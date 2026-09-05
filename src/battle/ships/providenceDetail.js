@@ -81,110 +81,188 @@ function addEngines({ add }) {
     [-74, 0, 7.5, 2],
     [74, 0, 7.5, 2],
   ];
+  // liner gradient rim -> throat: dark blue-grey at the lip, dim blue, brighter blue, white throat
   const LINER = [
-    rgb(PAL.engineGlow, 0.32),
-    rgb(PAL.engineGlow, 0.75),
+    rgb(0x3a4a60, 0.9),
+    rgb(PAL.engineGlow, 0.3),
+    rgb(PAL.engineGlow, 0.7),
     rgb(0xc8e4ff, 1.05),
   ];
   for (const [ex, ey, r, tier] of layout) {
-    const len = r * 1.15;
-    const z0 = zS - 5;
+    // bells stand 1.8 r proud of the stern wall and flare at the mouth; the liner recedes from the lip to
+    // a throat at the wall, so the bell has real depth around the (smaller) shared glow disc
+    const len = r * 1.8;
+    const z0 = zS - 3;
     const mouth = z0 + len;
     for (const lod of [0, 1, 2]) {
       if (lod === 2 && tier === 2) continue;
       const seg = lod === 0 ? 20 : lod === 1 ? 12 : 8;
-      if (lod < 2) {
+      // outer shroud: slight waist, flared lip
+      add(
+        loftRings(
+          tubeRings(
+            ex,
+            ey,
+            lod < 2
+              ? [
+                  [z0 - 1, r * 0.94],
+                  [z0 + len * 0.3, r * 0.96],
+                  [z0 + len * 0.62, r * 1.0],
+                  [mouth - r * 0.25, r * 1.08],
+                  [mouth, r * 1.15],
+                  [mouth, r * 1.0],
+                ]
+              : [
+                  [z0 - 1, r * 0.94],
+                  [mouth, r * 1.12],
+                ],
+            seg,
+          ),
+          {
+            sharpRings: new Set(lod < 2 ? [4, 5] : []),
+            faceColor: (i, j, c) => rgb(0x4d525b, c[2] > mouth - 0.5 ? 0.7 : 1),
+            texel: 1 / 6,
+          },
+        ),
+        "dark",
+        { lod, keepColor: true },
+      );
+      if (lod === 0)
+        for (const f of [0.2, 0.5]) {
+          const za = z0 + len * f;
+          const rr = r * (0.95 + 0.06 * f);
+          add(
+            loftRings(
+              tubeRings(
+                ex,
+                ey,
+                [
+                  [za - 1.1, rr],
+                  [za - 0.9, rr * 1.09],
+                  [za + 0.9, rr * 1.09],
+                  [za + 1.1, rr],
+                ],
+                seg,
+              ),
+              {
+                sharpRings: new Set([1, 2]),
+                faceColor: () => rgb(0x3c4048),
+                texel: 1 / 4,
+              },
+            ),
+            "dark",
+            { lod, keepColor: true },
+          );
+        }
+      // lit liner (faces inward): from the lip down to the throat at the stern wall (a plain cone at
+      // LOD 2, where the tri budget is tight)
+      add(
+        loftRings(
+          tubeRings(
+            ex,
+            ey,
+            lod < 2
+              ? [
+                  [mouth, r * 1.0],
+                  [mouth - len * 0.22, r * 0.9],
+                  [mouth - len * 0.55, r * 0.72],
+                  [z0 + 2.5, r * 0.45],
+                ]
+              : [
+                  [mouth, r * 1.0],
+                  [z0 + 2.5, r * 0.45],
+                ],
+            seg,
+          ),
+          {
+            invert: true,
+            faceColor: (i) => (lod < 2 ? LINER[i] : LINER[i === 0 ? 0 : 3]),
+          },
+        ),
+        "engineGlow",
+        { lod, keepColor: true },
+      );
+      // stiffening ledge inside the liner (LOD 0)
+      if (lod === 0) {
+        const zl = mouth - len * 0.36;
+        const rl = r * 0.82;
         add(
           loftRings(
             tubeRings(
               ex,
               ey,
               [
-                [z0 - 1, r * 1.07],
-                [z0 + len * 0.45, r * 1.0],
-                [mouth - 2.5, r * 0.95],
-                [mouth, r * 1.02],
-                [mouth, r * 0.9],
+                [zl - 0.6, rl * 1.02],
+                [zl - 0.6, rl * 0.94],
+                [zl + 0.6, rl * 0.94],
+                [zl + 0.6, rl * 1.02],
               ],
               seg,
             ),
             {
-              sharpRings: new Set([3, 4]),
-              faceColor: (i) => rgb(0x4d525b, i === 3 ? 0.75 : 1),
-              texel: 1 / 6,
+              invert: true,
+              sharpRings: new Set([1, 2]),
+              faceColor: () => rgb(0x2a3140),
             },
           ),
           "dark",
           { lod, keepColor: true },
         );
-        if (lod === 0)
-          for (const f of [0.22, 0.6]) {
-            const za = z0 + len * f;
-            add(
-              loftRings(
-                tubeRings(
-                  ex,
-                  ey,
-                  [
-                    [za - 1.1, r * 1.0],
-                    [za - 0.9, r * 1.1],
-                    [za + 0.9, r * 1.1],
-                    [za + 1.1, r * 1.0],
-                  ],
-                  seg,
-                ),
-                {
-                  sharpRings: new Set([1, 2]),
-                  faceColor: () => rgb(0x3c4048),
-                  texel: 1 / 4,
-                },
-              ),
-              "dark",
-              { lod, keepColor: true },
-            );
-          }
       }
-      // lit liner (faces inward): dim blue at the rim, brighter and whiter toward the throat; LOD 2
-      // keeps only the core disc (the shared glow disc covers the bell from afar)
-      if (lod < 2)
-        add(
-          loftRings(
-            tubeRings(
-              ex,
-              ey,
-              [
-                [mouth, r * 0.9],
-                [mouth - len * 0.3, r * 0.84],
-                [mouth - len * 0.62, r * 0.7],
-                [z0 + 2.5, r * 0.48],
-              ],
-              seg,
-            ),
-            { invert: true, faceColor: (i) => LINER[i] },
-          ),
-          "engineGlow",
-          { lod, keepColor: true },
-        );
       add(
-        ringCap(
-          tubeRings(
-            ex,
-            ey,
-            [[lod === 2 ? mouth - 2 : z0 + 2.5, r * (lod === 2 ? 0.8 : 0.48)]],
-            seg,
-          )[0],
-          [0, 0, 1],
-          { color: rgb(PAL.engineCore, lod === 2 ? 1.0 : 1.3) },
-        ),
+        ringCap(tubeRings(ex, ey, [[z0 + 2.5, r * 0.45]], seg)[0], [0, 0, 1], {
+          color: rgb(PAL.engineCore, 1.3),
+        }),
         "engineGlow",
         { lod, keepColor: true },
       );
     }
+    // glow disc / plume radius: the shared disc reads out to ~0.8 x this and the plume flares to 1.3 x,
+    // so 0.7 x the mouth keeps the glow inside the liner with the dark rim and lip visible around it
     engines.push({
       pos: [ex, ey, +mouth.toFixed(1)],
-      r: +(r * 0.9).toFixed(1),
+      r: +(r * 0.7).toFixed(1),
     });
   }
+  // stern wall furniture: vent grilles and hatches between the bells (LOD 0), two tall louvred vents
+  // beside the outer bells (LOD 0/1)
+  const vent = (x, y, w, h, lod = 0) => {
+    add(box(x, y, zS + 0.4, w + 1.2, h + 1.2, 0.8), "hull", {
+      color: new THREE.Color(PAL.dorsal).multiplyScalar(0.8),
+      texel: 1 / 8,
+      lod,
+    });
+    add(box(x, y, zS + 0.9, w, h, 0.5), "dark", {
+      color: 0x22262c,
+      texel: 1 / 4,
+      lod,
+    });
+    if (lod === 0)
+      for (let yy = y - h / 2 + 1.2; yy < y + h / 2 - 0.6; yy += 1.8)
+        add(box(x, yy, zS + 1.25, w - 0.6, 0.5, 0.3), "dark", {
+          color: PAL.darkLit,
+          texel: 1 / 3,
+          lod,
+        });
+  };
+  for (const lod of [0, 1]) {
+    vent(-66, -20, 8, 16, lod);
+    vent(66, -20, 8, 16, lod);
+  }
+  vent(0, 42, 20, 6);
+  for (const [x, y] of [
+    [-64, -34],
+    [64, -34],
+    [-10, -62],
+    [10, -62],
+    [-46, 14],
+    [46, 14],
+  ])
+    add(box(x, y, zS + 0.6, 3.2, 3.2, 1.2), "dark", {
+      color: 0x2e3238,
+      texel: 1 / 2,
+      lod: 0,
+    });
   // stern machinery between the nozzles: pump housings, manifolds, vertical fuel pipes, a raised rim
   for (const [x, y, w, h, d] of [
     [-23, -14, 7, 10, 9],

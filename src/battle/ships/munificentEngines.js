@@ -42,17 +42,42 @@ export function nozzleBell(
 ) {
   const n = seg || (lod === 0 ? 18 : lod === 1 ? 12 : 8);
   const prof = superellipse(n, 2);
-  // outer bell: flares toward the mouth, sooty toward the lip
+  // outer bell: a near-cylindrical body from the stern wall, then a flared lip over the last 35 % so
+  // the bell reads as a bell (not a disc on a plate); sooty toward the lip
+  const flare = Math.min(protrude * 0.35, r * 0.6);
+  const body = protrude - flare;
+  const shellTint = (px, py, pz, o) =>
+    mix(shell, shellDark, smoothstep(zMouth - protrude, zMouth, pz), o);
+  if (body > 0.5)
+    add(
+      tubeZ(r + 1.3, r + 0.9, body, n, x, y, zMouth - flare - body / 2, true),
+      "dark",
+      { texel: 1 / 4, lod, tint: shellTint },
+    );
   add(
-    tubeZ(r + 1.7, r + 0.9, protrude, n, x, y, zMouth - protrude / 2, true),
+    tubeZ(
+      r + 2.2 + r * 0.06,
+      r + 1.3,
+      flare,
+      n,
+      x,
+      y,
+      zMouth - flare / 2,
+      true,
+    ),
     "dark",
-    {
-      texel: 1 / 4,
-      lod,
-      tint: (px, py, pz, o) =>
-        mix(shell, shellDark, smoothstep(zMouth - protrude, zMouth, pz), o),
-    },
+    { texel: 1 / 4, lod, tint: shellTint },
   );
+  // cooling bands around the body (LOD 0)
+  if (lod === 0 && body > 8)
+    for (const f of [0.3, 0.68]) {
+      const zb = zMouth - flare - body * (1 - f);
+      add(
+        tubeZ(r + 1.9, r + 1.9, Math.min(2.2, body * 0.12), n, x, y, zb, true),
+        "dark",
+        { texel: 1 / 4, lod, tint: (px, py, pz, o) => o.copy(shellDark) },
+      );
+    }
   // interior: lit gradient shell seen from behind
   const st =
     lod === 2
@@ -82,7 +107,8 @@ export function nozzleBell(
   );
   // rim lip: annulus between the bell interior and the outer shell, tinted with glow spill
   if (lod < 2) {
-    const outer = prof.map(([u, v]) => [x + u * (r + 2.2), y + v * (r + 2.2)]);
+    const ro = r + 2.2 + r * 0.06;
+    const outer = prof.map(([u, v]) => [x + u * ro, y + v * ro]);
     const inner = prof.map(([u, v]) => [x + u * (r + 0.1), y + v * (r + 0.1)]);
     add(ringZ(outer, inner, zMouth - 1.2, zMouth), "dark", {
       texel: 1 / 3,
@@ -90,7 +116,9 @@ export function nozzleBell(
       tint: (px, py, pz, o) => mix(shell, MID, 0.38, o),
     });
   }
-  return { pos: [x, y, zMouth], r };
+  // glow disc / plume radius for the framework: the disc reads out to ~0.8 x this and the plume flares
+  // to 1.3 x, so 0.7 x the mouth keeps the glow inside the bell with the rim and lip visible around it
+  return { pos: [x, y, zMouth], r: +(r * 0.7).toFixed(1) };
 }
 
 /**

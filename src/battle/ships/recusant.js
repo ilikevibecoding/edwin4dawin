@@ -44,12 +44,13 @@ import {
 
 export const RECUSANT = { length: 1187, width: 490, height: 150 };
 
-// palette: vertex tints over the shared plating (albedo ~0.62 before tint). Calibrated so sunlit grey
-// lands near sRGB 175 and shadow faces near 50; slightly cool so it reads grey beside the tan Munificent.
-const GREY = col(0xc0c2c6);
+// palette: vertex tints over the shared plating (albedo ~0.62 before tint). A darker cool grey
+// (gunmetal) calibrated so sunlit plating lands near sRGB 135-150 and shadow faces near 40, a clear step
+// below the paler blue-grey Providence and well apart from the tan Munificent at 2-10 km.
+const GREY = col(0x9a9fa8);
 const GREY_LT = GREY.clone().multiplyScalar(1.07);
 const GREY_DK = GREY.clone().multiplyScalar(0.86);
-const GREY_FADE = col(0xd4d3d0); // paint fade toward the slab tips: lighter, warmer, flatter
+const GREY_FADE = col(0xb0b1b3); // paint fade toward the slab tips: lighter, flatter
 const SOOT = col(0x2a2a2e);
 const MACH = 0x7a7c82; // machinery tint on the dark texture
 const MACH_DK = 0x50525a;
@@ -97,12 +98,14 @@ export function buildRecusant(mats) {
   for (const lod of [0, 1, 2]) {
     const seg = lod === 0 ? 12 : 8;
     const prof = superellipse(seg, 2);
+    // LOD 2 (beyond 9 km) carries the spike 1.6x thicker so the spear does not vanish to sub-pixel
+    const k2 = lod === 2 ? 1.6 : 1;
     add(
       loftZ(
         prof,
         [
-          { z: zBow, sx: 1.5, sy: 1.5 },
-          { z: tipEnd, sx: 3.4, sy: 3.4 },
+          { z: zBow, sx: 1.5 * k2, sy: 1.5 * k2 },
+          { z: tipEnd, sx: 3.4 * k2, sy: 3.4 * k2 },
         ],
         { capStart: true, flat: true },
       ),
@@ -115,8 +118,8 @@ export function buildRecusant(mats) {
       [stepA, stepB],
       [stepB, rootZ],
     ].forEach(([z0, z1], i) => {
-      const r0 = spikeR(z0 + 0.02);
-      const r1 = spikeR(z1 - 0.01);
+      const r0 = spikeR(z0 + 0.02) * k2;
+      const r1 = spikeR(z1 - 0.01) * k2;
       add(
         loftZ(
           prof,
@@ -138,17 +141,17 @@ export function buildRecusant(mats) {
       );
     });
     // ring collars at the steps and the heavy root collar where the spike meets the spine
-    add(tubeZ(7.6, 7.6, 6, seg, 0, 0, stepA, false), "dark", {
+    add(tubeZ(7.6 * k2, 7.6 * k2, 6, seg, 0, 0, stepA, false), "dark", {
       color: MACH,
       texel: 1 / 3,
       lod,
     });
-    add(tubeZ(11.2, 11.2, 7, seg, 0, 0, stepB, false), "dark", {
+    add(tubeZ(11.2 * k2, 11.2 * k2, 7, seg, 0, 0, stepB, false), "dark", {
       color: MACH,
       texel: 1 / 3,
       lod,
     });
-    add(tubeZ(15.8, 14.6, 16, seg, 0, 0, rootZ + 6, false), "dark", {
+    add(tubeZ(15.8 * k2, 14.6 * k2, 16, seg, 0, 0, rootZ + 6, false), "dark", {
       color: MACH,
       texel: 1 / 4,
       lod,
@@ -200,14 +203,14 @@ export function buildRecusant(mats) {
   const Z1 = 262;
   const coreS = (z) => 12 + ((z - Z0) / (Z1 - Z0)) * 8;
   const coreProf = roundedRect(2, 0.3, 0.3);
-  for (const lod of [0, 1, 2])
+  for (const lod of [0, 1])
     add(
-      loftZ(lod === 2 ? roundedRect(1, 0.3, 0.3) : coreProf, [
+      loftZ(coreProf, [
         { z: Z0, sx: coreS(Z0) * 0.86, sy: coreS(Z0) * 0.86 },
         { z: Z1, sx: coreS(Z1) * 0.86, sy: coreS(Z1) * 0.86 },
       ]),
-      lod === 2 ? "hull" : "dark",
-      { color: lod === 2 ? GREY_DK.getHex() : CORE, texel: 1 / 5, lod },
+      "dark",
+      { color: CORE, texel: 1 / 5, lod },
     );
   // frame (rib) stations along the spine; frames are skipped where the command pod sits
   const NF = 27;
@@ -339,15 +342,14 @@ export function buildRecusant(mats) {
     const w = frameW(z);
     const h = frameH(z);
     const t = 4.4 + ((z - Z0) / (Z1 - Z0)) * 1.8; // radial depth of the rib
-    const d = lod === 2 ? 3.6 : 2.6; // thickness along z
+    const d = 2.6; // thickness along z
     add(
       ringZ(octagon(w, h, CH), octagon(w - t, h - t, CH), z - d / 2, z + d / 2),
       "hull",
       {
         texel: 1 / 3,
         lod,
-        tint: (x, y, zz, o) =>
-          o.copy(lod === 2 ? GREY : GREY_LT).multiplyScalar(y < -4 ? 0.9 : 1),
+        tint: (x, y, zz, o) => o.copy(GREY_LT).multiplyScalar(y < -4 ? 0.9 : 1),
       },
     );
     if (lod === 0) {
@@ -387,12 +389,29 @@ export function buildRecusant(mats) {
         });
     }
   };
-  for (const lod of [0, 1, 2])
+  for (const lod of [0, 1])
     for (let i = 0; i < NF; i++) {
       if (podFrames.has(i)) continue;
-      if (lod === 2 && i % 4) continue;
       frame(FZ[i], lod);
     }
+  // LOD 2 (beyond 9 km): the open cage would thin to a sub-pixel line, so the spine is a solid octagonal
+  // hull filling the frame envelope (lit grey, darker below), with the pod gap bridged by the same loft
+  add(
+    loftZ(
+      octagon(1, 1, CH),
+      [
+        { z: Z0, sx: frameW(Z0) * 0.96, sy: frameH(Z0) * 0.96 },
+        { z: Z1, sx: frameW(Z1) * 0.96, sy: frameH(Z1) * 0.96 },
+      ],
+      { capStart: true, texel: 1 / 12 },
+    ),
+    "hull",
+    {
+      uv: "keep",
+      lod: 2,
+      tint: (x, y, z, o) => o.copy(GREY).multiplyScalar(y < -4 ? 0.86 : 1),
+    },
+  );
   // stringers along the octagon vertices: the four chamfer-side runs span the whole spine (and the pod
   // gap), the top/bottom runs stop either side of the pod
   const kept = [];
@@ -526,6 +545,7 @@ export function buildRecusant(mats) {
     { z: podZ + 48, sx: 7, sy: 7 },
   ];
   const podY = 27;
+  const collarZ = podZ - 2; // heavy collar station (see pod framing below)
   const podSX = (z) =>
     table(
       POD.map((p) => [p.z, p.sx]),
@@ -538,11 +558,15 @@ export function buildRecusant(mats) {
     );
   for (const lod of [0, 1, 2]) {
     const prof = superellipse(lod === 0 ? 18 : lod === 1 ? 12 : 8, 2.4);
+    // LOD 2 carries the pod 1.3x fatter (and a bigger pylon) so it still reads as a bulge at 10 km
+    const podK = lod === 2 ? 1.3 : 1;
     add(
       loftZ(
         prof,
         (lod === 2 ? [POD[0], POD[2], POD[3], POD[5]] : POD).map((p) => ({
           ...p,
+          sx: p.sx * podK,
+          sy: p.sy * podK,
           y: podY,
         })),
         { capStart: true, capEnd: true, texel: 1 / 12 },
@@ -557,7 +581,11 @@ export function buildRecusant(mats) {
     );
     // pylon and dark underside fairing
     add(
-      new THREE.BoxGeometry(12, 18, 46).translate(0, podY - 12, podZ - 4),
+      new THREE.BoxGeometry(12 * podK, 18 * podK, 46 * podK).translate(
+        0,
+        podY - 12,
+        podZ - 4,
+      ),
       "dark",
       {
         color: MACH_DK,
@@ -569,6 +597,7 @@ export function buildRecusant(mats) {
       // recessed window slots around the pod's front half
       for (const side of [-1, 1])
         for (let z = podZ - 38; z <= podZ + 22; z += 8) {
+          if (Math.abs(z - collarZ) < 10) continue; // under the collar rings
           const v = 3.6 / podSY(z);
           slotWindow(add, {
             c: [
@@ -653,6 +682,185 @@ export function buildRecusant(mats) {
       });
     }
   }
+  // pod framing, so the capsule is not a bare tank on a post:
+  //  - a heavy collar at the pylon station: two raised rings with a dark channel between them and four
+  //    lugs (LOD 2 keeps one ring);
+  //  - a girder frame cradling the pod: flank girders at mid height, braces down to the chamfer
+  //    stringers, ties into the adjacent frames, two arches over the top;
+  //  - sensor clusters: a dorsal array plate with lit slits, ear pods on the collar, whip aerials.
+  const podTop = (z) => podY + podSY(z);
+  for (const lod of [0, 1, 2]) {
+    const prof = superellipse(lod === 0 ? 18 : lod === 1 ? 12 : 8, 2.4);
+    const ring = (za, zb, k, mat, color) =>
+      add(
+        loftZ(
+          prof,
+          [
+            { z: za, sx: podSX(za) * k, sy: podSY(za) * k, y: podY },
+            { z: zb, sx: podSX(zb) * k, sy: podSY(zb) * k, y: podY },
+          ],
+          { capStart: true, capEnd: true },
+        ),
+        mat,
+        { color, texel: 1 / 4, lod },
+      );
+    if (lod === 2) {
+      // over the 1.3x LOD 2 pod
+      ring(collarZ - 8, collarZ + 8, 1.3 * 1.12, "hull", GREY.getHex());
+      continue;
+    }
+    ring(collarZ - 8.5, collarZ - 2.5, 1.09, "hull", GREY.getHex());
+    ring(collarZ + 2.5, collarZ + 8.5, 1.09, "hull", GREY.getHex());
+    ring(collarZ - 3, collarZ + 3, 1.035, "dark", MACH_DK);
+    for (let q = 0; q < 4; q++) {
+      const a = Math.PI / 4 + (q * Math.PI) / 2;
+      const g = new THREE.BoxGeometry(5, 3.4, 15);
+      g.rotateZ(a - Math.PI / 2);
+      g.translate(
+        Math.cos(a) * podSX(collarZ) * 1.07,
+        podY + Math.sin(a) * podSY(collarZ) * 1.07,
+        collarZ,
+      );
+      add(g, "dark", { color: MACH, texel: 1 / 3, lod });
+    }
+  }
+  {
+    const gx = podSX(podZ) + 4.5;
+    const gy = podY - 2;
+    const zA = podZ - 48;
+    const zB = podZ + 44;
+    const zPre = Math.max(...FZ.filter((z) => z < podZ - 58));
+    const zPost = Math.min(...FZ.filter((z) => z > podZ + 58));
+    for (const lod of [0, 1])
+      for (const s of [-1, 1]) {
+        add(bar([s * gx, gy, zA], [s * gx, gy, zB], 2.4, 2.4), "hull", {
+          color: GREY_LT,
+          texel: 1 / 3,
+          lod,
+        });
+        // ties from the girder ends into the top corners of the neighbouring cage frames
+        add(
+          bar(
+            [s * gx, gy, zA],
+            [s * CH * frameW(zPre), frameH(zPre) - 1.5, zPre],
+            2.0,
+            2.0,
+          ),
+          "hull",
+          { color: GREY_LT, texel: 1 / 3, lod },
+        );
+        add(
+          bar(
+            [s * gx, gy, zB],
+            [s * CH * frameW(zPost), frameH(zPost) - 1.5, zPost],
+            2.0,
+            2.0,
+          ),
+          "hull",
+          { color: GREY_LT, texel: 1 / 3, lod },
+        );
+        // braces from the chamfer stringers up to the girder
+        for (const z of [zA + 4, podZ - 16, podZ + 12, zB - 4])
+          add(
+            bar([s * frameW(z), CH * frameH(z), z], [s * gx, gy, z], 1.6, 1.6),
+            "dark",
+            { color: MACH, texel: 1 / 2, lod },
+          );
+        // arches over the pod (girder -> shoulder -> crown), standing clear of the skin and windows
+        for (const z of [podZ - 36, podZ + 20]) {
+          const top = podTop(z) + 3;
+          const sh = [s * (podSX(z) + 2.5), podY + podSY(z) * 0.8, z];
+          add(bar([s * gx, gy, z], sh, 1.8, 1.8), "hull", {
+            color: GREY_LT,
+            texel: 1 / 3,
+            lod,
+          });
+          add(bar(sh, [s * 7, top, z], 1.8, 1.8), "hull", {
+            color: GREY_LT,
+            texel: 1 / 3,
+            lod,
+          });
+          if (s > 0)
+            add(bar([-7.5, top, z], [7.5, top, z], 1.8, 1.8), "hull", {
+              color: GREY_LT,
+              texel: 1 / 3,
+              lod,
+            });
+        }
+        // ear pods: sensor cylinders on short stalks either side of the collar
+        const ex = s * (podSX(collarZ) + 5.5);
+        const ey = podY + 5;
+        add(
+          tubeZ(2.2, 2.2, 10, lod === 0 ? 10 : 6, ex, ey, collarZ, false),
+          "dark",
+          {
+            color: MACH,
+            texel: 1 / 3,
+            lod,
+          },
+        );
+        add(
+          bar(
+            [s * podSX(collarZ) * 0.98, ey - 1, collarZ],
+            [ex, ey, collarZ],
+            1.4,
+            1.4,
+          ),
+          "dark",
+          { color: MACH_DK, texel: 1 / 3, lod },
+        );
+        if (lod === 0)
+          add(
+            new THREE.BoxGeometry(1.2, 1.2, 1.2).translate(
+              ex,
+              ey,
+              collarZ + 5.6,
+            ),
+            "windows",
+            { color: 0xff6a4a, lod, uv: "keep" },
+          );
+      }
+    // dorsal sensor array plate on the pod's forward top, with lit slits and short rods (LOD 0/1)
+    for (const lod of [0, 1]) {
+      const z = podZ - 26;
+      const y = podTop(z);
+      add(new THREE.BoxGeometry(10, 1.2, 12).translate(0, y + 0.4, z), "dark", {
+        color: MACH_DK,
+        texel: 1 / 4,
+        lod,
+      });
+      for (const dz of [-3.5, 0, 3.5])
+        add(
+          quadAt([0, y + 1.05, z + dz], [0, 1, 0], [1, 0, 0], 7, 0.7),
+          "windows",
+          { color: WINDOW, lod, uv: "keep" },
+        );
+      if (lod === 0)
+        for (const [dx, dz] of [
+          [-4, -5],
+          [4, -5],
+          [-4, 5],
+          [4, 5],
+        ])
+          add(bar([dx, y + 1, z + dz], [dx, y + 5, z + dz], 0.5, 0.5), "dark", {
+            color: MACH,
+            texel: 1 / 3,
+            lod,
+          });
+      // whip aerials aft on the pod top
+      for (const dx of [-3, 3])
+        add(
+          bar(
+            [dx, podTop(podZ + 40), podZ + 40],
+            [dx, podTop(podZ + 40) + 14, podZ + 41],
+            0.5,
+            0.5,
+          ),
+          "dark",
+          { color: MACH, texel: 1 / 3, lod },
+        );
+    }
+  }
   // long sensor boom off the pod (LOD 0/1)
   for (const lod of [0, 1])
     add(
@@ -733,7 +941,8 @@ export function buildRecusant(mats) {
     return out;
   };
   const tipFade = (x, z) => 0.5 * smoothstep(0.5, 1, Math.abs(x) / slabSX(z));
-  const sternSoot = (z) => 0.62 * smoothstep(546, zStern, z);
+  // darker warm band over the last ~150 m of the slab, heaviest at the stern wall
+  const sternSoot = (z) => 0.6 * smoothstep(440, zStern, z);
   const slabTint = (x, y, z, o) => {
     mix(GREY, GREY_FADE, tipFade(x, z), o);
     o.lerp(SOOT, sternSoot(z));
@@ -1431,16 +1640,19 @@ export function buildRecusant(mats) {
   const NOZ = [];
   for (let i = 0; i < 7; i++)
     NOZ.push({ x: -132 + i * 44, y: -1, r: i === 3 ? 15 : 13 });
+  // the bells stand 22 m proud of the stern plate (mouth at zS + 20) so they read as bells with depth
+  // rather than glow discs on a flat plate
+  const MOUTH = zS + 20;
   for (const { x, y, r } of NOZ) {
     let entry;
     for (const lod of [0, 1, 2]) {
       entry = nozzleBell(add, {
         x,
         y,
-        zMouth: zS + 2.4,
+        zMouth: MOUTH,
         r,
-        depth: 26,
-        protrude: 8,
+        depth: 28,
+        protrude: 22,
         lod,
         shell: SHELL,
         shellDark: SHELL_DK,
@@ -1456,12 +1668,13 @@ export function buildRecusant(mats) {
         });
     }
     engines.push(entry);
-    // soot streaks on the slab top and bottom forward of the nozzle
+    // soot streaks on the slab top and bottom forward of the nozzle: ~140 m long, narrow and faint at
+    // the head, wide and dense at the stern edge
     for (const lod of [0, 1])
       for (const up of [1, -1]) {
         const pts = [];
         const nrm = [];
-        for (let z = 544; z <= 590; z += 7.7) {
+        for (let z = 450; z <= 590; z += 10) {
           const s = slabSurf(x, z, up, 0);
           pts.push(s.p);
           nrm.push(s.n);
@@ -1469,24 +1682,51 @@ export function buildRecusant(mats) {
         sootStreak(add, {
           points: pts,
           normals: nrm,
-          halfW: (i) => 6 + i * 0.9,
+          halfW: (i) => 3.5 + i * 0.85,
           base: (px, py, pz, o) => slabTint(px, py, pz, o).multiplyScalar(1.25),
           soot: SOOT,
-          strength: (i) => 0.85 * smoothstep(0, pts.length - 1, i) ** 0.6,
+          strength: (i) => 0.85 * smoothstep(0, pts.length - 1, i) ** 0.8,
           lod,
           texel: TEX,
           lift: 1.0,
         });
       }
   }
-  // pipework and clamps between the nozzles on the stern plate (LOD 0)
+  // stern structure around the bells: a pylon between every pair of bells and outboard of the end
+  // ones (LOD 0/1), a manifold beam across the top and a pipe run along the bottom (LOD 0/1), clamps
+  // and pipework between the nozzles (LOD 0)
+  for (const lod of [0, 1]) {
+    for (let i = 0; i <= NOZ.length; i++) {
+      const xp = -154 + i * 44;
+      add(
+        new THREE.BoxGeometry(5, 34, 15).translate(xp, -1, zS + 7.5),
+        "hull",
+        { color: GREY_DK.getHex(), texel: 1 / 6, lod },
+      );
+      add(new THREE.BoxGeometry(3, 30, 2).translate(xp, -1, zS + 16), "dark", {
+        color: MACH_DK,
+        texel: 1 / 3,
+        lod,
+      });
+    }
+    add(bar([-158, 17.5, zS + 9], [158, 17.5, zS + 9], 3.2, 3.2), "dark", {
+      color: MACH,
+      texel: 1 / 2,
+      lod,
+    });
+    add(bar([-158, -19, zS + 6], [158, -19, zS + 6], 2.4, 2.4), "dark", {
+      color: MACH_DK,
+      texel: 1 / 2,
+      lod,
+    });
+  }
   for (let i = 0; i + 1 < NOZ.length; i++) {
     const a = NOZ[i];
     const b = NOZ[i + 1];
     add(
       bar(
-        [a.x + a.r + 2.5, a.y + 8, zS + 1.8],
-        [b.x - b.r - 2.5, b.y + 8, zS + 1.8],
+        [a.x + a.r + 2.5, a.y + 8, zS + 3.4],
+        [b.x - b.r - 2.5, b.y + 8, zS + 3.4],
         1.6,
         1.6,
       ),
@@ -1494,14 +1734,24 @@ export function buildRecusant(mats) {
       { color: MACH, texel: 1 / 2, lod: 0 },
     );
     add(
-      new THREE.BoxGeometry(6, 5, 2.4).translate(
+      new THREE.BoxGeometry(6, 5, 4).translate(
         (a.x + b.x) / 2,
         a.y - 8,
-        zS + 2.2,
+        zS + 3.2,
       ),
       "dark",
       { color: MACH_DK, texel: 1 / 3, lod: 0 },
     );
+    for (const yy of [-12, 10])
+      add(
+        new THREE.BoxGeometry(3.4, 1.6, 12).translate(
+          (a.x + b.x) / 2,
+          yy,
+          zS + 9,
+        ),
+        "dark",
+        { color: MACH, texel: 1 / 2, lod: 0 },
+      );
   }
 
   return assemble(

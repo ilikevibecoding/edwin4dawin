@@ -22,6 +22,7 @@ import {
 import {
   FORE_FIN,
   PAL,
+  PLATE_TEXEL,
   TOWER,
   VENTRAL_FIN,
   barAlong,
@@ -29,6 +30,7 @@ import {
 } from "./providenceSpec.js";
 
 const UP = new THREE.Vector3(0, 1, 0);
+const ALONG = new THREE.Vector3(0, 0, 1);
 
 export function buildTower(ctx) {
   buildStack(ctx, TOWER, "main");
@@ -64,6 +66,39 @@ function onTier(t, side, y, z, geo, out = 0.4) {
   placeOn(geo, p.addScaledVector(n, out), n, UP);
   return geo;
 }
+// tier outline ring at height y, grown by k metres (for seam bands hugging the tier)
+function tierOutline(t, y, k) {
+  const fns = tierFns(t);
+  return slabRings({
+    y0: y,
+    y1: y + 1,
+    n: 2,
+    zLead: (yy) => fns.zLead(yy) - k,
+    zTrail: (yy) => fns.zTrail(yy) + k,
+    halfT: (yy) => fns.halfT(yy) + k,
+    tail: t.tail,
+  }).rings[0];
+}
+// thin strip running up a tier face at chord fraction f: rectangular rings following the surface
+function tierStrip(t, side, f, y0, y1, w, h, steps = 4) {
+  const fns = tierFns(t);
+  const rings = [];
+  for (let q = 0; q <= steps; q++) {
+    const y = y0 + ((y1 - y0) * q) / steps;
+    const z = fns.zLead(y) + (fns.zTrail(y) - fns.zLead(y)) * f;
+    const { p, n } = tierSurface(t, side, y, z);
+    const base = p.clone().addScaledVector(n, 0.05);
+    const a = base.clone().addScaledVector(ALONG, -w / 2);
+    const b = base.clone().addScaledVector(ALONG, w / 2);
+    rings.push([
+      a.toArray(),
+      b.toArray(),
+      b.clone().addScaledVector(n, h).toArray(),
+      a.clone().addScaledVector(n, h).toArray(),
+    ]);
+  }
+  return rings;
+}
 
 const faceTint = (baseHex, seed) => (i, j) => {
   const base = rgb(baseHex);
@@ -78,7 +113,8 @@ const faceTint = (baseHex, seed) => (i, j) => {
 function buildStack({ add }, spec, name) {
   const dir = spec.dir;
   const main = name === "main";
-  const texel = main ? 1 / 30 : 1 / 20;
+  const texel = PLATE_TEXEL;
+  const SEAM = rgb(PAL.dorsal, 0.78);
   for (const lod of [0, 1, 2]) {
     spec.tiers.forEach((t, k) => {
       const fns = tierFns(t);
@@ -98,15 +134,72 @@ function buildStack({ add }, spec, name) {
         "hull",
         { lod, keepColor: true },
       );
-      // ledge: the exposed tier top
+      // ledge: the exposed tier top (same plate scale as the faces: no tiling seam at the edge)
       add(
         ringCap(rings[rings.length - 1], [0, dir, 0], {
           color: rgb(PAL.dorsal, 0.95),
-          texel: 1 / 12,
+          texel,
         }),
         "hull",
         { lod, keepColor: true },
       );
+      // large-plate framework on the main tower, matching the hull's raised transverse seams: raised
+      // seam bands hugging the tier outline at one or two heights, and (LOD 0) vertical seam strips
+      // dividing each face into 40-60 m plates
+      if (main && lod < 2) {
+        const h = Math.abs(t.y1 - t.y0);
+        const nb = h > 50 ? 2 : 1;
+        for (let q = 1; q <= nb; q++) {
+          const yc = t.y0 + ((t.y1 - t.y0) * q) / (nb + 1);
+          const band = (dy, kk) => tierOutline(t, yc + dy * dir, kk);
+          add(
+            loftRings(
+              [
+                band(-1.5, 0.02),
+                band(-1.2, 0.5),
+                band(1.2, 0.5),
+                band(1.5, 0.02),
+              ],
+              {
+                sharp,
+                sharpRings: new Set([1, 2]),
+                faceColor: () => SEAM,
+                texel: 1 / 8,
+              },
+            ),
+            "hull",
+            { lod, keepColor: true },
+          );
+        }
+        if (lod === 0) {
+          const len = fns.zTrail(t.y0) - fns.zLead(t.y0);
+          const nv = Math.max(1, Math.round(len / 52) - 1);
+          for (const side of [-1, 1])
+            for (let q = 1; q <= nv; q++) {
+              const f = 0.14 + ((0.8 - 0.14) * q) / (nv + 1);
+              add(
+                loftRings(
+                  tierStrip(
+                    t,
+                    side,
+                    f,
+                    t.y0 + 2 * dir,
+                    t.y1 - 2 * dir,
+                    1.6,
+                    0.5,
+                  ),
+                  {
+                    sharp: new Set([0, 1, 2, 3]),
+                    faceColor: () => SEAM,
+                    texel: 1 / 8,
+                  },
+                ),
+                "hull",
+                { lod, keepColor: true },
+              );
+            }
+        }
+      }
       // orange trims hugging the nose and the blunt tail of every tier
       if (lod < 2 || (main && k < 2)) {
         const n = lod === 0 ? 3 : 2;
@@ -177,7 +270,7 @@ function buildHead(add, head, lod, main, name) {
     loftRings(rings, {
       sharp,
       faceColor: (i, j, c, n) => (bandSegs.has(j) ? DARK : tint(i, j)),
-      uv: (i, j, p, arc) => [p[2] / 16, arc / 16],
+      uv: (i, j, p, arc) => [p[2] * PLATE_TEXEL, arc * PLATE_TEXEL],
     }),
     "hull",
     { lod, keepColor: true },
@@ -185,7 +278,7 @@ function buildHead(add, head, lod, main, name) {
   add(
     ringCap(rings[0], [0, 0, -1], {
       color: rgb(PAL.flank, 0.92),
-      texel: 1 / 10,
+      texel: PLATE_TEXEL,
     }),
     "hull",
     { lod, keepColor: true },
@@ -193,7 +286,7 @@ function buildHead(add, head, lod, main, name) {
   add(
     ringCap(rings[rings.length - 1], [0, 0, 1], {
       color: rgb(PAL.flank, 0.85),
-      texel: 1 / 10,
+      texel: PLATE_TEXEL,
     }),
     "hull",
     { lod, keepColor: true },
@@ -272,25 +365,67 @@ function mainTowerDetail({ add }) {
       [1, 122, 0.78, 12, 10],
       [2, 196, 0.62, 12, 10],
     ];
+    // recessed equipment channels: a bezel frame standing 2.2 m proud of the face around a near-black
+    // floor with cross ribs and a lit slit, so the panel reads as a real trench with depth from any
+    // angle instead of a painted black slab
     for (const [k, y, f, w, h] of panels) {
       const t = tiers[k];
       const z = zAt(t, y, f);
-      add(
-        onTier(t, side, y, z, box(0, 0.3, 0, w + 1.4, 0.6, h + 1.4)),
-        "hull",
-        {
-          color: new THREE.Color(PAL.dorsal).multiplyScalar(0.85),
-          texel: 1 / 8,
-          lod: 0,
-        },
-      );
-      add(onTier(t, side, y, z, box(0, 0.7, 0, w, 0.8, h)), "dark", {
-        color: PAL.darkLit,
-        texel: 1 / 4,
+      const fw = 1.5;
+      const out = 3.0;
+      const frameOpts = {
+        color: new THREE.Color(PAL.dorsal).multiplyScalar(0.85),
+        texel: 1 / 8,
+        lod: 0,
+      };
+      // bars and floor extend 1.2 m into the face so the surface curvature under a wide panel never
+      // opens a gap beneath them
+      for (const s of [-1, 1]) {
+        add(
+          onTier(
+            t,
+            side,
+            y,
+            z,
+            box(
+              0,
+              (out - 1.2) / 2,
+              s * (h / 2 + fw / 2),
+              w + 2 * fw,
+              out + 1.2,
+              fw,
+            ),
+            0,
+          ),
+          "hull",
+          frameOpts,
+        );
+        add(
+          onTier(
+            t,
+            side,
+            y,
+            z,
+            box(s * (w / 2 + fw / 2), (out - 1.2) / 2, 0, fw, out + 1.2, h),
+            0,
+          ),
+          "hull",
+          frameOpts,
+        );
+      }
+      add(onTier(t, side, y, z, box(0, 0.1, 0, w, 1.8, h), 0), "dark", {
+        color: 0x1c1f24,
+        texel: 1 / 6,
         lod: 0,
       });
+      for (let r = -h / 2 + 2.2; r < h / 2 - 1.5; r += 3.6)
+        add(
+          onTier(t, side, y, z, box(0, 1.22, r, w - 0.4, 0.44, 0.7), 0),
+          "dark",
+          { color: PAL.darkLit, texel: 1 / 3, lod: 0 },
+        );
       add(
-        onTier(t, side, y + h * 0.3, z, box(0, 1.2, 0, w * 0.7, 0.3, 0.6)),
+        onTier(t, side, y, z, box(0, 1.35, -h / 2 + 1.0, w * 0.7, 0.3, 0.5), 0),
         "windows",
         { color: PAL.windowCool, lod: 0, uv: "keep" },
       );
@@ -314,9 +449,9 @@ function mainTowerDetail({ add }) {
           "hull",
           {
             color: new THREE.Color(PAL.dorsal).multiplyScalar(
-              0.9 + rand() * 0.3,
+              0.85 + rand() * 0.2,
             ),
-            texel: 1 / 10,
+            texel: PLATE_TEXEL,
             lod: 0,
           },
         );
