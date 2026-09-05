@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { Rng } from '../core/seed';
 import { PORT_ISLAND, type WorldMap } from './map';
 import type { RoadSegment } from './roads';
+import type { MooredBoat } from './traffic';
 import { InstanceBatch, addNeutralVertexAttributes, cellKey, createBatchedPbrMaterial, mergeUnitParts, splitCells, type BatchSource, type CellSource } from './batching';
 import { LAYER_CAMERA, LAYER_CASCADE0, LAYER_MIRROR, MAX_CASCADES, activeShadowPassIsFine, cascadeIsFine, layerMask, maskCasts, type ViewCull } from './culling';
 
@@ -99,7 +100,7 @@ export class Props {
   readonly material: THREE.MeshStandardMaterial;
   readonly materials: THREE.Material[] = [];
   readonly lampPositions: THREE.Vector3[] = [];
-  readonly mooredBoatPositions: { x: number; z: number; rot: number; len: number }[] = [];
+  readonly mooredBoatPositions: MooredBoat[] = [];
   private readonly m = new THREE.Matrix4();
   private readonly q = new THREE.Quaternion();
   private readonly p = new THREE.Vector3();
@@ -1173,12 +1174,12 @@ export class Props {
     pbox('glass', cu, gz + 12, quayS - 60, 240, 4, 36);
     pbox('white', cu, gz, quayS - 20, 120, 7, 30); // gangway hall reaching the quay
     occupy(cu, quayS - 55, 150);
-    const sv = quayS + 19;
-    pbox('dark', cu, -2.5, sv, 290, 12.5, 36);
-    pbox('white', cu, 10, sv, 280, 28, 32);
-    for (let d = 0; d < 6; d++) pbox('glass', cu, 13.5 + d * 3.5, sv, 276, 1.2, 33);
-    pbox('white', cu - 30, 38, sv, 90, 8, 22);
-    pcyl('dark', cu - 90, 38, sv, 4, 14);
+    // the liner itself is a vessel of the traffic batch (hull with a bow, tiers, lifeboats, funnel): berth it here
+    {
+      const sv = quayS + 22;
+      const [sx, sz] = world(cu, sv);
+      this.mooredBoatPositions.push({ x: sx, z: sz, rot: yaw, len: 290, kind: 'cruise' });
+    }
     // fuel tank farm by the river: tanks of mixed sizes in bunds, each with its stair, top rail and roof
     // vent, pipe racks running between the rows and a pump house
     const tanks = this.map.pois.find((p) => p.kind === 'tanks')!;

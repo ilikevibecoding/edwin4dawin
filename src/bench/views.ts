@@ -58,8 +58,10 @@ export const BENCH_VIEWS: BenchView[] = [
     id: 'bridge-low', name: 'Low-altitude bridge flyover', description: 'Chase view 45 m over the northern causeway arch, traffic on the deck, piers meeting the water.',
     time: 15.5, weather: 'clear',
     camera: { mode: 'chase', fov: 50 },
-    plane: { pos: [-1950, 52, -3740], headingDeg: 96, pitchDeg: 0, bankDeg: 4, speed: 55, throttle: 0.7 },
-    presim: 30, clipInputs: { pitch: 0, roll: 0.05, yaw: 0 },
+    // parallel to the deck (bridge heading 82 deg) and 30 m off its north side, so the clip never carries the
+    // aircraft through the stay fan of the pylon ahead
+    plane: { pos: [-1950, 52, -3750], headingDeg: 83, pitchDeg: 0, bankDeg: 4, speed: 55, throttle: 0.7 },
+    presim: 30, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
   },
   {
     id: 'skyline-high', name: 'High-altitude skyline', description: 'Fixed camera 900 m up over the bay looking north-west at the downtown skyline hierarchy, port in the middle distance.',

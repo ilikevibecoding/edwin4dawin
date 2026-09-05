@@ -33,21 +33,94 @@ function pointAt(pts: Vec2[], s: number): { x: number; z: number; dx: number; dz
   return { x: pts[0][0], z: pts[0][1], dx: 1, dz: 0 };
 }
 
-export function deckHeightProfile(spec: BridgeSpec, map: WorldMap, s: number, total: number): number {
-  const rampLen = Math.min(160, total * 0.25);
-  const hA = map.heightAt(spec.pts[0][0], spec.pts[0][1]), hB = map.heightAt(spec.pts[spec.pts.length - 1][0], spec.pts[spec.pts.length - 1][1]);
-  const upA = smoothstep(0, rampLen, s), upB = smoothstep(0, rampLen, total - s);
-  let h = lerp(Math.max(hA, 0.5) + 0.3, spec.deck, upA);
-  h = Math.min(h, lerp(Math.max(hB, 0.5) + 0.3, spec.deck, upB));
-  if (spec.archHeight > 0) {
+/** Vertical alignment of a deck, the way a highway profile is laid out: grade lines meeting at points of vertical
+ *  intersection (PVIs), each PVI rounded by a parabolic vertical curve of length `L` (a crest over the main span,
+ *  sags where the approach grades meet the low deck). Adjacent curves never overlap, so the profile is C1 everywhere
+ *  and has no local bumps at the pylons. */
+interface Alignment { s: number[]; h: number[]; L: number[]; }
+
+/** Grade of the raised approaches (4 %: the steepest most highway bridges use) and the limit before a side drops its
+ *  flat low section and climbs straight from the abutment. */
+const APPROACH_GRADE = 0.04;
+const MAX_GRADE = 0.055;
+
+function buildAlignment(spec: BridgeSpec, map: WorldMap, total: number): Alignment {
+  const rampLen = Math.min(160, total * 0.35);
+  const hA = Math.max(map.heightAt(spec.pts[0][0], spec.pts[0][1]), 0.5) + 0.3;
+  const hB = Math.max(map.heightAt(spec.pts[spec.pts.length - 1][0], spec.pts[spec.pts.length - 1][1]), 0.5) + 0.3;
+  const D = spec.deck;
+  const pvi: { s: number; h: number; L: number }[] = [{ s: 0, h: hA, L: 0 }];
+  if (spec.archHeight > 0 && spec.archLength > 0) {
     const centre = spec.archT * total;
-    const d = Math.abs(s - centre) / (spec.archLength * 0.5);
-    if (d < 1) {
-      const bump = 0.5 + 0.5 * Math.cos(d * Math.PI);
-      h += (spec.archHeight - spec.deck) * bump;
-    }
+    const R = spec.archHeight - D;
+    const cableStayed = spec.archHeight >= 20 && spec.archLength >= 350;
+    const mainSpan = cableStayed ? Math.min(spec.archLength * 0.5, 300) : spec.archLength * 0.8;
+    const Ls = 160;                                   // sag curve where the grade meets the low deck
+    let Lc = Math.max(200, mainSpan * 1.5);           // crest curve: covers the main span and its pylons
+    // one side at a time: a flat low section, then the approach grade (tangent length Lh from the crest PVI), if
+    // there is room for it at <= MAX_GRADE; otherwise the deck climbs straight from the abutment
+    const side = (room: number): { L: number; direct: boolean } => {
+      const Lh = R / APPROACH_GRADE + Lc / 4;
+      if (Lh <= room) return { L: Lh, direct: false };
+      if (R / (room - Lc / 4) <= MAX_GRADE) return { L: room, direct: false };
+      return { L: 0, direct: true };
+    };
+    const left = side(centre - rampLen - Ls * 0.5 - 20);
+    const right = side(total - centre - rampLen - Ls * 0.5 - 20);
+    if (!left.direct) { pvi.push({ s: rampLen, h: D, L: 120 }); pvi.push({ s: centre - left.L, h: D, L: Ls }); }
+    // the crest PVI sits above the clearance by the parabola's midpoint offset so the deck's high point lands on
+    // `archHeight`: Hp = archHeight + Lc/8 (gL + gR) with the grades themselves depending on Hp (linear solve)
+    const baseL = left.direct ? hA : D, lenL = left.direct ? centre : left.L;
+    const baseR = right.direct ? hB : D, lenR = right.direct ? total - centre : right.L;
+    Lc = Math.min(Lc, lenL, lenR);
+    const k = (Lc / 8) * (1 / lenL + 1 / lenR);
+    const Hp = (spec.archHeight - (Lc / 8) * (baseL / lenL + baseR / lenR)) / (1 - k);
+    pvi.push({ s: centre, h: Hp, L: Lc });
+    if (!right.direct) { pvi.push({ s: centre + right.L, h: D, L: Ls }); pvi.push({ s: total - rampLen, h: D, L: 120 }); }
+  } else {
+    pvi.push({ s: rampLen, h: D, L: 120 });
+    pvi.push({ s: total - rampLen, h: D, L: 120 });
   }
-  return h;
+  pvi.push({ s: total, h: hB, L: 0 });
+  // curves may not overlap: each takes at most the gap to its neighbours
+  const a: Alignment = { s: [], h: [], L: [] };
+  for (let i = 0; i < pvi.length; i++) {
+    let L = pvi[i].L;
+    if (i > 0) L = Math.min(L, pvi[i].s - pvi[i - 1].s);
+    if (i < pvi.length - 1) L = Math.min(L, pvi[i + 1].s - pvi[i].s);
+    a.s.push(pvi[i].s); a.h.push(pvi[i].h); a.L.push(Math.max(0, L));
+  }
+  return a;
+}
+
+function evalAlignment(a: Alignment, s: number): number {
+  const n = a.s.length;
+  s = clamp(s, a.s[0], a.s[n - 1]);
+  let i = 0;
+  while (i < n - 2 && s > a.s[i + 1]) i++;
+  const grade = (k: number) => (a.h[k + 1] - a.h[k]) / Math.max(a.s[k + 1] - a.s[k], 1e-6);
+  // inside the curve of PVI k: h = h_k + g_in u + (g_out - g_in) (u + L/2)^2 / (2 L), u = s - s_k in [-L/2, L/2]
+  const curve = (k: number): number | null => {
+    const L = a.L[k];
+    if (L <= 0) return null;
+    const u = s - a.s[k];
+    if (Math.abs(u) > L * 0.5) return null;
+    const gIn = k > 0 ? grade(k - 1) : grade(k), gOut = k < n - 1 ? grade(k) : grade(k - 1);
+    const w = u + L * 0.5;
+    return a.h[k] + gIn * u + ((gOut - gIn) * w * w) / (2 * L);
+  };
+  const c0 = curve(i), c1 = curve(i + 1);
+  if (c0 !== null) return c0;
+  if (c1 !== null) return c1;
+  return a.h[i] + grade(i) * (s - a.s[i]);
+}
+
+const _alignments = new WeakMap<BridgeSpec, Alignment>();
+
+export function deckHeightProfile(spec: BridgeSpec, map: WorldMap, s: number, total: number): number {
+  let a = _alignments.get(spec);
+  if (!a) { a = buildAlignment(spec, map, total); _alignments.set(spec, a); }
+  return evalAlignment(a, s);
 }
 
 export interface BridgeBuild {
@@ -101,22 +174,25 @@ const CONCRETE_FRAG = /* glsl */ `
     float n = fbm3(vWorldPosR.xz * 0.11);
     // 43 cm grain: band-limited (fades to its mean once a pixel spans a good part of its wavelength)
     float n2 = mix(vnoise(vWorldPosR.xz * 2.3), 0.5, smoothstep(0.12, 0.4, fp));
-    // sun-bleached concrete pavement, a shade darker than the shoulders so the white lines and the kerbs read
+    // weathered concrete pavement: mid grey, darker than the shoulders so the white lines and the kerbs read
     float onShoulder = clamp((abs(xm) - width * 0.5 - 0.005) / fwX + 0.5, 0.0, 1.0);
-    vec3 conc = mix(vec3(0.46, 0.46, 0.44), vec3(0.58, 0.57, 0.54), n) * (0.94 + 0.12 * n2);
-    vec3 shoulder = mix(vec3(0.66, 0.66, 0.63), vec3(0.78, 0.77, 0.74), n) * (0.96 + 0.08 * n2);
+    vec3 conc = mix(vec3(0.25, 0.25, 0.245), vec3(0.34, 0.335, 0.32), n) * (0.94 + 0.12 * n2);
+    vec3 shoulder = mix(vec3(0.42, 0.42, 0.40), vec3(0.52, 0.51, 0.49), n) * (0.96 + 0.08 * n2);
     // transverse pavement joints every 6 m, faint longitudinal joints at the lane edges
     float laneW = width / max(lanes, 1.0);
     float u = xm + width * 0.5;
     float k = floor(u / laneW);
     float lp = u - k * laneW;
     float edgeDist = min(lp, laneW - lp);
-    float joint = mix(aaLine((fract(along / 6.0) - 0.5) * 6.0, 0.065, fwA), 0.022, smoothstep(1.5, 4.0, fwA));
+    float jf = fract(along / 6.0);
+    float joint = mix(aaLine((jf - 0.5) * 6.0, 0.065, fwA), 0.022, smoothstep(1.5, 4.0, fwA));
     float laneJoint = mix(aaLine(edgeDist, 0.05, fwX), 0.1 / laneW, smoothstep(0.8, 2.5, fwX));
     conc *= 1.0 - 0.20 * joint - 0.08 * laneJoint;
-    // tyre paths and weathering patches
+    // tyre paths, joint staining (the dark smear tyres drag off every transverse joint) and weathering patches
     float wheel = mix(exp(-pow((abs(lp - laneW * 0.5) - laneW * 0.28) * 3.0, 2.0)), 0.18, smoothstep(0.5, 2.0, fwX));
-    conc *= 1.0 - 0.10 * wheel;
+    conc *= 1.0 - 0.17 * wheel;
+    float stain = mix((1.0 - smoothstep(0.5, 0.9, jf)) * smoothstep(0.5, 0.56, jf) * (0.4 + 0.6 * n2), 0.12, smoothstep(1.5, 4.0, fwA));
+    conc *= 1.0 - 0.10 * stain * wheel - 0.04 * stain;
     conc *= 1.0 - 0.12 * smoothstep(0.6, 0.75, fbm3(vWorldPosR.xz * 0.03 + 8.0));
     shoulder *= 1.0 - 0.15 * joint - 0.1 * smoothstep(0.6, 0.75, fbm3(vWorldPosR.xz * 0.03 + 8.0));
     conc = mix(conc, shoulder, onShoulder);
@@ -136,7 +212,17 @@ const CONCRETE_FRAG = /* glsl */ `
   } else {
     // run-off streaks down the faces and a little grime
     float streak = fbm3(vec2(vWorldPosR.x + vWorldPosR.z, vWorldPosR.y * 0.25) * 0.7);
-    diffuseColor.rgb *= 0.93 + 0.12 * streak;
+    diffuseColor.rgb *= 0.90 + 0.14 * streak;
+    // formwork: lift joints every 3.2 m up every face; on the piers and pylons (aRoadInfo.y = 1) panel joints
+    // every 2.4 m along the face too (only the world axis that varies across the face draws them)
+    float fwY = max(fwidth(vWorldPosR.y), 1e-4);
+    float lift = aaLine((fract(vWorldPosR.y / 3.2) - 0.5) * 3.2, 0.03, fwY) * (1.0 - smoothstep(0.4, 1.2, fwY));
+    float fwPx = fwidth(vWorldPosR.x), fwPz = fwidth(vWorldPosR.z);
+    float panel = aaLine((fract(vWorldPosR.x / 2.4) - 0.5) * 2.4, 0.03, max(fwPx, 1e-4)) * step(1e-5, fwPx) * (1.0 - smoothstep(0.4, 1.2, fwPx))
+                + aaLine((fract(vWorldPosR.z / 2.4) - 0.5) * 2.4, 0.03, max(fwPz, 1e-4)) * step(1e-5, fwPz) * (1.0 - smoothstep(0.4, 1.2, fwPz));
+    diffuseColor.rgb *= 1.0 - 0.14 * lift - 0.10 * clamp(panel, 0.0, 1.0) * vRoadInfo.y;
+    // tide and spray darken the concrete near the water
+    diffuseColor.rgb *= 1.0 - 0.22 * (1.0 - smoothstep(0.3, 5.0, vWorldPosR.y)) * vRoadInfo.y;
   }
 }
 `;
@@ -157,7 +243,7 @@ function createConcreteMaterial(concrete: THREE.Material): THREE.MeshStandardMat
       .replace('#include <common>', `#include <common>\nvarying vec2 vRoadUv; varying vec3 vRoadInfo; varying vec3 vWorldPosR;\n${GLSL_NOISE}\n${GLSL_AA_LINE}`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${CONCRETE_FRAG}`);
   };
-  mat.customProgramCacheKey = () => 'bridge-concrete-v3';
+  mat.customProgramCacheKey = () => 'bridge-concrete-v4';
   return mat;
 }
 
@@ -174,7 +260,7 @@ float aaLine(float d, float h, float fw) { return clamp((min(h, d + 0.5 * fw) - 
  *  the alpha instead: a 22 cm cable at 2 km is a continuous faint line, not a chain of dots (with or without
  *  MSAA — the clips are captured without). The width the geometry projects to is ~1.7 x the vertex radius
  *  (six-sided prisms, boxes seen across their diagonal). */
-const STEEL_MIN_PX = 1.25;
+const STEEL_MIN_PX = 1.75;
 const STEEL_VERT = /* glsl */ `
 vGlow = aGlow; vCover = 1.0;
 if (aAxis.w > 0.5) {
@@ -297,6 +383,29 @@ class Soup {
         this.vertex(_p.x, _p.y, _p.z, _n.x, _n.y, _n.z, c, extra, axis);
       }
       this.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+  }
+
+  /** Tapered prism (side faces only): a rectangle `wb` x `db` centred on (xb, zb) at `yb` lofted to `wt` x `dt`
+   *  centred on (xt, zt) at `yt`, yawed about Y: flared pier stems, leaning pylon legs. */
+  prism(xb: number, yb: number, zb: number, wb: number, db: number, xt: number, yt: number, zt: number, wt: number, dt: number, yaw: number, c: Rgb, extra?: readonly number[], caps = false): void {
+    if (yt - yb <= 0.005) return;
+    const cy = Math.cos(yaw), sy = Math.sin(yaw);
+    // local (across, along) -> world: box() yaws its local x to (cos, 0, -sin) and local z to (sin, 0, cos)
+    const corner = (cx: number, cz: number, ax: number, az: number, y: number) => _p.set(cx + ax * cy + az * sy, y, cz - ax * sy + az * cy);
+    const ring = (y: number, cx: number, cz: number, w: number, d: number) => [[-w / 2, -d / 2], [w / 2, -d / 2], [w / 2, d / 2], [-w / 2, d / 2]].map(([ax, az]) => corner(cx, cz, ax, az, y).clone());
+    const B = ring(yb, xb, zb, wb, db), T = ring(yt, xt, zt, wt, dt);
+    for (let i = 0; i < 4; i++) {
+      const j = (i + 1) % 4;
+      _n.subVectors(T[i], B[i]).cross(_d.subVectors(B[j], B[i])).normalize();
+      const base = this.vertexCount;
+      for (const v of [B[i], T[i], T[j], B[j]]) this.vertex(v.x, v.y, v.z, _n.x, _n.y, _n.z, c, extra);
+      this.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+    if (caps) {
+      const base = this.vertexCount;
+      for (const v of T) this.vertex(v.x, v.y, v.z, 0, 1, 0, c, extra);
+      this.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
     }
   }
 
@@ -537,8 +646,8 @@ const C_CAP: Rgb = [1.08, 1.08, 1.07];       // parapet cap: pale, catches the l
 const C_SOFFIT: Rgb = [0.86, 0.86, 0.86];
 const C_UNDER: Rgb = [0.78, 0.78, 0.79];
 const C_WET: Rgb = [0.5, 0.5, 0.52];         // tidal band on the columns
-const C_PROXY: Rgb = [0.4, 0.4, 0.44];       // distance pier proxies: the shaded side of a pier as seen from afar
-const C_PROXY_SOFFIT: Rgb = [0.3, 0.3, 0.34]; // the deck's underside shadow line between the piers
+const C_PROXY: Rgb = [0.3, 0.3, 0.34];       // distance pier proxies: the shaded side of a pier as seen from afar
+const C_PROXY_SOFFIT: Rgb = [0.22, 0.22, 0.26]; // the deck's underside shadow line between the piers
 const C_FOOTING: Rgb = [0.74, 0.75, 0.76];
 const C_FOAM: Rgb = [1.85, 1.9, 1.92];       // wash around the footings (albedo ~0.9)
 const C_DECK: Rgb = [1, 1, 1];
@@ -564,7 +673,10 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
   const group = new BridgeGroup(culler);
   const routes: BridgeRoute[] = [];
   const allDecks = new Soup(5);
+  /** aRoadUv + aRoadInfo of the structure: lanes = 0 marks plain concrete; aRoadInfo.y = 1 adds the formwork panel
+   *  joints of the piers and pylons (see CONCRETE_FRAG) */
   const NO_ROAD = [0, 0, 0, 0, 0];
+  const PIER_INFO = [0, 0, 0, 1, 0];
 
   const g = GIRDER_DEPTH, ph = PARAPET_H;
 
@@ -718,31 +830,42 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
       const inWater = ground < 0.2;
       // hammerhead caps overhang the fascia by ~3 m so the pier line stays visible from above the deck
       const capW = W + 6.4;
-      /** column or wall standing in the water: footing, tidal band, shaft */
-      const shaft = (x: number, z: number, w: number, d: number, top: number, round: boolean) => {
-        if (inWater) {
-          P.struct.box(x, -1.0, z, w + 2.4, 1.6, d + 2.4, yaw, 0, C_FOOTING, false, NO_ROAD);
-          P.struct.disc(x, 0.05, z, (w + 2.4) * 0.5 + 0.9, (d + 2.4) * 0.5 + 0.9, 12, C_FOAM, NO_ROAD);
-          const wetTop = Math.min(top, 1.7);
-          if (round) P.struct.cylinder(x, 0.55, z, w, wetTop - 0.55, 12, C_WET, false, NO_ROAD);
-          else P.struct.box(x, 0.55, z, w, wetTop - 0.55, d, yaw, 0, C_WET, true, NO_ROAD);
-          if (round) P.struct.cylinder(x, wetTop, z, w, top - wetTop, 12, C_PLAIN, false, NO_ROAD);
-          else P.struct.box(x, wetTop, z, w, top - wetTop, d, yaw, 0, C_PLAIN, true, NO_ROAD);
-        } else if (round) P.struct.cylinder(x, colBottom, z, w, top - colBottom, 12, C_PLAIN, false, NO_ROAD);
-        else P.struct.box(x, colBottom, z, w, top - colBottom, d, yaw, 0, C_PLAIN, true, NO_ROAD);
-      };
       const proxyBottom = inWater ? -0.3 : colBottom;
+      /** footing and foam wash of a member standing in the water */
+      const footing = (x: number, z: number, w: number, d: number) => {
+        P.struct.box(x, -1.0, z, w + 2.4, 1.6, d + 2.4, yaw, 0, C_FOOTING, false, NO_ROAD);
+        P.struct.disc(x, 0.05, z, (w + 2.4) * 0.5 + 0.9, (d + 2.4) * 0.5 + 0.9, 12, C_FOAM, NO_ROAD);
+      };
       if (W >= 20 || heavy) {
+        // wall pier whose stem flares out to the cap (the classic causeway hammerhead): the sloping faces run
+        // from the water right up to the cap edge, so the stem is in view from above the deck as well as from
+        // the side, and the cap never reads as a block hanging under the fascia
         const ww = heavy ? W * 0.7 : W * 0.5, wt = heavy ? 3.2 : 2.2;
-        shaft(f.x, f.z, ww, wt, capBottom, false);
-        P.struct.box(f.x, capBottom, f.z, capW, capH, wt + 1.0, yaw, 0, C_PLAIN, false, NO_ROAD);
-        P.proxy.box(f.x, proxyBottom, f.z, ww + 2.4, capBottom - proxyBottom + 0.2, wt + 4.0, yaw, 0, C_PROXY, true, NO_ROAD);
+        const topW = capW - 3.0, topT = wt + 0.6;
+        const bottom = inWater ? 0.55 : colBottom;
+        const widthAt = (y: number) => lerp(ww, topW, clamp((y - bottom) / (capBottom - bottom), 0, 1));
+        const thickAt = (y: number) => lerp(wt, topT, clamp((y - bottom) / (capBottom - bottom), 0, 1));
+        if (inWater) {
+          footing(f.x, f.z, ww, wt);
+          const wetTop = Math.min(capBottom, 1.9);
+          P.struct.prism(f.x, 0.55, f.z, ww, wt, f.x, wetTop, f.z, widthAt(wetTop), thickAt(wetTop), yaw, C_WET, PIER_INFO);
+          P.struct.prism(f.x, wetTop, f.z, widthAt(wetTop), thickAt(wetTop), f.x, capBottom, f.z, topW, topT, yaw, C_PLAIN, PIER_INFO);
+        } else P.struct.prism(f.x, colBottom, f.z, ww, wt, f.x, capBottom, f.z, topW, topT, yaw, C_PLAIN, PIER_INFO);
+        P.struct.box(f.x, capBottom, f.z, capW, capH, wt + 1.0, yaw, 0, C_PLAIN, false, PIER_INFO);
+        P.proxy.prism(f.x, proxyBottom, f.z, ww + 2.4, wt + 4.0, f.x, capTop + 0.1, f.z, capW, wt + 4.0, yaw, C_PROXY, NO_ROAD);
       } else {
-        for (const off of [-W * 0.3, W * 0.3]) {
-          shaft(f.x + f.rx * off, f.z + f.rz * off, 2.4, 2.4, capBottom, true);
-          P.proxy.box(f.x + f.rx * off, proxyBottom, f.z + f.rz * off, 5.6, capBottom - proxyBottom + 0.2, 5.6, yaw, 0, C_PROXY, true, NO_ROAD);
+        // twin round columns at the fascia line under a cap beam
+        for (const off of [-(hw + 0.4), hw + 0.4]) {
+          const x = f.x + f.rx * off, z = f.z + f.rz * off;
+          if (inWater) {
+            footing(x, z, 2.4, 2.4);
+            const wetTop = Math.min(capBottom, 1.9);
+            P.struct.cylinder(x, 0.55, z, 2.4, wetTop - 0.55, 12, C_WET, false, PIER_INFO);
+            P.struct.cylinder(x, wetTop, z, 2.4, capBottom - wetTop, 12, C_PLAIN, false, PIER_INFO);
+          } else P.struct.cylinder(x, colBottom, z, 2.4, capBottom - colBottom, 12, C_PLAIN, false, PIER_INFO);
         }
-        P.struct.box(f.x, capBottom, f.z, W + 5.6, capH, 2.6, yaw, 0, C_PLAIN, false, NO_ROAD);
+        P.struct.box(f.x, capBottom, f.z, W + 5.6, capH, 2.6, yaw, 0, C_PLAIN, false, PIER_INFO);
+        P.proxy.box(f.x, proxyBottom, f.z, W + 5.6, capTop - proxyBottom + 0.1, 5.6, yaw, 0, C_PROXY, true, NO_ROAD);
       }
       // soffit slab of the span ahead: the dark underside line of the deck between this pier and the next
       {
@@ -756,8 +879,12 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
 
     // ------------------------------------------------------------ main span structure
     if (cableStayed) {
+      // H pylons: two concrete legs tapering (and leaning in a little) from a wide base in the water to the
+      // anchorage zone, a cross beam under the deck and a portal beam at the top; the stays fan from the upper
+      // third of the legs to anchor blocks on the deck edges
       const pylonH = 0.24 * mainSpan + 10; // above the deck
-      const legW = 3.2, legD = 4.8, legA = hw + 1.9;
+      const legWb = 4.6, legDb = 6.4, legWt = 2.8, legDt = 4.2;
+      const legAb = hw + 3.0, legAt = hw + 1.9; // leg centre offset from the axis at the base / the top (clear of the parapet)
       const nC = mainSpan >= 240 ? 9 : 7;
       const spacingC = (mainSpan / 2 - 16) / nC;
       for (const ps of [spanA, spanB]) {
@@ -765,27 +892,57 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         const f = frameAt(ps);
         const ground = map.heightAt(f.x, f.z);
         const yaw = yawAt(f);
-        const colBottom = Math.min(ground, -0.5) - 3;
+        const inWater = ground < 0.2;
+        const colBottom = inWater ? 0.55 : Math.min(ground, -0.5) - 3;
+        const topY = f.y + pylonH;
+        const tl = (y: number) => clamp((y - colBottom) / (topY - colBottom), 0, 1);
+        const legA = (y: number) => lerp(legAb, legAt, tl(y));
+        const legW = (y: number) => lerp(legWb, legWt, tl(y));
+        const legD = (y: number) => lerp(legDb, legDt, tl(y));
+        const wetTop = 2.4;
         for (const side of [-1, 1]) {
-          const lx = f.x + f.rx * legA * side, lz = f.z + f.rz * legA * side;
-          P.tall.box(lx, colBottom, lz, legW, f.y + pylonH - colBottom, legD, yaw, 0, C_PLAIN, false, NO_ROAD);
-          if (ground < 0.2) {
-            P.struct.box(lx, -1.2, lz, legW + 3, 1.9, legD + 3, yaw, 0, C_FOOTING, false, NO_ROAD);
-            P.struct.disc(lx, 0.05, lz, (legW + 3) * 0.5 + 1.0, (legD + 3) * 0.5 + 1.0, 12, C_FOAM, NO_ROAD);
+          const at = (y: number) => ({ x: f.x + f.rx * legA(y) * side, z: f.z + f.rz * legA(y) * side });
+          const seg = (y0: number, y1: number, soup: Soup, c: Rgb) => {
+            const a = at(y0), b = at(y1);
+            soup.prism(a.x, y0, a.z, legW(y0), legD(y0), b.x, y1, b.z, legW(y1), legD(y1), yaw, c, PIER_INFO, y1 === topY);
+          };
+          if (inWater) {
+            const b = at(colBottom);
+            P.struct.box(b.x, -1.2, b.z, legWb + 3, 1.9, legDb + 3, yaw, 0, C_FOOTING, false, NO_ROAD);
+            P.struct.disc(b.x, 0.05, b.z, (legWb + 3) * 0.5 + 1.0, (legDb + 3) * 0.5 + 1.0, 12, C_FOAM, NO_ROAD);
+            seg(colBottom, wetTop, P.struct, C_WET);
+            seg(wetTop, f.y + 1.0, P.struct, C_PLAIN);
+          } else seg(colBottom, f.y + 1.0, P.struct, C_PLAIN);
+          seg(f.y + 1.0, topY, P.tall, C_PLAIN);
+          // maintenance: platforms with railings at the deck and under the anchorages, a ladder up the inner face
+          for (const py of [f.y + 1.0, topY - 6.5]) {
+            const a = at(py);
+            P.tall.box(a.x, py, a.z, legW(py) + 2.4, 0.3, legD(py) + 2.4, yaw, 0, C_UNDER, false, NO_ROAD);
+            const rw = legW(py) + 2.4, rd = legD(py) + 2.4;
+            for (const [ox, oz, w, d] of [[0, -rd / 2, rw, 0.08], [0, rd / 2, rw, 0.08], [-rw / 2, 0, 0.08, rd], [rw / 2, 0, 0.08, rd]] as const) {
+              const cy = Math.cos(yaw), sy = Math.sin(yaw);
+              P.arch.box(a.x + ox * cy + oz * sy, py + 1.3, a.z - ox * sy + oz * cy, w, 0.08, d, yaw, 0, S_DARK, true, undefined, true);
+            }
           }
+          const l0 = at(f.y + 1.3), l1 = at(topY - 6.5);
+          const inner = (p: { x: number; z: number }, y: number) => new THREE.Vector3(p.x - f.rx * (legW(y) * 0.5 + 0.25) * side, y, p.z - f.rz * (legW(y) * 0.5 + 0.25) * side);
+          P.arch.strut(inner(l0, f.y + 1.3), inner(l1, topY - 6.5), 0.22, S_DARK);
         }
-        P.struct.box(f.x, f.y - g - 2.2, f.z, 2 * legA + legW, 2.2, legD, yaw, 0, C_PLAIN, false, NO_ROAD);          // cross beam under the deck
-        P.tall.box(f.x, f.y + pylonH - 5, f.z, 2 * legA + legW, 3.6, legD * 0.7, yaw, 0, C_PLAIN, false, NO_ROAD);   // portal beam
+        P.struct.box(f.x, f.y - g - 2.2, f.z, 2 * legA(f.y) + legW(f.y), 2.2, legD(f.y), yaw, 0, C_PLAIN, false, PIER_INFO);            // cross beam under the deck
+        P.tall.box(f.x, topY - 5, f.z, 2 * legA(topY - 3) + legW(topY - 3), 3.6, legD(topY) * 0.75, yaw, 0, C_PLAIN, false, PIER_INFO); // portal beam
         for (let k = 1; k <= nC; k++) {
           for (const dirS of [-1, 1]) {
             const sa = ps + dirS * (k * spacingC + 10);
             if (sa < 4 || sa > total - 4) continue;
             const fa = frameAt(sa);
-            const topY = f.y + pylonH - 3 - (nC - k) * ((0.45 * pylonH) / nC);
+            const hy = topY - 3 - (nC - k) * ((0.42 * pylonH) / nC);
             for (const side of [-1, 1]) {
-              const anchor = new THREE.Vector3(fa.x + fa.rx * (hw + 0.36) * side, fa.y + 1.1, fa.z + fa.rz * (hw + 0.36) * side);
-              const head = new THREE.Vector3(f.x + f.rx * (legA - legW * 0.5 + 0.1) * side, topY, f.z + f.rz * (legA - legW * 0.5 + 0.1) * side);
-              P.arch.strut(anchor, head, 0.11, S_PLAIN);
+              // anchor block on the deck edge, the stay leaving its top
+              const ax = fa.x + fa.rx * (hw + 0.1) * side, az = fa.z + fa.rz * (hw + 0.1) * side;
+              parts[chunkOf(sa)].struct.box(ax, fa.y + KERB, az, 1.0, 1.3, 1.9, yawAt(fa), 0, C_UNDER, false, NO_ROAD);
+              const anchor = new THREE.Vector3(ax, fa.y + KERB + 1.3, az);
+              const head = new THREE.Vector3(f.x + f.rx * (legA(hy) - legW(hy) * 0.5 + 0.1) * side, hy, f.z + f.rz * (legA(hy) - legW(hy) * 0.5 + 0.1) * side);
+              P.arch.strut(anchor, head, 0.14, S_PLAIN);
             }
           }
         }
