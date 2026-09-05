@@ -4,6 +4,21 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 `BUILD_ID.txt` next to the deployed `index.html`.
 
 ## Unreleased
+
+## iter08 — wave 4 builders and lead fixes (deployed as 45d3ba89fc54-20260905T040053Z)
+- Aircraft loop 3: welded airfoil tail (t/c 0.09 -> 0.12, open trailing edge, hinge lines, swept dorsal
+  fillet), wing lowered onto a boxier cabin roof with a flush root fairing, chined/stepped float hulls with
+  strut shoes, spreader bars, bracing wires and water rudder, rounded prop blades with an ogival spinner,
+  fin livery and calmer tail panel lines, float hull maps (walkway, boot-top at the waterline, wet band),
+  plan-shaped hull meniscus with bow ripples. Flight harness 23/23; draw calls unchanged.
+- Shadows loop: CascadeFitter replaces CSM.update — splits from camera height / aircraft distance (low
+  views 0-24 / 24-290 / 290-3500 m), cascades fit to the receiver slab, per-cascade bias (1 texel normal,
+  -0.25 texel depth); cascade-bitmask caster routing with shadow-only building/prop proxies; airframe
+  shadow casting double-sided (the cabin used to count as lit because only back faces were recorded);
+  overcast dims the shadow term. Contact shadow gap at the floats 0 px; draw calls at or below baseline
+  in all 13 views (plane-rear-quarter 392 -> 366, island-pass 449 -> 368).
+- Lead: propeller tip ring NaN (pow of a -2e-16 base) found by the live verifier's console check, fixed and
+  redeployed.
 - Iteration 07 scored (4 critics x 13 frames x 27 categories, bench/results/iter07/scores.md): category
   median 5.5 (iter06: 5.0-5.5); +1.5 water reflections, +1.0 water colour / vegetation / bridges, but two
   regressions — aircraft geometry 6.5 -> 5.5 (paper-thin tail read, wing-root gap, struts piercing floats,
@@ -109,4 +124,5 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 | 03aacefc4377-20260904T101257Z | 7557979bb140b196590ad9bb5f77ca49ef23e291 | https://raw.githack.com/ilikevibecoding/edwin4dawin/gh-pages/play.html | verified: build id matched, loaded in 9 s, flew |
 | 32aab3d85421-20260904T180514Z | c3a351f8276056fc04dd89dc766a8c5550d032a6 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/c3a351f8276056fc04dd89dc766a8c5550d032a6/play.html | verified: build id matched, loaded in 12.4 s, water takeoff to 67 m in 30 s (deterministic, identical to local), no console errors; 177 draw calls / 0.79 M tris in the water-landing view |
 | a73e7fb62028-20260904T202825Z | e05ebaf37fcf09e9154c1746c85c7d9f6ea2f30c | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/e05ebaf37fcf09e9154c1746c85c7d9f6ea2f30c/play.html | verified: build id matched, loaded in 15.3 s, water takeoff to 81 m in 30 s (new flight model), no console errors; 174 draw calls / 0.79 M tris in the water-landing view |
+| 45d3ba89fc54-20260905T040053Z | a94d74e3d96a3d8d54f274bf1dc6b9c42865909f | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/a94d74e3d96a3d8d54f274bf1dc6b9c42865909f/play.html | verified: build id matched, loaded in 16.9 s, water takeoff to 86 m in 30 s, no console errors; 171 draw calls / 0.59 M tris in the water-landing view. Wave 4 (aircraft 3, shadows, clouds 3) + planar reflections + wake foam fix. A first deploy of this round (1b11b7f0e45c) was replaced after the verifier caught a NaN propeller tip ring |
 | 4642d4630c87-20260904T235001Z | a3c7ba5670942411bf607043d4a14a60dbb8ef81 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/a3c7ba5670942411bf607043d4a14a60dbb8ef81/play.html | verified: build id matched, loaded in 15.5 s, water takeoff to 86 m in 30 s, no console errors; 164 draw calls / 0.49 M tris in the water-landing view. Includes bridges/skyline loop 2, cockpit with live instruments, vegetation loop 2, IBL-hitch and shader warm-up fixes, night exposure, play-feel changes |
