@@ -88,7 +88,14 @@ else {
 }
 
 // --- serve ------------------------------------------------------------------
-const preview = spawn('npx', ['vite', 'preview', '--port', String(port), '--strictPort'], { cwd: dir, stdio: 'ignore' });
+// Spawned detached so it leads its own process group: `npx` forks `sh -c vite`,
+// which forks node, and killing the npx pid alone left the node server running
+// on its port — fourteen of them were found alive after a night of gates.
+const preview = spawn('npx', ['vite', 'preview', '--port', String(port), '--strictPort'], {
+  cwd: dir,
+  stdio: 'ignore',
+  detached: true,
+});
 const base = `http://127.0.0.1:${port}/`;
 for (let i = 0; i < 60; i++) {
   try {
@@ -153,7 +160,7 @@ process.exit(failed ? 1 : 0);
 
 function cleanup() {
   try {
-    preview?.kill();
+    if (preview?.pid) process.kill(-preview.pid, 'SIGTERM');
   } catch {}
   if (keep) log(`worktree kept at ${dir}`);
   else {
