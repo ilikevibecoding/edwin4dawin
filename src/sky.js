@@ -103,7 +103,7 @@ export class Sky {
     this.domeMat = new THREE.ShaderMaterial({
       uniforms: {
         uSkyTop: su.uSkyTop, uSkyHorizon: su.uSkyHorizon, uSkyVoid: su.uSkyVoid, uSunsetColor: su.uSunsetColor,
-        uSunsetStrength: su.uSunsetStrength, uSunDiscDir: su.uSunDiscDir, uSkyDay: su.uSkyDay, uMoonDir: su.uMoonDir, uMoonPhase: su.uMoonPhase,
+        uSunsetStrength: su.uSunsetStrength, uSunDiscDir: su.uSunDiscDir, uSkyDay: su.uSkyDay, uSkyGain: su.uSkyGain, uMoonDir: su.uMoonDir, uMoonPhase: su.uMoonPhase,
         uSunAlpha: { value: 1 }, uMoonAlpha: { value: 1 },
       },
       vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, side: THREE.BackSide, depthWrite: false, depthTest: false,

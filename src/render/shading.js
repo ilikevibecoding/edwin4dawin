@@ -44,6 +44,7 @@ export const SHADING_UNIFORMS = {
   uSunsetColor: { value: new THREE.Color(1.0, 0.45, 0.15) },
   uSunsetStrength: { value: 0 },
   uSkyDay: { value: 1 },                                 // day factor 0..1 (star/moon visibility, Mie glow colour)
+  uSkyGain: { value: 1 },                                // dayExposure / exposure: the sky keeps its authored brightness when the night exposure lifts the scene
   uCamPos: { value: new THREE.Vector3() },
   uTimeS: { value: 0 },                                  // seconds, for water waves / twinkle
   uAmbientK: { value: AMBIENT_K },
@@ -66,7 +67,7 @@ SHADING_UNIFORMS.uShadowMap1.value = dummyShadow;
 // Sky gradient shared by the dome, the fog and reflections. `d` is a unit direction.
 export const SKY_GLSL = /* glsl */ `
 uniform vec3 uSkyTop; uniform vec3 uSkyHorizon; uniform vec3 uSkyVoid; uniform vec3 uSunsetColor;
-uniform float uSunsetStrength; uniform vec3 uSunDiscDir; uniform float uSkyDay;
+uniform float uSunsetStrength; uniform vec3 uSunDiscDir; uniform float uSkyDay; uniform float uSkyGain;
 vec3 skyGradient(vec3 d) {
   // Rayleigh-ish: the zenith stays saturated, the horizon whitens quickly (optical depth grows as 1/sin(elev))
   float up = clamp(d.y, 0.0, 1.0);
@@ -82,7 +83,7 @@ vec3 skyGradient(vec3 d) {
   float cosSun = max(dot(d, uSunDiscDir), 0.0);
   float halo = pow(cosSun, 12.0) * 0.16 * uSkyDay * step(-0.02, uSunDiscDir.y);
   col += halo * mix(vec3(1.0, 0.8, 0.6), vec3(1.0), uSkyDay * (1.0 - uSunsetStrength));
-  return col;
+  return col * uSkyGain;
 }`;
 
 // Fragment-shader chunk: sun term, shadows, specular, fog colour. Requires SKY_GLSL uniforms (included).

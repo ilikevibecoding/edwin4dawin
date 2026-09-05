@@ -65,6 +65,7 @@ export class RenderPipeline {
     if (this.enabled) this.shadows.configure(q.shadows || 0, q.shadowRes || 1024); else this.shadows.configure(0, 1024);
     this.post.bloomEnabled = this.enabled && !!q.bloom;
     this.post.fxaaEnabled = this.enabled && !!q.fxaa;
+    if (!this.enabled) SHADING_UNIFORMS.uSkyGain.value = 1;   // the direct path has no exposure to compensate
     setShadingDefines({ FANCY: this.enabled ? 1 : 0, MATERIAL_MAPS: this.enabled && this.materialMaps ? 1 : 0 });
   }
 
@@ -110,8 +111,10 @@ export class RenderPipeline {
     const share = THREE.MathUtils.clamp((1 - u.uAmbientK.value) / (1 - AMBIENT_K), 0, 1);   // 1 at full sun, 0 without
     u.uAmbientTint.value.copy(WHITE).lerp(SHADE_TINT, share);
     u.uCamPos.value.copy(g.camera.position);
-    // exposure keyed to the time of day (night raised so lit cities read as lit cities)
+    // exposure keyed to the time of day (night raised so lit cities read as lit cities); the sky dome, fog and sky
+    // reflections are pre-divided by the same lift so the authored night/dusk sky colours come out as authored
     this.post.exposure = THREE.MathUtils.lerp(this.nightExposure, this.dayExposure, sky.dayFactor);
+    u.uSkyGain.value = this.dayExposure / this.post.exposure;
   }
 
   // Full frame. handScene/handCamera are drawn on top of the world with a cleared depth buffer, like before.
