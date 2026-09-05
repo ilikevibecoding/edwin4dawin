@@ -57,15 +57,27 @@ export function emitMat(ctx, key, hex, intensity = 2.4, base = "emitBlue") {
 /**
  * One-off emissive canvas material under `key` (guarded): `draw(g, w, h)` paints a w×h canvas that
  * becomes the emissive map (black diffuse). Used for the big status boards and job boards.
+ * `scale` shrinks the backing canvas (w·scale × h·scale) while `draw` keeps painting in w×h units,
+ * so a board laid out at 2048 px can be stored at 1024 without touching its layout code.
  */
-export function canvasEmitMat(ctx, key, w, h, draw, { intensity = 1.3 } = {}) {
+export function canvasEmitMat(ctx, key, w, h, draw, { intensity = 1.3, scale = 1 } = {}) {
   if (!ctx.materials[key]) {
-    const c = makeCanvas(w, h);
+    const c = makeCanvas(Math.round(w * scale), Math.round(h * scale));
     const g = c.getContext("2d");
+    if (scale !== 1) g.scale(scale, scale);
     draw(g, w, h);
     ctx.materials[key] = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: toTexture(c, { srgb: true, wrap: false }), emissiveIntensity: intensity, roughness: 0.2, metalness: 0 });
   }
   return ctx.materials[key];
+}
+
+// CRT scanlines in device pixels (a 1 px line every 3 px), independent of any layout scale on `g`
+function scanlines(g, alpha = 0.22) {
+  g.save();
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.fillStyle = `rgba(0,0,0,${alpha})`;
+  for (let yy = 0; yy < g.canvas.height; yy += 3) g.fillRect(0, yy, g.canvas.width, 1);
+  g.restore();
 }
 
 const MONO = '"DejaVu Sans Mono", "Liberation Mono", Menlo, Consolas, monospace';
@@ -265,11 +277,10 @@ export function statusBoardMat(ctx, key = "eng_board", { accent = "#ffb347", coo
         g.fillStyle = k === 7 ? warn : rgba(accent, 0.55);
         g.fillRect(40 + k * 164, h - 32, 110, 12);
       }
-      // scanlines
-      g.fillStyle = "rgba(0,0,0,0.22)";
-      for (let yy = 0; yy < h; yy += 3) g.fillRect(0, yy, w, 1);
+      scanlines(g);
     },
-    { intensity },
+    // laid out at 2048×624, stored at 1024×312 (texture budget): 8.4 m of board, read from ≥ 6 m
+    { intensity, scale: 0.5 },
   );
 }
 
@@ -308,19 +319,19 @@ export function jobBoardMat(ctx, key = "eng_jobs", { title = "WORK ORDERS  ·  B
         g.fillStyle = rgba(accent, 0.5);
         g.fillRect(810, y - 6, 60 + rand() * 120, 12);
       }
-      g.fillStyle = "rgba(0,0,0,0.22)";
-      for (let yy = 0; yy < h; yy += 3) g.fillRect(0, yy, w, 1);
+      scanlines(g);
     },
-    { intensity },
+    { intensity, scale: 0.5 },
   );
 }
 
 /**
  * Big-text banner (bay names, hatch labels): one line of large text with an accent bar either side
  * and an optional smaller second line. `ratio` is w/h of the canvas (match the plate it goes on);
- * `width` is the canvas width in texels (2048 for a 5 m sign, 512 for a small label).
+ * `width` is the canvas width in texels (1024 for a 5 m sign read from across a room, 512 for a
+ * small label).
  */
-export function bannerMat(ctx, key, { text, sub = null, accent = "#ffb347", fg = "#e8edf5", bg = "#05070b", ratio = 8, intensity = 1.5, width = 2048 } = {}) {
+export function bannerMat(ctx, key, { text, sub = null, accent = "#ffb347", fg = "#e8edf5", bg = "#05070b", ratio = 8, intensity = 1.5, width = 1024 } = {}) {
   const w = width;
   const h = Math.round(w / ratio);
   return canvasEmitMat(
@@ -434,10 +445,9 @@ export function readoutMat(ctx, key, { title = "DECK STATUS  ·  ENGINEERING", a
       g.fillStyle = rgba(accent, 0.9);
       g.font = `bold 20px ${MONO}`;
       g.fillText("MAIN BUS LOAD  ·  1.4 GW", 40, 352);
-      g.fillStyle = "rgba(0,0,0,0.25)";
-      for (let yy = 0; yy < h; yy += 3) g.fillRect(0, yy, w, 1);
+      scanlines(g, 0.25);
     },
-    { intensity },
+    { intensity, scale: 0.5 },
   );
 }
 
@@ -545,12 +555,19 @@ export function wallStencil(kit, ctx, side, u, v, size, idx, { bounds = ctx.boun
   frame.add("decal", new THREE.PlaneGeometry(size, size), u, v, n, { uv: "keep", uvRect: decalRect(idx) });
 }
 
-/** Stencil decal lying on the floor (or any horizontal surface at y). */
+/**
+ * Stencil decal lying on the floor (or any horizontal surface at y). The shared decal sheet wears
+ * its glyphs down to 50 % opacity, which on a floor plate reads grey; the stencil is laid twice
+ * (the decal material neither writes depth nor z-fights itself), so the worn floor drops to ≤ 25 %
+ * and the glyphs read black.
+ */
 export function floorStencil(kit, x, z, size, idx, yaw = 0, y = 0.006) {
-  const g = new THREE.PlaneGeometry(size, size);
-  g.rotateX(-Math.PI / 2);
-  g.rotateY(yaw);
-  kit.add("decal", g, { pos: [x, y, z], uv: "keep", uvRect: decalRect(idx) });
+  for (let k = 0; k < 2; k++) {
+    const g = new THREE.PlaneGeometry(size, size);
+    g.rotateX(-Math.PI / 2);
+    g.rotateY(yaw);
+    kit.add("decal", g, { pos: [x, y + k * 0.0005, z], uv: "keep", uvRect: decalRect(idx) });
+  }
 }
 
 /** Thin painted line on the floor (lane markings): from (x0,z0) to (x1,z1). */
@@ -608,7 +625,10 @@ export function workLight(kit, ctx, x, y, z, { ceil, color = COOL, intensity = 6
   kit.box("metal", x, y + 0.22, z, w * 0.5, 0.06, d * 0.5, { color: PALETTE.gunmetal });
   kit.box(emit, x, y - 0.005, z, w - 0.1, 0.02, d - 0.1, { uv: "keep" });
   kit.box("emitAmber", x + w / 2 - 0.06, y + 0.12, z + d / 2 + 0.006, 0.05, 0.03, 0.01);
-  if (light) ctx.light(pointLight(color, intensity, distance, [x, y - 0.3, z]));
+  // the real light hangs 0.9 m under the diffuser: at 0.3 m its own inverse-square falloff lit the
+  // dim face to a clipped white block from any camera below it (probe: 569 px >= 240 at 0.3 m,
+  // 0 px at 0.9 m, where the face renders at the emitter's own 230)
+  if (light) ctx.light(pointLight(color, intensity, distance, [x, y - 0.9, z]));
 }
 
 /** Wall-mounted red rotating-beacon style warning lamp (dome + cage). */
@@ -1163,7 +1183,17 @@ export function loader(kit, ctx, x, z, { yaw = 0, seed = 8, color = PALETTE.impA
   add("paintedMetal", new THREE.BoxGeometry(0.7, 0.3, 0.1), 0, 1.1, -0.1, { color: PALETTE.impDark, texel: 2 });
   add("impScreen1", new THREE.PlaneGeometry(0.4, 0.14), 0, 1.15, -0.04, { uv: "keep" });
   for (const sx of [-1, 1]) for (const sz of [-0.3, 1.1]) add("paintedMetal", new THREE.BoxGeometry(0.06, 1.5, 0.06), sx * 0.7, 1.55, sz, { color: PALETTE.impDark, texel: 2 });
+  // grey cab panels between the cage posts (both flanks and the back) with a lit amber marker on
+  // each, so the cab reads as a two-tone machine from the lane instead of a black block (impGrey:
+  // an impMid panel vanished against the impMid chassis under the lane light)
+  for (const sx of [-1, 1]) {
+    add("paintedMetal", new THREE.BoxGeometry(0.04, 0.5, 1.28), sx * 0.72, 1.35, 0.4, { color: PALETTE.impGrey, texel: 2 });
+    add("emitAmber", new THREE.BoxGeometry(0.012, 0.06, 0.3), sx * 0.746, 1.5, 0.05);
+  }
+  add("paintedMetal", new THREE.BoxGeometry(1.36, 0.5, 0.04), 0, 1.35, 1.13, { color: PALETTE.impGrey, texel: 2 });
+  add("emitAmber", new THREE.BoxGeometry(0.3, 0.06, 0.012), 0, 1.5, 1.156);
   add("paintedMetal", new THREE.BoxGeometry(1.5, 0.08, 1.5), 0, 2.32, 0.4, { color: PALETTE.impDark, texel: 2 });
+  add("paintedMetal", new THREE.BoxGeometry(1.54, 0.05, 1.54), 0, 2.29, 0.4, { color: PALETTE.impGrey, texel: 2 });
   add("emitAmber", new THREE.CylinderGeometry(0.08, 0.1, 0.14, 10), 0.55, 2.43, 0.4);
   // mast (two channels + crossbars + a lift chain) and the fork carriage at the front
   for (const sx of [-1, 1]) {

@@ -79,7 +79,9 @@ export function buildCargo(kit, ctx) {
         while (x < x1 - 0.7) {
           const isWide = r() < wide;
           const sx = isWide ? 2.2 : 1.05 + r() * 0.25;
-          if (x + sx / 2 > x1 - 0.1) break;
+          // the whole box must sit inside the end posts (checking the centre let the last container
+          // overhang the rack end by half a box and cut through the row sign)
+          if (x + sx > x1 - 0.1) break;
           const gapChance = li === ys.length - 1 ? 0.35 : 1 - fill;
           if (r() > gapChance) {
             const sy = li === 0 ? 1.1 + r() * 0.4 : 0.8 + r() * 0.75;
@@ -103,8 +105,10 @@ export function buildCargo(kit, ctx) {
   // whose middle tiers hold coolant drums
   rack(-43, -44.0, -13, -41.2, ctx.seed + 3, { rows: 2, levels: 2, levelH: 2.3, tones: [1, 2, 4], wide: 0.45, fill: 0.86 });
   rack(-45, -37.9, -11, -36.5, ctx.seed + 4, { tones: [0, 3, 5], drums: [1, 2] });
-  // rack-end guards (hazard bumpers) and lit row labels: a text plate in a housing under a small
-  // lamp bar — the bare amber plates that were here read as glowing cream crates from the door
+  // rack-end guards (hazard bumpers) and lit row labels: a 1.2 × 0.45 m text plate in a housing
+  // hung 0.55 m out from the end posts on a bracket arm (a header bar across the posts carries it),
+  // its lamp bar on the arm above — clear of the end-bay containers, which used to cut through the
+  // plate when the housing sat on the post line
   const rowSubs = ["Bins · Stock", "Containers", "Heavy Cargo", "Coolant Drums"];
   for (const [x, z0, z1, row] of [
     [-45, -63.5, -62.1, 1],
@@ -119,11 +123,15 @@ export function buildCargo(kit, ctx) {
     const zc = (z0 + z1) / 2;
     const s = x < -20 ? -1 : 1;
     kit.box("hazard", x, 0.2, zc, 0.16, 0.4, z1 - z0 + 0.3, { texel: HAZARD_TEXEL });
-    bannerMat(ctx, "cargo_row" + row, { text: "Row " + row, sub: rowSubs[row - 1], accent: "#ffb347", ratio: 2.6, width: 512, intensity: 1.1 });
-    kit.box("paintedMetal", x, 2.4, zc, 0.08, 0.5, 0.96, { color: PALETTE.impBlack, texel: 2 });
-    kit.add("cargo_row" + row, new THREE.PlaneGeometry(0.78, 0.3), { pos: [x + s * 0.045, 2.4, zc], rot: [0, (s * Math.PI) / 2, 0], uv: "keep" });
-    kit.box("paintedMetal", x + s * 0.06, 2.72, zc, 0.16, 0.06, 0.9, { color: PALETTE.impDark, texel: 2 });
-    kit.box("emitAmberDim", x + s * 0.06, 2.685, zc, 0.12, 0.01, 0.8, { uv: "keep" });
+    bannerMat(ctx, "cargo_row" + row, { text: "Row " + row, sub: rowSubs[row - 1], accent: "#ffb347", ratio: 2.67, width: 512, intensity: 1.1 });
+    const sx = x + s * 0.55;
+    kit.box("paintedMetal", x, 2.78, zc, 0.08, 0.08, z1 - z0 + 0.1, { color: PALETTE.impDark, texel: 2 });
+    kit.box("paintedMetal", x + s * 0.3, 2.78, zc, 0.62, 0.06, 0.1, { color: PALETTE.impDark, texel: 2 });
+    kit.box("paintedMetal", x + s * 0.3, 2.2, zc, 0.56, 0.04, 0.06, { color: PALETTE.impDark, texel: 2 });
+    kit.box("paintedMetal", sx, 2.45, zc, 0.1, 0.56, 1.36, { color: PALETTE.impBlack, texel: 2 });
+    kit.add("cargo_row" + row, new THREE.PlaneGeometry(1.2, 0.45), { pos: [sx + s * 0.055, 2.45, zc], rot: [0, (s * Math.PI) / 2, 0], uv: "keep" });
+    kit.box("paintedMetal", sx, 2.78, zc, 0.18, 0.06, 1.3, { color: PALETTE.impDark, texel: 2 });
+    kit.box("emitAmberDim", sx, 2.745, zc, 0.14, 0.01, 1.2, { uv: "keep" });
   }
 
   // ---------------------------------------------------------------- floor markings
@@ -182,9 +190,9 @@ export function buildCargo(kit, ctx) {
     pipeRun(kit, [[dx + 0.5, dh + 2.4, z0 - 4], [dx + 0.5, dh + 2.4, z1 + 4]], 0.14, PALETTE.impMid);
     pipeRun(kit, [[dx + 0.5, dh + 2.4, z0 - 4], [dx + 0.5, H - 0.3, z0 - 4]], 0.14, PALETTE.impMid);
     pipeRun(kit, [[dx + 0.5, dh + 2.4, z1 + 4], [dx + 0.5, H - 0.3, z1 + 4]], 0.14, PALETTE.impMid);
-    // dock control pedestal and a status board beside the door
-    cabinet(kit, dx + 1.1, z1 + 2.2, { yaw: -Math.PI / 2, w: 1.3, h: 2.0, d: 0.5, seed: ctx.seed + 11, screen: 3 });
-    cabinet(kit, dx + 1.1, z0 - 2.2, { yaw: -Math.PI / 2, w: 1.3, h: 2.0, d: 0.5, seed: ctx.seed + 12, screen: 2, lamp: "emitRed" });
+    // dock control pedestals (fronts toward the bay) and a status board beside the door
+    cabinet(kit, dx + 1.1, z1 + 2.2, { yaw: Math.PI / 2, w: 1.3, h: 2.0, d: 0.5, seed: ctx.seed + 11, screen: 3 });
+    cabinet(kit, dx + 1.1, z0 - 2.2, { yaw: Math.PI / 2, w: 1.3, h: 2.0, d: 0.5, seed: ctx.seed + 12, screen: 2, lamp: "emitRed" });
     wallScreen(kit, ctx, { side: "xmin", u: uXmin(z1 + 4.5), v: 3.2, w: 2.0, h: 1.1, screen: 3 });
     wallScreen(kit, ctx, { side: "xmin", u: uXmin(z0 - 4.5), v: 3.2, w: 2.0, h: 1.1, screen: 1 });
     kit.collider([dx, 0, z0 - 0.9], [dx + 0.95, dh + 0.8, z1 + 0.9], "dock");
@@ -300,17 +308,22 @@ export function buildCargo(kit, ctx) {
   cableTray(kit, [min[0] + 1.5, -60.6], [max[0] - 1.5, -60.6], H - 0.6, { w: 0.6, ceil: H, cables: 5, seed: 3 });
   cableTray(kit, [min[0] + 1.5, -39.4], [max[0] - 1.5, -39.4], H - 0.6, { w: 0.6, ceil: H, cables: 4, seed: 4 });
   cableTray(kit, [-10, min[2] + 1.5], [-10, max[2] - 1.5], H - 0.85, { w: 0.5, ceil: H, cables: 3, seed: 5 });
-  // high-bay fixtures over the lanes: long emissive troughs (no real lights) ...
+  // high-bay fixtures over the lanes: long emissive troughs (no real lights) ... the white lane
+  // troughs are a dim diffuser with a narrow bright core (the full-width soft white bloomed from
+  // the door), the aisle troughs plain amber
   for (const z of [-58, -50, -42]) {
     for (let x = -42; x < -9; x += 8) {
       kit.box("paintedMetal", x, H - 0.5, z, 3.2, 0.2, 0.5, { color: PALETTE.impDark, texel: 2 });
-      kit.box(z === -50 ? "emitWhiteSoft" : "emitAmber", x, H - 0.61, z, 3.0, 0.02, 0.36, { uv: "keep" });
+      kit.box(z === -50 ? "emitWhiteDim" : "emitAmber", x, H - 0.61, z, 3.0, 0.02, 0.36, { uv: "keep" });
+      if (z === -50) kit.box("emitWhiteSoft", x, H - 0.615, z, 2.9, 0.02, 0.08, { uv: "keep" });
       kit.box("metal", x, H - 0.3, z, 0.06, 0.4, 0.06, { color: PALETTE.steel });
     }
   }
   // ... and the six real lights: hanging work lights along the main lane, amber in the aisles, cool at the dock
-  workLight(kit, ctx, -15, 6.2, -50, { ceil: H, color: 0xfff1dc, intensity: 12, distance: 16, w: 1.8, d: 0.55 });
-  workLight(kit, ctx, -30, 6.2, -50, { ceil: H, color: 0xfff1dc, intensity: 12, distance: 16, w: 1.8, d: 0.55 });
+  // lane work lights on the dim white face: the 1.8 m soft-white face of the nearest one, 10 m
+  // from the door camera, bloomed to a white block at the top of the frame
+  workLight(kit, ctx, -15, 6.2, -50, { ceil: H, color: 0xfff1dc, intensity: 12, distance: 16, w: 1.8, d: 0.55, emit: "emitWhiteDim" });
+  workLight(kit, ctx, -30, 6.2, -50, { ceil: H, color: 0xfff1dc, intensity: 12, distance: 16, w: 1.8, d: 0.55, emit: "emitWhiteDim" });
   workLight(kit, ctx, -24, 6.0, -55, { ceil: H, color: AMBER, intensity: 9, distance: 14, w: 1.4, d: 0.5 });
   workLight(kit, ctx, -30, 6.0, -45, { ceil: H, color: AMBER, intensity: 9, distance: 14, w: 1.4, d: 0.5 });
   ctx.light(pointLight(COOL, 8, 13, [-44, 6.5, -50]));

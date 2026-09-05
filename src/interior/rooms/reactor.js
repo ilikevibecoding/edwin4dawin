@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
 import { Kit, rng } from "../../kit.js";
 import { GRATE_TILE } from "../../textures.js";
-import { impFloor, impCeiling, impWall, stairs, platform, railing, pipeRun, pillar, wallScreen, equipmentRack, wallSegment } from "../imperial.js";
+import { impFloor, impCeiling, impWall, impConsole, stairs, platform, railing, pipeRun, pillar, wallScreen, equipmentRack, wallSegment } from "../imperial.js";
 import { pointLight, wallFrame } from "../builders.js";
 import { signPlate } from "../corridor.js";
 import { ENG_PAINTS, ENG_PAINTS_DARK, ENG_CEIL_PAINTS, ENG_THEME, AMBER, COOL, HAZARD_TEXEL, emitMat, pulseSet, wallVent, wallStencil, floorStencil, floorBorder, tank, cabinet, gratedTrench, warningLamp, cableTray, spotLight } from "./engProps.js";
@@ -315,6 +315,27 @@ export function buildReactor(kit, ctx) {
   catwalk(max[0] - 2.2, min[2] + 0.2, max[0] - 0.2, max[2] - 0.2, 8, "xmin");
   catwalk(min[0] + 2.2, min[2] + 0.2, max[0] - 2.2, min[2] + 2.2, 8, "zmax");
   catwalk(min[0] + 2.2, max[2] - 2.2, max[0] - 2.2, max[2] - 0.2, 8, "zmin");
+  // gallery stations on the ±8 side catwalks: a monitoring console with a bucket seat (seat on the
+  // wall side, so the operator looks at the core), a cabinet, an open bay, repeating — the two walls
+  // run different phases so the galleries stop mirroring each other. Kept clear of the coolant
+  // risers and of the y = 8 cross gantry.
+  {
+    const bay = (side, y, z, kind) => {
+      const s = side === "xmin" ? 1 : -1; // toward the core
+      const wx = side === "xmin" ? min[0] : max[0];
+      if (kind === "c") {
+        impConsole(kit, ctx, { x: wx + s * 1.45, z, y, yaw: s > 0 ? -Math.PI / 2 : Math.PI / 2, w: 1.6, d: 0.7, screens: [2, 0], chair: true, seed: ctx.seed + 60 + Math.round(-z), lampMat: "emitBlue" });
+        // amber station lamp on the wall behind the seat: from the gantry, 30 m off, the console
+        // itself is a few pixels — the lamp is what marks the bay as a manned post
+        kit.box("paintedMetal", wx + s * 0.08, y + 2.3, z, 0.16, 0.16, 1.5, { color: PALETTE.impDark, texel: 2 });
+        kit.box("emitAmber", wx + s * 0.165, y + 2.3, z, 0.01, 0.08, 1.3, { uv: "keep" });
+      } else cabinet(kit, wx + s * 0.55, z, { yaw: s > 0 ? Math.PI / 2 : -Math.PI / 2, y, w: 1.3, h: 1.9, d: 0.6, seed: ctx.seed + 80 + Math.round(-z), screen: kind === "k" ? 4 : null, lamp: "emitBlueDim" });
+    };
+    for (const [z, kind] of [[-104.5, "c"], [-97, "k"], [-93.5, "c"], [-87, "s"], [-79.5, "c"], [-71, "k"]]) bay("xmax", -8, z, kind);
+    for (const [z, kind] of [[-110, "s"], [-105, "c"], [-96, "c"], [-93, "k"]]) bay("xmin", -8, z, kind);
+    for (const [z, kind] of [[-104, "k"], [-98, "c"], [-88, "c"], [-84, "s"], [-76, "c"], [-70, "k"]]) bay("xmin", 8, z, kind);
+    for (const [z, kind] of [[-106, "c"], [-102, "s"], [-92, "c"], [-86, "k"], [-77, "c"], [-73, "s"], [-68, "c"]]) bay("xmax", 8, z, kind);
+  }
   for (const [x0, x1] of [[min[0] + 2.2, -3.4], [3.4, max[0] - 2.2]]) {
     kit.boxMM("floorGloss", [x0, 7.75, CZ - 1.2], [x1, 8, CZ + 1.2], { texel: 0.33 });
     kit.boxMM("paintedMetal", [x0, 7.4, CZ - 1.3], [x1, 7.75, CZ + 1.3], { color: PALETTE.impDark, texel: 1.5 });
@@ -386,12 +407,12 @@ export function buildReactor(kit, ctx) {
       frame.box("rx_wall", u, v, 0.106, w, 0.3, 0.01, { uv: "keep" });
       frame.box("emitBlueDim", u, v - 0.24, 0.106, w, 0.03, 0.01, { uv: "keep" });
     };
-    for (const z of [-70, -78, -86, -95, -104]) {
+    for (const z of [-70, -78, -86, -95, -104]) for (const y of [5.0, 11.5, -4.5]) lightPanel("xmax", z - min[2], y);
+    // the west wall runs its own rhythm (four bays, offset from the east wall's five) so the two
+    // galleries stop mirroring each other; also keeps its panels off the B-12 stencil at z = -95
+    for (const z of [-73, -82, -87.5, -105.5]) {
       lightPanel("xmin", max[2] - z, 5.0);
       lightPanel("xmin", max[2] - z, 11.5);
-      lightPanel("xmax", z - min[2], 5.0);
-      lightPanel("xmax", z - min[2], 11.5);
-      lightPanel("xmax", z - min[2], -4.5);
       if (z < -80) lightPanel("xmin", max[2] - z, -4.5);
     }
     for (const x of [-18, -6, 6, 18]) for (const y of [5.0, 11.5, -4.5]) lightPanel("zmin", x - min[0], y);
