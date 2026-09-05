@@ -129,10 +129,14 @@ BENCH_VIEWS.push(
     presim: 10, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
   },
   {
-    id: 'glass-sun', name: 'Cockpit glass in direct sun', description: 'Close on the windshield and left side windows with the sun behind the camera; interior visible through the glass.',
-    time: 15.5, weather: 'clear',
-    camera: { mode: 'fixed', pos: [418.3, 3.05, 1911.3], headingDeg: 15, pitchDeg: -8, fov: 32 },
-    plane: { pos: [420, 1.96, 1905], headingDeg: 240, pitchDeg: 0, bankDeg: 0, speed: 0, throttle: 0.0 },
+    id: 'glass-sun', name: 'Cockpit glass in direct sun', description: 'Close on the windshield and left side windows, the sun high off the starboard bow so its mirror image lands on the windshield; interior visible through the glass.',
+    // Camera and aircraft keep their relative pose (same framing as before) but the whole rig is turned 60 degrees:
+    // the moored heading 240 -> 180 with the camera on the same fore-port bearing, at 14:00 (sun el 58, az 246).
+    // With the old pose (15:30, sun behind the camera) no pane could mirror the sun toward the lens; now the
+    // windshield's left pane reflects it at ~(2.1, 0.93, -0.59) body, clear of the wing's shadow.
+    time: 14.0, weather: 'clear',
+    camera: { mode: 'fixed', pos: [424.6, 3.05, 1909.6], headingDeg: -45, pitchDeg: -8, fov: 32 },
+    plane: { pos: [420, 1.96, 1905], headingDeg: 180, pitchDeg: 0, bankDeg: 0, speed: 0, throttle: 0.0 },
     presim: 10, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
   },
 );

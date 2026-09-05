@@ -123,6 +123,47 @@ export function withStations(sections: Section[], xs: number[]): Section[] {
   return out;
 }
 
+/**
+ * Sections with intermediate stations inserted wherever two consecutive stations are more than `maxSpan` apart,
+ * the inserted sections following a monotone cubic (Fritsch-Carlson) through the neighbouring stations' parameters
+ * instead of the straight line `sectionAt` draws. A loft with 1 m spans between hand-placed stations reads as a
+ * series of cones under a clear-coat highlight (the "faceting bands" along the belly); the cubic gives it a smooth
+ * curvature along its length without ever overshooting a station.
+ */
+export function smoothStations(sections: Section[], maxSpan: number): Section[] {
+  const S = sections.length;
+  if (S < 3) return sections.slice();
+  const xs = sections.map((s) => s.x);
+  const keys = ['yc', 'w', 'top', 'bot', 'n', 'nBot'] as const;
+  const value = (s: Section, k: typeof keys[number]): number => (k === 'n' ? s.n ?? 2.2 : k === 'nBot' ? s.nBot ?? s.n ?? 2.2 : s[k]);
+  const tangents = (ys: number[]): number[] => {
+    const h: number[] = [], d: number[] = [];
+    for (let i = 0; i < S - 1; i++) { h.push(xs[i + 1] - xs[i]); d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i])); }
+    const m = new Array<number>(S).fill(0);
+    m[0] = d[0]; m[S - 1] = d[S - 2];
+    for (let i = 1; i < S - 1; i++) {
+      if (d[i - 1] * d[i] <= 0) { m[i] = 0; continue; }
+      m[i] = 3 * (h[i - 1] + h[i]) / ((2 * h[i] + h[i - 1]) / d[i - 1] + (h[i] + 2 * h[i - 1]) / d[i]);
+    }
+    return m;
+  };
+  const series = keys.map((k) => { const ys = sections.map((s) => value(s, k)); return { ys, m: tangents(ys) }; });
+  const out: Section[] = [];
+  for (let i = 0; i < S - 1; i++) {
+    out.push(sections[i]);
+    const h = xs[i + 1] - xs[i];
+    const k = Math.floor(Math.abs(h) / maxSpan);
+    for (let j = 1; j <= k; j++) {
+      const f = j / (k + 1), f2 = f * f, f3 = f2 * f;
+      const h00 = 2 * f3 - 3 * f2 + 1, h10 = f3 - 2 * f2 + f, h01 = -2 * f3 + 3 * f2, h11 = f3 - f2;
+      const at = (ki: number) => { const { ys, m } = series[ki]; return h00 * ys[i] + h10 * h * m[i] + h01 * ys[i + 1] + h11 * h * m[i + 1]; };
+      out.push({ x: xs[i] + h * f, yc: at(0), w: at(1), top: at(2), bot: at(3), n: at(4), nBot: at(5) });
+    }
+  }
+  out.push(sections[S - 1]);
+  return out;
+}
+
 /** Sections shrunk by a skin thickness (interior shell). */
 export function insetSections(sections: Section[], d: number): Section[] {
   return sections.map((s) => ({ ...s, w: Math.max(s.w - d, 0.01), top: Math.max(s.top - d, 0.01), bot: Math.max(s.bot - d, 0.01) }));

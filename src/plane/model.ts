@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   Batch, bladeGeometry, deckGeometry, fairedStrutGeometry, floatHull, glareShieldGeometry, gridGeometry, halfWidthAt, humpGeometry, inBlock, insetSections, keyedRing, loftGrid,
-  arcFraction, paneGeometry, partsMaterial, placement, quadGeometry, revealGeometry, sectionAt, sectionPerimeter, spinnerGeometry, strapGeometry, strutGeometry, tOfHeight, weldSmooth, wingLowerY, wingPanel, wingUpperY, wingXLE, wingXTE, withStations,
+  arcFraction, paneGeometry, partsMaterial, placement, quadGeometry, revealGeometry, sectionAt, sectionPerimeter, smoothStations, spinnerGeometry, strapGeometry, strutGeometry, tOfHeight, weldSmooth, wingLowerY, wingPanel, wingUpperY, wingXLE, wingXTE, withStations,
   type FloatStation, type QuadBlock, type Section, type Surf, type WingSpec,
 } from './geometry';
 import {
@@ -33,8 +33,13 @@ const CANVAS_PERIOD = 1 / 15;
 
 /** Finishes of the untextured parts; all of them share one `partsMaterial` (colour/roughness/metalness per vertex). */
 const SURF = {
-  metal: { color: 0x8e949a, roughness: 0.38, metalness: 0.9 },
-  darkMetal: { color: 0x2c2f33, roughness: 0.45, metalness: 0.8 },
+  /** bare aluminium fittings (cleats, rails, hubs): satin, not chrome */
+  metal: { color: 0x9a9ea3, roughness: 0.52, metalness: 0.85 },
+  /** struts, spreader bars and jury struts: steel tube painted the livery grey-white, semi-gloss enamel */
+  strut: { color: 0xd9d8d2, roughness: 0.42, metalness: 0.0 },
+  /** bracing wires: dull galvanised steel */
+  wire: { color: 0x6a6d70, roughness: 0.6, metalness: 0.7 },
+  darkMetal: { color: 0x2c2f33, roughness: 0.5, metalness: 0.6 },
   /** polished spinner: picks up a tight sun highlight */
   spinner: { color: 0xc4c8ce, roughness: 0.16, metalness: 0.95 },
   exhaust: { color: 0x5a4a3c, roughness: 0.6, metalness: 0.9 },
@@ -53,8 +58,14 @@ const SURF = {
   prop: { color: 0x1e1f22, roughness: 0.5, metalness: 0.6 },
   propTip: { color: 0xf2c230, roughness: 0.5, metalness: 0.0 },
   shirt: { color: 0x2f4f6f, roughness: 0.85, metalness: 0.0 },
+  /** open collar and cuffs of the pilot's shirt (a lighter trim) */
+  collar: { color: 0x9fb3c6, roughness: 0.85, metalness: 0.0 },
+  cap: { color: 0x22283a, roughness: 0.9, metalness: 0.0 },
   skin: { color: 0xc8956c, roughness: 0.7, metalness: 0.0 },
   headset: { color: 0x1a1a1c, roughness: 0.5, metalness: 0.0 },
+  /** folded sectional chart on the copilot seat */
+  paper: { color: 0xe9e4d6, roughness: 0.92, metalness: 0.0 },
+  chartInk: { color: 0xb6cbd2, roughness: 0.92, metalness: 0.0 },
   /** baggage in the aft bay: canvas duffels, a cooler and a hard case */
   duffelRed: { color: 0x8c2f2a, roughness: 0.9, metalness: 0.0 },
   duffelOlive: { color: 0x5d6640, roughness: 0.9, metalness: 0.0 },
@@ -68,7 +79,8 @@ const SURF = {
 } satisfies Record<string, Surf>;
 
 /** channels of the navigation-light mesh (index into `lightPower`) */
-const LIGHT = { red: 0, green: 1, tail: 2, beacon: 3, strobe: 4 } as const;
+const LIGHT = { red: 0, green: 1, tail: 2, beacon: 3, strobe: 4, landing: 5 } as const;
+const N_LIGHTS = 6;
 
 const DEG = Math.PI / 180;
 
@@ -203,7 +215,11 @@ export class PlaneModel {
    * (red/green wingtips, white tail, red beacon, white strobes) is driven through `lightPower`.
    */
   readonly lights: THREE.Mesh;
-  private readonly lightPower = { value: new Float32Array(5) };
+  private readonly lightPower = { value: new Float32Array(N_LIGHTS) };
+  /** glow sprites behind the lenses (one mesh, additive), driven by the same channel powers */
+  readonly lightGlow: THREE.Mesh;
+  /** cabin glow seen in / through the glass after dusk (0 by day .. 1 at night) */
+  private readonly glassUniforms: { uCabinGlow: { value: number } };
   readonly yokeL: THREE.Group;
   readonly yokeR: THREE.Group;
   readonly throttleLever: THREE.Mesh;
@@ -257,16 +273,23 @@ export class PlaneModel {
       { x: 0.00, yc: 0.05, w: 0.80, top: 1.13, bot: 0.68, n: 6.5, nBot: 2.4 },
       { x: -0.40, yc: 0.05, w: 0.79, top: 1.12, bot: 0.66, n: 5.8, nBot: 2.4 },
       { x: -0.90, yc: 0.05, w: 0.76, top: 1.08, bot: 0.62, n: 4.4, nBot: 2.4 },
-      { x: -1.25, yc: 0.055, w: 0.70, top: 1.00, bot: 0.56, n: 3.3, nBot: 2.3 },
-      { x: -1.60, yc: 0.06, w: 0.62, top: 0.90, bot: 0.50, n: 2.7, nBot: 2.2 },
-      { x: -2.60, yc: 0.10, w: 0.44, top: 0.62, bot: 0.34, n: 2.3, nBot: 2.1 },
-      { x: -3.70, yc: 0.16, w: 0.28, top: 0.42, bot: 0.20, n: 2.1 },
-      { x: -4.70, yc: 0.24, w: 0.15, top: 0.30, bot: 0.10, n: 2.0 },
-      { x: -5.35, yc: 0.30, w: 0.06, top: 0.22, bot: 0.04, n: 2.0 },
+      { x: -1.25, yc: 0.055, w: 0.71, top: 1.00, bot: 0.57, n: 3.3, nBot: 2.3 },
+      // aft body: a DHC-2-class tail cone stays deep and slab-sided well past the cabin (the old 0.62 / 0.42 m
+      // depths at -2.6 / -3.7 read as a pencil under the tailplane) and converges to a rounded stern post at
+      // -5.5 instead of a 26 cm blade capped flat at -5.35
+      { x: -1.60, yc: 0.06, w: 0.64, top: 0.91, bot: 0.52, n: 2.8, nBot: 2.2 },
+      { x: -2.60, yc: 0.10, w: 0.50, top: 0.70, bot: 0.40, n: 2.6, nBot: 2.1 },
+      { x: -3.70, yc: 0.16, w: 0.35, top: 0.50, bot: 0.27, n: 2.4 },
+      { x: -4.70, yc: 0.24, w: 0.21, top: 0.34, bot: 0.15, n: 2.2 },
+      { x: -5.15, yc: 0.29, w: 0.11, top: 0.22, bot: 0.08, n: 2.1 },
+      { x: -5.40, yc: 0.32, w: 0.045, top: 0.11, bot: 0.035, n: 2.0 },
+      { x: -5.50, yc: 0.33, w: 0.012, top: 0.03, bot: 0.01, n: 2.0 },
     ];
     // side windows [front x, aft x, top height]; pillars are the strips left between them
     const sideWindows: [number, number, number][] = [[1.77, 0.95, WIN_TOP], [0.85, -0.42, WIN_TOP], [-0.52, -1.25, WS_BASE]];
-    const sections = withStations(base, [CABIN_FRONT, CABIN_REAR, ...sideWindows.flatMap(([a, b]) => [a, b])]);
+    // cubic in-between stations every <= 38 cm so the long cowl, cabin and tail-cone spans loft as curves, then the
+    // window / bulkhead stations the cut-outs need
+    const sections = withStations(smoothStations(base, 0.38), [CABIN_FRONT, CABIN_REAR, ...sideWindows.flatMap(([a, b]) => [a, b])]);
     const si = (x: number): number => sections.findIndex((s) => Math.abs(s.x - x) < 1e-6);
     // livery sill line (bottom of the white upper body): level along the cabin, drooping toward the tail
     const sillY = (x: number): number => (x >= CABIN_REAR ? SILL : SILL - ((CABIN_REAR - x) / (5.35 + CABIN_REAR)) * 0.10);
@@ -278,7 +301,7 @@ export class PlaneModel {
       { y: WIN_TOP, segs: SEG_ROOF, fallbackT: 0.10 }, { y: WS_BASE, segs: SEG_WS, fallbackT: 0.146 }, { y: (s) => sillY(s.x), segs: SEG_WIN, fallbackT: 0.2125 },
       { y: (s) => sillY(s.x) - CHEAT_LINE.top, segs: 1, fallbackT: 0.23 }, { y: (s) => sillY(s.x) - CHEAT_LINE.bottom, segs: 1, fallbackT: 0.26 },
       { y: (s) => sillY(s.x) - CHEAT_LINE.pin, segs: 1, fallbackT: 0.27 },
-    ], 7);
+    ], 10);
     const jA = SEG_ROOF, jB = jA + SEG_WS, jC = jB + SEG_WIN;
     const outer = loftGrid(sections, ring);
     const R = outer.R;
@@ -341,12 +364,16 @@ export class PlaneModel {
     // vertexColors: wingPanel() shades the faces inside the hinge gaps dark so the gap reads as a line
     const wingPaint = new THREE.MeshPhysicalMaterial({
       map: wing.map, roughnessMap: wing.roughnessMap, normalMap: wing.normalMap, normalScale: new THREE.Vector2(0.5, 0.5),
-      color: 0xffffff, roughness: 1.0, metalness: 0.0, clearcoat: 0.65, clearcoatRoughness: 0.14, envMapIntensity: 1.0, vertexColors: true,
+      color: 0xffffff, roughness: 1.0, metalness: 0.0, clearcoat: 0.65, clearcoatRoughness: 1.0, clearcoatRoughnessMap: wing.clearcoatRoughnessMap, envMapIntensity: 1.0, vertexColors: true,
       clearcoatNormalMap: wing.clearcoatNormalMap, clearcoatNormalScale: new THREE.Vector2(0.45, 0.45),
     });
+    // floats: painted aluminium hull (metalness 0, clear-coated, scuffed, glossier wet band) with a bare anodised deck
+    // and an anti-slip walkway; the whole split lives in one packed texture (clearcoatMap R, roughnessMap G,
+    // metalnessMap B). The old uniform metalness 0.55 made the hulls read as chrome mirroring the water.
     const floatPaint = new THREE.MeshPhysicalMaterial({
-      map: flt.map, roughnessMap: flt.roughnessMap, normalMap: flt.normalMap, normalScale: new THREE.Vector2(0.6, 0.6),
-      color: 0xffffff, roughness: 1.0, metalness: 0.55, clearcoat: 0.2, clearcoatRoughness: 0.3, envMapIntensity: 1.0,
+      map: flt.map, roughnessMap: flt.roughnessMap, metalnessMap: flt.metalnessMap, clearcoatMap: flt.clearcoatMap,
+      normalMap: flt.normalMap, normalScale: new THREE.Vector2(0.6, 0.6),
+      color: 0xffffff, roughness: 1.0, metalness: 1.0, clearcoat: 0.45, clearcoatRoughness: 0.22, envMapIntensity: 1.0,
     });
     // Thin glass: a faint cool tint at low alpha; the reflection comes from the physically based specular terms and
     // is composited on top with premultiplied blending so it does not depend on the opacity. The Fresnel term also
@@ -360,19 +387,22 @@ export class PlaneModel {
       color: 0x9fc3d2, transparent: true, opacity: 0.05, roughness: 0.06, metalness: 0.0, envMapIntensity: 1.0,
       side: THREE.FrontSide, depthWrite: false, specularIntensity: 1.0, ior: 1.52, premultipliedAlpha: true,
     });
-    const glassUniforms = { uDirt: { value: glassDirtTexture() }, uEnvGain: { value: 1.6 }, uDirtAmount: { value: 0.16 } };
+    const glassUniforms = { uDirt: { value: glassDirtTexture() }, uEnvGain: { value: 2.2 }, uDirtAmount: { value: 0.16 }, uCabinGlow: { value: 0 } };
+    this.glassUniforms = glassUniforms;
     glass.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, glassUniforms);
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nattribute vec4 aPane;\nvarying vec4 vPane;\nvarying vec2 vPaneUv;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPane = aPane;\nvPaneUv = uv;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform sampler2D uDirt;\nuniform float uEnvGain;\nuniform float uDirtAmount;\nvarying vec4 vPane;\nvarying vec2 vPaneUv;')
+        .replace('#include <common>', '#include <common>\nuniform sampler2D uDirt;\nuniform float uEnvGain;\nuniform float uDirtAmount;\nuniform float uCabinGlow;\nvarying vec4 vPane;\nvarying vec2 vPaneUv;')
         // acrylic panes are never optically flat: a gentle low-frequency wobble of the shading normal bends the
-        // mirrored sky / sun streak across the pane (the "slight distortion" of real light-aircraft glazing)
+        // mirrored sky / sun streak across the pane (the "slight distortion" of real light-aircraft glazing); the
+        // windshield (vPane.z) also carries a slow cylindrical bow across its width so the sun's image travels
         .replace('#include <normal_fragment_maps>', /* glsl */ `
           #include <normal_fragment_maps>
-          vec2 glassWob = vec2(sin(vPaneUv.x * 21.0 + vPaneUv.y * 6.0) + 0.5 * sin(vPaneUv.x * 47.0), cos(vPaneUv.y * 17.0 - vPaneUv.x * 4.0)) * 0.010;
+          vec2 glassWob = vec2(sin(vPaneUv.x * 21.0 + vPaneUv.y * 6.0) + 0.5 * sin(vPaneUv.x * 47.0), cos(vPaneUv.y * 17.0 - vPaneUv.x * 4.0)) * 0.012;
+          if (vPane.z > 0.5) glassWob += vec2(sin(vPaneUv.x * 6.3) * 0.012, sin(vPaneUv.y * 12.6) * 0.016);
           normal = normalize(normal + vec3(glassWob, 0.0));
         `)
         .replace('#include <opaque_fragment>', /* glsl */ `
@@ -385,33 +415,53 @@ export class PlaneModel {
           float vig = 1.0 - smoothstep(0.0, 0.07, dEdge);
           // the cabin side of the glass carries half the smudge film and catches no sun (the roof shades it)
           float inner = vPane.w;
-          float dirt = texture2D(uDirt, vPaneUv * vPane.xy * 1.6).r * uDirtAmount * (1.0 - 0.5 * inner);
+          float dirt = texture2D(uDirt, vPaneUv * vPane.xy * 1.6).r * uDirtAmount * (1.0 - 0.3 * inner);
           vec3 glassN = normalize(normal), glassV = normalize(vViewPosition);
           float glassNdv = saturate(dot(glassN, glassV));
+          // Fresnel: 4 % head-on rising to a mirror at grazing angles. The rim is widened a little over Schlick
+          // (pow 3.5 mixed in) so the sky reflection reads on the side panes at the 40-60 degree views the stills
+          // use; a thin pane seen against a lit cabin needs that to register as glass at all.
           float glassF = 0.04 + 0.96 * pow(1.0 - glassNdv, 5.0);
+          float glassFr = 0.05 + 0.95 * mix(pow(1.0 - glassNdv, 5.0), pow(1.0 - glassNdv, 3.5), 0.6);
+          // Fresnel-weighted mirror image of the sky / environment probe, sharp (the panes are near-specular)
+          vec3 skyRefl = vec3(0.0);
+          #ifdef USE_ENVMAP
+            skyRefl = getIBLRadiance(glassV, glassN, 0.05) * glassFr * uEnvGain;
+          #endif
           // smudge film: a broad glossy lobe around the sun's mirror direction (the haze a dirty windshield shows
-          // around the sun), strongest where the film is thick; the mirror highlight itself is the GGX term
-          vec3 filmSheen = vec3(0.0);
+          // around the sun), strongest where the film is thick; plus the sun's own mirror image as a tight lobe
+          // with a small halo (the GGX term at roughness 0.06 is a sub-pixel spike that the wobble breaks up)
+          vec3 filmSheen = vec3(0.0), sunGlint = vec3(0.0);
           #if NUM_DIR_LIGHTS > 0
             vec3 sunL = directionalLights[0].direction;
             float sunNdh = saturate(dot(glassN, normalize(sunL + glassV)));
-            filmSheen = directionalLights[0].color * pow(sunNdh, 8.0) * (0.10 + dirt * 0.9) * saturate(dot(glassN, sunL) * 4.0) * (1.0 - 0.7 * inner);
+            float sunFacing = saturate(dot(glassN, sunL) * 4.0);
+            filmSheen = directionalLights[0].color * pow(sunNdh, 8.0) * (0.10 + dirt * 0.9) * sunFacing * (1.0 - 0.5 * inner);
+            sunGlint = directionalLights[0].color * (pow(sunNdh, 1400.0) * 2.5 + pow(sunNdh, 160.0) * 0.30) * sunFacing * (0.6 + 0.4 * glassFr) * (1.0 - 0.6 * inner);
           #endif
           // the film only shows where it scatters light (sun sheen, a little of the sky reflection): as a diffuse
           // haze it would frost the panes and make them glow at night
-          vec3 glassSpec = reflectedLight.directSpecular * (1.0 + dirt * 2.0) + filmSheen + reflectedLight.indirectSpecular * uEnvGain * (1.0 + dirt * 1.5);
+          vec3 glassSpec = reflectedLight.directSpecular * (1.0 + dirt * 2.0) + filmSheen + sunGlint + skyRefl * (1.0 + dirt * 1.5);
           // soft knee: the sun's mirror image stays bright but never clips to white
           glassSpec = 1.0 - exp(-glassSpec);
           float glassA = clamp(diffuseColor.a + glassF * 0.85 + vig * 0.10 + dirt * 0.06, 0.0, 1.0);
-          // the tint veil is lit by the sky only: sun on the pane must not fill it with a bright diffuse haze
-          vec3 glassCol = reflectedLight.indirectDiffuse * 1.5 * (diffuseColor.a + dirt * 0.06) + glassSpec * (1.0 - 0.5 * vig);
+          // the tint veil is lit by the sky only: sun on the pane must not fill it with a bright diffuse haze; the
+          // dirt film scatters a little skylight (the veil the cabin side shows against the bright bay)
+          vec3 glassCol = reflectedLight.indirectDiffuse * 1.5 * (diffuseColor.a + dirt * 0.22) + glassSpec * (1.0 - 0.5 * vig);
+          // cabin side of the windshield: a faint mirror image of the glare shield top along the pane's bottom
+          // (dark anti-glare vinyl lit by the sky) and, after dusk, the instrument backlight in the same place;
+          // from outside the same glow shows through the windshield's lower half as the panel's warm spill
+          float wsBottom = (vPane.z > 0.5 ? 1.0 - smoothstep(0.0, 0.5, vPaneUv.x) : 0.0);
+          glassCol += inner * wsBottom * (reflectedLight.indirectDiffuse * vec3(0.30, 0.28, 0.26) + vec3(0.9, 0.62, 0.34) * uCabinGlow * 0.10);
+          glassCol += (1.0 - inner) * uCabinGlow * (vec3(0.9, 0.62, 0.34) * (0.05 + 0.10 * wsBottom));
+          glassA = max(glassA, saturate(uCabinGlow * (0.06 + 0.12 * wsBottom * (1.0 - inner))));
           glassCol = mix(glassCol, totalDiffuse * 0.10, seal);
           glassA = mix(glassA, 1.0, seal);
           gl_FragColor = vec4(glassCol, glassA);
         `)
         .replace('#include <premultiplied_alpha_fragment>', '');
     };
-    glass.customProgramCacheKey = () => 'cockpit-glass-v8';
+    glass.customProgramCacheKey = () => 'cockpit-glass-v9';
     const plainPaint = new THREE.MeshPhysicalMaterial({ color: LIVERY.upper, roughness: 0.4, metalness: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.15 });
     const parts = partsMaterial();
     // Upwelling light from the water: the environment probe's lower half is a neutral fill, so a surface facing
@@ -477,6 +527,7 @@ export class PlaneModel {
       return m;
     };
     const at = placement;
+    const V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
 
     // ------------------------------------------------------------ fuselage shell, cabin, glass
     mesh(gridGeometry(outer, { quad: (i, j) => !isWindow(i, j), capStart: true, capEnd: true }), paint);
@@ -681,7 +732,7 @@ export class PlaneModel {
     // and whose tip trailing edge sinks into the fin's leading edge (replaces the old slab)
     const dorsalSpec: WingSpec = { span: 0.33, rootChord: 1.3, tipChord: 0.25, sweep: -0.885, dihedral: 0, thickness: 0.10, twist: 0, camber: 0, te: TAIL_TE };
     const dorsalGeo = wingPanel(dorsalSpec, { z0: 0, z1: 0.33, segments: 3, part: 'full', n: 10, tipRound: 0.05, vOf: (z) => tailV(z, 2.0) });
-    airframe.add(dorsalGeo, at([-2.94, 0.50, 0], [-Math.PI / 2, 0, 0]));
+    airframe.add(dorsalGeo, at([-2.94, 0.62, 0], [-Math.PI / 2, 0, 0]));
     mesh(airframe.build(), wingPaint);
     mesh(white.build(), plainPaint);
     this.rudder = new THREE.Group();
@@ -702,30 +753,100 @@ export class PlaneModel {
         .replace('#include <common>', '#include <common>\nattribute float aLight;\nvarying float vLight;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLight = aLight;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform float uLightPower[5];\nvarying float vLight;')
+        .replace('#include <common>', `#include <common>\nuniform float uLightPower[${N_LIGHTS}];\nvarying float vLight;`)
         .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vColor * uLightPower[int(vLight + 0.5)];');
     };
-    lightsMat.customProgramCacheKey = () => 'plane-lights-v1';
+    lightsMat.customProgramCacheKey = () => 'plane-lights-v2';
     this.materials.push(lightsMat);
-    const lens = (r: number, tint: number, channel: number): THREE.BufferGeometry => {
-      const g = new THREE.SphereGeometry(r, 8, 6);
-      const n = g.getAttribute('position').count, c = new THREE.Color(tint);
+    /** tag a geometry with the channel and its (linear) tint scaled by `gain`: lenses at 1, the lit skin patches dimmer */
+    const lit = (g: THREE.BufferGeometry, tint: number, channel: number, gain = 1): THREE.BufferGeometry => {
+      const n = g.getAttribute('position').count, c = new THREE.Color(tint).multiplyScalar(gain);
       const col = new Float32Array(n * 3), ch = new Float32Array(n);
       for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; ch[i] = channel; }
       g.setAttribute('color', new THREE.BufferAttribute(col, 3));
       g.setAttribute('aLight', new THREE.BufferAttribute(ch, 1));
       return g;
     };
-    // wingtip lenses sit just outboard of the rounded tip (span ends at z 7.52) so they are not buried in the wing
+    const lens = (r: number, tint: number, channel: number) => lit(new THREE.SphereGeometry(r, 8, 6), tint, channel);
+    // wingtip lenses sit just outboard of the rounded tip (span ends at z 7.52) so they are not buried in the wing;
+    // a thin tinted patch on the tip's upper and lower skin around each lens picks up its light after dusk
     const lightKit = new Batch();
+    const glows: { p: THREE.Vector3; tint: number; channel: number; size: number }[] = [];
     for (const [tip, tint, channel] of [[this.wingTipL, 0xd81c1c, LIGHT.red], [this.wingTipR, 0x18c848, LIGHT.green]] as const) {
-      const zOut = Math.sign(tip.z) * 7.55;
+      const sgn = Math.sign(tip.z), zOut = sgn * 7.55;
       lightKit.add(lens(0.06, tint, channel), at([tip.x, tip.y, zOut]));
-      lightKit.add(lens(0.035, 0xf2f4ff, LIGHT.strobe), at([tip.x - 0.12, tip.y, zOut - Math.sign(tip.z) * 0.02]));
+      lightKit.add(lens(0.035, 0xf2f4ff, LIGHT.strobe), at([tip.x - 0.12, tip.y, zOut - sgn * 0.02]));
+      for (const [dy, flipY] of [[0.045, 0], [-0.04, Math.PI]] as const) {
+        const patch = new THREE.CircleGeometry(0.22, 12);
+        patch.scale(1.6, 1, 1);
+        lightKit.add(lit(patch, tint, channel, 0.10), at([tip.x - 0.05, tip.y + dy, sgn * 7.28], [-Math.PI / 2 + flipY, 0, 0]));
+      }
+      glows.push({ p: V3(tip.x, tip.y, zOut), tint, channel, size: 0.42 }, { p: V3(tip.x - 0.12, tip.y, zOut), tint: 0xf2f4ff, channel: LIGHT.strobe, size: 0.55 });
     }
-    lightKit.add(lens(0.04, 0xf2f4ff, LIGHT.tail), at([-5.37, 0.30, 0]));
+    lightKit.add(lens(0.04, 0xf2f4ff, LIGHT.tail), at([-5.51, 0.33, 0]));
+    glows.push({ p: V3(-5.51, 0.33, 0), tint: 0xf2f4ff, channel: LIGHT.tail, size: 0.34 });
+    // rotating beacon on the fin tip, and the landing light in the port wing's leading edge inboard of the strut
     lightKit.add(lens(0.05, 0xd81c1c, LIGHT.beacon), at([-4.80, 2.07, 0]));
+    glows.push({ p: V3(-4.80, 2.07, 0), tint: 0xd81c1c, channel: LIGHT.beacon, size: 0.55 });
+    const landing = V3(WING_POS.x + wingXLE(wingSpec, 2.3) - 0.01, WING_POS.y + 0.02, -2.3);
+    lightKit.add(lit(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 12), 0xfff2d8, LIGHT.landing), at(landing, [0, 0, Math.PI / 2]));
+    glows.push({ p: landing, tint: 0xfff0d0, channel: LIGHT.landing, size: 0.9 });
     this.lights = mesh(lightKit.build(), lightsMat, { cast: false, receive: false });
+    // glow sprites: one camera-facing quad per lamp, expanded in the vertex shader, additive, fading with the
+    // channel power (bloom alone left the lamps as hard 8 px stars); pushed toward the camera so the lens does not cut them
+    {
+      const n = glows.length;
+      const pos = new Float32Array(n * 12), corner = new Float32Array(n * 8), col = new Float32Array(n * 12), ch = new Float32Array(n * 4), size = new Float32Array(n * 4), idx: number[] = [];
+      const c = new THREE.Color();
+      glows.forEach((g, k) => {
+        c.set(g.tint);
+        for (let v = 0; v < 4; v++) {
+          const i = k * 4 + v;
+          pos[i * 3] = g.p.x; pos[i * 3 + 1] = g.p.y; pos[i * 3 + 2] = g.p.z;
+          corner[i * 2] = v & 1 ? 1 : -1; corner[i * 2 + 1] = v & 2 ? 1 : -1;
+          col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+          ch[i] = g.channel; size[i] = g.size;
+        }
+        idx.push(k * 4, k * 4 + 1, k * 4 + 2, k * 4 + 1, k * 4 + 3, k * 4 + 2);
+      });
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      geo.setAttribute('aCorner', new THREE.BufferAttribute(corner, 2));
+      geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+      geo.setAttribute('aLight', new THREE.BufferAttribute(ch, 1));
+      geo.setAttribute('aSize', new THREE.BufferAttribute(size, 1));
+      geo.setIndex(idx);
+      geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.5, 0), 9.5);
+      const glowMat = new THREE.ShaderMaterial({
+        uniforms: { uLightPower: this.lightPower },
+        vertexShader: /* glsl */ `
+          attribute vec2 aCorner; attribute vec3 color; attribute float aLight; attribute float aSize;
+          uniform float uLightPower[${N_LIGHTS}];
+          varying vec2 vCorner; varying vec3 vCol; varying float vPow;
+          void main() {
+            vCorner = aCorner; vCol = color; vPow = uLightPower[int(aLight + 0.5)];
+            vec4 mv = modelViewMatrix * vec4(position, 1.0);
+            // no halo without power (day): collapse the quad so it costs no fill
+            float s = vPow > 0.01 ? aSize : 0.0;
+            mv.xy += aCorner * s; mv.z += 0.12;
+            gl_Position = projectionMatrix * mv;
+          }`,
+        fragmentShader: /* glsl */ `
+          varying vec2 vCorner; varying vec3 vCol; varying float vPow;
+          void main() {
+            float r = length(vCorner);
+            if (r > 1.0) discard;
+            // a bright core with a long soft skirt: the scatter of a point source in a slightly hazy night
+            float halo = pow(1.0 - r, 3.0) * 0.35 + pow(max(1.0 - r * 3.0, 0.0), 2.0) * 0.5;
+            gl_FragColor = vec4(vCol * halo * vPow * 0.045, 1.0);
+          }`,
+        transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: true,
+      });
+      this.materials.push(glowMat);
+      this.lightGlow = mesh(geo, glowMat, { cast: false, receive: false });
+      this.lightGlow.renderOrder = 16;
+      this.lightGlow.frustumCulled = false;
+    }
 
     // ------------------------------------------------------------ floats & struts
     // EDO-style hull: hard chine at yc, V bottom (deadrise) to the keel, near-vertical sides, crowned deck; the
@@ -754,7 +875,6 @@ export class PlaneModel {
     // wing strut attachment points sit on the wing's lower surface
     const strutZ = 2.9;
     const strutTop = (xLocal: number) => new THREE.Vector3(WING_POS.x + xLocal, WING_POS.y + wingLowerY(wingSpec, xLocal, strutZ) + 0.03, 0);
-    const V3 = (x: number, y: number, z: number) => new THREE.Vector3(x, y, z);
     /** strut end fitting: a shoe on the deck (or a pad under the belly) with a bolt boss, so no tube pierces a skin bare */
     const shoe = (p: THREE.Vector3, dir: THREE.Vector3, size: number) => {
       fittings.add(new THREE.BoxGeometry(size, 0.035, size * 0.75), at(p.clone().addScaledVector(dir, 0.012)), SURF.darkMetal);
@@ -770,18 +890,18 @@ export class PlaneModel {
       // main struts: front and rear pairs from the deck shoes to pads under the belly, plus diagonal braces
       const fDeck = V3(FX, deckAt(FX), side * 1.25), rDeck = V3(RX, deckAt(RX), side * 1.25);
       const fBelly = V3(1.4, belly, side * 0.55), rBelly = V3(-0.7, belly, side * 0.5);
-      fittings.add(fairedStrutGeometry(fDeck, fBelly, 0.14, 0.05), undefined, SURF.metal);
-      fittings.add(fairedStrutGeometry(rDeck, rBelly, 0.14, 0.05), undefined, SURF.metal);
-      fittings.add(strutGeometry(fDeck.clone().add(V3(0.05, 0.03, 0)), rBelly, 0.022), undefined, SURF.metal);
-      fittings.add(strutGeometry(rDeck.clone().add(V3(-0.05, 0.03, 0)), fBelly, 0.022), undefined, SURF.metal);
+      fittings.add(fairedStrutGeometry(fDeck, fBelly, 0.14, 0.05), undefined, SURF.strut);
+      fittings.add(fairedStrutGeometry(rDeck, rBelly, 0.14, 0.05), undefined, SURF.strut);
+      fittings.add(strutGeometry(fDeck.clone().add(V3(0.05, 0.03, 0)), rBelly, 0.022), undefined, SURF.strut);
+      fittings.add(strutGeometry(rDeck.clone().add(V3(-0.05, 0.03, 0)), fBelly, 0.022), undefined, SURF.strut);
       shoe(fDeck, UPV, 0.22); shoe(rDeck, UPV, 0.22);
       shoe(fBelly, DOWNV, 0.16); shoe(rBelly, DOWNV, 0.16);
       // wing struts (V) from shoes on the outboard deck edge to the wing underside, with a jury strut between them
       const fWing = V3(1.25, deckAt(1.25), side * 1.36), rWing = V3(-0.3, deckAt(-0.3), side * 1.36);
       const frontTop = strutTop(0.25).setZ(side * strutZ), rearTop = strutTop(-0.85).setZ(side * strutZ);
-      fittings.add(fairedStrutGeometry(fWing, frontTop, 0.12, 0.045), undefined, SURF.metal);
-      fittings.add(fairedStrutGeometry(rWing, rearTop, 0.12, 0.045), undefined, SURF.metal);
-      fittings.add(strutGeometry(frontTop.clone().setY(frontTop.y - 0.05), rearTop.clone().setY(rearTop.y - 0.05), 0.03), undefined, SURF.metal);
+      fittings.add(fairedStrutGeometry(fWing, frontTop, 0.12, 0.045), undefined, SURF.strut);
+      fittings.add(fairedStrutGeometry(rWing, rearTop, 0.12, 0.045), undefined, SURF.strut);
+      fittings.add(strutGeometry(frontTop.clone().setY(frontTop.y - 0.05), rearTop.clone().setY(rearTop.y - 0.05), 0.03), undefined, SURF.strut);
       shoe(fWing, UPV, 0.16); shoe(rWing, UPV, 0.16);
       // wing strut root fittings under the wing
       for (const top of [frontTop, rearTop]) fittings.add(new THREE.BoxGeometry(0.16, 0.03, 0.10), at(top.clone().setY(top.y - 0.02)), SURF.darkMetal);
@@ -802,12 +922,12 @@ export class PlaneModel {
     // spreader bars between the floats (faired tubes) with saddle fittings on the deck edges
     for (const x of [FX, RX]) {
       const y = deckAt(x) + 0.05;
-      fittings.add(fairedStrutGeometry(V3(x, y, -1.25), V3(x, y, 1.25), 0.10, 0.06), undefined, SURF.metal);
+      fittings.add(fairedStrutGeometry(V3(x, y, -1.25), V3(x, y, 1.25), 0.10, 0.06), undefined, SURF.strut);
       for (const side of [-1, 1]) fittings.add(new THREE.BoxGeometry(0.18, 0.06, 0.16), at([x, deckAt(x) + 0.03, side * 1.16]), SURF.darkMetal);
     }
     // horizontal bracing wires crossing between the two spreader bars
-    fittings.add(strutGeometry(V3(FX, deckAt(FX) + 0.05, -1.1), V3(RX, deckAt(RX) + 0.05, 1.1), 0.008), undefined, SURF.darkMetal);
-    fittings.add(strutGeometry(V3(FX, deckAt(FX) + 0.05, 1.1), V3(RX, deckAt(RX) + 0.05, -1.1), 0.008), undefined, SURF.darkMetal);
+    fittings.add(strutGeometry(V3(FX, deckAt(FX) + 0.05, -1.1), V3(RX, deckAt(RX) + 0.05, 1.1), 0.008), undefined, SURF.wire);
+    fittings.add(strutGeometry(V3(FX, deckAt(FX) + 0.05, 1.1), V3(RX, deckAt(RX) + 0.05, -1.1), 0.008), undefined, SURF.wire);
     mesh(floats.build(), floatPaint);
     mesh(fittings.build(), parts);
 
@@ -972,26 +1092,67 @@ export class PlaneModel {
     // yokes: shaft entering the panel below the switch row, hub with a placard, ram's-horn wheel with grips
     const YOKE_HUB = new THREE.Vector3(YOKE_HUB_X, YOKE_HUB_Y, 0);
     const shaftIn = inPanel(0, -0.175, 0.0).setZ(0);
+    /** where the pilot's wrists meet the hands on the grips (hub space), for the static forearms in the cabin kit */
+    const WRIST = (s: number) => new THREE.Vector3(-0.115, 0.045, s * 0.165);
     const mkYoke = (z: number, hands: boolean): THREE.Group => {
       const g = new THREE.Group();
       const yoke = new Batch();
       const shaftEnd = shaftIn.clone().sub(YOKE_HUB).setZ(0);
       const shaftDir = shaftEnd.clone().normalize();
-      yoke.add(strutGeometry(new THREE.Vector3(0, 0, 0), shaftEnd.clone().addScaledVector(shaftDir, 0.16), 0.018), undefined, SURF.darkMetal);
-      yoke.add(new THREE.CylinderGeometry(0.03, 0.03, 0.04, 12), at(shaftEnd.clone().addScaledVector(shaftDir, -0.01), [0, 0, Math.PI / 2 - Math.atan2(shaftDir.y, shaftDir.x)]), SURF.rubber);
-      yoke.add(new THREE.BoxGeometry(0.05, 0.09, 0.075), undefined, SURF.plastic);
-      // wheel: 250-degree arc open at the top, three spokes, grips angled up and outward at the horn tips
-      yoke.add(new THREE.TorusGeometry(0.15, 0.013, 8, 36, Math.PI * 1.39), at(undefined, [0, Math.PI / 2, Math.PI * 0.805]), SURF.plastic);
-      yoke.add(new THREE.BoxGeometry(0.022, 0.15, 0.03), at([0, -0.075, 0]), SURF.plastic);
+      const shaftRot: [number, number, number] = [0, 0, Math.PI / 2 - Math.atan2(shaftDir.y, shaftDir.x)];
+      // column: a chromed tube into the panel through a two-step rubber boot
+      yoke.add(strutGeometry(new THREE.Vector3(0, 0, 0), shaftEnd.clone().addScaledVector(shaftDir, 0.16), 0.016), undefined, SURF.metal);
+      yoke.add(new THREE.CylinderGeometry(0.03, 0.036, 0.035, 12), at(shaftEnd.clone().addScaledVector(shaftDir, -0.045), shaftRot), SURF.rubber);
+      yoke.add(new THREE.CylinderGeometry(0.038, 0.048, 0.03, 12), at(shaftEnd.clone().addScaledVector(shaftDir, -0.015), shaftRot), SURF.rubber);
+      // hub: a rounded-off block with the placard face toward the pilot and a chromed centre bolt
+      yoke.add(new THREE.BoxGeometry(0.05, 0.10, 0.09), undefined, SURF.plastic);
+      yoke.add(new THREE.CylinderGeometry(0.012, 0.012, 0.006, 10), at([-0.027, -0.03, 0], [0, 0, Math.PI / 2]), SURF.metal);
+      // ram's-horn: each arm leaves the hub outward and a little down, then sweeps up and back into a near-vertical
+      // grip (rubber) whose top leans toward the pilot; the horns are one bent tube with sphere joints
       for (const s of [-1, 1]) {
-        yoke.add(new THREE.BoxGeometry(0.022, 0.03, 0.15), at([0, 0, s * 0.075]), SURF.plastic);
-        const tip = new THREE.Vector3(0, 0.15 * Math.sin(Math.PI * 0.195), s * 0.15 * Math.cos(Math.PI * 0.195));
-        const grip = tip.clone().add(new THREE.Vector3(0, 0.08, s * 0.03));
-        yoke.add(strutGeometry(tip, grip, 0.017, 10), undefined, SURF.rubber);
+        const arm: THREE.Vector3[] = [
+          new THREE.Vector3(0, -0.005, s * 0.04), new THREE.Vector3(-0.005, -0.02, s * 0.12), new THREE.Vector3(-0.015, -0.005, s * 0.155),
+          new THREE.Vector3(-0.03, 0.03, s * 0.165), new THREE.Vector3(-0.05, 0.11, s * 0.165),
+        ];
+        for (let i = 0; i < 3; i++) {
+          yoke.add(strutGeometry(arm[i], arm[i + 1], 0.012, 10), undefined, SURF.plastic);
+          yoke.add(new THREE.SphereGeometry(0.012, 8, 6), at(arm[i + 1]), SURF.plastic);
+        }
+        yoke.add(strutGeometry(arm[3], arm[4], 0.017, 10), undefined, SURF.rubber);
+        yoke.add(new THREE.SphereGeometry(0.017, 8, 6), at(arm[4]), SURF.rubber);
+        // left horn: the trim switch (a rocker under the thumb on top of the grip) and the red PTT on its inner face
+        if (s < 0) {
+          yoke.add(new THREE.BoxGeometry(0.014, 0.008, 0.012), at([-0.055, 0.128, s * 0.16]), SURF.darkMetal);
+          yoke.add(new THREE.BoxGeometry(0.010, 0.006, 0.008), at([-0.055, 0.133, s * 0.16]), SURF.lightPlastic);
+          yoke.add(new THREE.CylinderGeometry(0.006, 0.006, 0.006, 10), at([-0.046, 0.085, s * 0.147], [Math.PI / 2, 0, 0]), SURF.mixture);
+        }
         if (hands) {
-          // pilot's hands wrapped around the grips
-          yoke.add(new THREE.CapsuleGeometry(0.03, 0.045, 4, 12), at(tip.clone().lerp(grip, 0.5).add(new THREE.Vector3(-0.012, 0, 0)), [0, 0, s * 0.2]), SURF.skin);
-          yoke.add(new THREE.CylinderGeometry(0.011, 0.011, 0.05, 8), at(tip.clone().lerp(grip, 0.75).add(new THREE.Vector3(0.028, 0.0, -s * 0.01)), [0, 0, Math.PI / 2]), SURF.skin);
+          // hand: the palm lies against the grip's aft face, four fingers wrap the outboard side and curl in front of
+          // it, the thumb hooks the inboard side; a watch on the left wrist
+          const gripDir = arm[4].clone().sub(arm[3]).normalize();
+          const gc = arm[3].clone().lerp(arm[4], 0.5);
+          const palm = gc.clone().add(new THREE.Vector3(-0.026, 0.0, 0));
+          yoke.add(new THREE.BoxGeometry(0.028, 0.085, 0.072), at(palm, [0, 0, Math.atan2(gripDir.x, gripDir.y) * -1]), SURF.skin);
+          for (let f = 0; f < 4; f++) {
+            const y = gc.y + 0.03 - f * 0.019, r = 0.0085;
+            const base = new THREE.Vector3(-0.024, y, s * (0.165 + 0.021)), knuckle = new THREE.Vector3(0.006, y, s * (0.165 + 0.018)), tip = new THREE.Vector3(0.018, y, s * 0.158);
+            yoke.add(new THREE.CapsuleGeometry(r, base.distanceTo(knuckle), 3, 8), at(base.clone().lerp(knuckle, 0.5), [0, 0, -Math.PI / 2]), SURF.skin);
+            yoke.add(strutGeometry(knuckle, tip, r * 0.9, 8), undefined, SURF.skin);
+            yoke.add(new THREE.SphereGeometry(r * 0.9, 6, 5), at(tip), SURF.skin);
+          }
+          const thumbA = new THREE.Vector3(-0.02, gc.y + 0.02, s * 0.145), thumbB = new THREE.Vector3(0.006, gc.y + 0.05, s * 0.15);
+          yoke.add(strutGeometry(thumbA, thumbB, 0.009, 8), undefined, SURF.skin);
+          yoke.add(new THREE.SphereGeometry(0.009, 6, 5), at(thumbB), SURF.skin);
+          // wrist from the palm back to where the sleeve's cuff takes over; the watch on the left one
+          const wrist = WRIST(s);
+          yoke.add(strutGeometry(palm.clone().add(new THREE.Vector3(-0.014, -0.02, 0)), wrist, 0.026, 10), undefined, SURF.skin);
+          if (s < 0) {
+            const wDir = palm.clone().sub(wrist).normalize();
+            const wPos = wrist.clone().addScaledVector(wDir, 0.03);
+            yoke.add(new THREE.TorusGeometry(0.029, 0.005, 6, 14), at(wPos, [0, Math.PI / 2 - Math.atan2(wDir.x, wDir.z), 0]), SURF.belt);
+            yoke.add(new THREE.CylinderGeometry(0.016, 0.016, 0.008, 12), at(wPos.clone().add(new THREE.Vector3(0.004, 0.030, 0)), [0, 0, -0.2]), SURF.metal);
+            yoke.add(new THREE.CylinderGeometry(0.012, 0.012, 0.004, 12), at(wPos.clone().add(new THREE.Vector3(0.0045, 0.0345, 0)), [0, 0, -0.2]), SURF.headset);
+          }
         }
       }
       const m = new THREE.Mesh(yoke.build(), parts);
@@ -1041,6 +1202,11 @@ export class PlaneModel {
       strap([x, yb, z - 0.24], [x, yb, z - 0.04]); strap([x, yb, z + 0.24], [x, yb, z + 0.04]);
       buckle([x, yb + 0.004, z]);
     }
+    // folded sectional chart dropped on the copilot seat: two leaves of paper, the top one half-open at an angle,
+    // with the printed face (pale blue-grey) showing on the open leaf
+    cabinKit.add(new THREE.BoxGeometry(0.24, 0.006, 0.17), at([1.02, cushionTop + 0.011, 0.35], [0, 0.28, 0]), SURF.paper);
+    cabinKit.add(new THREE.BoxGeometry(0.20, 0.0025, 0.13), at([1.02, cushionTop + 0.0155, 0.35], [0, 0.28, 0]), SURF.chartInk);
+    cabinKit.add(new THREE.BoxGeometry(0.24, 0.006, 0.085), at([1.075, cushionTop + 0.030, 0.42], [0.55, 0.28, 0]), SURF.paper);
     const lapY = cushionTop + 0.09, chestY = SEAT_Y + 0.06 + 0.50;
     strap([0.96, cushionTop + 0.01, -0.60], [1.07, lapY, -0.36], [0.35, 1, 0]); strap([0.96, cushionTop + 0.01, -0.08], [1.07, lapY, -0.32], [0.35, 1, 0]);
     buckle([1.075, lapY, -0.34], [0, 0, 0.35]);
@@ -1051,16 +1217,34 @@ export class PlaneModel {
     // pilot: torso, head with headset, arms from the shoulders to the yoke grips. The eyes (cockpitEye) sit at the
     // front of the head: with the cockpit camera's 5 cm near plane the head, headband and earcups must all be
     // behind the eye or they fill the frame from inside
-    const headY = this.cockpitEye.y - 0.03, headX = this.cockpitEye.x - 0.10;
-    cabinKit.add(new THREE.BoxGeometry(0.28, 0.58, 0.42), at([headX - 0.02, SEAT_Y + 0.06 + 0.29, -0.34]), SURF.shirt);
-    cabinKit.add(new THREE.SphereGeometry(0.11, 12, 10), at([headX, headY, -0.34]), SURF.skin);
-    cabinKit.add(new THREE.TorusGeometry(0.115, 0.018, 6, 16, Math.PI), at([headX, headY + 0.03, -0.34], [0, Math.PI / 2, 0]), SURF.headset);
-    for (const side of [-1, 1]) cabinKit.add(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 10), at([headX, headY, -0.34 + side * 0.12], [Math.PI / 2, 0, 0]), SURF.headset);
+    const headY = this.cockpitEye.y - 0.03, headX = this.cockpitEye.x - 0.10, PZ = -0.34;
+    const shoulderY = SEAT_Y + 0.06 + 0.52;
+    // torso in a navy shirt with rounded shoulders, an open collar showing the neck, the head a slightly tall
+    // ovoid under a ball cap (crown + peak) with the headset band over the cap, ear cups and a boom mic to the mouth
+    cabinKit.add(new THREE.BoxGeometry(0.26, 0.52, 0.40), at([headX - 0.02, SEAT_Y + 0.06 + 0.26, PZ]), SURF.shirt);
+    for (const side of [-1, 1]) cabinKit.add(new THREE.SphereGeometry(0.065, 10, 8), at([headX - 0.02, shoulderY, PZ + side * 0.17]), SURF.shirt);
+    cabinKit.add(new THREE.CylinderGeometry(0.048, 0.052, 0.10, 12), at([headX - 0.005, shoulderY + 0.03, PZ]), SURF.skin);
+    for (const side of [-1, 1]) cabinKit.add(new THREE.BoxGeometry(0.09, 0.022, 0.07), at([headX + 0.02, shoulderY + 0.035, PZ + side * 0.06], [side * 0.55, 0, -0.35]), SURF.collar);
+    const head = new THREE.SphereGeometry(0.105, 14, 12); head.scale(0.95, 1.12, 0.92);
+    cabinKit.add(head, at([headX, headY, PZ]), SURF.skin);
+    cabinKit.add(new THREE.SphereGeometry(0.108, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.44), at([headX + 0.005, headY + 0.012, PZ], [0, 0, -0.10]), SURF.cap);
+    cabinKit.add(new THREE.BoxGeometry(0.075, 0.008, 0.11), at([headX + 0.115, headY + 0.055, PZ], [0, 0, -0.18]), SURF.cap);
+    cabinKit.add(new THREE.TorusGeometry(0.118, 0.016, 6, 16, Math.PI), at([headX, headY + 0.035, PZ], [0, Math.PI / 2, 0]), SURF.headset);
+    for (const side of [-1, 1]) cabinKit.add(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 10), at([headX, headY - 0.01, PZ + side * 0.115], [Math.PI / 2, 0, 0]), SURF.headset);
+    { const micA = V3(headX + 0.01, headY - 0.03, PZ - 0.125), micB = V3(headX + 0.10, headY - 0.075, PZ - 0.05);
+      cabinKit.add(strutGeometry(micA, micB, 0.004, 6), undefined, SURF.headset);
+      cabinKit.add(new THREE.SphereGeometry(0.013, 8, 6), at(micB), SURF.headset); }
+    // arms: upper arm from the shoulder down to an elbow by the hip, forearm in the sleeve forward to a cuff just
+    // behind the hand (the wrists and hands travel with the yoke)
     for (const side of [-1, 1]) {
-      const shoulder = V3(headX, SEAT_Y + 0.06 + 0.52, -0.34 + side * 0.20), elbow = V3(1.20, 0.52, -0.34 + side * 0.23), wrist = V3(YOKE_HUB.x - 0.04, YOKE_HUB.y + 0.12, -0.34 + side * 0.165);
+      const shoulder = V3(headX - 0.02, shoulderY, PZ + side * 0.19), elbow = V3(1.15, 0.50, PZ + side * 0.24);
+      const wrist = WRIST(side).add(YOKE_HUB).add(V3(0, 0, PZ));
+      const cuff = wrist.clone().lerp(elbow, 0.10);
       cabinKit.add(strutGeometry(shoulder, elbow, 0.045, 8), undefined, SURF.shirt);
-      cabinKit.add(strutGeometry(elbow, wrist, 0.04, 8), undefined, SURF.shirt);
-      cabinKit.add(new THREE.SphereGeometry(0.045, 8, 6), at(elbow), SURF.shirt);
+      cabinKit.add(new THREE.SphereGeometry(0.046, 8, 6), at(elbow), SURF.shirt);
+      cabinKit.add(strutGeometry(elbow, cuff, 0.040, 8), undefined, SURF.shirt);
+      const cDir = wrist.clone().sub(elbow).normalize();
+      cabinKit.add(new THREE.CylinderGeometry(0.043, 0.041, 0.025, 10), at(cuff, [0, 0, -Math.atan2(cDir.x, cDir.y)]), SURF.collar);
     }
     // legs to the pedals
     for (const side of [-1, 1]) {
@@ -1147,14 +1331,20 @@ export class PlaneModel {
     bladeMat.opacity = 1 - blend;
     this.propBlades.visible = blend < 0.999;
     this.propBlades.castShadow = blend < 0.5;
-    // position lights, rotating beacon and strobes: only emissive after dusk (`night` 0 by day .. 1 at night)
-    const strobeOn = (time % 1.2) < 0.06 || ((time + 0.15) % 1.2) < 0.06;
+    // position lights, rotating beacon and strobes: only emissive after dusk (`night` 0 by day .. 1 at night).
+    // Beacon: a rotating red lamp, ~1 Hz, a sharp flash on a dim floor so the lens always reads red; strobes: a
+    // double flash (50 ms, 100 ms apart) every 1.5 s; the landing light is on while on the water (taxiing lamp)
     const glow = Math.pow(night, 0.6);
+    const strobePhase = time % 1.5;
+    const strobeOn = strobePhase < 0.05 || (strobePhase > 0.15 && strobePhase < 0.20);
+    const beaconFlash = Math.pow(Math.max(0, Math.sin(time * Math.PI * 2)), 6);
     const P = this.lightPower.value;
     P[LIGHT.red] = P[LIGHT.green] = 7 * glow;
     P[LIGHT.tail] = 6 * glow;
-    P[LIGHT.beacon] = (2 + 12 * Math.max(0, Math.sin(time * 4.5))) * glow;
-    P[LIGHT.strobe] = (strobeOn ? 30 : 0) * glow;
+    P[LIGHT.beacon] = (1.5 + 14 * beaconFlash) * glow;
+    P[LIGHT.strobe] = (strobeOn ? 40 : 0) * glow;
+    P[LIGHT.landing] = telemetry && telemetry.onWater ? 10 * glow : 0;
+    this.glassUniforms.uCabinGlow.value = glow;
     this.wheels.visible = gearDown;
     this.wheels.position.y = gearDown ? 0 : 0.3;
     // controls: the yoke turns with roll (right roll = clockwise seen by the pilot) and slides fore/aft with pitch
