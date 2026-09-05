@@ -140,7 +140,9 @@ for (const cp of checkpoints) {
       minAlive = Math.min(minAlive, st.alive);
       trace.push(`${simT}s ${st.heavyInFlight}/${st.boltsInFlight}@${st.heat}`);
     }
-    console.log(`   density (heavy/capital bolts in flight @ heat): ${trace.splice(0).join("  ")}`);
+    console.log(
+      `   density (heavy/capital bolts in flight @ heat): ${trace.splice(0).join("  ")}`,
+    );
   }
   const stats = await page.evaluate(() => window.debugAPI.battleStats());
   const state = await page.evaluate(() => window.debugAPI.battleState());

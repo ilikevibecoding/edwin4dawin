@@ -206,17 +206,20 @@ export class Cinematic {
     return {
       name: "fighter chase",
       duration: 8,
-      smoothK: 3.5,
+      // a smoothed camera trails a 300 m/s fighter by speed / rate: track tightly and let the
+      // fighter's own turn-limited motion keep the path smooth
+      smoothK: 30,
       roll: 0.04,
       at: (t, p, l) => {
-        if (!f) return;
+        if (!f || f.alive === false) return false; // the fighter is gone: cut
         _a.copy(f.vel).normalize();
         p.copy(f.pos)
-          .addScaledVector(_a, -(36 + t * 10))
-          .add(_b.set(0, 9 + t * 4, 0));
-        _c.copy(f.pos).addScaledVector(_a, 160);
-        if (f.anchor) l.lerpVectors(_c, f.anchor.position, 0.5);
+          .addScaledVector(_a, -(50 + t * 12))
+          .add(_b.set(0, 14 + t * 5, 0));
+        _c.copy(f.pos).addScaledVector(_a, 140);
+        if (f.anchor) l.lerpVectors(_c, f.anchor.position, 0.4);
         else l.copy(_c);
+        return true;
       },
     };
   }
@@ -459,7 +462,11 @@ export class Cinematic {
     if (!this.shot) this._next();
     this.time += dt;
     const t = Math.min(1, this.time / this.shot.duration);
-    this.shot.at(t, this.pos, this.look);
+    // a shot may end itself early (its subject is gone) by returning false: cut to the next one
+    if (this.shot.at(t, this.pos, this.look) === false) {
+      this._next();
+      return;
+    }
     this._clear(this.pos);
     if (this.smooth === 0) {
       this.camera.position.copy(this.pos);
