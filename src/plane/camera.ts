@@ -5,6 +5,10 @@ import type { PlaneModel } from './model';
 
 export type CameraMode = 'chase' | 'cockpit' | 'orbit' | 'fixed';
 
+/** chase spring stiffness and damping (damping ratio 0.9); C/K is the feed-forward lead in seconds */
+const CHASE_K = 60;
+const CHASE_C = 2 * 0.9 * Math.sqrt(CHASE_K);
+
 /** Chase / cockpit cameras with inertia, speed-dependent FOV and turbulence shake. */
 export class FlightCamera {
   mode: CameraMode = 'chase';
@@ -42,7 +46,11 @@ export class FlightCamera {
     const fwd = flight.forward(this.fwd);
     const yaw = Math.atan2(fwd.x, fwd.z);
     const speed = flight.telemetry.airspeed;
-    const dist = this.chaseDistance + speed * 0.08;
+    // the rest distance closes with speed by the spring's feed-forward lead (C/K seconds of travel): this is where
+    // the camera came to rest in every bench still so far (a spring settled behind a frozen aircraft with its
+    // velocity fed forward), i.e. the framing the frames have been judged on; in flight it is now the steady state
+    // too, so the clip continues from the still without the camera falling 15-20 m back
+    const dist = Math.max(10, this.chaseDistance + speed * (0.08 - CHASE_C / CHASE_K));
     const heightOff = this.chaseHeight + speed * 0.012;
     const orbitQ = this.orbitQ.setFromEuler(this.euler.set(this.orbitPitch, yaw + this.orbitYaw, 0, 'YXZ'));
     return out.set(0, heightOff, -dist).applyQuaternion(orbitQ).add(flight.position);
@@ -107,7 +115,7 @@ export class FlightCamera {
     const speed = t.airspeed;
     // bank the camera slightly with the aircraft so turns feel dynamic
     if (!this.initialised) { this.pos.copy(desired); this.vel.set(0, 0, 0); this.initialised = true; }
-    const k = 60, c = 2 * 0.9 * Math.sqrt(60);
+    const k = CHASE_K, c = CHASE_C;
     // feed the aircraft velocity forward so the spring only has to absorb accelerations
     desired.addScaledVector(flight.velocity, c / k);
     const acc = this.tmp.copy(desired).sub(this.pos).multiplyScalar(k).addScaledVector(this.vel, -c);
