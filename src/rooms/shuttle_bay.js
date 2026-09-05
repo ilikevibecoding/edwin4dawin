@@ -399,9 +399,10 @@ export function buildShuttleBay(kit, ctx, room) {
   // the fills sit inside the ceiling troughs at x = ±12 (between the emitter pane and its plate, 17.55 m) so
   // the slab above them is hidden rather than lit to a blob
   const TY = H - 0.45;
-  kit.light({ type: "point", pos: [12, TY, -24], color: white, intensity: lux(TY, 2.0), distance: 64, priority: 0.62 });
-  kit.light({ type: "point", pos: [-12, TY, 12], color: white, intensity: lux(TY, 2.0), distance: 64, priority: 0.6 });
-  kit.light({ type: "point", pos: [-12, TY, 28], color: white, intensity: lux(TY, 2.2), distance: 60, priority: 0.55 });
+  // (k +20 % after the neutral palette: the spawn frame averaged 47/255 against the critic's 50–65 target)
+  kit.light({ type: "point", pos: [12, TY, -24], color: white, intensity: lux(TY, 2.4), distance: 64, priority: 0.62 });
+  kit.light({ type: "point", pos: [-12, TY, 12], color: white, intensity: lux(TY, 2.4), distance: 64, priority: 0.6 });
+  kit.light({ type: "point", pos: [-12, TY, 28], color: white, intensity: lux(TY, 2.65), distance: 60, priority: 0.55 });
   kit.light({ type: "point", pos: [-22, 12, 0], color: 0xff3b2e, intensity: lux(12, 0.4), distance: 24, priority: 0.3 });
 
   // ---- animated beacons

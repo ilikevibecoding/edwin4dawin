@@ -334,7 +334,10 @@ export function buildKestrelShell(kit) {
       // dark bulkhead closing the throat: without it the barrel's flat cream end cap (z -1.3) shows through the
       // liner's narrow end and the deck work light turns it into a white blob; the glow sits just in front
       kit.add("rubber", new THREE.CircleGeometry(1.1, 24), { pos: [px, py, -1.27], color: PALETTE.gunmetal, uv: "keep" });
-      kit.add("hangar_blueDim", new THREE.CircleGeometry(0.42, 24), { pos: [px, py, -1.22], uv: "keep" }); // idle throat glow (40 % blueDim)
+      // idle throat glow: a small dim core inside a soft additive halo (a 0.4 m flat emissive disc read
+      // as a saturated blue sticker in the nozzle mouth from the deck camera)
+      kit.add("hangar_blueDim", new THREE.CircleGeometry(0.2, 20), { pos: [px, py, -1.22], uv: "keep" });
+      kit.add("hangar_glowBlue", new THREE.PlaneGeometry(1.5, 1.5), { pos: [px, py, -1.12], uv: "keep" });
       kit.add("metal", new THREE.RingGeometry(1.14, 1.3, 24), { pos: [px, py, 0.36], color: PALETTE.darkMetal, uv: "keep" }); // lip
     }
     for (let k = 0; k < 8; k++) {
