@@ -96,7 +96,7 @@ vec3 roofPalette(float k) {
 }
 // glazing families: blue-green, bronze, grey, clear (the reflective base colour of a pane)
 vec3 glassFamily(float k) {
-  if (k < 0.4) return vec3(0.30, 0.42, 0.50);
+  if (k < 0.4) return vec3(0.34, 0.46, 0.55);
   if (k < 0.6) return vec3(0.38, 0.30, 0.22);
   if (k < 0.8) return vec3(0.36, 0.38, 0.41);
   return vec3(0.46, 0.51, 0.55);
@@ -229,8 +229,9 @@ normal = normalize(normal + facadeTilt);`)
     vec3 litCol = mix(vec3(0.78, 0.87, 1.0), vec3(1.0, 0.74, 0.42), step(1.0 - warmMix, hash11(paneH * 17.0 + seed)));
     // glazing family and clear / reflective split per building
     float gfam = hash11(seed * 2.1 + 0.7);
+    if (wall.b > wall.r + 0.02 && gfam > 0.4 && gfam < 0.6) gfam = 0.2;   // cool-tinted towers never carry bronze glass
     vec3 gtint = glassFamily(gfam);
-    float clear = step(0.72, hash11(seed * 3.9 + 1.3));   // clear glass: the interior shows through
+    float clear = step(0.8, hash11(seed * 3.9 + 1.3));   // clear glass: the interior shows through
     // window rectangle of this style in cell fractions (x along the bay, y up the storey)
     float x0 = 0.22, x1 = 0.78, y0 = 0.25, y1 = 0.82;
     float refl = 0.6;      // reflectivity of the glazing (metalness of the pane)
@@ -250,7 +251,7 @@ normal = normalize(normal + facadeTilt);`)
     // the top, blinds or curtains drawn on some panes, the reveal's shadow along the head and one jamb
     float px = clamp((fx - x0) / max(x1 - x0, 0.01), 0.0, 1.0), py = clamp((fy - y0) / max(y1 - y0, 0.01), 0.0, 1.0);
     float blindLen = 0.15 + 0.75 * fract(paneH * 9.1);
-    float blind = step(0.55, paneH) * step(1.0 - blindLen, py) * vis;
+    float blind = step(0.62, paneH) * step(1.0 - blindLen, py) * vis;
     vec3 blindCol = mix(vec3(0.58, 0.57, 0.53), vec3(0.62, 0.50, 0.40), step(0.8, fract(paneH * 5.3)));
     vec3 interior = vec3(0.045, 0.055, 0.065) + vec3(0.14, 0.13, 0.11) * smoothstep(0.78, 0.98, py) * vis;
     vec3 seen = mix(interior, blindCol, blind);
@@ -276,20 +277,20 @@ normal = normalize(normal + facadeTilt);`)
       // curtain wall: vision glass over a spandrel band, mullions between; spandrels are either dark glass
       // (an all-glass tower) or metal panel. The pane's base colour is its glazing family, tinted by the
       // instance colour, with high metalness so the environment (sky gradient, haze, sun) is what a pane shows.
-      vec3 tint = mix(gtint, wall * 0.5, 0.35) * (0.9 + 0.2 * variant);
-      float mull = 1.0 - fpulse(bu, 0.035, 0.965, pwu);
+      vec3 tint = mix(gtint, wall * 0.6, 0.5) * (0.9 + 0.2 * variant);
+      float mull = 1.0 - fpulse(bu, 0.025, 0.975, pwu);
       float spandrelGlass = step(0.5, hash11(seed * 5.3));
       vec3 spandrelCol = mix(mix(wall * 0.45, vec3(0.86, 0.87, 0.88), step(0.8, hash11(seed * 6.1))), tint * 0.55, spandrelGlass);
       float spandrel = fpulse(fl, 0.0, y0, pwv) * (1.0 - mull);
-      float mullCol = 0.32 + 0.3 * step(0.5, hash11(seed * 8.8));
+      float mullCol = 0.2 + 0.35 * step(0.6, hash11(seed * 8.8));
       vec3 frame = vec3(mullCol) * (0.95 + 0.1 * spandrelGlass);
-      vec3 pane = mix(tint, mix(seen, tint, 0.45), clear);
+      vec3 pane = mix(tint, mix(seen * 0.7, tint, 0.5), clear);
       col = mix(frame, spandrelCol, spandrel);
       col = mix(col, pane * reveal, glass);
       // horizontal transom line at the head of the spandrel
       col = mix(col, frame, fpulse(fl, y0 - 0.02, y0 + 0.01, pwv) * (1.0 - mull));
       rough = mix(mix(0.45, 0.2, spandrelGlass), 0.1, glass);
-      metal = glass * mix(0.88, 0.55, clear) + spandrel * spandrelGlass * 0.7;
+      metal = glass * mix(0.92, 0.6, clear) + spandrel * spandrelGlass * 0.75;
       emis = litCol * lit * glass * mix(1.3, 2.0, clear) * (1.0 - 0.6 * blind);
       // some towers wear LED accent light at night: the corner mullions and a band under the crown
       float accent = step(0.82, hash11(seed * 3.3 + 2.2)) * step(60.0, H);
@@ -332,8 +333,8 @@ normal = normalize(normal + facadeTilt);`)
       float topRail = fpulse(fl, 0.39, 0.42, pwv) * gx;
       vec3 pane = mix(gtint * 0.65, seen, 0.4);
       col = mix(wall * 0.92, vec3(0.94, 0.93, 0.9), slab);
-      col = mix(col, pane * reveal, glass);
-      col = mix(col, glassDark * 2.2, railBand * 0.45);
+      col = mix(col, pane * reveal * 0.8, glass);
+      col = mix(col, glassDark * 1.6, railBand * 0.55);
       col = mix(col, vec3(0.9), railBand * max(posts, topRail) * 0.9);
       // under-slab shadow on the door head
       col *= 1.0 - 0.3 * fpulse(fl, 0.88, 1.0, pwv) * gx;
@@ -465,9 +466,13 @@ normal = normalize(normal + facadeTilt);`)
         float shop = sx * fpulse(fl, 0.05, 0.74, pwv);
         float fascia = sx * fpulse(fl, 0.77, 0.94, pwv);
         vec3 fasciaCol = fasciaPalette(hash12(vec2(floor(colIdx * 0.5), seed)));
-        vec3 shopIn = vec3(0.05, 0.05, 0.05) + vec3(0.22, 0.2, 0.17) * smoothstep(0.55, 0.74, fy) * vis;
+        vec3 shopIn = vec3(0.10, 0.09, 0.08) + vec3(0.3, 0.27, 0.22) * smoothstep(0.5, 0.74, fy) * vis;
+        float awning = sx * fpulse(fl, 0.66, 0.76, pwv) * step(0.5, hash12(vec2(floor(colIdx * 0.5), seed + 1.0)));
+        awning *= 0.6 + 0.4 * fpulse(bu * 6.0, 0.0, 0.5, pwu * 6.0);   // striped valance
         col = mix(wall * 0.9, shopIn, shop);
         col = mix(col, fasciaCol, fascia);
+        col = mix(col, mix(fasciaCol, vec3(0.9), 0.35) * 0.8, awning);
+        shop *= 1.0 - awning;
         rough = mix(0.8, 0.12, shop);
         metal = shop * 0.5;
         emis = vec3(1.0, 0.88, 0.7) * shop * 1.5 * nightOn + fasciaCol * fascia * 1.2 * nightOn;
