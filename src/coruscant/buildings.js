@@ -18,7 +18,10 @@ import { makeStyle } from './facade.js';
 import { poolsFor } from './towers/pools.js';
 import { FAMILIES, LANDMARKS, LABELS, resolveFamily, buildFamily } from './towers/index.js';
 import { bridgeStubs } from './towers/tiered.js';
+import * as ROOMS from './rooms/index.js';
 import { list as roomList } from './rooms/index.js';
+import { B } from '../blocks.js';
+import { landmarkFor } from './landmarks/index.js';
 
 export { FAMILIES, LANDMARKS, roomList };
 export { stampBlueprint } from './blueprint.js';
@@ -54,9 +57,13 @@ function defaultDoor(lot, front) {
   }
 }
 
+const groundOf = (lot, layout) => (layout && layout.levels && layout.levels.ground != null) ? layout.levels.ground : (lot.groundY != null ? lot.groundY - 1 : 60);
+
 // Uncached build (exported for the test harness / benchmarks).
 export function buildBlueprint(lot, layout) {
-  const ground = (layout && layout.levels && layout.levels.ground != null) ? layout.levels.ground : (lot.groundY != null ? lot.groundY - 1 : 60);
+  const ground = groundOf(lot, layout);
+  // signature landmarks (docs/rubrics/06_landmarks.md) have their own module; anything else goes through the families
+  if (lot.kind === 'landmark') { const lm = landmarkFor(lot.family); if (lm) return buildSignature(lm, lot, layout); }
   const rng = new RNG(lot.seed ?? 1);
   const fam = resolveFamily(lot, rng);
   const height = Math.max(10, lot.height ?? 60);
@@ -75,6 +82,38 @@ export function buildBlueprint(lot, layout) {
   const res = buildFamily(fam, bp, lot, ctx) || { nF: 0, extra: 0 };
   if (lot.kind === 'tower' && layout) bridgeStubs(bp, lot, layout, res, style);
   finishMeta(bp, lot, fam, res, ground, front, ldoor, midDoorF);
+  return bp.export();
+}
+
+// A signature landmark module fills the whole lot volume itself: `build(bp, lot, ctx)` on a Blueprint of the lot's
+// footprint and height budget, recording NPC metadata through the Blueprint API. The standard meta fields (ids,
+// bounds, door, inside, midDoor, lobby, floors) are filled in afterwards from what the module recorded.
+export function buildSignature(lm, lot, layout) {
+  const ground = groundOf(lot, layout);
+  const rng = new RNG(lot.seed ?? 1);
+  const h = Math.max(8, Math.min(256 - ground, (lot.height ?? lm.height ?? 60) + 1));
+  const bp = new Blueprint(lot, lot.w, h, lot.d, ground);
+  bp.rng = rng;
+  const levels = (layout && layout.levels) || { ground, underWalk: ground + 1, deck: 95, midWalk: 96, floorPitch: 5 };
+  lm.build(bp, lot, { rng, layout, levels, rooms: ROOMS, B, seed: layout ? layout.seed : (lot.seed ?? 0) });
+  const m = bp.meta, walk = ground + 1;
+  const front = lot.front || (lot.door && lot.door.side) || 'S';
+  m.id = lot.id;
+  m.kind = 'landmark';
+  m.family = lot.family;
+  m.district = lot.district || null;
+  m.name = m.name || lm.name || lot.name || cap(lot.family);
+  m.floorY = walk;
+  m.bounds = { x0: lot.x0, x1: lot.x0 + lot.w - 1, z0: lot.z0, z1: lot.z0 + lot.d - 1 };
+  if (!m.doors.length && lot.door) m.doors.push({ x: lot.door.x, y: walk, z: lot.door.z, side: front });
+  const d0 = m.doors[0] || { x: lot.x0 + (lot.w >> 1), y: walk, z: lot.z0 + lot.d - 1 };
+  m.door = lot.door && lot.door.out ? { x: lot.door.out.x, y: walk, z: lot.door.out.z } : { x: d0.x, y: d0.y, z: d0.z };
+  m.inside = lot.door && lot.door.in ? { x: lot.door.in.x, y: walk, z: lot.door.in.z } : { x: d0.x, y: d0.y, z: d0.z };
+  m.midDoor = lot.midDoor ? { x: m.door.x, y: levels.midWalk || 96, z: m.door.z } : null;
+  if (!m.lobby) m.lobby = { ...m.inside };
+  if (!Array.isArray(m.floors) || !m.floors.length) m.floors = [...new Set([walk, ...m.rooms.map((r) => r.y)])].sort((a, b) => a - b);
+  m.height = bp.h;
+  pruneMeta(bp);
   return bp.export();
 }
 
