@@ -3,6 +3,59 @@
 Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served in `window.__build` and in
 `BUILD_ID.txt` next to the deployed `index.html`.
 
+## iter09 — wave 5 builders (deployed as aa8b21f9f839-20260905T121546Z)
+- Iteration 08 scored (bench/results/iter08/scores.md): no category regressed; aircraft geometry +1.5,
+  wakes +1.5, ten categories +1.0; flat at 5.0: vegetation and repetition. Wave 5 targeted those plus
+  artifacts, cockpit materials, world believability and night lighting.
+- Vegetation loop 3: eight crown layouts with per-plant stretch, lumps, yaw, height and young/old size;
+  sea grape and slash pine species with per-biome mixes; jittered clearing-noise placement (no rows);
+  trunks on every crown tree, 3D palm fronds; card atlas drawn from the same layouts as the 3D crowns and
+  stretched per instance so the LOD switch does not pop; foliage light model (wrapped diffuse,
+  translucency, sky-down indirect). Two root causes of the black "clone" crowns fixed: the CSM
+  `lights_fragment_begin` patch is expanded after `onBeforeCompile`, so the foliage shadow-floor rename had
+  never matched (shadowed crowns got zero direct light), and `Color.offsetHSL` ran in linear space where the
+  palette's lightness is 0.05-0.08, clamping ~1 % of plants to black. aerial-a canopy median (83,102,74) ->
+  (79,91,71) vs reference (81,85,74); triangles down 1-14 %, calls unchanged.
+- Aircraft loop 4: the cockpit "flat tan room / sky sliver under the wing" was the camera's 0.4 m near
+  plane clipping a headliner 10 cm above the eye — cockpit near plane 0.05 m (cascades re-fit on the
+  change); PBR cabin lining (perforated headliner, stitched seams, vinyl window band, door panels, kick
+  strips), sun visors, overhead console with trim wheel, headrests, grab handles; wing underside rivets,
+  inspection plates, drains and grime; shadowed water leaks scattered light (wing shadow on water
+  (37,72,104) -> (46,106,134), lit water unchanged) and the airframe receives blue-green water bounce;
+  side glass roughness 0.25 -> 0.06 with the vignette/tint veil cut (interior visible through the panes);
+  prop turns at tachometer RPM and cross-fades blades to a planform-derived disc from 500 RPM; clear coat
+  over a rougher base with orange-peel normals, raised decal edges, soot and oil streaks, float scuffs.
+  Flight harness 23/23.
+- World loop 3: urbanity gradient (district edges, arterial corridors, noise fray) drives the suburb fill —
+  walk-up rows and parking decks on corridors, strip malls / big boxes / petrol canopies on arterials,
+  industrial lots in the far suburbs, houses elsewhere — so the city frays instead of ending on a line;
+  retention lakes, rotated suburban grids, superblocks; CPU-baked suburb ground detail (street band, block
+  tone, car parks) fading in from 1.2 to 3.8 km where instances are subpixel; marsh sloughs, farmland and
+  scrub beyond the map; facade family and tint clustered per neighbourhood; six new tower massings and
+  irregular roof furniture; port apron dressed (blocked container yards with aisles, reach stackers,
+  trucks, light masts, rail spur, tank farm with stairs and bunds, chassis lot, bollards, harbour cranes);
+  causeway pier proxies and soffits beyond 450 m inside the chunk mesh (no new draws).
+- Night / clouds loop 4: night keys blue-black (zenith 0.024 -> 0.005) with a city light-pollution glow
+  (`uCityGlow` footprint and view uniforms, `cityGlowSky/At` in `skyRadiance`), moon key 0.09, haze denser at
+  night; clouds keyed by the moon (~1 % of daylight) with city-lit undersides (zenith sRGB (46,61,100) ->
+  (20,25,42), cloud E1 (90,90,99) -> (48,38,36)); overcast ceiling thins from 0.6 of the range so it
+  dissolves column by column instead of ending on a straight edge, deck-aware slow scattering tail (grey
+  underside with dark cores), per-cell base altitude and ~1 km undulation (ragged bases); low-sun aureole;
+  sun glitter as an analytic Cox-Munk streak plus a two-octave sparkle capped per pixel (sunset clip
+  new-bright fraction 0.258 -> 0.097). Shader-only; frame cost within noise.
+- Artifacts / temporal loop: thin bridge steel carries a member axis and is inflated to >= 1.2 px in the
+  vertex shader with alpha fading by true coverage (dotted cables and beaded railings read as continuous
+  lines); lane markings, joints and tyre paths box-filtered with `fwidth`, pavement grain band-limited;
+  container yard gaps 1.2 -> 0.35 m (the 1-2 px dark grid crawled: harbor clip flicker max 4.90 -> 1.88);
+  the night "cloud-shadow rectangle" on the bay was the dredged channel's 60 m depth ramp — narrow cuts now
+  have a 25 m lip and a 150 m shoulder; boat wakes fade their oldest third; surf lines limited to 40-90 m
+  from shore (the "foam swirls" traced bathymetry over the flats); chase camera settles at the spring's rest
+  pose with the aircraft's velocity so clips no longer snap at frame 1 (bridge-low clip max diff 15.7 ->
+  9.8, stills within 0.5-3.3 m of iter08 framing); aerial-a and skyline-high cameras dolly with the aircraft
+  during clips (stills identical: horizon 0.2468); door step stands clear of the cabin skin.
+- Merge check (bridge-low, harbor, cockpit-city, night stills): 236-262 calls, 1.11-1.50 M triangles, no
+  console output. Night (1.498 M) and cockpit-city (1.48 M) are now at the triangle budget: next perf pass.
+
 ## Unreleased
 - Performance loop 2 (deployed as 6b3d3214497a-20260905T063622Z): wake ribbons in one instanced draw
   (52 -> 1 calls), roads in frustum-culled 3 km index chunks, one instanced camera batch per unit shape /
@@ -138,6 +191,7 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 | 03aacefc4377-20260904T101257Z | 7557979bb140b196590ad9bb5f77ca49ef23e291 | https://raw.githack.com/ilikevibecoding/edwin4dawin/gh-pages/play.html | verified: build id matched, loaded in 9 s, flew |
 | 32aab3d85421-20260904T180514Z | c3a351f8276056fc04dd89dc766a8c5550d032a6 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/c3a351f8276056fc04dd89dc766a8c5550d032a6/play.html | verified: build id matched, loaded in 12.4 s, water takeoff to 67 m in 30 s (deterministic, identical to local), no console errors; 177 draw calls / 0.79 M tris in the water-landing view |
 | a73e7fb62028-20260904T202825Z | e05ebaf37fcf09e9154c1746c85c7d9f6ea2f30c | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/e05ebaf37fcf09e9154c1746c85c7d9f6ea2f30c/play.html | verified: build id matched, loaded in 15.3 s, water takeoff to 81 m in 30 s (new flight model), no console errors; 174 draw calls / 0.79 M tris in the water-landing view |
+| aa8b21f9f839-20260905T121546Z | a69f517440e212798b48336c2797fa6edd541e99 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/a69f517440e212798b48336c2797fa6edd541e99/play.html | verified: build id matched, loaded in 18.1 s, water takeoff to 86 m in 30 s, no console errors; 143 draw calls / 0.18 M tris in the water-landing view. Wave 5 (vegetation 3, aircraft 4, world 3, night/clouds 4, artifacts/temporal) |
 | 6b3d3214497a-20260905T063622Z | d4e414a3391693e4779def304942f3d29904666d | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/d4e414a3391693e4779def304942f3d29904666d/play.html | verified: build id matched, loaded in 17.8 s, water takeoff to 86 m in 30 s, no console errors; 144 draw calls / 0.18 M tris in the water-landing view. Performance loop 2 + vegetation tint |
 | 45d3ba89fc54-20260905T040053Z | a94d74e3d96a3d8d54f274bf1dc6b9c42865909f | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/a94d74e3d96a3d8d54f274bf1dc6b9c42865909f/play.html | verified: build id matched, loaded in 16.9 s, water takeoff to 86 m in 30 s, no console errors; 171 draw calls / 0.59 M tris in the water-landing view. Wave 4 (aircraft 3, shadows, clouds 3) + planar reflections + wake foam fix. A first deploy of this round (1b11b7f0e45c) was replaced after the verifier caught a NaN propeller tip ring |
 | 4642d4630c87-20260904T235001Z | a3c7ba5670942411bf607043d4a14a60dbb8ef81 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/a3c7ba5670942411bf607043d4a14a60dbb8ef81/play.html | verified: build id matched, loaded in 15.5 s, water takeoff to 86 m in 30 s, no console errors; 164 draw calls / 0.49 M tris in the water-landing view. Includes bridges/skyline loop 2, cockpit with live instruments, vegetation loop 2, IBL-hitch and shader warm-up fixes, night exposure, play-feel changes |
