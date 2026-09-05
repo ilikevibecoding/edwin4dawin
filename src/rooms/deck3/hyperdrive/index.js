@@ -8,6 +8,7 @@ import { IMP, col } from "../../deck2/_shared/palette.js";
 import { rail, WALL_T } from "../../deck2/_shared/shell.js";
 import { console as consoleProp, pipe, duct, tank, stairs, floorLine, cabinet, hazardStrip, indicatorField, placer, wallScreen } from "../../deck2/_shared/props.js";
 import { TAU, ring, strut, powerCabinet, cableTray, toolRack, monitorPedestal, junctionBox, ventGrille, valveStation, wallLamp, ceilingFixture, highBay, topScreens, labelCrate } from "../engctl/engprops.js";
+import { animKey, MODE, buildAnimatedEmitters, anim } from "../engctl/anim.js";
 
 const Y = 12;
 const CEIL = 40;
@@ -43,7 +44,9 @@ export default defineRoom({
     wallColor: IMP.impMid,
     wallAlt: new THREE.Color("#474b52"), // between mid and dark: impDark rows showed the panel map's smudges as stains
     stripMat: "emitAmber",
-    floor: { color: IMP.impMid }, // same deck tone as the reactor catwalk; impDark read as black under 28 m of air
+    // same deck tint as the reactor catwalk (0x7a7e86): the deck map is charcoal, so impMid reflected
+    // ~1 % of the light and read as black under 28 m of air even from 400 cd floods
+    floor: { color: 0x7a7e86 },
     ceiling: { channels: 6, axis: "z", color: IMP.impDark, panelW: 4 },
     lights: false,
     doorDressing: { accent: "emitBlue" },
@@ -57,9 +60,25 @@ export default defineRoom({
     const mid = P("impMid");
     const steel = P("steel");
     let seed = 500;
+    // Animated emitters (one extra mesh, see engctl/anim.js) — the charge sequence: every 12 s the six
+    // field-coil rings light fore→aft over 6 s (CHARGE), an energy bead runs along the hull slot strips
+    // with the travelling blue light (BEAD), the housing disc and its step rings pulse during the hold
+    // (BURST), then everything resets; the coil-bank amber lines flicker faintly (FAINT). The kit's static
+    // emitBlue pieces are folded into the same mesh, so the room stays at 16 calls.
+    const BLUE = IMP.impBlue;
+    const AMBER = IMP.impAmber;
+    const WHITE = new THREE.Color("#dfe9ff");
+    const SLOT_KEY = animKey(MODE.BEAD, { base: 1.6, aux: [700, 44, 0] });
+    const BURST_BLUE = animKey(MODE.BURST, { base: 1.6 });
+    const BURST_WHITE = animKey(MODE.BURST, { base: 1.3 });
 
     // ---- motivator body, seams, side slots -----------------------------------------------------------
-    kit.cyl("paintedMetal", 0, AX, (MZ0 + MZ1) / 2, R, MZ1 - MZ0 + 0.2, "z", { color: dark, segments: 40, texel: 4 });
+    // hull: matte painted plates (impPanel, roughness 0.62) in 8 bays round × 12 along so the bevels
+    // fall on the ribs and seam rings — not paintedMetal: its worn map's roughness sits at 0.4, and under
+    // the shadow key the upper port flank mirrored the key toward every port-lane camera as a white
+    // band that bloomed over the side view's top-left (GGX at grazing Fresnel; a 3–4 × broader lobe and
+    // a dielectric F0 is what takes the band under the bloom threshold together with the key's offset)
+    kit.cyl("impPanel", 0, AX, (MZ0 + MZ1) / 2, R, MZ1 - MZ0 + 0.2, "z", { color: dark, segments: 40, uvScale: [8, 12] });
     // hull: seam rings with bolt rows, longitudinal panel seams between the ribs, access hatches
     const onHull = (a, dr) => [Math.cos(a) * (R + dr), AX + Math.sin(a) * (R + dr)];
     for (const z of [708, 712, 716, 724, 728, 736]) {
@@ -72,13 +91,15 @@ export default defineRoom({
       }
     }
     for (const s of [-1, 1]) {
-      kit.box("emitBlue", s * (R + 0.02), AX, (MZ0 + MZ1) / 2, 0.12, 0.3, MZ1 - MZ0 - 4);
+      // slot strips z 700..744: the energy bead runs along them with the charge sequence
+      kit.box(SLOT_KEY, s * (R + 0.02), AX, (MZ0 + MZ1) / 2, 0.12, 0.3, MZ1 - MZ0 - 4, { color: BLUE });
       kit.box("paintedMetal", s * (R + 0.01), AX, (MZ0 + MZ1) / 2, 0.14, 0.7, MZ1 - MZ0 - 3.6, { color: black });
     }
-    // hull plates: eight shallow longitudinal ribs and eight recessed seam lines between them
+    // hull plates: eight shallow longitudinal ribs and eight recessed seam lines between them (the ribs'
+    // flat tops share the hull's normal, so they are matte plates too or they streak where the hull did)
     for (let k = 0; k < 8; k++) {
       const a = (k / 8) * TAU + Math.PI / 8;
-      kit.add("paintedMetal", new THREE.BoxGeometry(0.5, 0.16, MZ1 - MZ0 - 2), { pos: [Math.cos(a) * (R + 0.02), AX + Math.sin(a) * (R + 0.02), (MZ0 + MZ1) / 2], rot: [0, 0, a - Math.PI / 2], color: black, texel: 2.5 });
+      kit.add("impPanel", new THREE.BoxGeometry(0.5, 0.16, MZ1 - MZ0 - 2), { pos: [Math.cos(a) * (R + 0.02), AX + Math.sin(a) * (R + 0.02), (MZ0 + MZ1) / 2], rot: [0, 0, a - Math.PI / 2], color: black, texel: 0.25 });
       const b = (k / 8) * TAU + Math.PI / 16;
       if (Math.abs(Math.cos(b)) > 0.97) continue; // the side slots run here
       kit.add("paintedMetal", new THREE.BoxGeometry(0.06, 0.03, MZ1 - MZ0 - 2.4), { pos: [Math.cos(b) * (R + 0.005), AX + Math.sin(b) * (R + 0.005), (MZ0 + MZ1) / 2], rot: [0, 0, b - Math.PI / 2], color: black });
@@ -138,8 +159,13 @@ export default defineRoom({
       const shrouded = ci === 2;
       const plaque = ci === 3;
       const sensor = ci === 4;
-      ring(kit, "paintedMetal", [0, AX, z], 5.2, 0.5, "z", { radial: 10, tubular: 40, color: dark });
-      ring(kit, doubled ? "emitAmber" : "emitBlue", [0, AX, z], 4.62, 0.09, "z", { radial: 6, tubular: 40 });
+      // inner ring: lights in sequence fore→aft (ring ci comes on at ci seconds of the 12 s cycle)
+      const chargeKey = animKey(MODE.CHARGE, { phase: ci / 6, base: doubled ? 1.5 : 1.6 });
+      // coil casing: matte painted segments (impPanel — dielectric, roughness 0.62 — in 4 m tiles), not
+      // paintedMetal: the worn-metal map's roughness sits at 0.4, and a torus under a 2000 cd high-bay
+      // mirrored it toward every floor camera as a clipped, bloomed streak along its crown
+      ring(kit, "impPanel", [0, AX, z], 5.2, 0.5, "z", { radial: 10, tubular: 40, color: dark, texel: 0.25 });
+      ring(kit, chargeKey, [0, AX, z], 4.62, 0.09, "z", { radial: 6, tubular: 40, color: doubled ? AMBER : BLUE });
       if (shrouded) {
         // maintenance shroud: light canvas cover over the top 150° of the ring, cinched by black straps,
         // amber tag at the port edge
@@ -164,7 +190,7 @@ export default defineRoom({
       }
       ring(kit, "paintedMetal", [0, AX, z], 5.7, 0.08, "z", { radial: 6, tubular: 40, color: black });
       if (doubled) {
-        for (const dz of [-0.75, 0.75]) ring(kit, "paintedMetal", [0, AX, z + dz], 5.05, 0.32, "z", { radial: 8, tubular: 40, color: black });
+        for (const dz of [-0.75, 0.75]) ring(kit, "impPanel", [0, AX, z + dz], 5.05, 0.32, "z", { radial: 8, tubular: 40, color: black, texel: 0.25 });
         for (let k = 1; k < 8; k += 2) {
           const a = (k / 8) * TAU;
           kit.box("paintedMetal", Math.cos(a) * 5.35, AX + Math.sin(a) * 5.35, z, 0.7, 0.7, 1.1, { color: black, rot: [0, 0, a], texel: 2.5 });
@@ -181,7 +207,9 @@ export default defineRoom({
       }
       for (const s of [-1, 1]) {
         kit.box("paintedMetal", s * 5.4, AX, z, 0.9, 1.4, 1.3, { color: black, texel: 2.5 });
-        kit.box(sensor ? "emitRedImp" : "emitBlue", s * 5.87, AX, z, 0.03, 0.6, 0.5);
+        // lug lamps charge with their ring (the sensor coil's stay red and steady)
+        if (sensor) kit.box("emitRedImp", s * 5.87, AX, z, 0.03, 0.6, 0.5);
+        else kit.box(chargeKey, s * 5.87, AX, z, 0.03, 0.6, 0.5, { color: doubled ? AMBER : BLUE });
       }
     }
 
@@ -203,7 +231,8 @@ export default defineRoom({
           pipe(kit, PALETTE, [s * 5.25, AX - 0.72, z + dz + (dz < 0 ? 0.5 : -0.5)], [foot[0] - s * 0.15, foot[1] + 0.4, foot[2] + (dz < 0 ? 0.15 : -0.15)], 0.045, { bracket: 0, color: dark });
         }
       }
-      ring(kit, "paintedMetal", [0, AX, z], 4.9, 0.35, "z", { radial: 8, tubular: 40, color: mid });
+      // clamp ring: matte painted like the coil casings (the 706 clamp sits 11 m under the shadow key)
+      ring(kit, "impPanel", [0, AX, z], 4.9, 0.35, "z", { radial: 8, tubular: 40, color: mid, texel: 0.25 });
       hazardStrip(kit, [-6.7, z - 2.6], [6.7, z - 2.0], Y + 0.005);
       hazardStrip(kit, [-6.7, z + 2.0], [6.7, z + 2.6], Y + 0.005);
       hazardStrip(kit, [-6.7, z - 2.0], [-6.1, z + 2.0], Y + 0.005);
@@ -288,10 +317,12 @@ export default defineRoom({
         kit.boxMM("paintedMetal", [cx - 3.2, Y, zc - 2.7], [cx + 3.2, Y + 0.4, zc + 2.7], { color: black, texel: 2.5 });
         // dark core with thick fins; the heat glow is a thin amber line recessed in each fin gap
         kit.boxMM("paintedMetal", [cx - 2.6, Y + 0.4, zc - 2.3], [cx + 2.6, Y + 8.8, zc + 2.3], { color: dark, texel: 2.5 });
+        // the heat lines flicker faintly (0.9–1.0), each bank on its own phase
+        const faint = animKey(MODE.FAINT, { phase: (k + (s > 0 ? 7 : 0)) / 14, base: 1.5 });
         for (let i = 0; i < 9; i++) {
           const fy = Y + 1.0 + i * 0.9;
           kit.boxMM("paintedMetal", [cx - 3.0, fy, zc - 2.5], [cx + 3.0, fy + 0.36, zc + 2.5], { color: mid, texel: 2.5 });
-          if (i < 8) kit.boxMM("emitAmber", [cx - 2.62, fy + 0.58, zc - 2.32], [cx + 2.62, fy + 0.68, zc + 2.32]);
+          if (i < 8) kit.boxMM(faint, [cx - 2.62, fy + 0.58, zc - 2.32], [cx + 2.62, fy + 0.68, zc + 2.32], { color: AMBER });
         }
         kit.boxMM("paintedMetal", [cx - 3.2, Y + 8.8, zc - 2.7], [cx + 3.2, Y + 9.3, zc + 2.7], { color: black, texel: 2.5 });
         // rack frame: four corner posts and a name plate, so the amber lines sit on a visible rack
@@ -410,11 +441,12 @@ export default defineRoom({
     kit.cyl("paintedMetal", 0, AX, Z1 - 1.05, 4.6, 0.26, "z", { color: black, segments: 48, open: true, texel: 2.5 });
     disc(3.55, 4.62, Z1 - 1.18, mid);
     kit.cyl("paintedMetal", 0, AX, Z1 - 1.31, 3.55, 0.26, "z", { color: black, segments: 48, open: true, texel: 2.5 });
-    disc(3.05, 3.57, Z1 - 1.44, 0xffffff, "emitBlue");
-    disc(3.02, 3.14, Z1 - 1.45, 0xffffff, "emitWhite");
-    ring(kit, "emitBlue", [0, AX, Z1 - 0.72], 6.05, 0.07, "z", { radial: 6, tubular: 48 });
-    ring(kit, "emitBlue", [0, AX, Z1 - 0.98], 5.1, 0.06, "z", { radial: 6, tubular: 48 });
-    ring(kit, "emitBlue", [0, AX, Z1 - 1.24], 4.1, 0.06, "z", { radial: 6, tubular: 48 });
+    // (the core disc and the three step rings pulse at the end of each charge sequence)
+    disc(3.05, 3.57, Z1 - 1.44, BLUE, BURST_BLUE);
+    disc(3.02, 3.14, Z1 - 1.45, WHITE, BURST_WHITE);
+    ring(kit, BURST_BLUE, [0, AX, Z1 - 0.72], 6.05, 0.07, "z", { radial: 6, tubular: 48, color: BLUE });
+    ring(kit, BURST_BLUE, [0, AX, Z1 - 0.98], 5.1, 0.06, "z", { radial: 6, tubular: 48, color: BLUE });
+    ring(kit, BURST_BLUE, [0, AX, Z1 - 1.24], 4.1, 0.06, "z", { radial: 6, tubular: 48, color: BLUE });
     for (let k = 0; k < 16; k++) {
       const a = (k / 16) * TAU;
       kit.cyl("metal", Math.cos(a) * 7.1, AX + Math.sin(a) * 7.1, Z1 - 0.71, 0.14, 0.12, "z", { color: steel, segments: 8 });
@@ -465,30 +497,79 @@ export default defineRoom({
       duct(kit, PALETTE, [s * 13, CEIL - 1.0, 692.5], [s * 13, CEIL - 1.0, 749.5], 1.2, 0.8, { color: mid });
       for (const z of [700, 722, 744]) duct(kit, PALETTE, [s * 13.6, CEIL - 1.0, z], [s * (X1 - 0.3), CEIL - 1.0, z], 0.9, 0.6, { color: mid });
     }
-    duct(kit, PALETTE, [-12.4, CEIL - 1.0, 711], [12.4, CEIL - 1.0, 711], 0.9, 0.6, { color: mid });
+    // (the forward cross duct sits over the forward cradle at 706: it carries the shadow-key cluster)
+    duct(kit, PALETTE, [-12.4, CEIL - 1.0, 706], [12.4, CEIL - 1.0, 706], 0.9, 0.6, { color: mid });
     duct(kit, PALETTE, [-12.4, CEIL - 1.0, 733], [12.4, CEIL - 1.0, 733], 0.9, 0.6, { color: mid });
     // suspended hall fixtures over the two floor lanes on the cross-duct rhythm: framed housings on
-    // 13 m stems hanging just above gantry height, louvred white faces down (fills sit in the 711/733 pairs)
-    const FIX = [[-11, 711], [11, 711], [-11, 733], [11, 733]];
-    for (const z of [700, 711, 722, 733, 744]) for (const x of [-11, 11]) ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 3.2, d: 1.0, stem: 13, mat: "emitWhite" });
+    // 13 m stems hanging just above gantry height, louvred white faces down (fills sit in the 733 pair
+    // and the port 711 one). They hang over the lane centres, 9.5 m off the hull flank: at x ±11 the
+    // fills were 6.5 m from the flank and mirrored in it as hot streaks in the side and housing views.
+    const FIX = [[-14, 711], [-14, 733], [14, 733]];
+    for (const z of [700, 711, 722, 733, 744]) for (const x of [-14, 14]) ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 3.2, d: 1.0, stem: 13, mat: "emitWhite" });
     // high-bay clusters: under the three wall-side cross ducts over the coil banks, and under the two
-    // central ducts either side of the gantry (the only ceiling the floor views see past the motivator)
+    // central ducts (the only ceiling the floor views see past the motivator). The 706 duct's row spans
+    // the forward cradle; its port cluster (x −9, over the port rail) is the room's shadow key.
     for (const z of [700, 722, 744]) for (const s of [-1, 1]) highBay(kit, PALETTE, [s * 23.5, CEIL - 1.3, z], { drop: 1.4 });
-    for (const z of [711, 733]) for (const s of [-1, 1]) highBay(kit, PALETTE, [s * 5, CEIL - 1.3, z], { drop: 1.4 });
+    for (const x of [-9, 0, 9]) highBay(kit, PALETTE, [x, CEIL - 1.3, 706], { drop: 1.4 });
+    for (const s of [-1, 1]) highBay(kit, PALETTE, [s * 5, CEIL - 1.3, 733], { drop: 1.4 });
 
-    // ---- lights (shell fills off, 14): blue-white keys under the gantry masts, warm fills inside the
-    // suspended fixtures, wall floods in their hoods, housing accent, door pool -------------------------
-    const L = (pos, color, intensity, distance, priority = 0.5) => ctx.lights.push({ type: "point", pos, color, intensity, distance, priority });
-    L([0, GANTRY + 1.6, 714], 0x8ab0ff, 90, 38, 0.8);
-    L([0, GANTRY + 1.6, 730], 0x8ab0ff, 90, 38, 0.8);
-    for (const [x, z] of FIX) L([x, CEIL - 13.9, z], 0xfff0dc, 150, 44, 0.5);
-    L([5, CEIL - 3.6, 733], 0xfff0dc, 210, 46, 0.5); // central clusters: light the ceiling the door/side views see
-    L([-5, CEIL - 3.6, 711], 0xfff0dc, 210, 46, 0.5); // ...and the one the aft view sees
-    for (const s of [-1, 1]) for (const z of [703, 735]) L([s * (X1 - 1.4), Y + 11.4, z], 0xffcf90, 120, 34, 0.5);
-    L([0, AX + 2, Z1 - 3.5], 0x6a9bff, 70, 20, 0.6);
-    // port-flank service lamp at 741 (traded for the door pool): 1 m off its head, washes the shadowed
-    // lower flank the housing view's top-left looks at
-    L([-5.1, AX - 3.1, 741], 0xffe8d0, 36, 13, 0.6);
-    return {};
+    // ---- lights (shell fills off, 14): shadow key over the forward cradle, blue-white keys under the
+    // gantry masts, warm fills under the suspended fixtures, wall floods off their hoods, the housing
+    // accent (pulses with the disc) and the travelling charge light.
+    // The hall is lit by these alone (no studio environment) across 12–24 m of air onto a ~2.5 % deck
+    // (≈ 2.5 lx for 20 % grey, 6 lx for 45 %), so the key runs 1800 cd (3 lx on the port lane, ~6 lx on
+    // the hull crown 15 m away — a spot lights nothing behind its cone, so its own cluster stays clean)
+    // and the fixture points 260–480 cd, each hung 1.6–2 m under its housing and ≥ 3.6 m off any wall
+    // so nothing near them clips. At 3000 cd the key mirrored in the forward coil and the 706 clamp as
+    // a bloomed white haze over the side view's top-left; the hull did the same at 1800 until it went
+    // matte and the key moved off the axis (see the key). -------------------------------------------
+    const L = (pos, color, intensity, distance, priority = 0.5) => {
+      const d = { type: "point", pos, color, intensity, distance, priority };
+      ctx.lights.push(d);
+      return d;
+    };
+    // SHADOW KEY: in the port head of the 706 cluster row (x −9, over the port rail; head face y 36.5),
+    // aimed at the cradle's port foot (9° toward the axis) with a 49° half-cone: full intensity from the
+    // port wall racks to x +5, 70–85 % on the starboard lane. The motivator and its coils cast across the
+    // starboard lane, the port rails and consoles cast toward the hull base, the gantry onto the hull
+    // crown. Port of the axis rather than over it: with the key straight above the hull, every port-lane
+    // camera sat on the mirror direction of the hull's upper port flank (a downlight on a horizontal
+    // cylinder always has one), and the flank reflected the key as a bloomed white band; from x −9 the
+    // mirror points move down the flank to where the key arrives near-normal, ~6 × dimmer.
+    ctx.lights.push({ type: "spot", pos: [-9, CEIL - 3.8, 706], target: [-5, Y, 706.5], color: 0xf4f6ff, intensity: 1800, distance: 64, angle: 0.85, penumbra: 0.5, priority: 1.5, shadow: true });
+    L([0, GANTRY + 1.6, 714], 0x8ab0ff, 110, 38, 1.2); // gantry lamps: steady
+    L([0, GANTRY + 1.6, 730], 0x8ab0ff, 110, 38, 1.2);
+    // three of the ten suspended fixtures carry fills (over the port lane by the side view, and the
+    // two over the aft consoles): 2 m under the faces, 480 cd → 3 lx on the lane centres 12.6 m down,
+    // the key's pool level, so the key still owns the shadows where both reach
+    for (const [x, z] of FIX) L([x, CEIL - 15.4, z], 0xfff0dc, 480, 40, z === 711 || x < 0 ? 1.5 : 1.2);
+    L([5, CEIL - 4.8, 733], 0xfff0dc, 260, 46, 0.8); // aft central cluster: lights the ceiling and ducts the door/side views see
+    // wall floods: in the fin gaps between the coil banks (their racks and amber lines get 100 lx),
+    // 9 m over the lanes
+    for (const s of [-1, 1]) for (const z of [703, 735]) L([s * (X1 - 3.6), Y + 9.0, z], 0xffcf90, 400, 34, z === 703 ? 1.5 : 1.2);
+    const HOUSING_I = 110;
+    const housingLight = L([0, AX + 2, Z1 - 3.5], 0x6a9bff, HOUSING_I, 22, 1.2);
+    // port-flank service lamp at 741: 1 m off its head, washes the shadowed lower flank the housing
+    // view's top-left looks at
+    L([-5.1, AX - 3.1, 741], 0xffe8d0, 60, 14, 1.0);
+    // travelling charge light: rides the port slot strip (z 700 → 744 over the 6 s travel leg) at r 8.8
+    // from the axis — 3 m outside the coil casings, so each coil brightens as the charge passes and the
+    // hull flank takes a moving blue wash — in step with the bead on the strip; off during hold and
+    // reset. (At r 6.8 / 160 cd it passed 1.1 m from each casing and put 90 lx on it: a blown bulb.)
+    const CHARGE_I = 120;
+    const chargeLight = L([-8.5, AX + 2.2, 700], 0x5a8cff, 0, 18, 1.2);
+
+    const emitters = buildAnimatedEmitters(ctx, { adopt: ["emitBlue"] });
+
+    return {
+      update(dt, t) {
+        emitters.uniforms.uTime.value = t;
+        const seq = anim.seq(t);
+        const bead = anim.bead(seq);
+        chargeLight.pos[2] = 700 + 44 * bead.pos;
+        chargeLight.intensity = CHARGE_I * bead.on;
+        housingLight.intensity = HOUSING_I * (1 + 1.3 * anim.burst(seq));
+      },
+    };
   },
 });

@@ -5,13 +5,13 @@
 // and floodlights; the catwalk is lined with consoles, valve stations, cabinets and racks. Amber /
 // orange, heavy machinery, deep vertical volume (§11).
 import * as THREE from "three";
-import { mergeGeometries } from "three/addons/utils/BufferGeometryUtils.js";
 import { defineRoom } from "../../deck2/_shared/room.js";
 import { IMP, col } from "../../deck2/_shared/palette.js";
 import { rail, WALL_T } from "../../deck2/_shared/shell.js";
 import { console as consoleProp, pipe, cabinet, floorLine, hazardStrip, indicatorField, placer } from "../../deck2/_shared/props.js";
 import { REACTOR_WINDOW } from "../engctl/index.js";
 import { TAU, ring, strut, valveStation, toolRack, monitorPedestal, wallLamp, portalArch, cableTray, junctionBox, ventGrille, labelCrate } from "../engctl/engprops.js";
+import { animKey, MODE, buildAnimatedEmitters, anim } from "../engctl/anim.js";
 
 const Y = 12;
 const PIT_Y = 4;
@@ -29,6 +29,8 @@ const IX1 = X1 - WALK;
 const IZ0 = Z0 + WALK;
 const IZ1 = Z1 - WALK;
 const BW = 3.0; // bridge width
+// column flood masts on the platform edge (r 12.7), 1.8 m outside the N, S and W bridge rails
+const FLOODS = [[-3.3, CZ - 12.27], [3.3, CZ + 12.27], [-12.27, CZ - 3.3]];
 
 export default defineRoom({
   id: "d3-reactor",
@@ -66,11 +68,27 @@ export default defineRoom({
     const mid = P("impMid");
     const steel = P("steel");
     let seed = 300;
-    // geometry for the pulsing white-hot channel mesh (core slots + collar line), built into one mesh below
-    const chanGeos = [];
+    // Animated emitters (one extra mesh, see engctl/anim.js): the core's white-hot channel centres and
+    // the pit collar pulse together (PULSE), two energy bands sweep round the column (SWEEP), the ring
+    // ledge markers chase upward (CHASE) and one hooded pit lamp flickers (FLICKER). The kit's static
+    // emitWhite pieces are folded into the same mesh, so the room stays at 16 calls.
+    const WHITE = new THREE.Color("#dfe9ff");
+    const AMBER = IMP.impAmber;
+    const ORANGE = IMP.engOrange;
+    const PULSE_WHITE = animKey(MODE.PULSE, { base: 1.85 });
+    const PULSE_AMBER = animKey(MODE.PULSE, { base: 1.5 });
+    const PULSE_ORANGE = animKey(MODE.PULSE, { base: 2.0 });
 
+    // Deck tints. The rig lights rooms with their own fixtures only (the captured environment of a dark
+    // chamber is nearly black), and the shared deck map is charcoal (mean albedo 0.13 with 9 % metal), so
+    // an impMid deck reflects ~1 % of the light that reaches it and read as black in every view. The
+    // walkable decks are two steps lighter (0x7a7e86: 2.3 % albedo), the pit floor 8 m below one step
+    // (0x6a6e76), and the bridge plates under the grating bars impGrey — with the fixtures below they
+    // sit at 20–30 % grey in the pools and fall off to charcoal between them.
+    const DECK = 0x7a7e86;
+    const PIT_DECK = 0x6a6e76;
     // ---- pit floor, pit walls with ribs, hazard edges, trays ---------------------------------------
-    kit.boxMM("impFloor", [X0, PIT_Y, Z0], [X1, PIT_Y + 0.5, Z1], { color: dark, texel: 0.5 });
+    kit.boxMM("impFloor", [X0, PIT_Y, Z0], [X1, PIT_Y + 0.5, Z1], { color: PIT_DECK, texel: 0.5 });
     kit.boxMM("paintedMetal", [-36, PIT_Y, 612.5], [36, Y, Z0], { color: dark, texel: 2.5 });
     kit.boxMM("paintedMetal", [-36, PIT_Y, Z1], [36, Y, 690], { color: dark, texel: 2.5 });
     kit.boxMM("paintedMetal", [-36, PIT_Y, Z0], [X0, Y, Z1], { color: dark, texel: 2.5 });
@@ -98,7 +116,7 @@ export default defineRoom({
     }
 
     // ---- lower service ring, ring conduits, pumps, floodlights -------------------------------------
-    kit.cyl("impFloor", 0, PIT_Y + 0.65, CZ, 16, 0.3, "y", { color: 0x2a2d33, segments: 40, texel: 0.5 });
+    kit.cyl("impFloor", 0, PIT_Y + 0.65, CZ, 16, 0.3, "y", { color: mid, segments: 40, texel: 0.5 });
     kit.cyl("paintedMetal", 0, PIT_Y + 0.95, CZ, 16.05, 0.3, "y", { color: black, segments: 40, open: true });
     for (const [r, y] of [[11.3, PIT_Y + 1.7], [12.6, PIT_Y + 2.7]]) {
       // matte painted steel: polished `metal` here mirrored the collar's hot line as white streaks
@@ -120,21 +138,18 @@ export default defineRoom({
     // white-hot centre line at 6.75..7.45 — above the two ring conduits, which hide anything lower on
     // the collar from the catwalk — plus glow slots near the deck, a hazard ring on the service deck
     // and eight coolant feed pipes radiating from the collar to the deck edge
+    // (the whole collar — amber band, orange band, white line and the deck slots — breathes with the core)
     kit.cyl("paintedMetal", 0, PIT_Y + 1.6, CZ, 10.4, 3.2, "y", { color: black, segments: 40, texel: 2.5 });
-    kit.cyl("emitAmber", 0, PIT_Y + 3.1, CZ, 10.46, 0.7, "y", { segments: 40, open: true });
-    kit.cyl("emitOrange", 0, PIT_Y + 3.1, CZ, 10.49, 0.34, "y", { segments: 40, open: true });
-    {
-      const g = new THREE.CylinderGeometry(10.53, 10.53, 0.1, 40, 1, true);
-      g.translate(0, PIT_Y + 3.1, CZ);
-      chanGeos.push(g.toNonIndexed());
-    }
+    kit.cyl(PULSE_AMBER, 0, PIT_Y + 3.1, CZ, 10.46, 0.7, "y", { segments: 40, open: true, color: AMBER });
+    kit.cyl(PULSE_ORANGE, 0, PIT_Y + 3.1, CZ, 10.49, 0.34, "y", { segments: 40, open: true, color: ORANGE });
+    kit.cyl(PULSE_WHITE, 0, PIT_Y + 3.1, CZ, 10.53, 0.1, "y", { segments: 40, open: true, color: WHITE });
     kit.cyl("paintedMetal", 0, PIT_Y + 3.6, CZ, 10.6, 0.3, "y", { color: dark, segments: 40, texel: 2.5 });
     kit.cyl("paintedMetal", 0, PIT_Y + 2.55, CZ, 10.6, 0.3, "y", { color: dark, segments: 40, texel: 2.5 });
     kit.cyl("paintedMetal", 0, PIT_Y + 0.6, CZ, 10.7, 0.3, "y", { color: dark, segments: 40, texel: 2.5 });
     for (let k = 0; k < 24; k++) {
       if (k % 6 === 3) continue; // coolant spines stand here
       const a = (k / 24) * TAU;
-      kit.box(k % 2 ? "emitAmber" : "emitOrange", Math.cos(a) * 10.44, PIT_Y + 1.05, CZ + Math.sin(a) * 10.44, 0.5, 0.22, 0.1, { rot: [0, Math.PI / 2 - a, 0] });
+      kit.box(k % 2 ? PULSE_AMBER : PULSE_ORANGE, Math.cos(a) * 10.44, PIT_Y + 1.05, CZ + Math.sin(a) * 10.44, 0.5, 0.22, 0.1, { rot: [0, Math.PI / 2 - a, 0], color: k % 2 ? AMBER : ORANGE });
     }
     kit.add("hazard", new THREE.RingGeometry(10.85, 11.55, 64), { pos: [0, PIT_Y + 0.958, CZ], rot: [-Math.PI / 2, 0, 0], texel: 2 });
     for (let k = 0; k < 8; k++) {
@@ -163,10 +178,14 @@ export default defineRoom({
       kit.box("paintedMetal", Math.cos(a) * rm, PIT_Y + 0.58, CZ + Math.sin(a) * rm, r1 - r0, 0.16, 0.6, { color: black, rot: [0, -a, 0], texel: 2.5 });
       kit.box("paintedMetal", Math.cos(a) * rm, PIT_Y + 0.62, CZ + Math.sin(a) * rm, r1 - r0 - 0.4, 0.1, 0.44, { color: mid, rot: [0, -a, 0], texel: 2.5 });
     }
-    // housed pit lamps high on the pit walls (hooded faces aimed down, hidden from the catwalk)
+    // housed pit lamps high on the pit walls (hooded faces aimed down, hidden from the catwalk). The
+    // east head at CZ − 8 is the faulty one: its face flickers (animated mesh) with a point light in its
+    // hood doing the same (see the light list) — it is the pit lamp the pit view looks at.
+    const FLICKER_SEED = 0.61;
+    const FLICKER_KEY = animKey(MODE.FLICKER, { phase: FLICKER_SEED, base: 1.3 });
     for (const z of [CZ - 24, CZ - 8, CZ + 8, CZ + 24]) {
       wallLamp(kit, PALETTE, [X0, PIT_Y + 6.2, z], Math.PI / 2, { w: 1.1, tilt: 0.75 });
-      wallLamp(kit, PALETTE, [X1, PIT_Y + 6.2, z], -Math.PI / 2, { w: 1.1, tilt: 0.75 });
+      wallLamp(kit, PALETTE, [X1, PIT_Y + 6.2, z], -Math.PI / 2, { w: 1.1, tilt: 0.75, mat: z === CZ - 8 ? FLICKER_KEY : "emitWhite", faceColor: WHITE });
     }
     for (const x of [-24, -8, 8, 24]) {
       wallLamp(kit, PALETTE, [x, PIT_Y + 6.2, Z0], 0, { w: 1.1, tilt: 0.75 });
@@ -203,7 +222,7 @@ export default defineRoom({
     }
 
     // ---- ring catwalk, inner rails, bridges, core platform -----------------------------------------
-    const deck = (a, b) => kit.boxMM("impFloor", [a[0], Y - 0.5, a[1]], [b[0], Y, b[1]], { color: mid, texel: 0.5 });
+    const deck = (a, b) => kit.boxMM("impFloor", [a[0], Y - 0.5, a[1]], [b[0], Y, b[1]], { color: DECK, texel: 0.5 });
     deck([X0, Z0], [X1, IZ0]);
     deck([X0, IZ1], [X1, Z1]);
     deck([X0, IZ0], [IX0, IZ1]);
@@ -236,7 +255,9 @@ export default defineRoom({
     // bridge: dark deck read as grating (steel cross-bars every 0.5 m over a black base), amber edge
     // strips, under-trusses
     const bridge = (a, b) => {
-      kit.boxMM("impFloor", [a[0], Y - 0.5, a[1]], [b[0], Y - 0.02, b[1]], { color: black, texel: 0.5 });
+      // (base plate impGrey: it is what shows between the bars, and the shadow key's pool and the rail
+      // shadows need an albedo — the bars themselves are bare metal and only reflect)
+      kit.boxMM("impFloor", [a[0], Y - 0.5, a[1]], [b[0], Y - 0.02, b[1]], { color: IMP.impGrey, texel: 0.5 });
       const alongX = b[0] - a[0] > b[1] - a[1];
       if (alongX) {
         for (const s of [-1, 1]) kit.boxMM("paintedMetal", [a[0], Y - 1.1, CZ + s * (BW / 2 - 0.2) - 0.1], [b[0], Y - 0.5, CZ + s * (BW / 2 - 0.2) + 0.1], { color: black, texel: 2.5 });
@@ -267,13 +288,24 @@ export default defineRoom({
       rail(kit, PALETTE, [(s * BW) / 2, Y, IZ0], [(s * BW) / 2, Y, CZ - PLAT_R], Y);
     }
     // (each gantry carries a hooded floodlight aimed down its bridge; the amber pool lights sit under them)
+    // The entry gantry is the heavy crane: an 8 m span whose flood head hangs at x −2.9, west of the
+    // bridge rails, so it can be the room's shadow key (rails and posts cast across the grating).
     portalArch(kit, PALETTE, [IX0 + 0.45, Y, CZ], Math.PI / 2, { lamp: 1 });
     portalArch(kit, PALETTE, [IX1 - 0.45, Y, CZ], Math.PI / 2, { lamp: -1 });
-    portalArch(kit, PALETTE, [0, Y, IZ0 + 0.45], 0, { lamp: 1 });
+    portalArch(kit, PALETTE, [0, Y, IZ0 + 0.45], 0, { lamp: 1, span: 8, trolley: 0.42 });
     portalArch(kit, PALETTE, [0, Y, IZ1 - 0.45], 0, { lamp: -1 });
+    // hooded flood under the ring's inner-edge beam aimed into the pit (the pit view's near floor), set
+    // between the deck's support columns west of the entry bridge
+    underdeckFlood(kit, PALETTE, [-12, Y - 1.1, IZ0 + 0.9]);
+    // column floods: three 2.5 m masts on the platform edge beside the N, S and W bridge landings, each
+    // with a hooded head cantilevered 1 m toward the column and aimed at the drum's base. Without them
+    // the rig's self-lit chamber showed the 88 m column as a black silhouette between its emissive bands
+    // in every view; their pools (50 % grey at the centre, 5 m wide, 6 m tall) sit on the faces the
+    // entry / engctl-window (N), bridge (S) and core (W) cameras look at. (Lights in the list below.)
+    for (const [fx, fz] of FLOODS) coreFlood(kit, PALETTE, [fx, Y, fz], [0, CZ]);
 
     // core platform ring with edge posts, kerb, hatches and monitor pedestals
-    kit.cyl("impFloor", 0, Y - 0.25, CZ, PLAT_R, 0.5, "y", { color: mid, segments: 48, texel: 0.5 });
+    kit.cyl("impFloor", 0, Y - 0.25, CZ, PLAT_R, 0.5, "y", { color: DECK, segments: 48, texel: 0.5 });
     kit.cyl("paintedMetal", 0, Y - 0.42, CZ, PLAT_R + 0.03, 0.16, "y", { color: black, segments: 48, open: true });
     kit.cyl("paintedMetal", 0, Y + 0.15, CZ, CORE_R + 0.35, 0.3, "y", { color: black, segments: 32 });
     const n = 16;
@@ -312,9 +344,7 @@ export default defineRoom({
         // gradient by geometry: wide amber rim, orange mid band, narrow white-hot centre (capped ~1.9)
         kit.cyl("emitAmber", 0, y + h / 2, CZ, 8.8, h - 0.3, "y", { segments: 32, open: true });
         kit.cyl("emitOrange", 0, y + h / 2, CZ, 8.84, 1.5, "y", { segments: 32, open: true });
-        const g = new THREE.CylinderGeometry(8.88, 8.88, 0.45, 32, 1, true);
-        g.translate(0, y + h / 2, CZ);
-        chanGeos.push(g.toNonIndexed());
+        kit.cyl(PULSE_WHITE, 0, y + h / 2, CZ, 8.88, 0.45, "y", { segments: 32, open: true, color: WHITE });
         const ns = 36;
         for (let k = 0; k < ns; k++) {
           const a = (k / ns) * TAU;
@@ -341,6 +371,15 @@ export default defineRoom({
         y += h;
       }
       kit.cyl("paintedMetal", 0, y + 0.15, CZ, 9.85, 0.3, "y", { color: black, segments: 32 });
+      // energy bands: thin orange rings on the cap rings between the slots (after segments 5 and 10), a
+      // hot head sweeping slowly round the column with a fading tail — clockwise at 20 s per turn at y ≈ 39,
+      // counter-clockwise at 29 s per turn at y ≈ 67 (SWEEP: the fragment's angle about the axis is its phase)
+      if (i === 5 || i === 10) {
+        const sweep = animKey(MODE.SWEEP, { base: 1.6, rate: i === 5 ? 0.05 : -0.035, aux: [0, 0, CZ] });
+        kit.cyl(sweep, 0, y + 0.15, CZ, 9.93, 0.2, "y", { segments: 48, open: true, color: ORANGE });
+        kit.cyl("paintedMetal", 0, y + 0.3, CZ, 9.97, 0.06, "y", { color: black, segments: 48, open: true });
+        kit.cyl("paintedMetal", 0, y, CZ, 9.97, 0.06, "y", { color: black, segments: 48, open: true });
+      }
       y += 0.3;
     }
     // glowing top collar and ceiling socket
@@ -388,13 +427,6 @@ export default defineRoom({
       glow([-0.05, sy - 0.79, CZ + 10.2], [0.05, sy - 0.75, Z1 - 0.8]);
       glow([-0.05, sy - 0.79, Z0 + 0.8], [0.05, sy - 0.75, CZ - 10.2]);
     }
-    // pulsing white-hot channel centres: one mesh, cloned emissive material capped just past white
-    // (1.6–2.1); the hot read comes from the narrow centre inside the wider orange/amber layers
-    const chanMat = ctx.materials.emitWhite.clone();
-    chanMat.emissiveIntensity = 1.85;
-    const channel = new THREE.Mesh(mergeGeometries(chanGeos, false), chanMat);
-    ctx.group.add(channel);
-
     // ---- walls: vertical pipes, conduit bands, ring ledges at y 40 / 70 -----------------------------
     const pipeTop = collarY - 2;
     for (const z of [624.5, 638, 664.5, 678]) {
@@ -414,10 +446,13 @@ export default defineRoom({
       kit.boxMM("emitAmber", [X0 + 1.5, by - 0.03, Z1 - 0.58], [X1 - 1.5, by + 0.03, Z1 - 0.56]);
     }
     // ring walkways receding up the shaft (y 25 … 85): ledge, fascia, edge glow line, rail, and
-    // small marker lamps every 6 m on the fascia (amber / white alternating per ring) so the 88 m reads
+    // small marker lamps every 9 m on the fascia (amber / white alternating per ring) so the 88 m reads.
+    // The markers chase upward: one ring at a time lights hot and fades (CHASE, phase = ring index, one
+    // sweep up the shaft every 9 s), so the eye is led up the 88 m.
     for (const [ri, ly] of [25, 40, 55, 70, 85].entries()) {
       const L = 1.5;
-      const lamp = ri % 2 ? "emitWhite" : "emitAmber";
+      const lampCol = ri % 2 ? WHITE : AMBER;
+      const lamp = animKey(MODE.CHASE, { phase: ri / 5, base: ri % 2 ? 1.3 : 1.5, rate: 1 / 9 });
       kit.boxMM("impFloor", [X0, ly - 0.4, Z0], [X1, ly, Z0 + L], { color: dark, texel: 0.5 });
       kit.boxMM("impFloor", [X0, ly - 0.4, Z1 - L], [X1, ly, Z1], { color: dark, texel: 0.5 });
       kit.boxMM("impFloor", [X0, ly - 0.4, Z0 + L], [X0 + L, ly, Z1 - L], { color: dark, texel: 0.5 });
@@ -431,12 +466,12 @@ export default defineRoom({
       kit.boxMM("emitAmber", [X0 + L, ly - 0.3, Z0 + L + 0.04], [X1 - L, ly - 0.24, Z0 + L + 0.06]);
       kit.boxMM("emitAmber", [X0 + L, ly - 0.3, Z1 - L - 0.06], [X1 - L, ly - 0.24, Z1 - L - 0.04]);
       for (let z = Z0 + L + 3; z < Z1 - L - 2; z += 9) {
-        kit.box(lamp, X0 + L + 0.07, ly - 0.58, z, 0.02, 0.14, 0.5);
-        kit.box(lamp, X1 - L - 0.07, ly - 0.58, z, 0.02, 0.14, 0.5);
+        kit.box(lamp, X0 + L + 0.07, ly - 0.58, z, 0.02, 0.14, 0.5, { color: lampCol });
+        kit.box(lamp, X1 - L - 0.07, ly - 0.58, z, 0.02, 0.14, 0.5, { color: lampCol });
       }
       for (let x = X0 + L + 3; x < X1 - L - 2; x += 9) {
-        kit.box(lamp, x, ly - 0.58, Z0 + L + 0.07, 0.5, 0.14, 0.02);
-        kit.box(lamp, x, ly - 0.58, Z1 - L - 0.07, 0.5, 0.14, 0.02);
+        kit.box(lamp, x, ly - 0.58, Z0 + L + 0.07, 0.5, 0.14, 0.02, { color: lampCol });
+        kit.box(lamp, x, ly - 0.58, Z1 - L - 0.07, 0.5, 0.14, 0.02, { color: lampCol });
       }
       rail(kit, PALETTE, [X0 + L - 0.06, ly, Z0 + L], [X0 + L - 0.06, ly, Z1 - L], ly, { post: 4.8 });
       rail(kit, PALETTE, [X1 - L + 0.06, ly, Z0 + L], [X1 - L + 0.06, ly, Z1 - L], ly, { post: 4.8 });
@@ -446,7 +481,7 @@ export default defineRoom({
       for (const [cx, cz] of [[X0 + 0.75, Z0 + 0.75], [X1 - 0.75, Z0 + 0.75], [X0 + 0.75, Z1 - 0.75], [X1 - 0.75, Z1 - 0.75]]) {
         kit.box("paintedMetal", cx, ly + 1.2, cz, 0.16, 2.4, 0.16, { color: black });
         kit.box("paintedMetal", cx, ly + 2.5, cz, 0.5, 0.2, 0.5, { color: dark });
-        kit.box(lamp, cx, ly + 2.38, cz, 0.36, 0.04, 0.36);
+        kit.box(lamp, cx, ly + 2.38, cz, 0.36, 0.04, 0.36, { color: lampCol });
       }
     }
 
@@ -568,7 +603,14 @@ export default defineRoom({
     kit.boxMM("paintedMetal", [2.45, Y + 2.6, Z0], [4.25, Y + 5.4, Z0 + 0.14], { color: dark, texel: 2.5 });
     kit.boxMM("impPanel", [2.53, Y + 2.68, Z0 + 0.14], [4.17, Y + 5.32, Z0 + 0.152], { color: mid, uv: "keep" });
     ventGrille(kit, PALETTE, [3.35, Y + 3.3, Z0 + 0.152], 0, { w: 1.3, h: 0.7 });
-    junctionBox(kit, PALETTE, [3.35, Y + 4.1, Z0 + 0.152], 0, { seed: seed++, w: 0.6, h: 0.5 });
+    junctionBox(kit, PALETTE, [3.35, Y + 4.0, Z0 + 0.152], 0, { seed: seed++, w: 0.6, h: 0.5 });
+    // hooded flood on the pier under the header beam: the door-approach light (the deck in front of
+    // both doors and the door faces themselves)
+    wallLamp(kit, PALETTE, [3.35, Y + 4.72, Z0 + 0.152], 0, { w: 1.1, tilt: 0.85 });
+    // hooded floods high on the long walls (visible sources for the catwalk pools the entry and core
+    // views look across; the west one at 652 pools the deck the core camera stands on)
+    wallLamp(kit, PALETTE, [X1, Y + 5.2, 624], -Math.PI / 2, { w: 1.3, tilt: 0.95 });
+    wallLamp(kit, PALETTE, [X0, Y + 5.2, 652], Math.PI / 2, { w: 1.3, tilt: 0.95 });
     kit.boxMM("paintedMetal", [-1.0, Y + 5.4, Z0], [9.6, Y + 6.3, Z0 + 0.6], { color: dark, texel: 2.5 });
     kit.boxMM("impPanel", [-0.92, Y + 5.48, Z0 + 0.6], [9.52, Y + 6.22, Z0 + 0.612], { color: dark, uv: "keep" });
     kit.boxMM("paintedMetal", [-1.0, Y + 5.3, Z0], [9.6, Y + 5.4, Z0 + 0.66], { color: black, texel: 4 });
@@ -576,34 +618,142 @@ export default defineRoom({
     kit.boxMM("emitAmber", [-0.6, Y + 5.85, Z0 + 0.612], [9.2, Y + 5.95, Z0 + 0.632]);
     for (const x of [-0.4, 3.35, 9.0]) kit.boxMM("paintedMetal", [x - 0.25, Y + 6.3, Z0], [x + 0.25, Y + 8.0, Z0 + 0.5], { color: black, texel: 2.5 });
 
-    // ---- lights: amber pools by the core, cool fills at the corners, amber core-base glow in the pit,
-    // two mid-height shaft lights, a top light and a warm pool at the forward door approach (14) --------
-    const L = (pos, color, intensity, distance, priority = 0.5) => ctx.lights.push({ type: "point", pos, color, intensity, distance, priority });
-    // amber pools: spots in the four gantry lamp heads aimed almost straight down at the bridge decks.
-    // A point light anywhere on a bridge axis mirrors off the column as a round dot exactly on the
-    // axis of the entry/bridge views; a 57° cone leaning 11° toward the core never reaches the column
-    // above the service platform, so the pool reads as the lamp's own light and the drum stays clean.
+    // ---- lights (14). The rig has no studio environment any more: everything the cameras see must be
+    // lit by these descriptors, and only the nearest 12 point / 4 spot of the FOUR active rooms are live
+    // (d / (0.5 + priority)). So the list is built around the five camera positions — an entry cluster
+    // (shadow key, pier flood, underdeck flood), the core (four gantry pools, three column floods, two
+    // collar lights) and the catwalk (two wall floods) — with priorities 1.2–2.0 on the lights each view
+    // needs so they beat the corridor's, engctl's and the hyperdrive's lights through the shared walls.
+    // Far shaft/top lights were dropped: at 40–85 m from every camera they never entered the pool.
+    // Intensities are candela against ~2.5 % deck albedo: a pool needs ~2.5 lx to sit at 20 % grey and
+    // ~6 lx for 45 %, so the spots run 300–650 cd and the points 70–180 cd, and every point is kept
+    // ≥ 1.2 m from its housing and ≥ 1.5 m from any wall, post or the drum (a point light lights its
+    // own hood; at 0.5 m these values clip it). ----------------------------------------------------
+    const L = (pos, color, intensity, distance, priority = 0.5) => {
+      const d = { type: "point", pos, color, intensity, distance, priority };
+      ctx.lights.push(d);
+      return d;
+    };
+    // amber pools: spots in the four gantry lamp heads aimed down the bridge decks. A point light
+    // anywhere on a bridge axis mirrors off the column as a round dot exactly on the axis of the
+    // entry/bridge views, so these are spots; the three side pools lean 27° toward the core (57°
+    // half-cone, 300 cd → 13 lx at the frame bottom of the bridge view, 3 lx 6 m out, so the grating
+    // reads for 8 m before it falls to the column floods' pool at the platform), whose far edge grazes
+    // the drum at y 12–14 with no intensity left. All four breathe with the core (same phase as the
+    // channel material).
+    const pools = [];
     for (const [gx, gz] of [[IX0 + 0.45, CZ], [IX1 - 0.45, CZ], [0, IZ0 + 0.45], [0, IZ1 - 0.45]]) {
       const len = Math.hypot(-gx, CZ - gz);
       const ux = -gx / len;
       const uz = (CZ - gz) / len;
-      ctx.lights.push({ type: "spot", pos: [gx + ux * 0.4, Y + 4.0, gz + uz * 0.4], target: [gx + ux * 1.2, Y, gz + uz * 1.2], color: 0xffa040, intensity: 100, distance: 30, angle: 1.0, penumbra: 0.5, priority: 0.8 });
+      const entry = gz === IZ0 + 0.45;
+      // SHADOW KEY (entry gantry): 0.45 m under the crane's flood head (x −2.9, 1.4 m west of the bridge
+      // rails), aimed down the bridge and across the landing (35° down, 57° half-cone, 650 cd → 20 lx
+      // under the arch falling to 2.5 lx 8 m out along the grating). The west rail's bars and posts
+      // cast a stripe along the grating 0.5 m inside the rail, the arch's east post and the landing
+      // console cast across the landing toward the entry camera; the cone's edge stays 2° off the
+      // column's lower drum, so it keeps no specular dot.
+      const d = entry
+        ? { type: "spot", pos: [-2.9, Y + 3.55, gz + 0.75], target: [1.4, Y, gz + 3.6], color: 0xffb060, intensity: 650, distance: 36, angle: 1.0, penumbra: 0.45, priority: 1.5, shadow: true }
+        : { type: "spot", pos: [gx + ux * 0.4, Y + 4.0, gz + uz * 0.4], target: [gx + ux * 2.4, Y, gz + uz * 2.4], color: 0xffa040, intensity: 300, distance: 30, angle: 1.0, penumbra: 0.5, priority: gz === IZ1 - 0.45 ? 1.2 : 1.5 };
+      ctx.lights.push(d);
+      pools.push(d);
     }
-    for (const [x, z] of [[X0 + 4, Z0 + 4], [X1 - 4, Z0 + 4], [X0 + 4, Z1 - 4], [X1 - 4, Z1 - 4]]) L([x, Y + 6, z], 0xcfd8ff, 50, 30, 0.5);
-    L([0, CEIL - 10, CZ], 0xffb060, 200, 80, 0.4);
-    L([13, PIT_Y + 2.6, CZ], 0xffa040, 110, 36, 0.6);
-    L([-13, PIT_Y + 2.6, CZ], 0xffa040, 110, 36, 0.6);
-    L([-18, 52, CZ], 0xffa040, 140, 50, 0.3);
-    L([18, 78, CZ], 0xffb060, 140, 50, 0.3);
-    L([3, Y + 3.6, Z0 + 3], 0xffc890, 30, 14, 0.4);
+    const poolBase = pools.map((d) => d.intensity);
+    // landing console east of the entry bridge, facing the core, under the shadow key: it casts a long
+    // shadow across the ring grating toward the entry camera
+    consoleProp(kit, PALETTE, [4.6, Y, IZ0 - 1.0], Math.PI, { w: 2.4, screens: 2, seed: seed++, screenMat: "screenImp3" });
+    // entry cluster fills (all housed, see the fixtures above): pier flood (door approach; 2.6 m off
+    // the pier so its patch on the painted plate stays under 70 % grey) and the west underdeck flood
+    // into the pit under the pit camera. That one sits 4.5 m north of the deck edge and 3 m under it,
+    // i.e. 47° below the pit camera's foreground rail: the rail bar's mirror point for the camera is
+    // then on its unlit underside — at IZ0 + 1.5 the flood mirrored in the bar as two clipped blobs —
+    // and the pool lands where the hood's 63° beam meets the pit floor. (The landing console's post
+    // lamp went to the column floods: the shadow key already puts 20 lx on the landing.)
+    L([3.35, Y + 3.9, Z0 + 2.6], 0xffc890, 130, 18, 1.2);
+    L([-12, Y - 3.0, IZ0 + 4.5], 0xffe8d0, 160, 20, 1.2);
+    // column floods (see the masts above): warm white points 1.4 m ahead of each mast, r 11.3, 2 m over
+    // the platform — 1.7 m off the drum, 24 lx at the patch centre (the drum's black paint reads ~55 %
+    // grey there through its specular term, no clipping, falling to 25 % over a 4 m round), 17 lx on
+    // the deck round the mast. The N flood carries priority 3: it is the light on the face of the column
+    // that engctl's window view looks at from 42 m through the shared glass, past all twelve of
+    // engctl's own points — at 1.5 the pool there held only the entry key and the column was a
+    // silhouette between its bands.
+    for (const [fx, fz] of FLOODS) {
+      const len = Math.hypot(fx, fz - CZ);
+      L([fx - (fx / len) * 1.4, Y + 2.0, fz - ((fz - CZ) / len) * 1.4], 0xffe0c0, 70, 16, fz < CZ - 10 ? 3.0 : 1.5);
+    }
+    // amber core-base glow in the pit: two lights round the collar (W and the entry side) breathing with
+    // it, at r 16.5 over the service ring's edge — 3.9 m from the steel ring conduits (at r 13 they
+    // clipped the r 12.6 conduit to a white streak) and 2.1 m over the pit deck for a 35 lx amber pool
+    const COLLAR_I = 160;
+    // (the west one at 2.0: the pit camera looks at it past six of engctl's lights and the N and W
+    // column floods through the shared wall, and at 1.5 it was the 13th point in that view)
+    const collarLights = [L([-16.5, PIT_Y + 2.6, CZ], 0xffa040, COLLAR_I, 40, 2.0), L([0, PIT_Y + 2.6, CZ - 16.5], 0xffa040, COLLAR_I, 40, 1.2)];
+    // catwalk pools under the wall floods: 2.6 m off the wall so the wall patch behind the hood stays
+    // below clipping (point lights ignore the hood), 4.4 m over the deck. The west one is at 652: it
+    // pools the deck north of the core camera (x −35..−27, z 646..658 — the view's bottom-left, which
+    // was 9 % grey), 7 m behind-left of that camera so its mirror point in the inner rail, 1.1 m in
+    // front of the lens, lies 60° outside the frame. (The east flood at 660 was only ever live in the
+    // bridge view, as a 12 % pool at its right edge; it went to the S column flood.)
+    L([X1 - 2.6, Y + 4.4, 624], 0xffe0c8, 150, 24, 1.5);
+    L([X0 + 2.6, Y + 4.4, 652], 0xffe0c8, 150, 24, 1.3);
+    // the faulty east pit lamp (CZ − 8): light 1.6 m out from its hood, flickering with its face
+    const FLICKER_I = 70;
+    const flickerLight = L([X1 - 1.6, PIT_Y + 5.6, CZ - 8], 0xffe0c0, FLICKER_I, 20, 0.8);
+
+    const emitters = buildAnimatedEmitters(ctx, { adopt: ["emitWhite"] });
 
     return {
       update(dt, t) {
-        chanMat.emissiveIntensity = 1.85 + 0.2 * Math.sin(t * 1.3) + 0.05 * Math.sin(t * 4.1);
+        emitters.uniforms.uTime.value = t;
+        // core pulse: the channel material's phase (1.85 · animPulse) drives the pools and the collar glow
+        const p = anim.pulse(t) - 1; // −0.135 … +0.135
+        for (let i = 0; i < pools.length; i++) pools[i].intensity = poolBase[i] * (1 + 1.6 * p);
+        for (const d of collarLights) d.intensity = COLLAR_I * (1 + 2.2 * p);
+        flickerLight.intensity = FLICKER_I * anim.flicker(t, FLICKER_SEED * 37);
       },
     };
   },
 });
+
+// Hooded flood hung under the ring's inner-edge beam (`pos` = beam underside at the beam's pit face),
+// head tilted 1.1 rad so the bright face looks down into the pit and stays hidden from the catwalk.
+function underdeckFlood(kit, PALETTE, pos) {
+  const black = col(PALETTE, "impBlack");
+  const dark = col(PALETTE, "impDark");
+  const [x, y, z] = pos;
+  kit.boxMM("paintedMetal", [x - 0.08, y - 0.4, z - 0.4], [x + 0.08, y, z - 0.24], { color: black });
+  kit.boxMM("paintedMetal", [x - 0.5, y - 0.46, z - 0.5], [x + 0.5, y - 0.38, z + 0.3], { color: dark, texel: 2.5 });
+  const tilt = 1.1;
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, 0, 0));
+  const c = [x, y - 0.72, z + 0.1];
+  kit.add("paintedMetal", new THREE.BoxGeometry(0.8, 0.4, 0.34), { pos: c, quat: q, color: black, texel: 2.5 });
+  const n = [0, -Math.sin(tilt), Math.cos(tilt)];
+  kit.add("emitWhite", new THREE.BoxGeometry(0.62, 0.26, 0.02), { pos: [c[0] + n[0] * 0.18, c[1] + n[1] * 0.18, c[2] + n[2] * 0.18], quat: q });
+}
+
+// Column flood: 2.5 m mast on the platform edge with a hooded head cantilevered 1 m toward the column
+// on an arm, nose down 25° at the drum's base. `pos` = mast foot, `toward` = the column axis (x, z); the
+// point light goes 0.4 m ahead of the head (see the light list), so the mast's inner face takes ~20 lx
+// and only the emitter face is in front of it.
+function coreFlood(kit, PALETTE, pos, toward) {
+  const black = col(PALETTE, "impBlack");
+  const dark = col(PALETTE, "impDark");
+  const [x, y, z] = pos;
+  const yaw = Math.atan2(toward[0] - x, toward[1] - z);
+  const P = placer(kit, pos, yaw);
+  P.box("paintedMetal", 0, 0.06, 0, 0.5, 0.12, 0.5, { color: dark, texel: 2.5 });
+  P.box("paintedMetal", 0, 1.25, 0, 0.16, 2.5, 0.16, { color: black });
+  P.box("paintedMetal", 0, 2.45, 0.5, 0.1, 0.1, 1.1, { color: black });
+  const tilt = 0.45;
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, 0, 0)));
+  const hc = P.world(0, 2.25, 1.0);
+  kit.add("paintedMetal", new THREE.BoxGeometry(0.56, 0.4, 0.44), { pos: hc, quat: q, color: black, texel: 2.5 });
+  const fwd = new THREE.Vector3(0, 0, 0.225).applyQuaternion(q);
+  kit.add("emitWhite", new THREE.BoxGeometry(0.4, 0.26, 0.02), { pos: [hc[0] + fwd.x, hc[1] + fwd.y, hc[2] + fwd.z], quat: q });
+  kit.collider([x - 0.3, y, z - 0.3], [x + 0.3, y + 2.6, z + 0.3], "mast");
+}
 
 // Pit heat exchanger: long plinth, finned body, three drums on top, manifold toward the core. Front = +Z.
 function exchanger(kit, PALETTE, pos, yaw, seed) {
@@ -643,29 +793,31 @@ function pumpBlock(kit, PALETTE, pos, yaw, seed, variant = 0) {
   P.box("paintedMetal", 0, 1.25, 0, 2.8, 1.9, 2.0, { color: variant === 2 ? black : dark, texel: 2.5 });
   P.box("paintedMetal", 0, 2.28, 0, 3.0, 0.16, 2.2, { color: variant === 1 ? dark : black, texel: 2.5 });
   // motor on the top deck (so the block reads as a pump from the catwalk above): saddle, steel drum(s)
-  // overhanging both sides, black end bells and centre band; outlet stub on the front
+  // overhanging both sides, black end bells and centre band; outlet stub on the front. The drums are
+  // painted steel (paintedMetal, steel tint), not bare `metal`: a 0.5 m polished drum 9 m from the
+  // underdeck flood mirrored it into the core view as a bloomed white blob.
   P.box("paintedMetal", 0, 2.5, -0.45, 2.0, 0.3, 1.0, { color: black });
   if (variant === 1) {
     for (const z of [-0.78, -0.12]) {
-      P.cyl("metal", 0, 2.96, z, 0.3, 2.4, "x", { color: steel, segments: 14, texel: 0.5 });
+      P.cyl("paintedMetal", 0, 2.96, z, 0.3, 2.4, "x", { color: steel, segments: 14, texel: 0.5 });
       P.cyl("paintedMetal", 1.25, 2.96, z, 0.34, 0.16, "x", { color: black, segments: 14 });
       P.cyl("paintedMetal", -1.25, 2.96, z, 0.34, 0.16, "x", { color: black, segments: 14 });
     }
     P.box("paintedMetal", 0, 2.96, -0.45, 0.4, 0.5, 0.9, { color: black });
   } else if (variant === 2) {
-    P.cyl("metal", 0, 3.38, -0.45, 0.72, 3.8, "x", { color: steel, segments: 18, texel: 0.5 });
+    P.cyl("paintedMetal", 0, 3.38, -0.45, 0.72, 3.8, "x", { color: steel, segments: 18, texel: 0.5 });
     for (const x of [-1.2, -0.6, 0, 0.6, 1.2]) P.cyl("paintedMetal", x, 3.38, -0.45, 0.8, 0.08, "x", { color: black, segments: 18 });
     P.cyl("paintedMetal", 1.95, 3.38, -0.45, 0.78, 0.24, "x", { color: black, segments: 18 });
     P.cyl("paintedMetal", -1.95, 3.38, -0.45, 0.78, 0.24, "x", { color: black, segments: 18 });
   } else {
-    P.cyl("metal", 0, 2.95, -0.45, 0.55, 3.2, "x", { color: steel, segments: 16, texel: 0.5 });
+    P.cyl("paintedMetal", 0, 2.95, -0.45, 0.55, 3.2, "x", { color: steel, segments: 16, texel: 0.5 });
     P.cyl("paintedMetal", 1.65, 2.95, -0.45, 0.62, 0.22, "x", { color: black, segments: 16 });
     P.cyl("paintedMetal", -1.65, 2.95, -0.45, 0.62, 0.22, "x", { color: black, segments: 16 });
     P.cyl("paintedMetal", 0, 2.95, -0.45, 0.6, 0.5, "x", { color: black, segments: 16 });
   }
   P.cyl("metal", 0, 1.6, 1.2, 0.26, 1.0, "z", { color: steel, segments: 12 });
   if (variant === 2) {
-    P.cyl("metal", 0.8, 2.85, 0.55, 0.42, 1.0, "y", { color: steel, segments: 14, texel: 0.5 });
+    P.cyl("paintedMetal", 0.8, 2.85, 0.55, 0.42, 1.0, "y", { color: steel, segments: 14, texel: 0.5 });
     P.cyl("paintedMetal", 0.8, 3.38, 0.55, 0.48, 0.12, "y", { color: black, segments: 14 });
     P.cyl("emitBlue", 1.3, 2.85, 0.55, 0.04, 0.7, "y", { segments: 6 });
     // open top hatch on the front-left of the deck: mid-grey rim, black bay with a glowing coil strip

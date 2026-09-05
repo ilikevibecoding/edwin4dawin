@@ -223,7 +223,8 @@ export function portalArch(kit, PALETTE, pos, yaw, { span = 4.7, h = 4.5, post =
 // Housed wall lamp: dark hood on the wall with a bright face tilted `tilt` rad DOWN from horizontal,
 // so the face is hidden from above and lights the floor/props below. Faces +Z (into the room).
 // `face` scales the emitter inside the same head (0.6 = a small lamp in a big hood, no clipped bar).
-export function wallLamp(kit, PALETTE, pos, yaw, { w = 0.9, tilt = 0.7, mat = "emitWhite", face = 1 } = {}) {
+// `faceColor` tints the face's vertex colours (only read by the animated-emitter keys, see anim.js).
+export function wallLamp(kit, PALETTE, pos, yaw, { w = 0.9, tilt = 0.7, mat = "emitWhite", face = 1, faceColor = null } = {}) {
   const P = placer(kit, pos, yaw);
   const black = col(PALETTE, "impBlack");
   const dark = col(PALETTE, "impDark");
@@ -233,18 +234,26 @@ export function wallLamp(kit, PALETTE, pos, yaw, { w = 0.9, tilt = 0.7, mat = "e
   const hc = P.world(0, 0.12, 0.5);
   kit.add("paintedMetal", new THREE.BoxGeometry(w - 0.1, 0.4, 0.3), { pos: hc, quat: q, color: black, texel: 2.5 });
   const fwd = new THREE.Vector3(0, 0, 0.155).applyQuaternion(q);
-  kit.add(mat, new THREE.BoxGeometry((w - 0.24) * face, 0.28 * face, 0.02), { pos: [hc[0] + fwd.x, hc[1] + fwd.y, hc[2] + fwd.z], quat: q });
+  kit.add(mat, new THREE.BoxGeometry((w - 0.24) * face, 0.28 * face, 0.02), { pos: [hc[0] + fwd.x, hc[1] + fwd.y, hc[2] + fwd.z], quat: q, ...(faceColor ? { color: faceColor } : {}) });
   for (const s of [-1, 1]) P.box("paintedMetal", (s * (w - 0.06)) / 2, 0.1, 0.5, 0.06, 0.5, 0.7, { color: black });
 }
 
 // Ceiling fixture: framed housing on a stem with a louvred light face under it (the fill light sits
 // just below). The face hangs below the black bottom plate so it is visible from the floor.
-export function ceilingFixture(kit, PALETTE, pos, { w = 2.4, d = 0.7, stem = 1.0, mat = "emitAmber", yaw = 0 } = {}) {
+// `flush`: pendant variant on a single rod whose emitter is the whole underside — a point light hung
+// 0.5 m under a low pendant puts ~300 lx on any down-facing lip or louvre and clips it white (the
+// rig's black paint still has a 3–4 % specular term), so the pendant shows the light no dark face.
+export function ceilingFixture(kit, PALETTE, pos, { w = 2.4, d = 0.7, stem = 1.0, mat = "emitAmber", yaw = 0, flush = false } = {}) {
   const P = placer(kit, pos, yaw);
   const black = col(PALETTE, "impBlack");
   const dark = col(PALETTE, "impDark");
-  for (const s of [-1, 1]) P.box("paintedMetal", (s * w) / 3, -stem / 2, 0, 0.06, stem, 0.06, { color: black });
+  if (flush) P.box("paintedMetal", 0, -stem / 2, 0, 0.1, stem, 0.1, { color: black });
+  else for (const s of [-1, 1]) P.box("paintedMetal", (s * w) / 3, -stem / 2, 0, 0.06, stem, 0.06, { color: black });
   P.box("paintedMetal", 0, -stem - 0.16, 0, w, 0.32, d, { color: dark, texel: 2.5 });
+  if (flush) {
+    P.box(mat, 0, -stem - 0.335, 0, w, 0.03, d, { uv: "keep" });
+    return;
+  }
   P.box("paintedMetal", 0, -stem - 0.33, 0, w - 0.16, 0.04, d - 0.16, { color: black });
   P.box(mat, 0, -stem - 0.36, 0, w - 0.3, 0.02, d - 0.3, { uv: "keep" });
   for (let i = 1; i < 4; i++) P.box("paintedMetal", -w / 2 + (i * w) / 4, -stem - 0.375, 0, 0.04, 0.05, d - 0.2, { color: black });

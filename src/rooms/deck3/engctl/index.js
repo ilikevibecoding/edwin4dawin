@@ -10,7 +10,8 @@ import { defineRoom } from "../../deck2/_shared/room.js";
 import { IMP, col } from "../../deck2/_shared/palette.js";
 import { rail } from "../../deck2/_shared/shell.js";
 import { placer, console as consoleProp, indicatorField, wallScreen, pipe, duct, pillar, stairs, holoTable, floorLine, cabinet, hazardStrip } from "../../deck2/_shared/props.js";
-import { arcLine, arcPos, powerCabinet, openPowerCabinet, cableTray, toolRack, junctionBox, ventGrille, yawBox, conduitBundle, ceilingFixture, topScreens, labelCrate, palletStack } from "./engprops.js";
+import { arcLine, arcPos, powerCabinet, openPowerCabinet, cableTray, toolRack, junctionBox, ventGrille, yawBox, conduitBundle, ceilingFixture, topScreens, labelCrate, palletStack, wallLamp } from "./engprops.js";
+import { animKey, MODE, buildAnimatedEmitters, anim } from "./anim.js";
 
 const Y = 12;
 const CEIL = 22;
@@ -20,6 +21,7 @@ const Z0 = 572 + 0.3;
 const Z1 = 612.5 - 0.3;
 const MEZZ = Y + 4; // mezzanine deck top
 const D2R = Math.PI / 180;
+const DECK = 0x7a7e86; // walkable deck tint (see shell.floor)
 
 // Window onto the reactor, shared plane z 612.5 with d3-reactor (which cuts the same hole).
 export const REACTOR_WINDOW = { a0: -26, a1: -2, y0: Y + 1.2, y1: Y + 5.5 };
@@ -56,9 +58,10 @@ export default defineRoom({
     wallColor: IMP.impMid,
     wallAlt: IMP.impGrey,
     stripMat: "emitAmber",
-    // impMid (policy C): the deck plate is 0.35-metal paint, so the tint mostly sets the diffuse term —
-    // at 0x2b2e34 / 0x40444b the status/mezz floors read ~10 % grey under the 8 m ceiling fixtures
-    floor: { mat: "impFloor", color: IMP.impMid },
+    // 0x7a7e86 (policy C, and the self-lit rig): the deck map is charcoal (0.13 albedo, 9 % metal), so
+    // the tint sets the diffuse term — impMid reflected ~1 % and read 10 % grey under the fixtures even
+    // after the fills were doubled; two steps lighter it sits at 20–30 % in the pools
+    floor: { mat: "impFloor", color: DECK },
     ceiling: { channels: 5, axis: "x", color: IMP.impDark, stripMat: "emitAmber" },
     lights: false,
     doorDressing: { accent: "emitAmber" },
@@ -71,6 +74,13 @@ export default defineRoom({
     const mid = P("impMid");
     const steel = P("steel");
     let seed = 100;
+    // Animated emitters (one extra mesh, see anim.js): two header gauge needles swing (SWING), one red
+    // gauge blinks (BLINK), the alert lamp over the window slow-blinks (BLINK); the kit's static emitWhite
+    // and emitOrange pieces are folded into the same mesh so the room stays at 16 calls with the holo.
+    // Screen content flicker is a per-room clone of the three screen materials (no extra calls), jittered
+    // on staggered phases in update().
+    const WHITE = new THREE.Color("#dfe9ff");
+    const screenMats = ["screenImp0", "screenImp1", "screenImp3"].map((k) => (ctx.materials[k] = ctx.materials[k].clone()));
 
     // ---- console arcs facing the window --------------------------------------------------------
     // (a console = shared prop + two small angled desk screens + a dressed service back)
@@ -129,7 +139,12 @@ export default defineRoom({
       push(new THREE.BoxGeometry(0.28, 0.12, 0.004), [Math.cos(a) * 0.86, y, Math.sin(a) * 0.86], [0, -a + Math.PI / 2, 0]);
       push(new THREE.BoxGeometry(0.3, 0.004, 0.004), [Math.cos(a) * 0.62, y, Math.sin(a) * 0.62], [0, -a, 0]);
     }
-    const schematic = new THREE.Mesh(mergeGeometries(geos, false), ctx.materials.holo);
+    // the table's own grid ring joins the schematic mesh (one holo call instead of two); the schematic
+    // uses the table's per-instance holo material so its opacity can pulse without touching other tables
+    push(new THREE.TorusGeometry(1.2 * 0.55, 0.02, 6, 48), [0, 0.36, 0], [Math.PI / 2, 0, 0]);
+    ctx.group.remove(holo.cone, holo.grid);
+    const holoMat = holo.material;
+    const schematic = new THREE.Mesh(mergeGeometries(geos, false), holoMat);
     schematic.position.set(CX, Y + 0.95 + 0.14, 592);
     ctx.group.add(schematic);
 
@@ -152,31 +167,52 @@ export default defineRoom({
     kit.boxMM("emitAmber", [-26.5, Y + 6.55, Z1 - 0.96], [3.0, Y + 6.62, Z1 - 0.9]);
     kit.boxMM("emitAmber", [-26.5, Y + 8.98, Z1 - 0.96], [3.0, Y + 9.05, Z1 - 0.9]);
     // 13 lit gauges (amber dial faces with a needle, every fourth red) alternating with vent slats,
-    // each bay faced with a clean painted plate (the worn-metal map speckles at this size)
+    // each bay faced with a clean painted plate (the worn-metal map speckles at this size). Live dials:
+    // gauge 4's red face blinks (0.6 Hz), gauges 5 and 7 carry white emissive needles that swing about
+    // their hubs on different phases (the mesh rotates in the vertex shader)
+    const SWING = { 5: 0.0, 7: 0.37 };
     for (let i = 0; i < 13; i++) {
       const x = -25.5 + i * 2.15;
       kit.boxMM("impPanel", [x - 0.78, Y + 6.7, Z1 - 0.962], [x + 0.62, Y + 8.9, Z1 - 0.95], { color: dark, uv: "keep" });
       kit.cyl("paintedMetal", x, Y + 7.8, Z1 - 0.97, 0.36, 0.06, "z", { segments: 20, color: black });
-      kit.cyl(i % 4 === 0 ? "emitRedImp" : "emitAmber", x, Y + 7.8, Z1 - 1.005, 0.28, 0.02, "z", { segments: 20 });
+      if (i === 4) kit.cyl(animKey(MODE.BLINK, { phase: 0.2, base: 1.5, rate: 1 / 1.6, aux: [0.5, 0, 0] }), x, Y + 7.8, Z1 - 1.005, 0.28, 0.02, "z", { segments: 20, color: IMP.impRed });
+      else kit.cyl(i % 4 === 0 ? "emitRedImp" : "emitAmber", x, Y + 7.8, Z1 - 1.005, 0.28, 0.02, "z", { segments: 20 });
       const na = -0.9 + ((i * 7) % 5) * 0.45;
-      kit.box("paintedMetal", x + Math.sin(na) * 0.11, Y + 7.8 + Math.cos(na) * 0.11, Z1 - 1.02, 0.03, 0.24, 0.01, { color: black, rot: [0, 0, -na] });
+      if (i in SWING) {
+        const swing = animKey(MODE.SWING, { phase: SWING[i], base: 1.3, rate: 0.3, aux: [x, Y + 7.8, Z1 - 1.02] });
+        kit.box(swing, x + Math.sin(na) * 0.11, Y + 7.8 + Math.cos(na) * 0.11, Z1 - 1.02, 0.03, 0.24, 0.01, { color: WHITE, rot: [0, 0, -na] });
+      } else kit.box("paintedMetal", x + Math.sin(na) * 0.11, Y + 7.8 + Math.cos(na) * 0.11, Z1 - 1.02, 0.03, 0.24, 0.01, { color: black, rot: [0, 0, -na] });
       kit.cyl("paintedMetal", x, Y + 7.8, Z1 - 1.02, 0.04, 0.02, "z", { segments: 8, color: black });
       if (i < 12) {
         kit.box("paintedMetal", x + 1.07, Y + 7.8, Z1 - 0.98, 0.5, 1.6, 0.06, { color: black });
         for (let j = 0; j < 8; j++) kit.box("paintedMetal", x + 1.07, Y + 7.1 + j * 0.2, Z1 - 1.02, 0.4, 0.04, 0.02, { color: mid });
       }
     }
+    // amber alert lamp over the window centre (on the centre mullion, between the window head and the
+    // header): black housing with a hood, amber lens slow-blinking at 2.4 s; its point light blinks with it
+    const ALERT = { rate: 1 / 2.4, phase: 0.58, duty: 0.45 };
+    {
+      const F = placer(kit, [-14, Y + 5.85, Z1 - 0.1], Math.PI);
+      F.box("paintedMetal", 0, 0, 0.16, 0.62, 0.36, 0.32, { color: black, texel: 2.5 });
+      F.box("paintedMetal", 0, 0.2, 0.22, 0.7, 0.04, 0.46, { color: dark });
+      F.box("paintedMetal", 0, -0.15, 0.06, 0.3, 0.06, 0.12, { color: dark });
+      F.box(animKey(MODE.BLINK, { phase: ALERT.phase, base: 1.5, rate: ALERT.rate, aux: [ALERT.duty, 0, 0] }), 0, 0.02, 0.325, 0.44, 0.2, 0.02, { color: IMP.impAmber });
+      for (const s of [-1, 1]) F.box("paintedMetal", s * 0.28, 0.02, 0.33, 0.04, 0.26, 0.04, { color: black });
+    }
     // strip between the reactor door and the east wall (x 2.2..3.7): vent + junction box under the header
     ventGrille(kit, PALETTE, [2.95, Y + 4.9, Z1], Math.PI, { w: 1.0, h: 0.8 });
     junctionBox(kit, PALETTE, [2.95, Y + 3.7, Z1], Math.PI, { seed: seed++, w: 0.5, h: 0.5 });
+    // hooded door-approach lamp over the reactor door (between the lintel indicator and the header):
+    // the aft-door view's floor in front of the door, and the door face itself
+    wallLamp(kit, PALETTE, [1, Y + 4.9, Z1], Math.PI, { w: 1.1, tilt: 0.9, face: 0.7 });
 
     // ---- mezzanine along the west and forward walls ---------------------------------------------
     const MW = -26.7; // west deck inner edge
     const MZ = 575.3; // forward deck inner edge
     const WEST_END = 605;
     const FWD_END = -14;
-    kit.boxMM("impFloor", [X0, MEZZ - 0.3, Z0], [MW, MEZZ, WEST_END], { color: mid, texel: 0.5 });
-    kit.boxMM("impFloor", [MW, MEZZ - 0.3, Z0], [FWD_END, MEZZ, MZ], { color: mid, texel: 0.5 });
+    kit.boxMM("impFloor", [X0, MEZZ - 0.3, Z0], [MW, MEZZ, WEST_END], { color: DECK, texel: 0.5 });
+    kit.boxMM("impFloor", [MW, MEZZ - 0.3, Z0], [FWD_END, MEZZ, MZ], { color: DECK, texel: 0.5 });
     // edge trims, toe plates, support beams and pillars
     kit.boxMM("paintedMetal", [MW - 0.3, MEZZ - 0.7, MZ], [MW, MEZZ - 0.3, WEST_END], { color: black, texel: 1 });
     kit.boxMM("paintedMetal", [X0, MEZZ - 0.7, MZ - 0.3], [FWD_END, MEZZ - 0.3, MZ], { color: black, texel: 1 });
@@ -315,37 +351,78 @@ export default defineRoom({
     duct(kit, PALETTE, [-26.5, CEIL - 0.7, 596], [2.6, CEIL - 0.7, 596], 0.8, 0.45, { color: mid });
     duct(kit, PALETTE, [-26.5, CEIL - 0.7, 580], [-26.5, CEIL - 0.7, 596], 0.8, 0.45, { color: mid });
 
-    // ---- lights (shell fills off): every pool hangs in a framed fixture 1 m under the ceiling, the
-    // point light 0.5 m below its face (positions keep clear of the trunks and ducts) --------------------
-    const L = (pos, color, intensity, distance, priority = 0.5) => ctx.lights.push({ type: "point", pos, color, intensity, distance, priority });
+    // ---- lights (shell fills off, 13): every pool hangs in a framed fixture 1 m under the ceiling, the
+    // point light 0.75 m below its face (positions keep clear of the trunks and ducts). The room is lit
+    // by these alone (no studio environment): against the ~2 % deck a pool needs ~5 lx for 20 % grey,
+    // so the fixtures run 190 cd (3 lx on the floor 7.9 m down, a 40 lx halo on the ceiling channels
+    // above — the ceiling is a lit plane, not a black one) and the pendants 80 cd. Points sit far enough
+    // below their housings that the black lips stay under 50 % grey. Priorities 0.8–1.2: the corridor's
+    // and the reactor's lights compete for the same 12 point / 4 spot slots through the walls. --------
+    const L = (pos, color, intensity, distance, priority = 0.5) => {
+      const d = { type: "point", pos, color, intensity, distance, priority };
+      ctx.lights.push(d);
+      return d;
+    };
     const FIXTURES = [
-      [-10, 605.5, 0xffb060, 36, 18, 0.7, "emitAmber"],
-      [-23.5, 601, 0xffb060, 34, 18, 0.6, "emitAmber"],
-      [-6.5, 601, 0xffb060, 34, 18, 0.6, "emitAmber"],
-      [-20, 577.5, 0xffc890, 32, 16, 0.5, "emitAmber"],
-      [-3.5, 584, 0xffd0a0, 28, 16, 0.5, "emitAmber"],
-      [1, 606, 0xffc890, 26, 14, 0.4, "emitAmber"],
+      [-10, 605.5, 0xffb060, 190, 22, 1.0, "emitAmber"],
+      [-23.5, 601, 0xffb060, 190, 22, 1.0, "emitAmber"],
+      [-6.5, 601, 0xffb060, 190, 22, 1.0, "emitAmber"],
+      [-20, 577.5, 0xffc890, 190, 22, 0.8, "emitAmber"],
+      [-3.5, 584, 0xffd0a0, 190, 22, 1.0, "emitAmber"],
+      [1, 606, 0xffc890, 170, 22, 0.8, "emitAmber"],
     ];
     for (const [x, z, color, intensity, distance, priority, mat] of FIXTURES) {
       ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 2.4, d: 0.7, stem: 1.0, mat });
-      L([x, CEIL - 1.85, z], color, intensity, distance, priority);
+      L([x, CEIL - 2.11, z], color, intensity, distance, priority);
     }
     // low pendants for the open deck (policy C): housed fixtures on 5.5 m stems, faces 4.1 m over the
     // floor, so their pools land where the status and mezz cameras look — the strip north of the
     // western arcs (status bottom-left), the command post east of the holo (status bottom-right, cool
     // tint, replacing the 8 m blue fixture at −9.5/591; turned along z to clear the x −12 trunk) and
-    // the open floor under the mezz camera (in place of the 8 m fixture at −20/588). The deck plate is
-    // 0.35-metal paint with a ~0.01 diffuse albedo at impMid, so the pools need ~5 lx to read mid-grey.
+    // the open floor under the mezz camera (in place of the 8 m fixture at −20/588). 80 cd → 6 lx on
+    // the deck, 40 % of the key's 16 lx. Flush pendants (whole underside emissive, single rod): the
+    // point 0.5 m under the louvred housing lit its lips and louvres to 300 lx and the pendant read as
+    // one white blob in the status and door views.
     for (const [x, z, color, yaw] of [[-17, 595, 0xfff0dc, 0], [-10.6, 590, 0xd8e2ff, Math.PI / 2], [-20, 587, 0xfff0dc, 0]]) {
-      ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 2.0, d: 0.7, stem: 5.5, mat: "emitWhite", yaw });
-      L([x, CEIL - 6.4, z], color, 60, 16, 0.7); // 0.5 m under the face: at the face it blew the housing white
+      ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 2.0, d: 0.7, stem: 5.5, mat: "emitWhite", yaw, flush: true });
+      if (x === -10.6) {
+        // SHADOW KEY: the command-post pendant, 0.5 m under its face, aimed at the holo table's near
+        // side so the table, the three command consoles and the operators' stools cast across the
+        // aisle toward the door and status cameras (57° half-cone, 42 m reach; 220 cd → 16 lx on the
+        // deck at the table, the room's dominant pool)
+        ctx.lights.push({ type: "spot", pos: [x, CEIL - 6.4, z], target: [-11.4, Y, 591.3], color, intensity: 220, distance: 42, angle: 1.0, penumbra: 0.5, priority: 1.0, shadow: true });
+      } else L([x, CEIL - 6.9, z], color, 60, 18, 1.2); // 1 m under the face (at 0.5 m its specular on the face doubled the glare), 3.1 m over the deck: 6 lx
     }
-    L([-14, Y + 2.6, 609.6], 0xff8a30, 10, 8, 0.4); // spill from the sill indicators
+    L([-14, Y + 2.6, 609.6], 0xff8a30, 16, 9, 0.6); // spill from the sill indicators
+    // door-approach pool under the hooded lamp over the reactor door (1.3 m under its head, 2.2 m off
+    // the wall so the panel strip round the door stays under 65 % grey)
+    L([1, Y + 3.6, Z1 - 2.2], 0xfff0dc, 90, 14, 1.0);
+    // cyan point over the holo table, breathing with the schematic's opacity
+    const HOLO_I = 22;
+    const holoLight = L([CX, Y + 2.3, 592], 0x4fd8ff, HOLO_I, 9, 1.0);
+    // amber alert lamp's own light, blinking with it: 0.65 m under the lens and 0.7 m off the wall, so
+    // the header soffit 0.35 m over the lens (which a light at the lens clipped to flat amber) gets
+    // ~10 lx and the window head a soft amber wash
+    const ALERT_I = 14;
+    const alertLight = L([-14, Y + 5.2, Z1 - 0.7], 0xffa028, ALERT_I, 10, 0.8);
+
+    const emitters = buildAnimatedEmitters(ctx, { adopt: ["emitWhite", "emitOrange"] });
 
     return {
       update(dt, t) {
+        emitters.uniforms.uTime.value = t;
         schematic.rotation.y = t * 0.35;
         schematic.position.y = Y + 0.95 + 0.14 + Math.sin(t * 0.8) * 0.03;
+        const breathe = 0.5 + 0.5 * Math.sin(t * 2.0);
+        holoMat.opacity = 0.35 * (0.8 + 0.2 * breathe);
+        holoLight.intensity = HOLO_I * (0.65 + 0.35 * breathe);
+        alertLight.intensity = ALERT_I * anim.blink(t, ALERT.rate, ALERT.phase, ALERT.duty);
+        // screen content flicker: the three screen layouts jitter 0.97–1.13 (× 1.1 base) on staggered
+        // phases, with a rare short refresh dip
+        for (let i = 0; i < screenMats.length; i++) {
+          const dip = Math.max(0, Math.sin(t * 1.3 + i * 2.5) - 0.97) * 3;
+          screenMats[i].emissiveIntensity = 1.1 * (0.99 + 0.03 * Math.sin(t * 13.7 + i * 2.1) * Math.sin(t * 4.3 + i) + 0.03 * Math.sin(t * 0.9 + i * 1.7) - dip);
+        }
       },
     };
   },
