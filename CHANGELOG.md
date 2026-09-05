@@ -62,6 +62,11 @@ the integration branch and in the committed `dist/` build; landmark builders sti
   40 disaster lifecycle/replay/restore checks; `test-disasters.mjs` folds door states and crop stages into the world
   hash (NPCs opening doors and crops growing were the cause of the intermittent "reset restores the sampled world
   region" failure). Multiplayer 8/8.
+- Measured after the landmark merge (SwiftShader VM, Light preset, `bench/r5_*.json`): frontier town 148 draw calls,
+  202k tris, JS 3.1 ms/frame, 227 MB heap (0 exceptions); Coruscant Senate view at 10 chunks: 629 chunks, 144 draw calls,
+  1.08M tris, JS 2.3 ms/frame, 506 MB heap, GPU-bound in software GL (171 ms; unmeasured on a real GPU). Full suite on
+  the merged tree: unit 11, textures 11, towers 6, spaceport 15, Death Star 8, disasters 40/40 (ALL PASS), multiplayer
+  8/8; all twelve landmark harnesses OK.
 - Measured (R1, SwiftShader, `bench/r1_*.json`): Light preset A/B before/after the pipeline 105.3 -> 93.5 ms frame,
   3.75 -> 3.35 ms JS, 146 draw calls both; Cinematic 408 draw calls (shadow pass 144 chunk + 59 object draws of 374
   loaded chunks), +58.6 MB GPU memory at 1280x713; noon mean luminance Cinematic/Light 1.024 with real maps; bloom
