@@ -1,22 +1,30 @@
-// Maintenance & Repair Bay (deck D). A yellow gantry crane on wall rails traverses the room with a
-// hook block; three workbenches with tool boards along the N wall; a part-disassembled maintenance
-// droid on a clamp stand; a fighter wing panel (hex plating) leaning on an A-frame stand; a welding
-// station behind dark screens under an extraction hood with a flickering arc and a hard white spot;
-// parts shelving with instanced bins; a scissor parts lift in the SW corner; cable reels, a hydraulic
-// press, a drill press; a painted dashed vehicle lane from the blast door (geometry lines and bars, no
-// textured stripes to stair-step), faint oil under the machines only.
+// Maintenance & Repair Bay (deck D). The centre of the bay is the job in hand: a repulsor-lift cargo
+// sled hovering across the vehicle lane on four glowing pads, carrying a turbolaser barrel assembly
+// (breech block, finned cooling sleeve, barrel, muzzle ring) on two V-cradles under a yellow A-frame
+// gantry whose chain hoist is slung to the sleeve; a coolant cart with hoses to the sleeve, two rolling
+// tool chests, a diagnostics terminal, a removed muzzle ring on the deck and a work-light stand
+// surround it, with keep-clear bars across the lane at both ends. A yellow gantry crane on wall rails
+// traverses the room above it with a hook block; three workbenches with tool boards along the N wall;
+// a part-disassembled maintenance droid on a clamp stand; a fighter wing panel (hex plating) leaning
+// on an A-frame stand; a welding station behind dark screens under an extraction hood with a
+// flickering arc and a hard white spot; parts shelving with instanced bins; a scissor parts lift in
+// the SW corner; cable reels, a hydraulic press, a drill press; a painted dashed vehicle lane from the
+// blast door (geometry lines and bars, no textured stripes to stair-step), faint oil under the machines.
 // Light: the crane bridge sweeps the whole middle of the room just under the ceiling, so nothing hangs
-// there: two flush hooded downlights (spots) pool light on the bays, two hooded pendants over the lane
-// at either end (outside the bridge's travel) and a portable work-light stand light the rest, all
-// amber-white (the deck's workshop temperature, shared with engineering); the amber pendant over the
-// benches, the hard white welding lamp on the extraction duct and the parts-lift lamp are the
-// practicals; the ceiling slots are dim recessed lines, never the key.
+// from the ceiling there: two flush hooded downlights (spots) pool light on the bays, two hooded
+// pendants over the lane at either end (outside the bridge's travel), two caged bay lamps under the
+// A-frame gantry's beam (open fixtures: they light the sled below and the ceiling structure above, so
+// the coffers, ribs and beams over the job read instead of going black) and a portable work-light
+// stand aimed at the barrel, all amber-white (the deck's workshop temperature, shared with
+// engineering); the amber pendant over the benches, the hard white welding lamp on the extraction
+// duct and the parts-lift lamp are the practicals; the ceiling slots are dim recessed lines.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impRailing, impWallGear, impWallLight, impCrate, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
 import { rng, prism } from "../kit.js";
-import { ensureDeckDMaterials, shellNoFloor, deckFloor, pipe, pipePath, valveWheel, gauge, junctionBox, hazardBorder, dashedLine, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, cable, assembly, blinkerField, instGeo, pendantLamp, shroudLamp } from "./deck_d_kit.js";
+import { ensureDeckDMaterials, shellNoFloor, deckFloor, pipe, pipePath, valveWheel, gauge, junctionBox, hazardBorder, hazardBars, dashedLine, decalD, decalImp, DECK_D_DECAL, wallU, warningLamp, cable, assembly, blinkerField, instGeo, pendantLamp, shroudLamp } from "./deck_d_kit.js";
+import { yawFrame } from "./deck_a_kit.js";
 
 const YEL = PALETTE.yellow;
 const UP = new THREE.Vector3(0, 1, 0);
@@ -46,7 +54,9 @@ export function buildMaintenance(kit, ctx, room) {
     seed: 2207,
     wall: { panelW: 2.0, features: { vent: 0.15, equipment: 0, conduit: 0, light: 0.0, screen: 0.06 }, altChance: 0.4, panelColor: PALETTE.impGrey, panelColorAlt: PALETTE.impGreyDark },
     walls: { N: { features: plain, altChance: 0.5 }, E: { features: plain, altChance: 0.5 } },
-    ceiling: { troughs: 2, troughW: 0.36, beamStep: 3.4, accentKey: DIM, lightKey: "roomsd_slotWarm" },
+    // the coffer slab is hull-dark rather than black so the bay lamps' spill picks the ceiling structure
+    // out (ribs and beams as dark relief, the slots as dim lines)
+    ceiling: { troughs: 2, troughW: 0.36, beamStep: 3.4, accentKey: DIM, lightKey: "roomsd_slotWarm", dark: PALETTE.hullDark },
   });
   deckFloor(kit, -hx, -hz, hx, hz, []);
   // vehicle lane from the blast door: plain tile between two painted dashed yellow lines (geometry, so
@@ -54,7 +64,7 @@ export function buildMaintenance(kit, ctx, room) {
   for (const s of [-1, 1]) dashedLine(kit, -hx + 0.3, s * 1.6, 14.2, s * 1.6, { w: 0.14, dash: 1.0, gap: 0.7 });
   kit.boxMM("impPanel1", [14.1, 0.002, -1.67], [14.3, 0.01, 1.67], { color: YEL, uv: "world", texel: 1 });
   decalImp(kit, IMP_DECAL.arrowRight, [-13.0, 0.016, 0], "up", 1.0, { spin: Math.PI });
-  decalImp(kit, IMP_DECAL.keepClear, [-9.5, 0.016, 0], "up", 1.0, { spin: Math.PI / 2 });
+  decalImp(kit, IMP_DECAL.keepClear, [-11.2, 0.016, 0], "up", 1.0, { spin: Math.PI / 2 });
   decalImp(kit, IMP_DECAL.bay02, [12.6, 0.016, 0], "up", 1.2, { spin: Math.PI / 2 });
   // wear: large faint oil smudges under the machines only (press, reels, welder), grime in the corners
   for (const [x, z, s] of [[1.4, -9.4, 2.6], [-14.4, -5.8, 2.4], [10.8, 8.0, 2.2]]) decalD(kit, DECK_D_DECAL.oil, [x, 0.018, z], "up", s, { spin: rand() * 3 });
@@ -95,8 +105,12 @@ export function buildMaintenance(kit, ctx, room) {
     impWallLight(E, wallU(room, "E", 0), h - 0.7, { key: DIM, w: 1.4 });
   }
 
-  // --- S side: wing panel on its stand, welding station, parts lift
-  wingPanel(kit, -5.0, 7.4, { rand });
+  // --- centre: the sled with the turbolaser barrel under the A-frame gantry, its carts and chests
+  const SLED_X = -4.5;
+  sledSetPiece(kit, SLED_X, { accentKey, rand });
+
+  // --- S side: wing panel on its stand (E of the sled's gantry), welding station, parts lift
+  wingPanel(kit, 0.6, 7.4, { rand });
   weldingStation(kit, walls.S.frame, room, 9.2, 7.0, h, { accentKey });
   partsLift(kit, -13.6, 8.4, h, { accentKey });
   {
@@ -132,16 +146,19 @@ export function buildMaintenance(kit, ctx, room) {
   impCrate(kit, -14.6, 0.9, 3.4, 0.9, 0.6, 0.8, { seed: 23, decal: IMP_DECAL.bay03 });
 
   // --- gantry crane: wall rails along x, bridge across z with a trolley + hook block, traversing
-  // (travel stops short of the welding station's duct riser at x = 9.2 and its duct along the S wall)
-  gantryCrane(kit, room, { travel: [-6.5, 8.3], trolleyZ: -3.6 });
+  // (travel stops short of the welding station's duct riser at x = 9.2 and its duct along the S wall;
+  // the hook block runs at z = -5.5, N of the sled's gantry legs, so it passes nothing on its way)
+  gantryCrane(kit, room, { travel: [-6.5, 8.3], trolleyZ: -5.5 });
 
-  // --- lights (8). Work light: two hooded pendants over the lane, hung outside the bridge's travel
+  // --- lights (10). Work light: two hooded pendants over the lane, hung outside the bridge's travel
   // (x < -6.8 and x > 8.6); two hooded downlights flush with the ceiling over the bays, as spots aimed
   // straight down (the cone never touches the ceiling or the hood's own reflector, so the fixture reads
-  // as a dim lens in a black hood, and the dark girder passing under them just catches the light); a
-  // portable work-light stand by the droid. Practicals: the dim amber pendant over the benches, the
-  // hard white welding lamp clamped to the extraction duct, the parts-lift lamp. Three spots in all:
-  // the pool has three spot slots and the current cell's lights always win them.
+  // as a dim lens in a black hood, and the dark girder passing under them just catches the light); two
+  // open caged bay lamps under the A-frame gantry's beam over the sled (they light the ceiling structure
+  // above as much as the barrel below); a portable work-light stand aimed at the barrel. Practicals: the
+  // dim amber pendant over the benches, the hard white welding lamp clamped to the extraction duct, the
+  // parts-lift lamp. Three spots in all: the pool has three spot slots and the current cell's lights
+  // always win them.
   const work = 0xffe0bc; // amber-white, as in engineering
   const WARM = "roomsd_warmLow";
   for (const [i, x] of [-10.5, 11.5].entries()) {
@@ -149,14 +166,19 @@ export function buildMaintenance(kit, ctx, room) {
     const mouth = shroudLamp(kit, [x, h - 0.08, 0], [x, 4.3, 0], [x, 0, 0], { key: WARM, size: 0.55 });
     kit.light({ type: "point", pos: [mouth[0], mouth[1] - 0.3, mouth[2]], color: work, intensity: 4.4 * 3.8, decay: 1, distance: 18, priority: 0.6 - i * 0.01 });
   }
-  for (const [i, [x, z]] of [[3.5, -5.0], [-2.5, 5.2]].entries()) {
+  for (const [i, [x, z]] of [[3.5, -5.0], [0.6, 5.4]].entries()) {
     // flush hooded downlight: the spot's source sits in the hood mouth, so the cone lights the bay below and
     // neither the hood interior nor the ceiling
     const mouth = shroudLamp(kit, [x, h - 0.05, z], [x, h - 0.32, z], [x, 0, z], { key: WARM, size: 0.5 });
     kit.light({ type: "spot", pos: [mouth[0], mouth[1] - 0.08, mouth[2]], target: [x, 0, z], color: work, intensity: lux(h - 0.5, 6.2), distance: 18, angle: 1.15, penumbra: 0.4, priority: 0.62 - i * 0.01 });
   }
+  // caged bay lamps under the A-frame beam (set-piece geometry is built in sledSetPiece)
+  for (const [i, z] of [-1.9, 1.9].entries()) {
+    bayLamp(kit, SLED_X, 4.12, z, WARM);
+    kit.light({ type: "point", pos: [SLED_X, 3.75, z], color: work, intensity: lux(3.6, 3.2), distance: 16, priority: 0.59 - i * 0.01 });
+  }
   {
-    const [x, z, target] = [2.8, -4.6, [5.2, 1.0, -6.6]];
+    const [x, z, target] = [SLED_X - 3.6, 3.4, [SLED_X, 1.8, 0.4]];
     workLightStand(kit, x, z, target);
     const dx = target[0] - x;
     const dz = target[2] - z;
@@ -203,6 +225,212 @@ function workLightStand(kit, x, z, target) {
   }
   cable(kit, [[x + 0.04, 1.5, z], [x + 0.35, 0.6, z + 0.3], [x + 0.9, 0.02, z + 0.7], [x + 2.2, 0.02, z + 0.9]], 0.018, { color: PALETTE.impBlack });
   kit.collider([x - 0.65, 0, z - 0.65], [x + 0.65, 2.5, z + 0.65], "lightStand");
+}
+
+/** Open caged bay lamp hung under a beam: socket, warm lens sphere, four guard bars and a guard ring. */
+function bayLamp(kit, x, yTop, z, key) {
+  kit.cyl("impTrim", x, yTop - 0.05, z, 0.07, 0.1, "y", { color: PALETTE.impBlack, segments: 10 });
+  kit.cyl("impMetal", x, yTop - 0.14, z, 0.1, 0.08, "y", { color: PALETTE.impCharcoal, segments: 12, r2: 0.07 });
+  kit.add(key, new THREE.SphereGeometry(0.11, 12, 8), { pos: [x, yTop - 0.3, z], uv: "keep" });
+  for (let k = 0; k < 4; k++) {
+    const a = (k / 4) * Math.PI * 2 + Math.PI / 4;
+    kit.box("impMetal", x + Math.cos(a) * 0.14, yTop - 0.3, z + Math.sin(a) * 0.14, 0.012, 0.36, 0.012, { color: PALETTE.impGreyDark });
+  }
+  kit.add("impMetal", new THREE.TorusGeometry(0.14, 0.008, 6, 16).rotateX(Math.PI / 2), { pos: [x, yTop - 0.36, z], color: PALETTE.impGreyDark, uv: "scale", uvScale: [4, 1] });
+}
+
+/**
+ * Rolling tool chest: black body, five drawer fronts (coloured) with bar handles on the local +z face,
+ * a tray of tools on top, casters, a chevron kick strip. yaw turns local +z (the drawers) in the room.
+ */
+function toolChest(kit, x, z, yaw, opts = {}) {
+  const { color = PALETTE.impRed, seed = 1 } = opts;
+  const rand = rng(seed);
+  const f = yawFrame(kit, x, 0, z, yaw);
+  f.box("impTrim", 0, 0.52, 0, 1.0, 0.8, 0.55, { color: PALETTE.impBlack, texel: 1 });
+  for (let k = 0; k < 5; k++) {
+    const v = 0.22 + k * 0.145;
+    f.box("impPanel1", 0, v, 0.28, 0.92, 0.12, 0.012, { color, uv: "world", texel: 1 });
+    f.box("impMetal", 0, v, 0.29, 0.5, 0.025, 0.02, { color: PALETTE.impGrey });
+  }
+  f.box("impMetal", 0, 0.935, 0, 1.04, 0.03, 0.59, { color: PALETTE.impGrey, texel: 1 });
+  for (const s of [-1, 1]) {
+    f.box("impTrim", s * 0.5, 0.98, 0, 0.04, 0.06, 0.59, { color: PALETTE.impBlack });
+    f.box("impTrim", 0, 0.98, s * 0.28, 1.04, 0.06, 0.03, { color: PALETTE.impBlack });
+  }
+  for (let k = 0; k < 4; k++) f.box("impMetal", -0.33 + k * 0.22, 0.97, (rand() - 0.5) * 0.24, 0.04, 0.03, 0.22 + rand() * 0.14, { color: [PALETTE.impGrey, YEL, PALETTE.impGrey, PALETTE.impRed][k] });
+  f.cylV("impMetal", 0.36, 1.0, -0.15, 0.05, 0.1, { color: PALETTE.impGreyDark, segments: 10 });
+  for (const su of [-1, 1]) for (const sn of [-1, 1]) f.cylU("rubber", su * 0.4, 0.07, sn * 0.2, 0.07, 0.05, { color: PALETTE.impBlack, segments: 10 });
+  f.box("chevronY", 0, 0.1, 0.281, 0.9, 0.06, 0.005, { texel: 3 });
+  f.collider(-0.55, 0.55, 0, 1.05, -0.32, 0.32, "toolChest");
+}
+
+/**
+ * Centre set piece at x = cx across the vehicle lane: a repulsor-lift cargo sled hovering on four
+ * glowing pads, carrying a turbolaser barrel assembly (breech block, finned cooling sleeve, tapered
+ * barrel, muzzle ring; axis along z, breech to the N) on two V-cradles with hold-down straps, under a
+ * yellow A-frame gantry (casters, cross ties) whose beam-trolley chain hoist is slung to the sleeve.
+ * Around it: a coolant cart with two hoses to the sleeve's fittings, two rolling tool chests, a
+ * diagnostics terminal cabled to the breech, a removed muzzle ring on the deck, keep-clear bars across
+ * the lane at both ends. The bay lamps' fixtures hang from the beam (their lights are declared by the room).
+ */
+function sledSetPiece(kit, cx, opts) {
+  const { accentKey, rand } = opts;
+  const SL = 6.4; // sled length (along z)
+  const SW = 2.8; // sled width (along x)
+  const DY0 = 0.42; // deck underside (hovering)
+  const DY1 = 0.72; // deck top
+  const BY = 1.8; // barrel axis height
+  const GY = 4.3; // gantry beam centre height (its top clears the crane girder at 4.66)
+  // --- sled: charcoal slab in a black edge frame, chevron stripe round the edge, tie-down cleats, four
+  // repulsor pads with a blue glow ring under each, control yoke at the S end
+  kit.box("impMetal", cx, (DY0 + DY1) / 2, 0, SW, DY1 - DY0, SL, { color: PALETTE.impCharcoal, texel: 1 });
+  kit.box("impTrim", cx, DY1 - 0.03, 0, SW + 0.06, 0.06, SL + 0.06, { color: PALETTE.impBlack, texel: 1 });
+  kit.box("impDeck", cx, DY1 + 0.01, 0, SW - 0.3, 0.02, SL - 0.3, { color: PALETTE.impGreyDark, texel: 0.5 });
+  for (const s of [-1, 1]) {
+    kit.box("chevronY", cx + s * (SW / 2 + 0.005), DY0 + 0.13, 0, 0.01, 0.16, SL - 0.4, { texel: 2 });
+    kit.box("chevronY", cx, DY0 + 0.13, s * (SL / 2 + 0.005), SW - 0.4, 0.16, 0.01, { texel: 2 });
+    for (let k = 0; k < 4; k++) kit.box("impMetal", cx + s * (SW / 2 - 0.12), DY1 + 0.04, -2.4 + k * 1.6, 0.14, 0.06, 0.2, { color: PALETTE.impGrey });
+  }
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      const px = cx + sx * 0.85;
+      const pz = sz * 2.2;
+      kit.cyl("impTrim", px, DY0 - 0.14, pz, 0.5, 0.28, "y", { color: PALETTE.impBlack, segments: 20 });
+      kit.cyl("impMetal", px, DY0 - 0.31, pz, 0.44, 0.06, "y", { color: PALETTE.impGreyDark, segments: 20, r2: 0.36 });
+      kit.add("roomsd_blueLow", new THREE.TorusGeometry(0.4, 0.025, 6, 32).rotateX(Math.PI / 2), { pos: [px, DY0 - 0.32, pz] });
+      kit.cyl("roomsd_blueLow", px, DY0 - 0.345, pz, 0.32, 0.01, "y", { segments: 20 });
+    }
+  }
+  {
+    const yx = cx + 1.0;
+    const yz = SL / 2 - 0.25;
+    kit.box("impTrim", yx, DY1 + 0.5, yz, 0.3, 1.0, 0.2, { color: PALETTE.impBlack, texel: 1 });
+    kit.add("impMetal", new THREE.BoxGeometry(0.5, 0.04, 0.36), { pos: [yx, DY1 + 1.02, yz - 0.05], rot: [0.5, 0, 0], color: PALETTE.impCharcoal });
+    kit.add("scrAmber1", new THREE.PlaneGeometry(0.4, 0.26), { pos: [yx, DY1 + 1.042, yz - 0.038], rot: [-Math.PI / 2 + 0.5, 0, 0], uv: "keep" });
+    kit.box(accentKey, yx, DY1 + 0.7, yz + 0.101, 0.16, 0.03, 0.01);
+    blink([yx - 0.1, DY1 + 0.6, yz + 0.105], [0.04, 0.04, 0.01], "emitGreen", 1.4, 0.7);
+  }
+  // --- barrel assembly on two V-cradles
+  const cradle = (zc, r) => {
+    const top = BY - r - 0.12;
+    kit.box("impTrim", cx, (DY1 + top) / 2, zc, 1.3, top - DY1, 0.34, { color: PALETTE.impBlack, texel: 1 });
+    kit.box("impMetal", cx, top + 0.02, zc, 1.4, 0.05, 0.4, { color: PALETTE.impCharcoal });
+    for (const s of [-1, 1]) kit.add("impTrim", new THREE.BoxGeometry(0.6, 0.06, 0.34), { pos: [cx + s * 0.44, top + 0.22, zc], rot: [0, 0, s * 0.8], color: PALETTE.impBlack });
+    kit.add("impMetal", new THREE.TorusGeometry(r + 0.04, 0.025, 6, 24, Math.PI), { pos: [cx, BY, zc], color: PALETTE.impBlack, uv: "scale", uvScale: [6, 1] });
+    kit.box("chevronY", cx, DY1 + 0.25, zc + 0.175, 1.1, 0.12, 0.01, { texel: 2 });
+  };
+  const zB0 = -SL / 2 + 0.2;
+  const zB1 = zB0 + 1.6;
+  const zS1 = 0.8;
+  cradle(-0.5, 0.62);
+  cradle(2.0, 0.42);
+  // breech block: grey-dark block, black end plate, cooling vanes both sides, hatch / hazard / LEDs on the
+  // door-facing (W) side, stencil on the end plate
+  kit.boxMM("impMetal", [cx - 0.75, BY - 0.75, zB0], [cx + 0.75, BY + 0.75, zB1], { color: PALETTE.impGreyDark, texel: 1 });
+  kit.boxMM("impTrim", [cx - 0.82, BY - 0.82, zB0 - 0.08], [cx + 0.82, BY + 0.82, zB0 + 0.1], { color: PALETTE.impBlack, texel: 1 });
+  for (let k = 0; k < 5; k++) kit.boxMM("impTrim", [cx - 0.88, BY - 0.62 + k * 0.3, zB0 + 0.3], [cx + 0.88, BY - 0.58 + k * 0.3, zB1 - 0.25], { color: PALETTE.impBlack });
+  kit.box("impTrim", cx - 0.76, BY + 0.05, (zB0 + zB1) / 2, 0.02, 0.6, 0.8, { color: PALETTE.impBlack, texel: 1 });
+  kit.box("impMetal", cx - 0.77, BY + 0.05, (zB0 + zB1) / 2, 0.01, 0.5, 0.7, { color: PALETTE.impCharcoal, texel: 1 });
+  for (let k = 0; k < 4; k++) kit.box(k === 2 ? "emitRedImp" : accentKey, cx - 0.776, BY - 0.1 + k * 0.08, zB1 - 0.45, 0.01, 0.04, 0.05);
+  blink([cx - 0.778, BY + 0.28, zB1 - 0.45], [0.01, 0.05, 0.05], accentKey, 0.9, 0.5);
+  decalImp(kit, IMP_DECAL.hazard, [cx - 0.76, BY - 0.5, zB0 + 0.4], "-x", 0.3);
+  decalImp(kit, IMP_DECAL.glyphs2, [cx, BY + 0.25, zB0 - 0.085], "-z", 0.5);
+  decalImp(kit, IMP_DECAL.restricted, [cx + 0.76, BY + 0.1, (zB0 + zB1) / 2], "+x", 0.4);
+  kit.cyl("impTrim", cx, BY, zB0 - 0.2, 0.3, 0.26, "z", { color: PALETTE.impBlack, segments: 20 });
+  kit.cyl("impMetal", cx, BY, zB0 - 0.34, 0.18, 0.06, "z", { color: PALETTE.impGrey, segments: 16 });
+  // cooling sleeve: grey drum with black band flanges and two coolant fittings on the W side, taper
+  kit.cyl("impMetal", cx, BY, (zB1 + zS1) / 2, 0.62, zS1 - zB1, "z", { color: PALETTE.impGrey, segments: 28, texel: 1 });
+  for (let k = 0; k < 5; k++) kit.cyl("impTrim", cx, BY, zB1 + 0.25 + k * 0.45, 0.66, 0.08, "z", { color: PALETTE.impBlack, segments: 28 });
+  kit.cyl("impMetal", cx, BY, zS1 + 0.1, 0.62, 0.2, "z", { r2: 0.46, color: PALETTE.impCharcoal, segments: 28 });
+  for (const [fy, fz] of [[BY + 0.1, -0.9], [BY - 0.15, -0.5]]) {
+    kit.cyl("impMetal", cx - 0.7, fy, fz, 0.06, 0.24, "x", { color: PALETTE.impGreyDark, segments: 10 });
+    kit.cyl("impTrim", cx - 0.8, fy, fz, 0.075, 0.05, "x", { color: PALETTE.impBlack, segments: 10 });
+  }
+  // barrel: grey tube with a mid band, black muzzle ring, dark bore
+  kit.cyl("impMetal", cx, BY, (zS1 + 0.2 + SL / 2 - 0.2) / 2, 0.42, SL / 2 - 0.2 - zS1 - 0.2, "z", { color: PALETTE.impGrey, segments: 24, texel: 1 });
+  kit.cyl("impTrim", cx, BY, 1.9, 0.46, 0.1, "z", { color: PALETTE.impBlack, segments: 24 });
+  kit.cyl("impTrim", cx, BY, SL / 2 - 0.35, 0.5, 0.3, "z", { color: PALETTE.impBlack, segments: 24 });
+  kit.cyl("impGloss", cx, BY, SL / 2 - 0.195, 0.3, 0.01, "z", { segments: 20 });
+  kit.collider([cx - SW / 2 - 0.1, 0, -SL / 2 - 0.1], [cx + SW / 2 + 0.1, BY + 0.9, SL / 2 + 0.1], "sled");
+  // --- A-frame gantry: yellow beam along z, black head castings, two sloped members per leg with a
+  // cross tie, foot beams on casters; trolley + chain hoist + hook block slung to the sleeve
+  const GL = 8.0;
+  kit.box("impMetal", cx, GY, 0, 0.26, 0.36, GL, { color: YEL, texel: 1 });
+  kit.box("impTrim", cx, GY, 0, 0.3, 0.08, GL + 0.04, { color: PALETTE.impBlack, texel: 1 });
+  for (const s of [-1, 1]) {
+    const lz = s * (GL / 2 - 0.2);
+    kit.box("impTrim", cx, GY, lz, 0.5, 0.4, 0.4, { color: PALETTE.impBlack, texel: 1 });
+    const legLen = Math.hypot(0.95, GY - 0.25);
+    const ang = Math.atan2(0.95, GY - 0.25);
+    for (const t of [-1, 1]) kit.add("impMetal", new THREE.BoxGeometry(0.14, legLen, 0.14), { pos: [cx + t * 0.475, (GY + 0.25) / 2, lz], rot: [0, 0, t * ang], color: YEL, texel: 1 });
+    kit.box("impMetal", cx, 1.3, lz, 1.4, 0.1, 0.12, { color: YEL, texel: 1 });
+    kit.box("impTrim", cx, 0.15, lz, 2.3, 0.14, 0.3, { color: PALETTE.impBlack, texel: 1 });
+    for (const t of [-1, 1]) kit.cyl("rubber", cx + t * 1.0, 0.1, lz, 0.1, 0.12, "x", { color: PALETTE.impBlack, segments: 12 });
+    kit.box("chevronY", cx, 0.16, lz - s * 0.155, 2.0, 0.1, 0.01, { texel: 3 });
+    kit.collider([cx - 1.2, 0, lz - 0.2], [cx + 1.2, GY + 0.4, lz + 0.2], "gantryLeg");
+  }
+  {
+    const tz = -0.8;
+    kit.box("impTrim", cx, GY - 0.32, tz, 0.5, 0.28, 0.5, { color: PALETTE.impBlack, texel: 1 });
+    for (const t of [-1, 1]) kit.cyl("impMetal", cx + t * 0.2, GY - 0.2, tz, 0.1, 0.06, "x", { color: PALETTE.impGrey, segments: 12 });
+    kit.cyl("impMetal", cx, GY - 0.66, tz, 0.17, 0.42, "y", { color: PALETTE.impCharcoal, segments: 16 });
+    kit.box("impPanel1", cx - 0.172, GY - 0.66, tz, 0.012, 0.3, 0.26, { color: YEL, uv: "world", texel: 2 });
+    kit.cyl("impMetal", cx, GY - 0.98, tz, 0.02, 0.24, "y", { color: PALETTE.impGreyDark, segments: 6 });
+    kit.box("impTrim", cx, GY - 1.22, tz, 0.26, 0.28, 0.16, { color: PALETTE.impBlack, texel: 1 });
+    kit.box("chevronY", cx - 0.135, GY - 1.22, tz, 0.01, 0.22, 0.12, { texel: 3 });
+    kit.add("impMetal", new THREE.TorusGeometry(0.13, 0.03, 8, 18, Math.PI * 1.4).rotateZ(Math.PI * 0.8).rotateY(Math.PI / 2), { pos: [cx, GY - 1.5, tz], color: PALETTE.impGrey, uv: "scale", uvScale: [4, 1] });
+    // two-leg chain sling from the hook over the sleeve, yellow lifting straps round it
+    for (const sz of [-1.3, -0.3]) {
+      pipe(kit, [cx, GY - 1.6, tz], [cx, BY + 0.68, sz], 0.022, { color: PALETTE.impGreyDark, segments: 6 });
+      kit.add("impMetal", new THREE.TorusGeometry(0.68, 0.03, 6, 28, Math.PI), { pos: [cx, BY, sz], color: YEL, uv: "scale", uvScale: [6, 1] });
+    }
+  }
+  // --- around the job: coolant cart (W, hoses to the sleeve), tool chests, diagnostics terminal cabled to
+  // the breech, removed muzzle ring and bolts on the deck, keep-clear bars across the lane
+  {
+    const kx = cx - 3.2;
+    const kz = -1.6;
+    kit.box("impTrim", kx, 0.5, kz, 0.9, 0.8, 0.7, { color: PALETTE.impBlack, texel: 1 });
+    kit.box("impPanel1", kx - 0.451, 0.55, kz, 0.012, 0.6, 0.6, { color: PALETTE.impBlueDeep, uv: "world", texel: 1 });
+    kit.cyl("impMetal", kx, 1.1, kz, 0.28, 0.8, "z", { color: PALETTE.impGrey, segments: 18 });
+    for (const s of [-1, 1]) kit.cyl("impTrim", kx, 1.1, kz + s * 0.3, 0.3, 0.06, "z", { color: PALETTE.impBlack, segments: 18 });
+    gauge(kit, [kx - 0.46, 0.7, kz + 0.15], "-x", 0.08, { seed: 71 });
+    kit.box(accentKey, kx - 0.46, 0.7, kz - 0.15, 0.01, 0.05, 0.05);
+    decalImp(kit, IMP_DECAL.hazard, [kx - 0.458, 0.4, kz], "-x", 0.22);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.cyl("rubber", kx + sx * 0.35, 0.1, kz + sz * 0.3, 0.1, 0.06, "x", { color: PALETTE.impBlack, segments: 10 });
+    cable(kit, [[kx + 0.2, 1.3, kz], [kx + 1.0, 1.05, kz + 0.25], [cx - 1.5, 0.95, -1.05], [cx - 0.9, BY + 0.1, -0.9]], 0.04, { color: PALETTE.impGreyDark });
+    cable(kit, [[kx + 0.2, 1.25, kz - 0.25], [kx + 1.1, 0.5, kz - 0.35], [cx - 1.7, 0.2, -0.65], [cx - 0.9, BY - 0.15, -0.5]], 0.035, { color: PALETTE.impBlueDeep });
+    kit.collider([kx - 0.5, 0, kz - 0.4], [kx + 0.5, 1.4, kz + 0.4], "coolantCart");
+  }
+  toolChest(kit, cx - 2.5, 2.4, -Math.PI / 2, { color: PALETTE.impRed, seed: 81 });
+  toolChest(kit, cx + 2.4, -2.6, -Math.PI / 2, { color: PALETTE.impGreyDark, seed: 82 });
+  {
+    // diagnostics terminal on a wheeled stand, E of the breech, screen toward the barrel
+    const tx = cx + 2.3;
+    const tz = -0.2;
+    kit.box("impTrim", tx, 0.06, tz, 0.7, 0.12, 0.6, { color: PALETTE.impBlack, texel: 1 });
+    kit.cyl("impMetal", tx, 0.7, tz, 0.05, 1.2, "y", { color: PALETTE.impGreyDark, segments: 10 });
+    kit.box("impTrim", tx, 1.45, tz, 0.7, 0.55, 0.12, { color: PALETTE.impBlack, texel: 1 });
+    kit.add("scrAmber2", new THREE.PlaneGeometry(0.6, 0.42), { pos: [tx - 0.065, 1.47, tz], rot: [0, -Math.PI / 2, 0], uv: "keep" });
+    kit.box("impMetal", tx, 1.1, tz, 0.5, 0.04, 0.3, { color: PALETTE.impCharcoal });
+    for (let k = 0; k < 5; k++) kit.box(k === 3 ? "emitRedImp" : accentKey, tx - 0.07, 1.125, tz - 0.12 + k * 0.06, 0.04, 0.01, 0.04);
+    blink([tx - 0.066, 1.22, tz + 0.25], [0.01, 0.04, 0.04], "emitGreen", 1.7, 0.6, 0.5);
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) kit.cyl("rubber", tx + sx * 0.28, 0.06, tz + sz * 0.22, 0.06, 0.05, "x", { color: PALETTE.impBlack, segments: 10 });
+    cable(kit, [[tx - 0.1, 1.15, tz], [tx - 0.6, 0.4, tz - 0.6], [cx + 1.3, 0.02, -1.4], [cx + 0.78, BY - 0.4, zB1 - 0.5]], 0.02, { color: PALETTE.impBlack });
+    kit.collider([tx - 0.4, 0, tz - 0.35], [tx + 0.4, 1.75, tz + 0.35], "terminal");
+  }
+  {
+    // removed muzzle ring lying on the deck with three bolts beside it
+    const rx = cx - 3.4;
+    const rz = -3.6;
+    kit.add("impMetal", new THREE.TorusGeometry(0.42, 0.09, 8, 28).rotateX(Math.PI / 2), { pos: [rx, 0.09, rz], color: PALETTE.impCharcoal, uv: "scale", uvScale: [8, 1] });
+    kit.cyl("impTrim", rx, 0.05, rz, 0.5, 0.05, "y", { color: PALETTE.impBlack, segments: 28 });
+    for (let k = 0; k < 3; k++) kit.cyl("impMetal", rx + 0.7 + rand() * 0.3, 0.03, rz + (rand() - 0.5) * 0.6, 0.035, 0.06, "y", { color: PALETTE.impGrey, segments: 6 });
+    kit.collider([rx - 0.55, 0, rz - 0.55], [rx + 0.55, 0.2, rz + 0.55], "muzzleRing");
+    decalD(kit, DECK_D_DECAL.oil, [cx + 0.6, 0.018, 3.9], "up", 1.4);
+  }
+  for (const x of [cx - 4.6, cx + 4.6]) hazardBars(kit, x, -1.55, x, 1.55, { w: 0.36, bar: 0.3, color: YEL, y: 0.004 });
 }
 
 /** Workbench against the N wall at x = bx (len along x), tool board on the wall frame above it. */

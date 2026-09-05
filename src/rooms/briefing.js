@@ -2,18 +2,41 @@
 // (E) wall, each with a continuous readout desk and a row of operator chairs; a central stepped
 // aisle leads down to the front. At the front (W wall, either side of the door) a raised dais
 // carries the lectern console under a ceiling projector whose cone lands on a rotating tactical
-// hologram; a 4 x 2.2 m holo screen is framed on the wall behind it. Blue-white lighting, step lights.
+// hologram; a 4 x 2.2 m holo screen is framed on the wall behind it. The foreground between the door
+// and the tiers is worked: a dark runner from the door to the aisle steps, two technicians' consoles
+// flanking it (screens toward the door), a holo plinth with a rotating deck map of the ship's tower
+// and a rank of three standing displays on the S side. Blue-white lighting, step lights.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { impRoomShell, impConsole, impWallGear, impWallLight, lux } from "./imperial_kit.js";
 import { IMP_DECAL } from "../textures_imperial.js";
-import { wallScreen, chairInstance, projector, holoShip, cableRun } from "./deck_b_props.js";
+import { wallScreen, chairInstance, projector, holoShip, holoTowerMap, cableRun, ensureDeckBMaterials } from "./deck_b_props.js";
+import { yawFrame, yawToward, projectorColumn, projectorCone } from "./deck_a_kit.js";
+
+/** Free-standing display board: foot plate, post, framed screen at 1.6 m facing local +z, lit strip. */
+function standingDisplay(kit, x, z, yaw, screenKey, accentKey, opts = {}) {
+  const { leds = 3 } = opts;
+  const f = yawFrame(kit, x, 0, z, yaw);
+  f.box("impTrim", 0, 0.03, -0.06, 0.8, 0.06, 0.56, { color: PALETTE.impBlack, texel: 1 });
+  f.box("impMetal", 0, 0.7, -0.1, 0.18, 1.3, 0.12, { color: PALETTE.impCharcoal, texel: 1 });
+  f.box("impTrim", 0, 1.62, -0.02, 1.24, 0.9, 0.08, { color: PALETTE.impBlack, texel: 1 });
+  f.box("impGloss", 0, 1.64, 0.025, 1.12, 0.74, 0.01);
+  f.screen(screenKey, 0, 1.64, 0.032, 1.04, 0.66);
+  f.box(accentKey, 0, 1.2, 0.025, 0.8, 0.02, 0.012);
+  for (let i = 0; i < leds; i++) f.box(i === 1 ? "emitRedImp" : i === 2 ? "emitWhite" : accentKey, 0.46 - i * 0.12, 1.2, 0.025, 0.05, 0.03, 0.012);
+  f.box("impMetal", 0, 2.12, -0.02, 0.5, 0.08, 0.05, { color: PALETTE.impGreyDark });
+  f.decal(IMP_DECAL.glyphs2, 0, 2.12, 0.006, 0.07);
+  f.collider(-0.64, 0.64, 0, 2.2, -0.36, 0.1, "display");
+}
 
 export function buildBriefing(kit, ctx, room) {
   const [w, h, d] = room.size;
   const hx = w / 2;
   const hz = d / 2;
   const accentKey = ctx.accentKey ? ctx.accentKey(room) : "emitBlue";
+  const M = ctx.materials;
+  ensureDeckBMaterials(M);
+  for (const k of ["deckB_holoDim", "deckB_holoMid", "holo", "holoBright"]) kit.noShadowKeys.add(k);
   const walls = impRoomShell(kit, room, ctx.doors, {
     seed: 6307,
     accentKey,
@@ -87,6 +110,42 @@ export function buildBriefing(kit, ctx, room) {
   E.decal(IMP_DECAL.glyphs3, hz - 8.6, 2.6, 0.034, 0.5);
   E.decal(IMP_DECAL.glyphs1, hz + 8.6, 2.6, 0.034, 0.5);
 
+  // --- foreground between the door and the first row ---------------------------------------------
+  // dark runner from the door to the aisle steps with blue hairlines, a cross band at the threshold
+  kit.boxMM("impDeck", [-hx + 0.3, 0.004, -aisle], [-2.25, 0.014, aisle], { color: PALETTE.impGreyDark, texel: 0.7 });
+  for (const s of [-1, 1]) kit.boxMM(accentKey, [-hx + 0.4, 0.006, s * (aisle + 0.02) - 0.012], [-2.3, 0.017, s * (aisle + 0.02) + 0.012]);
+  kit.boxMM("impTrim", [-hx + 1.7, 0.006, -aisle - 0.06], [-hx + 1.76, 0.016, aisle + 0.06], { color: PALETTE.impBlack });
+  // technicians' consoles either side of the runner, sloped tops toward the door, a chair each (the
+  // N one sits just clear of the dais steps, the S one a little further in to leave the plinth room)
+  for (const s of [-1, 1]) {
+    const cx = s < 0 ? -7.0 : -6.6;
+    const cz = s < 0 ? -2.7 : 2.85;
+    impConsole(kit, cx, 0, cz, 1.8, 0.9, { yaw: -Math.PI / 2, seed: 44 + (s > 0 ? 1 : 0), screens: s < 0 ? ["scrBlue0", "scrWhite1"] : ["scrBlue1", "scrBlue2"], accentKey, height: 0.9 });
+    chairInstance(kit, cx - 1.0, cz, -Math.PI / 2);
+  }
+  // holo plinth on the S side of the runner, inside the spawn's view cone: projector column, faint
+  // cone, rotating deck map of the tower
+  {
+    const px = -8.9;
+    const pz = 2.7;
+    const ph = 0.92;
+    projectorColumn(kit, px, pz, 0.36, ph, { accentKey, rings: 2 });
+    projectorCone(kit, px, ph + 0.08, pz, ph + 0.5, 0.08, 0.62, "holo");
+    const map = holoTowerMap(M, 1.15);
+    map.group.position.set(px, ph + 0.34, pz);
+    kit.attach(map.group);
+    kit.onUpdate((dt, t) => {
+      map.group.rotation.y = t * 0.35;
+      map.blip.visible = Math.sin(t * 5) > -0.2;
+    });
+    kit.light({ type: "point", pos: [px, ph + 1.1, pz], color: 0x8fc0ff, intensity: 3.0, distance: 5, priority: 0.32 });
+  }
+  // rank of three standing displays in front of the S half of the front-row desk, turned toward the door
+  {
+    const keys = ["scrBlue0", "scrWhite1", "scrBlue1"];
+    [4.3, 5.6, 6.9].forEach((z, i) => standingDisplay(kit, -6.4, z, yawToward(-6.4, z, -12, 0) + Math.PI, keys[i], accentKey));
+  }
+
   // --- front: dais with the lectern and the hologram, screens either side of the door
   const W = walls.W.frame; // u = hz - z
   const dz0 = -7.0;
@@ -111,14 +170,15 @@ export function buildBriefing(kit, ctx, room) {
   kit.collider([dx0, 0, dz0], [dx0 + 0.1, dy, dz1], "dais");
   // lectern console at the south end of the dais, speaker stands west of it facing the room
   impConsole(kit, -10.2, dy, -3.1, 1.6, 0.8, { yaw: -Math.PI / 2, seed: 17, screens: ["scrBlue1"], accentKey, height: 0.95 });
-  // hologram over the north half of the dais + projector on the ceiling
-  const holoPos = [-10.2, dy + 1.35, -5.5];
+  // hologram over the north half of the dais + projector on the ceiling (the emitter sits 0.6 m
+  // clear of the QA walker's dais target at z -6.0)
+  const holoPos = [-10.2, dy + 1.35, -4.9];
   kit.cyl("impTrim", holoPos[0], dy + 0.03, holoPos[2], 0.5, 0.06, "y", { color: PALETTE.impBlack, segments: 24 });
   kit.cyl("impGloss", holoPos[0], dy + 0.07, holoPos[2], 0.44, 0.02, "y", { segments: 24 });
   kit.cyl(accentKey, holoPos[0], dy + 0.055, holoPos[2], 0.505, 0.02, "y", { segments: 24 });
   kit.collider([holoPos[0] - 0.5, dy, holoPos[2] - 0.5], [holoPos[0] + 0.5, dy + 0.1, holoPos[2] + 0.5], "emitter");
   // projector housing only: the beam is the spot light below, the blue cone mesh is hidden
-  projector(kit, -5.2, h, -5.0, [holoPos[0], dy + 0.1, holoPos[2]], { accentKey, spread: 0.7, cone: false });
+  projector(kit, -5.2, h, -4.6, [holoPos[0], dy + 0.1, holoPos[2]], { accentKey, spread: 0.7, cone: false });
   const ship = holoShip(ctx.materials, 2.6);
   ship.position.set(holoPos[0], holoPos[1], holoPos[2]);
   ship.rotation.z = 0.12;
@@ -136,16 +196,15 @@ export function buildBriefing(kit, ctx, room) {
     W.box("impTrim", hz + 4.6 + s * 2.55, 2.65, 0.07, 0.24, 2.6, 0.08, { color: PALETTE.impBlack });
     W.box("emitWhiteSoft", hz + 4.6 + s * 2.55, 2.65, 0.115, 0.08, 2.4, 0.012, { uv: "keep" });
   }
-  // (no room-drawn lane from the door to the aisle: the plain deck runs to the first step)
 
-  // --- lights
-  // (raised ~25% after the dark ribbed ceiling landed: spawn view mean luma back above 32)
-  kit.light({ type: "point", pos: [-9.6, h - 1.0, -4.6], color: 0xdfe8ff, intensity: lux(h - 1.0, 2.0), distance: 12, priority: 0.55 });
-  kit.light({ type: "point", pos: [-8.5, h - 1.0, 4.0], color: 0xdfe8ff, intensity: lux(h - 1.0, 2.0), distance: 12, priority: 0.5 });
-  for (const s of [-1, 1]) kit.light({ type: "point", pos: [1.5, h - 1.0, s * 5.5], color: 0xdfe8ff, intensity: lux(h - 1.0, 3.8), distance: 15, priority: 0.45 });
-  for (const s of [-1, 1]) kit.light({ type: "point", pos: [10.0, h - 1.0, s * 4.5], color: 0xdfe8ff, intensity: lux(h - 1.0, 2.8), distance: 12, priority: 0.4 - (s + 1) * 0.005 });
-  kit.light({ type: "point", pos: [2.0, 1.2, 0], color: new THREE.Color(room.accent).getHex(), intensity: 3.6, distance: 9, priority: 0.3 });
-  kit.light({ type: "spot", pos: [-5.2, h - 0.6, -5.0], target: [holoPos[0], dy, holoPos[2]], color: 0x9fd0ff, intensity: lux(4.2, 1.1), distance: 10, angle: 0.42, penumbra: 0.6, priority: 0.48 });
+  // --- lights: foreground fills doubled (dais side, plinth side, over the runner), tier keys, the
+  // projector spot on the dais hologram
+  kit.light({ type: "point", pos: [-9.6, h - 1.0, -4.6], color: 0xdfe8ff, intensity: lux(h - 1.0, 5.6), distance: 14, priority: 0.55 });
+  kit.light({ type: "point", pos: [-8.0, h - 1.0, 4.4], color: 0xdfe8ff, intensity: lux(h - 1.0, 5.6), distance: 14, priority: 0.5 });
+  kit.light({ type: "point", pos: [-9.6, h - 1.0, 0], color: 0xdfe8ff, intensity: lux(h - 1.0, 4.6), distance: 13, priority: 0.47 });
+  for (const s of [-1, 1]) kit.light({ type: "point", pos: [1.5, h - 1.0, s * 5.5], color: 0xdfe8ff, intensity: lux(h - 1.0, 5.0), distance: 15, priority: 0.45 });
+  for (const s of [-1, 1]) kit.light({ type: "point", pos: [10.0, h - 1.0, s * 4.5], color: 0xdfe8ff, intensity: lux(h - 1.0, 3.6), distance: 13, priority: 0.4 - (s + 1) * 0.005 });
+  kit.light({ type: "spot", pos: [-5.2, h - 0.6, -4.6], target: [holoPos[0], dy, holoPos[2]], color: 0x9fd0ff, intensity: lux(4.2, 1.1), distance: 10, angle: 0.42, penumbra: 0.6, priority: 0.48 });
 }
 
 /** Continuous readout desk on a tier: black top, charcoal front with a blue strip, tilted readouts. */
