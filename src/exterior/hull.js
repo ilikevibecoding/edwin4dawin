@@ -408,7 +408,32 @@ export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed 
     const r = rand();
     const raised = r < 0.045;
     const missing = r > 0.995;
-    if (missing) return;
+    if (missing) {
+      // skipped plate → an open service well, not a hole: a 0.7 m frame lip at plate-top height around
+      // the recess, a dark floor 0.25 m down and a hatch (plus a slot) set into it
+      const ci0 = bucket(_c.z);
+      const k0 = panel.tone;
+      const lipTop = thickness - embed + 0.05;
+      const grooves = out[ci0].grooves;
+      const put = (ox, oz, sx, sy, sz, h, c) => {
+        _v.copy(_c).addScaledVector(_ex, ox).addScaledVector(_ez, oz).addScaledVector(_n, h - sy / 2);
+        grooves.push(frameItem(_v, _ex.clone(), _n.clone(), _ez.clone(), sx, sy, sz, c));
+      };
+      for (const e of [-1, 1]) {
+        put(0, e * (l / 2 - 0.35), w, 0.5, 0.7, lipTop, grey(k0 * 0.85, 1.02));
+        put(e * (w / 2 - 0.35), 0, 0.7, 0.5, l - 1.4, lipTop, grey(k0 * 0.85, 1.02));
+      }
+      put(0, 0, w - 1.4, 0.2, l - 1.4, lipTop - 0.3, grey(0.26, 1.06));
+      const hw = Math.min(w - 3, 4.5);
+      const hl = Math.min(l - 3, 3.4);
+      if (hw > 1.5 && hl > 1.5) {
+        const slot = l - hl > 4.5;
+        const oz = slot ? -(l - hl) * 0.12 : 0;
+        put(0, oz, hw, 0.4, hl, lipTop - 0.12, grey(k0 * 0.95, 1.0));
+        if (slot) put(0, oz + hl / 2 + 1.2, Math.min(hw, 3), 0.15, 0.9, lipTop - 0.22, grey(0.12, 1.1));
+      }
+      return;
+    }
     // near-uniform thickness (±3 %, raised plates +18 %): the relief is in the plate texture, and
     // stepped plate tops read as stacked cardboard from the dock station
     const th = raised ? thickness * 1.18 : thickness * (0.97 + rand() * 0.06);
