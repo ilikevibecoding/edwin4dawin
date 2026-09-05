@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-05T10:39:28.891Z",
+  "updated": "2026-09-05T11:28:56.499Z",
   "phase": "Star Wars expansion: 7 builders running (gameplay 1:1, space train, towers+rooms, spaceport+ships, Death Star interior, HD textures, shaders/shadows/bloom); landmark wave next",
   "summary": "User round 2 feedback: references received (Coruscant skyline/platform/senate/plaza + Monument Plaza). New rubrics: 05 render quality (64x HD tiles, normal/material maps, cascaded sun shadows, HDR bloom + filmic tone mapping, atmospheric sky, water reflections, presets) and 06 landmarks (one builder per signature building). Layout now reserves 12 landmark lots (Senate 3x3, Jedi Temple 3x3, Monument Plaza 3x3, Uscru undercity 3x3, Works, CoCo market, Opera, 500 Republica, Chancellery, Medcenter, Detention, HoloNet); 421 towers + 12 landmarks + 8 plazas.",
   "links": [
@@ -130,8 +130,8 @@
     },
     {
       "name": "Render quality: 64x HD tiles + normal/material atlases (R2)",
-      "status": "building",
-      "detail": "Builder R2 on cursor/render-hd-textures-54d6: material classes per tile, class-specific detail at 64x keeping the 16x layout, height->normal maps, roughness/metalness/emissive atlas, contact sheets, tests."
+      "status": "merged",
+      "detail": "118 tiles refined 16 -> 64 px per material class (wood grain, brick mortar bevels, cobble rounding, brushed metal, glass), normal + roughness/metal/emissive atlases, 11/11 texture tests, ~300 ms atlas build; shaders (R1) will consume the maps."
     },
     {
       "name": "Coruscant signature landmarks (12 buildings, one builder each)",
@@ -331,6 +331,10 @@
     {
       "time": "2026-09-05 10:39 UTC",
       "text": "Tower/room library merged; landmark wave launched (7 of 12 builders, rest queued behind the 10-agent limit)."
+    },
+    {
+      "time": "2026-09-05 11:28 UTC",
+      "text": "HD textures merged; landmark builders relaunched without image attachments after three timed out with no output (Senate, Temple, Monument Plaza); 500 Republica launched."
     }
   ],
   "issues": [
