@@ -6,10 +6,12 @@
 //
 // Modules do not import this file (no cycles): add one import line and one list entry per building below.
 import { LANDMARK as market } from './market.js';
+import { LANDMARK as senate } from './senate.js';
 import { LANDMARK as temple } from './temple.js';
 
 const MODULE_LIST = [
   market,
+  senate,
   temple,
 ];
 
