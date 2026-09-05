@@ -254,6 +254,7 @@ let started = false;
 function begin() {
   started = true;
   hud.hideStart();
+  if (TOUCH) hud.setHint(""); // the card explained the gestures; keep the phone HUD to one line
 }
 hud.startEl.addEventListener("click", (e) => {
   if (e.target.closest(".scene-link")) return; // navigating to the other scene
