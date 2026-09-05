@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
+import { createReflectionUniforms, type ReflectionUniforms } from '../render/reflection';
 import { WORLD_SIZE } from './map';
 import type { MapTextures } from './terrain';
 
@@ -12,8 +13,10 @@ import type { MapTextures } from './terrain';
  *    filtered by its screen footprint so distant water goes calm instead of aliasing; the filtered-out
  *    slope variance is carried into the microfacet roughness (sky-reflection blur and sun glitter),
  *  - a two-flow body colour (bed albedo attenuated by the water column plus deep-water scattering and
- *    suspended sediment), a Fresnel mix with the blurred sky reflection taken from the scene environment
- *    map, an anisotropic Cox-Munk style sun glitter, and foam from shore exposure, surf and wakes.
+ *    suspended sediment), a Fresnel mix with the reflection (the planar mirror image of the scene from
+ *    render/reflection.ts where it has content, blurred by the roughness, over the blurred sky reflection
+ *    taken from the scene environment map), an anisotropic Cox-Munk style sun glitter, and foam from
+ *    shore exposure, surf and wakes.
  *
  * The MeshStandardMaterial pipeline is used for shadowed irradiance (direct + IBL) and the final colour
  * is composed here, so the water gets CSM shadows, cloud shadows and aerial perspective like everything
@@ -43,6 +46,12 @@ uniform float uWaveTime;
 uniform float uWindSpeed;
 uniform vec2 uWindDir;
 uniform vec3 uSunDirW;
+uniform sampler2D uReflTex;   // premultiplied mirror image of the scene (alpha 0 where only sky would be seen)
+uniform sampler2D uReflDepth; // its logarithmic depth
+uniform mat4 uReflVP;
+uniform vec4 uReflParams;     // x: active, y: log-depth constant, z: focal length (texels), w: top mip level
+uniform vec2 uReflTexel;
+uniform vec4 uReflTune;       // x: streak scale, y: perturbation scale, z/w: streak (fraction of the height) fading the image out
 varying vec3 vWorldPos;
 ${GLSL_NOISE}
 float terrainHeightW(vec2 wp) {
@@ -183,11 +192,60 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, f
   float F = 0.02 + 0.98 * pow(1.0 - LdotH, 5.0);
   return D * F * G / (4.0 * NdotV);
 }
+// Mirror image of the scene along the reflected ray (render/reflection.ts). P: surface point, V: view
+// vector, N: wave normal, mss: unresolved slope variance, dist: camera distance. Returns premultiplied
+// colour and coverage; coverage 0 where the reflected ray only sees sky (the caller keeps its sky there).
+vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist) {
+  vec4 rc = uReflVP * vec4(P, 1.0);
+  if (rc.w <= 0.0) return vec4(0.0);
+  float wp = rc.w; // depth of P for the mirror camera (equals its depth for the real camera)
+  vec2 uv0 = rc.xy / wp * 0.5 + 0.5;
+  vec2 lim = uReflTexel * 0.5;
+  // The flat mirror sees an object along this ray at depth wq. The real reflected ray leaves P tilted by
+  // the wave slope and travels about the same path length L, so its hit point is displaced by (R - R0) L:
+  // that is the mirror image displaced by the same vector (clip-space displacement per metre: dclip).
+  vec3 R = reflect(-V, N);
+  R.y = max(R.y, 0.02);
+  vec3 R0 = vec3(-V.x, V.y, -V.z);
+  vec4 dclip = uReflVP * vec4((R - R0) * uReflTune.y, 0.0);
+  float k = dist / wp; // metres along the ray per unit of depth
+  float dq = texture2D(uReflDepth, clamp(uv0, lim, 1.0 - lim)).r;
+  float wq = dq < 0.99999 ? exp2(dq * 2.0 / uReflParams.y) - 1.0 : wp * 8.0; // sky: assume a distant object
+  float L = max(wq - wp, 0.0) * k;
+  vec4 rc1 = rc * (wq / wp) + dclip * L;
+  vec2 uv1 = rc1.xy / max(rc1.w, 1e-3) * 0.5 + 0.5;
+  // re-project once with the depth found at the displaced lookup, so a ray that hits a nearer object (or
+  // misses the one the flat mirror saw) uses that path length instead
+  dq = texture2D(uReflDepth, clamp(uv1, lim, 1.0 - lim)).r;
+  wq = dq < 0.99999 ? exp2(dq * 2.0 / uReflParams.y) - 1.0 : wp * 8.0;
+  L = max(wq - wp, 0.0) * k;
+  rc1 = rc * (wq / wp) + dclip * L;
+  vec2 uv = rc1.xy / max(rc1.w, 1e-3) * 0.5 + 0.5;
+  uv = uv0 + clamp(uv - uv0, vec2(-0.08), vec2(0.08));
+  // The unresolved facets tilt the reflected rays by twice their slope (rms sqrt(mss / 2) per axis). A tilt in
+  // the view plane changes the ray's elevation fully, a sideways tilt turns it by only sin(grazing angle), so
+  // the image of a point at share L / D of the mirror distance is smeared into a vertical streak (the glitter-
+  // path ellipse): rms 2 sigma share in elevation and that times |V.y| across. uReflTune.x scales the streak.
+  float share = clamp(1.0 - wp / max(wq, wp), 0.0, 1.0);
+  float streak = uReflTune.x * sqrt(mss) * share * uReflParams.z; // texels along the image's vertical
+  float across = streak * clamp(abs(V.y), 0.1, 1.0);
+  // the cross-streak blur comes from the mip chain, the streak from five taps along it (mip level raised so
+  // the taps overlap; the cross blur is then at most 0.4 of the streak)
+  float lod = clamp(log2(max(max(across, 0.375 * streak), 1.0)), 0.0, uReflParams.w);
+  // a streak longer than a good part of the image carries no more information than the environment map
+  float clarity = 1.0 - smoothstep(uReflTune.z, uReflTune.w, streak * uReflTexel.y);
+  float edge = smoothstep(0.0, 0.015, uv.x) * smoothstep(0.0, 0.015, 1.0 - uv.x) * smoothstep(0.0, 0.015, uv.y) * smoothstep(0.0, 0.015, 1.0 - uv.y);
+  vec2 dv = vec2(0.0, 0.75 * streak * uReflTexel.y);
+  vec4 c = textureLod(uReflTex, uv, lod) * 0.316
+         + (textureLod(uReflTex, uv + dv, lod) + textureLod(uReflTex, uv - dv, lod)) * 0.239
+         + (textureLod(uReflTex, uv + 2.0 * dv, lod) + textureLod(uReflTex, uv - 2.0 * dv, lod)) * 0.103;
+  return c * (clarity * edge);
+}
 `;
 
 /** Runs after normal_fragment_begin: wave normal, body reflectance, foam. Leaves w* variables in main scope. */
 const WATER_FRAG_SURFACE = /* glsl */ `
-vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3 wDbg;
+vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3 wDbg; float wDist;
 {
   vec2 wp = vWorldPos.xz;
   vec2 dxw = dFdx(wp), dyw = dFdy(wp);
@@ -361,7 +419,7 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   float wakeGrain = 0.55 + 0.45 * vnoise(wp * 1.7 + vec2(t * 0.6, 0.0)) * (0.6 + 0.8 * vnoise(wp * 4.3 - t * 0.9));
   foam = clamp(foam + wake.r * 0.85 * wakeGrain + whitecap, 0.0, 0.92);
 
-  wN = N; wV = V; wFoam = foam; wMss = mss; wDx = dxw; wDy = dyw;
+  wN = N; wV = V; wFoam = foam; wMss = mss; wDx = dxw; wDy = dyw; wDist = dist;
   wBodyR = R;
   wDbg = vec3(depth, milk, open);
   normal = normalize((viewMatrix * vec4(N, 0.0)).xyz);
@@ -411,6 +469,11 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   float whitening = 0.65 * pow(1.0 - clamp(Rdir.y, 0.0, 1.0), 0.3);
   float lum = dot(sky, vec3(0.2126, 0.7152, 0.0722));
   sky = max(lum * (1.0 - 0.18 * whitening) + (sky - lum) * (1.0 + 2.2 * whitening), vec3(0.0));
+  // the mirrored scene (aircraft, shore, piers, city) replaces the sky where the reflected ray meets an object
+  if (uReflParams.x > 0.5) {
+    vec4 refl = sceneReflection(vWorldPos, wV, wN, wMss, wDist);
+    sky = sky * (1.0 - refl.a) + refl.rgb;
+  }
   float cosV = clamp(dot(wN, wV), 0.0, 1.0);
   // ensemble Fresnel of the rough surface: the unresolved facets take the grazing reflectance well below a mirror's
   float Fg = max(1.0 - 1.6 * rSky * rSky, 0.45);
@@ -452,6 +515,8 @@ export class Water {
       uWindSpeed: { value: 6 },
       uWindDir: { value: new THREE.Vector2(0.94, 0.34) },
       uSunDirW: { value: new THREE.Vector3(0, 1, 0) },
+      // inactive placeholders until attachReflection() shares the reflection pass's uniforms
+      ...createReflectionUniforms(),
     };
     const uniforms = this.uniforms;
     const prev = mat.onBeforeCompile;
@@ -467,7 +532,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v2-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v3-${WATER_DEBUG}`;
     this.material = mat;
 
     // A flat grid reaching past the far clip plane so the horizon is always water; shading is per pixel
@@ -480,6 +545,12 @@ export class Water {
     this.mesh.receiveShadow = true;
     this.mesh.matrixAutoUpdate = false;
     this.mesh.renderOrder = 5;
+  }
+
+  /** Sample the planar reflection pass. The pass mutates its uniform values in place, so sharing the value
+   *  objects keeps the material current whether or not it has already been compiled. */
+  attachReflection(u: ReflectionUniforms): void {
+    for (const k of Object.keys(u) as (keyof ReflectionUniforms)[]) this.uniforms[k].value = u[k].value;
   }
 
   update(camX: number, camZ: number, time: number, windSpeed: number, windDir: THREE.Vector2, sunDir: THREE.Vector3, wakeCenter: THREE.Vector2, wakeSize: number): void {
