@@ -196,7 +196,10 @@ function begin() {
   started = true;
   hud.hideStart();
 }
-hud.startEl.addEventListener("click", begin);
+hud.startEl.addEventListener("click", (e) => {
+  if (e.target.closest(".scene-link")) return; // navigating to the other scene
+  begin();
+});
 hud.showStart();
 hud.setMode("exterior");
 hud.setLocation("Coruscant orbit · Open Circle Fleet");
