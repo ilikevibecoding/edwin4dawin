@@ -160,8 +160,8 @@ export function buildExterior(scene, materials) {
       sun.intensity = inside ? 1.6 : 2.1;
       // the superstructure's lit windows are a scale cue from outside; from the bridge / observation
       // gallery they are 30-100 m away and read as a city, so inside they drop to sparse dim panes
-      for (const m of [materials.city, materials.cityDense]) if (m) m.emissiveIntensity = inside ? 0.35 : 1.6;
-      if (materials.ext_window) materials.ext_window.emissiveIntensity = inside ? 0.4 : 1.4;
+      for (const m of [materials.city, materials.cityDense]) if (m) m.emissiveIntensity = inside ? 0.25 : 1.0;
+      if (materials.ext_window) materials.ext_window.emissiveIntensity = inside ? 0.3 : 0.85;
     },
     dims: { TOWER, HANGAR, HULL, ENGINES },
   };

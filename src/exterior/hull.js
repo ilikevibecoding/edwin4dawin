@@ -8,7 +8,7 @@ import * as THREE from "three";
 import { PALETTE } from "../materials.js";
 import { rng, setVertexColor } from "../kit.js";
 import { vnoise, vnoise2 } from "../textures.js";
-import { HULL, halfWidth, dorsalH, ventralH, CHUNKS, chunkIndex, chunkCenterZ, HANGAR, REACTOR, CITY } from "./dims.js";
+import { HULL, halfWidth, dorsalH, ventralH, CHUNKS, chunkIndex, chunkCenterZ, HANGAR, REACTOR, CITY, PLATE_LIFT } from "./dims.js";
 import { Batcher, instancedMesh, frameItem, grey, planarUVs } from "./batch.js";
 import { ensureExtMaterials, TRENCH_TILE } from "./exttex.js";
 
@@ -319,7 +319,7 @@ export function plateColor(x, z, side, isPlateau, k) {
  * Some row seams are widened into cross grooves, so the pattern reads as a two-dimensional
  * patchwork. Emits per-chunk plate instances, groove instances and plate anchors for the detail pass.
  */
-export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed = 0.5, zStart = HULL.bowZ + 1, zEnd = HULL.sternZ - 0.5, bucket = chunkIndex, grooveDepth = 2, toneScale = 1, segmented = true, crossChance = 0.26, minSplit = 1, subSeam = 0.15 } = {}) {
+export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed = 0.5, zStart = HULL.bowZ + 1, zEnd = HULL.sternZ - 0.5, bucket = chunkIndex, grooveDepth = 2, toneScale = 1, segmented = true, crossChance = 0.26, minSplit = 1, subSeam = 0.05, mergeChance = 0.25, lines = true } = {}) {
   const zSplitFor = (du) => {
     if (du * surf.width(zEnd) <= maxW) return Infinity;
     let a = zStart;
@@ -331,13 +331,16 @@ export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed 
     }
     return (a + b) / 2;
   };
-  // seam half-widths (metres): surface edge, active groove seam by depth, plain column boundary
-  const grooveHalf = (depth) => (depth <= 1 ? 1.25 : 0.95);
-  const grooveWidth = (depth) => (depth <= 1 ? 2.4 : 1.8);
-  const plainHalf = (depth) => (depth <= grooveDepth + 2 ? 0.5 : 0.35);
-  const rowSeam = 0.55;
-  const crossSeam = 0.95;
+  // seam half-widths (metres): active groove seam by depth, plain column boundary, row / cross seams.
+  // Narrow (the widest gap is 0.84 m): the plates must read as one armoured surface with seam lines,
+  // not as separate slabs with dark trenches between them.
+  const grooveHalf = (depth) => (depth <= 1 ? 0.42 : 0.32);
+  const grooveWidth = (depth) => (depth <= 1 ? 0.8 : 0.6);
+  const plainHalf = (depth) => (depth <= grooveDepth + 2 ? 0.17 : 0.12);
+  const rowSeam = 0.18;
+  const crossSeam = 0.32;
   const grooveTone = grey(0.38, 1.04);
+  const chunkLen = (HULL.sternZ - HULL.bowZ) / CHUNKS;
 
   // column boundaries: { id, depth, zs (where the seam starts), segLen, phase }
   let boundaryId = 1;
@@ -406,14 +409,17 @@ export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed 
     const raised = r < 0.045;
     const missing = r > 0.995;
     if (missing) return;
-    const th = raised ? thickness * 1.7 : thickness * (0.88 + rand() * 0.24);
+    // near-uniform thickness (±3 %, raised plates +18 %): the relief is in the plate texture, and
+    // stepped plate tops read as stacked cardboard from the dock station
+    const th = raised ? thickness * 1.18 : thickness * (0.97 + rand() * 0.06);
     const top = _c.clone().addScaledVector(_n, th - embed);
     _c.addScaledVector(_n, th / 2 - embed);
-    // tone: region × panel batch × per-plate albedo jitter (±6 %) × replacement / primered plates
-    let k = panel.tone * (1 + (rand() - 0.5) * 0.12);
+    // tone: region × panel batch × per-plate albedo jitter (±3.5 %) × replacement / primered plates
+    // (kept small: with every plate a different shade the field read as a quilt from medium range)
+    let k = panel.tone * (1 + (rand() - 0.5) * 0.07);
     const rr = rand();
-    if (rr < 0.025) k *= 1.09; // fresh replacement plate
-    else if (rr < 0.075) k *= 0.78 + rand() * 0.1; // primered / darker plate (2–3 per 100 m)
+    if (rr < 0.02) k *= 1.07; // fresh replacement plate
+    else if (rr < 0.05) k *= 0.82 + rand() * 0.08; // primered / darker plate (1–2 per 100 m)
     if (raised) k *= 0.97;
     const c = plateColor(_c.x, _c.z, surf.side, surf.isPlateau, k);
     // texture variety: flip half the plates 180° about the normal
@@ -436,7 +442,7 @@ export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed 
     const L = z1 - z0;
     if (W < 2 || L < 2) return;
     surf.at((u0 + u1) / 2, zc, _c);
-    panel.tone = toneScale * regionTone(_c.x, _c.z, surf.side, surf.isPlateau, (u0 + u1) / 2) * (1 + (rand() - 0.5) * 0.1);
+    panel.tone = toneScale * regionTone(_c.x, _c.z, surf.side, surf.isPlateau, (u0 + u1) / 2) * (1 + (rand() - 0.5) * 0.06);
     // seams on the column boundaries: active groove (wide + strip), else plain; the left boundary's
     // groove strip is emitted by this (right-hand) panel so every boundary is drawn exactly once
     const actL = activeAt(bL, zc);
@@ -461,6 +467,12 @@ export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed 
       if (W > 11) nu = Math.max(nu, minSplit);
       if (L > 11) nz = Math.max(nz, minSplit);
     }
+    // a quarter of the panels are laid as one plate (the 2 × 3 / 3 × 2 sub-plates merged), so the
+    // field mixes 10 m plates with 25 m slabs instead of one uniform quilt
+    if (W <= 27 && L <= 27 && rand() < mergeChance) {
+      nu = 1;
+      nz = 1;
+    }
     const uCuts = [u0];
     for (let i = 1; i < nu; i++) uCuts.push(u0 + (u1 - u0) * (jog && nu === 2 ? jog : i / nu + (rand() - 0.5) * 0.24));
     uCuts.push(u1);
@@ -480,6 +492,41 @@ export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed 
     }
   };
 
+  // long fore-aft panel line: a 0.35 m dark bead on the plate tops (0.1–0.2 m proud of the ±3 %
+  // thickness spread) in 40–120 m segments with gaps, cut at the chunk boundaries so each piece LODs
+  // with its chunk. With the seams down to hairlines these carry the plating's long-line structure.
+  const emitLine = (u, za, zb) => {
+    const zc = (za + zb) / 2;
+    surf.at(Math.min(1, u + 0.01), zc, _b);
+    surf.at(Math.max(0, u - 0.01), zc, _a);
+    _ex.subVectors(_b, _a).normalize();
+    surf.at(u, zb, _b);
+    surf.at(u, za, _a);
+    _ez.subVectors(_b, _a);
+    const l = _ez.length();
+    _ez.divideScalar(l);
+    _n.crossVectors(_ez, _ex).normalize();
+    if (_n.dot(surf.hint) < 0) _n.negate();
+    surf.at(u, zc, _c);
+    if (surf.skip && (surf.skip(_c.x, _c.z) || surf.skip(_a.x, _a.z) || surf.skip(_b.x, _b.z))) return;
+    _c.addScaledVector(_n, thickness - embed + 0.06);
+    out[bucket(_c.z)].grooves.push(frameItem(_c, _ex.clone(), _n.clone(), _ez.clone(), 0.35, 0.2, l, grooveTone));
+  };
+  const emitLines = (u, z0, z1) => {
+    let z = z0 + rand() * 30;
+    while (z < z1 - 20) {
+      const zEndSeg = Math.min(z1, z + 40 + rand() * 80);
+      let za = z;
+      while (za < zEndSeg - 4) {
+        const ci = bucket(za + 0.01);
+        const zb = ci === bucket(zEndSeg - 0.01) ? zEndSeg : Math.min(zEndSeg, HULL.bowZ + (ci + 1) * chunkLen);
+        emitLine(u, za, zb);
+        za = zb;
+      }
+      z = zEndSeg + 20 + rand() * 60;
+    }
+  };
+
   const emitRows = (u0, u1, bL, bR, depth, z0, z1) => {
     const rowLen = 18 + rand() * 12;
     const cuts = [z0];
@@ -490,6 +537,7 @@ export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed 
     }
     cuts.push(z1);
     for (let i = 0; i < cuts.length - 1; i++) emitPanel({ u0, u1, z0: cuts[i], z1: cuts[i + 1], bL, bR, depth });
+    if (lines && z1 - z0 > 40 && rand() < 0.6) emitLines(u0 + (u1 - u0) * (0.25 + rand() * 0.5), z0, z1);
   };
 
   const rec = (u0, u1, bL, bR, depth, z0) => {
@@ -513,9 +561,8 @@ export function platingFor(surf, rand, out, { maxW = 32, thickness = 2.0, embed 
  * the ~1,300 plates + grooves of the chunk beyond LOD_DISTANCES.plates, where the plate seams only
  * alias into a sandy stipple.
  */
-function buildFarSkin(side, z0, z1, thickness, embed) {
+function buildFarSkin(side, z0, z1, lift) {
   const geos = [];
-  const lift = thickness - embed;
   for (const part of ["plateau", "bevelL", "bevelR"]) {
     const surf = makeSurface(side, part);
     const nx = part === "plateau" ? 14 : 3;
@@ -585,8 +632,8 @@ function buildStreaks(rand, chunks) {
       const w = 2.5 + rand() * 4;
       const tone = regionTone(x, z, side, true, 0.5) * (0.5 + rand() * 0.12);
       const H = side > 0 ? dorsalH : ventralH;
-      const y0 = side * (H(z) + (side > 0 ? 1.55 : 1.35));
-      const y1 = side * (H(z + len) + (side > 0 ? 1.55 : 1.35));
+      const y0 = side * (H(z) + PLATE_LIFT + 0.05);
+      const y1 = side * (H(z + len) + PLATE_LIFT + 0.05);
       const dir = new THREE.Vector3(0, y1 - y0, len).normalize();
       const up = new THREE.Vector3(0, side, 0);
       const across = new THREE.Vector3(1, 0, 0);
@@ -662,7 +709,7 @@ function buildHangarModule(materials, rand) {
     }
   }
   const plateGeo = new THREE.BoxGeometry(1, 1, 1);
-  g.add(instancedMesh(plateGeo, materials.hull2, plates, { castShadow: true, name: "hangarPlates" }));
+  g.add(instancedMesh(plateGeo, materials.ext_hullPlate, plates, { castShadow: true, name: "hangarPlates" }));
   // side walls of the module (from the plateau down to the bottom) in the plate tone family, with
   // rib / panel steps so the housing reads as machinery from below
   const wallH = yTop - yBot;
@@ -841,7 +888,7 @@ function buildReactor(materials, group, rand) {
       items.push(frameItem(_c.clone(), east.clone(), _n.clone(), north.clone(), w, 0.8, Math.max(2, h), c));
     }
   }
-  const pm = instancedMesh(new THREE.BoxGeometry(1, 1, 1), materials.hull, items, { castShadow: true, name: "reactorPlates" });
+  const pm = instancedMesh(new THREE.BoxGeometry(1, 1, 1), materials.ext_hullPlate, items, { castShadow: true, name: "reactorPlates" });
   group.add(pm);
   return items.length;
 }
@@ -868,11 +915,10 @@ export function buildHull(materials) {
   trenchMesh.castShadow = true;
   trenchMesh.receiveShadow = true;
   group.add(trenchMesh);
-  // stern face in the plates' own tone family (it used to be a darker blue-grey that read as a
-  // second, bolted-on ship) and the bow cap closing the tip
-  const sternTone = PALETTE.hullGrey.clone().multiplyScalar(0.64);
-  setVertexColor(stern, sternTone);
-  setVertexColor(bowCap, sternTone);
+  // bow cap closing the tip in the plates' own tone family; the stern cap is the base under the
+  // plating engines.js lays over it, a step darker so it shows through the plate seams
+  setVertexColor(stern, PALETTE.hullGrey.clone().multiplyScalar(0.5));
+  setVertexColor(bowCap, PALETTE.hullGrey.clone().multiplyScalar(0.64));
   const sternMesh = new THREE.Mesh(stern, materials.hullDark);
   sternMesh.name = "stern";
   sternMesh.castShadow = true;
@@ -895,7 +941,10 @@ export function buildHull(materials) {
       // ventral plateau: forced 2 × 2 sub-plate pass with wider sub-seams so its plate scale matches
       // the dorsal from the (closer) hangar station
       const ventralPlateau = side < 0 && part === "plateau";
-      platingFor(surf, rand, chunks, { maxW: part === "plateau" ? 32 : 28, thickness: side > 0 ? 2.0 : 1.8, grooveDepth: 2, minSplit: ventralPlateau ? 2 : 1, subSeam: ventralPlateau ? 0.42 : 0.15 });
+      // plates are thick boxes but sit almost flush (PLATE_LIFT above the skin): the seams are shallow
+      // lines, not trenches between stacked slabs
+      const thickness = side > 0 ? 2.0 : 1.8;
+      platingFor(surf, rand, chunks, { maxW: part === "plateau" ? 32 : 28, thickness, embed: thickness - PLATE_LIFT, grooveDepth: 2, minSplit: ventralPlateau ? 2 : 1, subSeam: ventralPlateau ? 0.14 : 0.05, mergeChance: ventralPlateau ? 0.12 : 0.25 });
     }
   }
   buildStreaks(rand, chunks);
@@ -908,7 +957,7 @@ export function buildHull(materials) {
     const cg = new THREE.Group();
     cg.name = "chunk_" + i;
     cg.userData.centerZ = chunkCenterZ(i);
-    const pm = instancedMesh(plateGeo, i % 2 ? materials.hull2 : materials.hull, chunks[i].plates, { castShadow: true, name: "plates", lod: 1 });
+    const pm = instancedMesh(plateGeo, materials.ext_hullPlate, chunks[i].plates, { castShadow: true, name: "plates", lod: 1 });
     cg.add(pm);
     if (chunks[i].worn.length) cg.add(instancedMesh(plateGeo, materials.ext_hullWorn, chunks[i].worn, { name: "platesWorn", lod: 1 }));
     if (chunks[i].grooves.length) cg.add(instancedMesh(plateGeo, materials.hullDark, chunks[i].grooves, { name: "grooves", lod: 1 }));
@@ -916,7 +965,7 @@ export function buildHull(materials) {
     const far = new Batcher(materials);
     const z0 = HULL.bowZ + i * chunkLen;
     const z1 = z0 + chunkLen;
-    for (const side of [1, -1]) for (const g of buildFarSkin(side, z0, z1, side > 0 ? 2.0 : 1.8, 0.5)) far.add(i % 2 ? "hull2" : "hull", g, null);
+    for (const side of [1, -1]) for (const g of buildFarSkin(side, z0, z1, PLATE_LIFT)) far.add(i % 2 ? "hull2" : "hull", g, null);
     for (const m of far.build(cg, { name: "farSkin", castShadow: false, lod: 2 })) m.visible = false;
     plateCount += chunks[i].plates.length + chunks[i].worn.length;
     group.add(cg);
