@@ -18,6 +18,15 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 - Wake foam no longer saturates: the wake-map term is capped below 1 and modulated by a fine
   world-anchored grain; fresh ribbons ramp in over their first points and a bounce/skip closes the old
   ribbon instead of bridging the airborne gap (the water-landing clip showed two flat white bars).
+- Clouds loop 3 (cloud volume): the macro field is baked raw (half float) and each column's height is
+  derived from how far it exceeds the coverage threshold (+ slow tower field + ~1 km turret field), so
+  cells are domed towers up to 2 km tall with steep walls instead of 300 m pancakes; the base footprint is
+  unchanged so ground shadows still match and weather changes no longer need a rebake. Light march: 3
+  short noised steps (lobe self-shadowing) + 3 long envelope-only steps (no terraced shading) + analytic
+  remainder of the column above; 3 scattering octaves each with a flatter phase (rims glow toward a low
+  sun, cores stay shaded); ambient split into sky (occluded from above) and ground bounce / city glow
+  (occluded from below); moon key at night, stars occluded by cloud alpha. Presets: cloudTop 3500 (clear,
+  scattered), 2000 (cloudy), 3200 (storm); coverage clear 0.27, scattered 0.37, cloudy 0.70.
 
 ## iter07 — wave 3 builders and lead fixes (deployed as a73e7fb62028-20260904T202825Z)
 - Water loop 2: physical absorption (red dies within a metre), bay/ocean reflectances re-derived, sediment

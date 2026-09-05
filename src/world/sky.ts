@@ -24,14 +24,16 @@ vec3 stars(vec3 dir) {
   star *= smoothstep(0.35, 0.0, length(f));
   return vec3(star) * (0.6 + 0.4 * hash12(c.zx));
 }
-vec3 skyBackground(vec3 dir) {
+/** starVis: 1 in clear sky, 0 behind cloud (stars vanish before the sky glow does: they are point
+ *  sources, any haze or cloud veil kills them first). */
+vec3 skyBackground(vec3 dir, float starVis) {
   vec3 sky = skyRadiance(dir);
   sky += sunDisc(dir);
   vec3 moonDir = moonDirection();
   float cm = dot(dir, moonDir);
   float moon = smoothstep(0.99975, 0.99992, cm) * 1.6 + pow(max(cm, 0.0), 700.0) * 0.08;
   sky += vec3(0.75, 0.8, 0.95) * moon * uNight;
-  sky += stars(dir) * uNight * 0.7;
+  sky += stars(dir) * uNight * 0.55 * starVis;
   return sky;
 }
 `;
@@ -47,13 +49,17 @@ uniform float uCovExtent;
 in vec2 vUv;
 void main() {
   vec2 cs = uCovCenter + (vUv - 0.5) * uCovExtent;
-  vec3 f = cloudFieldCS(cs);
+  float f = cloudFieldRaw(cs);
   vec2 p = cs * 0.00015 + uCloudSeed;
   // slow field: which masses develop vertically (0 flat .. 1 towering)
   float tower = clamp((fbm3(p * 0.7 + 3.1) - 0.22) / 0.46, 0.0, 1.0);
   // slight variation of the base altitude between cells
   float baseVar = clamp((fbm3(p * 2.2 + 5.5) - 0.2) / 0.5, 0.0, 1.0);
-  gl_FragColor = vec4(f.x, mix(f.y, tower, 0.5), baseVar, f.z);
+  // ~1 km turret field: modulates the column height inside a cell so a mass breaks into several towers
+  // of different heights instead of one smooth mound; it also warps the 3D noise domain so the 64^3
+  // tile never repeats visibly across the sky
+  float turret = clamp((fbm3(p * 7.0 + 21.0) - 0.25) / 0.4, 0.0, 1.0);
+  gl_FragColor = vec4(f, tower, baseVar, turret);
 }
 `;
 
@@ -67,6 +73,7 @@ ${GLSL_SKY}
 ${GLSL_AERIAL}
 uniform sampler3D uNoise3D;
 uniform sampler2D uCovTex;
+uniform vec3 uGroundColor;
 uniform vec2 uCovCenter;
 uniform float uCovExtent;
 uniform vec3 uCamPos;
@@ -77,93 +84,135 @@ uniform float uMaxDist;
 in vec2 vUv;
 
 const float SIGMA = 0.03;         // extinction per metre at unit density (dense cumulus)
-const float NOISE_SCALE = 1.0 / 1600.0;
+const float NOISE_SCALE = 1.0 / 2600.0;
 
 // interleaved gradient noise: a pure function of the pixel position, so frames are reproducible
 float ign(vec2 px) { return fract(52.9829189 * fract(0.06711056 * px.x + 0.00583715 * px.y)); }
 
-/** Macro field at a world xz position: x coverage, y vertical development, z base variation, w column thickness. */
+/** Macro field at a world xz position: x raw field, y vertical development (0 flat .. 1 towering),
+ *  z base variation, w turret field (~1 km). */
 vec4 macroField(vec2 wp) {
   vec2 uv = (wp + uCloudWind - uCovCenter) / uCovExtent + 0.5;
   return texture(uCovTex, uv);
 }
 
-/** Vertical envelope of the layer (before noise): flat base at a common altitude, column height driven by
- *  the macro field. Returns coverage * vertical profile; hf = height fraction in the slab, hn = fraction of
- *  this column's own height, H = column height fraction. */
+/** Vertical envelope of the layer (before noise): a flat base whose footprint is exactly cloudCoverage2D
+ *  (so the ground shadows still match), columns whose height is set by how far the raw field exceeds the
+ *  threshold (cell interiors tower, edges stay low), by the slow "tower" field (some masses develop
+ *  vertically, others stay flat) and by the ~1 km turret field. Returns coverage * vertical profile;
+ *  hf = height fraction in the slab, hn = fraction of this column's own height, H = column height. */
 float envelope(vec3 p, vec4 f, out float hf, out float hn, out float H) {
   float thick = uCloudTop - uCloudBase;
-  float base = uCloudBase + (f.z - 0.5) * 0.12 * thick;
+  // base altitude: varies between cells (f.z) with a gentle ~1 km undulation (f.w) so no base is a ruler line
+  float base = uCloudBase + (f.z - 0.5) * 0.16 * thick + (f.w - 0.5) * 0.05 * thick;
   hf = (p.y - base) / thick;
-  H = mix(0.3, 1.0, smoothstep(0.05, 0.75, f.y));
+  float d = f.x - cloudThreshold();
+  // base footprint (identical to cloudCoverage2D, so the ground shadows match)
+  float cov = smoothstep(0.0, 0.09, d);
+  // own height of this column: low at the footprint edge, rising steeply with the depth inside the cell
+  // (steep walls, a narrow skirt of low tufts instead of a wide thin shelf around each tower; the sqrt
+  // rounds a conical cell into a dome), faster over towering masses; the turret field then breaks the
+  // mound into several towers of different heights
+  float g = mix(0.55, 0.16, f.y);
+  float dg = max(d, 0.0) / g;
+  H = 0.1 + 0.9 * sqrt(clamp(dg * 2.2, 0.0, 1.0));
+  // a closed deck saturates the field, so its thickness (and the light coming through it) varies with
+  // the turret field alone: give it a wider range so the underside shows thick dark cells and thin bright gaps
+  float deck = smoothstep(0.45, 0.7, uCloudCoverage);
+  H = clamp(H * mix(mix(0.55, 0.28, deck), 1.1, f.w), 0.05, 1.0);
   hn = hf / H;
-  // cumulus keep a sharp flat base; a closed deck (high coverage) gets a soft one that the shape noise
-  // carves into hanging lumps, which is what gives stratocumulus its cellular underside
-  float baseRamp = mix(0.05, 0.22, smoothstep(0.45, 0.7, uCloudCoverage));
-  float v = smoothstep(0.0, baseRamp, hf) * (1.0 - smoothstep(0.55, 1.0, hn));
-  // thin columns (cell edges, the gaps of a deck) are less dense: light gets through, the underside of an
-  // overcast reads as cells instead of an even grey
-  return f.x * v * mix(0.8, 1.2, f.w);
+  // cumulus keep a fairly sharp flat base (the shape noise still nibbles it into shallow lumps); a closed
+  // deck gets a soft one carved into hanging cells. The upper two thirds of the column are a soft ramp
+  // the shape noise cuts into cauliflower lobes several hundred metres tall.
+  float baseRamp = mix(0.09, 0.18, smoothstep(0.45, 0.7, uCloudCoverage));
+  float v = smoothstep(0.0, baseRamp, hf) * (1.0 - smoothstep(0.25, 1.0, hn)) * (1.0 - smoothstep(0.9, 1.0, hf));
+  // cov^2: the soft footprint fringe thins out for the noise to shred instead of forming a plate
+  return cov * cov * v;
 }
 
-vec3 noiseCoord(vec3 p) { return (p + vec3(uCloudWind.x, 0.0, uCloudWind.y)) * NOISE_SCALE; }
+vec3 noiseCoord(vec3 p, vec4 f) {
+  vec3 q = (p + vec3(uCloudWind.x, 0.0, uCloudWind.y)) * NOISE_SCALE;
+  // slow domain warp breaks the tiling of the 64^3 texture
+  return q + vec3(f.w * 0.9, f.z * 0.53, f.w * 0.6);
+}
 
 /** Shape-eroded density: solid interiors, cauliflower lobes where the envelope thins (top and edges). */
 float shapeDensity(float e, float hn, vec4 n) {
   float shape = clamp((n.r * 0.6 + n.g * 0.25 + n.a * 0.15 - 0.3) / 0.7, 0.0, 1.0);
-  // interiors stay noise-modulated (mottled bases, uneven light march) instead of saturating
-  float erosion = mix(0.5, 1.0, clamp(hn, 0.0, 1.0));
-  return e * 1.15 - (1.0 - shape) * erosion;
+  // bases stay solid and slightly mottled; the erosion grows toward the top where it carves the lobes
+  float erosion = mix(0.7, 1.3, clamp(hn, 0.0, 1.0));
+  return e * 1.2 - (1.0 - shape) * erosion;
 }
+
+/** Expected noised density for an envelope value (what shapeDensity averages to over the noise): the
+ *  envelope alone would count the soft fringe outside the visible surface as cloud. */
+float meanDensity(float e, float hn) { return clamp(e * 1.2 - 0.5 * mix(0.7, 1.3, clamp(hn, 0.0, 1.0)), 0.0, 1.0); }
 
 /** Density without edge detail (used by the light march). */
 float densityBase(vec3 p, vec4 f) {
   float hf, hn, H;
   float e = envelope(p, f, hf, hn, H);
   if (e <= 0.002) return 0.0;
-  vec4 n = texture(uNoise3D, noiseCoord(p));
+  vec4 n = texture(uNoise3D, noiseCoord(p, f));
   return clamp(shapeDensity(e, hn, n), 0.0, 1.0);
 }
 
 /** Full density with detail erosion of the edges; mott returns the low-frequency shape noise so the
  *  lighting can mottle the undersides without another fetch. */
-float densityFull(vec3 p, float e, float hn, out float mott) {
-  vec3 q = noiseCoord(p);
+float densityFull(vec3 p, vec4 f, float e, float hn, out float mott) {
+  vec3 q = noiseCoord(p, f);
   vec4 n = texture(uNoise3D, q);
   mott = n.a;
   float d = shapeDensity(e, hn, n);
   if (d <= 0.0) return 0.0;
-  // low-frequency worley erosion, billowy at the base and wispier toward the top
+  // worley erosion, billowy lobes at the base and sides, wispier toward the top
   float det = texture(uNoise3D, q * 3.0 + vec3(0.37, 0.11, 0.73)).g;
   float wisp = texture(uNoise3D, q * 5.0 + vec3(0.61, 0.29, 0.17)).b;
-  float er = mix(det, wisp, smoothstep(0.35, 0.95, hn));
+  float er = mix(det, wisp, smoothstep(0.45, 1.0, hn));
   // remap (rather than subtract) so eroded edges keep a steep density gradient: crisp cauliflower lobes
-  float k = 0.46 * (1.0 - er);
+  float k = 0.5 * (1.0 - er);
   d = (d - k) / (1.0 - k);
-  return clamp(d * 2.0, 0.0, 1.0);
+  return clamp(d * 2.5, 0.0, 1.0);
 }
 
-/** Optical depth toward the light through the layer (4 growing steps). */
-float lightOD(vec3 p, vec3 L) {
+/** Optical depth toward the light. Three short steps sample the noised density (lobes shadow their
+ *  neighbours: the cauliflower relief), three long steps sample only the smooth envelope (a long step
+ *  through the noised field would switch on and off as it crosses lobes and terrace the shading), and
+ *  the rest of the column above the sample is added analytically (the flat base of a tall tower is
+ *  shadowed by the whole tower). */
+float lightOD(vec3 p, vec3 L, float H, float hf) {
   float thick = uCloudTop - uCloudBase;
   float od = 0.0;
   float t = 0.0;
-  float s = thick * 0.06;
-  for (int i = 0; i < 4; i++) {
+  float s = 24.0;
+  float last = 0.0;
+  for (int i = 0; i < 6; i++) {
     vec3 q = p + L * (t + s * 0.5);
-    if (q.y > uCloudTop + 1.0 || q.y < uCloudBase - 200.0) break;
-    od += densityBase(q, macroField(q.xz)) * s;
+    if (q.y > uCloudTop + 1.0 || q.y < uCloudBase - 300.0) break;
+    vec4 f = macroField(q.xz);
+    if (i < 3) last = densityBase(q, f);
+    else { float qhf, qhn, qH; last = meanDensity(envelope(q, f, qhf, qhn, qH), qhn); }
+    od += last * s;
     t += s;
     s *= 2.0;
   }
+  float rem = max((H - hf) * thick / max(L.y, 0.25) - t, 0.0);
+  od += min(rem, 1200.0) * last * 0.5;
   // shadowing uses a reduced extinction: multiple scattering carries light deeper than Beer-Lambert alone
-  return od * SIGMA * 0.6;
+  return od * SIGMA * 0.7;
 }
 
-// Beer-Lambert with a cheap multiple-scattering approximation (3 octaves of attenuated extinction)
-float beer(float od) { return 0.5 * exp(-od) + 0.32 * exp(-0.25 * od) + 0.18 * exp(-0.06 * od); }
 // Henyey-Greenstein phase normalised so that isotropic = 1
 float hgN(float c, float g) { float g2 = g * g; return (1.0 - g2) / pow(1.0 + g2 - 2.0 * g * c, 1.5); }
+// dual-lobe phase: forward lobe gives the silver lining near the sun, back lobe keeps bases readable
+float phase2(float c, float k) { return mix(hgN(c, 0.74 * k), hgN(c, -0.2 * k), 0.42); }
+// Beer-Lambert with a cheap multiple-scattering approximation: 3 octaves of attenuated extinction, each
+// with a flatter phase (light that has scattered several times has lost its direction, so the forward
+// peak toward a low sun lights the rims but not the shadowed cores). The slow tail keeps the shaded
+// walls at ~25 % of the lit crown while the base of a tall tower (~25 units of optical depth) drops to ~5 %.
+vec3 scatter(float od, float c) {
+  return vec3(0.44 * exp(-od) * phase2(c, 1.0), 0.36 * exp(-0.25 * od) * phase2(c, 0.5), 0.20 * exp(-0.06 * od) * phase2(c, 0.2));
+}
 
 void main() {
   vec2 ndc = vUv * 2.0 - 1.0;
@@ -175,8 +224,9 @@ void main() {
   float nightMix = smoothstep(0.02, -0.08, uSunDir.y);
   vec3 moonDir = normalize(vec3(-uSunDir.x, max(0.25, -uSunDir.y * 0.8 + 0.3), -uSunDir.z));
   vec3 L = normalize(mix(uSunDir, moonDir, nightMix));
-  // moonlight is dimmer relative to the (exposure-boosted) night sky than the key colours alone suggest
-  vec3 lightCol = uSunColor * 2.9 * mix(1.0, 0.5, nightMix);
+  // moonlit cumulus sit a few times above the night sky, not at the daylight ratio: the night exposure
+  // boost (x3.5) would otherwise turn them white
+  vec3 lightCol = uSunColor * 2.9 * mix(1.0, 0.3, nightMix);
 
   float T = 1.0;
   vec3 col = vec3(0.0);
@@ -201,20 +251,21 @@ void main() {
     float t = t0 + ign(gl_FragCoord.xy) * dtF;
 
     float cosSun = dot(dir, L);
-    // dual-lobe phase: forward lobe gives the silver lining near the sun, back lobe keeps bases readable
-    float phase = mix(hgN(cosSun, 0.72), hgN(cosSun, -0.18), 0.45);
     float forward = smoothstep(0.3, 0.95, cosSun);
+    // low sun: the whole lower sky glows warm, so the bounce light on the undersides turns warm too
+    float lowSun = (1.0 - smoothstep(0.04, 0.3, L.y)) * (1.0 - nightMix);
     // sky light on the tops: hemisphere average of the dome (deep blue) whitened by aerosol scatter
     vec3 skyAmb = mix(uZenithColor, uHazeColor, 0.5) * 0.95;
-    vec3 gndAmb = uHazeColor * 0.45;
-    // low sun: grazing light reaches the undersides (warm sunset bases)
-    float lowSun = (1.0 - smoothstep(0.04, 0.3, L.y)) * (1.0 - nightMix);
+    // bounce light on the bases: the sunlit sea and land (warm and dim at sunset, when the glowing
+    // horizon haze takes over), and at night the city's glow on the undersides
+    vec3 gndAmb = uGroundColor * 0.18 + uSunHazeColor * 0.32 * lowSun + vec3(1.0, 0.9, 0.8) * 0.035 * uNight;
 
     int level = 0;          // 0 coarse, 1 fine, 2 surface
     int empty = 0;
     int sinceLight = 9;
     float lt = 1.0;
     float wsum = 0.0;
+    const vec3 ONE3 = vec3(1.0);
     for (int i = 0; i < 200; i++) {
       if (float(i) >= budget || t > t1 || T < 0.01) break;
       vec3 p = uCamPos + dir * t;
@@ -234,7 +285,7 @@ void main() {
         continue;
       }
       float mott;
-      float dens = densityFull(p, e, hn, mott);
+      float dens = densityFull(p, f, e, hn, mott);
       if (dens <= 0.003) {
         empty++;
         if (level == 2 && empty > 1) level = 1;
@@ -249,22 +300,26 @@ void main() {
         continue;
       }
       float dt = level == 2 ? dtS : dtF;
-      // the light march varies slowly along the ray: reuse it for the next surface sample
-      if (level == 1 || sinceLight >= 1) {
-        lt = beer(lightOD(p, L));
-        // grazing sunset light on the undersides, attenuated by the local cloud thickness
-        lt = max(lt, lowSun * (1.0 - smoothstep(0.0, 0.35, hn)) * exp(-e * 2.5) * 0.6);
+      // the light march varies slowly along the ray: reuse it for the next 1-2 samples (the far light
+      // steps sample the smooth envelope, so the reuse does not skip lobe shadows the eye would notice)
+      if (sinceLight >= (level == 2 ? 2 : 1)) {
+        lt = dot(scatter(lightOD(p, L, H, hf), cosSun), ONE3);
         sinceLight = 0;
       } else sinceLight++;
       float powder = 1.0 - exp(-dens * 5.0);
-      float sunTerm = lt * phase * mix(mix(0.55, 1.0, powder), 1.0, forward);
-      // ambient: sky from above, sea/haze bounce from below, occluded by the cloud thickness overhead
-      // (thin cells of an overcast deck stay bright underneath, thick cells go dark). The overhead
-      // thickness is modulated by the low-frequency shape noise so the flat bases read as mottled
-      // (hollows between the lobes let more sky light through) instead of a uniform grey.
-      float above = max(H - hf, 0.0) * (uCloudTop - uCloudBase) * e * mix(1.6, 0.55, mott) * mix(0.45, 1.3, f.w);
-      float ao = mix(0.14, 1.0, exp(-above * 0.0015)) * mix(0.82, 1.12, mott);
-      vec3 amb = mix(gndAmb, skyAmb, clamp(hf * 1.3, 0.0, 1.0)) * ao;
+      float sunTerm = lt * mix(mix(0.7, 1.0, powder), 1.0, forward);
+      // ambient: sky from above, sea/haze bounce from below, occluded by the column of cloud overhead
+      // (the crown is open to the sky, the flat base of a tall tower sees almost none of it; thin cells
+      // stay bright underneath). The overhead thickness is modulated by the low-frequency shape noise so
+      // the bases read as mottled (hollows between the lobes let more light through), not an even grey.
+      float thick = uCloudTop - uCloudBase;
+      float above = max(H - hf, 0.0) * thick * mix(1.3, 0.6, mott);
+      float below = max(hf, 0.0) * thick * mix(1.3, 0.6, mott);
+      // walls: a sample near the outer surface (envelope well below 1) sees half the sky sideways
+      float side = (1.0 - 0.7 * e) * smoothstep(0.0, 0.3, hn) * 0.6;
+      float aoSky = max(mix(0.12, 1.0, exp(-above * 0.0022)), side);
+      float aoGnd = max(mix(0.15, 1.0, exp(-below * 0.003)), side);
+      vec3 amb = (skyAmb * aoSky + gndAmb * aoGnd) * mix(0.6, 1.3, mott);
       vec3 S = lightCol * sunTerm + amb;
       float a = 1.0 - exp(-dens * SIGMA * dt);
       col += T * a * S;
@@ -323,12 +378,12 @@ void main() {
   vec4 vpos = uInvProj * vec4(ndc, 1.0, 1.0);
   vpos /= vpos.w;
   vec3 dir = normalize((uInvView * vec4(vpos.xyz, 0.0)).xyz);
-  vec3 sky = skyBackground(dir);
   // tent-filtered upsample of the reduced-resolution cloud layer (4 bilinear taps = 3x3 tent)
   vec2 o = uCloudTexel * 0.35;
   vec4 c = texture(uCloudTex, uv + vec2(-o.x, -o.y)) + texture(uCloudTex, uv + vec2(o.x, -o.y))
          + texture(uCloudTex, uv + vec2(-o.x, o.y)) + texture(uCloudTex, uv + vec2(o.x, o.y));
   c *= 0.25;
+  vec3 sky = skyBackground(dir, smoothstep(0.6, 0.97, c.a));
   gl_FragColor = vec4(sky * c.a + c.rgb, 1.0);
 }
 `;
@@ -390,8 +445,9 @@ export class Sky {
   constructor(private atmos: Atmosphere, renderer: THREE.WebGLRenderer, opts: { cloudSteps: number; scale: number }) {
     this.noise = createCloudNoiseTexture(64);
     this.scale = opts.scale;
+    // half float: the column height is derived from the raw field, 8-bit steps would terrace the tops
     this.covRT = new THREE.WebGLRenderTarget(COV_SIZE, COV_SIZE, {
-      type: THREE.UnsignedByteType, format: THREE.RGBAFormat, depthBuffer: false, generateMipmaps: false,
+      type: THREE.HalfFloatType, format: THREE.RGBAFormat, depthBuffer: false, generateMipmaps: false,
       minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, wrapS: THREE.ClampToEdgeWrapping, wrapT: THREE.ClampToEdgeWrapping,
     });
     this.covMat = new THREE.ShaderMaterial({
