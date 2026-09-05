@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import { Disaster } from './base.js';
 import { BLOCKS, B, SHAPE } from '../blocks.js';
 import { CLOUD_HEIGHT, TOWN_GROUND } from '../constants.js';
-import { BattleStation, STATION_RADIUS } from './beam/stationStub.js';
+import { BattleStation, STATION_RADIUS } from './beam/station.js';
 import { BeamMesh, MAX_TRIBUTARIES } from './beam/beamMesh.js';
 import { MotePool } from './beam/motes.js';
 import { RingSet } from './beam/rings.js';
@@ -239,7 +239,7 @@ export class OrbitalBeam extends Disaster {
     if (t < this.T1) {
       // the watchers' heads follow the descending station
       const npcs = this.game.npcs;
-      if (npcs && npcs.watchInfo && (t & 3) === 0) { const p = this.stationAt(t / 20, this._v); npcs.watchInfo.x = p.x; npcs.watchInfo.y = p.y; npcs.watchInfo.z = p.z; }
+      if (npcs && npcs.watchInfo && (t & 3) === 0) npcs.watchMove(this.stationAt(t / 20, this._v));
     }
     if (t === this.TA) this.m.effects.setEnvironment({ tint: [0.88, 0.98, 0.98], skyLightMul: 0.94 });
     if (t === this.alertTick) this.onAlert();

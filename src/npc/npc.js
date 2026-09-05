@@ -287,6 +287,7 @@ export class NPCManager {
     this.watchInfo = { x: point.x, y: point.y, z: point.z, untilTick: this.tickCount + 20 * (opts.duration || 60), lines: opts.lines || 'sky', share: opts.share ?? 0.8 };
     for (const npc of this.list) npc.watcher = npc.rng.chance(this.watchInfo.share);
   }
+  watchMove(point) { if (this.watchInfo) { this.watchInfo.x = point.x; this.watchInfo.y = point.y; this.watchInfo.z = point.z; } }
   clearWatch() { if (this.watchInfo) { this.watchInfo = null; for (const npc of this.list) if (npc.watcher) { npc.watcher = false; npc.idleTimer = Math.min(npc.idleTimer, npc.rng.range(0.2, 1.5)); npc.lookAt = null; } } }
   // A wave front (or blast) sweeps everyone within `radius` of (x,z) off their feet in direction (dirX,dirZ):
   // they tumble through the air, then flail helplessly in the water for a few seconds before they can swim.
