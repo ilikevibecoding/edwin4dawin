@@ -2523,7 +2523,48 @@ export function createForest({
     envMapIntensity: 0.2,
   });
   const farGround = farGroundMaps();
-  const skirtMat = new THREE.MeshStandardMaterial({ map: farGround.map, roughnessMap: farGround.rough, roughness: 1, metalness: 0, envMapIntensity: 0.35 });
+  // The skirt is the plain carried past the terrain mesh, and it has to land
+  // at the value of the ground it continues. The terrain shader knocks its
+  // dirt down by a 0.68 level cut and an occlusion stack before the key sees
+  // it; this material had neither, so the same straw tile under the same 9.4
+  // key rendered 0.67–0.77 against a terrain edge at 0.41–0.52 beside it, and
+  // at 400–550 m — 73 per cent fogged — the lit quarter that was left still
+  // put it at 0.78 under a sky of 0.72: the cream mass over the treeline in
+  // the rear and pride framings. The tint carries the terrain's cut, and a
+  // touch of the laterite's red so the straw does not meet the dirt as a
+  // yellow. The environment term is down with it: a Standard material's
+  // dielectric specular is light that does not scale with the tint.
+  const skirtMat = new THREE.MeshStandardMaterial({
+    map: farGround.map,
+    color: new THREE.Color(0.3, 0.265, 0.25),
+    roughnessMap: farGround.rough,
+    roughness: 1,
+    metalness: 0,
+    envMapIntensity: 0.15,
+  });
+  // The lit term falls off with distance, to 0.55 by 520 m — the same curve
+  // the terrain's far flat runs, so the two meet at one value wherever they
+  // interleave. The plain fogs to the horizon band, the brightest sky there
+  // is; the hills behind it fog to the sky a few degrees up, a stop's tenth
+  // darker. A far plain three quarters fogged still carries a quarter of its
+  // own lit straw on that floor and measured 0.67 under hills at 0.62 — the
+  // last band brighter than what stood over it. The near ground has the
+  // grazing-angle occlusion of clods and stems that makes a plain seen
+  // edge-on darker than the dirt underfoot; this mesh has no relief, so the
+  // occlusion is written in by distance.
+  skirtMat.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSkirtW;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvSkirtW = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vSkirtW;')
+      .replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+        diffuseColor.rgb *= mix( 1.0, 0.55, smoothstep( 240.0, 520.0, distance( vSkirtW, cameraPosition ) ) );`,
+      );
+  };
+  skirtMat.customProgramCacheKey = () => 'forest-skirt-r3';
 
   // Horizon strips. These were MeshBasicMaterial with a dark tint: unlit, so
   // the same 0x6a6650 at noon and at midnight, and the strip's own painted

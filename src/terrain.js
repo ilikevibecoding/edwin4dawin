@@ -5069,6 +5069,13 @@ function buildFarHills(env) {
   //     stands above the plain (the same height key as the tint) is held back
   //     to the slow rate. Same rule for the scrub domes, which stand on slopes
   //     by construction.
+  // Round 3, after the sky's fog chunk started converging every material on
+  // the dome itself: the hand-built air (fogColor, cooled by elevation) is
+  // gone and the air is the chunk's own `hzCol` under one flat tone; the flat
+  // is back on the plain's fog entirely; the flat's tint is down again, to
+  // meet the near ground, and falls off with distance; the mesh past 860 m is
+  // folded onto a sphere instead of being cut by the far plane. The notes
+  // above stand as the record of why each piece is where it is.
   const hazeChunk = (hillKExpr, airScale = '1.0') => {
     const stock = THREE.ShaderChunk.fog_fragment;
     // the sky's patched chunk carries the view vector and a lit-dust colour;
@@ -5076,50 +5083,66 @@ function buildFarHills(env) {
     const patched = stock.includes('hzDist');
     const dist = patched ? 'hzDist' : 'vFogDepth';
     const air = patched ? 'hzCol' : 'fogColor';
-    // the ray's world-space elevation, which the sky's chunk already has
-    const rayY = patched ? 'hzRayY' : '0.0';
     const blend = `
       float hillDist = ${dist};
-      // The airlight is the sky in the ray's own direction, and the sky is not
-      // one colour: it is the cream of the horizon band for the first degree
-      // and then falls steeply to blue-grey — measured in the camp framing,
-      // the sky four degrees over the crests is at 0.48/0.65/1.0 of the band
-      // and 0.34/0.55/1.0 by seven. The scene fog converges on the band
-      // whatever the ray does, which is right for the flat (every ray to the
-      // flat is at the horizon) and wrong for a hill: a crest fogged to the
-      // band stands against sky that is a stop darker, and that is the whole
-      // of the "hills lighter than the sky" defect that survived the tint,
-      // the cap and the Lambert change. So the hills' air takes the sky's
-      // gradient by the ray's elevation. Two knees, one steep, from the
-      // measured gradient.
-      float hillRayY = ${rayY};
-      vec3 hillSkyK = mix( vec3( 1.0 ), vec3( 0.5, 0.66, 1.0 ), smoothstep( -0.004, 0.06, hillRayY ) );
-      hillSkyK = mix( hillSkyK, vec3( 0.36, 0.56, 1.0 ), smoothstep( 0.06, 0.15, hillRayY ) );
-      // The flat past 450 m is folded into the hill treatment as well: the
-      // scene fog converges on the lit-dust colour, which toward the sun is a
-      // cream brighter than the sky just over the horizon, so the fully fogged
-      // far plain rendered as a pale mesa between the hills. Inside 380 m it
-      // keeps the plain's fog and meets the forest's skirt — which covers this
-      // mesh to 420 m — without a step; what shows past the skirt is on the
-      // hill treatment before it has cleared it.
-      float hillK = max( ${hillKExpr}, smoothstep( 380.0, 640.0, hillDist ) );
-      float hillFog = smoothstep( 150.0, 720.0, hillDist ) * 0.62;
-      // ...and then the last fourteen per cent over the final sixty metres, so
-      // the far plane still cuts the mesh in air the exact colour of the sky
-      float hillWall = smoothstep( 690.0, 800.0, hillDist ) * 0.86 + smoothstep( 820.0, 880.0, hillDist ) * 0.14;
-      vec3 hillAir = mix( fogColor * vec3( 0.76, 0.86, 1.0 ), fogColor * vec3( 0.86, 0.91, 0.98 ), smoothstep( 0.0, 0.86, hillWall ) );
-      hillAir = mix( hillAir, ${air}, smoothstep( 0.86, 1.0, hillWall ) );
-      // ...and the whole of it, wall included, goes to the sky at the ray's
-      // elevation: the wall is the far plane cutting the mesh, and past it is
-      // that sky, not the band
-      hillAir *= hillSkyK;
+      // Round 3. The airlight is the sky in the ray's own direction, and the
+      // sky's fog chunk now hands it over ready-made: \`hzCol\` is the displayed
+      // dome — the same gradient, tone curve and transfer the sky went
+      // through — evaluated at this ray's elevation and azimuth, so a crest
+      // fogs to the exact pixel the sky puts just above it and the flat fogs
+      // to the horizon it stands against. Round 2 built the same thing by
+      // hand out of \`fogColor\`: a per-elevation cooling on the *linear* fog
+      // colour, mixed into a display-space frame, which is why the hills
+      // came out a saturated navy at 0.25–0.30 luma under a sky of 0.65 — a
+      // stop and a third under the sky at their base, and bluer than any air.
+      // Measured from the pride into the sun, before: hills 0.22–0.28, hue
+      // 220, saturation 0.5–0.6; sky over the ridge 0.62.
+      //
+      // So: the air is \`hzCol\`, under one flat tone (below). No cooling by
+      // elevation — the dome's gradient already carries the fall to blue-grey
+      // over the first degrees — and no separate wall colour, because the
+      // mesh is no longer cut (see the fold at the vertex stage).
+      //
+      // The flat is the plain. It takes the scene fog exactly as the near
+      // ground does (the scene fog converges on the horizon sky for a ray to
+      // the ground, so the round-2 fold of the far flat into the hill
+      // treatment is gone with the cream band it was there for), and only
+      // what stands above the plain — the height key — is on the hills' rate.
+      float hillK = ${hillKExpr};
+      // The hills' rate is the scene fog's, floored. A ray to a crest is up
+      // out of the dust layer and the layer integral thins it, which is right
+      // for the first few hundred metres — a hill at 450 m still shows its
+      // own dark bush — but by the crests it has to have gone most of the way
+      // to the sky: real hills in dusty air sit at 0.7–0.9 of the horizon
+      // sky's luminance, a little bluer and greyer, never a stop under it.
+      // The floor takes them from 0.58 at 500 m to 0.72 by 650 m — measured
+      // from the pride and the rear framing, crests at 0.75–0.85 of the sky
+      // over the ridge, the hill foot running on into the plain's band;
+      // the stock chunk's own far-plane wall (0.55–0.92 of the far plane for
+      // a ray over the horizon) carries them the rest of the way to the air
+      // by the fold radius, so the far range past it is all air.
+      float hillFog = smoothstep( 100.0, 650.0, hillDist ) * 0.76;
+      // A hill is a little darker and a little bluer than the sky in its own
+      // direction, always — including at the fold, where the fog has taken
+      // it entirely. The dome is brightest in the first degree over the
+      // horizon and falls 13 per cent by two degrees (measured: band 0.72,
+      // sky over the ridge 0.61–0.64, per channel 0.81/0.85/0.92), so a hill
+      // flank fogged to exactly the sky at its own half-degree came out 3–4
+      // per cent *brighter* than the sky over the crest in the camp and
+      // forest framings — the pale-band read, in miniature. At 0.87 of the
+      // sky in its direction the whole hill sits under the sky over its
+      // ridge and 13 per cent under the plain at its foot, which is where a
+      // range at the horizon sits in a photograph of dusty air. The flat is
+      // not toned: it is the plain, it fogs to the horizon it stands against
+      // and has to meet it exactly.
+      vec3 hillAir = ${air} * vec3( 0.85, 0.87, 0.91 );
       // the scrub domes fog to a shade under the air, so one standing past the
       // crest it grows on — hazier than the crest in front of it — is still a
       // dark speck in the haze and not a pale plate over a dark ridge. A
       // darkening, not a cooling: at 0.8 of a cooled air the domes were grey-
       // blue specks on a cream slope, which is a field of pebbles.
       hillAir *= ${airScale};
-      float hillF = mix( fogFactor, max( hillFog, hillWall ), hillK );
+      float hillF = mix( fogFactor, max( fogFactor, hillFog ), hillK );
       // The rule, enforced rather than tuned for: a hill is never lighter
       // than the air in front of it. The lit value is soft-compressed under
       // 0.92 of the haze colour's luminance — a knee, so the sunlit flank
@@ -5136,11 +5159,37 @@ function buildFarHills(env) {
     const out = stock.replace(/gl_FragColor\.rgb\s*=\s*mix\([^;]*;/, blend);
     return out === stock ? stock : out;
   };
+  // The fold. The mesh runs to 1500 m and the camera's far plane is at 900, so
+  // the far third of it was never drawn: the plane cut the hills off in a
+  // jagged contour at 900 m and the stock fog's wall had to take everything
+  // inside that to the exact sky so the contour would not show. Which meant
+  // a hill at the wall *was* the sky in its own direction — and the sky in a
+  // low ray's direction is the horizon band, brighter than the sky over the
+  // crest above it. Everything past 860 m is drawn on a sphere of that
+  // radius round the camera instead: a vertex beyond it slides down its own
+  // sight line, so the skyline keeps its exact angular shape and nothing is
+  // cut. What was clipped is the far range itself — the hills at 900–1500 m
+  // that the brief describes and that no frame had ever shown. Normals and
+  // the height key are read off the unfolded position, so the light and the
+  // tint are unchanged; only the depth moves, and at 860 m the fog is at
+  // its wall whatever the ray, so nothing folded carries lit value the eye
+  // could see slide. The far plane stays at 900 for the culling it does.
+  const HILL_FOLD = 860;
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, hillUniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying float vHillY;\nvarying vec2 vHillXZ;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHillY = position.y;\nvHillXZ = position.xz;');
+      .replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>
+      vHillY = position.y;
+      vHillXZ = position.xz;
+      {
+        vec3 hillV = ( modelMatrix * vec4( transformed, 1.0 ) ).xyz - cameraPosition;
+        float hillR = length( hillV );
+        if ( hillR > ${HILL_FOLD.toFixed(1)} ) transformed += hillV * ( ${HILL_FOLD.toFixed(1)} / hillR - 1.0 );
+      }`,
+      );
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vHillY;\nvarying vec2 vHillXZ;\nuniform sampler2D uHillMacro;')
       .replace(
@@ -5148,7 +5197,29 @@ function buildFarHills(env) {
         `#include <map_fragment>
       vec4 hMac = texture2D( uHillMacro, vHillXZ / 460.0 + 0.23 );
       float hillTint = smoothstep( 2.5, 15.0, vHillY );
-      diffuseColor.rgb *= mix( vec3( 0.56, 0.53, 0.45 ), vec3( 0.06, 0.062, 0.054 ), hillTint );
+      // Round 3: the plain tint down again, 0.56 to 0.285, and a shade redder.
+      // At 0.56 the flat between 70 and 300 m rendered 0.70–0.73 into the sun
+      // at 4–30 per cent fog — brighter than the dirt in the foreground
+      // (0.54–0.58) and a saturated hue-40 yellow against the hue-28 laterite
+      // it continues, which is the strip under the treeline in the pride
+      // framing. The near ground carries a 0.68 level cut and an occlusion
+      // stack this mesh has none of, so its tint has to carry the same cut
+      // for the two to meet at one value where the terrain ends.
+      //
+      // And the plain's lit term falls off with distance, to 0.55 by 520 m.
+      // The plain fogs to the horizon band, which is the brightest sky there
+      // is (0.72 into the sun); the hills behind it fog to the sky a few
+      // degrees up, which is 0.62. So a far plain three quarters fogged still
+      // carries a quarter of its own lit straw on top of a floor that is
+      // already the band, and rendered 0.66–0.67 under hills at 0.60–0.63:
+      // the one band in the frame brighter than the sky over it. What the
+      // near ground has and this mesh lacks is the grazing-angle occlusion
+      // of clods and stems, which is real and is why a plain seen edge-on
+      // into the sun is darker than the same dirt underfoot. The forest's
+      // skirt carries the identical curve, so the two meet at one value.
+      float hillD = distance( vec3( vHillXZ.x, vHillY, vHillXZ.y ), cameraPosition );
+      float hillFlatK = mix( 1.0, 0.55, smoothstep( 240.0, 520.0, hillD ) );
+      diffuseColor.rgb *= mix( hillFlatK * vec3( 0.285, 0.25, 0.24 ), vec3( 0.06, 0.062, 0.054 ), hillTint );
       // two-tone: darker, cooler patches of denser bush against lighter dry
       // grass, strongest on the mid slopes where there is a hill to vary
       diffuseColor.rgb *= mix( 0.86, 1.14, hMac.r ) * mix( vec3( 0.92, 0.96, 1.03 ), vec3( 1.08, 1.03, 0.95 ), hMac.a );
@@ -5289,7 +5360,9 @@ function buildFarHills(env) {
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHillY = position.y;');
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', '#include <common>\nvarying float vHillY;')
-        .replace('#include <fog_fragment>', hazeChunk('smoothstep( 2.5, 15.0, vHillY )', '0.82'));
+        // 0.93 of the hill's air, which is itself 0.87 of the sky: the domes
+        // land at 0.81 of the sky, where the old 0.82 of an untoned air had them
+        .replace('#include <fog_fragment>', hazeChunk('smoothstep( 2.5, 15.0, vHillY )', '0.93'));
     };
     const sMesh = new THREE.Mesh(sg, sm);
     sMesh.name = 'farScrub';
