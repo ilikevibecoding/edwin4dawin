@@ -572,13 +572,17 @@ async function boot() {
       // the driver does at the wheel. 12 m/s puts the truck within half a metre
       // of where rounds 1–4 shot it (the old run went 8.6 → 13 on an odometer
       // that over-counted its corner cuts, so the mean speed is not the match).
-      // Steering still runs, so the truck sits where the driver holds it.
+      // Steering still runs, so the truck sits where the driver holds it. The
+      // driver is told it is cruising, or its speed caps read the pin as a
+      // brake held to the floor and the body sits nose-down for the shot.
       const PREROLL_SPEED = 12.0;
+      driver.state.cruise = PREROLL_SPEED;
       driver.state.speed = PREROLL_SPEED;
       for (let i = 0; i < preroll; i++) {
         simulate(dtStep);
         driver.state.speed = PREROLL_SPEED;
       }
+      driver.state.cruise = 0;
       vehicle.root.updateMatrixWorld(true);
       const ok = rig.setView(name);
       skyRig.follow(vehicle.root.position);

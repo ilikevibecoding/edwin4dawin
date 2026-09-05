@@ -62,6 +62,9 @@ export function createDriver({ terrain, vehicle, collision = null, startT = 0.42
     gear: 1,
     auto: true,
     autoT: startT,
+    // > 0: auto-drive holds this speed with the throttle balancing drag (the
+    // capture pre-roll); 0: the caps below set the pace
+    cruise: 0,
     // collision: the normal-velocity change this frame (m/s) and where it
     // happened, held for one frame for the audio and the camera; whether the
     // truck is resting against something; the yaw kick still working out
@@ -479,8 +482,23 @@ export function createDriver({ terrain, vehicle, collision = null, startT = 0.42
       }
       if (junction && !state.turned && state.route === 'trail' && (junction.trailT - state.autoT) * route.length < 22) vMax = Math.min(vMax, 6.5);
       vMax = Math.max(vMax, 5);
-      input.throttle = THREE.MathUtils.clamp((vMax - state.speed) * 1.5 + 0.5, 0, 1);
-      input.brake = state.speed > vMax + 0.5 ? THREE.MathUtils.clamp((state.speed - vMax) * 0.4, 0, 1) : 0;
+      if (state.cruise > 0) {
+        // The capture pre-roll holds one speed so a beauty view ends at a fixed
+        // place on the road. Left to the caps above, a pinned 12 m/s on the
+        // spur's bend reads as a brake pedal held to the floor — accel −21 m/s²
+        // every step — and the body sat nose-down 5.7° in every truck frame of
+        // the round-5 re-shoot, with the glass cameras (placed in root space)
+        // off the cab. Cruise: the limit is the pinned speed and the throttle
+        // balances drag exactly, so the body sees a steady cruise, as it did
+        // when the old driver ran flat out here.
+        vMax = state.cruise;
+        const cruiseDrag = 0.42 * state.speed + 0.02 * state.speed * Math.abs(state.speed);
+        input.throttle = THREE.MathUtils.clamp((vMax - state.speed) * 1.5 + cruiseDrag / 9.5, 0, 1);
+        input.brake = 0;
+      } else {
+        input.throttle = THREE.MathUtils.clamp((vMax - state.speed) * 1.5 + 0.5, 0, 1);
+        input.brake = state.speed > vMax + 0.5 ? THREE.MathUtils.clamp((state.speed - vMax) * 0.4, 0, 1) : 0;
+      }
     } else {
       const t = (has(KEYS.forward) ? 1 : 0) - (has(KEYS.back) ? 1 : 0);
       input.throttle = Math.max(0, t);
