@@ -89,7 +89,7 @@ export class Particles {
   }
 
   spawn(x, y, z, vx, vy, vz, size, life, kind, uv, color, alpha) {
-    if (this.count >= MAX) return;
+    if (this.count >= Math.min(MAX, this.cap || MAX)) return;
     const i = this.count++;
     this.pos[i * 3] = x; this.pos[i * 3 + 1] = y; this.pos[i * 3 + 2] = z;
     this.vel[i * 3] = vx; this.vel[i * 3 + 1] = vy; this.vel[i * 3 + 2] = vz;

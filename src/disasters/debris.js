@@ -44,7 +44,8 @@ void main() {
 }`;
 
 export class DebrisSystem {
-  constructor(scene, world, atlas, maxCount = 600) {
+  constructor(scene, world, atlas, maxCount = 600, cap = maxCount) {
+    this.cap = Math.min(cap, maxCount);   // soft limit (quality preset); `max` is the allocated pool
     this.world = world;
     this.max = maxCount;
     this.count = 0;
@@ -82,7 +83,7 @@ export class DebrisSystem {
   // Spawn a debris cube. Returns index or -1 when the pool is full (oldest is recycled if `force`).
   spawn(x, y, z, vx, vy, vz, blockId, size = 0.6, life = 12, opts = {}) {
     let i;
-    if (this.count < this.max) i = this.count++;
+    if (this.count < Math.min(this.max, this.cap)) i = this.count++;
     else if (opts.force) { i = 0; for (let k = 1; k < this.count; k++) if (this.age[k] > this.age[i]) i = k; }
     else return -1;
     this.px[i] = x; this.py[i] = y; this.pz[i] = z;

@@ -11,7 +11,7 @@ import { BLOCKS, B } from '../blocks.js';
 import { CHUNK_SIZE as CS } from '../constants.js';
 
 export const BUDGET = {
-  editsPerTick: 260,        // block edits applied per simulation tick
+  editsPerTick: 400,        // block edits applied per simulation tick (fixed for all clients: part of the deterministic simulation)
   relightPerFrame: 3,       // chunks fully relit per frame
   remeshPerFrame: 3,        // chunk meshes rebuilt per frame (disaster-dirty chunks)
   maxDebris: 600,
@@ -31,7 +31,7 @@ export class DisasterManager {
     this.state = 'idle'; // idle | preview | running | paused | finished | restoring
     this.tick = 0;
     this.journal = new BlockJournal();
-    this.debris = new DebrisSystem(game.scene, game.world, game.atlas, BUDGET.maxDebris);
+    this.debris = new DebrisSystem(game.scene, game.world, game.atlas, 1800, BUDGET.maxDebris);
     this.effects = new Effects();
     this.net = null;                // network client (optional); must implement sendCommand(cmd)
     this.permissions = game.permissions;

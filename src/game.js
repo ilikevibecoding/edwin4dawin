@@ -24,6 +24,7 @@ import { PerfMonitor } from './perf.js';
 import { Permissions } from './permissions.js';
 import { SaveManager } from './save.js';
 import { DisasterManager } from './disasters/manager.js';
+import { applyQuality, loadQualityName } from './quality.js';
 import { Tsunami } from './disasters/tsunami.js';
 import { Tornado } from './disasters/tornado.js';
 import { OrbitalBeam } from './disasters/orbitalBeam.js';
@@ -174,6 +175,7 @@ export class Game {
     this.train = new Train(this.scene, this.world, this.audio, this.particles);
     // disasters: deterministic, journaled, admin-controlled
     this.disasters = new DisasterManager(this);
+    { const qp = new URLSearchParams(location.search); applyQuality(this, loadQualityName(qp), { persist: false, renderDistance: !qp.has('rd') }); }
     this.disasters.register(Tsunami);
     this.disasters.register(Tornado);
     this.disasters.register(OrbitalBeam);

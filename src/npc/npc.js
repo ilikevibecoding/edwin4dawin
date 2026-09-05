@@ -38,6 +38,8 @@ const LINES = {
   tornado: ['Twister! Take cover!', 'Get inside, now!', 'Ring the bell! Tornado!', "Don't look at it, RUN!"],
   beam: ['What in God\'s name is that light?!', 'The sky is burning! Run!', 'Get away from there!', 'Judgment day, I tell you!'],
   trapped: ["Help! I can't swim!", 'Somebody get me out of here!', "I'm stuck! Help!", 'Over here! Help!'],
+  sky: ["What's that in the sky?", 'Is that... a moon?', 'Look up! What in tarnation is that?', "That ain't no star.", "Somebody fetch the sheriff. Look at the sky!", "It's getting bigger...", 'Ma, come look at this!', 'Lord have mercy, what IS that?', 'Is it coming closer?', "I don't like the look of that."],
+  swept: ['Whoa-oa-oa!', "I can't- glub- help!", 'The water took me!', 'Hold on to something!', 'Aaah! Grab my hand!'],
 };
 
 const PANIC_SPEED = 4.2;
@@ -92,6 +94,8 @@ class NPC {
     this.air = null;          // {vx,vy,vz,spin} while thrown by a tornado
     this.stunned = 0;
     this.swimming = false;
+    this.swept = 0;      // seconds left of being tossed around by a wave
+    this.watcher = false; // stops to stare at something in the sky
     this.trapped = 0;         // seconds spent unable to progress while in water
     this.shoutCooldown = 0;
     this.health = 20;
@@ -278,8 +282,30 @@ export class NPCManager {
       if (npc.state === 'walk' && npc.target && npc.target.kind !== 'evacuate') { npc.path = null; npc.state = 'idle'; npc.idleTimer = npc.rng.range(0.1, 0.8); npc.target = null; }
     }
   }
+  // Something strange in the sky: most NPCs stop, turn toward it, crane their heads and mutter (no panic yet).
+  watch(point, opts = {}) {
+    this.watchInfo = { x: point.x, y: point.y, z: point.z, untilTick: this.tickCount + 20 * (opts.duration || 60), lines: opts.lines || 'sky', share: opts.share ?? 0.8 };
+    for (const npc of this.list) npc.watcher = npc.rng.chance(this.watchInfo.share);
+  }
+  clearWatch() { if (this.watchInfo) { this.watchInfo = null; for (const npc of this.list) if (npc.watcher) { npc.watcher = false; npc.idleTimer = Math.min(npc.idleTimer, npc.rng.range(0.2, 1.5)); npc.lookAt = null; } } }
+  // A wave front (or blast) sweeps everyone within `radius` of (x,z) off their feet in direction (dirX,dirZ):
+  // they tumble through the air, then flail helplessly in the water for a few seconds before they can swim.
+  sweep(x, z, radius, dirX, dirZ, strength = 12) {
+    const r2 = radius * radius;
+    for (const npc of this.list) {
+      const dx = npc.pos.x - x, dz = npc.pos.z - z;
+      if (dx * dx + dz * dz > r2 || npc.swept > 0) continue;
+      const k = strength * npc.rng.range(0.7, 1.15);
+      this.applyImpulse(npc, dirX * k + npc.rng.range(-3, 3), 5 + k * 0.35, dirZ * k + npc.rng.range(-3, 3));
+      npc.air.spin = npc.rng.range(-12, 12);
+      npc.swept = 4 + npc.rng.range(0, 2);
+      npc.panic = true; npc.panicUntil = Math.max(npc.panicUntil, this.tickCount + 20 * 90);
+      this.shout(npc, 'swept', 0.5);
+    }
+  }
   clearAlert() {
     this.alertInfo = null;
+    this.clearWatch();
     for (const npc of this.list) { npc.panic = false; npc.trapped = 0; if (npc.target && npc.target.kind === 'evacuate') { npc.target = null; npc.path = null; npc.state = 'idle'; npc.idleTimer = npc.rng.range(1, 4); } }
   }
   // Throw an NPC (tornado). Velocities in blocks/s.
@@ -480,6 +506,12 @@ export class NPCManager {
     const solidAt = (x, y, z) => BLOCKS[w.getBlock(Math.floor(x), Math.floor(y), Math.floor(z))].solid;
     if (!solidAt(nx, npc.pos.y + 0.9, npc.pos.z)) npc.pos.x = nx; else a.vx *= -0.3;
     if (!solidAt(npc.pos.x, npc.pos.y + 0.9, nz)) npc.pos.z = nz; else a.vz *= -0.3;
+    if (a.vy < 0 && w.getBlock(Math.floor(npc.pos.x), Math.floor(ny + 0.3), Math.floor(npc.pos.z)) === B.WATER) {
+      // splashed down into water: no stun, the current takes over
+      npc.pos.y = ny; npc.air = null; npc.airSpin = 0; npc.swept = Math.max(npc.swept || 0, 3);
+      this.audio.step('gravel', npc.pos, 1.2);
+      return;
+    }
     if (a.vy < 0 && (solidAt(npc.pos.x, ny, npc.pos.z) || ny < 1)) {
       // landed
       const h = standHeight(w, Math.floor(npc.pos.x), Math.floor(npc.pos.y + 0.01), Math.floor(npc.pos.z));
@@ -509,10 +541,19 @@ export class NPCManager {
     const feet = this.world.getBlock(Math.floor(npc.pos.x), Math.floor(npc.pos.y + 0.2), Math.floor(npc.pos.z));
     const body = this.world.getBlock(Math.floor(npc.pos.x), Math.floor(npc.pos.y + 1.0), Math.floor(npc.pos.z));
     npc.swimming = feet === B.WATER || body === B.WATER;
+    if (npc.swept > 0) npc.swept -= dt;
     if (npc.swimming) {
       let top = feet === B.WATER ? Math.floor(npc.pos.y + 0.2) : Math.floor(npc.pos.y + 1.0);
       while (this.world.getBlock(Math.floor(npc.pos.x), top + 1, Math.floor(npc.pos.z)) === B.WATER && top < npc.pos.y + 6) top++;
       let surface = top + 0.9 - 1.3; // eyes above the surface
+      if (npc.swept > 0) {
+        // helpless: bobbing under and over the surface, spun around and carried hard by the current
+        surface += -0.55 + 0.45 * Math.sin(this.tickCount * 0.35 + npc.id * 1.7);
+        npc.targetYaw += dt * (2.5 + (npc.id % 3));
+        npc.trapped += dt * 2;
+        if (this.alertInfo && this.alertInfo.flowFn) { const f = this.alertInfo.flowFn(npc.pos.x, npc.pos.z); if (f) this.tryMoveWater(npc, f[0] * dt * 1.8, f[1] * dt * 1.8); }
+        npc.state = 'idle'; npc.idleTimer = Math.max(npc.idleTimer, 0.3); npc.path = null; npc.target = null;
+      }
       // a ceiling right above the water (porch awning, upper floor): keep the head out of the planks and
       // swim for open sky instead of treading water under it
       const bx = Math.floor(npc.pos.x), bz = Math.floor(npc.pos.z);
@@ -546,6 +587,18 @@ export class NPCManager {
     if (d2 < 9 && npc.state !== 'walk') npc.lookAt = { x: player.pos.x, y: player.pos.y + 1.6, z: player.pos.z };
     else if (npc.state !== 'walk') { if (npc.rng.chance(0.01)) npc.lookAt = npc.rng.chance(0.5) ? null : { x: npc.pos.x + npc.rng.range(-5, 5), y: npc.pos.y + 1.4, z: npc.pos.z + npc.rng.range(-5, 5) }; }
     else npc.lookAt = null;
+    // something strange in the sky: watchers stop, turn toward it and crane their heads
+    const wi = this.watchInfo;
+    if (wi && npc.watcher && !npc.panic && !npc.swimming && npc.stunned <= 0) {
+      if (this.tickCount > wi.untilTick) this.clearWatch();
+      else {
+        if (npc.state === 'walk') { npc.path = null; npc.target = null; npc.state = 'idle'; }
+        npc.idleTimer = Math.max(npc.idleTimer, 0.5);
+        npc.lookAt = { x: wi.x, y: wi.y, z: wi.z };
+        npc.targetYaw = Math.atan2(wi.x - npc.pos.x, wi.z - npc.pos.z);
+        if (npc.rng.chance(0.005)) this.shout(npc, wi.lines, 1);
+      }
+    }
 
     if (npc.state === 'idle') {
       npc.idleTimer -= dt;
@@ -692,7 +745,7 @@ export class NPCManager {
         let w = want; while (w > Math.PI) w -= Math.PI * 2; while (w < -Math.PI) w += Math.PI * 2;
         hy = Math.max(-1.1, Math.min(1.1, w));
         const dist = Math.sqrt(ldx * ldx + ldz * ldz);
-        hp = -Math.atan2(npc.lookAt.y - (py + 1.62), dist);
+        hp = Math.max(-1.25, Math.min(0.8, -Math.atan2(npc.lookAt.y - (py + 1.62), dist)));
       }
       npc.headYaw += (hy - npc.headYaw) * Math.min(1, dt * 8);
       npc.headPitch += (hp - npc.headPitch) * Math.min(1, dt * 8);

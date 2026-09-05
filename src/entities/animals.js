@@ -193,7 +193,7 @@ export class AnimalManager {
       pos: new THREE.Vector3(sp.x, 0, sp.z), prevPos: new THREE.Vector3(), yaw: sp.yaw ?? rng.range(0, Math.PI * 2), targetYaw: 0,
       tie: !!sp.tie, pen: sp.pen || null, state: 'idle', timer: rng.range(2, 10), target: null, walkTime: 0, grazeT: 0, graze: false,
       soundTimer: rng.range(spec.soundGap[0], spec.soundGap[1]), lightTimer: 0, name: sp.type === 'horse' ? 'Horse' : sp.type === 'cow' ? 'Cow' : sp.type === 'pig' ? 'Pig' : 'Chicken',
-      panic: false, panicUntil: 0, air: null, stunned: 0, swimming: false, airSpin: 0,
+      panic: false, panicUntil: 0, air: null, stunned: 0, swimming: false, airSpin: 0, swept: 0, id: this.list.length,
     };
     a.targetYaw = a.yaw;
     a.lod = buildStaticLOD(model.root); // distant stand-in (1 draw call)
@@ -232,7 +232,21 @@ export class AnimalManager {
       if (a.soundTimer > 4) a.soundTimer = a.rng.range(0.5, 4);
     }
   }
-  clearAlert() { this.alertInfo = null; for (const a of this.list) { a.panic = false; a.air = null; a.stunned = 0; } }
+  clearAlert() { this.alertInfo = null; for (const a of this.list) { a.panic = false; a.air = null; a.stunned = 0; a.swept = 0; } }
+  // A wave front sweeps animals within `radius` of (x,z) off their feet: they tumble, then thrash in the water.
+  sweep(x, z, radius, dirX, dirZ, strength = 12) {
+    const r2 = radius * radius;
+    for (const a of this.list) {
+      const dx = a.pos.x - x, dz = a.pos.z - z;
+      if (dx * dx + dz * dz > r2 || (a.swept || 0) > 0) continue;
+      const k = strength * a.rng.range(0.6, 1.1) * (a.spec.height > 1.2 ? 0.7 : 1.1);
+      this.applyImpulse(a, dirX * k + a.rng.range(-3, 3), 4 + k * 0.35, dirZ * k + a.rng.range(-3, 3));
+      a.air.spin = a.rng.range(-10, 10);
+      a.swept = 4 + a.rng.range(0, 2);
+      a.panic = true; a.panicUntil = performance.now() + 90000;
+      if (a.spec.sound) this.audio[a.spec.sound](a.pos);
+    }
+  }
   applyImpulse(a, vx, vy, vz) {
     if (!a.air) a.air = { vx: 0, vy: 0, vz: 0, spin: a.rng.range(-5, 5) };
     a.air.vx += vx; a.air.vy += vy; a.air.vz += vz;
@@ -250,6 +264,10 @@ export class AnimalManager {
     const nx = a.pos.x + air.vx * dt, ny = a.pos.y + air.vy * dt, nz = a.pos.z + air.vz * dt;
     if (!solidAt(nx, a.pos.y + 0.5, a.pos.z)) a.pos.x = nx; else air.vx *= -0.3;
     if (!solidAt(a.pos.x, a.pos.y + 0.5, nz)) a.pos.z = nz; else air.vz *= -0.3;
+    if (air.vy < 0 && w.getBlock(Math.floor(a.pos.x), Math.floor(ny + 0.3), Math.floor(a.pos.z)) === B.WATER) {
+      a.pos.y = ny; a.air = null; a.airSpin = 0; a.swept = Math.max(a.swept || 0, 3);   // splashdown: the current takes over
+      return;
+    }
     if (air.vy < 0 && (solidAt(a.pos.x, ny, a.pos.z) || ny < 1)) {
       const h = standHeight(w, Math.floor(a.pos.x), Math.floor(a.pos.y + 0.01), Math.floor(a.pos.z));
       a.pos.y = h !== null ? h : Math.ceil(ny);
@@ -279,10 +297,13 @@ export class AnimalManager {
       const feet = this.world.getBlock(Math.floor(a.pos.x), Math.floor(a.pos.y + 0.2), Math.floor(a.pos.z));
       const body = this.world.getBlock(Math.floor(a.pos.x), Math.floor(a.pos.y + a.spec.height * 0.6), Math.floor(a.pos.z));
       a.swimming = feet === B.WATER || body === B.WATER;
+      if ((a.swept || 0) > 0) a.swept -= dt;
       if (a.swimming) {
         let top = feet === B.WATER ? Math.floor(a.pos.y + 0.2) : Math.floor(a.pos.y + a.spec.height * 0.6);
         while (this.world.getBlock(Math.floor(a.pos.x), top + 1, Math.floor(a.pos.z)) === B.WATER && top < a.pos.y + 6) top++;
-        a.pos.y += (top + 0.9 - a.spec.height * 0.55 - a.pos.y) * Math.min(1, dt * 4);
+        const bob = (a.swept || 0) > 0 ? -0.4 + 0.4 * Math.sin(performance.now() * 0.007 + a.id * 2) : 0;
+        if ((a.swept || 0) > 0) { a.targetYaw += dt * 3; a.state = 'idle'; a.timer = Math.max(a.timer, 0.5); }
+        a.pos.y += (top + 0.9 - a.spec.height * 0.55 + bob - a.pos.y) * Math.min(1, dt * 4);
         if (this.alertInfo && this.alertInfo.flowFn) { const f = this.alertInfo.flowFn(a.pos.x, a.pos.z); if (f && !BLOCKS_SOLID(this.world, a.pos.x + f[0] * dt, a.pos.y + 0.5, a.pos.z + f[1] * dt)) { a.pos.x += f[0] * dt; a.pos.z += f[1] * dt; } }
       }
       if (far) continue;
