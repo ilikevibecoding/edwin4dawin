@@ -1,30 +1,45 @@
-// Chunk streaming + rendering: generation/lighting/meshing budgets and the world shader.
+// Chunk streaming + rendering: generation/lighting/meshing budgets and the world + water shaders.
 import * as THREE from 'three';
 import { CHUNK_SIZE as CS, CHUNK_HEIGHT as CH, DEFAULT_RENDER_DISTANCE } from './constants.js';
 import { Mesher, LIGHT_TABLE, SHADE_TABLE } from './mesher.js';
 import { World } from './world.js';
+import { SHADING_PARS, SHADOW_LAYER, bindShading } from './render/shading.js';
+import { bindMaterialMaps } from './render/materialMaps.js';
 
 // aLight (uint8 pair: light sums 0..60) and aShade (uint8 table index) are expanded through uniform tables that
 // hold the exact float32 values the old Float32 attributes carried (see the vertex layout note in mesher.js).
+// FANCY 0 is the pre-rubric shader (Light preset); FANCY 1 adds the per-pixel sun/shadow/material path.
 const VERT = /* glsl */ `
 uniform float uLightTable[${LIGHT_TABLE.length}];
 uniform float uShadeTable[${SHADE_TABLE.length}];
 attribute vec2 aLight;
 attribute float aShade;
+attribute float aFace;
 varying vec2 vUv;
 varying vec2 vLight;
 varying float vShade;
 varying float vDist;
+#if FANCY
+varying vec3 vWorldPos;
+varying float vFace;
+varying float vExtra;
+#endif
 void main() {
   vUv = uv;
   vLight = vec2(uLightTable[int(aLight.x)], uLightTable[int(aLight.y)]);
   vShade = uShadeTable[int(aShade)];
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = length(mv.xyz);
+#if FANCY
+  vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+  vFace = mod(aFace, 8.0);
+  vExtra = floor(aFace / 8.0);
+#endif
   gl_Position = projectionMatrix * mv;
 }`;
 
-const FRAG = /* glsl */ `
+// Common fragment head: legacy uniforms + light curves + (FANCY) the shared shading chunk and the tangent frame.
+const FRAG_HEAD = /* glsl */ `
 uniform sampler2D map;
 uniform float uSkyLight;
 uniform vec3 uSkyTint;
@@ -47,21 +62,142 @@ float blockCurve(float l) {
   float c = l / (4.0 - 3.0 * l);
   return mix(c, l, 0.6);
 }
+#if FANCY
+varying vec3 vWorldPos;
+varying float vFace;
+varying float vExtra;
+uniform float uTimeS;
+uniform sampler2D uNormalMap;
+uniform sampler2D uMaterialMap;
+${SHADING_PARS}
+// World normal and tangent frame of the atlas uv per face (faceUV in mesher.js). T = d(world)/du,
+// B = -d(world)/dv: OpenGL normal maps (red = +u, green = toward the top of the tile, blue = out).
+void faceFrame(float f, out vec3 N, out vec3 T, out vec3 B) {
+  if (f < 0.5)      { N = vec3(1.0, 0.0, 0.0);  T = vec3(0.0, 0.0, -1.0); B = vec3(0.0, 1.0, 0.0); }
+  else if (f < 1.5) { N = vec3(-1.0, 0.0, 0.0); T = vec3(0.0, 0.0, 1.0);  B = vec3(0.0, 1.0, 0.0); }
+  else if (f < 2.5) { N = vec3(0.0, 1.0, 0.0);  T = vec3(1.0, 0.0, 0.0);  B = vec3(0.0, 0.0, -1.0); }
+  else if (f < 3.5) { N = vec3(0.0, -1.0, 0.0); T = vec3(-1.0, 0.0, 0.0); B = vec3(0.0, 0.0, -1.0); }
+  else if (f < 4.5) { N = vec3(0.0, 0.0, 1.0);  T = vec3(1.0, 0.0, 0.0);  B = vec3(0.0, 1.0, 0.0); }
+  else              { N = vec3(0.0, 0.0, -1.0); T = vec3(-1.0, 0.0, 0.0); B = vec3(0.0, 1.0, 0.0); }
+}
+#endif`;
+
+const FRAG = /* glsl */ `
+${FRAG_HEAD}
 void main() {
   vec4 tex = texture2D(map, vUv);
   if (tex.a < uAlphaTest) discard;
-  float sky = lightCurve(vLight.x) * uSkyLight;
+  float skyCurved = lightCurve(vLight.x);
+  float sky = skyCurved * uSkyLight;
   float blk = blockCurve(vLight.y);
-  vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
+  vec3 blkCol = vec3(blk) * vec3(1.0, 0.9, 0.72);
+#if FANCY
+  vec3 N, T, B;
+  faceFrame(vFace, N, T, B);
+  vec3 gN = N;
+  float rough = 0.9, metal = 0.0, emis = 0.0;
+  #if MATERIAL_MAPS
+  vec3 nm = texture2D(uNormalMap, vUv).xyz * 2.0 - 1.0;
+  N = normalize(T * nm.x + B * nm.y + gN * max(nm.z, 0.05));
+  vec3 mm = texture2D(uMaterialMap, vUv).xyz;
+  rough = mm.x; metal = mm.y; emis = mm.z;
+  #endif
+  vec3 V = normalize(uCamPos - vWorldPos);
+  vec3 albedo = tex.rgb;
+  // lightmap ambient + directional sun (shadowed, gated by the vertex sky light), against the warm block light
+  vec3 light = shadingLight(vec3(sky) * uSkyTint, blkCol, vWorldPos, N, skyCurved, vDist);
+  light = max(light, vec3(0.035)) + vec3(uFlash);
+  vec3 col = albedo * light * vShade * (1.0 - 0.45 * metal);
+  // sky reflection (metals: albedo-tinted, dielectrics: faint at grazing angles) + sun highlight
+  float ndv = max(dot(N, V), 0.0);
+  vec3 F0 = mix(vec3(0.04), albedo, metal);
+  vec3 Fenv = F0 + (1.0 - F0) * pow(1.0 - ndv, 5.0);
+  float gloss = 1.0 - rough;
+  vec3 env = skyGradient(reflect(-V, N)) * skyCurved;
+  col += env * Fenv * gloss * gloss * vShade;
+  col += sunSpecular(vWorldPos, N, gN, V, rough, metal, albedo, skyCurved, vDist) * vShade;
+  // emissive: not shadowed, not sky lit, still fogged
+  col += albedo * emis * 2.2;
+  vec3 fogC = fogColorDir(uFogColor, -V);
+#else
+  vec3 light = max(vec3(sky) * uSkyTint, blkCol);
   light = max(light, vec3(0.035)) + vec3(uFlash);
   vec3 col = tex.rgb * light * vShade;
+  vec3 fogC = uFogColor;
+#endif
   float f = smoothstep(uFogNear, uFogFar, vDist);
-  col = mix(col, uFogColor, f);
+  col = mix(col, fogC, f);
   gl_FragColor = vec4(col, tex.a * uOpacity);
 }`;
 
+// Water: two scrolling procedural wave layers perturb the top face normal; Fresnel-weighted sky reflection, sun
+// glint through the shared specular, depth tint from the column depth the mesher packed into aFace.
+const WATER_FRAG = /* glsl */ `
+${FRAG_HEAD}
+#if FANCY
+float whash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float wnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  f = f * f * (3.0 - 2.0 * f);
+  float a = whash(i), b = whash(i + vec2(1.0, 0.0)), c = whash(i + vec2(0.0, 1.0)), d = whash(i + vec2(1.0, 1.0));
+  return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+float waveHeight(vec2 p, float t) {
+  float h = wnoise(p * 0.55 + vec2(t * 0.30, t * 0.17)) * 0.62;
+  h += wnoise(p * 1.7 - vec2(t * 0.42, -t * 0.27) + 7.3) * 0.38;
+  return h;
+}
+vec3 waveNormal(vec2 p, float t) {
+  float e = 0.08;
+  float h0 = waveHeight(p, t), hx = waveHeight(p + vec2(e, 0.0), t), hz = waveHeight(p + vec2(0.0, e), t);
+  vec2 g = vec2(hx - h0, hz - h0) / e * 0.10;
+  return normalize(vec3(-g.x, 1.0, -g.y));
+}
+#endif
+void main() {
+  vec4 tex = texture2D(map, vUv);
+  if (tex.a < uAlphaTest) discard;
+  float skyCurved = lightCurve(vLight.x);
+  float sky = skyCurved * uSkyLight;
+  float blk = blockCurve(vLight.y);
+  vec3 blkCol = vec3(blk) * vec3(1.0, 0.9, 0.72);
+#if FANCY
+  vec3 gN, T, B;
+  faceFrame(vFace, gN, T, B);
+  vec3 V = normalize(uCamPos - vWorldPos);
+  float flip = dot(gN, V) < 0.0 ? -1.0 : 1.0;           // seen from the back (submerged camera): light the back side
+  vec3 N = gN;
+  if (vFace > 1.5 && vFace < 2.5) N = waveNormal(vWorldPos.xz, uTimeS);
+  N *= flip; gN *= flip;
+  float depth = max(vExtra, 1.0);
+  float deepT = clamp((depth - 1.0) / 6.0, 0.0, 1.0);
+  vec3 albedo = mix(tex.rgb, tex.rgb * vec3(0.38, 0.52, 0.78), deepT);
+  vec3 light = shadingLight(vec3(sky) * uSkyTint, blkCol, vWorldPos, N, skyCurved, vDist);
+  light = max(light, vec3(0.035)) + vec3(uFlash);
+  vec3 col = albedo * light * vShade;
+  float ndv = max(dot(N, V), 0.0);
+  float F = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
+  vec3 refl = skyGradient(reflect(-V, N)) * skyCurved * mix(0.6, 1.0, uSkyLight);
+  col = mix(col, refl, F * 0.92);
+  col += sunSpecular(vWorldPos, N, gN, V, 0.10, 0.0, albedo, skyCurved, vDist);
+  float alpha = tex.a * mix(0.66, 0.94, clamp((depth - 1.0) / 5.0, 0.0, 1.0));
+  alpha = mix(alpha, 1.0, F * 0.8);
+  vec3 fogC = fogColorDir(uFogColor, -V);
+#else
+  vec3 light = max(vec3(sky) * uSkyTint, blkCol);
+  light = max(light, vec3(0.035)) + vec3(uFlash);
+  vec3 col = tex.rgb * light * vShade;
+  float alpha = tex.a * uOpacity;
+  vec3 fogC = uFogColor;
+#endif
+  float f = smoothstep(uFogNear, uFogFar, vDist);
+  col = mix(col, fogC, f);
+  gl_FragColor = vec4(col, alpha);
+}`;
+
 export function makeWorldMaterial(atlas, opts = {}) {
-  return new THREE.ShaderMaterial({
+  const m = new THREE.ShaderMaterial({
+    defines: { FANCY: 0, MATERIAL_MAPS: 0 },
     uniforms: {
       map: { value: atlas },
       uSkyLight: { value: 1 },
@@ -77,14 +213,28 @@ export function makeWorldMaterial(atlas, opts = {}) {
       uShadeTable: { value: SHADE_TABLE },
     },
     vertexShader: VERT,
-    fragmentShader: FRAG,
+    fragmentShader: opts.water ? WATER_FRAG : FRAG,
     transparent: !!opts.transparent,
     side: opts.side ?? THREE.FrontSide,
     depthWrite: true,
   });
+  bindShading(m);
+  bindMaterialMaps(m);
+  return m;
 }
 
 const COST_EMA = 0.2; // smoothing of the per-step cost estimates
+
+// AABB against inward-facing planes (same convention as THREE.Frustum.intersectsBox).
+const _pv = new THREE.Vector3();
+function boxInPlanes(planes, box) {
+  for (let i = 0; i < planes.length; i++) {
+    const n = planes[i].normal;
+    _pv.set(n.x > 0 ? box.max.x : box.min.x, n.y > 0 ? box.max.y : box.min.y, n.z > 0 ? box.max.z : box.min.z);
+    if (planes[i].distanceToPoint(_pv) < 0) return false;
+  }
+  return true;
+}
 
 export class Terrain {
   constructor(world, scene, atlas) {
@@ -94,7 +244,7 @@ export class Terrain {
     scene.add(this.group);
     this.mesher = new Mesher();
     this.material = makeWorldMaterial(atlas, { alphaTest: 0.5 });
-    this.waterMaterial = makeWorldMaterial(atlas, { alphaTest: 0.0, opacity: 0.78, transparent: true, side: THREE.DoubleSide });
+    this.waterMaterial = makeWorldMaterial(atlas, { alphaTest: 0.0, opacity: 0.78, transparent: true, side: THREE.DoubleSide, water: true });
     this.renderDistance = DEFAULT_RENDER_DISTANCE;
     this.lastCx = null;
     this.lastCz = null;
@@ -217,6 +367,7 @@ export class Terrain {
       m.updateMatrix();
       m.frustumCulled = true;
       if (isWater) m.renderOrder = 10;
+      else m.layers.enable(SHADOW_LAYER);   // solid chunks cast sun shadows (render/shadows.js); water does not
       m.chunkBox = new THREE.Box3();
       m.chunkInRange = true; // meshes are only built inside the render distance
       this.group.add(m);
@@ -232,16 +383,19 @@ export class Terrain {
   }
 
   // Hides in-range chunk meshes whose world AABB is outside the camera frustum (exact: such a mesh
-  // contributes no fragments). Called for every render of the scene.
+  // contributes no fragments). Called for every render of the scene, including the shadow cameras, which may
+  // add inward-facing planes (camera.userData.cullPlanes: the view slice swept toward the light) so only chunks
+  // that can actually shadow something visible are drawn into a cascade.
   cullChunks(camera) {
     this._cullRuns++;
     if (!this.frustumCullChunks) return;
     this._projScreen.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     const fr = this._frustum.setFromProjectionMatrix(this._projScreen);
+    const extra = camera.userData.cullPlanes;
     const children = this.group.children;
     for (let i = 0; i < children.length; i++) {
       const m = children[i];
-      if (m.chunkInRange) m.visible = fr.intersectsBox(m.chunkBox);
+      if (m.chunkInRange) m.visible = fr.intersectsBox(m.chunkBox) && (!extra || boxInPlanes(extra, m.chunkBox));
     }
   }
 
