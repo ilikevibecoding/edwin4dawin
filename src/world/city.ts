@@ -24,10 +24,11 @@ function unitBox(): THREE.BufferGeometry {
   g.translate(0, 0.5, 0);
   return withPart(g, () => 0);
 }
+/** Round prisms carry aPart = -1 so the facade shader unwraps its window grid around the drum (facade.ts). */
 function unitPrism(segments: number, rotOffset: number): THREE.BufferGeometry {
   const g = new THREE.CylinderGeometry(0.5, 0.5, 1, segments, 1, false, rotOffset);
   g.translate(0, 0.5, 0);
-  return withPart(g, () => 0);
+  return withPart(g, () => -1);
 }
 /** Tapered box (pyramidal crowns, masts): top face scaled to `topScale`. */
 function unitFrustum(topScale = 0.3): THREE.BufferGeometry {
