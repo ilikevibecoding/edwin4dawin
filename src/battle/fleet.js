@@ -5,6 +5,13 @@
 // of sample points on the hull (for impact placement), bounds: { radius } }. Every part of every LOD is one
 // InstancedMesh; each frame ships are bucketed by camera distance into LOD 0/1/2 and their matrices and
 // colours written into that LOD's meshes, so a fleet of forty ships costs (parts × lods) draw calls.
+//
+// Turrets: a model may carry `turretTypes: { heavy: { body, barrels, bodyMaterial, barrelMaterial,
+// pivotY, barrelLen, yawLimit, pitchMin, pitchMax, rate } }` (geometries in turret space: up +Y, rest aim
+// -Z, body pivot at the origin, barrel elevation pivot at (0, pivotY, 0)) and `turrets: [{ type, pos, up,
+// forward }]` in ship space. Bodies and barrels are their own InstancedMeshes (two draw calls per type per
+// class) that yaw and pitch toward the ship's target at a limited rate, and hardpoints with `turret: k`
+// fire from the barrel tips, so bolts leave the guns that are visibly tracking.
 import * as THREE from "three";
 
 export const LOD_RANGES = [2200, 9000, Infinity]; // metres: lod0 < 2.2 km, lod1 < 9 km, lod2 beyond
@@ -12,8 +19,16 @@ export const LOD_RANGES = [2200, 9000, Infinity]; // metres: lod0 < 2.2 km, lod1
 const _m = new THREE.Matrix4();
 const _inv = new THREE.Matrix4();
 const _v = new THREE.Vector3();
+const _v2 = new THREE.Vector3();
 const _q = new THREE.Quaternion();
+const _q2 = new THREE.Quaternion();
+const _qy = new THREE.Quaternion();
+const _qx = new THREE.Quaternion();
 const _c = new THREE.Color();
+const _one = new THREE.Vector3(1, 1, 1);
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
+const X_AXIS = new THREE.Vector3(1, 0, 0);
+const TURRET_REST_PITCH = 0.12;
 
 export class Ship {
   constructor(model, opts) {
@@ -37,6 +52,11 @@ export class Ship {
     this.target = null;
     this.lod = 0;
     this.alive = true;
+    // per-turret yaw/pitch (turret space), driven toward the target by Fleet.update
+    const nt = model.turrets ? model.turrets.length : 0;
+    this.turretState = new Float32Array(nt * 2);
+    for (let k = 0; k < nt; k++)
+      this.turretState[k * 2 + 1] = TURRET_REST_PITCH;
     this.updateMatrix();
   }
   updateMatrix() {
@@ -45,10 +65,39 @@ export class Ship {
   localToWorld(local, out) {
     return out.copy(local).applyMatrix4(this.matrix);
   }
-  // world position of hardpoint i and its outward direction
+  // world pivot and orientation (rest frame) of turret k: outQ = ship rotation × turret basis
+  turretFrame(k, outPos, outQ) {
+    const t = this.model.turrets[k];
+    outPos.set(t.pos[0], t.pos[1], t.pos[2]).applyMatrix4(this.matrix);
+    if (outQ) outQ.copy(this.quaternion).multiply(t._basis);
+    return outPos;
+  }
+  // world aim direction of turret k from its current yaw/pitch
+  turretAim(k, out) {
+    const yaw = this.turretState[k * 2];
+    const pitch = this.turretState[k * 2 + 1];
+    const t = this.model.turrets[k];
+    _q.copy(this.quaternion).multiply(t._basis);
+    _qy.setFromAxisAngle(Y_AXIS, yaw);
+    _qx.setFromAxisAngle(X_AXIS, pitch);
+    _q.multiply(_qy).multiply(_qx);
+    return out.set(0, 0, -1).applyQuaternion(_q);
+  }
+  // world position of hardpoint i and its rest (masking) direction; turret hardpoints fire from the
+  // barrel tips wherever the turret is currently pointing
   hardpointWorld(i, outPos, outDir) {
     const h = this.model.hardpoints[i];
-    outPos.set(h.pos[0], h.pos[1], h.pos[2]).applyMatrix4(this.matrix);
+    if (h.turret !== undefined && this.model.turrets) {
+      const k = h.turret;
+      const t = this.model.turrets[k];
+      const def = this.model.turretTypes[t.type];
+      this.turretFrame(k, outPos, _q2);
+      _qy.setFromAxisAngle(Y_AXIS, this.turretState[k * 2]);
+      _q2.multiply(_qy);
+      outPos.add(_v2.set(0, def.pivotY || 0, 0).applyQuaternion(_q2));
+      this.turretAim(k, _v2);
+      outPos.addScaledVector(_v2, def.barrelLen || 20);
+    } else outPos.set(h.pos[0], h.pos[1], h.pos[2]).applyMatrix4(this.matrix);
     if (outDir)
       outDir
         .set(h.dir[0], h.dir[1], h.dir[2])
@@ -106,9 +155,110 @@ export class Fleet {
       this.group.add(im);
       lods[part.lod].push(im);
     }
-    const entry = { model, lods, ships: [], capacity };
+    const entry = { model, lods, ships: [], capacity, turrets: null };
+    if (model.turrets && model.turrets.length && model.turretTypes) {
+      // precompute each turret's basis (up +Y, rest aim -Z) and create body/barrel meshes per type
+      for (const t of model.turrets) {
+        const up = new THREE.Vector3(...(t.up || [0, 1, 0])).normalize();
+        const fwd = new THREE.Vector3(...(t.forward || [0, 0, -1]));
+        fwd.addScaledVector(up, -fwd.dot(up)).normalize();
+        if (fwd.lengthSq() < 1e-6)
+          fwd.set(0, 0, -1).addScaledVector(up, -up.z).normalize();
+        const right = new THREE.Vector3().crossVectors(fwd, up).normalize();
+        const m = new THREE.Matrix4().makeBasis(
+          right,
+          up,
+          fwd.clone().negate(),
+        );
+        t._basis = new THREE.Quaternion().setFromRotationMatrix(m);
+      }
+      entry.turrets = {};
+      for (const [type, def] of Object.entries(model.turretTypes)) {
+        const idx = [];
+        model.turrets.forEach((t, k) => t.type === type && idx.push(k));
+        if (!idx.length) continue;
+        const cap = capacity * idx.length;
+        const mk = (geo, mat, name) => {
+          const im = new THREE.InstancedMesh(geo, mat, cap);
+          im.name = `${model.id}_turret_${type}_${name}`;
+          im.count = 0;
+          im.frustumCulled = false;
+          im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+          this.group.add(im);
+          return im;
+        };
+        entry.turrets[type] = {
+          def,
+          idx,
+          body: def.body ? mk(def.body, def.bodyMaterial, "body") : null,
+          barrels: def.barrels
+            ? mk(def.barrels, def.barrelMaterial, "barrels")
+            : null,
+        };
+      }
+    }
     this.classes.set(model.id, entry);
     return entry;
+  }
+
+  // Aim every turret of a ship at its target (rate-limited yaw/pitch in turret space), then write the
+  // body and barrel instance matrices. Only ships at LOD 0/1 are drawn; aiming runs for all so hardpoints
+  // fire from the right place even when the guns are sub-pixel.
+  _updateTurrets(entry, s, dt, draw) {
+    const model = s.model;
+    const target = s.target && s.target.alive ? s.target.position : null;
+    for (const [type, T] of Object.entries(entry.turrets)) {
+      const def = T.def;
+      const rate = def.rate || 0.6;
+      const yawLimit = def.yawLimit ?? Math.PI;
+      const pMin = def.pitchMin ?? -0.08;
+      const pMax = def.pitchMax ?? 1.25;
+      for (const k of T.idx) {
+        const t = model.turrets[k];
+        s.turretFrame(k, _v, _q2); // pivot + rest orientation
+        let goalYaw = 0;
+        let goalPitch = TURRET_REST_PITCH;
+        if (target) {
+          _v2.copy(target).sub(_v).applyQuaternion(_q.copy(_q2).invert());
+          const h = Math.hypot(_v2.x, _v2.z);
+          goalYaw = Math.atan2(-_v2.x, -_v2.z);
+          goalPitch = Math.atan2(_v2.y, h);
+          if (yawLimit < Math.PI)
+            goalYaw = THREE.MathUtils.clamp(goalYaw, -yawLimit, yawLimit);
+          goalPitch = THREE.MathUtils.clamp(goalPitch, pMin, pMax);
+        }
+        const st = s.turretState;
+        let dy = goalYaw - st[k * 2];
+        if (yawLimit >= Math.PI) dy = Math.atan2(Math.sin(dy), Math.cos(dy)); // shortest way round
+        const step = rate * dt;
+        st[k * 2] += THREE.MathUtils.clamp(dy, -step, step);
+        if (yawLimit >= Math.PI)
+          st[k * 2] = Math.atan2(Math.sin(st[k * 2]), Math.cos(st[k * 2]));
+        st[k * 2 + 1] += THREE.MathUtils.clamp(
+          goalPitch - st[k * 2 + 1],
+          -step,
+          step,
+        );
+        if (!draw) continue;
+        _qy.setFromAxisAngle(Y_AXIS, st[k * 2]);
+        _q.copy(_q2).multiply(_qy);
+        if (T.body) {
+          _m.compose(_v, _q, _one);
+          T.body.setMatrixAt(T.n, _m);
+        }
+        if (T.barrels) {
+          _v2
+            .set(0, def.pivotY || 0, 0)
+            .applyQuaternion(_q)
+            .add(_v);
+          _qx.setFromAxisAngle(X_AXIS, st[k * 2 + 1]);
+          _q.multiply(_qx);
+          _m.compose(_v2, _q, _one);
+          T.barrels.setMatrixAt(T.n, _m);
+        }
+        T.n++;
+      }
+    }
   }
 
   add(model, opts) {
@@ -138,11 +288,13 @@ export class Fleet {
     this.stats.drawn = [0, 0, 0];
     for (const entry of this.classes.values()) {
       const counts = [0, 0, 0];
+      if (entry.turrets) for (const T of Object.values(entry.turrets)) T.n = 0;
       for (const s of entry.ships) {
         if (!s.alive) continue;
         const L = s.lod;
         const i = counts[L]++;
         if (i >= entry.capacity) continue;
+        if (entry.turrets) this._updateTurrets(entry, s, dt, L < 2);
         // damage darkens and reddens the tint slightly; dead ships go dark
         const k = Math.max(0.25, 1 - s.damage * 0.08);
         _c.copy(s.tint).multiplyScalar(k);
@@ -159,6 +311,14 @@ export class Fleet {
         }
         this.stats.drawn[L] += counts[L];
       }
+      if (entry.turrets)
+        for (const T of Object.values(entry.turrets)) {
+          for (const im of [T.body, T.barrels]) {
+            if (!im) continue;
+            im.count = T.n;
+            im.instanceMatrix.needsUpdate = true;
+          }
+        }
     }
   }
 

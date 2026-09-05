@@ -198,6 +198,8 @@ export function assemble(
     engines = [],
     bounds = null,
     surfaceFrom = null,
+    turretTypes = null,
+    turrets = null,
   },
   mats,
 ) {
@@ -236,6 +238,36 @@ export function assemble(
     (bb.max.y + bb.min.y) / 2 || 0,
     (bb.max.z + bb.min.z) / 2 || 0,
   ];
+  // turret geometries get the same object-space plating UVs and tints as the instanced parts
+  let turretDefs = null;
+  if (turretTypes && turrets && turrets.length) {
+    turretDefs = {};
+    for (const [type, def] of Object.entries(turretTypes)) {
+      const prep = (geo, color, texel) => {
+        if (!geo) return null;
+        let g = geo.index ? geo.toNonIndexed() : geo;
+        if (!g.attributes.normal) g.computeVertexNormals();
+        if (!g.attributes.uv || def.planarUV !== false)
+          g = planarUV(g, texel || 1 / 5);
+        if (!g.attributes.color || color !== undefined)
+          tintGeometry(g, color === undefined ? 0xffffff : color);
+        g.computeBoundingSphere();
+        return g;
+      };
+      turretDefs[type] = {
+        body: prep(def.body, def.bodyColor, def.texel),
+        barrels: prep(def.barrels, def.barrelColor, def.texel),
+        bodyMaterial: mats[def.bodyMaterial || "hull"],
+        barrelMaterial: mats[def.barrelMaterial || "dark"],
+        pivotY: def.pivotY || 0,
+        barrelLen: def.barrelLen || 20,
+        yawLimit: def.yawLimit ?? Math.PI,
+        pitchMin: def.pitchMin ?? -0.08,
+        pitchMax: def.pitchMax ?? 1.25,
+        rate: def.rate || 0.6,
+      };
+    }
+  }
   return {
     id,
     side,
@@ -245,6 +277,15 @@ export function assemble(
     engines,
     bounds: { radius, half, centre },
     surface,
+    turretTypes: turretDefs,
+    turrets: turretDefs
+      ? turrets.map((t) => ({
+          type: t.type,
+          pos: t.pos,
+          up: t.up || [0, 1, 0],
+          forward: t.forward || [0, 0, -1],
+        }))
+      : null,
   };
 }
 
