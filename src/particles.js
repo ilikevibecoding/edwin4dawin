@@ -1,6 +1,6 @@
 // GPU point-sprite particles: block break chips (atlas-textured), smoke, dust.
 import * as THREE from 'three';
-import { BLOCKS } from './blocks.js';
+import { BLOCKS, B } from './blocks.js';
 import { tileUV } from './textures.js';
 import { SHARED } from './entityMaterial.js';
 
@@ -116,6 +116,17 @@ export class Particles {
       const sub = ts / 4;
       const uv = [tu + Math.floor(Math.random() * 3) * sub, tv + Math.floor(Math.random() * 3) * sub, sub, 0];
       this.spawn(px, py, pz, vx, vy, vz, 0.12 + Math.random() * 0.08, 0.7 + Math.random() * 0.6, 0, uv, [1, 1, 1], 1);
+    }
+  }
+
+  // Water splash burst (bodies hitting the flood, wave impacts)
+  splash(x, y, z, n = 10, power = 1) {
+    const [tu, tv, ts] = tileUV(BLOCKS[B.WATER].tex[2]);
+    const sub = ts / 4;
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * Math.PI * 2, r = Math.random() * 0.6;
+      const uv = [tu + Math.floor(Math.random() * 3) * sub, tv + Math.floor(Math.random() * 3) * sub, sub, 0];
+      this.spawn(x + Math.cos(a) * r, y + Math.random() * 0.3, z + Math.sin(a) * r, Math.cos(a) * (1 + Math.random() * 2) * power, (2.5 + Math.random() * 3.5) * power, Math.sin(a) * (1 + Math.random() * 2) * power, 0.12 + Math.random() * 0.1, 0.5 + Math.random() * 0.5, 0, uv, [0.85, 0.92, 1], 0.95);
     }
   }
 

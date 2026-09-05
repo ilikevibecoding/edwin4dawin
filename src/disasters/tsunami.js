@@ -547,9 +547,11 @@ export class Tsunami extends Disaster {
       if (ahead <= SWEEP_AHEAD && ahead > -2 && p.pos.y < this.g.crestTop) {
         this.playerHit = true;
         const sp = this.params.speed, I = this.params.intensity;
-        const k = clamp(sp * 1.5 + 4 + 6 * I, 8, 22);
+        const k = clamp(sp * 0.6 + 3 * I, 4, 12); // lands back inside the crest instead of on dry street ahead of it
         p.impulse(this.g.dx * k, 7 + 3 * I, this.g.dz * k);
         p.fallDistance = 0;
+        p.swept = 4;
+        if (this.game.particles) this.game.particles.splash(p.pos.x, p.pos.y + 0.5, p.pos.z, 24, 1.5);
         const dmg = Math.round(3 * I);
         if (dmg > 0) p.damage(dmg);
         this._queue(EV_HIT);

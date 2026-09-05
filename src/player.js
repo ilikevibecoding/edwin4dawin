@@ -132,6 +132,7 @@ export class Player {
     this.lastGroundBlock = B.GRASS;
     this.force = new THREE.Vector3(); // external acceleration (blocks/s^2) applied at the next tick
     this.lastImpact = 0;
+    this.swept = 0; // seconds of being tossed by a wave: buoyant and helpless
     // creative flight (double-tap jump toggles it, like Minecraft)
     this.flying = false;
     this.jumpWasDown = false;
@@ -188,6 +189,7 @@ export class Player {
     this.prevEyeHeight = this.eyeHeight;
     if (this.hurtTime > 0) this.hurtTime--;
     if (this.jumpCooldown > 0) this.jumpCooldown--;
+    if (this.swept > 0) this.swept -= 0.05;
 
     if (this.dead) {
       this.deathTimer++;
@@ -295,6 +297,7 @@ export class Player {
     } else if (this.inWater) {
       this.vel.x *= 0.8; this.vel.y *= 0.8; this.vel.z *= 0.8;
       this.vel.y -= 0.02;
+      if (this.swept > 0) { this.vel.y += 0.055; if (this.eyeUnderwater) this.vel.y += 0.03; } // tossed by the wave: bob back up to the surface
       this.fallDistance = 0;
     } else {
       this.vel.y -= 0.08;

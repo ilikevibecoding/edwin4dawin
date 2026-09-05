@@ -172,6 +172,7 @@ export class Game {
     this.npcs.game = this;
     await this.nextFrame();
     this.animals = new AnimalManager(this.scene, this.world, this.town, this.audio);
+    this.animals.particles = this.particles;
     this.train = new Train(this.scene, this.world, this.audio, this.particles);
     // disasters: deterministic, journaled, admin-controlled
     this.disasters = new DisasterManager(this);
@@ -462,6 +463,8 @@ export class Game {
     }
     this.player.tick(ctrl);
     for (const ev of this.player.events) this.handlePlayerEvent(ev);
+    // first time the player is held under water for a while: one hint (Minecraft sinks you unless you hold jump)
+    if (this.player.eyeUnderwater && !this.player.flying) { this.underwaterTicks = (this.underwaterTicks || 0) + 1; if (this.underwaterTicks === 50 && !this.swimHintShown) { this.swimHintShown = true; this.hud.addMessage('Hold Space to swim up.'); } } else this.underwaterTicks = 0;
     this.player.events.length = 0;
     if (this.player.dead && this.hud.screen !== 'death') this.openScreen('death');
 

@@ -297,7 +297,8 @@ export class NPCManager {
       const dx = npc.pos.x - x, dz = npc.pos.z - z;
       if (dx * dx + dz * dz > r2 || npc.swept > 0) continue;
       const k = strength * npc.rng.range(0.7, 1.15);
-      this.applyImpulse(npc, dirX * k + npc.rng.range(-3, 3), 5 + k * 0.35, dirZ * k + npc.rng.range(-3, 3));
+      this.applyImpulse(npc, dirX * k + npc.rng.range(-3, 3), 7 + k * 0.35, dirZ * k + npc.rng.range(-3, 3));
+      if (this.game && this.game.particles) this.game.particles.splash(npc.pos.x, npc.pos.y + 0.3, npc.pos.z, 12, 1.2);
       npc.air.spin = npc.rng.range(-12, 12);
       npc.swept = 4 + npc.rng.range(0, 2);
       npc.panic = true; npc.panicUntil = Math.max(npc.panicUntil, this.tickCount + 20 * 90);
@@ -510,7 +511,8 @@ export class NPCManager {
     if (a.vy < 0 && w.getBlock(Math.floor(npc.pos.x), Math.floor(ny + 0.3), Math.floor(npc.pos.z)) === B.WATER) {
       // splashed down into water: no stun, the current takes over
       npc.pos.y = ny; npc.air = null; npc.airSpin = 0; npc.swept = Math.max(npc.swept || 0, 3);
-      this.audio.step('gravel', npc.pos, 1.2);
+      if (this.game && this.game.particles) this.game.particles.splash(npc.pos.x, ny + 0.4, npc.pos.z, 14, 1);
+      this.audio.splash(npc.pos);
       return;
     }
     if (a.vy < 0 && (solidAt(npc.pos.x, ny, npc.pos.z) || ny < 1)) {
@@ -552,6 +554,11 @@ export class NPCManager {
       let top = feet === B.WATER ? Math.floor(npc.pos.y + 0.2) : Math.floor(npc.pos.y + 1.0);
       while (this.world.getBlock(Math.floor(npc.pos.x), top + 1, Math.floor(npc.pos.z)) === B.WATER && top < npc.pos.y + 6) top++;
       let surface = top + 0.9 - 1.3; // eyes above the surface
+      const bx = Math.floor(npc.pos.x), bz = Math.floor(npc.pos.z);
+      // the flooded floor under the body (any solid, incl. slabs/fences/panes): nobody may sink below it
+      let groundTop = -1;
+      for (let yy = top; yy >= top - 8 && yy >= 0; yy--) { if (BLOCKS[this.world.getBlock(bx, yy, bz)].solid) { groundTop = yy + 1; break; } }
+      if (groundTop >= 0 && npc.pos.y < groundTop - 0.05) npc.pos.y = groundTop; // was pushed into the street bed: pop up
       if (npc.swept > 0) {
         // helpless: bobbing under and over the surface, spun around and carried hard by the current
         surface += -0.55 + 0.45 * Math.sin(this.tickCount * 0.35 + npc.id * 1.7);
@@ -562,13 +569,13 @@ export class NPCManager {
       }
       // a ceiling right above the water (porch awning, upper floor): keep the head out of the planks and
       // swim for open sky instead of treading water under it
-      const bx = Math.floor(npc.pos.x), bz = Math.floor(npc.pos.z);
       let ceil = -1;
       for (let yy = top + 1; yy <= top + 3; yy++) if (BLOCKS[this.world.getBlock(bx, yy, bz)].solid) { ceil = yy; break; }
       if (ceil >= 0) {
         surface = Math.min(surface, ceil - 1.85);
         if (!npc.target || npc.target.kind !== 'escape') { const t = this.openWaterTarget(npc, top); if (t) { npc.target = t; npc.path = null; npc.state = 'walk'; npc.speed = SWIM_SPEED; npc.sitting = false; } }
       }
+      if (groundTop >= 0) surface = Math.max(surface, groundTop + 0.02);
       npc.pos.y += (surface - npc.pos.y) * Math.min(1, dt * 4);
       if (this.alertInfo && this.alertInfo.flowFn) { const f = this.alertInfo.flowFn(npc.pos.x, npc.pos.z); if (f) { this.tryMoveWater(npc, f[0] * dt, f[1] * dt); } }
       npc.trapped += dt;

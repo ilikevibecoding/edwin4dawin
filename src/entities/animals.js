@@ -240,7 +240,8 @@ export class AnimalManager {
       const dx = a.pos.x - x, dz = a.pos.z - z;
       if (dx * dx + dz * dz > r2 || (a.swept || 0) > 0) continue;
       const k = strength * a.rng.range(0.6, 1.1) * (a.spec.height > 1.2 ? 0.7 : 1.1);
-      this.applyImpulse(a, dirX * k + a.rng.range(-3, 3), 4 + k * 0.35, dirZ * k + a.rng.range(-3, 3));
+      this.applyImpulse(a, dirX * k + a.rng.range(-3, 3), 6 + k * 0.35, dirZ * k + a.rng.range(-3, 3));
+      if (this.particles) this.particles.splash(a.pos.x, a.pos.y + 0.3, a.pos.z, 10, 1.1);
       a.air.spin = a.rng.range(-10, 10);
       a.swept = 4 + a.rng.range(0, 2);
       a.panic = true; a.panicUntil = performance.now() + 90000;
@@ -266,6 +267,8 @@ export class AnimalManager {
     if (!solidAt(a.pos.x, a.pos.y + 0.5, nz)) a.pos.z = nz; else air.vz *= -0.3;
     if (air.vy < 0 && w.getBlock(Math.floor(a.pos.x), Math.floor(ny + 0.3), Math.floor(a.pos.z)) === B.WATER) {
       a.pos.y = ny; a.air = null; a.airSpin = 0; a.swept = Math.max(a.swept || 0, 3);   // splashdown: the current takes over
+      if (this.particles) this.particles.splash(a.pos.x, ny + 0.3, a.pos.z, 12, 1);
+      this.audio.splash(a.pos);
       return;
     }
     if (air.vy < 0 && (solidAt(a.pos.x, ny, a.pos.z) || ny < 1)) {
@@ -303,7 +306,14 @@ export class AnimalManager {
         while (this.world.getBlock(Math.floor(a.pos.x), top + 1, Math.floor(a.pos.z)) === B.WATER && top < a.pos.y + 6) top++;
         const bob = (a.swept || 0) > 0 ? -0.4 + 0.4 * Math.sin(performance.now() * 0.007 + a.id * 2) : 0;
         if ((a.swept || 0) > 0) { a.targetYaw += dt * 3; a.state = 'idle'; a.timer = Math.max(a.timer, 0.5); }
-        a.pos.y += (top + 0.9 - a.spec.height * 0.55 + bob - a.pos.y) * Math.min(1, dt * 4);
+        // never below the flooded floor (slabs, fences and panes included)
+        const abx = Math.floor(a.pos.x), abz = Math.floor(a.pos.z);
+        let groundTop = -1;
+        for (let yy = top; yy >= top - 8 && yy >= 0; yy--) { if (BLOCKS[this.world.getBlock(abx, yy, abz)].solid) { groundTop = yy + 1; break; } }
+        if (groundTop >= 0 && a.pos.y < groundTop - 0.05) a.pos.y = groundTop;
+        let target = top + 0.9 - a.spec.height * 0.55 + bob;
+        if (groundTop >= 0) target = Math.max(target, groundTop + 0.02);
+        a.pos.y += (target - a.pos.y) * Math.min(1, dt * 4);
         if (this.alertInfo && this.alertInfo.flowFn) { const f = this.alertInfo.flowFn(a.pos.x, a.pos.z); if (f && !BLOCKS_SOLID(this.world, a.pos.x + f[0] * dt, a.pos.y + 0.5, a.pos.z + f[1] * dt)) { a.pos.x += f[0] * dt; a.pos.z += f[1] * dt; } }
       }
       if (far) continue;
