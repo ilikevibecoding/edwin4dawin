@@ -10,6 +10,7 @@ import * as THREE from "three";
 export const LOD_RANGES = [2200, 9000, Infinity]; // metres: lod0 < 2.2 km, lod1 < 9 km, lod2 beyond
 
 const _m = new THREE.Matrix4();
+const _inv = new THREE.Matrix4();
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
 const _c = new THREE.Color();
@@ -54,6 +55,19 @@ export class Ship {
         .applyQuaternion(this.quaternion)
         .normalize();
     return outPos;
+  }
+  // true when a world point lies inside the ship's object-space bounding box (scaled by `margin`)
+  containsPoint(worldPoint, margin = 1) {
+    const b = this.model.bounds;
+    if (!b.half)
+      return worldPoint.distanceTo(this.position) < b.radius * 0.5 * margin;
+    _inv.copy(this.matrix).invert();
+    _v.copy(worldPoint).applyMatrix4(_inv);
+    return (
+      Math.abs(_v.x - b.centre[0]) < b.half[0] * margin &&
+      Math.abs(_v.y - b.centre[1]) < b.half[1] * margin &&
+      Math.abs(_v.z - b.centre[2]) < b.half[2] * margin
+    );
   }
   // a random point on the hull surface (world), for impacts and fires
   randomSurfacePoint(out, rand = Math.random) {

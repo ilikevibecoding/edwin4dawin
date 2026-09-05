@@ -220,6 +220,20 @@ export function assemble(
   }
   const radius = bounds ? bounds.radius : length * 0.55;
   const surface = hullGeo ? sampleSurface(hullGeo, 600, 7) : new Float32Array();
+  // object-space box over every LOD-0 part: cameras and fighters use it to stay outside the hull
+  const bb = new THREE.Box3();
+  for (const p of out)
+    if (p.lod === 0) bb.expandByObject(new THREE.Mesh(p.geometry));
+  const half = [
+    (bb.max.x - bb.min.x) / 2 || 1,
+    (bb.max.y - bb.min.y) / 2 || 1,
+    (bb.max.z - bb.min.z) / 2 || 1,
+  ];
+  const centre = [
+    (bb.max.x + bb.min.x) / 2 || 0,
+    (bb.max.y + bb.min.y) / 2 || 0,
+    (bb.max.z + bb.min.z) / 2 || 0,
+  ];
   return {
     id,
     side,
@@ -227,7 +241,7 @@ export function assemble(
     parts: out,
     hardpoints,
     engines,
-    bounds: { radius },
+    bounds: { radius, half, centre },
     surface,
   };
 }
