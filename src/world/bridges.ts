@@ -654,8 +654,9 @@ const C_CAP: Rgb = [1.08, 1.08, 1.07];       // parapet cap: pale, catches the l
 const C_SOFFIT: Rgb = [0.86, 0.86, 0.86];
 const C_UNDER: Rgb = [0.78, 0.78, 0.79];
 const C_WET: Rgb = [0.5, 0.5, 0.52];         // tidal band on the columns
-const C_PYLON: Rgb = [0.84, 0.825, 0.79];    // pylon legs: warm weathered concrete, a step below the deck so they do not bleach to white in full sun
-const C_ANCHOR: Rgb = [0.64, 0.63, 0.61];    // anchorage zone of the legs: darker steel-faced concrete where the stays enter
+const C_PYLON: Rgb = [0.66, 0.645, 0.61];    // pylon legs and piers: warm weathered concrete (albedo ~0.3, like the pavement) so the sunlit faces
+                                             // do not bleach to white and the lift bands / streaks survive tonemapping
+const C_ANCHOR: Rgb = [0.50, 0.49, 0.47];    // anchorage zone of the legs: darker steel-faced concrete where the stays enter
 const C_PROXY: Rgb = [0.34, 0.34, 0.38];       // distance pier proxies: the shaded side of a pier as seen from afar
 const C_PROXY_SOFFIT: Rgb = [0.22, 0.22, 0.26]; // the deck's underside shadow line between the piers
 const C_FOOTING: Rgb = [0.74, 0.75, 0.76];
