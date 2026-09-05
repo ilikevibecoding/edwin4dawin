@@ -1065,3 +1065,69 @@ to 4 m if the night ground stays warm, the second gate post a step less silver.
 `80cb5e6`. Three blind critics score it against round 2; if the three blockers
 read as closed and no family drops two points, round 4 passes the gate the
 first time and rounds 5–10 begin on the consensus.
+
+## Gauntlet round 4 — verdict
+
+**Pass, first time.** Three blind critics on 103 frames of `80cb5e6` against
+round 2 (`gauntlet/round4/`). Every family flat or up; Materials — the round's
+category — up in every family that can show it for A and B and in three for C;
+the only drops are single points on new artefacts (the night light bar for B
+and C, glass see-through for A, the dusk contact decal for C). Means 5.67 →
+6.19, 5.70 → 6.30, 5.44 → 5.83.
+
+### What the three agree on
+
+The lion is the weakest object in the game and all three say why in the same
+words: a constant-radius body with Gaussian mounds where a scapula plane and a
+hip knuckle should be, fur that is an isotropic mottle with no rim response, eyes
+proud of the face. The night hero has three things in it brighter than anything
+real: the light bar, and two discs in the sky. The hills lost their cobalt but
+not their value error — into the sun they are under the floor, with the sun
+behind they meet the sky. The shade under the mess is right on the open floor
+and a stop and a half too deep in the pockets. The water hole is mud.
+
+### Investigated rather than averaged
+
+The discs were the interesting one. A read a moon with no disc, B a moon and a
+bloomed star, C the headlamp beams' slices. On a served build they survive
+hiding the sky (no stars, no moon), the dust points, every scene root and every
+post pass; the moon projects to (1 490, −1 385) at 51° elevation with the camera
+pitched 2.4°, so it is not in the frame. With everything but the lights hidden
+the frame holds a row of cool discs along the light bar's line and a row of
+warm ones along the headlamps', each stepping away from its lamp and shrinking.
+`fast` draws a beam as twelve cross-section quads spaced by a 1.35 power; from
+55–65° off-axis each slice's bright core is its own soft disc. (My own hide of
+the beam group had not held: `update()` sets it visible every frame.) C had the
+mechanism; A and B had the moon.
+
+Two readings that all three critics made were tool defects, and old ones. The
+trailer has been framed through a tent roof since round 2 because the fleet
+tool's occluder raycast needed a `Raycaster` it imported from `/node_modules`,
+which only the dev server serves — every baseline is shot from a preview, so the
+camp's tents never counted. The walk strip stepped 0.12 s from six metres and
+the lion moved a quarter of the frame in eight frames; every gait reading this
+round — stride, flexion, head bob, tail — was made on seven tenths of one cycle.
+Both are fixed and the incumbent frames re-shot.
+
+Also checked: the crown knobs one critic called defaults are on (the dusk crown
+is 3.2 st under the sky *with* them, a cap problem); the pride plain is bald
+because the graze ring thins as well as shortens (A read the code and gave the
+fix); the lion head in the frames is the round-5 head (A suspected a mismatch —
+the side read stands as a finding); the mirror metric cannot pass a real
+reflection (the finding is the aim, 13° back of outboard, from the car
+builder's own report).
+
+### Process
+
+Fourteen orphaned preview servers from earlier gates were alive on the box: the
+gate killed the `npx` wrapper and not the node child. It kills the process group
+now. The rubric records the deploy/accept order — the live preview follows
+gated builds, acceptance needs a scored consensus, a rejection rolls the preview
+back the same day.
+
+### Next
+
+Round 5 is the rubric's lighting, shadows and reflections round, which is where
+the open items sit. Five builders are on the consensus briefs (lighting, hero
+car, lions, campground, vegetation) with terrain still out on its round 4; the
+HUD items are mine. Then `shots/round5/`, three critics against round 4.

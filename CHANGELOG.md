@@ -17,6 +17,48 @@ numbers the targets are about.
 
 ---
 
+## Gauntlet round 4 verdict — pass, first time
+
+**Build `80cb5e6` stays live.** Three blind critics scored it against round 2
+(`gauntlet/round4/critic_{A,B,C}.md`, consensus in `CONSENSUS.md`, 36 frames in
+`frames/`) and all three pass it: Materials up in every family that can show
+them, no category down more than one point, means 5.67 → 6.19 / 5.70 → 6.30 /
+5.44 → 5.83. The three round-2 blockers: stars **closed** (0.13–0.15 % of sky
+over Y 0.35 for the star field); hills **half** (saturation 0.42 → ≤ 0.24 and the
+cream band gone, but sun-facing crests at 1.01–1.24 of the sky and `lion_far`'s
+near ridge at 0.54–0.61 against a 0.72 floor); camp shade **half** (open floor
+1.5 st, on target; pockets under the tables 2.7–3.7).
+
+- **Investigated, not averaged.** The "two moons" in the night hero — A: a
+  moon with no disc, B: moon plus a bloomed star, C: beam slices — were probed
+  on a served build: they survive hiding the sky, the dust, every scene root
+  and every post pass; the moon is at 51° elevation, out of frame; with only
+  the lights left, a row of discs steps away from each lamp. They are the
+  headlamp beams' cross-section slices (12 at `fast`, 1.35-power spacing) seen
+  55–65° off-axis. The crown "defaults" one critic saw are on in the build
+  (`crownGrad 1.0, transPeak 2.5`) — the dusk crown is 3.2 st under the sky
+  with them on, which is a shader-cap problem. The pride plain is bald because
+  the graze ring thins as well as shortens. The lion head in the frames is the
+  round-5 head; from the side it still reads bear-like.
+- **Two tool defects, three rounds old, fixed.** The trailer was framed through
+  a tent roof because `fleetshots.mjs` built its occluder `Raycaster` from a
+  second three imported at `/node_modules`, which a preview server never
+  serves; `debugAPI.THREE` now carries the bundle's own (`7b83ecf`). The walk
+  strip stepped 0.12 s from 6 m — 0.84 m of travel, a quarter of the frame —
+  so no critic could judge planting or flexion; it steps 0.3 s from 8 m now
+  (`0fa387c`), two stride cycles across the frame, and the round-4 incumbent
+  is re-shot as `shots/round4/lions_walk_fixed/`.
+- **Carried into round 5 as blocking:** the night hero's hot spots (light bar
+  slab 1.4–6.9 k px of bloom, beam-slice discs); hills against the sky on all
+  four frames; shade pockets. **Weakest object in the game:** the lion
+  (Silhouette 5, Geometry 5, Materials 5 — "a large plush dog with lion eyes").
+- Process: the gate now kills its preview's whole process group (fourteen
+  orphaned servers were found alive, `d845bc3`); the rubric states the
+  deploy/accept order and the rollback rule.
+- Round 5 (lighting, shadows, reflections) is running on the consensus briefs:
+  lighting, hero car, lions, campground, vegetation, with terrain still out on
+  its round 4.
+
 ## Round 4, wave B — the plain, the camp, the lions' head and walk, the car's materials
 
 **Build `80cb5e6`** — live, smoke-tested (HUD reads `build 80cb5e6 · 2026-09-05 02:52Z`, zero page errors). Five landings on top of `4bdaba9`, each gated alone against HEAD, then the combined tree gated at fast/high/ultra with the interaction checks before the deploy.
