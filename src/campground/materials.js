@@ -4,6 +4,7 @@ import { deadWoodMaps } from '../textures/nature.js';
 import {
   ashMaps,
   canvasMaps,
+  canvasStainMap,
   chairClothMaps,
   charLogMaps,
   coalsGlowMap,
@@ -13,6 +14,7 @@ import {
   mapBoardMap,
   paintedSteelMaps,
   polyMaps,
+  postMaps,
   ropeMaps,
   savannaRockMaps,
   signMap,
@@ -31,8 +33,26 @@ import {
 const CANVAS_TRANSMIT = 0.13;
 function canvasTranslucency(shader) {
   shader.uniforms.uTransmit = { value: CANVAS_TRANSMIT };
+  shader.uniforms.uStain = { value: canvasStainMap() };
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nuniform float uTransmit;')
+    .replace('#include <common>', '#include <common>\nuniform float uTransmit;\nuniform sampler2D uStain;')
+    .replace(
+      '#include <map_fragment>',
+      `#include <map_fragment>
+      #ifdef USE_MAP
+      {
+        // A second, nine-metre layer over the one-metre weave tile: bleaching
+        // where the sun sits, dust run down in streaks, water rings. This is
+        // what stops the roof reading as a repeated tile at 1.5 m.
+        vec3 st = texture2D(uStain, vMapUv * 0.11 + vec2(0.31, 0.57)).rgb;
+        float fade = smoothstep(0.35, 0.75, st.r);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(1.24, 1.2, 1.1) + 0.025, fade * 0.55);
+        float streak = smoothstep(0.5, 0.85, st.g);
+        diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.78, 0.72, 0.62), streak * 0.45);
+        diffuseColor.rgb *= 1.0 - smoothstep(0.35, 0.7, st.b) * 0.16;
+      }
+      #endif`,
+    )
     .replace(
       '#include <lights_fragment_end>',
       `#include <lights_fragment_end>
@@ -43,7 +63,14 @@ function canvasTranslucency(shader) {
         float back = saturate(dot(-normal, directionalLights[0].direction));
         vec3 through = directionalLights[0].color * diffuseColor.rgb * back * uTransmit;
         #if defined(USE_SHADOWMAP) && NUM_DIR_LIGHT_SHADOWS > 0
-        through *= getShadow(directionalShadowMap[0], directionalLightShadows[0].shadowMapSize, directionalLightShadows[0].shadowIntensity, directionalLightShadows[0].shadowBias, directionalLightShadows[0].shadowRadius, vDirectionalShadowCoord[0]);
+        // The shadow term is the sun on the far side of the cloth, so it belongs
+        // here — but only partly: a canopy is lit through by the whole bright
+        // sky as well as the sun, and the shadow map does not know about that.
+        // Multiplying through by the raw term left the underside of a canopy
+        // that shadows itself at its own depth as black as the ground under it
+        // (round 2, critic C).
+        float sh = getShadow(directionalShadowMap[0], directionalLightShadows[0].shadowMapSize, directionalLightShadows[0].shadowIntensity, directionalLightShadows[0].shadowBias, directionalLightShadows[0].shadowRadius, vDirectionalShadowCoord[0]);
+        through *= mix(1.0, sh, 0.6);
         #endif
         reflectedLight.directDiffuse += through;
       }
@@ -66,6 +93,17 @@ let cached = null;
 
 const V2 = (s) => new THREE.Vector2(s, s);
 
+// Indirect light on the camp's matt surfaces. `envMapIntensity` scales the
+// sky environment's *diffuse* irradiance as well as its reflection, and the
+// sky module scales every material's value by the hour's env dial, so for a
+// rough dielectric this number is most of what lights it in shade. Round 2 had
+// 0.3 on everything: in the canopy's shadow a chair got a third of the skylight
+// the sky was putting out and read as a black cut-out (Y 0.02 against dirt at
+// 0.25). Matt cloth, timber, rope and dirt take the full sky; the plastics and
+// painted steel stay lower because on them the term is also a reflection.
+const ENV_MATT = 0.8;
+const ENV_GLOSS = 0.5;
+
 export function campMaterials(env = null) {
   if (cached) return cached;
   const m = {};
@@ -80,7 +118,7 @@ export function campMaterials(env = null) {
       color,
       metalness: 0,
       roughness: 1,
-      envMapIntensity: 0.35,
+      envMapIntensity: ENV_MATT,
       side: THREE.DoubleSide,
       ...extra,
     });
@@ -94,7 +132,7 @@ export function campMaterials(env = null) {
   // camp chairs and the mess-tent roll-ups: a heavier, darker cloth
   m.canvasChair = canvasOf('green', 0x8a7a5a);
   // a poly tarp is canvas that has never been anything but one flat colour
-  m.tarp = canvasOf('sand', 0x6f8592, { roughness: 0.7, envMapIntensity: 0.5 });
+  m.tarp = canvasOf('sand', 0x6f8592, { roughness: 0.7, envMapIntensity: ENV_GLOSS });
 
   const timber = timberMaps('grey');
   m.timber = new THREE.MeshStandardMaterial({
@@ -104,7 +142,7 @@ export function campMaterials(env = null) {
     normalScale: V2(1.0),
     metalness: 0,
     roughness: 1,
-    envMapIntensity: 0.3,
+    envMapIntensity: ENV_MATT,
   });
   const timberWarm = timberMaps('warm');
   m.timberWarm = new THREE.MeshStandardMaterial({
@@ -114,7 +152,7 @@ export function campMaterials(env = null) {
     normalScale: V2(1.0),
     metalness: 0,
     roughness: 1,
-    envMapIntensity: 0.3,
+    envMapIntensity: ENV_MATT,
   });
   // Poles and posts: the same silvered wood, but a bark-stripped round section
   // reads darker in the grain than a sawn board, so it carries a tint.
@@ -126,7 +164,19 @@ export function campMaterials(env = null) {
     color: 0x8f7d66,
     metalness: 0,
     roughness: 1,
-    envMapIntensity: 0.3,
+    envMapIntensity: ENV_MATT,
+  });
+  // Heavy bush poles — the gate, the lantern poles: a whole-log map, one tile
+  // the height of a post (kit.js TILE.post), with its checks and its mud line.
+  const post = postMaps();
+  m.post = new THREE.MeshStandardMaterial({
+    map: post.map,
+    normalMap: post.normal,
+    roughnessMap: post.rough,
+    normalScale: V2(1.3),
+    metalness: 0,
+    roughness: 1,
+    envMapIntensity: ENV_MATT,
   });
 
   const galv = galvMaps();
@@ -203,7 +253,7 @@ export function campMaterials(env = null) {
     normalScale: V2(0.8),
     metalness: 0,
     roughness: 0.95,
-    envMapIntensity: 0.2,
+    envMapIntensity: ENV_MATT,
   });
 
   const poly = polyMaps();
@@ -234,19 +284,20 @@ export function campMaterials(env = null) {
     normalScale: V2(1.3),
     metalness: 0,
     roughness: 1,
-    envMapIntensity: 0.3,
+    envMapIntensity: ENV_MATT,
   });
   const dead = deadWoodMaps();
   m.deadwood = new THREE.MeshStandardMaterial({
     map: dead.map,
     normalMap: dead.normal,
     roughnessMap: dead.rough,
-    aoMap: dead.ao,
+    // no aoMap: the merged camp mesh has no uv1, so the map sampled one texel
+    // as a constant darkening on every log and bench
     normalScale: V2(1.1),
     color: 0xb9a893,
     metalness: 0,
     roughness: 1,
-    envMapIntensity: 0.3,
+    envMapIntensity: ENV_MATT,
   });
   const ash = ashMaps();
   // The bed of coals under the flames: the emissive mask is the glowing
@@ -287,7 +338,7 @@ export function campMaterials(env = null) {
     normalScale: V2(1.0),
     metalness: 0,
     roughness: 1,
-    envMapIntensity: 0.3,
+    envMapIntensity: ENV_MATT,
   });
 
   m.glass = new THREE.MeshPhysicalMaterial({
@@ -346,7 +397,7 @@ export function campMaterials(env = null) {
       map: tex,
       metalness: 0,
       roughness: 0.75,
-      envMapIntensity: 0.3,
+      envMapIntensity: 0.6,
       name: key,
     });
   // The two boards read from the road are drawn at 1024 px with the name line
@@ -372,7 +423,7 @@ export function campMaterials(env = null) {
     metalness: 0,
     roughness: 0.95,
     side: THREE.DoubleSide,
-    envMapIntensity: 0.3,
+    envMapIntensity: ENV_MATT,
     emissive: 0xc8b078,
     emissiveMap: dryGrassCutout(),
     emissiveIntensity: 0.4,
@@ -387,7 +438,7 @@ export function campMaterials(env = null) {
     normalScale: V2(0.8),
     metalness: 0,
     roughness: 1,
-    envMapIntensity: 0.3,
+    envMapIntensity: ENV_MATT,
     side: THREE.DoubleSide,
   });
   m.chairCloth.onBeforeCompile = canvasTranslucency;

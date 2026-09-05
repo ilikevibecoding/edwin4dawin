@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { profile } from '../lib/geo.js';
-import { lump, Obj, slackLine } from './kit.js';
+import { lump, Obj, poleUV, slackLine } from './kit.js';
 import { gable, guy } from './tents.js';
 import { chair, crate, drum, extinguisher, jerry, lantern, radioSet, table, tyre } from './props.js';
 
@@ -514,23 +514,62 @@ export function bomaLine(rnd, pts, ground = () => 0, { height = 1.1, gaps = [] }
   return o;
 }
 
+/** A round pole in the whole-log `post` map, one tile along its length whatever the length. */
+function logCyl(o, rTop, rBottom, L, radial, xform) {
+  const g = new THREE.CylinderGeometry(rTop, rBottom, L, radial, 1);
+  g.translate(0, L * 0.5, 0);
+  poleUV(g, L);
+  return o.add('post', g, xform, { uv: false });
+}
+
 /** The gate: two heavy posts, a timber-framed wire gate swung open, the camp sign beside it. */
 export function gate(rnd, width = 5.2) {
   const o = new Obj();
-  for (const s of [-1, 1]) o.cyl('pole', 0.12, 0.14, 2.2, 9, { pos: [s * width * 0.5, -0.1, 0] });
-  o.box('timber', width + 0.3, 0.14, 0.14, { pos: [0, 2.15, 0] });
+  // The posts and the beam are round bush timber in the `post` material: a
+  // whole-log map with the checks, the silvering above and the mud line at the
+  // foot, one tile the height of the post so nothing repeats (round 2: "a flat
+  // brown"). The posts are lump-noised so their silhouette is not a lathe.
+  for (const s of [-1, 1]) {
+    const g = new THREE.CylinderGeometry(0.11, 0.14, 2.2, 11, 6);
+    g.translate(0, 1.1, 0);
+    const p = g.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i);
+      const z = p.getZ(i);
+      const y = p.getY(i);
+      const a = Math.atan2(z, x);
+      const k = 1 + 0.08 * Math.sin(a * 3 + y * 2.1 + s) + 0.05 * Math.sin(a * 5 - y * 4.3);
+      p.setXYZ(i, x * k, y, z * k);
+    }
+    g.computeVertexNormals();
+    poleUV(g, 2.4);
+    o.add('post', g, { pos: [s * width * 0.5, -0.1, 0], rot: [(rnd() - 0.5) * 0.03, s * 0.7, (rnd() - 0.5) * 0.03] }, { uv: false });
+    // end checks: the top of a seasoned post splits along the grain
+    for (let i = 0; i < 3; i++) {
+      const a = rnd() * TAU;
+      o.box('steelBlack', 0.004, 0.06, 0.05 + rnd() * 0.06, { pos: [s * width * 0.5 + Math.cos(a) * 0.04, 2.08, Math.sin(a) * 0.04], rot: [0, a, 0] });
+    }
+    // and a mud line at the foot where the rain splashes off the track
+    o.cyl('post', 0.145, 0.15, 0.25, 11, { pos: [s * width * 0.5, -0.05, 0] }, { uv: false });
+  }
+  logCyl(o, 0.075, 0.075, width + 0.3, 10, { pos: [-(width + 0.3) * 0.5, 2.15, 0], rot: [0, 0, -Math.PI / 2] });
+  // the beam is lashed to the posts, not nailed
+  for (const s of [-1, 1]) o.tube('rope', slackLine([s * width * 0.5 - 0.1, 2.05, 0.12], [s * width * 0.5 + 0.1, 2.25, -0.12], 0, 3), 0.01, 5);
   o.box('signGate', 2.6, 1.3, 0.04, { pos: [0, 2.9, -0.02] }, { uv: false });
-  o.box('timber', 2.8, 0.08, 0.08, { pos: [0, 3.6, 0] });
-  for (const s of [-1, 1]) o.box('timber', 0.08, 1.5, 0.08, { pos: [s * 1.35, 2.9, 0.06] });
+  logCyl(o, 0.04, 0.04, 2.8, 8, { pos: [-1.4, 3.6, 0], rot: [0, 0, -Math.PI / 2] });
+  for (const s of [-1, 1]) logCyl(o, 0.04, 0.045, 1.5, 8, { pos: [s * 1.35, 2.15, 0.06] });
   // the gate itself, hinged on the -x post, open 80 degrees inward
   const gw = width * 0.5 - 0.15;
   const ang = -1.4;
   const gateObj = new Obj();
-  gateObj.box('timber', gw, 0.07, 0.05, { pos: [gw * 0.5, 1.3, 0] });
-  gateObj.box('timber', gw, 0.07, 0.05, { pos: [gw * 0.5, 0.35, 0] });
-  gateObj.box('timber', 0.06, 1.05, 0.05, { pos: [0.03, 0.82, 0] });
-  gateObj.box('timber', 0.06, 1.05, 0.05, { pos: [gw - 0.03, 0.82, 0] });
-  gateObj.box('timber', 0.05, Math.hypot(gw, 0.95), 0.04, { pos: [gw * 0.5, 0.82, 0], rot: [0, 0, Math.atan2(gw, 0.95)] });
+  gateObj.box('post', gw, 0.07, 0.05, { pos: [gw * 0.5, 1.3, 0] });
+  gateObj.box('post', gw, 0.07, 0.05, { pos: [gw * 0.5, 0.35, 0] });
+  gateObj.box('post', 0.06, 1.05, 0.05, { pos: [0.03, 0.82, 0] });
+  gateObj.box('post', 0.06, 1.05, 0.05, { pos: [gw - 0.03, 0.82, 0] });
+  gateObj.box('post', 0.05, Math.hypot(gw, 0.95), 0.04, { pos: [gw * 0.5, 0.82, 0], rot: [0, 0, Math.atan2(gw, 0.95)] });
+  // strap hinges and a hasp
+  for (const y of [0.35, 1.3]) gateObj.box('steelBlack', 0.22, 0.04, 0.012, { pos: [0.11, y, 0.032] });
+  gateObj.box('steelBlack', 0.12, 0.05, 0.012, { pos: [gw - 0.06, 0.82, 0.032] });
   for (let i = 0; i < 6; i++) gateObj.tube('wire', [[0.05, 0.4 + i * 0.16, 0.0], [gw - 0.05, 0.4 + i * 0.16, 0.0]], 0.003, 3, undefined, { density: 1 });
   o.merge(gateObj, { pos: [-width * 0.5 + 0.15, 0, 0], rot: [0, ang, 0] });
   // a second leaf, propped open the other way against a stone
@@ -545,6 +584,30 @@ export function gate(rnd, width = 5.2) {
     o.merge(ln.obj, { pos: [s * width * 0.5, 1.62, 0.3] });
     lamps.push({ x: s * width * 0.5, y: 1.62 + ln.lamp.y, z: 0.3, kind: 'lantern' });
   }
+  return { obj: o, lamps };
+}
+
+/**
+ * A pole lantern for the parking row: a 3 m bush pole with a bracket arm out
+ * over +z and a hurricane lamp hung from its hook, a stay wire back to a peg,
+ * and an old tyre dropped round the foot so nobody reverses into it.
+ */
+export function poleLantern(rnd, height = 3.0) {
+  const o = new Obj();
+  const lamps = [];
+  logCyl(o, 0.05, 0.065, height + 0.1, 9, { pos: [0, -0.1, 0], rot: [(rnd() - 0.5) * 0.03, rnd() * TAU, (rnd() - 0.5) * 0.03] });
+  // arm and its strut
+  o.box('timber', 0.05, 0.05, 0.7, { pos: [0, height - 0.1, 0.32] });
+  o.box('timber', 0.04, 0.04, 0.62, { pos: [0, height - 0.32, 0.22], rot: [0.85, 0, 0] });
+  o.box('steel', 0.016, 0.06, 0.016, { pos: [0, height - 0.15, 0.62] });
+  o.tube('wire', slackLine([0, height - 0.18, 0.62], [0, height - 0.32, 0.62], 0, 2), 0.004, 4);
+  const ln = lantern(rnd);
+  o.merge(ln.obj, { pos: [0, height - 0.6, 0.62] });
+  lamps.push({ x: 0, y: height - 0.6 + ln.lamp.y, z: 0.62, kind: 'lantern' });
+  // stay wire against the arm's pull
+  o.tube('wire', slackLine([0, height - 0.05, -0.03], [0, 0.1, -1.4], 0.03, 4), 0.004, 3);
+  o.cyl('steel', 0.008, 0.012, 0.3, 6, { pos: [0, -0.05, -1.4], rot: [-0.4, 0, 0] });
+  o.merge(tyre(rnd, 0.36), { pos: [0.02, 0, 0.03] });
   return { obj: o, lamps };
 }
 
@@ -629,14 +692,19 @@ export function firePit(rnd, radius = 1.15, { small = false } = {}) {
     }
   }
   if (!small) {
-    // tripod and hanging pot, grill on two stones
+    // tripod and hanging pot, grill on two stones. The tripod is swung off the
+    // fire's axis so the pot hangs over the edge of the coals: on the axis it
+    // hid the flames from the fire framing and the fire read as a pot with a
+    // glow under it (round 2).
+    const tx = 0.38;
+    const tz = -0.33;
     for (let i = 0; i < 3; i++) {
       const a = (i / 3) * TAU + 0.5;
-      o.cyl('steelBlack', 0.014, 0.016, 1.9, 7, { pos: [Math.cos(a) * 0.9, 0, Math.sin(a) * 0.9], rot: [Math.sin(a) * 0.48, 0, -Math.cos(a) * 0.48] });
+      o.cyl('steelBlack', 0.014, 0.016, 1.9, 7, { pos: [tx + Math.cos(a) * 0.9, 0, tz + Math.sin(a) * 0.9], rot: [Math.sin(a) * 0.48, 0, -Math.cos(a) * 0.48] });
     }
-    o.tube('wire', [[0, 1.68, 0], [0, 0.85, 0]], 0.005, 4);
-    o.cyl('steelBlack', 0.17, 0.14, 0.22, 14, { pos: [0, 0.62, 0] });
-    o.tube('wire', slackLine([-0.16, 0.84, 0], [0.16, 0.84, 0], -0.1, 5), 0.006, 5);
+    o.tube('wire', [[tx, 1.68, tz], [tx, 0.85, tz]], 0.005, 4);
+    o.cyl('steelBlack', 0.17, 0.14, 0.22, 14, { pos: [tx, 0.62, tz] });
+    o.tube('wire', slackLine([tx - 0.16, 0.84, tz], [tx + 0.16, 0.84, tz], -0.1, 5), 0.006, 5);
     o.box('steel', 0.6, 0.02, 0.45, { pos: [radius * 0.55, 0.3, -radius * 0.2] });
     for (let i = 0; i < 7; i++) o.box('steel', 0.6, 0.015, 0.015, { pos: [radius * 0.55, 0.32, -radius * 0.2 - 0.2 + i * 0.065] });
     o.cyl('alu', 0.11, 0.1, 0.16, 12, { pos: [radius * 0.5, 0.33, -radius * 0.15] });

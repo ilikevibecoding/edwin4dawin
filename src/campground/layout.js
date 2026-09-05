@@ -88,6 +88,14 @@ export function buildPlan() {
     { u: 15.4, v: -4.9, heading: [0.55, -1], kind: 'motorcycle' },
   ];
 
+  // Pole lanterns over the parking row, between the lane and the vehicles'
+  // tails, so the camp's light reaches the cars at night (the fleet measured
+  // none did). The arm and the lamp hang out toward the vehicles (+v).
+  const rowLamps = [
+    { u: -4.5, v: -14.5, height: 3.0, facing: [0, 1] },
+    { u: 14.5, v: -13.5, height: 3.0, facing: [0.3, 1] },
+  ];
+
   // Ground wear, as polylines the overlay paints. Tyre tracks run from the
   // road to the lane and from the lane into each slot; footpaths link the
   // places people actually walk between.
@@ -103,13 +111,34 @@ export function buildPlan() {
     [lane.from, lane.v],
     [lane.to, lane.v],
   ];
+  // Ruts run from the lane through the slot and on past the vehicle's far end,
+  // so they show in front of a nose-in vehicle and behind a backed-in one; a
+  // track that stopped at the slot centre lay wholly under the body (round 2).
   const slotTracks = parking.map((p) => {
-    const back = p.heading[1] > 0.5 ? [p.u - p.heading[0] * 5, lane.v] : p.heading[1] < -0.5 ? [p.u + p.heading[0] * 2, lane.v] : [p.u, lane.v];
-    return [back, [p.u, p.v]];
+    const h = p.heading;
+    const along = Math.abs(h[1]) < 0.5;
+    const back = h[1] > 0.5 ? [p.u - h[0] * 5, lane.v] : h[1] < -0.5 ? [p.u + h[0] * 2, lane.v] : [p.u - h[0] * 9, lane.v];
+    const through = along ? [p.u - h[0] * 3.5, p.v] : [p.u, p.v];
+    const beyond = along ? [p.u + h[0] * 4.5, p.v + h[1] * 4.5] : h[1] > 0.5 ? [p.u + h[0] * 2.8, p.v + h[1] * 2.8] : [p.u - h[0] * 2.8, p.v - h[1] * 2.8];
+    return [back, through, beyond];
   });
+  // The trunk routes: the ones walked a hundred times a day, wide and pale.
+  // Fire to mess, mess to the parking, fire to the tents, tents to the mess.
+  const heavyPaths = [
+    [[fire.u - 1.2, fire.v - 0.4], [mess.u + 3.5, mess.v - 1.5], [mess.u + 1.5, mess.v - 2.6]],
+    [[mess.u + 1, mess.v - 3.6], [mess.u + 2.5, -3], [-3.2, lane.v + 1.2]],
+    [[fire.u + 0.4, fire.v + 2.4], [fire.u - 0.5, 12.5], [fire.u - 1, 15.8]],
+    [[mess.u + 0.5, mess.v + 3.6], [mess.u - 0.5, 14.5], [mess.u - 1, 16.2]],
+    [[fire.u + 1.0, fire.v - 2.6], [fire.u + 1.5, -5], [1.5, lane.v + 1.5]],
+  ];
   const paths = [
     // fire to mess to kitchen to tank
     [[fire.u, fire.v], [mess.u + 2, mess.v - 1], [mess.u - 3, mess.v]],
+    // the mess to the far end of the parking, the cabin to the ranger's vehicle,
+    // the tent line's east end down to the lane
+    [[mess.u - 3, mess.v - 3.5], [-14, -6], [-16, lane.v + 1.5]],
+    [[cabin.u - 1, cabin.v - 3], [cabin.u - 1.5, -8], [16, lane.v + 4]],
+    [[22, 17.5], [24, 9], [21.5, -2], [17, -9]],
     [[mess.u - 4, mess.v], [kitchen.u + 2, kitchen.v], [tank.u + 1, tank.v - 1]],
     [[kitchen.u, kitchen.v - 2], [wood.u, wood.v]],
     [[wood.u, wood.v], [fire.u - 1, fire.v]],
@@ -165,7 +194,8 @@ export function buildPlan() {
     tents,
     staffTents,
     parking,
-    wear: { trackIn, laneLine, slotTracks, paths, gameTrail },
+    rowLamps,
+    wear: { trackIn, laneLine, slotTracks, paths, heavyPaths, gameTrail },
     // the fence runs along the road side with the gate in it, and turns up both ends
     fence: [
       [[-38, -23], [gate.u - gate.width / 2, -23]],

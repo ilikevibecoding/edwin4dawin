@@ -68,7 +68,7 @@ export function clearingMask(anchor) {
   };
 }
 
-export function buildGroundWear(frame, plan, { quality = 'high', footprints = [] } = {}) {
+export function buildGroundWear(frame, plan, { quality = 'high', footprints = [], seats = [] } = {}) {
   const px = quality === 'fast' ? 12 : quality === 'ultra' ? 22 : 16; // pixels per metre
   const W = Math.round((EXTENT.u1 - EXTENT.u0) * px);
   const H = Math.round((EXTENT.v1 - EXTENT.v0) * px);
@@ -131,9 +131,49 @@ export function buildGroundWear(frame, plan, { quality = 'high', footprints = []
     }
   };
 
-  // --- the apron and the access track --------------------------------------
+  // --- the pad's own grain -------------------------------------------------
+  // Before anything is painted on it, the compound's dirt gets a second scale
+  // of detail: half-metre to two-metre mottling — patches of paler, drier dust
+  // and darker, damper or more trodden earth — and a grit of small stones. The
+  // terrain's dirt is one tile at one scale, and under the mess tent that is
+  // what the frame showed (round 2, critic A).
   ctx.fillStyle = packed(0);
   ctx.fillRect(0, 0, W, H);
+  {
+    const pale = (a) => `rgba(196,176,140,${a})`;
+    const dun = (a) => `rgba(120,98,70,${a})`;
+    const n = Math.round(W * H * 0.0018);
+    for (let i = 0; i < n; i++) {
+      const u = EXTENT.u0 + rnd() * (EXTENT.u1 - EXTENT.u0);
+      const v = EXTENT.v0 + rnd() * (EXTENT.v1 - EXTENT.v0);
+      const bare = bareAt(u, v);
+      if (bare < 0.3 || rnd() > bare) continue;
+      const r = 0.4 + rnd() * 1.4;
+      const c = rnd() < 0.5 ? pale : dun;
+      const a = 0.05 + rnd() * 0.09;
+      const g = ctx.createRadialGradient(X(u), Y(v), 0, X(u), Y(v), r * px);
+      g.addColorStop(0, c(a));
+      g.addColorStop(0.6, c(a * 0.5));
+      g.addColorStop(1, c(0));
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.ellipse(X(u), Y(v), r * px, r * px * (0.55 + rnd() * 0.45), rnd() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    // grit: small stones and clods, a pale one and a dark one
+    const m = Math.round(W * H * 0.004);
+    for (let i = 0; i < m; i++) {
+      const u = EXTENT.u0 + rnd() * (EXTENT.u1 - EXTENT.u0);
+      const v = EXTENT.v0 + rnd() * (EXTENT.v1 - EXTENT.v0);
+      if (rnd() > bareAt(u, v)) continue;
+      ctx.fillStyle = rnd() < 0.6 ? `rgba(190,176,150,${0.18 + rnd() * 0.3})` : `rgba(70,56,40,${0.2 + rnd() * 0.3})`;
+      ctx.beginPath();
+      ctx.ellipse(X(u), Y(v), (0.03 + rnd() * 0.06) * px, (0.025 + rnd() * 0.04) * px, rnd() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // --- the apron and the access track --------------------------------------
   const apron = [
     [-27, -19.5],
     [27, -19.5],
@@ -192,10 +232,25 @@ export function buildGroundWear(frame, plan, { quality = 'high', footprints = []
     tyreTracks(seg, { alpha: 0.12 + 0.3 * k, passes: 2, width: 0.3 });
   }
   tyreTracks(plan.wear.laneLine, { alpha: 0.7, passes: 3 });
-  // the turn into each slot is driven once a day, the lane a hundred times
-  for (const t of plan.wear.slotTracks) tyreTracks(t, { alpha: 0.45, passes: 1 });
-  // where the vehicles stand, the ground is packed to a polish
-  for (const p of plan.parking) stroke([[p.u, p.v - 1.5], [p.u, p.v + 1.5]], 2.2, packed, { step: 0.4, alpha: 0.35, feather: 1.6 });
+  // The turn into each slot: the same vehicle in and out every day, so two
+  // passes a little apart, and the ruts run on past the body (layout.js). At
+  // the slot itself the wheels have stood and spun on the same spot: a darker,
+  // sharper pair of pits a wheelbase apart, and the ground between packed.
+  for (const t of plan.wear.slotTracks) tyreTracks(t, { alpha: 0.62, passes: 2, width: 0.34 });
+  for (const p of plan.parking) {
+    const h = p.heading;
+    const L = Math.hypot(h[0], h[1]) || 1;
+    const fx = h[0] / L;
+    const fz = h[1] / L;
+    stroke([[p.u - fx * 1.5, p.v - fz * 1.5], [p.u + fx * 1.5, p.v + fz * 1.5]], 2.0, packed, { step: 0.4, alpha: 0.35, feather: 1.6 });
+    for (const s of [-1, 1]) {
+      for (const k of [-1.35, 1.35]) {
+        const u = p.u + fx * k - fz * s * 0.85;
+        const v = p.v + fz * k + fx * s * 0.85;
+        stroke([[u - fx * 0.3, v - fz * 0.3], [u + fx * 0.3, v + fz * 0.3]], 0.42, rut, { step: 0.12, jitter: 0.03, alpha: 0.55, feather: 1.2 });
+      }
+    }
+  }
 
   // --- footpaths -----------------------------------------------------------
   // a worn path in dry country is pale in the middle, where feet have polished
@@ -204,6 +259,56 @@ export function buildGroundWear(frame, plan, { quality = 'high', footprints = []
     stroke(p, 1.0, path, { step: 0.22, jitter: 0.2, alpha: 0.6, feather: 1.5 });
     stroke(p, 0.45, dust, { step: 0.18, jitter: 0.08, alpha: 0.42, feather: 1.15 });
     stroke(p, 0.55, rut, { step: 0.2, jitter: 0.14, alpha: 0.22, feather: 1.3 });
+  }
+  // the trunk routes — fire, mess, tents, parking — are wider, paler and
+  // fray at the edges into a scuffed margin, because everyone walks them
+  for (const p of plan.wear.heavyPaths) {
+    stroke(p, 1.9, path, { step: 0.25, jitter: 0.35, alpha: 0.5, feather: 1.6 });
+    stroke(p, 1.1, dust, { step: 0.18, jitter: 0.22, alpha: 0.5, feather: 1.25 });
+    stroke(p, 0.5, dust, { step: 0.15, jitter: 0.1, alpha: 0.45, feather: 1.1 });
+    stroke(p, 1.4, rut, { step: 0.22, jitter: 0.45, alpha: 0.14, feather: 1.4 });
+    // scuff marks: heel drags across the path
+    for (let i = 0; i < p.length - 1; i++) {
+      const [ax, az] = p[i];
+      const [bx, bz] = p[i + 1];
+      const L = Math.hypot(bx - ax, bz - az);
+      for (let k = 0; k < L * 2.5; k++) {
+        const t = rnd();
+        const u = ax + (bx - ax) * t + (rnd() - 0.5) * 1.2;
+        const v = az + (bz - az) * t + (rnd() - 0.5) * 1.2;
+        ctx.fillStyle = rnd() < 0.5 ? `rgba(60,48,34,${0.15 + rnd() * 0.2})` : `rgba(200,182,146,${0.15 + rnd() * 0.2})`;
+        ctx.beginPath();
+        ctx.ellipse(X(u), Y(v), (0.12 + rnd() * 0.16) * px, (0.04 + rnd() * 0.04) * px, Math.atan2(bz - az, bx - ax) + (rnd() - 0.5) * 0.8, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  // --- where people sit ------------------------------------------------------
+  // Under and in front of every chair and bench the dust is kicked and
+  // compacted: a paler, polished patch with a darker scuffed rim, heel marks,
+  // and the odd dark spot of a spill.
+  for (const s of seats) {
+    const g = ctx.createRadialGradient(X(s.u), Y(s.v), 0, X(s.u), Y(s.v), s.r * 1.3 * px);
+    g.addColorStop(0, dust(0.34));
+    g.addColorStop(0.55, dust(0.2));
+    g.addColorStop(0.8, packed(0.16));
+    g.addColorStop(1, packed(0));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(X(s.u), Y(s.v), s.r * 1.3 * px, s.r * 1.05 * px, rnd() * Math.PI, 0, Math.PI * 2);
+    ctx.fill();
+    const marks = Math.round(s.r * 14);
+    for (let k = 0; k < marks; k++) {
+      const a = rnd() * Math.PI * 2;
+      const d = Math.sqrt(rnd()) * s.r * 1.1;
+      const u = s.u + Math.cos(a) * d;
+      const v = s.v + Math.sin(a) * d;
+      const t = rnd();
+      ctx.fillStyle = t < 0.6 ? `rgba(58,46,32,${0.14 + rnd() * 0.18})` : t < 0.92 ? `rgba(205,188,150,${0.16 + rnd() * 0.2})` : `rgba(30,22,16,${0.35 + rnd() * 0.3})`;
+      ctx.beginPath();
+      ctx.ellipse(X(u), Y(v), (0.08 + rnd() * 0.14) * px, (0.035 + rnd() * 0.04) * px, rnd() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
   // trampled ground: round the fire, under the mess tent, at the kitchen, at the gate
   const trample = (u, v, r, a) => {
@@ -396,7 +501,8 @@ export function buildGroundWear(frame, plan, { quality = 'high', footprints = []
     polygonOffset: true,
     polygonOffsetFactor: -2,
     polygonOffsetUnits: -2,
-    envMapIntensity: 0.25,
+    // skylight on the dirt in shade, as on the props (see materials.js ENV_MATT)
+    envMapIntensity: 0.6,
     name: 'campWear',
   });
   const mesh = new THREE.Mesh(geo, mat);

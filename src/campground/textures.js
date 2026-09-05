@@ -165,6 +165,101 @@ export function timberMaps(kind = 'grey') {
 }
 
 /**
+ * A whole bush pole, as one tile the height of a gate post: u runs along the
+ * log from the foot (0) to the top (1), v goes round it. Bark-stripped and
+ * seasoned in the sun: long grain and shrinkage checks along the axis, knots,
+ * silver-grey over the ochre heartwood with the ochre showing in the checks,
+ * a darker mud-splashed foot and a grey-black bleached top.
+ */
+export function postMaps() {
+  return cached('camp.post', () => {
+    const n = 256;
+    const seed = 71;
+    const hf = heightField(n, n, (x, y) => {
+      const u = x / n; // along
+      const v = y / n; // round
+      // grain runs along u: ridged noise stretched 30:1
+      const grain = ridged(u * 2.2, v * 28, { octaves: 4, period: 2, seed });
+      // shrinkage checks: a handful of deep, narrow cracks along the axis that
+      // wander a little and die out
+      let check = 0;
+      for (let k = 0; k < 4; k++) {
+        const cv = 0.12 + k * 0.24 + Math.sin(u * 6.3 + k * 2.1) * 0.02;
+        const width = 0.006 + 0.004 * Math.sin(u * 14 + k);
+        const run = smoothstep(0.05 + k * 0.1, 0.25 + k * 0.1, u) * smoothstep(0.98, 0.7 + k * 0.05, u);
+        const dv = Math.min(Math.abs(v - cv), Math.abs(v - cv - 1), Math.abs(v - cv + 1));
+        check = Math.max(check, smoothstep(width, 0, dv) * run);
+      }
+      const knot = worley(u * 6, v * 3, 6, seed + 11);
+      const knotRing = smoothstep(0.04, 0.2, knot.f1) * (knot.id > 0.75 ? 1 : 0);
+      return clamp(0.25 + grain * 0.55 - check * 0.6 - knotRing * 0.2);
+    });
+    const normal = normalFromHeight(hf, n, n, 1.8, { repeat: 1 });
+    const silver = rgb(0x9b958a);
+    const grey = rgb(0x746c60);
+    const heart = rgb(0x8a6a48);
+    const dark = rgb(0x3a3129);
+    const mud = rgb(0x5e4a36);
+    const map = pixelTexture(
+      n,
+      n,
+      (x, y, out) => {
+        const u = x / n;
+        const v = y / n;
+        const h = hf[y * n + x];
+        const tone = fbm(u * 3, v * 3, { octaves: 3, period: 3, seed: seed + 20 });
+        // silvered where the sun and rain reach, ochre heartwood in the hollows
+        let c = mixRgb(heart, grey, smoothstep(0.15, 0.5, h));
+        c = mixRgb(c, silver, smoothstep(0.5, 0.9, h) * (0.5 + 0.5 * tone));
+        // the checks are dark, with the fresh wood showing at their lips
+        c = mixRgb(c, dark, smoothstep(0.3, 0.05, h) * 0.8);
+        // weathering runs in streaks down the post
+        const streak = fbm(u * 2, v * 16, { octaves: 3, period: 2, seed: seed + 6 });
+        c = mixRgb(c, dark, smoothstep(0.6, 0.9, streak) * 0.25);
+        // the foot: rain-splashed mud up the first half metre, irregular
+        const foot = smoothstep(0.22 + tone * 0.08, 0.02, u);
+        c = mixRgb(c, mud, foot * 0.55);
+        // the bleached, checked top
+        c = mixRgb(c, rgb(0x6c675f), smoothstep(0.9, 0.99, u) * 0.5);
+        put(out, c);
+      },
+      { srgb: true, repeat: 1 },
+    );
+    const rough = roughnessTexture(n, n, (x, y) => clamp(0.72 + (1 - hf[y * n + x]) * 0.26), { repeat: 1 });
+    return { map, normal, rough };
+  });
+}
+
+/**
+ * Large-scale stain and fade for the canvas: a soft fbm at a nine-metre period
+ * that the canvas materials multiply over the one-metre weave tile, so no two
+ * square metres of a roof are the same. Sampled in the shader, not baked, so
+ * the weave tile stays 256 px.
+ */
+export function canvasStainMap() {
+  return cached('camp.canvasstain', () => {
+    const n = 128;
+    return pixelTexture(
+      n,
+      n,
+      (x, y, out) => {
+        const u = x / n;
+        const v = y / n;
+        // R: broad fade (bleaching), G: streaky dust run along v, B: blotches (water marks, mildew)
+        const fade = fbm(u * 2, v * 2, { octaves: 3, period: 2, seed: 301 });
+        const streak = fbm(u * 6, v * 1.2, { octaves: 3, period: 6, seed: 302 });
+        const blot = worley(u * 4, v * 4, 4, 303);
+        const ring = smoothstep(0.25, 0.32, blot.f1) * smoothstep(0.42, 0.34, blot.f1) * (blot.id > 0.6 ? 1 : 0);
+        out[0] = Math.round(clamp(fade) * 255);
+        out[1] = Math.round(clamp(streak) * 255);
+        out[2] = Math.round(clamp(ring * 0.8 + fbm(u * 3, v * 3, { octaves: 2, period: 3, seed: 304 }) * 0.3) * 255);
+      },
+      { srgb: false, repeat: 1 },
+    );
+  });
+}
+
+/**
  * Corrugated galvanised sheet. Thirteen corrugations a metre across u, zinc
  * spangle in the flats, and rust bleeding down v from where the roofing
  * screws go through the crowns.

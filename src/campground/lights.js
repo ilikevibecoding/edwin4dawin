@@ -54,7 +54,12 @@ export function createCampLights(mats, lamps, anchors, { quality = 'high' } = {}
   }
 
   // --- real lights -------------------------------------------------------------
-  const cap = quality === 'fast' ? 4 : 6;
+  // Two more than round 2 at every tier for the pole lanterns over the parking
+  // row (the fleet measured no camp light on the vehicles at night). Every
+  // camp light is a shadowless point light in the one forward loop, so the
+  // cost is per fragment across the scene, not per object: six at fast is the
+  // same program count, one more loop iteration.
+  const cap = quality === 'fast' ? 6 : 8;
   const chosen = anchors.slice().sort((a, b) => (b.priority || 0) - (a.priority || 0)).slice(0, cap);
   for (const a of chosen) {
     const l = new THREE.PointLight(a.color ?? 0xffb35c, 0, a.distance ?? 12, a.decay ?? 1.9);

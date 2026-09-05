@@ -30,7 +30,7 @@ const TAU = Math.PI * 2;
  * `sag` is a fraction of the bay span (a fly on poles is 5–8 %, a tent on a
  * full frame with eave rails is nearly nothing).
  */
-function gable(o, key, w, d, eaveY, ridgeY, { overhang = 0, sag = 0.06, belly = 0.04, bays = null, edge = 0.035, wrinkle = 0.02, seg = 2.5, seed = 0 } = {}) {
+function gable(o, key, w, d, eaveY, ridgeY, { overhang = 0, sag = 0.06, belly = 0.04, bays = null, edge = 0.035, wrinkle = 0.02, seg = 2.5, seed = 0, hem = 0, ridgeRoll = 0 } = {}) {
   const half = w * 0.5 + overhang;
   const L = d + overhang * 2;
   const rise = ridgeY - eaveY;
@@ -55,6 +55,17 @@ function gable(o, key, w, d, eaveY, ridgeY, { overhang = 0, sag = 0.06, belly = 
   };
   const segX = Math.max(4, Math.round(panelW * seg));
   const segZ = Math.max(4, Math.round(L * seg));
+  const before = o.parts.length;
+  // the free eave edge's displacement, shared by the panel and its hem
+  const edgeDy = (z) => {
+    let dy = -sagAt(z) + edge * (Math.sin(z * 5.1 + seed) * 0.5 + Math.sin(z * 11.7 + seed * 1.7 + 1.0) * 0.35 + Math.sin(z * 23.0 + seed * 0.4) * 0.15);
+    for (const hz of holds) {
+      const dist = Math.abs(z - hz);
+      if (dist > 1.4 || dist < 0.02) continue;
+      dy += wrinkle * Math.cos(Math.atan2(z - hz, 0) * 7.0 + seed) * Math.exp(-dist * 2.2);
+    }
+    return dy;
+  };
   for (const s of [-1, 1]) {
     const g = new THREE.PlaneGeometry(panelW, L, segX, segZ);
     g.rotateX(-Math.PI / 2); // lie in xz, normal +y
@@ -86,8 +97,26 @@ function gable(o, key, w, d, eaveY, ridgeY, { overhang = 0, sag = 0.06, belly = 
     g.computeVertexNormals();
     const xc = s * half * 0.5;
     const yc = ridgeY - (rise * half) / w;
-    o.add(key, g, { pos: [xc, yc, 0], rot: [0, 0, -s * slope] });
+    const xform = { pos: [xc, yc, 0], rot: [0, 0, -s * slope] };
+    o.add(key, g, xform);
+    // A rolled hem along the eave: the cloth is doubled and stitched at its
+    // edge, which is the thickness a canopy shows from above and from the side.
+    // Without it the roof was a zero-thickness sheet in every overhead.
+    if (hem > 0) {
+      const pts = [];
+      const n = Math.max(4, Math.ceil(L / 0.45));
+      for (let i = 0; i <= n; i++) {
+        const z = -L * 0.5 + (L * i) / n;
+        pts.push([s * (panelW * 0.5 - hem * 0.6), edgeDy(z) - hem * 0.2, -z]);
+      }
+      o.tube(key, pts, hem, 6, xform, { density: 2.5, tension: 0.3 });
+    }
   }
+  // the ridge pole's cloth sleeve, a roll along the top of the two panels
+  if (ridgeRoll > 0) {
+    o.tube(key, [[0, ridgeY - ridgeRoll * 0.35, -L * 0.5], [0, ridgeY - ridgeRoll * 0.35, 0], [0, ridgeY - ridgeRoll * 0.35, L * 0.5]], ridgeRoll, 7, undefined, { density: 0.6 });
+  }
+  return o.parts.length - before;
 }
 
 /** Triangle to fill a gable end. */
@@ -203,7 +232,7 @@ export function safariTent(rnd, kind = 'khaki') {
   // corners: it sags between them and its half-metre overhang droops
   const flyLift = 0.3;
   const fd = D + veranda;
-  gable(o, flyKey, W, fd, wallH + flyLift, ridgeH + flyLift, {
+  const flyParts = gable(o, flyKey, W, fd, wallH + flyLift, ridgeH + flyLift, {
     overhang: 0.5,
     sag: 0.045,
     belly: 0.05,
@@ -212,10 +241,12 @@ export function safariTent(rnd, kind = 'khaki') {
     wrinkle: 0.025,
     seg: 2.2,
     seed: rnd() * 7,
+    hem: 0.025,
+    ridgeRoll: 0.04,
   });
   // shift the fly forward over the veranda: rebuild is simpler than moving, so
-  // instead translate the last two parts
-  for (let i = o.parts.length - 2; i < o.parts.length; i++) o.parts[i][1].translate(0, 0, veranda * 0.5);
+  // instead translate the parts the gable just added
+  for (let i = o.parts.length - flyParts; i < o.parts.length; i++) o.parts[i][1].translate(0, 0, veranda * 0.5);
   o.cyl(frame, 0.02, 0.02, D + veranda + 1.0, 8, { pos: [0, ridgeH + flyLift - 0.03, -D * 0.5 - 0.5], rot: [Math.PI / 2, 0, 0] });
   // guys off the fly corners and the veranda poles
   guy(o, [-W * 0.5 - 0.5, wallH + flyLift, -D * 0.5 - 0.5], [-0.6, -0.8], 1.4);
@@ -263,9 +294,9 @@ export function messTent(rnd, { w = 9, d = 6, ridge = 3.3, eave = 2.3 } = {}) {
   // ridge runs along x; front (+z) and back are the long sides. Built along z
   // with the eave held at the three perimeter poles a side, so the canvas hangs
   // in two 4.5 m catenaries between them.
-  gable(o, key, d, w, eave, ridge, { overhang: 0.35, sag: 0.06, belly: 0.06, bays: [-w * 0.5, 0, w * 0.5], edge: 0.04, wrinkle: 0.03, seg: 2.6, seed: 3.3 });
+  const roofParts = gable(o, key, d, w, eave, ridge, { overhang: 0.35, sag: 0.06, belly: 0.06, bays: [-w * 0.5, 0, w * 0.5], edge: 0.04, wrinkle: 0.03, seg: 2.6, seed: 3.3, hem: 0.035, ridgeRoll: 0.06 });
   // the gable built along z; turn it so the ridge runs along x
-  for (let i = o.parts.length - 2; i < o.parts.length; i++) o.parts[i][1].rotateY(Math.PI / 2);
+  for (let i = o.parts.length - roofParts; i < o.parts.length; i++) o.parts[i][1].rotateY(Math.PI / 2);
   // gable ends
   for (const s of [-1, 1]) {
     const g = profile(
@@ -308,8 +339,9 @@ export function messTent(rnd, { w = 9, d = 6, ridge = 3.3, eave = 2.3 } = {}) {
   o.cyl(poleKey, 0.02, 0.02, w + 0.4, 8, { pos: [-w * 0.5 - 0.2, ridge - 0.02, 0], rot: [0, 0, -Math.PI / 2] });
   // back wall rolled up under the eave
   o.cyl(key, 0.12, 0.12, w - 0.1, 10, { pos: [-w * 0.5 + 0.05, eave - 0.15, -d * 0.5 + 0.06], rot: [0, 0, -Math.PI / 2] });
-  // ground sheet
-  o.box('canvasChair', w - 0.4, 0.02, d - 0.4, { pos: [0, 0.01, 0] });
+  // No ground sheet: the 8 x 5 m dark cloth was one flat tile that went black
+  // in the canopy's shade (round 2, all three critics). The floor is the
+  // compacted dirt of the ground overlay, with mats under the tables (index.js).
 
   // string lights: two catenaries between the king poles and along the front eave
   const bulbs = (a, b, n, sag) => {
@@ -362,7 +394,7 @@ export function ridgeTent(rnd) {
   const key = 'canvasGreen';
   for (const sz of [-1, 1]) o.cyl('pole', 0.025, 0.03, H, 7, { pos: [0, 0, sz * D * 0.5] });
   o.cyl('pole', 0.02, 0.02, D + 0.3, 7, { pos: [0, H, -D * 0.5 - 0.15], rot: [Math.PI / 2, 0, 0] });
-  gable(o, key, W, D, 0.25, H, { overhang: 0.1, sag: 0.05, belly: 0.03, edge: 0.02, wrinkle: 0.015, seg: 2.5, seed: rnd() * 7 });
+  gable(o, key, W, D, 0.25, H, { overhang: 0.1, sag: 0.05, belly: 0.03, edge: 0.02, wrinkle: 0.015, seg: 2.5, seed: rnd() * 7, hem: 0.018 });
   wall(o, key, W - 0.1, 0.27, 0.012, { pos: [0, 0.13, -D * 0.5], belly: -0.02 });
   gableEnd(o, key, W - 0.1, 0.25, H - 0.02, -D * 0.5 + 0.01);
   // front flap tied open to one side

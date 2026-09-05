@@ -20,6 +20,7 @@ export const TILE = {
   timber: 0.6,
   timberWarm: 0.6,
   pole: 0.6,
+  post: 2.4,
   canvas: 1.0,
   canvasOlive: 1.0,
   canvasSand: 1.0,

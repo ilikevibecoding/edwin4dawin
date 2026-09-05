@@ -79,27 +79,33 @@ const FLAME_MOTION = /* glsl */ `
     // the whole fire leans and gusts with a slow noise
     float lean = (vnoise(t * 1.3 + 3.0) - 0.5) * 0.35 + (vnoise(t * 4.0 + 7.0) - 0.5) * 0.12;
     if (s.w < 0.3) {
-      // a standing tongue on the coals: flickers in height at 4–8 Hz, never leaves
+      // a standing tongue on the coals: flickers in height at 4–8 Hz, never
+      // leaves. The core is the fire's silhouette, so it stands the full bed
+      // height and the tongues are spread across the coals rather than bunched
+      // on the axis, which is what read as one thin yellow streak from ten
+      // metres (round 2).
       float n = vnoise(t * (4.5 + s.y * 3.5) + s.x * 20.0);
-      float h = uHeight * (0.4 + s.y * 0.2) * (0.7 + 0.6 * n);
-      life = 0.18 + 0.25 * s.z;
+      float h = uHeight * (0.5 + s.y * 0.3) * (0.72 + 0.56 * n);
+      life = 0.14 + 0.22 * s.z;
       float ang = s.z * 6.2831;
-      float r = uRadius * 0.45 * s.x;
+      float r = uRadius * (0.1 + 0.38 * s.x);
       // the sprite fills 85 % of its quad with the base 0.425 quads below centre
       vec3 p = vec3(cos(ang) * r + lean * h * 0.5, h * 0.5 + 0.04, sin(ang) * r + lean * h * 0.2);
-      size = h * 1.15;
-      fade = 0.75 + 0.45 * n;
+      size = h * 1.0;
+      // half-weight each: six of these stack additively, and at full weight the
+      // stack summed to a white disc
+      fade = 0.32 + 0.28 * n;
       return p;
     }
-    float speed = 0.6 + s.y * 0.55;
+    float speed = 0.55 + s.y * 0.55;
     life = fract(t * speed + s.x);
     float ang = s.z * 6.2831;
-    float r = uRadius * (0.1 + s.w * 0.5) * (1.0 - life * 0.6);
-    vec3 p = vec3(cos(ang) * r + lean * life * 1.4, 0.25 * uHeight + life * uHeight * (0.7 + s.y * 0.3), sin(ang) * r + lean * life * 0.5);
-    p.x += (vnoise(t * 5.0 + s.z * 30.0) - 0.5) * 0.12 * life;
+    float r = uRadius * (0.1 + s.w * 0.55) * (1.0 - life * 0.6);
+    vec3 p = vec3(cos(ang) * r + lean * life * 1.4, 0.3 * uHeight + life * uHeight * (0.85 + s.y * 0.4), sin(ang) * r + lean * life * 0.5);
+    p.x += (vnoise(t * 5.0 + s.z * 30.0) - 0.5) * 0.14 * life;
     // a tongue is fat as it leaves the core and gone at the top
-    size = uHeight * (0.2 + s.w * 0.14) * sin(clamp(life, 0.0, 1.0) * 3.1416) * (1.0 - life * 0.3);
-    fade = 1.0 - smoothstep(0.4, 1.0, life);
+    size = uHeight * (0.24 + s.w * 0.16) * sin(clamp(life, 0.0, 1.0) * 3.1416) * (1.0 - life * 0.3);
+    fade = 1.0 - smoothstep(0.35, 1.0, life);
     return p;
   }
 `;
@@ -119,7 +125,8 @@ const EMBER_MOTION = /* glsl */ `
     vec3 p = vec3(cos(ang + life * 6.0 + s.x * 3.0) * (r + sw * life) + wind.x + (vnoise(t * 2.0 + s.x * 9.0) - 0.5) * 0.3 * life,
                   h,
                   sin(ang + life * 5.0) * (r + sw * life) + wind.y);
-    size = 0.028 * (1.0 - life * 0.5);
+    // 5 cm: a 3 cm ember is under a pixel in a 640-wide frame from the fire ring
+    size = 0.055 * (1.0 - life * 0.45);
     // an ember goes bright and dark on its way up, and only some ever leave the fire
     float twinkle = 0.45 + 0.55 * vnoise(t * (9.0 + s.w * 12.0) + s.z * 40.0);
     fade = twinkle * (1.0 - smoothstep(0.55, 1.0, life)) * smoothstep(0.0, 0.05, life) * step(0.35, s.x);
@@ -158,8 +165,10 @@ const flameFragment = /* glsl */ `
     // colour by heat: white-yellow core, orange body, dark red edge; a rising
     // tongue cools with life, so its ramp slides toward the red end
     float h = heat * (1.0 - vLife * 0.75);
+    // the hottest core is yellow, not white: with additive quads stacked the
+    // blue channel is what tips a bright yellow into white
     vec3 c = mix(vec3(0.55, 0.06, 0.005), vec3(1.0, 0.42, 0.06), smoothstep(0.08, 0.45, h));
-    c = mix(c, vec3(1.0, 0.78, 0.38), smoothstep(0.6, 0.98, h));
+    c = mix(c, vec3(1.0, 0.74, 0.2), smoothstep(0.6, 0.98, h));
     float alpha = s.a * vFade;
     gl_FragColor = vec4(c * uGain * alpha, alpha);
   }
@@ -232,7 +241,7 @@ const glowFragment = /* glsl */ `
   }
 `;
 
-function makeSystem(count, motion, fragment, uniforms, { blending, depthWrite = false, fog = false } = {}) {
+function makeSystem(count, motion, fragment, uniforms, { blending, depthWrite = false, fog = false, core = 0 } = {}) {
   const geo = new THREE.InstancedBufferGeometry();
   const base = new THREE.PlaneGeometry(1, 1);
   geo.index = base.index;
@@ -240,6 +249,9 @@ function makeSystem(count, motion, fragment, uniforms, { blending, depthWrite = 
   geo.setAttribute('corner', base.attributes.position);
   const seeds = new Float32Array(count * 4);
   for (let i = 0; i < count * 4; i++) seeds[i] = Math.random();
+  // the first `core` particles are the standing tongues (w < 0.3 in the flame
+  // motion), the rest rise: the silhouette does not thin with the tier
+  for (let i = 0; i < count && core > 0; i++) seeds[i * 4 + 3] = i < core ? Math.random() * 0.3 : 0.3 + Math.random() * 0.7;
   geo.setAttribute('seed', new THREE.InstancedBufferAttribute(seeds, 4));
   geo.instanceCount = count;
   const vertex = billboardVertex.replace('vec3 motion(vec4 s, float t, out float size, out float life, out float fade);', motion);
@@ -297,9 +309,11 @@ export function createFire({ radius = 0.5, height = 1.3, quality = 'high', wind 
     uTex: { value: flameTex },
     uGain: { value: 0.9 },
   };
-  const flames = makeSystem(Math.round(22 * tier), FLAME_MOTION, flameFragment, { ...shared }, { blending: THREE.AdditiveBlending });
+  // six standing tongues at every tier, plus rising ones by tier
+  const coreN = 6;
+  const flames = makeSystem(coreN + Math.round(16 * tier), FLAME_MOTION, flameFragment, { ...shared }, { blending: THREE.AdditiveBlending, core: coreN });
   flames.name = 'fireFlames';
-  const embers = makeSystem(Math.round(26 * tier), EMBER_MOTION, emberFragment, { ...shared, uTex: { value: emberTex }, uGain: { value: 3.0 } }, { blending: THREE.AdditiveBlending });
+  const embers = makeSystem(Math.round(30 * tier), EMBER_MOTION, emberFragment, { ...shared, uTex: { value: emberTex }, uGain: { value: 3.0 } }, { blending: THREE.AdditiveBlending });
   embers.name = 'fireEmbers';
   const smoke = makeSystem(
     Math.round(30 * tier),
@@ -320,8 +334,9 @@ export function createFire({ radius = 0.5, height = 1.3, quality = 'high', wind 
   embers.renderOrder = 4;
   group.add(smoke, flames, embers);
 
-  // ground glow
-  const glowR = radius * 5.5;
+  // ground glow: out to five metres on a 1.15 m pit, so the pool reaches the
+  // chairs (2.7 m) and fades past them rather than stopping at their feet
+  const glowR = radius * 8;
   const glowGeo = new THREE.CircleGeometry(glowR, 28);
   glowGeo.rotateX(-Math.PI / 2);
   const glowMat = new THREE.ShaderMaterial({
@@ -345,11 +360,13 @@ export function createFire({ radius = 0.5, height = 1.3, quality = 'high', wind 
 
   let pointLight = null;
   if (light) {
-    // decay 1.5 rather than 2: a fire's light in a dark camp is read against a
-    // near-black ambient, and the physically-steeper curve leaves the chairs
-    // blown and the tent front ten metres off unlit
-    pointLight = new THREE.PointLight(0xff9448, 0, 24, 1.5);
-    pointLight.position.set(0, 1.05, 0);
+    // decay 1 rather than the physical 2: a fire's light in a dark camp is read
+    // against a near-black ambient, and the steeper curves left the ground at
+    // the ring blown while the chairs three metres off and the mess-tent front
+    // at six sat in the moonlight (rounds 1–2 at decay 2 and 1.5). At decay 1
+    // with the same peak the pool at 3 m is a third brighter and at 6 m double.
+    pointLight = new THREE.PointLight(0xff9448, 0, 20, 1.0);
+    pointLight.position.set(0, 1.15, 0);
     pointLight.name = 'fireLight';
     pointLight.castShadow = false;
     group.add(pointLight);
@@ -372,20 +389,24 @@ export function createFire({ radius = 0.5, height = 1.3, quality = 'high', wind 
       flicker = flickerAt(phase, phaseSeed);
       for (const m of mats) m.uniforms.uTime.value = phase;
       glowMat.uniforms.uTime.value = phase;
-      glowMat.uniforms.uGlow.value = (0.12 + 0.55 * night) * flicker;
+      glowMat.uniforms.uGlow.value = (0.1 + 0.4 * night) * flicker;
       if (pointLight) {
-        pointLight.intensity = (7 + 26 * night) * flicker * radius * 2;
+        pointLight.intensity = (6 + 20 * night) * flicker * radius * 2;
         pointLight.position.x = Math.sin(phase * 3.1) * 0.06;
         pointLight.position.z = Math.cos(phase * 2.3) * 0.06;
       }
     },
     setNight(night) {
-      // flames read against daylight only if they are hot; at night they are the brightest thing there is
-      flames.material.uniforms.uGain.value = 0.9 + night * 0.45;
-      embers.material.uniforms.uGain.value = 2.4 + night * 1.2;
-      smoke.material.uniforms.uOpacity.value = 0.4 - night * 0.22;
-      smoke.material.uniforms.uColor.value.set(night > 0.5 ? 0x2c3140 : 0x8d8f8c);
-      smoke.material.uniforms.uLit.value.set(night > 0.5 ? 0xb87040 : 0xb98a5a);
+      // flames read against daylight only if they are hot; at night they are
+      // the brightest thing there is — but the gain stays under what stacks the
+      // six core quads to white (round 2's core was a pale disc)
+      flames.material.uniforms.uGain.value = 0.9 - night * 0.2;
+      embers.material.uniforms.uGain.value = 2.4 + night * 1.4;
+      // the column is lit amber at its root and, after dark, a grey a little
+      // paler than the sky it stands against so it reads as a column at all
+      smoke.material.uniforms.uOpacity.value = 0.4 - night * 0.1;
+      smoke.material.uniforms.uColor.value.set(night > 0.5 ? 0x4a4c56 : 0x8d8f8c);
+      smoke.material.uniforms.uLit.value.set(night > 0.5 ? 0xc07a44 : 0xb98a5a);
     },
     count: flames.geometry.instanceCount + embers.geometry.instanceCount + smoke.geometry.instanceCount,
     calls: 4,

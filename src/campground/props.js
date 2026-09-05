@@ -405,6 +405,57 @@ export function duffel(rnd, key = 'canvasGreen') {
   return o;
 }
 
+/**
+ * Litter where people sit. `kind` is 'cap' (a bottle cap, face up or down),
+ * 'peg' (a tent peg pulled and kicked loose), 'bottle' (an empty on its side)
+ * or 'glove' (a dropped work glove). Each is a few triangles in an existing
+ * material bucket, so a dozen of them cost no draw call.
+ */
+export function litter(rnd, kind = 'cap') {
+  const o = new Obj();
+  if (kind === 'cap') {
+    const key = ['steelRed', 'steelYellow', 'alu', 'steelBlue'][Math.floor(rnd() * 4)];
+    o.cyl(key, 0.015, 0.016, 0.006, 10, { pos: [0, 0.002, 0], rot: [(rnd() - 0.5) * 0.15, 0, 0] });
+  } else if (kind === 'peg') {
+    // rot [pi/2, 0, yaw] lays the cylinder's axis along (-sin yaw, 0, cos yaw)
+    const yaw = rnd() * TAU;
+    const ax = -Math.sin(yaw);
+    const az = Math.cos(yaw);
+    o.cyl('steel', 0.005, 0.007, 0.26, 6, { pos: [0, 0.008, 0], rot: [Math.PI / 2, 0, yaw] }, { centre: true });
+    o.box('steel', 0.03, 0.006, 0.006, { pos: [ax * 0.12, 0.012, az * 0.12], rot: [0, -yaw, 0] });
+  } else if (kind === 'bottle') {
+    const yaw = rnd() * TAU;
+    const ax = -Math.sin(yaw);
+    const az = Math.cos(yaw);
+    o.cyl('glass', 0.03, 0.032, 0.2, 10, { pos: [0, 0.031, 0], rot: [Math.PI / 2, 0, yaw] }, { centre: true, uv: false });
+    o.cyl('glass', 0.013, 0.026, 0.06, 10, { pos: [ax * 0.13, 0.031, az * 0.13], rot: [Math.PI / 2, 0, yaw] }, { centre: true, uv: false });
+    o.cyl('steelBlack', 0.014, 0.014, 0.02, 10, { pos: [ax * 0.165, 0.031, az * 0.165], rot: [Math.PI / 2, 0, yaw] }, { centre: true });
+  } else {
+    // a glove: the palm as a flat lump, thumb and fingers curled under
+    o.add('canvasSand', lump(0.055, 0.02, 0.09, rnd, { detail: 1, rough: 0.12, flat: 0.95 }), { pos: [0, 0.0, 0] });
+    for (let i = 0; i < 4; i++) o.cyl('canvasSand', 0.011, 0.012, 0.07, 6, { pos: [-0.033 + i * 0.022, 0.012, 0.08], rot: [Math.PI / 2 + 0.25 + rnd() * 0.2, 0, 0] });
+    o.cyl('canvasSand', 0.012, 0.013, 0.06, 6, { pos: [0.06, 0.012, 0.01], rot: [Math.PI / 2, 0, -0.9] });
+  }
+  return o;
+}
+
+/** A woven mat put down under a table: sand canvas with a lift at the corners. */
+export function mat(rnd, w = 3.0, d = 2.2) {
+  const o = new Obj();
+  const g = new THREE.PlaneGeometry(w, d, 6, 5);
+  g.rotateX(-Math.PI / 2);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const fx = Math.abs(p.getX(i) / (w * 0.5));
+    const fz = Math.abs(p.getZ(i) / (d * 0.5));
+    // corners curl up a little, and the middle undulates on the dirt beneath
+    p.setY(i, 0.012 + Math.pow(fx * fz, 3) * 0.05 + Math.sin(p.getX(i) * 3.1 + p.getZ(i) * 2.3) * 0.004);
+  }
+  g.computeVertexNormals();
+  o.add('canvasSand', g, { rot: [0, (rnd() - 0.5) * 0.06, 0] });
+  return o;
+}
+
 /** Rubbish bin: half a drum with a lid propped on it. */
 export function bin(rnd) {
   const o = new Obj();

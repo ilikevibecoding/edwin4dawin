@@ -17,6 +17,7 @@ import {
   laundryLine,
   lookout,
   noticeBoard,
+  poleLantern,
   radioMast,
   signPost,
   solarArray,
@@ -110,6 +111,13 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   put(flagPole(6), { u: plan.flag.u, v: plan.flag.v });
   put(gate(rnd, plan.gate.width), { u: plan.gate.u, v: plan.gate.v, facing: [0, 1] });
   lightAt(plan.gate.u + plan.gate.width * 0.5, plan.gate.v + 0.3, 1.7, { name: 'gateLamp', intensity: 10, distance: 9, priority: 5, color: 0xffb35c });
+  // pole lanterns over the parking row, between the lane and the vehicles'
+  // tails: the side the arrival and gate views see. Priority sits above the
+  // kitchen and gate so both survive the fast tier's cap.
+  plan.rowLamps.forEach((l, i) => {
+    put(poleLantern(rnd, l.height), { u: l.u, v: l.v, facing: l.facing, conform: 0.2, half: 0.3 });
+    lightAt(l.u + l.facing[0] * 0.62, l.v + l.facing[1] * 0.62, l.height - 0.52, { name: 'rowLamp' + i, intensity: 12, distance: 14, priority: 7 - i * 0.5, color: 0xffb35c, decay: 1.6 });
+  });
   put(signPost('signSpeed', 0.9, 0.5, 1.5), { u: plan.gate.u - 6, v: plan.gate.v - 2.5, facing: [-0.6, -1] });
   for (const line of plan.fence) {
     put(fenceLine(rnd, line.map(([u, v]) => [u, -v]), (x, z) => frame.ground(x, -z)), { u: 0, v: 0, y: 0, facing: [0, -1] });
@@ -145,6 +153,7 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   // --- the fire and what sits round it -------------------------------------------
   put(firePit(rnd, plan.fire.radius), { u: plan.fire.u, v: plan.fire.v, conform: 1 });
   const ring = 2.7;
+  const seats = []; // where people sit: the ground there is scuffed and littered
   for (let i = 0; i < 9; i++) {
     const a = (i / 9) * Math.PI * 2 + 0.3 + R.jitter(0.12);
     if (i === 4) continue; // a gap on the mess side where people walk in
@@ -153,6 +162,42 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
     const v = plan.fire.v + Math.sin(a) * r;
     if (i % 4 === 1) put(P.logBench(rnd), { u, v, facing: [-Math.sin(a), Math.cos(a)], conform: 1, half: 0.8 });
     else put(P.chair(rnd), { u, v, facing: [-Math.cos(a), -Math.sin(a)].map((c, k) => c + R.jitter(0.25)), conform: 1, half: 0.4 });
+    // feet go toward the fire
+    seats.push({ u: u - Math.cos(a) * 0.35, v: v - Math.sin(a) * 0.35, r: i % 4 === 1 ? 0.9 : 0.55 });
+  }
+  // the mess tables' chairs and the picnic tables, in plan coordinates
+  {
+    const c = plan.mess.facing[0];
+    const s = -plan.mess.facing[1];
+    const toPlan = (x, z) => ({ u: plan.mess.u + x * s + z * c, v: plan.mess.v + (x * c - z * s) });
+    for (const x of [-2.2, 2.2]) for (const z of [0.95, -0.75]) for (let i = 0; i < 3; i++) seats.push({ ...toPlan(x - 0.8 + i * 0.8, z), r: 0.45 });
+  }
+  seats.push({ u: plan.mess.u + 7.5, v: plan.mess.v + 4.5, r: 1.3 }, { u: plan.mess.u - 1, v: plan.mess.v + 6.5, r: 1.3 });
+  // litter: bottle caps, a dropped glove, tent pegs kicked loose — small
+  // things where people sit, so the ground is not bare between the chairs
+  const litterAt = (u, v, r, n) => {
+    for (let i = 0; i < n; i++) {
+      const a = rnd() * Math.PI * 2;
+      const d = Math.sqrt(rnd()) * r;
+      const t = rnd();
+      const kind = t < 0.55 ? 'cap' : t < 0.75 ? 'peg' : t < 0.88 ? 'bottle' : 'glove';
+      put(P.litter(rnd, kind), { u: u + Math.cos(a) * d, v: v + Math.sin(a) * d, facing: [Math.cos(a * 3), Math.sin(a * 3)], conform: 1 });
+    }
+  };
+  litterAt(plan.fire.u, plan.fire.v + 0.3, 3.4, quality === 'fast' ? 10 : 16);
+  litterAt(plan.mess.u, plan.mess.v - 0.4, 3.6, quality === 'fast' ? 6 : 10);
+  litterAt(plan.mess.u + 7.5, plan.mess.v + 4.5, 1.4, 3);
+  litterAt(plan.mess.u - 1, plan.mess.v + 6.5, 1.4, 3);
+  // and mats put down under the mess tables where the ground sheet used to be
+  // (one flat tile the size of the tent, near-black in the shade)
+  {
+    const c = plan.mess.facing[0];
+    const s = -plan.mess.facing[1];
+    for (const x of [-2.2, 2.2]) {
+      const u = plan.mess.u + x * s;
+      const v = plan.mess.v + x * c;
+      put(P.mat(rnd, 3.4, 2.6), { u, v, facing: plan.mess.facing, conform: 1 });
+    }
   }
   put(P.table(rnd, 0.7, 0.7, 0.5), { u: plan.fire.u + 3.3, v: plan.fire.v - 1.6, facing: [0.3, -1], conform: 1, half: 0.4 });
   put(P.cooler(rnd, 'polyBlue'), { u: plan.fire.u + 3.9, v: plan.fire.v - 2.2, facing: [0.5, -1], conform: 1, half: 0.3 });
@@ -239,7 +284,7 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   }
   group.add(built);
 
-  const wear = buildGroundWear(frame, plan, { quality, footprints });
+  const wear = buildGroundWear(frame, plan, { quality, footprints, seats });
   group.add(wear.mesh);
   const clearing = clearingMask(anchor);
 
@@ -301,6 +346,7 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   };
 
   let time = 0;
+  let hour = null;
   return {
     group,
     anchor,
@@ -311,10 +357,23 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
     frame,
     materials: mats,
     stats,
+    /** the camp's night level, 0 by day to 1 at night, for anything that wants to check it */
+    get night() {
+      return camp.level;
+    },
+    /**
+     * main.js calls this on every hour change. Before it existed the lamps
+     * learned the hour by matching the sky's key direction every 0.4 s, which
+     * still runs as the fallback when nobody calls this.
+     */
+    setTimeOfDay(name) {
+      hour = name;
+      camp.setMode(name);
+    },
     update(dt, t, ctx = {}) {
       const step = THREE.MathUtils.clamp(dt || 0, 1e-4, 0.1);
       time += step;
-      camp.update(step, time, ctx);
+      camp.update(step, time, hour && !ctx.timeOfDay ? { ...ctx, timeOfDay: hour } : ctx);
       const night = camp.level;
       for (const f of fires) {
         f.update(step, time, { night });
