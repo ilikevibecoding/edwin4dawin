@@ -98,7 +98,13 @@ export class DisasterManager {
       }
       case 'start': {
         if (!cls) return { ok: false, reason: 'no disaster' };
-        if (this.state === 'restoring') return { ok: false, reason: 'restore in progress' };
+        if (this.state === 'restoring') {
+          // queue it: the new disaster starts the moment the world is restored (a refusal here looked like a broken start)
+          this.pendingStart = { ...cmd };
+          this.say(`Restoring the world first... ${cls.label} will start when it is done.`);
+          this._notify();
+          return { ok: true, pending: true, reason: 'queued until the restore completes' };
+        }
         this._disposeActive();
         const seed = cmd.seed ?? ((Date.now() ^ (Math.random() * 1e9)) >>> 0);
         this.active = new cls(this, cmd.params || {}, seed);
@@ -209,6 +215,7 @@ export class DisasterManager {
     if (this.game.animals) this.game.animals.clearAlert();
     this.say('Area restored.');
     if (this.pendingReplay) { const c = this.pendingReplay; this.pendingReplay = null; this.apply(c, false); }
+    else if (this.pendingStart) { const c = this.pendingStart; this.pendingStart = null; this.apply(c, false); }
     this._notify();
   }
 
