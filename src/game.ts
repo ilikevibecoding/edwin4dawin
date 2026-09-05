@@ -379,8 +379,8 @@ export class Game {
     this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size);
     const info = this.renderer.info.render;
     const ps = this.passStats;
-    let c0 = info.calls, t0 = info.triangles;
-    const mark = (name: PassName) => { ps[name].calls = info.calls - c0; ps[name].triangles = info.triangles - t0; c0 = info.calls; t0 = info.triangles; };
+    const mark = this.markPass;
+    this.passCalls0 = info.calls; this.passTriangles0 = info.triangles;
     this.wakes.render(this.renderer, cx, cz);
     mark('wake');
     this.sky.render(this.renderer, cam, this.post.width, this.post.height);
@@ -404,4 +404,13 @@ export class Game {
     if (this.params.dbg.has('reflview')) this.reflection.debugBlit();
     this.metrics.endFrame();
   }
+
+  private passCalls0 = 0;
+  private passTriangles0 = 0;
+  /** Close the pass `name` on the renderer.info counters (deltas since the previous mark; a few integer ops). */
+  private readonly markPass = (name: PassName): void => {
+    const info = this.renderer.info.render, p = this.passStats[name];
+    p.calls = info.calls - this.passCalls0; p.triangles = info.triangles - this.passTriangles0;
+    this.passCalls0 = info.calls; this.passTriangles0 = info.triangles;
+  };
 }
