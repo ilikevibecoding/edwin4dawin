@@ -22,6 +22,15 @@ const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3
 const _m4 = new THREE.Matrix4(), _m4b = new THREE.Matrix4();
 const FALLBACK_SUN = new THREE.Vector3(0.45, 0.8, -0.4).normalize();
 
+// API (the beam effect codes against this):
+//   new BattleStation(scene, { radius = 64 })       builds and adds the meshes, hidden until set() with alpha > 0
+//   radius                                          blocks
+//   set(x, y, z, ax, ay, az, state)                 centre, unit aim direction (dish -> target), and
+//                                                   state { power, heat, charge, firing, alpha: 0..1, time: s }
+//   dishWorld(out)                                  world position of the dish centre (bowl-floor emitter, on the aim)
+//   focusWorld(out, dist = radius * 0.35)           point `dist` blocks in front of the dish centre along the aim
+//   rimPoints(n, outArray)                          n world points evenly spaced around the dish rim (n = 8: the emitter nodes)
+//   dispose()
 export class BattleStation {
   // opts: radius (blocks, default 64), voxel (block size of one voxel; auto: 1 up to R 80, else 2),
   //       sky (object with sunDir, default window.game.sky), sunDir (Vector3 overriding sky)
@@ -155,7 +164,7 @@ export { BattleStation as RingStation };
 // ---------------------------------------------------------------- compatibility with the current orbitalBeam.js
 // The old slim ring station API: set(x, y, z, power, heat, time, alpha, spin). The sphere aims straight down.
 export const STATION_RING_RADIUS = STATION_RADIUS + 2;     // where the old code spawns its motes (just outside the hull)
-export const STATION_FOCUS_DROP = Math.round((STATION_RADIUS - STATION_RADIUS * 0.15 + 1.5) + STATION_RADIUS * 0.35);
+export const STATION_FOCUS_DROP = Math.round(stationLayout(STATION_RADIUS).emitterR + STATION_RADIUS * 0.35);   // centre -> focus, aiming down
 
 export class StationMesh extends BattleStation {
   set(x, y, z, a, b, c, d) {

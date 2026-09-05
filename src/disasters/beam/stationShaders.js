@@ -62,10 +62,10 @@ void main() {
   else if (mat < 3.5) base = vec3(0.14, 0.15, 0.18);        // trench floor
   else if (mat < 4.5) base = vec3(0.27, 0.28, 0.32);        // trench wall
   else if (mat < 5.5) base = vec3(0.66, 0.67, 0.71);        // dish rim
-  else if (mat < 6.5) base = vec3(0.23, 0.24, 0.28);        // dish bowl
+  else if (mat < 6.5) base = vec3(0.27, 0.28, 0.32);        // dish bowl
   else if (mat < 7.5) base = vec3(0.42, 0.43, 0.47);        // seam
   else base = vec3(0.04, 0.07, 0.05);                         // emitter node
-  if (groove && mat < 2.5) tone *= 0.8;
+  if (groove && mat < 2.5) tone *= 0.86;
   if (mat > 4.5 && mat < 5.5) { groove = false; window = false; }
   if (mat > 2.5 && mat < 3.5) window = false;
   if (mat > 5.5) window = false;

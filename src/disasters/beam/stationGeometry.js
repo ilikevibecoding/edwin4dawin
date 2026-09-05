@@ -107,8 +107,23 @@ function faceMat(mat, axis, positive, cellCoord) {
   return mat;
 }
 
-// Greedy-meshed voxel body. Returns { geometry, quads, cells } (cells is the volume, kept for debugging).
+// Greedy-meshed voxel body. Returns { geometry, quads, cells } (cells = volume size per axis). The vertex
+// arrays are cached per (radius, voxel) so a second disaster run does not pay the ~150 ms build again.
+const bodyCache = new Map();
+
 export function buildBodyGeometry(lay) {
+  const key = `${lay.R}:${lay.voxel}`;
+  let built = bodyCache.get(key);
+  if (!built) { built = meshBody(lay); bodyCache.set(key, built); }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(built.pos, 3));
+  g.setAttribute('aFace', new THREE.BufferAttribute(built.face, 4));
+  g.setIndex(new THREE.BufferAttribute(built.index, 1));
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(), lay.outer + 1);
+  return { geometry: g, quads: built.quads, cells: built.cells };
+}
+
+function meshBody(lay) {
   const v = lay.voxel;
   let N = Math.ceil((2 * lay.outer) / v) + 2;
   if (N & 1) N++;                                   // even: voxel faces lie on integer model coordinates
@@ -143,7 +158,7 @@ export function buildBodyGeometry(lay) {
     for (let s = lo; s <= hi; s++) {
       // mask of exposed faces between slice s-1 and s along axis d; code = mat | side<<8 (side 1 = normal points +d)
       let any = false;                       // (the merge pass below leaves the mask all-zero again)
-      const y0 = (s - 1 + 0.5 - half) * v, y1 = (s + 0.5 - half) * v;   // cell coordinates along d (for the lip walls)
+      const c0 = (s - 1 + 0.5 - half) * v, c1 = (s + 0.5 - half) * v;   // owning-cell coordinate along d (lip walls)
       for (let a = lo; a < hi; a++) {
         const rowBase = s * sd + a * su;
         for (let b = lo; b < hi; b++) {
@@ -152,8 +167,8 @@ export function buildBodyGeometry(lay) {
           const m1 = s < N ? cells[i1] : 0;
           if (m0 === 0 && m1 === 0) continue;
           let code = 0;
-          if (m0 && !m1) code = faceMat(m0, d, true, y0) | 256;
-          else if (!m0 && m1) code = faceMat(m1, d, false, y1);
+          if (m0 && !m1) code = faceMat(m0, d, true, c0) | 256;
+          else if (!m0 && m1) code = faceMat(m1, d, false, c1);
           if (code) { mask[a * N + b] = code; any = true; }
         }
       }
@@ -188,12 +203,7 @@ export function buildBodyGeometry(lay) {
       }
     }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('aFace', new THREE.Uint8BufferAttribute(face, 4));
-  g.setIndex(index);
-  g.computeBoundingSphere();
-  return { geometry: g, quads, cells: N };
+  return { pos: new Float32Array(pos), face: new Uint8Array(face), index: new Uint32Array(index), quads, cells: N };
 }
 
 // Nine camera-facing glow quads (centre emitter + rim nodes). The vertex shader billboards them around
