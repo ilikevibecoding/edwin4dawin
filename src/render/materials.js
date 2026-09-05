@@ -14,26 +14,31 @@
 //   hl          how much the painted brightness feeds the base height (dark = low)
 //   nearMedian  restrict the class detail to texels close to the tile's median colour (wood with books, etc.)
 //   emit        { lo, hi, sat }: per-texel emissive mask from luminance (smoothstep lo..hi) gated by saturation
+//   blend       colour tolerance (mean abs RGB, 0..255) for the edge-aware upsample: neighbouring base texels of the
+//               same structure within this distance are interpolated smoothly (no 4x4 grid); 0 = crisp nearest
+//   bake        strength of the shading baked from the base relief into the colour (rounded stones, ribs)
+//   round       chamfer the convex corners of face blocks against grooves (cobble stones); dots are always rounded
+//   roundAlpha  holes eat the corner texel of neighbouring face blocks (leaf clusters)
 export const CLASS_DEFAULTS = {
-  wood: { roughness: 0.72, metalness: 0, emissive: 0, relief: 0.6, grooveSign: -1, grooveT: 20, bevel: 0.16, grain: 'h', hl: 0.35, nearMedian: true },
-  stone: { roughness: 0.86, metalness: 0, emissive: 0, relief: 0.7, grooveSign: -1, grooveT: 18, bevel: 0.05, hl: 0.5 },
-  brick: { roughness: 0.82, metalness: 0, emissive: 0, relief: 0.75, grooveSign: 1, grooveT: 18, bevel: 0.14, hl: 0.2 },
-  cobble: { roughness: 0.84, metalness: 0, emissive: 0, relief: 0.9, grooveSign: -1, grooveT: 22, bevel: 0.05, hl: 0.3, smooth: true },
-  dirt: { roughness: 0.94, metalness: 0, emissive: 0, relief: 0.4, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0.3, dots: true, smooth: true },
-  sand: { roughness: 0.9, metalness: 0, emissive: 0, relief: 0.25, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0.2, smooth: true },
-  gravel: { roughness: 0.88, metalness: 0, emissive: 0, relief: 0.65, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0.2, blobs: true, blobT: 12, smooth: true },
-  plaster: { roughness: 0.76, metalness: 0, emissive: 0, relief: 0.3, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0.15 },
-  metal: { roughness: 0.42, metalness: 0.85, emissive: 0, relief: 0.5, grooveSign: -1, grooveT: 16, bevel: 0.18, hl: 0.2, dots: true, nearMedian: true },
-  chrome: { roughness: 0.12, metalness: 1, emissive: 0, relief: 0.3, grooveSign: -1, grooveT: 16, bevel: 0.14, hl: 0.15 },
-  panel: { roughness: 0.5, metalness: 0.55, emissive: 0, relief: 0.5, grooveSign: -1, grooveT: 12, bevel: 0.2, hl: 0.25, dots: true },
-  glass: { roughness: 0.08, metalness: 0, emissive: 0, relief: 0.25, grooveSign: 0, grooveT: 0, bevel: 0.12, bevelAlpha: true, hl: 0 },
-  fabric: { roughness: 0.95, metalness: 0, emissive: 0, relief: 0.35, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0.1, smooth: true },
-  foliage: { roughness: 0.7, metalness: 0, emissive: 0, relief: 0.6, grooveSign: 0, grooveT: 0, bevel: 0.08, bevelAlpha: true, hl: 0.25, style: 'leaves', smooth: true },
-  liquid: { roughness: 0.1, metalness: 0, emissive: 0, relief: 0.15, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0, smooth: true },
-  glow: { roughness: 0.4, metalness: 0.1, emissive: 1, relief: 0.35, grooveSign: -1, grooveT: 40, bevel: 0.12, hl: 0.15, emit: { lo: 110, hi: 180, sat: 0 } },
-  ore: { roughness: 0.82, metalness: 0, emissive: 0, relief: 0.8, grooveSign: -1, grooveT: 18, bevel: 0.05, hl: 0.5, nuggetMetal: 0 },
-  organic: { roughness: 0.8, metalness: 0, emissive: 0, relief: 0.6, grooveSign: -1, grooveT: 22, bevel: 0.06, hl: 0.3, smooth: true, grain: 'v' },
-  plain: { roughness: 0.9, metalness: 0, emissive: 0, relief: 0, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0 },
+  wood: { roughness: 0.72, metalness: 0, emissive: 0, relief: 0.6, grooveSign: -1, grooveT: 20, bevel: 0.16, grain: 'h', hl: 0.35, nearMedian: true, blend: 26, bake: 0 },
+  stone: { roughness: 0.86, metalness: 0, emissive: 0, relief: 0.7, grooveSign: -1, grooveT: 36, bevel: 0.05, hl: 0.5, blend: 64, bake: 0 },
+  brick: { roughness: 0.82, metalness: 0, emissive: 0, relief: 0.75, grooveSign: 1, grooveT: 18, bevel: 0.14, hl: 0.2, blend: 34, bake: 0 },
+  cobble: { roughness: 0.84, metalness: 0, emissive: 0, relief: 0.9, grooveSign: -1, grooveT: 22, bevel: 0.05, hl: 0.3, smooth: true, blend: 40, bake: 0.22, round: true },
+  dirt: { roughness: 0.94, metalness: 0, emissive: 0, relief: 0.4, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0.3, dots: true, smooth: true, blend: 40, bake: 0.12 },
+  sand: { roughness: 0.9, metalness: 0, emissive: 0, relief: 0.25, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0.2, dots: true, smooth: true, blend: 30, bake: 0.08 },
+  gravel: { roughness: 0.88, metalness: 0, emissive: 0, relief: 0.65, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0.2, blobs: true, blobT: 12, smooth: true, blend: 30, bake: 0.18, round: true },
+  plaster: { roughness: 0.76, metalness: 0, emissive: 0, relief: 0.3, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0.15, blend: 40, bake: 0 },
+  metal: { roughness: 0.42, metalness: 0.85, emissive: 0, relief: 0.5, grooveSign: -1, grooveT: 16, bevel: 0.18, hl: 0.2, dots: true, nearMedian: true, blend: 22, bake: 0 },
+  chrome: { roughness: 0.12, metalness: 1, emissive: 0, relief: 0.3, grooveSign: -1, grooveT: 16, bevel: 0.14, hl: 0.15, blend: 30, bake: 0 },
+  panel: { roughness: 0.5, metalness: 0.55, emissive: 0, relief: 0.5, grooveSign: -1, grooveT: 12, bevel: 0.2, hl: 0.25, dots: true, blend: 16, bake: 0 },
+  glass: { roughness: 0.08, metalness: 0, emissive: 0, relief: 0.25, grooveSign: 0, grooveT: 0, bevel: 0.12, bevelAlpha: true, hl: 0, blend: 0, bake: 0 },
+  fabric: { roughness: 0.95, metalness: 0, emissive: 0, relief: 0.35, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0.1, smooth: true, blend: 36, bake: 0 },
+  foliage: { roughness: 0.7, metalness: 0, emissive: 0, relief: 0.6, grooveSign: 0, grooveT: 0, bevel: 0.08, bevelAlpha: true, hl: 0.25, style: 'leaves', smooth: true, blend: 110, bake: 0.1 },
+  liquid: { roughness: 0.1, metalness: 0, emissive: 0, relief: 0.15, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0, smooth: true, blend: 60, bake: 0 },
+  glow: { roughness: 0.4, metalness: 0.1, emissive: 1, relief: 0.35, grooveSign: -1, grooveT: 40, bevel: 0.12, hl: 0.15, emit: { lo: 110, hi: 180, sat: 0 }, blend: 24, bake: 0 },
+  ore: { roughness: 0.82, metalness: 0, emissive: 0, relief: 0.8, grooveSign: -1, grooveT: 18, bevel: 0.05, hl: 0.5, nuggetMetal: 0, blend: 64, bake: 0 },
+  organic: { roughness: 0.8, metalness: 0, emissive: 0, relief: 0.6, grooveSign: -1, grooveT: 22, bevel: 0.06, hl: 0.3, smooth: true, grain: 'v', blend: 30, bake: 0.2 },
+  plain: { roughness: 0.9, metalness: 0, emissive: 0, relief: 0, grooveSign: 0, grooveT: 0, bevel: 0, hl: 0, blend: 0, bake: 0 },
 };
 
 // Explicit classification of every painted tile. `detail` overrides which class refiner paints the surface
@@ -48,9 +53,9 @@ const TILE_MATERIALS = {
   sand: { cls: 'sand' },
   gravel: { cls: 'gravel' },
   bedrock: { cls: 'stone', relief: 0.9, roughness: 0.92 },
-  oak_log: { cls: 'wood', grain: 'v', bark: true, roughness: 0.85, relief: 0.8 },
+  oak_log: { cls: 'wood', grain: 'v', bark: true, roughness: 0.85, relief: 0.8, blend: 50 },
   oak_log_top: { cls: 'wood', grain: 'rings' },
-  oak_leaves: { cls: 'foliage' },
+  oak_leaves: { cls: 'foliage', roundAlpha: true },
   oak_planks: { cls: 'wood' },
   glass: { cls: 'glass' },
   bricks: { cls: 'brick' },
@@ -58,13 +63,13 @@ const TILE_MATERIALS = {
   tall_grass: { cls: 'foliage', style: 'blades' },
   dandelion: { cls: 'foliage', style: 'flower' },
   poppy: { cls: 'foliage', style: 'flower' },
-  spruce_log: { cls: 'wood', grain: 'v', bark: true, roughness: 0.85, relief: 0.8 },
+  spruce_log: { cls: 'wood', grain: 'v', bark: true, roughness: 0.85, relief: 0.8, blend: 50 },
   spruce_log_top: { cls: 'wood', grain: 'rings' },
   spruce_planks: { cls: 'wood' },
-  spruce_leaves: { cls: 'foliage' },
-  birch_log: { cls: 'wood', grain: 'v', bark: true, roughness: 0.7, relief: 0.5 },
+  spruce_leaves: { cls: 'foliage', roundAlpha: true },
+  birch_log: { cls: 'wood', grain: 'v', bark: true, roughness: 0.7, relief: 0.5, blend: 50 },
   birch_log_top: { cls: 'wood', grain: 'rings' },
-  birch_leaves: { cls: 'foliage' },
+  birch_leaves: { cls: 'foliage', roundAlpha: true },
   dirt_path_top: { cls: 'dirt', relief: 0.3 },
   dirt_path_side: { cls: 'dirt' },
   mud: { cls: 'dirt', roughness: 0.55, relief: 0.35 },
@@ -133,8 +138,8 @@ const TILE_MATERIALS = {
   panel_black: { cls: 'panel' },
   panel_red: { cls: 'panel' },
   panel_stripe: { cls: 'panel' },
-  glow_panel: { cls: 'glow', detail: 'panel', emit: { lo: 110, hi: 180, sat: 0 } },
-  glow_panel_blue: { cls: 'glow', detail: 'panel', emit: { lo: 100, hi: 170, sat: 0 } },
+  glow_panel: { cls: 'glow', detail: 'panel', emit: { lo: 212, hi: 236, sat: 0 } },
+  glow_panel_blue: { cls: 'glow', detail: 'panel', emit: { lo: 125, hi: 160, sat: 0 } },
   holo_sign: { cls: 'glow', detail: 'panel', emit: { lo: 100, hi: 200, sat: 0 }, roughness: 0.3, metalness: 0.4 },
   console_top: { cls: 'panel', emissive: 1, emit: { lo: 120, hi: 200, sat: 0.3 }, roughness: 0.35 },
   console_side: { cls: 'panel', emissive: 1, emit: { lo: 120, hi: 200, sat: 0.3 } },
@@ -144,7 +149,7 @@ const TILE_MATERIALS = {
   chrome: { cls: 'chrome' },
   window_lit: { cls: 'glass', emissive: 1, emit: { lo: 150, hi: 200, sat: 0 }, roughness: 0.1 },
   window_dark: { cls: 'glass', roughness: 0.1 },
-  city_lamp: { cls: 'glow', detail: 'panel', emit: { lo: 150, hi: 230, sat: 0 } },
+  city_lamp: { cls: 'glow', detail: 'panel', emit: { lo: 200, hi: 235, sat: 0 } },
   hull_plate: { cls: 'metal', roughness: 0.5 },
   hull_trench: { cls: 'panel', emissive: 1, emit: { lo: 150, hi: 200, sat: 0.3 } },
 };
@@ -179,7 +184,7 @@ const cache = new Map();
 // Every material object has exactly these keys in this order (one hidden class for the refiner's hot loops).
 const MATERIAL_KEYS = ['name', 'cls', 'detail', 'roughness', 'metalness', 'emissive', 'relief', 'grooveSign', 'grooveT', 'bevel', 'bevelAlpha',
   'dots', 'blobs', 'blobT', 'smooth', 'grain', 'hl', 'nearMedian', 'emit', 'style', 'bark', 'metalSat', 'sparkle', 'chips', 'cracks',
-  'nuggetMetal', 'domeAmp', 'detailScale', 'explicit', 'fallback'];
+  'nuggetMetal', 'domeAmp', 'detailScale', 'blend', 'bake', 'round', 'roundAlpha', 'explicit', 'fallback'];
 
 // Returns the full material description of a tile: class defaults merged with per-tile overrides.
 // `explicit` is true when the name is in the table, `fallback` when even the keyword rules did not match.

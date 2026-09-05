@@ -89,13 +89,58 @@ function banks() {
 }
 
 // Scratch buffers reused across tiles (keeps the GC quiet during the load-time build).
+const BB = B * B;
 const SCR = {
-  lum: new Float32Array(B * B), sat: new Float32Array(B * B), op: new Uint8Array(B * B), rel: new Float32Array(B * B),
-  st: new Uint8Array(B * B), hb: new Float32Array(B * B), w: new Float32Array(B * B), emit: new Float32Array(B * B), nug: new Uint8Array(B * B),
-  dist: new Float32Array(B * B), hist: new Uint32Array(256 * 4),
-  dl: new Float32Array(N), dh: new Float32Array(N), hbUp: new Float32Array(N), mark: new Uint8Array(N),
-  dr: new Float32Array(K * K), dg: new Float32Array(K * K), db: new Float32Array(K * K),
+  lum: new Float32Array(BB), sat: new Float32Array(BB), op: new Uint8Array(BB), rel: new Float32Array(BB),
+  br: new Float32Array(BB), bg: new Float32Array(BB), bb: new Float32Array(BB),
+  st: new Uint8Array(BB), hb: new Float32Array(BB), w: new Float32Array(BB), emit: new Float32Array(BB), nug: new Uint8Array(BB),
+  dist: new Float32Array(BB), hist: new Uint32Array(256 * 4),
+  er: new Float32Array(BB), eg: new Float32Array(BB), eb: new Float32Array(BB),
+  dl: new Float32Array(N), dh: new Float32Array(N), hbUp: new Float32Array(N), mark: new Uint8Array(N), acut: new Uint8Array(N),
+  cr: new Float32Array(N), cg: new Float32Array(N), cb: new Float32Array(N), fr: new Float32Array(N), fg: new Float32Array(N), fb: new Float32Array(N),
+  W: [new Float32Array(N), new Float32Array(N), new Float32Array(N), new Float32Array(N)],
 };
+
+// ---------------------------------------------------------------------------
+// 16 -> 64 lattice tables: the four base texels around every HD texel (bilinear footprint, wrapping) and their
+// plain bilinear weights. The owner texel (x >> 2, y >> 2) is always one of the four.
+// ---------------------------------------------------------------------------
+const Q0 = new Int32Array(N), Q1 = new Int32Array(N), Q2 = new Int32Array(N), Q3 = new Int32Array(N), OWN = new Int32Array(N);
+const QW0 = new Float32Array(N), QW1 = new Float32Array(N), QW2 = new Float32Array(N), QW3 = new Float32Array(N);
+for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+  const i = y * S + x;
+  const gx = (x + 0.5) / K - 0.5, gy = (y + 0.5) / K - 0.5;
+  const x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0;
+  Q0[i] = ((y0 & BM) * B + (x0 & BM)); Q1[i] = ((y0 & BM) * B + ((x0 + 1) & BM));
+  Q2[i] = (((y0 + 1) & BM) * B + (x0 & BM)); Q3[i] = (((y0 + 1) & BM) * B + ((x0 + 1) & BM));
+  OWN[i] = (y >> 2) * B + (x >> 2);
+  QW0[i] = (1 - fx) * (1 - fy); QW1[i] = fx * (1 - fy); QW2[i] = (1 - fx) * fy; QW3[i] = fx * fy;
+}
+
+// Edge-aware weights for this tile: a neighbouring base texel only contributes to an HD texel when it has the
+// owner's structure code and a similar colour (tolerance `tol`, mean abs RGB difference), so the smoothing
+// never crosses grooves, rivets, holes or material changes. tol 0 = pure nearest neighbour (crisp pixel art).
+function blendWeights(A, tol, W) {
+  const st = A.st, nug = A.nug, br = A.br, bg = A.bg, bb = A.bb;
+  const W0 = W[0], W1 = W[1], W2 = W[2], W3 = W[3];
+  const t0 = tol * 0.5, t1 = tol + 1e-6;
+  for (let i = 0; i < N; i++) {
+    const o = OWN[i], so = st[o], no = nug[o], r = br[o], g = bg[o], b = bb[o];
+    let w0 = QW0[i], w1 = QW1[i], w2 = QW2[i], w3 = QW3[i], j;
+    j = Q0[i]; if (j !== o) { if (st[j] !== so || nug[j] !== no) w0 = 0; else { const d = (Math.abs(br[j] - r) + Math.abs(bg[j] - g) + Math.abs(bb[j] - b)) / 3; w0 *= d <= t0 ? 1 : d >= t1 ? 0 : 1 - smoothstep(t0, t1, d); } }
+    j = Q1[i]; if (j !== o) { if (st[j] !== so || nug[j] !== no) w1 = 0; else { const d = (Math.abs(br[j] - r) + Math.abs(bg[j] - g) + Math.abs(bb[j] - b)) / 3; w1 *= d <= t0 ? 1 : d >= t1 ? 0 : 1 - smoothstep(t0, t1, d); } }
+    j = Q2[i]; if (j !== o) { if (st[j] !== so || nug[j] !== no) w2 = 0; else { const d = (Math.abs(br[j] - r) + Math.abs(bg[j] - g) + Math.abs(bb[j] - b)) / 3; w2 *= d <= t0 ? 1 : d >= t1 ? 0 : 1 - smoothstep(t0, t1, d); } }
+    j = Q3[i]; if (j !== o) { if (st[j] !== so || nug[j] !== no) w3 = 0; else { const d = (Math.abs(br[j] - r) + Math.abs(bg[j] - g) + Math.abs(bb[j] - b)) / 3; w3 *= d <= t0 ? 1 : d >= t1 ? 0 : 1 - smoothstep(t0, t1, d); } }
+    const s = 1 / (w0 + w1 + w2 + w3);
+    W0[i] = w0 * s; W1[i] = w1 * s; W2[i] = w2 * s; W3[i] = w3 * s;
+  }
+}
+// dst (64x64) = per-base-texel field `src` (16x16) interpolated with the weights W
+function upsample(src, W, dst) {
+  const W0 = W[0], W1 = W[1], W2 = W[2], W3 = W[3];
+  for (let i = 0; i < N; i++) dst[i] = W0[i] * src[Q0[i]] + W1[i] * src[Q1[i]] + W2[i] * src[Q2[i]] + W3[i] * src[Q3[i]];
+}
+const QW = [QW0, QW1, QW2, QW3]; // plain bilinear (smooth classes: rounded stones, fabric, foliage)
 
 // ---------------------------------------------------------------------------
 // Base (16x16) analysis: luminance, structure (face / groove / dot / transparent), base height.
@@ -112,11 +157,12 @@ const at = (x, y) => ((y & BM) * B + (x & BM));
 function analyze(base, M) {
   const d = base.data;
   const n = B * B;
-  const { lum, sat, op, rel, st, hb, w, emit, nug, hist } = SCR;
+  const { lum, sat, op, rel, st, hb, w, emit, nug, hist, br, bg, bb } = SCR;
   hist.fill(0);
   let count = 0;
   for (let i = 0; i < n; i++) {
     const r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2], a = d[i * 4 + 3];
+    br[i] = r; bg[i] = g; bb[i] = b;
     lum[i] = 0.299 * r + 0.587 * g + 0.114 * b;
     const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
     sat[i] = mx > 0 ? (mx - mn) / mx : 0;
@@ -147,7 +193,7 @@ function analyze(base, M) {
     hb[i] = s === GROOVE ? -1 : s === DOT ? 0.8 : s === TRANSP ? (alphaGroove ? -1 : 0) : clamp(rel[i] / 60, -1, 1) * hl;
   }
   if (M.smooth && gs !== 0) domeHeights(st, hb);
-  return { lum, sat, op, median, rel, st, hb, w, emit, nug };
+  return { lum, sat, op, median, rel, st, hb, w, emit, nug, br, bg, bb };
 }
 // isolated texels that differ strongly from four similar neighbours become domes (rivets, pebbles)
 function markDots(lum, st) {
@@ -267,18 +313,19 @@ function ellipses(dl, dh, rng, n, rxMin, rxMax, ryMin, ryMax, kind, amp) {
       if (e >= 1) continue;
       const i = ((iy + y) & SM) * S + ((ix + x) & SM);
       const sd = (dx + dy) / (r * 1.414);
-      if (kind === 0) { dl[i] += amp * (-0.07 + 0.11 * sd * (1 - e * 0.5)); dh[i] -= 0.7 * (1 - e); }
-      else if (kind === 1) { dl[i] += amp * (0.03 - 0.11 * sd); dh[i] += 0.5 * (1 - e); }
-      else { const t = -dy / ry; dl[i] += amp * (0.05 + 0.1 * t - 0.06 * e); dh[i] += 0.7 * (1 - e); }
+      if (kind === 0) { dl[i] += amp * (-0.08 + 0.13 * sd * (1 - e * 0.5)); dh[i] -= 0.7 * (1 - e); }
+      else if (kind === 1) { dl[i] += amp * (0.03 - 0.12 * sd); dh[i] += 0.5 * (1 - e); }
+      else { const t = -dy / ry; dl[i] += amp * (0.13 * t - 0.03 - (e > 0.6 && dy > 0 ? 0.07 : 0)); dh[i] += 0.7 * (1 - e); }
     }
   }
 }
-// Wood grain: dark wavy lines along the grain, tone bands, optional knot; dir 0 = horizontal, 1 = vertical,
-// 2 = concentric growth rings.
+// Wood grain: dark wavy streaks along the grain whose strength fades in and out along their length (broken
+// streaks, like real sawn wood), tone bands, optional knot; dir 0 = horizontal, 1 = vertical, 2 = growth rings.
 function grain(dl, dh, rng, T, dir, period, amp, wob, hAmp, withKnot) {
   const nz = banks();
   const phase0 = rng.next() * period;
   const knot = { x: rng.range(6, 58), y: rng.range(6, 58), ra: rng.range(3, 4.4), rb: rng.range(1.5, 2.3), on: withKnot };
+  const fade = nz.medium2;
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
     const i = y * S + x;
     let v;
@@ -296,19 +343,26 @@ function grain(dl, dh, rng, T, dir, period, amp, wob, hAmp, withKnot) {
     const p = (vv + phase0) / period;
     const f = p - Math.floor(p);
     const dist = Math.min(f, 1 - f) * period;
-    const line = Math.max(0, 1 - dist / 0.95);
+    const line = Math.max(0, 1 - dist / 0.9);
+    // streak strength along the grain: mostly present, with gaps where the medium noise dips
+    const str = clamp(0.55 + 1.3 * fieldAt(fade, x, y, T), 0, 1);
     const m = fieldAt(nz.medium, x, y, T);
-    dl[i] += -amp * line + 0.03 * Math.sin(p * Math.PI * 2 + 1.2) + 0.035 * m + kd;
-    dh[i] += -hAmp * line + 0.12 * m + kd * 2;
+    dl[i] += -amp * line * str + 0.03 * Math.sin(p * Math.PI * 2 + 1.2) + 0.03 * m + kd;
+    dh[i] += -hAmp * line * str + 0.12 * m + kd * 2;
   }
 }
-// Fabric weave: 2x2 texel threads, alternating over/under
-function weave(dl, dh, amp) {
+// Basket weave: every base texel is one thread segment, orientation alternating in a checkerboard; the thread
+// has a rounded profile across (bright centre, dark edges) and dips under the crossing threads at its ends.
+const WEAVE_PROFILE = [-0.8, 0.6, 0.6, -0.8];
+function weave(dl, dh, T, amp) {
+  const f = banks().fine;
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
     const i = y * S + x;
-    const over = ((x >> 1) + (y >> 1)) & 1;
-    const d = over ? ((y & 1) === 0 ? amp : -amp) : ((x & 1) === 0 ? amp : -amp);
-    dl[i] += d; dh[i] += d * 4;
+    const horiz = (((x >> 2) + (y >> 2)) & 1) === 0;
+    const across = horiz ? (y & 3) : (x & 3), along = horiz ? (x & 3) : (y & 3);
+    const prof = WEAVE_PROFILE[across] * (0.75 + 0.35 * fieldAt(f, x, y, T)); // fibre irregularity
+    const end = (along === 0 || along === 3) ? -0.3 : 0.12;
+    dl[i] += amp * (prof + 0.5 * end); dh[i] += 3 * amp * (prof + end);
   }
 }
 // Soft radial glow inside every base texel (emissive cells)
@@ -357,54 +411,64 @@ D.wood = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
   const bark = !!M.bark;
   const dir = M.grain === 'v' ? 1 : M.grain === 'rings' ? 2 : 0;
-  grain(dl, dh, rng, T, dir, rng.range(bark ? 3.2 : 3.4, bark ? 4.4 : 4.8), bark ? 0.15 : 0.1, bark ? 2.6 : 1.3, bark ? 0.7 : 0.4, !bark && dir !== 2 && rng.chance(0.55));
+  if (bark) {
+    grain(dl, dh, rng, T, dir, rng.range(3.6, 5), 0.13, 2.4, 0.7, false);
+    // furrows along the trunk with a lit ridge beside them
+    lines(dl, dh, rng, rng.int(6, 9), LP(dir === 1 ? Math.PI / 2 : 0, 0.12, 10, 28, -0.17, -0.9, false, 0.25, 0.07, 0, false));
+    addNoise(dl, nz.fine, 0.03, T, 0);
+  } else {
+    grain(dl, dh, rng, T, dir, dir === 2 ? rng.range(3.2, 4) : rng.range(5, 7.5), dir === 2 ? 0.11 : 0.14, dir === 2 ? 0.8 : 1.6, 0.45, dir !== 2 && rng.chance(0.55));
+    // a few longer dark streaks along the grain
+    if (dir !== 2) lines(dl, dh, rng, rng.int(2, 4), LP(dir === 1 ? Math.PI / 2 : 0, 0.03, 8, 22, -0.1, -0.3, false, 0, 0, 0, false));
+  }
   addNoise(dl, nz.white, 0.018, T, seed);
-  if (bark) lines(dl, dh, rng, rng.int(3, 6), LP(dir === 1 ? 0 : Math.PI / 2, 0.25, 3, 8, -0.14, -0.5, false, 0.35, 0, 0, false));
 };
 D.stone = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.medium, 0.055, T, 0); addNoise(dl, nz.fine2, 0.04, T, 0); addNoise(dl, nz.white, 0.025, T, seed);
-  addNoise(dh, nz.medium, 0.25, T, 0); addNoise(dh, nz.fine2, 0.1, T, 0);
+  addNoise(dl, nz.medium, 0.07, T, 0); addNoise(dl, nz.fine2, 0.05, T, 0); addNoise(dl, nz.white, 0.028, T, seed);
+  addNoise(dh, nz.medium, 0.3, T, 0); addNoise(dh, nz.fine2, 0.12, T, 0);
   const chips = M.chips ?? (M.relief < 0.4 ? 3 : 7);
-  ellipses(dl, dh, rng, chips, 1.3, 2.8, 0.9, 2.4, 0, 1.0001);
-  lines(dl, dh, rng, M.cracks ?? (M.relief < 0.4 ? 1 : 2), LP(-1, Math.PI, 8, 22, -0.16, -0.8, false, 0.6, 0.06, 0, false));
-  addSpecks(dl, dh, seed + 3, 0.985, 0.07, 0.0001, 0, 0, 0);
+  ellipses(dl, dh, rng, chips, 1.3, 2.8, 0.9, 2.4, 0, 1.4);
+  lines(dl, dh, rng, M.cracks ?? (M.relief < 0.4 ? 1 : 2), LP(-1, Math.PI, 8, 22, -0.18, -0.8, false, 0.6, 0.07, 0, false));
+  addSpecks(dl, dh, seed + 3, 0.985, 0.06, 0.0001, 0.012, -0.07, -0.1);
 };
 D.brick = (C) => {
-  const { A, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.045, T, 0); addNoise(dl, nz.medium2, 0.02, T, 0); addNoise(dl, nz.white, 0.03, T, seed);
+  const { A, rng, T, dl, dh, seed, nz } = C;
+  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium2, 0.03, T, 0); addNoise(dl, nz.white, 0.03, T, seed);
   addNoise(dh, nz.fine, 0.15, T, 0);
-  addSpecks(dl, dh, seed + 5, 0.965, -0.1, -0.4, 0, 0, 0);
-  addNoiseWhere(dl, nz.white, 0.06, T, seed + 6, A.st, GROOVE);
+  addSpecks(dl, dh, seed + 5, 0.965, -0.11, -0.4, 0, 0, 0);
+  ellipses(dl, dh, rng, 3, 0.9, 1.6, 0.8, 1.3, 0, 1.0001);
+  addNoiseWhere(dl, nz.white, 0.07, T, seed + 6, A.st, GROOVE);
 };
 D.cobble = (C) => {
   const { A, rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium, 0.03, T, 0); addNoise(dl, nz.white, 0.03, T, seed);
+  addNoise(dl, nz.fine, 0.045, T, 0); addNoise(dl, nz.medium, 0.03, T, 0); addNoise(dl, nz.white, 0.03, T, seed);
   addNoise(dh, nz.fine, 0.12, T, 0);
   ellipses(dl, dh, rng, 4, 1, 1.8, 1, 1.8, 0, 0.8);
-  addNoiseWhere(dl, nz.white, 0.04, T, seed + 6, A.st, GROOVE);
+  addNoiseWhere(dl, nz.white, 0.05, T, seed + 6, A.st, GROOVE);
 };
 D.dirt = (C) => {
   const { rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium, 0.03, T, 0); addNoise(dl, nz.white, 0.055, T, seed);
+  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium, 0.03, T, 0); addNoise(dl, nz.white, 0.05, T, seed);
   addNoise(dh, nz.fine, 0.3, T, 0); addNoise(dh, nz.white, 0.12, T, seed + 1);
   ellipses(dl, dh, rng, rng.int(6, 10), 1, 1.7, 0.8, 1.5, 1, 1.0001);
 };
 D.sand = (C) => {
   const { T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.03, T, 0); addNoise(dl, nz.white, 0.035, T, seed);
+  addNoise(dl, nz.fine, 0.03, T, 0); addNoise(dl, nz.white, 0.03, T, seed);
   addNoise(dh, nz.medium, 0.25, T, 0);
-  ripples(dl, dh, T, 0.02);
-  addSpecks(dl, dh, seed + 7, 0.97, 0.1, 0.2, 0.03, -0.08, -0.1);
+  ripples(dl, dh, T, 0.025);
+  addSpecks(dl, dh, seed + 7, 0.965, 0.1, 0.2, 0.03, -0.08, -0.1);
 };
 D.gravel = (C) => {
-  const { T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.04, T, 0); addNoise(dl, nz.white, 0.04, T, seed);
+  const { rng, T, dl, dh, seed, nz } = C;
+  addNoise(dl, nz.fine, 0.045, T, 0); addNoise(dl, nz.white, 0.04, T, seed);
   addNoise(dh, nz.medium, 0.2, T, 0);
+  ellipses(dl, dh, rng, 6, 1, 1.6, 0.8, 1.4, 1, 0.8);
 };
 D.plaster = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.coarse2, 0.035, T, 0); addNoise(dl, nz.fine, 0.025, T, 0); addNoise(dl, nz.white, 0.02, T, seed);
+  addNoise(dl, nz.coarse2, 0.035, T, 0); addNoise(dl, nz.fine, 0.028, T, 0); addNoise(dl, nz.white, 0.02, T, seed);
   addNoise(dh, nz.coarse2, 0.3, T, 0); addNoise(dh, nz.fine, 0.1, T, 0);
   if (M.sparkle) addSpecks(dl, dh, seed + 9, 0.975, 0.1, 0.1, 0, 0, 0);
   else if (rng.chance(0.4)) lines(dl, dh, rng, 1, LP(-1, Math.PI, 10, 24, -0.09, -0.4, false, 0.5, 0, 0, false));
@@ -412,14 +476,14 @@ D.plaster = (C) => {
 D.metal = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
   const vert = M.grain === 'v';
-  addNoiseAniso(dl, nz.fine, 0.05, T, 19, 192, vert); addNoiseAniso(dh, nz.fine, 0.12, T, 19, 192, vert);
-  addNoiseAniso(dl, nz.white, 0.025, T, 0, 64, vert); addNoise(dl, nz.white, 0.012, T, seed);
-  addSpecks(dl, dh, seed + 13, 0.988, -0.08, -0.1, 0, 0, 0);
-  lines(dl, dh, rng, rng.int(2, 4), LP(vert ? Math.PI / 2 : 0, 0.15, 6, 18, 0.09, -0.2, false, 0, 0, vert ? 1 : S, false));
+  addNoiseAniso(dl, nz.fine, 0.065, T, 19, 192, vert); addNoiseAniso(dh, nz.fine, 0.12, T, 19, 192, vert);
+  addNoiseAniso(dl, nz.white, 0.03, T, 0, 64, vert); addNoise(dl, nz.white, 0.012, T, seed);
+  addSpecks(dl, dh, seed + 13, 0.988, -0.09, -0.1, 0, 0, 0);
+  lines(dl, dh, rng, rng.int(2, 4), LP(vert ? Math.PI / 2 : 0, 0.15, 6, 18, 0.1, -0.2, false, 0, 0, vert ? 1 : S, false));
 };
 D.chrome = (C) => {
   const { T, dl, dh, seed, nz } = C;
-  addNoiseAniso(dl, nz.coarse, 0.06, T, 32, 96, false); addNoiseAniso(dl, nz.fine, 0.02, T, 16, 128, false); addNoise(dl, nz.white, 0.01, T, seed);
+  addNoiseAniso(dl, nz.coarse, 0.07, T, 32, 96, false); addNoiseAniso(dl, nz.fine, 0.02, T, 16, 128, false); addNoise(dl, nz.white, 0.008, T, seed);
   addNoise(dh, nz.coarse, 0.1, T, 0);
 };
 D.panel = (C) => {
@@ -435,18 +499,18 @@ D.glass = (C) => {
 };
 D.fabric = (C) => {
   const { T, dl, dh, seed, nz } = C;
-  weave(dl, dh, 0.06);
-  addNoise(dl, nz.white, 0.03, T, seed); addNoise(dl, nz.fine, 0.02, T, 0); addNoise(dh, nz.fine, 0.05, T, 0);
+  weave(dl, dh, T, 0.065);
+  addNoise(dl, nz.white, 0.025, T, seed); addNoise(dl, nz.fine, 0.02, T, 0); addNoise(dh, nz.fine, 0.05, T, 0);
 };
 D.foliage = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
   const style = M.style || 'leaves';
   addNoise(dl, nz.fine, 0.035, T, 0); addNoise(dl, nz.white, 0.02, T, seed); addNoise(dh, nz.fine, 0.1, T, 0);
-  if (style === 'leaves') ellipses(dl, dh, rng, 44, 1.8, 3.2, 1.1, 2, 2, 1.0001);
+  if (style === 'leaves') ellipses(dl, dh, rng, 52, 2, 3.4, 1.2, 2.1, 2, 1.6);
   else if (style === 'flower') ellipses(dl, dh, rng, 24, 1.2, 1.9, 1, 1.4, 2, 1.0001);
-  else if (style === 'blades') lines(dl, dh, rng, 90, LP(-Math.PI / 2, 0, 2, 5, 0.09, 0.3, true, 0, 0, 0, true));
-  else if (style === 'ridges') addSpecks(dl, dh, seed + 17, 0.985, 0.12, 0.5, 0, 0, 0);
-  clampArr(dl, -0.25, 0.25);
+  else if (style === 'blades') lines(dl, dh, rng, 110, LP(-Math.PI / 2, 0, 3, 6, 0.13, 0.3, true, 0, 0, 0, true));
+  else if (style === 'ridges') { addNoiseAniso(dl, nz.fine, 0.07, T, 19, 192, true); addSpecks(dl, dh, seed + 17, 0.985, 0.12, 0.5, 0, 0, 0); }
+  clampArr(dl, -0.28, 0.28);
 };
 D.liquid = (C) => {
   const { T, dl, dh, nz } = C;
@@ -462,7 +526,7 @@ D.organic = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
   addNoise(dl, nz.fine, 0.03, T, 0); addNoise(dl, nz.white, 0.02, T, seed); addNoise(dh, nz.fine, 0.1, T, 0);
   if (M.style === 'ribs') { addNoiseAniso(dl, nz.fine, 0.03, T, 128, 19, false); addNoise(dl, nz.medium, 0.03, T, 0); }
-  else lines(dl, dh, rng, 70, LP(M.grain === 'r' ? -1 : Math.PI / 2, M.grain === 'r' ? 0 : 0.35, 4, 10, 0.09, 0.3, true, 0, 0, 0, false));
+  else lines(dl, dh, rng, 70, LP(M.grain === 'r' ? -1 : Math.PI / 2, M.grain === 'r' ? 0 : 0.35, 4, 10, 0.1, 0.3, true, 0, 0, 0, false));
 };
 
 // Domes on DOT texels (rivets, pebbles) and bevels along face/groove borders (light from the top-left).
@@ -508,17 +572,15 @@ function structurePass(M, A, dl, dh) {
   }
 }
 
-// Base height upsample: stepped (crisp bevels) or bilinear (rounded stones, fabric, foliage).
-function upsampleHeight(hb, smooth, out) {
-  if (smooth) {
-    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-      const gx = (x + 0.5) / K - 0.5, gy = (y + 0.5) / K - 0.5;
-      const x0 = Math.floor(gx), y0 = Math.floor(gy), fx = gx - x0, fy = gy - y0;
-      const h00 = hb[at(x0, y0)], h10 = hb[at(x0 + 1, y0)], h01 = hb[at(x0, y0 + 1)], h11 = hb[at(x0 + 1, y0 + 1)];
-      out[y * S + x] = (h00 * (1 - fx) + h10 * fx) * (1 - fy) + (h01 * (1 - fx) + h11 * fx) * fy;
+// Baked shading from the base relief (light from the top-left): rounded stones, ribs and lumps read in the colour
+// too, not only in the normal map (mild, like the ambient occlusion HD packs paint into their albedo).
+function bakeShading(h, dl, amount) {
+  for (let y = 0; y < S; y++) {
+    const ym = ((y - 1) & SM) * S, y0 = y * S, yp = ((y + 1) & SM) * S;
+    for (let x = 0; x < S; x++) {
+      const gx = (h[y0 + ((x + 1) & SM)] - h[y0 + ((x - 1) & SM)]) * 0.5, gy = (h[yp + x] - h[ym + x]) * 0.5;
+      dl[y0 + x] -= amount * (gx + gy);
     }
-  } else {
-    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) out[y * S + x] = hb[(y >> 2) * B + (x >> 2)];
   }
 }
 
@@ -532,24 +594,52 @@ function blockMaterial(M, A, bi, out) {
   out[0] = rough * 255; out[1] = metal * 255; out[2] = emis * 255;
 }
 
-// Colour composition: base texel + detail, mean-corrected per 4x4 block so every block averages to its base texel.
+// Rounds the 16px silhouettes: at a convex corner of a dot block (rivet, pebble) or, for `round` classes, of a
+// face block against grooves (cobble stones), the corner HD texel takes the outside neighbours' colour and
+// height, so those shapes read as rounded instead of square.
+function roundCorners(M, A, dl, cr, cg, cb, hbUp, acut) {
+  const st = A.st, br = A.br, bg = A.bg, bb = A.bb, hb = A.hb;
+  const roundFace = !!M.round, roundAlpha = !!M.roundAlpha;
+  for (let by = 0; by < B; by++) for (let bx = 0; bx < B; bx++) {
+    const bi = by * B + bx, s = st[bi];
+    if (s === TRANSP || s === GROOVE || (s === FACE && !roundFace && !roundAlpha)) continue;
+    const outside = s === DOT ? FACE : roundFace ? GROOVE : TRANSP;
+    const ju = at(bx, by - 1), jd = at(bx, by + 1), jl = at(bx - 1, by), jr = at(bx + 1, by);
+    for (let c = 0; c < 4; c++) {
+      const jv = (c & 2) ? jd : ju, jh = (c & 1) ? jr : jl;
+      if (st[jv] !== outside || st[jh] !== outside) continue;
+      if (outside === TRANSP) { // leaf clusters: the hole eats the corner texel (alpha), colour stays
+        acut[(by * K + ((c & 2) ? K - 1 : 0)) * S + bx * K + ((c & 1) ? K - 1 : 0)] = 1;
+        continue;
+      }
+      // very high contrast dots (LEDs, lit windows) stay square: the mean correction could not absorb the swap
+      const or = 0.5 * (br[jv] + br[jh]), og = 0.5 * (bg[jv] + bg[jh]), ob = 0.5 * (bb[jv] + bb[jh]);
+      if (Math.max(Math.abs(br[bi] - or), Math.abs(bg[bi] - og), Math.abs(bb[bi] - ob)) > 80) continue;
+      const i = (by * K + ((c & 2) ? K - 1 : 0)) * S + bx * K + ((c & 1) ? K - 1 : 0);
+      cr[i] = or; cg[i] = og; cb[i] = ob;
+      hbUp[i] = (hb[jv] + hb[jh]) * 0.5; dl[i] = 0;
+    }
+  }
+}
+
+// Colour composition. The base is upsampled edge-aware (smooth inside similar regions, crisp across structure),
+// the class detail is added on top, then every 4x4 block is corrected back to its base texel's mean: first with
+// a smooth (interpolated) correction field so no block edges appear, then the tiny residual per block.
 function compose(M, A, d, dl, dh, hbUp, o, material, height, seed) {
   const nz = NZ, gen = nz.fine, wn = nz.white, genOff = (seed + 31) & NM;
-  const { dr, dg, db } = SCR;
+  const { cr, cg, cb, er, eg, eb, fr, fg, fb, W } = SCR;
   const mat = [0, 0, 0];
   const scale = M.detailScale ?? 1;
+  upsample(A.br, W, cr); upsample(A.bg, W, cg); upsample(A.bb, W, cb);
+  const acut = SCR.acut;
+  acut.fill(0);
+  roundCorners(M, A, dl, cr, cg, cb, hbUp, acut);
   for (let by = 0; by < B; by++) for (let bx = 0; bx < B; bx++) {
     const bi = by * B + bx;
-    const r = d[bi * 4], g = d[bi * 4 + 1], b = d[bi * 4 + 2], a = d[bi * 4 + 3];
-    blockMaterial(M, A, bi, mat);
-    const mr = mat[0], mg = mat[1], mb = mat[2];
+    const r = d[bi * 4], g = d[bi * 4 + 1], b = d[bi * 4 + 2];
     if (A.st[bi] === TRANSP) {
-      for (let fy = 0; fy < K; fy++) for (let fx = 0; fx < K; fx++) {
-        const i = (by * K + fy) * S + bx * K + fx;
-        o[i * 4] = r; o[i * 4 + 1] = g; o[i * 4 + 2] = b; o[i * 4 + 3] = a;
-        material[i * 4] = mr; material[i * 4 + 1] = mg; material[i * 4 + 2] = 0; material[i * 4 + 3] = 255;
-        height[i] = hbUp[i];
-      }
+      for (let fy = 0; fy < K; fy++) for (let fx = 0; fx < K; fx++) { const i = (by * K + fy) * S + bx * K + fx; cr[i] = r; cg[i] = g; cb[i] = b; height[i] = hbUp[i]; }
+      er[bi] = 0; eg[bi] = 0; eb[bi] = 0;
       continue;
     }
     // headroom keeps detail from clamping on very bright / very dark texels
@@ -558,19 +648,30 @@ function compose(M, A, d, dl, dh, hbUp, o, material, height, seed) {
     const wgt = A.w[bi], hw = 0.5 + 0.5 * wgt;
     let sr = 0, sg = 0, sb = 0;
     for (let fy = 0; fy < K; fy++) for (let fx = 0; fx < K; fx++) {
-      const i = (by * K + fy) * S + bx * K + fx, k = fy * K + fx;
+      const i = (by * K + fy) * S + bx * K + fx;
       // texels that do not look like the tile's main material get generic fine noise instead of the class detail
       const dv = (dl[i] * wgt + (1 - wgt) * (0.03 * gen[i] + 0.015 * wn[(i + genOff) & NM])) * hf;
       // mostly multiplicative (keeps hue), partly additive (dark tiles still show detail)
-      const vr = dv * (0.75 * r + 24), vg = dv * (0.75 * g + 24), vb = dv * (0.75 * b + 24);
-      dr[k] = vr; dg[k] = vg; db[k] = vb;
+      const vr = cr[i] + dv * (0.75 * cr[i] + 24), vg = cg[i] + dv * (0.75 * cg[i] + 24), vb = cb[i] + dv * (0.75 * cb[i] + 24);
+      cr[i] = vr; cg[i] = vg; cb[i] = vb;
       sr += vr; sg += vg; sb += vb;
       height[i] = hbUp[i] + dh[i] * hw;
     }
-    sr /= K * K; sg /= K * K; sb /= K * K;
+    er[bi] = r - sr / (K * K); eg[bi] = g - sg / (K * K); eb[bi] = b - sb / (K * K);
+  }
+  // smooth correction field (same edge-aware weights as the base) ...
+  upsample(er, W, fr); upsample(eg, W, fg); upsample(eb, W, fb);
+  for (let by = 0; by < B; by++) for (let bx = 0; bx < B; bx++) {
+    const bi = by * B + bx, a = d[bi * 4 + 3];
+    blockMaterial(M, A, bi, mat);
+    const mr = mat[0], mg = mat[1], mb = A.st[bi] === TRANSP ? 0 : mat[2];
+    // ... plus the residual the smooth field did not deliver to this block (small, constant per block)
+    let sr = 0, sg = 0, sb = 0;
+    for (let fy = 0; fy < K; fy++) for (let fx = 0; fx < K; fx++) { const i = (by * K + fy) * S + bx * K + fx; sr += fr[i]; sg += fg[i]; sb += fb[i]; }
+    const rr = er[bi] - sr / (K * K), rg = eg[bi] - sg / (K * K), rb = eb[bi] - sb / (K * K);
     for (let fy = 0; fy < K; fy++) for (let fx = 0; fx < K; fx++) {
-      const i = (by * K + fy) * S + bx * K + fx, k = fy * K + fx;
-      o[i * 4] = r + dr[k] - sr; o[i * 4 + 1] = g + dg[k] - sg; o[i * 4 + 2] = b + db[k] - sb; o[i * 4 + 3] = a;
+      const i = (by * K + fy) * S + bx * K + fx;
+      o[i * 4] = cr[i] + fr[i] + rr; o[i * 4 + 1] = cg[i] + fg[i] + rg; o[i * 4 + 2] = cb[i] + fb[i] + rb; o[i * 4 + 3] = acut[i] ? 0 : a;
       material[i * 4] = mr; material[i * 4 + 1] = mg; material[i * 4 + 2] = mb; material[i * 4 + 3] = 255;
     }
   }
@@ -606,12 +707,15 @@ export function refineTile(base, name, rng = null, opts = null) {
   if (!rng) rng = new RNG(seedFromName(name));
   const nz = banks();
   const A = analyze(base, M);
+  blendWeights(A, M.blend, SCR.W);
   const dl = SCR.dl, dh = SCR.dh;
   dl.fill(0); dh.fill(0);
   const C = { M, A, rng, nz, T: makeXf(rng), seed: rng.int(0, 1e9), dl, dh, baseData: d };
   (D[M.detail] || D[M.cls] || D.stone)(C);
   structurePass(M, A, dl, dh);
-  upsampleHeight(A.hb, !!M.smooth, SCR.hbUp);
+  // base relief: bilinear for rounded classes (stones, lumps), edge-aware elsewhere (crisp steps at grooves only)
+  upsample(A.hb, M.smooth ? QW : SCR.W, SCR.hbUp);
+  if (M.bake > 0) bakeShading(SCR.hbUp, dl, M.bake);
   compose(M, A, d, dl, dh, SCR.hbUp, color.data, material, height, C.seed);
   return { color, height, material };
 }
