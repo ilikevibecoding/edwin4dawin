@@ -15,8 +15,11 @@
 // and the disaster ends. Everything visual (voxel crest mesh, far sea sheet, spray, debris, sound, shake, sky) lives
 // in render() and never touches world state; debris is spawned render-side from queued destruction events, so the
 // simulation's RNG is never consumed by cosmetics.
+// Entities: every tick the band of townsfolk and animals the front has just passed over (previous front position ..
+// current one, across the whole width, below the flood surface) is knocked off its feet by npcs/animals.sweep(): they
+// tumble along the flow, then bob helplessly in the water before they can swim. The player gets a strong impulse,
+// a camera tumble and a muffled "under the wave" moment. All of this is client-side and never touches block edits.
 import { Disaster } from './base.js';
-import { DisasterManager } from './manager.js';
 import { BLOCKS, B, SHAPE } from '../blocks.js';
 import { TOWN_GROUND, CHUNK_HEIGHT as CH, ATLAS_TILES } from '../constants.js';
 import { TOWN_BOUNDS } from '../worldgen.js';
@@ -28,26 +31,44 @@ import { VoxelCrest, CREST_BACK, STEP_DIST, crestDepth } from './tsunami/crestMe
 const TPS = 20;
 const ROOM_DIRS = [1, 0, -1, 0, 0, 1, 0, -1, 1, 1, 1, -1, -1, 1, -1, -1];
 const LEAD = 4.5;                 // max distance the crest may run ahead of the oldest unfilled column (blocks)
-const MAX_DESTROY_PER_TICK = 40;  // block edits reserved for crest destruction (the rest floods)
+const MAX_DESTROY_PER_TICK = 56;  // block edits reserved for crest destruction (the rest floods)
 const MAX_DRAIN_VISITS = 4000;    // cells inspected per tick while draining
 const SWEEP_COLUMNS = 1500;       // columns re-checked per tick by the slow sweeps (late-loaded chunks, final drain)
 const MAX_FOAM = 170;             // live spray particles owned by the tsunami
 const UNKNOWN = -32768;
 const DIRS = { west: [1, 0], east: [-1, 0], north: [0, 1], south: [0, -1] };
-const EV_CRACK = 0, EV_SPLASH = 1, EV_RUMBLE = 2;
-const EV_STRIDE = 5, EV_MAX = 40 * EV_STRIDE;
+const EV_CRACK = 0, EV_SPLASH = 1, EV_RUMBLE = 2, EV_HIT = 3;
+const EV_STRIDE = 5, EV_MAX = 64 * EV_STRIDE;   // crack events are capped (>= MAX_DESTROY_PER_TICK); the rare ones always queue
 const WHITE = [1, 1, 1];
+// entity sweep: how far behind the foot an entity that has not been taken yet is still swept (covers townsfolk
+// running into the wave between two ticks), and the length of the player's tumble / muffled moment (s)
+const SWEEP_BEHIND = 1.5, SWEEP_AHEAD = 0.3, TUMBLE_TIME = 1.6;
 // overcast storm: slate haze that the sky dome, horizon and fog share (skyMix keeps it daylight, not night)
-const ENV_STORM = { tint: [0.86, 0.9, 0.98], fogColor: [0.52, 0.6, 0.7], fogFarMul: 0.85, skyColor: [0.5, 0.55, 0.63], skyMix: 0.45, cloudAlpha: 0.7 };
-const ENV_RECEDE = { tint: [0.93, 0.95, 1], fogColor: [0.6, 0.68, 0.78], fogFarMul: 0.95, skyColor: [0.55, 0.6, 0.68], skyMix: 0.2, cloudAlpha: 0.9 };
+const ENV_STORM = { tint: [0.86, 0.9, 0.98], fogColor: [0.52, 0.6, 0.7], fogNearMul: 1, fogFarMul: 0.85, skyColor: [0.5, 0.55, 0.63], skyMix: 0.45, cloudAlpha: 0.7 };
+const ENV_RECEDE = { tint: [0.93, 0.95, 1], fogColor: [0.6, 0.68, 0.78], fogNearMul: 1, fogFarMul: 0.95, skyColor: [0.55, 0.6, 0.68], skyMix: 0.2, cloudAlpha: 0.9 };
+// under the wave (the front has just hit the player): murky blue, dense fog, the sky nearly gone
+const ENV_UNDER = { tint: [0.5, 0.68, 0.95], fogColor: [0.08, 0.26, 0.42], fogNearMul: 0.04, fogFarMul: 0.2, skyColor: [0.1, 0.28, 0.46], skyMix: 0.92, cloudAlpha: 0.2 };
 // debris budget (visual): pieces per second the flood may launch and the share of the shared pool it may occupy
-const DEBRIS_RATE = 28, DEBRIS_BURST = 10, DEBRIS_POOL_SHARE = 0.92, DEBRIS_LIFE_MIN = 120, DEBRIS_LIFE_MAX = 200;
+const DEBRIS_RATE = 40, DEBRIS_BURST = 14, DEBRIS_POOL_SHARE = 0.92, DEBRIS_LIFE_MIN = 120, DEBRIS_LIFE_MAX = 200;
 
 // Cells the rising water may occupy: air and things a flood simply washes over.
 function fillable(id) {
   if (id === B.AIR) return true;
   const d = BLOCKS[id];
   return !d.solid && (d.replaceable || d.shape === SHAPE.CROSS || id === B.TORCH);
+}
+
+// What a surge really tears loose (relative weight of the destruction probability): porch posts, railings, awnings,
+// fences, doors, signs and glass go first, planks and crates follow, iron rarely, masonry (brick, stone, plaster)
+// practically never - a flooded town keeps its walls and loses its woodwork. Stone slabs/gravestones sit in between.
+function floodFragility(id) {
+  const d = BLOCKS[id];
+  if (!d || id === B.AIR || id === B.BEDROCK || id === B.WATER) return 0;
+  if (d.shape !== SHAPE.CUBE) return d.sound === 'metal' ? 0.5 : d.sound === 'stone' ? 0.35 : 1.3;
+  switch (d.sound) {
+    case 'glass': return 1.25; case 'cloth': return 1.0; case 'grass': return 0.95; case 'wood': return 0.85;
+    case 'gravel': case 'sand': return 0.5; case 'metal': return 0.2; default: return 0.06;
+  }
 }
 
 export class Tsunami extends Disaster {
@@ -60,7 +81,7 @@ export class Tsunami extends Disaster {
     { key: 'direction', label: 'Direction (from)', type: 'select', options: ['west', 'east', 'north', 'south'], default: 'west' },
     { key: 'speed', label: 'Wave speed', type: 'number', min: 1, max: 20, step: 0.5, default: 6, unit: 'blocks/s' },
     { key: 'duration', label: 'Duration', type: 'number', min: 10, max: 240, step: 5, default: 60, unit: 's' },
-    { key: 'damage', label: 'Structural damage', type: 'number', min: 0, max: 1, step: 0.05, default: 0.5 },
+    { key: 'damage', label: 'Structural damage', type: 'number', min: 0, max: 1, step: 0.05, default: 0.65 },
     { key: 'intensity', label: 'Intensity', type: 'number', min: 0, max: 1, step: 0.05, default: 0.7 },
     { key: 'center', label: 'Center (x, z)', type: 'position', default: [0, 0] },
     { key: 'radius', label: 'Affected radius', type: 'number', min: 20, max: 160, step: 5, default: 110, unit: 'blocks' },
@@ -105,6 +126,9 @@ export class Tsunami extends Disaster {
     this.reachedTown = false;
     this.nextRumbleTick = 0;
     this.destroyed = 0;
+    this.sweptNpcs = new Set();   // entity ids the front has already taken (at most one launch per flood)
+    this.sweptAnimals = new Set();
+    this.sweptCount = 0;          // entities launched so far (diagnostics)
     this.c = null;              // column arrays (built in begin)
     this.events = [];           // flat [kind, x, y, z, id, ...] queued by simulate(), flushed by render()
     this.flow = [0, 0];         // scratch returned by flowFn
@@ -124,6 +148,7 @@ export class Tsunami extends Disaster {
     this.seaY = baseY - 4;
     this.seaAlpha = 0;
     this.crestFade = 1;         // 1 = crest fully shown; eased toward 0 when the camera is inside it / indoors
+    this.tumble = 0;            // seconds left of the player's tumble (camera roll, murky fog, muffled roar)
     this.debrisAcc = DEBRIS_BURST;
     this._tmp = { x: 0, y: 0, z: 0 };
     this._evPos = { x: 0, y: 0, z: 0 };
@@ -273,6 +298,7 @@ export class Tsunami extends Disaster {
         this.s = next;
         this._advanceFront();
         this._fill();
+        this._sweepFront();
         if (!this.reachedTown && this.s >= this.g.townEdgeS) { this.reachedTown = true; this._queue(EV_SPLASH); this._queue(EV_RUMBLE); this.nextRumbleTick = this.tick + 80; }
         if (this.reachedTown && this.tick >= this.nextRumbleTick && this.s < 2 * this.g.r) { this._queue(EV_RUMBLE); this.nextRumbleTick = this.tick + 80; }
         if (this.s >= 2 * this.g.r + 12) {
@@ -380,7 +406,8 @@ export class Tsunami extends Disaster {
     this.sweepPtr = k;
   }
 
-  // The crest hits a column: fragile blocks in surface..surface+waveHeight break (into water inside the body).
+  // The crest hits a column: fragile blocks in surface..surface+waveHeight break (into water inside the body), with
+  // the flood's own material weights (woodwork, glass and fences go, masonry stays - see floodFragility).
   // Returns false when the tick's destruction allowance ran out before the column was finished.
   _hitColumn(i) {
     const c = this.c, terrain = this._terrainOf(i);
@@ -394,7 +421,7 @@ export class Tsunami extends Disaster {
     for (let y = terrain + 1; y <= yTop; y++) {
       const id = this.world.getBlock(x, y, z);
       if (id === B.AIR || id === B.WATER) continue;
-      const frag = DisasterManager.fragility(id);
+      const frag = floodFragility(id);
       if (frag <= 0) continue;
       const taper = 1 - 0.5 * (y - terrain - 1) / band;      // the crest hits hardest at its foot
       if (hash3(x, y, z, this.seed) >= pBase * frag * taper) continue;
@@ -500,23 +527,62 @@ export class Tsunami extends Disaster {
   // Signed distance of a point ahead of the front (negative = already flooded).
   _aheadOf(x, z) { const g = this.g; return ((x - g.cx) * g.dx + (z - g.cz) * g.dz + g.r) - this.s; }
 
+  // The current pushes a swimming player along; the front itself knocks them off their feet once: a strong impulse
+  // up and along the flow (they surface a few blocks on and swim normally), a little damage, and a queued EV_HIT
+  // that render() turns into the tumble (shake, spray, murky fog, muffled roar). A flying observer is not taken.
   _pushPlayer() {
     const p = this.game.player;
     if (!p || p.dead) return;
     const f = this._flowAt(p.pos.x, p.pos.z);
     if (!f) return;
     if (p.inWater) p.addForce(f[0] * 4, 1.5, f[1] * 4);
-    if (this.phase === 'wave' && !this.playerHit) {
+    if (this.phase === 'wave' && !this.playerHit && !p.flying) {
       const ahead = this._aheadOf(p.pos.x, p.pos.z);
-      if (ahead <= 0 && ahead > -2 && p.pos.y < this.g.crestTop) {
+      if (ahead <= SWEEP_AHEAD && ahead > -2 && p.pos.y < this.g.crestTop) {
         this.playerHit = true;
-        const sp = this.params.speed;
-        p.impulse(this.g.dx * sp * 1.5, 5, this.g.dz * sp * 1.5);
-        const dmg = Math.round(3 * this.params.intensity);
+        const sp = this.params.speed, I = this.params.intensity;
+        const k = clamp(sp * 1.5 + 4 + 6 * I, 8, 22);
+        p.impulse(this.g.dx * k, 7 + 3 * I, this.g.dz * k);
+        p.fallDistance = 0;
+        const dmg = Math.round(3 * I);
         if (dmg > 0) p.damage(dmg);
-        this._queue(EV_SPLASH);
+        this._queue(EV_HIT);
       }
     }
+  }
+
+  // The crest knocks everyone it passes off their feet. Entities in the band the front covered this tick (previous
+  // position .. current one, plus SWEEP_BEHIND for people running into it, across the whole chord of the front) whose
+  // feet are below the flood surface are launched along the flow by npcs/animals.sweep() and land helpless in the
+  // water. A Set of ids per manager makes sure every entity is taken at most once per flood (the hook itself skips
+  // entities that are still 'swept'), so nobody riding the front is launched again. Cosmetic: uses no simulation RNG
+  // and never touches block edits, so the journal is unaffected.
+  _sweepFront() {
+    const g = this.g, s = this.s;
+    if (s <= 0) return;
+    const k = s - g.r;
+    const halfLen = Math.sqrt(Math.max(0, g.r * g.r - k * k)) + 3;
+    const fx = g.cx + g.dx * k, fz = g.cz + g.dz * k;
+    const strength = clamp(9 + 6 * this.params.intensity + 0.5 * (this.params.waveHeight - 4), 8, 16);
+    const back = (s - this.prevS) + SWEEP_BEHIND;
+    const yMax = Math.max(g.floodTop, g.baseY + this.params.waveHeight) - 0.5;
+    const take = (mgr, ids) => {
+      if (!mgr || !mgr.eachNear || !mgr.sweep) return;
+      let n = 0;
+      mgr.eachNear(fx, fz, halfLen, (e) => {
+        if (e.pos.y >= yMax || e.air || (e.swept || 0) > 0 || ids.has(e.id)) return;
+        const ahead = this._aheadOf(e.pos.x, e.pos.z);
+        if (ahead > SWEEP_AHEAD || ahead < -back) return;
+        ids.add(e.id);
+        mgr.sweep(e.pos.x, e.pos.z, 0.35, g.dx, g.dz, strength);
+        n++;
+      });
+      if (!n) return;
+      this.sweptCount += n;
+      for (const e of mgr.list) if (e.air && (e.swept || 0) > 0) ids.add(e.id);   // neighbours the small disc took along
+    };
+    take(this.game.npcs, this.sweptNpcs);
+    take(this.game.animals, this.sweptAnimals);
   }
 
   _alert() {
@@ -527,7 +593,7 @@ export class Tsunami extends Disaster {
     if (this.game.animals) this.game.animals.alert({ ...info, flowFn: this.flowFn });
   }
 
-  _queue(kind, x = 0, y = 0, z = 0, id = 0) { if (this.events.length < EV_MAX) this.events.push(kind, x, y, z, id); }
+  _queue(kind, x = 0, y = 0, z = 0, id = 0) { if (kind !== EV_CRACK || this.events.length < EV_MAX) this.events.push(kind, x, y, z, id); }
 
   // ------------------------------------------------------------------ debris hooks
   _waterLevelAt(x, z) {
@@ -565,7 +631,8 @@ export class Tsunami extends Disaster {
     if (this.debrisAcc < 1) return;
     const pNear = camDist < 40 ? 1 : camDist > 120 ? 0.1 : 1 - 0.9 * (camDist - 40) / 80;
     if (Math.random() > pNear) return;
-    if (d.count >= Math.floor(d.max * DEBRIS_POOL_SHARE)) {
+    const pool = Math.min(d.max, d.cap || d.max);                 // quality preset: soft cap of the shared pool
+    if (d.count >= Math.floor(pool * DEBRIS_POOL_SHARE)) {
       if (!d.camera) return;
       const cx = d.camera.position.x, cz = d.camera.position.z;
       let worst = -1, worstScore = -1;
@@ -634,9 +701,19 @@ export class Tsunami extends Disaster {
     else { seaTarget = g.baseY - 4; alphaTarget = 0; }
     if (!paused) { const kk = Math.min(1, dt * 1.5); this.seaY += (seaTarget - this.seaY) * kk; this.seaAlpha += (alphaTarget - this.seaAlpha) * kk; }
     vis.setSea(this.seaY, this.anim, this.seaAlpha);
-    // environment: overcast storm while the water is up, thinning as it recedes, clear again at the end
-    const env = (this.phase === 'wave' || this.phase === 'hold') ? 1 : this.phase === 'recede' ? 2 : 0;
-    if (env !== this.envState) { this.envState = env; if (env === 1) this.m.effects.setEnvironment(ENV_STORM); else if (env === 2) this.m.effects.setEnvironment(ENV_RECEDE); else this.m.effects.reset(); }
+    // the tumble after the front hit the player: the camera keeps rolling while the timer runs down
+    if (this.tumble > 0 && !paused) {
+      this.tumble -= dt;
+      this.m.effects.shake(0.25 + 0.6 * clamp(this.tumble / TUMBLE_TIME, 0, 1), 1.6);
+    }
+    // environment: overcast storm while the water is up, thinning as it recedes, clear again at the end; murky
+    // "under the wave" while the player tumbles
+    const env = this.tumble > 0 ? 3 : (this.phase === 'wave' || this.phase === 'hold') ? 1 : this.phase === 'recede' ? 2 : 0;
+    if (env !== this.envState) {
+      this.envState = env;
+      if (env === 1) this.m.effects.setEnvironment(ENV_STORM); else if (env === 2) this.m.effects.setEnvironment(ENV_RECEDE);
+      else if (env === 3) this.m.effects.setEnvironment(ENV_UNDER); else this.m.effects.reset();
+    }
     if (paused) return;
     const fp = this._tmp;                                                     // nearest point of the front to the player
     const pc = clamp(perp, -halfLen, halfLen);
@@ -716,7 +793,28 @@ export class Tsunami extends Disaster {
     else if (this.phase === 'recede') { gain = 0.18 * inten; cutoff = 900; }
     else { audio.loopStop('flood', 2); this.loopOn = false; return; }
     if (this.game.player.inWater && this.phase !== 'ending') gain += 0.06;
+    if (this.tumble > 0) { gain = Math.max(gain, 0.5); cutoff = 140; }      // under the wave: loud but muffled
     audio.loopSet('flood', { gain, cutoff, pan });
+  }
+
+  // The front hits the player: a burst of spray and drops flung across the view along the flow, a splash, a bright
+  // wet flash, and the tumble/murky-fog timer (see render()). Camera-relative and purely visual.
+  _playerHitFx(fp, camera) {
+    const g = this.g, parts = this.game.particles, cam = camera.position, uv = this._uv, sp = this.params.speed;
+    this.tumble = TUMBLE_TIME;
+    this.m.effects.shake(1.0, 1.6);
+    this.m.effects.flash(0.35, 0.45, [0.72, 0.86, 1]);
+    this.game.audio.splashBig(fp);
+    const yaw = this.game.player.yaw, fwdX = -Math.sin(yaw), fwdZ = -Math.cos(yaw);
+    for (let n = 0; n < 70; n++) {
+      const tile = Math.random() < 0.5 ? this._snow : this._water, sub = tile[2] / 4;
+      uv[0] = tile[0] + Math.floor(Math.random() * 3) * sub; uv[1] = tile[1] + Math.floor(Math.random() * 3) * sub; uv[2] = sub; uv[3] = 0;
+      const a = Math.random() * Math.PI * 2, r = 0.6 + Math.random() * 1.8;
+      const x = cam.x + fwdX * 0.9 + Math.cos(a) * r, z = cam.z + fwdZ * 0.9 + Math.sin(a) * r, y = cam.y - 0.7 + Math.random() * 1.8;
+      const vx = g.dx * sp * 0.6 + (Math.random() - 0.5) * 6, vz = g.dz * sp * 0.6 + (Math.random() - 0.5) * 6;
+      parts.spawn(x, y, z, vx, 1.5 + Math.random() * 5, vz, 0.08 + Math.random() * 0.12, 0.5 + Math.random() * 0.6, 0, uv, WHITE, 1);
+    }
+    this.foamLive += 40;
   }
 
   // Destruction events -> chips of the broken block + foam, crack sounds and debris (all camera-relative, visual only).
@@ -748,6 +846,7 @@ export class Tsunami extends Disaster {
         }
       } else if (kind === EV_SPLASH) audio.splashBig(fp);
       else if (kind === EV_RUMBLE) { audio.rumble(fp, 0.8); this.m.effects.shake(0.25, 2); }
+      else if (kind === EV_HIT) this._playerHitFx(fp, camera);
     }
     ev.length = 0;
   }

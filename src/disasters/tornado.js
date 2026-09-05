@@ -10,7 +10,6 @@
 // Heading convention: degrees clockwise from north viewed from above; 0 = north (-z), 90 = east (+x),
 // 180 = south (+z), 270 = west (-x).
 import { Disaster } from './base.js';
-import { DisasterManager } from './manager.js';
 import { B, BLOCKS, SHAPE } from '../blocks.js';
 import { ATLAS_TILES, CHUNK_HEIGHT } from '../constants.js';
 import { hash2, hash3, clamp } from '../rng.js';
@@ -22,10 +21,12 @@ import { PathPreview } from './tornado/preview.js';
 
 const ROPE_TICKS = 120;           // rope-out length (6 s)
 const TOUCHDOWN_TICKS = 60;       // funnel descends / spins up over the first 3 s
-const RIP_PICKS = 32;             // candidate cells tested per tick
+const RIP_PICKS = 44;             // candidate cells tested per tick
 const TOP_PICK_SHARE = 0.6;       // share of picks aimed at the topmost block of the column (roof-first)
 const SCAN_ABOVE = 24;            // blocks above the terrain surface searched for structures
 const GROUND_SCOUR = 0.12;        // rip probability multiplier for the terrain surface itself
+const CORE_CRACK = 0.55;          // within this fraction of the radius a strong funnel (intensity >= 0.8) also cracks masonry
+const CORE_CRACK_MIN_I = 0.8;
 // exposure faces (index stored with each queued rip): 0 = up, 1 = +x, 2 = -x, 3 = +z, 4 = -z
 const FX = [0, 1, -1, 0, 0], FY = [1, 0, 0, 0, 0], FZ = [0, 0, 0, 1, -1];
 const CAPTURE_TICKS = 80;         // a player held in / on the core this long (4 s) is thrown clear...
@@ -37,10 +38,10 @@ const EJECT_TICKS = 60;           // ...and the wind lets go of them for 3 s
 // more than RIP_OVERFLOW cells are still queued, so the cost stays at ~1.25 relights/s in normal destruction
 // and never exceeds 2.5/s. Cells the funnel has left behind (> 2 radii away) are dropped instead of ripped.
 const RIP_BATCH_TICKS = 16;
-const PENDING_MAX = 64;           // cells waiting for a burst (x,y,z,id,face each); a full queue drops new picks
+const PENDING_MAX = 96;           // cells waiting for a burst (x,y,z,id,face each); a full queue drops new picks
 const PENDING_STRIDE = 5;
-const RIP_OVERFLOW = 32;          // queued cells that justify a second chunk in the same burst
-const MAX_DEBRIS_PER_BURST = 12;  // debris launched per burst tick (~15 per second on average)
+const RIP_OVERFLOW = 40;          // queued cells that justify a second chunk in the same burst
+const MAX_DEBRIS_PER_BURST = 16;  // debris launched per burst tick (~20 per second on average)
 const MAX_FLING_PER_TICK = 3;
 const ALERT_INTERVAL = 40;        // ticks between NPC/animal alerts (2 s)
 const CLOUD_DECK_Y = 120;
@@ -51,6 +52,21 @@ const SKY_FAR = 300;              // ...and at 35 % beyond this one
 const SOUND_RANGE = 220;
 const BELL_RANGE = 220;
 const RIP_QUEUE_MAX = 48;         // ripped cells buffered for render-side effects (x,y,z,id)
+
+// Relative weight of the rip probability per material (a pure function of the block id, the pick's distance from the
+// axis as a fraction of the radius and the intensity, so it stays deterministic). Woodwork, glass, fences, signs and
+// cloth tear loose more readily than the shared table says; masonry keeps its low base value, but a strong funnel
+// (intensity >= CORE_CRACK_MIN_I) cracks brick and stone near the core too, so the town visibly suffers.
+export function ripFragility(id, q, intensity) {
+  const d = BLOCKS[id];
+  if (!d || id === B.AIR || id === B.BEDROCK || id === B.WATER) return 0;
+  if (d.shape !== SHAPE.CUBE) return d.sound === 'stone' ? 0.6 : d.sound === 'metal' ? 0.7 : 1.2;   // fences, slabs, doors, signs, panes...
+  switch (d.sound) {
+    case 'glass': return 1.2; case 'cloth': return 1.0; case 'grass': return 0.95; case 'wood': return 0.85;
+    case 'gravel': case 'sand': return 0.6; case 'metal': return 0.4;
+    default: return 0.3 + (intensity >= CORE_CRACK_MIN_I && q < CORE_CRACK ? 0.4 * (1 - q / CORE_CRACK) : 0);   // brick/stone/plaster
+  }
+}
 
 export class Tornado extends Disaster {
   static type = 'tornado';
@@ -259,9 +275,10 @@ export class Tornado extends Disaster {
   // Deterministic block ripping inside the core cylinder, outside in and fragility-weighted. Every tick
   // RIP_PICKS columns are drawn; most picks aim at the topmost block of the column (roof, false front, porch
   // roof, fence, sign), the rest at a random height where only blocks with an exposed outdoor face qualify
-  // (facades, windows, balconies) - see exposedFace(). Cells that fail their fragility roll are queued and
-  // torn out chunk by chunk every RIP_BATCH_TICKS ticks (applyRips), which bounds the manager's relight/remesh
-  // work per second while the rip rate stays the same.
+  // (facades, windows, balconies) - see exposedFace(). Cells that fail their fragility roll (ripFragility: the
+  // tornado's own material weights) are queued and torn out chunk by chunk every RIP_BATCH_TICKS ticks
+  // (applyRips), which bounds the manager's relight/remesh work per second while the rip rate stays the same.
+  // A burst is at most PENDING_MAX cells, well inside the 400 edits/tick budget.
   ripBlocks(mult) {
     const R = this.params.radius, I = this.params.intensity * mult;
     if (I <= 0) return;
@@ -282,7 +299,7 @@ export class Tornado extends Disaster {
       if (face < 0) continue;
       const dx = x + 0.5 - cx, dz = z + 0.5 - cz;
       const d = Math.sqrt(dx * dx + dz * dz);
-      let pr = DisasterManager.fragility(id) * I * (1 - d / R);
+      let pr = ripFragility(id, d / R, this.params.intensity) * I * (1 - d / R);
       if (y <= g) pr *= GROUND_SCOUR;                   // scours the ground only occasionally
       if (pr <= rng.next()) continue;
       // full queue = budget hit: drop the pick
