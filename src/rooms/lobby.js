@@ -106,15 +106,16 @@ function deckA({ kit, N, S, hx, hz, h, accentKey, accentHex, inlayKey, lifts, li
   }
   // the crest repeats on the lift wall between the corridor door and the starboard lift's call panel
   crestPlate(S, hx - 4.4, accentKey);
-  // lights: cool white pendant over the inlay on a short stem, its point 0.9 m under the lens (close
-  // enough to read as the source, far enough that the canopy and the white inlay stay below clipping),
-  // white downlights in the alcove soffits, the deck accent at the lifts, a fill for the corridor door
-  // kept 2.8 m off the lintel so the header does not bloom
-  pendant(kit, 0, h, 0.4, accentKey, 0.2);
-  kit.light({ type: "point", pos: [0, h - 1.25, 0.4], color: 0xe6eeff, intensity: lux(h - 1.25, 3.8), distance: 17, priority: 0.5 });
-  for (const s of [-1, 1]) kit.light({ type: "point", pos: [s * 3.75, 2.3, -hz + 0.6], color: 0xf2f6ff, intensity: 6.5, distance: 9, priority: 0.42 });
-  liftLights(8.5);
-  kit.light({ type: "point", pos: [0, h - 1.4, 3.2], color: 0xdfe8ff, intensity: 28, distance: 11, priority: 0.36 });
+  // lights: cool white disc luminaire over the inlay, flush to the ceiling so its point can sit high
+  // (0.9 m under the lens: close enough to read as the source, far enough that the canopy and the white
+  // inlay stay below clipping; the white inlay blooms above ~5.7 lux-units), white downlights in the
+  // alcove soffits, the deck accent at the lifts, a fill for the corridor door kept 2.8 m off the
+  // lintel so the header does not bloom
+  pendant(kit, 0, h, 0.4, accentKey, 0.05);
+  kit.light({ type: "point", pos: [0, h - 1.1, 0.4], color: 0xe6eeff, intensity: lux(h - 1.1, 3.8), distance: 17, priority: 0.5 });
+  for (const s of [-1, 1]) kit.light({ type: "point", pos: [s * 3.75, 2.3, -hz + 0.6], color: 0xf2f6ff, intensity: 7.5, distance: 10, priority: 0.42 });
+  liftLights(10.0);
+  kit.light({ type: "point", pos: [0, h - 1.2, 3.2], color: 0xdfe8ff, intensity: 30, distance: 11, priority: 0.36 });
 }
 
 // ---------------------------------------------------------------------------
