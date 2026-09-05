@@ -128,6 +128,23 @@ interface Landmass {
   wet?: boolean; // mangrove character: low, muddy, no beach
   /** small natural island: dense continuous canopy, sheltered coves grow a mangrove fringe */
   isle?: boolean;
+  /** wooded key of the inner bay: a thin sand rim, solid low hammock canopy, no glades, a narrow shelf */
+  key?: boolean;
+}
+
+/** Authored dense-forest classes (WorldMap.canopy). The planter reads them for density and species mix,
+ *  the city keeps its lots out of them. */
+export enum Canopy {
+  NONE = 0,
+  /** tall hardwood hammock on the shore side of Garza's causeway approach */
+  HAMMOCK = 1,
+  /** small wooded key: low dense canopy under a mangrove rim */
+  KEY = 2,
+  /** mainland bay-shore fringe in front of the suburbs */
+  SHORE = 3,
+  /** low mangrove thicket (the northern end of the hammock belt, where tall crowns would rise into the
+   *  bridge approach) */
+  SCRUB = 4,
 }
 
 // ---------------------------------------------------------------- SDF helpers
@@ -196,6 +213,36 @@ const GARZA_SPIT_HW = 42;
  *  out of the land) and the seabed pass (which gives it a proper turquoise depth). */
 export function garzaLagoon(x: number, z: number): number {
   return sdIsland(x, z, 200, 2380, 100, 62, 0.5, 15, 0.25);
+}
+
+/** The approach highway across Garza (garza-hwy-2), north-bound: causeway landing, island spine, spit. */
+const GARZA_APPROACH: Vec2[] = [[-10, 2600], [10, 2450], [30, 2300], [GARZA_SPIT[0][0], GARZA_SPIT[0][1]], [GARZA_SPIT[1][0], GARZA_SPIT[1][1]]];
+/** x of the approach highway's centre line at z (z decreases along the road). */
+function garzaRoadX(z: number): number {
+  const P = GARZA_APPROACH;
+  if (z >= P[0][1]) return P[0][0];
+  for (let i = 0; i < P.length - 1; i++) {
+    const [ax, az] = P[i], [bx, bz] = P[i + 1];
+    if (z <= az && z >= bz) return lerp(ax, bx, (az - z) / (az - bz));
+  }
+  return P[P.length - 1][0];
+}
+/** Signed distance (negative inside) to the hammock belt on the shore (west) side of the approach highway:
+ *  the reference's dark tree wall behind the road. It begins 22 m west of the centre line, so the shoulder
+ *  keeps a grass and sand margin in front of the tree line, and runs 80-135 m deep from the main body's west
+ *  shore up the spit, narrowing away over the spit's southern half. The depth wanders along the road so the
+ *  outer shore is not a ruled edge. */
+export function garzaBeltSd(x: number, z: number, grow = 0): number {
+  const u = garzaRoadX(z) - x;
+  // the belt ends ~170 m short of the bridge abutment: the bench's hero-island mask must not climb the spit
+  // (largest-island bbox: canopy at z < ~1950 projects above iter09's mask top in aerial-a), and a cleared
+  // embankment is how a causeway approach reads anyway
+  const taper = smoothstep(1960, 2100, z) * (1 - smoothstep(2440, 2530, z));
+  const depth = 85 + 50 * (0.5 + 0.5 * fbm2(z / 150 + 2.0, 0.3, 2));
+  const inner = 22;
+  // `grow` pushes the outer shore out (the canopy mask reaches the roughened waterline) but never the
+  // road-side edge; both taper with the belt so the tips stay narrow
+  return Math.max(inner - u, u - inner - (depth + grow) * taper, 1950 - z, z - 2540);
 }
 
 /** The mainland coast runs north-south along x ≈ -2500 with bays and headlands. */
@@ -293,6 +340,9 @@ export function createLandmasses(): Landmass[] {
       d = smin(d, sdIsland(x, z, 375, 2160, 85, 115, 0.2, 14, 0.2), 110);    // north-east lobe (park, marina)
       d = smin(d, sdIsland(x, z, 130, 2240, 110, 85, -0.1, 16, 0.2), 100);   // north lobe (spit root)
       d = smin(d, sdSegment(x, z, GARZA_SPIT[0][0], GARZA_SPIT[0][1], GARZA_SPIT[1][0], GARZA_SPIT[1][1]) - GARZA_SPIT_HW, 60);
+      // hammock belt on the shore side of the approach highway (the spit's west half and the main body's
+      // north-west shore); its outer shore is roughened here so the belt does not read as a road embankment
+      d = smin(d, garzaBeltSd(x, z) + 14 * fbm2(x / 70 + 1.0, z / 70 - 2.0, 2), 45);
       // interior lagoon; its distance is steepened so only a narrow sandy rim surrounds the pond
       d = Math.max(d, -garzaLagoon(x, z) * 2.5 + 12);
       return d;
@@ -353,6 +403,49 @@ export function createLandmasses(): Landmass[] {
       const ix = cx + rng.gauss() * sx * 0.45, iz = cz + rng.gauss() * sz * 0.45;
       const rx = rng.range(70, 240), rz = rng.range(60, 180), rot = rng.range(0, Math.PI), seed = rng.int(100, 900);
       L.push({ id: `mang-${cx}-${i}`, bx: ix, bz: iz, br: Math.max(rx, rz) * 1.6 + 60, sd: (x, z) => sdIsland(x, z, ix, iz, rx, rz, rot, seed, 0.35), beach: 0, height: 0.55, seabed: 0.004, shelf: 1.6, wet: true });
+    }
+  }
+
+  // Wooded keys of the inner bay (the reference's scatter of islets behind the causeway): small hammocks
+  // with a thin sand rim and a mangrove edge, thickest in the water west of Garza's approach, a few east of
+  // the bridge and along the south bayfront, plus two larger keys mid-bay. Candidates are rejected within
+  // reach of the marked channels (boats), the causeways and bridges, the seaplane lane and other land.
+  {
+    const keyRng = new Rng('bay-keys');
+    const channels = createChannels();
+    const bridges = createBridges();
+    const lane: Vec2[] = [[-2400, 3300], [1600, 3300]];
+    const clear = (cx: number, cz: number, r: number): boolean => {
+      for (const c of channels) if (sdPolyline(cx, cz, c.pts) < c.width * 0.5 + 170 + r) return false;
+      for (const b of bridges) if (sdPolyline(cx, cz, b.pts) < 230 + r) return false;
+      if (sdPolyline(cx, cz, lane) < 420 + r) return false;
+      for (const lm of L) {
+        if (Math.hypot(cx - lm.bx, cz - lm.bz) - lm.br > r + 120) continue;
+        if (lm.sd(cx, cz) < r + 120) return false;
+      }
+      return true;
+    };
+    // a steep shelf: the rim of pale water around a key stays a few crown widths wide, so the keys sit in
+    // the bay's blue instead of on turquoise saucers
+    const addKey = (id: string, cx: number, cz: number, rx: number, rz: number, rot: number, seed: number): boolean => {
+      if (!clear(cx, cz, Math.max(rx, rz))) return false;
+      L.push({ id, bx: cx, bz: cz, br: Math.max(rx, rz) * 1.5 + 50, sd: (x, z) => sdIsland(x, z, cx, cz, rx, rz, rot, seed, 0.3), beach: 12, height: 1.9, seabed: 0.035, shelf: 1.8, isle: true, key: true });
+      return true;
+    };
+    addKey('key-west', -1250, 650, 150, 105, 0.35, 501);
+    addKey('key-mid', -600, 1900, 125, 90, -0.4, 502);
+    const regions: [number, number, number, number, number][] = [
+      [-2250, -350, 250, 2350, 34],
+      [550, 1500, 950, 1800, 7],
+      [-2000, -700, -1400, 150, 9],
+    ];
+    for (const [x0, x1, z0, z1, n] of regions) {
+      let placed = 0;
+      for (let tries = 0; tries < n * 12 && placed < n; tries++) {
+        const cx = keyRng.range(x0, x1), cz = keyRng.range(z0, z1);
+        const rx = keyRng.range(28, 80) * (keyRng.chance(0.6) ? 0.72 : 1), rz = rx * keyRng.range(0.4, 1);
+        if (addKey(`key-${x0}-${placed}`, cx, cz, rx, rz, keyRng.range(0, Math.PI), keyRng.int(100, 900))) placed++;
+      }
     }
   }
 
@@ -677,6 +770,8 @@ export interface WorldMapData {
   coast: Float32Array;
   /** 0..255 wave exposure of the nearest shore (0 = sheltered flat / mangrove cove, 255 = open ocean) */
   exposure: Uint8Array;
+  /** authored dense-forest class per cell (Canopy) */
+  canopy: Uint8Array;
   districts: District[];
   roads: RoadSpec[];
   bridges: BridgeSpec[];
@@ -696,6 +791,7 @@ export class WorldMap implements WorldMapData {
   veg = new Uint8Array(MAP_N * MAP_N);
   coast = new Float32Array(MAP_N * MAP_N);
   exposure = new Uint8Array(MAP_N * MAP_N);
+  canopy = new Uint8Array(MAP_N * MAP_N);
   districts = createDistricts();
   roads = createRoads();
   bridges = createBridges();
@@ -740,6 +836,13 @@ export class WorldMap implements WorldMapData {
     const [cx, cz] = this.toCell(x, z);
     const ix = clamp(Math.round(cx), 0, MAP_N - 1), iz = clamp(Math.round(cz), 0, MAP_N - 1);
     return this.veg[iz * MAP_N + ix] / 255;
+  }
+
+  /** authored dense-forest class at a point (Canopy.NONE outside the belts, keys and shore fringes) */
+  canopyAt(x: number, z: number): Canopy {
+    const [cx, cz] = this.toCell(x, z);
+    const ix = clamp(Math.round(cx), 0, MAP_N - 1), iz = clamp(Math.round(cz), 0, MAP_N - 1);
+    return this.canopy[iz * MAP_N + ix] as Canopy;
   }
 
   /** wave exposure 0..1 */
@@ -926,6 +1029,7 @@ export class WorldMap implements WorldMapData {
     const canals = this.canals;
     const canalBounds = canals.map((c) => ({ minX: Math.min(c.a[0], c.b[0]) - c.width, maxX: Math.max(c.a[0], c.b[0]) + c.width, z: c.a[1] }));
     const marinas = this.marinas;
+    const bridges = this.bridges;
     // through roads that may cross the western marsh, with bounding boxes for quick rejection
     const embankments = this.roads.filter((r) => r.cls === 'highway' || r.cls === 'arterial').map((r) => {
       let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -966,6 +1070,7 @@ export class WorldMap implements WorldMapData {
         let h: number;
         let zone: Zone;
         let veg = 0;
+        let canopyCls = Canopy.NONE;
         if (sd < 0) {
           // LAND
           const inland = -sd;
@@ -975,7 +1080,27 @@ export class WorldMap implements WorldMapData {
           for (const d of districts) {
             if (sdBox(x, z, d.cx, d.cz, d.hw, d.hh, d.rot) < 0) { dist = d; break; }
           }
-          const seawall = dist !== null && (dist.zone === Zone.DOWNTOWN || dist.zone === Zone.RES_MID || dist.zone === Zone.INDUSTRIAL || dist.zone === Zone.LOT || dist.zone === Zone.CONSTRUCTION || dist.zone === Zone.STADIUM || dist.zone === Zone.MARINA || (dist.zone === Zone.HOTEL && expo < 0.3));
+          // authored dense forest (0..1): the hammock belt on the shore side of Garza's approach highway, the
+          // wooded keys, and the mainland's bay-shore fringe in front of the suburbs (south of the stadium
+          // headland, clear of the marinas and the bridge landings). It narrows the beach to a rim, takes
+          // priority over the district lots and the seawalls, and is planted solid by the vegetation.
+          let forest = 0;
+          if (lm.id === 'garza') {
+            forest = 1 - smoothstep(-8, 4, garzaBeltSd(x, z, 34));
+            if (forest > 0.5) canopyCls = z > 2110 ? Canopy.HAMMOCK : Canopy.SCRUB;
+          } else if (lm.key) {
+            forest = 1;
+            canopyCls = Canopy.KEY;
+          } else if (id === 0 && x > -3400 && z > -1800 && z < 3400 && inland < 160) {
+            const fw = 70 + 55 * (0.5 + 0.5 * perlin2(x / 260 + 4.0, z / 260 - 1.0));
+            forest = (1 - smoothstep(fw - 25, fw + 15, inland)) * smoothstep(-1750, -1550, z) * (1 - smoothstep(3150, 3350, z));
+            if (forest > 0) {
+              for (const ma of marinas) forest *= smoothstep(150, 260, Math.hypot(x - ma.x, z - ma.z));
+              for (const b of bridges) forest *= smoothstep(45, 85, sdPolyline(x, z, b.pts));
+              if (forest > 0.5) canopyCls = Canopy.SHORE;
+            }
+          }
+          const seawall = forest < 0.5 && dist !== null && (dist.zone === Zone.DOWNTOWN || dist.zone === Zone.RES_MID || dist.zone === Zone.INDUSTRIAL || dist.zone === Zone.LOT || dist.zone === Zone.CONSTRUCTION || dist.zone === Zone.STADIUM || dist.zone === Zone.MARINA || (dist.zone === Zone.HOTEL && expo < 0.3));
           if (lm.wet) {
             h = 0.15 + lm.height * smoothstep(0, 60, inland) + 0.15 * perlin2(x / 30, z / 30);
             zone = Zone.MANGROVE;
@@ -990,7 +1115,8 @@ export class WorldMap implements WorldMapData {
             // lets the canopy reach almost to the water in places and opens broad sand aprons in others,
             // so no island wears its beach as a ring of constant width
             const widthNoise = Math.max(0.25 + 0.4 * expo, 0.45 + 0.9 * (0.5 + 0.5 * perlin2(x / 600 + 5.2, z / 600 - 1.3)) + 0.35 * perlin2(x / 240 + 1.7, z / 240 - 4.1) + 0.15 * perlin2(x / 90 + 6.3, z / 90 + 2.4));
-            const beachW = seawall ? 5 : lm.beach * (0.45 + 1.4 * expo) * widthNoise * (lakeShore > 0 ? 1.6 : 1.0);
+            // the forest belts meet the water over a 7 m rim of sand and mud instead of a beach apron
+            const beachW = lerp(seawall ? 5 : lm.beach * (0.45 + 1.4 * expo) * widthNoise * (lakeShore > 0 ? 1.6 : 1.0), 7, forest);
             // beach cusps wobble the profile a few metres so the wet band, tide lines and dune toe do not
             // run as concentric contour rings; a low berm crests the upper beach of exposed shores
             const cusp = inland + 5 * perlin2(x / 42 + 7.7, z / 42 - 3.3) * smoothstep(3, 12, inland);
@@ -1029,8 +1155,9 @@ export class WorldMap implements WorldMapData {
                 }
               }
             }
-            // Garza's causeway spit is a bare sand bank (too low for the planters' dune palms) rather than canopy
-            if (lm.id === 'garza' && z < GARZA_SPIT[0][1] + 60 && sdSegment(x, z, GARZA_SPIT[0][0], GARZA_SPIT[0][1], GARZA_SPIT[1][0], GARZA_SPIT[1][1]) < GARZA_SPIT_HW + 40) {
+            // Garza's causeway spit is a bare sand bank (too low for the planters' dune palms) rather than canopy,
+            // except where the hammock belt stands on its shore side
+            if (lm.id === 'garza' && forest < 0.5 && z < GARZA_SPIT[0][1] + 60 && sdSegment(x, z, GARZA_SPIT[0][0], GARZA_SPIT[0][1], GARZA_SPIT[1][0], GARZA_SPIT[1][1]) < GARZA_SPIT_HW + 40) {
               const spitT = smoothstep(GARZA_SPIT[0][1] + 60, GARZA_SPIT[0][1] - 40, z);
               if (spitT > 0.5) { zone = Zone.BEACH; veg = 15; }
               const bank = lerp(0.3, 0.8 + 0.08 * perlin2(x / 40, z / 40), smoothstep(0, 16, inland));
@@ -1058,7 +1185,7 @@ export class WorldMap implements WorldMapData {
           }
           // districts override the generic zone once fully on land
           let inDistrict = false;
-          if (h > 1.4 && dist !== null) {
+          if (h > 1.4 && dist !== null && forest < 0.5) {
             const d = dist;
             inDistrict = true;
             zone = d.zone;
@@ -1081,7 +1208,7 @@ export class WorldMap implements WorldMapData {
           if (zone === Zone.RES_LOW && !inDistrict) {
             zone = Zone.PARK;
             veg = Math.floor(150 + 105 * smoothstep(-0.35, 0.3, landNoise));
-            if (lm.isle) {
+            if (lm.isle && forest < 0.5) {
               // dense island canopy thinning into the odd sandy glade
               const glade = perlin2(x / 95 + 5.0, z / 95 - 2.0);
               veg = Math.floor(Math.min(255, veg + 45) * (1 - 0.55 * smoothstep(0.22, 0.5, glade)));
@@ -1089,6 +1216,9 @@ export class WorldMap implements WorldMapData {
             }
             if (lakeShore > 0) veg = Math.min(veg, 160);
           }
+          // the authored forest is a closed canopy
+          if (forest > 0.5 && (zone === Zone.PARK || zone === Zone.MANGROVE)) veg = 255;
+          else canopyCls = Canopy.NONE;
           if (zone === Zone.WETLAND_FLAT) {
             const isle = smoothstep(0.5, 0.64, 0.5 + 0.5 * fbm2(x / 240 + 3.0, z / 240 + 8.0, 3));
             veg = Math.floor(40 + 215 * isle);
@@ -1115,7 +1245,8 @@ export class WorldMap implements WorldMapData {
           const seabed = bilerp(cSeabed, sTx, sTz, sX0, sZ0);
           const shelf = bilerp(cShelf, sTx, sTz, sX0, sZ0);
           let depth: number;
-          if (lm.wet) depth = Math.min(regional, 0.05 + sd * seabed);
+          // mangrove islets and the bay keys stand on a narrow shelf: a pale rim, then the bay's own depth
+          if (lm.wet || lm.key) depth = Math.min(regional, 0.05 + sd * seabed);
           else if (lm.beach === 0) depth = Math.min(regional, shelf + sd * seabed);
           else {
             // Beach-fringed shores: a nearshore slope (steeper on exposed beaches, broad sand flats on
@@ -1220,6 +1351,7 @@ export class WorldMap implements WorldMapData {
         this.height[idx] = h;
         this.zone[idx] = zone;
         this.veg[idx] = clamp(veg, 0, 255);
+        this.canopy[idx] = canopyCls;
       }
       if (onProgress && (j & 63) === 0) onProgress(0.35 + (j / n) * 0.65);
     }

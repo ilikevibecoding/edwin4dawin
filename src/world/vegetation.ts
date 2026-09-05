@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { Rng, hash2 } from '../core/seed';
 import { perlin2, smoothstep } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
-import { CELL, HALF, Zone, type WorldMap } from './map';
+import { CELL, Canopy, HALF, Zone, type WorldMap } from './map';
 import { balanceGroundIbl } from './terrain';
 import { InstanceBatch, splitCells, type CellSource } from './batching';
 import { LAYER_CAMERA, LAYER_DEFAULT, LAYER_MAIN, LAYER_MIRROR, MAX_CASCADES, cascadeIsFine, layerMask, maskCasts, type ViewCull } from './culling';
@@ -1205,12 +1205,35 @@ export class Vegetation {
     const palm = (x: number, z: number, y: number, prng: Rng, hMin = 6, hMax = 13) => add(4, x, z, y - 0.15, hMin + (hMax - hMin) * Math.pow(prng.next(), 1.3), prng, prng.range(-0.14, 0.14));
     /** young-to-old height draw (metres): most trees are mid-sized, a few are large */
     const size = (prng: Rng, min: number, max: number) => min + (max - min) * Math.pow(prng.next(), 1.5);
+    /** The authored forest belts (map.canopy): a closed canopy in the reference's proportions. A mangrove
+     *  edge stands at the water; behind it a dense mixed hardwood hammock with the odd emergent and palm
+     *  breaking the top line (no shrubs, no dune grass, few palms). The keys carry a lower canopy with more
+     *  mangrove, the mainland fringe is mostly mangrove, and the scrub class is a mangrove thicket with no
+     *  tall crown at all. Sizes are crown heights in metres: the hammock is kept lower (8-13.5 m) than the
+     *  inland parks so the belt reads as the reference's low closed canopy. */
+    const canopyPlant = (cls: Canopy, x: number, z: number, y: number, prng: Rng, roll: number, coast: number) => {
+      if (cls === Canopy.SCRUB) {
+        if (roll < 0.8) add(2, x, z, y - 0.2, size(prng, 2.2, 3.8), prng);
+        else if (roll < 0.92) add(6, x, z, y - 0.15, size(prng, 3.0, 4.2), prng);
+        else add(3, x, z, y - 0.1, size(prng, 1.5, 2.6), prng);
+        return;
+      }
+      const edge = cls === Canopy.SHORE ? -30 : -16;
+      if (coast > edge && roll < (cls === Canopy.SHORE ? 0.7 : 0.55)) { add(2, x, z, y - 0.2, size(prng, 2.6, 5.0), prng); return; }
+      const key = cls === Canopy.KEY;
+      let t = prng.next();
+      if ((t -= key ? 0.05 : 0.07) < 0) palm(x, z, y, prng, 7, 11);
+      else if ((t -= 0.08) < 0) add(6, x, z, y - 0.15, size(prng, 3.0, 6.0), prng);
+      else if ((t -= key ? 0.08 : cls === Canopy.SHORE ? 0.1 : 0.14) < 0) add(1, x, z, y - 0.3, key ? size(prng, 14, 17) : size(prng, 14, 18), prng);
+      else if (key && (t -= 0.25) < 0) add(2, x, z, y - 0.2, size(prng, 3, 5.5), prng);
+      else add(0, x, z, y - 0.3, key ? size(prng, 8, 12) : size(prng, 8, 13.5), prng);
+    };
 
     // cell walk over the map: candidates jittered inside each land cell, density from the veg channel and
     // two clump fields (a 150 m grove field and a 32 m clearing field), so the canopy has dense knots,
     // thin patches and gaps instead of an even sprinkle
     const n = map.n;
-    const zone = map.zone, veg = map.veg, height = map.height;
+    const zone = map.zone, veg = map.veg, height = map.height, canopy = map.canopy;
     for (let j = 0; j < n; j++) {
       for (let i = 0; i < n; i++) {
         const idx = j * n + i;
@@ -1222,9 +1245,12 @@ export class Vegetation {
         const clump = perlin2(cx / 150, cz / 150);
         const grove = perlin2(cx / 420 + 9.0, cz / 420 - 3.0);
         const clearing = 0.5 + 0.5 * perlin2(cx / 32 + 4.4, cz / 32 - 7.7);
+        // the authored forest belts are planted solid (the mangrove zone keeps its own belt planting)
+        const canopyCls = zn === Zone.PARK ? (canopy[idx] as Canopy) : Canopy.NONE;
         let p = 0;
         let candidates = 1;
-        switch (zn) {
+        if (canopyCls !== Canopy.NONE) { p = 0.97; candidates = 3; }
+        else switch (zn) {
           case Zone.MANGROVE: p = 0.95; candidates = 3; break;
           case Zone.BEACH: p = 0.6; candidates = 2; break;
           case Zone.PARK: p = 0.06 + 0.94 * smoothstep(0.35, 0.95, v) + 0.08 * clump; candidates = v > 0.6 ? 3 : v > 0.3 ? 2 : 1; break;
@@ -1239,7 +1265,7 @@ export class Vegetation {
         }
         if (p <= 0) continue;
         // clearings: the densest zones lose ~40 % of their candidates where the clearing field is low
-        if (zn === Zone.PARK || zn === Zone.RES_LOW || zn === Zone.WETLAND_FLAT) p *= 0.6 + 0.4 * smoothstep(0.25, 0.6, clearing);
+        if (canopyCls === Canopy.NONE && (zn === Zone.PARK || zn === Zone.RES_LOW || zn === Zone.WETLAND_FLAT)) p *= 0.6 + 0.4 * smoothstep(0.25, 0.6, clearing);
         for (let c = 0; c < candidates; c++) {
           const h = hash2(i, j, 7 + c * 3);
           if (h >= p) continue;
@@ -1253,7 +1279,10 @@ export class Vegetation {
           const coast = map.coastAt(jx, jz);
           const nearShore = coast > -110;
           // sizes are crown heights in metres (see HEIGHTS for the species ranges)
-          if (zn === Zone.MANGROVE) {
+          if (canopyCls !== Canopy.NONE) {
+            if (occupied(jx, jz)) continue;
+            canopyPlant(canopyCls, jx, jz, y, prng, roll, coast);
+          } else if (zn === Zone.MANGROVE) {
             if (occupied(jx, jz)) continue;
             // mangrove belt with the odd sea grape and palm on its landward, higher side
             if (y > 0.9 && roll < 0.08) add(6, jx, jz, y - 0.15, size(prng, 3, 7), prng);
@@ -1332,7 +1361,13 @@ export class Vegetation {
           if (y < 0.9) continue;
           const zn = map.zoneAt(x, z);
           if (zn === Zone.INDUSTRIAL || zn === Zone.AIRPORT || zn === Zone.WETLAND_FLAT || zn === Zone.LOT) continue;
-          if (roadRng.chance(0.22) || occupied(x, z)) continue;
+          // the road's own occupancy footprint (10 m cells around a 14 m radius) reaches 20-30 m from the centre
+          // line, so an avenue tree tested where it stands never passes; on the open zones that carry no lots
+          // the test is made 15 m further out instead, which still catches a building close to the shoulder.
+          // Beach stays strict: the bare spit up to the abutment is the bench's hero-island mask top (a tree
+          // row on both shoulders there merges into one strip and lifts it)
+          const probe = zn === Zone.PARK || zn === Zone.MANGROVE ? 15 : 0;
+          if (roadRng.chance(0.22) || occupied(x - uz * probe * side, z + ux * probe * side)) continue;
           const kind = roadRng.next();
           if (kind < 0.72) palm(x, z, y, roadRng, 6, 13);
           else if (kind < 0.86) add(6, x, z, y - 0.15, size(roadRng, 3, 7), roadRng);
