@@ -119,6 +119,8 @@ export function createWildlife({ terrain, env = null, quality = 'high' } = {}) {
     animals: lions.map((l) => ({
       root: l.root,
       kind: l.kind,
+      // plan radius for the collision system's soft circle (src/collision.js)
+      radius: l.kind === 'cub' ? 0.7 : 1.2,
       get state() {
         return l.state;
       },

@@ -224,6 +224,260 @@ check('the eye stays in the seat', Math.abs(s.x - seat.x) < 0.02 && Math.abs(s.z
 const turned = Math.hypot(s.aimWorld[0] - seat.aimWorld[0], s.aimWorld[2] - seat.aimWorld[2]);
 check('the head turns', turned > 0.15, `aim moved ${turned.toFixed(3)}`);
 
+// ---------------------------------------------------------------------------
+// Collision. The world is paused, so every run below steps the simulation by
+// hand through debugAPI.collision.trace() and reads the truck back per frame:
+// position, speed, the impact it reported, and the clearance of its three
+// circles to the nearest hard collider (negative means inside one).
+// ---------------------------------------------------------------------------
+log('collision');
+const hasCollision = await page.evaluate(() => !!window.debugAPI.collision);
+check('debugAPI exposes the collision world', hasCollision);
+if (hasCollision) {
+  const stats = await page.evaluate(() => window.debugAPI.collision.stats);
+  check('static colliders were registered at boot', stats.count > 100, `${stats.count} colliders, ${JSON.stringify(stats.byTag)}`);
+  check('static build cost under 20 ms', stats.boot.ms < 20, `${stats.boot.ms} ms (${Object.entries(stats.boot.stages).map(([k, v]) => `${k} ${v}`).join(', ')})`);
+
+  /** Put the truck at (x, z) facing `heading` under manual control with the wheel held, then run. */
+  const ram = async (x, z, heading, { speed = 8.33, frames = 180, throttle = 1 } = {}) => {
+    // manual control reads the keyboard every step, so the wheel is held
+    // with a real key down rather than by poking the input
+    if (throttle) await page.keyboard.down('KeyW');
+    const trace = await page.evaluate(
+      ({ x, z, heading, speed, frames, throttle }) => {
+        const { driver } = window.debugAPI.objects;
+        const s = driver.state;
+        s.auto = false;
+        s.pos.set(x, 0, z);
+        s.heading = heading;
+        s.speed = speed;
+        s.spin = 0;
+        s.jolt = 0;
+        s.contact = false;
+        driver.input.throttle = throttle;
+        driver.input.brake = 0;
+        driver.input.steer = 0;
+        s.steer = 0;
+        return window.debugAPI.collision.trace(frames, 1 / 60);
+      },
+      { x, z, heading, speed, frames, throttle },
+    );
+    if (throttle) await page.keyboard.up('KeyW');
+    return trace;
+  };
+
+  /** What a head-on run did: penetration, when it stopped, how many impacts it reported. */
+  const headOn = (trace) => {
+    const first = trace.findIndex((f) => f.contact);
+    const minClear = Math.min(...trace.map((f) => f.clearance));
+    const impacts = trace.filter((f) => f.impact > 3).length;
+    const peak = Math.max(...trace.map((f) => f.impact));
+    let stopped = -1;
+    if (first >= 0) {
+      // first frame after which |speed| never comes back above 1 m/s
+      for (let i = first; i < trace.length; i++) {
+        if (trace.slice(i).every((f) => Math.abs(f.speed) < 1)) {
+          stopped = i;
+          break;
+        }
+      }
+    }
+    const after = first >= 0 ? trace.slice(first + 30) : [];
+    return {
+      first,
+      minClear,
+      impacts,
+      peak: +peak.toFixed(2),
+      stopS: stopped >= 0 ? +((stopped - first) / 60).toFixed(3) : null,
+      quietAfterHalfSecond: after.length > 0 && after.every((f) => Math.abs(f.speed) < 1),
+      tag: trace[first]?.tag,
+      accelPeak: +Math.min(...trace.map((f) => f.accel)).toFixed(1),
+    };
+  };
+  const reportHeadOn = (label, r) => {
+    check(`${label}: the truck made contact`, r.first >= 0, r.first >= 0 ? `frame ${r.first} (${r.tag})` : 'never touched');
+    check(`${label}: never left inside a collider`, r.minClear > -0.01, `min clearance ${r.minClear.toFixed(4)} m`);
+    check(`${label}: under 1 m/s within 0.5 s of contact`, r.quietAfterHalfSecond, `settled ${r.stopS} s after contact`);
+    check(`${label}: impact fired once`, r.impacts === 1, `${r.impacts} impact(s) over 3 m/s, peak ${r.peak} m/s, accel ${r.accelPeak} m/s²`);
+  };
+
+  // (a) a culvert headwall, from six metres, at 30 km/h
+  const hw = await page.evaluate(() => {
+    const { terrain } = window.debugAPI.objects;
+    const h = terrain.riverbed?.headwalls?.[0];
+    if (!h) return null;
+    // the wall's face is on the channel side; stand six metres out from it
+    return { x: h.x + h.nx * 6, z: h.z + h.nz * 6, heading: Math.atan2(-h.nx, -h.nz) };
+  });
+  check('a culvert headwall is exposed by the terrain', !!hw);
+  if (hw) reportHeadOn('headwall', headOn(await ram(hw.x, hw.z, hw.heading)));
+
+  // (b) a parked vehicle, into its tail from the lane (the row is too tight to
+  // come at one from the side without starting inside its neighbour), and a
+  // guest tent into its back wall from the savanna side
+  const fv = await page.evaluate(() => {
+    const cols = window.debugAPI.collision.colliders().filter((c) => c.tag === 'vehicle' && c.type === 'box');
+    const c = cols.find((v) => /jeep/.test(v.name || '')) || cols[0];
+    if (!c) return null;
+    const fx = Math.sin(c.heading);
+    const fz = Math.cos(c.heading);
+    return { x: c.x - fx * (c.hl + 6), z: c.z - fz * (c.hl + 6), heading: c.heading, name: c.name };
+  });
+  check('the fleet registered vehicles', !!fv, fv?.name);
+  if (fv) reportHeadOn('fleet vehicle', headOn(await ram(fv.x, fv.z, fv.heading)));
+
+  const tent = await page.evaluate(() => {
+    const cols = window.debugAPI.collision.colliders().filter((c) => c.tag === 'tent' && c.type === 'box' && c.name === 'tent');
+    const c = cols[2] || cols[0];
+    if (!c) return null;
+    const fx = Math.sin(c.heading);
+    const fz = Math.cos(c.heading);
+    return { x: c.x - fx * (c.hl + 6), z: c.z - fz * (c.hl + 6), heading: c.heading };
+  });
+  check('the camp registered tents', !!tent);
+  if (tent) reportHeadOn('tent', headOn(await ram(tent.x, tent.z, tent.heading)));
+
+  // (d) a glancing pass along the boma at 15 degrees, wheel held straight
+  const glance = await page.evaluate(() => {
+    const { camp } = window.debugAPI.objects;
+    const cols = window.debugAPI.collision.colliders().filter((c) => c.name === 'boma');
+    if (!cols.length || !camp?.frame) return null;
+    const a = (15 * Math.PI) / 180;
+    // inside the camp, 2 m clear of the pile, heading along it and 15° into it
+    const v = -22.2 + 0.7 + 1.05 + 2.0;
+    const u = 6;
+    const p = camp.frame.toWorld(u, v);
+    const heading = camp.frame.worldHeading(Math.cos(a), -Math.sin(a));
+    const tangent = camp.frame.worldHeading(1, 0);
+    return { x: p.x, z: p.z, heading, tangent, start: [u, v] };
+  });
+  check('the boma is registered', !!glance);
+  if (glance) {
+    // judged over the second after contact: the truck is still along the pile
+    // then, and has not yet reached whatever the camp put past its end
+    const full = await ram(glance.x, glance.z, glance.heading, { speed: 8, frames: 150, throttle: 1 });
+    const first = full.findIndex((f) => f.contact);
+    check('boma glance: the truck touched the boma', first >= 0 && full[first].tag === 'structure', first >= 0 ? `frame ${first} (${full[first].tag})` : 'never touched');
+    if (first >= 0) {
+      const tr = full.slice(0, first + 61);
+      const v0 = tr[first - 1]?.speed ?? tr[first].speed;
+      const after = tr.slice(first);
+      const vMin = Math.min(...after.map((f) => f.speed));
+      const ratio = vMin / v0;
+      const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+      const endAngle = Math.abs(wrap(tr[tr.length - 1].h - glance.tangent));
+      const minClear = Math.min(...tr.map((f) => f.clearance));
+      const travelled = Math.hypot(tr[tr.length - 1].x - tr[first].x, tr[tr.length - 1].z - tr[first].z);
+      check('boma glance: the truck slides rather than stops', ratio > 0.6, `speed ${v0.toFixed(2)} -> min ${vMin.toFixed(2)} m/s (${(ratio * 100).toFixed(0)} %)`);
+      check('boma glance: the wall steers the truck along itself', endAngle < 0.2, `${((endAngle * 180) / Math.PI).toFixed(1)}° off the line at the end, ${travelled.toFixed(1)} m on`);
+      check('boma glance: never inside the pile', minClear > -0.01, `min clearance ${minClear.toFixed(4)} m`);
+    }
+  }
+
+  // (c) the whole auto-drive route, both ways along the mainline: no hard
+  // contact, and never closer than 0.4 m to anything static
+  const route = await page.evaluate(() => {
+    const api = window.debugAPI;
+    const { driver, terrain } = api.objects;
+    const s = driver.state;
+    const run = (setup, maxFrames) => {
+      setup();
+      let minClear = Infinity;
+      let where = null;
+      let contacts = 0;
+      let frames = 0;
+      let maxSpeed = 0;
+      let atJunction = null;
+      const j = terrain.junction;
+      for (let k = 0; k < maxFrames; k++) {
+        const tr = api.collision.trace(30, 1 / 60);
+        frames += 30;
+        for (const f of tr) {
+          if (f.contact) contacts++;
+          if (f.speed > maxSpeed) maxSpeed = f.speed;
+          if (f.clearance < minClear) {
+            minClear = f.clearance;
+            const near = api.collision.clearance(f.x, f.z, 1.05);
+            where = { x: +f.x.toFixed(1), z: +f.z.toFixed(1), speed: +f.speed.toFixed(1), route: s.route, t: +s.autoT.toFixed(3), tag: near.tag, name: near.name };
+          }
+          const dj = Math.hypot(f.x - j.x, f.z - j.z);
+          if (dj < 6 && (!atJunction || f.clearance < atJunction.clearance)) atJunction = { clearance: +f.clearance.toFixed(2), speed: +f.speed.toFixed(1), dj: +dj.toFixed(1) };
+        }
+        if (setup.done()) break;
+      }
+      return { minClear: +minClear.toFixed(3), where, contacts, frames, maxSpeed: +maxSpeed.toFixed(1), atJunction, seconds: +(frames / 60).toFixed(0) };
+    };
+    // forward: from high on the spur, through the junction, along the mainline
+    // to its end. Not from the very top: the spur's first 40 m lie outside the
+    // driver's playable-area clamp (terrain.size * 0.45), so a truck put there
+    // is snapped 19 m sideways before it moves.
+    const fwd = () => {
+      s.auto = true;
+      driver.resetAuto(0.12);
+      const p = terrain.roadPoint(0.12);
+      const t = terrain.roadTangent(0.12);
+      s.pos.copy(p);
+      s.heading = Math.atan2(t.x, t.z);
+      s.speed = 6;
+      s.spin = 0;
+      s.contact = false;
+    };
+    fwd.done = () => s.route === 'main' && s.autoT > 0.955;
+    // back: the mainline the other way, from its far end down past the camp to the junction
+    const back = () => {
+      s.auto = true;
+      driver.resetAuto(0.5);
+      s.route = 'main';
+      s.turned = true;
+      s.autoDir = -1;
+      s.autoT = 0.955;
+      const p = terrain.mainPoint(0.955);
+      const t = terrain.mainTangent(0.955);
+      s.pos.copy(p);
+      s.heading = Math.atan2(-t.x, -t.z);
+      s.speed = 6;
+      s.spin = 0;
+      s.contact = false;
+    };
+    back.done = () => s.route !== 'main' || s.autoT < 0.045;
+    const out = { forward: run(fwd, 400), back: run(back, 400) };
+    // leave the truck where the capture tools expect it
+    driver.resetAuto(0.42);
+    return out;
+  });
+  for (const dir of ['forward', 'back']) {
+    const r = route[dir];
+    check(`auto-drive ${dir}: no hard contact over the route`, r.contacts === 0, `${r.contacts} contact frames in ${r.seconds} s, cruise ${r.maxSpeed} m/s`);
+    check(`auto-drive ${dir}: clearance ≥ 0.4 m to every static collider`, r.minClear >= 0.4, `min ${r.minClear} m at ${JSON.stringify(r.where)}`);
+    if (r.atJunction) console.log(`        ${dir} at the junction: clearance ${r.atJunction.clearance} m at ${r.atJunction.speed} m/s`);
+  }
+
+  // cost
+  // Per-frame samples come from performance.now() round the resolve in the
+  // driver, which in a headless browser ticks in 0.1 ms steps: a frame reads 0
+  // or 0.1, so the p99 can only ever be "under one tick". The batch is timed as
+  // a whole and gives the real per-resolve figure.
+  const perf = await page.evaluate(() => {
+    const api = window.debugAPI;
+    const { driver } = api.objects;
+    driver.state.auto = true;
+    driver.resetAuto(0.42);
+    api.collision.trace(600, 1 / 60);
+    const st = api.collision.stats;
+    // at the camp, where the grid is densest, and against the boma
+    driver.resetAuto(0.6);
+    api.collision.trace(30, 1 / 60);
+    const free = api.collision.bench(2000);
+    const c = api.collision.colliders().find((k) => k.name === 'boma');
+    // the same pose every call: 5 cm into the pile, heading along it, so each
+    // resolve is a full contact and push-out, not the first one only
+    const touching = api.collision.bench(2000, { x: c.x + Math.cos(c.heading) * (c.hw + 1.0), z: c.z - Math.sin(c.heading) * (c.hw + 1.0), heading: c.heading, speed: 8 });
+    driver.resetAuto(0.42);
+    return { ...st, batch: { free: +free.toFixed(4), touching: +touching.toFixed(4) } };
+  });
+  check('resolve costs under 0.1 ms per frame', perf.resolveMs.mean < 0.1 && perf.resolveMs.p99 <= 0.1 && perf.batch.free < 0.1 && perf.batch.touching < 0.1, `per frame mean ${perf.resolveMs.mean} ms, p99 ${perf.resolveMs.p99} ms over ${perf.resolveMs.samples} frames (0.1 ms timer); batched ${perf.batch.free} ms free, ${perf.batch.touching} ms against the boma`);
+}
+
 await browser.close();
 console.log(failures ? `\n${failures} check(s) failed` : '\nall checks passed');
 process.exit(failures ? 1 : 0);

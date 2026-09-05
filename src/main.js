@@ -16,6 +16,7 @@ import { createAudio } from './audio.js';
 import { createVehicle } from './vehicle/index.js';
 import { setVehicleEnv } from './vehicle/materials.js';
 import { createHud } from './hud.js';
+import { createCollisionWorld, registerCamp, registerFleet, registerForest, registerRoadside, registerWildlife } from './collision.js';
 
 // ---------------------------------------------------------------------------
 // Boot, main loop, and the debug API the screenshot tool drives.
@@ -142,7 +143,34 @@ async function boot() {
   const wheelDust = createWheelDust();
   scene.add(wheelDust.points);
 
-  const driver = createDriver({ terrain, vehicle });
+  // --- collision -----------------------------------------------------------
+  // Built from what is now in the scene: the forest's trunk and rock instance
+  // matrices, the roadside's merged meshes, the camp's placements, the fleet's
+  // footprints. The lions follow as soft circles. Nothing here reads a file.
+  const collision = createCollisionWorld({ cell: 8 });
+  const collisionBoot = { ms: 0, stages: {}, forest: null, roadside: 0, camp: 0, fleet: 0, lions: 0 };
+  {
+    const t0 = performance.now();
+    let t = t0;
+    const lap = (name) => {
+      const now = performance.now();
+      collisionBoot.stages[name] = +(now - t).toFixed(2);
+      t = now;
+    };
+    collisionBoot.forest = registerForest(collision, forest);
+    lap('forest');
+    collisionBoot.roadside = registerRoadside(collision, roadside, terrain);
+    lap('roadside');
+    collisionBoot.camp = registerCamp(collision, camp);
+    collisionBoot.fleet = registerFleet(collision, fleet);
+    collisionBoot.lions = registerWildlife(collision, wildlife);
+    lap('camp+fleet+lions');
+    collision.build();
+    lap('grid');
+    collisionBoot.ms = +(performance.now() - t0).toFixed(2);
+  }
+
+  const driver = createDriver({ terrain, vehicle, collision });
   const rig = createCameraRig(camera, { vehicle, terrain });
   rig.attach({ wildlife });
   const hud = createHud();
@@ -402,6 +430,8 @@ async function boot() {
 
   function simulate(dt) {
     simTime += dt;
+    // the lions moved last frame; the truck resolves against where they are now
+    collision.updateDynamic();
     driver.update(dt);
     forest.update(simTime);
     motes.update(simTime, vehicle.root.position);
@@ -440,6 +470,8 @@ async function boot() {
       timeOfDay,
       camera,
       vehiclePos: vehicle.root.position,
+      impact: driver.state.impact,
+      impactTag: driver.state.contactTag,
     });
     // indicator relay while the wheel is held over under manual control
     if (!driver.state.auto && Math.abs(driver.input.steer) > 0.6) {
@@ -615,7 +647,56 @@ async function boot() {
       if (v !== undefined) renderer.toneMappingExposure = v;
       return renderer.toneMappingExposure;
     },
-    objects: { scene, camera, renderer, terrain, forest, vehicle, skyRig, post, driver, rig, camp, fleet, wildlife, audio },
+    objects: { scene, camera, renderer, terrain, forest, vehicle, skyRig, post, driver, rig, camp, fleet, wildlife, audio, roadside, collision },
+    /**
+     * The collision world for the checks and the critics: every collider as a
+     * plain object, a circle query, the truck's own circles, and the numbers
+     * (count by tag, boot cost, per-frame cost of the resolve).
+     */
+    collision: {
+      colliders: () => collision.colliders(),
+      query: (x, z, r) => collision.query(x, z, r, []).map((it) => ({ tag: it.tag, hard: it.hard, name: it.name, x: it.x, z: it.z, r: it.r, type: it.type ? 'box' : 'circle' })),
+      clearance: (x, z, r, opts) => {
+        const c = collision.clearance(x, z, r, opts);
+        return { d: c.d, tag: c.collider?.tag ?? null, name: c.collider?.name ?? null, x: c.collider?.x, z: c.collider?.z };
+      },
+      truck: () => driver.circles,
+      /** Mean cost of one resolve at the truck's pose, in ms, over a timed batch of `n`. */
+      bench(n = 600, pose = null) {
+        const s = driver.state;
+        const t0 = performance.now();
+        for (let i = 0; i < n; i++) {
+          if (pose) {
+            s.pos.x = pose.x;
+            s.pos.z = pose.z;
+            s.heading = pose.heading;
+            s.speed = pose.speed ?? 8;
+          }
+          driver.resolve(1 / 60);
+        }
+        return (performance.now() - t0) / n;
+      },
+      get stats() {
+        return { ...collision.stats, boot: collisionBoot };
+      },
+      /** Step the simulation `n` times by `dt` and return a per-frame trace of the truck (for the tools). */
+      trace(n = 60, dt = 1 / 60) {
+        const out = [];
+        for (let i = 0; i < n; i++) {
+          simulate(dt);
+          const s = driver.state;
+          const sh = Math.sin(s.heading);
+          const ch = Math.cos(s.heading);
+          let worst = Infinity;
+          for (const c of driver.circles) {
+            const d = collision.clearance(s.pos.x + sh * c.dz, s.pos.z + ch * c.dz, c.r).d;
+            if (d < worst) worst = d;
+          }
+          out.push({ x: s.pos.x, z: s.pos.z, h: s.heading, speed: s.speed, impact: s.impact, contact: s.contact, tag: s.contactTag, clearance: worst, accel: s.accel });
+        }
+        return out;
+      },
+    },
     // The bundle's own three, for the capture tools: a second copy imported
     // from /node_modules only exists on the dev server, and the fleet tool's
     // occluder raycast silently went without one on every preview build.

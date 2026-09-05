@@ -420,6 +420,9 @@ export function createFleet({ env = null, quality: sceneQuality = 'high', placem
       heading,
       wheels: built.wheels,
       footprint: p.fp,
+      // the body itself for collision (src/collision.js): the footprint above
+      // carries half a metre of parking margin, which is not a thing to hit
+      bounds: { hw: Math.max(0.4, (built.track || 0.8) + 0.18), z0: built.length[0], z1: built.length[1] },
       slot: { x: s.x, z: s.z, heading: s.heading, moved: p.moved || 0, flipped: p.flip },
       drops: k.drops.slice(),
     });

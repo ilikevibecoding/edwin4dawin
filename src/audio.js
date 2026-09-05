@@ -8,9 +8,9 @@
 //
 // Contract:
 //   createAudio() -> {
-//     update(dt, { speed, throttle, rpm, surface, timeOfDay, camera, vehiclePos }),
+//     update(dt, { speed, throttle, rpm, surface, timeOfDay, camera, vehiclePos, impact, impactTag }),
 //     setEnabled(bool), enabled,
-//     cue(name, opts),             // one-shots: door, indicator, horn, lion
+//     cue(name, opts),             // one-shots: door, indicator, horn, lion, impact
 //     inspect(),                   // node parameters, for tools/audiocheck.mjs
 //   }
 //
@@ -22,7 +22,7 @@
 //          ─ 2 stone voices, noise → bandpass → gated gain ──────────────┤│
 //   wind   ─ noise → windFilter (lowpass, gusting LFO) → windGain ────────┤│
 //   bed    ─ noise floor, 2 cricket voices, a call oscillator, a lion ────┤│
-//   cues   ─ perc voice (door), horn pair ────────────────────────────────┤│
+//   cues   ─ perc voice (door), horn pair, knock (impact) ───────────────┤│
 //                                                    extFilter → extBus ─┴┴→ compressor → master → out
 //
 // Everything exterior goes through `extFilter`, a lowpass the interior cameras
@@ -62,7 +62,9 @@ export function createAudio() {
 
   // scheduler timers, in seconds of update time, and how often each has fired
   const timers = { stone: 0.3, bird: 4, hornbill: 25, lion: 30 };
-  const fired = { stone: 0, bird: 0, hornbill: 0, lion: 0 };
+  const fired = { stone: 0, bird: 0, hornbill: 0, lion: 0, impact: 0 };
+  let impactGap = 0;
+  let lastImpact = 0;
 
   // Since setTargetAtTime approaches asymptotically, the values written are the
   // targets; the checker reads the params themselves.
@@ -236,6 +238,14 @@ export function createAudio() {
     const oHornA = osc('sawtooth', 370, hornFilter);
     const oHornB = osc('sawtooth', 440, hornFilter);
 
+    // impact: a body knock. Low noise for the panel, a sine for the frame
+    // ringing under it, both through one gain the cue shapes
+    const knockGain = gain(0, extFilter);
+    const knockFilter = filter('lowpass', 140, 1.2, knockGain);
+    noise.connect(knockFilter);
+    const knockToneGain = gain(0, knockGain);
+    const oKnock = osc('sine', 52, knockToneGain);
+
     g = {
       master, comp, engineBus, extBus, extFilter, noiseSrc,
       engineGain, engineFilter, fund, sub, harm2, harm3, oFund, oSub, oHarm2, oHarm3,
@@ -245,6 +255,7 @@ export function createAudio() {
       floorGain, crickets, callGain, oCall,
       lionGain, lionFilter, oLion, oLion2, oGrowl, growlDepth,
       percGain, percFilter, hornGain, oHornA, oHornB,
+      knockGain, knockFilter, knockToneGain, oKnock,
       stoneIx: 0,
       interior: false,
       surface: 'trail',
@@ -387,6 +398,51 @@ export function createAudio() {
     v.gain.gain.setTargetAtTime(0, t + 0.002, 0.006);
   }
 
+  /**
+   * The truck hitting something: `speed` is the normal velocity change in m/s
+   * (a wall at 30 km/h is 8.3). A knock through the body — a low thud with the
+   * frame ringing under it, longer and deeper the harder the hit — plus a
+   * short mid rattle for anything the hit loosened. Nothing above 1 m/s of
+   * a lion's shove is more than a bump.
+   */
+  function impact({ speed = 3, tag = null } = {}) {
+    const t = ctx.currentTime;
+    const k = clamp01((speed - 0.5) / 9);
+    const lvl = 0.25 + 0.75 * k;
+    const dur = 0.09 + 0.16 * k;
+    const gn = g.knockGain.gain;
+    const f = g.knockFilter.frequency;
+    gn.cancelScheduledValues(t);
+    f.cancelScheduledValues(t);
+    // the panel: a burst of low noise, opening then closing the filter
+    f.setValueAtTime(90 + 220 * k, t);
+    f.exponentialRampToValueAtTime(70, t + dur);
+    gn.setValueAtTime(0, t);
+    gn.linearRampToValueAtTime(lvl, t + 0.005);
+    gn.setTargetAtTime(0, t + 0.005, dur * 0.45);
+    // the frame: a sine dropping in pitch, held a little longer on a hard hit
+    const tone = g.knockToneGain.gain;
+    const fr = g.oKnock.frequency;
+    tone.cancelScheduledValues(t);
+    fr.cancelScheduledValues(t);
+    fr.setValueAtTime(64 + 30 * k, t);
+    fr.exponentialRampToValueAtTime(38, t + dur * 1.6);
+    tone.setValueAtTime(0, t);
+    tone.linearRampToValueAtTime(0.5 + 0.5 * k, t + 0.008);
+    tone.setTargetAtTime(0, t + 0.008, dur * 0.7);
+    // something loose: a short mid rattle off the stone voice, hard hits only
+    if (k > 0.35 && !(tag === 'lion')) {
+      const v = g.stones[g.stoneIx];
+      g.stoneIx ^= 1;
+      v.filter.frequency.cancelScheduledValues(t);
+      v.filter.frequency.setValueAtTime(tag === 'tent' ? 700 : 1400, t + 0.02);
+      v.gain.gain.cancelScheduledValues(t);
+      v.gain.gain.setValueAtTime(0, t + 0.02);
+      v.gain.gain.linearRampToValueAtTime(0.18 * k, t + 0.025);
+      v.gain.gain.setTargetAtTime(0, t + 0.025, 0.05);
+    }
+  }
+
   function horn({ duration = 0.45 } = {}) {
     const t = ctx.currentTime;
     const gn = g.hornGain.gain;
@@ -494,7 +550,7 @@ export function createAudio() {
     }
   }
 
-  const cues = { door, indicator, horn, lion: (o) => roar({ close: true, ...o }) };
+  const cues = { door, indicator, horn, impact, lion: (o) => roar({ close: true, ...o }) };
 
   return {
     get enabled() {
@@ -520,6 +576,18 @@ export function createAudio() {
     update(dt, state) {
       if (!enabled || !g || !state) return;
       dt = dt > 0.1 ? 0.1 : dt > 0 ? dt : 0;
+      // Impacts are read every frame, not on the tick: a hit is one frame long.
+      // Gated so a slide along a wall — a contact every frame — knocks once and
+      // then only again for a harder hit or after the gap.
+      impactGap -= dt;
+      const imp = state.impact || 0;
+      if (imp > 0.8 && (impactGap <= 0 || imp > lastImpact * 2.5)) {
+        impact({ speed: imp, tag: state.impactTag });
+        fired.impact++;
+        lastImpact = imp;
+        impactGap = imp > 4 ? 0.5 : 0.35;
+      }
+      if (impactGap <= 0) lastImpact = 0;
       acc += dt;
       if (acc < TICK) return;
       const step = acc;

@@ -74,6 +74,65 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   const footprints = [];
   let objects = 0;
 
+  // --- collision footprints -----------------------------------------------------
+  // Everything placed through `put` also registers what the truck can hit: an
+  // oriented box round the parts of the object that stand between tyre height
+  // and the truck's roof, in world space, for src/collision.js. Litter, mats
+  // and anything else a tyre rolls over drops out on height; the fence, the
+  // boma and the gate are registered by hand below because a single box round
+  // a 76 m fence line or an open gate would close the camp.
+  const colliders = [];
+  const COLLIDE_ROOF = 2.4;
+  const COLLIDE_FLOOR = 0.25;
+  /** World position of a point given in an object's own frame after placement. */
+  const objToWorld = (p, ox, oz) => {
+    const c = Math.cos(p.yaw);
+    const s = Math.sin(p.yaw);
+    const lx = p.u + ox * c + oz * s;
+    const lz = -p.v + (-ox * s + oz * c);
+    return frame.toWorld(lx, -lz);
+  };
+  const footprintOf = (obj) => {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minZ = Infinity;
+    let maxZ = -Infinity;
+    let any = false;
+    for (const [key, geo] of obj.parts) {
+      // guy ropes, stay wires and their pegs and sliders hold a tent up, not a
+      // truck back; without this a 4 x 7 m tent was an 8 x 11 m box
+      if (key === 'rope' || key === 'wire') continue;
+      if (!geo.boundingBox) geo.computeBoundingBox();
+      const bb = geo.boundingBox;
+      if (bb.isEmpty() || bb.min.y > COLLIDE_ROOF || bb.max.y < COLLIDE_FLOOR) continue;
+      if (bb.max.y < 0.45 && bb.max.x - bb.min.x < 0.2 && bb.max.z - bb.min.z < 0.2) continue;
+      minX = Math.min(minX, bb.min.x);
+      maxX = Math.max(maxX, bb.max.x);
+      minZ = Math.min(minZ, bb.min.z);
+      maxZ = Math.max(maxZ, bb.max.z);
+      any = true;
+    }
+    return any ? { minX, maxX, minZ, maxZ } : null;
+  };
+  const collideObj = (obj, p, spec, name) => {
+    const tag = typeof spec === 'string' ? spec : spec?.tag || 'prop';
+    if (spec && typeof spec === 'object' && spec.r) {
+      const w = objToWorld(p, spec.x || 0, spec.z || 0);
+      colliders.push({ type: 'circle', tag, hard: spec.hard !== false, name, x: w.x, z: w.z, r: spec.r });
+      return;
+    }
+    const fp = footprintOf(obj);
+    if (!fp) return;
+    const hw = (fp.maxX - fp.minX) * 0.5;
+    const hl = (fp.maxZ - fp.minZ) * 0.5;
+    if (hw < 0.04 || hl < 0.04) return;
+    const w = objToWorld(p, (fp.minX + fp.maxX) * 0.5, (fp.minZ + fp.maxZ) * 0.5);
+    // the object's +z after its yaw, as a camp direction, then as a world heading
+    const heading = frame.worldHeading(Math.sin(p.yaw), -Math.cos(p.yaw));
+    if (Math.max(hw, hl) / Math.min(hw, hl) < 1.3) colliders.push({ type: 'circle', tag, hard: true, name, x: w.x, z: w.z, r: Math.max(hw, hl) });
+    else colliders.push({ type: 'box', tag, hard: true, name, x: w.x, z: w.z, hw, hl, heading });
+  };
+
   /** Place a builder result (Obj, or { obj, lamps }) and carry its lamps into camp space. */
   const put = (res, placement) => {
     const obj = res.obj || res;
@@ -86,6 +145,7 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
       const s = Math.sin(p.yaw);
       lamps.push({ x: p.u + l.x * c + l.z * s, y: p.y + l.y, z: -p.v + (-l.x * s + l.z * c), kind: l.kind });
     }
+    if (placement.collide !== false && (placement.dy || 0) < 1.0) collideObj(obj, p, placement.collide, placement.name);
     return p;
   };
   const lightAt = (u, v, y, opts) => {
@@ -94,22 +154,44 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
 
   // --- structures --------------------------------------------------------------
   const cab = cabin(rnd);
-  put(cab, { u: plan.cabin.u, v: plan.cabin.v, facing: plan.cabin.facing });
+  put(cab, { u: plan.cabin.u, v: plan.cabin.v, facing: plan.cabin.facing, collide: 'structure', name: 'cabin' });
   footprints.push({ u: plan.cabin.u, v: plan.cabin.v - 0.6, r: 3.0 });
   lightAt(plan.cabin.u + 0.2, plan.cabin.v - 2.9, 2.45, { name: 'cabinPorch', intensity: 16, distance: 11, priority: 8, color: 0xffb35c });
-  put(storeHut(rnd), { u: plan.store.u, v: plan.store.v, facing: plan.store.facing });
+  put(storeHut(rnd), { u: plan.store.u, v: plan.store.v, facing: plan.store.facing, collide: 'structure', name: 'store' });
   footprints.push({ u: plan.store.u, v: plan.store.v, r: 2.2 });
-  put(radioMast(rnd, plan.mast.height), { u: plan.mast.u, v: plan.mast.v, facing: [0, -1] });
-  put(solarArray(rnd), { u: plan.solar.u, v: plan.solar.v, facing: plan.solar.facing });
-  put(waterTank(rnd), { u: plan.tank.u, v: plan.tank.v, facing: [1, -0.3] });
-  put(fuelStore(rnd), { u: plan.fuel.u, v: plan.fuel.v, facing: plan.fuel.facing });
-  put(lookout(rnd, plan.lookout.height), { u: plan.lookout.u, v: plan.lookout.v, facing: [0.6, -1] });
+  // the mast's guy wires reach six metres out at ankle height; the collider is
+  // the lattice and its base, not the wires (a truck through a guy is a wire
+  // it did not see, and a box round the anchors would fence off the cabin)
+  put(radioMast(rnd, plan.mast.height), { u: plan.mast.u, v: plan.mast.v, facing: [0, -1], collide: { tag: 'structure', r: 0.9 }, name: 'mast' });
+  put(solarArray(rnd), { u: plan.solar.u, v: plan.solar.v, facing: plan.solar.facing, collide: 'structure', name: 'solar' });
+  put(waterTank(rnd), { u: plan.tank.u, v: plan.tank.v, facing: [1, -0.3], collide: 'structure', name: 'tank' });
+  put(fuelStore(rnd), { u: plan.fuel.u, v: plan.fuel.v, facing: plan.fuel.facing, collide: 'structure', name: 'fuel' });
+  put(lookout(rnd, plan.lookout.height), { u: plan.lookout.u, v: plan.lookout.v, facing: [0.6, -1], collide: 'structure', name: 'lookout' });
   lightAt(plan.lookout.u, plan.lookout.v, plan.lookout.height + 1.2, { name: 'lookoutLamp', intensity: 9, distance: 12, priority: 3, color: 0xffb35c });
-  put(latrineBlock(rnd), { u: plan.latrine.u, v: plan.latrine.v, facing: plan.latrine.facing });
+  put(latrineBlock(rnd), { u: plan.latrine.u, v: plan.latrine.v, facing: plan.latrine.facing, collide: 'structure', name: 'latrine' });
   lightAt(plan.latrine.u - 1.2, plan.latrine.v, 2.2, { name: 'latrineLamp', intensity: 8, distance: 7, priority: 2 });
-  put(noticeBoard(), { u: plan.mapBoard.u, v: plan.mapBoard.v, facing: plan.mapBoard.facing });
-  put(flagPole(6), { u: plan.flag.u, v: plan.flag.v });
-  put(gate(rnd, plan.gate.width), { u: plan.gate.u, v: plan.gate.v, facing: [0, 1] });
+  put(noticeBoard(), { u: plan.mapBoard.u, v: plan.mapBoard.v, facing: plan.mapBoard.facing, collide: 'sign', name: 'mapBoard' });
+  put(flagPole(6), { u: plan.flag.u, v: plan.flag.v, collide: { tag: 'structure', r: 0.12 }, name: 'flagPole' });
+  // The gate is registered by hand: two posts and the two leaves standing open
+  // into the camp (structures.js hinges them at ±width/2 − 0.15 and swings
+  // them −1.4 and π + 1.7 rad); a box round the whole object would shut it.
+  // The beam over the top is at 2.15 m and is not a collider — see the report.
+  const gp = put(gate(rnd, plan.gate.width), { u: plan.gate.u, v: plan.gate.v, facing: [0, 1], collide: false });
+  {
+    const gw = plan.gate.width * 0.5 - 0.15;
+    for (const s of [-1, 1]) {
+      const post = objToWorld(gp, s * plan.gate.width * 0.5, 0);
+      colliders.push({ type: 'circle', tag: 'structure', hard: true, name: 'gatePost', x: post.x, z: post.z, r: 0.22 });
+    }
+    for (const [hx, ang] of [
+      [-plan.gate.width * 0.5 + 0.15, -1.4],
+      [plan.gate.width * 0.5 - 0.15, Math.PI + 1.7],
+    ]) {
+      const a = objToWorld(gp, hx, 0);
+      const b = objToWorld(gp, hx + Math.cos(ang) * gw, -Math.sin(ang) * gw);
+      colliders.push({ type: 'segment', tag: 'structure', hard: true, name: 'gateLeaf', x0: a.x, z0: a.z, x1: b.x, z1: b.z, r: 0.08 });
+    }
+  }
   lightAt(plan.gate.u + plan.gate.width * 0.5, plan.gate.v + 0.3, 1.7, { name: 'gateLamp', intensity: 10, distance: 9, priority: 5, color: 0xffb35c });
   // pole lanterns over the parking row, between the lane and the vehicles'
   // tails: the side the arrival and gate views see. Priority sits above the
@@ -120,25 +202,38 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   // dark jeeps at 0.016–0.018 from 5 m: 26 / 20 m, and the poles moved over
   // the vehicles (layout.js) rather than the row's centre.
   plan.rowLamps.forEach((l, i) => {
-    put(poleLantern(rnd, l.height), { u: l.u, v: l.v, facing: l.facing, conform: 0.2, half: 0.3 });
+    // the pole with the tyre round its foot; the stay wire and its peg are not colliders
+    put(poleLantern(rnd, l.height), { u: l.u, v: l.v, facing: l.facing, conform: 0.2, half: 0.3, collide: { tag: 'structure', r: 0.5 }, name: 'rowLamp' });
     lightAt(l.u + l.facing[0] * 0.62, l.v + l.facing[1] * 0.62, l.height - 0.52, { name: 'rowLamp' + i, intensity: 26, distance: 20, priority: 7 - i * 0.5, color: 0xffb35c, decay: 1.6 });
   });
-  put(signPost('signSpeed', 0.9, 0.5, 1.5), { u: plan.gate.u - 6, v: plan.gate.v - 2.5, facing: [-0.6, -1] });
+  put(signPost('signSpeed', 0.9, 0.5, 1.5), { u: plan.gate.u - 6, v: plan.gate.v - 2.5, facing: [-0.6, -1], collide: 'sign', name: 'speedSign' });
+  // The fence and the boma are one object each, spanning the camp: their
+  // colliders are the plan's own segments, a post's width for the wire and
+  // the pile's spread for the thorn, with the boma broken where the gate is.
+  const segment = (u0, v0, u1, v1, r, name) => {
+    const a = frame.toWorld(u0, v0);
+    const b = frame.toWorld(u1, v1);
+    colliders.push({ type: 'segment', tag: 'structure', hard: true, name, x0: a.x, z0: a.z, x1: b.x, z1: b.z, r });
+  };
   for (const line of plan.fence) {
-    put(fenceLine(rnd, line.map(([u, v]) => [u, -v]), (x, z) => frame.ground(x, -z)), { u: 0, v: 0, y: 0, facing: [0, -1] });
+    put(fenceLine(rnd, line.map(([u, v]) => [u, -v]), (x, z) => frame.ground(x, -z)), { u: 0, v: 0, y: 0, facing: [0, -1], collide: false });
+    for (let i = 0; i < line.length - 1; i++) segment(line[i][0], line[i][1], line[i + 1][0], line[i + 1][1], 0.12, 'fence');
   }
   // thorn boma piled just inside the road fence, broken at the gate and where the game trail crosses
   const bomaV = -22.2;
+  const bomaGap = plan.gate.width * 0.5 + 1.4;
   put(
     bomaLine(rnd, [[-38, -bomaV], [38, -bomaV]], (x, z) => frame.ground(x, -z), {
-      gaps: [[plan.gate.u, -bomaV, plan.gate.width * 0.5 + 1.4]],
+      gaps: [[plan.gate.u, -bomaV, bomaGap]],
       height: quality === 'fast' ? 0.9 : 1.1,
     }),
-    { u: 0, v: 0, y: 0, facing: [0, -1] },
+    { u: 0, v: 0, y: 0, facing: [0, -1], collide: false },
   );
+  segment(-38, bomaV, plan.gate.u - bomaGap, bomaV, 0.7, 'boma');
+  segment(plan.gate.u + bomaGap, bomaV, 38, bomaV, 0.7, 'boma');
 
   // --- canvas ---------------------------------------------------------------------
-  put(messTent(rnd, plan.mess), { u: plan.mess.u, v: plan.mess.v, facing: plan.mess.facing, conform: 0.3, half: 4 });
+  put(messTent(rnd, plan.mess), { u: plan.mess.u, v: plan.mess.v, facing: plan.mess.facing, conform: 0.3, half: 4, collide: 'tent', name: 'mess' });
   // The mess lamp doubles as the daytime fill under the fly (lights.js): the
   // sky's hemisphere fills the open floor but nothing warm gets in under the
   // tables, so the pockets there sat 2.7–3.7 stops under the sunlit pad
@@ -157,23 +252,29 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
     // the sunlit laterite (the light multiplies the albedo's own saturation).
     day: { intensity: 12, distance: 6.0, decay: 1.2, color: 0xeadfcf, dy: -0.7 },
   });
-  put(kitchenShelter(rnd, plan.kitchen, P), { u: plan.kitchen.u, v: plan.kitchen.v, facing: plan.kitchen.facing, conform: 0.3, half: 2.5 });
+  put(kitchenShelter(rnd, plan.kitchen, P), { u: plan.kitchen.u, v: plan.kitchen.v, facing: plan.kitchen.facing, conform: 0.3, half: 2.5, collide: 'tent', name: 'kitchen' });
   lightAt(plan.kitchen.u + 1.5, plan.kitchen.v, 2.0, { name: 'kitchenLamp', intensity: 12, distance: 9, priority: 6 });
   plan.tents.forEach((t, i) => {
-    put(safariTent(rnd, t.kind), { u: t.u, v: t.v, facing: t.facing, conform: 0.6, half: 2.5 });
+    put(safariTent(rnd, t.kind), { u: t.u, v: t.v, facing: t.facing, conform: 0.6, half: 2.5, collide: 'tent', name: 'tent' });
     if (i === 2 || i === 0 || i === 4) {
       lightAt(t.u - t.facing[0] * 3.3, t.v - 3.3, 1.7, { name: 'tentLamp' + i, intensity: 7, distance: 7, priority: i === 2 ? 4 : 1 });
     }
   });
-  for (const t of plan.staffTents) put(ridgeTent(rnd), { u: t.u, v: t.v, facing: t.facing, conform: 1, half: 1.2 });
+  for (const t of plan.staffTents) put(ridgeTent(rnd), { u: t.u, v: t.v, facing: t.facing, conform: 1, half: 1.2, collide: 'tent', name: 'staffTent' });
   put(laundryLine(rnd, Math.hypot(plan.laundry.b[0] - plan.laundry.a[0], plan.laundry.b[1] - plan.laundry.a[1])), {
     u: (plan.laundry.a[0] + plan.laundry.b[0]) * 0.5,
     v: (plan.laundry.a[1] + plan.laundry.b[1]) * 0.5,
     facing: [-(plan.laundry.b[1] - plan.laundry.a[1]), plan.laundry.b[0] - plan.laundry.a[0]],
+    // the line itself hangs at head height; its two poles are what a truck meets
+    collide: false,
   });
+  for (const [u, v] of [plan.laundry.a, plan.laundry.b]) {
+    const w = frame.toWorld(u, v);
+    colliders.push({ type: 'circle', tag: 'prop', hard: true, name: 'laundryPole', x: w.x, z: w.z, r: 0.15 });
+  }
 
   // --- the fire and what sits round it -------------------------------------------
-  put(firePit(rnd, plan.fire.radius), { u: plan.fire.u, v: plan.fire.v, conform: 1 });
+  put(firePit(rnd, plan.fire.radius), { u: plan.fire.u, v: plan.fire.v, conform: 1, collide: { tag: 'structure', r: plan.fire.radius + 0.25 }, name: 'fireRing' });
   const ring = 2.7;
   const seats = []; // where people sit: the ground there is scuffed and littered
   for (let i = 0; i < 9; i++) {
@@ -232,7 +333,7 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   put(P.splitWood(rnd, 5), { u: plan.fire.u - 2.4, v: plan.fire.v - 0.6, conform: 1, half: 0.6 });
   for (let i = 0; i < 3; i++) put(P.jerry(rnd, i === 1 ? 'polyBlue' : 'poly'), { u: plan.fire.u - 3.2 + i * 0.4, v: plan.fire.v + 2.6, facing: [R.jitter(1), -1], conform: 1, half: 0.3 });
   // the staff fire behind the store
-  put(firePit(rnd, plan.fire2.radius, { small: true }), { u: plan.fire2.u, v: plan.fire2.v, conform: 1 });
+  put(firePit(rnd, plan.fire2.radius, { small: true }), { u: plan.fire2.u, v: plan.fire2.v, conform: 1, collide: { tag: 'structure', r: plan.fire2.radius + 0.2 }, name: 'fireRing' });
   for (let i = 0; i < 3; i++) {
     const a = 1.2 + i * 1.6 + R.jitter(0.3);
     put(P.logBench(rnd), { u: plan.fire2.u + Math.cos(a) * 1.7, v: plan.fire2.v + Math.sin(a) * 1.7, facing: [-Math.sin(a), Math.cos(a)], conform: 1, half: 0.8 });
@@ -258,7 +359,7 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   put(P.picnicTable(rnd), { u: plan.mess.u + 7.5, v: plan.mess.v + 4.5, facing: [0.9, -0.5], conform: 1, half: 1.0 });
   put(P.picnicTable(rnd), { u: plan.mess.u - 1, v: plan.mess.v + 6.5, facing: [1, 0.15], conform: 1, half: 1.0 });
   const tableLamp = P.lantern(rnd);
-  put({ obj: tableLamp.obj, lamps: [{ ...tableLamp.lamp, kind: 'lantern' }] }, { u: plan.mess.u + 7.5, v: plan.mess.v + 4.5, dy: 0.78, conform: 0 });
+  put({ obj: tableLamp.obj, lamps: [{ ...tableLamp.lamp, kind: 'lantern' }] }, { u: plan.mess.u + 7.5, v: plan.mess.v + 4.5, dy: 0.78, conform: 0, collide: false });
   // supplies stacked by the store and the kitchen
   for (let i = 0; i < 4; i++) put(P.crate(rnd, 0.6 + R.jitter(0.1), 0.42, 0.45, i === 3), { u: plan.store.u + 2.8 + (i % 2) * 0.7, v: plan.store.v + 2.4 + Math.floor(i / 2) * 0.6, facing: [1, R.jitter(0.4)], conform: 1, half: 0.4 });
   put(P.tarpPile(rnd, 1.6, 0.8, 1.2), { u: plan.store.u + 1.5, v: plan.store.v - 2.6, facing: [1, 0.2], conform: 1, half: 0.8 });
@@ -268,7 +369,49 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   // --- the margins: rocks, deadfall, a termite mound ----------------------------------
   const inCore = (u, v) => Math.abs(u) < 30 && v > -21 && v < 26;
   const onWear = (u, v) => v > -21 && v < -5 && Math.abs(u) < 29;
-  const scatter = (count, make, rMin, rMax, { half = 0.5 } = {}) => {
+  // The spur skirts the camp's savanna side, and the margins reach it. Nothing
+  // scattered may sit on the road: the truck drives it on auto, and a boulder
+  // in the wheel track is a wall to src/collision.js where it used to be a
+  // picture the truck passed through. Keep-out is the shoulder's edge plus the
+  // truck's half-width and the clearance auto-drive is held to.
+  const trail = [];
+  if (terrain.roadPoint) {
+    for (let i = 0; i <= 800; i++) {
+      const p = terrain.roadPoint(i / 800);
+      if (Math.hypot(p.x - anchor.x, p.z - anchor.z) < 90) trail.push(p.x, p.z);
+    }
+  }
+  const trailDist = (u, v) => {
+    const w = frame.toWorld(u, v);
+    let best = Infinity;
+    for (let i = 0; i < trail.length; i += 2) {
+      const d = (trail[i] - w.x) ** 2 + (trail[i + 1] - w.z) ** 2;
+      if (d < best) best = d;
+    }
+    return Math.sqrt(best);
+  };
+  const TRAIL_KEEP = (terrain.roadHalf ?? 1.25) + (terrain.shoulder ?? 1.15) + 1.6;
+  const onTrail = (u, v, half) => trailDist(u, v) < TRAIL_KEEP + half;
+  // Nor in the fence line: the ring the scatter fills spans v = -25 to -21,
+  // which is exactly the wire and the thorn pile. A boulder there pokes through
+  // the boma, and to the truck sliding along the pile it is a hidden step.
+  const fenceLines = plan.fence.concat([[[-38, bomaV], [38, bomaV]]]);
+  const fenceDist = (u, v) => {
+    let best = Infinity;
+    for (const line of fenceLines) {
+      for (let i = 0; i < line.length - 1; i++) {
+        const [ax, av] = line[i];
+        const [bx, bv] = line[i + 1];
+        const dx = bx - ax;
+        const dv = bv - av;
+        const t = Math.max(0, Math.min(1, ((u - ax) * dx + (v - av) * dv) / (dx * dx + dv * dv)));
+        best = Math.min(best, Math.hypot(u - ax - dx * t, v - av - dv * t));
+      }
+    }
+    return best;
+  };
+  const onFence = (u, v, half) => fenceDist(u, v) < 1.5 + half;
+  const scatter = (count, make, rMin, rMax, { half = 0.5, collide = 'prop' } = {}) => {
     let placed = 0;
     let guard = 0;
     while (placed < count && guard++ < count * 30) {
@@ -280,18 +423,32 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
       if (onWear(u, v)) continue;
       if (inCore(u, v) && rnd() < 0.85) continue;
       if (Math.hypot(u - plan.lookout.u, v - plan.lookout.v) < 4) continue;
-      put(make(u, v), { u, v, facing: [Math.cos(a * 3), Math.sin(a * 3)], conform: 1, half });
+      if (onTrail(u, v, half)) continue;
+      if (onFence(u, v, half)) continue;
+      put(make(u, v), { u, v, facing: [Math.cos(a * 3), Math.sin(a * 3)], conform: 1, half, collide });
       placed++;
     }
   };
   const tier = quality === 'fast' ? 0.6 : quality === 'ultra' ? 1.5 : 1;
-  scatter(Math.round(26 * tier), () => P.rock(rnd, 0.25 + rnd() * 0.5), 18, 44, { half: 0.4 });
-  scatter(Math.round(6 * tier), () => P.rock(rnd, 0.9 + rnd() * 0.7), 30, 46, { half: 1.0 });
+  scatter(Math.round(26 * tier), () => P.rock(rnd, 0.25 + rnd() * 0.5), 18, 44, { half: 0.4, collide: 'rock' });
+  scatter(Math.round(6 * tier), () => P.rock(rnd, 0.9 + rnd() * 0.7), 30, 46, { half: 1.0, collide: 'rock' });
   scatter(Math.round(9 * tier), () => P.branch(rnd, 2.2 + rnd() * 2.2), 22, 46, { half: 1.2 });
-  put(P.termiteMound(rnd), { u: 36, v: 26, conform: 1, half: 0.8 });
-  put(P.termiteMound(rnd), { u: -40, v: 14, conform: 1, half: 0.8 });
+  put(P.termiteMound(rnd), { u: 36, v: 26, conform: 1, half: 0.8, collide: 'rock', name: 'termite' });
+  put(P.termiteMound(rnd), { u: -40, v: 14, conform: 1, half: 0.8, collide: 'rock', name: 'termite' });
   // a rock kopje at the far corner the lookout looks over
-  for (let i = 0; i < 5; i++) put(P.rock(rnd, 1.1 + rnd() * 0.9), { u: -33 + R.jitter(2.5), v: 27 + R.jitter(2.5), conform: 1, half: 1.2 });
+  for (let i = 0; i < 5; i++) {
+    const rock = P.rock(rnd, 1.1 + rnd() * 0.9);
+    // the corner is where the spur passes closest; a boulder that would sit in
+    // the road is pulled back into the pile rather than dropped
+    let u = -33 + R.jitter(2.5);
+    let v = 27 + R.jitter(2.5);
+    for (let k = 0; k < 4 && onTrail(u, v, 1.2); k++) {
+      u = -33 + R.jitter(1.5);
+      v = 27 + R.jitter(1.5);
+    }
+    if (onTrail(u, v, 1.2)) continue;
+    put(rock, { u, v, conform: 1, half: 1.2, collide: 'rock', name: 'kopje' });
+  }
 
   // --- build ------------------------------------------------------------------------------
   const built = kit.build(mats, { castShadow: true, receiveShadow: true });
@@ -365,6 +522,7 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
     lights: lights.length,
     particles: fires.reduce((n, f) => n + f.count, 0),
     grass: grass.count,
+    colliders: colliders.length,
   };
 
   let time = 0;
@@ -375,6 +533,8 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
     parking,
     lights,
     clearing,
+    /** What the truck can hit, world space: [{ type: 'circle'|'box'|'segment', tag, hard, ... }] for src/collision.js. */
+    colliders,
     plan,
     frame,
     materials: mats,

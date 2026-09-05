@@ -47,8 +47,11 @@ export function buildPlan() {
   const flag = { u: 13.5, v: 6.5 };
   const laundry = { a: [-14.5, 23.5], b: [-5, 24] };
 
+  // The spur passes behind this arc, closest at its west end (v ≈ 26 at
+  // u ≈ -18). The first tent is pulled in so its fly clears the road by a
+  // truck's width: at (-19.5, 21.5) the eave hung a metre off the centreline.
   const tents = [
-    { u: -19.5, v: 21.5, facing: [0.28, -1], kind: 'khaki' },
+    { u: -18.6, v: 19.4, facing: [0.28, -1], kind: 'khaki' },
     { u: -9.5, v: 19.8, facing: [0.1, -1], kind: 'sand' },
     { u: 0.8, v: 19.2, facing: [0, -1], kind: 'khaki' },
     { u: 11, v: 19.8, facing: [-0.12, -1], kind: 'sand' },
