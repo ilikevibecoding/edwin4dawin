@@ -105,7 +105,8 @@ function withBounds(c: Omit<ChannelSpec, 'bx' | 'bz' | 'br'>): ChannelSpec {
   let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
   for (const [x, z] of c.pts) { minX = Math.min(minX, x); maxX = Math.max(maxX, x); minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z); }
   const bx = (minX + maxX) / 2, bz = (minZ + maxZ) / 2;
-  return { ...c, bx, bz, br: Math.max(maxX - minX, maxZ - minZ) / 2 + c.width + 80 };
+  // margin covers the half width plus the 150 m shoulder of a narrow cut
+  return { ...c, bx, bz, br: Math.max(maxX - minX, maxZ - minZ) / 2 + c.width + 160 };
 }
 
 interface Landmass {
@@ -1103,13 +1104,23 @@ export class WorldMap implements WorldMapData {
             const wide = c.width >= 200;
             let d = sdPolyline(x, z, c.pts) - c.width * 0.5;
             // the lips wander by up to ~200 m; the noise fades out inside the lane so its authored depth holds
-            if (wide) d += (80 * fbm2(x / 380 + 1.5, z / 380 - 2.5, 2) + 130 * perlin2(x / 1100 + 3.3, z / 1100 - 6.1)) * smoothstep(-c.width * 0.3, 0, d);
-            const blend = wide ? 220 : 60;
-            if (d < blend) {
-              let t = smoothstep(-c.width * 0.1, blend, d);
-              // the lane's flanks are steep near the lip and level out: the deep colour stays with the lane
-              if (wide) t = 1 - (1 - t) * (1 - t);
-              depth = Math.max(depth, c.depth * (1 - t) + depth * t);
+            if (wide) {
+              d += (80 * fbm2(x / 380 + 1.5, z / 380 - 2.5, 2) + 130 * perlin2(x / 1100 + 3.3, z / 1100 - 6.1)) * smoothstep(-c.width * 0.3, 0, d);
+              if (d < 220) {
+                let t = smoothstep(-c.width * 0.1, 220, d);
+                // the lane's flanks are steep near the lip and level out: the deep colour stays with the lane
+                t = 1 - (1 - t) * (1 - t);
+                depth = Math.max(depth, c.depth * (1 - t) + depth * t);
+              }
+            } else if (d < 150) {
+              // dredged cut: a steep lip down to the authored depth within ~25 m, then a long shoulder
+              // (scour, spoil banks) levelling into the flats over 150 m. The old single 60 m ramp put the
+              // whole 1-3 m colour transition of the water into ~20 m, so every cut drew a hard-edged dark
+              // band across the bay (read as a cloud-shadow rectangle at night)
+              const sh = Math.min(Math.max(3.2, depth), c.depth);
+              const lip = 1 - smoothstep(-c.width * 0.1, 25, d);
+              const shoulder = 1 - smoothstep(0, 150, d);
+              depth = Math.max(depth, depth + (sh - depth) * shoulder * shoulder + (c.depth - sh) * lip);
             }
           }
           // dredged marina basins so the piers stand in navigable water

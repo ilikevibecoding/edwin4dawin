@@ -724,7 +724,9 @@ export class Props {
         for (let r = 0; r < rows; r++) for (let c = 0; c < bays; c++) {
           if (rng.chance(0.28)) continue;
           const stack = Math.min(4, Math.max(1, Math.round(tall + rng.range(-1.5, 1.5))));
-          const u = bu + c * 13.4, v = bv + r * 6.1;
+          // yard gaps of 0.35-0.4 m (real block spacing) instead of 1.2 m: at 700-1500 m the wide gaps were
+          // 1-2 px dark lines in a regular grid and crawled between clip frames (harbor container shimmer)
+          const u = bu + c * 12.6, v = bv + r * 5.25;
           for (let k = 0; k < stack; k++) pbox(rng.pick(boxColours), u, g + k * 2.6, v, 12.2, 2.6, 4.9);
         }
         occupy(bu + 60, bv + 15, 80);
