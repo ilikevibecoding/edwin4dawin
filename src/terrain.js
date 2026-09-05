@@ -5324,7 +5324,9 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
     // outcrop can land minutes after the water on a slow boot — look for it
     // every ninety frames. Six tries was not enough: the pool booted without
     // its reflection in one capture out of three.
-    if (mat.uniforms.uRockN.value === 0 && (rockScans === 0 || renderer.info.render.frame % 90 === 0)) {
+    // Capped at forty scans (a minute) so a scene without a kopje does not
+    // walk the graph every ninety frames for the rest of the session.
+    if (mat.uniforms.uRockN.value === 0 && rockScans < 40 && (rockScans === 0 || renderer.info.render.frame % 90 === 0)) {
       rockScans++;
       scanRocks(scene);
     }
