@@ -221,6 +221,10 @@ const CONCRETE_FRAG = /* glsl */ `
     float panel = aaLine((fract(vWorldPosR.x / 2.4) - 0.5) * 2.4, 0.03, max(fwPx, 1e-4)) * step(1e-5, fwPx) * (1.0 - smoothstep(0.4, 1.2, fwPx))
                 + aaLine((fract(vWorldPosR.z / 2.4) - 0.5) * 2.4, 0.03, max(fwPz, 1e-4)) * step(1e-5, fwPz) * (1.0 - smoothstep(0.4, 1.2, fwPz));
     diffuseColor.rgb *= 1.0 - 0.14 * lift - 0.10 * clamp(panel, 0.0, 1.0) * vRoadInfo.y;
+    // each 4 m construction lift of a pier or pylon was poured on a different day: alternating tones (+-6 %)
+    // that are the one formwork feature still legible from 300 m (fades to the mean once a lift is ~2 px tall)
+    float liftTone = (hash11(floor(vWorldPosR.y / 4.0 + 0.5) + floor(vWorldPosR.x * 0.02) * 7.0) - 0.5) * (1.0 - smoothstep(1.0, 2.5, fwY));
+    diffuseColor.rgb *= 1.0 + 0.12 * liftTone * vRoadInfo.y;
     // tide and spray darken the concrete near the water
     diffuseColor.rgb *= 1.0 - 0.22 * (1.0 - smoothstep(0.3, 5.0, vWorldPosR.y)) * vRoadInfo.y;
   }
@@ -243,7 +247,7 @@ function createConcreteMaterial(concrete: THREE.Material): THREE.MeshStandardMat
       .replace('#include <common>', `#include <common>\nvarying vec2 vRoadUv; varying vec3 vRoadInfo; varying vec3 vWorldPosR;\n${GLSL_NOISE}\n${GLSL_AA_LINE}`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${CONCRETE_FRAG}`);
   };
-  mat.customProgramCacheKey = () => 'bridge-concrete-v4';
+  mat.customProgramCacheKey = () => 'bridge-concrete-v5';
   return mat;
 }
 
@@ -646,6 +650,8 @@ const C_CAP: Rgb = [1.08, 1.08, 1.07];       // parapet cap: pale, catches the l
 const C_SOFFIT: Rgb = [0.86, 0.86, 0.86];
 const C_UNDER: Rgb = [0.78, 0.78, 0.79];
 const C_WET: Rgb = [0.5, 0.5, 0.52];         // tidal band on the columns
+const C_PYLON: Rgb = [0.84, 0.825, 0.79];    // pylon legs: warm weathered concrete, a step below the deck so they do not bleach to white in full sun
+const C_ANCHOR: Rgb = [0.64, 0.63, 0.61];    // anchorage zone of the legs: darker steel-faced concrete where the stays enter
 const C_PROXY: Rgb = [0.34, 0.34, 0.38];       // distance pier proxies: the shaded side of a pier as seen from afar
 const C_PROXY_SOFFIT: Rgb = [0.22, 0.22, 0.26]; // the deck's underside shadow line between the piers
 const C_FOOTING: Rgb = [0.74, 0.75, 0.76];
@@ -847,9 +853,9 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
           footing(f.x, f.z, ww, wt);
           const wetTop = Math.min(capBottom, 1.9);
           P.struct.prism(f.x, 0.55, f.z, ww, wt, f.x, wetTop, f.z, widthAt(wetTop), thickAt(wetTop), yaw, C_WET, PIER_INFO);
-          P.struct.prism(f.x, wetTop, f.z, widthAt(wetTop), thickAt(wetTop), f.x, capBottom, f.z, topW, topT, yaw, C_PLAIN, PIER_INFO);
-        } else P.struct.prism(f.x, colBottom, f.z, ww, wt, f.x, capBottom, f.z, topW, topT, yaw, C_PLAIN, PIER_INFO);
-        P.struct.box(f.x, capBottom, f.z, capW, capH, wt + 1.0, yaw, 0, C_PLAIN, false, PIER_INFO);
+          P.struct.prism(f.x, wetTop, f.z, widthAt(wetTop), thickAt(wetTop), f.x, capBottom, f.z, topW, topT, yaw, C_PYLON, PIER_INFO);
+        } else P.struct.prism(f.x, colBottom, f.z, ww, wt, f.x, capBottom, f.z, topW, topT, yaw, C_PYLON, PIER_INFO);
+        P.struct.box(f.x, capBottom, f.z, capW, capH, wt + 1.0, yaw, 0, C_PYLON, false, PIER_INFO);
         P.proxy.prism(f.x, proxyBottom, f.z, ww + 2.4, wt + 4.0, f.x, capTop + 0.1, f.z, capW, wt + 4.0, yaw, C_PROXY, NO_ROAD);
       } else {
         // column bent: round columns under a cap beam, the outer pair standing outboard of the fascia (the
@@ -865,10 +871,10 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
             footing(x, z, dia, dia);
             const wetTop = Math.min(capBottom, 1.9);
             P.struct.cylinder(x, 0.55, z, dia, wetTop - 0.55, 12, C_WET, false, PIER_INFO);
-            P.struct.cylinder(x, wetTop, z, dia, capBottom - wetTop, 12, C_PLAIN, false, PIER_INFO);
-          } else P.struct.cylinder(x, colBottom, z, dia, capBottom - colBottom, 12, C_PLAIN, false, PIER_INFO);
+            P.struct.cylinder(x, wetTop, z, dia, capBottom - wetTop, 12, C_PYLON, false, PIER_INFO);
+          } else P.struct.cylinder(x, colBottom, z, dia, capBottom - colBottom, 12, C_PYLON, false, PIER_INFO);
         }
-        P.struct.box(f.x, capBottom, f.z, cw2, capH, dia + 0.4, yaw, 0, C_PLAIN, false, PIER_INFO);
+        P.struct.box(f.x, capBottom, f.z, cw2, capH, dia + 0.4, yaw, 0, C_PYLON, false, PIER_INFO);
         P.proxy.box(f.x, proxyBottom, f.z, cw2, capTop - proxyBottom + 0.1, dia + 3.0, yaw, 0, C_PROXY, true, NO_ROAD);
       }
       // soffit slab of the span ahead: the dark underside line of the deck between this pier and the next
@@ -904,6 +910,9 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         const legW = (y: number) => lerp(legWb, legWt, tl(y));
         const legD = (y: number) => lerp(legDb, legDt, tl(y));
         const wetTop = 2.4;
+        // stay heads sit in the upper 42 % of the leg above the deck; that stretch is the anchorage zone
+        const headY = (k: number) => topY - 3 - (nC - k) * ((0.42 * pylonH) / nC);
+        const anchorZ0 = headY(1) - 2.5;
         for (const side of [-1, 1]) {
           const at = (y: number) => ({ x: f.x + f.rx * legA(y) * side, z: f.z + f.rz * legA(y) * side });
           const seg = (y0: number, y1: number, soup: Soup, c: Rgb) => {
@@ -915,9 +924,16 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
             P.struct.box(b.x, -1.2, b.z, legWb + 3, 1.9, legDb + 3, yaw, 0, C_FOOTING, false, NO_ROAD);
             P.struct.disc(b.x, 0.05, b.z, (legWb + 3) * 0.5 + 1.0, (legDb + 3) * 0.5 + 1.0, 12, C_FOAM, NO_ROAD);
             seg(colBottom, wetTop, P.struct, C_WET);
-            seg(wetTop, f.y + 1.0, P.struct, C_PLAIN);
-          } else seg(colBottom, f.y + 1.0, P.struct, C_PLAIN);
-          seg(f.y + 1.0, topY, P.tall, C_PLAIN);
+            seg(wetTop, f.y + 1.0, P.struct, C_PYLON);
+          } else seg(colBottom, f.y + 1.0, P.struct, C_PYLON);
+          seg(f.y + 1.0, anchorZ0, P.tall, C_PYLON);
+          seg(anchorZ0, topY, P.tall, C_ANCHOR);
+          // steel anchor boxes on the inner face at every stay head
+          for (let k = 1; k <= nC; k++) {
+            const hy = headY(k), a = at(hy);
+            const off = legW(hy) * 0.5 + 0.35;
+            P.arch.box(a.x - f.rx * off * side, hy - 0.7, a.z - f.rz * off * side, 0.9, 1.4, 1.6, yaw, 0, S_DARK, false, undefined, true);
+          }
           // maintenance: platforms with railings at the deck and under the anchorages, a ladder up the inner face
           for (const py of [f.y + 1.0, topY - 6.5]) {
             const a = at(py);
@@ -932,14 +948,15 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
           const inner = (p: { x: number; z: number }, y: number) => new THREE.Vector3(p.x - f.rx * (legW(y) * 0.5 + 0.25) * side, y, p.z - f.rz * (legW(y) * 0.5 + 0.25) * side);
           P.arch.strut(inner(l0, f.y + 1.3), inner(l1, topY - 6.5), 0.22, S_DARK);
         }
-        P.struct.box(f.x, f.y - g - 2.2, f.z, 2 * legA(f.y) + legW(f.y), 2.2, legD(f.y), yaw, 0, C_PLAIN, false, PIER_INFO);            // cross beam under the deck
-        P.tall.box(f.x, topY - 5, f.z, 2 * legA(topY - 3) + legW(topY - 3), 3.6, legD(topY) * 0.75, yaw, 0, C_PLAIN, false, PIER_INFO); // portal beam
+        P.struct.box(f.x, f.y - g - 2.2, f.z, 2 * legA(f.y) + legW(f.y), 2.2, legD(f.y), yaw, 0, C_PYLON, false, PIER_INFO);            // cross beam under the deck
+        // slim portal beam flush with the leg tops (a deep one read as a suspension tower saddle)
+        P.tall.box(f.x, topY - 2.0, f.z, 2 * legA(topY - 1) + legW(topY - 1) * 0.6, 2.0, legD(topY) * 0.6, yaw, 0, C_ANCHOR, false, PIER_INFO);
         for (let k = 1; k <= nC; k++) {
           for (const dirS of [-1, 1]) {
             const sa = ps + dirS * (k * spacingC + 10);
             if (sa < 4 || sa > total - 4) continue;
             const fa = frameAt(sa);
-            const hy = topY - 3 - (nC - k) * ((0.42 * pylonH) / nC);
+            const hy = headY(k);
             for (const side of [-1, 1]) {
               // anchor block on the deck edge, the stay leaving its top
               const ax = fa.x + fa.rx * (hw + 0.1) * side, az = fa.z + fa.rz * (hw + 0.1) * side;
