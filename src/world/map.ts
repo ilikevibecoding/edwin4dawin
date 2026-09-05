@@ -231,6 +231,16 @@ export function createLakes(): LakeSpec[] {
     { id: 'lake-north', cx: -5900, cz: -6600, rx: 480, rz: 330, rot: 0.3, seed: 61 },
     { id: 'lake-west', cx: -7550, cz: 550, rx: 520, rz: 300, rot: -0.2, seed: 62 },
     { id: 'lake-south', cx: -4300, cz: 4300, rx: 380, rz: 260, rot: 0.5, seed: 63 },
+    // retention lakes and borrow pits of the inland subdivisions: the flat hinterland behind the skyline
+    // is broken by water the way a drained coastal plain is
+    { id: 'lake-nres-a', cx: -6350, cz: -4500, rx: 260, rz: 170, rot: 0.15, seed: 64 },
+    { id: 'lake-nres-b', cx: -4650, cz: -6250, rx: 210, rz: 150, rot: -0.35, seed: 65 },
+    { id: 'lake-nres-c', cx: -7300, cz: -5900, rx: 330, rz: 200, rot: 0.6, seed: 66 },
+    { id: 'lake-wres', cx: -6300, cz: -3350, rx: 240, rz: 160, rot: -0.1, seed: 67 },
+    { id: 'lake-mres', cx: -5750, cz: -750, rx: 300, rz: 190, rot: 0.25, seed: 68 },
+    { id: 'lake-nres2', cx: -6150, cz: -8100, rx: 280, rz: 190, rot: -0.5, seed: 69 },
+    { id: 'lake-far-n', cx: -8300, cz: -7100, rx: 230, rz: 160, rot: 0.4, seed: 70 },
+    { id: 'lake-fsres', cx: -6000, cz: 5300, rx: 260, rz: 170, rot: -0.3, seed: 71 },
   ];
 }
 
@@ -377,21 +387,24 @@ export function createDistricts(): District[] {
   add({ id: 'garza-park', zone: Zone.PARK, cx: 365, cz: 2160, hw: 120, hh: 105, rot: 0.2, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
   add({ id: 'barrier-golf', zone: Zone.GOLF, cx: 2680, cz: -5300, hw: 420, hh: 520, rot: 0.0, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
   add({ id: 'southkey-golf', zone: Zone.GOLF, cx: 1300, cz: 6300, hw: 550, hh: 420, rot: -0.3, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
-  // mainland suburbs: density falls off from the core toward the western marsh
-  add({ id: 'north-res', zone: Zone.RES_LOW, cx: -5600, cz: -5400, hw: 2100, hh: 1800, rot: 0.0, gridX: 95, gridZ: 140, density: 0.75, hMin: 4, hMax: 11 });
+  // mainland suburbs: density falls off from the core toward the western marsh. Every subdivision has its
+  // own slight grid rotation and spacing, so from altitude the hinterland is a patchwork of differently
+  // aligned street grids with wedges of scrub between them instead of one lattice to the horizon (the two
+  // canal districts stay axis-aligned: their canals are laid out in the grid's frame)
+  add({ id: 'north-res', zone: Zone.RES_LOW, cx: -5600, cz: -5400, hw: 2100, hh: 1800, rot: 0.07, gridX: 95, gridZ: 140, density: 0.75, hMin: 4, hMax: 11 });
   add({ id: 'west-res', zone: Zone.RES_LOW, cx: -5300, cz: -2700, hw: 1500, hh: 1150, rot: 0.0, gridX: 100, gridZ: 130, density: 0.75, hMin: 4, hMax: 12 });
-  add({ id: 'mid-res', zone: Zone.RES_LOW, cx: -4900, cz: -900, hw: 1400, hh: 600, rot: 0.0, gridX: 105, gridZ: 140, density: 0.55, hMin: 4, hMax: 10 });
+  add({ id: 'mid-res', zone: Zone.RES_LOW, cx: -4900, cz: -900, hw: 1400, hh: 600, rot: -0.05, gridX: 105, gridZ: 140, density: 0.55, hMin: 4, hMax: 10 });
   add({ id: 'south-res', zone: Zone.RES_LOW, cx: -4200, cz: 1300, hw: 1700, hh: 1500, rot: 0.0, gridX: 105, gridZ: 135, density: 0.7, hMin: 4, hMax: 10 });
-  add({ id: 'far-west-res', zone: Zone.RES_LOW, cx: -7950, cz: -4200, hw: 650, hh: 3000, rot: 0.0, gridX: 110, gridZ: 150, density: 0.45, hMin: 4, hMax: 10 });
-  add({ id: 'west-res-2', zone: Zone.RES_LOW, cx: -7750, cz: 900, hw: 850, hh: 2000, rot: 0.0, gridX: 115, gridZ: 150, density: 0.4, hMin: 4, hMax: 9 });
-  add({ id: 'far-south-res', zone: Zone.RES_LOW, cx: -6600, cz: 4300, hw: 2000, hh: 1400, rot: 0.0, gridX: 105, gridZ: 140, density: 0.55, hMin: 4, hMax: 10 });
-  add({ id: 'south-shore-res', zone: Zone.RES_LOW, cx: -3900, cz: 3900, hw: 1400, hh: 900, rot: 0.0, gridX: 105, gridZ: 135, density: 0.6, hMin: 4, hMax: 10 });
-  add({ id: 'far-south-res-2', zone: Zone.RES_LOW, cx: -4800, cz: 6500, hw: 2000, hh: 1200, rot: 0.0, gridX: 110, gridZ: 140, density: 0.5, hMin: 4, hMax: 9 });
-  add({ id: 'far-south-res-4', zone: Zone.RES_LOW, cx: -7700, cz: 6700, hw: 900, hh: 1000, rot: 0.0, gridX: 120, gridZ: 150, density: 0.38, hMin: 4, hMax: 9 });
-  add({ id: 'south-edge-res', zone: Zone.RES_LOW, cx: -5500, cz: 8800, hw: 3100, hh: 1100, rot: 0.0, gridX: 120, gridZ: 150, density: 0.35, hMin: 4, hMax: 9 });
-  add({ id: 'north-res-2', zone: Zone.RES_LOW, cx: -4800, cz: -8000, hw: 2400, hh: 800, rot: 0.0, gridX: 100, gridZ: 140, density: 0.55, hMin: 4, hMax: 10 });
-  add({ id: 'far-north-res', zone: Zone.RES_LOW, cx: -7950, cz: -8000, hw: 650, hh: 800, rot: 0.0, gridX: 120, gridZ: 150, density: 0.4, hMin: 4, hMax: 9 });
-  add({ id: 'north-edge-res', zone: Zone.RES_LOW, cx: -5500, cz: -9400, hw: 3100, hh: 600, rot: 0.0, gridX: 120, gridZ: 150, density: 0.35, hMin: 4, hMax: 9 });
+  add({ id: 'far-west-res', zone: Zone.RES_LOW, cx: -7950, cz: -4200, hw: 650, hh: 3000, rot: -0.06, gridX: 110, gridZ: 150, density: 0.45, hMin: 4, hMax: 10 });
+  add({ id: 'west-res-2', zone: Zone.RES_LOW, cx: -7750, cz: 900, hw: 850, hh: 2000, rot: 0.05, gridX: 115, gridZ: 150, density: 0.4, hMin: 4, hMax: 9 });
+  add({ id: 'far-south-res', zone: Zone.RES_LOW, cx: -6600, cz: 4300, hw: 2000, hh: 1400, rot: 0.06, gridX: 105, gridZ: 140, density: 0.55, hMin: 4, hMax: 10 });
+  add({ id: 'south-shore-res', zone: Zone.RES_LOW, cx: -3900, cz: 3900, hw: 1400, hh: 900, rot: -0.07, gridX: 105, gridZ: 135, density: 0.6, hMin: 4, hMax: 10 });
+  add({ id: 'far-south-res-2', zone: Zone.RES_LOW, cx: -4800, cz: 6500, hw: 2000, hh: 1200, rot: 0.04, gridX: 110, gridZ: 140, density: 0.5, hMin: 4, hMax: 9 });
+  add({ id: 'far-south-res-4', zone: Zone.RES_LOW, cx: -7700, cz: 6700, hw: 900, hh: 1000, rot: -0.08, gridX: 120, gridZ: 150, density: 0.38, hMin: 4, hMax: 9 });
+  add({ id: 'south-edge-res', zone: Zone.RES_LOW, cx: -5500, cz: 8800, hw: 3100, hh: 1100, rot: 0.03, gridX: 120, gridZ: 150, density: 0.35, hMin: 4, hMax: 9 });
+  add({ id: 'north-res-2', zone: Zone.RES_LOW, cx: -4800, cz: -8000, hw: 2400, hh: 800, rot: -0.06, gridX: 100, gridZ: 140, density: 0.55, hMin: 4, hMax: 10 });
+  add({ id: 'far-north-res', zone: Zone.RES_LOW, cx: -7950, cz: -8000, hw: 650, hh: 800, rot: 0.08, gridX: 120, gridZ: 150, density: 0.4, hMin: 4, hMax: 9 });
+  add({ id: 'north-edge-res', zone: Zone.RES_LOW, cx: -5500, cz: -9400, hw: 3100, hh: 600, rot: 0.04, gridX: 120, gridZ: 150, density: 0.35, hMin: 4, hMax: 9 });
   add({ id: 'south-bayfront', zone: Zone.RES_MID, cx: -3000, cz: -900, hw: 480, hh: 650, rot: 0.0, gridX: 120, gridZ: 130, density: 0.6, hMin: 8, hMax: 35 });
   // barrier island
   add({ id: 'hotel-south', zone: Zone.HOTEL, cx: 2330, cz: -1500, hw: 330, hh: 1250, rot: -0.12, gridX: 130, gridZ: 110, density: 0.85, hMin: 20, hMax: 110 });
@@ -430,11 +443,14 @@ export function computeDistrictGrids(districts: District[]): Map<string, GridLin
   const out = new Map<string, GridLines>();
   for (const d of districts) {
     if (d.gridX <= 0 || d.gridZ <= 0) continue;
-    // slight irregularity in spacing keeps the grid from looking machine-made
+    // slight irregularity in spacing keeps the grid from looking machine-made; the low-rise suburbs also
+    // merge the odd pair of blocks into a superblock (a school, a church lot, a strip of shops), which
+    // breaks the even rhythm of the street lattice seen from altitude
+    const superP = d.zone === Zone.RES_LOW ? 0.11 : 0;
     const xs: number[] = [];
-    for (let x = -d.hw; x <= d.hw + 1; x += d.gridX * rng.range(0.9, 1.15)) xs.push(Math.min(x, d.hw));
+    for (let x = -d.hw; x <= d.hw + 1; x += d.gridX * rng.range(0.9, 1.15) * (rng.chance(superP) ? 1.8 : 1)) xs.push(Math.min(x, d.hw));
     const zs: number[] = [];
-    for (let z = -d.hh; z <= d.hh + 1; z += d.gridZ * rng.range(0.9, 1.15)) zs.push(Math.min(z, d.hh));
+    for (let z = -d.hh; z <= d.hh + 1; z += d.gridZ * rng.range(0.9, 1.15) * (rng.chance(superP) ? 1.7 : 1)) zs.push(Math.min(z, d.hh));
     out.set(d.id, { xs, zs });
   }
   return out;
@@ -590,6 +606,57 @@ export function createPois(): Poi[] {
     { id: 'seaplane-base', kind: 'seaplane', x: -2050, z: -4700, rot: Math.PI * 0.5, size: 60 },
     { id: 'golf-club', kind: 'clubhouse', x: 1215, z: 6250, rot: -0.3, size: 30 },
   ];
+}
+
+// ---------------------------------------------------------------- urban gradient
+
+interface CorridorBox { pts: Vec2[]; hw: number; minX: number; maxX: number; minZ: number; maxZ: number }
+interface UrbanFields { urban: District[]; corridors: CorridorBox[] }
+const _urbanCache = new WeakMap<District[], UrbanFields>();
+function urbanFields(districts: District[], roads: RoadSpec[]): UrbanFields {
+  let f = _urbanCache.get(districts);
+  if (f) return f;
+  const corridors = roads.filter((r) => r.cls === 'highway' || r.cls === 'arterial').map((r) => {
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
+    for (const [px, pz] of r.pts) { minX = Math.min(minX, px); maxX = Math.max(maxX, px); minZ = Math.min(minZ, pz); maxZ = Math.max(maxZ, pz); }
+    return { pts: r.pts, hw: r.width * 0.5, minX: minX - 400, maxX: maxX + 400, minZ: minZ - 400, maxZ: maxZ + 400 };
+  });
+  f = { urban: districts.filter((d) => d.zone === Zone.DOWNTOWN || d.zone === Zone.RES_MID), corridors };
+  _urbanCache.set(districts, f);
+  return f;
+}
+
+export interface UrbanSample {
+  /** 0..1 urban intensity: 1 in the downtown / mid-rise cores, falling off through the outer ring and along the
+   *  arterials into the house-scale suburbs; frayed by noise so no edge follows a district rectangle */
+  urban: number;
+  /** distance (m) to the edge of the nearest highway / arterial, capped at 400 */
+  corridor: number;
+  /** signed distance (m) to the nearest downtown / mid-rise district (negative inside) */
+  edgeD: number;
+}
+
+/** The urban gradient of the sprawl, shared by the city fill (which building types a block gets) and the
+ *  ground shading (how the ground under them reads from altitude), so the ragged city edge is the same in both. */
+export function urbanGradient(districts: District[], roads: RoadSpec[], x: number, z: number): UrbanSample {
+  const f = urbanFields(districts, roads);
+  let corridor = 400;
+  for (const r of f.corridors) {
+    if (x < r.minX || x > r.maxX || z < r.minZ || z > r.maxZ) continue;
+    corridor = Math.min(corridor, sdPolyline(x, z, r.pts) - r.hw);
+  }
+  let edgeD = 5000;
+  for (const u of f.urban) edgeD = Math.min(edgeD, sdBox(x, z, u.cx, u.cz, u.hw, u.hh, u.rot));
+  const un = 0.5 + 0.5 * perlin2(x / 380 + 3.3, z / 380 - 7.1);
+  let urban: number;
+  if (edgeD < 0) {
+    // inside a core the edge frays inward: the outer 150-500 m of the district lose urbanity where the noise is low
+    const fray = smoothstep(-(180 + 380 * un), -30, edgeD) * (0.25 + 0.75 * (1 - un));
+    urban = 1 - 0.85 * fray;
+  } else {
+    urban = (1 - smoothstep(100, 1100, edgeD)) * (0.4 + 0.7 * un) + (1 - smoothstep(20, 140, corridor)) * (0.25 + 0.5 * un);
+  }
+  return { urban: clamp(urban, 0, 1), corridor, edgeD };
 }
 
 // ---------------------------------------------------------------- generation
