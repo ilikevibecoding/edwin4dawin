@@ -252,7 +252,9 @@ export function buildLifesupport(kit, ctx) {
   for (let x = min[0] + 2; x < max[0] - 1; x += 3) kit.box("paintedMetal", x, H - 0.1, (min[2] + max[2]) / 2, 0.24, 0.2, max[2] - min[2] - 0.3, { color: PALETTE.impBlack, texel: 2 });
   // strips are built like the shared imperial fixture (dark housing, a faint diffuser that reads as the
   // lit fixture body, a narrow dim core): the earlier raw 0.1 m emitStrip boxes were three blown white
-  // bars with halos where the beams cut the spine
+  // bars with halos where the beams cut the spine. The diffuser block stands 2 cm proud of the housing
+  // and covers most of its width: recessed inside it, the visible face was the housing's paintedMetal
+  // underside, which the lights 1.3 m below lit into a speckled grey slab.
   const strip = (mat, x0, z0, x1, z1) => {
     const alongX = Math.abs(x1 - x0) >= Math.abs(z1 - z0);
     const xc = (x0 + x1) / 2;
@@ -261,10 +263,10 @@ export function buildLifesupport(kit, ctx) {
     const dims = (w, len) => (alongX ? [len, w] : [w, len]);
     let [sx, sz] = dims(0.42, L + 0.2);
     kit.box("paintedMetal", xc, H - 0.06, zc, sx, 0.1, sz, { color: PALETTE.impDark, texel: 2 });
-    [sx, sz] = dims(0.26, L);
-    kit.box("emitWhiteFaint", xc, H - 0.095, zc, sx, 0.02, sz, { uv: "keep" });
+    [sx, sz] = dims(0.34, L + 0.04);
+    kit.box("emitWhiteFaint", xc, H - 0.115, zc, sx, 0.03, sz, { uv: "keep" });
     [sx, sz] = dims(0.05, L - 0.1);
-    kit.box(mat, xc, H - 0.11, zc, sx, 0.02, sz, { uv: "keep" });
+    kit.box(mat, xc, H - 0.135, zc, sx, 0.02, sz, { uv: "keep" });
   };
   strip("emitWhiteDim", min[0] + 1, 0, max[0] - 1, 0);
   strip("emitWhiteDim", min[0] + 1, -4.6, -12, -4.6);
