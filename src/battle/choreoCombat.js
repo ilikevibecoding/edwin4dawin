@@ -67,6 +67,14 @@ export const BOLT_SPECS = {
   },
 };
 
+// Turbolaser colours per side: the Republic fires red and blue, the Separatists blue and green (the film's
+// exchange reads as red/blue against blue/green). Picked per shot from the capital RNG stream.
+export function boltColor(side, rand) {
+  if (side === "republic")
+    return rand() < 0.55 ? BOLT_COLORS.republic : BOLT_COLORS.republicBlue;
+  return rand() < 0.55 ? BOLT_COLORS.separatistBlue : BOLT_COLORS.separatist;
+}
+
 export const MISS_RATE = 0.3;
 const MAX_RANGE = 16000;
 
@@ -186,6 +194,7 @@ function fireAt(st, i, tgt, ctx) {
   }
   const b = bolts.fire(_from, _aim, {
     ...spec,
+    color: boltColor(st.side, rand),
     target: t,
     side: st.side,
     kind: hp.kind === "heavy" ? "turbo" : "light",
@@ -370,8 +379,10 @@ export function pointDefence(ctx, dt) {
     _aim.z += frand.range(-10, 10);
     const miss = frand() >= PD_HIT_CHANCE;
     s.pdCool = frand.range(PD_COOLDOWN[0], PD_COOLDOWN[1]);
+    const pdColor = boltColor(s.side, frand);
     const b = bolts.fire(_pd, _aim, {
       ...spec,
+      color: pdColor,
       length: 34,
       radius: 1.1,
       target: null,
