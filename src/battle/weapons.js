@@ -4,15 +4,21 @@
 // Rendering: every bolt is one quad whose two ends are the bolt's tail and head in world space. The vertex
 // shader projects both ends, clips the segment against the near plane, and expands the quad perpendicular
 // to the *projected* axis so bolts seen head-on still read as a round glow instead of an edge-on sliver.
-// The fragment shader draws a tapered capsule in that ribbon space: a white-hot core, a saturated coloured
-// halo, a thin tail and a bright rounded head, with a subtle time-based flicker per bolt.
+// Distant bolts are held to a minimum projected width AND length (a thin streak, never a round pill), and
+// the more a bolt had to be inflated the dimmer and more saturated it draws, so a 10 km exchange reads as
+// fine red and teal streaks between the lines. The fragment shader draws a tapered capsule in that ribbon
+// space: a saturated coloured halo, a thin tail, and a small hot core that whitens only at the head tip.
 import * as THREE from "three";
 
 const _p = new THREE.Vector3();
 const _size = new THREE.Vector2();
+const EMPTY = Object.freeze({});
 
 // halo half-width as a multiple of the bolt radius (the visible core is ~radius wide)
 const HALO = 2.4;
+// screen-space minimums (pixels): half-width of the halo and length of the streak
+const MIN_HALF_WIDTH_PX = 0.9;
+const MIN_LENGTH_PX = 34;
 
 export const BOLT_COLORS = {
   republic: new THREE.Color(1.0, 0.22, 0.12), // red turbolasers
@@ -63,19 +69,36 @@ void main() {
   float lenN = length(d);
   vec2 dir = lenN > 1e-6 ? d / lenN : vec2(0.0, 1.0);
   vec2 perp = vec2(-dir.y, dir.x);
-  // perspective half-width of the halo at each end, never thinner than ~1.5 px so distant bolts stay
-  // readable dashes (film language: the exchange must be legible from between the lines)
+  // perspective half-width of the halo at each end, never thinner than a fraction of a pixel so distant
+  // bolts stay readable (film language: the exchange must be legible from between the lines)
+  float px = 2.0 / resolution.y;                 // one pixel in aspect-corrected NDC
   float halo = iParam.x * ${HALO.toFixed(2)};
-  float minW = 3.0 / resolution.y;
+  float minW = ${MIN_HALF_WIDTH_PX.toFixed(2)} * px;
   float waT = halo * projectionMatrix[1][1] / ca.w;
   float wbT = halo * projectionMatrix[1][1] / cb.w;
   float wa = max(waT, minW);
   float wb = max(wbT, minW);
-  // when the width had to be inflated the bolt is far away: dim it a little and fade the white-hot core
-  // so distant bolts read as saturated red / teal streaks rather than white ones
-  float ratio = min(1.0, (waT + wbT) / (wa + wb));
+  // minimum projected length: a far bolt is a streak, not a pill. Only the part of the shortness that
+  // comes from distance is made up (a bolt seen head-on is foreshortened and stays a dot): compare the
+  // projected length with what the bolt would measure seen broadside at the same distance.
+  float wMid = 0.5 * (ca.w + cb.w);
+  float lenWorld = length(iB - iA);
+  float lenBroad = lenWorld * projectionMatrix[1][1] / wMid;
+  float fore = lenBroad > 1e-6 ? clamp(lenN / lenBroad, 0.0, 1.0) : 1.0;
+  // the minimum scales with the bolt's real length: a heavy turbolaser (~100 m) gets the full streak, a
+  // fighter laser (~25 m) a quarter of it, so the capital exchange stays the dominant graphic
+  float minLen = ${MIN_LENGTH_PX.toFixed(1)} * px * sqrt(fore) * clamp(lenWorld / 100.0, 0.25, 1.0);
+  float lenT = lenN;
+  if (lenN < minLen) {
+    // grow the streak backwards from the head (the head marks where the bolt really is)
+    na = nb - dir * minLen;
+    lenN = minLen;
+  }
+  // when width or length had to be inflated the bolt is far away: dim it and drop the white core so
+  // distant bolts read as saturated red / teal streaks rather than white confetti
+  float ratio = min(min(1.0, (waT + wbT) / (wa + wb)), lenT / max(lenN, 1e-6));
   float flicker = 0.9 + 0.1 * sin(time * 41.0 + iParam.y * 97.0) * sin(time * 67.0 + iParam.y * 13.0);
-  vGain = vec2((0.8 + 0.2 * ratio) * iParam.w * flicker, 0.15 + 0.85 * smoothstep(0.15, 0.8, ratio));
+  vGain = vec2((0.62 + 0.38 * ratio) * iParam.w * flicker, 0.1 + 0.9 * smoothstep(0.2, 0.85, ratio));
   float isHead = step(0.0, position.y);
   float across = position.x * 2.0;
   vec2 base = mix(na, nb, isHead);
@@ -111,9 +134,12 @@ void main() {
   float d = length(vec2(dx, dy)) / (wHere * taper);
   if (d >= 1.0) discard;
   float halo = (1.0 - d) * (1.0 - d);
-  float core = smoothstep(0.34, 0.0, d) * vGain.y;
+  // hot core: narrow, and it only whitens toward the head tip so red bolts stay red along their length
+  float core = smoothstep(0.24, 0.0, d) * vGain.y;
+  float tip = smoothstep(0.55, 1.0, t);
+  vec3 coreCol = mix(vColor * 1.6, mix(vColor, vec3(1.0), 0.5), tip);
   float g = mix(0.4, 1.0, smoothstep(0.0, 0.85, t)) * vGain.x;
-  vec3 col = (vColor * (halo + 0.35 * (1.0 - vGain.y) * (1.0 - d)) + mix(vColor, vec3(1.0), 0.85) * core) * g;
+  vec3 col = (vColor * (halo * 1.15 + 0.35 * (1.0 - vGain.y) * (1.0 - d)) + coreCol * core) * g;
   gl_FragColor = vec4(col, 1.0);
 }`;
 
@@ -195,6 +221,10 @@ export class Bolts {
         seed: 0,
         intensity: 1,
         muzzle: true,
+        // set by the choreography after fire(); reset here so a recycled record never carries them over
+        capital: false,
+        heavy: false,
+        fighterTarget: null,
       }
     );
   }
@@ -202,10 +232,14 @@ export class Bolts {
   /**
    * @param from Vector3, to Vector3 (world)
    * @param opts { color: Color, speed, length, radius, damage, target, side, kind, intensity, muzzle }
+   * @param target, side, kind (optional, positional) override the same fields of `opts`, so hot callers
+   *   can pass a shared spec object plus the per-shot fields without building an options object per shot:
+   *   `bolts.fire(from, to, BOLT_SPECS.heavy.republic, targetShip, "republic", "turbo")`.
    * Returns the bolt record (from, to, dir, speed, length, radius, color, damage, target, side, kind, t,
-   * dist, miss) or null when the pool is full. The record is recycled after the hit callback.
+   * dist, miss, capital, heavy, fighterTarget) or null when the pool is full. The record is recycled after
+   * the hit callback.
    */
-  fire(from, to, opts = {}) {
+  fire(from, to, opts = EMPTY, target, side, kind) {
     if (this.bolts.length >= this.capacity) return null;
     const b = this._alloc();
     b.from.copy(from);
@@ -216,13 +250,16 @@ export class Bolts {
     b.radius = opts.radius || 2.2;
     b.color = opts.color || BOLT_COLORS.republic;
     b.damage = opts.damage || 1;
-    b.target = opts.target || null;
-    b.side = opts.side || "republic";
-    b.kind = opts.kind || "turbo";
+    b.target = target !== undefined ? target : opts.target || null;
+    b.side = side || opts.side || "republic";
+    b.kind = kind || opts.kind || "turbo";
     b.intensity = opts.intensity || 1;
     b.muzzle = opts.muzzle !== false;
     b.t = 0;
     b.miss = false;
+    b.capital = false;
+    b.heavy = false;
+    b.fighterTarget = null;
     b.seed = Math.random();
     b.dist = b.dir.length();
     if (b.dist > 1e-6) b.dir.divideScalar(b.dist);
@@ -239,14 +276,20 @@ export class Bolts {
    */
   attachMuzzleFlash(explosions, opts = {}) {
     const scale = opts.scale ?? 1;
+    const fast = typeof explosions.flash === "function";
     this.onFire = (b) => {
       if (!b.muzzle) return;
-      explosions.spawn(b.from, {
-        kind: "flash",
-        size: b.radius * 5 * scale,
-        life: 0.09 + Math.random() * 0.05,
-        color: b.color,
-      });
+      const size = b.radius * 5 * scale;
+      const life = 0.09 + Math.random() * 0.05;
+      // positional fast path (no options object per shot) when the explosion system offers it
+      if (fast) explosions.flash(b.from, size, life, b.color);
+      else
+        explosions.spawn(b.from, {
+          kind: "flash",
+          size,
+          life,
+          color: b.color,
+        });
     };
     return this;
   }

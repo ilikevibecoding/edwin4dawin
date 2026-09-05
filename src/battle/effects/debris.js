@@ -1,8 +1,10 @@
 // Debris: one InstancedMesh of tumbling hull fragments thrown by detonations and heavy hits. Every
-// fragment is the same jagged low-poly chunk (a jittered icosahedron, 20 triangles) in a dark hull colour,
-// made varied by a random plate-like non-uniform scale and orientation. Fragments carry velocity and spin,
-// start ember-hot (per-instance emissive that cools over a few seconds) and shrink away over the last part
-// of a 20-40 s life, so the pool recycles without a pop. Lit by the battle sun + Coruscant fill like hulls.
+// fragment is the same jagged low-poly chunk (a jittered icosahedron, 20 triangles) whose faces carry a
+// brightness variation, coloured per instance (dark scorched grey by default, or the hull colour a
+// detonation passes in so a hulk throws tan / cream / blue-grey plates), made varied by a random plate-like
+// non-uniform scale and orientation. Fragments carry velocity and spin, start ember-hot (per-instance
+// emissive that cools over a few seconds) and shrink away over the last part of a 20-40 s life, so the
+// pool recycles without a pop. Lit by the battle sun + Coruscant fill like hulls.
 import * as THREE from "three";
 import { battlePatch, makeBattleSun } from "../battleShader.js";
 
@@ -11,6 +13,10 @@ const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const _v = new THREE.Vector3();
 const _e = new THREE.Euler();
+const _c = new THREE.Color();
+
+// linear albedo of a scorched dark-grey fragment (what every chunk was before per-instance colour)
+export const DEBRIS_DEFAULT_COLOR = new THREE.Color(0.055, 0.055, 0.06);
 
 function rng(seed) {
   let a = seed >>> 0;
@@ -30,7 +36,8 @@ function randDir(out) {
 }
 
 // jagged chunk: unit icosahedron with every vertex pushed in or out (per position, so shared corners stay
-// welded), flat-shaded, faces in a few dark hull greys with the odd lighter painted plate
+// welded), flat-shaded, faces carrying a brightness variation around 1 (the odd lighter painted plate, the
+// odd darker recess) that the per-instance colour multiplies
 export function chunkGeometry(seed = 5) {
   const rand = rng(seed);
   let g = new THREE.IcosahedronGeometry(1, 0);
@@ -46,15 +53,15 @@ export function chunkGeometry(seed = 5) {
     }
     pos.setXYZ(i, pos.getX(i) * k, pos.getY(i) * k, pos.getZ(i) * k);
   }
-  const palette = [0x3a3a3e, 0x44454a, 0x2c2c30, 0x4e4a44, 0x6a6a6e, 0x262628];
+  // per-face multipliers (linear): mostly plain hull, some darker recesses, a few lighter plates
+  const palette = [1.0, 1.25, 0.65, 1.1, 1.8, 0.5];
   const col = new Float32Array(pos.count * 3);
-  const c = new THREE.Color();
   for (let f = 0; f < pos.count / 3; f++) {
-    c.setHex(palette[Math.floor(rand() * palette.length)]);
+    const k = palette[Math.floor(rand() * palette.length)];
     for (let v = 0; v < 3; v++) {
-      col[(f * 3 + v) * 3] = c.r;
-      col[(f * 3 + v) * 3 + 1] = c.g;
-      col[(f * 3 + v) * 3 + 2] = c.b;
+      col[(f * 3 + v) * 3] = k;
+      col[(f * 3 + v) * 3 + 1] = k;
+      col[(f * 3 + v) * 3 + 2] = k;
     }
   }
   g.setAttribute("color", new THREE.BufferAttribute(col, 3));
@@ -116,6 +123,11 @@ export class Debris {
     this.mesh.castShadow = false;
     this.mesh.receiveShadow = false;
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    // per-instance colour from the start so the program compiles once with instancing colour on
+    this.mesh.instanceColor = new THREE.InstancedBufferAttribute(
+      new Float32Array(capacity * 3).fill(1),
+      3,
+    ).setUsage(THREE.DynamicDrawUsage);
     scene.add(this.mesh);
     this.list = [];
     this._pool = [];
@@ -147,6 +159,7 @@ export class Debris {
         spinAxis: new THREE.Vector3(0, 1, 0),
         spinRate: 0,
         scale: new THREE.Vector3(1, 1, 1),
+        color: new THREE.Color(),
         age: 0,
         life: 30,
         heat: 0,
@@ -162,7 +175,9 @@ export class Debris {
    * @param speed top speed (m/s); individual pieces get 15-100 % of it
    * @param opts { size: typical fragment size (m), radius: spawn radius, velocity: base velocity (Vector3),
    *   dir: bias direction (world) for the spread, life: [min, max] seconds, heat: initial ember glow 0..1,
-   *   evict: when the pool is full recycle the oldest fragments (default true; hits pass false) }
+   *   evict: when the pool is full recycle the oldest fragments (default true; hits pass false),
+   *   color: fragment albedo (THREE.Color or hex, linear-ish hull colour; default scorched dark grey) so a
+   *   hulk throws chunks in its own hull colour }
    * Returns the number of fragments thrown.
    */
   burst(pos, count = 60, speed = 80, opts = {}) {
@@ -171,6 +186,10 @@ export class Debris {
     const life = opts.life || [20, 40];
     const heat0 = opts.heat ?? 1;
     const evict = opts.evict !== false;
+    const color = opts.color;
+    if (color === undefined || color === null) _c.copy(DEBRIS_DEFAULT_COLOR);
+    else if (typeof color === "number") _c.setHex(color);
+    else _c.copy(color);
     let n = 0;
     for (let i = 0; i < count; i++) {
       let f;
@@ -206,6 +225,8 @@ export class Debris {
       // most pieces are dark hull within a few seconds; a few stay ember-red longer
       f.heat = heat0 * (0.35 + 0.65 * Math.random());
       f.cool = 1 / (1.5 + Math.random() * 3.5);
+      // hull colour, a little darker on some pieces (scorched side out)
+      f.color.copy(_c).multiplyScalar(0.6 + 0.5 * Math.random());
       n++;
     }
     this.spawned += n;
@@ -235,11 +256,13 @@ export class Debris {
       _s.copy(f.scale).multiplyScalar(fade);
       _m.compose(f.pos, f.quat, _s);
       this.mesh.setMatrixAt(n, _m);
+      this.mesh.instanceColor.setXYZ(n, f.color.r, f.color.g, f.color.b);
       this.iHeat.setX(n, f.heat);
       n++;
     }
     this.mesh.count = n;
     this.mesh.instanceMatrix.needsUpdate = true;
+    this.mesh.instanceColor.needsUpdate = true;
     this.iHeat.needsUpdate = true;
   }
 
