@@ -5,7 +5,7 @@
 // and brow around the viewport strip, side window bands, roof plating, stepped underside, aft docking
 // port, sensor blisters, the two shield generator domes with plinths / rings / ribs and the comms mast.
 import * as THREE from "three";
-import { panelWithHoles } from "../kit.js";
+import { panelWithHoles, rng } from "../kit.js";
 import { PALETTE } from "../materials.js";
 import { TOWER } from "../spec.js";
 import { plateField, shade, mixC, C, plateTone, fieldNoise, TEXEL, EMIT } from "./hull_util.js";
@@ -17,6 +17,55 @@ const Z = V(0, 0, 1);
 // gradient helpers must never feed pow() a negative base: one NaN vertex colour in an additive mesh
 // gets into the scene env-map capture and PMREM spreads it over every reflective surface
 const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
+
+/**
+ * Plating relief over a flat wall section, mapped by in-plane coordinates: P(u, v, d) -> world point
+ * d metres proud of the wall. `rows` are [v0, v1] courses (a gap between consecutive courses becomes a
+ * darker recess band); the columns are shared by every course so the vertical seams line up. Each cell
+ * gets a dark seam groove on its boundary (level "mid": the grid still reads at 1–2 km) and, with
+ * probability plateP, a raised bevelled plate in a tonal spread (level "near") — one in hatchP of those
+ * carries a three-hatch access cluster. Randomness comes from the caller's local generator so the
+ * shared exterior sequence stays untouched.
+ */
+function reliefGrid(at, rnd, { P, u0, u1, rows, cellU, nrm, tint, plateP = 0.6, h = [0.25, 0.5], groove = 0.3, hatchP = 0.12, level = "near", texel = TEXEL }) {
+  const T = PALETTE.hullTrench;
+  const D = PALETTE.hullDark;
+  const nu = Math.max(1, Math.round((u1 - u0) / cellU));
+  const du = (u1 - u0) / nu;
+  const gd = 0.03; // seams ride just proud of the skin: no z-fighting with the far-level wall quad
+  const grooves = at("mid", "hullGreeble");
+  const vA = rows[0][0];
+  const vB = rows[rows.length - 1][1];
+  for (let i = 1; i < nu; i++) {
+    const u = u0 + i * du;
+    grooves.quad(P(u - groove / 2, vA, gd), P(u + groove / 2, vA, gd), P(u + groove / 2, vB, gd), P(u - groove / 2, vB, gd), T, texel * 2, nrm);
+  }
+  rows.forEach(([r0, r1], k) => {
+    if (k > 0) {
+      const prev = rows[k - 1][1];
+      // touching courses share a seam groove; a gap reads as a darker recessed band
+      if (r0 - prev < 0.05) grooves.quad(P(u0, r0 - groove / 2, gd), P(u1, r0 - groove / 2, gd), P(u1, r0 + groove / 2, gd), P(u0, r0 + groove / 2, gd), T, texel * 2, nrm);
+      else grooves.quad(P(u0, prev, gd), P(u1, prev, gd), P(u1, r0, gd), P(u0, r0, gd), mixC(D, T, 0.6), texel * 2, nrm);
+    }
+    for (let i = 0; i < nu; i++) {
+      if (rnd() >= plateP) continue;
+      const a = u0 + i * du + groove;
+      const b = u0 + (i + 1) * du - groove;
+      const c = r0 + groove;
+      const d = r1 - groove;
+      if (b - a < 1.5 || d - c < 1.5) continue;
+      const hh = h[0] + rnd() * (h[1] - h[0]);
+      const tone = shade(mixC(plateTone(rnd), tint, 0.4), 0.9 + rnd() * 0.2);
+      at(level, rnd() < 0.5 ? "hullPlate1" : "hullPlate").frustum([P(a, c, 0), P(b, c, 0), P(b, d, 0), P(a, d, 0)], nrm, hh, Math.min(0.6, 0.1 * Math.min(b - a, d - c)), tone, texel);
+      if (b - a > 5.5 && d - c > 2.4 && rnd() < hatchP) {
+        const hz = at(level, "hullGreeble");
+        const um = (a + b) / 2;
+        const vm = (c + d) / 2;
+        for (const k of [-1, 0, 1]) hz.frustum([P(um + k * 1.6 - 0.55, vm - 0.55, hh), P(um + k * 1.6 + 0.55, vm - 0.55, hh), P(um + k * 1.6 + 0.55, vm + 0.55, hh), P(um + k * 1.6 - 0.55, vm + 0.55, hh)], nrm, 0.22, 0.1, D, texel * 2);
+      }
+    }
+  });
+}
 
 export function buildTower(ctx) {
   const { chunks, rand } = ctx;
@@ -31,6 +80,9 @@ export function buildTower(ctx) {
   const hw = (y) => n.hw + n.draft * (n.yTop - y);
   const hl = (y) => (n.z1 - n.z0) / 2 + n.draft * (n.yTop - y) * 0.5;
   const at = (lvl, key) => chunks.batch(zc, lvl, key);
+  // local generator for the plating relief so the shared exterior sequence (engines follow the tower)
+  // is not shifted by the extra draws
+  const lrand = rng(3301);
 
   // stepped plinth under the head: the neck storeys stop 12 m under the soffit and two 6 m slabs
   // carry the load up to the module underside (neck hw ≈ 61 → 65 → 85 → head 105), so the head
@@ -69,14 +121,24 @@ export function buildTower(ctx) {
         const y1 = y0 + sh;
         const yb0 = y1 - bandH - 1.0;
         const yb1 = y1 - 1.0;
-        const tint = tintFor(k % 3 === 2 ? M : mixC(M, L, 0.55), k * 10, 0);
+        const storeyTint = tintFor(k % 3 === 2 ? M : mixC(M, L, 0.55), k * 10, 0);
         for (const [s0, s1] of segs) {
           // margins so the quads stop at the pilasters
           const m0 = (y) => s0 + (s0 === -1 ? pil * 1.3 : pil) / f.len(y);
           const m1 = (y) => s1 - (s1 === 1 ? pil * 1.3 : pil) / f.len(y);
+          // each panel between pilasters gets its own tone step so the storeys read as courses of plates
+          const tint = shade(storeyTint, 0.93 + 0.14 * lrand());
           const far = at("far", "hullPlate1");
           far.quad(f.P(y0, m0(y0)), f.P(y0, m1(y0)), f.P(yb0, m1(yb0)), f.P(yb0, m0(yb0)), tint, TEXEL, f.nrm);
           far.quad(f.P(yb1, m0(yb1)), f.P(yb1, m1(yb1)), f.P(y1, m1(y1)), f.P(y1, m0(y1)), tint, TEXEL, f.nrm);
+          // plating relief on the panel: 8 m cells with seam grooves and raised plates. u is metres along
+          // the face from its centre (a constant fraction of the drafted half-length would lean)
+          {
+            const ym = (y0 + yb0) / 2;
+            const lm = f.len(ym);
+            const P = (u, v, d) => f.P(v, u / f.len(v), -d);
+            reliefGrid(at, lrand, { P, u0: m0(ym) * lm + 0.5, u1: m1(ym) * lm - 0.5, rows: [[y0 + 0.6, yb0 - 0.5]], cellU: 8, nrm: f.nrm, tint, plateP: 0.5, h: [0.25, 0.45], hatchP: 0.1 });
+          }
           const dark = at("far", "hullGreeble");
           dark.quad(f.P(yb0, m0(yb0)), f.P(yb0, m1(yb0)), f.P(yb0, m1(yb0), rec), f.P(yb0, m0(yb0), rec), D, TEXEL * 2, V(0, 1, 0));
           dark.quad(f.P(yb1, m0(yb1)), f.P(yb1, m1(yb1)), f.P(yb1, m1(yb1), rec), f.P(yb1, m0(yb1), rec), D, TEXEL * 2, V(0, -1, 0));
@@ -143,6 +205,10 @@ export function buildTower(ctx) {
       for (const s of [-1, 1]) {
         dk.quad(V(s * (p.hw + 0.05), yr0, p.z0), V(s * (p.hw + 0.05), yr0, p.z1), V(s * (p.hw + 0.05), yr1, p.z1), V(s * (p.hw + 0.05), yr1, p.z0), T, TEXEL * 2, V(s, 0, 0));
         dk.quad(V(-p.hw, yr0, zcP + s * ((p.z1 - p.z0) / 2 + 0.05)), V(p.hw, yr0, zcP + s * ((p.z1 - p.z0) / 2 + 0.05)), V(p.hw, yr1, zcP + s * ((p.z1 - p.z0) / 2 + 0.05)), V(-p.hw, yr1, zcP + s * ((p.z1 - p.z0) / 2 + 0.05)), T, TEXEL * 2, V(0, 0, s));
+      }
+      if (i === 1) {
+        // upper step flanks: a course of plates above the foot reveal (the head's "collar")
+        for (const s of [-1, 1]) reliefGrid(at, lrand, { P: (u, v, d) => V(s * (p.hw + d), v, u), u0: p.z0 + 1, u1: p.z1 - 1, rows: [[yr1 + 0.4, p.y1 - 0.4]], cellU: 8, nrm: V(s, 0, 0), tint, plateP: 0.65, h: [0.2, 0.4], hatchP: 0.1 });
       }
       if (i === 0) {
         const yw = (p.y0 + p.y1) / 2 + 0.6;
@@ -279,20 +345,57 @@ export function buildTower(ctx) {
           pane.quad(V(x + 0.3, y, glowZ - 0.02), V(x - 0.3, y, glowZ - 0.02), V(x - 0.3, y + 0.28, glowZ - 0.02), V(x + 0.3, y + 0.28, glowZ - 0.02), c, 1, fwd);
         }
       };
+      // the strip is not uniform: thin mullions split each viewport into one to three panes of different
+      // widths (a transom bar across every fourth), and every pane is lit, dim or dark on its own, so the
+      // row reads as a working deck of windows rather than nine identical lit slots. The mullions sit in
+      // the opening in front of the glass with no aft face: back-face culled from inside the bridge.
+      const PANES = [
+        [[1, "lit"]],
+        [[0.36, "dim"], [0.64, "lit"]],
+        [[0.5, "lit"], [0.5, "dark"]],
+        [[1, "dim"]],
+        [[1 / 3, "lit"], [1 / 3, "lit"], [1 / 3, "dim"]],
+        [[1, "lit"]],
+        [[0.64, "dark"], [0.36, "lit"]],
+        [[0.5, "lit"], [0.5, "dim"]],
+        [[1, "lit"]],
+      ];
+      const LEVEL = { lit: 1.0, dim: 0.42, dark: 0.1 };
+      const mull = at("mid", "hullGreeble");
+      const mullion = (x, y0, y1) => mull.box(x, (y0 + y1) / 2, b.z0 + 0.25, 0.22, y1 - y0, 0.4, T, TEXEL * 2, { skip: new Set(["+z"]) });
+      const transom = (x0, x1, y) => mull.box((x0 + x1) / 2, y, b.z0 + 0.25, x1 - x0, 0.18, 0.4, T, TEXEL * 2, { skip: new Set(["+z"]) });
+      const splitWindow = (x0, x1, y0, y1, parts, top, bottom, k) => {
+        const wdt = x1 - x0;
+        let u = 0;
+        for (const [frac, kind] of parts) {
+          const px0 = x0 + u * wdt;
+          const px1 = px0 + frac * wdt;
+          const lv = LEVEL[kind] * k;
+          litPane(px0 - (u === 0 ? 0.15 : 0.08), px1 + (u + frac > 0.999 ? 0.15 : 0.08), y0 - 0.15, y1 + 0.15, 0xc8d8ff, top * lv, bottom * lv);
+          if (kind !== "dark") consoles(px0, px1, y0);
+          u += frac;
+          if (u < 0.999) mullion(x0 + u * wdt, y0 - 0.1, y1 + 0.1);
+        }
+      };
       for (let i = 0; i < vp.count; i++) {
         const x = -vp.hw + vw / 2 + i * (vw + vp.pillar);
         const k = 0.85 + 0.3 * rand();
-        litPane(x - vw / 2 - 0.15, x + vw / 2 + 0.15, vp.y0 - 0.15, vp.y1 + 0.15, 0xc8d8ff, 0.7 * k, 0.32 * k);
-        consoles(x - vw / 2, x + vw / 2, vp.y0);
+        splitWindow(x - vw / 2, x + vw / 2, vp.y0, vp.y1, PANES[i % PANES.length], 0.7, 0.32, k);
+        if (i % 4 === 2) transom(x - vw / 2 - 0.1, x + vw / 2 + 0.1, vp.y0 + (vp.y1 - vp.y0) * 0.72);
       }
       // observation gallery: the same cool interior tone, dimmer — these read as windows on the deck
-      // below the bridge, not as a second row of lit panels
+      // below the bridge, not as a second row of lit panels; each 14 m bay is three or four panes
+      const GPANES = [
+        [[0.34, "lit"], [0.33, "dark"], [0.33, "lit"]],
+        [[0.25, "dim"], [0.5, "lit"], [0.25, "lit"]],
+        [[0.5, "lit"], [0.25, "dim"], [0.25, "dark"]],
+      ];
       for (const s of [-1, 1]) {
         for (let i = 0; i < gv.count; i++) {
           const x = s * (gv.x0 + gw * (i + 0.5));
           const k = 0.8 + 0.35 * rand();
-          litPane(x - gw / 2 + 0.3, x + gw / 2 - 0.3, gv.y0 - 0.1, gv.y1 + 0.1, 0xc8d8ff, 0.5 * k, 0.24 * k);
-          consoles(x - gw / 2 + 0.6, x + gw / 2 - 0.6, gv.y0);
+          const parts = GPANES[(i + (s > 0 ? 1 : 0)) % GPANES.length];
+          splitWindow(x - gw / 2 + 0.3, x + gw / 2 - 0.3, gv.y0, gv.y1, s > 0 ? parts : [...parts].reverse(), 0.5, 0.24, k);
         }
       }
     }
@@ -323,28 +426,59 @@ export function buildTower(ctx) {
         for (const s of [-1, 1]) mid.box(s * ((prev.hx + f.hx) / 2), (yLo + yHi) / 2, zc2, f.hx - prev.hx, yHi - yLo, f.proud, tintFor(f.tint, s * f.hx, 0), TEXEL, { skip: new Set(["+z"]) });
         prev = f;
       }
-      // proud plates on the light bands above the frame and above the gallery band
-      for (const [y0, y1] of [[bandA[1] + frame[2].dy + 0.6, b.y1 - 0.8], [bandB[1] + 0.6, bandA[0] - frame[2].dy - 0.6]]) {
-        if (y1 - y0 < 1.6) continue;
-        const cols = 5;
-        for (let i = 0; i < cols; i++) {
-          const x0 = -b.hw + 1.2 + (i * (w - 2.4)) / cols + 0.7;
-          const x1 = -b.hw + 1.2 + ((i + 1) * (w - 2.4)) / cols - 0.7;
-          mid.box((x0 + x1) / 2, (y0 + y1) / 2, b.z0 - 0.5, x1 - x0, y1 - y0, 1.0, shade(mixC(plateTone(rand), L, 0.2), 0.84 + rand() * 0.32), TEXEL, { skip: new Set(["+z"]) });
+      // plating relief on the forward face so it has contrast at 100–200 m: plate cells with seam
+      // grooves on the two outer frame layers (side blocks and the middle layer's top / bottom bars),
+      // darker course lines level with the viewport band's edges, hatch clusters, and thin dark reveals
+      // along every step edge so the layering reads as steps rather than as one flat sheet
+      {
+        const fwd = V(0, 0, -1);
+        const onZ = (z) => (u, v, d) => V(u, v, z - d);
+        const f0 = frame[0];
+        const f1 = frame[1];
+        const f2 = frame[2];
+        const yF = (f) => [bandA[0] - f.dy, bandA[1] + f.dy];
+        const y0r = yF(f0);
+        const y1r = yF(f1);
+        const y2r = yF(f2);
+        // three courses: below the sill line, level with the viewport band, above the brow (which
+        // crosses the side blocks at bandA[1] .. bandA[1] + 3)
+        const courses = (ya, yb, m) => [[ya + m, bandA[0] - 0.9], [bandA[0] - 0.1, bandA[1] + 0.1], [bandA[1] + 3.4, yb - m]];
+        for (const s of [-1, 1]) {
+          reliefGrid(at, lrand, { P: onZ(b.z0 - f2.proud), u0: s > 0 ? f1.hx + 0.5 : -f2.hx + 0.5, u1: s > 0 ? f2.hx - 0.5 : -f1.hx - 0.5, rows: courses(y2r[0], y2r[1], 0.5), cellU: 6.8, nrm: fwd, tint: f2.tint, plateP: 0.62, h: [0.2, 0.4], hatchP: 0.16 });
+          reliefGrid(at, lrand, { P: onZ(b.z0 - f1.proud), u0: s > 0 ? f0.hx + 0.4 : -f1.hx + 0.4, u1: s > 0 ? f1.hx - 0.4 : -f0.hx - 0.4, rows: courses(y1r[0], y1r[1], 0.4), cellU: 6.6, nrm: fwd, tint: f1.tint, plateP: 0.55, h: [0.15, 0.3], hatchP: 0.1 });
         }
+        // middle layer top / bottom bars: one course each (the brow uplights' halos sit on the top one)
+        reliefGrid(at, lrand, { P: onZ(b.z0 - f1.proud), u0: -f0.hx + 0.4, u1: f0.hx - 0.4, rows: [[y0r[1] + 0.3, y1r[1] - 0.4]], cellU: 7.6, nrm: fwd, tint: f1.tint, plateP: 0.55, h: [0.12, 0.25], hatchP: 0 });
+        reliefGrid(at, lrand, { P: onZ(b.z0 - f1.proud), u0: -f0.hx + 0.4, u1: f0.hx - 0.4, rows: [[y1r[0] + 0.4, y0r[0] - 0.3]], cellU: 7.6, nrm: fwd, tint: f1.tint, plateP: 0.55, h: [0.12, 0.25], hatchP: 0 });
+        // top light band: a course of big bevelled plates (proud like the old five slabs, but varied,
+        // seamed and with hatch clusters) between the frame's top edge and the roof
+        reliefGrid(at, lrand, { P: onZ(b.z0), u0: -f2.hx + 0.4, u1: f2.hx - 0.4, rows: [[y2r[1] + 0.7, b.y1 - 0.8]], cellU: 20, nrm: fwd, tint: L, plateP: 0.85, h: [0.5, 0.85], groove: 0.4, hatchP: 0.35 });
+        const rv = at("mid", "hullGreeble");
+        const reveal = (xa, xb, ya, yb, z) => rv.quad(V(xa, ya, z), V(xb, ya, z), V(xb, yb, z), V(xa, yb, z), T, TEXEL * 2, fwd);
+        // face slab above and beside the outer layer
+        reveal(-f2.hx - 0.7, f2.hx + 0.7, y2r[1], y2r[1] + 0.6, b.z0 - 0.03);
+        for (const s of [-1, 1]) reveal(s > 0 ? f2.hx : -f2.hx - 0.7, s > 0 ? f2.hx + 0.7 : -f2.hx, y2r[0], y2r[1] + 0.6, b.z0 - 0.03);
+        // outer layer around the middle layer
+        reveal(-f1.hx - 0.5, f1.hx + 0.5, y1r[1], y1r[1] + 0.5, b.z0 - f2.proud - 0.03);
+        reveal(-f1.hx - 0.5, f1.hx + 0.5, y1r[0] - 0.5, y1r[0], b.z0 - f2.proud - 0.03);
+        for (const s of [-1, 1]) reveal(s > 0 ? f1.hx : -f1.hx - 0.5, s > 0 ? f1.hx + 0.5 : -f1.hx, y1r[0] - 0.5, y1r[1] + 0.5, b.z0 - f2.proud - 0.03);
+        // middle layer around the inner layer (its top edge is under the brow)
+        reveal(-f0.hx - 0.4, f0.hx + 0.4, y0r[0] - 0.4, y0r[0], b.z0 - f1.proud - 0.03);
+        for (const s of [-1, 1]) reveal(s > 0 ? f0.hx : -f0.hx - 0.4, s > 0 ? f0.hx + 0.4 : -f0.hx, y0r[0] - 0.4, y0r[1], b.z0 - f1.proud - 0.03);
       }
       const far = at("far", "hullTrim");
       // brow runs pilaster to pilaster; the sill stays on the frame
       far.box(0, bandA[1] + 1.5, b.z0 - 1.8, (xPil - pilW / 2) * 2 - 0.4, 3.0, 3.6, D, TEXEL * 3, { skip: new Set(["+z"]) });
       far.box(0, bandA[0] - 0.6, b.z0 - 0.9, frame[0].hx * 2 + 2, 1.2, 1.8, D, TEXEL * 3, { skip: new Set(["+z"]) });
-      // four recessed floods per row — housings let into the brow underside / sill top with a cool
-      // lens — each throwing an additive wash down (up) the dark band so the strip reads lit when the
-      // face is in shadow, without the LED-strip rows of point lights
+      // four recessed floods per row — housings let into the brow top / sill underside with a warm
+      // lens. Each lens gets only a compact halo on the plating behind it (≈3 m, a third of the old
+      // intensity): the fixtures read as lamps, the long triangular washes they used to paint up and
+      // down the face are gone
       const em = at("far", "exta_emit");
       const rec = at("mid", "hullGreeble");
       const wash = at("far", "exta_pool");
       const lens = C(0xfff0d0).multiplyScalar(3.0);
-      const washC = C(0xfff0d0).multiplyScalar(0.34);
+      const washC = C(0xfff0d0).multiplyScalar(0.11);
       const zWash = b.z0 - 0.12;
       const fan = (x, yFrom, yTo, w0, w1, zq = zWash) => {
         // soft pool on the band face from the flood (width w0) to yTo (width w1): the colour falls off
@@ -362,21 +496,20 @@ export function buildTower(ctx) {
         const yb = yTo;
         wash.grid(V(x - wAt(ya) / 2, ya, zq), V(x + wAt(ya) / 2, ya, zq), V(x + wAt(yb) / 2, yb, zq), V(x - wAt(yb) / 2, yb, zq), 6, 5, col, 1, V(0, 0, -1));
       };
-      // the wash never crosses the viewport band itself (that is glass, lit from inside): the brow row
-      // are uplights on the brow's top face washing the plates above it, the sill row are downlights
-      // under the sill washing the plated band down to the gallery windows; both wash quads ride just
-      // in front of the proud plates, which stand 1 m off the face
+      // the halo never crosses the viewport band itself (that is glass, lit from inside): the brow row
+      // are uplights on the brow's top face, the sill row downlights under the sill; both halo quads
+      // ride just in front of the frame plates
       const yBrowTop = bandA[1] + 3.0;
       for (const fx of [-0.78, -0.26, 0.26, 0.78]) {
         const x = fx * vp.hw;
         // brow row: 1.2 m housing let 0.5 m into the brow top, warm lens on its upper face
         rec.box(x, yBrowTop + 0.2, b.z0 - 2.3, 1.6, 0.5, 1.9, T, TEXEL * 2, { skip: new Set(["-y"]) });
         em.box(x, yBrowTop + 0.5, b.z0 - 2.3, 1.2, 0.16, 1.2, lens, 1, { skip: new Set(["-y"]) });
-        fan(x, yBrowTop + 0.5, b.y1 - 0.8, 2.6, 18, b.z0 - 1.03);
+        fan(x, yBrowTop + 0.5, yBrowTop + 3.4, 2.2, 3.2, b.z0 - 1.03);
         // sill row: housing let into the sill underside, lens on its lower face
         rec.box(x, bandA[0] - 1.05, b.z0 - 1.3, 1.6, 0.5, 1.5, T, TEXEL * 2, { skip: new Set(["+y"]) });
         em.box(x, bandA[0] - 1.32, b.z0 - 1.3, 1.2, 0.16, 0.8, lens, 1, { skip: new Set(["+y"]) });
-        fan(x, bandA[0] - 1.35, bandB[1] + 0.6, 2.6, 20, b.z0 - 1.03);
+        fan(x, bandA[0] - 1.35, bandA[0] - 4.2, 2.2, 3.2, b.z0 - 1.03);
       }
       // sensor blisters on the front flanks and on the roof corners
       for (const s of [-1, 1]) {
@@ -404,8 +537,16 @@ export function buildTower(ctx) {
           const z0 = pilZ[i] + (i === 0 ? 0 : 1.3);
           const z1 = pilZ[i + 1] - (i === pilZ.length - 2 ? 0 : 1.3);
           for (const [y0, y1, kind] of bands) {
-            if (kind === "plate") at("far", "hullPlate").quad(V(x, y0, z0), V(x, y0, z1), V(x, y1, z1), V(x, y1, z0), tintFor(L, s * 50, y0), TEXEL, nrm);
-            else {
+            if (kind === "plate") {
+              const tint = tintFor(L, s * 50, y0);
+              at("far", "hullPlate").quad(V(x, y0, z0), V(x, y0, z1), V(x, y1, z1), V(x, y1, z0), tint, TEXEL, nrm);
+              // plating relief on the tall bands: one or two courses of plate cells with seam grooves
+              // (a darker course line splits the 14 m band) and hatch clusters
+              if (y1 - y0 > 6) {
+                const rows = y1 - y0 > 12 ? [[y0 + 0.6, y0 + (y1 - y0) * 0.45 - 0.4], [y0 + (y1 - y0) * 0.45 + 0.4, y1 - 0.6]] : [[y0 + 0.6, y1 - 0.6]];
+                reliefGrid(at, lrand, { P: (u, v, d) => V(x + s * d, v, u), u0: z0 + 0.6, u1: z1 - 0.6, rows, cellU: 7.2, nrm, tint, plateP: 0.6, h: [0.25, 0.5], hatchP: 0.14 });
+              }
+            } else {
               const xi = x - s * rec;
               const dark = at("far", "hullGreeble");
               dark.quad(V(x, y0, z0), V(x, y0, z1), V(xi, y0, z1), V(xi, y0, z0), D, TEXEL * 2, V(0, 1, 0));
