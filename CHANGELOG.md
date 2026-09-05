@@ -17,6 +17,65 @@ numbers the targets are about.
 
 ---
 
+## Gauntlet round 2 verdict, and the round-4 fixes for what it found
+
+**Build `4bdaba9`** — live, smoke-tested (HUD reads `build 4bdaba9 · 2026-09-05 01:11Z`, zero page errors).
+
+- **Verdict.** Three blind critics on 103 frames of `a8ca6eb` against round 1
+  (`gauntlet/round2/critic_{A,B,C}.md`, consensus in `CONSENSUS.md`, 35 key
+  frames in `frames/`): "round 2 fixed the car and broke the world." Hero car,
+  glass, tyre contact, day shadows and gait scored up; the night sky (20 % of
+  sky pixels lit — snow), the far hills (saturated cobalt, darker than the sky),
+  the black shade under the mess canopy and the lions' eyes scored down two to
+  three points. Round 2 therefore **did not pass** the non-regression gate, and
+  had been deployed before the critics scored it; those three regressions were
+  treated as blocking for this deploy. Four findings were the tools, not the
+  game, and are fixed: the chase camera "inside the flank" was the HUD
+  screenshot catching the camera mid-transition (`rig.snap()`), glass frames at
+  half resolution, the HUD stamp naming the bundle commit, and a soil hue that
+  measured unchanged.
+- **Stars** (`4bdaba9`): points instead of pixel-floored discs, the dusting grid
+  removed, the Milky Way a smooth band; the night palette had been converted to
+  linear twice so the dome rendered black under the grade's grey lift. Sky pixels
+  over 0.35 luma in the night hero: 19.8 % → 0.75 %. Night ground under the
+  horizon again (pad/horizon 2.4 → 0.68); moon key, fill and grade retuned.
+- **Hills** (`2c77f7f`): the hill airlight is now the displayed sky at the ray's
+  own elevation (no cooling multiplier, no `hillSkyK`), the far mesh folded onto
+  a sphere past 860 m, the straw flat and the forest skirt brought to the near
+  terrain's level with a shared distance falloff. Hills sit at 0.72–0.92 of the
+  ridge sky with saturation 0.47 → 0.25; the cream band is gone.
+- **Camp shade** (`4bdaba9`): day hemisphere 0.5 → 2.5 with the sun 9.4 → 7.9 —
+  the shade was hemisphere + environment and nothing else. Sunlit/shade 3.4 →
+  2.25 stops; the chairs under the awning read (0.14 → 0.26). The rest is the
+  camp's wear decal (`envMapIntensity` 0.25) and the terrain's indirect response,
+  handed to their owners.
+- **Dusk hero front** (`4bdaba9`): the clipped grille was a 7.0 key square to a
+  6° sun, not the lamps; key 4.0 with a softer grade knee, clipped pixels
+  14.5 % → 2.8 %.
+- **Lions, round 4** (`b3f403b`): eyes set lower, closer and forward with 70 % of
+  the iris visible (was ~35 %), amber iris with pupil and catchlight; mouth as a
+  seam, ears 20 % smaller and ovoid; loft normals continuous across rows;
+  forearm/gaskin +22 %, head +8 %; paws as feet, not boots; contact blobs per
+  paw and body (chest dirt 1.47 stops under open dirt); a sheen so the dusk key
+  rims the coat. Feet probe unchanged at machine precision.
+- **Fleet, round 3** (`62d7e42`): lamp pools only under lit lamps, a seven-vehicle
+  night set (markers, one arriving with headlamps, a dome light, a lit camper
+  window), night hemisphere floor, neutral panes instead of the laterite film,
+  motorcycle re-lathed, wheel contact blobs, and the trailer framed from its
+  body box.
+- **Hero car, round 3** (`d8b40ec`): live door mirrors at high/ultra (a 192×224
+  target per pane from the eye reflected through the pane, one pane per frame,
+  live within 5 m; ~105 calls per pass), lamp glow with a hot core and coloured
+  rim, brake and reverse logic, a bedside ladder, calipers that read through
+  the spokes, the cabin neutralised from amber.
+- HUD: tight text shadow for legibility over sunlit dirt; the key legend rests
+  ten seconds after the first gesture; type dims at night. Favicon request
+  silenced.
+- Running: hero-car materials (side-pane Fresnel, interior crackle, mirror at
+  fast, beam pool), lion gait (stride, swing flexion, head and tail), lion head
+  to measured skull ratios, campground (fire reach, fleet-row lanterns, paths,
+  timber), vegetation (plain density, crown shading, night canopy, treeline).
+
 ## Gauntlet rounds 2 and 3 — every family rebuilt once
 
 **Build `a8ca6eb`** — live, smoke-tested (HUD reads `build a8ca6eb · 2026-09-04 19:19Z`, zero page errors).

@@ -892,3 +892,73 @@ from a clean worktree of `a8ca6eb`; three blind critics score it against
 now: the horizon builder (`src/terrain.js` far hills and flat, `src/forest.js`
 skirt and treeline) and the hero car's geometry round (arches, brakes,
 suspension, lamp lenses at night, cabin colour, door mirrors at high/ultra).
+
+## Gauntlet round 2 — verdict, and round 4
+
+**Build `4bdaba9`**, live: HUD reads `build 4bdaba9 · 2026-09-05 01:11Z`, zero
+page errors, smoke-tested by `tools/deploy.mjs`.
+
+### The critics on round 2
+
+Three blind critics on 103 frames of `a8ca6eb` against round 1
+(`gauntlet/round2/`). Critic B's line stands for all three: "round 2 fixed the
+car and broke the world." The families that were rebuilt from the inside — hero
+car, glass, tyre contact, day shadows, gait — scored up, some by three points.
+The three things that sit behind the truck in every frame scored down: the night
+sky (A counted 20 % of sky pixels lit, against 0.45 % in round 1 — it read as
+snow), the far hills (measured on `mainroad`: hue 33° sat 0.14 in round 1, hue
+220° sat 0.44 in round 2, darker than the sky at their base) and the shade under
+the mess canopy (3.4 stops under sunlit dirt, a hole). The lions' eyes, the one
+lion-like feature round 1 had, closed to slits in the round-3 head.
+
+By the rubric round 2 did not pass: colour/atmosphere and cleanliness dropped
+two to three points in three families. It had also been deployed before the
+critics scored it. Both facts are in the consensus; the regressions were made
+blocking for the next deploy rather than queue items, and the process note is
+that the live preview follows *scored* candidates from here.
+
+### Investigated rather than averaged
+
+Four findings were mine, not the game's. B's "chase camera inside the truck's
+flank" on every HUD frame: the tool parks the camera on the hero view for its
+shader warm-up, and the HUD screenshot two seconds after `resume()` caught the
+chase camera still easing back across the flank — `rig.snap()` now lands it
+first, and the re-shot frame shows the chase cam seven metres back. B's
+"magenta soil": measured hue 24° sat 0.60 in both rounds, unchanged — a contrast
+illusion against the new blue hills. C's "HUD stamp is the wrong build": the
+worktree was at the bundle commit, one ahead of the source. A and C's half-size
+glass frames: the glass gauntlet's default, now 640×360.
+
+### Round 4
+
+- **Stars.** `starGrid` floored every star at a whole pixel at 640 wide, and the
+  night palette went through `lin()` twice so the dome was black and the stars
+  sat on the grade's grey lift. Points, two grids, no dusting, a Gaussian Milky
+  Way band: 19.8 % → 0.75 % of sky pixels over 0.35 luma.
+- **Hills.** The hill airlight was lit-dust `fogColor` times a cooling factor —
+  navy into the sun, brighter than the sky with the sun behind. It is now the
+  displayed sky at the ray's own elevation, toned 0.87 so the range sits under
+  the ridge sky at 0.72–0.92 of it. The straw flat and the forest skirt take the
+  near terrain's level with one shared falloff, so the cream band is gone.
+- **Camp shade.** Ablation showed the shade was hemisphere + environment and
+  nothing else, at a key:sky ratio of 8:0.2 on a horizontal surface. Hemisphere
+  0.5 → 2.5, sun 9.4 → 7.9: 3.4 → 2.25 stops, chairs readable. The rest is the
+  camp's wear decal at `envMapIntensity` 0.25 and the terrain's own indirect
+  response, both handed to their owners with numbers.
+- **Dusk front.** Ablation: lights off −0.04, bloom off −0.05, key off −0.24. It
+  was a 7.0 key square to a 6° sun. Key 4.0; clipped pixels 14.5 % → 2.8 %.
+- **Lions.** Eyes measured by raycast against the mesh: 35 % → 70 % of the iris
+  unoccluded from the face camera. Paws, contact blobs, continuous loft normals,
+  thicker legs, a sheen for the dusk rim. From the front the head still reads
+  bear-like; the next head round works to measured skull ratios (zygomatic width
+  0.62–0.68 of head length, a 0.33 L boxed muzzle, eyes at 0.45 of cheek width)
+  instead of adjectives.
+- **Fleet.** Pools only under lit lamps; a parked camp shows markers, one arrival
+  with headlamps, a dome light and a lit window, not twelve headlamp blasts.
+
+### Measured (`fast`, software raster)
+
+Draw calls and triangles unchanged by lighting, horizon and fleet: day hero 540
+calls / 1.93 M tris, camp mess 566 / 2.12 M, lion close 535 / 1.78 M. Fleet at
+`high` 78 calls / 514 k tris (+0.3 %). Boot compile at fast 62 s under a
+saturated box (four builders' browsers running).
