@@ -603,6 +603,7 @@ function step(fixedDt = null) {
   if (framesRendered > 1 || fixedDt) battle.update(dt, camera.position);
   else fleet.update(0, camera.position);
   plumes.update(fleet, t);
+  explosions.setCamera(camera.position); // distance culling and smoke sorting
   if (cinematic.enabled) {
     cinematic.update(dt);
     if (cinematic.shotName !== lastShotShown) {

@@ -288,6 +288,7 @@ export class Director {
     const s = st.ship;
     explosions.blast(s.position, s.model.length * 0.38, {
       velocity: s.velocity,
+      ship: s, // debris takes the hull colour
     });
     // the wreck burns from many wounds
     const nFires = 5 + rand.int(3);
@@ -447,7 +448,11 @@ export class Director {
         while (d.subIdx < d.subs.length && u >= d.subs[d.subIdx].u) {
           const sb = d.subs[d.subIdx++];
           _w.copy(sb.local).applyMatrix4(s.matrix);
-          explosions.blast(_w, sb.size, { velocity: s.velocity, debris: 14 });
+          explosions.blast(_w, sb.size, {
+            velocity: s.velocity,
+            debris: 14,
+            ship: s,
+          });
         }
         if (d.t >= d.dur) this.finishDeath(st);
         continue;
