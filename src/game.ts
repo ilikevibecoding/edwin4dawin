@@ -20,7 +20,7 @@ import { Traffic } from './world/traffic';
 import { Aircraft } from './plane/aircraft';
 import { FlightCamera } from './plane/camera';
 import { Metrics } from './core/metrics';
-import { ViewCull, configureMainCamera, installCascadeRouting, layerMask, shadowPassStats } from './world/culling';
+import { LAYER_MAIN, ViewCull, configureMainCamera, installCascadeRouting, layerMask, shadowPassStats } from './world/culling';
 
 export interface QualitySettings {
   samples: number;
@@ -99,6 +99,7 @@ export class Game {
     this.renderer.info.autoReset = false;
     this.camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.4, 60000);
     configureMainCamera(this.camera);
+    this.camera.layers.enable(LAYER_MAIN);
     this.atmos = new Atmosphere(params.seed);
     if (params.time !== null) this.atmos.hour = params.time;
     if (params.weather) this.atmos.setWeather(params.weather);
@@ -361,7 +362,7 @@ export class Game {
     this.cascades.fit(planePos.y + 5);
     // view / shadow-caster culling shared by the chunked world systems
     this.cull.update(cam, this.csm.maxFar, this.atmos.state.sunDir);
-    this.terrain.update(cx, cz);
+    this.terrain.update(cx, cz, this.cull);
     // casters reach as far as the cascades do; the canopy stops at half the range (a crown's shadow is a
     // couple of texels there and every tile is a draw call per cascade)
     this.city.batches.shadowDistance = this.csm.maxFar;

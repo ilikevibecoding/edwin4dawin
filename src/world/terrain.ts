@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { LAYER_DEFAULT, LAYER_MAIN, LAYER_MIRROR, type ViewCull } from './culling';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { HALF, MAP_N, WORLD_SIZE, type WorldMap } from './map';
 
@@ -14,8 +15,14 @@ export function balanceGroundIbl(_shader: { fragmentShader: string }): void {}
 export class MapTextures {
   height: THREE.DataTexture;
   zone: THREE.DataTexture;
+  /** lowest and highest ground height (m) */
+  readonly heightMin: number;
+  readonly heightMax: number;
 
   constructor(map: WorldMap, renderer: THREE.WebGLRenderer) {
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < map.height.length; i++) { const h = map.height[i]; if (h < lo) lo = h; if (h > hi) hi = h; }
+    this.heightMin = lo; this.heightMax = hi;
     const floatLinear = renderer.capabilities.isWebGL2 && renderer.extensions.has('OES_texture_float_linear');
     if (floatLinear) {
       this.height = new THREE.DataTexture(map.height, MAP_N, MAP_N, THREE.RedFormat, THREE.FloatType);
@@ -52,14 +59,19 @@ const RING_CELLS = 96; // cells across each ring (must be a multiple of 4)
 const BASE_CELL = 8; // metres, finest ring
 const RINGS = 7; // 8m .. 512m cells; outermost ring spans ±(96*512/2) = ±24.5km
 
-function buildRing(level: number, hollow: boolean): THREE.BufferGeometry {
+/** The sectors of one clipmap ring: SECTORS x SECTORS blocks of cells (the hollow middle left out), each an
+ *  index range over the ring's shared vertex buffer with the box of its own vertices, so the ring is
+ *  frustum-culled sector by sector instead of drawn whole around the camera. */
+interface RingSector { geometry: THREE.BufferGeometry; box: THREE.Box3 }
+const SECTORS = 4;
+
+function buildRing(level: number, hollow: boolean): RingSector[] {
   const cell = BASE_CELL * 2 ** level;
   const n = RING_CELLS;
   const half = (n * cell) / 2;
   const innerStart = n / 4, innerEnd = (3 * n) / 4; // hollow region indices
   const positions: number[] = [];
   const edge: number[] = [];
-  const index: number[] = [];
   const vid = new Int32Array((n + 1) * (n + 1)).fill(-1);
   let count = 0;
   for (let j = 0; j <= n; j++) {
@@ -78,23 +90,41 @@ function buildRing(level: number, hollow: boolean): THREE.BufferGeometry {
       edge.push(ex, ez);
     }
   }
-  for (let j = 0; j < n; j++) {
-    for (let i = 0; i < n; i++) {
-      const a = vid[j * (n + 1) + i], b = vid[j * (n + 1) + i + 1], c = vid[(j + 1) * (n + 1) + i], d = vid[(j + 1) * (n + 1) + i + 1];
-      if (a < 0 || b < 0 || c < 0 || d < 0) continue;
-      // alternate diagonal for a less regular tessellation
-      if (((i + j) & 1) === 0) index.push(a, c, b, b, c, d);
-      else index.push(a, d, b, a, c, d);
+  const position = new THREE.Float32BufferAttribute(positions, 3);
+  const aEdge = new THREE.Float32BufferAttribute(edge, 2);
+  // one sphere for the whole ring on every sector: the reflection pass decides per ring from this radius
+  const sphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), half * 1.5 + 200);
+  const per = n / SECTORS;
+  const sectors: RingSector[] = [];
+  for (let sj = 0; sj < SECTORS; sj++) {
+    for (let si = 0; si < SECTORS; si++) {
+      const index: number[] = [];
+      const box = new THREE.Box3();
+      for (let j = sj * per; j < (sj + 1) * per; j++) {
+        for (let i = si * per; i < (si + 1) * per; i++) {
+          const a = vid[j * (n + 1) + i], b = vid[j * (n + 1) + i + 1], c = vid[(j + 1) * (n + 1) + i], d = vid[(j + 1) * (n + 1) + i + 1];
+          if (a < 0 || b < 0 || c < 0 || d < 0) continue;
+          // alternate diagonal for a less regular tessellation
+          if (((i + j) & 1) === 0) index.push(a, c, b, b, c, d);
+          else index.push(a, d, b, a, c, d);
+          for (const v of [a, b, c, d]) box.expandByPoint(_v.set(positions[v * 3], 0, positions[v * 3 + 2]));
+        }
+      }
+      if (!index.length) continue;
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', position);
+      g.setAttribute('aEdge', aEdge);
+      g.setIndex(index);
+      g.boundingSphere = sphere;
+      // the border vertices sample the height field up to a cell away from their position
+      box.min.x -= cell; box.min.z -= cell; box.max.x += cell; box.max.z += cell;
+      sectors.push({ geometry: g, box });
     }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-  g.setAttribute('aEdge', new THREE.Float32BufferAttribute(edge, 2));
-  g.setIndex(index);
-  g.computeBoundingSphere();
-  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), half * 1.5 + 200);
-  return g;
+  return sectors;
 }
+const _v = new THREE.Vector3();
+const _box = new THREE.Box3();
 
 export const TERRAIN_VERT_PARS = /* glsl */ `
 uniform sampler2D uHeightTex;
@@ -345,7 +375,8 @@ const TERRAIN_FRAG_MAIN = /* glsl */ `
 export class Terrain {
   readonly group = new THREE.Group();
   readonly material: THREE.MeshStandardMaterial;
-  private readonly rings: THREE.Mesh[] = [];
+  /** every sector of every ring, with its box in ring space (the ring offset is added at cull time) */
+  private readonly sectors: { mesh: THREE.Mesh; box: THREE.Box3 }[] = [];
   private readonly offsetUniform = { value: new THREE.Vector3() };
 
   constructor(readonly textures: MapTextures) {
@@ -373,24 +404,36 @@ export class Terrain {
     mat.customProgramCacheKey = () => 'terrain-v4';
     this.material = mat;
     for (let level = 0; level < RINGS; level++) {
-      const geo = buildRing(level, level > 0);
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.frustumCulled = false;
-      mesh.receiveShadow = true;
-      mesh.castShadow = false;
-      mesh.matrixAutoUpdate = false;
-      this.rings.push(mesh);
-      this.group.add(mesh);
+      for (const { geometry, box } of buildRing(level, level > 0)) {
+        const mesh = new THREE.Mesh(geometry, mat);
+        mesh.frustumCulled = false;
+        mesh.receiveShadow = true;
+        mesh.castShadow = false;
+        mesh.matrixAutoUpdate = false;
+        mesh.name = `ring${level}`;
+        // the ground spans the height range of the map wherever the sector lands
+        box.min.y = textures.heightMin - 1; box.max.y = textures.heightMax + 1;
+        this.sectors.push({ mesh, box });
+        this.group.add(mesh);
+      }
     }
   }
 
   /** Shift the clipmap so it is centred on the camera. All rings share one centre, so their borders
-   *  coincide exactly; snapping to two fine cells keeps ring 0 and ring 1 on the same lattice. */
-  update(camX: number, camZ: number): void {
+   *  coincide exactly; snapping to two fine cells keeps ring 0 and ring 1 on the same lattice. Sectors
+   *  are then drawn for the camera and / or the water's mirror camera as their frustums require. */
+  update(camX: number, camZ: number, cull?: ViewCull): void {
     const snap = BASE_CELL * 2;
     const sx = Math.round(camX / snap) * snap;
     const sz = Math.round(camZ / snap) * snap;
     this.offsetUniform.value.set(sx, 0, sz);
+    for (const s of this.sectors) {
+      if (!cull) { s.mesh.visible = true; s.mesh.layers.set(LAYER_DEFAULT); continue; }
+      _box.copy(s.box); _box.min.x += sx; _box.max.x += sx; _box.min.z += sz; _box.max.z += sz;
+      const main = cull.boxInView(_box), mirror = cull.boxInMirror(_box);
+      s.mesh.visible = main || mirror;
+      s.mesh.layers.set(main && mirror ? LAYER_DEFAULT : main ? LAYER_MAIN : LAYER_MIRROR);
+    }
   }
 }
 
