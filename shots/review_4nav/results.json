@@ -1,0 +1,101 @@
+{
+  "label": "4nav",
+  "readyMs": 18487,
+  "warmup": {
+    "frameMs": 816.18,
+    "fps": 1.2,
+    "worstMs": 816.2,
+    "calls": 126,
+    "triangles": 699906,
+    "geometries": 86,
+    "textures": 145,
+    "programs": 94,
+    "heapMB": 194.8,
+    "longTasks": 15,
+    "longTaskMs": 26178,
+    "loadMs": 16118,
+    "mode": "exterior",
+    "visibleRooms": 0,
+    "colliders": 0,
+    "lightDescs": 0,
+    "lights": 16,
+    "room": null,
+    "qualityLevel": 3,
+    "pixelRatio": 1,
+    "buildMs": {
+      "materials": 3096,
+      "exterior": 493,
+      "interior": 1841
+    },
+    "precompile": {
+      "done": true,
+      "ms": 10187
+    },
+    "exteriorTris": 45662,
+    "greebles": {
+      "instances": 29335,
+      "drawCalls": 35,
+      "batches": 58,
+      "trianglesVisible": 238136,
+      "trianglesLOD": 238136,
+      "regions": {
+        "dorsal": 4371,
+        "city": 7531,
+        "stern": 1864,
+        "tower": 7503,
+        "trenchP": 2497,
+        "trenchS": 2478,
+        "keel": 3048
+      },
+      "decals": 1475,
+      "decals2": 1212,
+      "windows": 432,
+      "lamps": 254,
+      "skirts": 3340,
+      "turrets": {
+        "heavy": 6,
+        "pointDefence": 24
+      },
+      "chunks": 23,
+      "trianglesAll": 924808
+    },
+    "traffic": {
+      "fighters": 12,
+      "airborne": 4
+    },
+    "syncBytes": 3138
+  },
+  "exterior": {},
+  "views": {},
+  "nav": {
+    "doors": {},
+    "doorsPassed": "0/0",
+    "lift": {
+      "started": true,
+      "inCab": {
+        "x": 10.28,
+        "z": 610
+      },
+      "arrivedRoom": "liftLobbyH",
+      "ok": true
+    },
+    "transitions": {
+      "boardMode": "interior",
+      "boardRoom": "bridge",
+      "leaveMode": "exterior",
+      "ok": true
+    }
+  },
+  "logs": [
+    "[warning] THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+    "[warning] THREE.WebGLRenderer: KHR_parallel_shader_compile extension not supported."
+  ],
+  "summary": {
+    "views": 0,
+    "maxCalls": 0,
+    "maxTriangles": 0,
+    "programs": 94,
+    "heapMB": 187.2,
+    "errors": 0
+  }
+}

@@ -1,0 +1,146 @@
+{
+  "label": "5nav",
+  "readyMs": 28531,
+  "warmup": {
+    "frameMs": 1638.08,
+    "fps": 0.6,
+    "worstMs": 1638.1,
+    "calls": 126,
+    "triangles": 699906,
+    "geometries": 86,
+    "textures": 145,
+    "programs": 94,
+    "heapMB": 184,
+    "longTasks": 12,
+    "longTaskMs": 40146,
+    "loadMs": 23100,
+    "mode": "exterior",
+    "visibleRooms": 0,
+    "colliders": 0,
+    "lightDescs": 0,
+    "lights": 16,
+    "room": null,
+    "qualityLevel": 3,
+    "pixelRatio": 1,
+    "buildMs": {
+      "materials": 3301,
+      "exterior": 1002,
+      "interior": 2172
+    },
+    "precompile": {
+      "done": true,
+      "ms": 16636
+    },
+    "exteriorTris": 45662,
+    "greebles": {
+      "instances": 29335,
+      "drawCalls": 35,
+      "batches": 58,
+      "trianglesVisible": 238136,
+      "trianglesLOD": 238136,
+      "regions": {
+        "dorsal": 4371,
+        "city": 7531,
+        "stern": 1864,
+        "tower": 7503,
+        "trenchP": 2497,
+        "trenchS": 2478,
+        "keel": 3048
+      },
+      "decals": 1475,
+      "decals2": 1212,
+      "windows": 432,
+      "lamps": 254,
+      "skirts": 3340,
+      "turrets": {
+        "heavy": 6,
+        "pointDefence": 24
+      },
+      "chunks": 23,
+      "trianglesAll": 924808
+    },
+    "traffic": {
+      "fighters": 12,
+      "airborne": 4
+    },
+    "syncBytes": 3138
+  },
+  "exterior": {},
+  "views": {},
+  "nav": {
+    "doors": {
+      "bridge_main": {
+        "from": "bridge",
+        "to": "corridorT",
+        "endedIn": "liftLobbyT",
+        "ok": true,
+        "end": [
+          0,
+          190,
+          610.9
+        ]
+      },
+      "holo_door": {
+        "from": "corridorT",
+        "to": "holo",
+        "endedIn": "holo",
+        "ok": true,
+        "end": [
+          -35,
+          190.4,
+          615.3
+        ]
+      },
+      "lobbyC_door": {
+        "from": "spineC",
+        "to": "liftLobbyC",
+        "endedIn": "liftLobbyC",
+        "ok": true,
+        "end": [
+          0,
+          50,
+          444.9
+        ]
+      },
+      "medbay_door": {
+        "from": "spineC",
+        "to": "medbay",
+        "endedIn": "medbay",
+        "ok": true,
+        "end": [
+          13.8,
+          50,
+          320
+        ]
+      }
+    },
+    "doorsPassed": "4/4",
+    "lift": {
+      "started": true,
+      "inCab": {
+        "x": 10.28,
+        "z": 610
+      },
+      "arrivedRoom": "liftLobbyH",
+      "ok": true
+    },
+    "transitions": {
+      "boardMode": "interior",
+      "boardRoom": "bridge",
+      "leaveMode": "exterior",
+      "ok": true
+    }
+  },
+  "logs": [
+    "[warning] THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed.",
+    "[warning] THREE.WebGLRenderer: KHR_parallel_shader_compile extension not supported."
+  ],
+  "summary": {
+    "views": 0,
+    "maxCalls": 0,
+    "maxTriangles": 0,
+    "programs": 94,
+    "heapMB": 188.3,
+    "errors": 0
+  }
+}

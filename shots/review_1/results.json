@@ -1,0 +1,7962 @@
+{
+  "label": "1",
+  "readyMs": 16736,
+  "warmup": {
+    "frameMs": 871.32,
+    "fps": 1.1,
+    "worstMs": 871.3,
+    "calls": 159,
+    "triangles": 1207234,
+    "geometries": 74,
+    "textures": 141,
+    "programs": 53,
+    "heapMB": 180.2,
+    "longTasks": 15,
+    "longTaskMs": 25927,
+    "loadMs": 13707,
+    "mode": "exterior",
+    "visibleRooms": 0,
+    "colliders": 0,
+    "lightDescs": 0,
+    "lights": 16,
+    "room": null,
+    "qualityLevel": 3,
+    "pixelRatio": 1,
+    "buildMs": {
+      "materials": 3241,
+      "exterior": 340,
+      "interior": 1514
+    },
+    "exteriorTris": 36162,
+    "greebles": {
+      "instances": 37179,
+      "drawCalls": 34,
+      "batches": 57,
+      "trianglesVisible": 317716,
+      "trianglesLOD": 317716,
+      "regions": {
+        "dorsal": 3782,
+        "city": 14493,
+        "stern": 1617,
+        "tower": 7996,
+        "trenchP": 2890,
+        "trenchS": 2906,
+        "keel": 3452
+      },
+      "decals": 204,
+      "turrets": {
+        "heavy": 6,
+        "pointDefence": 24
+      },
+      "chunks": 23,
+      "trianglesAll": 1259340
+    },
+    "traffic": {
+      "fighters": 12,
+      "airborne": 4
+    },
+    "syncBytes": 3150
+  },
+  "exterior": {
+    "reveal": {
+      "frameMs": 903.68,
+      "fps": 1.1,
+      "worstMs": 4617.7,
+      "calls": 159,
+      "triangles": 1207234,
+      "geometries": 74,
+      "textures": 141,
+      "programs": 53,
+      "heapMB": 158.9,
+      "longTasks": 29,
+      "longTaskMs": 38792,
+      "loadMs": 29705,
+      "mode": "exterior",
+      "visibleRooms": 0,
+      "colliders": 0,
+      "lightDescs": 0,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 34,
+        "batches": 57,
+        "trianglesVisible": 317716,
+        "trianglesLOD": 317716,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3149
+    },
+    "bow": {
+      "frameMs": 910.9,
+      "fps": 1.1,
+      "worstMs": 4617.7,
+      "calls": 161,
+      "triangles": 1231426,
+      "geometries": 78,
+      "textures": 144,
+      "programs": 53,
+      "heapMB": 159.6,
+      "longTasks": 41,
+      "longTaskMs": 49763,
+      "loadMs": 42546,
+      "mode": "exterior",
+      "visibleRooms": 0,
+      "colliders": 0,
+      "lightDescs": 0,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 34,
+        "batches": 57,
+        "trianglesVisible": 317716,
+        "trianglesLOD": 317716,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3149
+    },
+    "dorsal": {
+      "frameMs": 969.8,
+      "fps": 1,
+      "worstMs": 4617.7,
+      "calls": 153,
+      "triangles": 1158846,
+      "geometries": 78,
+      "textures": 144,
+      "programs": 53,
+      "heapMB": 159.1,
+      "longTasks": 53,
+      "longTaskMs": 61471,
+      "loadMs": 53502,
+      "mode": "exterior",
+      "visibleRooms": 0,
+      "colliders": 0,
+      "lightDescs": 0,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 34,
+        "batches": 57,
+        "trianglesVisible": 317716,
+        "trianglesLOD": 317716,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3149
+    },
+    "bridge": {
+      "frameMs": 1899.61,
+      "fps": 0.5,
+      "worstMs": 6127.2,
+      "calls": 535,
+      "triangles": 2789460,
+      "geometries": 275,
+      "textures": 213,
+      "programs": 68,
+      "heapMB": 160.8,
+      "longTasks": 65,
+      "longTaskMs": 89006,
+      "loadMs": 71836,
+      "mode": "exterior",
+      "visibleRooms": 7,
+      "colliders": 0,
+      "lightDescs": 90,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 35,
+        "batches": 57,
+        "trianglesVisible": 1027350,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3139
+    },
+    "hangar": {
+      "frameMs": 1987.17,
+      "fps": 0.5,
+      "worstMs": 6127.2,
+      "calls": 390,
+      "triangles": 2404636,
+      "geometries": 320,
+      "textures": 247,
+      "programs": 72,
+      "heapMB": 161.8,
+      "longTasks": 77,
+      "longTaskMs": 113602,
+      "loadMs": 97987,
+      "mode": "exterior",
+      "visibleRooms": 2,
+      "colliders": 0,
+      "lightDescs": 37,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 49,
+        "batches": 57,
+        "trianglesVisible": 939002,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3150
+    },
+    "stern": {
+      "frameMs": 1242.29,
+      "fps": 0.8,
+      "worstMs": 6127.2,
+      "calls": 171,
+      "triangles": 1207230,
+      "geometries": 320,
+      "textures": 247,
+      "programs": 72,
+      "heapMB": 161.5,
+      "longTasks": 89,
+      "longTaskMs": 125975,
+      "loadMs": 119288,
+      "mode": "exterior",
+      "visibleRooms": 0,
+      "colliders": 0,
+      "lightDescs": 0,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 34,
+        "batches": 57,
+        "trianglesVisible": 317716,
+        "trianglesLOD": 317716,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3148
+    },
+    "trench": {
+      "frameMs": 1580.41,
+      "fps": 0.6,
+      "worstMs": 6127.2,
+      "calls": 271,
+      "triangles": 2221348,
+      "geometries": 320,
+      "textures": 247,
+      "programs": 72,
+      "heapMB": 161.7,
+      "longTasks": 101,
+      "longTaskMs": 145636,
+      "loadMs": 131335,
+      "mode": "exterior",
+      "visibleRooms": 1,
+      "colliders": 0,
+      "lightDescs": 20,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 42,
+        "batches": 57,
+        "trianglesVisible": 1104904,
+        "trianglesLOD": 1194484,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3172
+    },
+    "turbolaser": {
+      "frameMs": 2404.42,
+      "fps": 0.4,
+      "worstMs": 6127.2,
+      "calls": 454,
+      "triangles": 2648066,
+      "geometries": 329,
+      "textures": 247,
+      "programs": 72,
+      "heapMB": 162.5,
+      "longTasks": 114,
+      "longTaskMs": 180231,
+      "loadMs": 154971,
+      "mode": "exterior",
+      "visibleRooms": 7,
+      "colliders": 0,
+      "lightDescs": 90,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 37,
+        "batches": 57,
+        "trianglesVisible": 1051658,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3163
+    },
+    "close_turbolaser": {
+      "frameMs": 3324.94,
+      "fps": 0.3,
+      "worstMs": 6413.8,
+      "calls": 1037,
+      "triangles": 3485224,
+      "geometries": 749,
+      "textures": 249,
+      "programs": 82,
+      "heapMB": 163.9,
+      "longTasks": 125,
+      "longTaskMs": 221945,
+      "loadMs": 193277,
+      "mode": "exterior",
+      "visibleRooms": 24,
+      "colliders": 0,
+      "lightDescs": 297,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 51,
+        "batches": 57,
+        "trianglesVisible": 1152656,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3176
+    },
+    "close_bridge_front": {
+      "frameMs": 4158.04,
+      "fps": 0.2,
+      "worstMs": 6413.8,
+      "calls": 804,
+      "triangles": 2716710,
+      "geometries": 958,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.4,
+      "longTasks": 137,
+      "longTaskMs": 275243,
+      "loadMs": 239352,
+      "mode": "exterior",
+      "visibleRooms": 23,
+      "colliders": 0,
+      "lightDescs": 255,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 31,
+        "batches": 57,
+        "trianglesVisible": 906102,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3176
+    },
+    "close_trench": {
+      "frameMs": 2333.59,
+      "fps": 0.4,
+      "worstMs": 6413.8,
+      "calls": 222,
+      "triangles": 1874314,
+      "geometries": 958,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.2,
+      "longTasks": 149,
+      "longTaskMs": 297493,
+      "loadMs": 287221,
+      "mode": "exterior",
+      "visibleRooms": 2,
+      "colliders": 0,
+      "lightDescs": 37,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 26,
+        "batches": 57,
+        "trianglesVisible": 726568,
+        "trianglesLOD": 1241596,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3164
+    },
+    "close_hangar_below": {
+      "frameMs": 2611.25,
+      "fps": 0.4,
+      "worstMs": 6413.8,
+      "calls": 455,
+      "triangles": 2245258,
+      "geometries": 958,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.2,
+      "longTasks": 161,
+      "longTaskMs": 328727,
+      "loadMs": 306032,
+      "mode": "exterior",
+      "visibleRooms": 6,
+      "colliders": 0,
+      "lightDescs": 70,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 34,
+        "batches": 57,
+        "trianglesVisible": 847658,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3175
+    },
+    "medium_stern": {
+      "frameMs": 2098.93,
+      "fps": 0.5,
+      "worstMs": 6413.8,
+      "calls": 160,
+      "triangles": 1822158,
+      "geometries": 958,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.5,
+      "longTasks": 173,
+      "longTaskMs": 352700,
+      "loadMs": 338904,
+      "mode": "exterior",
+      "visibleRooms": 0,
+      "colliders": 0,
+      "lightDescs": 0,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 47,
+        "batches": 57,
+        "trianglesVisible": 1095808,
+        "trianglesLOD": 1095808,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3168
+    },
+    "medium_bow_low": {
+      "frameMs": 1176.96,
+      "fps": 0.8,
+      "worstMs": 6413.8,
+      "calls": 163,
+      "triangles": 1082540,
+      "geometries": 958,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.6,
+      "longTasks": 186,
+      "longTaskMs": 364815,
+      "loadMs": 358067,
+      "mode": "exterior",
+      "visibleRooms": 0,
+      "colliders": 0,
+      "lightDescs": 0,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 40,
+        "batches": 57,
+        "trianglesVisible": 383592,
+        "trianglesLOD": 383592,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3156
+    },
+    "far_oblique": {
+      "frameMs": 843.13,
+      "fps": 1.2,
+      "worstMs": 6270.5,
+      "calls": 166,
+      "triangles": 1149006,
+      "geometries": 958,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 164.9,
+      "longTasks": 199,
+      "longTaskMs": 374293,
+      "loadMs": 368062,
+      "mode": "exterior",
+      "visibleRooms": 0,
+      "colliders": 0,
+      "lightDescs": 0,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 34,
+        "batches": 57,
+        "trianglesVisible": 292250,
+        "trianglesLOD": 292250,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3171
+    },
+    "far_belly": {
+      "frameMs": 849.46,
+      "fps": 1.2,
+      "worstMs": 6270.5,
+      "calls": 157,
+      "triangles": 1126334,
+      "geometries": 958,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.1,
+      "longTasks": 212,
+      "longTaskMs": 385187,
+      "loadMs": 377735,
+      "mode": "exterior",
+      "visibleRooms": 0,
+      "colliders": 0,
+      "lightDescs": 0,
+      "lights": 16,
+      "room": null,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 34,
+        "batches": 57,
+        "trianglesVisible": 317716,
+        "trianglesLOD": 317716,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3171
+    }
+  },
+  "views": {
+    "bridge": {
+      "frameMs": 2996.57,
+      "fps": 0.3,
+      "worstMs": 6270.5,
+      "calls": 251,
+      "triangles": 2034740,
+      "geometries": 958,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.9,
+      "longTasks": 225,
+      "longTaskMs": 429169,
+      "loadMs": 396312,
+      "mode": "interior",
+      "room": "bridge",
+      "visibleRooms": 1,
+      "colliders": 126,
+      "lightDescs": 20,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 47,
+        "batches": 57,
+        "trianglesVisible": 1103376,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3174
+    },
+    "bridge_captain": {
+      "frameMs": 3856.59,
+      "fps": 0.3,
+      "worstMs": 6270.5,
+      "calls": 240,
+      "triangles": 1717644,
+      "geometries": 958,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.5,
+      "longTasks": 237,
+      "longTaskMs": 479434,
+      "loadMs": 446134,
+      "mode": "interior",
+      "room": "bridge",
+      "visibleRooms": 1,
+      "colliders": 126,
+      "lightDescs": 20,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 25,
+        "batches": 57,
+        "trianglesVisible": 711592,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3179
+    },
+    "bridge_pit": {
+      "frameMs": 3718.24,
+      "fps": 0.3,
+      "worstMs": 6270.5,
+      "calls": 253,
+      "triangles": 2057112,
+      "geometries": 958,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.2,
+      "longTasks": 249,
+      "longTaskMs": 523874,
+      "loadMs": 495357,
+      "mode": "interior",
+      "room": "bridge",
+      "visibleRooms": 1,
+      "colliders": 126,
+      "lightDescs": 20,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 49,
+        "batches": 57,
+        "trianglesVisible": 1125748,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3182
+    },
+    "bridge_window": {
+      "frameMs": 3044.72,
+      "fps": 0.3,
+      "worstMs": 6270.5,
+      "calls": 239,
+      "triangles": 2071678,
+      "geometries": 958,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.5,
+      "longTasks": 261,
+      "longTaskMs": 558016,
+      "loadMs": 536838,
+      "mode": "interior",
+      "room": "bridge",
+      "visibleRooms": 1,
+      "colliders": 126,
+      "lightDescs": 20,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 47,
+        "batches": 57,
+        "trianglesVisible": 1103376,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3178
+    },
+    "bridge_holo": {
+      "frameMs": 3274.4,
+      "fps": 0.3,
+      "worstMs": 6270.5,
+      "calls": 252,
+      "triangles": 2072746,
+      "geometries": 958,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.8,
+      "longTasks": 273,
+      "longTaskMs": 597733,
+      "loadMs": 570597,
+      "mode": "interior",
+      "room": "bridge",
+      "visibleRooms": 1,
+      "colliders": 126,
+      "lightDescs": 20,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 47,
+        "batches": 57,
+        "trianglesVisible": 1103376,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3172
+    },
+    "corridorT": {
+      "frameMs": 1993.57,
+      "fps": 0.5,
+      "worstMs": 6270.5,
+      "calls": 148,
+      "triangles": 99302,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.5,
+      "longTasks": 285,
+      "longTaskMs": 617511,
+      "loadMs": 607647,
+      "mode": "interior",
+      "room": "corridorT",
+      "visibleRooms": 1,
+      "colliders": 319,
+      "lightDescs": 23,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3176
+    },
+    "holo": {
+      "frameMs": 1560.33,
+      "fps": 0.6,
+      "worstMs": 5972.5,
+      "calls": 118,
+      "triangles": 144324,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.9,
+      "longTasks": 297,
+      "longTaskMs": 634103,
+      "loadMs": 623396,
+      "mode": "interior",
+      "room": "holo",
+      "visibleRooms": 1,
+      "colliders": 98,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3177
+    },
+    "holo_table": {
+      "frameMs": 1741.35,
+      "fps": 0.6,
+      "worstMs": 5972.5,
+      "calls": 115,
+      "triangles": 71014,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.3,
+      "longTasks": 309,
+      "longTaskMs": 655402,
+      "loadMs": 641019,
+      "mode": "interior",
+      "room": "holo",
+      "visibleRooms": 1,
+      "colliders": 98,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3162
+    },
+    "holo_dais": {
+      "frameMs": 1501.58,
+      "fps": 0.7,
+      "worstMs": 5972.5,
+      "calls": 109,
+      "triangles": 118968,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.6,
+      "longTasks": 321,
+      "longTaskMs": 672690,
+      "loadMs": 662227,
+      "mode": "interior",
+      "room": "holo",
+      "visibleRooms": 1,
+      "colliders": 98,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3177
+    },
+    "holo_screens": {
+      "frameMs": 1463.01,
+      "fps": 0.7,
+      "worstMs": 5972.5,
+      "calls": 110,
+      "triangles": 118970,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 165.7,
+      "longTasks": 334,
+      "longTaskMs": 691340,
+      "loadMs": 678691,
+      "mode": "interior",
+      "room": "holo",
+      "visibleRooms": 1,
+      "colliders": 98,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3175
+    },
+    "holo_east": {
+      "frameMs": 1608.67,
+      "fps": 0.6,
+      "worstMs": 5972.5,
+      "calls": 116,
+      "triangles": 120132,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.1,
+      "longTasks": 345,
+      "longTaskMs": 709638,
+      "loadMs": 696610,
+      "mode": "interior",
+      "room": "holo",
+      "visibleRooms": 1,
+      "colliders": 98,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3165
+    },
+    "comms": {
+      "frameMs": 1553.55,
+      "fps": 0.6,
+      "worstMs": 5063.4,
+      "calls": 117,
+      "triangles": 157690,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.5,
+      "longTasks": 357,
+      "longTaskMs": 728228,
+      "loadMs": 716713,
+      "mode": "interior",
+      "room": "comms",
+      "visibleRooms": 1,
+      "colliders": 90,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 3
+      },
+      "syncBytes": 3174
+    },
+    "comms_wall": {
+      "frameMs": 1606.98,
+      "fps": 0.6,
+      "worstMs": 4571.1,
+      "calls": 115,
+      "triangles": 157112,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166,
+      "longTasks": 369,
+      "longTaskMs": 747601,
+      "loadMs": 734976,
+      "mode": "interior",
+      "room": "comms",
+      "visibleRooms": 1,
+      "colliders": 90,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 3
+      },
+      "syncBytes": 3177
+    },
+    "comms_racks": {
+      "frameMs": 1492.59,
+      "fps": 0.7,
+      "worstMs": 4256.1,
+      "calls": 109,
+      "triangles": 83932,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.3,
+      "longTasks": 381,
+      "longTaskMs": 765122,
+      "loadMs": 754199,
+      "mode": "interior",
+      "room": "comms",
+      "visibleRooms": 1,
+      "colliders": 90,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 3
+      },
+      "syncBytes": 3166
+    },
+    "comms_holocomm": {
+      "frameMs": 1558.02,
+      "fps": 0.6,
+      "worstMs": 4256.1,
+      "calls": 112,
+      "triangles": 102132,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.6,
+      "longTasks": 393,
+      "longTaskMs": 784007,
+      "loadMs": 771848,
+      "mode": "interior",
+      "room": "comms",
+      "visibleRooms": 1,
+      "colliders": 90,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 3
+      },
+      "syncBytes": 3176
+    },
+    "comms_antenna": {
+      "frameMs": 1462.65,
+      "fps": 0.7,
+      "worstMs": 4256.1,
+      "calls": 113,
+      "triangles": 127400,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.7,
+      "longTasks": 405,
+      "longTaskMs": 801203,
+      "loadMs": 790438,
+      "mode": "interior",
+      "room": "comms",
+      "visibleRooms": 1,
+      "colliders": 90,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 3
+      },
+      "syncBytes": 3163
+    },
+    "intel": {
+      "frameMs": 1284.73,
+      "fps": 0.8,
+      "worstMs": 4256.1,
+      "calls": 120,
+      "triangles": 135906,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.2,
+      "longTasks": 417,
+      "longTaskMs": 815922,
+      "loadMs": 806897,
+      "mode": "interior",
+      "room": "intel",
+      "visibleRooms": 1,
+      "colliders": 71,
+      "lightDescs": 11,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 3
+      },
+      "syncBytes": 3156
+    },
+    "intel_vaults": {
+      "frameMs": 1211.37,
+      "fps": 0.8,
+      "worstMs": 4256.1,
+      "calls": 106,
+      "triangles": 131148,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.3,
+      "longTasks": 429,
+      "longTaskMs": 830044,
+      "loadMs": 821152,
+      "mode": "interior",
+      "room": "intel",
+      "visibleRooms": 1,
+      "colliders": 71,
+      "lightDescs": 11,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 3
+      },
+      "syncBytes": 3168
+    },
+    "intel_cell": {
+      "frameMs": 1304.9,
+      "fps": 0.8,
+      "worstMs": 4256.1,
+      "calls": 113,
+      "triangles": 122392,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.4,
+      "longTasks": 442,
+      "longTaskMs": 847245,
+      "loadMs": 835615,
+      "mode": "interior",
+      "room": "intel",
+      "visibleRooms": 1,
+      "colliders": 71,
+      "lightDescs": 11,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3168
+    },
+    "intel_desks": {
+      "frameMs": 1254.82,
+      "fps": 0.8,
+      "worstMs": 4256.1,
+      "calls": 115,
+      "triangles": 85280,
+      "geometries": 959,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.7,
+      "longTasks": 453,
+      "longTaskMs": 860771,
+      "loadMs": 851554,
+      "mode": "interior",
+      "room": "intel",
+      "visibleRooms": 1,
+      "colliders": 71,
+      "lightDescs": 11,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3166
+    },
+    "briefing": {
+      "frameMs": 1289.27,
+      "fps": 0.8,
+      "worstMs": 4256.1,
+      "calls": 111,
+      "triangles": 89468,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.8,
+      "longTasks": 465,
+      "longTaskMs": 876279,
+      "loadMs": 866407,
+      "mode": "interior",
+      "room": "briefing",
+      "visibleRooms": 1,
+      "colliders": 59,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3166
+    },
+    "briefing_tiers": {
+      "frameMs": 1381.96,
+      "fps": 0.7,
+      "worstMs": 4179.4,
+      "calls": 108,
+      "triangles": 89560,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.7,
+      "longTasks": 477,
+      "longTaskMs": 893109,
+      "loadMs": 882271,
+      "mode": "interior",
+      "room": "briefing",
+      "visibleRooms": 1,
+      "colliders": 59,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3166
+    },
+    "briefing_screen": {
+      "frameMs": 1591.32,
+      "fps": 0.6,
+      "worstMs": 3604.7,
+      "calls": 109,
+      "triangles": 40196,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.8,
+      "longTasks": 490,
+      "longTaskMs": 914587,
+      "loadMs": 899897,
+      "mode": "interior",
+      "room": "briefing",
+      "visibleRooms": 1,
+      "colliders": 59,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3169
+    },
+    "briefing_ready": {
+      "frameMs": 1343.44,
+      "fps": 0.7,
+      "worstMs": 3479.1,
+      "calls": 104,
+      "triangles": 39872,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.8,
+      "longTasks": 502,
+      "longTaskMs": 929412,
+      "loadMs": 919250,
+      "mode": "interior",
+      "room": "briefing",
+      "visibleRooms": 1,
+      "colliders": 59,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3173
+    },
+    "lift_lift_T1": {
+      "frameMs": 1525.54,
+      "fps": 0.7,
+      "worstMs": 3381.9,
+      "calls": 92,
+      "triangles": 65122,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.9,
+      "longTasks": 513,
+      "longTaskMs": 947314,
+      "loadMs": 934821,
+      "mode": "interior",
+      "room": "liftLobbyT",
+      "visibleRooms": 1,
+      "colliders": 91,
+      "lightDescs": 6,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3168
+    },
+    "lift_lift_T2": {
+      "frameMs": 1570.94,
+      "fps": 0.6,
+      "worstMs": 1890.5,
+      "calls": 87,
+      "triangles": 15434,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.9,
+      "longTasks": 525,
+      "longTaskMs": 966586,
+      "loadMs": 954385,
+      "mode": "interior",
+      "room": "liftLobbyT",
+      "visibleRooms": 1,
+      "colliders": 91,
+      "lightDescs": 6,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3172
+    },
+    "liftLobbyT": {
+      "frameMs": 1340.65,
+      "fps": 0.7,
+      "worstMs": 1890.5,
+      "calls": 130,
+      "triangles": 47126,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 167,
+      "longTasks": 537,
+      "longTaskMs": 981750,
+      "loadMs": 972598,
+      "mode": "interior",
+      "room": "liftLobbyT",
+      "visibleRooms": 2,
+      "colliders": 91,
+      "lightDescs": 17,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3154
+    },
+    "liftLobbyT_lifts": {
+      "frameMs": 1389.6,
+      "fps": 0.7,
+      "worstMs": 1846.8,
+      "calls": 137,
+      "triangles": 97902,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.4,
+      "longTasks": 549,
+      "longTaskMs": 998442,
+      "loadMs": 987722,
+      "mode": "interior",
+      "room": "liftLobbyT",
+      "visibleRooms": 2,
+      "colliders": 91,
+      "lightDescs": 17,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3171
+    },
+    "observation": {
+      "frameMs": 2100.45,
+      "fps": 0.5,
+      "worstMs": 2530.9,
+      "calls": 178,
+      "triangles": 1556664,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.6,
+      "longTasks": 562,
+      "longTaskMs": 1028550,
+      "loadMs": 1006991,
+      "mode": "interior",
+      "room": "observation",
+      "visibleRooms": 1,
+      "colliders": 58,
+      "lightDescs": 11,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 23,
+        "batches": 57,
+        "trianglesVisible": 689616,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3164
+    },
+    "observation_window": {
+      "frameMs": 1910.83,
+      "fps": 0.5,
+      "worstMs": 2530.9,
+      "calls": 170,
+      "triangles": 1539184,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.7,
+      "longTasks": 574,
+      "longTaskMs": 1050471,
+      "loadMs": 1035221,
+      "mode": "interior",
+      "room": "observation",
+      "visibleRooms": 1,
+      "colliders": 58,
+      "lightDescs": 11,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 22,
+        "batches": 57,
+        "trianglesVisible": 672452,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3175
+    },
+    "observation_memorial": {
+      "frameMs": 2581.59,
+      "fps": 0.4,
+      "worstMs": 2991.8,
+      "calls": 180,
+      "triangles": 1733976,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.8,
+      "longTasks": 586,
+      "longTaskMs": 1084704,
+      "loadMs": 1058908,
+      "mode": "interior",
+      "room": "observation",
+      "visibleRooms": 1,
+      "colliders": 58,
+      "lightDescs": 11,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 33,
+        "batches": 57,
+        "trianglesVisible": 932678,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3175
+    },
+    "observation_bar": {
+      "frameMs": 2864.7,
+      "fps": 0.3,
+      "worstMs": 3031.6,
+      "calls": 181,
+      "triangles": 1778412,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.8,
+      "longTasks": 598,
+      "longTaskMs": 1120369,
+      "loadMs": 1094242,
+      "mode": "interior",
+      "room": "observation",
+      "visibleRooms": 1,
+      "colliders": 58,
+      "lightDescs": 11,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 33,
+        "batches": 57,
+        "trianglesVisible": 934690,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3163
+    },
+    "observation_chart": {
+      "frameMs": 2789.71,
+      "fps": 0.4,
+      "worstMs": 3031.6,
+      "calls": 182,
+      "triangles": 1584438,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 167,
+      "longTasks": 609,
+      "longTaskMs": 1150662,
+      "loadMs": 1129506,
+      "mode": "interior",
+      "room": "observation",
+      "visibleRooms": 1,
+      "colliders": 58,
+      "lightDescs": 11,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 25,
+        "batches": 57,
+        "trianglesVisible": 716268,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3175
+    },
+    "spineC": {
+      "frameMs": 1842.91,
+      "fps": 0.5,
+      "worstMs": 3031.6,
+      "calls": 148,
+      "triangles": 49858,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 167.5,
+      "longTasks": 621,
+      "longTaskMs": 1169488,
+      "loadMs": 1159508,
+      "mode": "interior",
+      "room": "spineC",
+      "visibleRooms": 2,
+      "colliders": 454,
+      "lightDescs": 34,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3167
+    },
+    "crossC": {
+      "frameMs": 1503.9,
+      "fps": 0.7,
+      "worstMs": 3031.6,
+      "calls": 152,
+      "triangles": 99284,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.8,
+      "longTasks": 633,
+      "longTaskMs": 1185862,
+      "loadMs": 1175651,
+      "mode": "interior",
+      "room": "crossC",
+      "visibleRooms": 2,
+      "colliders": 184,
+      "lightDescs": 34,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3178
+    },
+    "lift_lift_C1": {
+      "frameMs": 1562.97,
+      "fps": 0.6,
+      "worstMs": 3031.6,
+      "calls": 92,
+      "triangles": 61496,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.8,
+      "longTasks": 645,
+      "longTaskMs": 1204983,
+      "loadMs": 1192828,
+      "mode": "interior",
+      "room": "liftLobbyC",
+      "visibleRooms": 1,
+      "colliders": 145,
+      "lightDescs": 4,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3178
+    },
+    "lift_lift_C2": {
+      "frameMs": 1584.37,
+      "fps": 0.6,
+      "worstMs": 3031.6,
+      "calls": 89,
+      "triangles": 11832,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 166.8,
+      "longTasks": 657,
+      "longTaskMs": 1224285,
+      "loadMs": 1212176,
+      "mode": "interior",
+      "room": "liftLobbyC",
+      "visibleRooms": 1,
+      "colliders": 145,
+      "lightDescs": 4,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3172
+    },
+    "liftLobbyC": {
+      "frameMs": 1277.05,
+      "fps": 0.8,
+      "worstMs": 3031.6,
+      "calls": 89,
+      "triangles": 12472,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 167.7,
+      "longTasks": 669,
+      "longTaskMs": 1238413,
+      "loadMs": 1230238,
+      "mode": "interior",
+      "room": "liftLobbyC",
+      "visibleRooms": 1,
+      "colliders": 145,
+      "lightDescs": 4,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3170
+    },
+    "liftLobbyC_lifts": {
+      "frameMs": 1174.96,
+      "fps": 0.9,
+      "worstMs": 3031.6,
+      "calls": 98,
+      "triangles": 62288,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 167.6,
+      "longTasks": 681,
+      "longTaskMs": 1251961,
+      "loadMs": 1243682,
+      "mode": "interior",
+      "room": "liftLobbyC",
+      "visibleRooms": 1,
+      "colliders": 145,
+      "lightDescs": 4,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3184
+    },
+    "crewQuarters": {
+      "frameMs": 2115.79,
+      "fps": 0.5,
+      "worstMs": 3031.6,
+      "calls": 159,
+      "triangles": 287178,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 167.5,
+      "longTasks": 693,
+      "longTaskMs": 1280475,
+      "loadMs": 1260447,
+      "mode": "interior",
+      "room": "crewQuarters",
+      "visibleRooms": 3,
+      "colliders": 105,
+      "lightDescs": 46,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3176
+    },
+    "crewQuarters_bay": {
+      "frameMs": 2851.56,
+      "fps": 0.4,
+      "worstMs": 3261,
+      "calls": 168,
+      "triangles": 238976,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 167.5,
+      "longTasks": 705,
+      "longTaskMs": 1317562,
+      "loadMs": 1292891,
+      "mode": "interior",
+      "room": "crewQuarters",
+      "visibleRooms": 3,
+      "colliders": 105,
+      "lightDescs": 46,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3181
+    },
+    "crewQuarters_wash": {
+      "frameMs": 2514.11,
+      "fps": 0.4,
+      "worstMs": 3261,
+      "calls": 96,
+      "triangles": 268798,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 163.4,
+      "longTasks": 717,
+      "longTaskMs": 1347199,
+      "loadMs": 1329524,
+      "mode": "interior",
+      "room": "crewQuarters",
+      "visibleRooms": 1,
+      "colliders": 91,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3184
+    },
+    "crewQuarters_day": {
+      "frameMs": 1763.02,
+      "fps": 0.6,
+      "worstMs": 3261,
+      "calls": 92,
+      "triangles": 195248,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 163.3,
+      "longTasks": 729,
+      "longTaskMs": 1365303,
+      "loadMs": 1354911,
+      "mode": "interior",
+      "room": "crewQuarters",
+      "visibleRooms": 1,
+      "colliders": 91,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3185
+    },
+    "officersQuarters": {
+      "frameMs": 2770.11,
+      "fps": 0.4,
+      "worstMs": 3430.5,
+      "calls": 157,
+      "triangles": 131886,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 163.7,
+      "longTasks": 741,
+      "longTaskMs": 1401488,
+      "loadMs": 1375671,
+      "mode": "interior",
+      "room": "officersQuarters",
+      "visibleRooms": 3,
+      "colliders": 137,
+      "lightDescs": 46,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3187
+    },
+    "officersQuarters_cabin": {
+      "frameMs": 3081.3,
+      "fps": 0.3,
+      "worstMs": 3430.5,
+      "calls": 170,
+      "triangles": 133156,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 163.9,
+      "longTasks": 753,
+      "longTaskMs": 1440000,
+      "loadMs": 1415368,
+      "mode": "interior",
+      "room": "officersQuarters",
+      "visibleRooms": 3,
+      "colliders": 137,
+      "lightDescs": 46,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3174
+    },
+    "officersQuarters_suite": {
+      "frameMs": 1946.24,
+      "fps": 0.5,
+      "worstMs": 3430.5,
+      "calls": 88,
+      "triangles": 89030,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 163.4,
+      "longTasks": 766,
+      "longTaskMs": 1460959,
+      "loadMs": 1449962,
+      "mode": "interior",
+      "room": "officersQuarters",
+      "visibleRooms": 1,
+      "colliders": 123,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3187
+    },
+    "officersQuarters_link": {
+      "frameMs": 2251.13,
+      "fps": 0.4,
+      "worstMs": 3430.5,
+      "calls": 92,
+      "triangles": 162876,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 163.4,
+      "longTasks": 777,
+      "longTaskMs": 1486990,
+      "loadMs": 1468075,
+      "mode": "interior",
+      "room": "officersQuarters",
+      "visibleRooms": 1,
+      "colliders": 123,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3182
+    },
+    "mess": {
+      "frameMs": 1995.15,
+      "fps": 0.5,
+      "worstMs": 3430.5,
+      "calls": 167,
+      "triangles": 188098,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 163.4,
+      "longTasks": 789,
+      "longTaskMs": 1510235,
+      "loadMs": 1496554,
+      "mode": "interior",
+      "room": "mess",
+      "visibleRooms": 3,
+      "colliders": 125,
+      "lightDescs": 46,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3182
+    },
+    "mess_hall": {
+      "frameMs": 1920.59,
+      "fps": 0.5,
+      "worstMs": 3430.5,
+      "calls": 177,
+      "triangles": 212954,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 163.5,
+      "longTasks": 801,
+      "longTaskMs": 1532818,
+      "loadMs": 1518628,
+      "mode": "interior",
+      "room": "mess",
+      "visibleRooms": 3,
+      "colliders": 125,
+      "lightDescs": 46,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3185
+    },
+    "mess_serving": {
+      "frameMs": 1980.58,
+      "fps": 0.5,
+      "worstMs": 3430.5,
+      "calls": 95,
+      "triangles": 120044,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 163.4,
+      "longTasks": 814,
+      "longTaskMs": 1558702,
+      "loadMs": 1541567,
+      "mode": "interior",
+      "room": "mess",
+      "visibleRooms": 1,
+      "colliders": 125,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3187
+    },
+    "mess_galley": {
+      "frameMs": 2099.85,
+      "fps": 0.5,
+      "worstMs": 3430.5,
+      "calls": 103,
+      "triangles": 169858,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 164.1,
+      "longTasks": 825,
+      "longTaskMs": 1582381,
+      "loadMs": 1566167,
+      "mode": "interior",
+      "room": "mess",
+      "visibleRooms": 1,
+      "colliders": 125,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3176
+    },
+    "mess_south": {
+      "frameMs": 2125.19,
+      "fps": 0.5,
+      "worstMs": 3430.5,
+      "calls": 171,
+      "triangles": 139404,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 164.1,
+      "longTasks": 837,
+      "longTaskMs": 1607900,
+      "loadMs": 1591749,
+      "mode": "interior",
+      "room": "mess",
+      "visibleRooms": 3,
+      "colliders": 125,
+      "lightDescs": 46,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3173
+    },
+    "lounge": {
+      "frameMs": 2125.19,
+      "fps": 0.5,
+      "worstMs": 3430.5,
+      "calls": 260,
+      "triangles": 1616752,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 163.5,
+      "longTasks": 850,
+      "longTaskMs": 1635485,
+      "loadMs": 1617405,
+      "mode": "interior",
+      "room": "lounge",
+      "visibleRooms": 4,
+      "colliders": 184,
+      "lightDescs": 56,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 34,
+        "batches": 57,
+        "trianglesVisible": 595398,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3177
+    },
+    "lounge_viewport": {
+      "frameMs": 2103.66,
+      "fps": 0.5,
+      "worstMs": 3430.5,
+      "calls": 217,
+      "triangles": 1492068,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 163.6,
+      "longTasks": 861,
+      "longTaskMs": 1658520,
+      "loadMs": 1642817,
+      "mode": "interior",
+      "room": "lounge",
+      "visibleRooms": 3,
+      "colliders": 103,
+      "lightDescs": 44,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 29,
+        "batches": 57,
+        "trianglesVisible": 533648,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3171
+    },
+    "lounge_holo": {
+      "frameMs": 2237.37,
+      "fps": 0.4,
+      "worstMs": 3430.5,
+      "calls": 206,
+      "triangles": 1608230,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 163.9,
+      "longTasks": 873,
+      "longTaskMs": 1685737,
+      "loadMs": 1668281,
+      "mode": "interior",
+      "room": "lounge",
+      "visibleRooms": 1,
+      "colliders": 73,
+      "lightDescs": 10,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 42,
+        "batches": 57,
+        "trianglesVisible": 623462,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3184
+    },
+    "lounge_bar": {
+      "frameMs": 3038,
+      "fps": 0.3,
+      "worstMs": 3490.3,
+      "calls": 190,
+      "triangles": 2076914,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 85,
+      "heapMB": 164.5,
+      "longTasks": 885,
+      "longTaskMs": 1724895,
+      "loadMs": 1698238,
+      "mode": "interior",
+      "room": "lounge",
+      "visibleRooms": 1,
+      "colliders": 73,
+      "lightDescs": 10,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 35,
+        "batches": 57,
+        "trianglesVisible": 1027350,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3181
+    },
+    "medbay": {
+      "frameMs": 2163.23,
+      "fps": 0.5,
+      "worstMs": 3490.3,
+      "calls": 186,
+      "triangles": 224436,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.4,
+      "longTasks": 897,
+      "longTaskMs": 1748362,
+      "loadMs": 1736321,
+      "mode": "interior",
+      "room": "medbay",
+      "visibleRooms": 3,
+      "colliders": 149,
+      "lightDescs": 46,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3167
+    },
+    "medbay_ward": {
+      "frameMs": 1761.7,
+      "fps": 0.6,
+      "worstMs": 3490.3,
+      "calls": 159,
+      "triangles": 187174,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164,
+      "longTasks": 910,
+      "longTaskMs": 1769150,
+      "loadMs": 1755863,
+      "mode": "interior",
+      "room": "medbay",
+      "visibleRooms": 3,
+      "colliders": 149,
+      "lightDescs": 46,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3180
+    },
+    "medbay_recovery": {
+      "frameMs": 1825.46,
+      "fps": 0.5,
+      "worstMs": 3490.3,
+      "calls": 108,
+      "triangles": 163498,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.5,
+      "longTasks": 921,
+      "longTaskMs": 1789724,
+      "loadMs": 1775742,
+      "mode": "interior",
+      "room": "medbay",
+      "visibleRooms": 1,
+      "colliders": 135,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3181
+    },
+    "medbay_bacta": {
+      "frameMs": 1515.76,
+      "fps": 0.7,
+      "worstMs": 3490.3,
+      "calls": 109,
+      "triangles": 163500,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 163.9,
+      "longTasks": 933,
+      "longTaskMs": 1806673,
+      "loadMs": 1796886,
+      "mode": "interior",
+      "room": "medbay",
+      "visibleRooms": 1,
+      "colliders": 135,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 5
+      },
+      "syncBytes": 3180
+    },
+    "medbay_scanner": {
+      "frameMs": 1635.96,
+      "fps": 0.6,
+      "worstMs": 3490.3,
+      "calls": 106,
+      "triangles": 137852,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.1,
+      "longTasks": 945,
+      "longTaskMs": 1826494,
+      "loadMs": 1813915,
+      "mode": "interior",
+      "room": "medbay",
+      "visibleRooms": 1,
+      "colliders": 135,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3184
+    },
+    "medbay_surgery": {
+      "frameMs": 1466.75,
+      "fps": 0.7,
+      "worstMs": 3490.3,
+      "calls": 107,
+      "triangles": 187122,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.1,
+      "longTasks": 957,
+      "longTaskMs": 1843564,
+      "loadMs": 1833767,
+      "mode": "interior",
+      "room": "medbay",
+      "visibleRooms": 1,
+      "colliders": 135,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3184
+    },
+    "armory": {
+      "frameMs": 1598.42,
+      "fps": 0.6,
+      "worstMs": 3490.3,
+      "calls": 99,
+      "triangles": 240846,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.6,
+      "longTasks": 969,
+      "longTaskMs": 1863060,
+      "loadMs": 1850803,
+      "mode": "interior",
+      "room": "armory",
+      "visibleRooms": 1,
+      "colliders": 83,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3182
+    },
+    "armory_counter": {
+      "frameMs": 1652.69,
+      "fps": 0.6,
+      "worstMs": 3489.7,
+      "calls": 101,
+      "triangles": 314390,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.1,
+      "longTasks": 981,
+      "longTaskMs": 1883106,
+      "loadMs": 1870905,
+      "mode": "interior",
+      "room": "armory",
+      "visibleRooms": 1,
+      "colliders": 83,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3165
+    },
+    "armory_racks": {
+      "frameMs": 1653.4,
+      "fps": 0.6,
+      "worstMs": 3489.7,
+      "calls": 94,
+      "triangles": 240450,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.4,
+      "longTasks": 993,
+      "longTaskMs": 1902911,
+      "loadMs": 1890881,
+      "mode": "interior",
+      "room": "armory",
+      "visibleRooms": 1,
+      "colliders": 83,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3176
+    },
+    "armory_helmets": {
+      "frameMs": 1518.39,
+      "fps": 0.7,
+      "worstMs": 3489.7,
+      "calls": 96,
+      "triangles": 288758,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.7,
+      "longTasks": 1005,
+      "longTaskMs": 1920548,
+      "loadMs": 1910152,
+      "mode": "interior",
+      "room": "armory",
+      "visibleRooms": 1,
+      "colliders": 83,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3175
+    },
+    "armory_range": {
+      "frameMs": 1548.32,
+      "fps": 0.6,
+      "worstMs": 3489.7,
+      "calls": 96,
+      "triangles": 294458,
+      "geometries": 961,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164,
+      "longTasks": 1017,
+      "longTaskMs": 1939075,
+      "loadMs": 1927713,
+      "mode": "interior",
+      "room": "armory",
+      "visibleRooms": 1,
+      "colliders": 83,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3184
+    },
+    "detention": {
+      "frameMs": 1830.71,
+      "fps": 0.5,
+      "worstMs": 3489.7,
+      "calls": 117,
+      "triangles": 167322,
+      "geometries": 963,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.4,
+      "longTasks": 1029,
+      "longTaskMs": 1962011,
+      "loadMs": 1947427,
+      "mode": "interior",
+      "room": "detention",
+      "visibleRooms": 1,
+      "colliders": 118,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3173
+    },
+    "detention_desk": {
+      "frameMs": 2142.22,
+      "fps": 0.5,
+      "worstMs": 3489.7,
+      "calls": 118,
+      "triangles": 144326,
+      "geometries": 963,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.1,
+      "longTasks": 1042,
+      "longTaskMs": 1991135,
+      "loadMs": 1971737,
+      "mode": "interior",
+      "room": "detention",
+      "visibleRooms": 1,
+      "colliders": 118,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3172
+    },
+    "detention_cells": {
+      "frameMs": 2453.21,
+      "fps": 0.4,
+      "worstMs": 3489.7,
+      "calls": 109,
+      "triangles": 164900,
+      "geometries": 963,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.4,
+      "longTasks": 1053,
+      "longTaskMs": 2019416,
+      "loadMs": 1999857,
+      "mode": "interior",
+      "room": "detention",
+      "visibleRooms": 1,
+      "colliders": 118,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3168
+    },
+    "detention_cell": {
+      "frameMs": 2274.6,
+      "fps": 0.4,
+      "worstMs": 3489.7,
+      "calls": 107,
+      "triangles": 93426,
+      "geometries": 963,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.5,
+      "longTasks": 1065,
+      "longTaskMs": 2046177,
+      "loadMs": 2030131,
+      "mode": "interior",
+      "room": "detention",
+      "visibleRooms": 1,
+      "colliders": 118,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3180
+    },
+    "detention_observation": {
+      "frameMs": 2243.28,
+      "fps": 0.4,
+      "worstMs": 3489.7,
+      "calls": 109,
+      "triangles": 164806,
+      "geometries": 963,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.8,
+      "longTasks": 1077,
+      "longTaskMs": 2072798,
+      "loadMs": 2056189,
+      "mode": "interior",
+      "room": "detention",
+      "visibleRooms": 1,
+      "colliders": 118,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3179
+    },
+    "detention_interrogation": {
+      "frameMs": 1885.21,
+      "fps": 0.5,
+      "worstMs": 3489.7,
+      "calls": 115,
+      "triangles": 119262,
+      "geometries": 963,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.3,
+      "longTasks": 1089,
+      "longTaskMs": 2094175,
+      "loadMs": 2081934,
+      "mode": "interior",
+      "room": "detention",
+      "visibleRooms": 1,
+      "colliders": 118,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3180
+    },
+    "detention_holding": {
+      "frameMs": 1881.62,
+      "fps": 0.5,
+      "worstMs": 3489.7,
+      "calls": 109,
+      "triangles": 164890,
+      "geometries": 963,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.4,
+      "longTasks": 1101,
+      "longTaskMs": 2116504,
+      "loadMs": 2102609,
+      "mode": "interior",
+      "room": "detention",
+      "visibleRooms": 1,
+      "colliders": 118,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3181
+    },
+    "lift_lift_E1": {
+      "frameMs": 1727.73,
+      "fps": 0.6,
+      "worstMs": 3489.7,
+      "calls": 92,
+      "triangles": 63224,
+      "geometries": 990,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.6,
+      "longTasks": 1113,
+      "longTaskMs": 2137036,
+      "loadMs": 2125140,
+      "mode": "interior",
+      "room": "liftLobbyE",
+      "visibleRooms": 1,
+      "colliders": 136,
+      "lightDescs": 4,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3165
+    },
+    "lift_lift_E2": {
+      "frameMs": 1646.3,
+      "fps": 0.6,
+      "worstMs": 3447.4,
+      "calls": 88,
+      "triangles": 13592,
+      "geometries": 997,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.8,
+      "longTasks": 1126,
+      "longTaskMs": 2158099,
+      "loadMs": 2144873,
+      "mode": "interior",
+      "room": "liftLobbyE",
+      "visibleRooms": 1,
+      "colliders": 136,
+      "lightDescs": 4,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3160
+    },
+    "liftLobbyE": {
+      "frameMs": 1325.52,
+      "fps": 0.8,
+      "worstMs": 2648.6,
+      "calls": 106,
+      "triangles": 20080,
+      "geometries": 1003,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.9,
+      "longTasks": 1137,
+      "longTaskMs": 2171257,
+      "loadMs": 2163274,
+      "mode": "interior",
+      "room": "liftLobbyE",
+      "visibleRooms": 2,
+      "colliders": 136,
+      "lightDescs": 11,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3165
+    },
+    "liftLobbyE_lifts": {
+      "frameMs": 1243.16,
+      "fps": 0.8,
+      "worstMs": 2648.6,
+      "calls": 124,
+      "triangles": 74016,
+      "geometries": 1006,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 165,
+      "longTasks": 1149,
+      "longTaskMs": 2185680,
+      "loadMs": 2177332,
+      "mode": "interior",
+      "room": "liftLobbyE",
+      "visibleRooms": 2,
+      "colliders": 136,
+      "lightDescs": 11,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3163
+    },
+    "reactor": {
+      "frameMs": 2307.65,
+      "fps": 0.4,
+      "worstMs": 2942.7,
+      "calls": 209,
+      "triangles": 223484,
+      "geometries": 1034,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 165.2,
+      "longTasks": 1161,
+      "longTaskMs": 2216912,
+      "loadMs": 2195300,
+      "mode": "interior",
+      "room": "reactor",
+      "visibleRooms": 3,
+      "colliders": 183,
+      "lightDescs": 31,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3166
+    },
+    "reactor_core": {
+      "frameMs": 2516.23,
+      "fps": 0.4,
+      "worstMs": 2942.7,
+      "calls": 195,
+      "triangles": 244274,
+      "geometries": 1034,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.4,
+      "longTasks": 1173,
+      "longTaskMs": 2248288,
+      "loadMs": 2229077,
+      "mode": "interior",
+      "room": "reactor",
+      "visibleRooms": 3,
+      "colliders": 183,
+      "lightDescs": 31,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3172
+    },
+    "reactor_pit": {
+      "frameMs": 2812.63,
+      "fps": 0.4,
+      "worstMs": 3030,
+      "calls": 206,
+      "triangles": 253576,
+      "geometries": 1034,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.5,
+      "longTasks": 1186,
+      "longTaskMs": 2286030,
+      "loadMs": 2260775,
+      "mode": "interior",
+      "room": "reactor",
+      "visibleRooms": 3,
+      "colliders": 183,
+      "lightDescs": 31,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3171
+    },
+    "reactor_north": {
+      "frameMs": 2690.01,
+      "fps": 0.4,
+      "worstMs": 3030,
+      "calls": 256,
+      "triangles": 275140,
+      "geometries": 1036,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.9,
+      "longTasks": 1197,
+      "longTaskMs": 2315024,
+      "loadMs": 2295546,
+      "mode": "interior",
+      "room": "reactor",
+      "visibleRooms": 3,
+      "colliders": 183,
+      "lightDescs": 31,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3180
+    },
+    "engControl": {
+      "frameMs": 1883.75,
+      "fps": 0.5,
+      "worstMs": 3030,
+      "calls": 190,
+      "triangles": 218388,
+      "geometries": 1050,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.8,
+      "longTasks": 1209,
+      "longTaskMs": 2334760,
+      "loadMs": 2324506,
+      "mode": "interior",
+      "room": "engControl",
+      "visibleRooms": 3,
+      "colliders": 129,
+      "lightDescs": 34,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3175
+    },
+    "engControl_window": {
+      "frameMs": 2857.22,
+      "fps": 0.3,
+      "worstMs": 3474.2,
+      "calls": 220,
+      "triangles": 274504,
+      "geometries": 1050,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.8,
+      "longTasks": 1222,
+      "longTaskMs": 2375205,
+      "loadMs": 2345879,
+      "mode": "interior",
+      "room": "engControl",
+      "visibleRooms": 3,
+      "colliders": 129,
+      "lightDescs": 34,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3174
+    },
+    "engControl_screens": {
+      "frameMs": 2211.73,
+      "fps": 0.5,
+      "worstMs": 3474.2,
+      "calls": 153,
+      "triangles": 207430,
+      "geometries": 1050,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 165.5,
+      "longTasks": 1234,
+      "longTaskMs": 2398454,
+      "loadMs": 2383653,
+      "mode": "interior",
+      "room": "engControl",
+      "visibleRooms": 2,
+      "colliders": 129,
+      "lightDescs": 27,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 3
+      },
+      "syncBytes": 3164
+    },
+    "hyperdrive": {
+      "frameMs": 1753.21,
+      "fps": 0.6,
+      "worstMs": 3474.2,
+      "calls": 120,
+      "triangles": 91016,
+      "geometries": 1063,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 164.9,
+      "longTasks": 1245,
+      "longTaskMs": 2415729,
+      "loadMs": 2404791,
+      "mode": "interior",
+      "room": "hyperdrive",
+      "visibleRooms": 2,
+      "colliders": 123,
+      "lightDescs": 16,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 3
+      },
+      "syncBytes": 3171
+    },
+    "hyperdrive_units": {
+      "frameMs": 1757.02,
+      "fps": 0.6,
+      "worstMs": 3474.2,
+      "calls": 121,
+      "triangles": 115206,
+      "geometries": 1063,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 165.2,
+      "longTasks": 1257,
+      "longTaskMs": 2436545,
+      "loadMs": 2423774,
+      "mode": "interior",
+      "room": "hyperdrive",
+      "visibleRooms": 2,
+      "colliders": 123,
+      "lightDescs": 16,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 3
+      },
+      "syncBytes": 3174
+    },
+    "hyperdrive_aisle": {
+      "frameMs": 2339.89,
+      "fps": 0.4,
+      "worstMs": 3474.2,
+      "calls": 89,
+      "triangles": 79218,
+      "geometries": 1063,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 165.5,
+      "longTasks": 1270,
+      "longTaskMs": 2469176,
+      "loadMs": 2446859,
+      "mode": "interior",
+      "room": "hyperdrive",
+      "visibleRooms": 1,
+      "colliders": 123,
+      "lightDescs": 9,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 3
+      },
+      "syncBytes": 3162
+    },
+    "corrEW": {
+      "frameMs": 1672.67,
+      "fps": 0.6,
+      "worstMs": 3474.2,
+      "calls": 95,
+      "triangles": 63886,
+      "geometries": 1063,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 165.4,
+      "longTasks": 1281,
+      "longTaskMs": 2484624,
+      "loadMs": 2475858,
+      "mode": "interior",
+      "room": "corrEW",
+      "visibleRooms": 1,
+      "colliders": 81,
+      "lightDescs": 7,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 3
+      },
+      "syncBytes": 3165
+    },
+    "corrEE": {
+      "frameMs": 1367.78,
+      "fps": 0.7,
+      "worstMs": 3474.2,
+      "calls": 89,
+      "triangles": 64500,
+      "geometries": 1067,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 165.2,
+      "longTasks": 1293,
+      "longTaskMs": 2499579,
+      "loadMs": 2491150,
+      "mode": "interior",
+      "room": "corrEE",
+      "visibleRooms": 1,
+      "colliders": 75,
+      "lightDescs": 7,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 3
+      },
+      "syncBytes": 3164
+    },
+    "spineE": {
+      "frameMs": 1298.4,
+      "fps": 0.8,
+      "worstMs": 3474.2,
+      "calls": 174,
+      "triangles": 305600,
+      "geometries": 1074,
+      "textures": 250,
+      "programs": 86,
+      "heapMB": 165.4,
+      "longTasks": 1305,
+      "longTaskMs": 2514734,
+      "loadMs": 2506092,
+      "mode": "interior",
+      "room": "spineE",
+      "visibleRooms": 2,
+      "colliders": 229,
+      "lightDescs": 19,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3160
+    },
+    "lifeSupport": {
+      "frameMs": 1503.11,
+      "fps": 0.7,
+      "worstMs": 3474.2,
+      "calls": 207,
+      "triangles": 441774,
+      "geometries": 1085,
+      "textures": 252,
+      "programs": 86,
+      "heapMB": 165,
+      "longTasks": 1318,
+      "longTaskMs": 2534913,
+      "loadMs": 2521807,
+      "mode": "interior",
+      "room": "lifeSupport",
+      "visibleRooms": 3,
+      "colliders": 143,
+      "lightDescs": 31,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3162
+    },
+    "lifeSupport_tanks": {
+      "frameMs": 1473.06,
+      "fps": 0.7,
+      "worstMs": 3474.2,
+      "calls": 188,
+      "triangles": 435932,
+      "geometries": 1085,
+      "textures": 252,
+      "programs": 86,
+      "heapMB": 165.6,
+      "longTasks": 1329,
+      "longTaskMs": 2550937,
+      "loadMs": 2540931,
+      "mode": "interior",
+      "room": "lifeSupport",
+      "visibleRooms": 3,
+      "colliders": 143,
+      "lightDescs": 31,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3169
+    },
+    "lifeSupport_scrubbers": {
+      "frameMs": 1583.09,
+      "fps": 0.6,
+      "worstMs": 3474.2,
+      "calls": 101,
+      "triangles": 146138,
+      "geometries": 1085,
+      "textures": 252,
+      "programs": 86,
+      "heapMB": 165.7,
+      "longTasks": 1341,
+      "longTaskMs": 2570270,
+      "loadMs": 2558681,
+      "mode": "interior",
+      "room": "lifeSupport",
+      "visibleRooms": 1,
+      "colliders": 67,
+      "lightDescs": 12,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3171
+    },
+    "maintenance": {
+      "frameMs": 1532.3,
+      "fps": 0.7,
+      "worstMs": 3474.2,
+      "calls": 168,
+      "triangles": 207770,
+      "geometries": 1094,
+      "textures": 252,
+      "programs": 86,
+      "heapMB": 165.3,
+      "longTasks": 1353,
+      "longTaskMs": 2588482,
+      "loadMs": 2577950,
+      "mode": "interior",
+      "room": "maintenance",
+      "visibleRooms": 2,
+      "colliders": 81,
+      "lightDescs": 17,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3164
+    },
+    "maintenance_bay": {
+      "frameMs": 1443.95,
+      "fps": 0.7,
+      "worstMs": 3474.2,
+      "calls": 172,
+      "triangles": 158966,
+      "geometries": 1094,
+      "textures": 252,
+      "programs": 86,
+      "heapMB": 165.9,
+      "longTasks": 1366,
+      "longTaskMs": 2606709,
+      "loadMs": 2595574,
+      "mode": "interior",
+      "room": "maintenance",
+      "visibleRooms": 2,
+      "colliders": 81,
+      "lightDescs": 17,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3160
+    },
+    "maintenance_welding": {
+      "frameMs": 1467.58,
+      "fps": 0.7,
+      "worstMs": 3474.2,
+      "calls": 130,
+      "triangles": 206894,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 86,
+      "heapMB": 166.1,
+      "longTasks": 1377,
+      "longTaskMs": 2623141,
+      "loadMs": 2612816,
+      "mode": "interior",
+      "room": "maintenance",
+      "visibleRooms": 1,
+      "colliders": 81,
+      "lightDescs": 10,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3172
+    },
+    "cargo": {
+      "frameMs": 1480.76,
+      "fps": 0.7,
+      "worstMs": 3474.2,
+      "calls": 156,
+      "triangles": 373556,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 86,
+      "heapMB": 166.2,
+      "longTasks": 1389,
+      "longTaskMs": 2640732,
+      "loadMs": 2630323,
+      "mode": "interior",
+      "room": "cargo",
+      "visibleRooms": 2,
+      "colliders": 96,
+      "lightDescs": 19,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3178
+    },
+    "cargo_catwalk": {
+      "frameMs": 1606.34,
+      "fps": 0.6,
+      "worstMs": 3474.2,
+      "calls": 169,
+      "triangles": 353794,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 86,
+      "heapMB": 165.7,
+      "longTasks": 1401,
+      "longTaskMs": 2660381,
+      "loadMs": 2648629,
+      "mode": "interior",
+      "room": "cargo",
+      "visibleRooms": 2,
+      "colliders": 96,
+      "lightDescs": 19,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3179
+    },
+    "cargo_lift": {
+      "frameMs": 1641.49,
+      "fps": 0.6,
+      "worstMs": 3474.2,
+      "calls": 165,
+      "triangles": 304522,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 86,
+      "heapMB": 165.9,
+      "longTasks": 1414,
+      "longTaskMs": 2681852,
+      "loadMs": 2668628,
+      "mode": "interior",
+      "room": "cargo",
+      "visibleRooms": 2,
+      "colliders": 96,
+      "lightDescs": 19,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1219012,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3174
+    },
+    "lift_lift_H1": {
+      "frameMs": 1622.44,
+      "fps": 0.6,
+      "worstMs": 3474.2,
+      "calls": 87,
+      "triangles": 59908,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 86,
+      "heapMB": 165.9,
+      "longTasks": 1425,
+      "longTaskMs": 2699926,
+      "loadMs": 2688629,
+      "mode": "interior",
+      "room": "liftLobbyH",
+      "visibleRooms": 1,
+      "colliders": 132,
+      "lightDescs": 6,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3181
+    },
+    "lift_lift_H2": {
+      "frameMs": 1616.54,
+      "fps": 0.6,
+      "worstMs": 3474.2,
+      "calls": 86,
+      "triangles": 10300,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 86,
+      "heapMB": 165.7,
+      "longTasks": 1437,
+      "longTaskMs": 2719483,
+      "loadMs": 2708051,
+      "mode": "interior",
+      "room": "liftLobbyH",
+      "visibleRooms": 1,
+      "colliders": 132,
+      "lightDescs": 6,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3179
+    },
+    "liftLobbyH": {
+      "frameMs": 1345.01,
+      "fps": 0.7,
+      "worstMs": 3474.2,
+      "calls": 223,
+      "triangles": 429390,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 86,
+      "heapMB": 166.1,
+      "longTasks": 1449,
+      "longTaskMs": 2734518,
+      "loadMs": 2726487,
+      "mode": "interior",
+      "room": "liftLobbyH",
+      "visibleRooms": 2,
+      "colliders": 132,
+      "lightDescs": 26,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3173
+    },
+    "liftLobbyH_lifts": {
+      "frameMs": 1828.98,
+      "fps": 0.5,
+      "worstMs": 4388.2,
+      "calls": 204,
+      "triangles": 374420,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 105,
+      "heapMB": 170,
+      "longTasks": 1461,
+      "longTaskMs": 2758929,
+      "loadMs": 2744563,
+      "mode": "interior",
+      "room": "liftLobbyH",
+      "visibleRooms": 2,
+      "colliders": 132,
+      "lightDescs": 26,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3175
+    },
+    "hangar": {
+      "frameMs": 2064.69,
+      "fps": 0.5,
+      "worstMs": 4524.9,
+      "calls": 214,
+      "triangles": 637836,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 113,
+      "heapMB": 167.4,
+      "longTasks": 1473,
+      "longTaskMs": 2785056,
+      "loadMs": 2769980,
+      "mode": "interior",
+      "room": "hangar",
+      "visibleRooms": 1,
+      "colliders": 271,
+      "lightDescs": 20,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3181
+    },
+    "hangar_well": {
+      "frameMs": 2129.32,
+      "fps": 0.5,
+      "worstMs": 4524.9,
+      "calls": 206,
+      "triangles": 637054,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 113,
+      "heapMB": 167.1,
+      "longTasks": 1485,
+      "longTaskMs": 2810809,
+      "loadMs": 2795261,
+      "mode": "interior",
+      "room": "hangar",
+      "visibleRooms": 1,
+      "colliders": 271,
+      "lightDescs": 20,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3173
+    },
+    "hangar_racks": {
+      "frameMs": 1828.33,
+      "fps": 0.5,
+      "worstMs": 4524.9,
+      "calls": 191,
+      "triangles": 559930,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 113,
+      "heapMB": 167.8,
+      "longTasks": 1497,
+      "longTaskMs": 2831750,
+      "loadMs": 2820159,
+      "mode": "interior",
+      "room": "hangar",
+      "visibleRooms": 1,
+      "colliders": 271,
+      "lightDescs": 20,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3181
+    },
+    "hangar_gantry": {
+      "frameMs": 2068.27,
+      "fps": 0.5,
+      "worstMs": 4524.9,
+      "calls": 200,
+      "triangles": 636088,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 113,
+      "heapMB": 167.4,
+      "longTasks": 1509,
+      "longTaskMs": 2857161,
+      "loadMs": 2841201,
+      "mode": "interior",
+      "room": "hangar",
+      "visibleRooms": 1,
+      "colliders": 271,
+      "lightDescs": 20,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3184
+    },
+    "hangar_booth": {
+      "frameMs": 2499.44,
+      "fps": 0.4,
+      "worstMs": 4524.9,
+      "calls": 214,
+      "triangles": 638674,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 114,
+      "heapMB": 168,
+      "longTasks": 1521,
+      "longTaskMs": 2888817,
+      "loadMs": 2869014,
+      "mode": "interior",
+      "room": "hangar",
+      "visibleRooms": 1,
+      "colliders": 271,
+      "lightDescs": 20,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3180
+    },
+    "fighterMaint": {
+      "frameMs": 1869.44,
+      "fps": 0.5,
+      "worstMs": 4524.9,
+      "calls": 195,
+      "triangles": 455310,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 114,
+      "heapMB": 168,
+      "longTasks": 1534,
+      "longTaskMs": 2910793,
+      "loadMs": 2899027,
+      "mode": "interior",
+      "room": "fighterMaint",
+      "visibleRooms": 2,
+      "colliders": 162,
+      "lightDescs": 28,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3185
+    },
+    "fighterMaint_bays": {
+      "frameMs": 1590.06,
+      "fps": 0.6,
+      "worstMs": 4524.9,
+      "calls": 202,
+      "triangles": 480140,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 114,
+      "heapMB": 167.7,
+      "longTasks": 1546,
+      "longTaskMs": 2928479,
+      "loadMs": 2917010,
+      "mode": "interior",
+      "room": "fighterMaint",
+      "visibleRooms": 2,
+      "colliders": 162,
+      "lightDescs": 28,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3175
+    },
+    "fighterMaint_wing": {
+      "frameMs": 2064.2,
+      "fps": 0.5,
+      "worstMs": 4524.9,
+      "calls": 210,
+      "triangles": 459028,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 114,
+      "heapMB": 167.8,
+      "longTasks": 1557,
+      "longTaskMs": 2953237,
+      "loadMs": 2936417,
+      "mode": "interior",
+      "room": "fighterMaint",
+      "visibleRooms": 2,
+      "colliders": 162,
+      "lightDescs": 28,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3173
+    },
+    "shuttleBay": {
+      "frameMs": 1601.82,
+      "fps": 0.6,
+      "worstMs": 4524.9,
+      "calls": 169,
+      "triangles": 457886,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 114,
+      "heapMB": 167.7,
+      "longTasks": 1569,
+      "longTaskMs": 2971078,
+      "loadMs": 2962240,
+      "mode": "interior",
+      "room": "shuttleBay",
+      "visibleRooms": 3,
+      "colliders": 228,
+      "lightDescs": 40,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3186
+    },
+    "shuttleBay_ramp": {
+      "frameMs": 1541.9,
+      "fps": 0.6,
+      "worstMs": 4524.9,
+      "calls": 163,
+      "triangles": 452876,
+      "geometries": 1095,
+      "textures": 252,
+      "programs": 114,
+      "heapMB": 168.2,
+      "longTasks": 1582,
+      "longTaskMs": 2990595,
+      "loadMs": 2978591,
+      "mode": "interior",
+      "room": "shuttleBay",
+      "visibleRooms": 2,
+      "colliders": 183,
+      "lightDescs": 32,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3176
+    },
+    "shuttleBay_apron": {
+      "frameMs": 1809.32,
+      "fps": 0.6,
+      "worstMs": 4524.9,
+      "calls": 202,
+      "triangles": 404214,
+      "geometries": 1096,
+      "textures": 252,
+      "programs": 116,
+      "heapMB": 167.7,
+      "longTasks": 1593,
+      "longTaskMs": 3011656,
+      "loadMs": 2997888,
+      "mode": "interior",
+      "room": "shuttleBay",
+      "visibleRooms": 2,
+      "colliders": 183,
+      "lightDescs": 32,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3183
+    },
+    "shuttleBay_gallery": {
+      "frameMs": 1999.87,
+      "fps": 0.5,
+      "worstMs": 4524.9,
+      "calls": 217,
+      "triangles": 405610,
+      "geometries": 1096,
+      "textures": 252,
+      "programs": 116,
+      "heapMB": 168.2,
+      "longTasks": 1606,
+      "longTaskMs": 3038477,
+      "loadMs": 3021621,
+      "mode": "interior",
+      "room": "shuttleBay",
+      "visibleRooms": 2,
+      "colliders": 183,
+      "lightDescs": 32,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3174
+    },
+    "escapePods": {
+      "frameMs": 1521.68,
+      "fps": 0.7,
+      "worstMs": 4524.9,
+      "calls": 98,
+      "triangles": 36338,
+      "geometries": 1096,
+      "textures": 252,
+      "programs": 116,
+      "heapMB": 168.5,
+      "longTasks": 1617,
+      "longTaskMs": 3053115,
+      "loadMs": 3045000,
+      "mode": "interior",
+      "room": "escapePods",
+      "visibleRooms": 1,
+      "colliders": 145,
+      "lightDescs": 7,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3176
+    },
+    "escapePods_row": {
+      "frameMs": 1304.05,
+      "fps": 0.8,
+      "worstMs": 4524.9,
+      "calls": 97,
+      "triangles": 36336,
+      "geometries": 1096,
+      "textures": 252,
+      "programs": 116,
+      "heapMB": 168.5,
+      "longTasks": 1629,
+      "longTaskMs": 3067733,
+      "loadMs": 3059926,
+      "mode": "interior",
+      "room": "escapePods",
+      "visibleRooms": 1,
+      "colliders": 145,
+      "lightDescs": 7,
+      "lights": 16,
+      "qualityLevel": 3,
+      "pixelRatio": 1,
+      "buildMs": {
+        "materials": 3241,
+        "exterior": 340,
+        "interior": 1514
+      },
+      "exteriorTris": 36162,
+      "greebles": {
+        "instances": 37179,
+        "drawCalls": 0,
+        "batches": 57,
+        "trianglesVisible": 0,
+        "trianglesLOD": 1259340,
+        "regions": {
+          "dorsal": 3782,
+          "city": 14493,
+          "stern": 1617,
+          "tower": 7996,
+          "trenchP": 2890,
+          "trenchS": 2906,
+          "keel": 3452
+        },
+        "decals": 204,
+        "turrets": {
+          "heavy": 6,
+          "pointDefence": 24
+        },
+        "chunks": 23,
+        "trianglesAll": 1259340
+      },
+      "traffic": {
+        "fighters": 12,
+        "airborne": 4
+      },
+      "syncBytes": 3181
+    }
+  },
+  "nav": {
+    "doors": {
+      "bridge_main": {
+        "from": "bridge",
+        "to": "corridorT",
+        "endedIn": "liftLobbyT",
+        "ok": true,
+        "end": [
+          0,
+          190,
+          611.3
+        ]
+      },
+      "bridge_w": {
+        "from": "bridge",
+        "to": "corridorT",
+        "endedIn": "corridorT",
+        "ok": true,
+        "end": [
+          -14,
+          190,
+          603.3
+        ]
+      },
+      "bridge_e": {
+        "from": "bridge",
+        "to": "corridorT",
+        "endedIn": "corridorT",
+        "ok": true,
+        "end": [
+          14,
+          190,
+          603.3
+        ]
+      },
+      "holo_door": {
+        "from": "corridorT",
+        "to": "holo",
+        "endedIn": "holo",
+        "ok": true,
+        "end": [
+          -35,
+          190.4,
+          615.3
+        ]
+      },
+      "comms_door": {
+        "from": "corridorT",
+        "to": "comms",
+        "endedIn": "comms",
+        "ok": true,
+        "end": [
+          35,
+          190.6,
+          615.3
+        ]
+      },
+      "intel_door": {
+        "from": "corridorT",
+        "to": "intel",
+        "endedIn": "intel",
+        "ok": true,
+        "end": [
+          -67,
+          190,
+          613.7
+        ]
+      },
+      "briefing_door": {
+        "from": "corridorT",
+        "to": "briefing",
+        "endedIn": "briefing",
+        "ok": true,
+        "end": [
+          67,
+          190,
+          615.3
+        ]
+      },
+      "lobbyT_door": {
+        "from": "corridorT",
+        "to": "liftLobbyT",
+        "endedIn": "liftLobbyT",
+        "ok": true,
+        "end": [
+          0,
+          190,
+          615.3
+        ]
+      },
+      "obs_door": {
+        "from": "liftLobbyT",
+        "to": "observation",
+        "endedIn": "observation",
+        "ok": true,
+        "end": [
+          0,
+          190,
+          631.3
+        ]
+      },
+      "lobbyC_door": {
+        "from": "spineC",
+        "to": "liftLobbyC",
+        "endedIn": "liftLobbyC",
+        "ok": true,
+        "end": [
+          0,
+          50,
+          451.3
+        ]
+      },
+      "detention_door": {
+        "from": "liftLobbyC",
+        "to": "detention",
+        "endedIn": "detention",
+        "ok": true,
+        "end": [
+          0,
+          50,
+          455.9
+        ]
+      },
+      "crewq_door": {
+        "from": "spineC",
+        "to": "crewQuarters",
+        "endedIn": "crewQuarters",
+        "ok": true,
+        "end": [
+          13.8,
+          50,
+          420
+        ]
+      },
+      "offq_door": {
+        "from": "spineC",
+        "to": "officersQuarters",
+        "endedIn": "officersQuarters",
+        "ok": true,
+        "end": [
+          -13.8,
+          50,
+          418
+        ]
+      },
+      "mess_door": {
+        "from": "spineC",
+        "to": "mess",
+        "endedIn": "mess",
+        "ok": true,
+        "end": [
+          13.8,
+          50,
+          356
+        ]
+      },
+      "mess_door2": {
+        "from": "crossC",
+        "to": "mess",
+        "endedIn": "mess",
+        "ok": true,
+        "end": [
+          20,
+          50,
+          366.7
+        ]
+      },
+      "lounge_door": {
+        "from": "crossC",
+        "to": "lounge",
+        "endedIn": "lounge",
+        "ok": true,
+        "end": [
+          -63.3,
+          50,
+          380
+        ]
+      },
+      "medbay_door": {
+        "from": "spineC",
+        "to": "medbay",
+        "endedIn": "medbay",
+        "ok": true,
+        "end": [
+          13.8,
+          50,
+          320
+        ]
+      },
+      "armory_door": {
+        "from": "spineC",
+        "to": "armory",
+        "endedIn": "armory",
+        "ok": true,
+        "end": [
+          -6.2,
+          50,
+          322
+        ]
+      },
+      "reactor_door": {
+        "from": "liftLobbyE",
+        "to": "reactor",
+        "endedIn": "reactor",
+        "ok": true,
+        "end": [
+          0,
+          8,
+          588.4
+        ]
+      },
+      "engctl_reactor": {
+        "from": "engControl",
+        "to": "reactor",
+        "endedIn": "reactor",
+        "ok": true,
+        "end": [
+          -18.7,
+          8,
+          592
+        ]
+      },
+      "hyper_reactor": {
+        "from": "hyperdrive",
+        "to": "reactor",
+        "endedIn": "reactor",
+        "ok": true,
+        "end": [
+          18.7,
+          8,
+          592
+        ]
+      },
+      "corrEW_lobby": {
+        "from": "corrEW",
+        "to": "liftLobbyE",
+        "endedIn": "liftLobbyE",
+        "ok": true,
+        "end": [
+          3.3,
+          8,
+          602
+        ]
+      },
+      "corrEE_lobby": {
+        "from": "corrEE",
+        "to": "liftLobbyE",
+        "endedIn": "liftLobbyE",
+        "ok": true,
+        "end": [
+          -3.3,
+          8,
+          602
+        ]
+      },
+      "engctl_door": {
+        "from": "corrEW",
+        "to": "engControl",
+        "endedIn": "engControl",
+        "ok": true,
+        "end": [
+          -43,
+          8,
+          588.7
+        ]
+      },
+      "hyper_door": {
+        "from": "corrEE",
+        "to": "hyperdrive",
+        "endedIn": "hyperdrive",
+        "ok": true,
+        "end": [
+          45,
+          8.5,
+          589
+        ]
+      },
+      "spineE_door": {
+        "from": "liftLobbyE",
+        "to": "spineE",
+        "endedIn": "spineE",
+        "ok": true,
+        "end": [
+          0,
+          8,
+          623.3
+        ]
+      },
+      "life_door": {
+        "from": "spineE",
+        "to": "lifeSupport",
+        "endedIn": "lifeSupport",
+        "ok": true,
+        "end": [
+          -13.8,
+          8,
+          634
+        ]
+      },
+      "maint_door": {
+        "from": "spineE",
+        "to": "maintenance",
+        "endedIn": "maintenance",
+        "ok": true,
+        "end": [
+          13.8,
+          8,
+          634
+        ]
+      },
+      "cargo_door": {
+        "from": "spineE",
+        "to": "cargo",
+        "endedIn": "cargo",
+        "ok": true,
+        "end": [
+          0,
+          8,
+          683
+        ]
+      },
+      "lobbyH_door": {
+        "from": "liftLobbyH",
+        "to": "hangar",
+        "endedIn": "hangar",
+        "ok": true,
+        "end": [
+          0,
+          -20,
+          111.3
+        ]
+      },
+      "maintH_door": {
+        "from": "hangar",
+        "to": "fighterMaint",
+        "endedIn": "fighterMaint",
+        "ok": true,
+        "end": [
+          79,
+          -20,
+          190
+        ]
+      },
+      "shuttle_door": {
+        "from": "hangar",
+        "to": "shuttleBay",
+        "endedIn": "shuttleBay",
+        "ok": true,
+        "end": [
+          0,
+          -19.5,
+          309
+        ]
+      },
+      "pods_door": {
+        "from": "hangar",
+        "to": "escapePods",
+        "endedIn": "escapePods",
+        "ok": true,
+        "end": [
+          -71.3,
+          -20,
+          140
+        ]
+      }
+    },
+    "doorsPassed": "33/33",
+    "lift": {
+      "started": true,
+      "inCab": {
+        "x": 10.28,
+        "z": 610
+      },
+      "arrivedRoom": "liftLobbyT",
+      "ok": false
+    },
+    "transitions": {
+      "boardMode": "interior",
+      "boardRoom": "bridge",
+      "leaveMode": "exterior",
+      "ok": true
+    }
+  },
+  "logs": [
+    "[warning] THREE.BufferGeometry.toNonIndexed(): BufferGeometry is already non-indexed."
+  ],
+  "summary": {
+    "views": 134,
+    "maxCalls": 1037,
+    "maxTriangles": 3485224,
+    "programs": 139,
+    "heapMB": 168.5,
+    "errors": 0
+  }
+}
