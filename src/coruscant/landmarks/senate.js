@@ -16,7 +16,7 @@ const R_HALL = 57;                     // hall radius (inside the tiers' back wa
 const R_CORR0 = 58, R_CORR1 = 62;      // inner ring corridor (gallery), 5 wide
 const R_ROOM0 = 63, R_ROOM1 = 70;      // outer room band
 const DRUM_TOP = 13;                   // drum wall top block; dome starts at 14
-const DOME_YC = -16, DOME_R = 78;      // dome = spherical cap: h(r) = DOME_YC + sqrt(DOME_R^2 - r^2) (62 at the axis, 14 at r 72)
+const DOME_YC = -26.7, DOME_R = 82.7;  // dome = spherical cap: h(r) = DOME_YC + sqrt(DOME_R^2 - r^2) (56 at the axis, 14 at r 72)
 const FLOORS = [1, 6, 11];             // concourse floors (walk levels); 16 = gallery / Chancellor's level
 const RINGS = [[18, 23, 1], [25, 31, 4], [33, 39, 6], [41, 48, 9], [50, 56, 11]];   // [inner r, outer r, walk y]
 const PODIUM_R = 5, PODIUM_TOP = 12;
@@ -107,7 +107,7 @@ function drumAndDome(bp) {
       const ring = Math.abs(h - Math.round(h)) < 0.02 && Math.round(h) % 8 === 0;
       for (let y = Math.max(DRUM_TOP + 1, Math.min(yi, yo)); y <= Math.max(yo, yMax > yo ? yo : yMax); y++) {
         let id = STONE2;
-        if (rib) id = TRIM; else if (ring) id = BAND;
+        if (rib) id = (y % 5 === 0) ? GLOW : TRIM; else if (ring) id = BAND;
         if (r > R_DRUM - 6 && (y - DRUM_TOP) % 3 === 1) id = (Math.round(a * 30) & 1) ? B.WINDOW_LIT : STONE2;
         bp.set(x, y, z, id);
       }
@@ -228,11 +228,12 @@ function concourse(bp, rng) {
     if (y < 16) {
       // rooms in the outer band at the four cardinal straights: three 10x8 rooms per band, doors toward the corridor
       const roomKinds = [['meeting_room', 'executive_office', 'archive'], ['cafeteria', 'kitchen', 'lounge'], ['library', 'meeting_room', 'holo_theatre'], ['open_plan_office', 'executive_office', 'server_room']];
+      const rOut = y === 11 ? R_ROOM1 - 3 : R_ROOM1;   // the top floor stays under the dome's slope
       const bands = [
-        { side: 'N', x0: CX - 16, x1: CX + 16, z0: CZ + R_ROOM0, z1: CZ + R_ROOM1 },   // south band (door on its north side toward the corridor)
-        { side: 'S', x0: CX - 16, x1: CX + 16, z0: CZ - R_ROOM1, z1: CZ - R_ROOM0 },   // north band
-        { side: 'W', x0: CX + R_ROOM0, x1: CX + R_ROOM1, z0: CZ - 16, z1: CZ + 16 },   // east band
-        { side: 'E', x0: CX - R_ROOM1, x1: CX - R_ROOM0, z0: CZ - 16, z1: CZ + 16 },   // west band
+        { side: 'N', x0: CX - 16, x1: CX + 16, z0: CZ + R_ROOM0, z1: CZ + rOut },   // south band (door on its north side toward the corridor)
+        { side: 'S', x0: CX - 16, x1: CX + 16, z0: CZ - rOut, z1: CZ - R_ROOM0 },   // north band
+        { side: 'W', x0: CX + R_ROOM0, x1: CX + rOut, z0: CZ - 16, z1: CZ + 16 },   // east band
+        { side: 'E', x0: CX - rOut, x1: CX - R_ROOM0, z0: CZ - 16, z1: CZ + 16 },   // west band
       ];
       bands.forEach((b, bi) => {
         const alongX = b.side === 'N' || b.side === 'S';
@@ -256,9 +257,9 @@ function concourse(bp, rng) {
         const a = Math.PI / 4 + k * Math.PI / 2;
         for (let t = -0.28; t <= 0.28; t += 0.035) {
           const ang = a + t;
-          for (let r = R_ROOM0; r <= R_ROOM1 - 1; r++) {
+          for (let r = R_ROOM0; r <= rOut - 1; r++) {
             const x = Math.round(CX + Math.cos(ang) * r), z = Math.round(CZ + Math.sin(ang) * r);
-            if (dist(x, z) > R_ROOM1 - 0.5) continue;
+            if (dist(x, z) > rOut - 0.5) continue;
             bp.set(x, y - 1, z, (r % 3 === 0) ? B.PANEL_BLACK : PLATE);
             bp.fill(x, y, z, x, y + 3, z, AIR);
             bp.set(x, y + 4, z, ((x + z) % 4 === 0) ? GLOW : STONE);
@@ -270,7 +271,7 @@ function concourse(bp, rng) {
           const bx = Math.round(CX + Math.cos(ang) * 65), bz = Math.round(CZ + Math.sin(ang) * 65);
           if (j % 2 === 0) { bp.set(bx, y, bz, B.STONE_BRICK_SLAB); bp.spot(bx, y, bz, 'seat'); }
           else { bp.set(bx, y, bz, DARK); bp.set(bx, y + 1, bz, B.OAK_LEAVES); }
-          const px = Math.round(CX + Math.cos(ang) * 68.5), pz = Math.round(CZ + Math.sin(ang) * 68.5);
+          const px = Math.round(CX + Math.cos(ang) * (rOut - 1.5)), pz = Math.round(CZ + Math.sin(ang) * (rOut - 1.5));
           if (j === 0) { bp.set(px, y, pz, B.PANEL_BLACK); bp.set(px, y + 1, pz, B.HOLO_SIGN); bp.set(px, y + 2, pz, B.HOLO_SIGN); }
           else if (Math.abs(j) === 2) lamp(bp, px, y, pz, 2, B.LANTERN);
         }
