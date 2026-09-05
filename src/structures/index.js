@@ -3,9 +3,11 @@
 // `register(gen, game)` and calls `gen.addStructure({ name, x0, z0, x1, z1, fill(chunk, gen) })` for its pieces.
 // Builders: add ONE import + ONE line to REGISTRARS for your module; keep everything else in your own files.
 import { register as registerCoruscant } from '../coruscant/city.js';
+import { register as registerSpaceport } from '../coruscant/spaceport.js';
 
 const REGISTRARS = [
   registerCoruscant,
+  registerSpaceport,                                                          // Coruscant + frontier spaceports, ship traffic
   async (gen, game) => (await import('./hyperlane.js')).register(gen, game), // hyperlane track, stations, space train
 ];
 
