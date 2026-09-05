@@ -62,15 +62,16 @@ void main() {
     float along = exp(-u * 3.4);
     float core = exp(-v * v * 14.0) * exp(-u * 6.0);
     float flick = 0.9 + 0.1 * sin(uTime * 31.0 + vSeed * 50.0 + u * 9.0);
-    col = mix(vec3(0.35, 0.6, 1.0), vec3(0.95, 0.98, 1.0), core) * flick;
-    a = (across * along * 0.85 + core * 0.9) * I;
+    col = mix(vec3(0.35, 0.6, 1.0), vec3(0.9, 0.95, 1.0), core * 0.8) * flick;
+    a = (across * along * 0.6 + core * 0.5) * I;
   } else {
     vec2 c = vUv - 0.5;
     float rr = length(c) * 2.0;
     float glow = exp(-rr * rr * 6.0);
     float hot = exp(-rr * rr * 30.0);
-    col = mix(vec3(0.45, 0.7, 1.0), vec3(1.0, 1.0, 1.0), hot);
-    a = (glow * 0.9 + hot * 1.2) * I;
+    // a gradient disc: blue rim, pale core, never a clipped white blob
+    col = mix(vec3(0.4, 0.65, 1.0), vec3(0.85, 0.92, 1.0), hot);
+    a = (glow * 0.55 + hot * 0.55) * I;
   }
   gl_FragColor = vec4(col * a, a);
 }`;

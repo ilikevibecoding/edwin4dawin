@@ -31,7 +31,8 @@ export function makeBattleSun() {
     fillUp: { value: new THREE.Color(0.17, 0.2, 0.28) },
     // Coruscant's city light: warm gold, strongest on down-facing normals. Saturated enough that a
     // belly still measures hue ~33 degrees after the cool shadow lift of the final pass
-    fillDown: { value: new THREE.Color(1.3, 0.9, 0.44) },
+    // warm city fill, kept low-saturation so shadow sides read cream-grey rather than khaki
+    fillDown: { value: new THREE.Color(1.15, 0.95, 0.7) },
     planetDir: { value: new THREE.Vector3(0, -1, 0) },
   };
   return activeSun;

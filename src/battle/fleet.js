@@ -25,6 +25,7 @@ const _q2 = new THREE.Quaternion();
 const _qy = new THREE.Quaternion();
 const _qx = new THREE.Quaternion();
 const _c = new THREE.Color();
+const _cEm = new THREE.Color();
 const _one = new THREE.Vector3(1, 1, 1);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 const X_AXIS = new THREE.Vector3(1, 0, 0);
@@ -149,6 +150,8 @@ export class Fleet {
         capacity,
       );
       im.name = `${model.id}_lod${part.lod}_${part.name || "part"}`;
+      // unlit parts (windows, engine cores) are emissive: they go dark on a dead hull
+      im.userData.emissive = !!part.material.isMeshBasicMaterial;
       im.count = 0;
       im.frustumCulled = false; // instances are spread over kilometres; culling per mesh would be wrong
       im.castShadow = false;
@@ -303,12 +306,17 @@ export class Fleet {
         const i = counts[L]++;
         if (i >= entry.capacity) continue;
         if (entry.turrets) this._updateTurrets(entry, s, dt, L < 2);
-        // damage darkens and reddens the tint slightly; dead ships go dark
-        const k = Math.max(0.25, 1 - s.damage * 0.08);
+        // damage darkens the hull tint; a dead hull is a dark wreck and its windows / engine cores go out
+        const dead = s.health <= 0;
+        const k = dead ? 0.42 : Math.max(0.55, 1 - s.damage * 0.04);
         _c.copy(s.tint).multiplyScalar(k);
+        _cEm
+          .copy(s.tint)
+          .multiplyScalar(dead ? 0.03 : 1 - 0.5 * Math.min(1, s.damage / 12));
         for (const im of entry.lods[L]) {
           im.setMatrixAt(i, s.matrix);
-          if (im.instanceColor) im.setColorAt(i, _c);
+          if (im.instanceColor)
+            im.setColorAt(i, im.userData.emissive ? _cEm : _c);
         }
       }
       for (let L = 0; L < 3; L++) {

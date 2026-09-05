@@ -218,7 +218,8 @@ void main() {
   vec3 whiteGold = vec3(1.0, 0.82, 0.55);
   // only the hottest lights saturate toward white-gold like the film's hot spots
   vec3 pinCol = mix(amber, whiteGold, smoothstep(2.5, 7.0, fabric));
-  vec3 ground = vec3(0.018, 0.011, 0.009) * (0.5 + mood) * (0.35 + 0.65 * dens);
+  // dark violet-indigo ground (the plan's palette): the gold networks sit on a cool base, not on brown
+  vec3 ground = vec3(0.012, 0.010, 0.026) * (0.5 + mood) * (0.35 + 0.65 * dens);
   vec3 waterCol = vec3(0.003, 0.005, 0.012);
   vec3 lights = gold * (lines + rings + streets + halo * 0.7) + pinCol * fabric * 0.5
               + whiteGold * hubs;
