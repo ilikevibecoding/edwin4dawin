@@ -74,25 +74,63 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
   // light the trail they were pointed at and night needed a second set of
   // spotlights standing in for them. A shallow decay with the distance cutoff
   // doing the far end is what a headlamp on a trail actually looks like.
+  //
+  // The pool. Two critics measured the night hero and found the ground ahead
+  // no brighter than the ground beside the truck (0.027 against 0.020 for the
+  // lamp itself). The lamp sits 1.07 m up and the trail 10 m out is hit at
+  // five degrees of grazing, so of the 13 x 0.4 = 5 units the spot delivered
+  // there, cos(85) left 0.45 on the dirt — under the moon's 1.4 — and a
+  // 0.55 penumbra spread what was left into a gradient with no edge. Half the
+  // cone angle was also above the horizon, lighting the acacia crowns rather
+  // than the road. Now: a low beam. Aimed down six degrees so the pool centres
+  // about 10 m out, a 26 degree half-angle whose lower edge reaches the dirt
+  // 1.7 m ahead of the bumper and whose top stays under 20 degrees, a 0.3
+  // penumbra for a pool with an edge, and the intensity set per hour by
+  // `setHour` (see BEAM).
   for (const sx of [-1, 1]) {
-    const spot = new THREE.SpotLight(PALETTE.headlight, 0, 32, 0.5, 0.55, 0.4);
+    const spot = new THREE.SpotLight(PALETTE.headlight, 0, 34, 0.46, 0.3, 0.4);
     spot.position.set(sx * 0.72, headY, headlightZ);
-    spot.target.position.set(sx * 0.9, headY - 1.6, headlightZ + 22);
+    spot.target.position.set(sx * 0.95, headY - 2.3, headlightZ + 22);
     lamps.add(spot, spot.target);
     beams.push(spot);
   }
   // Cool white against the halogen headlamps, so the bar reads as the LED unit
-  // it is modelled as rather than as an absence of colour.
-  const barLight = new THREE.SpotLight(0xf2f6ff, 0, 32, 0.42, 0.4, 0.4);
+  // it is modelled as rather than as an absence of colour. It is 2.2 m up, so
+  // it reaches the trail at twice the headlamps' incidence and carries the far
+  // half of the pool.
+  const barLight = new THREE.SpotLight(0xf2f6ff, 0, 40, 0.38, 0.35, 0.4);
   barLight.position.set(0, S.roofY + 0.2, S.cabFrontZ + 0.1);
-  barLight.target.position.set(0, S.roofY - 2.0, S.cabFrontZ + 30);
+  barLight.target.position.set(0, S.roofY - 2.6, S.cabFrontZ + 30);
   lamps.add(barLight, barLight.target);
+
+  // Lamp levels by hour. Every number here used to be one pair — lit or not —
+  // tuned for night, and at dusk's exposure (1.3 against night's 1.15, with the
+  // bloom threshold at 0.86 rather than 2.0) the same 9.0 on the headlamp
+  // envelope and 2.2 on the cover lenses saturated into one white slab across
+  // the front of the truck; critic C read it as a missing texture. A lamp seen
+  // against a bright sky is also genuinely dimmer to the eye: it is the same
+  // bulb, and the frame around it is two stops brighter.
+  //
+  // `beam` is the spot intensity. The night value is what puts a pool on the
+  // trail (see the geometry note above): at 40 with decay 0.4 the dirt 10 m out
+  // gets 40 x 0.4 x 0.10 x 2 lamps = 3.2, plus the bar, against the moon's
+  // 1.4. The sky module's beam sprites read these intensities and scale their
+  // scatter as intensity / 13, so the value is held as low as the pool allows.
+  const BEAM = {
+    off: { beam: 0, bar: 0, head: 1.6, amber: 1.1, tail: 1.6, lens: 0 },
+    dusk: { beam: 22, bar: 26, head: 3.6, amber: 1.9, tail: 2.6, lens: 0.8 },
+    night: { beam: 40, bar: 46, head: 9.0, amber: 3.2, tail: 4.0, lens: 2.2 },
+  };
+  // a lit lamp in daylight or under cloud is a lamp lit against a bright frame
+  BEAM.day = BEAM.dusk;
+  BEAM.overcast = BEAM.dusk;
 
   const state = {
     speed: 0,
     steer: 0,
     wheelAngle: 0,
     lightsOn: false,
+    hour: 'day',
     suspension: [0, 0, 0, 0],
     load: [1, 1, 1, 1],
   };
@@ -107,20 +145,46 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
     }
   }
 
-  function setLights(on) {
-    state.lightsOn = on;
-    for (const b of beams) b.intensity = on ? 13 : 0;
-    barLight.intensity = on ? 18 : 0;
-    materials.headlight.emissiveIntensity = on ? 9.0 : 1.6;
-    materials.amber.emissiveIntensity = on ? 3.2 : 1.1;
-    materials.taillight.emissiveIntensity = on ? 4.0 : 1.6;
+  /** The lit levels for the current hour; `day` when the lamps are off. */
+  function applyLampLevels() {
+    const on = state.lightsOn;
+    const lv = on ? BEAM[state.hour] ?? BEAM.night : BEAM.off;
+    for (const b of beams) b.intensity = on ? lv.beam : 0;
+    barLight.intensity = on ? lv.bar : 0;
+    materials.headlight.emissiveIntensity = lv.head;
+    materials.amber.emissiveIntensity = lv.amber;
+    materials.taillight.emissiveIntensity = lv.tail;
     // Cover lenses: lit from behind, so they carry a glow of their own at night.
     // Blended at their own alpha, so the number is high for what reaches the
     // frame. The bowls behind them (`reflector`) light through `uLampBowl`.
     for (const key of ['lensClear', 'lensRibbed']) {
-      if (materials[key]) materials[key].emissiveIntensity = on ? 2.2 : 0;
+      if (materials[key]) materials[key].emissiveIntensity = lv.lens;
+    }
+    // the lit-lamp shaping saturates at dusk's exposure as readily as the
+    // emissive does, so its core follows the hour too
+    const coreScale = state.hour === 'dusk' ? 0.55 : 1;
+    for (const key of lampKeys) {
+      const u = materials[key]?.userData?.lamp;
+      if (u && u.uLampCoreBase === undefined) u.uLampCoreBase = u.uLampCore.value;
+      if (u) u.uLampCore.value = u.uLampCoreBase * coreScale;
     }
     setLampGlow(on);
+  }
+
+  function setLights(on) {
+    state.lightsOn = on;
+    applyLampLevels();
+  }
+
+  /**
+   * The hour, for the lamp levels. main.js keys `setLights` off the hour but
+   * never says which one; until it calls this, `update` reads the hour the
+   * debug API publishes, the same stopgap it uses for the terrain.
+   */
+  function setHour(name) {
+    if (!name || name === state.hour) return;
+    state.hour = name;
+    applyLampLevels();
   }
   setLights(false);
 
@@ -137,10 +201,14 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
     state.speed = speed;
     state.steer = steer;
 
+    // the hour, until main.js hands it over through setHour()
+    const hour = globalThis.debugAPI?.timeOfDay;
+    if (hour && hour !== state.hour) setHour(hour);
+
     // Brake lamps come up on the pedal, reverse lamps when actually rolling
     // backwards, both on top of whatever the running lights are doing.
     const braking = finite(drive.brake) > 0.05 && speed > -0.2;
-    const tailBase = state.lightsOn ? 4.0 : 1.6;
+    const tailBase = (state.lightsOn ? BEAM[state.hour] ?? BEAM.night : BEAM.off).tail;
     materials.taillight.emissiveIntensity = braking ? Math.max(tailBase, 11.0) : tailBase;
     // the lit-lamp shaping follows the lamp, not the switch: a brake lamp in
     // daylight still has a hot core, and a reversing lamp only when reversing
@@ -262,6 +330,7 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
     ground,
     mirrors,
     setLights,
+    setHour,
     setTerrain,
     update,
     spec: S,

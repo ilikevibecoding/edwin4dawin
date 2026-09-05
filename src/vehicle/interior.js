@@ -260,7 +260,8 @@ const CABIN_LIGHT = {
     fill: 0.26,
     dust: 0.42,
     craze: 1,
-    grain: 0.4,
+    grain: 0.2,
+    soil: 0.5,
     // Was sat 1.0 with a [0.96, 0.86, 0.72] tint: a tan pad, and the pad is
     // what every exterior camera sees of the cabin through the screen. A
     // sun-faded grey vinyl, a touch warm, reads as a dash from outside without
@@ -276,8 +277,9 @@ const CABIN_LIGHT = {
     sun: 4.6,
     fill: 2.95,
     dust: 0.4,
-    craze: 0.45,
-    grain: 0.34,
+    craze: 0.25,
+    grain: 0.18,
+    soil: 0.5,
     sat: 0.55,
     tint: [0.86, 0.86, 0.88],
   },
@@ -292,8 +294,9 @@ const CABIN_LIGHT = {
     sun: 3.4,
     fill: 2.5,
     dust: 0.35,
-    craze: 0.5,
-    grain: 0.38,
+    craze: 0.25,
+    grain: 0.2,
+    soil: 0.5,
     sat: 0.5,
     tint: [0.96, 0.96, 0.95],
   },
@@ -422,8 +425,8 @@ const CABIN_LIGHT = {
   // where it was, the only thing on a dial with any value was the backlight,
   // and a cluster whose scale is legible only because it is glowing is a night
   // cluster whatever time it is.
-  cabinPanel: { gain: 1.9, up: 0.2, occ: 0.34, sun: 0.9, fill: 1.05 },
-  cabinGlass: { gain: 0.72, up: 0.04, occ: 0.36, spec: 0.5, sun: 1.05, fill: 0.3 },
+  cabinPanel: { gain: 1.9, up: 0.2, occ: 0.34, sun: 0.9, fill: 1.05, soil: 0 },
+  cabinGlass: { gain: 0.72, up: 0.04, occ: 0.36, spec: 0.5, sun: 1.05, fill: 0.3, soil: 0 },
   louvre: { gain: 1.8, side: 0.3, up: 0.1, occ: 0.2, spec: 0.2, sun: 2.0, fill: 0.5, sat: 0.35, tint: [0.5, 0.52, 0.55] },
   // The rim is 500 mm of swept circular section across the bottom of the frame
   // and its normal map is built for a panel seen from 300 mm, so at this scale
@@ -520,6 +523,10 @@ function applyCabinLight(
     dust = 0,
     craze = 0,
     grain = 0,
+    // Grime, as a fraction of the library's. One for the surfaces boots and
+    // hands soil — floor, rubber, brackets — half on the moulded vinyl, and
+    // zero on the dial faces and their cover glass. See the soil term below.
+    soil = 1,
     tint = null,
     sat = 1,
     // The height band the dash's occlusion is modelled by. Compiled in rather
@@ -560,6 +567,7 @@ function applyCabinLight(
     uClDust: { value: dust },
     uClCraze: { value: craze },
     uClGrain: { value: grain },
+    uClSoil: { value: soil },
     // Linear multipliers, not an sRGB hex: this scales an albedo that is already
     // in working space, so running it through the colour-space convert would
     // darken every value by roughly its own gamma.
@@ -610,6 +618,7 @@ function applyCabinLight(
         uniform float uClDust;
         uniform float uClCraze;
         uniform float uClGrain;
+        uniform float uClSoil;
         uniform vec3 uClTint;
         uniform float uClSat;
         varying vec3 vClPos;
@@ -680,11 +689,18 @@ function applyCabinLight(
       )
       .replace(
         '#include <lights_fragment_maps>',
-        `float clOcc = 1.0;
+        `        float clOcc = 1.0;
         vec3 clAdd = vec3( 0.0 );
         vec3 clSpc = vec3( 0.0 );
         #include <lights_fragment_maps>
         {
+          // Screen-space curvature of the vertex normal, for the soil term:
+          // radians of turn per pixel, so a seam, a moulding edge or the lip
+          // of the dash scores high and the flat of a panel scores nothing.
+          // Taken outside the gate because derivatives inside a branch that
+          // not every pixel of the quad takes are undefined.
+          vec3 clDN = abs( dFdx( vClNrm ) ) + abs( dFdy( vClNrm ) );
+          float clCurv = clamp( ( clDN.x + clDN.y + clDN.z ) * 3.0, 0.0, 1.0 );
           if ( clIn > 0.002 ) {
             vec3 clN = normalize( vClNrm );
             vec3 clToC = ${v3(CL_CTR)} - vClPos;
@@ -762,8 +778,27 @@ function applyCabinLight(
             // rather than the albedo: on a surface lit almost entirely by
             // indirect the two are the same read, and this way it costs one
             // multiply instead of a second gated block up at map_fragment.
+            //
+            // Two tilings, and a mask. This used to be one blend of a 300 mm
+            // and an 80 mm field at a fixed 0.78–1.1 swing on every cabin key,
+            // and critic B's note on the interior frames was exactly that: the
+            // dash, the pillars, the column and the door cards all carrying the
+            // same high-frequency mottle at the same amplitude, reading as
+            // dirt-splat noise rather than as wear. Dirt in a cab is not even.
+            // It collects where nothing wipes it — in the seams, under the dash
+            // lip, in the footwell, on the underside of everything — and the
+            // open faces a sleeve crosses stay comparatively clean. So the
+            // coarse field stays as a low tone drift over the whole cab, and
+            // the fine field is gated to where dirt collects: the pockets the
+            // aperture cannot see (clSee, the same enclosure term the light
+            // uses) and the edges (clCurv). uClSoil is the per-key amplitude:
+            // half on the moulded vinyl, none on the dial faces.
             float clFine = clNoise( vClPos * 12.0 );
-            float clSoil = mix( 0.78, 1.1, clNoise( vClPos * 3.3 ) * 0.62 + clFine * 0.38 );
+            float clFine2 = clNoise( vClPos * 29.0 + 7.0 );
+            float clPocket = clamp( 1.0 - clSee * 1.7, 0.0, 1.0 );
+            float clCollect = clamp( clPocket * 0.85 + clCurv * 0.7, 0.0, 1.0 );
+            float clSoil = 1.0 + uClSoil * 0.07 * ( clNoise( vClPos * 3.3 ) * 2.0 - 1.0 );
+            clSoil *= 1.0 - uClSoil * clCollect * ( 0.16 + 0.2 * clFine + 0.1 * clFine2 );
             clOcc *= clSoil;
             // Moulded grain. Every surface in here carries a normal map built
             // for a panel seen from 300 mm, and the dash sits at 700 and the
@@ -784,7 +819,12 @@ function applyCabinLight(
             if ( uClGrain > 0.0 ) {
               float clCrease = smoothstep( 0.3, 0.0, abs( clNoise( vClPos * 58.0 ) * 2.0 - 1.0 ) );
               float clSpeck = clNoise( vClPos * 132.0 + 5.0 );
-              clGrainF = 1.0 - uClGrain * ( 0.85 * clCrease + 0.45 * ( 0.5 - clSpeck ) );
+              // Crease weight 0.85 to 0.5 and speckle 0.45 to 0.3 (round 4):
+              // at the old weights the crease net alone took a fifth of the
+              // value off every vinyl surface in a 17 mm lattice, which on the
+              // column shroud and the fascia at 700 mm is five-pixel cells —
+              // the crackle B saw. The net stays; it is the moulding.
+              clGrainF = 1.0 - uClGrain * ( 0.5 * clCrease + 0.3 * ( 0.5 - clSpeck ) );
               clOcc *= clGrainF;
             }
             // Trail dust, on the up-facing half of everything and heaviest where

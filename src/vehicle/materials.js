@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { PALETTE } from '../palette.js';
+import { SPEC as S } from './spec.js';
 import {
   applyBrightwork,
   applyCabinBounce,
@@ -119,7 +120,7 @@ export function vehicleMaterials(env = null) {
     // curvature gate rather than by refusing to reflect anything.
     // strength tracks the basecoat's — see the sweep table in makePaintMaterial.
     // These panels gain the most from it: 0.331 saturation to 0.374.
-    bw: { strength: 2.5, band: 0.5, flat: 0.5, ambient: 1.6 },
+    bw: { strength: 1.8, band: 0.5, flat: 0.5, ambient: 1.6 },
   });
   m.paintDark = makePaintMaterial(PALETTE.bodyPaintDark, {
     roughness: 0.42,
@@ -131,7 +132,7 @@ export function vehicleMaterials(env = null) {
     clearcoat: 0.78,
     clearcoatRoughness: 0.13,
     dirtTag: 'accent',
-    bw: { strength: 1.9, band: 0.55 },
+    bw: { strength: 1.5, band: 0.55 },
   });
 
   // --- metal family --------------------------------------------------------
@@ -206,7 +207,7 @@ export function vehicleMaterials(env = null) {
     roughness: 0.72,
     envMapIntensity: 0.5,
   });
-  applyDirt(m.steelDark, { ...LATERITE, amount: 0.95, tag: 'steelDark', film: 1.5, lift: 3.8, grain: 0.18 });
+  applyDirt(m.steelDark, { ...LATERITE, amount: 0.95, tag: 'steelDark', film: 1.5, lift: 3.8, grain: 0.18, cabin: true });
   // `flat` is high because the same key also covers the bumper's face and the
   // rack's flat stock, and those are what a skyline streak blows out on; the
   // tubes keep the streak through the curvature gate. The ambient term is what
@@ -250,13 +251,16 @@ export function vehicleMaterials(env = null) {
     roughnessMap: brushed.rough,
     normalMap: metal.normal,
     normalScale: new THREE.Vector2(0.07, 0.07),
-    envMapIntensity: 0.45,
+    // 0.45 to 0.8, with the graded strength down to 0.7 (round 4): the same
+    // trade as the paint — the real environment's skyline over the analytic
+    // bands, so a bezel mirrors the acacia line rather than a rule.
+    envMapIntensity: 0.8,
   });
   applyDirt(m.chrome, { ...LATERITE, amount: 0.5, tag: 'chrome', film: 0.7 });
   // Chrome is small curved hardware — bezels, a handle strip — so it is the one
   // brightwork that should keep its hot skyline streak at full strength, and the
   // curvature gate hands it over for free.
-  applyBrightwork(m.chrome, { tag: 'chrome', strength: 1.0, band: 0.55, trees: 0.95, line: 0.3, flat: 0.6 });
+  applyBrightwork(m.chrome, { tag: 'chrome', strength: 0.7, band: 0.55, trees: 0.95, line: 0.3, flat: 0.6 });
   // The door mirror's own pane. Chrome was standing in for it, and at roughness
   // 0.26 the lobe smears the graded skyline into an even wash — which is fine on
   // a bezel and is exactly wrong on the one surface whose whole job is to return
@@ -285,7 +289,26 @@ export function vehicleMaterials(env = null) {
     roughness: 0.02,
     envMapIntensity: 1.0,
   });
-  applyMirrorHorizon(m.mirrorGlass, { tag: 'mirrorGlass' });
+  // With the truck's own flank painted in by reflected ray (see the function):
+  // the envelope is the hull spec, the basecoat is the paint's, the film on it
+  // is the same laterite the door carries.
+  applyMirrorHorizon(m.mirrorGlass, {
+    tag: 'mirrorGlass',
+    paint: PALETTE.bodyPaint,
+    dust: LATERITE.dust,
+    flank: {
+      hw: S.bodyHalfWidth,
+      floorY: S.floorY,
+      beltY: S.beltlineY,
+      roofY: S.roofY,
+      hoodY: S.hoodY,
+      cabRearZ: S.cabRearZ,
+      cabFrontZ: S.cabFrontZ,
+      bedTopY: S.bedTopY,
+      bedRearZ: S.bedRearZ,
+      noseZ: S.noseZ,
+    },
+  });
   m.alu = new THREE.MeshStandardMaterial({
     // Brighter than the steel and cooler: bare aluminium is the light metal in
     // the frame and its identity is value, not gloss. With the steel map now
@@ -430,7 +453,7 @@ export function vehicleMaterials(env = null) {
   // term is back to being a supplement that breaks up tiling rather than a
   // substitute for the maps — and at 0.42 its own brightness swing was part of
   // what made the arch band read as a light-coloured object.
-  applyDirt(m.trim, { ...LATERITE, amount: 1.0, tag: 'trim', grain: 0.16 });
+  applyDirt(m.trim, { ...LATERITE, amount: 1.0, tag: 'trim', grain: 0.16, cabin: true });
   // Matt black plastic is the floor of the frame, and on the material chart its
   // vertical faces measured 0.076 — a featureless hole. What a real moulding
   // does at that angle is pick up a faint, *graded* sheen from the sky it can
@@ -477,7 +500,7 @@ export function vehicleMaterials(env = null) {
   // supplement. It still earns its place: it is projected from object position,
   // so it breaks up the map's tiling and carries a relief bump across the merged
   // flare without a seam, neither of which the uvs give for free.
-  applyDirt(m.trimGloss, { ...LATERITE, amount: 1.0, tag: 'trimGloss', grain: 0.18 });
+  applyDirt(m.trimGloss, { ...LATERITE, amount: 1.0, tag: 'trimGloss', grain: 0.18, cabin: true });
   applyBrightwork(m.trimGloss, {
     tag: 'trimGloss',
     strength: 0.62,
@@ -511,7 +534,7 @@ export function vehicleMaterials(env = null) {
     roughness: 0.95,
     envMapIntensity: 0.12,
   });
-  applyDirt(m.gap, { ...LATERITE, amount: 1.0, tag: 'gap', film: 0.2, spatter: 0.5, cake: 1.6, grain: 0.3 });
+  applyDirt(m.gap, { ...LATERITE, amount: 1.0, tag: 'gap', film: 0.2, spatter: 0.5, cake: 1.6, grain: 0.3, cabin: true });
   // A shut line should stay a shut line, but this key also lines both arch
   // openings, and an arch liner is a square foot of visible surface that ought
   // to read as "dark moulded tub with mud caked in it" rather than as a hole
@@ -553,7 +576,10 @@ export function vehicleMaterials(env = null) {
       map: glassTintMap(),
       metalness: 0.0,
       roughness,
-      roughnessMap: kind === 'screen' ? glassRoughness() : null,
+      // the screen's map carries the wiper arcs; the door glass gets a plain
+      // wind-streaked film at forty per cent of it; the rear glass lives in the
+      // plume and its dust is all in the layer map already
+      roughnessMap: kind === 'rear' ? null : glassRoughness(kind),
       ior: 1.5,
       opacity,
       transparent: true,
@@ -595,19 +621,42 @@ export function vehicleMaterials(env = null) {
     color: 0x141c1c,
     opacity: 0.1,
     roughness: 0.05,
-    film: { dustAmount: 0.9, dustAlpha: 0.3, band: 0.55, dust: 0x9c8468 },
+    // dustAlpha 0.3 -> 0.26 with the round-4 dust map: the map moved its mass
+    // to the cowl (bottom decile 0.42 -> 0.51 of full) rather than adding any
+    // (mean 0.135 -> 0.122), and the alpha comes down so the cowl band lands
+    // where the old even film peaked instead of a stop over it. ws_mid had
+    // paid see 0.85 -> 0.76 for the heavier band over the dark dash.
+    film: { dustAmount: 0.9, dustAlpha: 0.26, band: 0.55, dust: 0x9c8468 },
+    // No grazing sky on the screen. Tried at 0.12 for the raked views: the
+    // gauntlet's `interior` shot paid for it (veil 0.048 to 0.075, see 0.81
+    // to 0.78, measured by toggling the uniform alone) and `ws_close` did not
+    // gain, so the door glass keeps the term and the screen does not.
+    bw: { graze: 0 },
   });
   // Door glass: a light grey-green, nothing ever wipes it. `glassDark` used to
   // stand in for both this and the rear glass and the door panes carried the
   // windscreen's wiper arcs, which is why the two never agreed. The dust is
   // held well down from the screen's: the film was lit by the sun on the
   // sunlit flank and the whole cabin behind it read as one amber wash.
+  //
+  // Round 4: the sunlit door glass read as an open window (critic A: cover 59
+  // per cent, veil 0.074, no Fresnel at the top edge, no film). Two things put
+  // the glass back: the side dust map above breaks the mirror up, and `graze`
+  // lands a tenth of the sky on the pane past 40 degrees of incidence, which is
+  // the whole top third of a door pane seen from beside the truck. Face-on the
+  // pane is as clear as it was; `see` holds above 0.7.
   pane('glassSide', {
     kind: 'side',
     color: 0x16201e,
     opacity: 0.14,
     roughness: 0.05,
-    film: { dustAmount: 1.0, dustAlpha: 0.22, band: 0, dust: 0x9c8468 },
+    film: { dustAmount: 1.0, dustAlpha: 0.24, band: 0, dust: 0x9c8468 },
+    // 0.3 -> 0.2. Where the term shows is the raked views — from the seat the
+    // driver's door glass is at 70-80 degrees — and there the gauntlet's
+    // `interior` shot paid veil 0.048 -> 0.075, see 0.81 -> 0.77 for 0.3
+    // (measured by toggling the uniform alone). At 0.2 the pane still closes
+    // at the top edge; Fresnel alone would give 0.09 at 60 and 0.2 at 75.
+    bw: { graze: 0.2 },
   });
   // Rear cab glass: sits in the plume the truck drags behind it.
   pane('glassDark', {
@@ -908,7 +957,12 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.42,
   });
-  applyDirt(m.interiorPlastic, { amount: 0.6, tag: 'cabin', color: 0x6e625a, dust: 0x8e8a84, wet: LATERITE.wet, chroma: 0.2, arch: 0 });
+  // Spatter and cake held to a third in the cab (round 4). These are the
+  // exterior pass's thrown-mud noises, and at full strength on every cabin
+  // vinyl they were the second half of the "same dirt-splat texture on
+  // everything" read; what a cab collects is film and seam grime, which the
+  // film term here and the cabin shader's soil carry between them.
+  applyDirt(m.interiorPlastic, { amount: 0.6, tag: 'cabin', color: 0x6e625a, dust: 0x8e8a84, wet: LATERITE.wet, chroma: 0.2, arch: 0, spatter: 0.35, cake: 0.35 });
   // Top surfaces. These are the ones under the screen that the sun bakes, so
   // they are chalkier and a stop or two lighter — and they are what you see of
   // the cabin from outside, which is what keeps the greenhouse from going black.
@@ -924,7 +978,7 @@ export function vehicleMaterials(env = null) {
     roughness: 1.0,
     envMapIntensity: 0.5,
   });
-  applyDirt(m.interiorFaded, { amount: 0.7, tag: 'cabinTop', color: 0x7c6f64, dust: 0x9a948c, wet: LATERITE.wet, chroma: 0.2, arch: 0 });
+  applyDirt(m.interiorFaded, { amount: 0.7, tag: 'cabinTop', color: 0x7c6f64, dust: 0x9a948c, wet: LATERITE.wet, chroma: 0.2, arch: 0, spatter: 0.35, cake: 0.35 });
   // Stitched welt strips down the pad edges and the seat panel seams.
   const stitch = stitchMaps();
   m.stitch = new THREE.MeshStandardMaterial({

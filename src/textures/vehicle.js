@@ -322,6 +322,17 @@ export function applyBrightwork(
     fresnel = 0,
     clearcoat = false,
     pane = 0,
+    // Extra sky at grazing incidence, panes only, in units of the pane's own
+    // reflected radiance (the PMREM plus the graded break-up). Schlick at ior
+    // 1.5 is nine per cent at 60 degrees, and nine per cent of a sky that the
+    // hour has already scaled down is invisible over a lit cabin — critic A
+    // measured the sunlit door glass at 59 per cent of the frame adding 0.074
+    // of luma with no brightening at all along its top edge, "an open window".
+    // A real pane at that angle also carries a film, and a dust film scatters
+    // forward hardest at grazing, so this ramps in from 40 degrees and lands
+    // 0.1–0.15 of sky on the top third of a door pane seen from beside the
+    // truck while leaving the face-on view exactly as clear as it was.
+    graze = 0,
     // Grade the reflection off the clearcoat's roughness rather than the base
     // layer's. On paint the two are a factor of five apart — a 0.34 basecoat
     // under a 0.07 lacquer — and using the basecoat smeared the skyline into a
@@ -370,6 +381,7 @@ export function applyBrightwork(
     uBwLobe: { value: lobe },
   };
   if (pane) u.uBwPane = { value: pane };
+  if (pane) u.uBwGraze = { value: graze };
   if (flat) u.uBwFlat = { value: flat };
   if (ambient) u.uBwAmbient = { value: ambient };
   // exposed so the values can be swept against a live render rather than guessed
@@ -432,7 +444,7 @@ export function applyBrightwork(
         uniform float uBwLobe;
         ${flat ? 'uniform float uBwFlat;' : ''}
         ${ambient ? 'uniform float uBwAmbient;' : ''}
-        ${pane ? 'uniform float uBwPane;\n        vec3 bwPaneRefl = vec3( 0.0 );\n        float bwPaneF = 0.0;\n        float bwPaneOut = 1.0;' : ''}`,
+        ${pane ? 'uniform float uBwPane;\n        uniform float uBwGraze;\n        vec3 bwPaneRefl = vec3( 0.0 );\n        float bwPaneF = 0.0;\n        float bwPaneOut = 1.0;' : ''}`,
       )
       .replace(
         '#include <lights_fragment_maps>',
@@ -617,9 +629,13 @@ export function applyBrightwork(
           float gzE2 = gzE * gzE;
           float gzF = 0.04 + 0.96 * gzE2 * gzE2 * gzE;
           gzF *= mix( 0.2, 1.0, bwPaneOut ) * uBwPane;
-          float gzA = clamp( diffuseColor.a + gzF * ( 1.0 - diffuseColor.a ), 0.02, 1.0 );
+          // grazing sky (see graze above): the reflected radiance the BRDF already
+          // sampled, added on the outside face only, and closing the alpha by
+          // the same amount so it reads as reflection rather than as a veil
+          float gzG = uBwGraze * smoothstep( 0.22, 0.85, gzE ) * bwPaneOut;
+          float gzA = clamp( diffuseColor.a + ( gzF + gzG ) * ( 1.0 - diffuseColor.a ), 0.02, 1.0 );
           vec3 gzD = totalDiffuse + totalEmissiveRadiance * mix( 0.32, 1.0, bwPaneOut );
-          vec3 gzS = max( outgoingLight - totalDiffuse - totalEmissiveRadiance, vec3( 0.0 ) );
+          vec3 gzS = max( outgoingLight - totalDiffuse - totalEmissiveRadiance, vec3( 0.0 ) ) + radiance * gzG;
           outgoingLight = gzD + gzS / gzA;
           diffuseColor.a = gzA;
         }
@@ -645,16 +661,32 @@ export function applyMirrorHorizon(
   material,
   {
     tag = 'mh',
-    // Laterite in sun near the skyline, the truck's own shadow straight down.
-    // The first pass at 0xa2603c came back as a saturated orange plate; a
-    // reflection of the plain is duller than the plain, and darker than the
-    // sky above it by a stop or more.
-    ground = 0x7d5238,
-    groundNear = 0x3a2217,
-    scrub = 0x33301c,
+    // Multipliers on the environment's own plain (see the shader): a warm
+    // lean towards laterite near the skyline, the truck's own shadow straight
+    // down, and the scrub band. Two absolute laterites (0xa2603c, then
+    // 0x7d5238) each came back as a saturated orange plate, because a colour
+    // authored for one hour's exposure is wrong at the other three.
+    // Leaned further red (was 1.04/0.94/0.86) once the gauntlet mirror frame
+    // could be read against the trail beside it: the PMREM's plain is straw,
+    // the ground a door mirror actually looks back over is the laterite two-
+    // track, so the reflected plain takes a quarter of the way to that hue.
+    ground = new THREE.Color(1.0, 0.86, 0.74),
+    groundNear = new THREE.Color(0.3, 0.27, 0.25),
+    scrub = new THREE.Color(0.3, 0.32, 0.2),
     // the PMREM's sky is held a touch above unity so the sky half reads bright
     // against the ground, the way a mirror does against the shell round it
     sky = 1.15,
+    // The truck's own flank, painted into the pane. A door mirror is aimed
+    // down the side of the vehicle it is bolted to, so from any seat or bonnet
+    // camera a third of the glass is the rear door, the bed side and the strip
+    // of side glass above the beltline — and it is that slab of paint against
+    // the sky that says "mirror" before the horizon does. `flank` is the
+    // vehicle's envelope in its own object space; `paint` its basecoat.
+    paint = 0x3c4a34,
+    // what the mirror sees on the flank below the swage: the same laterite
+    // film the panels carry (LATERITE.dust in materials.js)
+    dust = 0xb08a68,
+    flank = null,
   } = {},
 ) {
   const u = {
@@ -662,10 +694,49 @@ export function applyMirrorHorizon(
     uMhNear: { value: new THREE.Color(groundNear) },
     uMhScrub: { value: new THREE.Color(scrub) },
     uMhSky: { value: sky },
+    uMhPaint: { value: new THREE.Color(paint) },
+    uMhDust: { value: new THREE.Color(dust) },
   };
   material.userData.mh = u;
-  return extendMaterial(material, `mh:${tag}`, (shader) => {
+  const f = flank && {
+    hw: 0.88,
+    floorY: 0.62,
+    beltY: 1.33,
+    roofY: 2.02,
+    hoodY: 1.3,
+    cabRearZ: -0.86,
+    cabFrontZ: 0.95,
+    bedTopY: 1.44,
+    bedRearZ: -2.4,
+    noseZ: 2.44,
+    ...flank,
+  };
+  const g = (v) => Number(v).toFixed(4);
+  return extendMaterial(material, `mh:${tag}:${f ? 1 : 0}`, (shader) => {
     Object.assign(shader.uniforms, u);
+    if (f) {
+      // Object-space ray for the flank test. The pane is merged into the body
+      // kit, whose object space is the truck's own, so the flank is an
+      // axis-aligned box here and the camera comes across through the inverse
+      // model matrix once per vertex (a pane is eighty vertices).
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+        varying vec3 vMhP;
+        varying vec3 vMhN;
+        varying vec3 vMhCam;
+        varying vec3 vMhFlankN;`,
+        )
+        .replace(
+          '#include <worldpos_vertex>',
+          `#include <worldpos_vertex>
+        vMhP = position;
+        vMhN = normal;
+        vMhCam = ( inverse( modelMatrix ) * vec4( cameraPosition, 1.0 ) ).xyz;
+        vMhFlankN = normalMatrix * vec3( position.x < 0.0 ? -1.0 : 1.0, 0.0, 0.0 );`,
+        );
+    }
     shader.fragmentShader = shader.fragmentShader
       .replace(
         '#include <common>',
@@ -673,7 +744,24 @@ export function applyMirrorHorizon(
         uniform vec3 uMhGround;
         uniform vec3 uMhNear;
         uniform vec3 uMhScrub;
-        uniform float uMhSky;`,
+        uniform float uMhSky;
+        uniform vec3 uMhPaint;
+        uniform vec3 uMhDust;
+        ${
+          f
+            ? `varying vec3 vMhP;
+        varying vec3 vMhN;
+        varying vec3 vMhCam;
+        varying vec3 vMhFlankN;
+        float mhBox( float v, float a, float b, float e ) {
+          return smoothstep( a - e, a + e, v ) * ( 1.0 - smoothstep( b - e, b + e, v ) );
+        }
+        float mhGs( float d, float w ) {
+          float t = d / w;
+          return exp( -t * t );
+        }`
+            : ''
+        }`,
       )
       .replace(
         '#include <lights_fragment_maps>',
@@ -689,16 +777,71 @@ export function applyMirrorHorizon(
           // treeline and not a rule
           float mhTr = 0.5 + 0.5 * sin( mhAz * 9.0 ) * sin( mhAz * 23.0 + 1.3 );
           float mhBand = ( 1.0 - smoothstep( -0.06 - 0.04 * mhTr, -0.02, mhUp ) ) * smoothstep( -0.12, -0.07, mhUp );
-          vec3 mhG = mix( uMhNear, uMhGround, smoothstep( -0.75, -0.05, mhUp ) );
-          mhG = mix( mhG, uMhScrub, mhBand * 0.85 );
-          // Exposed by the hour through the PMREM itself: the ground colours
-          // are authored for the day plain (luma 0.26 in the map), and the
-          // same ray at dusk or night returns a fraction of that, so the
-          // laterite dims with the sky instead of glowing orange after dark.
-          float mhLum = dot( radiance, vec3( 0.2126, 0.7152, 0.0722 ) );
-          mhG *= clamp( mhLum / 0.26, 0.0, 1.3 );
+          // The plain below the horizon is the PMREM's own: it is lit by this
+          // sky at this hour, and it is what the real door beside the mirror
+          // is reflecting too. Two authored laterites stood in for it before
+          // and came back (measured on the gauntlet's mirror frame) at 0.32
+          // luma and r:b 3.9 against a trail in the same frame at 0.58 and
+          // 1.56 — a saturated orange plate under a strip of sky. So the
+          // environment's ground is kept and only graded: pulled a third of
+          // the way to grey for the dust haze over the plain, tinted, darkened
+          // towards straight down where the ray lands in the truck's own
+          // shadow, and broken by the scrub band at the skyline.
+          float mhRL = dot( radiance, vec3( 0.2126, 0.7152, 0.0722 ) );
+          vec3 mhG = mix( radiance, vec3( mhRL ), 0.35 ) * uMhGround;
+          mhG *= mix( vec3( 1.0 ), uMhNear, smoothstep( -0.08, -0.7, mhUp ) );
+          mhG = mix( mhG, mhG * uMhScrub, mhBand * 0.85 );
           float mhBelow = 1.0 - smoothstep( -0.012, 0.004, mhUp );
           radiance = mix( radiance * uMhSky, mhG, mhBelow );
+          ${
+            f
+              ? `// --- the truck's own flank ------------------------------------
+          vec3 mhON = normalize( vMhN );
+          vec3 mhOV = normalize( vMhCam - vMhP );
+          vec3 mhOR = reflect( -mhOV, mhON );
+          float mhSd = vMhP.x < 0.0 ? -1.0 : 1.0;
+          // rays heading inboard cross the plane of the door skin
+          float mhIn = -mhOR.x * mhSd;
+          if ( mhIn > 0.02 ) {
+            float mhT = ( mhSd * ${g(f.hw)} - vMhP.x ) / mhOR.x;
+            float mhY = vMhP.y + mhT * mhOR.y;
+            float mhZ = vMhP.z + mhT * mhOR.z;
+            // the pane's own reflection is a metre or two off, so an edge a
+            // pixel wide there is a few centimetres of body
+            float mhE = 0.02 + 0.01 * mhT;
+            float mhCab = mhBox( mhZ, ${g(f.cabRearZ)}, ${g(f.cabFrontZ)}, mhE );
+            float mhBed = mhBox( mhZ, ${g(f.bedRearZ)}, ${g(f.cabRearZ)}, mhE );
+            float mhNose = mhBox( mhZ, ${g(f.cabFrontZ)}, ${g(f.noseZ - 0.25)}, mhE );
+            float mhTop = ${g(f.beltY)} * mhCab + ${g(f.bedTopY)} * mhBed + ${g(f.hoodY)} * mhNose;
+            float mhPaint = ( mhCab + mhBed + mhNose ) * mhBox( mhY, ${g(f.floorY - 0.12)}, mhTop, mhE );
+            float mhGlass = mhCab * mhBox( mhY, ${g(f.beltY)} + 0.03, ${g(f.roofY - 0.06)}, mhE );
+            // beltline moulding and door shut lines: the two dark rules that
+            // make a slab of green read as a door rather than as a colour
+            float mhRule = 1.0 - 0.55 * mhGs( mhY - ${g(f.beltY)}, 0.02 ) - 0.45 * mhGs( mhZ - ${g(f.cabRearZ)}, 0.012 );
+            // the skin is lit by the sky it faces plus the sun if it is on this
+            // side; the same split three uses, so it agrees with the real door
+            vec3 mhFN = normalize( vMhFlankN );
+            vec3 mhFNw = inverseTransformDirection( mhFN, viewMatrix );
+            vec3 mhIrr = vec3( 0.35 );
+            vec3 mhSkyRef = vec3( 0.5 );
+            #if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
+              mhIrr = textureCubeUV( envMap, envMapRotation * mhFNw, 1.0 ).rgb * envMapIntensity;
+              mhSkyRef = textureCubeUV( envMap, envMapRotation * normalize( mhFNw + vec3( 0.0, 0.7, 0.0 ) ), 0.5 ).rgb * envMapIntensity;
+            #endif
+            #if NUM_DIR_LIGHTS > 0
+              mhIrr += directionalLights[ 0 ].color * ( saturate( dot( mhFN, directionalLights[ 0 ].direction ) ) * RECIPROCAL_PI );
+            #endif
+            // laterite film climbing the panel from the sill, as on the door
+            float mhFilm = ( 1.0 - smoothstep( ${g(f.floorY)}, ${g(f.beltY)}, mhY ) ) * 0.5;
+            vec3 mhAlb = mix( uMhPaint, uMhDust, mhFilm );
+            vec3 mhPaintCol = mhAlb * mhIrr * mhRule + mhSkyRef * 0.045;
+            // tinted glass over a dark cabin: a little sky, mostly nothing
+            vec3 mhGlassCol = vec3( 0.012 ) + mhSkyRef * 0.09;
+            vec3 mhFlank = mix( mhPaintCol, mhGlassCol, mhGlass );
+            radiance = mix( radiance, mhFlank, max( mhPaint, mhGlass ) );
+          }`
+              : ''
+          }
         }
         #endif`,
       );
@@ -958,6 +1101,15 @@ export function applyDirt(
     // the layer lightens and roughens rather than darkens. Off by default; on
     // for paint and the cladding.
     scratch = 0,
+    // Keys that also dress the inside of the cab — trim, trimGloss, steelDark,
+    // gap. The road film, the spatter and the cake are all exterior processes,
+    // and with no gate on them the A-pillar trim and the header rail carried
+    // the same laterite wash as the sills (critic A: "the pillar trim is
+    // picking up the exterior dust pass"). With this set they go to nothing on
+    // any face inside the cabin box that looks into the cab; the outer skin of
+    // the same door, which faces out, keeps its dirt. The box is the one
+    // `applyCabinBounce` uses.
+    cabin = false,
   } = {},
 ) {
   const tex = dirtLayers();
@@ -976,7 +1128,22 @@ export function applyDirt(
   };
   // exposed so the mix can be swept against a live render instead of guessed
   material.userData.dirt = u;
-  return extendMaterial(material, `dirt:${tag}:${arch}:${scratch > 0}`, (shader) => {
+  const cabinGate = cabin
+    ? `{
+            vec3 dcE = abs( dp - vec3( 0.0, 1.26, 0.02 ) ) - vec3( 1.02, 0.71, 0.92 );
+            float dcIn = ( 1.0 - smoothstep( -0.05, 0.015, dcE.x ) )
+                       * ( 1.0 - smoothstep( -0.05, 0.015, dcE.y ) )
+                       * ( 1.0 - smoothstep( -0.05, 0.015, dcE.z ) );
+            vec3 dcTo = vec3( 0.0, 1.26, 0.02 ) - dp;
+            float dcFace = clamp( dot( dn, dcTo / max( length( dcTo ), 1e-4 ) ) * 1.5 + 0.5, 0.0, 1.0 );
+            float dcOut = 1.0 - dcIn * dcFace;
+            dirtFilm *= dcOut;
+            dirtCake *= dcOut;
+            dirtDrop *= dcOut;
+            halo *= dcOut;
+          }`
+    : '';
+  return extendMaterial(material, `dirt:${tag}:${arch}:${scratch > 0}:${cabin ? 1 : 0}`, (shader) => {
     Object.assign(shader.uniforms, u);
 
     shader.vertexShader = shader.vertexShader
@@ -1179,6 +1346,7 @@ export function applyDirt(
           float settle = 0.3 + 0.7 * up * up;
           float wipe = smoothstep( 0.30, 0.62, blotch ) * ( 0.32 + 0.68 * smoothstep( 0.24, 0.7, sF.a ) );
           dirtFilm = clamp( settle * ( 0.12 + 0.95 * wipe ) * ( 0.4 + 0.9 * reach ) * uDirtFilm, 0.0, 0.85 );
+          ${cabinGate}
 
           vec3 dc = diffuseColor.rgb;
           float lum = dot( dc, vec3( 0.2126, 0.7152, 0.0722 ) );
@@ -1642,8 +1810,8 @@ export function treadMaps(rows = 9) {
 }
 
 /** Windscreen film: wiper arcs, dust build-up in the corners. */
-export function glassRoughness() {
-  return cached('veh.glassRough', () =>
+export function glassRoughness(kind = 'screen') {
+  return cached(`veh.glassRough.${kind}`, () =>
     roughnessTexture(
       S,
       S,
@@ -1651,14 +1819,28 @@ export function glassRoughness() {
         const u = x / S;
         const v = y / S;
         const cx = u - 0.5;
+        const dust = fbm(u * 14, v * 14, { octaves: 5, period: 14, seed: 33 });
+        const spots = smoothstep(0.72, 0.95, fbm(u * 40, v * 40, { octaves: 2, period: 40, seed: 511 }));
+        if (kind === 'side') {
+          // Door glass: nothing wipes it, so the film is even and thin, with
+          // the wind's streaks trailing aft and the lower rear corner caked.
+          // Held to a quarter of the screen's, which is what breaks the pane's
+          // sky mirror up into a haze without killing it — critic A's "no dust
+          // film" on the sunlit door glass was a pane at a flat 0.05 mirroring
+          // one smooth PMREM. Forty per cent was tried first and took the
+          // gauntlet's side panes to `see` 0.65 / 0.67 against the 0.7 floor:
+          // a structured film costs legibility where a flat one only veils.
+          const streak = fbm((u - v * 0.35) * 48, v * 3, { octaves: 3, period: 48, seed: 17 });
+          const rearLow = smoothstep(0.3, 1.0, u) * (1 - smoothstep(0.0, 0.6, v));
+          const edge = smoothstep(0.4, 0.5, Math.abs(cx)) + smoothstep(0.4, 0.5, Math.abs(v - 0.5));
+          return clamp(0.02 + (dust * 0.12 + streak * 0.08 + rearLow * 0.2 + edge * 0.16 + spots * 0.14) * 0.25, 0.02, 0.2);
+        }
         const cy = v - 0.12;
         const r = Math.hypot(cx * 1.15, cy);
         const wipe = smoothstep(0.52, 0.58, r) + (1 - smoothstep(0.1, 0.16, r));
-        const dust = fbm(u * 14, v * 14, { octaves: 5, period: 14, seed: 33 });
         const edge = smoothstep(0.36, 0.5, Math.abs(cx)) + smoothstep(0.72, 1.0, v);
         // hard water spots outside the swept arc, which is where the reflection
         // breaks up and stops looking like a mirror offcut
-        const spots = smoothstep(0.72, 0.95, fbm(u * 40, v * 40, { octaves: 2, period: 40, seed: 511 }));
         return clamp(0.015 + wipe * 0.09 + dust * 0.05 + edge * 0.2 + spots * smoothstep(0.44, 0.6, r) * 0.16, 0.015, 0.46);
       },
       // Every glass map is authored with v running bottom-to-top, the way a
@@ -1720,35 +1902,52 @@ export function glassLayerMap(kind = 'screen') {
           // two blades pivoting off the bottom edge, so the clean region is
           // the union of two annular sectors — the same pair the interior's
           // own film draws, so the two layers agree about where the dirt is
-          let swept = 0;
           // Tandem blades: both park along the bottom edge pointing right and
           // sweep up and over to the left. The first cut had both stopping at
           // vertical, so the left third of the screen was never cleaned and the
-          // whole pane read as one even haze.
-          for (const [pu, pv, a0, a1, r0, r1] of [
-            [0.3, -0.16, -0.06, 2.55, 0.22, 0.98],
-            [0.76, -0.16, -0.1, 2.45, 0.2, 0.78],
-          ]) {
-            const dx = u - pu;
-            const dy = (v - pv) * 0.56;
-            const r = Math.hypot(dx, dy);
-            const ang = Math.atan2(dy, dx);
-            if (ang > a0 && ang < a1 && r > r0 && r < r1) {
-              const eA = Math.min(ang - a0, a1 - ang);
-              const eR = Math.min(r - r0, r1 - r);
-              swept = Math.max(swept, Math.min(1, eA * 14) * Math.min(1, eR * 30));
+          // whole pane read as one even haze. `grow` widens the arcs, which is
+          // how the ridge the blade pushes the dust into is found: the band
+          // just outside the sweep and not inside it.
+          const sweep = (grow) => {
+            let s = 0;
+            for (const [pu, pv, a0, a1, r0, r1] of [
+              [0.3, -0.16, -0.06, 2.55, 0.22, 0.98],
+              [0.76, -0.16, -0.1, 2.45, 0.2, 0.78],
+            ]) {
+              const dx = u - pu;
+              const dy = (v - pv) * 0.56;
+              const r = Math.hypot(dx, dy);
+              const ang = Math.atan2(dy, dx);
+              if (ang > a0 - grow && ang < a1 + grow && r > r0 - grow * 0.5 && r < r1 + grow) {
+                const eA = Math.min(ang - a0 + grow, a1 + grow - ang);
+                const eR = Math.min(r - r0 + grow * 0.5, r1 + grow - r);
+                s = Math.max(s, Math.min(1, eA * 14) * Math.min(1, eR * 30));
+              }
             }
-          }
+            return s;
+          };
+          const swept = sweep(0);
+          // the blade's ridge: a soft band of pushed dust outside the arc,
+          // heaviest at the top of the sweep and thinning down the sides
+          const ridge = clamp(sweep(0.055) - swept) * (0.55 + 0.45 * smoothstep(0.3, 0.7, v));
           // Low-contrast: a film of fines is an even haze that thickens towards
           // the edges, not a blotch pattern. The first cut at 0.55 of noise read
           // as frost from three metres.
           const blotch = fbm(u * 6, v * 6, { octaves: 4, period: 6, seed: 205 });
           const grit = smoothstep(0.72, 0.95, fbm(u * 46, v * 46, { octaves: 2, period: 46, seed: 511 }));
-          // the corners and the top edge are where the arcs never reach; the
-          // bottom edge collects a ledge of dust where the blades park
-          const corner = smoothstep(0.3, 0.5, Math.abs(cx)) * 0.6 + smoothstep(0.78, 1.0, v) * 0.6;
+          // Where the film actually sits. Critic A read the last version as a
+          // flat tan wash at one depth: a 0.3 floor plus a 0.6 top band put as
+          // much dust along the header as along the cowl. Dust on a screen is
+          // thrown up off the bonnet and settles downward, so it is weighted to
+          // the lower 30 per cent of the pane and to the wiper ridge, with the
+          // floor and the top band both pulled down; the corners the arcs never
+          // reach keep theirs.
+          const low = (1 - smoothstep(0.02, 0.34, v)) * (0.7 + 0.3 * blotch);
+          const corner = smoothstep(0.3, 0.5, Math.abs(cx)) * 0.55 + smoothstep(0.82, 1.0, v) * 0.3;
           const ledge = (1 - smoothstep(0.0, 0.1, v)) * 0.45;
-          dust = clamp((0.3 + blotch * 0.3 + corner + ledge) * (1 - swept * 0.88) + grit * 0.14 * (1 - swept * 0.6));
+          dust = clamp(
+            (0.14 + blotch * 0.24 + corner + ledge + low * 0.5) * (1 - swept * 0.9) + ridge * 0.5 + grit * 0.14 * (1 - swept * 0.6),
+          );
           // Factory shade band: about 120 mm of the 810 mm pane, graded out.
           // The first cut ran from 70 per cent height, a 270 mm band, which is
           // a third of the screen and read as a separate darker pane.
@@ -2110,7 +2309,13 @@ export function vinylMaps(kind = 'dark') {
       const pebble = smoothstep(0.0, 0.24, fine.f1);
       return clamp(island * 0.34 + pebble * 0.5 + fbm(u * 70, v * 70, { octaves: 3, period: 70, seed: 8 }) * 0.16);
     });
-    const normal = normalFromHeight(hf, n, n, faded ? 1.5 : 1.9, { repeat: 8 });
+    // Relief down from 1.5 / 1.9 (round 4): with the grit net below at half
+    // strength the cells were still reading as a crackle through the shading.
+    // Then down again to 0.7 / 1.0: the day interior frame showed the cells as
+    // lit and shadowed facets under the key through the screen, which is the
+    // wrinkled-paper read, not the moulding. Real grain is sub-millimetre
+    // relief; it should catch as a sheen change, not as shading.
+    const normal = normalFromHeight(hf, n, n, faded ? 0.7 : 1.0, { repeat: 8 });
     // Warm grey-brown, and light enough to survive a cabin lit only by bounce.
     // At 0x2b2724 this was 2.5% reflectance: correct for a black interior in a
     // studio, but in here it went to silhouette, and ACES pulls dark warm values
@@ -2136,10 +2341,20 @@ export function vinylMaps(kind = 'dark') {
         const h = hf[y * n + x];
         // UV fade blotches, stronger on the surfaces that face the screen
         const bleach = smoothstep(0.4, 0.95, fbm(u * 6, v * 6, { octaves: 4, period: 6, seed: 617 }));
-        let c = mixRgb(base, high, clamp(h * 1.2));
+        // Crown/gutter albedo contrast narrowed (was mix by h*1.2, i.e. the
+        // full base-to-high range): the island cells tiled at 8 were the
+        // 2 cm mottle over the dash and column. The grain now moves the tone
+        // by about a third of a stop instead of a half.
+        let c = mixRgb(base, high, clamp(0.3 + h * 0.75));
         if (faded) c = mixRgb(c, [c[0] * 1.2 + 12, c[1] * 1.2 + 12, c[2] * 1.17 + 11], bleach * 0.5);
-        // grit only in the gutters between the pebbles
-        c = mixRgb(c, grit, clamp(1 - h * 2.4) * (faded ? 0.3 : 0.22));
+        // grit only in the gutters between the pebbles. Halved in round 4:
+        // at 0.3 the pale gutters drew a light net round every grain island,
+        // and tiled at 8 over the dash, the column and the door cards that net
+        // was the "same high-frequency crackle at the same amplitude
+        // everywhere" of critic B's interior note. The grime that collects in
+        // seams and under the lip is the cabin shader's job now (interior.js,
+        // uClSoil); the moulding itself only has to look moulded.
+        c = mixRgb(c, grit, clamp(1 - h * 2.4) * (faded ? 0.15 : 0.11));
         out[0] = c[0];
         out[1] = c[1];
         out[2] = c[2];
@@ -3470,7 +3685,17 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
     clearcoatRoughness: 0.07,
     clearcoatNormalMap: paintPeelNormal(),
     clearcoatNormalScale: new THREE.Vector2(0.3, 0.3),
-    envMapIntensity: 0.3,
+    // Up from 0.3. All three round-2 critics scored the paint's reflection
+    // "a sky gradient only, no environment shapes", and that is what 0.3
+    // buys: the graded model below (three bands and a rim streak) was carrying
+    // seven times the energy of the real environment at face-on, so the PMREM's
+    // acacia line, koppies and horizon never reached the frame. Swept on the
+    // day hero, the door skin's mean tracks this number almost alone — 0.218 at
+    // 0.3, 0.245 at 0.7, 0.265 at 1.0 — while the graded strength barely moves
+    // it, so the two are traded: environment up, grade down. At 0.75 the flank
+    // shows a horizon line with the plain under it and the door sits 0.03
+    // above where the critics liked it.
+    envMapIntensity: 0.75,
     ...rest,
   });
   applyBrightwork(m, {
@@ -3490,7 +3715,9 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
     // the green out of the basecoat under it. Backing off gains contrast and
     // colour at once, and 2.5 is the knee — 2.0 buys a little more saturation on
     // the doors and starts costing it on the canopy panels.
-    strength: 2.5,
+    // Then 1.8 in round 4, with the real environment up to 0.75 (above): the
+    // grade is the break-up and the rim streak now, not the reflection itself.
+    strength: 1.8,
     // Back up most of the way now the grazing over-count above is fixed. Taking
     // this to 0.62 on its own barely moved the leak (0.28% to 0.265% of the
     // frame over 0.9) because the band was never the part that was wrong — the
