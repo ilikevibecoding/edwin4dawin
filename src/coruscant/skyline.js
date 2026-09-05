@@ -40,7 +40,9 @@ void main() {
   float u = abs(N.x) > 0.5 ? vWorld.z : vWorld.x;
   float fu = fract(u / 3.0), fy = fract(vWorld.y / 5.0);
   float win = (1.0 - top) * (1.0 - lm) * step(0.34, fu) * step(fu, 0.66) * step(0.25, fy) * step(fy, 0.65);
-  win += (1.0 - top) * lm * 0.35 * step(0.4, fu) * step(fu, 0.6) * step(0.3, fy) * step(fy, 0.5);   // sparse lit slits on landmarks
+  // landmarks: a wider 4 x 6 window pitch so their night faces read as lit buildings, not black masses
+  float fu2 = fract(u / 4.0), fy2 = fract(vWorld.y / 6.0);
+  win += (1.0 - top) * lm * step(0.3, fu2) * step(fu2, 0.6) * step(0.3, fy2) * step(fy2, 0.6);
   float lit = step(0.35, hash(vec3(floor(u / 3.0), floor(vWorld.y / 5.0), vSeed)));
   vec3 night = vec3(1.0, 0.85, 0.55) * (1.2 - uSkyLight) * lit;
   vec3 day = vec3(0.55, 0.62, 0.72) * uSkyLight;
