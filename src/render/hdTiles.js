@@ -291,6 +291,11 @@ function addNoise(dst, f, amp, T, off) {
   const row = T.row, col = T.col;
   for (let y = 0; y < S; y++) { const ry = row[y] + off, o = y * S; for (let x = 0; x < S; x++) dst[o + x] += amp * f[(ry + col[x]) & NM]; }
 }
+// two banks into the same destination in one pass (dst += a1 * f1 + a2 * f2)
+function addNoise2(dst, f1, a1, f2, a2, T) {
+  const row = T.row, col = T.col;
+  for (let y = 0; y < S; y++) { const ry = row[y], o = y * S; for (let x = 0; x < S; x++) { const k = ry + col[x]; dst[o + x] += a1 * f1[k] + a2 * f2[k]; } }
+}
 // same, restricted to HD texels whose base texel has structure `code`
 function addNoiseWhere(dst, f, amp, T, off, st, code) {
   const row = T.row, col = T.col;
@@ -502,8 +507,8 @@ D.wood = (C) => {
 };
 D.stone = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.medium, 0.07, T, 0); addNoise(dl, nz.fine2, 0.05, T, 0); C.white = 0.028;
-  addNoise(dh, nz.medium, 0.3, T, 0); addNoise(dh, nz.fine2, 0.12, T, 0);
+  addNoise2(dl, nz.medium, 0.07, nz.fine2, 0.05, T); C.white = 0.028;
+  addNoise2(dh, nz.medium, 0.3, nz.fine2, 0.12, T);
   const chips = M.chips ?? (M.relief < 0.4 ? 3 : 9);
   ellipses(dl, dh, rng, chips, 1.3, 2.8, 0.9, 2.4, 0, 1.7);
   lines(dl, dh, rng, M.cracks ?? (M.relief < 0.4 ? 1 : 2), LP(-1, Math.PI, 8, 22, -0.18, -0.8, false, 0.6, 0.07, 0, false));
@@ -511,7 +516,7 @@ D.stone = (C) => {
 };
 D.brick = (C) => {
   const { A, rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium2, 0.03, T, 0); C.white = 0.03;
+  addNoise2(dl, nz.fine, 0.05, nz.medium2, 0.03, T); C.white = 0.03;
   addNoise(dh, nz.fine, 0.15, T, 0);
   addSpecks(dl, dh, seed + 5, 0.965, -0.11, -0.4, 0, 0, 0);
   ellipses(dl, dh, rng, 3, 0.9, 1.6, 0.8, 1.3, 0, 1.0001);
@@ -519,14 +524,14 @@ D.brick = (C) => {
 };
 D.cobble = (C) => {
   const { A, rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium, 0.045, T, 0); C.white = 0.03;
+  addNoise2(dl, nz.fine, 0.05, nz.medium, 0.045, T); C.white = 0.03;
   addNoise(dh, nz.fine, 0.15, T, 0);
   ellipses(dl, dh, rng, 5, 1, 1.8, 1, 1.8, 0, 1.0001);
   addNoiseWhere(dl, nz.white, 0.05, T, seed + 6, A.st, GROOVE);
 };
 D.dirt = (C) => {
   const { rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium, 0.03, T, 0); C.white = 0.05;
+  addNoise2(dl, nz.fine, 0.05, nz.medium, 0.03, T); C.white = 0.05;
   addNoise(dh, nz.fine, 0.3, T, 0); addNoise(dh, nz.white, 0.12, T, seed + 1);
   ellipses(dl, dh, rng, rng.int(6, 10), 1, 1.7, 0.8, 1.5, 1, 1.0001);
 };
@@ -545,8 +550,8 @@ D.gravel = (C) => {
 };
 D.plaster = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.coarse2, 0.035, T, 0); addNoise(dl, nz.fine, 0.028, T, 0); C.white = 0.02;
-  addNoise(dh, nz.coarse2, 0.3, T, 0); addNoise(dh, nz.fine, 0.1, T, 0);
+  addNoise2(dl, nz.coarse2, 0.035, nz.fine, 0.028, T); C.white = 0.02;
+  addNoise2(dh, nz.coarse2, 0.3, nz.fine, 0.1, T);
   if (M.sparkle) addSpecks(dl, dh, seed + 9, 0.975, 0.1, 0.1, 0, 0, 0);
   else if (rng.chance(0.4)) lines(dl, dh, rng, 1, LP(-1, Math.PI, 10, 24, -0.09, -0.4, false, 0.5, 0, 0, false));
 };
@@ -591,8 +596,8 @@ D.foliage = (C) => {
 };
 D.liquid = (C) => {
   const { T, dl, dh, nz } = C;
-  addNoise(dl, nz.coarse, 0.035, T, 0); addNoise(dl, nz.medium, 0.02, T, 0);
-  addNoise(dh, nz.coarse, 0.3, T, 0); addNoise(dh, nz.medium, 0.1, T, 0);
+  addNoise2(dl, nz.coarse, 0.035, nz.medium, 0.02, T);
+  addNoise2(dh, nz.coarse, 0.3, nz.medium, 0.1, T);
 };
 D.glow = (C) => {
   const { T, dl, dh, seed, nz } = C;
@@ -723,12 +728,14 @@ function compose(M, A, d, dl, dh, hbUp, o, material, height, seed, white) {
     // headroom keeps detail from clamping on very bright / very dark texels; transparent blocks get no detail
     const mn = Math.min(r, g, b), mx = Math.max(r, g, b);
     const hf = transp ? 0 : clamp(Math.min(mn, 255 - mx) / 40, 0.3, 1) * scale;
-    const wgt = wArr[bi], hw = transp ? 0 : 0.5 + 0.5 * wgt, gw = (1 - wgt) * hf, dw = wgt * hf;
+    const wgt = wArr[bi], hw = transp ? 0 : 0.5 + 0.5 * wgt, gw = (1 - wgt) * hf, dw = wgt * hf, ww = white * dw;
     let sr = 0, sg = 0, sb = 0;
     for (let fy = 0; fy < K; fy++) for (let fx = 0; fx < K; fx++) {
       const i = (by * K + fy) * S + bx * K + fx;
+      let dv = dl[i] * dw;
+      if (ww !== 0) dv += ww * wn[(i + wOff) & NM];
       // texels that do not look like the tile's main material get generic fine noise instead of the class detail
-      const dv = (dl[i] + white * wn[(i + wOff) & NM]) * dw + gw * (0.03 * gen[i] + 0.015 * wn[(i + genOff) & NM]);
+      if (gw !== 0) dv += gw * (0.03 * gen[i] + 0.015 * wn[(i + genOff) & NM]);
       // mostly multiplicative (keeps hue), partly additive (dark tiles still show detail)
       const m = 1 + 0.75 * dv, add = 24 * dv;
       const vr = transp ? r : cr[i] * m + add, vg = transp ? g : cg[i] * m + add, vb = transp ? b : cb[i] * m + add;
