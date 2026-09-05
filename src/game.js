@@ -25,6 +25,7 @@ import { Permissions } from './permissions.js';
 import { SaveManager } from './save.js';
 import { DisasterManager } from './disasters/manager.js';
 import { VehicleManager } from './vehicles/manager.js';
+import { registerAllStructures } from './structures/index.js';
 import { applyQuality, loadQualityName } from './quality.js';
 import { Tsunami } from './disasters/tsunami.js';
 import { Tornado } from './disasters/tornado.js';
@@ -156,6 +157,7 @@ export class Game {
     const town = buildTown();
     this.town = town;
     this.gen.addOverlay(town.overlay());
+    await registerAllStructures(this.gen, this); // Coruscant, Death Star, hyperlane, stations (lazy per-chunk fills)
     const sb = town.saloon.bounds;
     town.saloonPos = { x: (sb.x0 + sb.x1) / 2, z: (sb.z0 + sb.z1) / 2 };
     this.smokeSources = town.smoke;
