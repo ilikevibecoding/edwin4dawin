@@ -77,9 +77,12 @@ void main() {
   gl_FragColor = vec4(outc * v, 1.0);
 }`;
 
-// FXAA (3.11-style, quality preset) with an edge-contrast early out so crisp texels inside a face stay untouched.
+// FXAA (3.11-style, quality preset) restricted to geometric edges: hardware depth is an affine function of the
+// screen position across a flat face, so its second difference is ~0 inside a face and only jumps at silhouettes and
+// creases. Texel edges inside a face never reach the filter, which keeps the NearestFilter textures crisp; the
+// edge-contrast early out then skips low-contrast geometry too.
 const FXAA_FRAG = /* glsl */ `
-uniform sampler2D tex; uniform vec2 uTexel;
+uniform sampler2D tex; uniform sampler2D depthTex; uniform vec2 uTexel;
 varying vec2 vUv;
 #define FXAA_REDUCE_MIN (1.0 / 128.0)
 #define FXAA_REDUCE_MUL (1.0 / 8.0)
@@ -87,6 +90,13 @@ varying vec2 vUv;
 void main() {
   vec2 uv = vUv;
   vec3 rgbM = texture2D(tex, uv).rgb;
+  float dC = texture2D(depthTex, uv).r;
+  float dL = texture2D(depthTex, uv - vec2(uTexel.x, 0.0)).r, dR = texture2D(depthTex, uv + vec2(uTexel.x, 0.0)).r;
+  float dD = texture2D(depthTex, uv - vec2(0.0, uTexel.y)).r, dU = texture2D(depthTex, uv + vec2(0.0, uTexel.y)).r;
+  float d2 = max(abs(dL + dR - 2.0 * dC), abs(dD + dU - 2.0 * dC));
+  float d1 = max(max(abs(dL - dC), abs(dR - dC)), max(abs(dD - dC), abs(dU - dC)));
+  // 1e-6 sits ~8x above the 24-bit quantisation noise of the second difference on a flat face
+  if (d2 < 0.25 * d1 + 1e-6) { gl_FragColor = vec4(rgbM, 1.0); return; }
   vec3 rgbNW = texture2D(tex, uv + vec2(-1.0, -1.0) * uTexel).rgb;
   vec3 rgbNE = texture2D(tex, uv + vec2(1.0, -1.0) * uTexel).rgb;
   vec3 rgbSW = texture2D(tex, uv + vec2(-1.0, 1.0) * uTexel).rgb;
@@ -109,10 +119,13 @@ void main() {
 const BLOOM_LEVELS = 5;
 
 function makeTarget(w, h, opts, hdrType) {
-  return new THREE.WebGLRenderTarget(Math.max(1, w), Math.max(1, h), {
+  w = Math.max(1, w); h = Math.max(1, h);
+  return new THREE.WebGLRenderTarget(w, h, {
     type: opts.type || hdrType, format: THREE.RGBAFormat,
     minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false,
     depthBuffer: !!opts.depth, stencilBuffer: false, colorSpace: THREE.NoColorSpace,
+    // the scene target keeps its depth in a sampleable texture (DEPTH_COMPONENT24) for the FXAA geometry mask
+    depthTexture: opts.depth ? new THREE.DepthTexture(w, h, THREE.UnsignedIntType) : null,
   });
 }
 
@@ -142,7 +155,7 @@ export class PostFX {
     this.downMat = mat(DOWN_FRAG, { tex: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.upMat = mat(UP_FRAG, { uLow: { value: null }, uSame: { value: null }, uTexel: { value: new THREE.Vector2() }, uSameWeight: { value: 1 } });
     this.compositeMat = mat(COMPOSITE_FRAG, { tex: { value: null }, bloom: { value: null }, uExposure: { value: 1 }, uBloomStrength: { value: 0.7 }, uBloomCap: { value: 0.35 }, uVignette: { value: 0.14 }, uDebug: { value: 0 }, uThreshold: { value: 1 } });
-    this.fxaaMat = mat(FXAA_FRAG, { tex: { value: null }, uTexel: { value: new THREE.Vector2() } });
+    this.fxaaMat = mat(FXAA_FRAG, { tex: { value: null }, depthTex: { value: null }, uTexel: { value: new THREE.Vector2() } });
     this.quad = new THREE.Mesh(geo, this.compositeMat);
     this.quad.frustumCulled = false;
     this.scene.add(this.quad);
@@ -233,6 +246,7 @@ export class PostFX {
     if (this.fxaaEnabled) {
       this._pass(this.compositeMat, this.ldr);
       this.fxaaMat.uniforms.tex.value = this.ldr.texture;
+      this.fxaaMat.uniforms.depthTex.value = this.hdr.depthTexture;
       this.fxaaMat.uniforms.uTexel.value.set(1 / this.ldr.width, 1 / this.ldr.height);
       this._pass(this.fxaaMat, null);
     } else {

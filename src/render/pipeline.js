@@ -18,6 +18,7 @@ const MOON_TINT = new THREE.Color(0.55, 0.66, 1.0);
 // Shade colour at full sun share: sky-lit shadows are slightly cool against the warm sun (sum stays neutral at noon).
 const SHADE_TINT = new THREE.Vector3(0.93, 0.965, 1.05);
 const WHITE = new THREE.Vector3(1, 1, 1);
+const HAND_DEPTH_SLICE = 0.05;   // depth range the first-person hand is drawn into (in front of every world pixel)
 // Wrapped N.L of a flat top face (see sunLight in shading.js): what a sunlit street receives at a light elevation e.
 const topFaceNdl = (e) => (Math.max(e, 0) + SUN_WRAP) / (1 + SUN_WRAP);
 // Sky-light budget: the ambient share is whatever the directional light does not deliver to a sunlit top face,
@@ -139,8 +140,13 @@ export class RenderPipeline {
     this.post.begin();
     r.render(scene, camera);
     scene.matrixWorldAutoUpdate = autoMatrices;
-    r.clearDepth();
+    // the hand draws on top of the world through a near depth slice instead of a depth clear (three.js never sets
+    // glDepthRange itself), so the scene depth stays intact for the FXAA geometry mask; only world pixels closer than
+    // ~0.053 (the camera's near plane is 0.05) could still win over the hand
+    const gl = r.getContext();
+    gl.depthRange(0, HAND_DEPTH_SLICE);
     r.render(handScene, handCamera);
+    gl.depthRange(0, 1);
     this.post.end();
   }
 
