@@ -40,6 +40,8 @@ export const QUALITY: Record<Quality, QualitySettings> = {
   ultra: { samples: 4, shadowMapSize: 4096, cascades: 4, cloudSteps: 32, skyScale: 1.0, shadowFar: 5000, anisotropy: 16, bloom: true },
 };
 
+export type PassName = 'wake' | 'sky' | 'shadow' | 'reflection' | 'main' | 'post';
+
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
@@ -70,6 +72,11 @@ export class Game {
   readonly cull = new ViewCull();
   /** draw calls / triangles of the last shadow pass per cascade (diagnostics) */
   readonly shadowPassStats = shadowPassStats;
+  /** draw calls / triangles of the last frame per pass (diagnostics; renderer.info deltas, so free) */
+  readonly passStats: Record<PassName, { calls: number; triangles: number }> = {
+    wake: { calls: 0, triangles: 0 }, sky: { calls: 0, triangles: 0 }, shadow: { calls: 0, triangles: 0 },
+    reflection: { calls: 0, triangles: 0 }, main: { calls: 0, triangles: 0 }, post: { calls: 0, triangles: 0 },
+  };
   width = 1;
   height = 1;
   time = 0;
@@ -219,20 +226,20 @@ export class Game {
     this.reflection.excludeChildrenWhen(this.vegetation.group, (tile, cam) => trianglesOf(tile) > 64 || distanceToBounds(tile, cam) > 1500);
 
     await this.tick(progress, 'Launching boats and traffic', 0.86);
-    this.traffic = new Traffic(this.map, this.roads, this.bridges.routes, this.wakes.scene, this.params.seed, this.props.mooredBoatPositions);
+    this.traffic = new Traffic(this.map, this.roads, this.bridges.routes, this.wakes.batch, this.params.seed, this.props.mooredBoatPositions);
     for (const m of this.traffic.materials) this.registerLit(m);
     this.traffic.group.name = 'traffic';
     this.scene.add(this.traffic.group);
     for (const c of this.traffic.contrailMeshes) { c.name = 'contrail'; this.scene.add(c); }
 
     await this.tick(progress, 'Pre-flighting the aircraft', 0.92);
-    this.aircraft = new Aircraft((x, z) => this.map.heightAt(x, z), this.scene, this.wakes.scene);
+    this.aircraft = new Aircraft((x, z) => this.map.heightAt(x, z), this.scene, this.wakes.batch);
     this.registerTree(this.aircraft.model.root);
     this.aircraft.model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.castShadow) this.airframeCasters.push(o); });
     // surface decals, point sprites and trails are not mirrored (the sprites are sized for the main frame),
     // nor is the cabin interior (only visible through the glass)
     const fx = this.aircraft.effects;
-    this.reflection.exclude(fx.stampL.mesh, fx.stampR.mesh, fx.spray.points, fx.exhaust.points, fx.vortexL.mesh, fx.vortexR.mesh, ...this.traffic.contrailMeshes, ...this.aircraft.model.interiorMeshes);
+    this.reflection.exclude(fx.stampL.mesh, fx.stampR.mesh, fx.spray.points, fx.exhaust.points, fx.vortexL.mesh!, fx.vortexR.mesh!, ...this.traffic.contrailMeshes, ...this.aircraft.model.interiorMeshes);
     this.flightCamera = new FlightCamera(this.camera);
     this.flightCamera.groundHeight = (x, z) => Math.max(0, this.map.heightAt(x, z));
     // default spawn: on the water at the downtown seaplane base facing east
@@ -363,15 +370,30 @@ export class Game {
     const airMask = layerMask('all', true, this.cull.casterCascades(planePos, 9, airHeight));
     for (const o of this.airframeCasters) o.layers.mask = airMask;
     this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size);
+    const info = this.renderer.info.render;
+    const ps = this.passStats;
+    let c0 = info.calls, t0 = info.triangles;
+    const mark = (name: PassName) => { ps[name].calls = info.calls - c0; ps[name].triangles = info.triangles - t0; c0 = info.calls; t0 = info.triangles; };
     this.wakes.render(this.renderer, cx, cz);
+    mark('wake');
     this.sky.render(this.renderer, cam, this.post.width, this.post.height);
+    mark('sky');
     // the shadow cascades are rendered by the first of the two scene renders below (the mirror pass when it
     // runs, else the main pass) and reused by the second
     this.renderer.shadowMap.needsUpdate = true;
     this.reflection.render(this.scene, cam);
+    mark('reflection');
     this.renderer.setRenderTarget(this.post.target);
     this.renderer.render(this.scene, cam);
+    mark('main');
+    // the shadow pass ran inside whichever scene render came first: split it out of that pass
+    let sc = 0, st = 0;
+    for (let i = 0; i < shadowPassStats.calls.length; i++) { sc += shadowPassStats.calls[i]; st += shadowPassStats.triangles[i]; }
+    ps.shadow.calls = sc; ps.shadow.triangles = st;
+    const host = this.reflection.uniforms.uReflParams.value.x > 0 ? ps.reflection : ps.main;
+    host.calls -= sc; host.triangles -= st;
     this.post.finish(cam, this.time);
+    mark('post');
     if (this.params.dbg.has('reflview')) this.reflection.debugBlit();
     this.metrics.endFrame();
   }

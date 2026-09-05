@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CONTRAIL_MATERIAL, HullStamp, WakeTrail } from '../render/wakes';
+import { CONTRAIL_MATERIAL, HullStamp, WakeTrail, type WakeBatch } from '../render/wakes';
 import type { FlightModel } from './physics';
 import type { PlaneModel } from './model';
 import { clamp, smoothstep } from '../core/noise';
@@ -107,10 +107,9 @@ export class PlaneEffects {
   private sprayAcc = 0;
   private exhaustAcc = 0;
 
-  constructor(wakeScene: THREE.Scene, scene: THREE.Scene) {
-    this.wakeL = new WakeTrail(70, 1.6, 14, 1.2);
-    this.wakeR = new WakeTrail(70, 1.6, 14, 1.2);
-    wakeScene.add(this.wakeL.mesh, this.wakeR.mesh);
+  constructor(wakes: WakeBatch, scene: THREE.Scene) {
+    this.wakeL = new WakeTrail(70, 1.6, 14, 1.2, wakes);
+    this.wakeR = new WakeTrail(70, 1.6, 14, 1.2, wakes);
     // hull plan of the floats (5.7 m x 0.74 m at the chine), see model.ts floatSections
     this.stampL = new HullStamp(5.6, 0.74, 0.9);
     this.stampR = new HullStamp(5.6, 0.74, 0.9);
@@ -121,7 +120,7 @@ export class PlaneEffects {
     scene.add(this.spray.points, this.exhaust.points);
     this.vortexL = new WakeTrail(90, 0.5, 2.2, 0.6, CONTRAIL_MATERIAL);
     this.vortexR = new WakeTrail(90, 0.5, 2.2, 0.6, CONTRAIL_MATERIAL);
-    scene.add(this.vortexL.mesh, this.vortexR.mesh);
+    scene.add(this.vortexL.mesh!, this.vortexR.mesh!);
   }
 
   /** Drop every trail, particle and decal (used when the aircraft is re-placed). */
@@ -185,9 +184,9 @@ export class PlaneEffects {
     const tipR = this.tmp2.copy(model.wingTipR).applyQuaternion(q).add(flight.position);
     this.vortexL.update(tipL.x, tipL.z, time, gpull > 0.05, t.airspeed);
     this.vortexR.update(tipR.x, tipR.z, time, gpull > 0.05, t.airspeed);
-    this.vortexL.mesh.position.y = tipL.y; this.vortexL.mesh.updateMatrix();
-    this.vortexR.mesh.position.y = tipR.y; this.vortexR.mesh.updateMatrix();
-    (this.vortexL.mesh.material as THREE.ShaderMaterial).uniforms.uStrength.value = gpull * 0.7;
-    (this.vortexR.mesh.material as THREE.ShaderMaterial).uniforms.uStrength.value = gpull * 0.7;
+    this.vortexL.mesh!.position.y = tipL.y; this.vortexL.mesh!.updateMatrix();
+    this.vortexR.mesh!.position.y = tipR.y; this.vortexR.mesh!.updateMatrix();
+    (this.vortexL.mesh!.material as THREE.ShaderMaterial).uniforms.uStrength.value = gpull * 0.7;
+    (this.vortexR.mesh!.material as THREE.ShaderMaterial).uniforms.uStrength.value = gpull * 0.7;
   }
 }

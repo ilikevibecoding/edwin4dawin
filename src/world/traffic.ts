@@ -4,7 +4,7 @@ import { clamp, lerp } from '../core/noise';
 import type { WorldMap, Vec2 } from './map';
 import type { RoadSegment } from './roads';
 import type { BridgeRoute } from './bridges';
-import { CONTRAIL_MATERIAL, WakeTrail } from '../render/wakes';
+import { CONTRAIL_MATERIAL, WakeTrail, type WakeBatch } from '../render/wakes';
 import { PbrSoup, cellKey, createBatchedPbrMaterial } from './batching';
 import { layerMask, maskCasts, setCasterClass, type ViewCull } from './culling';
 
@@ -305,7 +305,7 @@ export class Traffic {
   boatCount = 0;
   carCount = 0;
 
-  constructor(private map: WorldMap, roads: RoadSegment[], bridges: BridgeRoute[], private wakeScene: THREE.Scene, seed: number, moored: { x: number; z: number; rot: number; len: number }[]) {
+  constructor(private map: WorldMap, roads: RoadSegment[], bridges: BridgeRoute[], wakes: WakeBatch, seed: number, moored: { x: number; z: number; rot: number; len: number }[]) {
     const rng = new Rng(`traffic-${seed}`);
     const factory = new BoatFactory();
     // moving boats along channels: baked in their local frame, batched below
@@ -316,8 +316,7 @@ export class Traffic {
         const kind: HullKind = ch.id === 'ocean-route' || ch.id === 'ship-channel' ? (rng.chance(0.6) ? 'cargo' : 'ferry') : rng.pick(['speed', 'speed', 'console', 'yacht', 'sail', 'speed']);
         const b = factory.build(kind, rng);
         const speed = kind === 'cargo' ? rng.range(4, 6) : kind === 'ferry' ? 7 : kind === 'sail' ? rng.range(2.5, 4) : kind === 'yacht' ? rng.range(5, 9) : rng.range(9, 16);
-        const wake = new WakeTrail(kind === 'cargo' ? 90 : 80, b.wakeWidth, kind === 'cargo' ? 70 : kind === 'sail' ? 20 : 42, kind === 'sail' ? 0.45 : 1.5);
-        wakeScene.add(wake.mesh);
+        const wake = new WakeTrail(kind === 'cargo' ? 90 : 80, b.wakeWidth, kind === 'cargo' ? 70 : kind === 'sail' ? 20 : 42, kind === 'sail' ? 0.45 : 1.5, wakes);
         moverGeos.push(bakeLocal(b.group));
         this.boats.push({ id: moverGeos.length - 1, route: ch.pts, routeLen: len, s: rng.range(0, len), dir: rng.chance(0.5) ? 1 : -1, speed, len: b.len, draft: b.draft, wake, phase: rng.range(0, 100) });
       }
@@ -485,7 +484,7 @@ export class Traffic {
   }
 
   /** Contrail meshes live in the main scene (they are drawn in the air, not on the water). */
-  get contrailMeshes(): THREE.Mesh[] { return this.aircraft.filter((a) => a.contrail).map((a) => a.contrail!.mesh); }
+  get contrailMeshes(): THREE.Mesh[] { return this.aircraft.filter((a) => a.contrail).map((a) => a.contrail!.mesh!); }
 
   update(dt: number, time: number, night: number): void {
     const { tmpM, tmpQ, tmpP, tmpS, tmpE, movers } = this;
@@ -554,8 +553,8 @@ export class Traffic {
       movers.setMatrixAt(a.id, tmpM.compose(p, tmpQ.setFromEuler(tmpE), tmpS));
       if (a.contrail) {
         a.contrail.update(p.x, p.z, time, true, 250);
-        a.contrail.mesh.position.y = p.y - 2;
-        a.contrail.mesh.updateMatrix();
+        a.contrail.mesh!.position.y = p.y - 2;
+        a.contrail.mesh!.updateMatrix();
       }
     }
   }

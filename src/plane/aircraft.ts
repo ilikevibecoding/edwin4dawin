@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PlaneModel } from './model';
 import { FlightModel, type FlightInputs } from './physics';
 import { PlaneEffects } from './effects';
+import type { WakeBatch } from '../render/wakes';
 
 /** The player's seaplane: model + flight model + effects glued together. */
 export class Aircraft {
@@ -10,9 +11,9 @@ export class Aircraft {
   readonly effects: PlaneEffects;
   readonly inputs: FlightInputs = { throttle: 0, pitch: 0, roll: 0, yaw: 0, flaps: 0, brake: false };
 
-  constructor(heightAt: (x: number, z: number) => number, scene: THREE.Scene, wakeScene: THREE.Scene) {
+  constructor(heightAt: (x: number, z: number) => number, scene: THREE.Scene, wakes: WakeBatch) {
     this.flight = new FlightModel(heightAt);
-    this.effects = new PlaneEffects(wakeScene, scene);
+    this.effects = new PlaneEffects(wakes, scene);
     scene.add(this.model.root);
   }
 
