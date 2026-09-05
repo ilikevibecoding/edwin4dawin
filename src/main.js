@@ -550,9 +550,11 @@ function frame() {
     traffic.group.visible = ev !== "none";
     space.root.visible = ev !== "none";
     sun.intensity = ev === "none" ? 0 : SUN_INTENSITY;
+    // freeze the 2048² sun shadow pass while the sun contributes nothing, but only once its map exists
+    // (a never-rendered shadow map breaks every lit draw call, see LightPool.update)
     const sunOn = ev !== "none";
     if (sunOn && !sun.shadow.autoUpdate) sun.shadow.needsUpdate = true;
-    sun.shadow.autoUpdate = sunOn;
+    sun.shadow.autoUpdate = sunOn || !sun.shadow.map;
   }
   lightPool.assign(zone.lightDescs(), modes.mode === "interior" ? player.position : camera.position);
   lightPool.update(dt);

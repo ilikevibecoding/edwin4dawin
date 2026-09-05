@@ -98,11 +98,13 @@ export class LightPool {
       l.intensity += (target - l.intensity) * k;
       if (!d && l.intensity < 0.01) l.intensity = 0;
       if (d && d.color && !l.color.equals(d.color)) l.color.lerp(d.color, k);
-      // an unbound spot still renders a 1024² depth pass unless its shadow map is frozen
+      // an unbound spot still renders a 1024² depth pass unless its shadow map is frozen. The map must
+      // exist before freezing: three binds a plain empty texture to the sampler2DShadow of a light whose
+      // map was never rendered, and that GL_INVALID_OPERATION drops every lit draw call
       if (l.isSpotLight) {
         const on = !!d && l.intensity > 0.001;
         if (on && !l.shadow.autoUpdate) l.shadow.needsUpdate = true;
-        l.shadow.autoUpdate = on;
+        l.shadow.autoUpdate = on || !l.shadow.map;
       }
     }
   }
