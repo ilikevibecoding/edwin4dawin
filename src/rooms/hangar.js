@@ -765,11 +765,18 @@ export function buildHangar(kit, ctx, room) {
     doorDeco(walls.S.frame, hgWallOpenings(room, ctx.doors, "S"));
     doorDeco(walls.W.frame, hgWallOpenings(room, ctx.doors, "W"));
     doorDeco(walls.E.frame, eOpen);
-    // giant bay numbers (8 m) in the quiet upper bays
-    frameHgDecal(walls.N.frame, hgNumber(1), 32.5, 20.5, 0.08, 8);
-    frameHgDecal(walls.N.frame, hgNumber(2), 97.5, 20.5, 0.08, 8);
-    frameHgDecal(walls.S.frame, hgNumber(3), 97.5, 20.5, 0.08, 8);
-    frameHgDecal(walls.S.frame, hgNumber(4), 32.5, 20.5, 0.08, 8);
+    // giant bay numbers (8 m) in the quiet upper bays: backlit amber numerals on a black sign plate. From
+    // the Kestrel's cockpit preset the dashboard hides everything below the horizon, so the S wall's
+    // upper half, 175 m off through the cell fog, is the only hangar surface its windshield shows; the
+    // unlit paint there read as a 10 % smudge (h3p), lit numerals carry through the fog
+    const bigNumber = (frame, n, cu) => {
+      frame.box("impTrim", cu, 20.5, 0.3, 8.8, 8.8, 0.6, { color: PALETTE.impBlack, texel: 1 });
+      frameHgDecal(frame, hgNumber(n), cu, 20.5, 0.62, 8, null, "hangar_decalLit");
+    };
+    bigNumber(walls.N.frame, 1, 32.5);
+    bigNumber(walls.N.frame, 2, 97.5);
+    bigNumber(walls.S.frame, 3, 97.5);
+    bigNumber(walls.S.frame, 4, 32.5);
     frameHgDecal(walls.E.frame, HG_DECAL.tie, 110, 30.5, 0.08, 6);
     // fuel / coolant manifolds along the long walls at deck level, valve stations between the ribs
     const mo = { r: 0.24, step: 12.5, accentKey, bracket: 1.15 };

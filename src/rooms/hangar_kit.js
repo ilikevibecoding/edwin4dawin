@@ -178,9 +178,9 @@ export function deckDecalImp(kit, index, x, z, size, yaw = 0, y = 0.006) {
   return kit.add("decalImp", g, { pos: [x, y, z], uv: "keep", uvRect: impDecalRect(index) });
 }
 /** Decal on a wall frame from the hangar atlas. */
-export function frameHgDecal(frame, index, cu, cv, cn, size, h = null) {
+export function frameHgDecal(frame, index, cu, cv, cn, size, h = null, key = "hangar_decal") {
   const g = new THREE.PlaneGeometry(size, h || size);
-  return frame.add("hangar_decal", g, cu, cv, cn, { uv: "keep", uvRect: hgDecalRect(index) });
+  return frame.add(key, g, cu, cv, cn, { uv: "keep", uvRect: hgDecalRect(index) });
 }
 /** Dashed line on the deck between two points (thin boxes). */
 export function dashedLine(kit, from, to, opts = {}) {

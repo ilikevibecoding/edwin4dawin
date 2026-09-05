@@ -340,6 +340,15 @@ export function ensureHangarMaterials(materials) {
   if (registered && materials.hangar_decal) return registered;
   const decal = new THREE.MeshStandardMaterial({ map: makeHangarDecals(1024, 23), transparent: true, depthWrite: false, roughness: 0.75, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, envMapIntensity: 0.3, vertexColors: true });
   setDomain(decal, "interior");
+  // backlit variant of the same atlas for the giant bay numerals (the canvas doubles as the emissive
+  // map, tinted sodium amber: signage is on the critic's short list of amber accents). From the Kestrel's
+  // cockpit the only hangar surface above the dashboard's sightline is the far wall's upper half, 175 m
+  // off through the cell fog: unlit paint there was a 10 % smudge, lit numerals read
+  const decalLit = decal.clone();
+  decalLit.emissiveMap = decal.map;
+  decalLit.emissive = new THREE.Color("#ffb45a");
+  decalLit.emissiveIntensity = 1.1;
+  setDomain(decalLit, "interior");
   const grateTex = makeHangarGrate(512, 31);
   const grate = new THREE.MeshStandardMaterial({ map: grateTex, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 0.55, metalness: 0.85, envMapIntensity: 0.7, vertexColors: true, color: 0xffffff });
   setDomain(grate, "interior");
@@ -378,6 +387,7 @@ export function ensureHangarMaterials(materials) {
   setDomain(board, "interior");
   materials.hangar_board = board;
   materials.hangar_decal = decal;
+  materials.hangar_decalLit = decalLit;
   materials.hangar_grate = grate;
   materials.hangar_glowBlue = glow;
   materials.hangar_blueDim = blueDim;
@@ -385,6 +395,6 @@ export function ensureHangarMaterials(materials) {
   materials.hangar_ceilWarm = ceilWarm;
   materials.hangar_spillWarm = spillWarm;
   materials.hangar_tread = tread;
-  registered = { decal: "hangar_decal", grate: "hangar_grate", glow: "hangar_glowBlue", blueDim: "hangar_blueDim", amberDim: "hangar_amberDim", ceilWarm: "hangar_ceilWarm", tread: "hangar_tread", board: "hangar_board" };
+  registered = { decal: "hangar_decal", decalLit: "hangar_decalLit", grate: "hangar_grate", glow: "hangar_glowBlue", blueDim: "hangar_blueDim", amberDim: "hangar_amberDim", ceilWarm: "hangar_ceilWarm", tread: "hangar_tread", board: "hangar_board" };
   return registered;
 }
