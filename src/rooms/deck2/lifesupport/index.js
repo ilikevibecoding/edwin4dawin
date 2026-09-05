@@ -30,7 +30,9 @@ export default defineRoom({
     wallColor: IMP.impGrey,
     wallAlt: IMP.impWhite,
     stripMat: "emitTeal",
-    floor: { color: IMP.impMid },
+    // one step above impMid: the rig now mirrors the (dark) room in the deck instead of a studio
+    // environment, so the painted plating needs the lift to stay ≥ 20 % grey under the fills
+    floor: { color: 0x767a80 },
     // cool-white channel strips: the teal emitter (Kestrel key, intensity 2.4) mirrored in the metal
     // tank rims as a blown streak; the wall strips stay teal
     ceiling: { channels: 4, axis: "z", stripMat: "emitWhite" },

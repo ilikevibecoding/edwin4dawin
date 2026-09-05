@@ -8,13 +8,19 @@
 // pedestals; 24 housed suspended fixtures in three hall rows plus one pendant per pod; belt dividers
 // hold the west waiting area, the east has A-frame barriers at the FAULT pod and an information
 // pylon. Door end: lockers, O2 rack, console. Forward wall: status board (numbered tiles + text
-// strips), suit rack, supply shelves, locker banks. Amber accents; lights are descriptors (8 hatch
-// accents + 2 cabin lights + 4 down-spots under the centreline fixtures).
+// strips), suit rack, supply shelves, locker banks. Amber accents; lights are descriptors (7 hatch
+// accents + the FAULT beacon + 2 cabin lights + 4 down-spots under the centreline fixtures; the
+// down-spot nearest the door is the shadow key, aimed down the runway).
+// Motion (lighting round): one animated emitter mesh (glow.js atlas, 1 draw call) carries the FAULT
+// pod's rotating beacon drum + pulsing ring / tube strip / board tile, the READY pods' breathing
+// green caps, the runway guide dashes chasing toward the pods, the status board tiles' occasional
+// flicker and the open cabins' flickering lights; the beacon and cabin descriptors follow.
 import * as THREE from "three";
 import { insideOut } from "../../../kit.js";
 import { col } from "../_shared/palette.js";
 import { rail, WALL_T } from "../_shared/shell.js";
 import { placer, indicatorField, console as consoleProp, wallScreen, lockerBank, cabinet, floorLine, pipe, dropLight } from "../_shared/props.js";
+import { GlowAtlas, rgb, frac } from "../lifesupport/glow.js";
 
 const X0 = -20;
 const X1 = 20;
@@ -46,8 +52,30 @@ const EAST = [
 ];
 const EMIT = { g: "emitGreen", a: "emitAmber", r: "emitRedImp" };
 const RED = new THREE.Color("#7a2a24");
-const PAINT_AMBER = new THREE.Color("#ffb040");
+// painted floor amber: a pigment, not the emitter colour — at #ffb040 (≈0.6 effective albedo) a line
+// straight under a 160 cd fill already sat on the bloom threshold, and the gate marks under the
+// 400 cd key bloomed into a white haze over the checkpoint. DEEP is for marks inside the key pool
+// (E ≈ 2–3× a fill pool) so they render at the same perceived brightness as the rest.
+const PAINT_AMBER = new THREE.Color("#c8802a");
+const PAINT_AMBER_DEEP = new THREE.Color("#7a4a12");
 const SWING = (135 * Math.PI) / 180; // open-hatch swing angle (past 90 deg so the leaf clears the cabin view)
+
+// Animated emitter atlas rows (glow.js). Static rows scroll at RATE texture widths / s: the beacon
+// row holds 5 sectors so the drum turns at 1 rev/s, the green row two sine periods (0.4 Hz
+// breathing), the runway row one pulse (a 5 s chase). Live rows are rewritten per frame.
+const ROW = { GREEN: 0, RUNWAY: 1, BEACON: 2, FAULT: 3, TILE0: 4, CABIN0: 14, LINE: 16, WHITE: 17, AMBER: 18 };
+const ROWS = 19;
+const RATE = 0.2;
+const BEACON = { sectors: 5, s0: 0.64, width: 0.22 }; // s0 puts the sector facing the bay at t = 40
+const hash = (n) => frac(Math.sin(n * 12.9898) * 43758.5453);
+// status board tile: steady with a hair of jitter; a brief flutter in ~6 % of the 1/3 s segments
+const flicker = (t, seed) => {
+  const seg = Math.floor(t * 3) + seed * 17;
+  if (hash(seg) < 0.06) return 0.4 + 0.6 * Math.abs(Math.sin(t * 37 + seed));
+  return 0.95 + 0.05 * hash(seg + 0.5);
+};
+// open cabin lamp: gentle irregular flicker, 0.72–1.0
+const cabinFlicker = (t, phase) => 0.84 + 0.1 * Math.sin(t * 6.1 + phase) + 0.06 * Math.sin(t * 15.7 + 1.7 * phase);
 
 // Wall openings behind the two open hatches (the manifest passes these to the shell): square holes
 // hidden behind the collar throat, closed off by the cabin tube built in detail().
@@ -72,7 +100,38 @@ export function detail(ctx, shell, room) {
   const steel = P("steel");
   const amber = P("impAmber");
 
+  // ---- animated emitters: one atlas mesh for every moving light's visible source -------------------
+  const glow = new GlowAtlas(ROWS, { intensity: 1.4, rate: RATE });
+  const C_GREEN = rgb(P("impGreen"));
+  const C_AMBER = rgb(P("impAmber"));
+  const C_RED = rgb(P("impRed"));
+  const C_WARM = rgb(0xffe4c4);
+  glow.pattern(ROW.GREEN, C_GREEN, (u) => 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(Math.PI * 4 * u)));
+  glow.pattern(ROW.RUNWAY, C_AMBER, (u) => 0.2 + 0.8 * Math.exp(-(((u - 0.745) / 0.045) ** 2))); // lit dash 5 (z 322.9) at t = 40
+  glow.beaconRow(ROW.BEACON, C_RED, BEACON.sectors, BEACON.s0, BEACON.width);
+  glow.fill(ROW.LINE, C_AMBER, 0.4); // steady dim inlay (the muster line)
+  // steady white row (= emitWhite at 1.3): the lit viewports and the board's "open" markers ride the
+  // atlas so the room keeps a material slot free for the rubber runway mat
+  const C_WHITE = rgb(0xdfe9ff);
+  glow.fill(ROW.WHITE, C_WHITE, 0.93);
+  glow.fill(ROW.AMBER, C_AMBER, 1); // steady amber for emitters that face a down-spot (board header)
+  let beacon = null; // { desc, cx, cz, yaw } — the FAULT pod's red beacon light
+  const cabins = []; // { desc, row, phase } — open pods' cabin lights
+  const tiles = []; // { row, c, seed } — status board colour fields (live rows)
+
   // ---- local helpers ------------------------------------------------------------------------------
+  // painted hazard markings (amber stripes on black): a floor patch lying flat, or a band on a face
+  // toward local +Z. Painted instead of the shared hazard texture so its draw call goes to the atlas.
+  const hazardFloor = (Q, lx, lz, w, d, y = 0.003) => {
+    Q.box("paintedMetal", lx, y, lz, w, 0.006, d, { color: black });
+    const n = Math.round(w / 0.4);
+    for (let k = 0; k < n; k++) Q.box("paintedMetal", lx - w / 2 + (k + 0.5) * (w / n), y + 0.004, lz, (w / n) * 0.5, 0.004, d - 0.08, { color: PAINT_AMBER });
+  };
+  const hazardBand = (Q, lx, ly, lz, w, h) => {
+    Q.box("paintedMetal", lx, ly, lz, w, h, 0.01, { color: black });
+    const n = Math.round(w / 0.3);
+    for (let k = 0; k < n; k++) Q.box("paintedMetal", lx - w / 2 + (k + 0.5) * (w / n), ly, lz + 0.002, (w / n) * 0.5, h - 0.02, 0.01, { color: PAINT_AMBER });
+  };
   const junction = (x, y, z, yaw, { w = 0.4, h = 0.5, conduitTo = null, emit = "emitAmber", seed = 1 } = {}) => {
     const Q = placer(kit, [x, y, z], yaw);
     Q.box("paintedMetal", 0, 0, 0.08, w, h, 0.16, { color: dark, texel: 2.5 });
@@ -147,7 +206,15 @@ export function detail(ctx, shell, room) {
     }
     // viewport: steel ring, glowing cabin behind it (dark glass on a fault pod), two frame bars
     D.add("metal", new THREE.TorusGeometry(0.3, 0.045, 6, 24), cx, 1.9, z(0.13), { color: steel });
-    D.cyl(status === "r" ? "darkGloss" : "emitWhite", cx, 1.9, z(0.122), 0.27, 0.02, "z", { segments: 32 });
+    if (status === "r") D.cyl("darkGloss", cx, 1.9, z(0.122), 0.27, 0.02, "z", { segments: 32 });
+    else {
+      const g = new THREE.CylinderGeometry(0.27, 0.27, 0.02, 32);
+      g.rotateX(Math.PI / 2);
+      g.rotateY(D.yaw);
+      const p = D.world(cx, 1.9, z(0.122));
+      g.translate(p[0], p[1], p[2]);
+      glow.add(g, ROW.WHITE, 0.5);
+    }
     D.box("paintedMetal", cx, 1.9, z(0.135), 0.03, 0.54, 0.01, { color: black });
     D.box("paintedMetal", cx, 1.9, z(0.135), 0.54, 0.03, 0.01, { color: black });
     // lever handle on the side away from the hinge, knuckles on the hinge axis
@@ -180,6 +247,9 @@ export function detail(ctx, shell, room) {
     const Q = placer(kit, pos, yaw);
     const { s: status, h, open } = spec;
     const cap = EMIT[status];
+    const cabinRow = open ? ROW.CABIN0 + cabins.length : -1;
+    // animated piece in the station frame: box (yaw-rotated) on a glow row at phase u
+    const G = (row, u, lx, ly, lz, sx, sy, sz) => glow.box(row, u, sx, sy, sz, Q.world(lx, ly, lz), yaw);
     // plinth + framed collar (3.0 x 3.0 x 0.5) around a 2.0 m throat, annular seat plate with bolts
     Q.box("paintedMetal", 0, 0.25, 0.25, 3.0, 0.5, 0.5, { color: black, texel: 4 });
     for (const sx of [-1, 1]) Q.box("paintedMetal", sx * 1.25, 2.0, 0.25, 0.5, 3.0, 0.5, { color: dark, texel: 4 });
@@ -191,7 +261,13 @@ export function detail(ctx, shell, room) {
       const a = (k / 16) * Math.PI * 2;
       Q.cyl("metal", 1.32 * Math.cos(a), 1.9 + 1.32 * Math.sin(a), 0.51, 0.045, 0.03, "z", { color: steel, segments: 8 });
     }
-    Q.add(cap, new THREE.TorusGeometry(1.08, 0.02, 4, 48), 0, 1.9, 0.52); // lit seal ring (status colour)
+    // lit seal ring in the status colour; the FAULT pod's ring pulses (glow row FAULT)
+    if (status === "r") {
+      const ring = new THREE.TorusGeometry(1.08, 0.02, 4, 48);
+      ring.rotateY(yaw);
+      ring.translate(...Q.world(0, 1.9, 0.52));
+      glow.add(ring, ROW.FAULT, 0.5);
+    } else Q.add(cap, new THREE.TorusGeometry(1.08, 0.02, 4, 48), 0, 1.9, 0.52);
     // hinge blocks on the jamb, then the door (closed on its seat, or swung 110 deg into the bay)
     for (const y of [1.35, 2.45]) Q.box("paintedMetal", h * 1.25, y, 0.62, 0.3, 0.36, 0.28, { color: black, texel: 2.5 });
     {
@@ -207,7 +283,7 @@ export function detail(ctx, shell, room) {
       Q.cyl("paintedMetal", 0, 1.9, -1.52, 1.0, 0.06, "z", { color: mid, segments: 32, texel: 2.5 });
       Q.cyl("darkGloss", 0, 2.35, -1.485, 0.16, 0.02, "z", { segments: 20 });
       Q.box("emitAmber", 0, 1.3, -1.485, 0.4, 0.05, 0.01);
-      Q.box("impFloor", 0, 1.17, -0.55, 1.3, 0.05, 1.95, { color: dark, texel: 0.5 });
+      Q.box("paintedMetal", 0, 1.17, -0.55, 1.3, 0.05, 1.95, { color: dark, texel: 2.5 });
       // two seats pulled toward the hatch so they read through the opening from the row views:
       // black pads on dark frames, tall backs, crossed amber straps with lit buckles, headrests
       for (const sx of [-1, 1]) {
@@ -224,13 +300,14 @@ export function detail(ctx, shell, room) {
         Q.box("emitAmber", sx * 0.36, 2.05, -0.705, 0.1, 0.1, 0.01);
         Q.box("emitAmber", sx * 0.36, 2.72, -1.484, 0.14, 0.06, 0.01);
       }
+      // cabin lamp + boarding light are on the pod's own circuit: both flicker with the cabin light
       Q.box("paintedMetal", 0, 2.86, -0.6, 0.18, 0.05, 1.5, { color: black });
-      Q.box("emitWhite", 0, 2.83, -0.6, 0.1, 0.02, 1.4);
+      G(cabinRow, 0.5, 0, 2.83, -0.6, 0.1, 0.02, 1.4);
       Q.cyl("metal", 0, 2.55, 0.1, 0.02, 1.3, "x", { color: steel, segments: 8 });
       for (const sx of [-1, 1]) Q.box("emitAmber", sx * 0.62, 1.2, -0.55, 0.03, 0.02, 1.8);
       // boarding light recessed in the collar's top rail, lighting the cabin and the open door
       Q.box("paintedMetal", 0, 2.93, 0.25, 0.9, 0.06, 0.34, { color: black });
-      Q.box("emitWhite", 0, 2.895, 0.25, 0.8, 0.01, 0.26);
+      G(cabinRow, 0.5, 0, 2.895, 0.25, 0.8, 0.01, 0.26);
     }
     // label plate: dark plate, "POD" glyph in white bars, pod number as lit blocks, status lamp
     Q.box("paintedMetal", 0, 3.2, 0.52, 1.7, 0.36, 0.04, { color: black, texel: 2.5 });
@@ -247,9 +324,9 @@ export function detail(ctx, shell, room) {
     // muster step: 0.6 m block with a deck tread, lit nose, kick base; hazard on the floor in front
     Q.box("paintedMetal", 0, 0.05, 1.0, 2.5, 0.1, 1.1, { color: black });
     Q.box("paintedMetal", 0, 0.35, 1.0, 2.4, 0.5, 1.0, { color: mid, texel: 4 });
-    Q.box("impFloor", 0, 0.61, 1.0, 2.42, 0.02, 1.02, { color: dark, texel: 0.5 });
+    Q.box("paintedMetal", 0, 0.61, 1.0, 2.42, 0.02, 1.02, { color: dark, texel: 4 });
     Q.box("emitAmber", 0, 0.58, 1.505, 2.2, 0.03, 0.01);
-    Q.box("hazard", 0, 0.003, 1.85, 2.8, 0.006, 0.7, { texel: 2 });
+    hazardFloor(Q, 0, 1.85, 2.8, 0.7);
     for (const sx of [-1, 1]) {
       if (open && sx === h) continue; // rail folded away on the hinge side of an open hatch
       rail(kit, PALETTE, Q.world(sx * 1.2, 0, 0.55), Q.world(sx * 1.2, 0, 1.45), pos[1] + 0.6, { h: 1.02, post: 1.0 });
@@ -267,23 +344,41 @@ export function detail(ctx, shell, room) {
       Q.box("paintedMetal", 0, 0.004, cz - 0.25, 0.7, 0.008, 0.08, { color: PAINT_AMBER });
       Q.box("paintedMetal", 0, 0.004, cz - 0.45, 0.4, 0.008, 0.08, { color: PAINT_AMBER });
     }
-    // status pillar beside the collar (red head on a fault pod)
+    // status pillar beside the collar: READY caps breathe (glow row GREEN, staggered phase), a
+    // standby cap is a steady amber block, the FAULT pod carries a rotating red beacon drum
     Q.box("paintedMetal", 1.95, 0.05, 0.55, 0.36, 0.1, 0.36, { color: black });
     Q.box("paintedMetal", 1.95, 0.75, 0.55, 0.3, 1.5, 0.3, { color: status === "r" ? RED : dark, texel: 2.5 });
-    Q.box(cap, 1.95, 1.54, 0.55, 0.32, 0.08, 0.32);
+    if (status === "g") G(ROW.GREEN, frac(idx * 0.23 + (yaw > 0 ? 0 : 0.5)), 1.95, 1.54, 0.55, 0.32, 0.08, 0.32);
+    else if (status === "r") {
+      Q.box("paintedMetal", 1.95, 1.53, 0.55, 0.32, 0.06, 0.32, { color: black });
+      Q.cyl("paintedMetal", 1.95, 1.59, 0.55, 0.13, 0.06, "y", { color: black, segments: 20 });
+      const drum = new THREE.CylinderGeometry(0.11, 0.11, 0.2, 24, 1, true);
+      const c = Q.world(1.95, 1.72, 0.55);
+      drum.translate(c[0], c[1], c[2]);
+      glow.addRange(drum, ROW.BEACON, 0, 1 / BEACON.sectors);
+      Q.cyl("paintedMetal", 1.95, 1.835, 0.55, 0.125, 0.03, "y", { color: black, segments: 20 });
+      const desc = { type: "point", pos: [c[0], c[1], c[2]], color: 0xff4a2a, intensity: 8, distance: 9, priority: 0.7 };
+      ctx.lights.push(desc);
+      beacon = { desc, cx: c[0], cz: c[2], yaw };
+    } else Q.box(cap, 1.95, 1.54, 0.55, 0.32, 0.08, 0.32);
     indicatorField(Q, 1.95, 1.15, 0.705, 0.22, 0.3, seed + 2);
-    Q.collider([1.77, 0, 0.37], [2.13, 1.6, 0.73], "status-pillar");
+    Q.collider([1.77, 0, 0.37], [2.13, 1.85, 0.73], "status-pillar");
     // launch-tube housing above: a vertical half-cylinder from the collar top to the ceiling
     Q.add("paintedMetal", new THREE.CylinderGeometry(1.3, 1.3, tubeH, 20, 1, false, -Math.PI / 2, Math.PI), 0, TUBE_Y0 + tubeH / 2, 0, { color: dark, texel: 4 });
     for (const y of [TUBE_Y0 + 0.15, TUBE_Y0 + tubeH - 0.2]) Q.add("paintedMetal", new THREE.CylinderGeometry(1.36, 1.36, 0.14, 20, 1, false, -Math.PI / 2, Math.PI), 0, y, 0, { color: black });
     Q.box("paintedMetal", 0, TUBE_Y0 + tubeH / 2, 1.3, 0.12, tubeH - 0.5, 0.08, { color: black });
-    Q.box(status === "r" ? "emitRedImp" : "emitAmber", 0, TUBE_Y0 + tubeH / 2, 1.345, 0.03, tubeH - 0.7, 0.01);
+    if (status === "r") G(ROW.FAULT, 0.5, 0, TUBE_Y0 + tubeH / 2, 1.345, 0.03, tubeH - 0.7, 0.01);
+    else Q.box("emitAmber", 0, TUBE_Y0 + tubeH / 2, 1.345, 0.03, tubeH - 0.7, 0.01);
     // pendant fixture hung from the gantry cross-tie over the muster step: the housing that explains
-    // the warm accent light. An open pod is lit from the boarding light in its throat instead.
+    // the warm accent light. An open pod is lit from the boarding light in its throat instead; the
+    // FAULT pod's pendant is dark (its station light is the beacon).
     const pend = Q.world(0, 0, 1.9);
-    dropLight(kit, PALETTE, [pend[0], CY - 0.47, pend[2]], { w: 0.5, d: 1.5, stem: 2.0, mat: "emitWarmSoft" });
-    if (open) ctx.lights.push({ type: "point", pos: Q.world(0, 2.45, -0.05), color: 0xfff0dc, intensity: 4.5, distance: 6, priority: 0.6 });
-    else ctx.lights.push({ type: "point", pos: Q.world(0, 3.0, 1.9), color: status === "r" ? 0xff7a5c : 0xffb35c, intensity: 18, distance: 9, priority: 0.6 });
+    dropLight(kit, PALETTE, [pend[0], CY - 0.47, pend[2]], { w: 0.5, d: 1.5, stem: 2.0, mat: status === "r" ? "darkGloss" : "emitWarmSoft" });
+    if (open) {
+      const desc = { type: "point", pos: Q.world(0, 2.45, -0.05), color: 0xffe8d0, intensity: 4.5, distance: 6, priority: 0.6 };
+      ctx.lights.push(desc);
+      cabins.push({ desc, row: cabinRow, phase: idx * 1.7 });
+    } else if (status !== "r") ctx.lights.push({ type: "point", pos: Q.world(0, 3.0, 1.9), color: 0xffb35c, intensity: 40, distance: 13, priority: 0.6 });
   };
   STATION_Z.forEach((z, i) => station([IX0, Y, z], Math.PI / 2, WEST[i], i, 100 + i * 7));
   STATION_Z.forEach((z, i) => station([IX1, Y, z], -Math.PI / 2, EAST[i], i, 200 + i * 7));
@@ -393,11 +488,28 @@ export function detail(ctx, shell, room) {
   // =============================================================================================
   // CENTRE: runway with the muster line, guide lights, hanging muster signs, boarding lanes
   // =============================================================================================
-  kit.boxMM("darkGloss", [-0.9, Y, 306.4], [0.9, Y + 0.012, 328.4]);
+  // runway: a charcoal rubber anti-slip mat. It must be genuinely matte — the door view looks down
+  // the centreline with the four down-spots overhead, so every spot has a mirror point on the mat
+  // 2–5 m ahead of the camera. darkGloss (r 0.25) and paintedMetal (worn-metal map, brushed grain
+  // r ≈ 0.3) both bloomed those points into one white glitter path; rubber (r 0.8–0.94) does not.
+  kit.boxMM("rubber", [-0.9, Y, 306.4], [0.9, Y + 0.012, 328.4], { color: 0xffffff });
   const LY = Y + 0.014;
-  floorLine(kit, [0, LY, 306.6], [0, LY, 328.2], 0.16, "emitAmber");
+  // muster line: a steady dim inlay on the matte atlas material. Both a painted (paintedMetal) and
+  // an emitAmber strip sit on the camera–key axis of the door view and mirrored the four centreline
+  // spots into one bloomed glitter path (worn-metal roughness ≈ 0.5 at a grazing sightline)
+  glow.box(ROW.LINE, 0.5, 0.16, 0.006, 13.7, [0, LY + 0.003, 313.45]); // 306.6 .. 320.3
+  glow.box(ROW.LINE, 0.5, 0.16, 0.006, 7.3, [0, LY + 0.003, 324.55]); // 320.9 .. 328.2
   for (const z of STATION_Z) floorLine(kit, [-0.85, LY, z], [0.85, LY, z], 0.1, "emitAmber");
-  for (let z = 307.0; z <= 328.0; z += 3.0) for (const x of [-0.7, 0.7]) kit.box("emitAmber", x, Y + 0.02, z, 0.14, 0.016, 0.14);
+  // guide dashes either side of the muster line: one animated pair-row (glow row RUNWAY) whose lit
+  // pulse runs from the door toward the pods every 5 s — dash k's u is its position on the pattern,
+  // decreasing away from the door so the scrolling pulse travels forward
+  {
+    const N = 23;
+    for (let k = 0; k < N; k++) {
+      const u = 0.05 + 0.9 * (1 - k / (N - 1));
+      for (const x of [-0.62, 0.62]) glow.box(ROW.RUNWAY, u, 0.12, 0.012, 0.4, [x, Y + 0.026, 327.4 - k * 0.9]);
+    }
+  }
   // painted boarding lanes from the runway to each pod's muster square
   for (const z of STATION_Z) {
     for (const s of [-1, 1]) {
@@ -422,18 +534,22 @@ export function detail(ctx, shell, room) {
     G.box(s < 0 ? "emitGreen" : "emitAmber", 0, 0.5, 0.062, 0.05, 0.4, 0.01);
     G.collider([-0.2, 0, -0.2], [0.2, 1.85, 0.2], "muster-post");
   }
-  for (let k = 0; k < 6; k++) kit.box("paintedMetal", -0.65 + k * 0.26, Y + 0.016, 324.6, 0.18, 0.006, 0.18, { color: k % 2 ? PAINT_AMBER : black });
-  for (const x of [-1.1, 1.1]) floorLine(kit, [x, Y + 0.004, 324.1], [x, Y + 0.004, 325.1], 0.1, "paintedMetal", PAINT_AMBER);
+  // stop line: three amber inlays on the matte atlas row — as painted checkers (paintedMetal) they
+  // sat exactly on the second down-spot's mirror line in the door view and bloomed to white
+  for (let k = 0; k < 3; k++) glow.box(ROW.LINE, 0.5, 0.18, 0.006, 0.18, [-0.39 + k * 0.39, LY + 0.004, 324.6]);
+  for (const x of [-1.1, 1.1]) floorLine(kit, [x, Y + 0.004, 324.1], [x, Y + 0.004, 325.1], 0.1, "paintedMetal", PAINT_AMBER_DEEP);
   // boarding checkpoint on the runway 7.6 m in from the door: a pair of control pedestals angled at
   // the arriving crew, a floor-mounted lane gate between them (pivot housing with its striped boom
   // raised, receiving bollard opposite, lane-open lamps) and a painted check zone
   {
     const gz = 320.6;
-    consoleProp(kit, PALETTE, [-1.55, Y, gz], 0.35, { w: 0.9, d: 0.6, h: 1.15, screens: 1, screenMat: "screenImp2", seed: 45 });
-    consoleProp(kit, PALETTE, [1.55, Y, gz], -0.35, { w: 0.9, d: 0.6, h: 1.15, screens: 1, screenMat: "screenImp0", seed: 46 });
+    // (turned 43 deg toward the lane: at 20 deg their tilted screens mirrored the door-end key into
+    // the door view as two blown rectangles)
+    consoleProp(kit, PALETTE, [-1.55, Y, gz], 0.75, { w: 0.9, d: 0.6, h: 1.15, screens: 1, screenMat: "screenImp2", seed: 45 });
+    consoleProp(kit, PALETTE, [1.55, Y, gz], -0.75, { w: 0.9, d: 0.6, h: 1.15, screens: 1, screenMat: "screenImp0", seed: 46 });
     const C = placer(kit, [0, Y, gz], 0);
     C.box("paintedMetal", 0, 0.03, 0, 1.2, 0.06, 0.4, { color: black, texel: 4 });
-    for (const f of [-1, 1]) C.box("paintedMetal", 0, 0.062, f * 0.17, 1.1, 0.004, 0.04, { color: PAINT_AMBER });
+    for (const f of [-1, 1]) C.box("paintedMetal", 0, 0.062, f * 0.17, 1.1, 0.004, 0.04, { color: PAINT_AMBER_DEEP });
     // pivot housing + raised boom (red / white bands) on the west side
     C.box("paintedMetal", -0.62, 0.41, 0.02, 0.24, 0.7, 0.3, { color: dark, texel: 4 });
     C.box("paintedMetal", -0.62, 0.78, 0.02, 0.26, 0.04, 0.32, { color: black });
@@ -441,7 +557,8 @@ export function detail(ctx, shell, room) {
     C.box("emitGreen", -0.62, 0.55, 0.182, 0.1, 0.03, 0.01);
     C.box("emitAmber", -0.62, 0.46, 0.182, 0.06, 0.03, 0.01);
     C.cyl("metal", -0.62, 0.7, 0.2, 0.05, 0.3, "x", { color: steel, segments: 12 });
-    for (let k = 0; k < 4; k++) C.box("paintedMetal", -0.62, 0.7 + 0.155 + k * 0.31, 0.2, 0.06, 0.31, 0.12, { color: k % 2 ? white : P("impRed") });
+    // light bands in grey, not white: the boom stands 4 m under the 400 cd key and white bloomed
+    for (let k = 0; k < 4; k++) C.box("paintedMetal", -0.62, 0.7 + 0.155 + k * 0.31, 0.2, 0.06, 0.31, 0.12, { color: k % 2 ? grey : P("impRed") });
     C.box("paintedMetal", -0.62, 1.96, 0.2, 0.08, 0.04, 0.14, { color: black });
     C.collider([-0.75, 0, -0.14], [-0.49, 2.0, 0.28], "lane-gate");
     // receiving bollard with the boom cradle on the east side
@@ -450,7 +567,7 @@ export function detail(ctx, shell, room) {
     for (const f of [-1, 1]) C.box("metal", 0.62, 0.7, 0.2 + f * 0.08, 0.08, 0.16, 0.02, { color: steel });
     C.box("metal", 0.62, 0.63, 0.2, 0.08, 0.02, 0.18, { color: steel });
     C.collider([0.53, 0, -0.07], [0.71, 0.8, 0.3], "lane-gate");
-    for (let k = -1; k <= 1; k++) C.box("paintedMetal", k * 0.36, 0.016, 0.5, 0.2, 0.006, 0.2, { color: k ? PAINT_AMBER : black });
+    for (let k = -1; k <= 1; k++) C.box("paintedMetal", k * 0.36, 0.016, 0.5, 0.2, 0.006, 0.2, { color: k ? PAINT_AMBER_DEEP : black });
   }
   // stretcher trolley parked off the runway between the gate posts and the checkpoint: wheeled frame
   // with two shelves, a folded stretcher on top, med kit + blanket + O2 bottle below, push handle
@@ -463,7 +580,7 @@ export function detail(ctx, shell, room) {
     for (const lx of [-0.33, 0.33]) S.cyl("metal", lx, 0.95, 0.9, 0.02, 0.1, "y", { color: steel, segments: 8 });
     for (const lx of [-0.2, 0.2]) S.cyl("metal", lx, 0.89, 0, 0.02, 1.9, "z", { color: steel, segments: 8 });
     S.box("paintedMetal", 0, 0.89, 0, 0.42, 0.06, 1.7, { color: mid, texel: 4 });
-    S.box("paintedMetal", 0, 0.925, 0, 0.42, 0.01, 0.12, { color: PAINT_AMBER });
+    S.box("paintedMetal", 0, 0.925, 0, 0.42, 0.01, 0.12, { color: PAINT_AMBER_DEEP });
     S.box("paintedMetal", 0, 0.5, 0.55, 0.36, 0.26, 0.36, { color: white, texel: 4 });
     S.box("paintedMetal", -0.183, 0.5, 0.55, 0.01, 0.16, 0.05, { color: P("impRed") });
     S.box("paintedMetal", -0.183, 0.5, 0.55, 0.01, 0.05, 0.16, { color: P("impRed") });
@@ -474,7 +591,7 @@ export function detail(ctx, shell, room) {
     S.collider([-0.4, 0, -1.0], [0.4, 1.05, 1.0], "stretcher-trolley");
   }
   // hanging muster signs: framed dark plates with small amber glyph bars (not a lit slab)
-  for (const z of [313.0, 321.8]) {
+  for (const z of [311.85, 321.6]) {
     kit.box("paintedMetal", 0, CY - 0.555, z, 0.06, 1.05, 0.06, { color: black });
     kit.box("paintedMetal", 0, CY - 1.3, z, 1.5, 0.5, 0.12, { color: black, texel: 2.5 });
     for (const s of [-1, 1]) {
@@ -486,7 +603,7 @@ export function detail(ctx, shell, room) {
   }
   // hall fixtures in three rows: a centreline row over the runway in the gaps between stations (the
   // four down-spot fills hang under these) and two side rows on the pod rhythm over the muster floor
-  const FIX = [310.8, 315.2, 319.6, 324.0];
+  const FIX = [309.4, 314.3, 319.2, 324.0];
   for (const z of FIX) dropLight(kit, PALETTE, [0, CY, z], { w: 2.4, d: 0.6, stem: 0.9, mat: "emitWarmSoft" });
   for (const x of [-8.2, 8.2]) for (const z of STATION_Z) dropLight(kit, PALETTE, [x, CY, z], { w: 2.0, d: 0.5, stem: 0.9, mat: "emitWarmSoft" });
   // overhead gantry beams tying the launch tubes together along each wall (hung between channels)
@@ -523,7 +640,7 @@ export function detail(ctx, shell, room) {
       }
       Q.cyl("metal", 0, y0 + 0.5, 0.24, 0.015, w - 0.16, "x", { color: steel, segments: 8 });
     }
-    Q.box("hazard", 0, h - 0.13, d / 2 + 0.005, w - 0.2, 0.12, 0.01, { texel: 2 });
+    hazardBand(Q, 0, h - 0.13, d / 2 + 0.005, w - 0.2, 0.12);
     Q.collider([-w / 2, 0, -d / 2], [w / 2, h, d / 2], "o2-rack");
   }
   crate(10.6, IZ1 - 0.65, 0.04);
@@ -545,8 +662,10 @@ export function detail(ctx, shell, room) {
     const bz = IZ0 + 0.02;
     // clean dark panel plate (the worn-metal map on a 6.6 m slab reads as speckle even at texel 4)
     kit.boxMM("impPanel", [-3.3, Y + 1.25, bz], [3.3, Y + 3.75, bz + 0.12], { color: black, uv: "keep" });
-    kit.boxMM("impPanel", [-3.3, Y + 3.5, bz + 0.12], [3.3, Y + 3.75, bz + 0.14], { color: white, uv: "keep" });
-    kit.boxMM("emitAmber", [-3.1, Y + 3.58, bz + 0.14], [3.1, Y + 3.66, bz + 0.15]);
+    kit.boxMM("impPanel", [-3.3, Y + 3.5, bz + 0.12], [3.3, Y + 3.75, bz + 0.14], { color: grey, uv: "keep" });
+    // header strip on the matte atlas: as emitAmber (r 0.4) it mirrored the forward down-spot into a
+    // white spot whose bloom washed the tile below it in the board view
+    glow.box(ROW.AMBER, 0.5, 6.2, 0.08, 0.01, [0, Y + 3.62, bz + 0.145]);
     const B = placer(kit, [0, Y, bz + 0.12], 0);
     // header: "POD STATUS" text strip + bay glyph
     textStrip(B, -1.6, 3.625, 0.03, 1.2, 0.1, 1);
@@ -555,14 +674,20 @@ export function detail(ctx, shell, room) {
         const st = arr[i];
         const x = -2.4 + i * 1.2;
         const y = 2.9 - row * 0.85;
-        B.box("darkGloss", x, y, 0.01, 1.0, 0.7, 0.02);
-        // status colour field (top), pod number as five 14 cm blocks (middle, readable at 3 m) with
-        // the row's W / E marker, and one READY / FAULT text strip across the tile (bottom)
-        B.box(EMIT[st.s], x, y + 0.21, 0.025, 0.9, 0.22, 0.01);
+        // matte bezel: as darkGloss (r 0.25) the strip of plate showing above the status field sat on
+        // the forward down-spot's mirror point in the board view and bloomed white over the field
+        B.box("impPanel", x, y, 0.01, 1.0, 0.7, 0.02, { color: black, uv: "keep" });
+        // status colour field (top) on a live glow row — the FAULT tile pulses with its pod's ring,
+        // the others flicker occasionally; pod number as five 14 cm blocks (middle, readable at
+        // 3 m) with the row's W / E marker, and one READY / FAULT text strip across the tile (bottom)
+        const tileRow = st.s === "r" ? ROW.FAULT : ROW.TILE0 + row * 5 + i;
+        glow.box(tileRow, 0.5, 0.9, 0.22, 0.01, [x, Y + y + 0.21, bz + 0.12 + 0.025]);
+        if (st.s !== "r") tiles.push({ row: tileRow, c: st.s === "g" ? C_GREEN : C_AMBER, seed: row * 5 + i });
         B.box("paintedMetal", x - 0.4, y + 0.21, 0.03, 0.1, 0.14, 0.01, { color: row ? black : white });
         for (let k = 0; k < 5; k++) B.box(k <= i ? "emitAmber" : "paintedMetal", x - 0.34 + k * 0.17, y - 0.01, 0.025, 0.14, 0.14, 0.01, { color: dark });
         textStrip(B, x - 0.06, y - 0.23, 0.025, 0.74, 0.12, i + row * 3);
-        B.box(st.open ? "emitWhite" : st.s === "r" ? "emitRedImp" : "emitGreen", x + 0.38, y - 0.23, 0.025, 0.1, 0.1, 0.01);
+        if (st.open) glow.box(ROW.WHITE, 0.5, 0.1, 0.1, 0.01, B.world(x + 0.38, y - 0.23, 0.025));
+        else B.box(st.s === "r" ? "emitRedImp" : "emitGreen", x + 0.38, y - 0.23, 0.025, 0.1, 0.1, 0.01);
       }
     }
     indicatorField(B, 0, 1.45, 0.005, 5.8, 0.18, 51);
@@ -581,7 +706,7 @@ export function detail(ctx, shell, room) {
     Q.box("paintedMetal", 0, 0.05, 0, w, 0.1, d, { color: black });
     Q.box("impPanel", 0, h / 2, -d / 2 + 0.02, w - 0.1, h - 0.1, 0.02, { color: mid, uv: "keep" });
     Q.cyl("metal", 0, h - 0.2, 0.05, 0.02, w - 0.2, "x", { color: steel, segments: 8 });
-    Q.box("hazard", 0, h - 0.12, d / 2 + 0.005, w - 0.3, 0.1, 0.01, { texel: 2 });
+    hazardBand(Q, 0, h - 0.12, d / 2 + 0.005, w - 0.3, 0.1);
     for (let k = 0; k < 4; k++) {
       const lx = -w / 2 + 0.42 + k * 0.65;
       Q.cyl("metal", lx, h - 0.27, 0.05, 0.012, 0.14, "y", { color: steel, segments: 6 });
@@ -623,7 +748,7 @@ export function detail(ctx, shell, room) {
     Q.add("metal", new THREE.TorusGeometry(0.2, 0.05, 8, 20), 0.9, 1.6, 0, { color: steel, rot: [Math.PI / 2, 0, 0] });
     Q.box("paintedMetal", 0.4, 1.63, 0, 0.3, 0.2, 0.3, { color: black, texel: 2.5 });
     Q.box("emitAmber", 0.4, 1.68, 0.155, 0.16, 0.03, 0.01);
-    Q.box("hazard", 0, h - 0.1, d / 2 + 0.005, w - 0.3, 0.1, 0.01, { texel: 2 });
+    hazardBand(Q, 0, h - 0.1, d / 2 + 0.005, w - 0.3, 0.1);
     Q.collider([-w / 2, 0, -d / 2], [w / 2, h, d / 2], "supply-shelf");
   }
   wallScreen(kit, [-9.0, Y + 2.95, IZ0 + 0.1], 0, 2.4, 0.8, "screenImp3", { accent: "emitAmber" });
@@ -637,10 +762,49 @@ export function detail(ctx, shell, room) {
   pipe(kit, PALETTE, [-19.0, Y + 5.4, IZ0 + 0.3], [19.0, Y + 5.4, IZ0 + 0.3], 0.06, { color: dark, bracket: 3 });
 
   // =============================================================================================
-  // LIGHTS: four warm down-spots under the centreline fixtures aimed at the runway (spots use their
-  // own pool slot, so the ten station lights — 8 hatch accents + 2 cabins — stay live) = 14 total
+  // LIGHTS: four warm spots under the centreline fixtures (their own pool slot, so the ten station
+  // lights — 7 hatch accents + beacon + 2 cabins — stay live) = 14 total. The spot nearest the door
+  // is the room's shadow KEY: aimed down the runway so the checkpoint pedestals, lane gate and
+  // stretcher trolley throw their shadows forward along the deck; the other three are fills at
+  // 33–40 % of the key (the rig's captured environment no longer lifts the floor, so the fills carry
+  // the far half — the hall reads brightest at the door and falls off toward the board).
   // =============================================================================================
-  for (const z of FIX) {
-    ctx.lights.push({ type: "spot", pos: [0, CY - 1.4, z], target: [0, Y, z], color: 0xffe6cc, intensity: 90, distance: 30, angle: 1.15, penumbra: 0.7, priority: 0.9 });
-  }
+  FIX.forEach((z, i) => {
+    if (i === FIX.length - 1) {
+      ctx.lights.push({ type: "spot", pos: [0, CY - 1.4, z], target: [0, Y, z - 2.5], color: 0xffe6cc, intensity: 400, distance: 40, angle: 1.05, penumbra: 0.45, priority: 1.0, shadow: true });
+    } else {
+      // near-hemispherical flat cones (83 deg, short penumbra) so the muster floor either side of
+      // the runway reads; the forward one is softer (it also lights the status board wall 4 m away)
+      ctx.lights.push({ type: "spot", pos: [0, CY - 1.4, z], target: [0, Y, z], color: 0xffe6cc, intensity: i === 0 ? 130 : 160, distance: 30, angle: 1.45, penumbra: 0.2, priority: 0.9 });
+    }
+  });
+
+  glow.build(ctx.group);
+  return {
+    update(dt, t) {
+      // FAULT pod: ring, tube strip and board tile pulse together (0.9 Hz); the beacon light rides
+      // the drum's bright sector on a 16 cm circle and flashes as the sector sweeps the bay
+      glow.fill(ROW.FAULT, C_RED, 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(t * Math.PI * 1.8)));
+      if (beacon) {
+        const a = glow.beaconAngle(t, BEACON.sectors, BEACON.s0, BEACON.width);
+        const d = beacon.desc;
+        d.pos[0] = beacon.cx + 0.16 * Math.sin(a);
+        d.pos[2] = beacon.cz + 0.16 * Math.cos(a);
+        const f = Math.max(0, Math.cos(a - beacon.yaw)); // 1 when the sector faces the bay (local +z)
+        d.intensity = 4 + 14 * f * f;
+      }
+      // open cabins: lamp + boarding light + their descriptor flicker as one circuit
+      for (const c of cabins) {
+        const f = cabinFlicker(t, c.phase);
+        c.desc.intensity = 4.5 * f;
+        glow.fill(c.row, C_WARM, f);
+      }
+      // status board: each tile on its own live row
+      for (const tile of tiles) glow.fill(tile.row, tile.c, flicker(t, tile.seed));
+      glow.update(t);
+    },
+    dispose() {
+      glow.dispose();
+    },
+  };
 }

@@ -38,7 +38,7 @@ export default defineRoom({
     // and a lifted floor tint (one step above impMid) keep the wide bay from falling to ~15 % grey
     // between the amber accents. The runway strip is built in detail.js (it stops short of the door
     // dressing's threshold).
-    floor: { color: 0x7c8088 },
+    floor: { color: 0x868a92 },
     ceiling: { channels: 4, axis: "x", stripMat: "emitAmber", color: 0x7a7e86 },
     doorDressing: { accent: "emitAmber" },
     serviceBand: { y: 3.95, faces: ["n", "s"] },

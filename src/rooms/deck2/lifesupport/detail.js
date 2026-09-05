@@ -3,11 +3,17 @@
 // along the east wall), waste reclamation (two horizontal digesters in a curbed sump at the aft end),
 // a control station by the door and a service catwalk at +4.5 m along the east and aft walls.
 // Teal-tinted metal = water, white/grey = air. Everything is kit-bashed; lights are descriptors.
+// Lighting round: the shadow key is a yoked flood head over the west edge of the tank farm aimed
+// across the walkway (tanks, manifold and pump skids throw long shadows east over the deck); one
+// animated emitter mesh (glow.js atlas, 1 draw call) carries the coolant-flow sight-glass sleeves on
+// the manifold and return line, the pump skids' status lamps (three blink rates), the sump beacon's
+// rotating amber drum (its spot sweeps the grating with it) and a scrubber's pulsing fan glow.
 import * as THREE from "three";
 import { GRATE_TILE } from "../../../textures.js";
 import { col } from "../_shared/palette.js";
 import { rail, WALL_T } from "../_shared/shell.js";
-import { placer, indicatorField, console as consoleProp, wallScreen, lockerBank, table, pipe, duct, tank, pillar, floorLine, cabinet, hazardStrip } from "../_shared/props.js";
+import { placer, indicatorField, console as consoleProp, wallScreen, lockerBank, table, pipe, duct, tank, pillar, floorLine, cabinet } from "../_shared/props.js";
+import { GlowAtlas, rgb, frac, smoothstep } from "./glow.js";
 
 const X0 = 38;
 const X1 = 62;
@@ -28,6 +34,26 @@ const WATER_DARK = new THREE.Color("#2c6b66");
 const PAINT_TEAL = new THREE.Color("#5fd8c8"); // painted floor markings
 const PAINT_AMBER = new THREE.Color("#ffb040");
 
+// Animated emitter atlas rows (glow.js). Static rows scroll at RATE widths / s: the flow row's 12
+// stripes travel along the sight-glass sleeves, the beacon row's single sector turns the sump drum
+// at 0.2 rev/s. Live rows (pump lamps, fan glow) are rewritten per frame.
+const ROW = { FLOW: 0, BEACON: 1, PUMP0: 2, FAN: 5 };
+const ROWS = 6;
+const RATE = 0.2;
+const BEACON = { sectors: 1, s0: 0.4, width: 0.2 }; // s0: the sector faces the door (-z) at t = 40
+const PUMP_BLINK = [
+  { hz: 0.5, phase: 0.25 },
+  { hz: 0.8, phase: 0.75 },
+  { hz: 1.3, phase: 0.3 },
+];
+const GLOW_SCRUB = 1; // scrubber whose fan glow pulses
+const SUMP_Z = 411.6; // sump beacon hangs off the aft catwalk at x 50
+// status lamp blink with soft edges: on for the first half of each cycle
+const blink = (t, { hz, phase }) => {
+  const s = frac(t * hz + phase);
+  return 0.12 + 0.88 * smoothstep(0, 0.06, s) * (1 - smoothstep(0.5, 0.56, s));
+};
+
 export function detail(ctx, shell, room) {
   const { kit, PALETTE } = ctx;
   const Y = room.floorY;
@@ -42,7 +68,45 @@ export function detail(ctx, shell, room) {
   const WMX = 44.9; // ceiling water main (r 0.3) runs along z at this x
   const WMY = CY - 1.3;
 
+  // ---- animated emitters: one atlas mesh for every moving light's visible source -------------------
+  const glow = new GlowAtlas(ROWS, { intensity: 1.4, rate: RATE });
+  const C_TEAL = rgb(PAINT_TEAL);
+  const C_AMBER = rgb(P("impAmber"));
+  // stripe peak 0.7 (× 1.4 = 0.98): at 1.0 the teal sat over the bloom threshold and the six
+  // stripes on a sleeve fused into one white streak in the catwalk view
+  glow.pattern(ROW.FLOW, C_TEAL, (u) => {
+    const s = frac(12 * u);
+    return 0.15 + 0.55 * smoothstep(0, 0.08, s) * (1 - smoothstep(0.3, 0.38, s));
+  });
+  glow.beaconRow(ROW.BEACON, C_AMBER, BEACON.sectors, BEACON.s0, BEACON.width);
+  // coolant-flow sight glass: a short sleeve around a pipe run along z whose stripes travel in `dir`
+  const sightGlass = (x, y, z, r, len, dir) => {
+    const g = new THREE.CylinderGeometry(r, r, len, 16, 1, true);
+    g.rotateX(Math.PI / 2); // axis → +z (uv.y runs -z → +z)
+    g.translate(x, y, z);
+    const span = len * 0.5;
+    if (dir > 0) glow.addAxial(g, ROW.FLOW, span, 0);
+    else glow.addAxial(g, ROW.FLOW, 0, span);
+    for (const s of [-1, 1]) kit.cyl("metal", x, y, z + s * (len / 2 + 0.03), r + 0.03, 0.06, "z", { color: steel, segments: 16 });
+  };
+  let sump = null; // the sump beacon's spot descriptor
+
   // ---- small local helpers ----------------------------------------------------------------------
+  // painted hazard strip (amber blocks on black) over a floor/curb rectangle — painted rather than
+  // the shared hazard texture so that draw call goes to the animated emitters
+  const hazardStrip = (min, max, y) => {
+    const w = max[0] - min[0];
+    const d = max[1] - min[1];
+    kit.boxMM("paintedMetal", [min[0], y, min[1]], [max[0], y + 0.005, max[1]], { color: black });
+    const along = w >= d ? w : d;
+    const n = Math.max(2, Math.round(along / 0.4));
+    for (let k = 0; k < n; k++) {
+      const a = (k + 0.5) * (along / n);
+      const half = (along / n) * 0.25;
+      if (w >= d) kit.boxMM("paintedMetal", [min[0] + a - half, y + 0.005, min[1] + 0.03], [min[0] + a + half, y + 0.009, max[1] - 0.03], { color: PAINT_AMBER });
+      else kit.boxMM("paintedMetal", [min[0] + 0.03, y + 0.005, min[1] + a - half], [max[0] - 0.03, y + 0.009, min[1] + a + half], { color: PAINT_AMBER });
+    }
+  };
   const elbow = (x, y, z, r, color = WATER) => kit.add("metal", new THREE.SphereGeometry(r, 14, 10), { pos: [x, y, z], color });
   const strut = (a, b, size = 0.12, color = dark) => {
     const dir = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
@@ -229,6 +293,12 @@ export function detail(ctx, shell, room) {
   pipe(kit, PALETTE, [RX, RY, 409.0], [IX0, RY, 409.0], 0.16, { color: steel, bracket: 9 });
   elbow(RX, RY, 386.0, 0.18, steel);
   elbow(RX, RY, 409.0, 0.18, steel);
+  // flow sight glasses between the manifold's ceiling hangers: supply runs aft (+z) on the manifold,
+  // the return line brings it back (-z) — flanged sleeves whose lit stripes travel with the flow
+  for (const z of [390.3, 396.0, 401.8]) {
+    sightGlass(TANK_X, MY, z, 0.29, 1.0, +1);
+    sightGlass(RX, RY, z, 0.19, 0.8, -1);
+  }
   for (let i = 0; i < PUMP_Z.length; i++) {
     const z = PUMP_Z[i];
     // pump skid: black block, grey motor along z, end bells, indicator field, teal status strip
@@ -239,7 +309,9 @@ export function detail(ctx, shell, room) {
     for (const lx of [-0.5, 0.5]) Q.cyl("paintedMetal", lx, 1.22, 0, 0.36, 0.1, "x", { color: dark, segments: 16 });
     Q.box("paintedMetal", 0, 1.22, 0, 0.5, 0.2, 0.75, { color: dark });
     indicatorField(Q, 0.15, 0.62, 0.56, 0.7, 0.2, 60 + i);
-    Q.box("emitTeal", -0.35, 0.62, 0.56, 0.25, 0.05, 0.01);
+    // run lamp: blinks at this skid's own rate (glow live row PUMP0 + i)
+    Q.box("paintedMetal", -0.35, 0.62, 0.555, 0.29, 0.09, 0.01, { color: black });
+    glow.box(ROW.PUMP0 + i, 0.5, 0.25, 0.05, 0.01, Q.world(-0.35, 0.62, 0.56), Q.yaw);
     Q.box("darkGloss", 0, 0.25, 0.56, 1.0, 0.16, 0.02);
     Q.collider([-0.6, 0, -0.55], [0.6, 1.55, 0.55], "pump");
     // low-level suction/discharge stubs into the neighbouring tanks
@@ -316,6 +388,13 @@ export function detail(ctx, shell, room) {
       // fan intake: dark housing, recessed gloss disc, steel bezel, hub + six blades
       Q.cyl("paintedMetal", 0, 1.98, d / 2 + 0.1, 0.42, 0.2, "z", { color: dark, segments: 24 });
       Q.cyl("darkGloss", 0, 1.98, d / 2 + 0.2, 0.36, 0.02, "z", { segments: 24 });
+      if (i === GLOW_SCRUB) {
+        // UV sterilizer glow behind the blades of this unit's fan: a teal annulus pulsing (live row)
+        const ring = new THREE.RingGeometry(0.1, 0.34, 32);
+        ring.rotateY(Q.yaw);
+        ring.translate(...Q.world(0, 1.98, d / 2 + 0.213));
+        glow.add(ring, ROW.FAN, 0.5);
+      }
       Q.add("metal", new THREE.TorusGeometry(0.4, 0.02, 8, 32), 0, 1.98, d / 2 + 0.205, { color: steel });
       Q.cyl("metal", 0, 1.98, d / 2 + 0.23, 0.07, 0.06, "z", { color: steel, segments: 12 });
       for (let k = 0; k < 6; k++) {
@@ -375,8 +454,10 @@ export function detail(ctx, shell, room) {
     C.cyl("paintedMetal", 0.35, 0.9, 0.05, 0.36, 0.012, "y", { color: black, segments: 24 });
     C.collider([-0.7, 0, -0.4], [0.7, 1.1, 0.4], "cart");
   }
-  // trunk over the bank (1.2 × 0.8) and the riser at its forward end, up into the ceiling main
-  duct(kit, PALETTE, [61.1, Y + 3.4, 386.2], [61.1, Y + 3.4, 401.4], 1.2, 0.8, { color: white });
+  // trunk over the bank (1.2 × 0.8) and the riser at its forward end, up into the ceiling main. The
+  // trunk is grey, not white: its face stands 2 m from the under-catwalk work light and in white it
+  // rendered as a clipped band (door + air views)
+  duct(kit, PALETTE, [61.1, Y + 3.4, 386.2], [61.1, Y + 3.4, 401.4], 1.2, 0.8, { color: grey });
   kit.boxMM("paintedMetal", [60.5, Y + 3.0, 385.25], [IX1, CY - 0.1, 386.35], { color: white, texel: 1 });
   for (const y of [Y + 3.9, Y + 6.2, Y + 8.4]) kit.boxMM("paintedMetal", [60.47, y, 385.22], [IX1 + 0.01, y + 0.08, 386.38], { color: dark });
   // ceiling air main along x (white) feeding two branch runs along z with louvred vents
@@ -406,7 +487,7 @@ export function detail(ctx, shell, room) {
   crate(IX1 - 0.65, 384.4, 0, { color: dark });
   // floor: painted service line along the scrubber fronts, hazard at the stairs' foot
   mark([58.6, Y + 0.004, 386.2], [58.6, Y + 0.004, 401.4], 0.1, PAINT_AMBER);
-  hazardStrip(kit, [58.3, 401.0], [60.1, 401.8], Y + 0.004);
+  hazardStrip([58.3, 401.0], [60.1, 401.8], Y + 0.004);
 
   // ---- process skids in the middle-east strip (between the walkway and the scrubber bank) --------
   {
@@ -567,7 +648,7 @@ export function detail(ctx, shell, room) {
     [[WX0, WZ0], [WX1, WZ0 + CURB]],
   ]) {
     kit.boxMM("paintedMetal", [min[0], Y, min[1]], [max[0], Y + 0.3, max[1]], { color: dark, texel: 4 });
-    hazardStrip(kit, min, max, Y + 0.3);
+    hazardStrip(min, max, Y + 0.3);
     kit.collider([min[0], Y, min[1]], [max[0], Y + 0.3, max[1]], "curb");
   }
   const cy0 = Y + 0.3;
@@ -575,7 +656,7 @@ export function detail(ctx, shell, room) {
   rail(kit, PALETTE, [WX1 - 0.12, cy0, WZ0 + 0.12], [WX1 - 0.12, cy0, IZ1 - 0.1], cy0, { post: 1.5 });
   rail(kit, PALETTE, [WX0 + 0.12, cy0, WZ0 + 0.12], [48.9, cy0, WZ0 + 0.12], cy0, { post: 1.6 });
   rail(kit, PALETTE, [51.1, cy0, WZ0 + 0.12], [WX1 - 0.12, cy0, WZ0 + 0.12], cy0, { post: 1.6 });
-  hazardStrip(kit, [48.9, WZ0 - 0.9], [51.1, WZ0], Y + 0.004);
+  hazardStrip([48.9, WZ0 - 0.9], [51.1, WZ0], Y + 0.004);
   mark([WX0 - 0.5, Y + 0.004, WZ0 - 0.5], [WX1 + 0.5, Y + 0.004, WZ0 - 0.5], 0.12, PAINT_AMBER);
   for (const cz of [410.6, 413.0]) {
     const cy = Y + 1.55;
@@ -673,15 +754,21 @@ export function detail(ctx, shell, room) {
     kit.box("paintedMetal", 60.6, CT - 0.33, z, 1.2, 0.1, 0.3, { color: dark });
     kit.box("emitWhite", 60.6, CT - 0.385, z, 1.0, 0.02, 0.16);
   }
-  // sump floodlight: arm off the aft deck's edge beam, stem, hooded amber lamp aimed at the grating
-  // (houses the amber sump light, which is a down-spot so it cannot mirror off the aft wall)
+  // sump beacon: arm off the aft deck's edge beam, stem, hood, and under it a slowly rotating amber
+  // beacon drum (glow row BEACON, 0.2 rev/s). Its light is a down-spot whose target circles the
+  // grating in step with the drum's bright sector (a spot cannot mirror off the aft wall).
   {
-    const fz = 411.6;
+    const fz = SUMP_Z;
     kit.boxMM("paintedMetal", [49.96, CT - 0.19, fz - 0.04], [50.04, CT - 0.11, 413.15], { color: dark });
     kit.cyl("metal", 50.0, CT - 0.42, fz, 0.025, 0.5, "y", { color: steel, segments: 8 });
     kit.box("paintedMetal", 50.0, CT - 0.73, fz, 0.7, 0.14, 0.44, { color: dark, texel: 2.5 });
     kit.box("paintedMetal", 50.0, CT - 0.81, fz, 0.6, 0.03, 0.34, { color: black });
-    kit.box("emitAmber", 50.0, CT - 0.826, fz, 0.5, 0.01, 0.26);
+    kit.cyl("paintedMetal", 50.0, CT - 0.845, fz, 0.16, 0.04, "y", { color: black, segments: 20 });
+    const drum = new THREE.CylinderGeometry(0.13, 0.13, 0.24, 24, 1, true);
+    drum.translate(50.0, CT - 0.985, fz);
+    glow.addRange(drum, ROW.BEACON, 0, 1 / BEACON.sectors);
+    kit.cyl("paintedMetal", 50.0, CT - 1.12, fz, 0.14, 0.03, "y", { color: black, segments: 20 });
+    sump = { type: "spot", pos: [50.0, CT - 1.15, fz], target: [50.0, Y, fz], color: 0xffb060, intensity: 26, distance: 11, angle: 0.7, penumbra: 0.5, priority: 0.5 };
   }
   // aft wall above the deck: grilles, junction boxes, tray
   for (const x of [43.0, 50.0, 57.0]) grille(x, Y + 7.0, IZ1, Math.PI, 2.0, 0.9);
@@ -741,22 +828,64 @@ export function detail(ctx, shell, room) {
   // light for the scrubber bank, amber over the sump, a bright pool over the control station
   // =============================================================================================
   // Fills sit on the walkway centreline (x 50) between the two white branch ducts (x 46.1 / 53.9)
-  // and ≥ 2.6 m below the ceiling: a fill within ~1.5 m of a white duct blew its underside out.
-  // Side fills are weaker and 3 m down so the tank shells and skid domes keep their highlights.
+  // and 3.4 m below the ceiling (a fill within ~1.5 m of a white duct blew its underside out; the
+  // rig's captured environment no longer lifts the painted deck, so they hang lower and the floor
+  // exposure comes from key + fills). Side fills are weaker so the tank shells and skid domes keep
+  // their highlights. All fills stay ≤ 15 % of the key so the key's shadows read.
   const L = (pos, color, intensity, distance, priority = 0.5) => ctx.lights.push({ type: "point", pos, color, intensity, distance, priority });
-  L([50.0, CY - 2.6, 385.0], 0xd8f0ea, 70, 24, 0.8);
-  L([50.0, CY - 2.6, 394.0], 0xd8f0ea, 70, 26);
-  L([50.0, CY - 2.6, 403.0], 0xd8f0ea, 70, 26);
-  L([50.0, CY - 2.6, 411.0], 0xd8f0ea, 60, 22);
-  L([47.6, CY - 3.0, 391.0], 0xd8f0ea, 40, 18);
-  L([47.6, CY - 3.0, 402.0], 0xd8f0ea, 40, 18);
-  L([56.0, CY - 3.0, 393.0], 0xd8f0ea, 40, 18);
-  L([56.0, CY - 3.0, 403.0], 0xd8f0ea, 40, 18);
+  L([50.0, CY - 3.4, 385.0], 0xd8f0ea, 80, 24, 0.8);
+  L([50.0, CY - 3.4, 394.0], 0xd8f0ea, 80, 26);
+  L([50.0, CY - 3.4, 403.0], 0xd8f0ea, 80, 26);
+  L([50.0, CY - 3.4, 411.0], 0xd8f0ea, 72, 22);
+  L([47.6, CY - 3.4, 391.0], 0xd8f0ea, 40, 18);
+  L([47.6, CY - 3.4, 402.0], 0xd8f0ea, 40, 18);
+  L([56.0, CY - 3.4, 393.0], 0xd8f0ea, 40, 18);
+  L([56.0, CY - 3.4, 403.0], 0xd8f0ea, 40, 18);
   L([45.8, Y + 4.6, 391.5], 0x5fe8d8, 22, 11);
   L([45.8, Y + 4.6, 403.5], 0x5fe8d8, 22, 11);
   L([43.0, Y + 4.3, 381.0], 0xe4f6ff, 32, 12, 0.7);
-  L([59.0, CT - 0.8, 394.0], 0xdde8ff, 24, 10);
-  // sump: a down-spot under the hooded lamp on the aft deck (a point here mirrored as a disc on the
-  // aft wall panels from the door view)
-  ctx.lights.push({ type: "spot", pos: [50.0, Y + 3.6, 411.6], target: [50.0, Y, 411.6], color: 0xffb060, intensity: 26, distance: 11, angle: 1.05, penumbra: 0.5, priority: 0.5 });
+  L([59.0, CT - 0.8, 394.0], 0xdde8ff, 16, 10);
+  // sump beacon spot (its target sweeps the grating in update())
+  ctx.lights.push(sump);
+  // SHADOW KEY: a yoked flood head hung from the ceiling over the west edge of the tank farm, aimed
+  // across the walkway. Sitting west of and above the tanks it throws the tanks, the manifold and
+  // the pump skids as long shadows east across the deck (door + water views). angle 1.05 covers the
+  // whole tank row from 9 m up; distance 40 ≥ the room's long side.
+  {
+    const hx = 39.8;
+    const hy = CY - 0.95;
+    const hz = 397.5;
+    const target = [50.5, Y, hz];
+    const tilt = Math.atan2(target[0] - hx, hy - target[1]); // head tilt about z: face normal → target
+    const rot = [0, 0, tilt];
+    const sn = Math.sin(tilt);
+    const cs = Math.cos(tilt);
+    // ceiling plate, yoke arms, pivot axle, head box with its black bezel and lamp face, side flaps
+    kit.box("paintedMetal", hx, CY - 0.03, hz, 0.6, 0.06, 0.9, { color: black });
+    for (const dz of [-0.33, 0.33]) kit.box("paintedMetal", hx, CY - 0.5, hz + dz, 0.06, 0.94, 0.06, { color: black });
+    kit.cyl("metal", hx, hy, hz, 0.035, 0.72, "z", { color: steel, segments: 10 });
+    kit.add("paintedMetal", new THREE.BoxGeometry(0.9, 0.34, 0.56), { pos: [hx, hy, hz], rot, color: dark, texel: 2.5 });
+    kit.add("paintedMetal", new THREE.BoxGeometry(0.96, 0.05, 0.62), { pos: [hx + 0.16 * sn, hy - 0.16 * cs, hz], rot, color: black });
+    kit.add("emitWhite", new THREE.BoxGeometry(0.8, 0.012, 0.46), { pos: [hx + 0.19 * sn, hy - 0.19 * cs, hz], rot, uv: "keep" });
+    for (const s of [-1, 1]) kit.add("paintedMetal", new THREE.BoxGeometry(0.9, 0.22, 0.04), { pos: [hx + 0.27 * sn, hy - 0.27 * cs, hz + s * 0.3], rot, color: dark });
+    ctx.lights.push({ type: "spot", pos: [hx + 0.55 * sn, hy - 0.55 * cs, hz], target, color: 0xe8f4f0, intensity: 600, distance: 40, angle: 1.05, penumbra: 0.4, priority: 1.0, shadow: true });
+  }
+
+  glow.build(ctx.group);
+  return {
+    update(dt, t) {
+      // pump run lamps: three skids, three rates
+      for (let i = 0; i < PUMP_BLINK.length; i++) glow.fill(ROW.PUMP0 + i, C_TEAL, blink(t, PUMP_BLINK[i]));
+      // scrubber fan glow breathes at 0.3 Hz
+      glow.fill(ROW.FAN, C_TEAL, 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(t * Math.PI * 0.6)));
+      // sump beacon: the spot's pool circles the grating under the drum's bright sector
+      const a = glow.beaconAngle(t, BEACON.sectors, BEACON.s0, BEACON.width);
+      sump.target[0] = 50.0 + 1.2 * Math.sin(a);
+      sump.target[2] = SUMP_Z + 1.2 * Math.cos(a);
+      glow.update(t);
+    },
+    dispose() {
+      glow.dispose();
+    },
+  };
 }
