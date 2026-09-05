@@ -118,7 +118,7 @@ function buildStack({ add }, spec, name) {
           const c = fns.zTrail(y) - zl;
           const th = fns.halfT(y);
           const ring = [[0, y, zl - 0.35]];
-          const fs = [0.006, 0.02, 0.045];
+          const fs = [0.003, 0.01, 0.022];
           for (const f of fs)
             ring.push([th * slabThick(f, t.tail) + 0.35, y, zl + c * f]);
           for (let q = fs.length - 1; q >= 0; q--)
@@ -143,12 +143,12 @@ function buildStack({ add }, spec, name) {
           const zt = fns.zTrail(y);
           const th = fns.halfT(y);
           const a = th * t.tail + 0.35;
-          const b = th * slabThick(0.93, t.tail) + 0.35;
+          const b = th * slabThick(0.975, t.tail) + 0.35;
           return [
             [a, y, zt + 0.35],
             [-a, y, zt + 0.35],
-            [-b, y, zl + c * 0.93],
-            [b, y, zl + c * 0.93],
+            [-b, y, zl + c * 0.975],
+            [b, y, zl + c * 0.975],
           ];
         });
         add(

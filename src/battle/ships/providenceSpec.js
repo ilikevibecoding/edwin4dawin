@@ -4,12 +4,13 @@ import * as THREE from "three";
 import { lerp, loftRings, ringCap } from "./providenceGeo.js";
 
 // palette (sRGB hex; converted to linear vertex tints where used). Hull tints are chosen so sunlit
-// plating measures ~sRGB 150-185 and shadowed faces 40-65 through the shared `hull` material.
+// plating measures ~sRGB 150-185 through the shared `hull` material (x1.4 plating map) while the
+// planet-lit belly stays in the 40-65 band; the belly is the palest tint, the dorsal the darkest.
 export const PAL = {
-  dorsal: 0x6a7382,
-  flank: 0x7e8898,
+  dorsal: 0x7d8798,
+  flank: 0x939fb1,
   belly: 0x97a0ab,
-  finFace: 0x7a8494,
+  finFace: 0x9aa7ba,
   dark: 0x363a42,
   darkLit: 0x4a5059,
   rust: 0x6a4630,

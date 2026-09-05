@@ -5,6 +5,7 @@
 // clustered stern engine array. Blue-grey plating at three scales (raised 40-60 m plate seams, 10 m
 // sub-panels in the plating map, hatch rows), darker dorsal panels, paler belly, soot aft, rust-brown
 // trims on the tower edges. Three complete LODs, five materials.
+import * as THREE from "three";
 import { assemble, part } from "./shipKit.js";
 import {
   HULL,
@@ -48,7 +49,9 @@ function hullStations(lod, cuts) {
 export function buildProvidence(mats) {
   const L = PROVIDENCE.length;
   const parts = [];
-  // add a geometry; keepColor preserves per-vertex colours produced by the loft/colorize helpers
+  // add a geometry; keepColor preserves per-vertex colours produced by the loft/colorize helpers.
+  // `color` may be a hex, a THREE.Color or a linear [r, g, b] triple from rgb() (three's Color
+  // constructor ignores arrays, so triples are converted here).
   const add = (
     geo,
     mat,
@@ -63,7 +66,9 @@ export function buildProvidence(mats) {
     if (keepColor && geo.index) geo = geo.toNonIndexed();
     const saved = keepColor ? geo.attributes.color : null;
     const p = part(geo, mat, {
-      color,
+      color: Array.isArray(color)
+        ? new THREE.Color().setRGB(color[0], color[1], color[2])
+        : color,
       texel,
       lod,
       uv: keepColor ? "keep" : uv,
