@@ -693,6 +693,11 @@ export class Vegetation {
     const add = (arche: Archetype, x: number, z: number, y: number, s: number, prng: Rng, lean = 0) => {
       const tint = prng.pick(tints[arche]).clone();
       tint.offsetHSL(prng.range(-0.035, 0.035), prng.range(-0.1, 0.08), prng.range(-0.09, 0.08));
+      // the palette was tuned while a shadow-bias bug kept two thirds of the canopy dark; with correct
+      // shadowing the sunlit crowns came out lime (aerial-a canopy mean 82,120,61 vs reference 81,85,74),
+      // so pull every tint toward its luminance and a touch darker
+      const luma = 0.30 * tint.r + 0.59 * tint.g + 0.11 * tint.b;
+      tint.lerp(new THREE.Color(luma, luma, luma), 0.42).multiplyScalar(0.9);
       const squash = arche === 2 ? prng.range(0.5, 0.7) : arche === 3 ? prng.range(0.6, 0.85) : arche === 5 ? prng.range(0.32, 0.45) : arche === 1 ? prng.range(0.95, 1.25) : prng.range(0.7, 1.0);
       const trunk = arche === 2 ? prng.range(0.15, 0.3) : arche === 3 || arche === 5 ? 0.02 : arche === 1 ? prng.range(0.6, 0.95) : prng.range(0.3, 0.55);
       const seed = prng.next();
