@@ -791,17 +791,19 @@ export class Props {
         const rows = 6, bays = 10;
         const tall = rng.range(1, 4);
         // one row in six is an aisle; each block leans to one colour with odd boxes of others, stack heights
-        // wander bay to bay and the boxes are nudged so the yard does not read as a lattice
+        // wander bay to bay and the boxes are nudged so the yard does not read as a lattice. Yard gaps are
+        // 0.35-0.4 m (real block spacing): at 700-1500 m the old 1.2 m gaps were 1-2 px dark lines in a
+        // regular grid and crawled between clip frames (harbor container shimmer)
         const blockMat = rng.pick(boxColours);
         const aisle = rng.int(1, 5);
         for (let r = 0; r < rows; r++) {
           if (r === aisle && rng.chance(0.6)) continue;
-          const vJ = jitter(0.5);
+          const vJ = jitter(0.15);
           for (let c = 0; c < bays; c++) {
             if (rng.chance(0.28)) continue;
             const stack = Math.min(5, Math.max(1, Math.round(tall + rng.range(-1.8, 1.8))));
-            const u = bu + c * 13.4 + jitter(0.3), v = bv + r * 6.1 + vJ;
-            for (let k = 0; k < stack; k++) jbox(rng.chance(0.5) ? blockMat : rng.pick(boxColours), u + jitter(0.2), g + k * 2.6, v, 12.2, 2.6, 4.9, jitter(0.01));
+            const u = bu + c * 12.6 + jitter(0.15), v = bv + r * 5.25 + vJ;
+            for (let k = 0; k < stack; k++) jbox(rng.chance(0.5) ? blockMat : rng.pick(boxColours), u + jitter(0.1), g + k * 2.6, v, 12.2, 2.6, 4.9, jitter(0.01));
           }
         }
         occupy(bu + 60, bv + 15, 80);

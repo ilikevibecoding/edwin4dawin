@@ -515,8 +515,14 @@ export class PlaneModel {
 
     // ------------------------------------------------------------ exterior fittings (one merged mesh)
     const fittings = new Batch();
-    // door steps
-    for (const side of [-1, 1]) fittings.add(new THREE.BoxGeometry(0.3, 0.04, 0.22), at([1.3, -0.45, side * 0.72]), SURF.darkMetal);
+    // door steps under the door's bottom line: the tread stands clear of the skin on two brackets. It used to sit at a
+    // fixed z inside the boxy cabin's skin, so only a corner poked through the paint as a flat grey rectangle
+    // (read as a stray decal / a glass ghost by the iter08 critics).
+    for (const side of [-1, 1]) {
+      const skinZ = halfWidthAt(sectionAt(sections, 1.3), -0.45);
+      fittings.add(new THREE.BoxGeometry(0.3, 0.03, 0.2), at([1.3, -0.45, side * (skinZ + 0.11)]), SURF.darkMetal);
+      for (const dx of [-0.11, 0.11]) fittings.add(new THREE.BoxGeometry(0.03, 0.1, 0.18), at([1.3 + dx, -0.40, side * (skinZ + 0.085)], [0, 0, 0]), SURF.darkMetal);
+    }
     // engine exhaust stubs
     for (let i = 0; i < 2; i++) fittings.add(new THREE.CylinderGeometry(0.05, 0.06, 0.28, 10), at([2.75 - i * 0.22, -0.5, 0.62 + i * 0.03], [0.6, 0, 1.2]), SURF.exhaust);
     // intake scoop on the cowl top, cowl flaps (white paint batch)

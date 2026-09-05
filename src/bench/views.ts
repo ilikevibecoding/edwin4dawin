@@ -15,6 +15,9 @@ export interface BenchView {
     headingDeg?: number;
     pitchDeg?: number;
     fov: number;
+    /** fixed mode: once the clip runs, translate the camera with the aircraft (heading kept) so the composition of
+     *  the still holds instead of the aircraft leaving the frame; the still itself is unaffected */
+    follow?: boolean;
   };
   plane: {
     /** absolute position, or `fromCamera` = place the plane at screen coordinates relative to the fixed camera */
@@ -37,7 +40,7 @@ export const BENCH_VIEWS: BenchView[] = [
   {
     id: 'aerial-a', name: 'Reference A — high aerial', description: 'Reference-style wide aerial over Isla Garza looking north: causeway receding NNE, downtown skyline upper-left, boats with wakes below, aircraft lower right.',
     time: 14.6, weather: 'scattered',
-    camera: { mode: 'fixed', pos: [480, 400, 3720], headingDeg: -6, pitchDeg: -11, fov: 42 },
+    camera: { mode: 'fixed', pos: [480, 400, 3720], headingDeg: -6, pitchDeg: -11, fov: 42, follow: true },
     // reference (measured on the frame): aircraft bbox x 0.653-0.885, y 0.595-0.885, centroid ~(0.77, 0.74); the
     // aircraft flies toward the camera and to its left, seen from above its starboard bow (spinner visible,
     // far wing upper-left, near wing lower-right), banked toward the near wing
@@ -61,7 +64,7 @@ export const BENCH_VIEWS: BenchView[] = [
   {
     id: 'skyline-high', name: 'High-altitude skyline', description: 'Fixed camera 900 m up over the bay looking north-west at the downtown skyline hierarchy, port in the middle distance.',
     time: 16.2, weather: 'scattered',
-    camera: { mode: 'fixed', pos: [-300, 900, -1200], headingDeg: -38, pitchDeg: -10, fov: 45 },
+    camera: { mode: 'fixed', pos: [-300, 900, -1200], headingDeg: -38, pitchDeg: -10, fov: 45, follow: true },
     plane: { fromCamera: { screenX: 0.72, screenY: 0.68, distance: 70 }, headingDeg: -30, pitchDeg: 0, bankDeg: 12, speed: 60, throttle: 0.7 },
     presim: 30, clipInputs: { pitch: 0, roll: 0.1, yaw: 0 },
   },

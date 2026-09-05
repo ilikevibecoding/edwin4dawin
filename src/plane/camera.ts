@@ -7,6 +7,9 @@ export type CameraMode = 'chase' | 'cockpit' | 'orbit' | 'fixed';
 
 /** near plane outside the aircraft (game.ts / bench.ts create the cameras with this) and from the pilot's seat */
 const WORLD_NEAR = 0.4, COCKPIT_NEAR = 0.05;
+/** chase spring stiffness and damping (damping ratio 0.9); C/K is the feed-forward lead in seconds */
+const CHASE_K = 60;
+const CHASE_C = 2 * 0.9 * Math.sqrt(CHASE_K);
 
 /** Chase / cockpit cameras with inertia, speed-dependent FOV and turbulence shake. */
 export class FlightCamera {
@@ -38,6 +41,39 @@ export class FlightCamera {
   constructor(readonly camera: THREE.PerspectiveCamera) {}
 
   snap(): void { this.initialised = false; }
+
+  /** Rest pose of the chase spring for a target moving at the aircraft's velocity: the offset behind and above the
+   *  aircraft in a yaw-only frame (without the velocity feed-forward added in update). */
+  private chaseDesired(flight: FlightModel, out: THREE.Vector3): THREE.Vector3 {
+    const fwd = flight.forward(this.fwd);
+    const yaw = Math.atan2(fwd.x, fwd.z);
+    const speed = flight.telemetry.airspeed;
+    // the rest distance closes with speed by the spring's feed-forward lead (C/K seconds of travel): this is where
+    // the camera came to rest in every bench still so far (a spring settled behind a frozen aircraft with its
+    // velocity fed forward), i.e. the framing the frames have been judged on; in flight it is now the steady state
+    // too, so the clip continues from the still without the camera falling 15-20 m back
+    const dist = Math.max(10, this.chaseDistance + speed * (0.08 - CHASE_C / CHASE_K));
+    const heightOff = this.chaseHeight + speed * 0.012;
+    const orbitQ = this.orbitQ.setFromEuler(this.euler.set(this.orbitPitch, yaw + this.orbitYaw, 0, 'YXZ'));
+    return out.set(0, heightOff, -dist).applyQuaternion(orbitQ).add(flight.position);
+  }
+
+  /** Puts the camera where it sits in steady flight at the aircraft's current velocity and poses it, without
+   *  integrating. A chase camera settled behind a frozen aircraft would otherwise rest 12-13 m ahead of that pose
+   *  (the velocity feed-forward with nothing moving) and lurch back over the first half second once the
+   *  simulation runs — the bench still and the clip that continues from it now share one camera path. */
+  settle(flight: FlightModel, model: PlaneModel, stepDt = 0): void {
+    if (this.mode === 'chase') {
+      // the spring in update() sees the aircraft already advanced by the frame it is about to integrate, so its
+      // discrete rest pose leads the analytic one by one frame of travel (v * dt)
+      this.pos.copy(this.chaseDesired(flight, this.tmp2)).addScaledVector(flight.velocity, stepDt);
+      this.vel.copy(flight.velocity);
+      this.initialised = true;
+    } else {
+      this.snap();
+    }
+    this.update(flight, model, 0);
+  }
 
   update(flight: FlightModel, model: PlaneModel, dt: number): void {
     this.time += dt;
@@ -84,16 +120,12 @@ export class FlightCamera {
     // chase: spring-damper toward an offset behind and above the aircraft, in a yaw-only frame
     // `fwd` must not alias `tmp`: the spring acceleration below reuses `tmp`, and the look target needs the
     // real forward vector (aliasing made the camera look at position + 6 x acceleration and lose the aircraft)
-    const fwd = flight.forward(this.fwd);
-    const yaw = Math.atan2(fwd.x, fwd.z);
+    const desired = this.chaseDesired(flight, this.tmp2);
+    const fwd = this.fwd; // set by chaseDesired
     const speed = t.airspeed;
-    const dist = this.chaseDistance + speed * 0.08;
-    const heightOff = this.chaseHeight + speed * 0.012;
-    const orbitQ = this.orbitQ.setFromEuler(this.euler.set(this.orbitPitch, yaw + this.orbitYaw, 0, 'YXZ'));
-    const desired = this.tmp2.set(0, heightOff, -dist).applyQuaternion(orbitQ).add(flight.position);
     // bank the camera slightly with the aircraft so turns feel dynamic
     if (!this.initialised) { this.pos.copy(desired); this.vel.set(0, 0, 0); this.initialised = true; }
-    const k = 60, c = 2 * 0.9 * Math.sqrt(60);
+    const k = CHASE_K, c = CHASE_C;
     // feed the aircraft velocity forward so the spring only has to absorb accelerations
     desired.addScaledVector(flight.velocity, c / k);
     const acc = this.tmp.copy(desired).sub(this.pos).multiplyScalar(k).addScaledVector(this.vel, -c);
