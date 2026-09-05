@@ -462,9 +462,10 @@ function cabin(kit, ctx, labels, c, variant) {
     if (inSight) {
       // the wedge the corridor camera sees through the 0.32 m deep jambs is narrow and diagonal: at
       // the chair's distance from the desk wall only 1.2–2.1 m in shows, so the chair sits pulled
-      // back at the desk's near corner, turned to face the opening
+      // back toward the door from the desk's near corner, turned to face the opening, leaving the
+      // desk screen visible past its edge
       const chx = sx > 0 ? dxA - 0.45 : dxB + 0.45;
-      const chz = mz(1.73);
+      const chz = mz(1.33);
       impChair(kit, ctx, { x: chx, z: chz, yaw: Math.atan2(-(c.doorX - chx), -(nearZ - chz)) });
     } else {
       impChair(kit, ctx, { x: sx > 0 ? dxA - 0.45 : dxB + 0.45, z: scz + (rand() - 0.5) * 0.3, yaw: -sx * Math.PI / 2 + (rand() - 0.5) * 0.5 });
