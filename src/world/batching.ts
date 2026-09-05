@@ -109,6 +109,176 @@ export class PbrSoup {
   }
 }
 
+// ------------------------------------------------------------------ instance batches
+
+/** Per-tile instance data an InstanceBatch copies from: matrices (16 floats each), optional colours (3)
+ *  and the extra instanced attributes in the order the batch was given them. */
+export interface BatchSource { matrices: Float32Array; colors: Float32Array | null; extras: Float32Array[] }
+export interface BatchAttribute { name: string; itemSize: number }
+interface BatchRange { start: number; count: number }
+
+/** a batch is compacted when more than this fraction of it is holes */
+const COMPACT_HOLES = 0.3;
+/** collapsed instance (scale 0, far under the ground) written into freed slots: draws no fragments */
+const HOLE_MATRIX = new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -5000, 0, 1]);
+
+/**
+ * The instances of many spatial tiles in one instanced draw. Every tile drawn this frame owns a
+ * contiguous range of the batch holding copies of its first `count` instances, so the camera pass
+ * draws all the tiles in view of one geometry in a single call instead of one per tile. This is only
+ * for opaque (or alpha-tested), depth-written instances, whose draw order does not matter, so a tile's
+ * range can sit anywhere: a tile that leaves the view frees its range (filled with collapsed
+ * instances), a tile that enters takes the first free range that fits, and the batch is compacted once
+ * the holes add up. Only the ranges touched this frame are uploaded, so a tile crossing the frustum
+ * edge costs a few kilobytes, not a rebuild of everything in view.
+ */
+export class InstanceBatch<S extends BatchSource = BatchSource> {
+  readonly mesh: THREE.InstancedMesh;
+  private readonly matrices: Float32Array;
+  private readonly colors: Float32Array | null;
+  private readonly extras: { attr: THREE.InstancedBufferAttribute; array: Float32Array; size: number }[] = [];
+  /** high-water mark: instances [0, used) are drawn */
+  private used = 0;
+  private holes = 0;
+  private readonly free: BatchRange[] = [];
+  private readonly ranges = new Map<S, BatchRange>();
+  private dirtyMin = Infinity;
+  private dirtyMax = 0;
+
+  /** `unit`: the geometry every instance draws (its attributes and index are shared, not copied). */
+  constructor(readonly capacity: number, unit: THREE.BufferGeometry, material: THREE.Material, extras: BatchAttribute[], withColor: boolean, depthMaterial: THREE.Material | null = null) {
+    const geo = new THREE.BufferGeometry();
+    for (const [name, attr] of Object.entries(unit.attributes)) if (!(attr as THREE.InstancedBufferAttribute).isInstancedBufferAttribute) geo.setAttribute(name, attr as THREE.BufferAttribute);
+    if (unit.index) geo.setIndex(unit.index);
+    geo.boundingSphere = unit.boundingSphere;
+    geo.boundingBox = unit.boundingBox;
+    for (const e of extras) {
+      const array = new Float32Array(capacity * e.itemSize);
+      const attr = new THREE.InstancedBufferAttribute(array, e.itemSize);
+      attr.setUsage(THREE.DynamicDrawUsage);
+      geo.setAttribute(e.name, attr);
+      this.extras.push({ attr, array, size: e.itemSize });
+    }
+    const mesh = new THREE.InstancedMesh(geo, material, capacity);
+    this.matrices = mesh.instanceMatrix.array as Float32Array;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    if (withColor) {
+      this.colors = new Float32Array(capacity * 3);
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(this.colors, 3);
+      mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    } else this.colors = null;
+    if (depthMaterial) mesh.customDepthMaterial = depthMaterial;
+    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    mesh.frustumCulled = false;
+    mesh.matrixAutoUpdate = false;
+    mesh.count = 0;
+    mesh.visible = false;
+    this.mesh = mesh;
+  }
+
+  /** Give `tile` exactly `count` instances in the batch (0 removes it). False when it does not fit. */
+  set(tile: S, count: number): boolean {
+    const cur = this.ranges.get(tile);
+    if (cur) {
+      if (cur.count === count) return true;
+      this.release(tile, cur);
+    }
+    if (count === 0) return true;
+    const start = this.alloc(count);
+    if (start < 0) return false;
+    this.matrices.set(tile.matrices.subarray(0, count * 16), start * 16);
+    if (this.colors && tile.colors) this.colors.set(tile.colors.subarray(0, count * 3), start * 3);
+    for (let i = 0; i < this.extras.length; i++) {
+      const e = this.extras[i];
+      e.array.set(tile.extras[i].subarray(0, count * e.size), start * e.size);
+    }
+    this.ranges.set(tile, { start, count });
+    this.touch(start, count);
+    return true;
+  }
+
+  /** Upload the ranges written this frame and finish the draw setup. */
+  commit(): void {
+    if (this.holes > COMPACT_HOLES * this.used && this.used > 4096) this.compact();
+    if (this.dirtyMin < this.dirtyMax) {
+      const s = this.dirtyMin, n = Math.min(this.dirtyMax, this.used) - s;
+      if (n > 0) {
+        const m = this.mesh.instanceMatrix;
+        m.clearUpdateRanges(); m.addUpdateRange(s * 16, n * 16); m.needsUpdate = true;
+        const c = this.mesh.instanceColor;
+        if (c) { c.clearUpdateRanges(); c.addUpdateRange(s * 3, n * 3); c.needsUpdate = true; }
+        for (const e of this.extras) { e.attr.clearUpdateRanges(); e.attr.addUpdateRange(s * e.size, n * e.size); e.attr.needsUpdate = true; }
+      }
+      this.dirtyMin = Infinity; this.dirtyMax = 0;
+    }
+    this.mesh.count = this.used;
+    this.mesh.visible = this.used > 0;
+  }
+
+  private touch(start: number, count: number): void {
+    if (start < this.dirtyMin) this.dirtyMin = start;
+    if (start + count > this.dirtyMax) this.dirtyMax = start + count;
+  }
+
+  private release(tile: S, r: BatchRange): void {
+    this.ranges.delete(tile);
+    for (let i = 0; i < r.count; i++) this.matrices.set(HOLE_MATRIX, (r.start + i) * 16);
+    this.touch(r.start, r.count);
+    // merge into the free list (sorted by start)
+    const free = this.free;
+    let k = 0;
+    while (k < free.length && free[k].start < r.start) k++;
+    const prev = k > 0 ? free[k - 1] : null, next = k < free.length ? free[k] : null;
+    if (prev && prev.start + prev.count === r.start) {
+      prev.count += r.count;
+      if (next && prev.start + prev.count === next.start) { prev.count += next.count; free.splice(k, 1); }
+    } else if (next && r.start + r.count === next.start) {
+      next.start = r.start; next.count += r.count;
+    } else free.splice(k, 0, { start: r.start, count: r.count });
+    this.holes += r.count;
+    // a hole at the end just lowers the high-water mark
+    const last = free[free.length - 1];
+    if (last && last.start + last.count === this.used) { this.used = last.start; this.holes -= last.count; free.pop(); }
+  }
+
+  private alloc(count: number): number {
+    const free = this.free;
+    for (let i = 0; i < free.length; i++) {
+      const f = free[i];
+      if (f.count < count) continue;
+      const start = f.start;
+      f.start += count; f.count -= count;
+      if (f.count === 0) free.splice(i, 1);
+      this.holes -= count;
+      return start;
+    }
+    if (this.used + count > this.capacity) return -1;
+    const start = this.used;
+    this.used += count;
+    return start;
+  }
+
+  /** Move every range down over the holes (in start order, so ranges never overtake each other). */
+  private compact(): void {
+    const list = [...this.ranges.values()].sort((a, b) => a.start - b.start);
+    let w = 0;
+    for (const r of list) {
+      if (r.start !== w) {
+        this.matrices.copyWithin(w * 16, r.start * 16, (r.start + r.count) * 16);
+        this.colors?.copyWithin(w * 3, r.start * 3, (r.start + r.count) * 3);
+        for (const e of this.extras) e.array.copyWithin(w * e.size, r.start * e.size, (r.start + r.count) * e.size);
+        r.start = w;
+      }
+      w += r.count;
+    }
+    this.touch(0, w);
+    this.used = w;
+    this.holes = 0;
+    this.free.length = 0;
+  }
+}
+
 /** Integer key of the spatial cell containing (x, z) for a `cell`-metre grid over the 20 km map. */
 export function cellKey(x: number, z: number, cell: number): number {
   const ix = Math.floor((x + 10000) / cell), iz = Math.floor((z + 10000) / cell);

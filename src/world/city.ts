@@ -4,7 +4,8 @@ import { clamp, lerp, smoothstep } from '../core/noise';
 import { Zone, type District, type WorldMap } from './map';
 import type { Block } from './roads';
 import { createFacadeMaterial } from './facade';
-import { LAYER_CASCADE0, MAX_CASCADES, layerMask, maskCasts, type ViewCull } from './culling';
+import { LAYER_CAMERA, LAYER_CASCADE0, LAYER_MIRROR, MAX_CASCADES, layerMask, maskCasts, type ViewCull } from './culling';
+import { InstanceBatch, type BatchSource } from './batching';
 
 // ------------------------------------------------------------------ unit geometries
 // All are 1 m wide/deep centred on x/z and span y in [0,1]. Every geometry carries an `aPart` vertex
@@ -100,6 +101,10 @@ interface Instance {
 
 /** buildings shorter than this (houses, sheds) are left out of the far shadow proxies: their shadows are under a texel there */
 const PROXY_MIN_HEIGHT = 14;
+const CITY_EXTRAS = [{ name: 'aDims', itemSize: 3 }, { name: 'aStyle', itemSize: 4 }, { name: 'aStyle2', itemSize: 4 }];
+/** `lodR` is the horizontal half-diagonal of the tile (the shadow-distance metric); `center`, `r` and `height`
+ *  bound the buildings in world space and are only used for culling; the arrays feed the kind's batches */
+interface CityTile extends BatchSource { mesh: THREE.InstancedMesh; kind: Kind; n: number; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodR: number; bits: number }
 const _perCascade = new Array<number>(MAX_CASCADES).fill(0);
 
 /** Spatially tiled instance batches so far tiles can be frustum-culled and stop casting shadows. */
@@ -115,7 +120,12 @@ export class BuildingBatches {
   private readonly tileOz = -4520;
   /** `lodR` is the horizontal half-diagonal of the tile (the shadow-distance metric); `center`, `r`
    *  and `height` bound the buildings in world space and are only used for culling. */
-  private readonly tiles: { mesh: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodR: number; bits: number }[] = [];
+  private readonly tiles: CityTile[] = [];
+  /** one instanced draw per kind for the camera pass (every tile in view) and one for the mirror pass */
+  private readonly cameraBatches = new Map<Kind, InstanceBatch<CityTile>>();
+  private readonly mirrorBatches = new Map<Kind, InstanceBatch<CityTile>>();
+  readonly cameraMeshes = new Set<THREE.Object3D>();
+  readonly mirrorMeshes = new Set<THREE.Object3D>();
   /** shadow-only proxies, one per kind, holding every building at least PROXY_MIN_HEIGHT tall: a cascade
    *  that would draw more per-tile meshes than this costs draws the proxies instead (a whole distant city
    *  for six draw calls) */
@@ -174,7 +184,24 @@ export class BuildingBatches {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       this.group.add(mesh);
       const lodR = Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2;
-      this.tiles.push({ mesh, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodR, bits: 0 });
+      this.tiles.push({ mesh, kind, n: list.length, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodR, bits: 0, matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: [dims, style, style2] });
+    }
+    // camera / mirror batches per kind, sized for every building of that kind
+    const perKind = new Map<Kind, number>();
+    for (const t of this.tiles) perKind.set(t.kind, (perKind.get(t.kind) ?? 0) + t.n);
+    for (const [kind, n] of perKind) {
+      const unit = this.geos[kind];
+      const cam = new InstanceBatch<CityTile>(n, unit, this.material, CITY_EXTRAS, true);
+      cam.mesh.layers.set(LAYER_CAMERA);
+      cam.mesh.name = `city-${kind}`;
+      this.cameraBatches.set(kind, cam);
+      this.cameraMeshes.add(cam.mesh);
+      const mir = new InstanceBatch<CityTile>(n, unit, this.material, CITY_EXTRAS, true);
+      mir.mesh.layers.set(LAYER_MIRROR);
+      mir.mesh.name = `city-${kind}-mirror`;
+      this.mirrorBatches.set(kind, mir);
+      this.mirrorMeshes.add(mir.mesh);
+      this.group.add(cam.mesh, mir.mesh);
     }
     // shadow proxies: every building of a kind in one instanced mesh (the shadow pass only reads the
     // instance matrices, so the facade attributes are not needed)
@@ -214,7 +241,7 @@ export class BuildingBatches {
   /** Per-tile visibility: a tile is drawn when its box is in view and casts shadows when it is within
    *  the shadow distance and its footprint, swept along the sun's shadow, can reach anything in view.
    *  Tiles that only cast leave the camera layer so the main pass skips them. */
-  updateLod(camX: number, camZ: number, cull: ViewCull): void {
+  updateLod(camX: number, camZ: number, cull: ViewCull, camPos: THREE.Vector3, mirrorRange: number): void {
     const perCascade = _perCascade;
     perCascade.fill(0);
     for (const t of this.tiles) {
@@ -227,12 +254,20 @@ export class BuildingBatches {
     for (let i = 0; i < MAX_CASCADES; i++) if (perCascade[i] > this.proxies.length + 2) proxyBits |= 1 << i;
     for (const t of this.tiles) {
       const inView = cull.boxInView(t.box);
-      const mask = layerMask('all', inView, t.bits & ~proxyBits);
+      // the camera draws the tile from its kind's batch; the tile's own mesh is left to the shadow passes
+      // (and to the camera only when the batch is full)
+      const batched = this.cameraBatches.get(t.kind)!.set(t, inView ? t.n : 0);
+      let mask = layerMask('all', inView && !batched, t.bits & ~proxyBits);
       const cast = maskCasts(mask);
+      // the water mirrors the tiles within the reflection range (distance to the tile's bounding sphere)
+      const mirrored = inView && Math.max(0, t.center.distanceTo(camPos) - t.r) <= mirrorRange;
+      if (!this.mirrorBatches.get(t.kind)!.set(t, mirrored ? t.n : 0)) mask |= 1 << LAYER_MIRROR;
       t.mesh.castShadow = cast;
-      t.mesh.visible = inView || cast;
+      t.mesh.visible = mask !== 0;
       t.mesh.layers.mask = mask;
     }
+    for (const b of this.cameraBatches.values()) b.commit();
+    for (const b of this.mirrorBatches.values()) b.commit();
     for (const p of this.proxies) {
       p.visible = p.castShadow = proxyBits !== 0;
       p.layers.mask = proxyBits << LAYER_CASCADE0;

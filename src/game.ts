@@ -201,7 +201,10 @@ export class Game {
     this.scene.add(this.city.batches.group);
     // building tiles and prop chunks carry world-space bounds: mirror those within the reflection range
     const beyondRange = (o: THREE.Object3D, cam: THREE.PerspectiveCamera) => distanceToBounds(o, cam) > reflRange;
-    this.reflection.excludeChildrenWhen(this.city.batches.group, beyondRange);
+    // (the buildings in view are drawn from per-kind batches: the camera ones stay out of the mirror, the
+    // mirror ones hold exactly the tiles within range)
+    const cityB = this.city.batches;
+    this.reflection.excludeChildrenWhen(cityB.group, (o, cam) => cityB.cameraMeshes.has(o) || (!cityB.mirrorMeshes.has(o) && beyondRange(o, cam)));
     // roads occupy ground so trees keep off them
     for (const s of this.roads) {
       const len = Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
@@ -363,7 +366,7 @@ export class Game {
     this.city.batches.shadowDistance = this.csm.maxFar;
     this.vegetation.shadowDistance = Math.max(1800, Math.min(3000, this.csm.maxFar * 0.4));
     this.vegetation.updateLod(cx, cz, this.cull, cam.position);
-    this.city.batches.updateLod(cx, cz, this.cull);
+    this.city.batches.updateLod(cx, cz, this.cull, cam.position, this.reflection.range);
     this.props.updateLod(cx, cz, this.cull);
     this.traffic.updateCulling(this.cull);
     // the airframe casts only into the cascades its shadow can reach: swept down to the ground under it, so
