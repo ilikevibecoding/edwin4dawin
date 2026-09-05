@@ -9,6 +9,26 @@ export interface PbrMaps {
   clearcoatRoughnessMap?: THREE.CanvasTexture;
   /** tiled orange-peel normal for the clear coat (repeat set on the texture) */
   clearcoatNormalMap?: THREE.CanvasTexture;
+  /** metalness in the blue channel (floats: bare deck vs painted hull); may be the same texture as roughnessMap */
+  metalnessMap?: THREE.CanvasTexture;
+  /** clear-coat amount in the red channel (floats: none on the bare deck) */
+  clearcoatMap?: THREE.CanvasTexture;
+}
+
+/**
+ * Packs three grey canvases into one texture the way three.js samples them: clear-coat amount in red,
+ * roughness in green, metalness in blue, so a single map can serve as clearcoatMap + roughnessMap + metalnessMap.
+ */
+function packRGB(rc: HTMLCanvasElement, gc: HTMLCanvasElement, bc: HTMLCanvasElement): HTMLCanvasElement {
+  const w = rc.width, h = rc.height;
+  const r = rc.getContext('2d')!.getImageData(0, 0, w, h).data;
+  const g = gc.getContext('2d')!.getImageData(0, 0, w, h).data;
+  const b = bc.getContext('2d')!.getImageData(0, 0, w, h).data;
+  const [out, ctx] = canvas(w, h);
+  const img = ctx.createImageData(w, h);
+  for (let i = 0; i < w * h * 4; i += 4) { img.data[i] = r[i]; img.data[i + 1] = g[i + 1]; img.data[i + 2] = b[i + 2]; img.data[i + 3] = 255; }
+  ctx.putImageData(img, 0, 0);
+  return out;
 }
 
 function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
@@ -106,6 +126,45 @@ function panels(hctx: CanvasRenderingContext2D, actx: CanvasRenderingContext2D, 
       actx.beginPath(); actx.arc(x, y + 6, 1.2, 0, Math.PI * 2); actx.fill();
     }
   }
+}
+
+/**
+ * Per-panel finish variation for a roughness (or clear-coat roughness) canvas: every skin panel between consecutive
+ * station lines `us` and stringer lines `vs` gets its own offset drawn as a translucent white / black overlay, so
+ * neighbouring panels catch the sun slightly differently (a real riveted skin is never one uniform sheet: panels
+ * are painted, repaired and polished at different times). `amp` is the peak offset in 8-bit units; `channel`
+ * picks the overlay colour ('all' for a grey roughness map, 'g' for the clear-coat map's green channel). The
+ * seams themselves are drawn a little rougher (`seam` px wide, +`seamAmp`): paint pools and chips along a rivet row.
+ */
+function panelVariation(ctx: CanvasRenderingContext2D, w: number, h: number, us: number[], vs: number[], rng: Rng, amp: number, channel: 'all' | 'g', o: { y0?: number; y1?: number; seam?: number; seamAmp?: number } = {}): void {
+  const y0 = o.y0 ?? 0, y1 = o.y1 ?? h;
+  const white = channel === 'g' ? '0,255,0' : '255,255,255';
+  const U = [0, ...us.filter((u) => u > 0 && u < 1).sort((a, b) => a - b), 1].map((u) => u * w);
+  const V = [y0, ...vs.map((v) => v * h).filter((y) => y > y0 && y < y1).sort((a, b) => a - b), y1];
+  for (let i = 0; i < U.length - 1; i++) {
+    for (let j = 0; j < V.length - 1; j++) {
+      const d = (rng.next() * 2 - 1) * amp;
+      ctx.fillStyle = d >= 0 ? `rgba(${white},${d / 255})` : `rgba(0,0,0,${-d / 255})`;
+      ctx.fillRect(U[i], V[j], U[i + 1] - U[i], V[j + 1] - V[j]);
+    }
+  }
+  const seam = o.seam ?? 3, seamAmp = o.seamAmp ?? 22;
+  ctx.strokeStyle = `rgba(${white},${seamAmp / 255})`; ctx.lineWidth = seam;
+  for (const x of U.slice(1, -1)) { ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke(); }
+  for (const y of V.slice(1, -1)) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+}
+
+/** Soft wear patch (rougher or duller) centred at (x, y) with radius r: rubbed paint around handles, steps and seams. */
+function wear(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, amp: number, channel: 'all' | 'g' = 'all'): void {
+  const white = amp < 0 ? '0,0,0' : channel === 'g' ? '0,255,0' : '255,255,255';
+  amp = Math.abs(amp);
+  const g = ctx.createRadialGradient(x, y, 0, x, y, 1);
+  g.addColorStop(0, `rgba(${white},${amp / 255})`); g.addColorStop(0.55, `rgba(${white},${amp * 0.5 / 255})`); g.addColorStop(1, `rgba(${white},0)`);
+  ctx.save();
+  ctx.translate(x, y); ctx.scale(rx, ry); ctx.translate(-x, -y);
+  ctx.fillStyle = g;
+  ctx.fillRect(x - 1, y - 1, 2, 2);
+  ctx.restore();
 }
 
 export const LIVERY = {
@@ -243,13 +302,14 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   for (let i = 0; i < 12; i++) actx.fillRect(ringU * 0.45, (i / 12) * h + 6, ringU * 0.15, h / 12 - 12);
   // registration on the white rear fuselage above the cheat line (clear of the float struts from the quarter views)
   // and the operator script under the cabin windows (both sides, readable)
-  bodyText(actx, lay, w, h, LIVERY.registration, -3.05, 0.47, 0.18, 'bold', '"Helvetica Neue", Arial, sans-serif', LIVERY.cheat);
+  bodyText(actx, lay, w, h, LIVERY.registration, -3.05, 0.45, 0.15, 'bold', '"Helvetica Neue", Arial, sans-serif', LIVERY.cheat);
   bodyText(actx, lay, w, h, 'BAHÍA VISTA AIR TAXI', -0.25, 0.10, 0.085, 'bold italic', 'Georgia, "Times New Roman", serif', LIVERY.cheat);
-  bodyText(hctx, lay, w, h, LIVERY.registration, -3.05, 0.47, 0.18, 'bold', '"Helvetica Neue", Arial, sans-serif', '#9a9a9a');
+  bodyText(hctx, lay, w, h, LIVERY.registration, -3.05, 0.45, 0.15, 'bold', '"Helvetica Neue", Arial, sans-serif', '#9a9a9a');
   bodyText(hctx, lay, w, h, 'BAHÍA VISTA AIR TAXI', -0.25, 0.10, 0.085, 'bold italic', 'Georgia, "Times New Roman", serif', '#9a9a9a');
   // panel lines / rivets
   const stations = [3.9, 3.2, 2.32, 1.85, 0.0, -0.9, -1.6, -2.6, -3.7, -4.7].map((x) => lay.uOf(x));
-  panels(hctx, actx, w, h, stations, [0.12, 0.2, 0.3, 0.42, 0.5, 0.58, 0.7, 0.8, 0.88], 26);
+  const stringers = [0.12, 0.2, 0.3, 0.42, 0.5, 0.58, 0.7, 0.8, 0.88];
+  panels(hctx, actx, w, h, stations, stringers, 26);
   // door outline under the door window (both sides) with a handle
   hctx.strokeStyle = '#3a3a3a'; hctx.lineWidth = 3;
   actx.strokeStyle = 'rgba(20,20,25,0.35)'; actx.lineWidth = 2;
@@ -300,8 +360,20 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   }
   // sun-faded top: slightly lighter/desaturated
   actx.fillStyle = 'rgba(255,255,255,0.05)'; actx.fillRect(0, 0, w, h * 0.12); actx.fillRect(0, h * 0.88, w, h * 0.12);
-  // roughness: clearcoat paint ~0.35, cowl 0.5, soot/grime rougher, scratches
-  rctx.fillStyle = '#6e6e6e'; rctx.fillRect(0, 0, w, h);
+  // roughness of the base coat under the clear coat: painted aluminium ~0.40, varying panel by panel (+-0.05) and
+  // with wear (rubbed paint around the door handles, the boarding steps and the cowl fasteners, spray-dulled
+  // belly, sun-chalked roof), rivet seams a touch rougher; the cowl ring 0.5, soot and grime rougher, scratches
+  rctx.fillStyle = '#666666'; rctx.fillRect(0, 0, w, h);
+  panelVariation(rctx, w, h, stations, stringers, rng, 13, 'all', { seam: 3, seamAmp: 18 });
+  for (const side of [1, -1]) {
+    const V = (v: number) => (side > 0 ? v : 1 - v) * h;
+    wear(rctx, lay.uOf(1.0) * w, V(vLow(1.0, 0.05)), 70, 45, 34);                // door handle
+    wear(rctx, lay.uOf(1.3) * w, V(vLow(1.3, -0.45)), 90, 40, 40);               // boarding step
+    wear(rctx, lay.uOf(1.35) * w, V(vLow(1.35, 0.30)), 130, 30, 18);            // sill rub under the door window
+    wear(rctx, lay.uOf(3.55) * w, V(vLow(3.55, 0.3)), 120, 60, 16);             // cowl fasteners
+  }
+  rctx.fillStyle = 'rgba(255,255,255,0.10)'; rctx.fillRect(0, h * 0.44, w, h * 0.12);   // spray-dulled belly
+  rctx.fillStyle = 'rgba(255,255,255,0.05)'; rctx.fillRect(0, 0, w, h * 0.08); rctx.fillRect(0, h * 0.92, w, h * 0.08); // sun-chalked roof
   rctx.fillStyle = '#7a7a7a'; rctx.fillRect(0, 0, ringU, h);
   sootStreak(rctx, '170,170,170', 0.7);
   grime(rctx, rng, w, h, 160, 0.25, '150,150,150');
@@ -315,7 +387,18 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   // the matte anti-glare panel has no gloss to speak of and the soot streak dulls the coat
   const [cc, cctx] = canvas(w / 4, h / 4);
   cctx.scale(0.25, 0.25);
-  cctx.fillStyle = 'rgb(0,34,0)'; cctx.fillRect(0, 0, w, h);
+  cctx.fillStyle = 'rgb(0,36,0)'; cctx.fillRect(0, 0, w, h);
+  // the gloss is what the eye reads: panels differ by up to +-0.035 in clear-coat roughness (0.10 .. 0.18), the
+  // seams and the worn zones are duller, the belly is matted by spray and the roof by the sun
+  panelVariation(cctx, w, h, stations, stringers, rng, 9, 'g', { seam: 8, seamAmp: 16 });
+  for (const side of [1, -1]) {
+    const V = (v: number) => (side > 0 ? v : 1 - v) * h;
+    wear(cctx, lay.uOf(1.0) * w, V(vLow(1.0, 0.05)), 70, 45, 30, 'g');
+    wear(cctx, lay.uOf(1.3) * w, V(vLow(1.3, -0.45)), 90, 40, 36, 'g');
+    wear(cctx, lay.uOf(1.35) * w, V(vLow(1.35, 0.30)), 130, 30, 14, 'g');
+  }
+  cctx.fillStyle = 'rgba(0,255,0,0.05)'; cctx.fillRect(0, h * 0.44, w, h * 0.12);
+  cctx.fillStyle = 'rgba(0,255,0,0.04)'; cctx.fillRect(0, 0, w, h * 0.08); cctx.fillRect(0, h * 0.92, w, h * 0.08);
   cctx.fillStyle = 'rgb(0,16,0)'; cctx.fillRect(0, 0, lay.uOf(3.15) * w, h);
   cctx.fillStyle = 'rgb(0,120,0)';
   for (const side of [1, -1]) {
@@ -620,12 +703,29 @@ export function wingMaps(): PbrMaps {
     actx.fillRect(w * 0.5 + rng.range(-8, 8), rng.range(0, h), rng.range(1, 3), rng.range(1, 4));
   }
   grime(actx, rng, w, h, 80, 0.06);
-  rctx.fillStyle = '#5a5a5a'; rctx.fillRect(0, 0, w, h);
-  rctx.fillStyle = '#909090'; rctx.fillRect(w * 0.30, wy(0.12), w * 0.11, wy(0.20) - wy(0.12));
-  // the underside is a touch duller than the top coat
+  // base coat: ~0.38 varying per skin panel (spar / rib bays), rougher along the rivet seams, chipped and rubbed
+  // along the leading edge, the walkway is anti-slip grit, the underside a touch duller than the top coat
+  const spars = [0.14, 0.33, 0.5, 0.67, 0.86];
+  rctx.fillStyle = '#606060'; rctx.fillRect(0, 0, w, h);
+  panelVariation(rctx, w, h, spars, ribs, rng, 13, 'all', { y1: wy(1), seam: 3, seamAmp: 18 });
+  panelVariation(rctx, w, h, [0.3, 0.7], tailRibs, rng, 11, 'all', { y0: T0 * h, seam: 3, seamAmp: 14 });
+  rctx.fillStyle = 'rgba(255,255,255,0.16)'; rctx.fillRect(w * 0.47, 0, w * 0.06, h);
+  rctx.fillStyle = '#9a9a9a'; rctx.fillRect(w * 0.30, wy(0.12), w * 0.11, wy(0.20) - wy(0.12));
   rctx.fillStyle = 'rgba(255,255,255,0.10)'; rctx.fillRect(w * 0.5, 0, w * 0.5, wy(1));
+  // strut fittings and the fuel cap get handled: rubbed paint
+  for (const f of [0.30, 0.66]) wear(rctx, w * (0.5 + 0.5 * f), wy(2.9 / 7.3), 40, 30, 30);
+  wear(rctx, w * 0.40, wy(0.27), 30, 30, 26);
   grime(rctx, rng, w, h, 90, 0.2, '150,150,150');
-  return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.0), false), clearcoatNormalMap: orangePeelNormal(rng, 24, 48) };
+  // clear-coat roughness (green): 0.14 nominal, +-0.03 per panel, matte walkway, dull chipped leading edge
+  const [cc, cctx] = canvas(w / 4, h / 4);
+  cctx.scale(0.25, 0.25);
+  cctx.fillStyle = 'rgb(0,36,0)'; cctx.fillRect(0, 0, w, h);
+  panelVariation(cctx, w, h, spars, ribs, rng, 8, 'g', { y1: wy(1), seam: 8, seamAmp: 14 });
+  panelVariation(cctx, w, h, [0.3, 0.7], tailRibs, rng, 7, 'g', { y0: T0 * h, seam: 8, seamAmp: 12 });
+  cctx.fillStyle = 'rgba(0,255,0,0.10)'; cctx.fillRect(w * 0.47, 0, w * 0.06, h);
+  cctx.fillStyle = 'rgb(0,150,0)'; cctx.fillRect(w * 0.30, wy(0.12), w * 0.11, wy(0.20) - wy(0.12));
+  for (const f of [0.30, 0.66]) wear(cctx, w * (0.5 + 0.5 * f), wy(2.9 / 7.3), 40, 30, 26, 'g');
+  return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.0), false), clearcoatRoughnessMap: toTexture(cc, false), clearcoatNormalMap: orangePeelNormal(rng, 24, 48) };
 }
 
 /**
@@ -680,13 +780,30 @@ export function floatMaps(): PbrMaps {
     actx.beginPath(); actx.moveTo(x, y0); actx.lineTo(x + rng.range(-4, 4), y0 + len); actx.stroke();
   }
   grime(actx, rng, w, h, 90, 0.08, '60,60,55');
-  // roughness: matte deck, dull wet band, otherwise semi-gloss aluminium
-  rctx.fillStyle = '#7c7c7c'; rctx.fillRect(0, 0, w, h);
-  band(rctx, 0, 0.118, '#9a9a9a');
-  band(rctx, 0, 0.066, '#c8c8c8');
-  band(rctx, 0.17, 0.30, '#a4a4a4');
-  grime(rctx, rng, w, h, 100, 0.25, '160,160,160');
-  // scuffs: dock rash along the sides at deck height and boot marks on the walkways (dull, slightly lighter metal)
+  // Three material families on one hull, packed into one texture (clear coat R / roughness G / metalness B):
+  //  - hull sides and bottom: painted aluminium (no metalness, clear-coated), base roughness ~0.42 varying panel by
+  //    panel and rougher along the frame seams, the bottom a little duller (0.48) from spray and beaching;
+  //  - the wet band around the waterline is glossier and darker (water in the pores), not duller;
+  //  - the deck is bare anodised aluminium (metal, satin 0.6, no clear coat) and the walkway anti-slip grit
+  //    (near-matte 0.85, barely metallic).
+  const [mc, mctx] = canvas(w, h);
+  const [cc, cctx] = canvas(w, h);
+  const frames = [0.1, 0.2, 0.3, 0.4, 0.5, 0.58, 0.66, 0.76, 0.86, 0.94];
+  rctx.fillStyle = '#6b6b6b'; rctx.fillRect(0, 0, w, h);
+  band(rctx, CHINE, 0.5, '#7a7a7a');
+  panelVariation(rctx, w, h, frames, [0.118, CHINE, 1 - CHINE, 1 - 0.118], rng, 12, 'all', { seam: 3, seamAmp: 20 });
+  mctx.fillStyle = '#000000'; mctx.fillRect(0, 0, w, h);
+  cctx.fillStyle = '#ffffff'; cctx.fillRect(0, 0, w, h);
+  // wet band: glossier than the dry paint above it (roughness ~0.28), fading out toward the keel
+  for (const side of [1, -1]) {
+    const V = (v: number) => (side > 0 ? v : 1 - v) * h;
+    const g = rctx.createLinearGradient(0, V(0.165), 0, V(0.31));
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.08, 'rgba(0,0,0,0.36)'); g.addColorStop(0.5, 'rgba(0,0,0,0.30)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    rctx.fillStyle = g;
+    rctx.fillRect(0, Math.min(V(0.165), V(0.31)), w, Math.abs(V(0.31) - V(0.165)));
+  }
+  grime(rctx, rng, w, h, 100, 0.22, '160,160,160');
+  // scuffs: dock rash along the sides at deck height and boot marks on the walkways (dull, slightly lighter)
   for (let i = 0; i < 260; i++) {
     const side = rng.next() < 0.5 ? 1 : -1, onDeck = rng.next() < 0.45;
     const v = onDeck ? rng.range(0.005, 0.06) : rng.range(0.10, 0.19), y = (side > 0 ? v : 1 - v) * h;
@@ -696,7 +813,19 @@ export function floatMaps(): PbrMaps {
     actx.strokeStyle = `rgba(${onDeck ? '120,118,112' : '225,228,230'},${a * 0.5})`; actx.lineWidth = rng.range(0.6, 1.6);
     actx.beginPath(); actx.moveTo(x, y); actx.lineTo(x + len, y + rng.range(-4, 4)); actx.stroke();
   }
-  return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.2), false) };
+  // bare deck and anti-slip walkway: drawn last so nothing painted bleeds onto them
+  band(rctx, 0, 0.118, '#9c9c9c');
+  band(rctx, 0, 0.066, '#dadada');
+  band(mctx, 0, 0.118, '#e6e6e6');
+  band(mctx, 0, 0.066, '#1f1f1f');
+  band(cctx, 0, 0.118, '#000000');
+  // oxidised patches and boot scuffs on the deck vary its satin finish
+  for (let i = 0; i < 120; i++) {
+    const side = rng.next() < 0.5 ? 1 : -1, v = rng.range(0.0, 0.115), y = (side > 0 ? v : 1 - v) * h;
+    wear(rctx, rng.range(0, w), y, rng.range(10, 40), rng.range(3, 8), rng.range(-30, 30));
+  }
+  const packed = toTexture(packRGB(cc, rc, mc), false);
+  return { map: toTexture(ac, true), roughnessMap: packed, metalnessMap: packed, clearcoatMap: packed, normalMap: toTexture(heightToNormal(hc, 2.2), false) };
 }
 
 // ------------------------------------------------------------------ instrument panel
@@ -1248,11 +1377,13 @@ export function propDiscTexture(discR = 1.5, root = 0.16, length = 1.32, rootCho
       const inTip = THREE.MathUtils.smoothstep(r, tipR - tipBand - 0.015, tipR - tipBand + 0.015);
       if (inTip > 0) {
         cr = cr + (222 - cr) * inTip; cg = cg + (176 - cg) * inTip; cb = cb + (48 - cb) * inTip;
-        alpha *= 1 + 0.2 * inTip;
+        // the tip paint is brighter but sweeps no more of the disc than the dark blade: no coverage boost, or the
+        // band reads as a ring over the windshield instead of a tint
+        alpha *= 1 + 0.06 * inTip;
       }
       const glint = Math.exp(-Math.pow((r - (tipR - 0.03)) / 0.012, 2));
-      cr += (255 - cr) * glint * 0.35; cg += (250 - cg) * glint * 0.35; cb += (230 - cb) * glint * 0.35;
-      alpha = Math.min(alpha + glint * 0.05, 1);
+      cr += (255 - cr) * glint * 0.2; cg += (250 - cg) * glint * 0.2; cb += (230 - cb) * glint * 0.2;
+      alpha = Math.min(alpha + glint * 0.02, 1);
       d[k] = cr; d[k + 1] = cg; d[k + 2] = cb; d[k + 3] = Math.round(alpha * 255);
     }
   }
