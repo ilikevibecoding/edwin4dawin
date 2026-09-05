@@ -62,14 +62,21 @@ float worley2(vec2 p) {
  *  Individual cumulus are domain-warped cellular blobs (two worley scales, ~6 km and ~3 km spacing) that
  *  only develop where a slow ~17 km macro field is high: clusters of distinct 1-4 km masses separated by
  *  sectors of clear sky, rather than an even sprinkle that fuses into a band near the horizon. */
-vec3 cloudFieldCS(vec2 cs) {
+/** Raw (un-thresholded) macro field; the raymarch bakes this and thresholds it per height so that every
+ *  cell shrinks toward its top, while the ground shadow thresholds it once at the base footprint. */
+float cloudFieldRaw(vec2 cs) {
   vec2 p = cs * 0.00015 + uCloudSeed;
   vec2 warp = (vec2(fbm3(p * 1.3), fbm3(p * 1.3 + 4.2)) - 0.5) * 0.35;
   float macro = fbm3(p * 0.4 + 9.0);
   float cellsA = 1.0 - worley2(cs * (1.0 / 6000.0) + warp + uCloudSeed * 0.37);
   float cellsB = 1.0 - worley2(cs * (1.0 / 3000.0) + warp * 1.5 + uCloudSeed * 0.61 + 2.3);
-  float f = (cellsA * 0.65 + cellsB * 0.35) * 0.55 + macro * 0.45;
-  float thr = 0.72 - uCloudCoverage * 0.40;
+  return (cellsA * 0.65 + cellsB * 0.35) * 0.55 + macro * 0.45;
+}
+/** Coverage threshold on the raw field (the cloud base footprint). */
+float cloudThreshold() { return 0.72 - uCloudCoverage * 0.40; }
+vec3 cloudFieldCS(vec2 cs) {
+  float f = cloudFieldRaw(cs);
+  float thr = cloudThreshold();
   // narrow ramp: the edge detail comes from the 3D noise erosion, a wide ramp only made thin veils
   float cov = smoothstep(thr, thr + 0.09, f);
   float interior = smoothstep(thr + 0.03, thr + 0.25, f);
