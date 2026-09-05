@@ -233,7 +233,6 @@ function garzaRoadX(z: number): number {
  *  shore up the spit, narrowing away over the spit's northern third. The depth wanders along the road so the
  *  outer shore is not a ruled edge. */
 export function garzaBeltSd(x: number, z: number, grow = 0): number {
-  if (z < 1700 || z > 2650) return 100;
   const u = garzaRoadX(z) - x;
   const taper = smoothstep(1840, 1990, z) * (1 - smoothstep(2440, 2530, z));
   const depth = (85 + 50 * (0.5 + 0.5 * fbm2(z / 150 + 2.0, 0.3, 2))) * taper;
