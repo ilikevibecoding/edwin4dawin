@@ -8,19 +8,23 @@ export function createHud() {
   root.className = 'hud';
   root.innerHTML = `
     <div class="hud-corner hud-tl">
-      <div class="hud-title">RIDGELINE TRAIL</div>
-      <div class="hud-sub" id="hud-status">Auto-drive engaged</div>
+      <div class="hud-plate">
+        <div class="hud-title">RIDGELINE TRAIL</div>
+        <div class="hud-sub" id="hud-status">Auto-drive engaged</div>
+      </div>
     </div>
     <div class="hud-corner hud-br">
-      <div class="hud-speed"><span id="hud-speed">0</span><em>km/h</em></div>
-      <div class="hud-sub" id="hud-cam">Chase cam</div>
-      <div class="hud-rev" id="hud-rev"></div>
+      <div class="hud-plate">
+        <div class="hud-speed"><span id="hud-speed">0</span><em>km/h</em></div>
+        <div class="hud-sub" id="hud-cam">Chase cam</div>
+        <div class="hud-rev" id="hud-rev"></div>
+      </div>
     </div>
     <div class="hud-corner hud-bl">
-      <div class="hud-keys">
+      <div class="hud-plate hud-keys">
         <span><b>Click</b> views</span>
         <span><b>Drag</b> look</span>
-        <span><b>W A S D</b> drive</span>
+        <span><b>WASD</b> drive</span>
         <span><b>C</b> camera</span>
         <span><b>P</b> photo</span>
         <span><b>N</b> time</span>

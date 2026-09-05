@@ -30,6 +30,27 @@
          of running under the readout and the build stamp. */
       .hud-bl { bottom: 0; left: 0; max-width: calc(100% - 250px); }
       .hud-br { bottom: 0; right: 0; text-align: right; }
+      /* A plate under each block. Round 4's critics measured the legend at a
+         contrast of 1.5–1.7 over sunlit dirt and the dusk aureole: a text shadow
+         is a shadow, not a background, and a grey secondary over a 0.6-luma sky
+         has nowhere to go. The plate is a soft dark tint with the frame blurred
+         behind it, sized to the block, so it costs the picture a few hundred
+         pixels of its corner rather than a gradient across the bottom. */
+      .hud-plate {
+        display: inline-block;
+        padding: 9px 12px 8px;
+        margin: -9px -12px -8px;
+        border-radius: 7px;
+        background: rgba(6, 7, 10, 0.3);
+        -webkit-backdrop-filter: blur(6px);
+        backdrop-filter: blur(6px);
+      }
+      .hud-br .hud-plate { text-align: right; }
+      @media (max-width: 720px) {
+        .hud-corner { padding: 18px 20px; }
+        .hud-bl { max-width: calc(100% - 226px); }
+        .hud-keys { gap: 6px 12px; font-size: 10px; letter-spacing: 0.1em; }
+      }
 
       .hud-title {
         font-size: 12px;
@@ -49,17 +70,20 @@
       }
       .hud-speed {
         font-size: 46px;
-        font-weight: 200;
+        /* 200 drew the numeral thinner than the hint type beside it (round 4,
+           critics B and C); 300 keeps it light and gives it a stroke */
+        font-weight: 300;
         line-height: 0.9;
         font-variant-numeric: tabular-nums;
         text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 3px 18px rgba(0, 0, 0, 0.9);
       }
       .hud-speed em {
-        font-size: 12px;
+        font-size: 11px;
         font-style: normal;
         letter-spacing: 0.24em;
         margin-left: 8px;
         color: var(--accent);
+        opacity: 0.72;
       }
       .hud-keys {
         display: flex;
@@ -75,13 +99,16 @@
       }
       .hud-keys b { color: var(--ink); font-weight: 600; }
       .hud-keys { transition: opacity 1.4s ease; }
-      .hud-keys--rest { opacity: 0.42; }
-      /* at night the type would otherwise be the brightest thing in the frame */
+      .hud-keys--rest { opacity: 0.5; }
+      /* at night the type would otherwise be the brightest thing in the frame;
+         the rest state stays over 0.45 — at 0.3 the median hint pixel sat at the
+         ground's own luma (round 4, critics A and B) */
       .hud[data-hour="night"] .hud-title,
       .hud[data-hour="night"] .hud-sub,
-      .hud[data-hour="night"] .hud-keys { opacity: 0.62; }
-      .hud[data-hour="night"] .hud-keys--rest { opacity: 0.3; }
+      .hud[data-hour="night"] .hud-keys { opacity: 0.66; }
+      .hud[data-hour="night"] .hud-keys--rest { opacity: 0.45; }
       .hud[data-hour="night"] .hud-speed { opacity: 0.8; }
+      .hud[data-hour="night"] .hud-plate { background: rgba(6, 7, 10, 0.22); }
       .hud-rev {
         margin-top: 8px;
         font-size: 9.5px;
