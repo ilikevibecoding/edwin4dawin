@@ -37,10 +37,12 @@ const { buildSignature } = await import('../src/coruscant/buildings.js');
 function build() { return buildSignature(LM, lot, layout); }
 function hashBlocks(a) { let h = 2166136261; for (let i = 0; i < a.length; i++) { h ^= a[i]; h = Math.imul(h, 16777619); } return (h >>> 0).toString(16); }
 
-const t0 = performance.now();
+// the budget is what the streaming city pays per landmark on a warm engine, so the timed build is the second one
+// (the first carries module JIT warm-up and is what the determinism check compares against)
 const bp = build();
-const buildMs = performance.now() - t0;
+const t0 = performance.now();
 const bp2 = build();
+const buildMs = performance.now() - t0;
 const deterministic = hashBlocks(bp.blocks) === hashBlocks(bp2.blocks);
 
 const { w, h, d } = bp;

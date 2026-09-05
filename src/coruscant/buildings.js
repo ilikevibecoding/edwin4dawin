@@ -158,4 +158,22 @@ function pruneMeta(bp) {
   m.spots = m.spots.filter(ok);
   m.work = m.work.filter(ok);
   m.beds = m.beds.filter(ok);
+  // every room gets a `floor` box: the bounding box of the cells that really have a floor at its walk level and
+  // headroom above (a raked auditorium tier or an apartment drawn past a rounded facade otherwise hands NPC planners
+  // cells in the air); rooms with no such cell are dropped. The room rectangle itself is kept as registered (it
+  // includes the walls, which is what the lighting/furnishing harness measures).
+  const rooms = [];
+  for (const r of m.rooms) {
+    const y = r.y - bp.y0;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, n = 0, total = 0;
+    for (let wx = r.x; wx < r.x + r.w; wx++) for (let wz = r.z; wz < r.z + r.d; wz++) {
+      const x = wx - bp.lot.x0, z = wz - bp.lot.z0;
+      total++;
+      if (!bp.inside(x, y, z) || !passable(bp.get(x, y, z)) || !passable(bp.get(x, y + 1, z)) || !standable(bp.get(x, y - 1, z))) continue;
+      n++; if (wx < x0) x0 = wx; if (wx > x1) x1 = wx; if (wz < z0) z0 = wz; if (wz > z1) z1 = wz;
+    }
+    if (!n) continue;
+    rooms.push({ ...r, floor: { x: x0, z: z0, w: x1 - x0 + 1, d: z1 - z0 + 1, frac: +(n / Math.max(1, total)).toFixed(2) } });
+  }
+  m.rooms = rooms;
 }
