@@ -9,9 +9,9 @@
 // caged ladders to tier 2. Exposes the slot list for the traffic system; the arms follow each slot's
 // `occupied` flag, which that system writes.
 import * as THREE from "three";
-import { Batch, Batcher, sharedCylinder, axisQuat } from "./batch.js";
-import { FLOOR, HALL, WALL_T, DOORS, RACK, RIB_Z, RIB_W, RIB_D, STAIRS, LADDER_Z, RAIL_H, RAIL_MID, HG } from "./layout.js";
-import { label, railRun, ladder, housedLamp, hazardBlocks } from "./util.js";
+import { Batch, Batcher, sharedCylinder, axisQuat, NY } from "./batch.js";
+import { FLOOR, HALL, WALL_T, DOORS, RACK, RIB_Z, RIB_W, RIB_D, STAIRS, LADDER_Z, RAIL_H, RAIL_MID, HG, EM } from "./layout.js";
+import { label, railRun, ladder, housedLamp, hazardBlocks, litChannel } from "./util.js";
 import { contactShadow } from "./deck.js";
 
 const WALL_FACE = HALL.x1 - WALL_T - 0.12; // 79.72: wall panel front
@@ -170,24 +170,23 @@ function buildPlatform(ctx, B, s, tier) {
     for (const [a, b] of pieces) {
       let [xa, xb] = mm(xIn, xOut);
       B.boxMM("grate", 0xffffff, [xa, py - PLATE_T, a], [xb, py, b], { texel: 0.8 });
-      // deep fascia beam along the inner edge (0.6 m, dark) with a steel top lip, a 10 cm blue-white
-      // work-light strip recessed in a black channel on its hall face and a downlight strip under it:
-      // from the deck each tier reads as a lit gallery edge, not a dark line
+      // deep fascia beam along the inner edge (0.6 m, dark) with a steel top lip, carrying the tier's
+      // work-light run on its hall face: a housed, segmented channel (4 m lenses on the channel level
+      // between mid-grey joints, end caps, a twelfth of the lenses dead) 4 cm proud of the beam, and a
+      // soft downlight strip under it. From the deck each tier reads as a lit gallery edge with a body
+      // and joints, not one bare bar the length of the racks
       [xa, xb] = mm(xIn - 0.02, xIn + 0.14);
       B.boxMM("paintedMetal", PALETTE.impDark, [xa, py - PLATE_T - 0.6, a], [xb, py - 0.02, b], { texel: 0.5 });
       [xa, xb] = mm(xIn - 0.03, xIn + 0.16);
       B.boxMM("metal", HG.steel, [xa, py - 0.02, a], [xb, py + 0.03, b]);
-      [xa, xb] = mm(xIn - 0.05, xIn - 0.02);
-      B.boxMM("paintedMetal", PALETTE.impBlack, [xa, py - PLATE_T - 0.42, a + 0.2], [xb, py - PLATE_T - 0.22, b - 0.2]);
-      [xa, xb] = mm(xIn - 0.055, xIn - 0.045);
-      B.boxMM("emitWhite", 0xffffff, [xa, py - PLATE_T - 0.4, a + 0.25], [xb, py - PLATE_T - 0.24, b - 0.25]);
+      litChannel(B, PALETTE, [s * (xIn - 0.06), py - PLATE_T - 0.32, a + 0.15], [s * (xIn - 0.06), py - PLATE_T - 0.32, b - 0.15], [-s, 0, 0], { w: 0.3, depth: 0.14, lensW: 0.16, level: EM.channel, seg: 4, gap: 0.22, cap: 0.3, off: 0.08, seed: Math.round(a) + tier.tier });
       [xa, xb] = mm(xIn, xIn + 0.12);
-      B.boxMM("emitWhite", 0xffffff, [xa, py - PLATE_T - 0.61, a + 0.3], [xb, py - PLATE_T - 0.6, b - 0.3]);
-      // wall strip at knee height along the back of the platform
+      B.boxMM("hgEmit", EM.channel, [xa, py - PLATE_T - 0.61, a + 0.3], [xb, py - PLATE_T - 0.6, b - 0.3], { faces: NY });
+      // wall strip at knee height along the back of the platform (housed level)
       [xa, xb] = mm(xOut - 0.12, xOut);
       B.boxMM("paintedMetal", PALETTE.impBlack, [xa, py + 0.82, a + 0.15], [xb, py + 0.96, b - 0.15]);
       [xa, xb] = mm(xOut - 0.13, xOut - 0.12);
-      B.boxMM("emitWhite", 0xffffff, [xa, py + 0.86, a + 0.2], [xb, py + 0.92, b - 0.2]);
+      B.boxMM("hgEmit", EM.channel, [xa, py + 0.86, a + 0.2], [xb, py + 0.92, b - 0.2]);
       // brackets under the plate every 6 m
       for (let z = a + 2; z < b - 1; z += 6) {
         [xa, xb] = mm(xIn + 0.1, xOut);

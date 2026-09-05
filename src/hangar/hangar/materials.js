@@ -9,7 +9,7 @@ import * as THREE from "three";
 // Label atlas: text stencils and soft alpha shapes packed into one 1024^2 canvas. LABELS[name] =
 // {rect: [u0, v0, u1, v1], aspect}. Rows are grouped by cell height (the packer starts a new row when the
 // height changes or the row is full), so the spec is ordered to fill every row exactly: 72 + 9 x 64 + 3 x
-// 32 + 160 = 904 px of the 1024.
+// 32 + 160 + 120 = 1024 px.
 // ---------------------------------------------------------------------------
 const ATLAS = 1024;
 const LABEL_SPEC = [
@@ -51,10 +51,37 @@ for (const side of ["P", "S"]) for (const tier of [1, 2]) for (let i = 1; i <= 7
   LABEL_SPEC.push([s, s, 80, 32, {}]);
 }
 // giant wall stencils (one worn glyph each), the soft contact-shadow blob (drawn dark under the props)
-// and the landing-pad scuff arc
+// and the landing-pad scuff arc; last row: the soft square that tiles the occlusion pools under the
+// rectangular footprints (72 + 9 x 64 + 3 x 32 + 160 + 120 = 1024 px)
 LABEL_SPEC.push(["4", "4", 160, 160, { weight: 900, worn: true }], ["P", "P", 160, 160, { weight: 900, worn: true }], ["S", "S", 160, 160, { weight: 900, worn: true }], ["SHADOW", null, 272, 160, { shadow: true }], ["ARC", null, 160, 160, { arc: true }]);
+LABEL_SPEC.push(["SQSHADOW", null, 120, 120, { square: true }]);
 
 export const LABELS = {};
+
+/**
+ * Shared shadow falloff: alpha over s = 0 (the contact line / occluder edge) .. 1 (the end of the
+ * penumbra). A smoothstep held near 1 over the first fifth, so the pool stays near-black for a while
+ * before it falls away; GRAD (one-sided, the edge strips and the wall AO) and SQSHADOW (the corners
+ * of the deck pools) both sample it, so a pool composed from the two cells has no seams.
+ */
+export const FALLOFF = (s) => {
+  const t = Math.min(1, Math.max(0, s));
+  return 1 - t * t * (3 - 2 * t);
+};
+
+/**
+ * Sub-rectangle of an atlas cell in fractions of its padded interior (0 = the first drawn texel, 1 =
+ * the last), for quads that map only part of a cell: the opaque centre / a corner of SQSHADOW, or a
+ * GRAD strip without the transparent 2 px margin that would otherwise draw a hairline gap at its ends.
+ */
+export function cellRect(name, fu0, fv0, fu1, fv1) {
+  const L = LABELS[name];
+  const [u0, v0, u1, v1] = L.rect;
+  const [pu, pv] = L.pad;
+  const du = (u1 - u0) * (1 - 2 * pu), dv = (v1 - v0) * (1 - 2 * pv);
+  const a = u0 + (u1 - u0) * pu, b = v0 + (v1 - v0) * pv;
+  return [a + du * fu0, b + dv * fv0, a + du * fu1, b + dv * fv1];
+}
 
 function buildAtlas() {
   const c = document.createElement("canvas");
@@ -93,28 +120,43 @@ function buildAtlas() {
       g.closePath();
       g.fill();
     } else if (opt.shadow) {
-      // soft elliptical blob: opaque core fading to nothing at the cell edge (the core stays >= 0.85 over
-      // the inner 40 % so a crate footprint inside it is darkened by 85 %+, the fade is the penumbra)
+      // elliptical occlusion pool: opaque over the inner 70 % (the footprint plus the contact line), then
+      // a short penumbra to nothing at the cell edge
       const cx = x + w / 2, cy = y + h / 2;
       g.translate(cx, cy);
       g.scale(w / 2 - pad, h / 2 - pad);
       const grad = g.createRadialGradient(0, 0, 0, 0, 0, 1);
       grad.addColorStop(0, "rgba(255,255,255,1)");
-      grad.addColorStop(0.4, "rgba(255,255,255,0.88)");
-      grad.addColorStop(0.72, "rgba(255,255,255,0.4)");
+      grad.addColorStop(0.7, "rgba(255,255,255,1)");
+      grad.addColorStop(0.86, "rgba(255,255,255,0.55)");
       grad.addColorStop(1, "rgba(255,255,255,0)");
       g.fillStyle = grad;
       g.beginPath();
       g.arc(0, 0, 1, 0, Math.PI * 2);
       g.fill();
+    } else if (opt.square) {
+      // soft square occlusion tile: opaque over the inner 70 % of the cell, falling to nothing at the edge
+      // along both axes on the shared FALLOFF (a product of the two ramps, so the corners fade too);
+      // util.occlusionPool maps its centre and its corners under the rectangular footprints
+      const ramp = (t) => FALLOFF((Math.abs(t) - 0.7) / 0.3);
+      const img = g.createImageData(w - 2 * pad, h - 2 * pad);
+      for (let j = 0; j < h - 2 * pad; j++) {
+        const tv = ((j + 0.5) / (h - 2 * pad)) * 2 - 1;
+        for (let i = 0; i < w - 2 * pad; i++) {
+          const tu = ((i + 0.5) / (w - 2 * pad)) * 2 - 1;
+          const k = (j * (w - 2 * pad) + i) * 4;
+          img.data[k] = img.data[k + 1] = img.data[k + 2] = 255;
+          img.data[k + 3] = Math.round(255 * ramp(tu) * ramp(tv));
+        }
+      }
+      g.putImageData(img, x + pad, y + pad);
     } else if (opt.grad) {
-      // one-sided baked-shadow gradient: opaque at u = 0, gone at u = 1 (placed with u pointing away from
-      // the pilaster / ledge / wall base that casts it), constant along v
+      // one-sided baked-shadow gradient on the shared FALLOFF: opaque at u = 0, gone at u = 1 (placed
+      // with u pointing away from the pilaster / ledge / wall base / prop that casts it), constant along
+      // v; near-black over the first fifth so a 2 m flank still reads as shadow at 70 m on a half-size
+      // frame
       const grad = g.createLinearGradient(x + pad, 0, x + w - pad, 0);
-      grad.addColorStop(0, "rgba(255,255,255,1)");
-      grad.addColorStop(0.3, "rgba(255,255,255,0.6)");
-      grad.addColorStop(0.65, "rgba(255,255,255,0.2)");
-      grad.addColorStop(1, "rgba(255,255,255,0)");
+      for (let k = 0; k <= 10; k++) grad.addColorStop(k / 10, `rgba(255,255,255,${FALLOFF(k / 10).toFixed(3)})`);
       g.fillStyle = grad;
       g.fillRect(x, y, w, h);
     } else if (opt.streak) {
@@ -122,11 +164,11 @@ function buildAtlas() {
       // up by tread gaps
       const yc = y + h / 2;
       for (let r = pad; r < h - pad; r++) {
-        const a = Math.exp(-Math.pow((y + r + 0.5 - yc) / (h * 0.2), 2));
+        const a = Math.exp(-Math.pow((y + r + 0.5 - yc) / (h * 0.26), 2));
         const grad = g.createLinearGradient(x + pad, 0, x + w - pad, 0);
-        grad.addColorStop(0, `rgba(255,255,255,${(0.95 * a).toFixed(3)})`);
-        grad.addColorStop(0.45, `rgba(255,255,255,${(0.6 * a).toFixed(3)})`);
-        grad.addColorStop(1, `rgba(255,255,255,${(0.18 * a).toFixed(3)})`);
+        grad.addColorStop(0, `rgba(255,255,255,${(1.0 * a).toFixed(3)})`);
+        grad.addColorStop(0.45, `rgba(255,255,255,${(0.72 * a).toFixed(3)})`);
+        grad.addColorStop(1, `rgba(255,255,255,${(0.25 * a).toFixed(3)})`);
         g.fillStyle = grad;
         g.fillRect(x + pad, y + r, w - 2 * pad, 1);
       }
@@ -141,7 +183,7 @@ function buildAtlas() {
       // landing-pad scuff: a 160 degree arc of the cell circle, soft edged (three strokes), fading along
       // its length, broken by a few gaps
       const cx = x + w / 2, cy = y + h / 2, R = w * 0.36, n = 26, a0 = -0.35, a1 = 2.45;
-      for (const [lw, k] of [[w * 0.17, 0.32], [w * 0.11, 0.42], [w * 0.05, 0.55]]) {
+      for (const [lw, k] of [[w * 0.17, 0.45], [w * 0.11, 0.6], [w * 0.05, 0.8]]) {
         g.lineWidth = lw;
         g.lineCap = "round";
         for (let i = 0; i < n; i++) {
@@ -213,7 +255,7 @@ function buildAtlas() {
       }
     }
     g.restore();
-    LABELS[name] = { rect: [x / ATLAS, 1 - (y + h) / ATLAS, (x + w) / ATLAS, 1 - y / ATLAS], aspect: w / h };
+    LABELS[name] = { rect: [x / ATLAS, 1 - (y + h) / ATLAS, (x + w) / ATLAS, 1 - y / ATLAS], aspect: w / h, pad: [pad / w, pad / h] };
     x += w;
   }
   const tex = new THREE.CanvasTexture(c);
@@ -403,16 +445,17 @@ function buildField() {
         float cell = 0.5 + 0.5 * sin(p.x * 1.9 + t * 0.9) * sin(p.y * 1.9 - t * 1.3);
         // a scan band sweeping along z every ~9 s
         float scan = exp(-pow(mod(p.y - t * 14.0, uSize.y) - uSize.y * 0.5, 2.0) / 40.0);
-        // rim: a visible blue glow that fades over ~6 m from the hole edge (the field "grips" the lip)
+        // rim: a blue glow that fades over ~2 m from the hole edge (the field "grips" the lip)
         float d = min(min(p.x, uSize.x - p.x), min(p.y, uSize.y - p.y));
-        float rim = exp(-d * 0.6); // soft glow over ~3 m
-        float core = exp(-d * 2.2); // bright line where the field meets the lip
+        float rim = exp(-d * 0.9); // soft glow over ~2 m
+        float core = exp(-d * 2.6); // line where the field meets the lip
         float rimFlicker = 0.85 + 0.15 * sin(t * 5.0 + d * 2.0);
         // linear-light levels: the open field body stays around 0.002 (2-3 % on screen after the tone
-        // curve) so space reads near-black through it; the rim glow, the grip line at the lip and the
-        // scan band are the visible parts
-        float k = 0.002 + 0.0012 * a + 0.0008 * b + 0.001 * cell + 0.005 * scan + 0.1 * rim * rimFlicker;
-        vec3 col = vec3(0.28, 0.55, 1.0) * k + vec3(0.55, 0.82, 1.0) * (rim * 0.06 + core * 0.3) * rimFlicker;
+        // curve) so space reads near-black through it; the rim glow and the grip line at the lip are kept
+        // low too (from the aperture camera the near rim fills the strip under the sign plate at a
+        // grazing angle: it must stay a dark band with a faint blue edge, not a pale one)
+        float k = 0.002 + 0.0012 * a + 0.0008 * b + 0.001 * cell + 0.005 * scan + 0.035 * rim * rimFlicker;
+        vec3 col = vec3(0.28, 0.55, 1.0) * k + vec3(0.55, 0.82, 1.0) * (rim * 0.02 + core * 0.16) * rimFlicker;
         gl_FragColor = vec4(col, 1.0);
       }`,
     transparent: true,
@@ -427,9 +470,12 @@ function buildField() {
  * Deck plating: the sheet is the albedo and, through its G channel, the roughness: dark seams, grime,
  * rings and scuffs are rough (they eat the sheen), the clean plate is semi-gloss so the flood pools sit
  * on it. three.js multiplies `roughness` by the sampled G; the patch remaps that sample (linear light
- * 0.83 for the plate, ~0.03 for a seam) to 0.5 .. 0.95 instead. The second patch scales the image-based
- * (indirect) light on the plating only: the harness environment is a bright studio box that a 160 x
- * 240 m deck seen at grazing angles mirrors as an even light-grey wash (three.js applies
+ * 0.83 for the plate, ~0.03 for a seam) to 0.45 .. 0.95, then steps it per plate from the vertex tone
+ * (deck.js gives every plate one of four tones): the darkest and the lightest plates are the glossiest
+ * (polished by traffic / fresh plate), the two mid tones are duller, so a flood pool's specular smear
+ * breaks up plate by plate instead of running across the deck as one sheet. The second patch scales the
+ * image-based (indirect) light on the plating only: the harness environment is a bright studio box that
+ * a 160 x 240 m deck seen at grazing angles mirrors as an even light-grey wash (three.js applies
  * scene.environmentIntensity to every material, so envMapIntensity cannot do this); with the indirect
  * held down the deck stays dark between the flood pools, and the pools are the direct light.
  */
@@ -437,10 +483,38 @@ function makeDeck(sheet) {
   const m = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, map: sheet, roughnessMap: sheet, roughness: 1, metalness: 0.35, envMapIntensity: 0.4 });
   m.onBeforeCompile = (shader) => {
     shader.fragmentShader = shader.fragmentShader
-      .replace("roughnessFactor *= texelRoughness.g;", "roughnessFactor *= clamp(0.97 - 0.565 * texelRoughness.g, 0.3, 1.0);")
+      .replace(
+        "roughnessFactor *= texelRoughness.g;",
+        [
+          "roughnessFactor *= clamp(0.93 - 0.53 * texelRoughness.g, 0.3, 1.0);",
+          "{",
+          "\t// tone steps (deck.js): lane / aperture set 0.030 0.040 0.055 0.074, field set 0.094 0.128 0.174 0.236",
+          "\tfloat plateTone = vColor.g;",
+          "\tfloat plateGloss = plateTone < 0.035 ? 0.8 : plateTone < 0.047 ? 1.3 : plateTone < 0.064 ? 1.0 : plateTone < 0.084 ? 0.72",
+          "\t\t: plateTone < 0.11 ? 0.8 : plateTone < 0.15 ? 1.3 : plateTone < 0.2 ? 1.0 : 0.72;",
+          "\troughnessFactor = clamp(roughnessFactor * plateGloss, 0.25, 1.0);",
+          "}",
+        ].join("\n"),
+      )
       .replace("#include <lights_fragment_maps>", "#include <lights_fragment_maps>\n\tradiance *= 0.3;\n\tiblIrradiance *= 0.55;");
   };
-  m.customProgramCacheKey = () => "hgDeck-roughness-remap-ibl";
+  m.customProgramCacheKey = () => "hgDeck-roughness-remap-ibl-plates";
+  return m;
+}
+
+/**
+ * Deck / wall decals (stencils, wear, occlusion pools): dielectric with the indirect specular held down
+ * like the plating, but duller than the average plate (0.75 against the plates' 0.45 .. 0.95): rubber
+ * deposits and scuffed paint have no polish, and at the grazing angle of the deck view a 0.5-rough
+ * black track mirrored the far rail strips more sharply than the plates around it and read as a
+ * light streak - a tyre track must be the dark band at every angle.
+ */
+function makeDecal(atlas, decalOpts) {
+  const m = new THREE.MeshStandardMaterial({ map: atlas, roughness: 0.75, metalness: 0, vertexColors: true, envMapIntensity: 0.4, ...decalOpts });
+  m.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace("#include <lights_fragment_maps>", "#include <lights_fragment_maps>\n\tradiance *= 0.3;");
+  };
+  m.customProgramCacheKey = () => "hgDecal-ibl";
   return m;
 }
 
@@ -479,9 +553,9 @@ export function makeMaterials(shared) {
     hgCeil: new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, emissive: new THREE.Color("#8d9198"), emissiveIntensity: 0.07, roughness: 0.9, metalness: 0 }),
     // vertex-level emitter (see makeEmit)
     hgEmit: makeEmit(),
-    // painted stencils, the contact-shadow blob, the wear streaks and the baked-shadow gradients (vertex
-    // colour = paint colour; black for shadow and wear); on deck plating and panels
-    hgDecal: new THREE.MeshStandardMaterial({ map: atlas, roughness: 0.85, metalness: 0, vertexColors: true, envMapIntensity: 0.3, ...decalOpts }),
+    // painted stencils, the occlusion pools, the wear streaks and the baked-shadow gradients (vertex
+    // colour = paint colour; black for shadow and wear); on deck plating and panels (see makeDecal)
+    hgDecal: makeDecal(atlas, decalOpts),
     // lit signage: white letters
     hgSign: new THREE.MeshStandardMaterial({ map: atlas, color: 0xffffff, emissive: new THREE.Color("#dfe8ff"), emissiveMap: atlas, emissiveIntensity: 1.5, roughness: 0.6, metalness: 0, ...decalOpts }),
     // lit signage: red letters

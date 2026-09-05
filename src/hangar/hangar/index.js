@@ -12,19 +12,22 @@ import { buildRacks } from "./racks.js";
 import { buildCrane, buildClutter } from "./machinery.js";
 import { flushDecals } from "./util.js";
 
-// Light descriptors (27 with the four rack-platform points from racks.js and the crane's work light).
-// The harness pool is 12 points + 4 spots for the whole active set, so the few that matter carry the
-// priority: the four spots are the ceiling flood fixtures of layout.FLOODS (walls.js builds the housings
-// there) - two pools on the aft apron between the aft door and the aperture rail, taking pads 03/04 with
-// them, and two key lights on the port rack tiers so the fighters in the racks view are lit (0.9; the
-// first casts the shadows) - then the four red beacon points at the aperture corners (0.6), the apron
-// pool under the balcony, the rim-spill points under the lip for the exterior view, the door approaches,
-// the bay-door pools and the shaft (all <= 0.5). Everything else in the hall is emissive fixtures.
+// Light descriptors (28 with the four rack-platform points from racks.js and the crane's two work
+// lights). The harness pool is 12 points + 4 spots for the whole active set, so the few that matter carry
+// the priority: ten spots compete for the four spot slots - the ceiling flood fixtures of layout.FLOODS
+// (walls.js builds the housings there): two pools on the aft apron between the aft door and the aperture
+// rail, taking pads 03/04 with them (0.9; the first casts the shadows), two key lights on the rack tiers
+// (0.85), the crane trolley's two work lights (0.8, machinery.js; a 170 m range, so from the spawn
+// and the balcony the in-range bonus puts them over the out-of-range rack keys and the crane's pool is
+// lit wherever the crane is in frame), and a threshold flood over each bay door (0.5, 80 m range: live
+// only from a camera near that door). Then the four red beacon points at the aperture corners (0.6), the
+// apron pool under the balcony, the rim-spill points under the lip for the exterior view, the door
+// approaches and the shaft (all <= 0.5). Everything else in the hall is emissive.
 function addLights(ctx) {
   const L = ctx.lights;
   // tight cones (13 m pools on the deck from 55 m up) with a soft penumbra so the pools have edges and
   // the deck between them stays dark instead of an even wash
-  for (const f of FLOODS) L.push({ type: "spot", pos: [...f.pos], target: [...f.target], color: 0xf6f8ff, intensity: f.intensity, distance: 95, decay: 1.2, angle: f.angle, penumbra: f.penumbra, priority: 0.9 });
+  for (const f of FLOODS) L.push({ type: "spot", pos: [...f.pos], target: [...f.target], color: 0xf6f8ff, intensity: f.intensity, distance: f.distance ?? 95, decay: 1.2, angle: f.angle, penumbra: f.penumbra, priority: f.priority });
   for (const p of TRACTOR_POINTS) L.push({ type: "point", pos: [p[0] + Math.sign(p[0]) * 1.6, FLOOR + 3.4, p[2] + Math.sign(p[2] - 32) * 1.6], color: 0xff2a1a, intensity: 55, distance: 28, decay: 1.6, priority: 0.6 });
   // apron pool below the balcony / in front of the blast door: the aft-wall view's far apron, and a low
   // fill on the deck view's foreground (kept well under the flood pools so those still read as pools;
@@ -37,24 +40,19 @@ function addLights(ctx) {
   L.push({ type: "point", pos: [0, BALCONY.y + 2.6, 169.3], color: 0xd6e4ff, intensity: 30, distance: 22, priority: 0.4 });
   L.push({ type: "point", pos: [0, FLOOR + 6, -64], color: 0xf4f7ff, intensity: 70, distance: 28, priority: 0.3 });
   // the two bar gaps in the aperture rail: lifts the dashes, rails and bar posts where people stand, and
-  // the aft one is the aft-wall view's foreground deck (behind that camera, so no reflection in frame).
+  // the aft one is the aft-wall view's foreground deck (over that camera, so no reflection in frame).
   // The forward one is the aperture view's foreground: it has no flood pool, so this carries the plate
-  // seams, the non-slip band and the bar (its deck reflection falls below that frame)
+  // seams, the non-slip band and the bar (its deck reflection falls below that frame). The aft one hangs
+  // between the two lamp-mast heads (deck.js) 7 m behind the bar, at 40: at 110 and 3 m from the bar it
+  // lit the bar's top and the deck under it to a clipped white smear at the deck view's vanishing point
   L.push({ type: "point", pos: [0, FLOOR + 5, HOLE.z0 - 1.5], color: 0xf4f7ff, intensity: 120, distance: 26, decay: 1.6, priority: 0.4 });
-  L.push({ type: "point", pos: [0, FLOOR + 7, HOLE.z1 + 3], color: 0xf4f7ff, intensity: 110, distance: 32, decay: 1.6, priority: 0.4 });
+  L.push({ type: "point", pos: [0, FLOOR + 7, HOLE.z1 + 7], color: 0xf4f7ff, intensity: 40, distance: 32, decay: 1.6, priority: 0.4 });
   // port taxi lane beside the rack zone: the racks view's foreground deck (its camera stands at x -40
   // looking at the wall; the rack key spots stop at the wall base, so without this the plate seams and
   // lane edges in the bottom third of that frame are IBL-only). Priority 0.1: the harness's distance
   // term brings it in only for a viewer within ~20 m, so no other view loses a pool light to it
   L.push({ type: "point", pos: [-50, FLOOR + 7, 30], color: 0xf6f8ff, intensity: 110, distance: 30, decay: 1.6, priority: 0.1 });
-  // bay-door approaches: 14 m off each door's axis, over its crew-hatch / console group, so the light's
-  // mirror image seen from the bay-door camera (on the axis) and from the racks camera falls on the
-  // panel wall beside the surround, not on the glossy leaves (on the axis it drew a pale specular
-  // blotch over the hazard band)
-  for (const s of [-1, 1]) {
-    L.push({ type: "point", pos: [s * 74, FLOOR + 8, 1], color: 0xfff0e0, intensity: 80, distance: 32, priority: 0.3 });
-    L.push({ type: "point", pos: [s * 74, FLOOR + 8, 134], color: 0xfff0e0, intensity: 80, distance: 32, priority: 0.3 });
-  }
+  // (the bay-door thresholds are lit by the four threshold floods of layout.FLOODS)
   for (const z of [-12, 76]) L.push({ type: "point", pos: [0, -79, z], color: 0x3b6cff, intensity: 60, distance: 46, priority: 0.3 });
 }
 

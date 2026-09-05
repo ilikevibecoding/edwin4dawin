@@ -78,20 +78,42 @@ export const GALLERY_SPANS = {
   port: [[-68.5, 3], [131, 168.5]],
 };
 
-// the four spot descriptors of the light plan: each is a real ceiling flood fixture with a lit lens
-// (walls.js builds the housing at `pos`, index.js lights it toward `target`). Two pools centred on pads
-// 03/04 (0.21 rad from 55 m up: a 10 m pool with the full-intensity core 5 m wide, so the pad ring sits
-// in the penumbra and the apron lane between the pads stays dark - from the balcony camera the two pads
-// read as pools with edges, from the spawn the pool halves flank the lane), and one key light per side
-// aimed at the tier-1 fighters (0.24 rad, ~520: the cone stops short of the wall behind tier 2, and the
-// panel wall behind tier 1 takes a mid-grey wash instead of a blown-out patch). The first one casts the
-// shadows.
+// the fixed spot descriptors of the light plan: each is a real ceiling flood fixture with a lit lens
+// (walls.js builds the housing at `pos`, index.js lights it toward `target`). Two apron pools that fall
+// 3.5 m inboard and aft of the centres of pads 03/04 (0.23 rad from 55 m up with a 0.65 penumbra: the
+// pool is a soft 12 m disc that overlaps the painted ring off-centre, so the ring reads as paint lying in
+// a light, not as a lighter disc), and one key light per side aimed at the tier-1 fighters (0.24 rad,
+// ~520: the cone stops short of the wall behind tier 2, and the panel wall behind tier 1 takes a mid-
+// grey wash instead of a blown-out patch). The crane's two work lights (machinery.js) are spots too:
+// the harness pool holds four, and scores them by priority and distance, so the rack keys sit a notch
+// under the others - a viewer at the racks still gets them (they are 12 m over that camera), the spawn
+// and balcony cameras drop them for the crane pool instead. The top-scoring one casts the shadows.
+// Then one threshold flood over each bay door (0.5, 80 m range: from the door's own camera 54 m away it
+// scores over the crane pair and lights the tug tracks rolling out of the door; from every other camera
+// it is out of range and never displaces a pool). A point light there did not work: 8 m up and 14 m off
+// the axis so its mirror image stayed off the glossy leaves, it left the threshold at IBL level.
 export const FLOODS = [
-  { pos: [-22, -17, 143], target: [-22, FLOOR, 142], angle: 0.21, penumbra: 0.5, intensity: 1300 },
-  { pos: [22, -17, 143], target: [22, FLOOR, 142], angle: 0.21, penumbra: 0.5, intensity: 1300 },
-  { pos: [-44, -17, 42], target: [-70, -60, 42], angle: 0.24, penumbra: 0.4, intensity: 520 },
-  { pos: [44, -17, 42], target: [70, -60, 42], angle: 0.24, penumbra: 0.4, intensity: 520 },
+  { pos: [-19, -17, 140], target: [-18.5, FLOOR, 138.5], angle: 0.23, penumbra: 0.65, intensity: 1400, priority: 0.9 },
+  { pos: [19, -17, 140], target: [18.5, FLOOR, 138.5], angle: 0.23, penumbra: 0.65, intensity: 1400, priority: 0.9 },
+  { pos: [-44, -17, 42], target: [-70, -60, 42], angle: 0.24, penumbra: 0.4, intensity: 520, priority: 0.85 },
+  { pos: [44, -17, 42], target: [70, -60, 42], angle: 0.24, penumbra: 0.4, intensity: 520, priority: 0.85 },
+  ...DOORS.filter((d) => d.kind === "bay").map((d) => {
+    const s = Math.sign(d.dir[0]);
+    return { pos: [s * 68, -17, d.pos[2]], target: [s * 74, FLOOR, d.pos[2]], angle: 0.2, penumbra: 0.6, intensity: 500, priority: 0.5, distance: 80 };
+  }),
 ];
+// the crane's aft park (t = 40 in every frozen view): bridge over z 23 (between the bay-3 door at z 15
+// and the first rack slot at z 30: the slung container's far side is 4.2 m short of a fighter turning
+// into slot 30, and every approach line runs at z 30 .. 90), the trolley over the outer edge of the
+// port taxi lane at x -58 (12 m from the fighter centreline, 4 m outside the lane's edge line), the
+// hook block down at y -54 - in the 8 m of air between the tier-1 fighters' tops and the tier-2
+// bellies, so the black/yellow block sits against the dark wall behind the racks, not against a
+// light-grey fighter - with the slung container's floor 9 m over the lane. From the racks camera
+// (x -40, z 30) the block and the container hang 18 m away in the frame's upper right, whole (the
+// frame's top edge is at y -50 there), over their own work-light pool, which also reaches the bowser
+// group at z 30; from the spawn they are 137 m out in the middle third of the frame under the
+// light-grey girders; from the balcony likewise. Nothing hangs inside the rack zone.
+export const CRANE_PARK = { z: 23, x: -58, hook: -54 };
 
 // landing pads (centre x,z, radius) and their numbers
 export const PADS = [
@@ -127,16 +149,44 @@ export const HG = {
   rubber: new THREE.Color("#ffffff"),
   black: new THREE.Color("#111214"),
   shadow: new THREE.Color("#000000"),
+  nonSlip: new THREE.Color("#15161a"), // the aperture's clean dark non-slip band
 };
 
 // emitter levels (linear light) for the vertex-level emitter materials.hgEmit: everything here stays
 // under the bloom threshold (1.15) so it glows as a lit surface instead of clipping to white
 export const EM = {
   lens: new THREE.Color(0.98, 1.0, 1.08), // housed ceiling / wall flood lenses
+  ceil: new THREE.Color(0.84, 0.86, 0.94), // ceiling light runs (a full bay)
+  ceilWarm: new THREE.Color(0.86, 0.7, 0.46), // ceiling light runs in the bays relamped with warm tubes (a sixth of them)
+  ceilDim: new THREE.Color(0.5, 0.52, 0.58), // ceiling light runs in the 40 % dimmer bays
+  off: new THREE.Color(0.012, 0.012, 0.014), // a dead segment: the dark lens is still in its housing
   strip: new THREE.Color(0.88, 0.9, 0.98), // balcony rail strip, hatch slits
-  jamb: new THREE.Color(0.58, 0.6, 0.68), // caged bay-door jamb bars (about 40 % of emitWhite)
-  crane: new THREE.Color(1.02, 1.04, 1.1), // crane under-girder strips
+  // the aperture rails' strips and post caps: 72 m of them face the spawn 66 m out and the glossy lane
+  // mirrors them - at the strip level they merged into one hot bar at the vanishing point
+  rail: new THREE.Color(0.4, 0.42, 0.48),
+  channel: new THREE.Color(0.72, 0.74, 0.82), // segmented lit channels (tier fascias, waist strips, gallery edges)
+  jamb: new THREE.Color(0.5, 0.52, 0.6), // bay-door jamb light channels
+  crane: new THREE.Color(0.9, 0.92, 1.0), // crane under-girder and rail strips
+  lining: new THREE.Color(0.38, 0.4, 0.46), // shaft lip-beam lining strips (two stops under emitWhite)
   amberGlow: new THREE.Color(0.34, 0.16, 0.03), // behind the vent louvres (a warm glow through the slats, not a lamp)
+  amberGrille: new THREE.Color(0.5, 0.24, 0.05), // the amber grilles of the top slot row
   blueGlow: new THREE.Color(0.3, 0.45, 0.85), // behind the hatch slats
-  window: new THREE.Color(0.46, 0.54, 0.76), // tower / lift window bands (lit glazing, not a lamp)
+  blueGrille: new THREE.Color(0.26, 0.36, 0.62), // dim blue-white behind the top slot-row grilles
+  window: new THREE.Color(0.46, 0.54, 0.76), // the control room's ceiling light runs seen through the fake glazing either side of the real window
+  glass: new THREE.Color(0.05, 0.065, 0.11), // the fake glazing itself: dark blue-grey glass over a lit room (the real window's interior reads at this level)
+  tower: new THREE.Color(0.28, 0.33, 0.48), // the buttress towers' lift / stair window bands (a stop under the control glazing)
+  column: new THREE.Color(0.62, 0.64, 0.72), // the vertical light columns flanking the balcony
+  laneEdge: new THREE.Color(0.5, 0.38, 0.09), // the forward apron lane's lit edge lines (embedded amber edge lighting: the far lane reads from 200 m)
+  jambSealed: new THREE.Color(0.12, 0.125, 0.15), // the sealed bow portal's jamb channels: two stops under the live ones
+  // self-lit "paint" levels for structure at the roof, where no light of the plan reaches (the harness
+  // environment lights it from above only, so a hull-grey girder seen from below reads black): the
+  // crane's hull grey and its steel flanges, and the roof channels' housings and caps, at the sRGB
+  // values the lit base storey of the walls has (so they read as the same grey, lit)
+  hull: new THREE.Color(0.14, 0.145, 0.16),
+  hullLight: new THREE.Color(0.24, 0.245, 0.26),
+  housing: new THREE.Color(0.045, 0.047, 0.052),
+  housingCap: new THREE.Color(0.09, 0.093, 0.1),
+  // the hook block's yellow bands: hazard paint at the value it has under the two work lights right over
+  // it (the block hangs 34 m under them, over a dark wall: on plain paint it read as a black rectangle)
+  hazard: new THREE.Color(0.55, 0.36, 0.03),
 };

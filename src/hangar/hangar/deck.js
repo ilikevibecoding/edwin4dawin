@@ -5,10 +5,10 @@
 // the aft door with hold-short bars, taxi lines, cable covers, deck stencils, contact shadows, the
 // containment field over the hole and the four tractor emitters.
 import * as THREE from "three";
-import { Batcher, sharedTorus, PY } from "./batch.js";
-import { FLOOR, SHAFT_BOTTOM, HOLE, HALL, PADS, TAXI_X, RACK, RAIL_H, HG, TRACTOR_POINTS, RIB_Z, RIB_X, DOORS, WALL_T } from "./layout.js";
+import { Batcher, sharedTorus, PX, NX, PY, PZ, NZ } from "./batch.js";
+import { FLOOR, SHAFT_BOTTOM, HOLE, HALL, PADS, TAXI_X, RACK, RAIL_H, HG, EM, TRACTOR_POINTS, RIB_Z, RIB_X, DOORS, WALL_T } from "./layout.js";
 import { DECK_TILE, LABELS } from "./materials.js";
-import { tube, label, railRun, housedLamp, redBeacon, hazardBlocks, wearStreak, shadowGrad } from "./util.js";
+import { tube, label, railRun, housedLamp, redBeacon, hazardBlocks, wearStreak, shadowGrad, occlusionPool } from "./util.js";
 
 export const Y_MARK = FLOOR + 0.02; // painted markings are 2 cm proud of the plating (no coplanar faces)
 const FLAT_Q = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, 0)); // XY -> XZ plane
@@ -49,9 +49,11 @@ export function buildDeck(ctx) {
 // ---------------------------------------------------------------------------
 // Plates: 4 m semi-gloss plates (hgDeck; the sheet draws seams, rivets and tie-down rings, the vertex tone
 // sets the plate colour) with 6 cm gaps to the black bed, wider section joints on the rib lines, a darker
-// plate band under each taxi lane and round the aperture, and five per-plate tone steps (one plate in
-// ten a whole stop darker, one in ten lighter) so adjacent plates visibly differ at 20 m and the tiled
-// sheet never reads as one repeated image.
+// plate band under each taxi lane and round the aperture, and four per-plate tone steps a third of a
+// stop apart (0.5 / 0.68 / 0.92 / 1.25 of the base: neighbours with different steps differ by >= 36 % in
+// linear light, ~15 % on screen, and the darkest against the lightest is a stop and a third) so a squint
+// at the deck from any camera sees a patchwork of plates, and the tiled sheet never reads as one
+// repeated image. The tone also picks the plate's gloss (materials.js hgDeck).
 // ---------------------------------------------------------------------------
 function buildPlates(ctx, B) {
   const { PALETTE } = ctx;
@@ -59,9 +61,9 @@ function buildPlates(ctx, B) {
   // lip band rect (grown by half a seam so the plates keep a seam to the band)
   const cut = { x0: HOLE.x0 - LIP.band - seam / 2, x1: HOLE.x1 + LIP.band + seam / 2, z0: HOLE.z0 - LIP.band - seam / 2, z1: HOLE.z1 + LIP.band + seam / 2 };
   const onJoint = (v, lines) => lines.some((l) => Math.abs(l - v) < 1.01);
-  // tone steps: index by a weighted table (10 % a stop darker, 20 % dark, 30 % mid, 30 % plain, 10 % light)
-  const steps = (c) => [0.5, 0.74, 0.88, 1.0, 1.14].map((k) => c.clone().multiplyScalar(k));
-  const TABLE = [0, 1, 1, 2, 2, 2, 3, 3, 3, 4];
+  // tone steps: index by a weighted table (20 % darkest, 30 % dark, 30 % light, 20 % lightest)
+  const steps = (c) => [0.5, 0.68, 0.92, 1.25].map((k) => c.clone().multiplyScalar(k));
+  const TABLE = [0, 0, 1, 1, 1, 2, 2, 2, 3, 3];
   // base tones: mid-grey plating (between impMid and impGrey, so the tone steps have room to read in the
   // IBL-lit stretches between the flood pools), a darker set under the taxi lanes and round the aperture
   const tones = { mid: steps(PALETTE.impMid.clone().lerp(PALETTE.impGrey, 0.45)), dark: steps(PALETTE.impDark.clone().lerp(PALETTE.impMid, 0.3)) };
@@ -72,6 +74,7 @@ function buildPlates(ctx, B) {
     // deterministic per-plate step (integer hash of the plate cell, mixed so neighbours differ)
     let h = (Math.round(cx / G) * 73856093) ^ (Math.round(cz / G) * 19349663);
     h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+    h = Math.imul(h ^ (h >>> 16), 2246822507) >>> 0;
     return set[TABLE[h % 10]];
   };
   const plate = (x0, x1, z0, z1) => {
@@ -101,26 +104,35 @@ function buildPlates(ctx, B) {
 }
 
 // ---------------------------------------------------------------------------
-// Aperture lip, from the hole edge outward: a 0.3 m light steel lip (its face turning 0.3 m down into
-// the hole), a sparse black/yellow dash strip (2 m dashes, 1 m gaps, 0.4 m wide) on a dark rubber
-// non-slip band that runs out to 1.6 m, housed white edge lights in the band every 6 m.
+// Aperture lip, from the hole edge outward: a 0.3 m dark painted lip (its face turning 0.3 m down into
+// the hole; clean paint, not the speckled bare-metal sheet - it is 3 m from the aperture camera at a
+// grazing angle), a sparse black/yellow dash strip (2 m dashes, 1 m gaps, 0.4 m wide) on a clean dark
+// rubber non-slip band that runs out to 1.6 m with a crisp yellow line along its outer edge (and along
+// its hole-side edge in the two bar gaps, where the dashes stop), housed white edge lights in the band
+// every 6 m.
 // ---------------------------------------------------------------------------
 function buildLip(ctx, B) {
-  const { PALETTE } = ctx;
   const s = LIP.steel, d = LIP.dash, b = LIP.band;
   const yT = FLOOR + 0.03; // lip top, a hair over the paint
-  const steel = (mn, mx) => B.boxMM("metal", HG.steel, mn, mx);
-  // steel lip: top plate round the hole + inner face 0.3 m down
-  steel([HOLE.x0 - s, FLOOR - 0.3, HOLE.z0 - s], [HOLE.x1 + s, yT, HOLE.z0]);
-  steel([HOLE.x0 - s, FLOOR - 0.3, HOLE.z1], [HOLE.x1 + s, yT, HOLE.z1 + s]);
-  steel([HOLE.x0 - s, FLOOR - 0.3, HOLE.z0], [HOLE.x0, yT, HOLE.z1]);
-  steel([HOLE.x1, FLOOR - 0.3, HOLE.z0], [HOLE.x1 + s, yT, HOLE.z1]);
+  const lip = (mn, mx) => B.boxMM("paintedMetal", HG.gunmetal, mn, mx, { texel: 1 });
+  // lip: top plate round the hole + inner face 0.3 m down
+  lip([HOLE.x0 - s, FLOOR - 0.3, HOLE.z0 - s], [HOLE.x1 + s, yT, HOLE.z0]);
+  lip([HOLE.x0 - s, FLOOR - 0.3, HOLE.z1], [HOLE.x1 + s, yT, HOLE.z1 + s]);
+  lip([HOLE.x0 - s, FLOOR - 0.3, HOLE.z0], [HOLE.x0, yT, HOLE.z1]);
+  lip([HOLE.x1, FLOOR - 0.3, HOLE.z0], [HOLE.x1 + s, yT, HOLE.z1]);
   // non-slip band (flush with the plates) from the lip to 1.6 m
   const nb = { texel: 1 };
-  B.boxMM("rubber", PALETTE.impDark, [HOLE.x0 - b, SEAM_Y, HOLE.z0 - b], [HOLE.x1 + b, FLOOR, HOLE.z0 - s], nb);
-  B.boxMM("rubber", PALETTE.impDark, [HOLE.x0 - b, SEAM_Y, HOLE.z1 + s], [HOLE.x1 + b, FLOOR, HOLE.z1 + b], nb);
-  B.boxMM("rubber", PALETTE.impDark, [HOLE.x0 - b, SEAM_Y, HOLE.z0 - s], [HOLE.x0 - s, FLOOR, HOLE.z1 + s], nb);
-  B.boxMM("rubber", PALETTE.impDark, [HOLE.x1 + s, SEAM_Y, HOLE.z0 - s], [HOLE.x1 + b, FLOOR, HOLE.z1 + s], nb);
+  B.boxMM("rubber", HG.nonSlip, [HOLE.x0 - b, SEAM_Y, HOLE.z0 - b], [HOLE.x1 + b, FLOOR, HOLE.z0 - s], nb);
+  B.boxMM("rubber", HG.nonSlip, [HOLE.x0 - b, SEAM_Y, HOLE.z1 + s], [HOLE.x1 + b, FLOOR, HOLE.z1 + b], nb);
+  B.boxMM("rubber", HG.nonSlip, [HOLE.x0 - b, SEAM_Y, HOLE.z0 - s], [HOLE.x0 - s, FLOOR, HOLE.z1 + s], nb);
+  B.boxMM("rubber", HG.nonSlip, [HOLE.x1 + s, SEAM_Y, HOLE.z0 - s], [HOLE.x1 + b, FLOOR, HOLE.z1 + s], nb);
+  // yellow edge line (12 cm) round the band's outer edge
+  const yl = 0.12;
+  const line = (mn, mx) => B.boxMM("painted", HG.yellow, mn, mx, { faces: PY });
+  line([HOLE.x0 - b, FLOOR - 0.01, HOLE.z0 - b], [HOLE.x1 + b, Y_MARK, HOLE.z0 - b + yl]);
+  line([HOLE.x0 - b, FLOOR - 0.01, HOLE.z1 + b - yl], [HOLE.x1 + b, Y_MARK, HOLE.z1 + b]);
+  line([HOLE.x0 - b, FLOOR - 0.01, HOLE.z0 - b], [HOLE.x0 - b + yl, Y_MARK, HOLE.z1 + b]);
+  line([HOLE.x1 + b - yl, FLOOR - 0.01, HOLE.z0 - b], [HOLE.x1 + b, Y_MARK, HOLE.z1 + b]);
   // hazard dashes: 2 m on, 1 m off, along every edge (skipping the bar gaps and the emitter corners)
   const dashLen = 2, gapLen = 1;
   for (const sx of [-1, 1]) {
@@ -134,6 +146,9 @@ function buildLip(ctx, B) {
       if (x + dashLen > -4.5 && x < 4.5) continue;
       hazardBlocks(B, [x, FLOOR - 0.01, z0], [x + dashLen, Y_MARK, z1], "x", { faces: PY });
     }
+    // bar gap: a solid yellow line on the band's hole-side edge instead of the dashes
+    const g0 = Math.min(zc + sz * s, zc + sz * (s + 0.15)), g1 = Math.max(zc + sz * s, zc + sz * (s + 0.15));
+    line([-4.5, FLOOR - 0.01, g0], [4.5, Y_MARK, g1]);
   }
   // housed edge lights in the band, outside the rail line
   const e = 1.2;
@@ -177,13 +192,14 @@ function buildShaft(ctx, B) {
     B.boxMM(M, impDark, [a, SHAFT_BOTTOM, zA - 3.6], [b, floorTop, zB + 3.6]);
     // keel lip trim (lighter, so the hole outline reads from below) + a heavy lip beam proud of the deck
     // edge, carrying a lit strip on its inner face the full length of the edge (the far lip reads as a
-    // lit line from across the hole)
+    // lit line from across the hole; on the lining level - the bow one faces the spawn from 190 m,
+    // right under the far rail, and at the bare level it was part of the hot bar there)
     [a, b] = mm(35.9, 36.5);
     B.boxMM("metal", HG.steel, [a, floorTop, zA], [b, floorTop + 0.3, zB]);
     [a, b] = mm(35.4, 36.0);
     B.boxMM(M, impMid, [a, FLOOR - 1.0, zA - 0.6], [b, FLOOR - 0.6, zB + 0.6], { texel: 0.5 });
     [a, b] = mm(35.37, 35.4);
-    B.boxMM("emitWhite", 0xffffff, [a, FLOOR - 0.94, zA - 0.4], [b, FLOOR - 0.66, zB + 0.4]);
+    B.boxMM("hgEmit", EM.lining, [a, FLOOR - 0.94, zA - 0.4], [b, FLOOR - 0.66, zB + 0.4]);
 
     // three parked door leaves: dark leading-edge face, guide blocks; the top and bottom leaves carry the
     // two lit lining rows (housed white strips every 6 m), the middle one the red beacon row
@@ -244,10 +260,10 @@ function buildShaft(ctx, B) {
     rib(-78.9, -78.3, -36, 36, 0.9);
     rib(-83.6, -83.0, -36, 36, 0.6);
     for (let x = -33; x <= 33; x += 6) rib(floorTop, FLOOR - 1.6, x - 0.4, x + 0.4, 0.7);
-    // lit strip on the lip beam's inner face across the whole edge
+    // lit strip on the lip beam's inner face across the whole edge (lining level, see the +-x sides)
     {
       const [e0, e1] = proud(0.9, 0.93);
-      B.boxMM("emitWhite", 0xffffff, [-36.3, FLOOR - 0.94, e0], [36.3, FLOOR - 0.66, e1]);
+      B.boxMM("hgEmit", EM.lining, [-36.3, FLOOR - 0.94, e0], [36.3, FLOOR - 0.66, e1]);
     }
     // two conduit runs on the wall between the ribs
     for (const y of [-77.2, -81.2]) {
@@ -288,27 +304,64 @@ function buildRails(ctx, B) {
   const rx = HOLE.x1 + off, rz0 = HOLE.z0 - off, rz1 = HOLE.z1 + off;
   const gap = 3.15; // half width of the bar gap at x = 0
   const end = 35.5; // rails stop just short of the emitter housings at the corners (gaps < a player width)
+  // the strips and post caps sit on the vertex emitter at the rail level: the 72 m aft run faces the
+  // spawn 66 m out and the glossy lane mirrors it, so at the strip level (with bare white caps) it drew
+  // one hot bar at the vanishing point of the deck view, over its own reflection
+  const rail = { tag: "aperture-rail", lit: true, soft: true, level: EM.rail };
   for (const s of [-1, 1]) {
-    railRun(B, kit, [s * rx, HOLE.z0 + 0.6], [s * rx, HOLE.z1 - 0.6], FLOOR, { tag: "aperture-rail", lit: true });
-    for (const z of [rz0, rz1]) railRun(B, kit, [s * end, z], [s * gap, z], FLOOR, { tag: "aperture-rail", lit: true });
+    railRun(B, kit, [s * rx, HOLE.z0 + 0.6], [s * rx, HOLE.z1 - 0.6], FLOOR, rail);
+    for (const z of [rz0, rz1]) railRun(B, kit, [s * end, z], [s * gap, z], FLOOR, rail);
   }
   for (const z of [rz0, rz1]) {
-    // bar (lowered = closed): dark box with a light top edge; a black sign plate hung under the middle of
-    // the bar carries "APERTURE - KEEP CLEAR" on both faces (a legible label, not an unfinished plate),
-    // with a yellow block at each end
-    B.box("paintedMetal", PALETTE.impDark, 0, FLOOR + 0.98, z, gap * 2 + 0.1, 0.16, 0.14);
-    B.box("metal", HG.steel, 0, FLOOR + 1.07, z, gap * 2 + 0.1, 0.03, 0.15);
+    // bar (lowered = closed): a dark box beam with a gunmetal top plate, its paint worn off along the
+    // top front edge (a light wear line: the highlight the eye reads, without the whole top plate
+    // clipping under the gap light), a steel edge highlight along the bottom front edge, a row of bolt
+    // heads down both faces; a black sign plate hung under the middle of the bar carries "APERTURE -
+    // KEEP CLEAR" on both faces (a legible label, not an unfinished plate), with a yellow block at
+    // each end. Everything here is 1.5 - 3 m from the aperture camera.
+    const L = gap * 2 + 0.1;
+    B.box("paintedMetal", PALETTE.impDark, 0, FLOOR + 0.98, z, L, 0.16, 0.14, { texel: 1 });
+    B.box("paintedMetal", HG.gunmetal, 0, FLOOR + 1.07, z, L, 0.03, 0.15, { texel: 1 });
+    for (const dz of [-1, 1]) {
+      B.box("paintedMetal", HG.white, 0, FLOOR + 1.055, z + dz * 0.072, L - 0.2, 0.012, 0.012); // worn top edge
+      B.box("paintedMetal", HG.steel, 0, FLOOR + 0.905, z + dz * 0.072, L, 0.01, 0.012); // bottom edge highlight
+      for (let x = -gap + 0.35; x <= gap - 0.3; x += 0.5) B.box("paintedMetal", HG.gunmetal, x, FLOOR + 0.98, z + dz * 0.08, 0.05, 0.05, 0.03);
+    }
     B.box("paintedMetal", PALETTE.impBlack, 0, FLOOR + 0.72, z, 2.9, 0.38, 0.08);
     for (const s of [-1, 1]) B.box("painted", HG.yellow, s * 1.55, FLOOR + 0.72, z, 0.2, 0.38, 0.085);
     for (const dz of [-1, 1]) label(kit, "hgDecal", "APERTURE - KEEP CLEAR", [0, FLOOR + 0.72, z + dz * 0.045], [0, 0, dz], 2.7, { color: HG.white });
     for (const s of [-1, 1]) {
       const px = s * (gap + 0.18);
-      B.box("paintedMetal", PALETTE.impDark, px, FLOOR + 0.71, z, 0.3, 1.42, 0.3);
-      B.box("metal", HG.steel, px, FLOOR + 0.98, z, 0.36, 0.1, 0.36);
+      // pivot post: bolted base plate, a hazard band at knee height, steel collar under the bar, steel
+      // edge trims up the two hall-facing corners, bolt heads on the faces, twin red lamp head on top
+      B.box("paintedMetal", PALETTE.impDark, px, FLOOR + 0.71, z, 0.3, 1.42, 0.3, { texel: 1 });
+      B.box("paintedMetal", HG.gunmetal, px, FLOOR + 0.02, z, 0.46, 0.04, 0.46);
+      for (const bx of [-1, 1]) for (const bz of [-1, 1]) B.box("paintedMetal", HG.steel, px + bx * 0.19, FLOOR + 0.05, z + bz * 0.19, 0.05, 0.03, 0.05);
+      hazardBlocks(B, [px - 0.155, FLOOR + 0.35, z - 0.155], [px + 0.155, FLOOR + 0.62, z + 0.155], "y", { block: 0.09 });
+      B.box("paintedMetal", HG.steel, px, FLOOR + 0.98, z, 0.36, 0.1, 0.36);
+      for (const dz of [-1, 1]) {
+        for (const dx of [-1, 1]) B.box("paintedMetal", HG.steel, px + dx * 0.15, FLOOR + 0.71, z + dz * 0.15, 0.02, 1.4, 0.02);
+        for (const y of [0.15, 0.8, 1.2]) B.box("paintedMetal", HG.gunmetal, px, FLOOR + y, z + dz * 0.16, 0.06, 0.06, 0.03);
+      }
       // twin lamp head on the post top, one lens toward the hall and one toward the hole
       for (const dz of [-1, 1]) redBeacon(B, [px, FLOOR + 1.55, z + dz * 0.16], [0, 0, dz], 0.26);
     }
     kit.collider([-gap - 0.35, FLOOR, z - 0.18], [gap + 0.35, FLOOR + RAIL_H, z + 0.18], "hazard-bar");
+  }
+  // two lamp masts behind the aft bar gap (x +-4.6, z 101, 7 m): gunmetal pole on a bolted base with a
+  // hazard band, an arm toward the lane with a housed downlight head at the top - the fixtures that
+  // make the pool behind the KEEP CLEAR stencil (index.js puts the gap point light between the two
+  // heads; from the spawn 63 m away the pool at the vanishing point had no visible source)
+  for (const s of [-1, 1]) {
+    const x = s * 4.6, z = HOLE.z1 + 7, top = FLOOR + 7;
+    B.box("paintedMetal", HG.gunmetal, x, FLOOR + 0.03, z, 0.5, 0.06, 0.5);
+    for (const bx of [-1, 1]) for (const bz of [-1, 1]) B.box("paintedMetal", HG.steel, x + bx * 0.2, FLOOR + 0.07, z + bz * 0.2, 0.05, 0.03, 0.05);
+    B.cyl("metal", HG.gunmetal, x, (FLOOR + top) / 2, z, 0.09, top - FLOOR, "y", 10);
+    hazardBlocks(B, [x - 0.1, FLOOR + 0.5, z - 0.1], [x + 0.1, FLOOR + 1.1, z + 0.1], "y", { block: 0.1 });
+    B.box("paintedMetal", PALETTE.impDark, x - s * 0.55, top - 0.1, z, 1.1, 0.16, 0.16, { texel: 1 });
+    B.box("paintedMetal", PALETTE.impDark, x, top + 0.1, z, 0.3, 0.2, 0.3, { texel: 1 });
+    housedLamp(B, "hgEmit", [x - s * 0.95, top - 0.18, z], [0, -1, 0], [0.7, 0.3, 0.5], { inset: 0.05, lampColor: EM.lens });
+    kit.collider([x - 0.3, FLOOR, z - 0.3], [x + 0.3, FLOOR + 2.2, z + 0.3], "lamp-mast");
   }
   // deck stencils at the bar gaps
   label(kit, "hgDecal", "KEEP CLEAR", [0, Y_MARK + 0.01, rz0 - 2.8], [0, 1, 0], 7, { color: HG.yellow, spin: Math.PI });
@@ -388,6 +441,24 @@ function buildMarkings(ctx, B) {
     holdShort(160.5, -1);
     label(kit, "hgDecal", "FLIGHT DECK 4", [0, Y_MARK + 0.01, 152.5], [0, 1, 0], 5.6, { color: white });
   }
+  // the forward apron lane: from the bow blast door to the forward aperture bar, the same 6 m lane, but
+  // its edge lines are embedded amber edge lighting (a lit lane edge on the vertex emitter, flush with
+  // the paint) with housed edge lamps every 4 m beside them: from the balcony and the spawn the apron
+  // beyond the aperture is 200 m out and IBL-only, and the two lit lines converging on the bow door
+  // (with the lamp dots) are what reads there - the far lane, not black
+  {
+    const x0 = -3.0, x1 = 3.0, zDoor = -66.0, zBar = -36.0;
+    for (const x of [x0, x1]) B.boxMM("hgEmit", EM.laneEdge, [x - 0.14, FLOOR - 0.01, zDoor], [x + 0.14, Y_MARK, zBar], { faces: PY });
+    dashZ(0, zDoor + 3, zBar - 2, white, 0.1);
+    for (let z = zDoor + 2; z <= zBar - 2; z += 4) {
+      for (const x of [x0 - 0.45, x1 + 0.45]) {
+        housedLamp(B, "hgEmit", [x, FLOOR + 0.14, z], [0, 1, 0], [0.36, 0.14, 0.36], { housing: HG.gunmetal, inset: 0.05, lampColor: EM.channel });
+        // aft-facing lens (toward the balcony and spawn cameras): on the bright emitter, so the dot
+        // still blooms through at 200 m
+        housedLamp(B, "emitWhite", [x, FLOOR + 0.07, z + 0.19], [0, 0, 1], [0.3, 0.02, 0.1], { housing: HG.gunmetal, inset: 0.02 });
+      }
+    }
+  }
   // cross lanes between the pads (aft apron) and on the forward apron
   for (const z of [118, 142, -52]) {
     dashX(z, -TAXI_X, -29);
@@ -424,11 +495,21 @@ function buildMarkings(ctx, B) {
   label(kit, "hgDecal", "DECK 4", [0, Y_MARK + 0.01, -62], [0, 1, 0], 8, { color: white });
   // threshold wear: soft dark blobs in front of the blast doors and the bay doors (the paint is worn
   // where everything rolls in and out)
-  contactShadow(kit, 0, 165.5, 9, 6);
-  contactShadow(kit, 0, -65.5, 9, 6);
+  wearBlob(kit, 0, 165.5, 9, 6);
+  wearBlob(kit, 0, -65.5, 9, 6);
   for (const s of [-1, 1]) {
-    contactShadow(kit, s * 74, 15, 10, 18);
-    contactShadow(kit, s * 74.5, 120, 9, 14);
+    wearBlob(kit, s * 74, 15, 10, 18);
+    wearBlob(kit, s * 74.5, 120, 9, 14);
+  }
+  // steel threshold plate across every bay door (0.8 m into the hall from the jambs, 2 cm proud: the
+  // plate every load rolls over), with the two tug-track lines worn dark across it - from the bay-door
+  // camera the light plate at the door's foot is what the tracks run up to
+  for (const d of DOORS) {
+    if (d.kind !== "bay") continue;
+    const s = Math.sign(d.dir[0]), xi = s * (HALL.x1 - WALL_T - 0.13), xo = xi - s * 0.8;
+    const hw = d.w / 2 + 0.6;
+    B.boxMM("metal", HG.steel, [Math.min(xi, xo), FLOOR, d.pos[2] - hw], [Math.max(xi, xo), FLOOR + 0.02, d.pos[2] + hw], { faces: PY | (s > 0 ? NX : PX) | PZ | NZ });
+    for (const o of [-1.4, 1.4]) B.boxMM("paintedMetal", HG.gunmetal, [Math.min(xi, xo), FLOOR + 0.02, d.pos[2] + o - 0.45], [Math.max(xi, xo), FLOOR + 0.025, d.pos[2] + o + 0.45], { faces: PY });
   }
 }
 
@@ -460,42 +541,59 @@ function buildWear(ctx) {
     track(x, 121, 1, 26, 0.9);
     track(x + sx * 0.4, 60, -1, 30, 0.5);
   }
-  // landing pads: scuff arcs where craft set down (three per pad, turned), two skids across the centre
+  // landing pads: scuff arcs where craft set down (three per pad, turned) and the approach skids - a
+  // gear pair (3.2 m apart) of touchdown skids 9 m long, strongest on the approach side of the pad
+  // (craft come in from the blast door of their apron: the aft pads from +z, the forward pads from -z)
+  // and trailing across the centre, each skid doubled with an offset second track so the pair reads
+  // as two dark bands with a direction at 640 x 360, not as a smudge
   PADS.forEach((p, i) => {
     for (let k = 0; k < 3; k++) {
       const a = i * 1.7 + k * 2.1;
       const r = 5.2 + ((i + k) % 3) * 0.9;
       label(kit, "hgDecal", "ARC", [p.x + Math.cos(a) * 0.6, y, p.z + Math.sin(a) * 0.6], UP, 2 * r, { color: HG.shadow, spin: a });
     }
-    wearStreak(kit, [p.x - 1.6, y, p.z - 3.2 + (i % 2)], UP, [0.08, 0, 1], 5.5, 0.7);
-    wearStreak(kit, [p.x + 1.7, y, p.z + 3.0 - (i % 3) * 0.6], UP, [-0.06, 0, -1], 5.0, 0.7);
+    const dir = p.z > 32 ? 1 : -1; // approach side
+    const yaw = 0.05 * ((i % 3) - 1);
+    for (const k of [-1, 1]) {
+      const x = p.x + k * 1.6 + 0.3 * ((i + 1) % 2);
+      wearStreak(kit, [x, y, p.z + dir * 4.8], UP, [yaw, 0, -dir], 9.0, 0.9);
+      wearStreak(kit, [x + 0.3, y, p.z + dir * 3.6], UP, [yaw, 0, -dir], 7.0, 0.6);
+    }
   });
-  // drag marks out of every door: from the threshold into the hall, strongest at the door
+  // drag marks out of every door: from the threshold into the hall, strongest at the door. Bay doors
+  // get the tug track pair on the door axis (+-1.4 m, 18 m long, each doubled) that everything rolling
+  // through leaves - two dark bands converging on the threshold from the bay-door camera 20 m out -
+  // plus a wider, fainter pair where the loads trail
   for (const d of DOORS) {
     if (d.kind === "hatch") continue;
     const [px, , pz] = d.pos;
     const n = [-d.dir[0], 0, -d.dir[2]]; // into the hall
     const across = d.dir[0] !== 0 ? [0, 0, 1] : [1, 0, 0];
-    const w = d.kind === "blast" ? 4 : d.w;
-    const offs = d.kind === "blast" ? [-1.3, 1.3] : [-w * 0.3, -w * 0.1, w * 0.12, w * 0.32];
-    offs.forEach((o, i) => {
-      const from = [px + n[0] * 0.9 + across[0] * o, y, pz + n[2] * 0.9 + across[2] * o];
-      wearStreak(kit, from, UP, n, 10 + (i % 2) * 4, 0.9 + (i % 2) * 0.3);
-    });
+    const at = (o, back) => [px + n[0] * back + across[0] * o, y, pz + n[2] * back + across[2] * o];
+    if (d.kind === "blast") {
+      for (const o of [-1.3, 1.3]) wearStreak(kit, at(o, 0.9), UP, n, 12, 1.0);
+      continue;
+    }
+    for (const o of [-1.4, 1.4]) {
+      wearStreak(kit, at(o, 1.0), UP, n, 18, 1.1);
+      wearStreak(kit, at(o + 0.3, 1.0), UP, n, 14, 0.7);
+    }
+    for (const o of [-d.w * 0.32, d.w * 0.3]) wearStreak(kit, at(o, 1.0), UP, n, 9, 1.2);
   }
   // baked shadow under the rack tiers: a 3.4 m band along each side wall, dark at the wall
   for (const s of [-1, 1]) {
     const wall = s * (HALL.x1 - WALL_T - 0.12);
     shadowGrad(kit, [wall - s * 1.7, y, (RACK.zoneZ0 + RACK.zoneZ1) / 2], UP, [-s, 0, 0], 3.4, RACK.zoneZ1 - RACK.zoneZ0);
   }
-  // wall base: a 1.3 m band along every wall, broken at the door thresholds (their hazard aprons stay
-  // clean) and at the rack-tier band
+  // wall base: a 2.5 m occlusion band along every wall (walls.js lays the covered cable trench over its
+  // first 1.2 m, so the visible part runs out from the trench's edge angle), broken at the door
+  // thresholds (their hazard aprons stay clean) and at the rack-tier band
   const base = (wall, spans) => {
     for (const [a, b] of spans) {
       if (b - a < 1) continue;
       const c = (a + b) / 2, L = b - a;
-      if (wall.plane === "x") shadowGrad(kit, [wall.c + wall.inward * 0.65, y, c], UP, [wall.inward, 0, 0], 1.3, L);
-      else shadowGrad(kit, [c, y, wall.c + wall.inward * 0.65], UP, [0, 0, wall.inward], 1.3, L);
+      if (wall.plane === "x") shadowGrad(kit, [wall.c + wall.inward * 1.25, y, c], UP, [wall.inward, 0, 0], 2.5, L);
+      else shadowGrad(kit, [c, y, wall.c + wall.inward * 1.25], UP, [0, 0, wall.inward], 2.5, L);
     }
   };
   const inX = HALL.x1 - WALL_T - 0.12, inZ0 = HALL.z0 + WALL_T + 0.12, inZ1 = HALL.z1 - WALL_T - 0.12;
@@ -526,12 +624,20 @@ function buildWear(ctx) {
 }
 
 /**
- * Soft dark blob on the deck (contact darkening under props, threshold wear): the atlas blob (alpha
- * falling off to the edge) painted black over the plating. w along x, d along z are the prop's
- * footprint; the blob is grown 0.5 m beyond it on every side and a footprint that is not the blob's
- * aspect gets a second, crossed blob so the union covers the prop.
+ * Contact shadow under a prop, vehicle, column foot or rack leg: near-black over the w x d footprint
+ * (along x / z) and a 10 cm contact margin, then `ramp` metres of falloff to nothing on every side
+ * (util.occlusionPool: composed from atlas cells so the falloff is 0.3 .. 0.9 m whatever the size).
  */
-export function contactShadow(kit, x, z, w, d, grow = 0.5) {
+export function contactShadow(kit, x, z, w, d, ramp = 0.5) {
+  occlusionPool(kit, [x, Y_MARK + 0.012, z], w, d, ramp);
+}
+
+/**
+ * Soft dark blob on the deck (threshold wear where everything rolls in and out of a door): the atlas
+ * ellipse (alpha falling off to the edge) painted black over the plating, grown 0.5 m beyond w x d;
+ * a footprint that is not the blob's aspect gets a second, crossed blob so the union covers it.
+ */
+export function wearBlob(kit, x, z, w, d, grow = 0.5) {
   w += 2 * grow;
   d += 2 * grow;
   const bd = w / LABELS.SHADOW.aspect; // one blob's depth at width w
@@ -565,7 +671,7 @@ function buildTractorHousing(ctx, B, p) {
   kit.cyl("paintedMetal", cx, top + 0.55, cz, 0.7, 0.3, "y", { color: PALETTE.impMid, segments: 16 });
   // coil rings around the drum (the barrel coils are inside the hole, so the drum needs its own) + a
   // painted yellow ring on the deck round the base
-  const coil = sharedTorus(1.62, 0.1, 6, 32);
+  const coil = sharedTorus(1.62, 0.1, 4, 20);
   for (const y of [FLOOR + 0.6, FLOOR + 0.9, FLOOR + 1.2]) B.geo("metal", HG.steel, coil, [cx, y, cz], FLAT_Q);
   kit.add("painted", new THREE.RingGeometry(1.95, 2.25, 48), { pos: [cx, Y_MARK + 0.005, cz], quat: FLAT_Q, color: HG.yellow, uv: "scale", uvScale: [4, 1] });
   // indicator lights + bolt heads around the drum
@@ -585,13 +691,13 @@ function buildTractorHousing(ctx, B, p) {
   dir.normalize();
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), dir);
   const along = (f) => [start[0] + dir.x * f, start[1] + dir.y * f, start[2] + dir.z * f];
-  for (const f of [0.3, 0.5, 0.7]) kit.add("metal", new THREE.TorusGeometry(0.72, 0.11, 8, 24), { pos: along(len * f), quat: q, color: HG.steel, uv: "scale", uvScale: [4, 0.5] });
-  kit.add("emitBlue", new THREE.TorusGeometry(0.6, 0.06, 6, 24), { pos: along(len - 0.35), quat: q, uv: "scale", uvScale: [4, 0.5] });
+  for (const f of [0.3, 0.5, 0.7]) kit.add("metal", new THREE.TorusGeometry(0.72, 0.11, 5, 16), { pos: along(len * f), quat: q, color: HG.steel, uv: "scale", uvScale: [4, 0.5] });
+  kit.add("emitBlue", new THREE.TorusGeometry(0.6, 0.06, 4, 16), { pos: along(len - 0.35), quat: q, uv: "scale", uvScale: [4, 0.5] });
   // cut plate where the barrel passes through the deck lip
   B.box("paintedMetal", PALETTE.impBlack, p[0] + sx * 0.9, Y_MARK + 0.015, p[2] + sz * 0.9, 2.4, 0.03, 2.4);
   // deck stencil + contact shadow + collider (generous AABB so the corner between the rail ends is closed)
   label(kit, "hgDecal", "TRACTOR EMITTER", [cx + sx * 0.4, Y_MARK + 0.01, cz + sz * 3.0], [0, 1, 0], 3.6, { color: HG.yellow, spin: sz > 0 ? 0 : Math.PI });
-  contactShadow(kit, cx, cz, 4.4, 4.4, 0.9);
+  contactShadow(kit, cx, cz, 3.3, 3.3, 0.9);
   kit.collider(
     [Math.min(cx - 1.8, p[0] - sx * 0.2), FLOOR, Math.min(cz - 1.8, p[2] - sz * 0.2)],
     [Math.max(cx + 1.8, p[0] - sx * 0.2), top + 1, Math.max(cz + 1.8, p[2] - sz * 0.2)],

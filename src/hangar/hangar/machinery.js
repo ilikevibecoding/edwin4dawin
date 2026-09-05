@@ -1,16 +1,18 @@
 // d4-hangar machinery: the ceiling crane (two full-length gantry rails at y -16 hung from the ceiling
-// ribs with a lit strip under each, an underslung bridge with light-grey flanges, wide lit under-girder
-// strips, amber beacons along the girder and a maintenance walkway, a trolley with amber beacons, hoist
-// and hook block with a slung container, driven by t on a park-travel-park schedule that leaves it over
-// the aft half of the aperture with the hook down at y -40 at t = 40 - the one place a 54 m-high bridge
-// sits inside the deck view's frame, and in the balcony view's), and the deck-level utility clutter
-// clustered under the racks, along the end walls and by the spawn: fuel bowsers, ground-power carts,
-// tool carts, crate stacks, cable reels, mobile access platforms, drums, each on its contact shadow.
-// Nothing stands on a landing pad, taxi lane or door approach.
+// ribs with a segmented lit channel under each, an underslung bridge of two 2.4 m deep box girders in
+// Imperial hull grey with steel flanges, segmented lit under-girder channels, big amber beacons along
+// the girders and on both end trucks and a maintenance walkway, a trolley with two housed work lights
+// (spot descriptors) and amber beacons, hoist and a 2.6 m black/yellow hook block on a pair of heavy
+// cables with a slung 3.6 m container, driven by t on a park-travel-park schedule that leaves it at
+// layout.CRANE_PARK at t = 40 - over the port taxi lane at z 20 with the block down at y -54, in the
+// deck, balcony and racks frames), and the
+// deck-level utility clutter clustered under the racks, along the end walls and by the spawn: fuel
+// bowsers, ground-power carts, tool carts, crate stacks, cable reels, mobile access platforms, drums,
+// each on its contact shadow. Nothing stands on a landing pad, taxi lane or door approach.
 import * as THREE from "three";
 import { Batch, Batcher, sharedCylinder } from "./batch.js";
-import { FLOOR, CEIL, WALL_T, HALL, RIB_Z, RIB_D, RAIL_H, HG, EM } from "./layout.js";
-import { label, railRun } from "./util.js";
+import { FLOOR, CEIL, WALL_T, HALL, RIB_Z, RIB_D, RAIL_H, HG, EM, CRANE_PARK } from "./layout.js";
+import { label, railRun, litChannel } from "./util.js";
 import { contactShadow } from "./deck.js";
 
 // ---------------------------------------------------------------------------
@@ -20,16 +22,21 @@ const RAIL_X = 64;
 const RAIL_TOP = -16;
 const RIB_BOTTOM = CEIL - WALL_T - RIB_D; // underside of the transverse ceiling ribs
 const GIRDER_Z = 1.4; // half distance between the two bridge girders
-const DRUM_Y = -20.75; // hoist drum axis (trolley local)
+const GIRDER_TOP = -16.9, GIRDER_H = 2.4; // box girders: 2.4 m deep, so from the deck 140 m away the pair is a 4 px light bar across the roof, not a hairline
+const GIRDER_BOT = GIRDER_TOP - GIRDER_H; // -19.3
+const HOIST_TOP = GIRDER_BOT - 0.15; // the hoist body hangs under the girders
+const DRUM_Y = HOIST_TOP - 2.55; // hoist drum axis (trolley local)
+const WL_Y = HOIST_TOP - 1.7; // work-light lens plane (the spot descriptors shine from here)
 // schedule (module clock, 200 s cycle, offset so t = 40 lands mid-dwell at the aft park): dwell forward
-// over pad 05 with the hook part-lowered, 40 s travel aft, 60 s dwell over the aft half of the aperture
-// (bridge z 66, trolley x 8: from the spawn camera the bridge sits 94 m out at 30 deg elevation, in the
-// top of the frame, the hook block at y -40 in its upper third; from the balcony camera at 22 deg) with
-// the hook block down at y -40, travel back. The hover column of the traffic system is at (0, *, 32)
-// and its slot transfers leave the column toward +-x, so the slung load at (8, -40 .. -46, 66) is clear.
-const PARK_AFT = { z: 66, x: 8, hook: -40 };
+// over pad 05 with the hook part-lowered, 40 s travel aft, 60 s dwell at CRANE_PARK (bridge z 20,
+// trolley x -54, block at y -54 over the port taxi lane between the bay-3 door and the first rack slot:
+// see layout.js for the framing from the three cameras) with the hook down, travel back. The hover
+// column of the traffic system is at (0, *, 32) and its slot transfers leave the column toward +-x
+// along z 30 .. 90, so the slung load (z 18 .. 22) is clear of every approach.
+const PARK_AFT = CRANE_PARK;
 const PARK_FWD = { z: -52, x: -20, hook: -30 };
 const HOOK_TRAVEL = -22;
+const BLOCK_H = 2.6; // hook block height (its centre is the hook group origin)
 const smooth = (k) => k * k * (3 - 2 * k);
 const seg = (u, a, b) => smooth(Math.min(1, Math.max(0, (u - a) / (b - a))));
 
@@ -42,13 +49,13 @@ export function buildCrane(ctx) {
   for (const s of [-1, 1]) {
     const x = s * RAIL_X;
     const mm = (a, b) => [Math.min(x + s * a, x + s * b), Math.max(x + s * a, x + s * b)];
-    // I-beam rail: top flange, web, light-grey bottom flange (the trucks ride it), then a black channel
-    // under the flange with a continuous lit strip: the two rails read as lit lines along the roof
+    // I-beam rail: top flange, web, light-grey bottom flange (the trucks ride it), then a segmented lit
+    // channel under the flange (8 m lenses in a housed trough, a tenth of them dead): the two rails read
+    // as jointed lit lines along the roof, not two bare bars the length of the hall
     B.boxMM("paintedMetal", impDark, [x - 0.32, RAIL_TOP - 0.12, z0], [x + 0.32, RAIL_TOP, z1], { texel: 0.5 });
     B.boxMM("paintedMetal", impDark, [x - 0.07, RAIL_TOP - 0.9, z0 + 0.02], [x + 0.07, RAIL_TOP - 0.12, z1 - 0.02], { texel: 0.5 });
-    B.boxMM("metal", HG.steel, [x - 0.32, RAIL_TOP - 1.02, z0], [x + 0.32, RAIL_TOP - 0.9, z1]);
-    B.boxMM("paintedMetal", PALETTE.impBlack, [x - 0.16, RAIL_TOP - 1.12, z0 + 0.3], [x + 0.16, RAIL_TOP - 1.02, z1 - 0.3]);
-    B.boxMM("emitWhite", 0xffffff, [x - 0.1, RAIL_TOP - 1.125, z0 + 0.5], [x + 0.1, RAIL_TOP - 1.11, z1 - 0.5]);
+    B.boxMM("hgEmit", EM.hullLight, [x - 0.32, RAIL_TOP - 1.02, z0], [x + 0.32, RAIL_TOP - 0.9, z1]);
+    litChannel(B, PALETTE, [x, RAIL_TOP - 1.3, z0 + 0.3], [x, RAIL_TOP - 1.3, z1 - 0.3], [0, -1, 0], { w: 0.44, depth: 0.28, lensW: 0.22, level: EM.channel, seg: 8, gap: 0.5, cap: 0.4, off: 0.1, seed: s + 3, body: { mat: "hgEmit", color: EM.housing }, capStyle: { mat: "hgEmit", color: EM.housingCap } });
     // hangers to the transverse ceiling ribs with foot plates and a knee gusset toward the wall
     for (const z of RIB_Z) {
       B.boxMM("paintedMetal", impDark, [x - 0.25, RAIL_TOP + 0.1, z - 0.25], [x + 0.25, RIB_BOTTOM, z + 0.25], { texel: 0.5 });
@@ -67,105 +74,141 @@ export function buildCrane(ctx) {
   }
   B.flush();
 
-  // ---- bridge (moves along z)
+  // ---- bridge (moves along z): two 2.4 m deep box girders and the end trucks in Imperial hull grey on
+  // the self-lit level (EM.hull: nothing of the light plan reaches the roof, and hull-grey paint lit by
+  // the environment alone measured 26 sRGB against a 23 ceiling - invisible; on the emitter it sits at
+  // the value of the lit base storey, a light bar across a dark roof), lighter self-lit steel flanges,
+  // dark stiffeners, and a row of big amber beacons along each girder's outer face
   const bridge = new THREE.Group();
   bridge.name = "crane-bridge";
-  const bb = new Batch(), be = new Batch(), bp = new Batch();
+  const bb = new Batch(), bh = new Batch(), be = new Batch(), ba = new Batch();
+  const hull = { color: EM.hull }, flange = { color: EM.hullLight };
   const L = 2 * RAIL_X - 2.2; // girder length (ends buried 10 cm in the trucks)
+  const gY = GIRDER_TOP - GIRDER_H / 2; // girder centre
   for (const s of [-1, 1]) {
     const x = s * RAIL_X;
-    bb.box(x, -17.35, 0, 2.4, 2.3, 4.0, { color: impDark, texel: 0.5 }); // end truck around the rail
-    for (const dz of [-1.3, 1.3]) bb.box(x, -17.0, dz, 2.6, 0.7, 0.9, { color: impMid, texel: 0.5 }); // wheel covers
-    bb.box(x + s * 1.3, -16.7, 0, 0.2, 0.2, 3.6, { color: HG.steel });
-    for (const dz of [-1.5, 1.5]) bp.box(x + s * 1.35, -16.55, dz, 0.3, 0.3, 0.3); // beacons on the truck faces
+    bh.box(x, (GIRDER_TOP + 0.7 + GIRDER_BOT + 0.25) / 2, 0, 2.4, GIRDER_TOP + 0.7 - GIRDER_BOT - 0.25, 4.0, hull); // end truck around the rail
+    for (const dz of [-1.3, 1.3]) bb.box(x, -17.0, dz, 2.6, 0.7, 0.9, { color: impDark, texel: 0.5 }); // wheel covers
+    bh.box(x + s * 1.3, -16.7, 0, 0.2, 0.2, 3.6, flange);
+    // amber beacon at each end of the bridge: a gunmetal housing on the truck's outer face with a big
+    // lens toward the wall and a second on its underside (the one the deck sees), plus a rooftop lamp
+    bb.box(x + s * 1.35, -18.2, 0, 0.3, 1.0, 1.4, { color: HG.gunmetal });
+    ba.box(x + s * 1.52, -18.2, 0, 0.04, 0.9, 1.3);
+    ba.box(x + s * 1.35, -18.71, 0, 0.28, 0.02, 1.3);
+    bb.box(x - s * 0.8, -16.1, 0, 0.9, 0.2, 0.9, { color: HG.gunmetal });
+    ba.box(x - s * 0.8, -15.97, 0, 0.8, 0.06, 0.8);
   }
-  const ba = new Batch(); // amber beacons along the girders (read at 100 m)
   for (const zs of [-GIRDER_Z, GIRDER_Z]) {
-    bb.box(0, -17.6, zs, L, 1.4, 0.7, { color: impDark, texel: 0.5 });
-    bb.box(0, -16.84, zs, L, 0.12, 0.9, { color: impMid, texel: 0.5 });
-    // light-grey bottom flange (the underside is what the deck sees) with a wide lit strip in a black
-    // channel: 0.4 m of lit under-girder that reads as a line across the roof from the deck
-    bb.box(0, -18.36, zs, L, 0.12, 0.9, { color: HG.steel });
-    bb.box(0, -18.46, zs, L - 3, 0.08, 0.52, { color: PALETTE.impBlack });
-    be.box(0, -18.505, zs, L - 3.4, 0.01, 0.4);
-    // stiffener plates every 6 m on the outer face, an amber beacon housing every 20 m with the lens on
-    // the outer face and under the flange
-    for (let x = -60; x <= 60; x += 6) bb.box(x, -17.6, zs + Math.sign(zs) * 0.36, 0.25, 1.3, 0.04, { color: impMid });
+    const out = Math.sign(zs);
+    bh.box(0, gY, zs, L, GIRDER_H, 0.7, hull);
+    bh.box(0, GIRDER_TOP + 0.06, zs, L, 0.12, 0.9, flange);
+    // steel bottom flange (the underside is what the deck sees) carrying a black channel with a
+    // segmented lit lens (6 m lenses, mid-grey joints): a jointed lit line across the roof, housed
+    bh.box(0, GIRDER_BOT - 0.06, zs, L, 0.12, 0.9, flange);
+    bb.box(0, GIRDER_BOT - 0.16, zs, L - 3, 0.08, 0.52, { color: PALETTE.impBlack });
+    for (let x = -L / 2 + 1.7; x < L / 2 - 1.7 - 1; x += 6.5) {
+      const len = Math.min(6, L / 2 - 1.7 - x);
+      be.box(x + len / 2, GIRDER_BOT - 0.205, zs, len, 0.01, 0.4);
+      if (x + 6.5 < L / 2 - 1.7) bh.box(x + 6.25, GIRDER_BOT - 0.18, zs, 0.3, 0.06, 0.56, flange);
+    }
+    // dark stiffener plates every 6 m on the outer face (ribs on the light girder); a big amber beacon
+    // every 20 m - a 1.2 m gunmetal housing on the outer face with a 1.1 m lens toward the hall and a
+    // second under it (1.8 px at 140 m, a row of blooming amber dots that no ceiling fixture has: the
+    // crane's signature from the spawn and the balcony)
+    for (let x = -60; x <= 60; x += 6) bb.box(x, gY, zs + out * 0.36, 0.25, GIRDER_H - 0.1, 0.04, { color: impDark });
     for (let x = -50; x <= 50; x += 20) {
-      bb.box(x, -17.1, zs + Math.sign(zs) * 0.5, 0.7, 0.5, 0.3, { color: HG.gunmetal });
-      ba.box(x, -17.1, zs + Math.sign(zs) * 0.66, 0.6, 0.4, 0.03);
-      ba.box(x, -17.36, zs + Math.sign(zs) * 0.5, 0.6, 0.03, 0.26);
+      bb.box(x, gY + 0.3, zs + out * 0.55, 1.2, 0.8, 0.4, { color: HG.gunmetal });
+      ba.box(x, gY + 0.3, zs + out * 0.76, 1.1, 0.7, 0.03);
+      ba.box(x, gY - 0.11, zs + out * 0.55, 1.1, 0.03, 0.36);
     }
   }
   for (let x = -60; x <= 60; x += 12) bb.box(x, -17.15, 0, 0.3, 0.3, 2 * GIRDER_Z - 0.6, { color: impDark });
   // maintenance walkway along the +z girder with a 1.02 m rail
   const wz = GIRDER_Z + 0.35 + 0.05;
-  bb.box(0, -16.95, wz + 0.4, L - 2, 0.1, 0.8, { color: impMid, texel: 0.5 });
+  bh.box(0, -16.95, wz + 0.4, L - 2, 0.1, 0.8, hull);
   for (let x = -60; x <= 60; x += 6) bb.box(x, -17.15, wz + 0.4, 0.15, 0.3, 0.8, { color: impDark });
   for (let x = -61; x <= 61; x += 2.5) bb.box(x, -16.9 + RAIL_H / 2, wz + 0.78, 0.06, RAIL_H, 0.06, { color: HG.gunmetal });
-  bb.box(0, -16.9 + RAIL_H, wz + 0.78, L - 2, 0.05, 0.06, { color: HG.steel });
-  bb.box(0, -16.9 + RAIL_H * 0.55, wz + 0.78, L - 2, 0.04, 0.05, { color: HG.steel });
+  bh.box(0, -16.9 + RAIL_H, wz + 0.78, L - 2, 0.05, 0.06, flange);
+  bh.box(0, -16.9 + RAIL_H * 0.55, wz + 0.78, L - 2, 0.04, 0.05, flange);
   bb.box(0, -16.8, wz + 0.78, L - 2, 0.2, 0.03, { color: HG.gunmetal });
-  // housed work lights under both girders every 10 m (housing in the body batch, lens in the emitter batch)
+  // housed lamps under both girders every 10 m (housing in the body batch, lens in the emitter batch)
   for (let x = -55; x <= 55; x += 10) {
     for (const zs of [-GIRDER_Z, GIRDER_Z]) {
-      bb.box(x, -18.56, zs, 0.9, 0.16, 0.6, { color: impDark });
-      be.box(x, -18.645, zs, 0.8, 0.02, 0.5);
+      bb.box(x, GIRDER_BOT - 0.32, zs, 0.9, 0.16, 0.6, { color: impDark });
+      be.box(x, GIRDER_BOT - 0.405, zs, 0.8, 0.02, 0.5);
     }
   }
   const meshB = new THREE.Mesh(bb.geometry(), materials.paintedMetal);
+  const meshH = new THREE.Mesh(bh.geometry(), materials.hgEmit);
   const meshE = new THREE.Mesh(be.geometry(EM.crane), materials.hgEmit);
-  const meshP = new THREE.Mesh(bp.geometry(0xffffff), materials.hgPulse);
   const meshA = new THREE.Mesh(ba.geometry(0xffffff), materials.emitAmber);
-  bridge.add(meshB, meshE, meshP, meshA);
+  bridge.add(meshB, meshH, meshE, meshA);
 
-  // ---- trolley (moves along x on the bridge)
+  // ---- trolley (moves along x on the bridge): hull-grey carriages riding inside the girder pocket, a
+  // yoke down through it to the hoist body under the girders, two housed work lights under that (the
+  // spot descriptors below shine from their lenses), amber beacons on the body's x faces
   const trolley = new THREE.Group();
   trolley.name = "crane-trolley";
-  const tb = new Batch();
-  for (const sx of [-1, 1]) tb.box(sx * 1.1, -18.05, 0, 0.8, 0.9, 2.0, { color: impMid, texel: 0.5 }); // wheel carriages between the girders
-  tb.box(0, -19.1, 0, 2.6, 1.1, 3.4, { color: impDark, texel: 0.5 }); // hoist body
-  for (const sx of [-1, 1]) tb.box(sx * 1.31, -19.1, 0, 0.02, 0.7, 2.6, { color: impMid }); // side panels
-  for (const sx of [-1, 1]) tb.box(sx * 1.0, -20.1, 0, 0.2, 0.9, 0.6, { color: impDark }); // drum mounts
+  const tb = new Batch(), th = new Batch();
+  const hY = HOIST_TOP - 0.55; // hoist body centre (1.1 m tall)
+  for (const sx of [-1, 1]) th.box(sx * 1.1, -18.05, 0, 0.8, 0.9, 2.0, hull); // wheel carriages between the girders
+  for (const sx of [-1, 1]) th.box(sx * 1.1, (HOIST_TOP - 18.5) / 2, 0, 0.8, -18.5 - HOIST_TOP, 2.0, hull); // yoke plates down to the body
+  th.box(0, hY, 0, 2.6, 1.1, 3.4, hull); // hoist body
+  for (const sx of [-1, 1]) tb.box(sx * 1.31, hY, 0, 0.02, 0.7, 2.6, { color: impDark }); // side panels
+  for (const sx of [-1, 1]) tb.box(sx * 1.0, hY - 1.0, 0, 0.2, 0.9, 0.6, { color: impDark }); // drum mounts
   tb.addGeometry(new THREE.CylinderGeometry(0.45, 0.45, 1.8, 14), { pos: [0, DRUM_Y, 0], quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2), color: HG.gunmetal });
-  tb.addGeometry(new THREE.CylinderGeometry(0.2, 0.2, 0.4, 10), { pos: [0, -19.1, -1.9], quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2), color: HG.steel }); // motor stub
-  // amber beacon housings on the four corners of the hoist body (lenses in the amber batch below) and an
-  // amber bar along the hoist body's underside
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) tb.box(sx * 1.0, -18.4, sz * 1.5, 0.6, 0.3, 0.6, { color: HG.gunmetal });
-  tb.box(0, -19.72, 0, 2.2, 0.14, 0.5, { color: HG.gunmetal });
+  tb.addGeometry(new THREE.CylinderGeometry(0.2, 0.2, 0.4, 10), { pos: [0, hY, -1.9], quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2), color: HG.steel }); // motor stub
+  // amber beacon housings on the body's x faces at both z ends (lenses in the amber batch below)
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) tb.box(sx * 1.45, hY, sz * 1.3, 0.3, 0.5, 0.6, { color: HG.gunmetal });
+  // work-light housings: two 0.9 m gunmetal boxes under the hoist body, open downward, lens recessed
+  const WL = [[-0.85, 1.25], [0.85, -1.25]]; // [dx, dz] of the two work lights
+  for (const [dx, dz] of WL) {
+    tb.box(dx, WL_Y + 0.25, dz, 0.9, 0.4, 0.9, { color: HG.gunmetal });
+    for (const s of [-1, 1]) {
+      tb.box(dx + s * 0.44, WL_Y - 0.02, dz, 0.04, 0.14, 0.9, { color: HG.gunmetal });
+      tb.box(dx, WL_Y - 0.02, dz + s * 0.44, 0.9, 0.14, 0.04, { color: HG.gunmetal });
+    }
+  }
   const meshT = new THREE.Mesh(tb.geometry(), materials.paintedMetal);
   const te = new Batch();
-  for (const sx of [-1, 1]) te.box(sx * 0.8, -19.68, 1.2, 0.5, 0.06, 0.3);
-  te.box(0, -18.75, -1.72, 0.9, 0.08, 0.02);
-  const meshTE = new THREE.Mesh(te.geometry(0xffffff), materials.emitWhite);
+  for (const [dx, dz] of WL) te.box(dx, WL_Y + 0.04, dz, 0.76, 0.02, 0.76);
+  const meshTE = new THREE.Mesh(te.geometry(EM.lens), materials.hgEmit);
   const ta = new Batch();
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) ta.box(sx * 1.0, -18.19, sz * 1.5, 0.5, 0.14, 0.5);
-  ta.box(0, -19.8, 0, 2.0, 0.03, 0.36);
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) ta.box(sx * 1.61, hY, sz * 1.3, 0.02, 0.4, 0.5);
   const meshTA = new THREE.Mesh(ta.geometry(0xffffff), materials.emitAmber);
   // two hoist cables: unit-height boxes hanging from the drum, scaled to the hook height each frame
+  // (14 cm heavy wire rope: the pair reads from the racks camera 17 m away)
   const cb = new Batch();
-  for (const sx of [-0.45, 0.45]) cb.box(sx, -0.5, 0, 0.07, 1, 0.07, { color: HG.steel });
+  for (const sx of [-0.5, 0.5]) cb.box(sx, -0.5, 0, 0.14, 1, 0.14, { color: HG.steel });
   const cables = new THREE.Mesh(cb.geometry(), materials.paintedMetal);
   cables.position.y = DRUM_Y;
-  // hook block: sheave block, side plates, shank + hook
+  // hook block, 2.6 m tall: a sheave block in four 0.65 m black/yellow bands (yellow top and bottom),
+  // steel cheek plates and sheave axle, amber lamp housing on top, shank + hook under it
   const hook = new THREE.Group();
-  const hb = new Batch();
-  hb.box(0, 0, 0, 0.9, 1.2, 0.5, { color: impDark, texel: 1 });
-  for (const sz of [-1, 1]) hb.box(0, 0, sz * 0.26, 1.0, 1.0, 0.02, { color: impMid });
-  hb.box(0, 0.35, 0, 1.1, 0.14, 0.14, { color: HG.steel });
-  hb.box(0, -0.85, 0, 0.16, 0.5, 0.16, { color: HG.steel });
-  // J hook: half torus whose upper end meets the shank at (0, -1.1), curving down and round on +x
-  hb.addGeometry(new THREE.TorusGeometry(0.34, 0.09, 8, 18, Math.PI), { pos: [0, -1.44, 0], quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2), color: HG.steel });
-  const hazard = new THREE.Mesh(new THREE.BoxGeometry(0.92, 0.3, 0.52), materials.hazard);
-  hazard.position.y = -0.4;
-  // housed amber lamps on the block's top and on the spreader bar ends (the lowered hook reads as lit
-  // amber points from the deck)
-  const hookLamp = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.1, 0.5), materials.emitAmber);
-  hookLamp.position.set(0, 0.65, 0);
-  const spreaderLamps = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.08, 0.2), materials.emitAmber);
-  spreaderLamps.position.set(0, -2.16, 0);
-  // slung load: a spreader bar on two slings from the hook, a 2.4 m cargo container on four slings under
-  // it (recessed side panels, corner posts, dark lid) - the crane is at work, not a bare hook 50 m up
+  const hb = new Batch(), hy = new Batch();
+  const BW = 1.6, BD = 0.9, band = BLOCK_H / 4;
+  for (let i = 0; i < 4; i++) {
+    const yc = BLOCK_H / 2 - band * (i + 0.5);
+    (i % 2 === 0 ? hy : hb).box(0, yc, 0, BW, band, BD, i % 2 === 0 ? undefined : { color: HG.black });
+  }
+  for (const sz of [-1, 1]) hb.box(0, 0.1, sz * (BD / 2 + 0.02), BW + 0.2, BLOCK_H - 0.5, 0.04, { color: HG.steel });
+  hb.box(0, BLOCK_H / 2 + 0.08, 0, BW + 0.3, 0.16, 0.16, { color: HG.steel });
+  for (const sx of [-0.5, 0.5]) hb.box(sx, BLOCK_H / 2 + 0.06, 0, 0.2, 0.12, BD + 0.1, { color: HG.gunmetal });
+  hb.box(0, -BLOCK_H / 2 - 0.35, 0, 0.24, 0.7, 0.24, { color: HG.steel });
+  // J hook: half torus whose upper end meets the shank, curving down and round on +x
+  hb.addGeometry(new THREE.TorusGeometry(0.45, 0.12, 8, 18, Math.PI), { pos: [0, -BLOCK_H / 2 - 1.1, 0], quat: new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), -Math.PI / 2), color: HG.steel });
+  // amber lamp housings on the block top corners (the lowered block reads as lit amber points)
+  const hl = new Batch();
+  for (const sx of [-1, 1]) {
+    hb.box(sx * 0.55, BLOCK_H / 2 + 0.22, 0, 0.4, 0.16, 0.5, { color: HG.gunmetal });
+    hl.box(sx * 0.55, BLOCK_H / 2 + 0.31, 0, 0.32, 0.02, 0.42);
+  }
+  // slung load: a spreader bar on two slings from the hook, a 3.6 m cargo container in hull grey on four
+  // slings under it (recessed dark side panels, corner posts, dark lid, amber lamps on the spreader
+  // ends) - the crane is at work, and the load is big enough to read at 140 m. The container is on the
+  // girders' self-lit hull level: its sides face the spawn 137 m away with nothing of the light plan on
+  // them (the work lights are straight over it), and on plain paint it was a black 6 px box against the
+  // dark wall on a half-size frame - the one thing hanging from the crane has to read as a light-grey load
   const lb = new Batch(), lp = new Batch();
   const sling = (batch, a, b, r) => {
     const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
@@ -173,26 +216,37 @@ export function buildCrane(ctx) {
     const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
     batch.addGeometry(sharedCylinder(1, 1, 6), { pos: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2], quat: q, scale: [r, len, r], color: HG.steel });
   };
-  lb.box(0, -2.3, 0, 3.2, 0.16, 0.16, { color: HG.steel });
+  const hookTip = -BLOCK_H / 2 - 1.55, spY = hookTip - 1.1;
+  lb.box(0, spY, 0, 4.4, 0.2, 0.2, { color: HG.steel });
   for (const sx of [-1, 1]) {
-    lb.box(sx * 1.5, -2.3, 0, 0.2, 0.3, 0.3, { color: impDark });
-    sling(lb, [0, -1.55, 0], [sx * 1.5, -2.2, 0], 0.03);
+    lb.box(sx * 2.1, spY, 0, 0.24, 0.36, 0.36, { color: impDark });
+    hl.box(sx * 2.1, spY - 0.2, 0, 0.22, 0.02, 0.3);
+    sling(lb, [0, hookTip, 0], [sx * 2.1, spY + 0.1, 0], 0.04);
   }
-  const C = 2.4, cTop = -3.3, cy = cTop - 1.1;
-  lp.box(0, cy, 0, C, 2.2, C, { color: impMid, texel: 1 });
-  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const vy of [-0.55, 0.55]) lp.box(dx * (C / 2 + 0.01), cy + vy, dz * (C / 2 + 0.01), dx ? 0.02 : 1.7, 0.7, dz ? 0.02 : 1.7, { color: PALETTE.impBlack, texel: 1 });
-  for (const dx of [-1, 1]) for (const dz of [-1, 1]) lb.box((dx * C) / 2, cy, (dz * C) / 2, 0.1, 2.24, 0.1, { color: HG.gunmetal });
-  lp.box(0, cTop + 0.05, 0, C - 0.1, 0.1, C - 0.1, { color: impDark, texel: 1 });
-  lb.box(0, cy, 0, C + 0.03, 0.06, C + 0.03, { color: HG.gunmetal });
-  for (const dx of [-1, 1]) for (const dz of [-1, 1]) sling(lb, [dx * 1.5, -2.38, 0], [dx * 1.1, cTop, dz * 1.1], 0.025);
-  hook.add(new THREE.Mesh(hb.geometry(), materials.paintedMetal), hazard, hookLamp, new THREE.Mesh(lb.geometry(), materials.paintedMetal), new THREE.Mesh(lp.geometry(), materials.impPanel));
+  const C = 3.6, cTop = spY - 1.6, cy = cTop - C / 2;
+  lp.box(0, cy, 0, C, C, C, { color: EM.hull });
+  for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) for (const vy of [-0.85, 0.85]) lp.box(dx * (C / 2 + 0.01), cy + vy, dz * (C / 2 + 0.01), dx ? 0.02 : 2.6, 1.1, dz ? 0.02 : 2.6, { color: EM.housingCap });
+  for (const dx of [-1, 1]) for (const dz of [-1, 1]) lb.box((dx * C) / 2, cy, (dz * C) / 2, 0.14, C + 0.04, 0.14, { color: HG.gunmetal });
+  lp.box(0, cTop + 0.06, 0, C - 0.16, 0.12, C - 0.16, { color: EM.housing });
+  lb.box(0, cy, 0, C + 0.04, 0.08, C + 0.04, { color: HG.gunmetal });
+  for (const dx of [-1, 1]) for (const dz of [-1, 1]) sling(lb, [dx * 2.1, spY - 0.1, 0], [dx * 1.65, cTop, dz * 1.65], 0.035);
+  hook.add(new THREE.Mesh(hb.geometry(), materials.paintedMetal), new THREE.Mesh(hy.geometry(EM.hazard), materials.hgEmit), new THREE.Mesh(hl.geometry(0xffffff), materials.emitAmber), new THREE.Mesh(lb.geometry(), materials.paintedMetal), new THREE.Mesh(lp.geometry(), materials.hgEmit));
   trolley.add(meshT, meshTE, meshTA, cables, hook);
   bridge.add(trolley);
   group.add(bridge);
 
-  // moving work light under the trolley (descriptor pos is re-read every frame by the pool)
-  const light = { type: "point", pos: [PARK_AFT.x, -22, PARK_AFT.z], color: 0xfff1dc, intensity: 130, distance: 48, priority: 0.35 };
-  ctx.lights.push(light);
+  // the two work lights: spot descriptors from the trolley's lenses straight down (pos / target are
+  // re-read every frame by the pool). Priority 0.8 with a 170 m range: on the harness's score the pair
+  // beats the rack key lights (0.85) from the spawn and balcony cameras (they are 140-160 m out, so the
+  // in-range bonus decides it) and sits under the port key from the racks camera (which keeps its
+  // fighter shadows) - two of the four spot slots become the crane pool wherever the crane is in frame
+  // 1100 / 52 m^1.2 each in a 0.17 rad cone (a 9 m radius on the deck, the inner 4 m at full strength):
+  // the pair puts ~20 lux on the lane under the block, the brightest patch of deck in the racks frame
+  // (three times the plates round it on a half-size frame), a disc at 140 m, and the bowser group 9 m
+  // off the axis at (-64, 30) sits in the last of the penumbra. At 1500 in a 0.22 cone the pool measured
+  // 226 sRGB with the bowser blown out; at 450 it was a 37 against 25 - not a pool anyone would notice
+  const lights = WL.map(([dx, dz]) => ({ type: "spot", pos: [PARK_AFT.x + dx, -20.1, PARK_AFT.z + dz], target: [PARK_AFT.x + dx, FLOOR, PARK_AFT.z + dz], color: 0xfff1dc, intensity: 1100, distance: 170, decay: 1.2, angle: 0.17, penumbra: 0.55, priority: 0.8 }));
+  for (const l of lights) ctx.lights.push(l);
 
   const update = (t) => {
     const u = (t + 50) % 200; // t = 40 -> u = 90: mid-dwell over the aft apron, hook down
@@ -220,9 +274,12 @@ export function buildCrane(ctx) {
     bridge.position.z = zc;
     trolley.position.x = xt;
     hook.position.y = yH;
-    cables.scale.y = DRUM_Y - (yH + 0.6);
-    light.pos[0] = xt;
-    light.pos[2] = zc;
+    cables.scale.y = DRUM_Y - (yH + BLOCK_H / 2);
+    lights.forEach((l, i) => {
+      const [dx, dz] = WL[i];
+      l.pos[0] = l.target[0] = xt + dx;
+      l.pos[2] = l.target[2] = zc + dz;
+    });
   };
   update(0);
   return { update };
@@ -532,7 +589,8 @@ function bowser(P, lx, lz) {
     P.cyl("rubber", HG.rubber, lx + dx, F + 0.45, lz + dz, 0.45, 0.34, "x", { segments: 16 });
     P.cyl("metal", HG.steel, lx + dx, F + 0.45, lz + dz, 0.2, 0.38, "x", { segments: 10 });
   }
-  P.kcyl("paintedMetal", P.P.impGrey, lx, F + 1.75, lz - 0.3, 0.95, 3.4, "z", { segments: 20, texel: 0.5 });
+  // mid-grey tank (the forward port bowser stands in the crane's work-light pool: a light-grey tank there clipped to white)
+  P.kcyl("paintedMetal", P.P.impMid, lx, F + 1.75, lz - 0.3, 0.95, 3.4, "z", { segments: 20, texel: 0.5 });
   for (const dz of [-2.05, 1.45]) P.cyl("metal", HG.gunmetal, lx, F + 1.75, lz + dz, 0.8, 0.14, "z", { segments: 20 });
   P.kcyl("hazard", 0xffffff, lx, F + 1.75, lz + 0.6, 0.965, 0.3, "z", { segments: 20, texel: 1 });
   for (const dx of [-0.92, 0.92]) for (const dz of [-1.2, 0.6]) P.box("metal", HG.gunmetal, lx + dx, F + 1.25, lz + dz, 0.12, 0.9, 0.16);
