@@ -1,18 +1,19 @@
 # Status — B: command tower (Deck 1)
 
-Branch: `cursor/sd-command-tower-e845` · Last push: see git log · 2026-09-04 23:40 UTC
-Run: bc-624cbbb1-95b2-4ce5-82bb-455f2d92e845 · Phase: 3 (finalisation) — three critic rounds applied; round-4 blind pass on the final frames
+Branch: `cursor/sd-command-tower-e845` · Last push: see git log · 2026-09-05 01:35 UTC
+Run: bc-624cbbb1-95b2-4ce5-82bb-455f2d92e845 · Phase: 3 (finalisation) — four blind critic rounds applied; B's Deck 1 work is complete pending the scaffold
 
 ## Summary (3–6 lines, what a reviewer needs to know right now)
 
 All 11 Deck 1 modules (`src/rooms/deck1/**`: bridge, observation, nav, comms, tactical, intel, officers, two side
-passages, spine, lift lobby) are built to the §7/§8 contract, fully detailed, and have been through three blind critic
-rounds (FAIL 17 → 4 → 1 → round 4 below). Final full-deck harness run `p3-final2`: **55 views, 0 registry warnings**,
-every room inside budget (bridge 101k tris / 23 calls / 22 desc against its 300k / 24 / 28 allowance; largest standard
-room spine 114k / 14 / 13; builds 19–181 ms). 18 of the 24 critic views have 0 clipped pixels, the rest ≤ 26 px except
-holo/screen edge specks. Scaffold has not landed, so testing runs through `src/rooms/deck1/_dev/` (registry/ctx/
-light-pool shim, closed door-leaf stand-ins, no-HMR Vite config, own shots runner). Open interface items for A: wall
-thickness vs D's doors helper, N8AO leak, player floor height, `metal` reading black at room scale (see Requests).
+passages, spine, lift lobby) are built to the §7/§8 contract, fully detailed, and have been through four blind critic
+rounds (FAIL 17 → 4 → 1 → 1, the last FAIL — the officers' cabin — rebuilt afterwards; see Tested). Final full-deck
+harness run `p3-final3`: **55 views, 0 registry warnings**, every room inside budget (bridge 103k tris / 23 calls /
+22 desc against its 300k / 24 / 28 allowance; largest standard room spine 114k / 14 / 13; builds 22–177 ms). 14 of the
+24 critic views have 0 clipped pixels, 7 more ≤ 26 px, the rest only holo/screen edge specks. Scaffold has not landed,
+so testing runs through `src/rooms/deck1/_dev/` (registry/ctx/light-pool shim, closed door-leaf stand-ins, no-HMR Vite
+config, own shots runner). Open interface items for A: wall thickness vs D's doors helper, N8AO leak, player floor
+height, `metal` reading black at room scale (see Requests).
 
 ## Plan
 
@@ -313,12 +314,34 @@ sizes with jamb liners + threshold plates (D's assembly goes on top), colliders,
   pit-stbd (1–4 px lamp-diffuser specks, one 6 × 7 px raft diffuser), 12 in the wardroom, 9 in comms racks; the only
   three-digit counts are 1–3 px-tall holo-icon and screen-edge highlights in `d1-nav-holo` and the two tactical views.
 - Critic round 4 (one blind critic, the 24 critic views from `p3-final2` plus the six nav/tactical/observation views
-  re-shot after 567767b6): result recorded below when it returns.
+  re-shot after 567767b6): PASS 8 (`d1-bridge-dais`, `d1-bridge-walkway`, `d1-comms-racks`, `d1-comms-station`,
+  `d1-nav-dais`, `d1-nav-holo`, `d1-tactical-overview`, `d1-tactical-plot`), MARGINAL 15, FAIL 1 (`d1-officers-cabin`:
+  slab bunk/cabinet/desk, bunk read as a bench, bare floor). Rounds 1 → 4: FAIL 17 → 4 → 1 → 1, every remaining
+  MARGINAL carries only "minor" instances. Its ranked list: (1) bare floors / black ceilings; (2) the light strips
+  read as pure-white bars (they measure 0 px ≥ 236 — no bloom — but tonemap to ≈ 230/255); (3) slab furniture;
+  (4) intel's red fill light (by design: the plan's red-only restricted section at −1.5 EV — kept); (5) identical
+  modules in a row (rack rows, railing posts, cabin doors); (6) bridge command/window frames below the bridge mean.
+  Fixes applied after the pass, each verified in a harness run: transit `emitStrip` #b9ccff at 1.0 and the officers'
+  strips on the module's warm `offLamp` (both families now read blue-white / warm, not white; 0 clipped px); a
+  2.4 m plate grid on the bridge's fore platform and aft deck + aft pendants 100 cd (command frame mean 21.4 → 23.6,
+  window 18.2 → 19.4); the observation bench's bare-metal edge trim → `metalRough` (the "sofa base patch" was its
+  mirror of a soffit can); and the cabin rebuilt by the officers owner (c5216f93): bunk module with drawer base,
+  blanket/sheet/pillow, 1.15 m headboard with reading lamp, footboard and kit trunk; wall cabinet at 60 % of the
+  bunk with doors/handles/label/lit rail/shelf; desk modesty panel; settee on legs; armchair + round-base table on
+  the rug; kit bag, scuff band, 2 m approach lines, threshold mat; beams + cable trays overhead. Cabin mean 26.2,
+  0 clipped px. Not addressed: the intel accent (design), rack/railing/door repetition (functional uniformity), and
+  the remaining "minor" bare-floor notes on the bridge walkway and tactical views.
+- Final full-deck run `p3-final3` after the round-4 fixes: **55 views, 0 registry-shim warnings**, every room inside
+  budget (bridge 102.8k tris / 23 calls / 22 desc / 177 colliders / 177 ms; spine 114.3k / 14 / 13 / 201 / 143 ms;
+  comms 77.5k / 16 / 14; officers 65.5k / 15 / 14 / 98; tactical 52.6k / 16 / 13; nav 44.6k / 16 / 14; intel 35.6k /
+  13 / 14; observation 31.2k / 15 / 14; passages 27.4k / 26.7k / 14–15; lobby 14.1k / 16 / 5). Whole frame 83–223
+  calls, 133k–713k tris, 12–16 pool lights. Clipped pixels (≥ 236 luminance): 0 in 29 of the 55 views and in 14 of
+  the 24 critic views; ≤ 26 px in another 7 critic views (1–4 px lamp-diffuser specks); the only three-digit counts
+  are 1–3 px-tall holo-icon and screen-edge highlights (`d1-nav-holo`, the tactical views, `d1-nav-corner`).
 
 ## Remaining
-1. Critic round 4 verdicts → any last per-view fixes → push.
-2. Replace corridor greybox with D's `corridorSegment` when it lands; switch `doorHole` import to D's helper.
-3. Delete `_dev/` and re-test on the real registry when `SCAFFOLD READY`.
+1. Replace corridor greybox with D's `corridorSegment` when it lands; switch `doorHole` import to D's helper.
+2. Delete `_dev/` and re-test on the real registry when `SCAFFOLD READY`.
 
 ## Blockers
 - None. Scaffold not landed: I mimic `ctx` locally (see Summary); the Imperial material names from §10 are provided
