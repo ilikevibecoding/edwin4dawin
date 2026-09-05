@@ -15,7 +15,6 @@ import {
   bladeU,
   channelRect,
   col,
-  flipFaces,
   jitter,
   loftZ,
   mirrorV,
@@ -41,7 +40,6 @@ import {
   antennaCluster,
   dishMast,
   hatch,
-  lippedPlate,
   ribbedPanel,
   scorchRing,
   slotRow,
@@ -52,7 +50,7 @@ export const MUNIFICENT = { length: 825, width: 430, height: 290 };
 
 // palette: vertex tints over the shared plating (albedo ~0.62 before tint) / machinery textures.
 // Calibrated so sunlit tan lands near sRGB 175 and shadow faces near 50.
-const TAN = col(0xecd0a2);
+const TAN = col(0xdcc296);
 const TAN_LT = TAN.clone().multiplyScalar(1.08);
 const TAN_DK = TAN.clone().multiplyScalar(0.84);
 const TAN_FADE = col(0xe2d2b8); // paint fade: lighter, less saturated
