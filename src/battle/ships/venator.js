@@ -54,16 +54,19 @@ const Z = (zr) => zBow + zr;
 
 // ---- palette. Hull tints are linear albedo multipliers on the plating map (mean ~0.62 after the
 // material's x1.4 normalisation). Calibrated against debugAPI.capturePixels on venator_close through the
-// sun (5.4 x (1, .96, .9)) and ACES: the deck lands at sRGB ~204/192/170 (hue 39, sat .17 — the film's
-// warm cream), a flank in the sun's shadow near 50, the belly (planet glow only) near 63. Brighter tints
-// (0.95 on the deck measured 218 at sat .04) sit on the flat part of the ACES curve and read as
-// blown-out neutral white, so the whole palette stays below ~0.7.
-const CREAM = lin(0.72, 0.585, 0.375); // dorsal deck, door tops, terraces
-const CREAM_TOWER = lin(0.68, 0.56, 0.37);
-const FLANK = lin(0.5, 0.455, 0.4); // shoulder chamfer, wing edge band, block walls
-const LOWER = lin(0.39, 0.39, 0.4); // angled lower flank: dark neutral, a step above the belly
-const BELLY = lin(0.37, 0.37, 0.38); // belly, prong undersides, keel — one tint, no hue
-const STERN = lin(0.24, 0.215, 0.195); // heat-stained stern armour
+// sun (4.8 x (1, .96, .9)) and ACES: the film hull is cream-white / light grey (sat ~0.1-0.18) with
+// maroon, so the cream stays warm but low in chroma (a sunlit deck measures sRGB ~195/186/170, hue ~40,
+// sat ~0.13). Brighter tints (0.95 on the deck measured 218 at sat .04) sit on the flat part of the
+// ACES curve and read as blown-out neutral white, so the whole palette stays below ~0.78. The lower
+// hull is lit almost only by Coruscant's warm city glow (fill (1.3, .9, .44)), which turns any neutral
+// albedo brown; the lower flank and belly tints therefore lean slightly cool so they render as a
+// dark grey with only a hint of warmth instead of dark brown.
+const CREAM = lin(0.76, 0.69, 0.53); // dorsal deck, door tops, terraces
+const CREAM_TOWER = lin(0.72, 0.655, 0.51);
+const FLANK = lin(0.5, 0.47, 0.44); // shoulder chamfer, wing edge band, block walls
+const LOWER = lin(0.35, 0.37, 0.42); // angled lower flank: cool neutral, a step above the belly
+const BELLY = lin(0.32, 0.345, 0.41); // belly, prong undersides, keel — one tint, cool grey
+const STERN = lin(0.24, 0.225, 0.21); // heat-stained stern armour
 const DARK = 0xc8ccd2; // machinery greebles (dark texture x light tint = readable dark grey)
 const DARK_RECESS = 0x9a9ea6; // trench walls, hangar interiors
 const DARK_SEAM = 0x6e7178; // panel-line grooves
@@ -81,7 +84,7 @@ const HANGAR_BLUE = 0x9cc8ff;
 const sootOf = (base, k) =>
   mulColor(base, 1 - 0.55 * k, 1 - 0.6 * k, 1 - 0.66 * k);
 // paint fade: lighter and desaturated (kept well under white so faded plates do not bloom)
-const fadeOf = (base, k) => mixColor(base, lin(0.8, 0.73, 0.62), k);
+const fadeOf = (base, k) => mixColor(base, lin(0.82, 0.78, 0.7), k);
 
 // plating scales (tiles per metre): fine seams on the base hull, coarser on the raised plate groups
 const HULL_TEXEL = [1 / 14, 1 / 22, 1 / 24];
@@ -266,8 +269,11 @@ const DOOR_Z0 = 255;
 const DOOR_Z1 = 800;
 const HANGAR_DEPTH = 64;
 const HANGAR_HALF = 44;
-const SEAM_HALF = 4.5;
-const SEAM_DEPTH = 3.5;
+// centre seam between the door halves: 10 m wide, 4 m deep (dark floor, lit lips); the doors stand
+// only DOOR_H above the deck so the recess is not hidden behind the near door at oblique angles
+const SEAM_HALF = 5;
+const SEAM_DEPTH = 4;
+const DOOR_H = 3;
 const inDoors = (zr) => zr > DOOR_Z0 + 0.005 && zr < DOOR_Z1 + 0.005;
 const OPEN_HANGAR = {
   gap: (zr) => (inDoors(zr) ? HANGAR_HALF : 0),
@@ -377,6 +383,7 @@ const TOWER_X = 58;
 const TOWER_ZR = 960;
 const TOWER_TOP = 158;
 const HEAD_TOP = 186;
+const SPAN_Y = 152; // top of the connecting deck between the towers (~2/3 tower height)
 const TURRET_ZR = [420, 530, 640, 750];
 const turretX = (zr) => 96 + 0.5 * (wDeck(zr) - 96);
 const BELLY_BAYS = [
@@ -424,8 +431,8 @@ const HEAD_HZ = (y) =>
   );
 // fixed weathering points on the flat decks: scorch rings, kept clear of raised plates
 const SCORCH_POINTS = [
-  { x: -58, y: DECK_Y + 6, z: Z(470), r: 9 },
-  { x: 66, y: DECK_Y + 6, z: Z(690), r: 7 },
+  { x: -58, y: DECK_Y + DOOR_H, z: Z(470), r: 9 },
+  { x: 66, y: DECK_Y + DOOR_H, z: Z(690), r: 7 },
   { x: -176, y: DECK_Y, z: Z(600), r: 8 },
   { x: 206, y: DECK_Y, z: Z(740), r: 6.5 },
   { x: 90, y: T2_Y, z: Z(900), r: 7 },
@@ -899,27 +906,44 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
     doorX1(DOOR_Z0) >= x
       ? DOOR_Z0
       : clamp(((x + 6 + CHAMFER - 52) / 222) * 830, DOOR_Z0, DOOR_Z1);
-  const top = DECK_Y + 6;
+  const top = DECK_Y + DOOR_H;
   if (!open) {
     if (lod === 2) {
-      add(boxMM([-4.5, DECK_Y - 1.5, z0], [4.5, DECK_Y + 4.2, z1]), "dark", {
-        color: DARK_SEAM,
-        texel: 1 / 6,
-      });
+      // far LOD: the hull loft carries no recess, so a dark slot stands in for the seam
+      add(
+        boxMM(
+          [-SEAM_HALF, DECK_Y - 1.5, z0],
+          [SEAM_HALF, DECK_Y + DOOR_H - 0.6, z1],
+        ),
+        "dark",
+        { color: DARK_SEAM, texel: 1 / 6 },
+      );
     } else {
-      // the seam floor is the hull recess (dark); lit edge strips along its bottom corners, cross ribs
+      // the seam is a real recess in the hull loft (dark walls and floor); a near-black floor lane, lit
+      // strips along both bottom corners and cross ribs give it depth and a lit edge from any angle
       const yf = DECK_Y - SEAM_DEPTH;
+      add(
+        quadFacing(
+          [0, yf + 0.08, (z0 + z1) / 2],
+          [0, 1, 0],
+          [0, 0, -1],
+          SEAM_HALF * 2 - 3.2,
+          z1 - z0 - 6,
+        ),
+        "dark",
+        { color: 0x3c3f45, texel: 1 / 6 },
+      );
       for (const s of [-1, 1])
         add(
           quadFacing(
-            [s * (SEAM_HALF - 0.8), yf + 0.15, (z0 + z1) / 2],
+            [s * (SEAM_HALF - 1.0), yf + 0.15, (z0 + z1) / 2],
             [0, 1, 0],
             [0, 0, -1],
-            0.6,
+            1.0,
             z1 - z0 - 12,
           ),
           "windows",
-          { color: mulColor(HANGAR_WARM, 0.75), uv: "keep" },
+          { color: mulColor(HANGAR_WARM, 0.85), uv: "keep" },
         );
       if (fine)
         for (let zz = DOOR_Z0 + 30; zz < DOOR_Z1 - 20; zz += 60)
@@ -947,16 +971,16 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
           ? [
               [x0, DECK_Y - 1],
               [x1, DECK_Y - 1],
-              [x1, DECK_Y + 6],
-              [x0, DECK_Y + 6],
+              [x1, top],
+              [x0, top],
             ]
           : [
               [x0, DECK_Y - 1],
               [x1, DECK_Y - 1],
-              [x1, DECK_Y + 4],
-              [x1 - 3, DECK_Y + 6],
-              [x0 + 1.2, DECK_Y + 6],
-              [x0, DECK_Y + 5.2],
+              [x1, top - 1.4],
+              [x1 - 2.2, top],
+              [x0 + 1.0, top],
+              [x0, top - 0.7],
             ];
       return { z: Z(zr), pts: pts.map(([x, y]) => [s * x, y]) };
     };
@@ -971,32 +995,40 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
       hullOpts(CREAM),
     );
     if (mid) {
-      // door front face: a dark seam and vent grilles, so the 7 m step reads as a door end
+      // door front face: a dark seam and vent grilles, so the step reads as a door end
       const xf = doorX1(DOOR_Z0);
       add(
-        mbox(s, x0 + 2, xf - 2, DECK_Y + 2.2, DECK_Y + 2.7, z0 - 0.35, z0),
+        mbox(s, x0 + 2, xf - 2, DECK_Y + 0.9, DECK_Y + 1.3, z0 - 0.35, z0),
         "dark",
         { color: DARK_SEAM, texel: 1 / 4 },
       );
       if (fine)
         for (let x = x0 + 8; x < xf - 10; x += 14)
           add(
-            mbox(s, x, x + 6, DECK_Y + 3.4, DECK_Y + 5, z0 - 0.5, z0),
+            mbox(s, x, x + 6, DECK_Y + 1.7, DECK_Y + 2.6, z0 - 0.5, z0),
             "dark",
             { color: DARK, texel: 1 / 3 },
           );
-      // lit edge along the door's inner top lip (warm spill from the seam / bay)
+      // lit edge along the door's inner top lip (warm spill from the seam / bay): wide enough to
+      // read as a pair of lit lines down the deck centre from 300 m
       add(
         quadFacing(
-          [s * (x0 + 0.5), top + 0.06, (z0 + z1) / 2],
+          [s * (x0 + 1.4), top + 0.06, (z0 + z1) / 2],
           [0, 1, 0],
           [0, 0, -1],
-          0.5,
+          1.4,
           z1 - z0 - 16,
         ),
         "windows",
-        { color: mulColor(HANGAR_WARM, open ? 0.9 : 0.5), uv: "keep" },
+        { color: mulColor(HANGAR_WARM, open ? 0.9 : 0.8), uv: "keep" },
       );
+      // the seam wall below the lip: a dark inner face so the door edge reads as a real step
+      if (!open)
+        add(
+          mbox(s, x0 - 0.15, x0 + 0.05, DECK_Y - 1, top - 0.7, z0 + 2, z1 - 2),
+          "dark",
+          { color: 0x3c3f45, texel: 1 / 6 },
+        );
     }
     // maroon outer-edge panels in three long segments, thin inner stripe, forward block
     const zOuter = zrFit(x0 + 90);
@@ -1173,33 +1205,59 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
           "windows",
           { color: col, uv: "keep" },
         );
-      strip(floorY + 5, HANGAR_WARM, 1.4);
-      strip(floorY + 30, mulColor(HANGAR_WARM, 0.8), 1.0);
-      strip(DECK_Y - 5, HANGAR_WARM, 1.0);
+      strip(floorY + 5, HANGAR_WARM, 2.4);
+      strip(floorY + 30, mulColor(HANGAR_WARM, 0.8), 1.8);
+      strip(DECK_Y - 5, HANGAR_WARM, 1.8);
+      // lit wall panels high on the walls (the part of the far wall a distant camera sees over the
+      // near door) so the bay reads as a lit interior from 2 km
+      for (let zz = DOOR_Z0 + 24; zz < DOOR_Z1 - 24; zz += 45)
+        add(
+          quadFacing(
+            [s * (gap - 0.2), DECK_Y - 16, Z(zz)],
+            [-s, 0, 0],
+            [0, 1, 0],
+            26,
+            9,
+          ),
+          "windows",
+          { color: mulColor(HANGAR_WARM, 0.62), uv: "keep" },
+        );
       add(
         quadFacing(
           [s * (gap * 0.6), floorY + 0.15, zc],
           [0, 1, 0],
           [0, 0, -1],
-          1.6,
+          2.6,
           z1 - z0 - 30,
         ),
         "windows",
         { color: HANGAR_BLUE, uv: "keep" },
       );
     }
-    // floor light panels: the big glow that reads from a distance
+    // floor light panels: the big glow that reads from a distance (wide warm slabs down the lane with
+    // a continuous dim glow between them)
+    add(
+      quadFacing(
+        [0, floorY + 0.12, zc],
+        [0, 1, 0],
+        [0, 0, -1],
+        gap * 1.3,
+        z1 - z0 - 20,
+      ),
+      "windows",
+      { color: mulColor(HANGAR_WARM, 0.3), uv: "keep" },
+    );
     for (let zz = DOOR_Z0 + 40; zz < DOOR_Z1 - 40; zz += 60)
       add(
         quadFacing(
           [0, floorY + 0.2, Z(zz)],
           [0, 1, 0],
           [0, 0, -1],
-          gap * 1.1,
-          10,
+          gap * 1.3,
+          26,
         ),
         "windows",
-        { color: mulColor(HANGAR_WARM, 0.5), uv: "keep" },
+        { color: mulColor(HANGAR_WARM, 0.72), uv: "keep" },
       );
     if (mid) {
       // wall ribs spanning the full depth, with a gallery ledge at mid height
@@ -1563,10 +1621,72 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
       { uv: hullTexel },
     );
     add(hump.hull, "hull", hullOpts(mulColor(CREAM, 0.94)));
-    add(boxMM([-44, 130, Z(950)], [44, 134.5, Z(972)]), "hull", {
-      color: mulColor(CREAM, 0.92),
-      texel: 1 / 8,
-    });
+    // connecting deck between the two tower shafts at ~2/3 tower height: a 34 m deep slab with a
+    // dark underside band, a parapet, window rows on both faces and a centre hatch line (every LOD)
+    {
+      const yb = SPAN_Y - 5.5;
+      const yt = SPAN_Y;
+      add(boxMM([-46, yb, Z(944)], [46, yt, Z(978)]), "hull", {
+        color: mulColor(CREAM_TOWER, 0.96),
+        texel: 1 / 8,
+      });
+      add(boxMM([-46, yb - 1.6, Z(947)], [46, yb, Z(975)]), "dark", {
+        color: DARK,
+        texel: 1 / 4,
+      });
+      if (mid) {
+        for (const zz of [944, 978])
+          add(
+            boxMM([-46, yt, Z(zz) - 0.7], [46, yt + 1.1, Z(zz) + 0.7]),
+            "hull",
+            { color: mulColor(CREAM_TOWER, 0.9), texel: 1 / 6 },
+          );
+        // window rows along the front and aft faces (discrete at LOD 0, a bar at LOD 1)
+        for (const [zz, nz] of [
+          [944, -1],
+          [978, 1],
+        ])
+          for (let i = 0; i < (fine ? 12 : 1); i++) {
+            const x = fine ? -33 + i * 6 : 0;
+            add(
+              quadFacing(
+                [x, yb + 3.2, Z(zz) + nz * 0.08],
+                [0, 0, nz],
+                [0, 1, 0],
+                fine ? 2.4 : 66,
+                1.1,
+              ),
+              "windows",
+              { color: ROW_WARM, uv: "keep" },
+            );
+          }
+        // equipment along the top: a centre groove, two hatch rows and a sensor box
+        add(grooveMM(-0.5, 0.5, Z(947), Z(975), yt), "dark", {
+          color: DARK_SEAM,
+          texel: 1 / 4,
+        });
+        for (const s of [-1, 1]) {
+          add(mbox(s, 12, 30, yt, yt + 1.6, Z(952), Z(970)), "hull", {
+            color: mulColor(CREAM_TOWER, 0.9),
+            texel: 1 / 6,
+          });
+          if (fine)
+            for (let x = 6; x < 40; x += 8)
+              add(mbox(s, x, x + 2.4, yt, yt + 0.4, Z(973), Z(975.4)), "dark", {
+                color: DARK,
+                texel: 1 / 3,
+              });
+        }
+        // diagonal braces from the shaft faces to the underside of the span
+        for (const s of [-1, 1])
+          for (const zz of [950, 972]) {
+            const g = boxMM([-1.2, -10, -1.2], [1.2, 10, 1.2]);
+            g.rotateZ(s * 0.62);
+            g.translate(s * 36, yb - 7.5, Z(zz));
+            add(g, "dark", { color: DARK, texel: 1 / 4 });
+          }
+      }
+    }
     // hump top between the tower shafts: centre groove, hatch rows, vent grilles, equipment boxes
     if (fine) {
       const yH = T2_Y + 16;
@@ -1609,11 +1729,7 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
       texel: 1 / 10,
     });
     if (mid) {
-      add(boxMM([-44, 128.5, Z(949)], [44, 130, Z(973)]), "dark", {
-        color: DARK,
-        texel: 1 / 4,
-      });
-      // window row on the hump front and walkway lights
+      // window row on the hump front
       for (let i = 0; i < (fine ? 10 : 2); i++) {
         const x = -30 + (i + 0.5) * (60 / (fine ? 10 : 2));
         const n = new THREE.Vector3(0, 16, -14).normalize();
