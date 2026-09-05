@@ -327,7 +327,14 @@ export class AdminPanel {
     if (this.game.permissions && this.game.permissions.onChange) this.unsubscribe.push(this.game.permissions.onChange(() => { if (this.isOpen) { this._refreshPermission(); this._refreshStatus(); } }));
   }
 
-  dispose() { for (const u of this.unsubscribe) u(); this.unsubscribe = []; this.subscribed = false; this.root.remove(); }
+  dispose() {
+    for (const u of this.unsubscribe) u();
+    this.unsubscribe = [];
+    this.subscribed = false;
+    this._flushSave();
+    for (const t of ['liveTimer', 'previewTimer', 'noteTimer', 'copyTimer']) if (this[t]) { clearTimeout(this[t]); this[t] = null; }
+    this.root.remove();
+  }
 
   // ---------------------------------------------------------------- permission / selector
   _refreshPermission() {
@@ -908,7 +915,7 @@ export class AdminPanel {
     setDisabled(this.btnDiscard, !admin || restoring || s.journal === 0);
     const save = this.game.save;
     setText(this.saveHint, `Journal: ${fmtInt(s.journal)} cell${s.journal === 1 ? '' : 's'}` + (save ? `  \u00b7  saved edits: ${save.count}${save.dirty ? ' (writing\u2026)' : ''}` : '') + (s.journal > 0 && !(finished || s.state === 'idle') ? '  \u00b7  stop the disaster to commit' : ''));
-    setText(this.statsEl, `Edits ${fmtInt(s.edits)} \u00b7 restored ${fmtInt(s.restored)} \u00b7 tick ${fmtInt(s.tick)}` + (s.type ? ` \u00b7 ${s.type}` : ''));
+    setText(this.statsEl, `Edits ${fmtInt(s.edits)} \u00b7 restored ${fmtInt(s.restored)} \u00b7 tick ${fmtInt(s.tick)}` + (s.type && s.state !== 'idle' ? ` \u00b7 ${s.type}` : ''));
   }
 
   _refreshPerf() {
