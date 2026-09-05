@@ -697,7 +697,12 @@ function acaciaTile(ctx, w, h, opts) {
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  const deep = mixRgb(shade, [0, 0, 0], 0.55);
+  // The dark end of the tile. This was 55% of the way to black, and it was
+  // drawn three times over — as the cluster cast, the shoot lane and the low
+  // end of the ramp — so a card at 25 m carried a net of near-black lines
+  // through its green that two critics read as veins or cracks in plywood.
+  // Half the depth: the structure is still there, the black is not.
+  const deep = mixRgb(shade, [0, 0, 0], 0.28);
   const ramp = [deep, mixRgb(deep, shade, 0.55), shade, mixRgb(shade, base, 0.6), base, mixRgb(base, tip, 0.55), tip];
 
   const axis = (t) => [w * (0.01 + t * 0.98), midY + Math.sin(t * Math.PI) * h * sag + (t - 0.5) * h * sag * 3];
@@ -773,7 +778,9 @@ function acaciaTile(ctx, w, h, opts) {
       }
       nodesOf.push([]);
     } else {
-      nodesOf.push(zig(L, 6, 0.86, w * 0.0046 * (1 - L.root * 0.35), mixRgb(stem, [120, 100, 76], 0.2)));
+      // the twig itself a shade lighter as well: at 25 m a twig four texels
+      // wide is a line, and a near-black line through a green card is a crack
+      nodesOf.push(zig(L, 6, 0.86, w * 0.0046 * (1 - L.root * 0.35), mixRgb(stem, [120, 100, 76], 0.42)));
     }
   }
 
@@ -801,12 +808,13 @@ function acaciaTile(ctx, w, h, opts) {
   }
 
   // A soft smear of dark under each shoot, so neighbouring sprays keep a dark
-  // lane between them once the leaflets have mipped away.
+  // lane between them once the leaflets have mipped away. Half the alpha it
+  // had: at 0.42 the lanes were the vein lines.
   for (const L of legs) {
     if (L.main) continue;
     const off = L.hw * 0.4;
     ctx.save();
-    ctx.globalAlpha = 0.42;
+    ctx.globalAlpha = 0.22;
     ctx.strokeStyle = rgbStr(deep, 1);
     ctx.lineWidth = L.hw * 1.3;
     ctx.beginPath();
@@ -887,7 +895,7 @@ function acaciaTile(ctx, w, h, opts) {
     // was a solid camouflage plate with no sky through it. At the cluster's
     // own size and a third transparent the gaps stay open: a spray shows its
     // structure and the card edge is leaf clusters, not a shape.
-    if (!t.edge) cluster(t.x + t.r * 0.18, t.y + t.r * 0.3 * yGain, t.r * 0.8, t.ang, deep, 0.7, 1.1);
+    if (!t.edge) cluster(t.x + t.r * 0.18, t.y + t.r * 0.3 * yGain, t.r * 0.8, t.ang, deep, 0.5, 1.1);
     for (let k = 0; k < 2; k++) {
       const sub = clamp(t.tone + (k === 0 ? -0.15 : 0.13) * contrast);
       cluster(t.x, t.y, t.r * (k === 0 ? 1 : 0.84), t.ang + (k ? 0.4 : 0), rampAt(ramp, sub), 1, k === 0 ? 1.0 : 0.85);
@@ -1032,7 +1040,10 @@ export function acaciaAtlas() {
           bake: { root: 0.24, axis: 0.14, rim: 0.14 },
         }),
     ],
-    { bleed: mixRgb(SAV.acaciaShade, SAV.acaciaMid, 0.4) },
+    // Bled toward the mid green rather than the shade: the far mips average
+    // this into every card edge, and at 0.4 the alpha cut carried a dark rim
+    // round each cluster on the near crown.
+    { bleed: mixRgb(SAV.acaciaShade, SAV.acaciaMid, 0.65) },
   );
 }
 
@@ -2171,13 +2182,20 @@ export function treelineTexture(variant = 0) {
         // thirty-metre card) a scrub line that ran the whole width was a
         // continuous dark wall under the trees, and the wall is what the
         // skyline read as. Now it is patches, and mostly absent.
-        for (let layer = 0; layer < 3; layer++) {
-          const d = 0.6 - layer * 0.22;
+        // The gate the old form had let the foot run the whole width anyway:
+        // the fbm it read sits above 0.52 almost everywhere, so the strip
+        // dumped as a solid scrub line with the trees standing in it, and the
+        // three rings of that line stacked behind each other from across the
+        // plain were the dark band at the horizon. One layer now, gated on the
+        // upper tail of the field, so it is a few low patches under some of the
+        // trees and bare ground under the rest.
+        {
+          const d = 0.5;
           ctx.fillStyle = rgbStr(scrubCol(d), 1, 0.8);
           for (let x = 0; x < cw; x += 3) {
-            const n = fbm(x * 0.012 + layer * 9.1, variant * 3.3 + layer, { octaves: 3, period: 12, seed: 55 + layer });
-            const gate = smoothstep(0.52, 0.66, fbm(x * 0.004 + layer * 3, variant * 1.7, { octaves: 2, period: 8, seed: 66 + layer }));
-            const hh = ch * (0.015 + n * 0.045) * gate;
+            const n = fbm(x * 0.012 + 9.1, variant * 3.3, { octaves: 3, period: 12, seed: 55 });
+            const gate = smoothstep(0.66, 0.8, fbm(x * 0.004 + 3, variant * 1.7, { octaves: 2, period: 8, seed: 66 }));
+            const hh = ch * (0.012 + n * 0.04) * gate;
             if (hh < 1) continue;
             ctx.fillRect(x, ch * 0.985 - hh, 3.5, hh + 1);
           }
@@ -2186,15 +2204,20 @@ export function treelineTexture(variant = 0) {
         // trees: a few per layer, umbrella shapes wide and low, the far layer
         // smallest and closest to the haze. Twenty-three per strip was a tree
         // every six metres on the ring — woodland; a savanna skyline is open
-        // ground with a crown standing on it every twenty or thirty.
+        // ground with a crown standing on it every twenty or thirty. Eleven
+        // was still one every fifteen once the three rings overlapped from
+        // across the plain, and the mips ran them together into one band;
+        // seven per strip, bunched (a pair or a group, then a long gap) so
+        // the gaps are wide enough to survive three rings deep.
         const layers = [
-          { n: 4, d: 0.62, hi: [0.14, 0.24], wid: [1.3, 2.0] },
-          { n: 4, d: 0.4, hi: [0.2, 0.34], wid: [1.2, 1.9] },
-          { n: 3, d: 0.18, hi: [0.28, 0.46], wid: [1.1, 1.8] },
+          { n: 3, d: 0.62, hi: [0.14, 0.26], wid: [1.3, 2.0] },
+          { n: 2, d: 0.4, hi: [0.2, 0.36], wid: [1.2, 1.9] },
+          { n: 2, d: 0.18, hi: [0.28, 0.5], wid: [1.1, 1.8] },
         ];
         for (const L of layers) {
           for (let i = 0; i < L.n; i++) {
-            const cx = ((i + rnd() * 0.9) / L.n) * cw;
+            // bunched, not evenly spaced: a third of the strip stays empty
+            const cx = (((i + rnd() * 0.7) / L.n) * 0.66 + (variant % 2) * 0.34) * cw;
             const height = ch * lerp(L.hi[0], L.hi[1], rnd());
             const halfW = height * lerp(L.wid[0], L.wid[1], rnd()) * 0.5;
             const cols = {
