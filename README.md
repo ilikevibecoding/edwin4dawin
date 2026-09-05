@@ -40,7 +40,7 @@ Requires a WebGL-capable browser. Click the game once to grab the mouse.
 | Skip time 2 hours | `T` |
 | Debug overlay (FPS, frame/JS/GPU ms, draw calls, memory, entities, network) | `F3` |
 | Disaster / administrator control panel | `F4` or `` ` `` |
-| Pause menu (render distance, sound, time, view bobbing) | `Esc` |
+| Pause menu (render distance up to 24 chunks, sound, time, view bobbing) | `Esc` |
 
 `Ctrl` is intentionally not used for sprinting because `Ctrl+W` closes the browser tab.
 

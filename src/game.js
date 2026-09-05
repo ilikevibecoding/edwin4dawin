@@ -175,7 +175,11 @@ export class Game {
     this.train = new Train(this.scene, this.world, this.audio, this.particles);
     // disasters: deterministic, journaled, admin-controlled
     this.disasters = new DisasterManager(this);
-    { const qp = new URLSearchParams(location.search); applyQuality(this, loadQualityName(qp), { persist: false, renderDistance: !qp.has('rd') }); }
+    {
+      const qp = new URLSearchParams(location.search);
+      applyQuality(this, loadQualityName(qp), { persist: false, renderDistance: !qp.has('rd') });
+      if (!qp.has('rd')) { try { const rd = parseInt(localStorage.getItem('frontier-craft:rd'), 10); if (rd >= 2) this.terrain.setRenderDistance(rd); } catch (e) { /* ignore */ } }
+    }
     this.disasters.register(Tsunami);
     this.disasters.register(Tornado);
     this.disasters.register(OrbitalBeam);
@@ -254,9 +258,14 @@ export class Game {
     this.input.requestLock();
   }
   cycleRenderDistance() {
-    const opts = [4, 6, 7, 8, 10, 12];
+    const opts = [4, 6, 8, 10, 12, 16, 24];
     const i = opts.indexOf(this.terrain.renderDistance);
-    this.terrain.setRenderDistance(opts[(i + 1) % opts.length]);
+    this.setRenderDistance(opts[(i + 1) % opts.length]);
+  }
+  // explicit choice (pause menu / admin panel): remembered, and quality presets no longer override it
+  setRenderDistance(r) {
+    this.terrain.setRenderDistance(r);
+    try { localStorage.setItem('frontier-craft:rd', String(this.terrain.renderDistance)); } catch (e) { /* ignore */ }
   }
   respawn() {
     const s = this.spawnPoint;

@@ -29,7 +29,9 @@ export function applyQuality(game, name, { persist = true, renderDistance = true
   BUDGET.restorePerTick = q.restorePerTick;
   if (game.disasters && game.disasters.debris) game.disasters.debris.cap = q.maxDebris;
   if (game.particles) game.particles.cap = q.particleCap;
-  if (renderDistance && game.terrain) game.terrain.setRenderDistance(q.renderDistance);
+  // a view distance the player picked explicitly (pause menu / panel) wins over the preset's default
+  let explicit = null; try { explicit = parseInt(localStorage.getItem('frontier-craft:rd'), 10); } catch (e) { /* ignore */ }
+  if (renderDistance && game.terrain && !(explicit >= 2)) game.terrain.setRenderDistance(q.renderDistance);
   game.quality = name;
   if (persist) { try { localStorage.setItem(KEY, name); } catch (e) { /* ignore */ } }
   return q;

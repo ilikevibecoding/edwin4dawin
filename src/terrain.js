@@ -133,7 +133,7 @@ export class Terrain {
   }
 
   setRenderDistance(r) {
-    this.renderDistance = Math.max(2, Math.min(16, r));
+    this.renderDistance = Math.max(2, Math.min(24, r));
     this.buildOffsets();
     this.lastCx = null;
   }
