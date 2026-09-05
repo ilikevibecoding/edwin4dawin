@@ -633,9 +633,17 @@ interface Plant { x: number; y: number; z: number; s: number; rot: number; lean:
  *  and `height` bound the drawn plants and cards and are only used for culling. */
 /** `hi` (crown family only) is the subdivided mesh drawn instead of `near` when the camera is within
  *  HI_DISTANCE of the tile's plants; it shares the instance buffers of `near`. */
-interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; }
+interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; sub: SubCell[] | null; subBatch: InstanceBatch<SubCell> | null; maxS: number; }
+
+/** A SUB-metre cell of a crown tile: views into the tile's instance data regrouped by cell, so the near
+ *  batches draw only the cells of a near tile that are in view (the tile's own mesh draws every crown
+ *  of the tile, most of them behind the camera when it stands inside the tile). */
+interface SubCell { matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; box: THREE.Box3; count: number; }
 
 const TILE = 900;
+const SUB = 150;
+/** instances the near crown batches hold each (the tile's own mesh draws the tiles that do not fit) */
+const NEAR_CROWNS = 65536;
 /** casting tiles a coarse cascade (texel over NEAR_TEXEL) draws at most, nearest first */
 const COARSE_SHADOW_TILES = 8;
 const _casting = new Array<number>(MAX_CASCADES).fill(0);
@@ -647,7 +655,7 @@ const NEAR_BUDGET = 60000;
 /** card tiles closer than this (to their bounding sphere) are drawn into the water's mirror image */
 export const MIRROR_DISTANCE = 1500;
 
-const _n23 = new THREE.Vector3(), _n31 = new THREE.Vector3(), _n12 = new THREE.Vector3(), _apex = new THREE.Vector3();
+const _n23 = new THREE.Vector3(), _n31 = new THREE.Vector3(), _n12 = new THREE.Vector3(), _apex = new THREE.Vector3(), _p = new THREE.Vector3();
 /** Apex of a perspective frustum (the camera position): the common point of the right, bottom and top
  *  side planes (three.js orders them right, left, bottom, top, far, near). Falls back to `fallback`. */
 function frustumApex(f: THREE.Frustum, out: THREE.Vector3, fallbackX: number, fallbackZ: number): THREE.Vector3 {
@@ -687,6 +695,9 @@ export class Vegetation {
   readonly mirrorCards: THREE.InstancedMesh;
   private readonly cameraBatch: InstanceBatch<Tile>;
   private readonly mirrorBatch: InstanceBatch<Tile>;
+  /** the crowns of the near tiles' cells in view, one draw for the 66-triangle mesh and one for the subdivided one */
+  private readonly nearBatch: InstanceBatch<SubCell>;
+  private readonly hiBatch: InstanceBatch<SubCell>;
 
   constructor(map: WorldMap, occupied: (x: number, z: number) => boolean) {
     const rng = new Rng('vegetation');
@@ -710,6 +721,11 @@ export class Vegetation {
     this.mirrorCards.layers.set(LAYER_MIRROR);
     this.mirrorCards.name = 'cards-mirror';
     this.group.add(this.cameraCards, this.mirrorCards);
+    this.nearBatch = new InstanceBatch<SubCell>(NEAR_CROWNS, crownGeo, crownMat, CARD_EXTRAS, true);
+    this.nearBatch.mesh.name = 'crowns-near';
+    this.hiBatch = new InstanceBatch<SubCell>(NEAR_CROWNS, crownGeoHi, crownMat, CARD_EXTRAS, true);
+    this.hiBatch.mesh.name = 'crowns-hi';
+    this.group.add(this.nearBatch.mesh, this.hiBatch.mesh);
 
     const plants: Plant[] = [];
     const tints: Record<Archetype, THREE.Color[]> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [] };
@@ -950,7 +966,7 @@ export class Vegetation {
       far.visible = false;
       this.group.add(near, far);
       if (hi) { hi.boundingSphere = sphere.clone(); this.group.add(hi); }
-      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, extras: [farVar] });
+      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, extras: [farVar], sub: null, subBatch: null, maxS });
     };
     for (const t of byTile.values()) {
       if (t.crown.length) build(t.crown, crownGeo, crownMat, crownGeoHi);
@@ -961,6 +977,46 @@ export class Vegetation {
   update(time: number, wind: number): void {
     this.uTime.value = time;
     this.uWind.value = wind;
+  }
+
+  /** Regroup a crown tile's instances by SUB-metre cell into one compact copy (built the first time the
+   *  tile is drawn in 3D); each cell is a view into that copy with its own culling box. */
+  private static subCells(t: Tile): SubCell[] {
+    const n = t.n;
+    const nearVar = t.near.geometry.getAttribute('aVar').array as Float32Array;
+    const cells = new Map<number, number[]>();
+    const per = Math.ceil(TILE / SUB);
+    for (let i = 0; i < n; i++) {
+      const x = t.matrices[i * 16 + 12], z = t.matrices[i * 16 + 14];
+      // cell indices relative to the tile origin (plants sit inside their tile by construction)
+      const cx = Math.min(per - 1, Math.max(0, Math.floor((x - Math.floor(x / TILE) * TILE) / SUB)));
+      const cz = Math.min(per - 1, Math.max(0, Math.floor((z - Math.floor(z / TILE) * TILE) / SUB)));
+      const key = cz * per + cx;
+      let list = cells.get(key);
+      if (!list) { list = []; cells.set(key, list); }
+      list.push(i);
+    }
+    const matrices = new Float32Array(n * 16), colors = new Float32Array(n * 3), vars = new Float32Array(n * 4);
+    const out: SubCell[] = [];
+    const grow = t.maxS * 2.6, up = t.maxS * 3.7;
+    let w = 0;
+    for (const list of cells.values()) {
+      const start = w;
+      const box = new THREE.Box3();
+      for (const i of list) {
+        matrices.set(t.matrices.subarray(i * 16, i * 16 + 16), w * 16);
+        colors.set(t.colors.subarray(i * 3, i * 3 + 3), w * 3);
+        vars.set(nearVar.subarray(i * 4, i * 4 + 4), w * 4);
+        _p.set(t.matrices[i * 16 + 12], t.matrices[i * 16 + 13], t.matrices[i * 16 + 14]);
+        box.expandByPoint(_p);
+        w++;
+      }
+      // the same growth as the tile box: the largest crown sideways, trunk + crown + half a card up
+      box.min.x -= grow; box.max.x += grow; box.min.z -= grow; box.max.z += grow;
+      box.min.y -= 1; box.max.y += up;
+      out.push({ matrices: matrices.subarray(start * 16, w * 16), colors: colors.subarray(start * 3, w * 3), extras: [vars.subarray(start * 4, w * 4)], box, count: w - start });
+    }
+    return out;
   }
 
   /** Per-tile LOD: the nearest tiles (within NEAR_DISTANCE, up to an instance budget) draw the 3D
@@ -998,8 +1054,22 @@ export class Vegetation {
         if (casting[i] >= COARSE_SHADOW_TILES) bits &= ~(1 << i); else casting[i]++;
       }
       const hi = t.hi !== null && t.d < HI_DISTANCE;
-      t.near.visible = near && inView && !hi;
-      if (t.hi) t.hi.visible = near && inView && hi;
+      const near3d = near && inView;
+      // crown tiles drawn in 3D go through the near batches cell by cell (only the cells in view); the
+      // tile's own mesh is the fallback when the batch is full
+      let batched3d = false;
+      if (t.hi !== null && (near3d || t.subBatch !== null)) {
+        const batch = near3d ? (hi ? this.hiBatch : this.nearBatch) : null;
+        const sub = t.sub ??= Vegetation.subCells(t);
+        if (t.subBatch !== null && t.subBatch !== batch) { for (const s of sub) t.subBatch.set(s, 0); t.subBatch = null; }
+        if (batch !== null) {
+          batched3d = true;
+          for (const s of sub) if (!batch.set(s, cull.boxInView(s.box) ? s.count : 0)) batched3d = false;
+          if (!batched3d) { for (const s of sub) batch.set(s, 0); t.subBatch = null; } else t.subBatch = batch;
+        }
+      }
+      t.near.visible = near3d && !hi && !batched3d;
+      if (t.hi) t.hi.visible = near3d && hi && !batched3d;
       const drawCards = !near && inView && t.d < this.viewDistance;
       // far cards: full density to 3 km, half at 5.5 km, a quarter beyond (a crown is ~1 px there)
       const frac = near ? 1 : t.d < 3000 ? 1 : t.d < 5500 ? 0.5 : 0.25;
@@ -1020,5 +1090,7 @@ export class Vegetation {
     }
     this.cameraBatch.commit();
     this.mirrorBatch.commit();
+    this.nearBatch.commit();
+    this.hiBatch.commit();
   }
 }
