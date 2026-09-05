@@ -86,6 +86,99 @@ function plateField(kit, o) {
   return out;
 }
 
+/**
+ * Inter-hull service voids. The interior rooms (ship.js) do not fill the shell: between the corridor /
+ * room walls and the outer skin there are machinery voids 0.7–4.4 m deep, and the corridor and cabin
+ * portholes look straight into them — until now at the bare inside of the livery skin (two flat
+ * cream / brown bands). Dress each void as an unpressurised service bay: a primer liner over the skin,
+ * longitudinal stringers, C-section ring frames with roof and floor members, a pipe run under the roof
+ * with clamps, and — in the bays a porthole looks into — a numbered bay placard, a caged work lamp on
+ * the nearest frame, a valve station, a cable drop to an equipment cabinet, a gas-bottle rack and a
+ * couple of stencils. `s` is the side (-1 port, +1 starboard), `xS` the skin's inner face.
+ */
+function serviceBays(kit, rand, { s, xS, yF, yC, bays }) {
+  const d = -s; // inward
+  const X = (off) => xS + d * off;
+  const MM = (mat, a, b, opts) => kit.boxMM(mat, [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])], [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])], opts);
+  const PRIMER = new THREE.Color("#5a5f55");
+  const GRIME = new THREE.Color("#3a3b36");
+  const SLATE = PALETTE.slate;
+  const zA = Math.min(...bays.map((b) => b.zA));
+  const zB = Math.max(...bays.map((b) => b.zB));
+  MM("paintedMetal", [X(0), yF, zA], [X(0.04), yC, zB], { color: PRIMER, uv: "world", texel: 0.6 });
+  MM("paintedMetal", [X(0.04), yF, zA], [X(0.05), yF + 0.55, zB], { color: GRIME, uv: "world", texel: 0.6 }); // bilge staining
+  for (const y of [yF + 0.75, yF + 1.55, yF + 2.4]) MM("metal", [X(0.04), y - 0.05, zA], [X(0.16), y + 0.05, zB], { color: PALETTE.gunmetal, uv: "world", texel: 1 });
+  // pipe run under the roof: coolant (steel) and a fuel transfer line (orange), full length
+  const yP = yC - 0.32;
+  kit.cyl("metal", X(0.36), yP, (zA + zB) / 2, 0.07, zB - zA - 0.2, "z", { color: PALETTE.steel, segments: 10 });
+  kit.cyl("metal", X(0.56), yP - 0.12, (zA + zB) / 2, 0.045, zB - zA - 0.2, "z", { color: PALETTE.orange, segments: 8 });
+  for (const b of bays) {
+    for (const z of b.frames) {
+      // C-section ring frame on the skin with a flange, roof and floor members across the void
+      MM("metal", [X(0.04), yF, z - 0.07], [X(0.3), yC, z + 0.07], { color: SLATE, uv: "world", texel: 1 });
+      MM("metal", [X(0.3), yF, z - 0.17], [X(0.36), yC, z + 0.17], { color: SLATE, uv: "world", texel: 1 });
+      MM("metal", [X(0.04), yC - 0.2, z - 0.07], [X(b.depth), yC, z + 0.07], { color: SLATE, uv: "world", texel: 1 });
+      MM("metal", [X(0.04), yF, z - 0.07], [X(b.depth), yF + 0.14, z + 0.07], { color: SLATE, uv: "world", texel: 1 });
+      // pipe clamps on the frame
+      kit.box("metal", X(0.36), yP, z, 0.2, 0.2, 0.08, { color: PALETTE.darkMetal });
+      kit.box("metal", X(0.56), yP - 0.12, z, 0.14, 0.14, 0.08, { color: PALETTE.darkMetal });
+    }
+    if (b.porthole == null) continue;
+    const zp = b.porthole;
+    const face = s > 0 ? -Math.PI / 2 : Math.PI / 2; // decal planes turned to face inward
+    const decal = (idx, x, y, z, size) => {
+      const g = new THREE.PlaneGeometry(size, size);
+      g.rotateY(face);
+      kit.add("decal", g, { pos: [x, y, z], uv: "keep", uvRect: decalRect(idx) });
+    };
+    // numbered bay placard on the liner, level with the porthole
+    kit.box("painted", X(0.055), 2.3, zp, 0.02, 0.5, 0.66, { color: PALETTE.cream, uv: "keep" });
+    kit.box("metal", X(0.05), 2.3, zp, 0.01, 0.56, 0.72, { color: PALETTE.darkMetal });
+    decal(b.placard, X(0.07), 2.3, zp, 0.46);
+    decal(1, X(0.045), 1.95, zp - 0.62, 0.42); // CAUTION, above the cabinet's junction box
+    decal(15, X(0.045), 1.75, zp + 0.7, 0.34); // MIND THE GAP, above the bottle rack
+    // valve station on the coolant line: wheel on a stem, gauge
+    const zv = zp + 0.35;
+    kit.cyl("metal", X(0.36), yP - 0.22, zv, 0.035, 0.28, "y", { color: PALETTE.steel, segments: 8 });
+    kit.add("metalRough", new THREE.TorusGeometry(0.15, 0.02, 8, 24).rotateX(Math.PI / 2), { pos: [X(0.36), yP - 0.4, zv], color: PALETTE.orange, uv: "scale", uvScale: [4, 1] });
+    for (let k = 0; k < 3; k++) kit.box("metal", X(0.36), yP - 0.4, zv, 0.02, 0.02, 0.3, { color: PALETTE.orange, rot: [0, (k * Math.PI) / 3, 0] });
+    kit.cyl("metal", X(0.36), yP - 0.1, zv - 0.3, 0.06, 0.05, "x", { color: PALETTE.cream, segments: 12 });
+    // caged work lamp hung from the roof member of the frame aft of the porthole
+    const zf = b.frames.reduce((best, z) => (Math.abs(z - zp) < Math.abs(best - zp) ? z : best), b.frames[0]);
+    const zl = zf + 0.22 * Math.sign(zp - zf);
+    const xl = X(Math.min(1.1, b.depth * 0.45));
+    kit.cyl("metal", xl, yC - 0.33, zl, 0.02, 0.26, "y", { color: PALETTE.steel, segments: 6 });
+    kit.box("metal", xl, yC - 0.55, zl, 0.3, 0.2, 0.3, { color: PALETTE.gunmetal });
+    kit.box("emitWarm", xl, yC - 0.66, zl, 0.22, 0.03, 0.22);
+    for (const [dx, dz] of [[-0.13, -0.13], [0.13, -0.13], [-0.13, 0.13], [0.13, 0.13]]) kit.cyl("metal", xl + dx, yC - 0.78, zl + dz, 0.008, 0.26, "y", { color: PALETTE.steel, segments: 4 });
+    kit.box("metal", xl, yC - 0.91, zl, 0.3, 0.02, 0.3, { color: PALETTE.gunmetal });
+    // equipment cabinet forward of the porthole (between the frames that bracket it) with a status panel,
+    // hazard band and the cable drop
+    const zc = zp - 0.62;
+    kit.box("painted2", X(0.55), yF + 0.7, zc, 0.8, 1.4, 0.7, { color: PALETTE.gunmetal, uv: "world", texel: 0.5 });
+    kit.box("painted", X(0.96), yF + 1.05, zc, 0.01, 0.34, 0.5, { color: PALETTE.creamDark, uv: "keep" });
+    decal(6, X(0.97), yF + 1.05, zc, 0.3); // MAINT PNL
+    kit.box("hazard", X(0.96), yF + 0.25, zc, 0.01, 0.12, 0.66, { texel: 3 });
+    kit.box("leds", X(0.965), yF + 0.6, zc + 0.2, 0.01, 0.06, 0.2, { uv: "keep" });
+    kit.box("emitTeal", X(0.965), yF + 0.6, zc - 0.22, 0.01, 0.04, 0.04);
+    for (let k = 0; k < 3; k++) {
+      const zk = zc - 0.2 + k * 0.2;
+      kit.cyl("rubber", X(0.2), (yP + yF + 1.4) / 2, zk, 0.022, yP - (yF + 1.4), "y", { color: PALETTE.rubber, segments: 6 });
+    }
+    kit.box("metal", X(0.2), yF + 1.75, zc, 0.16, 0.24, 0.5, { color: PALETTE.darkMetal }); // junction box
+    kit.box("emitOrange", X(0.29), yF + 1.75, zc + 0.15, 0.01, 0.03, 0.03);
+    // gas-bottle rack aft of the porthole: two cylinders in a cradle with a valve cap each
+    const zg = zp + 0.65;
+    kit.box("metal", X(0.5), yF + 0.06, zg, 0.9, 0.12, 0.5, { color: PALETTE.darkMetal });
+    kit.box("metal", X(0.5), yF + 0.95, zg, 0.9, 0.06, 0.06, { color: PALETTE.steel });
+    for (const [dx, col] of [[0.3, PALETTE.orange], [0.72, PALETTE.creamDark]]) {
+      kit.cyl("painted", X(dx), yF + 0.7, zg, 0.16, 1.2, "y", { color: col, segments: 14 });
+      kit.cyl("metal", X(dx), yF + 1.36, zg, 0.06, 0.12, "y", { color: PALETTE.steel, segments: 8 });
+      kit.cyl("hazard", X(dx), yF + 1.1, zg, 0.165, 0.08, "y", { segments: 14, texel: 3 });
+    }
+  }
+}
+
 export function buildKestrelShell(kit) {
   ensureHangarMaterials(kit.materials); // hangar_tread / hangar_spillWarm, whichever cell builds first
   const rand = rng(4711);
@@ -282,14 +375,73 @@ export function buildKestrelShell(kit) {
     g.rotateY(s > 0 ? Math.PI / 2 : -Math.PI / 2);
     kit.add("decal", g, { pos: [s * (hw + 0.1), 2.55, zAft + 2.6], uv: "keep", uvRect: decalRect(7) }); // NO STEP
     kit.boxMM("metal", [Math.min(s * hw, s * (hw - 0.2)), 1.85, zAft], [Math.max(s * hw, s * (hw - 0.2)), 2.05, hz1 - 0.2], { color: PALETTE.darkMetal, uv: "world", texel: 0.5 }); // cheek bottom rail
-    kit.box("emitAmber", s * (hw - 0.08), 2.25, hz1 - 0.5, 0.02, 0.1, 0.4);
-    kit.box("hazard", s * (hw - 0.09), 2.6, zAft + 0.7, 0.02, 0.5, 0.5, { texel: 3 });
+    // inner faces of the cheeks (x ±3.05): these are the cream slabs in the top corners of the ramp view.
+    // Plate them like the outer faces (small plates, bolt rows), with a grime band along the rail, a
+    // pressure-door stencil, and the marker lamp / hazard tag proud of the face (they used to sit inside
+    // the slab)
+    const xi = s * (hw - 0.15);
+    const inX = (a, b) => [Math.min(xi - s * a, xi - s * b), Math.max(xi - s * a, xi - s * b)];
+    plateField(kit, { axis: "x", sign: -s, at: xi, u0: zAft + 0.15, u1: hz1 - 0.35, v0: 2.32, v1: yT - 0.5, uStep: 1.0, vStep: 0.34, steps: [0.04, 0.07], skip: 0, layer2: 0.25, bolts: 0.3, color: (i, j, r) => jitter(CREAM, r), rand });
+    kit.boxMM("paintedMetal", [inX(0, 0.03)[0], 2.05, zAft + 0.05], [inX(0, 0.03)[1], 2.3, hz1 - 0.25], { color: new THREE.Color("#6a655a"), uv: "world", texel: 0.5 }); // grime band over the rail
+    kit.boxMM("painted", [inX(0.02, 0.15)[0], 2.4, zAft + 1.03], [inX(0.02, 0.15)[1], 2.84, zAft + 1.47], { color: PALETTE.creamDark, uv: "keep" }); // stencil placard, proud of the plates
+    {
+      const g = new THREE.PlaneGeometry(0.4, 0.4);
+      g.rotateY(s > 0 ? -Math.PI / 2 : Math.PI / 2);
+      kit.add("decal", g, { pos: [xi - s * 0.16, 2.62, zAft + 1.25], uv: "keep", uvRect: decalRect(s < 0 ? 8 : 12) }); // H-2 PRESSURE DOOR / ATMO RECYC
+    }
+    kit.boxMM("metal", [inX(0.02, 0.18)[0], 2.34, hz1 - 0.85], [inX(0.02, 0.18)[1], 2.5, hz1 - 0.35], { color: PALETTE.darkMetal }); // marker lamp housing
+    kit.box("emitAmber", xi - s * 0.19, 2.42, hz1 - 0.6, 0.02, 0.1, 0.4);
+    kit.boxMM("hazard", [inX(0.02, 0.145)[0], 2.38, zAft + 0.3], [inX(0.02, 0.145)[1], 2.86, zAft + 0.7], { texel: 3 }); // hazard block
+  }
+  // hood soffit (the underside over the ramp head, in frame at the top of the ramp view): plated
+  // around the lamp housing so it is not a bare cream ceiling
+  const ySoffit = yT - 0.45;
+  for (const [ua, ub, va, vb] of [
+    [-hw + 0.3, -1.1, zAft + 0.25, hz1 - 0.6],
+    [1.1, hw - 0.3, zAft + 0.25, hz1 - 0.6],
+    [-1.1, 1.1, zAft + 0.25, zAft + 1.25],
+    [-1.1, 1.1, zAft + 1.95, hz1 - 0.6],
+  ]) {
+    plateField(kit, { axis: "y", sign: -1, at: ySoffit, u0: ua, u1: ub, v0: va, v1: vb, uStep: 1.1, vStep: 1.0, steps: [0.04, 0.07], skip: 0, layer2: 0, bolts: 0.4, color: (i, j, r) => jitter(CREAM, r), rand });
   }
   kit.box("metal", 0, yT - 0.52, zAft + 1.6, 1.9, 0.14, 0.5, { color: PALETTE.darkMetal });
   kit.box("hangar_spillWarm", 0, yT - 0.6, zAft + 1.6, 1.7, 0.02, 0.36, { uv: "keep" });
   for (let i = 0; i < 5; i++) kit.box("metal", -0.68 + i * 0.34, yT - 0.63, zAft + 1.6, 0.02, 0.08, 0.4, { color: PALETTE.darkMetal }); // louvres
   kit.collider([-hw, 1.85, zAft], [-hw + 0.2, yT, hz1], "hoodCheek");
   kit.collider([hw - 0.2, 1.85, zAft], [hw, yT, hz1], "hoodCheek");
+
+  // --- inter-hull service voids behind the corridor / cabin portholes (see serviceBays). Frames stop
+  //     0.1 m short of the corridor walls (x ±1.72, z -16..0) and the cabins' outer walls: the quarters
+  //     (x -5.2, z -9.2..-5.4) leave a 0.7 m slot on the port side, the galley (x 4.9, z -12.4..-8.8) and
+  //     the bathroom (x 3.7, z -5.2..-3.0) on the starboard side
+  {
+    const yF = yB + t; // belly slab top
+    const yC = yT - t; // roof underside
+    serviceBays(kit, rand, {
+      s: -1,
+      xS: x0 + t,
+      yF,
+      yC,
+      bays: [
+        { zA: -17.8, zB: -9.2, depth: 4.3, frames: [-15.8, -13.8, -11.4, -9.6], porthole: -12.6, placard: 0 },
+        { zA: -9.2, zB: -5.4, depth: 0.65, frames: [-8.3, -6.4] },
+        { zA: -5.4, zB: -0.6, depth: 4.3, frames: [-3.8, -1.4], porthole: -2.5, placard: 14 },
+      ],
+    });
+    serviceBays(kit, rand, {
+      s: 1,
+      xS: x1 - t,
+      yF,
+      yC,
+      bays: [
+        { zA: -17.8, zB: -12.4, depth: 4.0, frames: [-15.8, -14.0] },
+        { zA: -12.4, zB: -8.8, depth: 0.65, frames: [-10.6] },
+        { zA: -8.8, zB: -5.2, depth: 4.0, frames: [-8.4, -6.0], porthole: -7.2, placard: 2 },
+        { zA: -5.2, zB: -3.0, depth: 1.8, frames: [-4.1] },
+        { zA: -3.0, zB: -0.6, depth: 4.0, frames: [-1.6] },
+      ],
+    });
+  }
 
   // --- belly detail: keel strake, vent grilles, a retracted-turret dome
   kit.boxMM("paintedMetal", [-0.9, yB - 0.3, zBow + 2], [0.9, yB, zAft - 3], { color: PALETTE.gunmetal, uv: "world", texel: 0.5 });
