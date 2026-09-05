@@ -77,7 +77,6 @@ function masks() {
   return MASKS;
 }
 const M = (m, x, z) => (x < 0 || z < 0 || x >= W || z >= D) ? 0 : m[x * D + z];
-const tierOf = (y) => TIERS.findIndex((t) => y >= t.y0 && y <= t.y1 + 1);
 
 // ------------------------------------------------------------------------------------------------ helpers
 // 2-wide (or n-wide) doorway h high through a wall along x (z0 === z1) or along z, chrome jambs and a lit lintel
@@ -464,7 +463,6 @@ function spa(bp, rng, seed) {
   basin(bp, 44, 53, 73, 58, y); bp.fill(45, y - 1, 54, 72, y - 1, 57, BLUE);
   for (let x = 47; x <= 70; x += 3) bp.set(x, y, 53, SLAB);
   basin(bp, 38, 51, 42, 55, y); bp.fill(39, y - 1, 52, 41, y - 1, 54, BLUE); bp.set(40, y, 53, CHROME);
-  for (let x = 45; x <= 72; x += 3) lounger(bp, x, y, 51, 0 === 0 ? 0 : 1);
   for (let x = 45; x <= 72; x += 3) { bp.set(x, y, 51, SLAB); bp.set(x, y, 50, B.WHITE_WOOL); bp.spot(x, y, 51, 'seat'); }
   for (const [x, z] of [[40, 58], [76, 58], [45, 60], [72, 60]]) if (isIn(x, z)) { planter(bp, x, y, z, B.OAK_LEAVES); bp.set(x, y + 2, z, B.OAK_LEAVES); }
   bp.fill(75, y, 51, 79, y, 51, BLACK); bp.fill(75, y + 1, 51, 79, y + 1, 51, SLAB); bp.fill(78, y, 52, 79, y + 1, 52, B.SHELF); bp.work(77, y, 52, 'bartender');
