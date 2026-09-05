@@ -432,6 +432,29 @@ export function buildConsular(mats) {
       "hull",
       { uv: "keep", lod, color: CREAM },
     );
+    // cream shoulders continue the facets along the deck edge and down the taper to the neck
+    for (const s of [-1, 1])
+      add(
+        loftZ(
+          s > 0
+            ? [
+                [1, 0.665],
+                [0.69, 1],
+              ]
+            : [
+                [-0.69, 1],
+                [-1, 0.665],
+              ],
+          [
+            sec(38.3, 15.2, BELLY, DECK, 1.012, 0.05),
+            sec(63, 15.2, BELLY, DECK, 1.012, 0.05),
+            sec(77, 4.7, 2.15, 7.15, 1.012, 0.05),
+          ],
+          { closed: false, flat: true, texel: TEX },
+        ),
+        "hull",
+        { uv: "keep", lod, color: CREAM },
+      );
     // keel under the neck (deflector spheres hang off it), aft keel with its chamfered nose
     add(new THREE.BoxGeometry(6, 7.7, 16).translate(0, -1.35, Z(74)), "hull", {
       color: RED_DK,
@@ -776,8 +799,8 @@ export function buildConsular(mats) {
       const len = Math.hypot(dx, dz);
       const nx = (-s * dz) / len;
       const nz = dx / len;
-      const cx = (s * (WX0 + WX1)) / 2 + nx * 0.8;
-      const cz = Z((WZ0 + WZ1) / 2) + nz * 0.8;
+      const cx = (s * (WX0 + WX1)) / 2 + nx * 1.1;
+      const cz = Z((WZ0 + WZ1) / 2) + nz * 1.1;
       for (const up of [1, -1])
         add(
           quadAt(
@@ -785,7 +808,7 @@ export function buildConsular(mats) {
             [0, up, 0],
             [s * dx, 0, dz],
             len - 2,
-            1.4,
+            2.0,
             0.07,
           ),
           "paint",
