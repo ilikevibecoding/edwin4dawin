@@ -210,7 +210,7 @@ export class AnimalManager {
     const w = this.world, x = Math.floor(a.pos.x), z = Math.floor(a.pos.z);
     for (let d = 0; d <= 16; d++) {
       for (const y of d === 0 ? [57] : [57 + d, 57 - d]) {
-        if (y < 1 || y > 100) continue;
+        if (y < 1 || y > 250) continue;
         const h = standHeight(w, x, y, z);
         if (h !== null) { a.pos.y = h; return true; }
       }

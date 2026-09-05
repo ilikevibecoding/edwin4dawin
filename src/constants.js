@@ -1,6 +1,6 @@
 // World layout ---------------------------------------------------------------
 export const CHUNK_SIZE = 16;          // horizontal size of a chunk column (blocks)
-export const CHUNK_HEIGHT = 128;       // world height (blocks)
+export const CHUNK_HEIGHT = 256;       // world height (blocks): room for Coruscant's skyline and the Death Star
 export const SEA_LEVEL = 48;           // y of the topmost water block surface in oceans/rivers
 export const TOWN_GROUND = 56;         // y index of the topmost solid block in the flattened town area
 

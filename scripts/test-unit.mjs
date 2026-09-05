@@ -76,9 +76,9 @@ test('SaveManager keeps disaster-journaled cells out of the save until committed
   assert.equal(s.count, 3);
   const s2 = new SaveManager(1, storage);
   assert.equal(s2.count, 3, 'reloads from storage');
-  const chunk = { cx: 0, cz: 0, blocks: new Uint8Array(16 * 16 * 128) };
+  const chunk = { cx: 0, cz: 0, blocks: new Uint8Array(16 * 16 * 256) };
   assert.equal(s2.applyToChunk(chunk), 3);
-  assert.equal(chunk.blocks[((1 & 15) * 16 + (2 & 15)) * 128 + 60], 9);
+  assert.equal(chunk.blocks[((1 & 15) * 16 + (2 & 15)) * 256 + 60], 9);
   s2.clear(); assert.equal(store.size, 0);
 });
 

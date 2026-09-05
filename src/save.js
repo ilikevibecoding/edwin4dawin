@@ -2,7 +2,7 @@
 // DisasterManager and is NOT written to the save unless an administrator explicitly commits it, so a
 // disaster can never silently corrupt the main save. Saved edits are applied as a sparse overlay whenever
 // a chunk is generated.
-import { CHUNK_SIZE as CS } from './constants.js';
+import { CHUNK_SIZE as CS, CHUNK_HEIGHT } from './constants.js';
 
 const VERSION = 1;
 
@@ -65,7 +65,7 @@ export class SaveManager {
     const m = this.byChunk.get(chunk.cx * 100000 + chunk.cz);
     if (!m) return 0;
     let n = 0;
-    for (const [x, y, z, id] of m.values()) { chunk.blocks[((x & 15) * CS + (z & 15)) * 128 + y] = id; n++; }
+    for (const [x, y, z, id] of m.values()) { chunk.blocks[((x & 15) * CS + (z & 15)) * CHUNK_HEIGHT + y] = id; n++; }
     return n;
   }
 
