@@ -234,12 +234,14 @@ function garzaRoadX(z: number): number {
  *  outer shore is not a ruled edge. */
 export function garzaBeltSd(x: number, z: number, grow = 0): number {
   const u = garzaRoadX(z) - x;
-  const taper = smoothstep(1840, 1990, z) * (1 - smoothstep(2440, 2530, z));
-  const depth = (85 + 50 * (0.5 + 0.5 * fbm2(z / 150 + 2.0, 0.3, 2))) * taper;
+  // the belt ends 100 m short of the bridge abutment: the bench's hero-island mask must not climb the spit
+  // (largest-island bbox), and a cleared embankment is how a causeway approach reads anyway
+  const taper = smoothstep(1890, 2030, z) * (1 - smoothstep(2440, 2530, z));
+  const depth = 85 + 50 * (0.5 + 0.5 * fbm2(z / 150 + 2.0, 0.3, 2));
   const inner = 22;
-  // `grow` pushes the outer shore and the ends out (the canopy mask reaches the roughened waterline) but
-  // never the road-side edge
-  return Math.max(inner - u, u - (inner + depth) - grow, 1855 - grow - z, z - 2520 - grow);
+  // `grow` pushes the outer shore out (the canopy mask reaches the roughened waterline) but never the
+  // road-side edge; both taper with the belt so the tips stay narrow
+  return Math.max(inner - u, u - inner - (depth + grow) * taper, 1880 - z, z - 2540);
 }
 
 /** The mainland coast runs north-south along x ≈ -2500 with bays and headlands. */
@@ -417,20 +419,22 @@ export function createLandmasses(): Landmass[] {
       for (const b of bridges) if (sdPolyline(cx, cz, b.pts) < 230 + r) return false;
       if (sdPolyline(cx, cz, lane) < 420 + r) return false;
       for (const lm of L) {
-        if (Math.hypot(cx - lm.bx, cz - lm.bz) - lm.br > r + 150) continue;
-        if (lm.sd(cx, cz) < r + 150) return false;
+        if (Math.hypot(cx - lm.bx, cz - lm.bz) - lm.br > r + 120) continue;
+        if (lm.sd(cx, cz) < r + 120) return false;
       }
       return true;
     };
+    // a steep shelf: the rim of pale water around a key stays a few crown widths wide, so the keys sit in
+    // the bay's blue instead of on turquoise saucers
     const addKey = (id: string, cx: number, cz: number, rx: number, rz: number, rot: number, seed: number): boolean => {
       if (!clear(cx, cz, Math.max(rx, rz))) return false;
-      L.push({ id, bx: cx, bz: cz, br: Math.max(rx, rz) * 1.5 + 50, sd: (x, z) => sdIsland(x, z, cx, cz, rx, rz, rot, seed, 0.3), beach: 12, height: 1.9, seabed: 0.018, shelf: 1.8, isle: true, key: true });
+      L.push({ id, bx: cx, bz: cz, br: Math.max(rx, rz) * 1.5 + 50, sd: (x, z) => sdIsland(x, z, cx, cz, rx, rz, rot, seed, 0.3), beach: 12, height: 1.9, seabed: 0.035, shelf: 1.8, isle: true, key: true });
       return true;
     };
     addKey('key-west', -1250, 650, 150, 105, 0.35, 501);
     addKey('key-mid', -600, 1900, 125, 90, -0.4, 502);
     const regions: [number, number, number, number, number][] = [
-      [-2250, -350, 250, 2350, 30],
+      [-2250, -350, 250, 2350, 34],
       [550, 1500, 950, 1800, 7],
       [-2000, -700, -1400, 150, 9],
     ];
@@ -438,7 +442,7 @@ export function createLandmasses(): Landmass[] {
       let placed = 0;
       for (let tries = 0; tries < n * 12 && placed < n; tries++) {
         const cx = keyRng.range(x0, x1), cz = keyRng.range(z0, z1);
-        const rx = keyRng.range(28, 72) * (keyRng.chance(0.65) ? 0.75 : 1), rz = rx * keyRng.range(0.55, 1);
+        const rx = keyRng.range(28, 80) * (keyRng.chance(0.6) ? 0.72 : 1), rz = rx * keyRng.range(0.4, 1);
         if (addKey(`key-${x0}-${placed}`, cx, cz, rx, rz, keyRng.range(0, Math.PI), keyRng.int(100, 900))) placed++;
       }
     }
@@ -1082,7 +1086,7 @@ export class WorldMap implements WorldMapData {
           let forest = 0;
           if (lm.id === 'garza') {
             forest = 1 - smoothstep(-8, 4, garzaBeltSd(x, z, 34));
-            if (forest > 0.5) canopyCls = z > 2025 ? Canopy.HAMMOCK : Canopy.SCRUB;
+            if (forest > 0.5) canopyCls = z > 2050 ? Canopy.HAMMOCK : Canopy.SCRUB;
           } else if (lm.key) {
             forest = 1;
             canopyCls = Canopy.KEY;

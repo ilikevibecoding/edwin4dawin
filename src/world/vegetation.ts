@@ -990,9 +990,9 @@ export class Vegetation {
       let t = prng.next();
       if ((t -= key ? 0.05 : 0.07) < 0) palm(x, z, y, prng, 7, 11);
       else if ((t -= 0.08) < 0) add(6, x, z, y - 0.15, size(prng, 2.6, 4.4), prng);
-      else if ((t -= key ? 0.08 : cls === Canopy.SHORE ? 0.1 : 0.2) < 0) add(1, x, z, y - 0.3, key ? size(prng, 6, 8) : size(prng, 6.5, 9.5), prng);
+      else if ((t -= key ? 0.08 : cls === Canopy.SHORE ? 0.1 : 0.14) < 0) add(1, x, z, y - 0.3, key ? size(prng, 6, 8) : size(prng, 6, 8.5), prng);
       else if (key && (t -= 0.25) < 0) add(2, x, z, y - 0.2, size(prng, 3, 4.6), prng);
-      else add(0, x, z, y - 0.3, key ? size(prng, 3.6, 6.2) : size(prng, 4.2, 7.5), prng);
+      else add(0, x, z, y - 0.3, key ? size(prng, 3.6, 6.2) : size(prng, 3.8, 6.8), prng);
     };
 
     // cell walk over the map: candidates jittered inside each land cell, density from the veg channel and
