@@ -761,6 +761,16 @@ function build(bp, lot, ctx) {
   for (let x = 26; x <= 128; x += 10) { set(x, 1, 1, B.BARREL); if (x % 20 === 6) set(x, 2, 1, B.BARREL); }
   for (let x = 30; x <= 128; x += 24) lampPost(x, 1, 10, 3);
   for (const cx of SMELT) for (const dx of [-7, 7]) { set(cx + dx, 1, 6, B.PANEL_RED); set(cx + dx, 2, 6, B.GLOW_PANEL); }   // hazard beacons at the chimney feet
+  // container stacks between the chimney feet and two gantry cranes spanning the yard, so the yard reads as a working
+  // stack yard rather than an empty apron
+  for (let i = 0; i < SMELT.length - 1; i++) {
+    const a = SMELT[i] + 8, b = SMELT[i + 1] - 8;
+    for (let x = a; x + 1 <= b; x += 4) { const id = (x % 3 === 0) ? B.PANEL_RED : (x % 3 === 1) ? B.DURASTEEL : B.PANEL_STRIPE; fill(x, 1, 8, x + 1, 2, 9, id); if (x % 2 === 0) fill(x, 3, 8, x + 1, 3, 9, B.DURASTEEL_DARK); set(x, 1, 10, B.CRATE); }
+  }
+  for (const gx of [SMELT[1] - 3, SMELT[3] + 3]) {
+    col(gx, 1, 0, 12, B.IRON_BLOCK); col(gx, 1, 11, 12, B.IRON_BLOCK); fill(gx, 13, 0, gx, 13, 11, B.CHROME); fill(gx - 1, 13, 5, gx + 1, 13, 6, B.DURASTEEL_DARK);
+    col(gx, 9, 5, 12, B.IRON_BARS); set(gx, 8, 5, B.IRON_BLOCK); set(gx, 13, 3, B.GLOW_PANEL); set(gx, 13, 8, B.GLOW_PANEL);   // hook on its chain, deck lights
+  }
   bp.room('stack_yard', SX0 - 1, Y.under, 0, SX1 + 1, 11);
 
   // ------------------------------------------------------------------------------------------------ ore yard (west)
