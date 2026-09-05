@@ -186,6 +186,12 @@ export class Vehicle {
       const l = this.toGrid(pos.x, pos.y, pos.z, this.prev, { x: 0, y: 0, z: 0 });
       const n = this.toWorld(l.x, l.y, l.z, this.cur, { x: 0, y: 0, z: 0 });
       const dx = n.x - pos.x, dy = n.y - pos.y, dz = n.z - pos.z;
+      if (this.worldBlocks(entity, n)) {
+        // the world is in the way (a roof rider meeting a station canopy): the rider stays and the vehicle moves on
+        this.riders.delete(entity);
+        if (entity.vehicle === this) entity.vehicle = null;
+        return;
+      }
       pos.set(n.x, n.y, n.z);
       const dyaw = this.cur.yaw - this.prev.yaw;
       if (dyaw !== 0 && typeof entity.yaw === 'number') entity.yaw += dyaw;
@@ -205,6 +211,18 @@ export class Vehicle {
   }
 
   moving() { const p = this.prev, c = this.cur; return p.x !== c.x || p.y !== c.y || p.z !== c.z || p.yaw !== c.yaw; }
+
+  // Would the entity's box at `at` intersect a solid world block (not counting this vehicle)?
+  worldBlocks(entity, at) {
+    const world = this.game && this.game.world;
+    if (!world) return false;
+    const hw = (entity.width || 0.6) / 2 - 0.02, h = (entity.height || 1.8) - 0.02;
+    for (const [ox, oz] of [[-hw, -hw], [hw, -hw], [-hw, hw], [hw, hw]]) for (const oy of [0.02, h * 0.5, h]) {
+      const d = BLOCKS[world.getBlock(Math.floor(at.x + ox), Math.floor(at.y + oy), Math.floor(at.z + oz))];
+      if (d && d.solid) return true;
+    }
+    return false;
+  }
 
   // Does the entity's box intersect a solid cell of the vehicle at the current pose?
   overlapsEntity(box) {

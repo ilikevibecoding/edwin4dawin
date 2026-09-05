@@ -46,8 +46,8 @@ export const SCHEDULE = {
   dwell: 20,      // seconds docked at each end (doors open)
   accel: 8,       // seconds 0 -> vmax (and vmax -> 0)
   vmax: 30,       // blocks/s
-  doorLead: 1.5,  // doors close this long before departure
-  doorLag: 0.5,   // doors open this long after arrival
+  hopSpeed: 16,   // blocks/s: the train's own doors stay open below this speed, so you can hop on and off while it
+                  // rolls through the station and along the walkway (they seal for the cruise)
 };
 const DIST = ROUTE.coruscant.dockX0 - ROUTE.frontier.dockX0; // 2233
 const ACC = SCHEDULE.vmax / SCHEDULE.accel;
@@ -71,11 +71,13 @@ export function trainState(tick) {
   const t = ((tick * TICK_DT) % PERIOD + PERIOD) % PERIOD;
   const D = SCHEDULE.dwell, R = RIDE_TIME;
   const F = ROUTE.frontier, C = ROUTE.coruscant;
-  if (t < D) return { x0: F.dockX0, v: 0, phase: 'dwell', at: F, dest: C, dir: 1, doorsOpen: t >= SCHEDULE.doorLag && t < D - SCHEDULE.doorLead, phaseT: t, cycleT: t };
-  if (t < D + R) { const p = rideProfile(t - D); return { x0: F.dockX0 + p.s, v: p.v, phase: p.phase, at: null, dest: C, dir: 1, doorsOpen: false, phaseT: t - D, cycleT: t }; }
-  if (t < 2 * D + R) { const tt = t - D - R; return { x0: C.dockX0, v: 0, phase: 'dwell', at: C, dest: F, dir: -1, doorsOpen: tt >= SCHEDULE.doorLag && tt < D - SCHEDULE.doorLead, phaseT: tt, cycleT: t }; }
+  // the train's own doors are open whenever it is slower than hopSpeed: through the whole dwell and the first / last
+  // ~19 blocks of each ride (so people can hop on and off a rolling train); the platform screens follow (stations.js)
+  if (t < D) return { x0: F.dockX0, v: 0, phase: 'dwell', at: F, dest: C, dir: 1, doorsOpen: true, phaseT: t, cycleT: t };
+  if (t < D + R) { const p = rideProfile(t - D); return { x0: F.dockX0 + p.s, v: p.v, phase: p.phase, at: null, dest: C, dir: 1, doorsOpen: p.v <= SCHEDULE.hopSpeed, phaseT: t - D, cycleT: t }; }
+  if (t < 2 * D + R) { const tt = t - D - R; return { x0: C.dockX0, v: 0, phase: 'dwell', at: C, dest: F, dir: -1, doorsOpen: true, phaseT: tt, cycleT: t }; }
   const p = rideProfile(t - 2 * D - R);
-  return { x0: C.dockX0 - p.s, v: -p.v, phase: p.phase, at: null, dest: F, dir: -1, doorsOpen: false, phaseT: t - 2 * D - R, cycleT: t };
+  return { x0: C.dockX0 - p.s, v: -p.v, phase: p.phase, at: null, dest: F, dir: -1, doorsOpen: p.v <= SCHEDULE.hopSpeed, phaseT: t - 2 * D - R, cycleT: t };
 }
 
 // Ticks until the train next docks at `station` with open doors (for timetable boards / tests).

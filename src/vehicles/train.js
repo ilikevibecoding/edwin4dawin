@@ -156,7 +156,27 @@ export class SpaceTrain extends Vehicle {
     this.doorsClosed = closed;
     for (const [x, y, z] of this.doors) this.grid.set(x, y, z, closed ? (y === 2 ? DOOR_LOW : DOOR_HIGH) : 0);
     if (this.doorMesh) this.doorMesh.visible = closed;
+    if (closed) this.clearDoorways();
     this.emit('doors');
+  }
+
+  // A player standing in a doorway when the doors close is nudged to whichever side is nearer (inside the car or out
+  // onto the platform / walkway) instead of being sealed into the door panel.
+  clearDoorways() {
+    const game = this.game, p = game && game.player;
+    if (!p || !this.cur) return;
+    const hw = (p.width || 0.6) / 2;
+    // riders are aligned with the previous pose until their own tick carries them, so test the doors there
+    const pose = this.prev || this.cur;
+    for (const [gx, gy, gz] of this.doors) {
+      if (gy !== 2) continue;
+      const w = this.toWorld(gx, gy, gz, pose, { x: 0, y: 0, z: 0 });        // min corner of the door cell
+      if (p.pos.x + hw <= w.x || p.pos.x - hw >= w.x + 1 || p.pos.z + hw <= w.z || p.pos.z - hw >= w.z + 1 || p.pos.y + (p.height || 1.8) <= w.y || p.pos.y >= w.y + 2) continue;
+      const inside = p.pos.z < w.z + 0.5;                                    // the doors are on the +z (platform) face
+      p.pos.z = inside ? w.z - hw - 0.05 : w.z + 1 + hw + 0.05;
+      if (game.hud) game.hud.addMessage(inside ? 'Mind the doors.' : 'The doors closed behind you.');
+      return;
+    }
   }
 
   on(fn) { this.listeners.push(fn); }
@@ -177,7 +197,8 @@ export class SpaceTrain extends Vehicle {
     const game = this.game;
     if (game && game.player) {
       const p = game.player.pos, near = this.distanceTo(p.x, p.y, p.z) <= 80;
-      if (prevState.doorsOpen && !st.doorsOpen && st.phase === 'dwell') { this.emit('depart'); if (near && game.hud) game.hud.addMessage(`Space train departing for ${st.dest.name}. Mind the doors.`); }
+      if (prevState.phase === 'dwell' && st.phase !== 'dwell') { this.emit('depart'); if (near && game.hud) game.hud.addMessage(`Space train departing for ${st.dest.name}. Doors seal at ${SCHEDULE.hopSpeed} blocks per second.`); }
+      if (prevState.doorsOpen && !st.doorsOpen && st.phase !== 'dwell' && near && game.hud) game.hud.addMessage('Doors sealed for the cruise.');
       if (prevState.phase !== 'dwell' && st.phase === 'dwell') { this.emit('arrive'); if (near && game.hud) game.hud.addMessage(`Arriving at ${st.at.name}.`); }
       if (prevState.phase === 'accel' && st.phase === 'cruise' && near && game.hud) game.hud.addMessage(`Next stop: ${st.dest.name}. Cruising at ${SCHEDULE.vmax} blocks per second.`);
     }

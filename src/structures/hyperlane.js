@@ -8,7 +8,7 @@ import { B } from '../blocks.js';
 import { CHUNK_SIZE as CS, CHUNK_HEIGHT as CH } from '../constants.js';
 import { ROUTE } from '../vehicles/route.js';
 import { SpaceTrain } from '../vehicles/train.js';
-import { registerStations } from './stations.js';
+import { registerStations, stationLayout } from './stations.js';
 
 // World-coordinate block setter bounded to one chunk (returns false outside it).
 export function chunkSetter(chunk) {
@@ -23,12 +23,20 @@ export function chunkSetter(chunk) {
 
 const DECK = ROUTE.deckY, RAIL = ROUTE.railY;
 export const DECK_Z0 = -4, DECK_Z1 = 3; // deck spans z = -4..3 (8 wide); the train uses -3..2
+// walkway on the platform side (z 3..5, floor top level with the car sills at y 92) with a railing at z 6: hopping
+// off a slow train or off the roof lands here instead of 40 blocks down; the stations fill their own platforms
+export const WALK_Z0 = 3, WALK_Z1 = 5, WALK_Y = ROUTE.floorY - 1;
+let walkSkip = null;   // the stations' own footprints (platform, stair tower, concourse), resolved lazily (module cycle)
+const onWalkway = (x) => {
+  if (!walkSkip) walkSkip = [ROUTE.frontier, ROUTE.coruscant].map((S) => { const L = stationLayout(S); return [L.x0 - 1, L.x1 + 1]; });
+  return x >= ROUTE.x0 + 2 && x <= ROUTE.x1 - 2 && !walkSkip.some(([a, b]) => x >= a && x <= b);
+};
 
 function fillHyperlane(chunk, gen) {
   const set = chunkSetter(chunk);
   const bx = chunk.cx * CS, bz = chunk.cz * CS;
   const xa = Math.max(bx, ROUTE.x0), xb = Math.min(bx + CS - 1, ROUTE.x1);
-  if (xa > xb || bz + CS <= DECK_Z0 - 2 || bz > DECK_Z1 + 2) return;
+  if (xa > xb || bz + CS <= DECK_Z0 - 2 || bz > WALK_Z1 + 2) return;
   for (let x = xa; x <= xb; x++) {
     // deck + girder
     for (let z = DECK_Z0; z <= DECK_Z1; z++) set(x, DECK, z, z === DECK_Z0 || z === DECK_Z1 ? B.DURASTEEL : B.DURASTEEL_DARK);
@@ -54,13 +62,20 @@ function fillHyperlane(chunk, gen) {
         for (let y = ground; y >= ground - 2 && y > 0; y--) set(x, y, z, B.DURASTEEL_DARK); // footing
       }
     }
+    // walkway: two courses (support + floor) over the south lip, railing with glow studs, lamps every 32
+    if (onWalkway(x)) {
+      for (let z = WALK_Z0; z <= WALK_Z1; z++) { set(x, WALK_Y - 1, z, B.DURASTEEL_DARK); set(x, WALK_Y, z, z === WALK_Z1 ? B.DURASTEEL : (x % 8 === 0 ? B.PANEL_STRIPE : B.DECK_PLATE)); }
+      set(x, WALK_Y - 1, WALK_Z1 + 1, B.DURASTEEL_DARK); set(x, WALK_Y, WALK_Z1 + 1, B.DURASTEEL);
+      set(x, WALK_Y + 1, WALK_Z1 + 1, x % 8 === 4 ? B.GLOW_PANEL_BLUE : B.IRON_BARS);
+      if (x % 32 === 0) { for (let y = WALK_Y + 1; y <= WALK_Y + 3; y++) set(x, y, WALK_Z1 + 1, B.DURASTEEL_DARK); set(x, WALK_Y + 4, WALK_Z1 + 1, B.CITY_LAMP); }
+    }
     // buffer stops
     if (x <= ROUTE.x0 + 1 || x >= ROUTE.x1 - 1) for (let z = -3; z <= 2; z++) for (let y = RAIL; y <= RAIL + 2; y++) set(x, y, z, y === RAIL + 2 ? B.PANEL_RED : B.DURASTEEL);
   }
 }
 
 export async function register(gen, game) {
-  gen.addStructure({ name: 'hyperlane', x0: ROUTE.x0, z0: DECK_Z0 - 1, x1: ROUTE.x1 + 1, z1: DECK_Z1 + 2, fill: fillHyperlane });
+  gen.addStructure({ name: 'hyperlane', x0: ROUTE.x0, z0: DECK_Z0 - 1, x1: ROUTE.x1 + 1, z1: WALK_Z1 + 2, fill: fillHyperlane });
   const train = new SpaceTrain();
   registerStations(gen, game, train);
   game.spaceTrain = train;

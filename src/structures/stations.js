@@ -13,7 +13,7 @@ import { B } from '../blocks.js';
 import { CHUNK_SIZE as CS } from '../constants.js';
 import { addSignTiles } from '../textures.js';
 import { World } from '../world.js';
-import { ROUTE, doorWorldXs, PERIOD } from '../vehicles/route.js';
+import { ROUTE, doorWorldXs, PERIOD, TRAIN_LENGTH } from '../vehicles/route.js';
 import { chunkSetter, DECK_Z0 } from './hyperlane.js';
 import { SPACEPORT, STATION_Y, FRONTIER, FRONTIER_DECK_Y, onFrontierDeck } from '../coruscant/spaceport.js';
 
@@ -61,7 +61,7 @@ function towerGround(gen, L) {
 // goes into the end wall that stays clear (east unless the ground level is 4..6 mod 10).
 export function towerExitX(G, L) { const m = G % 10; return m >= 4 && m <= 6 ? L.tx0 : L.tx1; }
 
-function fillStation(chunk, gen, L, doorsOpen) {
+function fillStation(chunk, gen, L, edgeMode) {
   const set = chunkSetter(chunk);
   const bx = chunk.cx * CS, bz = chunk.cz * CS;
   const cx0 = bx, cx1 = bx + CS - 1, cz0 = bz, cz1 = bz + CS - 1;
@@ -109,8 +109,9 @@ function fillStation(chunk, gen, L, doorsOpen) {
     for (let x = xa; x <= xb; x++) {
       let door = false;
       for (const dx of L.doorXs) if (x === dx || x === dx + 1) door = true;
-      set(x, FLOOR + 1, PZ0, door && doorsOpen ? 0 : B.STEEL_GLASS);
-      set(x, FLOOR + 2, PZ0, door && doorsOpen ? 0 : B.STEEL_GLASS);
+      const open = edgeMode === 'open' || (edgeMode === 'doors' && door);
+      set(x, FLOOR + 1, PZ0, open ? 0 : B.STEEL_GLASS);
+      set(x, FLOOR + 2, PZ0, open ? 0 : B.STEEL_GLASS);
       set(x, FLOOR + 3, PZ0, door ? B.HOLO_SIGN : (x % 6 === 3 ? B.GLOW_PANEL : B.DURASTEEL_DARK));
     }
   }
@@ -300,22 +301,33 @@ function fillRoofStair(set, L, cx0, cx1, cz0, cz1) {
   if (gx + 1 >= cx0 && gx + 1 <= cx1) for (let k = 0; k < 4; k++) { const z = st.z1 + 1 - k; if (z >= cz0 && z <= cz1) set(gx + 1, W + 2, z, B.WALL_SIGN); }
 }
 
-// Toggles the platform edge doors (world blocks) whenever the train's doors change; chunks generated later read the
-// current state through `doorsOpenAt`.
+// The platform edge screen (world blocks at z = 3): 'doors' while the train is docked (the door columns are open),
+// 'open' along the whole platform while the train rolls through slowly with its doors open (hop on and off),
+// 'closed' glass otherwise. Re-applied on every train door / depart / arrive event; chunks generated later read the
+// current mode through `edgeMode`.
 class StationDoors {
   constructor(game, layouts, train) {
     this.game = game; this.layouts = layouts; this.train = train;
-    train.on((ev) => { if (ev === 'doors' || ev === 'arrive') this.apply(); });
+    train.on((ev) => { if (ev === 'doors' || ev === 'arrive' || ev === 'depart') this.apply(); });
   }
-  doorsOpenAt(S) { const st = this.train.state; return !!(st && st.at === S && st.doorsOpen); }
+  edgeMode(S) {
+    const st = this.train.state;
+    if (!st || !st.doorsOpen) return 'closed';
+    if (st.at === S) return 'doors';
+    const x0 = st.x0, x1 = st.x0 + TRAIN_LENGTH;
+    return (x1 >= S.platformX0 - 2 && x0 <= S.platformX1 + 2) ? 'open' : 'closed';
+  }
+  doorsOpenAt(S) { return this.edgeMode(S) !== 'closed'; }
   apply() {
     const world = this.game.world;
     if (!world) return;
     let changed = 0;
     for (const L of this.layouts) {
-      const open = this.doorsOpenAt(L.S);
-      for (const dx of L.doorXs) for (let k = 0; k < 2; k++) for (let y = FLOOR + 1; y <= FLOOR + 2; y++) {
-        if (world.setBlock(dx + k, y, PZ0, open ? 0 : B.STEEL_GLASS, true)) changed++;
+      const mode = this.edgeMode(L.S);
+      for (let x = L.px0; x <= L.tx1; x++) {
+        const door = L.doorXs.some((dx) => x === dx || x === dx + 1);
+        const open = mode === 'open' || (mode === 'doors' && door);
+        for (let y = FLOOR + 1; y <= FLOOR + 2; y++) if (world.setBlock(x, y, PZ0, open ? 0 : B.STEEL_GLASS, true)) changed++;
       }
     }
     if (changed && this.game.terrain && this.game.player) this.game.terrain.remeshDirty(16, this.game.player.pos.x, this.game.player.pos.z);
@@ -326,7 +338,7 @@ export function registerStations(gen, game, train) {
   const layouts = [stationLayout(ROUTE.frontier), stationLayout(ROUTE.coruscant)];
   const doors = new StationDoors(game, layouts, train);
   for (const L of layouts) {
-    gen.addStructure({ name: 'station:' + L.S.name, x0: L.x0, z0: L.z0, x1: L.x1, z1: L.z1, fill: (chunk, g) => fillStation(chunk, g, L, doors.doorsOpenAt(L.S)) });
+    gen.addStructure({ name: 'station:' + L.S.name, x0: L.x0, z0: L.z0, x1: L.x1, z1: L.z1, fill: (chunk, g) => fillStation(chunk, g, L, doors.edgeMode(L.S)) });
   }
   // sign text: tiles are baked into the atlas now (before it is finalised); the positions are registered with the
   // world once it exists. Reading direction: a board facing -x is read looking +x, so its text runs -z -> +z, etc.

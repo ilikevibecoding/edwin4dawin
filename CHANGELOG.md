@@ -28,9 +28,17 @@ the integration branch and in the committed `dist/` build; landmark builders sti
 - **Space train** (rubric 03; `vehicles/`, `structures/hyperlane.js`, `structures/stations.js`): an elevated
   hyperlane (y 90) between the frontier station at x 262 (with a roof-deck mini spaceport) and the Coruscant station
   at x 2548 (glass concourse joined to the spaceport bridge by half-slab steps); a 3-car voxel train whose timetable
-  is a pure function of the game tick (identical on every client), doors that open at platforms, an interior you can
-  walk around in while it moves; the vehicle manager carries players and NPCs standing on any car, and you can step
-  off and climb on while it moves.
+  is a pure function of the game tick (identical on every client), an interior you can walk around in while it moves;
+  the vehicle manager carries players standing on any car. Hop on and off: the train's doors stay open below 16
+  blocks/s (the whole dwell plus the first and last ~34 blocks of each ride) and the platform screens open along the
+  whole platform while it rolls through, so you can walk into a departing train from the platform or step out of an
+  arriving one; a walkway with railing runs the length of the hyperlane at car-sill height, so stepping off (or off
+  the roof) lands you there instead of 40 blocks down. Independent verification found and this round fixed: the
+  engine door that opened onto the drop, the hull passing through anyone on the track (a moving hull now shoves
+  entities ahead of it; 2 HP on first contact), doors sealing on a rider in the doorway (nudged inside), riders
+  carried into station canopies (the carry is refused and the train slides on), and a reload mid-ride stranding the
+  player (the timetable tick is saved with the player). CDP checks: hop-off onto the walkway, hop-on from the platform,
+  doorway sealing, reload while riding, track shove - all pass.
 - **Coruscant** (rubric 02 + 06; `coruscant/`): a 3-level street grid (boulevards, streets, skylanes) over the
   plateau with 421 tower lots, 8 plazas and 12 signature-landmark lots; tower families (residential, office, spire,
   slab, stepped, industrial) with a room library so every floor has lit, furnished, reachable rooms; blueprints are

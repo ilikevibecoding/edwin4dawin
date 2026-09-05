@@ -172,6 +172,7 @@ export class Game {
     this.player.yaw = this.startYaw; // default: face east toward town
     this.player.pitch = params.has('pitch') ? parseFloat(params.get('pitch')) * Math.PI / 180 : savedPlayer ? savedPlayer.pitch : -0.08;
     if (savedPlayer) {
+      if (savedPlayer.vehicleTick > 0 && this.vehicles && !(this.net && this.net.connected)) this.vehicles.tickCount = savedPlayer.vehicleTick | 0;
       this.player.health = Math.max(1, Math.min(20, savedPlayer.health | 0));
       this.player.food = Math.max(0, Math.min(20, savedPlayer.food | 0));
       this.player.saturation = Math.max(0, Math.min(this.player.food, +savedPlayer.saturation || 0));
@@ -195,6 +196,9 @@ export class Game {
     this.town = town;
     this.gen.addOverlay(town.overlay());
     await registerAllStructures(this.gen, this); // Coruscant, Death Star, hyperlane, stations (lazy per-chunk fills)
+    // vehicles take their timetable pose now (twice, so prev == cur): a rider restored from the save is standing on
+    // the train, not in mid-air where it used to be
+    if (this.vehicles && this.vehicles.tickCount > 0) for (const v of this.vehicles.list) if (v.tick) { v.tick(this.vehicles.tickCount); v.tick(this.vehicles.tickCount); }
     const sb = town.saloon.bounds;
     town.saloonPos = { x: (sb.x0 + sb.x1) / 2, z: (sb.z0 + sb.z1) / 2 };
     this.smokeSources = town.smoke;
@@ -714,7 +718,8 @@ export class Game {
   persistState() {
     if (!this.save || !this.player || this.player.dead) return;
     const p = this.player;
-    this.save.setPlayer({ x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, food: p.food, saturation: p.saturation });
+    // the vehicle tick goes with the player so a reload puts the space train where it was (a rider is not stranded)
+    this.save.setPlayer({ x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, food: p.food, saturation: p.saturation, vehicleTick: this.vehicles ? this.vehicles.tickCount : 0 });
     this.save.setInventory(this.inventory.serialize());
   }
   persistNow() {

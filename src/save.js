@@ -106,7 +106,8 @@ export class SaveManager {
     if (!this.enabled) return;
     const p = this.player;
     if (p && p.health === state.health && p.food === state.food && Math.abs(p.saturation - state.saturation) < 0.01 &&
-        Math.abs(p.x - state.x) < 0.01 && Math.abs(p.y - state.y) < 0.01 && Math.abs(p.z - state.z) < 0.01 && Math.abs(p.yaw - state.yaw) < 0.01 && Math.abs(p.pitch - state.pitch) < 0.01) return;
+        Math.abs(p.x - state.x) < 0.01 && Math.abs(p.y - state.y) < 0.01 && Math.abs(p.z - state.z) < 0.01 && Math.abs(p.yaw - state.yaw) < 0.01 && Math.abs(p.pitch - state.pitch) < 0.01 &&
+        Math.abs((p.vehicleTick || 0) - (state.vehicleTick || 0)) < 100) return;
     this.player = Object.assign({}, state);
     this.scheduleWrite();
   }
