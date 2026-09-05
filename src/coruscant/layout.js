@@ -49,11 +49,22 @@ const DISTRICT_RECTS = [
   { kind: 'residential', x0: 2880, z0: 120, x1: PLATEAU.x1, z1: PLATEAU.z1 },
   { kind: 'residential', x0: 3120, z0: 0, x1: PLATEAU.x1, z1: 120 },
 ];
-// Civic landmarks: each merges the 2x2 blocks around the boulevard intersection nearest `near`.
-const LANDMARKS = [
-  { family: 'senate', near: [PLATEAU.cx, PLATEAU.cz], height: 76 },
-  { family: 'temple', near: [3180, -240], height: 190 },
-  { family: 'opera', near: [2668, 240], height: 46 },
+// Signature landmarks (docs/rubrics/06_landmarks.md): each merges a span of sx x sz blocks (2x2 by default) whose
+// centre is nearest `near`; the boulevard lines inside the merged lot are cut. Order matters: earlier entries win
+// their blocks. Heights are blocks above the plateau; `family` is the id of the landmark module.
+export const LANDMARKS = [
+  { family: 'senate', name: 'Galactic Senate', near: [PLATEAU.cx, PLATEAU.cz], height: 90, span: [3, 3] },
+  { family: 'temple', name: 'Jedi Temple', near: [3180, -240], height: 190, span: [3, 3] },
+  { family: 'plaza_monument', name: 'Monument Plaza', near: [3200, 0], height: 30, span: [3, 3] },
+  { family: 'underworld', name: 'Uscru undercity strip', near: [2760, 330], height: 35, span: [3, 3] },
+  { family: 'works', name: 'The Works foundry', near: [2620, -420], height: 60, span: [3, 2] },
+  { family: 'market', name: 'CoCo Town market halls', near: [2780, -100], height: 25, span: [3, 2] },
+  { family: 'opera', name: 'Galaxies Opera House', near: [2668, 240], height: 60, span: [2, 2] },
+  { family: 'republica', name: '500 Republica', near: [3000, 300], height: 200, span: [2, 2] },
+  { family: 'chancellery', name: 'Senate Office Building', near: [2830, 70], height: 120, span: [2, 2] },
+  { family: 'medcenter', name: 'Grand Republic Medical Facility', near: [3350, 200], height: 110, span: [2, 2] },
+  { family: 'detention', name: 'Republic Judiciary Central Detention Center', near: [2800, -300], height: 70, span: [2, 2] },
+  { family: 'holonet', name: 'HoloNet broadcast tower', near: [3350, -300], height: 170, span: [2, 2] },
 ];
 
 export function districtAt(x, z) {
@@ -125,29 +136,34 @@ function buildLayout(seed) {
   }
   const blk = (i, j) => (i >= 0 && j >= 0 && i < nbx && j < nbz) ? blockAt[i * nbz + j] : null;
 
-  // landmarks: merge the 2x2 blocks around the nearest usable intersection; interior lines are cut there ------
+  // landmarks: merge a span of sx x sz blocks (anchored at block (li, lj), spreading to +x/+z) whose centre is
+  // nearest the wanted spot; the boulevard lines inside the merged lot are cut ---------------------------------
   const cutsX = xs.map(() => []), cutsZ = zs.map(() => []);   // per line: list of [from, to) intervals removed
   const landmarkGroups = [];
   const lots = [];
   for (const lm of LANDMARKS) {
+    const [sx, sz] = lm.span || [2, 2];
     let best = null, bestD = Infinity;
-    for (let li = 1; li < xs.length - 1; li++) for (let lj = 1; lj < zs.length - 1; lj++) {
-      const group = [blk(li, lj), blk(li + 1, lj), blk(li, lj + 1), blk(li + 1, lj + 1)];
+    for (let li = 1; li + sx - 1 < xs.length; li++) for (let lj = 1; lj + sz - 1 < zs.length; lj++) {
+      const group = [];
+      for (let i = 0; i < sx; i++) for (let j = 0; j < sz; j++) group.push(blk(li + i, lj + j));
       if (group.some((b) => !b || b.kind !== 'lots')) continue;
-      const d = Math.hypot(xs[li] - lm.near[0], zs[lj] - lm.near[1]);
+      // block (li, lj) spans xs[li - 1]..xs[li]; the merged lot spans xs[li - 1]..xs[li + sx - 1]
+      const cx = (xs[li - 1] + xs[li + sx - 1]) / 2, cz = (zs[lj - 1] + zs[lj + sz - 1]) / 2;
+      const d = Math.hypot(cx - lm.near[0], cz - lm.near[1]);
       if (d < bestD) { bestD = d; best = { li, lj, group }; }
     }
     if (!best) continue;
     const { li, lj, group } = best;
-    const x0 = group[0].x0, z0 = group[0].z0, x1 = group[3].x1, z1 = group[3].z1;
+    const x0 = group[0].x0, z0 = group[0].z0, x1 = group[group.length - 1].x1, z1 = group[group.length - 1].z1;
     for (const b of group) b.kind = 'landmark';
-    cutsX[li].push([zs[lj - 1] + DECK_HALF, zs[lj + 1] - DECK_HALF]);
-    cutsZ[lj].push([xs[li - 1] + DECK_HALF, xs[li + 1] - DECK_HALF]);
-    const lot = { id: lots.length, x0, z0, w: x1 - x0, d: z1 - z0, x1, z1, district: group[0].district, kind: 'landmark', family: lm.family,
-      height: lm.height, seed: mix(seed + 5, x0, z0), block: group[0].id, sides: { W: true, E: true, N: true, S: true }, front: 'S', midDoor: true, bridges: [] };
+    for (let i = 0; i < sx - 1; i++) cutsX[li + i].push([zs[lj - 1] + DECK_HALF, zs[lj + sz - 1] - DECK_HALF]);
+    for (let j = 0; j < sz - 1; j++) cutsZ[lj + j].push([xs[li - 1] + DECK_HALF, xs[li + sx - 1] - DECK_HALF]);
+    const lot = { id: lots.length, x0, z0, w: x1 - x0, d: z1 - z0, x1, z1, district: group[0].district, kind: 'landmark', family: lm.family, name: lm.name,
+      height: lm.height, span: [sx, sz], seed: mix(seed + 5, x0, z0), block: group[0].id, sides: { W: true, E: true, N: true, S: true }, front: 'S', midDoor: lm.height >= 40, bridges: [] };
     lot.door = doorFor(lot);
     lots.push(lot);
-    landmarkGroups.push({ family: lm.family, lot: lot.id, x: xs[li], z: zs[lj] });
+    landmarkGroups.push({ family: lm.family, name: lm.name, lot: lot.id, x: Math.round((x0 + x1) / 2), z: Math.round((z0 + z1) / 2), w: lot.w, d: lot.d, height: lm.height });
   }
 
   // plazas: the block nearest each district centre (all four sides on boulevards) ------------------------------
