@@ -563,8 +563,22 @@ async function boot() {
       }
       driver.state.pos.copy(p);
       driver.state.heading = Math.atan2(t.x, t.z);
-      driver.state.speed = 8.6;
-      for (let i = 0; i < preroll; i++) simulate(dtStep);
+      // The pre-roll rolls at one pinned speed. Left to auto-drive, where 170
+      // steps end is wherever its throttle logic takes the truck: the curvature
+      // cap that landed with collision (f6b370b) took the hero spot 6 m back
+      // along the spur, and the verge grass there stood across every truck
+      // view of round 5 — a change no builder had made to anything visible.
+      // Pinned, the end of the pre-roll is a fixed place on the road whatever
+      // the driver does at the wheel. 12 m/s puts the truck within half a metre
+      // of where rounds 1–4 shot it (the old run went 8.6 → 13 on an odometer
+      // that over-counted its corner cuts, so the mean speed is not the match).
+      // Steering still runs, so the truck sits where the driver holds it.
+      const PREROLL_SPEED = 12.0;
+      driver.state.speed = PREROLL_SPEED;
+      for (let i = 0; i < preroll; i++) {
+        simulate(dtStep);
+        driver.state.speed = PREROLL_SPEED;
+      }
       vehicle.root.updateMatrixWorld(true);
       const ok = rig.setView(name);
       skyRig.follow(vehicle.root.position);
