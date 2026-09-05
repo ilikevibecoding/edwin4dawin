@@ -223,15 +223,18 @@ function analyze(base, M) {
     else if (gs !== 0 && rel[i] * gs > gt) st[i] = GROOVE;
     else st[i] = FACE;
   }
-  if (M.blobs) { const bt = M.blobT || 12; for (let i = 0; i < n; i++) if (st[i] === FACE && Math.abs(rel[i]) > bt) st[i] = DOT; }
+  // (all material parameters are read up front so the optimiser sees every property access on the first call)
+  const blobs = !!M.blobs, bt = M.blobT || 12;
+  if (blobs) for (let i = 0; i < n; i++) if (st[i] === FACE && Math.abs(rel[i]) > bt) st[i] = DOT;
   if (M.dots) markDots(lum, st);
   const nearMedian = !!M.nearMedian, emitP = M.emit, isOre = M.cls === 'ore', hl = M.hl, alphaGroove = !!M.bevelAlpha;
+  const hasEmit = !!emitP, eLo = hasEmit ? emitP.lo : 0, eHi = hasEmit ? emitP.hi : 1, eSat = hasEmit ? (emitP.sat || 0) : 0;
   for (let i = 0; i < n; i++) {
     const r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2];
     // near-median weight: 1 for texels that look like the tile's main material
     const dist = Math.abs(r - mr) + Math.abs(g - mg) + Math.abs(b - mb);
     w[i] = nearMedian ? 1 - smoothstep(60, 130, dist) : 1;
-    emit[i] = emitP ? smoothstep(emitP.lo, emitP.hi, lum[i]) * (sat[i] >= (emitP.sat || 0) ? 1 : 0) : 0;
+    emit[i] = hasEmit ? smoothstep(eLo, eHi, lum[i]) * (sat[i] >= eSat ? 1 : 0) : 0;
     if (isOre && st[i] !== TRANSP && (Math.abs(rel[i]) > 30 || sat[i] > 0.3)) { nug[i] = 1; st[i] = FACE; }
     const s = st[i];
     hb[i] = s === GROOVE ? -1 : s === DOT ? 0.8 : s === TRANSP ? (alphaGroove ? -1 : 0) : clamp(rel[i] / 60, -1, 1) * hl;
@@ -495,11 +498,11 @@ D.wood = (C) => {
     // a few longer dark streaks along the grain
     if (dir !== 2) lines(dl, dh, rng, rng.int(2, 4), LP(dir === 1 ? Math.PI / 2 : 0, 0.03, 8, 22, -0.1, -0.3, false, 0, 0, 0, false));
   }
-  addNoise(dl, nz.white, 0.018, T, seed);
+  C.white = 0.018;
 };
 D.stone = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.medium, 0.07, T, 0); addNoise(dl, nz.fine2, 0.05, T, 0); addNoise(dl, nz.white, 0.028, T, seed);
+  addNoise(dl, nz.medium, 0.07, T, 0); addNoise(dl, nz.fine2, 0.05, T, 0); C.white = 0.028;
   addNoise(dh, nz.medium, 0.3, T, 0); addNoise(dh, nz.fine2, 0.12, T, 0);
   const chips = M.chips ?? (M.relief < 0.4 ? 3 : 9);
   ellipses(dl, dh, rng, chips, 1.3, 2.8, 0.9, 2.4, 0, 1.7);
@@ -508,7 +511,7 @@ D.stone = (C) => {
 };
 D.brick = (C) => {
   const { A, rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium2, 0.03, T, 0); addNoise(dl, nz.white, 0.03, T, seed);
+  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium2, 0.03, T, 0); C.white = 0.03;
   addNoise(dh, nz.fine, 0.15, T, 0);
   addSpecks(dl, dh, seed + 5, 0.965, -0.11, -0.4, 0, 0, 0);
   ellipses(dl, dh, rng, 3, 0.9, 1.6, 0.8, 1.3, 0, 1.0001);
@@ -516,33 +519,33 @@ D.brick = (C) => {
 };
 D.cobble = (C) => {
   const { A, rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium, 0.045, T, 0); addNoise(dl, nz.white, 0.03, T, seed);
+  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium, 0.045, T, 0); C.white = 0.03;
   addNoise(dh, nz.fine, 0.15, T, 0);
   ellipses(dl, dh, rng, 5, 1, 1.8, 1, 1.8, 0, 1.0001);
   addNoiseWhere(dl, nz.white, 0.05, T, seed + 6, A.st, GROOVE);
 };
 D.dirt = (C) => {
   const { rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium, 0.03, T, 0); addNoise(dl, nz.white, 0.05, T, seed);
+  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium, 0.03, T, 0); C.white = 0.05;
   addNoise(dh, nz.fine, 0.3, T, 0); addNoise(dh, nz.white, 0.12, T, seed + 1);
   ellipses(dl, dh, rng, rng.int(6, 10), 1, 1.7, 0.8, 1.5, 1, 1.0001);
 };
 D.sand = (C) => {
   const { T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.03, T, 0); addNoise(dl, nz.white, 0.03, T, seed);
+  addNoise(dl, nz.fine, 0.03, T, 0); C.white = 0.03;
   addNoise(dh, nz.medium, 0.25, T, 0);
   ripples(dl, dh, T, 0.025);
   addSpecks(dl, dh, seed + 7, 0.965, 0.1, 0.2, 0.03, -0.08, -0.1);
 };
 D.gravel = (C) => {
   const { rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.045, T, 0); addNoise(dl, nz.white, 0.04, T, seed);
+  addNoise(dl, nz.fine, 0.045, T, 0); C.white = 0.04;
   addNoise(dh, nz.medium, 0.2, T, 0);
   ellipses(dl, dh, rng, 6, 1, 1.6, 0.8, 1.4, 1, 0.8);
 };
 D.plaster = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.coarse2, 0.035, T, 0); addNoise(dl, nz.fine, 0.028, T, 0); addNoise(dl, nz.white, 0.02, T, seed);
+  addNoise(dl, nz.coarse2, 0.035, T, 0); addNoise(dl, nz.fine, 0.028, T, 0); C.white = 0.02;
   addNoise(dh, nz.coarse2, 0.3, T, 0); addNoise(dh, nz.fine, 0.1, T, 0);
   if (M.sparkle) addSpecks(dl, dh, seed + 9, 0.975, 0.1, 0.1, 0, 0, 0);
   else if (rng.chance(0.4)) lines(dl, dh, rng, 1, LP(-1, Math.PI, 10, 24, -0.09, -0.4, false, 0.5, 0, 0, false));
@@ -551,35 +554,35 @@ D.metal = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
   const vert = M.grain === 'v';
   addNoiseAniso(dl, nz.fine, 0.065, T, 19, 192, vert); addNoiseAniso(dh, nz.fine, 0.12, T, 19, 192, vert);
-  addNoiseAniso(dl, nz.white, 0.03, T, 0, 64, vert); addNoise(dl, nz.white, 0.012, T, seed);
+  addNoiseAniso(dl, nz.white, 0.03, T, 0, 64, vert); C.white = 0.012;
   addSpecks(dl, dh, seed + 13, 0.988, -0.09, -0.1, 0, 0, 0);
   lines(dl, dh, rng, rng.int(2, 4), LP(vert ? Math.PI / 2 : 0, 0.15, 6, 18, 0.1, -0.2, false, 0, 0, vert ? 1 : S, false));
 };
 D.chrome = (C) => {
   const { T, dl, dh, seed, nz } = C;
-  addNoiseAniso(dl, nz.coarse, 0.07, T, 32, 96, false); addNoiseAniso(dl, nz.fine, 0.02, T, 16, 128, false); addNoise(dl, nz.white, 0.008, T, seed);
+  addNoiseAniso(dl, nz.coarse, 0.07, T, 32, 96, false); addNoiseAniso(dl, nz.fine, 0.02, T, 16, 128, false); C.white = 0.008;
   addNoise(dh, nz.coarse, 0.1, T, 0);
 };
 D.panel = (C) => {
   const { rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.medium, 0.025, T, 0); addNoise(dl, nz.white, 0.012, T, seed);
+  addNoise(dl, nz.medium, 0.025, T, 0); C.white = 0.012;
   addNoise(dh, nz.medium, 0.1, T, 0);
   lines(dl, dh, rng, rng.int(1, 2), LP(0, 0.2, 5, 14, 0.04, 0, false, 0, 0, 0, false));
 };
 D.glass = (C) => {
   const { A, T, dl, seed, nz } = C;
-  addNoise(dl, nz.white, 0.015, T, seed);
+  C.white = 0.015;
   glassStreaks(dl, A.st, C.baseData, 0.1);
 };
 D.fabric = (C) => {
   const { T, dl, dh, seed, nz } = C;
   weave(dl, dh, T, 0.065);
-  addNoise(dl, nz.white, 0.025, T, seed); addNoise(dl, nz.fine, 0.02, T, 0); addNoise(dh, nz.fine, 0.05, T, 0);
+  C.white = 0.025; addNoise(dl, nz.fine, 0.02, T, 0); addNoise(dh, nz.fine, 0.05, T, 0);
 };
 D.foliage = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
   const style = M.style || 'leaves';
-  addNoise(dl, nz.fine, 0.035, T, 0); addNoise(dl, nz.white, 0.02, T, seed); addNoise(dh, nz.fine, 0.1, T, 0);
+  addNoise(dl, nz.fine, 0.035, T, 0); C.white = 0.02; addNoise(dh, nz.fine, 0.1, T, 0);
   if (style === 'leaves') ellipses(dl, dh, rng, 52, 2, 3.4, 1.2, 2.1, 2, 1.6);
   else if (style === 'flower') ellipses(dl, dh, rng, 24, 1.2, 1.9, 1, 1.4, 2, 1.0001);
   else if (style === 'blades') lines(dl, dh, rng, 110, LP(-Math.PI / 2, 0, 3, 6, 0.13, 0.3, true, 0, 0, 0, true));
@@ -593,12 +596,12 @@ D.liquid = (C) => {
 };
 D.glow = (C) => {
   const { T, dl, dh, seed, nz } = C;
-  cellGlow(dl, dh, 0.03); addNoise(dl, nz.white, 0.01, T, seed);
+  cellGlow(dl, dh, 0.03); C.white = 0.01;
 };
 D.ore = (C) => { D.stone(C); facets(C.dl, C.dh, C.A.nug); };
 D.organic = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.03, T, 0); addNoise(dl, nz.white, 0.02, T, seed); addNoise(dh, nz.fine, 0.1, T, 0);
+  addNoise(dl, nz.fine, 0.03, T, 0); C.white = 0.02; addNoise(dh, nz.fine, 0.1, T, 0);
   if (M.style === 'ribs') { addNoiseAniso(dl, nz.fine, 0.03, T, 128, 19, false); addNoise(dl, nz.medium, 0.03, T, 0); }
   else lines(dl, dh, rng, 70, LP(M.grain === 'r' ? -1 : Math.PI / 2, M.grain === 'r' ? 0 : 0.35, 4, 10, 0.1, 0.3, true, 0, 0, 0, false));
 };
@@ -659,13 +662,15 @@ function bakeShading(h, dl, amount) {
   }
 }
 
-// Per-base-texel material values -> (roughness, metalness, emissive) * 255
+// Per-base-texel material values -> (roughness, metalness, emissive) * 255 into out (Float64Array(3))
 function blockMaterial(M, A, bi, out) {
+  const metalSat = !!M.metalSat, isOre = M.cls === 'ore', nuggetMetal = +M.nuggetMetal;
+  const sat = A.sat, nug = A.nug, st = A.st, emit = A.emit;
   let rough = M.roughness, metal = M.metalness;
-  const emis = M.emissive * A.emit[bi];
-  if (M.metalSat) metal *= A.sat[bi] < 0.15 ? 1 : 0.15;
-  if (M.cls === 'ore') { metal = A.nug[bi] ? M.nuggetMetal : 0; if (A.nug[bi]) rough = 0.45; }
-  if (A.st[bi] === GROOVE) rough = Math.min(1, rough + 0.12);
+  const emis = M.emissive * emit[bi];
+  if (metalSat) metal *= sat[bi] < 0.15 ? 1 : 0.15;
+  if (isOre) { const n = nug[bi]; metal = n ? nuggetMetal : 0; if (n) rough = 0.45; }
+  if (st[bi] === GROOVE) rough = Math.min(1, rough + 0.12);
   out[0] = rough * 255; out[1] = metal * 255; out[2] = emis * 255;
 }
 
@@ -700,54 +705,53 @@ function roundCorners(M, A, dl, cr, cg, cb, hbUp, acut) {
 // Colour composition. The base is upsampled edge-aware (smooth inside similar regions, crisp across structure),
 // the class detail is added on top, then every 4x4 block is corrected back to its base texel's mean: first with
 // a smooth (interpolated) correction field so no block edges appear, then the tiny residual per block.
-function compose(M, A, d, dl, dh, hbUp, o, material, height, seed) {
-  const nz = NZ, gen = nz.fine, wn = nz.white, genOff = (seed + 31) & NM;
-  const { cr, cg, cb, er, eg, eb, fr, fg, fb, W } = SCR;
-  const mat = [0, 0, 0];
-  const scale = M.detailScale ?? 1;
+// `white` is the class's fine white-noise amplitude, added here (one pass less per tile).
+const MAT3 = new Float64Array(3);
+function compose(M, A, d, dl, dh, hbUp, o, material, height, seed, white) {
+  const nz = NZ, gen = nz.fine, wn = nz.white, genOff = (seed + 31) & NM, wOff = (seed + 977) & NM;
+  const { cr, cg, cb, er, eg, eb, fr, fg, fb, W, acut } = SCR;
+  const mat = MAT3, st = A.st, wArr = A.w;
+  const scale = M.detailScale === null ? 1 : +M.detailScale;
+  const inv = 1 / (K * K);
   upsample3(A.br, A.bg, A.bb, W, cr, cg, cb);
-  const acut = SCR.acut;
   acut.fill(0);
   roundCorners(M, A, dl, cr, cg, cb, hbUp, acut);
   for (let by = 0; by < B; by++) for (let bx = 0; bx < B; bx++) {
     const bi = by * B + bx;
     const r = d[bi * 4], g = d[bi * 4 + 1], b = d[bi * 4 + 2];
-    if (A.st[bi] === TRANSP) {
-      for (let fy = 0; fy < K; fy++) for (let fx = 0; fx < K; fx++) { const i = (by * K + fy) * S + bx * K + fx; cr[i] = r; cg[i] = g; cb[i] = b; height[i] = hbUp[i]; }
-      er[bi] = 0; eg[bi] = 0; eb[bi] = 0;
-      continue;
-    }
-    // headroom keeps detail from clamping on very bright / very dark texels
+    const transp = st[bi] === TRANSP;
+    // headroom keeps detail from clamping on very bright / very dark texels; transparent blocks get no detail
     const mn = Math.min(r, g, b), mx = Math.max(r, g, b);
-    const hf = clamp(Math.min(mn, 255 - mx) / 40, 0.3, 1) * scale;
-    const wgt = A.w[bi], hw = 0.5 + 0.5 * wgt;
+    const hf = transp ? 0 : clamp(Math.min(mn, 255 - mx) / 40, 0.3, 1) * scale;
+    const wgt = wArr[bi], hw = transp ? 0 : 0.5 + 0.5 * wgt, gw = (1 - wgt) * hf, dw = wgt * hf;
     let sr = 0, sg = 0, sb = 0;
     for (let fy = 0; fy < K; fy++) for (let fx = 0; fx < K; fx++) {
       const i = (by * K + fy) * S + bx * K + fx;
       // texels that do not look like the tile's main material get generic fine noise instead of the class detail
-      const dv = (dl[i] * wgt + (1 - wgt) * (0.03 * gen[i] + 0.015 * wn[(i + genOff) & NM])) * hf;
+      const dv = (dl[i] + white * wn[(i + wOff) & NM]) * dw + gw * (0.03 * gen[i] + 0.015 * wn[(i + genOff) & NM]);
       // mostly multiplicative (keeps hue), partly additive (dark tiles still show detail)
-      const vr = cr[i] + dv * (0.75 * cr[i] + 24), vg = cg[i] + dv * (0.75 * cg[i] + 24), vb = cb[i] + dv * (0.75 * cb[i] + 24);
+      const m = 1 + 0.75 * dv, add = 24 * dv;
+      const vr = transp ? r : cr[i] * m + add, vg = transp ? g : cg[i] * m + add, vb = transp ? b : cb[i] * m + add;
       cr[i] = vr; cg[i] = vg; cb[i] = vb;
       sr += vr; sg += vg; sb += vb;
       height[i] = hbUp[i] + dh[i] * hw;
     }
-    er[bi] = r - sr / (K * K); eg[bi] = g - sg / (K * K); eb[bi] = b - sb / (K * K);
+    er[bi] = transp ? 0 : r - sr * inv; eg[bi] = transp ? 0 : g - sg * inv; eb[bi] = transp ? 0 : b - sb * inv;
   }
   // smooth correction field (same edge-aware weights as the base) ...
   upsample3(er, eg, eb, W, fr, fg, fb);
   for (let by = 0; by < B; by++) for (let bx = 0; bx < B; bx++) {
     const bi = by * B + bx, a = d[bi * 4 + 3];
     blockMaterial(M, A, bi, mat);
-    const mr = mat[0], mg = mat[1], mb = A.st[bi] === TRANSP ? 0 : mat[2];
+    const mr = mat[0], mg = mat[1], mb = st[bi] === TRANSP ? 0 : mat[2];
     // ... plus the residual the smooth field did not deliver to this block (small, constant per block)
     let sr = 0, sg = 0, sb = 0;
     for (let fy = 0; fy < K; fy++) for (let fx = 0; fx < K; fx++) { const i = (by * K + fy) * S + bx * K + fx; sr += fr[i]; sg += fg[i]; sb += fb[i]; }
-    const rr = er[bi] - sr / (K * K), rg = eg[bi] - sg / (K * K), rb = eb[bi] - sb / (K * K);
+    const rr = er[bi] - sr * inv, rg = eg[bi] - sg * inv, rb = eb[bi] - sb * inv;
     for (let fy = 0; fy < K; fy++) for (let fx = 0; fx < K; fx++) {
-      const i = (by * K + fy) * S + bx * K + fx;
-      o[i * 4] = cr[i] + fr[i] + rr; o[i * 4 + 1] = cg[i] + fg[i] + rg; o[i * 4 + 2] = cb[i] + fb[i] + rb; o[i * 4 + 3] = acut[i] ? 0 : a;
-      material[i * 4] = mr; material[i * 4 + 1] = mg; material[i * 4 + 2] = mb; material[i * 4 + 3] = 255;
+      const i = (by * K + fy) * S + bx * K + fx, j = i * 4;
+      o[j] = cr[i] + fr[i] + rr; o[j + 1] = cg[i] + fg[i] + rg; o[j + 2] = cb[i] + fb[i] + rb; o[j + 3] = acut[i] ? 0 : a;
+      material[j] = mr; material[j + 1] = mg; material[j + 2] = mb; material[j + 3] = 255;
     }
   }
 }
@@ -786,14 +790,15 @@ export function refineTile(base, name, rng = null, opts = null) {
   blendWeights(SCR.sim, SCR.W);
   const dl = SCR.dl, dh = SCR.dh;
   dl.fill(0); dh.fill(0);
-  const C = { M, A, rng, nz, T: makeXf(rng), seed: rng.int(0, 1e9), dl, dh, baseData: d };
+  // C.white: amplitude of the per-tile fine white noise the class wants (applied in compose)
+  const C = { M, A, rng, nz, T: makeXf(rng), seed: rng.int(0, 1e9), dl, dh, baseData: d, white: 0 };
   (D[M.detail] || D[M.cls] || D.stone)(C);
   if (M.emit) neonGlow(A, dl, dh);
   structurePass(M, A, dl, dh);
   // base relief: bilinear for rounded classes (stones, lumps), edge-aware elsewhere (crisp steps at grooves only)
   upsample(A.hb, M.smooth ? PLAIN_W : SCR.W, SCR.hbUp);
   if (M.bake > 0) bakeShading(SCR.hbUp, dl, M.bake);
-  compose(M, A, d, dl, dh, SCR.hbUp, color.data, material, height, C.seed);
+  compose(M, A, d, dl, dh, SCR.hbUp, color.data, material, height, C.seed, +C.white);
   return { color, height, material };
 }
 
@@ -809,11 +814,10 @@ export function normalFromHeight(height, strength = 1) {
       const xm = (x - 1) & SM, xp = (x + 1) & SM;
       const gx = (h[ym + xp] + 2 * h[y0 + xp] + h[yp + xp] - h[ym + xm] - 2 * h[y0 + xm] - h[yp + xm]) / 8;
       const gy = (h[yp + xm] + 2 * h[yp + x] + h[yp + xp] - h[ym + xm] - 2 * h[ym + x] - h[ym + xp]) / 8;
-      let nx = -gx * k, ny = gy * k, nzc = 1;
-      const l = Math.sqrt(nx * nx + ny * ny + 1);
-      nx /= l; ny /= l; nzc /= l;
+      const nx = -gx * k, ny = gy * k;
+      const l = 127.5 / Math.sqrt(nx * nx + ny * ny + 1);
       const i = (y0 + x) * 4;
-      out[i] = 127.5 + 127.5 * nx; out[i + 1] = 127.5 + 127.5 * ny; out[i + 2] = 127.5 + 127.5 * nzc; out[i + 3] = 255;
+      out[i] = 127.5 + l * nx; out[i + 1] = 127.5 + l * ny; out[i + 2] = 127.5 + l; out[i + 3] = 255;
     }
   }
   return out;
