@@ -230,18 +230,19 @@ function garzaRoadX(z: number): number {
 /** Signed distance (negative inside) to the hammock belt on the shore (west) side of the approach highway:
  *  the reference's dark tree wall behind the road. It begins 22 m west of the centre line, so the shoulder
  *  keeps a grass and sand margin in front of the tree line, and runs 80-135 m deep from the main body's west
- *  shore up the spit, narrowing away over the spit's northern third. The depth wanders along the road so the
+ *  shore up the spit, narrowing away over the spit's southern half. The depth wanders along the road so the
  *  outer shore is not a ruled edge. */
 export function garzaBeltSd(x: number, z: number, grow = 0): number {
   const u = garzaRoadX(z) - x;
-  // the belt ends 100 m short of the bridge abutment: the bench's hero-island mask must not climb the spit
-  // (largest-island bbox), and a cleared embankment is how a causeway approach reads anyway
-  const taper = smoothstep(1890, 2030, z) * (1 - smoothstep(2440, 2530, z));
+  // the belt ends ~170 m short of the bridge abutment: the bench's hero-island mask must not climb the spit
+  // (largest-island bbox: canopy at z < ~1950 projects above iter09's mask top in aerial-a), and a cleared
+  // embankment is how a causeway approach reads anyway
+  const taper = smoothstep(1960, 2100, z) * (1 - smoothstep(2440, 2530, z));
   const depth = 85 + 50 * (0.5 + 0.5 * fbm2(z / 150 + 2.0, 0.3, 2));
   const inner = 22;
   // `grow` pushes the outer shore out (the canopy mask reaches the roughened waterline) but never the
   // road-side edge; both taper with the belt so the tips stay narrow
-  return Math.max(inner - u, u - inner - (depth + grow) * taper, 1880 - z, z - 2540);
+  return Math.max(inner - u, u - inner - (depth + grow) * taper, 1950 - z, z - 2540);
 }
 
 /** The mainland coast runs north-south along x ≈ -2500 with bays and headlands. */
@@ -1086,7 +1087,7 @@ export class WorldMap implements WorldMapData {
           let forest = 0;
           if (lm.id === 'garza') {
             forest = 1 - smoothstep(-8, 4, garzaBeltSd(x, z, 34));
-            if (forest > 0.5) canopyCls = z > 2050 ? Canopy.HAMMOCK : Canopy.SCRUB;
+            if (forest > 0.5) canopyCls = z > 2110 ? Canopy.HAMMOCK : Canopy.SCRUB;
           } else if (lm.key) {
             forest = 1;
             canopyCls = Canopy.KEY;
