@@ -3,14 +3,14 @@
 // Every block of a chunk column is classified with a signed-distance style test against the sphere (surface radius
 // varies per band: equatorial trench recessed 6, its raised lips, the superlaser crater with its raised rim),
 // the negative bowl sphere of the dish, and the nine emitter nodes. Blocks inside the hull are looked up in the
-// deck plans (plan.js). Priority boxes (hangar mouth, superlaser chamber, the overlook tower and its stair neck)
-// let the plans overrule the shell so those pieces can cut through or sit on top of the hull.
+// deck plans (plan.js). Priority boxes (hangar mouth, superlaser chamber, the overlook tower) let the plans overrule
+// the shell so those pieces can cut through or sit on top of the hull.
 import { B } from '../blocks.js';
 import { hash2, hash3 } from '../rng.js';
 import { CHUNK_SIZE as CS, CHUNK_HEIGHT as CH } from '../constants.js';
 import {
   CX, CY, CZ, R, SHELL, OUTER, TRENCH_HALF, TRENCH_DEPTH, LIP_RAISE, LIP_HALF, DISH, bowlDist2,
-  HANGAR, TOWER, DISH_WINDOW, DECK_Y0, DECK_H, N_DECKS, deckFloorY, N, X0, Z0,
+  HANGAR, TOWER, towerContains, DISH_WINDOW, DECK_Y0, DECK_H, N_DECKS, TOP_SPHERE_DECK, deckFloorY, N, X0, Z0,
 } from './layout.js';
 import { DeckPlans } from './plan.js';
 
@@ -64,9 +64,9 @@ function trenchLamp(px, pz) {
   return Math.floor(s) % 6 === 0;
 }
 
-const towerCarve = { x0: TOWER.module.mx - 4, x1: TOWER.module.mx + 4, z0: TOWER.module.mz - 4, z1: TOWER.module.mz + 4 };
 const SL = { x0: -8, x1: 8, z0: 64, z1: 71, y0: deckFloorY(19), y1: deckFloorY(19) + 6 };   // superlaser chamber (see FIXED.superlaser)
 const TOWER_TOP = deckFloorY(N_DECKS) - 1;
+const INTERIOR_TOP = deckFloorY(TOP_SPHERE_DECK + 1);   // first y above the top sphere deck's ceiling
 
 export function fillChunk(chunk, plans) {
   const wx0 = chunk.cx * CS, wz0 = chunk.cz * CS, blocks = chunk.blocks;
@@ -78,7 +78,7 @@ export function fillChunk(chunk, plans) {
     for (let lz = 0; lz < CS; lz++) {
       const z = wz0 + lz - CZ, pz = z + 0.5;
       const h2 = px * px + pz * pz;
-      const inTower = x >= TOWER.x0 && x <= TOWER.x1 && z >= TOWER.z0 && z <= TOWER.balconyZ1;
+      const inTower = towerContains(x, z);
       if (h2 > OUTER2 && !inTower) continue;
       const base = (lx * CS + lz) * CH;
       const inGrid = x >= X0 && z >= Z0 && x < X0 + N && z < Z0 + N;
@@ -87,9 +87,7 @@ export function fillChunk(chunk, plans) {
       let pa0 = 1e9, pa1 = -1, pb0 = 1e9, pb1 = -1, clipHangar = false;
       if (x >= HANGAR.wallX0 && x <= HANGAR.wallX1 && z >= HANGAR.backZ && z <= HANGAR.z1) { pa0 = HANGAR.y0; pa1 = HANGAR.y1 - 1; clipHangar = true; }
       else if (x >= SL.x0 && x <= SL.x1 && z >= SL.z0 && z <= SL.z1) { pa0 = SL.y0; pa1 = SL.y1; }
-      const inCarve = x >= towerCarve.x0 && x <= towerCarve.x1 && z >= towerCarve.z0 && z <= towerCarve.z1;
-      if (inCarve) { pb0 = deckFloorY(23); pb1 = TOWER_TOP; }
-      else if (inTower) { pb0 = TOWER.yBase; pb1 = TOWER_TOP; }
+      if (inTower) { pb0 = TOWER.yBase; pb1 = TOWER_TOP; }
       const dyMax = h2 < OUTER2 ? Math.sqrt(OUTER2 - h2) : 0;
       let y0 = Math.max(0, Math.floor(CY - dyMax)), y1 = Math.min(CH - 1, Math.ceil(CY + dyMax));
       if (pb1 >= 0) { y0 = Math.min(y0, pb0); y1 = Math.max(y1, pb1); }
@@ -156,13 +154,13 @@ export function fillChunk(chunk, plans) {
           continue;
         }
         // interior: deck plans between y 40 and the top sphere deck's ceiling, solid machinery fill above/below
-        if (y >= DECK_Y0 && y < TOWER.yBase && ci >= 0) {
+        if (y >= DECK_Y0 && y < INTERIOR_TOP && ci >= 0) {
           const d = ((y - DECK_Y0) / DECK_H) | 0, id = pb(d)[ci + (y - DECK_Y0 - d * DECK_H)];
           if (id) blocks[base + y] = id;
         } else blocks[base + y] = DURASTEEL_DARK;
       }
       // plinth under the tower: hull plating from the hull surface up to the tower base (not under the balcony)
-      if (inTower && !inCarve && z < TOWER.cantileverZ) {
+      if (inTower && z <= TOWER.z1) {
         const hullTop = Math.floor(CY - 0.5 + Math.sqrt(Math.max(0, R2 - h2)));
         for (let y = Math.max(0, hullTop + 1); y < TOWER.yBase; y++) if (!blocks[base + y]) blocks[base + y] = HULL_PLATE;
       }
@@ -179,6 +177,12 @@ export function register(gen, game) {
     fill: (chunk) => fillChunk(chunk, plans),
   };
   gen.addStructure(st);
-  if (game) game.deathstar = st;
+  if (game) {
+    game.deathstar = st;
+    // warm the deck plans (~12-25 ms each) in the background so no frame pays for one on first approach
+    let d = 0;
+    const step = () => { if (d < N_DECKS) { plans.get(d++); setTimeout(step, 40); } };
+    setTimeout(step, 1500);
+  }
   return st;
 }

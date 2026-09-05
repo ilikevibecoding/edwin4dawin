@@ -111,7 +111,7 @@ test('hangar deck reaches the throne room, the bridge, the reactor catwalks and 
   const { seen, n } = reach(walk, ...start);
   let walkable = 0; for (let d = 0; d < N_DECKS; d++) for (let i = 0; i < N * N; i++) walkable += walk[d][i];
   console.log(`   reached ${n} of ${walkable} walkable cells (${(100 * n / walkable).toFixed(1)}%)`);
-  const want = [['throne', TOWER.throneDeck, 16, 60], ['bridge', TOWER.bridgeDeck, 12, 60], ['reactor catwalk deck 12', 12, 10, 0], ['reactor catwalk deck 3', 3, -10, 0], ['reactor catwalk deck 21', 21, 0, 10]];
+  const want = [['throne', TOWER.throneDeck, 0, 55], ['throne balcony', TOWER.throneDeck, 0, TOWER.balconyZ1 - 1], ['bridge', TOWER.bridgeDeck, 0, 55], ['reactor catwalk deck 12', 12, 10, 0], ['reactor catwalk deck 3', 3, -10, 0], ['reactor catwalk deck 21', 21, 0, 10]];
   const bad = want.filter(([, d, x, z]) => !seen[d][cellIndex(x, z)]).map((w) => w[0]);
   assert(bad.length === 0, `unreachable: ${bad.join(', ')}`);
   const unreachedRooms = [];

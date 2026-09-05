@@ -17,8 +17,8 @@ export const OUTER = R + 5;           // largest surface radius (rim raise 4 + m
 export const N = 208, X0 = -104, Z0 = -104;
 
 // decks: floor at DECK_Y0 + d * DECK_H (1 floor + 5 clear + 1 ceiling). Decks 0..24 fill the sphere (y 40..214);
-// decks 25..27 exist only inside the overlook tower footprint on top of the hull.
-export const DECK_Y0 = 40, DECK_H = 7, N_DECKS = 28, TOP_SPHERE_DECK = 24;
+// decks 25..26 exist only inside the overlook tower footprint on top of the hull.
+export const DECK_Y0 = 40, DECK_H = 7, N_DECKS = 27, TOP_SPHERE_DECK = 24;
 export const deckFloorY = (d) => DECK_Y0 + d * DECK_H;
 export const deckOfY = (y) => Math.floor((y - DECK_Y0) / DECK_H);
 
@@ -90,17 +90,24 @@ export const HANGAR = {
   mouthZ: 90,                                    // from here on the box is the mouth cut through the hull
 };
 
-// --- overlook tower on the hull above the dish: bridge (deck 25), double-height throne room (decks 26-27) whose
-// glass balcony (z 70..73) overhangs the bridge's front wall. The filler grows a hull-plated plinth from the hull
-// surface up to yBase under everything but the balcony.
+// --- overlook superstructure on the hull above the dish, centred on the dish axis (x = 0): a wide command bridge
+// (deck 24, 35 x 25) half sunk into the hull with a glass front over the dish rim, and on its roof the narrower
+// double-height throne room (decks 25-26, 23 wide) whose glass-floored balcony (z 63..66) overhangs the bridge's
+// front wall. The filler grows a hull-plated plinth from the hull surface up to yBase under everything but the balcony.
+// The stair module in the back-right corner runs from the lower decks up to the throne room (it stands as a pillar in
+// the hangar bay on decks 11-13); on the sphere decks its door faces the 0-degree radial corridor, on the tower
+// decks it opens straight into the bridge / throne room.
 export const TOWER = {
-  x0: 4, x1: 21, z0: 46, z1: 69, balconyZ1: 73, cantileverZ: 70,
-  bridgeDeck: 25, throneDeck: 26, throneTop: 27,
-  // stair/lift module in the tower's back-left corner: main door toward the 0-degree radial (-z) on the sphere decks,
-  // a second door on its +x face (module frame fz = +4) into the bridge / throne room on the tower decks
-  module: { mx: 8, mz: 50, side: 3, d0: 2, d1: 26, doors2: [{ fx: 0, fz: 4, d0: 25, d1: 26 }] },
-  yBase: deckFloorY(25),
+  x0: -17, x1: 17, z0: 38, z1: 62,      // bridge footprint (walls inclusive)
+  tx0: -11, tx1: 11,                    // throne room footprint (same z range) + balcony beyond z1
+  balconyZ1: 66,
+  bridgeDeck: 24, throneDeck: 25, throneTop: 26,
+  module: { mx: 13, mz: 43, side: 2 },
+  yBase: deckFloorY(24),
 };
+export const towerContains = (x, z) =>
+  (x >= TOWER.x0 && x <= TOWER.x1 && z >= TOWER.z0 && z <= TOWER.z1) ||
+  (x >= TOWER.tx0 && x <= TOWER.tx1 && z > TOWER.z1 && z <= TOWER.balconyZ1);
 
 // Turbolift / stair modules: 9x9 footprint (3x3 shaft, PANEL_BLACK walls, spiral slab stairs, outer wall) with the
 // door on `side` (0 +x, 1 +z, 2 -x, 3 -z, in local axes). Deck range d0..d1 inclusive.
@@ -158,7 +165,7 @@ export const MODULES = (() => {
     const p = searchModule(phi, [20, 19, 21, 18, 22], [6.5, -6.5, 7.5, -7.5, 5.5, -5.5], REACTOR_WALL_R + 1, RINGS[0] - WALL_HALF - 0.6);
     if (p) add(p.mx, p.mz, { name: `lift30_${Math.round(phi * 180 / Math.PI)}` });
   }
-  add(TOWER.module.mx, TOWER.module.mz, { side: TOWER.module.side, d0: TOWER.module.d0, d1: TOWER.module.d1, doors2: TOWER.module.doors2, name: 'tower' });
+  add(TOWER.module.mx, TOWER.module.mz, { side: TOWER.module.side, d1: TOWER.throneDeck, name: 'tower' });
   // rings 60 / 85: modules inside the ring at phi 120 / 240, and beside the hangar for phi 0
   for (const ring of [RINGS[1], RINGS[2]]) {
     const inner = (ring === RINGS[1] ? RINGS[0] : RINGS[1]) + WALL_HALF + 0.6;
@@ -184,10 +191,10 @@ export const FIXED = {
   superlaser: { x0: -8, x1: 8, z0: 64, z1: 71, deck: 19 },   // focusing chamber behind the dish skin (glass toward the emitter)
 };
 
-// Boxes (local x/z, world y) where the deck plan is authoritative even inside the hull shell / outside the sphere.
+// Boxes (local x/z, world y) where the deck plan is authoritative even inside the hull shell / outside the sphere
+// (the tower box is the towerContains footprint; the superlaser chamber box lives in index.js next to the dish code).
 export const PRIORITY = {
   hangar: { x0: HANGAR.wallX0, x1: HANGAR.wallX1, z0: HANGAR.backZ, z1: HANGAR.z1, y0: HANGAR.y0, y1: HANGAR.y1 },
-  towerCarve: { x0: TOWER.module.mx - 4, x1: TOWER.module.mx + 4, z0: TOWER.module.mz - 4, z1: TOWER.module.mz + 4, y0: deckFloorY(23), y1: TOWER.yBase },
   tower: { x0: TOWER.x0, x1: TOWER.x1, z0: TOWER.z0, z1: TOWER.balconyZ1, y0: TOWER.yBase, y1: deckFloorY(N_DECKS) },
 };
 // glass patch in the dish skin in front of the superlaser chamber (world y)

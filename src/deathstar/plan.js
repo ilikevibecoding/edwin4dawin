@@ -63,6 +63,7 @@ export class DeckPlan {
 // ------------------------------------------------------------------------------------------------ geometry passes
 function interiorMask(P) {
   const d = P.d, rIn = deckInteriorRadius(d) - 0.75;
+  if (d > TOP_SPHERE_DECK) return;   // tower decks: everything is OUT except what tower() stamps
   const type = P.type, y0 = P.y0;
   const skin2 = (Math.sqrt(DISH.skin2) + 1) ** 2;
   for (let ix = 0; ix < N; ix++) {
@@ -170,33 +171,36 @@ function modules(P) {
     const [ox, oz] = rotate(m.side, 5, 0);
     const connected = carvePassage(P, m.mx + ox, m.mz + oz, 9);
     P.moduleDoors.set(mi, connected);
-    if (!connected && d <= TOP_SPHERE_DECK && d !== 23 && d !== 24) P.warnings.push(`module ${m.name} has no corridor connection on deck ${d}`);
+    if (!connected) P.warnings.push(`module ${m.name} has no corridor connection on deck ${d}`);
   });
 }
 
 // ------------------------------------------------------------------------------------------------ tower zone
+// Bridge deck: the 35 x 25 footprint (its back part lies inside the hull; the deck's 0-degree radial corridor ends
+// at the back wall, which gets a door there). Throne decks: the 23-wide footprint plus the balcony; the stair
+// module's housing continues through the double-height room as a solid pillar on the upper deck.
 function tower(P) {
   const d = P.d, tw = TOWER;
   if (d < tw.bridgeDeck) return;
-  const inBalcony = (x, z) => x >= tw.x0 && x <= tw.x1 && z > tw.z1 && z <= tw.balconyZ1;
   const inModule = (x, z) => Math.max(Math.abs(x - tw.module.mx), Math.abs(z - tw.module.mz)) <= 4;
-  for (let x = tw.x0; x <= tw.x1; x++) for (let z = tw.z0; z <= tw.balconyZ1; z++) {
-    const balc = inBalcony(x, z);
-    if (d === tw.bridgeDeck) {
-      if (balc) P.setT(x, z, T.VOID);
-      else if (x === tw.x0 || x === tw.x1 || z === tw.z0 || z === tw.z1) P.setT(x, z, T.RWALL);
+  if (d === tw.bridgeDeck) {
+    for (let x = tw.x0; x <= tw.x1; x++) for (let z = tw.z0; z <= tw.z1; z++) {
+      if (x === tw.x0 || x === tw.x1 || z === tw.z0 || z === tw.z1) P.setT(x, z, T.RWALL);
       else if (!inModule(x, z)) P.setT(x, z, T.ROOM);
-    } else { // throne room floor + upper level (footprint + balcony)
-      const edge = x === tw.x0 || x === tw.x1 || z === tw.z0 || z === tw.balconyZ1;
-      if (edge) P.setT(x, z, T.RWALL);
-      else if (d === tw.throneTop && inModule(x, z)) P.setT(x, z, T.SOLID);
-      else if (!inModule(x, z) || d === tw.throneTop) P.setT(x, z, T.ROOM);
+    }
+    for (let x = tw.tx0; x <= tw.tx1; x++) for (let z = tw.z1 + 1; z <= tw.balconyZ1; z++) P.setT(x, z, T.VOID);   // air under the balcony
+    for (let x = -1; x <= 1; x++) if (P.t(x, tw.z0 - 1) === T.CORR) P.setT(x, tw.z0, T.DOOR);
+  } else {
+    for (let x = tw.tx0; x <= tw.tx1; x++) for (let z = tw.z0; z <= tw.balconyZ1; z++) {
+      if (x === tw.tx0 || x === tw.tx1 || z === tw.z0 || z === tw.balconyZ1) P.setT(x, z, T.RWALL);
+      else if (inModule(x, z)) { if (d === tw.throneTop) P.setT(x, z, T.SOLID); }
+      else P.setT(x, z, T.ROOM);
     }
   }
   const mk = (name, x0, x1, z0, z1) => P.rooms.push({ id: P.rooms.length, name, d, x0, x1, z0, z1, fixed: true, ox: x0, oz: z0, ax: 1, az: 0, dx: 0, dz: 1, w: x1 - x0 + 1, dp: z1 - z0 + 1 });
   if (d === tw.bridgeDeck) mk('bridge', tw.x0 + 1, tw.x1 - 1, tw.z0 + 1, tw.z1 - 1);
-  if (d === tw.throneDeck) mk('throne', tw.x0 + 1, tw.x1 - 1, tw.z0 + 1, tw.balconyZ1 - 1);
-  if (d === tw.throneTop) mk('throneUpper', tw.x0 + 1, tw.x1 - 1, tw.z0 + 1, tw.balconyZ1 - 1);
+  if (d === tw.throneDeck) mk('throne', tw.tx0 + 1, tw.tx1 - 1, tw.z0 + 1, tw.balconyZ1 - 1);
+  if (d === tw.throneTop) mk('throneUpper', tw.tx0 + 1, tw.tx1 - 1, tw.z0 + 1, tw.balconyZ1 - 1);
   for (const room of P.rooms) for (let x = room.x0; x <= room.x1; x++) for (let z = room.z0; z <= room.z1; z++) if (P.t(x, z) === T.ROOM) P.roomOf[cellIndex(x, z)] = room.id;
 }
 
@@ -286,10 +290,11 @@ const COL = {
 };
 
 function renderTypes(P) {
-  const type = P.type, strip = P.strip, catwalk = P.d % CATWALK_EVERY === 0;
+  const type = P.type, strip = P.strip, catwalk = P.d % CATWALK_EVERY === 0, aboveHull = P.d > TOP_SPHERE_DECK;
   for (let ix = 0; ix < N; ix++) for (let iz = 0; iz < N; iz++) {
     const i = ix * N + iz, x = ix + X0, z = iz + Z0;
     let c;
+    if (aboveHull && type[i] === T.OUT) { P.blocks.fill(AIR, i * DECK_H, i * DECK_H + DECK_H); continue; }   // open space around the tower
     switch (type[i]) {
       case T.CORR: c = (strip[i] & 1) ? COL.corrLit : COL.corr; break;
       case T.PASS: c = COL.corrLit; break;

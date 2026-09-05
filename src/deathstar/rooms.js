@@ -307,48 +307,59 @@ function superlaser(P, room, rng, T) {
   P.set(x0 - 1, z0 + 2, 3, GLOW_PANEL_BLUE); P.set(x1 + 1, z0 + 2, 3, GLOW_PANEL_BLUE);
   P.set(x0 - 1, z0 + 2, 2, HOLO_SIGN); P.set(x1 + 1, z0 + 2, 2, HOLO_SIGN);
 }
+// Command bridge (deck 24): glass front over the dish rim and glass flanks near it, two console rows facing the
+// window with a centre aisle running from the corridor door at the back, tactical displays along the back wall,
+// the commander's chair beside the aisle.
 function bridge(P, room, rng, T) {
   const tw = TOWER;
   base(P, room, T, PANEL_STRIPE);
-  for (let x = tw.x0 + 1; x < tw.x1; x++) {
-    for (let dy = 1; dy <= 5; dy++) P.set(x, tw.z1, dy, STEEL_GLASS);
-    for (let z = tw.z1 - 4; z < tw.z1; z++) if (P.t(x, z) === T.ROOM) P.set(x, z, 0, x % 4 === 0 ? CHROME : STEEL_GLASS);
-    P.set(x, tw.z1, 0, CHROME);
-  }
+  for (let x = tw.x0 + 1; x < tw.x1; x++) { for (let dy = 1; dy <= 5; dy++) P.set(x, tw.z1, dy, STEEL_GLASS); P.set(x, tw.z1, 0, CHROME); }
   for (const x of [tw.x0, tw.x1]) for (let z = tw.z1 - 9; z < tw.z1; z++) for (let dy = 2; dy <= 4; dy++) P.set(x, z, dy, STEEL_GLASS);
-  for (const z of [58, 62]) for (let x = tw.x0 + 2; x < tw.x1 - 1; x++) { if (x === 12 || x === 13) continue; P.set(x, z, 1, CONSOLE); if (x % 4 === 0) P.set(x, z, 2, HOLO_SIGN); }
-  for (let x = 14; x <= tw.x1 - 1; x++) { P.set(x, tw.z0, 2, HOLO_SIGN); P.set(x, tw.z0, 3, x % 2 ? HOLO_SIGN : DURASTEEL_DARK); }
-  P.set(16, 55, 1, PANEL_BLACK); P.set(16, 56, 1, STONE_BRICK_SLAB);
+  for (const z of [tw.z1 - 4, tw.z1 - 9]) for (let x = tw.x0 + 2; x < tw.x1 - 1; x++) {
+    if (Math.abs(x) <= 1 || P.t(x, z) !== T.ROOM) continue;
+    P.set(x, z, 1, CONSOLE); if (x % 4 === 0) P.set(x, z, 2, HOLO_SIGN);
+  }
+  for (let x = tw.x0 + 1; x < tw.x1; x++) {
+    if (Math.abs(x) <= 1 || P.t(x, tw.z0 + 1) !== T.ROOM) continue;
+    P.set(x, tw.z0, 2, HOLO_SIGN); P.set(x, tw.z0, 3, x % 2 ? HOLO_SIGN : DURASTEEL_DARK);
+  }
+  P.set(3, tw.z1 - 13, 1, PANEL_BLACK); P.set(3, tw.z1 - 12, 1, STONE_BRICK_SLAB); P.set(4, tw.z1 - 13, 1, STONE_BRICK_SLAB);
   for (let x = tw.x0 + 1; x < tw.x1; x += 2) P.set(x, tw.z1 - 1, 6, GLOW_PANEL);
+  for (let x = -1; x <= 1; x++) for (let z = tw.z0 + 1; z < tw.z1; z += 2) P.set(x, z, 0, x === 0 ? PANEL_STRIPE : DECK_PLATE);   // aisle marking
 }
+// Throne room (deck 25, double height): black floor with a red carpet from the dais to the glass-floored balcony
+// over the dish, floor and wall lights (the ceiling is 12 above, too far to light the walking height), the throne on
+// a raised dais at the back facing the window, glass flanks and balcony.
 function throne(P, room, rng, T) {
-  const tw = TOWER;
+  const tw = TOWER, zd = tw.z0 + 4;
   base(P, room, T, PANEL_RED);
-  for (let x = tw.x0 + 1; x < tw.x1; x++) for (let z = tw.z0 + 1; z < tw.balconyZ1; z++) {
+  for (let x = tw.tx0 + 1; x < tw.tx1; x++) for (let z = tw.z0 + 1; z < tw.balconyZ1; z++) {
     if (P.t(x, z) !== T.ROOM) continue;
     P.set(x, z, 0, PANEL_BLACK); P.set(x, z, 6, AIR);
-    if (x >= 15 && x <= 17 && z >= 51) P.set(x, z, 0, PANEL_RED);
-    if ((x === 14 || x === 18) && z % 3 === 0 && z > 50 && z < 69) P.set(x, z, 0, GLOW_PANEL);
-    if (z >= tw.z1 + 1) P.set(x, z, 0, x % 4 === 0 ? CHROME : STEEL_GLASS);            // balcony: glass floor over the dish
-    if (x >= 13 && x <= 19 && z <= 49) P.set(x, z, 1, PANEL_BLACK);                     // dais
-    if (x >= 13 && x <= 19 && z === 50) P.set(x, z, 1, STONE_BRICK_SLAB);
+    if (Math.abs(x) <= 1 && z > zd) P.set(x, z, 0, PANEL_RED);
+    if ((Math.abs(x) === 3 || Math.abs(x) === 8) && z % 3 === 0 && z > zd && z <= tw.z1) P.set(x, z, 0, GLOW_PANEL);
+    if (z > tw.z1) P.set(x, z, 0, (x + 12) % 4 === 0 ? CHROME : STEEL_GLASS);            // balcony: glass floor over the dish
+    if (Math.abs(x) <= 3 && z < zd) P.set(x, z, 1, PANEL_BLACK);                         // dais
+    if (Math.abs(x) <= 3 && z === zd) P.set(x, z, 1, STONE_BRICK_SLAB);
   }
-  P.set(16, 47, 2, STONE_BRICK_SLAB); P.set(16, 46, 2, CHROME); P.set(16, 46, 3, CHROME); P.set(16, 46, 4, PANEL_RED); P.set(15, 46, 2, PANEL_RED); P.set(17, 46, 2, PANEL_RED);
-  for (let x = tw.x0 + 1; x < tw.x1; x++) for (let dy = 0; dy <= 5; dy++) P.set(x, tw.balconyZ1, dy, STEEL_GLASS);
-  for (const x of [tw.x0, tw.x1]) for (let z = 58; z < tw.balconyZ1; z++) { for (let dy = 1; dy <= 5; dy++) P.set(x, z, dy, STEEL_GLASS); P.set(x, z, 0, CHROME); }
-  for (const x of [tw.x0, tw.x1]) for (let z = tw.z0 + 2; z < 58; z += 4) P.set(x, z, 2, GLOW_PANEL);
-  for (let z = 47; z <= 53; z += 3) P.set(tw.x1, z, 3, PANEL_RED);
+  const zt = tw.z0 + 2;
+  P.set(0, zt + 1, 2, STONE_BRICK_SLAB); P.set(0, zt, 2, CHROME); P.set(0, zt, 3, CHROME); P.set(0, zt, 4, PANEL_RED); P.set(-1, zt, 2, PANEL_RED); P.set(1, zt, 2, PANEL_RED);
+  for (const x of [-4, 4]) { P.set(x, zt, 1, CHROME); P.set(x, zt, 2, CHROME); P.set(x, zt, 3, GLOW_PANEL); }   // dais lamps
+  for (let x = tw.tx0 + 1; x < tw.tx1; x++) for (let dy = 0; dy <= 6; dy++) P.set(x, tw.balconyZ1, dy, STEEL_GLASS);
+  for (const x of [tw.tx0, tw.tx1]) for (let z = tw.z1 - 7; z < tw.balconyZ1; z++) { for (let dy = 1; dy <= 6; dy++) P.set(x, z, dy, STEEL_GLASS); if (z > tw.z1) P.set(x, z, 0, CHROME); }
+  for (const x of [tw.tx0, tw.tx1]) for (let z = tw.z0 + 2; z < tw.z1 - 7; z += 4) if (P.t(x, z) === T.RWALL) { P.set(x, z, 2, GLOW_PANEL); P.set(x, z, 5, GLOW_PANEL); }
+  for (let x = -7; x <= 7; x += 2) P.set(x, tw.z0, 2, x % 3 === 0 ? PANEL_RED : PANEL_BLACK);
 }
 function throneUpper(P, room, rng, T) {
   const tw = TOWER;
-  for (let x = tw.x0; x <= tw.x1; x++) for (let z = tw.z0; z <= tw.balconyZ1; z++) {
+  for (let x = tw.tx0; x <= tw.tx1; x++) for (let z = tw.z0; z <= tw.balconyZ1; z++) {
     const t = P.t(x, z);
-    if (t === T.ROOM) { P.set(x, z, 0, AIR); P.set(x, z, 6, (x % 3 === 1 && z % 3 === 1) ? GLOW_PANEL : DURASTEEL_DARK); }
-    else if (t === T.RWALL) { P.set(x, z, 3, PANEL_RED); }
-    else if (t === T.SOLID) { P.fillCol(x, z, 0, 6, PANEL_BLACK); if ((x === tw.module.mx + 4 || z === tw.module.mz + 4) && (x + z) % 2 === 0) P.set(x, z, 2, GLOW_PANEL_BLUE); }
+    if (t === T.ROOM) { P.set(x, z, 0, AIR); P.set(x, z, 6, ((x + 12) % 3 === 1 && z % 3 === 1) ? GLOW_PANEL : DURASTEEL_DARK); }
+    else if (t === T.RWALL) { P.set(x, z, 3, PANEL_RED); if (z % 4 === 0 && z < tw.z1 - 7) P.set(x, z, 1, GLOW_PANEL); }
+    else if (t === T.SOLID) { P.fillCol(x, z, 0, 6, PANEL_BLACK); if (x === tw.module.mx - 4 && z % 2 === 0) P.set(x, z, 2, GLOW_PANEL_BLUE); }
   }
-  for (let x = tw.x0 + 1; x < tw.x1; x++) for (let dy = 0; dy <= 5; dy++) P.set(x, tw.balconyZ1, dy, STEEL_GLASS);
-  for (const x of [tw.x0, tw.x1]) for (let z = 58; z < tw.balconyZ1; z++) for (let dy = 0; dy <= 3; dy++) P.set(x, z, dy, STEEL_GLASS);
+  for (let x = tw.tx0 + 1; x < tw.tx1; x++) for (let dy = 0; dy <= 5; dy++) P.set(x, tw.balconyZ1, dy, STEEL_GLASS);
+  for (const x of [tw.tx0, tw.tx1]) for (let z = tw.z1 - 7; z < tw.balconyZ1; z++) for (let dy = 0; dy <= 3; dy++) P.set(x, z, dy, STEEL_GLASS);
 }
 
 const FIXED_FURNISH = {
