@@ -1,0 +1,7 @@
+[
+  { "name": "base", "patch": { "paintRoof": { "uBwStrength": 1.7, "uBwAmbient": 0.6, "uBwFlat": 0.9 } } },
+  { "name": "s35", "patch": { "paintRoof": { "uBwStrength": 3.5, "uBwAmbient": 0.6, "uBwFlat": 0.9 } } },
+  { "name": "s50a16", "patch": { "paintRoof": { "uBwStrength": 5.0, "uBwAmbient": 1.6, "uBwFlat": 0.9 } } },
+  { "name": "s50a16f5", "patch": { "paintRoof": { "uBwStrength": 5.0, "uBwAmbient": 1.6, "uBwFlat": 0.5 } } },
+  { "name": "s50a30f5", "patch": { "paintRoof": { "uBwStrength": 5.0, "uBwAmbient": 3.0, "uBwFlat": 0.5 } } }
+]

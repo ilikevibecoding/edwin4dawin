@@ -1,0 +1,7 @@
+[
+  { "name": "base", "patch": {} },
+  { "name": "nopaint", "patch": { "paint": { "uBwStrength": 0 }, "paintRoof": { "uBwStrength": 0 }, "paintAccent": { "uBwStrength": 0 } } },
+  { "name": "nochrome", "patch": { "chrome": { "uBwStrength": 0 }, "chrome": { "envMapIntensity": 0 } } },
+  { "name": "noalu", "patch": { "alu": { "uBwStrength": 0, "envMapIntensity": 0 } } },
+  { "name": "flatpaint", "patch": { "paint": { "clearcoatRoughness": 0.5, "roughness": 0.9 }, "paintRoof": { "clearcoatRoughness": 0.5, "roughness": 0.9 } } }
+]

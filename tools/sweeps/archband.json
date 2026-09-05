@@ -1,0 +1,8 @@
+[
+  { "name": "base", "patch": { "trim": { "uDirtLift": 2.6, "uBwAmbient": 1.7, "uBwStrength": 0.42 } } },
+  { "name": "lift14", "patch": { "trim": { "uDirtLift": 1.4, "uBwAmbient": 1.7, "uBwStrength": 0.42 } } },
+  { "name": "lift10", "patch": { "trim": { "uDirtLift": 1.0, "uBwAmbient": 1.7, "uBwStrength": 0.42 } } },
+  { "name": "noamb", "patch": { "trim": { "uDirtLift": 1.0, "uBwAmbient": 0.0, "uBwStrength": 0.42 } } },
+  { "name": "nobw", "patch": { "trim": { "uDirtLift": 1.0, "uBwAmbient": 0.0, "uBwStrength": 0.0 } } },
+  { "name": "nodirt", "patch": { "trim": { "uDirtFilm": 0, "uDirtCake": 0, "uDirtSpat": 0, "uDirtGrain": 0, "uDirtLift": 2.6, "uBwAmbient": 1.7, "uBwStrength": 0.42 } } }
+]

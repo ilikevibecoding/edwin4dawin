@@ -1,0 +1,83 @@
+{
+  "label": "fleet-r2",
+  "url": "http://127.0.0.1:5187/?quality=fast",
+  "info": {
+    "build": {
+      "rev": "bb7b293+",
+      "stamp": "2026-09-04 14:57Z"
+    },
+    "readyMs": 60477,
+    "boot": [
+      {
+        "label": "Compiling noise kernel",
+        "ms": 33
+      },
+      {
+        "label": "Building sky",
+        "ms": 138
+      },
+      {
+        "label": "Grading the road",
+        "ms": 8832
+      },
+      {
+        "label": "Planting the forest",
+        "ms": 4330
+      },
+      {
+        "label": "Assembling the truck",
+        "ms": 7815
+      },
+      {
+        "label": "Pitching camp",
+        "ms": 2975
+      },
+      {
+        "label": "Parking the fleet",
+        "ms": 1021
+      },
+      {
+        "label": "Finding the pride",
+        "ms": 15509
+      },
+      {
+        "label": "Posting the signs",
+        "ms": 70
+      },
+      {
+        "label": "Compiling shaders",
+        "ms": 18915
+      }
+    ],
+    "gpuTimer": true,
+    "quality": "fast",
+    "renderer": "WebKit WebGL"
+  },
+  "bootWall": 60491,
+  "drive": {
+    "quality": "fast",
+    "frames": 15,
+    "seconds": 0.42,
+    "fps": 35.9,
+    "fpsLow1": 6,
+    "frameMs": {
+      "p50": 18.4,
+      "p95": 167.8,
+      "p99": 167.8,
+      "max": 167.8
+    },
+    "longFrames": 1,
+    "gpuMs": null,
+    "calls": 453,
+    "triangles": 2569714,
+    "programs": 157,
+    "textures": 274,
+    "geometries": 320,
+    "visibleObjects": 254,
+    "visibleInstances": 26852,
+    "animals": 4,
+    "jsHeapMB": 342.8
+  },
+  "loops": null,
+  "errors": []
+}

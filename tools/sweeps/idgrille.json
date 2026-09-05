@@ -1,0 +1,6 @@
+[
+  { "name": "trimMAG", "patch": { "trim": { "color": 16711935 } } },
+  { "name": "gapMAG", "patch": { "trim": { "color": 16777215 }, "gap": { "color": 16711935 } } },
+  { "name": "steelDarkMAG", "patch": { "gap": { "color": 16777215 }, "steelDark": { "color": 16711935 } } },
+  { "name": "meshMAG", "patch": { "steelDark": { "color": 16777215 }, "mesh": { "color": 16711935 }, "trimGloss": { "color": 65535 } } }
+]
