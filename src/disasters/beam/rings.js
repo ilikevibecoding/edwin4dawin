@@ -1,11 +1,12 @@
-// A small set of glowing rings driven entirely by uniforms (radius, width, alpha, height per ring) in one
-// geometry: used for the ground shockwave, the cloud rings pushed outward by the descending beam, and the
-// preview target marker. Rings are flat discs (width > 0) or vertical curtains (width < 0 = height). Each
-// ring also has a "body" factor: 0 = pure additive glow, 1 = ordinary translucent dust (premultiplied alpha),
-// so a single material/draw call covers both looks.
+// A small set of glowing rings driven entirely by uniforms (radius, width, alpha, height and centre per ring) in
+// one geometry: used for the destruction wave (dust wall + shock glow + trailing dust), the cloud rings pushed
+// outward where the diagonal beam crosses the cloud layer, and the preview target marker. Rings are flat discs
+// (width > 0) or vertical curtains (width < 0 = height). Each ring also has a "body" factor: 0 = pure additive
+// glow, 1 = ordinary translucent dust (premultiplied alpha), so a single material/draw call covers both looks.
+// Curtains get a slow animated noise so a dust wall reads as billowing dust rather than a flat band.
 import * as THREE from 'three';
 
-export const RING_COUNT = 6;
+export const RING_COUNT = 8;
 const SEGMENTS = 72;
 
 const VERT = /* glsl */ `
@@ -14,28 +15,38 @@ attribute float aEdge;
 attribute float aAngle;
 uniform vec4 uRings[${RING_COUNT}];   // x radius, y width (negative = vertical band of that height), z alpha, w world y
 uniform vec4 uColors[${RING_COUNT}];  // rgb colour, w body (0 additive .. 1 opaque-ish)
-uniform vec3 uCenter;
+uniform vec3 uCenters[${RING_COUNT}]; // x, (unused), z centre per ring
+uniform float uTime;
 varying float vEdge;
 varying float vAlpha;
 varying float vVert;
+varying float vAngle;
 varying vec4 vColor;
 void main() {
   int i = int(aRing + 0.5);
   vec4 r = uRings[i];
+  vec3 c = uCenters[i];
   float rad = r.y < 0.0 ? r.x : r.x + aEdge * r.y;
   float y = r.y < 0.0 ? r.w - aEdge * r.y : r.w;
-  vec3 world = vec3(uCenter.x + cos(aAngle) * rad, y, uCenter.z + sin(aAngle) * rad);
-  vEdge = aEdge; vAlpha = r.z; vColor = uColors[i]; vVert = r.y < 0.0 ? 1.0 : 0.0;
+  // curtains billow: the top edge undulates around the ring
+  if (r.y < 0.0) { float w = 0.85 + 0.15 * sin(aAngle * 9.0 + uTime * 1.7) * sin(aAngle * 4.0 - uTime * 1.1); y = r.w - aEdge * r.y * w; rad += aEdge * (w - 1.0) * 3.0; }
+  vec3 world = vec3(c.x + cos(aAngle) * rad, y, c.z + sin(aAngle) * rad);
+  vEdge = aEdge; vAlpha = r.z; vColor = uColors[i]; vVert = r.y < 0.0 ? 1.0 : 0.0; vAngle = aAngle;
   gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
 }`;
 const FRAG = /* glsl */ `
+uniform float uTime;
 varying float vEdge;
 varying float vAlpha;
 varying float vVert;
+varying float vAngle;
 varying vec4 vColor;
 void main() {
   // flat rings fade at both edges; vertical bands are solid at the ground and fade towards the top
   float a = mix(sin(vEdge * 3.14159), 1.0 - smoothstep(0.25, 1.0, vEdge), vVert) * vAlpha;
+  // dusty texture on curtains
+  float tex = 0.8 + 0.2 * sin(vAngle * 31.0 + vEdge * 6.0 + uTime * 2.3) * sin(vAngle * 13.0 - uTime * 1.3);
+  a *= mix(1.0, tex, vVert * vColor.w);
   gl_FragColor = vec4(vColor.rgb * a, a * vColor.w);
 }`;
 
@@ -61,10 +72,11 @@ export class RingSet {
     this.geometry = g;
     this.rings = [];
     this.colors = [];
-    for (let i = 0; i < RING_COUNT; i++) { this.rings.push(new THREE.Vector4(0, 1, 0, 60)); this.colors.push(new THREE.Vector4(1, 1, 1, 0)); }
+    this.centers = [];
+    for (let i = 0; i < RING_COUNT; i++) { this.rings.push(new THREE.Vector4(0, 1, 0, 60)); this.colors.push(new THREE.Vector4(1, 1, 1, 0)); this.centers.push(new THREE.Vector3()); }
     // premultiplied-alpha blending: out = src + dst * (1 - a * body); body 0 is pure additive glow
     this.material = new THREE.ShaderMaterial({
-      uniforms: { uRings: { value: this.rings }, uColors: { value: this.colors }, uCenter: { value: new THREE.Vector3() } },
+      uniforms: { uRings: { value: this.rings }, uColors: { value: this.colors }, uCenters: { value: this.centers }, uTime: { value: 0 } },
       vertexShader: VERT, fragmentShader: FRAG, transparent: true, depthWrite: false, depthTest: true,
       blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
       side: THREE.DoubleSide,
@@ -76,14 +88,18 @@ export class RingSet {
     scene.add(this.mesh);
   }
 
-  setCenter(x, z) { this.material.uniforms.uCenter.value.set(x, 0, z); }
+  // Centre of every ring (the usual case: everything around the impact point)
+  setCenter(x, z) { for (let i = 0; i < RING_COUNT; i++) this.centers[i].set(x, 0, z); }
+  // Centre of one ring (e.g. cloud rings where the diagonal beam crosses the cloud layer)
+  setRingCenter(i, x, z) { this.centers[i].set(x, 0, z); }
   // body: 0 = additive light, 1 = translucent dust that also darkens/covers what is behind it
   setColor(i, r, g, b, body = 0) { this.colors[i].set(r, g, b, body); }
   set(i, radius, width, alpha, y) { this.rings[i].set(radius, width, alpha, y); }
   hide(i) { this.rings[i].z = 0; }
 
   // Call once per frame after setting rings: hides the mesh entirely when nothing is visible.
-  commit() {
+  commit(time = 0) {
+    this.material.uniforms.uTime.value = time;
     let any = false;
     for (let i = 0; i < RING_COUNT; i++) if (this.rings[i].z > 0.003) { any = true; break; }
     this.mesh.visible = any;
