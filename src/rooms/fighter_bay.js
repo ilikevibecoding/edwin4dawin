@@ -519,18 +519,19 @@ export function buildFighterBay(kit, ctx, room) {
     kit.light({ type: "spot", pos: [c.x, 12.2, lz], target: [c.x, 0, c.z], color: amber, intensity: lux(12.2, 2.6), distance: 40, angle: 0.72, penumbra: 0.5, priority: 3.12 - ci * 0.01 });
   });
   // ten pendants on a ≈ 16 m pitch over the lanes and aisles (a 7.2 m mounting height needs the pitch:
-  // laterally the falloff is twice as steep as it was from the slab)
+  // laterally the falloff is twice as steep as it was from the slab). k +25 % over the first pass: the
+  // spawn frame averaged 44/255 against the critic's 50–65 target
   for (const [x, z, k, dist, pr] of [
-    [14, 0, 4.0, 60, 0.58], // tow lane
-    [18, 31, 3.6, 50, 0.57], // spawn corner (6.7 m from the towed fighter's wing: no blown-out panel)
-    [14, -30, 3.2, 50, 0.53], // E forward
-    [2, -10, 3.2, 48, 0.52], // centre aisle, forward (6.7 m from the cradle wings)
-    [2, 10, 3.2, 48, 0.51], // centre aisle, aft
-    [0, -33, 3.0, 48, 0.47], // forward cross aisle
-    [0, 33, 3.0, 48, 0.46], // aft cross aisle
-    [-20, 0, 3.0, 48, 0.48], // W aisle, centre
-    [-19, -31, 3.0, 48, 0.5], // W aisle, forward
-    [-19, 29, 3.0, 48, 0.49], // W aisle, aft
+    [14, 0, 5.0, 60, 0.58], // tow lane
+    [18, 31, 4.5, 50, 0.57], // spawn corner (6.7 m from the towed fighter's wing: no blown-out panel)
+    [14, -30, 4.0, 50, 0.53], // E forward
+    [2, -10, 4.0, 48, 0.52], // centre aisle, forward (6.7 m from the cradle wings)
+    [2, 10, 4.0, 48, 0.51], // centre aisle, aft
+    [0, -33, 3.75, 48, 0.47], // forward cross aisle
+    [0, 33, 3.75, 48, 0.46], // aft cross aisle
+    [-20, 0, 3.75, 48, 0.48], // W aisle, centre
+    [-19, -31, 3.75, 48, 0.5], // W aisle, forward
+    [-19, 29, 3.75, 48, 0.49], // W aisle, aft
   ]) {
     fixture(x, PY, z, "emitWhiteDim");
     kit.light({ type: "point", pos: [x, PY + 0.15, z], color: white, intensity: lux(PY, k), distance: dist, priority: pr });

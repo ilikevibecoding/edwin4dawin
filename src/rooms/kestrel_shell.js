@@ -328,9 +328,13 @@ export function buildKestrelShell(kit) {
       const n = liner.attributes.normal;
       for (let i = 0; i < n.count; i++) n.setXYZ(i, -n.getX(i), -n.getY(i), -n.getZ(i)); // … and are lit as inside faces
       liner.rotateX(Math.PI / 2);
-      // matte (heat-stained) liner: the polished one mirrored the deck work light as a white blob
-      kit.add("paintedMetal", liner, { pos: [px, py, -0.53], color: PALETTE.gunmetal, uv: "scale", uvScale: [6, 2] });
-      kit.add("emitBlueDim", new THREE.CircleGeometry(0.72, 24), { pos: [px, py, -1.38], uv: "keep" }); // throat glow
+      // heat-blackened liner in the non-metal rubber set: the metal ones (polished, then "matte" paintedMetal)
+      // both threw the deck work light back as a white sheen off the inside of the cone
+      kit.add("rubber", liner, { pos: [px, py, -0.53], color: PALETTE.gunmetal, uv: "scale", uvScale: [6, 2] });
+      // dark bulkhead closing the throat: without it the barrel's flat cream end cap (z -1.3) shows through the
+      // liner's narrow end and the deck work light turns it into a white blob; the glow sits just in front
+      kit.add("rubber", new THREE.CircleGeometry(1.1, 24), { pos: [px, py, -1.27], color: PALETTE.gunmetal, uv: "keep" });
+      kit.add("hangar_blueDim", new THREE.CircleGeometry(0.42, 24), { pos: [px, py, -1.22], uv: "keep" }); // idle throat glow (40 % blueDim)
       kit.add("metal", new THREE.RingGeometry(1.14, 1.3, 24), { pos: [px, py, 0.36], color: PALETTE.darkMetal, uv: "keep" }); // lip
     }
     for (let k = 0; k < 8; k++) {
