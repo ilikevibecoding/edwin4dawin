@@ -65,8 +65,9 @@ export class Hand {
     this.camera = new THREE.PerspectiveCamera(70, 1, 0.05, 10);
     this.root = new THREE.Group();
     this.scene.add(this.root);
-    this.blockMat = makeEntityMaterial(atlas);
-    this.armMat = makeEntityMaterial(makeArmTexture());
+    // camera-space geometry: keep the legacy entity shading (no world-space sun / shadow maps)
+    this.blockMat = makeEntityMaterial(atlas, { shading: false });
+    this.armMat = makeEntityMaterial(makeArmTexture(), { shading: false });
     this.blockMesh = null;
     this.blockId = -1;
     const armGeo = new THREE.BoxGeometry(0.25, 0.8, 0.25);

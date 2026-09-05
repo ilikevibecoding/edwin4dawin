@@ -6,9 +6,13 @@
 //   uv        Float32 x2   atlas coordinates
 //   aLight    Uint8   x2   light sum k in 0..60; the vertex shader maps it through LIGHT_TABLE (k/60 as float32)
 //   aShade    Uint8   x1   index into SHADE_TABLE (every AO-curve x face-shade product, as float32)
+//   aFace     Uint8   x1   bits 0-2: face direction (DIRS index: 0 +x, 1 -x, 2 +y, 3 -y, 4 +z, 5 -z) from which the
+//                          shader derives the world normal and the tangent frame of the atlas uv (see faceUV);
+//                          bits 3-7: extra per-quad data (water top faces: depth of the water column below, 0..31)
 //   index     Uint16 (Uint32 only when a chunk exceeds 65536 vertices)
 // The tables hold exactly the float32 values the old Float32 attributes carried, so the varyings are bit-identical
-// without depending on the precision of shader arithmetic.
+// without depending on the precision of shader arithmetic. Cross (plant) quads are diagonal: they report the
+// nearest axis (first panel +-z, second panel +-x, sign by winding).
 import * as THREE from 'three';
 import { CHUNK_SIZE as CS, CHUNK_HEIGHT as CH, ATLAS_TILES } from './constants.js';
 import { B, BLOCKS, SHAPE } from './blocks.js';
@@ -123,7 +127,7 @@ const CROSS_QUADS = [
 class GeoBuffer {
   constructor(cap = 1 << 14) {
     this.cap = 0;
-    this.pos = null; this.uv = null; this.light = null; this.shade = null; this.idx = null;
+    this.pos = null; this.uv = null; this.light = null; this.shade = null; this.face = null; this.idx = null;
     this.grow(cap);
     this.vcount = 0;
     this.icount = 0;
@@ -134,6 +138,7 @@ class GeoBuffer {
     this.uv = re(this.uv, Float32Array, cap * 2);
     this.light = re(this.light, Uint8Array, cap * 2);
     this.shade = re(this.shade, Uint8Array, cap);
+    this.face = re(this.face, Uint8Array, cap);
     // 16-bit indices while every vertex index fits; upgraded to 32-bit only for huge chunks
     this.idx = re(this.idx, cap > MAX_U16_VERTS ? Uint32Array : Uint16Array, Math.ceil(cap * 1.5));
     this.cap = cap;
@@ -155,11 +160,12 @@ class GeoBuffer {
     }
     this.icount = i + 6;
   }
-  // Adds a quad. verts: 4 x [x,y,z,u,v,skyK,blkK,shadeIdx] (light in 0..60 units, shade as table index)
-  quad(verts, flip = false) {
+  // Adds a quad. verts: 4 x [x,y,z,u,v,skyK,blkK,shadeIdx] (light in 0..60 units, shade as table index);
+  // face: the aFace byte shared by the 4 vertices (direction index, plus extra bits for water depth)
+  quad(verts, flip = false, face = 2) {
     this.ensure(4);
     const v0 = this.vcount;
-    const pos = this.pos, uv = this.uv, light = this.light, shade = this.shade;
+    const pos = this.pos, uv = this.uv, light = this.light, shade = this.shade, fa = this.face;
     for (let k = 0; k < 4; k++) {
       const v = verts[k];
       const p = v0 + k;
@@ -167,6 +173,7 @@ class GeoBuffer {
       uv[p * 2] = v[3]; uv[p * 2 + 1] = v[4];
       light[p * 2] = v[5]; light[p * 2 + 1] = v[6];
       shade[p] = v[7];
+      fa[p] = face;
     }
     this.quadIndices(v0, flip);
     this.vcount = v0 + 4;
@@ -179,6 +186,7 @@ class GeoBuffer {
     g.setAttribute('uv', new THREE.BufferAttribute(this.uv.slice(0, n * 2), 2));
     g.setAttribute('aLight', new THREE.BufferAttribute(this.light.slice(0, n * 2), 2, false));
     g.setAttribute('aShade', new THREE.BufferAttribute(this.shade.slice(0, n), 1, false));
+    g.setAttribute('aFace', new THREE.BufferAttribute(this.face.slice(0, n), 1, false));
     let index;
     if (n <= MAX_U16_VERTS && this.idx.BYTES_PER_ELEMENT !== 2) { index = new Uint16Array(this.icount); index.set(this.idx.subarray(0, this.icount)); }
     else index = this.idx.slice(0, this.icount);
@@ -281,7 +289,7 @@ export class Mesher {
       const nid = pb[ni];
       if (opq[nid] || (cutout && nid === id)) continue;
       gb.ensure(4);
-      const pos = gb.pos, uv = gb.uv, light = gb.light, shade = gb.shade;
+      const pos = gb.pos, uv = gb.uv, light = gb.light, shade = gb.shade, face = gb.face;
       const v0 = gb.vcount;
       const tu = TILE_U[tex[d]], tv = TILE_V[tex[d]];
       // base cell = neighbour in face direction
@@ -300,6 +308,7 @@ export class Mesher {
         uv[p * 2] = tu + CU[k] * TS; uv[p * 2 + 1] = tv + CV[k] * TS;
         light[p * 2] = s; light[p * 2 + 1] = l;
         shade[p] = SQ[ao];
+        face[p] = d;
         const ac = AO_CURVE[ao];
         if (k === 0) a0 = ac; else if (k === 1) a1 = ac; else if (k === 2) a2 = ac; else a3 = ac;
       }
@@ -316,6 +325,9 @@ export class Mesher {
     const s = this.skyAt(x, y, z) * 4, l = this.lightAt(x, y, z) * 4;
     const sUp = this.skyAt(x, y + 1, z) * 4, lUp = this.lightAt(x, y + 1, z) * 4;
     const uv = this.uvTmp;
+    // depth of the water column under this cell (for the top face's depth tint), capped at 31 for the 5 spare bits
+    let depth = 1;
+    while (depth < 31 && y - depth >= 0 && this.blk(x, y - depth, z) === B.WATER) depth++;
     for (let d = 0; d < 6; d++) {
       const f = FACES[d];
       const nid = this.blk(x + f.n[0], y + f.n[1], z + f.n[2]);
@@ -335,7 +347,7 @@ export class Mesher {
         v[4] = tv + (uv[1] * UV_SCALE + INSET) * ts;
         v[5] = ss; v[6] = ll; v[7] = shadeQ;
       }
-      this.water.quad(verts, false);
+      this.water.quad(verts, false, d === 2 ? d | (depth << 3) : d);
     }
   }
 
@@ -354,9 +366,10 @@ export class Mesher {
         v[3] = k === 0 || k === 3 ? u0 : u1; v[4] = p[1] ? v0 : v1;
         v[5] = s; v[6] = l; v[7] = SHADE_CROSS_Q;
       }
-      this.solid.quad(verts, false);
+      // diagonal panels: normal (-1,0,1)/sqrt2 for the first, (-1,0,-1)/sqrt2 for the second -> nearest axes
+      this.solid.quad(verts, false, qi === 0 ? 4 : 1);
       // back side
-      this.solid.quad(this.tmpBack, false);
+      this.solid.quad(this.tmpBack, false, qi === 0 ? 5 : 0);
     }
   }
 
@@ -396,7 +409,7 @@ export class Mesher {
         v[4] = tv + (v2 * UV_SCALE + INSET) * ts;
         v[5] = skyK; v[6] = blkK; v[7] = shadeQ;
       }
-      buffer.quad(verts, false);
+      buffer.quad(verts, false, d);
     }
   }
 
@@ -476,7 +489,7 @@ export class Mesher {
           v[3] = tu + (u * UV_SCALE + INSET) * ts; v[4] = tv + (v2 * UV_SCALE + INSET) * ts;
           v[5] = s; v[6] = l; v[7] = SHADE_ONE_Q;
         }
-        this.solid.quad(verts, false);
+        this.solid.quad(verts, false, 2);
         break;
       }
       case SHAPE.PANE: {

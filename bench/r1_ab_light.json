@@ -1,0 +1,80 @@
+{
+  "note": "Interleaved Light-preset A/B on the SwiftShader VM: the pre-rubric tree (commit 07e4e89a, served on :5217) and this branch (:5207) benched alternately in one session so both see the same machine load. The Light preset renders through the untouched direct path; frame time differences are run-to-run noise (GPU-side numbers are not representative on a software rasterizer).",
+  "before": {
+    "frameAvgMs": 105.25,
+    "jsAvgMs": 3.75,
+    "drawCallsAvg": 146.22
+  },
+  "after": {
+    "frameAvgMs": 93.53,
+    "jsAvgMs": 3.35,
+    "drawCallsAvg": 146.19
+  },
+  "runs": [
+    {
+      "label": "r1_ab_before_light_1",
+      "url": "http://localhost:5217/?x=-8&z=2&time=0.45&quality=light",
+      "date": "2026-09-05T12:29:32.232Z",
+      "fpsAvg": 11.59,
+      "frameAvgMs": 89.57,
+      "frameP95Ms": 155.8,
+      "jsAvgMs": 3.26,
+      "jsP95Ms": 15.17,
+      "gpuAvgMs": 47.48,
+      "drawCallsAvg": 146,
+      "trianglesAvg": 188749.65,
+      "memMBAvg": 122.79,
+      "chunks": 241
+    },
+    {
+      "label": "r1_ab_after_light_1",
+      "url": "http://localhost:5207/?x=-8&z=2&time=0.45&quality=light",
+      "date": "2026-09-05T12:30:01.397Z",
+      "fpsAvg": 11.1,
+      "frameAvgMs": 100.67,
+      "frameP95Ms": 169.56,
+      "jsAvgMs": 3.63,
+      "jsP95Ms": 16.67,
+      "gpuAvgMs": 56.54,
+      "drawCallsAvg": 146.39,
+      "trianglesAvg": 188754.35,
+      "memMBAvg": 125.32,
+      "chunks": 241
+    },
+    {
+      "label": "r1_ab_before_light_2",
+      "url": "http://localhost:5217/?x=-8&z=2&time=0.45&quality=light",
+      "date": "2026-09-05T12:30:29.896Z",
+      "fpsAvg": 8.55,
+      "frameAvgMs": 120.94,
+      "frameP95Ms": 221.73,
+      "jsAvgMs": 4.24,
+      "jsP95Ms": 19.4,
+      "gpuAvgMs": 64.23,
+      "drawCallsAvg": 146.43,
+      "trianglesAvg": 188757.48,
+      "memMBAvg": 123.51,
+      "chunks": 241
+    },
+    {
+      "label": "r1_ab_after_light_2",
+      "url": "http://localhost:5207/?x=-8&z=2&time=0.45&quality=light",
+      "date": "2026-09-05T12:30:58.501Z",
+      "fpsAvg": 11.93,
+      "frameAvgMs": 86.39,
+      "frameP95Ms": 127.56,
+      "jsAvgMs": 3.07,
+      "jsP95Ms": 15.7,
+      "gpuAvgMs": 47.55,
+      "drawCallsAvg": 146,
+      "trianglesAvg": 188749.65,
+      "memMBAvg": 126.04,
+      "chunks": 241
+    }
+  ],
+  "ratioAfterOverBefore": {
+    "frame": 0.889,
+    "js": 0.893,
+    "drawCalls": 1
+  }
+}
