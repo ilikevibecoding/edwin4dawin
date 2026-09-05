@@ -32,6 +32,7 @@ Requires a WebGL-capable browser. Click the game once to grab the mouse.
 | Jump / swim up | `Space` |
 | Sprint | double-tap `W` or hold `R` |
 | Sneak | `Shift` |
+| Fly (creative flight) | double-tap `Space`; while flying hold `Space` to rise, `Shift` to descend, sprint for double speed; double-tap `Space` again or land to stop |
 | Break block | hold left mouse |
 | Place block / talk to a townsperson | right mouse |
 | Select hotbar slot | `1`–`9` or mouse wheel |

@@ -144,7 +144,7 @@ export class Game {
     this.perf.loadTimeMs = performance.now() - this.startedAt;
     document.getElementById('loading').style.display = 'none';
     this.hud.addMessage('Welcome to the frontier. Click to grab the mouse.');
-    this.hud.addMessage('WASD to move, Space to jump, double-tap W to sprint, E for blocks.');
+    this.hud.addMessage('WASD to move, Space to jump, double-tap W to sprint, double-tap Space to fly, E for blocks.');
     this.lastTime = performance.now();
     requestAnimationFrame((t) => this.loop(t));
   }
@@ -441,7 +441,7 @@ export class Game {
       if (inp.isDown('KeyS')) ctrl.forward -= 1;
       if (inp.isDown('KeyA')) ctrl.strafe -= 1;
       if (inp.isDown('KeyD')) ctrl.strafe += 1;
-      ctrl.jump = inp.isDown('Space');
+      ctrl.jump = inp.isDown('Space') || inp.takePress('Space');
       ctrl.sneak = inp.isDown('ShiftLeft') || inp.isDown('ShiftRight');
       // Sprint: hold R, or double-tap W (Minecraft's alternate binding). Ctrl is avoided because
       // Ctrl+W closes the browser tab.
@@ -473,6 +473,7 @@ export class Game {
       case 'land': this.audio.step(BLOCKS[ev.block].sound, null, 1.3); break;
       case 'fallhurt': this.audio.hurt(); this.audio.step('stone', null, 1.4); break;
       case 'burn': this.audio.hurt(); break;
+      case 'fly': this.hud.addMessage(ev.flying ? 'Flying: Space rises, Shift descends, double-tap Space or land to stop.' : 'Flight off.'); break;
       case 'hurt': this.audio.hurt(); break;
       case 'death': this.hud.addMessage('You died!'); break;
       default: break;

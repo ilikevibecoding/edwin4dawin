@@ -132,6 +132,11 @@ export class Player {
     this.lastGroundBlock = B.GRASS;
     this.force = new THREE.Vector3(); // external acceleration (blocks/s^2) applied at the next tick
     this.lastImpact = 0;
+    // creative flight (double-tap jump toggles it, like Minecraft)
+    this.flying = false;
+    this.jumpWasDown = false;
+    this.lastJumpTap = -100;
+    this.tickCount = 0;
   }
 
   // External forces from disasters (wind, water flow, blast). Accumulated and applied once per tick.
@@ -190,8 +195,19 @@ export class Player {
       return;
     }
 
+    this.tickCount++;
+    // double-tap jump within 7 ticks toggles flight; while flying, jump/sneak mean rise/descend
+    const jumpDown = !!ctrl.jump;
+    if (jumpDown && !this.jumpWasDown) {
+      if (this.tickCount - this.lastJumpTap <= 7 && !this.inWater) {
+        this.flying = !this.flying; this.vel.y = 0; this.fallDistance = 0; this.lastJumpTap = -100;
+        this.events.push({ type: 'fly', flying: this.flying });
+      } else this.lastJumpTap = this.tickCount;
+    }
+    this.jumpWasDown = jumpDown;
+
     let forward = ctrl.forward, strafe = ctrl.strafe;
-    this.sneaking = !!ctrl.sneak && this.onGround !== undefined;
+    this.sneaking = !this.flying && !!ctrl.sneak;
     const wantSprint = ctrl.sprint && forward > 0 && this.food > 6 && !this.sneaking;
     if (wantSprint && !this.sprinting) this.sprinting = true;
     if (!wantSprint || forward <= 0) this.sprinting = false;
@@ -204,7 +220,8 @@ export class Player {
     let len = Math.sqrt(forward * forward + strafe * strafe);
     if (len > 1) { forward /= len; strafe /= len; len = 1; }
     let accel;
-    if (this.inWater) accel = 0.02;
+    if (this.flying) accel = this.sprinting ? 0.1 : 0.05;   // Minecraft fly speed: ~11 blocks/s, ~22 sprinting
+    else if (this.inWater) accel = 0.02;
     else if (this.onGround) accel = this.sprinting ? 0.13 : 0.1;
     else accel = this.sprinting ? 0.026 : 0.02;
     if (len > 0.0001) {
@@ -216,14 +233,18 @@ export class Player {
       this.vel.z += (fz * forward + rz * strafe) * accel;
     }
 
-    // jumping / swimming
-    if (ctrl.jump) {
+    // jumping / swimming / flying
+    if (this.flying) {
+      if (ctrl.jump) this.vel.y += 0.15;
+      if (ctrl.sneak) this.vel.y -= 0.15;
+    } else if (ctrl.jump) {
       if (this.inWater) this.vel.y += 0.04;
       else if (this.onGround && this.jumpCooldown === 0) this.jump();
     }
     // external forces (blocks/s^2 -> blocks/tick over one 0.05 s tick)
     if (this.force.x || this.force.y || this.force.z) {
-      this.vel.x += this.force.x * 0.0025; this.vel.y += this.force.y * 0.0025; this.vel.z += this.force.z * 0.0025;
+      const fk = this.flying ? 0.001 : 0.0025; // a flying observer is buffeted, not swallowed
+      this.vel.x += this.force.x * fk; this.vel.y += this.force.y * fk; this.vel.z += this.force.z * fk;
       const sp = Math.hypot(this.vel.x, this.vel.y, this.vel.z);
       if (sp > 1.6) { const k = 1.6 / sp; this.vel.x *= k; this.vel.y *= k; this.vel.z *= k; } // cap at 32 blocks/s
       this.force.set(0, 0, 0);
@@ -245,7 +266,7 @@ export class Player {
     // movement with collision
     const box = this.box;
     const wasOnGround = this.onGround;
-    const res = moveBox(this.world, box, dx, this.vel.y, dz, STEP_HEIGHT, wasOnGround || this.inWater, this.scratch);
+    const res = moveBox(this.world, box, dx, this.vel.y, dz, this.flying ? 0 : STEP_HEIGHT, (wasOnGround || this.inWater) && !this.flying, this.scratch);
     const hw = PLAYER_WIDTH / 2;
     this.pos.set(box.x0 + hw, box.y0, box.z0 + hw);
     this.onGround = res.hitY && res.oy < 0;
@@ -253,12 +274,13 @@ export class Player {
     if (res.hitZ) this.vel.z = 0;
     if (res.hitY) {
       if (res.oy < 0 && !this.inWater) this.land();
+      if (res.oy < 0 && this.flying) { this.flying = false; this.events.push({ type: 'fly', flying: false }); } // landing ends flight
       this.vel.y = 0;
     }
     if (this.sprinting && (res.hitX || res.hitZ) && len > 0) { /* keep sprinting into walls like MC */ }
 
     // auto-jump over 1-block ledges
-    if (this.autoJump && this.onGround && !this.sneaking && (res.hitX || res.hitZ) && len > 0.3 && this.jumpCooldown === 0 && !this.inWater) {
+    if (this.autoJump && this.onGround && !this.sneaking && !this.flying && (res.hitX || res.hitZ) && len > 0.3 && this.jumpCooldown === 0 && !this.inWater) {
       const probe = this.box.offset(dx * 4 + Math.sign(dx) * 0.05, 1.0 + 0.01, dz * 4 + Math.sign(dz) * 0.05);
       const region = probe.clone(); region.y0 -= 0.05;
       const blocked = collectBoxes(this.world, region, this.scratch).some((bb) => bb.intersects(probe));
@@ -266,7 +288,11 @@ export class Player {
     }
 
     // gravity & drag
-    if (this.inWater) {
+    if (this.flying) {
+      this.vel.y *= 0.6;
+      this.vel.x *= 0.91; this.vel.z *= 0.91;
+      this.fallDistance = 0;
+    } else if (this.inWater) {
       this.vel.x *= 0.8; this.vel.y *= 0.8; this.vel.z *= 0.8;
       this.vel.y -= 0.02;
       this.fallDistance = 0;

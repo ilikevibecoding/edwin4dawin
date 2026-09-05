@@ -421,7 +421,7 @@ export class HUD {
     if (!game.input.locked && !game.loading) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(0, 0, W, H);
       this.textCentered('Click to play', W / 2, H / 2 - 30 * s, '#ffffff', s);
-      this.textCentered('WASD move - Space jump - Double-tap W to sprint - Left/Right click break/place', W / 2, H / 2 - 14 * s, '#c0c0c0', Math.max(1, s - 1));
+      this.textCentered('WASD move - Space jump - Double-tap W sprint - Double-tap Space fly - Left/Right click break/place', W / 2, H / 2 - 14 * s, '#c0c0c0', Math.max(1, s - 1));
     }
     this.mouse.clicked = false;
   }

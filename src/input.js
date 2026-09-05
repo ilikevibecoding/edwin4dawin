@@ -59,6 +59,8 @@ export class Input {
 
   isDown(code) { return this.keys.has(code); }
   wasPressed(code) { return this.pressed.has(code); }
+  // one-shot: true for the first tick that asks after a key press, so a quick tap between two slow frames still counts
+  takePress(code) { return this.pressed.delete(code); }
 
   // Call at end of frame
   endFrame() {
