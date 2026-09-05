@@ -282,10 +282,12 @@ function puff(seed: number, part: number, detail = 0): { pos: number[]; nrm: num
   return { pos, nrm, part: parts };
 }
 
-/** Unit crown tree: trunk (4-sided prism, part 0) + main puff (part 1) + three lobes (parts 2-4),
- *  88 triangles. The shader places and sizes the lobes per instance from the crown layouts. The `hi`
- *  variant used within a couple of hundred metres subdivides the main puff (148 triangles). */
-function crownGeometry(hi = false): THREE.BufferGeometry {
+/** Unit crown tree: trunk (4-sided prism, part 0) + main puff (part 1) + three lobes (parts 2-4).
+ *  The shader places and sizes the lobes per instance from the crown layouts. Three tessellations:
+ *  level 0 (88 triangles) beyond HI_DISTANCE, level 1 (main puff subdivided once, 148) inside it, level
+ *  2 (main puff twice, lobes once: 568) inside ULTRA_DISTANCE, where a 25 m crown fills a tenth of the
+ *  frame and 80 faces read as facets. */
+function crownGeometry(level = 0): THREE.BufferGeometry {
   const pos: number[] = [], nrm: number[] = [], part: number[] = [], uv: number[] = [];
   // trunk: 4 quads (8 tris) from y=0 to y=1, radius 0.07
   const r = 0.07, sides = 4;
@@ -297,7 +299,7 @@ function crownGeometry(hi = false): THREE.BufferGeometry {
     for (const [x, y, z] of quad) { pos.push(x, y, z); nrm.push(nx, 0, nz); part.push(0); uv.push(0, y); }
   }
   for (const [seed, pid] of [[3.1, 1], [8.7, 2], [14.3, 3], [21.9, 4]]) {
-    const pf = puff(seed, pid, hi && pid === 1 ? 1 : 0);
+    const pf = puff(seed, pid, pid === 1 ? Math.min(level, 2) : level > 1 ? 1 : 0);
     pos.push(...pf.pos); nrm.push(...pf.nrm); part.push(...pf.part);
     for (let i = 0; i < pf.part.length; i++) uv.push(0, 0);
   }
@@ -790,7 +792,7 @@ interface Plant { x: number; y: number; z: number; s: number; rot: number; lean:
  *  and `height` bound the drawn plants and cards and are only used for culling. */
 /** `hi` (crown family only) is the subdivided mesh drawn instead of `near` when the camera is within
  *  HI_DISTANCE of the tile's plants; it shares the instance buffers of `near`. */
-interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; cells: VegCells | null; nearBatch: InstanceBatch<CellSource> | null; cardCells: boolean; mirrorCells: boolean; maxS: number; }
+interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; cells: VegCells | null; batched3d: boolean; cardCells: boolean; mirrorCells: boolean; maxS: number; }
 
 /** The VEG_CELL-metre cells of a tile (built the first time the tile is drawn near or in full): the same
  *  cells once with the 3D mesh's per-instance attribute and once with the card's, so the batches draw
@@ -802,13 +804,16 @@ const TILE = 900;
 const VEG_CELL = 150;
 /** instances the near crown batches hold each (the tile's own mesh draws the tiles that do not fit) */
 const NEAR_CROWNS = 32768;
+const ULTRA_CROWNS = 8192;
 /** casting tiles a coarse cascade (texel over NEAR_TEXEL) draws at most, nearest first */
 const COARSE_SHADOW_TILES = 8;
 const _casting = new Array<number>(MAX_CASCADES).fill(0);
 // 3D distances to the planted footprint: at 420 m a 12 m crown is ~18 px tall (720p), where the card
 // is the better representation; the subdivided crown mesh is only worth its triangles closer than 200 m
 const NEAR_DISTANCE = 420;
-const HI_DISTANCE = 200;
+/** crown cells (150 m) closer than these to the camera draw the level-1 / level-2 tessellations */
+const HI_DISTANCE = 320;
+const ULTRA_DISTANCE = 140;
 const NEAR_BUDGET = 60000;
 /** card tiles closer than this (to their bounding sphere) are drawn into the water's mirror image */
 export const MIRROR_DISTANCE = 1500;
@@ -864,9 +869,11 @@ export class Vegetation {
   readonly mirrorCards: THREE.InstancedMesh;
   private readonly cameraBatch: InstanceBatch;
   private readonly mirrorBatch: InstanceBatch;
-  /** the crowns of the near tiles' cells in view, one draw for the 88-triangle mesh and one for the subdivided one */
+  /** the crowns of the near tiles' cells in view, one draw per tessellation level (chosen per cell by distance) */
   private readonly nearBatch: InstanceBatch<CellSource>;
   private readonly hiBatch: InstanceBatch<CellSource>;
+  private readonly ultraBatch: InstanceBatch<CellSource>;
+  private readonly crownBatches: InstanceBatch<CellSource>[];
 
   constructor(map: WorldMap, occupied: (x: number, z: number) => boolean) {
     const rng = new Rng('vegetation');
@@ -878,8 +885,9 @@ export class Vegetation {
     const cardMat = cardMaterial(atlas);
     const cardDepth = cardDepthMaterial(atlas);
     this.materials.push(crownMat, palmMat, cardMat);
-    const crownGeo = crownGeometry();
-    const crownGeoHi = crownGeometry(true);
+    const crownGeo = crownGeometry(0);
+    const crownGeoHi = crownGeometry(1);
+    const crownGeoUltra = crownGeometry(2);
     const palmGeo = palmGeometry();
     const cardGeo = cardGeometry();
     this.cameraBatch = new InstanceBatch(CAMERA_CARDS, cardGeo, cardMat, CARD_EXTRAS, true, cardDepth);
@@ -895,7 +903,10 @@ export class Vegetation {
     this.nearBatch.mesh.name = 'crowns-near';
     this.hiBatch = new InstanceBatch<CellSource>(NEAR_CROWNS, crownGeoHi, crownMat, CARD_EXTRAS, true);
     this.hiBatch.mesh.name = 'crowns-hi';
-    this.group.add(this.nearBatch.mesh, this.hiBatch.mesh);
+    this.ultraBatch = new InstanceBatch<CellSource>(ULTRA_CROWNS, crownGeoUltra, crownMat, CARD_EXTRAS, true);
+    this.ultraBatch.mesh.name = 'crowns-ultra';
+    this.crownBatches = [this.nearBatch, this.hiBatch, this.ultraBatch];
+    this.group.add(this.nearBatch.mesh, this.hiBatch.mesh, this.ultraBatch.mesh);
 
     const plants: Plant[] = [];
     const tints = {} as Record<Archetype, THREE.Color[]>;
@@ -1168,7 +1179,7 @@ export class Vegetation {
       far.visible = false;
       this.group.add(near, far);
       if (hi) { hi.boundingSphere = sphere.clone(); this.group.add(hi); }
-      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, extras: [farVar], cells: null, nearBatch: null, cardCells: false, mirrorCells: false, maxS });
+      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, extras: [farVar], cells: null, batched3d: false, cardCells: false, mirrorCells: false, maxS });
     };
     for (const t of byTile.values()) {
       if (t.crown.length) build(t.crown, crownGeo, crownMat, crownGeoHi);
@@ -1179,6 +1190,11 @@ export class Vegetation {
   update(time: number, wind: number): void {
     this.uTime.value = time;
     this.uWind.value = wind;
+  }
+
+  /** Instances drawn from each batch this frame (for the bench and budget checks). */
+  stats(): { near: number; hi: number; ultra: number; cards: number; mirrorCards: number } {
+    return { near: this.nearBatch.mesh.count, hi: this.hiBatch.mesh.count, ultra: this.ultraBatch.mesh.count, cards: this.cameraBatch.mesh.count, mirrorCards: this.mirrorBatch.mesh.count };
   }
 
   private static cells(t: Tile): VegCells {
@@ -1229,23 +1245,29 @@ export class Vegetation {
         if (!(bits & (1 << i)) || cascadeIsFine(i)) continue;
         if (casting[i] >= COARSE_SHADOW_TILES) bits &= ~(1 << i); else casting[i]++;
       }
-      const hi = t.hi !== null && t.d < HI_DISTANCE;
       const near3d = near && inView;
-      // crown tiles drawn in 3D go through the near batches cell by cell (only the cells in view); the
-      // tile's own mesh is the fallback when the batch is full
+      // crown tiles drawn in 3D go through the crown batches cell by cell (only the cells in view, each at
+      // the tessellation its distance calls for); the tile's own subdivided mesh is the fallback when a
+      // batch is full
       let batched3d = false;
-      if (t.hi !== null && (near3d || t.nearBatch !== null)) {
-        const batch = near3d ? (hi ? this.hiBatch : this.nearBatch) : null;
+      if (t.hi !== null && (near3d || t.batched3d)) {
         const cells = (t.cells ??= Vegetation.cells(t)).near;
-        if (t.nearBatch !== null && t.nearBatch !== batch) { for (const c of cells) t.nearBatch.set(c, 0); t.nearBatch = null; }
-        if (batch !== null) {
+        const batches = this.crownBatches;
+        if (near3d) {
           batched3d = true;
-          for (const c of cells) if (!batch.set(c, cull.boxInView(c.box) ? c.count : 0)) batched3d = false;
-          if (!batched3d) { for (const c of cells) batch.set(c, 0); t.nearBatch = null; } else t.nearBatch = batch;
+          for (const c of cells) {
+            const dist = c.box.distanceToPoint(cam);
+            const level = dist < ULTRA_DISTANCE ? 2 : dist < HI_DISTANCE ? 1 : 0;
+            const count = cull.boxInView(c.box) ? c.count : 0;
+            for (let l = 0; l < batches.length; l++) if (!batches[l].set(c, l === level ? count : 0)) batched3d = false;
+          }
         }
+        if (!batched3d) for (const c of cells) for (const b of batches) b.set(c, 0);
+        t.batched3d = batched3d;
       }
-      t.near.visible = near3d && !hi && !batched3d;
-      if (t.hi) t.hi.visible = near3d && hi && !batched3d;
+      // palm tiles (no subdivided mesh) draw their own instanced mesh
+      t.near.visible = t.hi === null && near3d;
+      if (t.hi) t.hi.visible = near3d && !batched3d;
       const drawCards = !near && inView && t.d < this.viewDistance;
       // far cards: full density to 3 km, half at 5.5 km, a quarter beyond (a crown is ~1 px there)
       const frac = near ? 1 : t.d < 3000 ? 1 : t.d < 5500 ? 0.5 : 0.25;
@@ -1290,7 +1312,6 @@ export class Vegetation {
     }
     this.cameraBatch.commit();
     this.mirrorBatch.commit();
-    this.nearBatch.commit();
-    this.hiBatch.commit();
+    for (const b of this.crownBatches) b.commit();
   }
 }
