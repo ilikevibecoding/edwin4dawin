@@ -576,16 +576,23 @@ function chancellorFloor(bp, rng) {
   const y = TOP, plan = new Plan(bp, y);
   corridor(plan, RING.x0, RING.z0, RING.x1, RING.z0 + 2);
   corridor(plan, RING.x0, RING.z0 + 3, RING.x0 + 2, RING.z1 - 3); corridor(plan, RING.x1 - 2, RING.z0 + 3, RING.x1, RING.z1 - 3);
-  // antechamber
-  bp.fill(RING.x0, y, RING.z1 - 2, RING.x1, y + 3, RING.z1, AIR);
-  paintFloor(bp, RING.x0, RING.z1 - 2, RING.x1, RING.z1, y - 1, 'red');
-  plan.mark(RING.x0, RING.z1 - 2, RING.x1, RING.z1);
-  for (let x = RING.x0; x <= RING.x1; x += 3) bp.set(x, y + 4, 39, (x % 2) ? GLOW : BLUE);
-  statue(bp, 33, y, 39); statue(bp, 47, y, 39);
-  guardKiosk(bp, 37, y, 40, 0, -1); guardKiosk(bp, 44, y, 40, 0, -1);
-  totem(bp, 32, y, 40); totem(bp, 48, y, 40);
-  for (const x of [34, 46]) { bp.set(x, y + 1, 41, RED); bp.set(x, y + 2, 41, GLOW); }
-  bp.room('antechamber', RING.x0 - 1, y, RING.z1 - 3, RING.x1 + 1, RING.z1 + 1);
+  // antechamber: five deep (z 38..42) between the core's south face and the office wall; waiting benches by the
+  // lifts, Red Guard kiosks flanking the approach to the grand door, statues, directory totems, red carpet
+  const az0 = RING.z1 - 2, az1 = OFFICE_ZN - 2;
+  bp.fill(RING.x0, y, az0, RING.x1, y + 3, az1, AIR);
+  paintFloor(bp, RING.x0, az0, RING.x1, az1, y - 1, 'red');
+  for (let z = az0; z <= az1; z++) for (const x of [39, 40, 41, 42]) bp.set(x, y - 1, z, (z % 2) ? B.RED_WOOL : B.GOLD_BLOCK);
+  plan.mark(RING.x0, az0, RING.x1, az1);
+  for (let x = RING.x0; x <= RING.x1; x += 3) for (const z of [az0 + 1, az1 - 1]) bp.set(x, y + 4, z, (x % 2) ? GLOW : BLUE);
+  statue(bp, 33, y, az1); statue(bp, 47, y, az1); statue(bp, 36, y, az1); statue(bp, 45, y, az1);
+  guardKiosk(bp, 37, y, az1 - 1, 0, -1); guardKiosk(bp, 44, y, az1 - 1, 0, -1);
+  totem(bp, 32, y, az1); totem(bp, 48, y, az1);
+  for (const x of [33, 34, 46, 47]) bench(bp, x, y, az0);
+  planter(bp, 32, y, az0, B.SPRUCE_LEAVES); planter(bp, 48, y, az0, B.SPRUCE_LEAVES);
+  for (const x of [RING.x0 - 1, RING.x1 + 1]) for (const z of [az0 + 1, az1 - 1]) { bp.set(x, y + 1, z, RED); bp.set(x, y + 2, z, GLOW); bp.set(x, y, z, B.RED_WOOL); }
+  bp.set(40, y + 3, az0 + 2, LANTERN); bp.set(41, y + 3, az0 + 2, LANTERN);
+  bp.spot(40, y, az0 + 1, 'stand'); bp.spot(35, y, az1 - 1, 'stand');
+  bp.room('antechamber', RING.x0 - 1, y, az0 - 1, RING.x1 + 1, az1 + 1);
   chancellorOffice(bp, rng);
   makeRoom(plan, rng, 'executive_office', 25, 28, 30, 40, { prefer: ['E'], floor: 'red' });
   makeRoom(plan, rng, 'open_plan_office', 50, 28, 55, 40, { prefer: ['W'] });
@@ -594,42 +601,52 @@ function chancellorFloor(bp, rng) {
   makeRoom(plan, rng, 'archive', 45, 18, 55, 22, { prefer: ['S'] });
   dressCorridors(plan);
 }
-const ARC_R = 32, ARC_CZ = 20;   // a gentle bow: z 48 at the office corners, 52 across the middle
+const ARC_R = 32, ARC_CZ = 20;   // a gentle bow: z 49 at the office corners, 52 across the middle
+const OFFICE_ZN = 44, OFFICE_X0 = 27, OFFICE_X1 = 53;   // office interior: first row z 44 (north wall at 43), x 27..53
 const arcZ = (x) => Math.round(ARC_CZ + Math.sqrt(ARC_R * ARC_R - (x - 40.5) * (x - 40.5)));   // first wall cell of the window arc
 function chancellorOffice(bp, rng) {
-  const y = TOP, x0 = 25, x1 = 55, zN = 42;
+  const y = TOP, x0 = OFFICE_X0, x1 = OFFICE_X1, zN = OFFICE_ZN;
   for (let x = x0; x <= x1; x++) {
     const zw = arcZ(x), zi = zw - 1;
     const wz1 = Math.max(zw, (x > x0 ? arcZ(x - 1) : 0) - 1, (x < x1 ? arcZ(x + 1) : 0) - 1);
     bp.fill(x, y, zN, x, y + 3, zi, AIR);
     for (let z = zN; z <= wz1; z++) {
-      const d = Math.hypot(x - 40.5, z - 46.5);
+      const d = Math.hypot(x - 40.5, z - 47.5);
       const edge = x === x0 || x === x1 || z === zN;
       bp.set(x, y - 1, z, edge ? BLACK : (d > 2.2 && d < 3.4) ? B.GOLD_BLOCK : ((x + z) % 5 === 0 ? RED : B.RED_WOOL));
-      bp.set(x, y + 4, z, ((x % 3 === 0) && (z % 3 === 0)) ? GLOW : (d > 5.5 && d < 6.6 ? BLUE : DARK));
+      bp.set(x, y + 4, z, ((x % 4 === 0) && (z % 3 === 0)) ? GLOW : (d > 5.5 && d < 6.6 ? BLUE : ((x + z) % 2 ? DARK : BLACK)));
     }
     // the curved window wall: steel glass between chrome mullions, chrome head, railing on the bay roof
     for (let z = zw; z <= wz1; z++) { bp.fill(x, y, z, x, y + 2, z, (x % 3 === 1) ? CHR : GLASS); bp.set(x, y + 3, z, CHR); bp.set(x, y + 4, z, CHR); bp.set(x, y + 5, z, BARS); }
     // corbelled underside where the bay hangs over the tier's south face
     if (wz1 > 47) for (let z = 48; z <= wz1; z++) { bp.set(x, y - 2, z, DARK); if (z <= wz1 - 1) bp.set(x, y - 3, z, STEEL); if (z <= wz1 - 2) bp.set(x, y - 4, z, DARK); if (z === 48) bp.set(x, y - 2, z, (x % 2) ? BLUE : DARK); }
   }
+  // the bay's side walls where it projects past the tier's face (z 48 onwards)
+  for (const [sx, dir] of [[x0 - 1, 1], [x1 + 1, -1]]) {
+    for (let z = 48; z <= arcZ(sx + dir); z++) {
+      bp.fill(sx, y, z, sx, y + 2, z, (z % 3 === 1) ? CHR : GLASS); bp.set(sx, y + 3, z, CHR); bp.set(sx, y + 4, z, CHR); bp.set(sx, y + 5, z, BARS);
+      bp.set(sx, y - 1, z, BLACK); bp.set(sx, y - 2, z, DARK);
+    }
+  }
   // red north wall with chrome pilasters and gold-topped banners, the grand door in the middle
   for (let x = x0; x <= x1; x++) for (let yy = y; yy <= y + 3; yy++) bp.set(x, yy, zN - 1, (x % 4 === 0) ? CHR : (yy === y + 3 ? DARK : RED));
-  for (const x of [27, 31, 49, 53]) { bp.fill(x, y, zN - 1, x, y + 2, zN - 1, B.RED_WOOL); bp.set(x, y + 3, zN - 1, B.GOLD_BLOCK); }
+  for (const x of [29, 33, 47, 51]) { bp.fill(x, y, zN - 1, x, y + 2, zN - 1, B.RED_WOOL); bp.set(x, y + 3, zN - 1, B.GOLD_BLOCK); }
   doorway(bp, 39, zN - 1, 42, zN - 1, y, 3, B.GOLD_BLOCK);
-  // desk before the window, the Chancellor's chair, guest chairs, statues, holo table, lounge, plants, lights
-  bp.set(39, y, 48, B.TABLE); bp.set(40, y, 48, CONSOLE); bp.set(41, y, 48, CONSOLE); bp.set(42, y, 48, B.TABLE); bp.set(40, y + 1, 48, HOLO);
-  bench(bp, 40, y, 49); bp.work(40, y, 49, 'chancellor'); bench(bp, 41, y, 49);
-  bench(bp, 38, y, 46); bench(bp, 43, y, 46); bp.set(39, y, 45, B.TABLE); bp.set(42, y, 45, B.TABLE);
-  for (const [sx, sz] of [[29, 45], [33, 48], [48, 48], [52, 45], [27, 43], [54, 43]]) { statue(bp, sx, y, sz); bp.set(sx, y - 1, sz, GLOW); }
-  for (let x = 28; x <= 30; x++) bp.set(x, y, 43, BLACK); bp.set(29, y + 1, 43, HOLO); bp.set(28, y + 1, 43, CONSOLE);
-  for (const [bx, bz] of [[27, 43], [31, 43], [28, 44], [30, 44]]) if (bp.isAir(bx, y, bz)) bench(bp, bx, y, bz);
-  bp.set(51, y, 43, B.TABLE); bench(bp, 50, y, 43); bench(bp, 52, y, 43); bench(bp, 51, y, 44); bp.set(51, y + 1, 43, LANTERN);
-  planter(bp, 26, y, 42, B.SPRUCE_LEAVES); planter(bp, 54, y, 42, B.SPRUCE_LEAVES); planter(bp, 36, y, 50, B.OAK_LEAVES); planter(bp, 45, y, 50, B.OAK_LEAVES);
-  guardKiosk(bp, 36, y, 43, 0, -1); guardKiosk(bp, 45, y, 43, 0, -1);
-  for (const x of [34, 47]) { bp.set(x, y + 3, 46, LANTERN); }
-  bp.set(40, y + 3, 44, LANTERN); bp.set(41, y + 3, 44, LANTERN);
-  bp.spot(40, y, 44, 'stand'); bp.spot(35, y, 46, 'stand'); bp.spot(46, y, 46, 'stand');
+  // the Chancellor's desk before the window with his chair, guest chairs and low tables, Red Guards inside the door
+  bp.set(39, y, 49, B.TABLE); bp.set(40, y, 49, CONSOLE); bp.set(41, y, 49, CONSOLE); bp.set(42, y, 49, B.TABLE); bp.set(40, y + 1, 49, HOLO); bp.set(41, y + 1, 49, HOLO);
+  bench(bp, 40, y, 50); bp.work(40, y, 50, 'chancellor'); bench(bp, 41, y, 50);
+  bench(bp, 38, y, 47); bench(bp, 43, y, 47); bp.set(39, y, 46, B.TABLE); bp.set(42, y, 46, B.TABLE); bench(bp, 38, y, 45); bench(bp, 43, y, 45);
+  guardKiosk(bp, 36, y, 45, 0, -1); guardKiosk(bp, 45, y, 45, 0, -1);
+  // gilded statues on lit plinths along the walls, holo-table lounge west, dining/lounge east, plants
+  for (const [sx, sz] of [[29, 46], [33, 49], [48, 49], [52, 46], [27, zN], [53, zN]]) { statue(bp, sx, y, sz); bp.set(sx, y - 1, sz, GLOW); }
+  for (let x = 29; x <= 31; x++) bp.set(x, y, zN, BLACK); bp.set(30, y + 1, zN, HOLO); bp.set(29, y + 1, zN, CONSOLE); bp.set(31, y + 1, zN, HOLO);
+  for (const [bx, bz] of [[28, zN], [32, zN], [29, zN + 1], [31, zN + 1]]) bench(bp, bx, y, bz);
+  bp.set(50, y, zN, B.TABLE); bp.set(51, y, zN, B.TABLE); bench(bp, 49, y, zN); bench(bp, 52, y, zN); bench(bp, 50, y, zN + 1); bench(bp, 51, y, zN + 1); bp.set(50, y + 1, zN, LANTERN);
+  planter(bp, 28, y, 48, B.SPRUCE_LEAVES); planter(bp, 52, y, 48, B.SPRUCE_LEAVES); planter(bp, 36, y, 51, B.OAK_LEAVES); planter(bp, 45, y, 51, B.OAK_LEAVES);
+  bp.set(35, y, 48, B.SHELF); bp.set(35, y + 1, 48, HOLO); bp.set(46, y, 48, B.BOOKSHELF); bp.set(46, y + 1, 48, B.BOOKSHELF);
+  for (const x of [34, 47]) bp.set(x, y + 3, 47, LANTERN);
+  bp.set(40, y + 3, zN + 1, LANTERN); bp.set(41, y + 3, zN + 1, LANTERN);
+  bp.spot(40, y, zN + 1, 'stand'); bp.spot(35, y, 47, 'stand'); bp.spot(46, y, 47, 'stand');
   bp.room('chancellor_office', x0 - 1, y, zN - 1, x1 + 1, 53);
 }
 // the roof of the top tier: core house for the stair and lifts, terrace furnishing, four corner pylons, the lit
@@ -659,7 +676,7 @@ function crown(bp) {
   bp.fill(40, y + 6, 32, 41, y + 8, 33, GLOW);
   for (const [px, pz] of [[33, 32], [48, 32], [40, 25], [40, 40]]) { bp.set(px, y + 6, pz, CHR); bp.set(px, y + 7, pz, BLUE); }   // beacons on the disc
   // the office bay's roof carries its own parapet; drop the terrace railing where it would cross the bay
-  for (let x = 25; x <= 55; x++) if (arcZ(x) >= 48) bp.set(x, y, 47, AIR);
+  for (let x = OFFICE_X0; x <= OFFICE_X1; x++) if (arcZ(x) >= 48) bp.set(x, y, 47, AIR);
   // corner pylons
   for (const [px, pz] of [[t.x0 + 1, t.z0 + 1], [t.x1 - 2, t.z0 + 1], [t.x0 + 1, t.z1 - 2], [t.x1 - 2, t.z1 - 2]]) {
     bp.fill(px, y, pz, px + 1, y + 6, pz + 1, STEEL); bp.fill(px, y + 7, pz, px + 1, y + 7, pz + 1, BLUE);
@@ -719,6 +736,10 @@ function approachDeck(bp) {
     if (x >= 38 && x <= 43) bp.set(x, y - 2, z, (z % 3) ? STEEL : BLUE);
   }
   for (let z = z0 + 2; z <= z1; z += 6) for (const x of [35, 46]) { bp.set(x, y + 2, z, BARS); bp.set(x, y + 3, z, LAMP); }
+  // red Senate banners on chrome poles between the lamps, statues flanking the sky lobby door, benches, planters
+  for (let z = z0 + 5; z <= z1 - 2; z += 6) for (const x of [35, 46]) { bp.fill(x, y + 2, z, x, y + 5, z, CHR); const bx = x === 35 ? 36 : 45; bp.set(bx, y + 5, z, B.RED_WOOL); bp.set(bx, y + 4, z, B.RED_WOOL); bp.set(bx, y + 3, z, B.GOLD_BLOCK); }
+  statue(bp, 37, y + 1, z0 + 1); statue(bp, 44, y + 1, z0 + 1);
+  for (const x of [36, 45]) { bench(bp, x, y + 1, z0 + 3); planter(bp, x, y + 1, z0 + 5, B.SPRUCE_LEAVES); bench(bp, x, y + 1, z0 + 11); planter(bp, x, y + 1, z0 + 13, B.OAK_LEAVES); }
   // stalk under the deck and the chrome props on the podium roof edge
   bp.fill(38, 1, 68, 43, 32, 71, DARK);
   for (let yy = 1; yy <= 32; yy++) for (const [cx, cz] of [[38, 68], [43, 68], [38, 71], [43, 71]]) bp.set(cx, yy, cz, (yy % 5 === 0) ? BLUE : CHR);
