@@ -1,8 +1,11 @@
 // Battle soak test: load battle.html, advance the simulation in fixed steps and report the choreography
-// stats at t = 0, 60, 120, 180 s (ships alive, deaths, bolts in flight, particles, update cost), with a
-// screenshot of the `wide` view (and any extra views) at every checkpoint. Also times battle.update alone.
+// stats at every checkpoint (ships alive, deaths, wrecks retired, reinforcements, bolts in flight, particles
+// per layer, fires burning, fighter losses per minute, update cost), with a screenshot of the `wide` view
+// (and any extra views) at every checkpoint. Also times battle.update alone and prints the death log
+// (when each ship died, how long after the director marked it) with the deaths per 3-minute window.
 // Usage: node tools/choreo-soak.mjs [--base http://127.0.0.1:5307/battle.html] [--out /tmp/soak]
 //        [--step 60] [--total 180] [--views wide,lines] [--shots 0,6,7]  (cinematic shot indices to grab)
+//        [--shot-t 5] [--shots-at 60,120]   e.g. a 20-minute run: --total 1200 --step 120 --views ""
 import { chromium } from "playwright-core";
 import { mkdirSync, existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -87,7 +90,41 @@ console.log(
   `battle pre-roll at load: ${await page.evaluate(() => window.debugAPI.battle.stats.prerollMs)} ms`,
 );
 
-const summary = (label, stats, state) => {
+// one probe of everything the report needs, taken in-page
+const probe = () =>
+  page.evaluate(() => {
+    const api = window.debugAPI;
+    const st = api.battleStats();
+    const ex = api.explosions;
+    const counts = ex.counts || {};
+    let firesLit = 0;
+    let fireRecords = 0;
+    for (const s of api.fleet.ships) {
+      if (!s.alive) continue;
+      for (const f of s.fires) {
+        fireRecords++;
+        if (f.lit) firesLit++;
+      }
+    }
+    const fs = api.fighters.stats || {};
+    return {
+      ...st,
+      additive: ex.add ? ex.add.particles.length : 0,
+      additiveCap: ex.add ? ex.add.capacity : 0,
+      smoke: ex.smoke ? ex.smoke.particles.length : 0,
+      smokeCap: ex.smoke ? ex.smoke.capacity : 0,
+      emitters: counts.fires ?? (ex.fires ? ex.fires.length : 0),
+      debris: counts.debris ?? 0,
+      fireRecords,
+      firesLit,
+      fightersDestroyed: fs.destroyed || 0,
+      fightersAlive: api.fighters.all.filter((f) => f.alive).length,
+      fighterShots: (fs.shotsCapital || 0) + (fs.shotsFighter || 0),
+      dogfightShots: fs.shotsFighter || 0,
+    };
+  });
+
+const summary = (label, stats, state, prev, dtMin) => {
   const ships = state.ships;
   const alive = ships.filter((s) => s.health > 0).length;
   const bySide = {};
@@ -97,6 +134,9 @@ const summary = (label, stats, state) => {
     else bySide[s.side].dead++;
   }
   const burning = ships.filter((s) => s.damage > 0).length;
+  const fDeaths = prev
+    ? (stats.fightersDestroyed - prev.fightersDestroyed) / dtMin
+    : 0;
   const line =
     `t=${String(label).padStart(4)} s  ships ${ships.length} alive ${alive} (${Object.entries(
       bySide,
@@ -104,10 +144,16 @@ const summary = (label, stats, state) => {
       .map(([k, v]) => `${k} ${v.alive}/${v.alive + v.dead}`)
       .join(
         ", ",
-      )})  deaths ${stats.deaths}  dying ${state.dying}  reinf ${stats.reinforcements}` +
-    `  bolts ${stats.boltsAlive} (capital in flight ${stats.boltsInFlight}, heavy ${stats.heavyInFlight}, heat ${stats.heat})  particles ${stats.particles}` +
-    `  salvos ${stats.salvos}  heavy ${stats.shotsHeavy}  light ${stats.shotsLight}  misses ${stats.misses}` +
-    `  scorched ${burning}  update ${stats.updateMs} ms (max ${stats.updateMsMax}, choreo ${stats.choreoMs})`;
+      )})  deaths ${stats.deaths}  dying ${state.dying}  retired ${stats.retired}  reinf ${stats.reinforcements}` +
+    `\n           bolts ${stats.boltsAlive} (capital in flight ${stats.boltsInFlight}, heavy ${stats.heavyInFlight}, heat ${stats.heat})` +
+    `  particles ${stats.particles} (additive ${stats.additive}/${stats.additiveCap}, smoke ${stats.smoke}/${stats.smokeCap}, debris ${stats.debris})` +
+    `\n           fires: ${stats.emitters} emitters burning, ${stats.firesLit}/${stats.fireRecords} records lit (lit ${stats.firesLit}, deferred ${stats.firesDeferred} since start)` +
+    `\n           fighters ${stats.fightersAlive}/${stats.fighters} alive, ${stats.fightersDestroyed} destroyed (${fDeaths.toFixed(0)}/min over the last ${dtMin} min` +
+    (fDeaths > 0
+      ? `, mean life ${(stats.fighters / fDeaths).toFixed(1)} min`
+      : "") +
+    `)  PD shots ${stats.pdShots} hits ${stats.pdHits}, dogfight shots ${stats.dogfightShots} hits ${stats.dogfightHits}` +
+    `\n           salvos ${stats.salvos}  heavy ${stats.shotsHeavy}  light ${stats.shotsLight}  misses ${stats.misses}  scorched ${burning}  update ${stats.updateMs} ms (max ${stats.updateMsMax}, choreo ${stats.choreoMs})`;
   console.log(line);
   return {
     label,
@@ -116,6 +162,7 @@ const summary = (label, stats, state) => {
     bySide,
     stats,
     dying: state.dying,
+    fighterDeathsPerMin: +fDeaths.toFixed(1),
   };
 };
 
@@ -125,7 +172,10 @@ for (let t = 0; t <= total; t += step) checkpoints.push(t);
 let simT = 0;
 let maxBolts = 0;
 let maxParticles = 0;
+let maxAdd = 0;
+let maxSmoke = 0;
 let minAlive = Infinity;
+let prevStats = null;
 const trace = []; // every 10 s: heavy bolts in flight / capital bolts in flight / heat
 for (const cp of checkpoints) {
   if (cp > simT) {
@@ -134,21 +184,26 @@ for (const cp of checkpoints) {
       const slice = Math.min(10, cp - simT);
       await page.evaluate((s) => window.debugAPI.advanceSim(s), slice);
       simT += slice;
-      const st = await page.evaluate(() => window.debugAPI.battleStats());
+      const st = await probe();
       maxBolts = Math.max(maxBolts, st.boltsAlive);
       maxParticles = Math.max(maxParticles, st.particles);
+      maxAdd = Math.max(maxAdd, st.additive);
+      maxSmoke = Math.max(maxSmoke, st.smoke);
       minAlive = Math.min(minAlive, st.alive);
       trace.push(`${simT}s ${st.heavyInFlight}/${st.boltsInFlight}@${st.heat}`);
     }
-    console.log(
-      `   density (heavy/capital bolts in flight @ heat): ${trace.splice(0).join("  ")}`,
-    );
+    if (total <= 600)
+      console.log(
+        `   density (heavy/capital bolts in flight @ heat): ${trace.splice(0).join("  ")}`,
+      );
+    else trace.length = 0;
   }
-  const stats = await page.evaluate(() => window.debugAPI.battleStats());
+  const stats = await probe();
   const state = await page.evaluate(() => window.debugAPI.battleState());
   maxBolts = Math.max(maxBolts, stats.boltsAlive);
   maxParticles = Math.max(maxParticles, stats.particles);
-  results.push(summary(cp, stats, state));
+  results.push(summary(cp, stats, state, prevStats, step / 60));
+  prevStats = stats;
   const overlaps = await page.evaluate(() =>
     window.debugAPI.battle.overlaps ? window.debugAPI.battle.overlaps(0) : null,
   );
@@ -157,7 +212,7 @@ for (const cp of checkpoints) {
       `   hull overlaps (oriented boxes touching): ${overlaps.length}${overlaps.length ? " " + JSON.stringify(overlaps) : ""}`,
     );
   const minSep = await page.evaluate(() => {
-    const ships = window.debugAPI.fleet.ships;
+    const ships = window.debugAPI.fleet.ships.filter((s) => s.alive);
     let best = null;
     for (let i = 0; i < ships.length; i++)
       for (let j = i + 1; j < ships.length; j++) {
@@ -171,9 +226,10 @@ for (const cp of checkpoints) {
       }
     return best;
   });
-  console.log(
-    `   closest pair of ship centres: ${minSep.d} m (${minSep.a} / ${minSep.b})`,
-  );
+  if (minSep)
+    console.log(
+      `   closest pair of ship centres: ${minSep.d} m (${minSep.a} / ${minSep.b})`,
+    );
   for (const v of views) {
     await page.evaluate((n) => window.debugAPI.setView(n), v);
     const f0 = await page.evaluate(() => window.debugAPI.frames());
@@ -210,6 +266,29 @@ for (const cp of checkpoints) {
   }
 }
 
+// death log: when each ship died and how long the director had it marked; deaths per 3-minute window
+const deathLog = await page.evaluate(() => {
+  const d = window.debugAPI.battle.director;
+  return d && d.deathLog ? d.deathLog : [];
+});
+if (deathLog.length) {
+  console.log(
+    `deaths (${deathLog.length} over ${total} s): ` +
+      deathLog
+        .map(
+          (e) =>
+            `${e.cls}${e.id}@${e.t}s${e.doomedFor >= 0 ? `(+${e.doomedFor}s)` : "(unmarked)"}`,
+        )
+        .join("  "),
+  );
+  const windows = [];
+  for (let w = 0; w < total; w += 180)
+    windows.push(deathLog.filter((e) => e.t >= w && e.t < w + 180).length);
+  console.log(
+    `deaths per 3-minute window: ${windows.join(" ")}  (target 2-4; first death at ${deathLog[0].t} s)`,
+  );
+} else console.log(`deaths: none in ${total} s`);
+
 // isolated cost of battle.update: 600 fixed steps, timed in-page
 const timing = await page.evaluate(() => {
   const api = window.debugAPI;
@@ -230,7 +309,7 @@ const timing = await page.evaluate(() => {
     choreoMs: b.stats.choreoMs,
     bolts: api.bolts.alive,
     particles: api.explosions.alive,
-    ships: api.fleet.ships.length,
+    ships: api.fleet.ships.filter((s) => s.alive).length,
   };
 });
 console.log(
@@ -281,15 +360,16 @@ const stress = await page.evaluate(() => {
     worstMs: +worst.toFixed(3),
     choreoMs: b.stats.choreoMs,
     minBolts,
-    ships: api.fleet.ships.length,
+    ships: api.fleet.ships.filter((s) => s.alive).length,
     particles: api.explosions.alive,
   };
 });
 console.log(
   `stress (bolt pool filled to 1500, ${stress.added} extra bolts): battle.update avg ${stress.avgMs} ms, worst ${stress.worstMs} ms over 240 steps, choreography part ${stress.choreoMs} ms (ships ${stress.ships}, bolts never below ${stress.minBolts}, particles ${stress.particles})`,
 );
+const last = results[results.length - 1].stats;
 console.log(
-  `peaks: bolts ${maxBolts} (< 1500 ${maxBolts < 1500 ? "OK" : "FAIL"}), particles ${maxParticles} (< 1400 ${maxParticles < 1400 ? "OK" : "FAIL"}), min alive ${minAlive}`,
+  `peaks: bolts ${maxBolts} (< 1500 ${maxBolts < 1500 ? "OK" : "FAIL"}), additive particles ${maxAdd}/${last.additiveCap} (${maxAdd < last.additiveCap ? "OK" : "FULL"}), smoke ${maxSmoke}/${last.smokeCap} (${maxSmoke < last.smokeCap ? "OK" : "FULL"}), both layers ${maxParticles}, min alive ${minAlive}`,
 );
 console.log(
   errors.length
@@ -299,7 +379,18 @@ console.log(
 writeFileSync(
   resolve(outDir, "soak.json"),
   JSON.stringify(
-    { errors, results, timing, stress, maxBolts, maxParticles, minAlive },
+    {
+      errors,
+      results,
+      deathLog,
+      timing,
+      stress,
+      maxBolts,
+      maxParticles,
+      maxAdd,
+      maxSmoke,
+      minAlive,
+    },
     null,
     1,
   ),

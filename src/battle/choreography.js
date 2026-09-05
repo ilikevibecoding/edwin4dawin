@@ -28,7 +28,7 @@ import {
   makeFighterFire,
   pointDefence,
 } from "./choreoCombat.js";
-import { Director } from "./choreoDamage.js";
+import { Director, FIRST_DOOM, roomFor } from "./choreoDamage.js";
 
 export { FLEET_PLAN, CLASS_INFO };
 
@@ -37,6 +37,9 @@ const _p = new THREE.Vector3();
 const _inv = new THREE.Matrix4();
 const _w = new THREE.Vector3();
 const ORIGIN = new THREE.Vector3();
+
+// the battle opens already joined: this many seconds run off-screen before the first frame
+const PREROLL = 16;
 
 export function createBattle({
   fleet,
@@ -52,6 +55,9 @@ export function createBattle({
   // fighter fire has its own stream: the swarms decide when to shoot with their own randomness, and
   // that must not disturb the capital ships' stream (which keeps the battle reproducible from the seed)
   const frand = rng((seed * 40503 + 977) >>> 0);
+  // effect densities follow the fleet size (phones run scale 0.6): the heavy-bolt band the density
+  // controller holds, the ambient flak rate and the share of losses that are replaced
+  const fxScale = scale >= 1 ? 1 : Math.max(0.5, scale) * 1.04;
   const models = {
     venator: venatorMod.buildVenator(mats),
     providence: buildProvidence(mats),
@@ -67,14 +73,14 @@ export function createBattle({
       console.warn("venatorOpen variant unavailable:", e);
     }
   }
-  for (const m of Object.values(models)) fleet.registerModel(m, 40);
+  const capacity = Math.round(40 * Math.max(0.5, Math.min(1, scale)));
+  for (const m of Object.values(models)) fleet.registerModel(m, capacity);
   fleet.enableInstanceColor();
   const boxes = new Map();
   for (const m of Object.values(models)) boxes.set(m.id, modelBox(m));
 
   const states = [];
   const stateByShip = new Map();
-  const fires = [];
   let id = 0;
   let time = 0;
   const stats = {
@@ -85,7 +91,13 @@ export function createBattle({
     kills: 0,
     deaths: 0,
     dyingNow: 0,
+    retired: 0,
     reinforcements: 0,
+    firesLit: 0,
+    firesDeferred: 0,
+    pdShots: 0,
+    pdHits: 0,
+    dogfightHits: 0,
     boltsInFlight: 0,
     heavyInFlight: 0,
     alive: 0,
@@ -128,6 +140,14 @@ export function createBattle({
       cruise,
       agile: 0,
       wander: { x: rnd.range(0.01, 0.03), y: rnd.range(0.008, 0.02) },
+      // heading weave of the line ships: amplitude 7-17 degrees over 3.5-7 minute swings
+      weave: {
+        amp: rnd.range(0.12, 0.3),
+        pitchAmp: rnd.range(0.02, 0.05),
+        omega: (Math.PI * 2) / rnd.range(210, 420),
+        phase: rnd() * Math.PI * 2,
+      },
+      bank: 0,
       phase: rnd() * Math.PI * 2,
       listDir: rnd.sign(),
       listAngle: 0,
@@ -142,10 +162,12 @@ export function createBattle({
       aimIdx: new Uint16Array(n),
       doomed: false,
       doomedAt: 0,
+      doomedFor: -1,
       critical: false,
       dying: null,
       dead: false,
       diedAt: -1,
+      retireAt: Infinity,
       ventT: rnd() * 3,
       pending: null,
       hpFrac() {
@@ -193,7 +215,7 @@ export function createBattle({
 
   // ---- combat plumbing
   const inFlight = { n: 0, heavy: 0 }; // capital bolts in flight (all / heavy turbolasers)
-  const heat = new Heat(80, 140);
+  const heat = new Heat(Math.round(80 * fxScale), Math.round(140 * fxScale));
   const ctx = {
     states,
     fleet,
@@ -204,17 +226,22 @@ export function createBattle({
     stats,
     inFlight,
     heat,
-    fires,
     time: () => time,
     stateOf: (s) => stateByShip.get(s) || null,
+    forget: (s) => stateByShip.delete(s),
     spawnReinforcement,
+    reinforceChance: Math.min(1, 0.5 + 0.5 * scale),
     fighters,
   };
   const director = new Director(ctx);
   bolts.onHit = (b) => director.onBoltHit(b);
   const fighterFire = makeFighterFire(ctx);
+  // a destroyed fighter: a bright pop that reads at a few hundred metres
   const onFighterDestroyed = (f) => {
-    if (f && f.pos) explosions.hit(f.pos, 12);
+    if (!f || !f.pos) return;
+    explosions.hit(f.pos, 18);
+    if (roomFor(explosions, "add", 0.9))
+      explosions.spawn(f.pos, { kind: "flash", size: 46, life: 0.16 });
   };
   if ("onDestroyed" in fighters) fighters.onDestroyed = onFighterDestroyed;
 
@@ -239,7 +266,9 @@ export function createBattle({
     for (let i = 0; i < nFires; i++) {
       s.randomSurfacePoint(_w, rand);
       _inv.copy(s.matrix).invert();
-      director.ignite(st, _w.applyMatrix4(_inv), rand.range(45, 110));
+      const size = rand.range(45, 110);
+      const life = rand.range(120, 330); // old wounds: some burn well into the visible battle
+      director.ignite(st, _w.applyMatrix4(_inv), size, life);
     }
   }
 
@@ -256,7 +285,11 @@ export function createBattle({
         ? venatorModel(rrand)
         : models[r.cls] || models.munificent;
     const entry = fleet.classes.get(model.id);
-    if (!entry || entry.ships.length >= entry.capacity) return false;
+    if (!entry) return false;
+    // the fleet draws only living instances: retired wrecks no longer take a slot
+    let drawn = 0;
+    for (const s of entry.ships) if (s.alive) drawn++;
+    if (drawn >= entry.capacity) return false;
     const home = _p;
     if (r.group && r.slot) {
       const g = r.group;
@@ -310,6 +343,32 @@ export function createBattle({
       classInfo(model.id).cruise[1],
     );
     stats.reinforcements++;
+    // entry flare: a flash and a ring of flak-like bursts around the arriving hull (no detonation)
+    const R = model.bounds.radius;
+    const bursts = [];
+    const nb = 4 + rrand.int(3);
+    for (let i = 0; i < nb; i++)
+      bursts.push([
+        rrand.range(-1, 1),
+        rrand.range(-0.5, 0.5),
+        rrand.range(-1, 1),
+        rrand.range(0.5, 0.95) * R,
+        rrand.range(45, 95),
+      ]);
+    if (roomFor(explosions, "add", 0.9)) {
+      explosions.spawn(st.ship.position, {
+        kind: "flash",
+        size: model.length * 0.55,
+        life: 0.4,
+      });
+      for (const [bx, by, bz, dist, size] of bursts) {
+        _w.set(bx, by, bz)
+          .normalize()
+          .multiplyScalar(dist)
+          .add(st.ship.position);
+        explosions.flak(_w, size);
+      }
+    }
     return true;
   }
 
@@ -317,11 +376,13 @@ export function createBattle({
   let tick = 0.5;
   let flakTimer = 0;
   const FIXED_TICK = 1.0;
+  const FLAK_PERIOD = 0.16 / fxScale;
 
   function update(dt, camPos) {
     const t0 = performance.now();
     time += dt;
-    // 1 Hz tick: retargeting (pairwise) and hull avoidance (pairwise)
+    // 1 Hz tick: retargeting (pairwise) and hull avoidance (pairwise). Targets change here and in the
+    // director's doom focus only (setTarget), every few seconds, so the tracking turrets visibly swing.
     tick -= dt;
     if (tick <= 0) {
       tick += FIXED_TICK;
@@ -361,7 +422,7 @@ export function createBattle({
     // ambient flak: bursts around the hulls and between the lines
     flakTimer -= dt;
     if (flakTimer <= 0 && states.length) {
-      flakTimer = 0.16;
+      flakTimer = FLAK_PERIOD;
       const st = states[rrand.int(states.length)];
       const r = st.ship.model.bounds.radius;
       _p.set(rrand.range(-1, 1), rrand.range(-0.6, 0.6), rrand.range(-1, 1))
@@ -370,12 +431,12 @@ export function createBattle({
         .add(st.ship.position);
       const size = 30 + rrand() * 55;
       // (drawn before the budget check so the stream does not depend on the particle load)
-      if (explosions.alive < 1100) explosions.flak(_p, size);
+      if (roomFor(explosions, "add", 0.9)) explosions.flak(_p, size);
     }
     pointDefence(ctx, dt);
     const t1 = performance.now();
     fleet.update(dt, camPos);
-    fighters.update(dt, time, fighterFire);
+    fighters.update(dt, time + PREROLL, fighterFire); // the swarms' clock starts at the pre-roll
     bolts.update(dt);
     explosions.update(dt);
     stats.boltsInFlight = inFlight.n;
@@ -391,20 +452,22 @@ export function createBattle({
     stats.choreoMs = +(stats.choreoMs * 0.95 + (t1 - t0) * 0.05).toFixed(3);
   }
 
-  // open on a battle already joined: the first seconds run off-screen so the first frame has the
-  // steady exchange in flight, the fires burning and the fighter swarms dispersed (a few hundred ms)
-  const PREROLL = 16;
+  // open on a battle already joined: the first seconds run off-screen (time counts up from -PREROLL,
+  // so every timestamp stays in one frame) with the steady exchange in flight, the fires burning, the
+  // fighter swarms dispersed, and one ship already marked by the director so a wreck or a death is on
+  // screen from the first minute; the next doom follows shortly after the visible start
+  time = -PREROLL;
+  director.nextDoomAt = -PREROLL + rrand.range(6, 10);
   const tp = performance.now();
   for (let i = 0; i < PREROLL * 30; i++) update(1 / 30, ORIGIN);
   stats.prerollMs = +(performance.now() - tp).toFixed(1);
   time = 0;
-  director.nextDoomAt = rrand.range(35, 60);
+  director.nextDoomAt = rrand.range(FIRST_DOOM[0], FIRST_DOOM[1]);
   stats.updateMs = stats.updateMsMax = stats.choreoMs = 0;
 
   return {
     fleet,
     models,
-    fires,
     states,
     groups,
     director,
@@ -459,10 +522,12 @@ export function createBattle({
         fighters: fighters.count,
         alive: director.alive,
         deaths: director.deaths,
+        retired: director.retired,
         dying,
         boltsInFlight: inFlight.n,
         heavyInFlight: inFlight.heavy,
         heat: +heat.value.toFixed(2),
+        deathLog: director.deathLog.slice(),
       };
     },
   };
