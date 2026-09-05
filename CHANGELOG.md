@@ -81,6 +81,31 @@ the integration branch and in the committed `dist/` build; landmark builders sti
   source mask 0.166% of pixels. Real-GPU 60 fps at 1080p is unmeasured in this VM.
 - All twelve signature landmarks are in (the six above plus the Detention Center, HoloNet tower, Medical Facility,
   Opera House, 500 Republica and the Chancellery; `docs/rubrics/06_landmarks.md` has the per-landmark harness table).
+- Coruscant landmark critic (100 screenshots, door/room/light probes over all 73 doors and 3,174 rooms): 0 ACCEPT,
+  7 ACCEPT WITH NITS, 5 REJECT (Senate, Temple, Republica, Uscru, HoloNet); the city-wide finding was that no landmark
+  read from 200 blocks (fog wall plus taller neighbours). Fix round, all landmark harnesses still OK:
+  - visibility: generic towers next to a landmark lot step down (under 60% of its height across the street, 85% within
+    40 blocks); the far-skyline layer now carries landmark impostors built from the real blueprints (column tops on a
+    3-block grid) drawn as lighter stone with a wider lit-window pitch at night, so the Senate dome, the Temple's
+    ziggurat and five spires and 500 Republica read from across the city;
+  - sky: the smog haze is a daytime effect, nights are deep violet with only the horizon glow band;
+  - Senate: pavilion stalk out of the south arch (the registered door was solid), lift beside the arch, no floating
+    rooms inside the double-height vestibules, an 8-deep Chancellor's office with a red-and-glass window wall (was a
+    29 x 2 strip), four rings of repulsorpod balconies up the chamber wall, grey ribbed cap, dark ceiling with rib
+    light lines, lit pit floor (15% dark -> 0);
+  - Temple: hangar floor strips, wall bands, posts and hanging rigs (76% of the floor below light 6 -> 0), more garden
+    lanterns and lit paths (0 black cells); Medcenter bacta hall lit floor grid;
+  - doors: Uscru street vents never sit over a doorway; Chancellery rear-door approach cleared of the lamp post;
+  - furnishing: civic rooms in detention/holonet/medcenter/opera (courtrooms, offices, lounges, theatres) are dressed
+    with tables, seats, shelves and consoles instead of crates and barrels; Opera horseshoe walls are red and gold with
+    glow bands and the Chancellor's box has a dais, throne, drapes, table, emblem and red guards; Medcenter roof garden
+    has lawns, flower beds and trees; HoloNet billboards show a bold lit image (planet disc, orbit ring, caption bars);
+  - Uscru: two new emissive blocks (`neon_pink`, `neon_green`); neon tubes along every floor band and up the facade
+    corners, neon door stacks and street lamps, pink/green lines on the deck underside; the Outlander Club has a lit
+    dance floor under a holo canopy, neon columns, a bar with a lit front and bottle shelves, booths and a DJ plinth.
+  - Not addressed this round: room rectangles that overhang rakes/facades (Republica apartments, Opera tiers; metadata
+    only, no NPCs spawn yet), the Chancellery disc pavilion's stalk, Works yards and Market arcade filler, and 500
+    Republica's slender massing (its lot is 2 x 2 blocks).
 - Known gaps: NPCs for Coruscant are planned (`docs/STARWARS_PLAN.md`, population plan) but not spawned;
   clouds cast no shadows; the Coruscant daytime haze is deliberately bright (city smog) and steel-glass roofs still
   read bright at noon; the "leave the planet by spaceship" journey is the next big project.

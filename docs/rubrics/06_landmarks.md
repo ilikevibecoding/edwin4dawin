@@ -68,3 +68,18 @@ domed rotundas, radial light strips, the Umate rock outcrop in a ring pool at th
 | chancellery | `chancellery.js` | OK: 417 rooms, 43 block types | stepped four-tier stone tower: Chancellor's floor with the curved red office, meeting rooms, briefing theatre, Senate Guard posts, senators' offices, archives, vault, cafeteria, sky lobby, crown, private landing platform with the disc pavilion (builder: dedicated subagent) |
 
 All twelve landmark lots are filled; every module passes `scripts/landmark-stats.mjs` (deterministic, 0 unreachable, 0 unlit).
+
+### Critic round (independent review, `/opt/cursor/artifacts/critic_coruscant_report.md`)
+
+Verdicts before the fix round: 0 ACCEPT, 7 ACCEPT WITH NITS (plaza, opera, chancellery, medcenter, detention, works,
+market), 5 REJECT (senate, temple, republica, underworld, holonet). The three probes (73 doors, 3,174 rooms, dense light
+survey) found 3 bad doors, 1 black room (Temple hangar, 76% below light 6), 4 floorless Senate rooms.
+
+Fixed (see CHANGELOG round 5): landmark visibility (neighbour height cap + blueprint impostors in the far-skyline
+layer), violet night sky, Senate arch/door/office/pods/dome, Temple hangar and garden light, Uscru door grate and
+Chancellery door post, civic furnishing in signature rooms, Opera walls and box, Medcenter garden, HoloNet billboard
+image, Uscru neon canyon and Outlander Club. Re-measured: Temple hangar 0% below light 6 (was 76%), Temple garden 1%
+(was 8%, 0 black cells), Senate pit 0% (was 15%).
+
+Open nits: room rectangles overhanging rakes/facades (Republica apartments, Opera tiers - metadata only), Chancellery
+disc pavilion stalk and blue-cube halo, Works yards and Market arcade filler, Republica's slender massing.
