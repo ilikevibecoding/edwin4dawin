@@ -6,7 +6,7 @@
 // `userData.lod` so the distance LOD keeps working (one draw call per material per chunk).
 import * as THREE from "three";
 import { rng } from "../kit.js";
-import { HULL, halfWidth, dorsalH, ventralH, skinPoint, CHUNKS, chunkIndex, CITY, TOWER, HANGAR, REACTOR } from "./dims.js";
+import { HULL, halfWidth, dorsalH, ventralH, skinPoint, CHUNKS, chunkIndex, CITY, TOWER, HANGAR, REACTOR, PLATE_LIFT } from "./dims.js";
 import { instancedMesh, frameItem, boxItem, mergeParts, unitPipeGeometry, grey } from "./batch.js";
 import { makeSurface, trenchWallX } from "./hull.js";
 
@@ -43,8 +43,10 @@ function frameMatrix(center, X, Y, Z, sc) {
   return new THREE.Matrix4().makeBasis(X.clone().multiplyScalar(sc), Y.clone().multiplyScalar(sc), Z.clone().multiplyScalar(f * sc)).setPosition(center);
 }
 
-/** Box standing on a plateau skin (side +1 dorsal / -1 ventral) at (x, z), `lift` above the plate tops. */
-function plateauItem(side, x, z, sx, sy, sz, c, yaw = 0, lift = 1.4) {
+/** Box standing on a plateau skin (side +1 dorsal / -1 ventral) at (x, z), `lift` above the skin (the
+ *  default sinks it 5 cm into the plate tops). */
+const LIFT = PLATE_LIFT - 0.05;
+function plateauItem(side, x, z, sx, sy, sz, c, yaw = 0, lift = LIFT) {
   const sk = skinPoint(x, z, side);
   _p.set(sk.x, sk.y + side * (lift + sy / 2), sk.z);
   _q.setFromEuler(_e.set(side > 0 ? 0 : Math.PI, yaw, 0));
@@ -57,14 +59,67 @@ const smoothstep = (a, b, x) => {
   return t * t * (3 - 2 * t);
 };
 
-/** Individual windows (0.8 m wide on a 1.5 m pitch) centred along a run of length `len`; `place(t)` builds
- *  the window at offset t. Runs of separate panes read as lit galleries instead of blooming into bars. */
+/**
+ * True when every corner of the yaw-rotated sx × sz footprint centred at (x, z) lies on the plateau of
+ * `side` with `margin` metres to spare (the wedge narrows toward the bow, so a long housing centred on
+ * the plateau can still hang its forward end out past the bevel into space).
+ */
+function footprintOnPlateau(side, x, z, sx, sz, yaw, margin = 1.5) {
+  const sp = side > 0 ? HULL.plateauDorsal : HULL.plateauVentral;
+  const c = Math.cos(yaw);
+  const s = Math.sin(yaw);
+  for (const [ex, ez] of [
+    [-1, -1],
+    [1, -1],
+    [1, 1],
+    [-1, 1],
+  ]) {
+    const lx = (ex * sx) / 2;
+    const lz = (ez * sz) / 2;
+    const wx = x + lx * c + lz * s;
+    const wz = z - lx * s + lz * c;
+    if (wz < HULL.bowZ + 3 || wz > HULL.sternZ - 3) return false;
+    if (Math.abs(wx) > halfWidth(wz) * sp - margin) return false;
+  }
+  return true;
+}
+
+/** Shrink a footprint (length only, or both axes) until it sits on the plateau; null if it would lose > 55 %. */
+function fitPlateau(side, x, z, sx, sz, yaw, both = true) {
+  let fx = 1;
+  let fz = 1;
+  for (let i = 0; i < 12; i++) {
+    if (footprintOnPlateau(side, x, z, sx * fx, sz * fz, yaw)) return [sx * fx, sz * fz];
+    fz *= 0.88;
+    if (both) fx *= 0.88;
+    if (fz < 0.45) return null;
+  }
+  return null;
+}
+
+/** Lit panes are 0.8 m wide on a 1.5 m pitch inside a cluster. */
 const WINDOW_W = 0.8;
 const WINDOW_PITCH = 1.5;
-function windowRun(len, place) {
-  const n = Math.max(1, Math.floor((len - WINDOW_W) / WINDOW_PITCH) + 1);
-  const t0 = (-(n - 1) * WINDOW_PITCH) / 2;
-  for (let i = 0; i < n; i++) place(t0 + i * WINDOW_PITCH);
+
+/**
+ * Windows along a run of length `len` (offsets centred on 0) in clusters of 2–4 panes with dark gaps of
+ * 4–10 m between the clusters, so about a fifth of the run is lit — the sparse Imperial pattern, not a
+ * continuous strip. `place(t)` builds the pane at offset t.
+ */
+export function windowCluster(rand, len, place) {
+  const half = len / 2;
+  let t = -half + rand() * 2.5;
+  while (t < half - WINDOW_W) {
+    const n = 2 + Math.floor(rand() * 3);
+    for (let i = 0; i < n && t < half - WINDOW_W; i++, t += WINDOW_PITCH) place(t + WINDOW_W / 2);
+    t += 4 + rand() * 6;
+  }
+}
+
+/** Instance tint for a lit pane: ~70 % warm white (null), 15 % amber, 15 % cool blue-white. */
+export function windowTint(rand) {
+  const r = rand();
+  return r < 0.15 ? [1, 0.66, 0.34] : r < 0.3 ? [0.62, 0.8, 1.0] : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -174,20 +229,20 @@ export function buildDetails(materials, hull, sup) {
   // that stay visible past the fine-greeble LOD so the clusters still read as knots at medium range
   const per = Array.from({ length: CHUNKS }, () => ({ boxes: [], big: [], lights: [], windows: [], pipes: [], reds: [], docks: [], dishes: [] }));
   const city = { boxes: [], lights: [], pipes: [], reds: [] };
-  const global = { radiators: [], sensors: [], antennas: [], wedges: [], reds: [], dim: [] };
+  const global = { radiators: [], sensors: [], antennas: [], wedges: [], dim: [] };
   let greebles = 0;
 
   // --- city tier tops: dense, organised machinery on the tier plating (blocks, low wide towers and
   // long halls with window strips, hatches, ports, conduits) — the "city" of the superstructure. The
-  // ISD superstructure is low-rise: towers are capped at ~35 m with wide footprints; only the four
-  // designated blocks below rise higher.
+  // ISD superstructure is low-rise: no block rises above ~1.4 tier heights, footprints are at least
+  // 0.6 of the height, and every tower stands in a group (podium + annex), never as a lone post.
   const tallBlocks = [
-    { ti: 0, s: -1, z: 262, w: 13, d: 15, h: 44 },
-    { ti: 0, s: 1, z: 384, w: 11, d: 13, h: 40 },
-    { ti: 1, s: 1, z: 392, w: 12, d: 12, h: 46 },
-    { ti: 1, s: -1, z: 476, w: 10, d: 14, h: 42 },
+    { ti: 0, s: -1, z: 262, w: 18, d: 18, h: 30 },
+    { ti: 0, s: 1, z: 384, w: 18, d: 18, h: 30 },
+    { ti: 1, s: 1, z: 392, w: 18, d: 18, h: 30 },
+    { ti: 1, s: -1, z: 476, w: 18, d: 20, h: 32 },
   ];
-  const nearTallBlock = (x, z) => tallBlocks.some((b) => Math.abs(z - b.z) < b.d / 2 + 3 && Math.abs(x - b.s * b.x) < b.w / 2 + 3);
+  const nearTallBlock = (x, z) => tallBlocks.some((b) => Math.abs(z - b.z) < b.d / 2 + 14 && Math.abs(x - b.s * b.x) < b.w / 2 + 3);
   for (const b of tallBlocks) {
     const t = CITY.tiers[b.ti];
     const hw = t.hw0 + ((t.hw1 - t.hw0) * (b.z - t.zs)) / (t.ze - t.zs);
@@ -198,18 +253,18 @@ export function buildDetails(materials, hull, sup) {
     city.boxes.push(boxItem(x, y0 + b.h / 2, b.z, b.w, b.h, b.d, grey(tone, 1.02)));
     city.boxes.push(boxItem(x, y0 + b.h + 1.2, b.z, b.w * 0.7, 2.4, b.d * 0.7, grey(tone * 0.85, 1.02)));
     city.boxes.push(boxItem(x, y0 + b.h + 5.5, b.z, 0.6, 6, 0.6, grey(0.4)));
-    // setback plinth at the base and vertical ribs on the long faces
+    // setback plinth at the base, a lower annex block aft of it, vertical ribs on the long faces
     city.boxes.push(boxItem(x, y0 + 3, b.z, b.w + 2.4, 6, b.d + 2.4, grey(tone * 0.9, 1.02)));
+    city.boxes.push(boxItem(x, y0 + b.h * 0.22, b.z + b.d / 2 + 5.5, b.w * 0.8, b.h * 0.44, 11, grey(tone * 1.06, 1.02)));
     for (let k = -1; k <= 1; k += 2) city.boxes.push(boxItem(x + (k * (b.w + 0.6)) / 2, y0 + b.h / 2, b.z, 0.6, b.h - 2, 1.4, grey(0.62, 1.02)));
-    // storeys of separate 0.8 m panes (continuous strips at 3.4 m pitch bloomed the whole face white
-    // from the bridge and the observation gallery)
+    // storeys of clustered 0.8 m panes on one long face and the outer flank (a fifth of each row lit)
     for (let y = 8; y < b.h - 3; y += 3.4) {
       if (rand() < 0.25) continue;
       const zf = b.z + (b.d / 2 + 0.06) * (rand() < 0.5 ? 1 : -1);
-      windowRun(b.w * 0.6, (t) => city.lights.push(boxItem(x + t, y0 + y, zf, WINDOW_W, 1.0, 0.16, null)));
-      windowRun(b.d * 0.5, (t) => city.lights.push(boxItem(x + (b.w / 2 + 0.06) * b.s, y0 + y, b.z + t, 0.16, 1.0, WINDOW_W, null)));
+      windowCluster(rand, b.w * 0.8, (t) => city.lights.push(boxItem(x + t, y0 + y, zf, WINDOW_W, 1.0, 0.16, windowTint(rand))));
+      windowCluster(rand, b.d * 0.8, (t) => city.lights.push(boxItem(x + (b.w / 2 + 0.06) * b.s, y0 + y, b.z + t, 0.16, 1.0, WINDOW_W, windowTint(rand))));
     }
-    greebles += 6;
+    greebles += 7;
   }
   for (const a of sup.anchors) {
     if (nearTallBlock(a.p.x, a.p.z)) continue;
@@ -218,10 +273,11 @@ export function buildDetails(materials, hull, sup) {
       const kind = rand();
       const tower = kind < 0.13;
       const hall = !tower && kind < 0.42 && a.l > 9;
-      const gw = tower ? 4.5 + rand() * Math.min(8, a.w * 0.7) : hall ? 3 + rand() * Math.min(4, a.w * 0.5) : 2 + rand() * Math.min(6, a.w * 0.6);
-      const gd = tower ? 4.5 + rand() * Math.min(8, a.l * 0.7) : hall ? Math.min(a.l - 2, 9 + rand() * 10) : 2 + rand() * Math.min(7, a.l * 0.6);
-      // low-rise: most towers 10–24 m, a few up to the 35 m cap
-      const gh = tower ? (rand() < 0.25 ? 26 + rand() * 9 : 10 + rand() * 14) : hall ? 3 + rand() * 3 : 1.5 + rand() * 3.5;
+      const gw = tower ? 6 + rand() * Math.min(8, a.w * 0.7) : hall ? 3 + rand() * Math.min(4, a.w * 0.5) : 2 + rand() * Math.min(6, a.w * 0.6);
+      const gd = tower ? 6 + rand() * Math.min(8, a.l * 0.7) : hall ? Math.min(a.l - 2, 9 + rand() * 10) : 2 + rand() * Math.min(7, a.l * 0.6);
+      // low-rise: towers 9–24 m but never taller than 1/0.6 of their mean footprint
+      let gh = tower ? (rand() < 0.25 ? 20 + rand() * 6 : 9 + rand() * 11) : hall ? 3 + rand() * 3 : 1.5 + rand() * 3.5;
+      if (tower) gh = Math.min(gh, (gw + gd) / 2 / 0.6);
       const ox = (rand() - 0.5) * Math.max(0, a.w - gw - 1);
       const oz = (rand() - 0.5) * Math.max(0, a.l - gd - 1);
       // mostly mid greys with a third of the blocks dark, so the city does not bleach to white in the sun
@@ -231,13 +287,20 @@ export function buildDetails(materials, hull, sup) {
       if (tower || hall) {
         for (let y = 2.2; y < gh - 1.2; y += 3.2) {
           if (rand() < 0.3) continue;
-          if (tower) windowRun(gw * 0.6, (t) => city.lights.push(onPlate(a, ox + t, y, oz + gd / 2 + 0.06, WINDOW_W, 1.0, 0.16, null)));
-          if (hall || rand() < 0.5) windowRun(gd * 0.7, (t) => city.lights.push(onPlate(a, ox + gw / 2 + 0.06, y, oz + t, 0.16, 1.0, WINDOW_W, null)));
+          if (tower) windowCluster(rand, gw * 0.8, (t) => city.lights.push(onPlate(a, ox + t, y, oz + gd / 2 + 0.06, WINDOW_W, 1.0, 0.16, windowTint(rand))));
+          if (hall || rand() < 0.5) windowCluster(rand, gd * 0.85, (t) => city.lights.push(onPlate(a, ox + gw / 2 + 0.06, y, oz + t, 0.16, 1.0, WINDOW_W, windowTint(rand))));
         }
         if (tower) {
-          // stepped crown (a setback top storey) rather than a needle; a short mast on a few
+          // stepped crown (a setback top storey) rather than a needle; a short mast on a few; a
+          // one-storey annex against a flank when the plate has room, so the tower is part of a block
           city.boxes.push(onPlate(a, ox, gh + 0.9, oz, gw * 0.65, 1.8, gd * 0.65, grey(k * 0.85, 1.02)));
           if (rand() < 0.3) city.boxes.push(onPlate(a, ox, gh + 3.6, oz, 0.4, 4, 0.4, grey(0.4)));
+          const aw = 3 + rand() * 3;
+          const sgn = ox > 0 ? -1 : 1;
+          if (Math.abs(ox + sgn * (gw / 2 + aw / 2)) + aw / 2 < a.w / 2 - 0.5) {
+            city.boxes.push(onPlate(a, ox + sgn * (gw / 2 + aw / 2), gh * 0.2, oz, aw, gh * 0.4, gd * 0.85, grey(k * 1.05, 1.02)));
+            greebles++;
+          }
           greebles++;
         }
         if (hall) {
@@ -332,61 +395,68 @@ export function buildDetails(materials, hull, sup) {
     const out = per[chunkIndex(c.z)];
     const side = c.side;
     if (c.kind === "complex") {
-      // one or two blocks per complex: wide-footprint machinery towers (aspect ≤ 2, not needles), and
-      // only squat housings on the ventral side (nothing hangs below the hull like a spire)
+      // one or two wide-footprint machinery towers per complex (height ≤ 1.6 × the footprint, so none
+      // reads as a needle), each on a one-storey podium with a lower annex against one flank so it is
+      // not a lone post; only squat housings on the ventral side (nothing hangs below the hull)
       const n = 1 + Math.floor(rand() * 2);
       for (let k = 0; k < n; k++) {
-        const tw = 7 + rand() * 5;
+        const tw = 9 + rand() * 6;
         const td = tw * (0.8 + rand() * 0.6);
-        const th = side > 0 ? 9 + rand() * 12 : 4 + rand() * 4;
+        const th = side > 0 ? Math.min(9 + rand() * 12, Math.min(tw, td) * 1.6) : 4 + rand() * 4;
         const tx = c.x + (rand() - 0.5) * c.r;
         const tz = c.z + (rand() - 0.5) * c.r;
+        if (!footprintOnPlateau(side, tx, tz, tw + 3, td + 3, 0)) continue;
         const tone = rand() < 0.5 ? 0.3 + rand() * 0.12 : 0.5 + rand() * 0.15;
         out.big.push(plateauItem(side, tx, tz, tw, th, td, grey(tone, 1.02)));
-        out.big.push(plateauItem(side, tx, tz, tw * 0.6, 2.2, td * 0.6, grey(tone * 0.8), 0, 1.4 + th));
-        out.big.push(plateauItem(side, tx, tz, 0.5, 6, 0.5, grey(0.4), 0, 1.4 + th + 2.2));
-        for (let y = 3; y < th - 2; y += 3.4) {
+        out.big.push(plateauItem(side, tx, tz, tw + 3, 2.6, td + 3, grey(tone * 0.9, 1.02)));
+        out.big.push(plateauItem(side, tx, tz, tw * 0.6, 2.2, td * 0.6, grey(tone * 0.8), 0, LIFT + th));
+        out.big.push(plateauItem(side, tx, tz, 0.5, 6, 0.5, grey(0.4), 0, LIFT + th + 2.2));
+        const ax = tx + (rand() < 0.5 ? -1 : 1) * (tw / 2 + 3.5);
+        if (footprintOnPlateau(side, ax, tz, 7, td * 0.8, 0)) out.big.push(plateauItem(side, ax, tz, 7, th * 0.45, td * 0.8, grey(tone * 1.05, 1.02)));
+        for (let y = 4.5; y < th - 2; y += 3.4) {
           if (rand() < 0.3) continue;
-          windowRun(tw * 0.55, (t) => out.windows.push(plateauItem(side, tx + t, tz + td / 2 + 0.1, WINDOW_W, 1.0, 0.2, null, 0, y)));
+          windowCluster(rand, tw * 0.6, (t) => out.windows.push(plateauItem(side, tx + t, tz + td / 2 + 0.1, WINDOW_W, 1.0, 0.2, windowTint(rand), 0, y)));
         }
         // soot fan trailing aft of the tower base
-        out.big.push(plateauItem(side, tx, tz + td / 2 + 7, tw * 1.1, 0.06, 12 + rand() * 8, grey(0.42, 0.98), 0, 0.02));
-        greebles += 4;
+        if (footprintOnPlateau(side, tx, tz + td / 2 + 7, tw * 1.1, 20, 0)) out.big.push(plateauItem(side, tx, tz + td / 2 + 7, tw * 1.1, 0.06, 12 + rand() * 8, grey(0.42, 0.98), 0, PLATE_LIFT + 0.01));
+        greebles += 5;
       }
       // a pair of big low housings and a pipe manifold across the complex
       for (let k = 0; k < 2; k++) {
-        const bw = 6 + rand() * 6;
-        out.big.push(plateauItem(side, c.x + (rand() - 0.5) * c.r * 1.2, c.z + (rand() - 0.5) * c.r * 1.2, bw, 3 + rand() * 3, 5 + rand() * 6, grey(0.36 + rand() * 0.2, 1.02), c.yaw));
+        const hx = c.x + (rand() - 0.5) * c.r * 1.2;
+        const hz = c.z + (rand() - 0.5) * c.r * 1.2;
+        const fitH = fitPlateau(side, hx, hz, 6 + rand() * 6, 5 + rand() * 6, c.yaw);
+        if (!fitH) continue;
+        out.big.push(plateauItem(side, hx, hz, fitH[0], 3 + rand() * 3, fitH[1], grey(0.36 + rand() * 0.2, 1.02), c.yaw));
         greebles++;
       }
-      const pl = c.r * 1.6;
-      const sk = skinPoint(c.x, c.z, side);
-      out.pipes.push(worldItem(sk.x, sk.y + side * 2.0, sk.z, 0.55, 0.55, pl, 0, c.yaw + Math.PI / 2, 0, grey(0.45)));
-      greebles++;
+      const fitP = fitPlateau(side, c.x, c.z, 0.55, c.r * 1.6, c.yaw + Math.PI / 2, false);
+      if (fitP) {
+        const sk = skinPoint(c.x, c.z, side);
+        out.pipes.push(worldItem(sk.x, sk.y + side * (LIFT + 0.6), sk.z, 0.55, 0.55, fitP[1], 0, c.yaw + Math.PI / 2, 0, grey(0.45)));
+        greebles++;
+      }
     } else if (c.kind === "gallery") {
-      const gl = 18 + rand() * 22;
       const gw = 5 + rand() * 3;
+      const fitG = fitPlateau(side, c.x, c.z, gw + 2, 18 + rand() * 22 + 8, c.yaw, false);
+      if (!fitG) continue;
+      const gl = fitG[1] - 8; // the end blocks add 4 m at each end
+      if (gl < 10) continue;
       const gh = 3.5 + rand() * 2;
       const tone = 0.4 + rand() * 0.2;
       out.big.push(plateauItem(side, c.x, c.z, gw, gh, gl, grey(tone, 1.02), c.yaw));
-      out.big.push(plateauItem(side, c.x, c.z, gw * 0.35, 0.8, gl - 3, grey(tone * 0.8), c.yaw, 1.4 + gh));
+      out.big.push(plateauItem(side, c.x, c.z, gw * 0.35, 0.8, gl - 3, grey(tone * 0.8), c.yaw, LIFT + gh));
       for (const sx of [-1, 1]) {
-        let z0 = -gl / 2 + 2;
-        while (z0 < gl / 2 - 3) {
-          const run = Math.min(gl / 2 - 1 - z0, 3 + rand() * 6);
-          const mid = z0 + run / 2;
-          windowRun(run, (t) => {
-            const cx = c.x + Math.cos(c.yaw) * sx * (gw / 2 + 0.08) + Math.sin(c.yaw) * (mid + t);
-            const cz = c.z - Math.sin(c.yaw) * sx * (gw / 2 + 0.08) + Math.cos(c.yaw) * (mid + t);
-            out.windows.push(plateauItem(side, cx, cz, 0.16, 0.9, WINDOW_W, null, c.yaw, 1.4 + gh * 0.5));
-          });
-          z0 += run + 1.5 + rand() * 4;
-        }
+        windowCluster(rand, gl - 4, (t) => {
+          const cx = c.x + Math.cos(c.yaw) * sx * (gw / 2 + 0.08) + Math.sin(c.yaw) * t;
+          const cz = c.z - Math.sin(c.yaw) * sx * (gw / 2 + 0.08) + Math.cos(c.yaw) * t;
+          out.windows.push(plateauItem(side, cx, cz, 0.16, 0.9, WINDOW_W, windowTint(rand), c.yaw, LIFT + gh * 0.5));
+        });
       }
       // end blocks and a couple of vents on the roof
       for (const e of [-1, 1]) out.big.push(plateauItem(side, c.x + Math.sin(c.yaw) * e * (gl / 2 + 2), c.z + Math.cos(c.yaw) * e * (gl / 2 + 2), gw + 2, gh * 0.7, 3.5, grey(0.3, 1.04), c.yaw));
-      for (let k = 0; k < 3; k++) out.big.push(plateauItem(side, c.x + (rand() - 0.5) * gw * 0.5, c.z + (rand() - 0.5) * (gl - 6), 1.6, 1.2, 1.6, grey(0.2, 1.1), 0, 1.4 + gh));
-      out.big.push(plateauItem(side, c.x, c.z + gl / 2 + 8, gw * 0.9, 0.06, 14, grey(0.42, 0.98), 0, 0.02));
+      for (let k = 0; k < 3; k++) out.big.push(plateauItem(side, c.x + (rand() - 0.5) * gw * 0.5, c.z + (rand() - 0.5) * (gl - 6), 1.6, 1.2, 1.6, grey(0.2, 1.1), 0, LIFT + gh));
+      if (footprintOnPlateau(side, c.x, c.z + gl / 2 + 8, gw, 14, 0)) out.big.push(plateauItem(side, c.x, c.z + gl / 2 + 8, gw * 0.9, 0.06, 14, grey(0.42, 0.98), 0, PLATE_LIFT + 0.01));
       greebles += 8;
     }
   }
@@ -421,7 +491,13 @@ export function buildDetails(materials, hull, sup) {
         const ox = ventral ? 0 : (rand() - 0.5) * (a.w - hw - 2);
         const oz = ventral ? 0 : (rand() - 0.5) * (a.l - hl - 2);
         out.boxes.push(onPlate(a, ox, 0.16, oz, hw, 0.5, hl, grey(tone * (rand() < 0.5 ? 0.9 : 1.05), 1.0)));
-        global.dim.push(onPlate(a, ox, 0.02, oz, hw + 0.8, 0.12, hl + 0.8, null));
+        // the lit amber rim only where crews work at night: the hangar approach lane (ventral, abeam
+        // of the module) and the heavy-turret bases; elsewhere a dark unlit rim (the lit ones scattered
+        // over the dorsal plates read as stray landing markers)
+        const lane = ventral && Math.abs(x) < HANGAR.module.x + 40 && z > HANGAR.module.z0 - 80 && z < HANGAR.module.z1 + 40;
+        const turretBase = a.side > 0 && a.isPlateau && HEAVY_TURRETS.zs.some((tz) => Math.hypot(Math.abs(x) - heavyTurretX(tz), z - tz) < HEAVY_TURRETS.padR + 26);
+        if (lane || turretBase) global.dim.push(onPlate(a, ox, 0.02, oz, hw + 0.8, 0.12, hl + 0.8, null));
+        else out.boxes.push(onPlate(a, ox, 0.02, oz, hw + 0.8, 0.12, hl + 0.8, grey(0.3, 1.02)));
         greebles += 2;
       }
       // recessed service port (dark, flush)
@@ -470,7 +546,8 @@ export function buildDetails(materials, hull, sup) {
         const ventral = a.side < 0;
         const gw = housing ? 2.2 + rand() * 2.4 : tall ? Math.min(a.w - 1.5, 8 + rand() * 5) : 2 + rand() * Math.min(6, a.w * 0.5);
         const gd = housing ? Math.min(a.l - 1.5, 6 + rand() * 14) : tall ? Math.min(a.l - 1.5, 8 + rand() * 5) : 2 + rand() * Math.min(7, a.l * 0.5);
-        const gh = housing ? 1.5 + rand() * 1.8 : tall ? (ventral ? 6 + rand() * 4 : 16 + rand() * 10) : tower ? (ventral ? 4 + rand() * 4 : 7 + rand() * 10) : 1.4 + rand() * 4.2;
+        let gh = housing ? 1.5 + rand() * 1.8 : tall ? (ventral ? 6 + rand() * 4 : 16 + rand() * 8) : tower ? (ventral ? 4 + rand() * 4 : 7 + rand() * 10) : 1.4 + rand() * 4.2;
+        if (tall || tower) gh = Math.min(gh, (gw + gd) / 2 / 0.6); // footprint aspect ≥ 0.6: no needles
         const ox = (rand() - 0.5) * Math.max(0, a.w - gw - 1.2);
         const oz = (rand() - 0.5) * Math.max(0, a.l - gd - 1.2);
         (tall || housing ? out.big : out.boxes).push(onPlate(a, ox, gh / 2 - 0.15, oz, gw, gh, gd, grey(k, 1.02)));
@@ -489,7 +566,7 @@ export function buildDetails(materials, hull, sup) {
           out.boxes.push(onPlate(a, ox, gh + 0.8, oz, gw * 0.6, 1.6, gd * 0.6, grey(k * 0.85)));
           for (let y = 3; y < gh - 2; y += 3.4) {
             if (rand() < 0.3) continue;
-            windowRun(gw * 0.55, (t) => out.windows.push(onPlate(a, ox + t, y, oz + gd / 2 + 0.1, WINDOW_W, 1.0, 0.2, null)));
+            windowCluster(rand, gw * 0.8, (t) => out.windows.push(onPlate(a, ox + t, y, oz + gd / 2 + 0.1, WINDOW_W, 1.0, 0.2, windowTint(rand))));
           }
           greebles++;
         }
@@ -501,7 +578,7 @@ export function buildDetails(materials, hull, sup) {
         }
         if (tower && rand() < 0.7) {
           // storeys of separate panes on the tower module
-          for (let y = 2.5; y < gh - 1.5; y += 3.2) windowRun(gw * 0.55, (t) => out.windows.push(onPlate(a, ox + t, y, oz + gd / 2 + 0.05, WINDOW_W, 1.0, 0.2, null)));
+          for (let y = 2.5; y < gh - 1.5; y += 3.2) windowCluster(rand, gw * 0.8, (t) => out.windows.push(onPlate(a, ox + t, y, oz + gd / 2 + 0.05, WINDOW_W, 1.0, 0.2, windowTint(rand))));
         }
       }
       // conduit run along a plate (mostly inside the clusters)
@@ -563,7 +640,7 @@ export function buildDetails(materials, hull, sup) {
         const Z = _b.clone().sub(_a).normalize();
         const Y = new THREE.Vector3().crossVectors(Z, X).normalize();
         if (Y.dot(surf.hint) < 0) Y.negate();
-        const c = surf.at(u, z, new THREE.Vector3()).addScaledVector(Y, 1.5);
+        const c = surf.at(u, z, new THREE.Vector3()).addScaledVector(Y, PLATE_LIFT);
         const f = { p: c, X, Y, Z };
         const out = per[chunkIndex(z)];
         const W = 18 + rand() * 14;
@@ -600,17 +677,11 @@ export function buildDetails(materials, hull, sup) {
       const gd = 1.4 + rand() * 0.8;
       out.big.push(worldItem(s * (xw + gd / 2), gy + gh / 2, zc, gd, gh, gl, 0, yaw, 0, grey(0.38 + rand() * 0.14, 1.02)));
       out.big.push(worldItem(s * (xw + gd + 0.3), gy + gh + 0.4, zc, 0.6, 0.5, gl - 2, 0, yaw, 0, grey(0.3)));
-      let t = -gl / 2 + 1.5;
-      while (t < gl / 2 - 2) {
-        const run = Math.min(gl / 2 - 1 - t, 2 + rand() * 5);
-        const lz = zc + t + run / 2;
-        windowRun(run, (u) => {
-          const wz = lz + u;
-          const wx = trenchWallX(wz) + gd * 1.045 + 0.1;
-          out.windows.push(worldItem(s * wx, gy + gh * 0.5, wz, 0.16, 1.0, WINDOW_W, 0, yaw, 0, null));
-        });
-        t += run + 1 + rand() * 3;
-      }
+      windowCluster(rand, gl - 3, (u) => {
+        const wz = zc + u;
+        const wx = trenchWallX(wz) + gd * 1.045 + 0.1;
+        out.windows.push(worldItem(s * wx, gy + gh * 0.5, wz, 0.16, 1.0, WINDOW_W, 0, yaw, 0, windowTint(rand)));
+      });
       greebles += 3;
     }
     for (let z = HULL.bowZ + 60; z < HULL.sternZ - 8; z += 5 + rand() * 5) {
@@ -694,7 +765,7 @@ export function buildDetails(materials, hull, sup) {
   // --- bow sensor cluster + antenna clusters + sensor arrays along the plateau shoulders
   const placeSensor = (x, z, side, scale, yaw, list) => {
     const sk = skinPoint(x, z, side);
-    _p.set(sk.x, sk.y + side * 1.4, sk.z);
+    _p.set(sk.x, sk.y + side * LIFT, sk.z);
     _q.setFromEuler(_e.set(side > 0 ? 0 : Math.PI, yaw, 0));
     _s.setScalar(scale);
     list.push({ m: _m.compose(_p, _q, _s).clone(), c: grey(0.66, 1.02) });
@@ -744,7 +815,7 @@ export function buildDetails(materials, hull, sup) {
       const x0 = Math.max(cityHW(z) + 40, heavyTurretX(550) + HEAVY_TURRETS.padR + 14);
       const x = s * (x0 + rand() * Math.max(4, hw - x0 - 30));
       const sk = skinPoint(x, z, 1);
-      _p.set(sk.x, sk.y + 1.6, sk.z);
+      _p.set(sk.x, sk.y + PLATE_LIFT + 0.1, sk.z);
       _q.setFromEuler(_e.set(0, rand() < 0.5 ? 0 : Math.PI / 2, 0));
       _s.setScalar(0.9 + rand() * 0.4);
       global.radiators.push({ m: _m.compose(_p, _q, _s).clone(), c: grey(0.5 + rand() * 0.1, 1.04) });
@@ -753,7 +824,7 @@ export function buildDetails(materials, hull, sup) {
       const z = 420 + k * 90;
       const hw = halfWidth(z) * HULL.plateauVentral;
       const sk = skinPoint(s * (hw * 0.55), z, -1);
-      _p.set(sk.x, sk.y - 1.5, sk.z);
+      _p.set(sk.x, sk.y - PLATE_LIFT - 0.05, sk.z);
       _q.setFromEuler(_e.set(Math.PI, rand() * 3, 0));
       _s.setScalar(1.0);
       global.radiators.push({ m: _m.compose(_p, _q, _s).clone(), c: grey(0.48, 1.04) });
@@ -779,15 +850,34 @@ export function buildDetails(materials, hull, sup) {
     }
   }
 
-  // --- navigation lights: red port / green-ish white starboard, bow and stern markers (static)
-  for (const [x, y, z] of [
-    [-halfWidth(700) + 2, 10, 700],
-    [halfWidth(700) - 2, 10, 700],
-    [0, dorsalH(-790) + 1.5, -790],
-    [0, -ventralH(-790) - 1.5, -790],
-    [0, TOWER.mast.y1 + 4, TOWER.mast.z],
-  ]) {
-    global.reds.push(boxItem(x, y, z, 1.0, 1.0, 1.0, null));
+  // --- navigation lights: red port / green starboard abeam, warm white bow (dorsal + ventral) and
+  // stern-corner markers, red beacon on the mast. Each is a 0.8 m unshaded lamp (ext_navLamp, HDR
+  // instance colour) with an additive glow point on it (ext_navGlow), so they read as lights.
+  const red = [3.0, 0.3, 0.2];
+  const green = [0.4, 3.0, 0.9];
+  const white = [3.0, 2.5, 1.9];
+  const navs = [
+    { p: [-halfWidth(700) + 2, 10, 700], c: red },
+    { p: [halfWidth(700) - 2, 10, 700], c: green },
+    { p: [-halfWidth(-200) + 2, 9, -200], c: red },
+    { p: [halfWidth(-200) - 2, 9, -200], c: green },
+    { p: [0, dorsalH(-790) + PLATE_LIFT + 0.4, -790], c: white },
+    { p: [0, -ventralH(-790) - PLATE_LIFT - 0.4, -790], c: white },
+    { p: [-270, dorsalH(HULL.sternZ - 4) + PLATE_LIFT + 0.8, HULL.sternZ - 4], c: white },
+    { p: [270, dorsalH(HULL.sternZ - 4) + PLATE_LIFT + 0.8, HULL.sternZ - 4], c: white },
+    { p: [0, TOWER.mast.y1 + 4, TOWER.mast.z], c: red },
+  ];
+  const navGeo = new THREE.BoxGeometry(0.8, 0.8, 0.8);
+  group.add(instancedMesh(navGeo, materials.ext_navLamp, navs.map((n) => boxItem(n.p[0], n.p[1], n.p[2], 1, 1, 1, n.c)), { name: "navLights" }));
+  {
+    const pg = new THREE.BufferGeometry();
+    pg.setAttribute("position", new THREE.Float32BufferAttribute(navs.flatMap((n) => n.p), 3));
+    pg.setAttribute("color", new THREE.Float32BufferAttribute(navs.flatMap((n) => n.c.map((v) => Math.min(1, v / 3) * 0.85 + 0.15)), 3));
+    const glows = new THREE.Points(pg, materials.ext_navGlow);
+    glows.name = "navGlows";
+    glows.frustumCulled = false;
+    glows.renderOrder = 7;
+    group.add(glows);
   }
 
   // --- build meshes: per chunk (LOD 0) into the hull chunk groups
@@ -814,7 +904,6 @@ export function buildDetails(materials, hull, sup) {
   lod0.add(instancedMesh(antennaClusterGeometry(), materials.hullDark, global.antennas, { name: "antennaClusters" }));
   lod0.add(instancedMesh(wedgeGeometry(), materials.hull, global.wedges, { name: "buttresses", castShadow: true }));
   if (global.dim.length) lod0.add(instancedMesh(boxGeo, materials.ext_dimLight, global.dim, { name: "hatchLamps" }));
-  group.add(instancedMesh(boxGeo, materials.exteriorRed, global.reds, { name: "navLights" }));
   greebles += global.radiators.length + global.sensors.length + global.antennas.length + global.wedges.length;
 
   return { group, lod0, stats: { greebles } };

@@ -5,11 +5,11 @@
 // point-defence. Static geometry is batched per material; repeated detail is instanced.
 import * as THREE from "three";
 import { PALETTE } from "../materials.js";
-import { rng, setVertexColor } from "../kit.js";
-import { CITY, TOWER, HULL, halfWidth, dorsalH, ventralH } from "./dims.js";
+import { rng } from "../kit.js";
+import { CITY, TOWER, HULL, halfWidth, dorsalH, ventralH, PLATE_LIFT } from "./dims.js";
 import { Batcher, instancedMesh, boxItem, mergeParts, grey } from "./batch.js";
 import { platingFor } from "./hull.js";
-import { wedgeGeometry, HEAVY_TURRETS, heavyTurretX, TERRACES, TOWER_PRISM } from "./details.js";
+import { wedgeGeometry, HEAVY_TURRETS, heavyTurretX, TERRACES, TOWER_PRISM, windowTint } from "./details.js";
 
 const _v = new THREE.Vector3();
 const _q = new THREE.Quaternion();
@@ -124,24 +124,26 @@ function facePlateWithHole(hw, y0, y1, z, thick, hole, hwTop = hw) {
 }
 
 /**
- * Row of lit windows along a line: small tall panes (0.8 × 1.6 m) in clustered runs of 3–8 with
- * dark gaps between the runs, so from outside it reads as decks with rooms, not a string of
- * runway lights.
+ * Row of lit windows along a line: small panes in clusters of 2–4 with 4–10 m of dark wall between
+ * the clusters (about a fifth of the row lit, mostly warm white with a few amber / cool panes), so
+ * from outside it reads as a few lit rooms per deck, not a strip of runway lights. `yaw` turns the
+ * panes to follow a face that is not axis-aligned.
  */
-function windowRow(items, x0, y, z0, x1, z1, rand, size = [0.8, 1.6, 0.4], step = 1.9) {
+function windowRow(items, x0, y, z0, x1, z1, rand, size = [0.8, 1.6, 0.4], step = 1.9, yaw = 0) {
   const L = Math.hypot(x1 - x0, z1 - z0);
   let d = 1 + rand() * 3;
+  _q.setFromEuler(_e.set(0, yaw, 0));
   while (d < L - 1) {
-    const run = 3 + Math.floor(rand() * 6);
+    const run = 2 + Math.floor(rand() * 3);
     for (let k = 0; k < run && d < L - 1; k++, d += step) {
-      if (rand() < 0.12) continue; // dark pane
+      if (rand() < 0.1) continue; // dark pane
       const t = d / L;
       _v.set(x0 + (x1 - x0) * t, y, z0 + (z1 - z0) * t);
       _s.set(size[0], size[1], size[2]);
-      _m.compose(_v, _q.identity(), _s);
-      items.push({ m: _m.clone() });
+      _m.compose(_v, _q, _s);
+      items.push({ m: _m.clone(), c: windowTint(rand) });
     }
-    d += 2 + rand() * 5;
+    d += 4 + rand() * 6;
   }
 }
 
@@ -234,8 +236,12 @@ function facade(A, B, y0A, y0B, yTop, n, rand, batch, dark, light, windows) {
       light.push(boxItem(_v.x, _v.y, _v.z, bw, bh, depth, grey(0.6 + rand() * 0.12, 1.02), yaw));
       const rows = bh > 14 ? 3 : 2;
       for (let k = 0; k < rows; k++) {
-        at(t + bw / 2, depth + 0.35, yb2 + bh * (0.25 + (0.5 * k) / (rows - 1)));
-        windows.push(boxItem(_v.x, _v.y, _v.z, bw * (0.5 + rand() * 0.3), 1.2, 0.2, null, yaw));
+        const yw = yb2 + bh * (0.25 + (0.5 * k) / (rows - 1));
+        at(t + 1.5, depth + 0.3, yw);
+        const ax = _v.x;
+        const az = _v.z;
+        at(t + bw - 1.5, depth + 0.3, yw);
+        windowRow(windows, ax, yw, az, _v.x, _v.z, rand, [0.8, 1.2, 0.3], 1.7, yaw);
       }
       if (rand() < 0.5) {
         at(t + bw / 2, depth * 0.5, yb2 + bh + 1.6);
@@ -253,8 +259,12 @@ function facade(A, B, y0A, y0B, yTop, n, rand, batch, dark, light, windows) {
         light.push(boxItem(_v.x, _v.y, _v.z, 1.6, h - 1.6, 1.8, grey(0.58 + rand() * 0.1, 1.02), yaw));
       }
       if (rand() < 0.6) {
-        at(t + pw / 2, 0.6, yb + ph * (0.3 + rand() * 0.4));
-        windows.push(boxItem(_v.x, _v.y, _v.z, pw * 0.6, 0.9, 0.2, null, yaw));
+        const yw = yb + ph * (0.3 + rand() * 0.4);
+        at(t + 1.2, 0.6, yw);
+        const ax = _v.x;
+        const az = _v.z;
+        at(t + pw - 1.2, 0.6, yw);
+        windowRow(windows, ax, yw, az, _v.x, _v.z, rand, [0.8, 0.9, 0.3], 1.6, yaw);
       }
       t += pw + 3 + rand() * 5;
     } else if (r < st.bay + st.panel + st.pilaster) {
@@ -354,7 +364,7 @@ export function buildSuperstructure(materials) {
         return false;
       },
     };
-    platingFor(surf, rand, [plateBucket], { maxW: 22, thickness: 1.3, embed: 0.4, zStart: t.zs + 1, zEnd: t.ze - 1, bucket: () => 0, grooveDepth: 1, toneScale: 0.98 });
+    platingFor(surf, rand, [plateBucket], { maxW: 22, thickness: 1.3, embed: 1.3 - PLATE_LIFT, zStart: t.zs + 1, zEnd: t.ze - 1, bucket: () => 0, grooveDepth: 1, toneScale: 0.98 });
   });
   const cityTop = baseY;
 
@@ -376,14 +386,15 @@ export function buildSuperstructure(materials) {
       const hh = tall ? 9 + rand() * 8 : 1.5 + rand() * 4;
       const x = (rand() - 0.5) * (2 * CITY.canyonHalf - w - 1);
       dark.push(boxItem(x, cityTop + hh / 2, z, w, hh, 2 + rand() * 4, grey(0.3 + rand() * 0.3)));
-      if (tall) for (let y = 3; y < hh - 1; y += 3.2) windows.push(boxItem(x + w / 2 + 0.05, cityTop + y, z, 0.2, 0.35, 1.4, null));
-      else if (rand() < 0.5) windows.push(boxItem(x, cityTop + hh + 0.2, z, 0.5, 0.25, 1.4, null));
+      if (tall) {
+        for (let y = 3; y < hh - 1; y += 3.2) if (rand() < 0.45) windows.push(boxItem(x + w / 2 + 0.05, cityTop + y, z, 0.2, 0.35, 1.0, windowTint(rand)));
+      } else if (rand() < 0.3) windows.push(boxItem(x, cityTop + hh + 0.2, z, 0.5, 0.25, 0.8, windowTint(rand)));
       greebles++;
     }
     // cross-bridges over the canyon
     for (const z of [t.zs + 60, t.zs + 140, t.zs + 198]) {
       batch.box("hull", 0, cityTop + 7.5, z, 2 * (CITY.canyonHalf + 6), 2.2, 6, PALETTE.hullGrey);
-      windows.push(boxItem(0, cityTop + 6.2, z - 3.1, 14, 0.4, 0.2, null));
+      windowRow(windows, -6, cityTop + 6.2, z - 3.1, 6, z - 3.1, rand, [0.8, 0.4, 0.2], 1.7);
     }
   }
 
@@ -459,13 +470,29 @@ export function buildSuperstructure(materials) {
   const bcy = (br.y0 + br.y1) / 2;
   // the bar starts 0.8 m behind its front face; the face is a plate with the bridge window opening
   // (deck 1 bridge glass sits at world z = 591 just behind it, y 181.5..186.5)
-  batch.box("hull", 0, bcy, (br.z0 + 0.8 + br.z1) / 2, bw, bh, bd - 0.8, PALETTE.hullGrey, 0.03);
-  batch.add("hull", facePlateWithHole(br.x, br.y0, br.y1, br.z0, 0.8, { hw: TOWER.windows.x + 0.5, y0: TOWER.windows.y0 - 0.35, y1: TOWER.windows.y1 + 0.35 }), PALETTE.hullGrey, 0.03);
+  // (plate texture: its panel lines and rivets replace the shared hull tile's round ports, which
+  // repeated as oil-stain blobs across the slab)
+  batch.box("ext_hullPlate", 0, bcy, (br.z0 + 0.8 + br.z1) / 2, bw, bh, bd - 0.8, PALETTE.hullGrey, 0.03);
+  batch.add("ext_hullPlate", facePlateWithHole(br.x, br.y0, br.y1, br.z0, 0.8, { hw: TOWER.windows.x + 0.5, y0: TOWER.windows.y0 - 0.35, y1: TOWER.windows.y1 + 0.35 }), PALETTE.hullGrey, 0.03);
   batch.box("hullDark", 0, br.y0 - 1.5, bcz, bw + 2, 3, bd + 2, PALETTE.hullDark);
   batch.box("hullDark", 0, br.y1 + 1, bcz, bw - 8, 2, bd - 6, PALETTE.hullDark);
   const wedges = [];
   for (const s of [-1, 1]) {
     batch.box("city", s * (br.x + 1), bcy, bcz, 2, bh - 4, bd - 4, PALETTE.hullGrey);
+    // stepped fairing under the bar's overhang beyond the prism top (two setbacks down the flank), and
+    // channels / a ledge on the flat end face so the end reads as structure, not a sawn-off slab
+    {
+      const xIn = prismHW(br.y0 - 4) - 1;
+      for (const [drop, hgt, xOut] of [
+        [3, 6, br.x - 6],
+        [9, 6, br.x - 16],
+      ]) {
+        const xc = s * ((xIn + xOut) / 2);
+        batch.box("hullDark", xc, br.y0 - 3 - drop, bcz, xOut - xIn, hgt, bd - 8 - drop, PALETTE.hullGrey.clone().multiplyScalar(0.7), 0.03);
+      }
+      for (let z = br.z0 + 6; z < br.z1 - 4; z += 6.5) dark.push(boxItem(s * (br.x + 2.3), bcy, z, 0.7, bh - 8, 0.8, grey(0.16, 1.05)));
+      batch.box("hullDark", s * (br.x + 2.4), br.y0 + 9.5, bcz, 0.9, 0.6, bd - 8, PALETTE.hullGrey.clone().multiplyScalar(0.85));
+    }
     batch.box("hullDark", s * (br.x - 14), br.y1 + 2, bcz + 6, 22, 4, 30, PALETTE.hullDark);
     light.push(boxItem(s * (br.x - 14), br.y1 + 5.5, bcz + 2, 12, 3, 16, grey(0.7)));
     // buttress wedges: one leg follows the leaning prism flank down from the module underside, the
@@ -514,7 +541,7 @@ export function buildSuperstructure(materials) {
     light.push(boxItem(s * 34, br.y1 + 3.6, bcz - 14, 14, 3.2, 9, grey(0.7)));
     light.push(boxItem(s * 28, br.y1 + 2.6, bcz + 18, 8, 1.6, 6, grey(0.62)));
     dark.push(boxItem(s * 40, br.y1 + 4.4, bcz + 12, 3, 4.8, 3, grey(0.3)));
-    windows.push(boxItem(s * 34, br.y1 + 3.8, bcz - 18.6, 9, 0.5, 0.2, null));
+    windowRow(windows, s * 30, br.y1 + 3.8, bcz - 18.6, s * 38, bcz - 18.6, rand, [0.8, 0.5, 0.2], 1.7);
   }
   // bridge windows: a recessed dark band across the front face with the glass strip inside; frame
   // lips above and below, mullions, a brow ledge (TOWER.windows y / z unchanged)
@@ -610,7 +637,7 @@ export function buildSuperstructure(materials) {
   lod0.add(instancedMesh(boxGeo, materials.hull2, light, { name: "facadeBlocks", castShadow: true }));
   lod0.add(instancedMesh(wedgeGeometry(), materials.hull, wedges, { name: "bridgeButtresses", castShadow: true }));
   // tier-top plating (LOD like the hull plates: visible far out)
-  group.add(instancedMesh(boxGeo, materials.hull2, plateBucket.plates, { name: "tierPlates", castShadow: true }));
+  group.add(instancedMesh(boxGeo, materials.ext_hullPlate, plateBucket.plates, { name: "tierPlates", castShadow: true }));
 
   // --- turbolaser batteries: 6 heavy turrets per side (4 large ones on the plateau beside the city on
   // dark pedestal pads, 2 smaller ones raised on the tier-0 top); the layout is shared with details.js
@@ -622,16 +649,16 @@ export function buildSuperstructure(materials) {
     HEAVY_TURRETS.zs.forEach((z, k) => {
       const x = s * heavyTurretX(z);
       const sc = HEAVY_TURRETS.scale;
-      _v.set(x, dorsalH(z) + 2.2, z);
+      _v.set(x, dorsalH(z) + PLATE_LIFT + 0.7, z);
       _q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), s * -(0.35 + k * 0.12));
       _s.set(sc, sc, sc);
       turrets.push({ m: _m.compose(_v, _q, _s).clone(), c: grey(0.6, 1.03) });
       // pedestal pad: wide dark disc with a lighter rim ring and a step
-      batch.cyl("hullDark", x, dorsalH(z) + 1.9, z, HEAVY_TURRETS.padR, HEAVY_TURRETS.padR + 1, 1.8, "y", padTone, 28);
-      batch.cyl("hullDark", x, dorsalH(z) + 2.6, z, HEAVY_TURRETS.padR * 0.72, HEAVY_TURRETS.padR * 0.74, 1.2, "y", PALETTE.hullDark, 28);
+      batch.cyl("hullDark", x, dorsalH(z) + PLATE_LIFT + 0.4, z, HEAVY_TURRETS.padR, HEAVY_TURRETS.padR + 1, 1.8, "y", padTone, 28);
+      batch.cyl("hullDark", x, dorsalH(z) + PLATE_LIFT + 1.1, z, HEAVY_TURRETS.padR * 0.72, HEAVY_TURRETS.padR * 0.74, 1.2, "y", PALETTE.hullDark, 28);
       const ring = new THREE.TorusGeometry(HEAVY_TURRETS.padR + 0.6, 0.7, 6, 40);
       ring.rotateX(Math.PI / 2);
-      ring.translate(x, dorsalH(z) + 2.4, z);
+      ring.translate(x, dorsalH(z) + PLATE_LIFT + 0.9, z);
       batch.add("hull", ring, PALETTE.hullGrey.clone().multiplyScalar(0.8), 0.1);
     });
     for (const z of [300, 470]) {
@@ -650,14 +677,14 @@ export function buildSuperstructure(materials) {
   for (const s of [-1, 1]) {
     for (let z = -560; z < 720; z += 95) {
       const hw = halfWidth(z) * HULL.plateauDorsal;
-      _v.set(s * (hw - 8), dorsalH(z) + 1.7, z);
+      _v.set(s * (hw - 8), dorsalH(z) + PLATE_LIFT + 0.2, z);
       _q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), s * 0.9 + rand() * 0.6);
       _s.set(0.42, 0.42, 0.42);
       small.push({ m: _m.compose(_v, _q, _s).clone(), c: grey(0.5, 1.03) });
     }
     for (let z = -480; z < 720; z += 130) {
       const hw = halfWidth(z) * HULL.plateauVentral;
-      _v.set(s * (hw - 10), -ventralH(z) - 1.5, z);
+      _v.set(s * (hw - 10), -ventralH(z) - PLATE_LIFT, z);
       _q.setFromEuler(_e.set(Math.PI, s * 0.9 + rand() * 0.6, 0));
       _s.set(0.42, 0.42, 0.42);
       small.push({ m: _m.compose(_v, _q, _s).clone(), c: grey(0.5, 1.03) });

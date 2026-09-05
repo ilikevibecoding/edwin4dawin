@@ -49,17 +49,26 @@ const planetFrag = /* glsl */ `
     // terminator warmth
     float term = smoothstep(-0.2, 0.15, ndl) * (1.0 - smoothstep(0.15, 0.55, ndl));
     col += vec3(0.9, 0.45, 0.2) * term * 0.12;
-    // grazing sunlight still lights the atmosphere column at the limb (ndl ~ 0 there when the sun is
-    // behind the viewer), so the ramp is centred below zero
-    float lit = smoothstep(-0.5, 0.15, ndl);
+    // the limb haze is lit by the sun only where the sun reaches the atmosphere column: the ramp is
+    // centred a little below zero (grazing light still lights the column), and the anti-sun limb
+    // stays dark — a night-side disc must not wear a uniform glowing ring like an eclipse
+    float lit = smoothstep(-0.28, 0.22, ndl);
     // limb darkening: the disc falls off toward its edge so the additive atmosphere outside it has
     // something dark to stand against (a limb as bright as the halo hides the halo)
     col *= 1.0 - 0.38 * pow(1.0 - ndv, 1.6);
     // haze toward the limb is capped below 1.0 so a planet filling a porthole never goes white;
     // only the last few degrees of the limb get the additive edge that blooms
-    vec3 rim = atmo * (0.45 + 0.55 * lit) * min(atmoStrength * 0.55, 0.95);
-    col = mix(col, rim, fres * 0.35);
+    vec3 rim = atmo * (0.04 + 0.96 * lit) * min(atmoStrength * 0.55, 0.95);
+    col = mix(col, rim, fres * 0.35 * (0.15 + 0.85 * lit));
     col += atmo * fres * fres * fres * atmoStrength * 0.6 * lit;
+    // lit crescent: forward-scattered sunlight in the atmosphere along the sun-facing limb, so a
+    // planet seen with the sun behind it shows a bright sliver on one side instead of a dark disc
+    // (wide enough to read as a crescent, fading out where the diffuse day term already lights the
+    // surface so a front-lit planet does not get a white limb ring)
+    vec3 nr = normalize(n - v * dot(n, v));
+    float toSun = smoothstep(-0.1, 0.7, dot(nr, sunDir));
+    float crescent = pow(1.0 - ndv, 1.5) * toSun * toSun * smoothstep(-0.45, 0.0, ndl) * (1.0 - smoothstep(0.2, 0.6, ndl));
+    col += mix(atmo, vec3(1.0), 0.5) * crescent * atmoStrength * 1.1;
     gl_FragColor = vec4(col, 1.0);
   }
 `;
@@ -83,9 +92,10 @@ const atmoFrag = /* glsl */ `
     // points away from the camera, so with the sun behind the viewer it read as night everywhere
     // and the whole halo ran at 18%). Grazing light still lights the column, hence the wide ramp.
     vec3 nr = normalize(n - v * dot(n, v));
-    float day = smoothstep(-0.55, 0.15, dot(nr, sunDir));
-    // additive blend multiplies by alpha, so keep it at 1 or the falloff gets squared into a hairline
-    gl_FragColor = vec4(atmo * glow * strength * (0.4 + 0.6 * day), 1.0);
+    float day = smoothstep(-0.3, 0.35, dot(nr, sunDir));
+    // scaled by the sun-facing term: the shell glows on the sunward limb and dies out on the far
+    // side (a uniform ring read as an eclipse); additive blend multiplies by alpha, so alpha stays 1
+    gl_FragColor = vec4(atmo * glow * strength * (0.02 + 0.98 * day), 1.0);
   }
 `;
 

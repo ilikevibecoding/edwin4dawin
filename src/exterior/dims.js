@@ -112,6 +112,8 @@ export const HANGAR = {
 
 // Chunking for LOD / culling along z
 export const CHUNKS = 8;
+/** Armour plate tops sit this far above the base skin (near-flush plating with hairline seams). */
+export const PLATE_LIFT = 0.35;
 export function chunkIndex(z) {
   return Math.min(CHUNKS - 1, Math.max(0, Math.floor(((z - HULL.bowZ) / (HULL.sternZ - HULL.bowZ)) * CHUNKS)));
 }

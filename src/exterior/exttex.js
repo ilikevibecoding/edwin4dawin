@@ -97,6 +97,126 @@ export function makeExtEngineGlow(size = 256) {
   return toTexture(c, { srgb: true, wrap: false });
 }
 
+/**
+ * Clean armour plate, one tile per plate instance: 2–3 × 2–3 sub-panels with hairline seams, a
+ * rectangular tone shift per sub-panel (a few noticeably darker / lighter panels, aligned to the
+ * grid), one or two long panel lines along v (fore-aft on the hull) with rivet rows beside them,
+ * rivet rows inside the sub-panel edges, grime pooling at the seams and faint fore-aft streaking.
+ * All the relief is in the normal / roughness maps; the plate geometry itself stays a flat slab. No
+ * round ports: at one tile per plate they repeated as identical blobs across the whole hull.
+ */
+export function makeExtHullPlate(size = 512, seed = 241) {
+  const t = new TexGen(size, size);
+  const rand = mulberry32(seed);
+  const cols = 2 + Math.floor(rand() * 2);
+  const cuts = [0];
+  for (let i = 1; i < cols; i++) cuts.push(i / cols + (rand() - 0.5) * 0.1);
+  cuts.push(1);
+  const rowCuts = cuts.slice(0, cols).map(() => {
+    const n = 2 + Math.floor(rand() * 2);
+    const r = [0];
+    for (let k = 1; k < n; k++) r.push(k / n + (rand() - 0.5) * 0.1);
+    r.push(1);
+    return r;
+  });
+  const lines = [];
+  for (let i = 0, n = 1 + Math.floor(rand() * 2); i < n; i++) lines.push(0.15 + rand() * 0.7);
+  const streaks = [];
+  for (let i = 0; i < 8; i++) streaks.push([rand(), rand() * 0.5, 0.2 + rand() * 0.5, 0.004 + rand() * 0.012]);
+  t.each((u, v, i) => {
+    let col = 0;
+    while (u > cuts[col + 1]) col++;
+    const rc = rowCuts[col];
+    let row = 0;
+    while (v > rc[row + 1]) row++;
+    const pu = (u - cuts[col]) / (cuts[col + 1] - cuts[col]);
+    const pv = (v - rc[row]) / (rc[row + 1] - rc[row]);
+    const ed = Math.min(pu, 1 - pu, pv, 1 - pv);
+    const edTile = Math.min(u, 1 - u, v, 1 - v);
+    const n1 = fbm(u, v, { octaves: 4, freq: 5, seed });
+    const n2 = fbm(u, v, { octaves: 5, freq: 22, seed: seed + 3 });
+    // rectangular discolouration aligned to the sub-panel grid: batch tone ±6 %, ~12 % of panels a
+    // step darker (primer) and ~5 % a step lighter (replacement)
+    const batch = vnoise(col * 0.41 + 0.17, row * 0.57 + 0.23, 3, seed + 9);
+    const pick = vnoise(col * 0.73 + 0.31, row * 0.29 + 0.61, 5, seed + 13);
+    let lum = 0.78 + (batch - 0.5) * 0.12 + (pick > 0.88 ? -0.1 : pick < 0.05 ? 0.06 : 0) + (n1 - 0.5) * 0.05 + (n2 - 0.5) * 0.03;
+    let rough = 0.66 + (n2 - 0.5) * 0.14;
+    let metal = 0.16 + (n1 - 0.5) * 0.1;
+    let hgt = 0.55;
+    // hairline sub-panel seams; the tile border (the plate edge) is a wider bevelled seam
+    const seamW = edTile < 0.016 ? 0.016 : 0.006;
+    const e = edTile < 0.016 ? edTile : ed;
+    if (e < seamW) {
+      const k = smooth(1 - e / seamW);
+      hgt -= 0.35 * k;
+      lum *= 1 - 0.4 * k;
+      rough += 0.2 * k;
+      metal = lerp(metal, 0.08, k);
+    }
+    // long panel lines along v (shallow grooves) with a rivet row beside each
+    for (const lx of lines) {
+      const d = Math.abs(u - lx);
+      if (d < 0.0045) {
+        const k = smooth(1 - d / 0.0045);
+        hgt -= 0.22 * k;
+        lum *= 1 - 0.24 * k;
+        rough += 0.1 * k;
+      }
+      if (Math.abs(u - lx - 0.016) < 0.0035 && Math.abs(((v * 40) % 1) - 0.5) < 0.14) {
+        hgt += 0.1;
+        lum *= 0.94;
+        metal += 0.15;
+      }
+    }
+    // rivet rows just inside each sub-panel edge
+    if (Math.abs(ed - 0.024) < 0.0045) {
+      const nearU = Math.min(pu, 1 - pu) < Math.min(pv, 1 - pv);
+      const along = nearU ? pv : pu;
+      if (Math.abs(((along * 22) % 1) - 0.5) < 0.14) {
+        hgt += 0.1;
+        lum *= 0.93;
+        metal += 0.15;
+      }
+    }
+    // grime pooling at the seams, fore-aft (+v) soot and a few rain-style streaks
+    const grime = clamp01(1 - ed / 0.06) * (0.4 + 0.6 * fbm(u, v, { octaves: 3, freq: 9, seed: seed + 11 }));
+    lum *= 1 - grime * 0.16;
+    rough += grime * 0.12;
+    const soot = smooth(clamp01((v - 0.45) / 0.55)) * (0.4 + 0.6 * vnoise2(u, v, 20, 3, seed + 5));
+    lum *= 1 - soot * 0.09;
+    rough += soot * 0.08;
+    for (const [sx, sy, sl, sw] of streaks) {
+      const dx = Math.abs(u - sx);
+      if (dx < sw && v > sy && v < sy + sl) {
+        const k = (1 - dx / sw) * (1 - (v - sy) / sl) * 0.4;
+        lum *= 1 - k * 0.3;
+        rough += k * 0.1;
+      }
+    }
+    t.setColor(i, lum * 0.985, lum, lum * 1.02);
+    t.rough[i] = clamp01(rough);
+    t.metal[i] = clamp01(metal);
+    t.height[i] = hgt;
+  });
+  const set = t.bake({ normalStrength: 2.2 });
+  set.metalnessMap = set.roughnessMap;
+  return set;
+}
+
+/** Soft radial dot for the navigation-light glow points. */
+export function makeExtNavGlow(size = 64) {
+  const c = makeCanvas(size, size);
+  const ctx = c.getContext("2d");
+  const g = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  g.addColorStop(0, "rgba(255,255,255,1)");
+  g.addColorStop(0.18, "rgba(255,255,255,0.7)");
+  g.addColorStop(0.5, "rgba(255,255,255,0.16)");
+  g.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, size, size);
+  return toTexture(c, { srgb: true, wrap: false });
+}
+
 /** Worn armour plate: finer irregular sub-plates, scratches, soot streaks trailing aft (+v), rivets. */
 export function makeExtHullWorn(size = 512, seed = 211) {
   const t = new TexGen(size, size);
@@ -119,8 +239,9 @@ export function makeExtHullWorn(size = 512, seed = 211) {
   }
   const streaks = [];
   for (let i = 0; i < 10; i++) streaks.push([rand(), rand() * 0.5, 0.2 + rand() * 0.5, 0.006 + rand() * 0.016]);
-  const hatches = [];
-  for (let i = 0; i < 3; i++) hatches.push([rand(), rand(), 0.03 + rand() * 0.04]);
+  // rectangular scorch patches aligned to the sub-panel grid (instead of round ports)
+  const scorch = [];
+  for (let i = 0; i < 3; i++) scorch.push([Math.floor(rand() * cols), Math.floor(rand() * 3), 0.5 + rand() * 0.4]);
   t.each((u, v, i) => {
     let col = 0;
     while (u > cuts[col + 1]) col++;
@@ -191,18 +312,9 @@ export function makeExtHullWorn(size = 512, seed = 211) {
         hgt -= 0.08 * k;
       }
     }
-    // small round hatches / ports
-    for (const [hx, hy, hr] of hatches) {
-      const d = Math.hypot(u - hx, v - hy);
-      if (d < hr) {
-        const k = smooth(clamp01((hr - d) / (hr * 0.35)));
-        hgt -= 0.12 * k;
-        lum *= 1 - 0.18 * k;
-        if (d > hr * 0.82) {
-          hgt += 0.1;
-          lum *= 0.8;
-        }
-      }
+    // scorched sub-panels: a whole panel (or its aft part) a step darker, edges following the seams
+    for (const [sc, sr, sk] of scorch) {
+      if (col === sc && row === sr % rc.length && pv > 1 - sk) lum *= 0.86 - 0.08 * smooth(clamp01((pv - (1 - sk)) / sk));
     }
     // chipped paint near seams
     const chip = fbm(u, v, { octaves: 5, freq: 36, seed: seed + 17 });
@@ -227,30 +339,42 @@ export function ensureExtMaterials(materials) {
   if (materials.ext_hullWorn) return materials;
   // dim warm emitter for hatch rims / access-port lamps (the shared exteriorLight is too bright for ~4 m hatches)
   materials.ext_dimLight = new THREE.MeshStandardMaterial({ color: 0x0c0a08, emissive: new THREE.Color("#ffd39a"), emissiveIntensity: 1.1, roughness: 0.7, metalness: 0, fog: false });
-  // superstructure / bridge window panes: same warm white as exteriorLight at about half the
-  // intensity, so rows of 0.8 × 1.6 m panes read as lit rooms rather than blooming runway lights
+  // superstructure / bridge window panes: the exteriorLight warm white at 0.85 (sparse clustered panes
+  // must read as lit rooms, not as strips), and the emissive takes the per-instance tint so a run of
+  // panes can mix ~15 % amber and ~15 % cool panes from one instanced mesh
   materials.ext_window = materials.exteriorLight.clone();
-  materials.ext_window.emissiveIntensity = 1.4;
+  materials.ext_window.emissiveIntensity = 0.85;
   materials.ext_window.color = new THREE.Color(0x0a0c10);
-  // docking-bay rim: exteriorLight at 0.6× so the bay reads as a lit opening, not a glowing frame
+  materials.ext_window.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      "#include <emissivemap_fragment>",
+      "#include <emissivemap_fragment>\n#if defined( USE_COLOR ) || defined( USE_INSTANCING_COLOR )\n\ttotalEmissiveRadiance *= vColor.rgb;\n#endif\n",
+    );
+  };
+  materials.ext_window.customProgramCacheKey = () => "ext_window_tint";
+  // docking-bay rim: exteriorLight at 0.3× so the bay reads as a lit opening, not a glare sprite
   materials.ext_dockLight = materials.exteriorLight.clone();
-  materials.ext_dockLight.emissiveIntensity = 1.8;
+  materials.ext_dockLight.emissiveIntensity = 0.9;
   // painted-armour finish shared with the hull sets: matte (roughness ≥ 0.7 after the map, metalness
   // ≤ 0.35 after the map) and almost no environment reflection
-  const worn = makeExtHullWorn(512, 211);
-  materials.ext_hullWorn = new THREE.MeshStandardMaterial({
-    map: worn.map,
-    roughnessMap: worn.roughnessMap,
-    metalnessMap: worn.metalnessMap,
-    normalMap: worn.normalMap,
-    normalScale: new THREE.Vector2(1.0, 1.0),
-    roughness: 1.3,
-    metalness: 0.9,
-    vertexColors: true,
-    color: 0xffffff,
-    envMapIntensity: 0.18,
-    fog: false,
-  });
+  const armour = (set, normalScale) =>
+    new THREE.MeshStandardMaterial({
+      map: set.map,
+      roughnessMap: set.roughnessMap,
+      metalnessMap: set.metalnessMap,
+      normalMap: set.normalMap,
+      normalScale: new THREE.Vector2(normalScale, normalScale),
+      roughness: 1.3,
+      metalness: 0.9,
+      vertexColors: true,
+      color: 0xffffff,
+      envMapIntensity: 0.18,
+      fog: false,
+    });
+  // the plate field: one 512² set (its relief — panel lines, rivets, seams — is textural, so the
+  // plate geometry can stay flat); the bridge slab and the stern plating share it
+  materials.ext_hullPlate = armour(makeExtHullPlate(512, 241), 1.0);
+  materials.ext_hullWorn = armour(makeExtHullWorn(512, 211), 1.0);
   const wall = makeExtTrenchWall(512, 223);
   materials.ext_trenchWall = new THREE.MeshStandardMaterial({
     map: wall.map,
@@ -272,5 +396,21 @@ export function ensureExtMaterials(materials) {
   const glowTex = makeExtEngineGlow(256);
   materials.ext_engineGlow = new THREE.MeshBasicMaterial({ map: glowTex, color: new THREE.Color(1.6, 1.6, 1.6), transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false, toneMapped: true });
   materials.ext_engineBloom = new THREE.MeshBasicMaterial({ map: glowTex, color: new THREE.Color("#6f9fe6"), transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false });
+  // the bloom fades with the view angle (× max(0, dot(dir to camera, +z exhaust axis))): face-on from
+  // astern it is the halo, from the dorsal quarter it vanishes instead of outlining the stern in blue
+  materials.ext_engineBloom.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace("#include <common>", "#include <common>\nvarying float vBloomFade;")
+      .replace("#include <begin_vertex>", "#include <begin_vertex>\n\tvec4 bloomWP = modelMatrix * vec4( position, 1.0 );\n\tvBloomFade = max( 0.0, normalize( cameraPosition - bloomWP.xyz ).z );");
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <common>", "#include <common>\nvarying float vBloomFade;")
+      .replace("#include <color_fragment>", "#include <color_fragment>\n\tdiffuseColor.a *= vBloomFade;");
+  };
+  materials.ext_engineBloom.customProgramCacheKey = () => "ext_engineBloom_fade";
+  // navigation lights: an unshaded lamp block coloured per instance (HDR instance colours, so the
+  // lamp itself tone-maps to a bright core instead of a sun-shaded coloured cube) plus one additive
+  // glow point per lamp (PointsMaterial: size in metres, one draw call for the whole set)
+  materials.ext_navLamp = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, fog: false });
+  materials.ext_navGlow = new THREE.PointsMaterial({ map: makeExtNavGlow(64), size: 3.6, sizeAttenuation: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending, vertexColors: true, fog: false });
   return materials;
 }
