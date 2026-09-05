@@ -213,7 +213,8 @@ export function registerStations(gen, game, train) {
     const dest = L.S === ROUTE.frontier ? 'TO CORUSCANT' : 'TO FRONTIER';
     const texts = [[`${dest}`, `EVERY ${minutes} MIN`]];
     const tiles = [addSignTiles(texts[0][0], 4), addSignTiles(texts[0][1], 4)];
-    for (let k = 0; k < 4; k++) { rows.push([L.hallX0 + 16 + k, FLOOR + 2, HALL_Z1 - 1, tiles[0][k]]); rows.push([L.hallX0 + 20 + k, FLOOR + 2, HALL_Z1 - 1, tiles[1][k]]); }
+    // the boards face north (-z): a reader looks south, so the text runs from +x to -x
+    for (let k = 0; k < 4; k++) { rows.push([L.hallX0 + 23 - k, FLOOR + 2, HALL_Z1 - 1, tiles[0][k]]); rows.push([L.hallX0 + 19 - k, FLOOR + 2, HALL_Z1 - 1, tiles[1][k]]); }
   }
   const attach = () => {
     if (game.world) { for (const [x, y, z, tile] of rows) game.world.signTiles.set(World.posKey(x, y, z), tile); }
