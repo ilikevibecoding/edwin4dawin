@@ -338,7 +338,7 @@ function throne(P, room, rng, T) {
     P.set(x, z, 0, PANEL_BLACK); P.set(x, z, 6, AIR);
     if (Math.abs(x) <= 1 && z > zd) P.set(x, z, 0, PANEL_RED);
     if ((Math.abs(x) === 3 || Math.abs(x) === 8) && z % 3 === 0 && z > zd && z <= tw.z1) P.set(x, z, 0, GLOW_PANEL);
-    if (z > tw.z1) P.set(x, z, 0, (x + 12) % 4 === 0 ? CHROME : STEEL_GLASS);            // balcony: glass floor over the dish
+    if (z > tw.z1) P.set(x, z, 0, (x + 10) % 4 === 0 ? CHROME : STEEL_GLASS);            // balcony: glass floor over the dish, chrome ribs at x = +-2, +-6, +-10
     if (Math.abs(x) <= 3 && z < zd) P.set(x, z, 1, PANEL_BLACK);                         // dais
     if (Math.abs(x) <= 3 && z === zd) P.set(x, z, 1, STONE_BRICK_SLAB);
   }
