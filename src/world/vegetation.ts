@@ -940,7 +940,7 @@ export class Vegetation {
       // offsetHSL there (a ±0.06 swing) clamped about one plant in a hundred to black and left many more
       // near black — the "near-black clone crowns" of the iter08 frames
       tint.getHSL(_hsl, THREE.SRGBColorSpace);
-      tint.setHSL(_hsl.h + prng.range(-0.03, 0.03), THREE.MathUtils.clamp(_hsl.s + prng.range(-0.06, 0.08), 0, 1), THREE.MathUtils.clamp(_hsl.l + prng.range(-0.05, 0.05), 0, 1), THREE.SRGBColorSpace);
+      tint.setHSL(_hsl.h + prng.range(-0.03, 0.03), THREE.MathUtils.clamp(_hsl.s + prng.range(-0.06, 0.08), 0, 1), THREE.MathUtils.clamp(_hsl.l + prng.range(-0.07, 0.07), 0, 1), THREE.SRGBColorSpace);
       tint.multiply(CANOPY_GAIN);
       const lum = 0.2126 * tint.r + 0.7152 * tint.g + 0.0722 * tint.b;
       tint.lerp(_grey.setScalar(lum), CANOPY_DESAT);
@@ -1047,7 +1047,8 @@ export class Vegetation {
               else if ((t -= shrubShare) < 0) add(3, jx, jz, y - 0.1, size(prng, 1.3, 2.8), prng);
               else add(0, jx, jz, y - 0.3, dense ? size(prng, 3.4, 8) : size(prng, 3.0, 6.8), prng);
             } else if (zn === Zone.INDUSTRIAL) {
-              add(roll < 0.5 ? 3 : 0, jx, jz, y - 0.2, roll < 0.5 ? size(prng, 1.3, 2.4) : size(prng, 3.5, 5.5), prng);
+              // trees only: a trunkless shrub on a paved apron read as a floating sphere (iter08 harbor B6)
+              add(0, jx, jz, y - 0.2, size(prng, 3.5, 5.5), prng);
             } else if (zn === Zone.AIRPORT) {
               add(roll < 0.3 ? 7 : 0, jx, jz, y - 0.3, roll < 0.3 ? size(prng, 3.5, 5.5) : size(prng, 3.2, 5), prng);
             } else {
