@@ -104,7 +104,7 @@ const PROXY_MIN_HEIGHT = 14;
 const CITY_EXTRAS = [{ name: 'aDims', itemSize: 3 }, { name: 'aStyle', itemSize: 4 }, { name: 'aStyle2', itemSize: 4 }];
 /** `lodR` is the horizontal half-diagonal of the tile (the shadow-distance metric); `center`, `r` and `height`
  *  bound the buildings in world space and are only used for culling; the arrays feed the kind's batches */
-interface CityTile extends BatchSource { mesh: THREE.InstancedMesh; kind: Kind; n: number; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodR: number; bits: number; cells: CellSource[] | null; cellsDrawn: boolean }
+interface CityTile extends BatchSource { mesh: THREE.InstancedMesh; kind: Kind; n: number; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodR: number; bits: number; cells: CellSource[] | null; cellsDrawn: boolean; mirrorCells: boolean }
 /** cells a tile in view is drawn by for the camera (built on first use), so the buildings of a tile the
  *  camera stands in that are outside the frustum are not submitted */
 const CITY_CELL = 250;
@@ -135,7 +135,7 @@ export class BuildingBatches {
   private readonly tiles: CityTile[] = [];
   /** one instanced draw per kind for the camera pass (every tile in view) and one for the mirror pass */
   private readonly cameraBatches = new Map<Kind, InstanceBatch>();
-  private readonly mirrorBatches = new Map<Kind, InstanceBatch<CityTile>>();
+  private readonly mirrorBatches = new Map<Kind, InstanceBatch>();
   readonly cameraMeshes = new Set<THREE.Object3D>();
   readonly mirrorMeshes = new Set<THREE.Object3D>();
   /** shadow-only proxies, one per kind, holding every building at least PROXY_MIN_HEIGHT tall: a cascade
@@ -196,7 +196,7 @@ export class BuildingBatches {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       this.group.add(mesh);
       const lodR = Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2;
-      this.tiles.push({ mesh, kind, n: list.length, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodR, bits: 0, cells: null, cellsDrawn: false, matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: [dims, style, style2] });
+      this.tiles.push({ mesh, kind, n: list.length, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodR, bits: 0, cells: null, cellsDrawn: false, mirrorCells: false, matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: [dims, style, style2] });
     }
     // camera / mirror batches per kind, sized for every building of that kind
     const perKind = new Map<Kind, number>();
@@ -208,7 +208,7 @@ export class BuildingBatches {
       cam.mesh.name = `city-${kind}`;
       this.cameraBatches.set(kind, cam);
       this.cameraMeshes.add(cam.mesh);
-      const mir = new InstanceBatch<CityTile>(n, unit, this.material, CITY_EXTRAS, true);
+      const mir = new InstanceBatch(n, unit, this.material, CITY_EXTRAS, true);
       mir.mesh.layers.set(LAYER_MIRROR);
       mir.mesh.name = `city-${kind}-mirror`;
       this.mirrorBatches.set(kind, mir);
@@ -281,9 +281,19 @@ export class BuildingBatches {
       }
       let mask = layerMask('all', inView && !batched, t.bits & ~proxyBits);
       const cast = maskCasts(mask);
-      // the water mirrors the tiles within the reflection range (distance to the tile's bounding sphere)
+      // the water mirrors the tiles within the reflection range (distance to the tile's bounding sphere),
+      // cell by cell against the mirror camera's frustum
       const mirrored = inView && Math.max(0, t.center.distanceTo(camPos) - t.r) <= mirrorRange;
-      if (!this.mirrorBatches.get(t.kind)!.set(t, mirrored ? t.n : 0)) mask |= 1 << LAYER_MIRROR;
+      const mirror = this.mirrorBatches.get(t.kind)!;
+      if (mirrored) {
+        let ok = true;
+        for (const c of t.cells!) if (!mirror.set(c, cull.boxInMirror(c.box) ? c.count : 0)) ok = false;
+        if (!ok) { for (const c of t.cells!) mirror.set(c, 0); mask |= 1 << LAYER_MIRROR; }
+        t.mirrorCells = ok;
+      } else if (t.mirrorCells) {
+        for (const c of t.cells!) mirror.set(c, 0);
+        t.mirrorCells = false;
+      }
       t.mesh.castShadow = cast;
       t.mesh.visible = mask !== 0;
       t.mesh.layers.mask = mask;

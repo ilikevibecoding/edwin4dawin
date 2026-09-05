@@ -145,6 +145,8 @@ export function activeShadowPassIsFine(): boolean {
 const _sphere = new THREE.Sphere();
 const _proj = new THREE.Matrix4();
 const _mvp = new THREE.Matrix4();
+/** reflection about the water plane y = 0 */
+const _mirror = new THREE.Matrix4().makeScale(1, -1, 1);
 
 /**
  * Per-frame culling volumes. `viewFrustum` is the camera frustum; `shadowFrustum` is the same frustum
@@ -155,6 +157,9 @@ const _mvp = new THREE.Matrix4();
  */
 export class ViewCull {
   readonly viewFrustum = new THREE.Frustum();
+  /** the view frustum of the water's mirror camera (the camera reflected about y = 0, same projection; the
+   *  reflection pass adds an oblique near plane on the water, which only shrinks this volume) */
+  readonly mirrorFrustum = new THREE.Frustum();
   readonly shadowFrustum = new THREE.Frustum();
   readonly cascadeFrustums: THREE.Frustum[] = [];
   /** number of cascade frustums valid this frame */
@@ -168,6 +173,8 @@ export class ViewCull {
   update(camera: THREE.PerspectiveCamera, shadowFar: number, sunDir: THREE.Vector3): void {
     _mvp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     this.viewFrustum.setFromProjectionMatrix(_mvp);
+    this.mirrorFrustum.setFromProjectionMatrix(_mvp.multiply(_mirror));
+    _mvp.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
     const near = camera.near;
     const top = (near * Math.tan(THREE.MathUtils.DEG2RAD * 0.5 * camera.fov)) / camera.zoom;
     const height = 2 * top, width = camera.aspect * height;
@@ -191,6 +198,11 @@ export class ViewCull {
 
   boxInView(box: THREE.Box3): boolean {
     return this.viewFrustum.intersectsBox(box);
+  }
+
+  /** Whether `box` can appear in the water's mirror image (it is inside the mirror camera's frustum). */
+  boxInMirror(box: THREE.Box3): boolean {
+    return this.mirrorFrustum.intersectsBox(box);
   }
 
   sphereInView(center: THREE.Vector3, radius: number): boolean {

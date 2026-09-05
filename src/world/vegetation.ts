@@ -633,7 +633,7 @@ interface Plant { x: number; y: number; z: number; s: number; rot: number; lean:
  *  and `height` bound the drawn plants and cards and are only used for culling. */
 /** `hi` (crown family only) is the subdivided mesh drawn instead of `near` when the camera is within
  *  HI_DISTANCE of the tile's plants; it shares the instance buffers of `near`. */
-interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; cells: VegCells | null; nearBatch: InstanceBatch<CellSource> | null; cardCells: boolean; maxS: number; }
+interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; cells: VegCells | null; nearBatch: InstanceBatch<CellSource> | null; cardCells: boolean; mirrorCells: boolean; maxS: number; }
 
 /** The VEG_CELL-metre cells of a tile (built the first time the tile is drawn near or in full): the same
  *  cells once with the 3D mesh's per-instance attribute and once with the card's, so the batches draw
@@ -695,7 +695,7 @@ export class Vegetation {
   /** the same for the card tiles the water mirrors (within MIRROR_DISTANCE), on the mirror-only layer */
   readonly mirrorCards: THREE.InstancedMesh;
   private readonly cameraBatch: InstanceBatch;
-  private readonly mirrorBatch: InstanceBatch<Tile>;
+  private readonly mirrorBatch: InstanceBatch;
   /** the crowns of the near tiles' cells in view, one draw for the 66-triangle mesh and one for the subdivided one */
   private readonly nearBatch: InstanceBatch<CellSource>;
   private readonly hiBatch: InstanceBatch<CellSource>;
@@ -717,7 +717,7 @@ export class Vegetation {
     this.cameraCards = this.cameraBatch.mesh;
     this.cameraCards.layers.set(LAYER_CAMERA);
     this.cameraCards.name = 'cards';
-    this.mirrorBatch = new InstanceBatch<Tile>(MIRROR_CARDS, cardGeo, cardMat, CARD_EXTRAS, true, cardDepth);
+    this.mirrorBatch = new InstanceBatch(MIRROR_CARDS, cardGeo, cardMat, CARD_EXTRAS, true, cardDepth);
     this.mirrorCards = this.mirrorBatch.mesh;
     this.mirrorCards.layers.set(LAYER_MIRROR);
     this.mirrorCards.name = 'cards-mirror';
@@ -967,7 +967,7 @@ export class Vegetation {
       far.visible = false;
       this.group.add(near, far);
       if (hi) { hi.boundingSphere = sphere.clone(); this.group.add(hi); }
-      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, extras: [farVar], cells: null, nearBatch: null, cardCells: false, maxS });
+      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, extras: [farVar], cells: null, nearBatch: null, cardCells: false, mirrorCells: false, maxS });
     };
     for (const t of byTile.values()) {
       if (t.crown.length) build(t.crown, crownGeo, crownMat, crownGeoHi);
@@ -1070,7 +1070,18 @@ export class Vegetation {
       // the water mirrors the card tiles within MIRROR_DISTANCE of the camera (the same test the reflection
       // pass applied to the separate tile meshes: distance to the tile's bounding sphere)
       const mirrored = drawCards && Math.max(0, t.center.distanceTo(cam) - t.r) <= MIRROR_DISTANCE;
-      if (!this.mirrorBatch.set(t, mirrored ? count : 0)) mask |= 1 << LAYER_MIRROR;
+      if (mirrored && frac === 1) {
+        // full-density tiles cell by cell against the mirror camera's frustum
+        const cells = (t.cells ??= Vegetation.cells(t)).cards;
+        this.mirrorBatch.set(t, 0);
+        let ok = true;
+        for (const c of cells) if (!this.mirrorBatch.set(c, cull.boxInMirror(c.box) ? c.count : 0)) ok = false;
+        if (!ok) { for (const c of cells) this.mirrorBatch.set(c, 0); mask |= 1 << LAYER_MIRROR; }
+        t.mirrorCells = ok;
+      } else {
+        if (t.mirrorCells) { for (const c of t.cells!.cards) this.mirrorBatch.set(c, 0); t.mirrorCells = false; }
+        if (!this.mirrorBatch.set(t, mirrored ? count : 0)) mask |= 1 << LAYER_MIRROR;
+      }
       t.far.visible = mask !== 0;
       t.far.castShadow = shadow;
       t.far.layers.mask = mask;
