@@ -88,8 +88,10 @@ export const BENCH_VIEWS: BenchView[] = [
     camera: { mode: 'chase', fov: 48 },
     // floats ~0.7 m above the water, flaring downwind (5 m/s tailwind on 086): the aircraft balloons a few
     // decimetres, sinks and touches down about 0.7 s into the clip (frame 7), then runs on the step at ~27 m/s
-    // with spray and float wakes; the old 5.5 m start floated in ground effect through the whole 3 s clip
-    plane: { pos: [-500, 2.7, 3330], headingDeg: 86, pitchDeg: 3, bankDeg: 0, speed: 28, throttle: 0.12, flaps: 1 },
+    // with spray and float wakes; the old 5.5 m start floated in ground effect through the whole 3 s clip.
+    // The landing line runs 110 m north of the channel's boat lane (z 3300) so the clip does not open on a
+    // boat wake stretching ahead of the aircraft with its boat already behind the camera
+    plane: { pos: [-500, 2.7, 3410], headingDeg: 86, pitchDeg: 3, bankDeg: 0, speed: 28, throttle: 0.12, flaps: 1 },
     presim: 30, clipInputs: { pitch: 0.15, roll: 0, yaw: 0 },
   },
   {

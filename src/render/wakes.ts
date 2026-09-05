@@ -179,7 +179,7 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         foam = lane * 1.0 + arm * mix(0.35, 0.8, fine);
         // arm crest slope: a raised crest, outward normal of the arm line
         vec2 armOut = s * right * COSK + fwd * SINK;
-        float crestSlope = -2.0 * dy / (armW * armW) * armBump * (0.12 + 0.1 * spd) * armEnv * min(armW / uTexel, 1.0);
+        float crestSlope = -2.0 * dy / (armW * armW) * armBump * (0.05 + 0.05 * spd) * armEnv * min(armW / uTexel, 1.0);
         g += armOut * crestSlope;
         // transverse stern waves: crests across the track, wavelength 2 pi v^2 / g, decaying down the lane
         float lam = max(6.2832 * speed * speed / 9.81, 0.5);
@@ -217,7 +217,7 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         foam = (meniscus + lip * 0.75) * coverage;
         // crest slope of the bow wave (raised toward the hull side of the crest)
         vec2 outDir = ax < 0.0 ? normalize(vec2(-fwd * ax + s * right * ay)) : s * right;
-        float slope = -2.0 * dc / (bowW * bowW) * bowBump * (0.35 + 0.1 * spd) * bowW;
+        float slope = -2.0 * dc / (bowW * bowW) * bowBump * (0.1 + 0.05 * spd) * bowW;
         g += outDir * slope * coverage;
         cover = coverage * max(exp(-outside * 3.0), bowBump);
       }
