@@ -1,7 +1,7 @@
 {
-  "updated": "2026-09-04T14:29:03.933Z",
-  "phase": "Phase 5 of 5: complete",
-  "summary": "All workstreams merged, reviewed and measured. Hosted build refreshed (README link), demo video recorded, PR #17 updated. See CHANGELOG.md for measurements, reproduction commands and remaining imperfections.",
+  "updated": "2026-09-05T00:39:46.030Z",
+  "phase": "Round 4: Death Star superlaser, panel redesign, wave-swept villagers, more destruction",
+  "summary": "New request: a Death Star-style battle station far in the sky corner that arrives while villagers look up and wonder, four green tributary beams converging into a pulsing focus, a green main beam and a wave of destruction; a simpler, friendlier panel with a Cinematic/Balanced/Light quality selector; flood sweeps people off their feet; a more destructive tornado; creative flight (done).",
   "links": [
     {
       "label": "Pull request #17",
@@ -67,6 +67,31 @@
       "name": "Critics + verification (visuals, tests, replay, multiplayer, perf)",
       "status": "complete",
       "detail": "Final code: unit 4/4, lifecycle 39/39 (replay hashes unchanged), multiplayer 8/8, quiet-machine bench: spawn js 1.7 ms / 90 draw calls, town 3.2 ms / 144 draw calls, disasters 6-21 ms JS, 0 exceptions."
+    },
+    {
+      "name": "Creative flight",
+      "status": "merged",
+      "detail": "Double-tap Space to fly (Minecraft rules), ?fly=1 starts airborne; verified with per-tick tests and a real-input desktop recording."
+    },
+    {
+      "name": "Death Star station model",
+      "status": "builder running",
+      "detail": "Original blocky Death-Star-inspired sphere: trench, superlaser dish, panel plating, window lights; far in the sky, fog-resistant, <= 4 draw calls."
+    },
+    {
+      "name": "Superlaser sequence + destruction wave",
+      "status": "builder running",
+      "detail": "Arrival from the sky corner (villagers stop and stare), 4 green tributaries igniting one by one, pulsing focus, diagonal green main beam, expanding destruction wave through the town."
+    },
+    {
+      "name": "Panel redesign",
+      "status": "builder running",
+      "detail": "Disaster cards, big primary action, slim status strip, key sliders + collapsed Advanced, quality selector."
+    },
+    {
+      "name": "Flood sweep + tornado damage",
+      "status": "builder running",
+      "detail": "Wave front knocks NPCs/animals/player off their feet (tumble, flail, carried by the current); tornado +40-60% damage; flood damage up."
     }
   ],
   "metrics": [
@@ -204,6 +229,10 @@
     {
       "time": "2026-09-04 14:29 UTC",
       "text": "Final: all three disasters accepted by critics; final bench + mp-test pass; dist rebuilt; demo recorded; PR updated."
+    },
+    {
+      "time": "2026-09-05 00:39 UTC",
+      "text": "Round 4 started: shared hooks committed (watch, sweep, quality presets, 400 edits/tick); 4 builders launched."
     }
   ],
   "issues": [
