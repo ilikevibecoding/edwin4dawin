@@ -718,6 +718,12 @@ function build(bp, lot, ctx) {
     for (let z = 36; z <= 84; z += 16) { set(xa, Y.roof + 3, z, B.CHROME); set(xb, Y.roof + 3, z + 8, B.PANEL_RED); }
     for (const x of [xa, xb]) { set(x, Y.roof + 2, 30, B.CHROME); set(x, Y.roof + 1, 30, B.CHROME); }
   }
+  // gas spheres on legs beside the nave, fed from the pipe racks
+  for (const [x, z, px0, px1] of [[36, 60, 29, 35], [36, 72, 29, 35], [118, 60, 119, 125], [118, 72, 119, 125]]) {
+    sphere(x, Y.roof + 5, z, 3, B.CHROME);
+    for (const [dx, dz] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) col(x + dx, Y.roof + 1, z + dz, Y.roof + 3, B.IRON_BARS);
+    fill(px0, Y.roof + 2, z, px1, Y.roof + 2, z, B.DURASTEEL_DARK); set(x, Y.roof + 9, z, B.GLOW_PANEL_BLUE); set(x, Y.roof + 2, z, B.PANEL_RED);
+  }
   // skylight monitors over the north and south strips: glass-sided boxes with a lit core
   for (const z of [14, 86]) for (const x0 of [42, 48, 54, 96, 102, 108]) {
     fill(x0, Y.roof + 1, z, x0 + 4, Y.roof + 1, z + 2, B.STEEL_GLASS); fill(x0 + 1, Y.roof + 1, z + 1, x0 + 3, Y.roof + 1, z + 1, B.GLOW_PANEL);
@@ -738,7 +744,7 @@ function build(bp, lot, ctx) {
     bp.disc(cx + 0.5, cz + 0.5, r + 1.5, top - 2, top - 2, B.GLOW_PANEL, true); bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 2, top - 2, B.CHROME, true);
     bp.disc(cx + 0.5, cz + 0.5, r + 1.5, top - 1, top - 1, B.CHROME, true); bp.disc(cx + 0.5, cz + 0.5, r + 0.5, top - 1, top - 1, B.VENT, true);
     bp.disc(cx + 0.5, cz + 0.5, r - 0.5, top - 1, top, B.MAGMA);                    // molten throat, flush with the rim
-    for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]]) set(cx + dx, top, cz + dz, B.PANEL_RED);
+    for (const [dx, dz] of [[r, 0], [-r, 0], [0, r], [0, -r]]) { set(cx + dx, top, cz + dz, B.PANEL_RED); set(cx + dx, top - 11, cz + dz, B.GLOW_PANEL); set(cx + dx, top - 6, cz + dz, B.GLOW_PANEL); }   // nav lights on the bands
     col(cx, 4, cz + r, top - 5, B.IRON_BARS);
   };
   for (const cx of SMELT) chimney(cx, 6, 5, Y.stack);
@@ -842,7 +848,11 @@ function build(bp, lot, ctx) {
     for (const y of [2, 3]) set(x, y, SZ1, x % 3 === 0 ? B.VENT : B.HULL_TRENCH);
   }
   fill(SX0, 34, SZ1, SX1, 35, SZ1, B.PANEL_STRIPE); fill(HX0, 34, SZ1 - 1, HX1, 35, SZ1 - 1, B.PANEL_STRIPE);
-  fill(SX0, Y.roof - 1, SZ1, SX1, Y.roof - 1, SZ1, B.CHROME);
+  for (let x = SX0 + 2; x < SX1; x += 4) { set(x, 34, SZ1, B.GLOW_PANEL); set(x, 34, SZ1 - 1, B.GLOW_PANEL); }   // lit plinth band at deck level
+  // cornice on all four sides: chrome with a glow cell every third block, so the roofline reads at night
+  const cornice = (x, z, i) => set(x, Y.roof - 1, z, i % 3 === 1 ? B.GLOW_PANEL : B.CHROME);
+  for (let x = SX0; x <= SX1; x++) { cornice(x, SZ1, x); cornice(x, SZ0, x); }
+  for (let z = SZ0; z <= SZ1; z++) { cornice(SX0, z, z); cornice(SX1, z, z); }
   // the portal: void face with lit slots, gable with the vent rose, holo billboard, both doors
   for (const x of [VX0 + 2, VX1 - 2]) col(x, 6, SZ1, 33, B.GLOW_PANEL);
   for (let y = 7; y <= 33; y += 2) { set(DX, y, SZ1, B.WINDOW_LIT); set(DX + 1, y, SZ1, B.WINDOW_LIT); }
@@ -850,6 +860,14 @@ function build(bp, lot, ctx) {
   for (const x of [62, 93]) col(x, Y.roof, SZ1, 53, B.DURASTEEL_DARK);
   for (const x of [63, 92]) { col(x, 51, SZ1, 55, B.IRON_BARS); set(x, 56, SZ1, B.GLOW_PANEL_BLUE); }
   for (const x of [65, 67, 69, 87, 89, 91]) { fill(x, 46, SZ1, x, 47, SZ1, B.WINDOW_LIT); set(x, 48, SZ1, B.HULL_PLATE); }   // lit gable windows
+  // stepped crown over the gable: three setbacks, each with a lit top band and glow slots
+  for (const [x0, x1, y] of [[66, 89, 52], [70, 85, 54], [74, 81, 56]]) {
+    fill(x0, y, SZ1 - 1, x1, y + 1, SZ1, B.DURASTEEL_DARK);
+    fill(x0 + 1, y + 1, SZ1, x1 - 1, y + 1, SZ1, B.PANEL_STRIPE);
+    for (let x = x0 + 1; x < x1; x++) if ((x - x0) % 2 === 1) set(x, y, SZ1, B.VENT);
+    for (let x = x0 + 3; x < x1; x += 4) set(x, y + 1, SZ1, B.GLOW_PANEL);
+  }
+  set(DX, 58, SZ1 - 1, B.CHROME); set(DX + 1, 58, SZ1 - 1, B.CHROME); set(DX, 59, SZ1 - 1, B.GLOW_PANEL); set(DX + 1, 59, SZ1 - 1, B.GLOW_PANEL);   // finial
   // the furnace eye: a round vent-rimmed emblem in the gable, red ring and a molten core that glows at night
   for (let y = 41; y <= 51; y++) for (let x = DX - 5; x <= DX + 6; x++) {
     const dx = x + 0.5 - (DX + 1), dy = y + 0.5 - 46.5, q = dx * dx + dy * dy;
