@@ -647,4 +647,70 @@ step per frame however long the software renderer takes. Nine segments (approach
 module, TIE launch from below, bridge walkway, corridor → blast door, turbolift ride bridge → hangar
 deck, hangar sweep with a launch, departure) → `tour.mp4`.
 
-Critique round 3 (the four round-2 critics, on `shots/sd_iter_4/`) is in progress.
+Critique round 3 (the four round-2 critics, on `shots/sd_iter_4/`) verified round 2: exterior 10
+Fixed / 2 Partly (close + far pass, medium failed on three Musts); bridge conditional pass, comms /
+intel pass; crew nine of ten views pass (one Must: life-support bars); hangar pass (no Musts);
+engineering one Must (occluded cargo signs). It also exposed a process gap: the command deck's
+round 2 had finished but was never merged, so those five rooms were re-listed as open.
+
+## SD iteration 5 — critique round 3 fixes merged (`shots/sd_iter_5/`, `/tmp/navtest_iter5.json`)
+
+Merged: command deck rounds 2 + 3 (tactical ring / plotters / floor channels, navigation course
+chart + 1.6× holo + operator station, briefing cog emblem / cabinet / varied rows, four lit named
+officer cabins, observation uplights / benches / four sill-housing types; label atlas shelf-packed,
+command textures 34 → 11 MB); crew round 3 (life-support fixtures, armory rack-top band, quarters
+refresher alcove, recreation games case, detention threshold + anteroom light, mess entry stations,
+dogged escape-pod doors, medbay status board); exterior round 3 (plates flush on a 0.35 m lift with
+merged 2×3 panels and a normal-mapped plate map, plated stern face with vernier / fin banks, ≤ 25 %
+lit clustered windows with tint, tower caps, engine glow inside the rims with view-dependent bloom,
+streak weathering, nav lights, planet crescent, greebles rejected outside the wedge); bridge round 3
+(0.8 m hologram pitched over the plot ring — the aft sightline to the viewports is open again, lit
+header trough + warm hood seam lamps, dressed station cheeks, tall/low lectern pair, comms strip +
+seat, intel hood); engineering round 3 (cargo row signs on brackets clear of the containers,
+hyperdrive channels terminated + reactor-blue motivator, canopied floods, reactor gallery stations,
+textures 19 → 6 MB); hangar round 3 (staggered launches ≥ 3 s, engine glow ramps with the path,
+pitch clamped inside the bay, containment field scan layer + crossing pulse + warm spill plane so the
+mouth reads lit from below, painted gantry rails, hooded floods, chain hoist, crew figure with arms).
+
+Shared (integrator): light pool 16 points; stencil erosion never cuts a stroke; grate tile 512;
+door seam lamps 30 mm on dim emitters with one accent per corridor; faint floor edge channels and
+ceiling strips inset 2 m from the doors; lobby dash rows thinned; 512×96 sign plates; lift rear
+channels sweep a passing-floor band, "Turbolift — In transit → …" HUD title, matte displays;
+`ceilingFixture()` shared helper; coherent conduit / screen panel runs capped at two; `railing()`
+colour option; yawed `impConsole` colliders as swept boxes; deep-red screen warn colour and dim
+status lamps (no ACES red clipping); emitters purely emissive (black albedo, roughness 1 — a
+fixture's own light can no longer clip its face); hangar module skirt strips warm at half strength.
+
+Measured (1280×720, software GL, static production build; iteration 4 → 5):
+
+| View | Calls | Tris | iter 4 (calls / tris) |
+|------|-------|------|-----------------------|
+| exterior_medium | 128 | 389k | 125 / 399k |
+| exterior_close | 243 | 766k | 235 / 780k |
+| exterior_dock (worst view) | 318 | 941k | 304 / 955k |
+| exterior_stern | 238 | 755k | 228 / 767k |
+| bridge_aft | 205 | 714k | 197 / 735k |
+| bridge_window | 190 | 711k | 184 / 732k |
+| observation | 177 | 511k | 172 / 519k |
+| corridor_crew | 123 | 139k | 125 / 142k |
+| quarters | 100 | 240k | 99 / 242k |
+| lifesupport | 110 | 197k | 112 / 207k |
+| engineering | 80 | 181k | 78 / 181k |
+| cargo | 83 | 177k | 82 / 172k |
+| hangar_entry | 290 | 687k | 286 / 693k |
+| hangar_deck | 267 | 685k | 257 / 684k |
+| fighterbay | 201 | 534k | 195 / 543k |
+
+All 50 views inside the budget (≤ 350 calls, ≤ 1.2 M triangles). Texture memory with every deck
+visited 140 MB (181) — under the 160 MB target after the label-canvas trims. Programs 288 (249): the
+round-3 material variants (plate map, hangar floor clone, bridge atlases) each add a program,
+compiled per deck behind the lift doors. Heap 328 MB. Load 19.0 s on this CPU. Light pool overflow:
+none in any room view except detention (1, its new anteroom light) and the exterior dock station (5,
+hangar lights requested while the camera is near the bay).
+
+Dynamic passes as before (door 41 % open, lift mid-ride → `d5_lift`, three staggered launches with
+one TIE mid-descent at y −20 and one 16 m below the hull, exterior ↔ interior round trip to the same
+spot). Navigation: 80 door / portal traversals + 5 lift rides, 0 failures, 0 page errors, no sector
+over its triangle or light budget — with the swept console colliders in place.
+
+Critique round 4 (the same four critics, on `shots/sd_iter_5/`) is in progress.
