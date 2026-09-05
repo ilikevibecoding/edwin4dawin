@@ -41,7 +41,7 @@ function doorway(bp, x0, z0, x1, z1, y, h = 3, lintel = GLOW, jamb = CHR) {
   if (z0 === z1) { bp.fill(x0 - 1, y, z0, x0 - 1, y + h, z0, jamb); bp.fill(x1 + 1, y, z0, x1 + 1, y + h, z0, jamb); bp.fill(x0, y + h, z0, x1, y + h, z0, lintel); }
   else { bp.fill(x0, y, z0 - 1, x0, y + h, z0 - 1, jamb); bp.fill(x0, y, z1 + 1, x0, y + h, z1 + 1, jamb); bp.fill(x0, y + h, z0, x0, y + h, z1, lintel); }
 }
-function statue(bp, x, y, z, body = CHR) { bp.set(x, y, z, BRICK); bp.fill(x, y + 1, z, x, y + 3, z, body); }
+function statue(bp, x, y, z, body = CHR, head = B.GOLD_BLOCK) { bp.set(x, y, z, BRICK); bp.fill(x, y + 1, z, x, y + 2, z, body); bp.set(x, y + 3, z, head); }
 function lampPost(bp, x, y, z, h = 2, id = LAMP) { bp.fill(x, y, z, x, y + h - 1, z, BARS); bp.set(x, y + h, z, id); }
 function planter(bp, x, y, z, leaf = B.OAK_LEAVES) { bp.set(x, y, z, DARK); bp.set(x, y + 1, z, leaf); }
 function bench(bp, x, y, z) { bp.set(x, y, z, SLAB); bp.spot(x, y, z, 'seat'); }
@@ -594,7 +594,7 @@ function chancellorFloor(bp, rng) {
   makeRoom(plan, rng, 'archive', 45, 18, 55, 22, { prefer: ['S'] });
   dressCorridors(plan);
 }
-const ARC_R = 19, ARC_CZ = 33;
+const ARC_R = 32, ARC_CZ = 20;   // a gentle bow: z 48 at the office corners, 52 across the middle
 const arcZ = (x) => Math.round(ARC_CZ + Math.sqrt(ARC_R * ARC_R - (x - 40.5) * (x - 40.5)));   // first wall cell of the window arc
 function chancellorOffice(bp, rng) {
   const y = TOP, x0 = 25, x1 = 55, zN = 42;
@@ -643,19 +643,21 @@ function crown(bp) {
     if (edge && bp.get(x, y + 1, z) === BLACK && (x + z) % 3 === 0) bp.set(x, y + 1, z, BLUE);
     if (edge && bp.get(x, y + 2, z) === BLACK && (x + z) % 4 === 0) bp.set(x, y + 2, z, B.WINDOW_LIT);
   }
-  // disc over the house (r 8.5 around the core centre) and the glass dome
-  for (let x = 31; x <= 50; x++) for (let z = 23; z <= 42; z++) {
+  // disc over the house (r 10.5 around the core centre, lit rim, blue ring) and the glass dome (the height budget
+  // ends at y 120, so the dome is 4 high)
+  for (let x = 29; x <= 52; x++) for (let z = 21; z <= 44; z++) {
     const d = Math.hypot(x - 40.5, z - 32.5);
-    if (d > 8.5) continue;
-    bp.set(x, y + 4, z, d > 7.5 ? CHR : ((x + z) % 3 === 0 ? BLUE : DARK));
-    bp.set(x, y + 5, z, d > 7.5 ? ((x + z) % 2 ? GLOW : CHR) : (d > 5.5 && d <= 6.5 ? BLUE : PLATE));
-    if (d <= 4.5) {
-      const h = Math.min(4, Math.max(1, Math.round(Math.sqrt(20.25 - d * d))));
+    if (d > 10.5) continue;
+    bp.set(x, y + 4, z, d > 9.5 ? CHR : ((x + z) % 3 === 0 ? BLUE : DARK));
+    bp.set(x, y + 5, z, d > 9.5 ? ((x + z) % 2 ? GLOW : CHR) : (d > 7.5 && d <= 8.5 ? BLUE : ((x % 4 === 0 || z % 4 === 0) ? DARK : PLATE)));
+    if (d <= 5.5) {
+      const h = Math.min(4, Math.max(1, Math.round(Math.sqrt(30.25 - d * d))));
       bp.set(x, y + 5 + h, z, d < 1.2 ? BLUE : GLASS);
-      if (d > 3.3) for (let yy = y + 6; yy < y + 5 + h; yy++) bp.set(x, yy, z, ((x + z) % 3) ? GLASS : CHR);
+      if (d > 4.3) for (let yy = y + 6; yy < y + 5 + h; yy++) bp.set(x, yy, z, ((x + z) % 3) ? GLASS : CHR);
     }
   }
-  bp.fill(40, y + 6, 32, 41, y + 7, 33, GLOW);
+  bp.fill(40, y + 6, 32, 41, y + 8, 33, GLOW);
+  for (const [px, pz] of [[33, 32], [48, 32], [40, 25], [40, 40]]) { bp.set(px, y + 6, pz, CHR); bp.set(px, y + 7, pz, BLUE); }   // beacons on the disc
   // the office bay's roof carries its own parapet; drop the terrace railing where it would cross the bay
   for (let x = 25; x <= 55; x++) if (arcZ(x) >= 48) bp.set(x, y, 47, AIR);
   // corner pylons
@@ -688,7 +690,11 @@ function skyLobby(plan, rng) {
   plan.mark(x0, z0, x1, z1);
   // entrance in the south face and the wide opening to the corridor
   doorway(bp, 39, z1 + 1, 42, z1 + 1, y, 3, GLOW); bp.door(40, y, z1 + 1, 'S');
-  doorway(bp, 38, z0 - 1, 43, z0 - 1, y, 3, BLUE);
+  // the north wall is a chrome colonnade: the lobby reads as one hall with the ring corridor behind it
+  for (let x = x0 + 1; x <= x1 - 1; x++) {
+    if (x % 4 === 1) { bp.fill(x, y, z0 - 1, x, y + 2, z0 - 1, CHR); bp.set(x, y + 3, z0 - 1, BLUE); continue; }
+    bp.fill(x, y, z0 - 1, x, y + 2, z0 - 1, AIR); bp.set(x, y + 3, z0 - 1, (x % 2) ? GLOW : DARK);
+  }
   for (let x = 36; x <= 45; x++) { bp.set(x, y, 54, BLACK); bp.set(x, y + 1, 54, (x === 40 || x === 41) ? CONSOLE : SLAB); }
   bp.set(35, y, 54, CHR); bp.set(46, y, 54, CHR); bp.set(35, y + 1, 54, BLUE); bp.set(46, y + 1, 54, BLUE);
   for (const x of [38, 43]) { bp.set(x, y, 53, SLAB); bp.work(x, y, 53, 'receptionist'); }
@@ -780,24 +786,32 @@ function discPavilion(bp) {
     const f = helixF(x, z);
     for (let k = 0; k < 3; k++) { const s = Math.round((1 + 14 * (f + k)) * 2) / 2, yy = Math.ceil(s); if (yy < y - 2) { bp.set(x, yy, z, BARS); if ((x + z) % 5 === 0) bp.set(x, yy + 1, z, LANTERN); } }
   }
-  // canopy: chrome posts and an annular steel-glass roof with lit rims
-  for (let k = 0; k < 6; k++) {
-    const a = Math.PI / 4 + k * Math.PI / 2 + (k >= 4 ? Math.PI / 4 : 0);
-    const px = Math.round(cx - 0.5 + Math.cos(a) * 9.5), pz = Math.round(cz - 0.5 + Math.sin(a) * 9.5);
+  // canopy over the stalk: eight chrome posts, a dark saucer roof with a lit rim and a steel-glass dome, so the
+  // pavilion reads as the saucer of the reference while the outer ring of the pad stays open for shuttles
+  for (let k = 0; k < 8; k++) {
+    const a = Math.PI / 8 + k * Math.PI / 4;
+    const px = Math.round(cx - 0.5 + Math.cos(a) * 6.8), pz = Math.round(cz - 0.5 + Math.sin(a) * 6.8);
     bp.fill(px, y + 1, pz, px, y + 6, pz, CHR); bp.set(px, y + 4, pz, BLUE);
   }
-  for (let x = 30; x <= 51; x++) for (let z = 80; z <= 101; z++) {
+  for (let x = 32; x <= 49; x++) for (let z = 82; z <= 99; z++) {
     const d = dist(x, z);
-    if (d > 10 || d <= 6) continue;
-    bp.set(x, y + 7, z, (d > 9 || d <= 7) ? ((x + z) % 2 ? GLOW : CHR) : GLASS);
+    if (d > 8) continue;
+    if (d > 4.5) { bp.set(x, y + 7, z, d > 7 ? ((x + z) % 3 === 0 ? GLOW : CHR) : ((x + z) % 2 ? DARK : STEEL)); if (d > 6 && (x + z) % 4 === 2) bp.set(x, y + 6, z, GLOW); continue; }
+    const h = Math.max(1, Math.round(Math.sqrt(20.25 - d * d)) - 1);
+    bp.set(x, y + 7 + h, z, d < 1.2 ? BLUE : GLASS);
+    if (d > 3.4) for (let yy = y + 7; yy < y + 7 + h; yy++) bp.set(x, yy, z, ((x + z) % 3) ? GLASS : CHR);
+    else bp.set(x, y + 7, z, (x + z) % 2 ? DARK : STEEL);
   }
-  // the Senate shuttle parked on the east half of the pad
-  bp.fill(44, y + 2, 89, 52, y + 4, 92, STEEL); bp.fill(45, y + 3, 90, 51, y + 3, 91, AIR);
-  bp.fill(53, y + 3, 90, 53, y + 3, 91, GLASS); bp.fill(52, y + 4, 90, 52, y + 4, 91, GLASS);
-  bp.fill(46, y + 5, 90, 48, y + 6, 91, DARK); bp.set(47, y + 7, 90, BLUE);
-  bp.fill(44, y + 3, 90, 44, y + 3, 91, BLUE);
-  for (const [gx, gz] of [[45, 89], [45, 92], [51, 89], [51, 92]]) bp.set(gx, y + 1, gz, BARS);
-  bp.fill(47, y + 1, 92, 48, y + 1, 93, PLATE); bp.spot(48, y + 1, 94, 'stand'); bp.work(36, y + 1, 96, 'deck officer');
+  bp.fill(40, y + 8, 90, 41, y + 9, 91, GLOW);
+  // the Senate shuttle docked at the east rim, nose over the pad, boarding ramp down onto the deck
+  bp.fill(49, y + 2, 89, 58, y + 4, 92, STEEL); bp.fill(50, y + 3, 90, 57, y + 3, 91, AIR);
+  bp.fill(49, y + 2, 89, 49, y + 2, 92, DARK); bp.fill(49, y + 3, 90, 49, y + 3, 91, GLASS);          // nose and cockpit
+  bp.fill(59, y + 3, 90, 59, y + 3, 91, BLUE); bp.fill(59, y + 2, 89, 59, y + 4, 89, DARK); bp.fill(59, y + 2, 92, 59, y + 4, 92, DARK);   // engines
+  bp.fill(52, y + 3, 88, 56, y + 3, 88, STEEL); bp.fill(52, y + 3, 93, 56, y + 3, 93, STEEL); bp.set(56, y + 3, 88, BLUE); bp.set(56, y + 3, 93, BLUE);   // wings
+  bp.fill(54, y + 5, 90, 57, y + 5, 91, DARK); bp.fill(56, y + 6, 90, 57, y + 6, 91, DARK); bp.set(57, y + 7, 90, BLUE);   // swept fin
+  for (const gz of [88, 93]) { bp.set(50, y + 1, gz, BARS); bp.set(50, y + 2, gz, CHR); bp.set(50, y + 3, gz, BLUE); }   // mooring beacons
+  bp.set(47, y + 1, 90, SLAB); bp.set(47, y + 1, 91, SLAB); bp.set(48, y + 1, 90, PLATE); bp.set(48, y + 1, 91, PLATE);
+  bp.spot(46, y + 1, 90, 'stand'); bp.work(36, y + 1, 96, 'deck officer');
   // benches and holo totems on the pad's west half
   for (const [bx, bz] of [[33, 88], [33, 93], [35, 84], [35, 97]]) bench(bp, bx, y + 1, bz);
   totem(bp, 31, y + 1, 90); totem(bp, 40, y + 1, 99); planter(bp, 34, y + 1, 86, B.SPRUCE_LEAVES); planter(bp, 34, y + 1, 95, B.SPRUCE_LEAVES);
