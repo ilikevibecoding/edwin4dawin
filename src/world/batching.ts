@@ -113,9 +113,39 @@ export class PbrSoup {
 
 /** Per-tile instance data an InstanceBatch copies from: matrices (16 floats each), optional colours (3)
  *  and the extra instanced attributes in the order the batch was given them. */
-export interface BatchSource { matrices: Float32Array; colors: Float32Array | null; extras: Float32Array[] }
+export interface BatchSource {
+  matrices: Float32Array; colors: Float32Array | null; extras: Float32Array[];
+  /** when set, the batch copies the instances at these indices instead of the first `count` ones */
+  indices?: Uint32Array;
+}
 export interface BatchAttribute { name: string; itemSize: number }
 interface BatchRange { start: number; count: number }
+
+/** The instances of one grid cell of a tile: a view into the tile's data with the cell's culling box. */
+export interface CellSource extends BatchSource { indices: Uint32Array; box: THREE.Box3; count: number }
+
+/** Regroup the `n` instances of `src` by `cell`-metre grid cell of their translation. `bound` grows a
+ *  box by instance `i` (position and extent). The cells share the tile's arrays, each with an index
+ *  list, so a tile drawn cell by cell submits only the cells in view without copying its data. */
+export function splitCells(src: BatchSource, n: number, cell: number, bound: (i: number, box: THREE.Box3) => void): CellSource[] {
+  const cells = new Map<number, number[]>();
+  for (let i = 0; i < n; i++) {
+    const key = cellKey(src.matrices[i * 16 + 12], src.matrices[i * 16 + 14], cell);
+    let list = cells.get(key);
+    if (!list) { list = []; cells.set(key, list); }
+    list.push(i);
+  }
+  const order = new Uint32Array(n);
+  const out: CellSource[] = [];
+  let w = 0;
+  for (const list of cells.values()) {
+    const start = w;
+    const box = new THREE.Box3();
+    for (const i of list) { order[w++] = i; bound(i, box); }
+    out.push({ matrices: src.matrices, colors: src.colors, extras: src.extras, indices: order.subarray(start, w), box, count: list.length });
+  }
+  return out;
+}
 
 /** a batch is compacted when more than this fraction of it is holes */
 const COMPACT_HOLES = 0.3;
@@ -187,11 +217,25 @@ export class InstanceBatch<S extends BatchSource = BatchSource> {
     if (count === 0) return true;
     const start = this.alloc(count);
     if (start < 0) return false;
-    this.matrices.set(tile.matrices.subarray(0, count * 16), start * 16);
-    if (this.colors && tile.colors) this.colors.set(tile.colors.subarray(0, count * 3), start * 3);
-    for (let i = 0; i < this.extras.length; i++) {
-      const e = this.extras[i];
-      e.array.set(tile.extras[i].subarray(0, count * e.size), start * e.size);
+    const idx = tile.indices;
+    if (idx) {
+      const withColor = this.colors !== null && tile.colors !== null;
+      for (let k = 0; k < count; k++) {
+        const i = idx[k], w = start + k;
+        this.matrices.set(tile.matrices.subarray(i * 16, i * 16 + 16), w * 16);
+        if (withColor) this.colors!.set(tile.colors!.subarray(i * 3, i * 3 + 3), w * 3);
+        for (let j = 0; j < this.extras.length; j++) {
+          const e = this.extras[j];
+          e.array.set(tile.extras[j].subarray(i * e.size, (i + 1) * e.size), w * e.size);
+        }
+      }
+    } else {
+      this.matrices.set(tile.matrices.subarray(0, count * 16), start * 16);
+      if (this.colors && tile.colors) this.colors.set(tile.colors.subarray(0, count * 3), start * 3);
+      for (let i = 0; i < this.extras.length; i++) {
+        const e = this.extras[i];
+        e.array.set(tile.extras[i].subarray(0, count * e.size), start * e.size);
+      }
     }
     this.ranges.set(tile, { start, count });
     this.touch(start, count);

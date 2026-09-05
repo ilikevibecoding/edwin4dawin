@@ -5,7 +5,7 @@ import { Zone, type District, type WorldMap } from './map';
 import type { Block } from './roads';
 import { createFacadeMaterial } from './facade';
 import { LAYER_CAMERA, LAYER_CASCADE0, LAYER_MIRROR, MAX_CASCADES, layerMask, maskCasts, type ViewCull } from './culling';
-import { InstanceBatch, type BatchSource } from './batching';
+import { InstanceBatch, splitCells, type BatchSource, type CellSource } from './batching';
 
 // ------------------------------------------------------------------ unit geometries
 // All are 1 m wide/deep centred on x/z and span y in [0,1]. Every geometry carries an `aPart` vertex
@@ -104,8 +104,20 @@ const PROXY_MIN_HEIGHT = 14;
 const CITY_EXTRAS = [{ name: 'aDims', itemSize: 3 }, { name: 'aStyle', itemSize: 4 }, { name: 'aStyle2', itemSize: 4 }];
 /** `lodR` is the horizontal half-diagonal of the tile (the shadow-distance metric); `center`, `r` and `height`
  *  bound the buildings in world space and are only used for culling; the arrays feed the kind's batches */
-interface CityTile extends BatchSource { mesh: THREE.InstancedMesh; kind: Kind; n: number; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodR: number; bits: number }
+interface CityTile extends BatchSource { mesh: THREE.InstancedMesh; kind: Kind; n: number; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodR: number; bits: number; cells: CellSource[] | null; cellsDrawn: boolean }
+/** cells a tile in view is drawn by for the camera (built on first use), so the buildings of a tile the
+ *  camera stands in that are outside the frustum are not submitted */
+const CITY_CELL = 250;
 const _perCascade = new Array<number>(MAX_CASCADES).fill(0);
+const _bp = new THREE.Vector3();
+/** grow `box` by building `i` of `t` the way the tile box was built (footprint half-diagonal x 0.6, height) */
+function boundBuilding(t: CityTile, i: number, box: THREE.Box3): void {
+  const m = t.matrices, dims = t.extras[0];
+  const x = m[i * 16 + 12], y = m[i * 16 + 13], z = m[i * 16 + 14];
+  const r = Math.hypot(dims[i * 3], dims[i * 3 + 2]) * 0.6, h = dims[i * 3 + 1];
+  box.expandByPoint(_bp.set(x - r, y, z - r));
+  box.expandByPoint(_bp.set(x + r, y + h, z + r));
+}
 
 /** Spatially tiled instance batches so far tiles can be frustum-culled and stop casting shadows. */
 export class BuildingBatches {
@@ -122,7 +134,7 @@ export class BuildingBatches {
    *  and `height` bound the buildings in world space and are only used for culling. */
   private readonly tiles: CityTile[] = [];
   /** one instanced draw per kind for the camera pass (every tile in view) and one for the mirror pass */
-  private readonly cameraBatches = new Map<Kind, InstanceBatch<CityTile>>();
+  private readonly cameraBatches = new Map<Kind, InstanceBatch>();
   private readonly mirrorBatches = new Map<Kind, InstanceBatch<CityTile>>();
   readonly cameraMeshes = new Set<THREE.Object3D>();
   readonly mirrorMeshes = new Set<THREE.Object3D>();
@@ -184,14 +196,14 @@ export class BuildingBatches {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       this.group.add(mesh);
       const lodR = Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2;
-      this.tiles.push({ mesh, kind, n: list.length, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodR, bits: 0, matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: [dims, style, style2] });
+      this.tiles.push({ mesh, kind, n: list.length, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodR, bits: 0, cells: null, cellsDrawn: false, matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: [dims, style, style2] });
     }
     // camera / mirror batches per kind, sized for every building of that kind
     const perKind = new Map<Kind, number>();
     for (const t of this.tiles) perKind.set(t.kind, (perKind.get(t.kind) ?? 0) + t.n);
     for (const [kind, n] of perKind) {
       const unit = this.geos[kind];
-      const cam = new InstanceBatch<CityTile>(n, unit, this.material, CITY_EXTRAS, true);
+      const cam = new InstanceBatch(n, unit, this.material, CITY_EXTRAS, true);
       cam.mesh.layers.set(LAYER_CAMERA);
       cam.mesh.name = `city-${kind}`;
       this.cameraBatches.set(kind, cam);
@@ -254,9 +266,19 @@ export class BuildingBatches {
     for (let i = 0; i < MAX_CASCADES; i++) if (perCascade[i] > this.proxies.length + 2) proxyBits |= 1 << i;
     for (const t of this.tiles) {
       const inView = cull.boxInView(t.box);
-      // the camera draws the tile from its kind's batch; the tile's own mesh is left to the shadow passes
-      // (and to the camera only when the batch is full)
-      const batched = this.cameraBatches.get(t.kind)!.set(t, inView ? t.n : 0);
+      // the camera draws the tile from its kind's batch, cell by cell (the cells in view); the tile's own
+      // mesh is left to the shadow passes (and to the camera only when the batch is full)
+      const batch = this.cameraBatches.get(t.kind)!;
+      let batched = true;
+      if (inView) {
+        const cells = t.cells ??= splitCells(t, t.n, CITY_CELL, boundBuilding.bind(null, t));
+        for (const c of cells) if (!batch.set(c, cull.boxInView(c.box) ? c.count : 0)) batched = false;
+        if (!batched) for (const c of cells) batch.set(c, 0);
+        t.cellsDrawn = batched;
+      } else if (t.cellsDrawn) {
+        for (const c of t.cells!) batch.set(c, 0);
+        t.cellsDrawn = false;
+      }
       let mask = layerMask('all', inView && !batched, t.bits & ~proxyBits);
       const cast = maskCasts(mask);
       // the water mirrors the tiles within the reflection range (distance to the tile's bounding sphere)

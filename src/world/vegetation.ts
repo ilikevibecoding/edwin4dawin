@@ -4,7 +4,7 @@ import { perlin2, smoothstep } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { CELL, HALF, Zone, type WorldMap } from './map';
 import { balanceGroundIbl } from './terrain';
-import { InstanceBatch } from './batching';
+import { InstanceBatch, splitCells, type CellSource } from './batching';
 import { LAYER_CAMERA, LAYER_MIRROR, MAX_CASCADES, cascadeIsFine, layerMask, maskCasts, type ViewCull } from './culling';
 
 /**
@@ -633,15 +633,16 @@ interface Plant { x: number; y: number; z: number; s: number; rot: number; lean:
  *  and `height` bound the drawn plants and cards and are only used for culling. */
 /** `hi` (crown family only) is the subdivided mesh drawn instead of `near` when the camera is within
  *  HI_DISTANCE of the tile's plants; it shares the instance buffers of `near`. */
-interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; sub: SubCell[] | null; subBatch: InstanceBatch<SubCell> | null; maxS: number; }
+interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; cells: VegCells | null; nearBatch: InstanceBatch<CellSource> | null; cardCells: boolean; maxS: number; }
 
-/** A SUB-metre cell of a crown tile: views into the tile's instance data regrouped by cell, so the near
- *  batches draw only the cells of a near tile that are in view (the tile's own mesh draws every crown
- *  of the tile, most of them behind the camera when it stands inside the tile). */
-interface SubCell { matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; box: THREE.Box3; count: number; }
+/** The VEG_CELL-metre cells of a tile (built the first time the tile is drawn near or in full): the same
+ *  cells once with the 3D mesh's per-instance attribute and once with the card's, so the batches draw
+ *  only the cells of a tile that are in view (the tile as a whole draws every plant, most of them behind
+ *  the camera when it stands inside the tile). */
+interface VegCells { near: CellSource[]; cards: CellSource[] }
 
 const TILE = 900;
-const SUB = 150;
+const VEG_CELL = 150;
 /** instances the near crown batches hold each (the tile's own mesh draws the tiles that do not fit) */
 const NEAR_CROWNS = 65536;
 /** casting tiles a coarse cascade (texel over NEAR_TEXEL) draws at most, nearest first */
@@ -693,11 +694,11 @@ export class Vegetation {
   readonly cameraCards: THREE.InstancedMesh;
   /** the same for the card tiles the water mirrors (within MIRROR_DISTANCE), on the mirror-only layer */
   readonly mirrorCards: THREE.InstancedMesh;
-  private readonly cameraBatch: InstanceBatch<Tile>;
+  private readonly cameraBatch: InstanceBatch;
   private readonly mirrorBatch: InstanceBatch<Tile>;
   /** the crowns of the near tiles' cells in view, one draw for the 66-triangle mesh and one for the subdivided one */
-  private readonly nearBatch: InstanceBatch<SubCell>;
-  private readonly hiBatch: InstanceBatch<SubCell>;
+  private readonly nearBatch: InstanceBatch<CellSource>;
+  private readonly hiBatch: InstanceBatch<CellSource>;
 
   constructor(map: WorldMap, occupied: (x: number, z: number) => boolean) {
     const rng = new Rng('vegetation');
@@ -712,7 +713,7 @@ export class Vegetation {
     const crownGeoHi = crownGeometry(true);
     const palmGeo = palmGeometry();
     const cardGeo = cardGeometry();
-    this.cameraBatch = new InstanceBatch<Tile>(CAMERA_CARDS, cardGeo, cardMat, CARD_EXTRAS, true, cardDepth);
+    this.cameraBatch = new InstanceBatch(CAMERA_CARDS, cardGeo, cardMat, CARD_EXTRAS, true, cardDepth);
     this.cameraCards = this.cameraBatch.mesh;
     this.cameraCards.layers.set(LAYER_CAMERA);
     this.cameraCards.name = 'cards';
@@ -721,9 +722,9 @@ export class Vegetation {
     this.mirrorCards.layers.set(LAYER_MIRROR);
     this.mirrorCards.name = 'cards-mirror';
     this.group.add(this.cameraCards, this.mirrorCards);
-    this.nearBatch = new InstanceBatch<SubCell>(NEAR_CROWNS, crownGeo, crownMat, CARD_EXTRAS, true);
+    this.nearBatch = new InstanceBatch<CellSource>(NEAR_CROWNS, crownGeo, crownMat, CARD_EXTRAS, true);
     this.nearBatch.mesh.name = 'crowns-near';
-    this.hiBatch = new InstanceBatch<SubCell>(NEAR_CROWNS, crownGeoHi, crownMat, CARD_EXTRAS, true);
+    this.hiBatch = new InstanceBatch<CellSource>(NEAR_CROWNS, crownGeoHi, crownMat, CARD_EXTRAS, true);
     this.hiBatch.mesh.name = 'crowns-hi';
     this.group.add(this.nearBatch.mesh, this.hiBatch.mesh);
 
@@ -966,7 +967,7 @@ export class Vegetation {
       far.visible = false;
       this.group.add(near, far);
       if (hi) { hi.boundingSphere = sphere.clone(); this.group.add(hi); }
-      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, extras: [farVar], sub: null, subBatch: null, maxS });
+      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, extras: [farVar], cells: null, nearBatch: null, cardCells: false, maxS });
     };
     for (const t of byTile.values()) {
       if (t.crown.length) build(t.crown, crownGeo, crownMat, crownGeoHi);
@@ -979,44 +980,18 @@ export class Vegetation {
     this.uWind.value = wind;
   }
 
-  /** Regroup a crown tile's instances by SUB-metre cell into one compact copy (built the first time the
-   *  tile is drawn in 3D); each cell is a view into that copy with its own culling box. */
-  private static subCells(t: Tile): SubCell[] {
-    const n = t.n;
-    const nearVar = t.near.geometry.getAttribute('aVar').array as Float32Array;
-    const cells = new Map<number, number[]>();
-    const per = Math.ceil(TILE / SUB);
-    for (let i = 0; i < n; i++) {
-      const x = t.matrices[i * 16 + 12], z = t.matrices[i * 16 + 14];
-      // cell indices relative to the tile origin (plants sit inside their tile by construction)
-      const cx = Math.min(per - 1, Math.max(0, Math.floor((x - Math.floor(x / TILE) * TILE) / SUB)));
-      const cz = Math.min(per - 1, Math.max(0, Math.floor((z - Math.floor(z / TILE) * TILE) / SUB)));
-      const key = cz * per + cx;
-      let list = cells.get(key);
-      if (!list) { list = []; cells.set(key, list); }
-      list.push(i);
-    }
-    const matrices = new Float32Array(n * 16), colors = new Float32Array(n * 3), vars = new Float32Array(n * 4);
-    const out: SubCell[] = [];
+  private static cells(t: Tile): VegCells {
     const grow = t.maxS * 2.6, up = t.maxS * 3.7;
-    let w = 0;
-    for (const list of cells.values()) {
-      const start = w;
-      const box = new THREE.Box3();
-      for (const i of list) {
-        matrices.set(t.matrices.subarray(i * 16, i * 16 + 16), w * 16);
-        colors.set(t.colors.subarray(i * 3, i * 3 + 3), w * 3);
-        vars.set(nearVar.subarray(i * 4, i * 4 + 4), w * 4);
-        _p.set(t.matrices[i * 16 + 12], t.matrices[i * 16 + 13], t.matrices[i * 16 + 14]);
-        box.expandByPoint(_p);
-        w++;
-      }
-      // the same growth as the tile box: the largest crown sideways, trunk + crown + half a card up
-      box.min.x -= grow; box.max.x += grow; box.min.z -= grow; box.max.z += grow;
-      box.min.y -= 1; box.max.y += up;
-      out.push({ matrices: matrices.subarray(start * 16, w * 16), colors: colors.subarray(start * 3, w * 3), extras: [vars.subarray(start * 4, w * 4)], box, count: w - start });
-    }
-    return out;
+    const m = t.matrices;
+    // the same growth as the tile box: the largest crown sideways, trunk + crown + half a card up
+    const bound = (i: number, box: THREE.Box3) => {
+      const x = m[i * 16 + 12], y = m[i * 16 + 13], z = m[i * 16 + 14];
+      box.expandByPoint(_p.set(x - grow, y - 1, z - grow));
+      box.expandByPoint(_p.set(x + grow, y + up, z + grow));
+    };
+    const nearVar = t.near.geometry.getAttribute('aVar').array as Float32Array;
+    const near = splitCells({ matrices: m, colors: t.colors, extras: [nearVar] }, t.n, VEG_CELL, bound);
+    return { near, cards: near.map((c) => ({ ...c, extras: t.extras })) };
   }
 
   /** Per-tile LOD: the nearest tiles (within NEAR_DISTANCE, up to an instance budget) draw the 3D
@@ -1058,14 +1033,14 @@ export class Vegetation {
       // crown tiles drawn in 3D go through the near batches cell by cell (only the cells in view); the
       // tile's own mesh is the fallback when the batch is full
       let batched3d = false;
-      if (t.hi !== null && (near3d || t.subBatch !== null)) {
+      if (t.hi !== null && (near3d || t.nearBatch !== null)) {
         const batch = near3d ? (hi ? this.hiBatch : this.nearBatch) : null;
-        const sub = t.sub ??= Vegetation.subCells(t);
-        if (t.subBatch !== null && t.subBatch !== batch) { for (const s of sub) t.subBatch.set(s, 0); t.subBatch = null; }
+        const cells = (t.cells ??= Vegetation.cells(t)).near;
+        if (t.nearBatch !== null && t.nearBatch !== batch) { for (const c of cells) t.nearBatch.set(c, 0); t.nearBatch = null; }
         if (batch !== null) {
           batched3d = true;
-          for (const s of sub) if (!batch.set(s, cull.boxInView(s.box) ? s.count : 0)) batched3d = false;
-          if (!batched3d) { for (const s of sub) batch.set(s, 0); t.subBatch = null; } else t.subBatch = batch;
+          for (const c of cells) if (!batch.set(c, cull.boxInView(c.box) ? c.count : 0)) batched3d = false;
+          if (!batched3d) { for (const c of cells) batch.set(c, 0); t.nearBatch = null; } else t.nearBatch = batch;
         }
       }
       t.near.visible = near3d && !hi && !batched3d;
@@ -1076,7 +1051,20 @@ export class Vegetation {
       const count = Math.max(1, Math.round(t.n * frac));
       // the camera draws the tile's cards from the shared batch; the tile's own card mesh is left to the
       // shadow passes (and to the camera only when the batch is full)
-      const batched = this.cameraBatch.set(t, drawCards ? count : 0);
+      // tiles drawn at full density go into the camera batch cell by cell (only the cells in view);
+      // thinned tiles draw their first `count` cards, whose selection the cells would change
+      let batched: boolean;
+      if (drawCards && frac === 1) {
+        const cells = (t.cells ??= Vegetation.cells(t)).cards;
+        this.cameraBatch.set(t, 0);
+        batched = true;
+        for (const c of cells) if (!this.cameraBatch.set(c, cull.boxInView(c.box) ? c.count : 0)) batched = false;
+        if (!batched) for (const c of cells) this.cameraBatch.set(c, 0);
+        t.cardCells = batched;
+      } else {
+        if (t.cardCells) { for (const c of t.cells!.cards) this.cameraBatch.set(c, 0); t.cardCells = false; }
+        batched = this.cameraBatch.set(t, drawCards ? count : 0);
+      }
       let mask = layerMask('all', drawCards && !batched, bits);
       const shadow = maskCasts(mask);
       // the water mirrors the card tiles within MIRROR_DISTANCE of the camera (the same test the reflection
