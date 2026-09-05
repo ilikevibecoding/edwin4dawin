@@ -10,7 +10,8 @@
     "preview": "vite preview --host 0.0.0.0 --port 4173",
     "server": "node server/index.mjs",
     "bench": "node scripts/bench.mjs",
-    "test": "node scripts/test-unit.mjs && node scripts/test-disasters.mjs",
+    "test": "node scripts/test-unit.mjs && node scripts/test-disasters.mjs && node scripts/test-textures.mjs",
+    "material-table": "node scripts/material-table.mjs",
     "mp-test": "node scripts/mp-test.mjs"
   },
   "dependencies": {

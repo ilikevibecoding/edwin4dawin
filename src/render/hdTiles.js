@@ -435,6 +435,36 @@ function facets(dl, dh, mask) {
     dh[i] = 1.2 - 0.4 * f;
   }
 }
+// Emissive texels (emit mask): neon tubes get a bright core along their run (dimmer edge rows), isolated lit
+// texels (LEDs, lamps) a radial glow; non-emissive face texels next to a lit one get a halo gradient toward it.
+function neonGlow(A, dl, dh) {
+  const st = A.st, em = A.emit;
+  for (let by = 0; by < B; by++) for (let bx = 0; bx < B; bx++) {
+    const bi = by * B + bx;
+    if (st[bi] === TRANSP) continue;
+    const lit = em[bi] > 0.5;
+    const l = em[at(bx - 1, by)] > 0.5, r = em[at(bx + 1, by)] > 0.5, u = em[at(bx, by - 1)] > 0.5, d = em[at(bx, by + 1)] > 0.5;
+    if (lit) {
+      const horiz = (l || r) && !(u || d), vert = (u || d) && !(l || r);
+      if (!horiz && !vert && (l || r || u || d)) continue; // inside a lit area: flat
+      for (let fy = 0; fy < K; fy++) for (let fx = 0; fx < K; fx++) {
+        const i = (by * K + fy) * S + bx * K + fx;
+        let v;
+        if (horiz) v = (fy === 0 || fy === 3) ? -0.07 : 0.07;
+        else if (vert) v = (fx === 0 || fx === 3) ? -0.07 : 0.07;
+        else { const px = fx - 1.5, py = fy - 1.5; v = 0.09 - 0.036 * (px * px + py * py); } // LED dome glow
+        dl[i] += v; dh[i] += 2 * v;
+      }
+    } else if (l || r || u || d) {
+      const gx = (r ? 1 : 0) - (l ? 1 : 0), gy = (d ? 1 : 0) - (u ? 1 : 0);
+      if (gx === 0 && gy === 0) continue;
+      for (let fy = 0; fy < K; fy++) for (let fx = 0; fx < K; fx++) {
+        const i = (by * K + fy) * S + bx * K + fx;
+        dl[i] += 0.04 * (gx * (fx - 1.5) + gy * (fy - 1.5)); // brighter toward the lit neighbour, zero mean
+      }
+    }
+  }
+}
 // Glass: bright core along the diagonal streak texels (semi-transparent base texels), lit outer frame edge
 function glassStreaks(dl, st, baseData, amp) {
   for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
@@ -461,7 +491,7 @@ D.wood = (C) => {
     lines(dl, dh, rng, rng.int(6, 9), LP(dir === 1 ? Math.PI / 2 : 0, 0.12, 10, 28, -0.17, -0.9, false, 0.25, 0.07, 0, false));
     addNoise(dl, nz.fine, 0.03, T, 0);
   } else {
-    grain(dl, dh, rng, T, dir, dir === 2 ? rng.range(3.2, 4) : rng.range(5, 7.5), dir === 2 ? 0.11 : 0.14, dir === 2 ? 0.8 : 1.6, 0.45, dir !== 2 && rng.chance(0.55));
+    grain(dl, dh, rng, T, dir, dir === 2 ? rng.range(3.2, 4) : rng.range(5, 7.5), dir === 2 ? 0.12 : 0.165, dir === 2 ? 0.8 : 1.6, 0.5, dir !== 2 && rng.chance(0.55));
     // a few longer dark streaks along the grain
     if (dir !== 2) lines(dl, dh, rng, rng.int(2, 4), LP(dir === 1 ? Math.PI / 2 : 0, 0.03, 8, 22, -0.1, -0.3, false, 0, 0, 0, false));
   }
@@ -471,8 +501,8 @@ D.stone = (C) => {
   const { M, rng, T, dl, dh, seed, nz } = C;
   addNoise(dl, nz.medium, 0.07, T, 0); addNoise(dl, nz.fine2, 0.05, T, 0); addNoise(dl, nz.white, 0.028, T, seed);
   addNoise(dh, nz.medium, 0.3, T, 0); addNoise(dh, nz.fine2, 0.12, T, 0);
-  const chips = M.chips ?? (M.relief < 0.4 ? 3 : 7);
-  ellipses(dl, dh, rng, chips, 1.3, 2.8, 0.9, 2.4, 0, 1.4);
+  const chips = M.chips ?? (M.relief < 0.4 ? 3 : 9);
+  ellipses(dl, dh, rng, chips, 1.3, 2.8, 0.9, 2.4, 0, 1.7);
   lines(dl, dh, rng, M.cracks ?? (M.relief < 0.4 ? 1 : 2), LP(-1, Math.PI, 8, 22, -0.18, -0.8, false, 0.6, 0.07, 0, false));
   addSpecks(dl, dh, seed + 3, 0.985, 0.06, 0.0001, 0.012, -0.07, -0.1);
 };
@@ -486,9 +516,9 @@ D.brick = (C) => {
 };
 D.cobble = (C) => {
   const { A, rng, T, dl, dh, seed, nz } = C;
-  addNoise(dl, nz.fine, 0.045, T, 0); addNoise(dl, nz.medium, 0.03, T, 0); addNoise(dl, nz.white, 0.03, T, seed);
-  addNoise(dh, nz.fine, 0.12, T, 0);
-  ellipses(dl, dh, rng, 4, 1, 1.8, 1, 1.8, 0, 0.8);
+  addNoise(dl, nz.fine, 0.05, T, 0); addNoise(dl, nz.medium, 0.045, T, 0); addNoise(dl, nz.white, 0.03, T, seed);
+  addNoise(dh, nz.fine, 0.15, T, 0);
+  ellipses(dl, dh, rng, 5, 1, 1.8, 1, 1.8, 0, 1.0001);
   addNoiseWhere(dl, nz.white, 0.05, T, seed + 6, A.st, GROOVE);
 };
 D.dirt = (C) => {
@@ -583,6 +613,7 @@ function structurePass(M, A, dl, dh) {
     const bi = by * B + bx, s = st[bi];
     if (s === TRANSP) continue;
     if (s === DOT) {
+      if (A.emit[bi] > 0.5) continue; // lit dots (LEDs) keep their glow instead of a shaded dome
       for (let fy = 0; fy < K; fy++) for (let fx = 0; fx < K; fx++) {
         const i = (by * K + fy) * S + bx * K + fx;
         const px = fx - 1.5, py = fy - 1.5, sd = (px + py) / 3, r2 = px * px + py * py;
@@ -757,6 +788,7 @@ export function refineTile(base, name, rng = null, opts = null) {
   dl.fill(0); dh.fill(0);
   const C = { M, A, rng, nz, T: makeXf(rng), seed: rng.int(0, 1e9), dl, dh, baseData: d };
   (D[M.detail] || D[M.cls] || D.stone)(C);
+  if (M.emit) neonGlow(A, dl, dh);
   structurePass(M, A, dl, dh);
   // base relief: bilinear for rounded classes (stones, lumps), edge-aware elsewhere (crisp steps at grooves only)
   upsample(A.hb, M.smooth ? PLAIN_W : SCR.W, SCR.hbUp);
