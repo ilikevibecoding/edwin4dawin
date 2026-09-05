@@ -44,7 +44,7 @@ export function createReflectionUniforms(): ReflectionUniforms {
     uReflVP: { value: new THREE.Matrix4() },
     uReflParams: { value: new THREE.Vector4(0, 1, 1, 0) },
     uReflTexel: { value: new THREE.Vector2(1, 1) },
-    uReflTune: { value: new THREE.Vector4(0.5, 0.6, 0.12, 0.3) },
+    uReflTune: { value: new THREE.Vector4(0.38, 0.6, 0.12, 0.3) },
   };
 }
 
