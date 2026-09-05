@@ -3,11 +3,13 @@
 // loft through a single section family (flat deck, rounded corners, flanks slanting out to a chine, a
 // chamfered dark shoulder, belly sides slanting in to a flat keel). The hammerhead bow is the widest
 // part: a 80 m forehead arc from a chisel nose lip at chine height up to the deck, a cargo-hold belly
-// deepest at 27 % of the length, rounded aft corners rolling down onto the narrower mid-hull. The
-// mid-hull carries five egg-shaped deflector pods per flank (two on the deck shoulders), a low hangar
-// band, an open-topped dorsal machinery box with a big cylinder, the bridge tower with its wide sensor
-// head and a ventral mast. The stern block flares out and up (taller above the centreline than below)
-// into three stacked engine housings ending in three large pentagonal nozzles over two smaller ones.
+// deepest at 27 % of the length that rises again to a lip where the mid-hull's box steps down from it,
+// rounded aft corners rolling down onto the narrower mid-hull. The mid-hull carries five egg-shaped
+// deflector pods per flank (two tucked under the hammerhead's corners), the long low hangar band, a
+// flank ledge, an open-topped dorsal machinery box with a big cylinder, the bridge tower with its wide
+// sensor head and a ventral mast. The stern block flares steeply out and up (taller above the
+// centreline than below) to a knee, rises gently to the block deck and steps into the engine housings,
+// ending in three large pentagonal nozzles over two smaller ones.
 // Grey plating with dark panel bands, red fleet roundel; twin heavies and quad batteries in dorsal,
 // ventral and flank rows.
 import * as THREE from "three";
@@ -68,15 +70,18 @@ const Z_NOSE = -300;
 const Z_STERN = 300;
 const L_FORE = 80; // forehead arc, nose lip to deck crest
 const R_NOSE = 24; // plan-view nose corner radius
-const Z_CORNER0 = -118; // hammerhead aft corners (plan) start rounding
-const Z_CORNER1 = -94; // ... and reach the mid-hull width
-const Z_ROLL0 = -117; // deck rolls down onto the mid deck
-const Z_ROLL1 = -83;
-const Z_BAY0 = -60;
+const Z_CORNER0 = -128; // hammerhead aft corners (plan) start rounding
+const Z_CORNER1 = -108; // ... and reach the mid-hull width
+const Z_STEP = -108; // the cargo-hold belly has risen to its lip; the mid-hull box steps down here
+const Z_ROLL0 = -114; // deck rolls down onto the mid deck
+const Z_ROLL1 = -88;
+const Z_BAY0 = -100;
 const Z_BAY1 = 45;
-const BAY_Y = [-28, -16];
-const Z_FLARE0 = 115;
-const Z_HOU = 265;
+const BAY_Y = [-30, -16];
+const Z_FLARE0 = 118;
+const Z_KNEE = 152; // steep part of the stern flare ends, gentle rise to the block deck
+const Z_BLOCK = 221; // full block height
+const Z_HOU = 262;
 const Z_BOXF = 55; // dorsal machinery box
 const Z_BOXA = 122;
 
@@ -105,19 +110,20 @@ const MID = {
   rB: 8,
 };
 const BLK = {
-  hwC: 55,
+  hwC: 51,
   yC: 10,
-  yT: 68,
+  yT: 67.3,
+  yKnee: 60.5, // deck height at the flare knee
   slant: 0.034,
   cr: 8,
   chX: 6,
   chY: 6,
   slope: 0.3,
-  yB: -49,
+  yB: -52.4,
   rB: 10,
 };
 const HOU = {
-  hwC: 58,
+  hwC: 53,
   yC: 10,
   yT: 71,
   slant: 0.016,
@@ -125,7 +131,7 @@ const HOU = {
   chX: 6,
   chY: 6,
   slope: 0.3,
-  yB: -47,
+  yB: -46, // keel of the housings rises gently to the stern
   rB: 10,
 };
 // cargo-hold belly under the bow (side view of the cutaway), z -> keel height
@@ -150,7 +156,10 @@ const BOW_KEEL = [
   [-159, -46],
   [-150, -44.7],
   [-140.6, -42],
-  [-131.3, MID.yB],
+  [-131.3, -38.5],
+  [-124, -34.6],
+  [-116, -32.2],
+  [Z_STEP, -31.5],
 ];
 const lerpK = (A, B, t, keys) => {
   const o = {};
@@ -170,31 +179,32 @@ export function hullParams(z) {
       z < zc ? Math.sqrt(Math.max(0, 1 - ((zc - z) / R_NOSE) ** 2)) : 1;
     const hwBow = BOW.hwC - R_NOSE + R_NOSE * nose;
     const tC = cornerFall(z, Z_CORNER0, Z_CORNER1); // 1 on the hammerhead, 0 aft of the corners
-    const tS = smooth01((z + 125) / 31); // shape blend
+    const tS = smooth01((z - Z_CORNER0) / (Z_CORNER1 - Z_CORNER0)); // shape blend
     const hwC = MID.hwC + (hwBow - MID.hwC) * tC;
-    const yC =
-      BOW.yC +
-      (MID.yC - BOW.yC) * smooth01((z - Z_CORNER0) / (Z_CORNER1 - Z_CORNER0));
+    const yC = BOW.yC + (MID.yC - BOW.yC) * tS;
     const deckBow = BOW.yC + (BOW.yT - BOW.yC) * fore;
     const yT =
       deckBow +
       (MID.yT - deckBow) * smooth01((z - Z_ROLL0) / (Z_ROLL1 - Z_ROLL0));
-    const yB = z <= -131.3 ? table(BOW_KEEL, z) : MID.yB;
+    // the cargo-hold belly rises to a lip that the mid-hull's box steps down from (a forward-facing ledge)
+    const yB = z <= Z_STEP ? table(BOW_KEEL, z) : MID.yB;
     p = { hwC, yC, yT, yB, ...lerpK(BOW, MID, tS, SHAPE_KEYS) };
-  } else if (z < Z_HOU) {
-    const tW = rampLin(z, 118, 192, 0.25);
-    const tT = rampLin(z, Z_FLARE0, 225, 0.2);
-    const tB = rampLin(z, 113, 180, 0.25);
-    const tS = rampLin(z, 118, 195, 0.25);
-    p = {
-      hwC: MID.hwC + (BLK.hwC - MID.hwC) * tW,
-      yC: MID.yC + (BLK.yC - MID.yC) * tS,
-      yT: MID.yT + (BLK.yT - MID.yT) * tT,
-      yB: MID.yB + (BLK.yB - MID.yB) * tB,
-      ...lerpK(MID, BLK, tS, SHAPE_KEYS),
-    };
   } else {
-    p = { ...HOU };
+    // stern flare: steep to the knee, then a gentle rise to the block deck; the housings step up at Z_HOU
+    const tK = rampLin(z, Z_FLARE0, Z_KNEE, 0.3);
+    const tG = Math.min(1, Math.max(0, (z - Z_KNEE) / (Z_BLOCK - Z_KNEE)));
+    const tB = rampLin(z, Z_FLARE0, 183, 0.2);
+    const hou = z >= Z_HOU;
+    const keelRise = Math.max(0, (z - Z_BLOCK) / (Z_STERN - Z_BLOCK));
+    p = {
+      hwC: hou ? HOU.hwC : MID.hwC + (BLK.hwC - MID.hwC) * tK,
+      yC: MID.yC + (BLK.yC - MID.yC) * rampLin(z, Z_FLARE0, 160, 0.3),
+      yT: hou
+        ? HOU.yT
+        : MID.yT + (BLK.yKnee - MID.yT) * tK + (BLK.yT - BLK.yKnee) * tG,
+      yB: BLK.yB + (MID.yB - BLK.yB) * (1 - tB) + (HOU.yB - BLK.yB) * keelRise,
+      ...lerpK(MID, hou ? HOU : BLK, hou ? 1 : tK, SHAPE_KEYS),
+    };
   }
   p.hwV = p.hwC - p.slant * Math.max(0, p.yT - p.yC);
   return p;
@@ -223,9 +233,10 @@ const BANDS = [
   [-30, 1.2, 0.6],
   [30, 1.2, 0.6],
   [80, 1.2, 0.6],
-  [112, 1.4, 0.7],
-  [155, 1.2, 0.5],
-  [196, 1.4, 0.6],
+  [116, 1.4, 0.7],
+  [150, 1.2, 0.5],
+  [186, 1.2, 0.5],
+  [Z_BLOCK - 1, 1.4, 0.6],
 ];
 // per-vertex hull tint; `across` = 1 marks the chamfered shoulder faces (set by markChamfer)
 function hullTint(x, y, z, o, across) {
@@ -311,17 +322,15 @@ export function buildDreadnought(mats) {
       -136,
       -132,
       -128,
-      -124,
-      -120,
+      -125,
+      -122,
+      -119,
       -116,
-      -112,
-      -108,
+      -113,
+      -110,
+      Z_STEP,
+      Z_STEP + 0.01,
       -104,
-      -100,
-      -96,
-      -92,
-      -84,
-      -72,
       Z_BAY0,
     ],
     1: [
@@ -332,12 +341,11 @@ export function buildDreadnought(mats) {
       -160,
       -145,
       -134,
-      -128,
+      -126,
       -120,
-      -112,
-      -104,
-      -96,
-      -80,
+      -114,
+      Z_STEP,
+      Z_STEP + 0.01,
       Z_BAY0,
     ],
     2: [
@@ -345,11 +353,18 @@ export function buildDreadnought(mats) {
       -190,
       -160,
       -134,
-      -120,
-      -108,
-      -96,
+      -122,
+      -114,
+      Z_STEP,
+      Z_STEP + 0.01,
       Z_BAY0,
     ],
+  };
+  // the hangar run carries the tail of the deck roll-down
+  const BAY = {
+    0: [Z_BAY0, -96, -92, -88, -82, Z_BAY1],
+    1: [Z_BAY0, -94, -88, Z_BAY1],
+    2: [Z_BAY0, -92, -84, Z_BAY1],
   };
   const AFT = {
     0: [
@@ -357,23 +372,24 @@ export function buildDreadnought(mats) {
       80,
       105,
       Z_FLARE0,
-      121,
-      127,
-      133,
-      140,
-      147,
-      154,
-      161,
-      168,
-      175,
-      182,
-      190,
-      198,
-      206,
-      215,
-      227,
-      240,
-      252,
+      122,
+      126,
+      130,
+      134,
+      138,
+      142,
+      146,
+      150,
+      155,
+      162,
+      170,
+      178,
+      186,
+      196,
+      208,
+      Z_BLOCK,
+      236,
+      250,
       Z_HOU,
       Z_HOU + 0.01,
       282,
@@ -382,16 +398,28 @@ export function buildDreadnought(mats) {
     1: [
       Z_BAY1,
       Z_FLARE0,
-      135,
-      155,
-      175,
-      195,
-      227,
+      127,
+      136,
+      145,
+      Z_KNEE,
+      168,
+      184,
+      Z_BLOCK,
       Z_HOU,
       Z_HOU + 0.01,
       Z_STERN,
     ],
-    2: [Z_BAY1, Z_FLARE0, 155, 195, Z_HOU, Z_HOU + 0.01, Z_STERN],
+    2: [
+      Z_BAY1,
+      Z_FLARE0,
+      135,
+      Z_KNEE,
+      184,
+      Z_BLOCK,
+      Z_HOU,
+      Z_HOU + 0.01,
+      Z_STERN,
+    ],
   };
   for (const lod of [0, 1, 2]) {
     const kC = lod === 0 ? 6 : lod === 1 ? 4 : 2;
@@ -400,7 +428,7 @@ export function buildDreadnought(mats) {
     const cut = secAt(0, kC, kB).cutIdx;
     const runs = [
       [STATIONS[lod], null, { capStart: true }],
-      [[Z_BAY0, Z_BAY1], lod === 2 ? null : new Set([cut.left, cut.right]), {}],
+      [BAY[lod], lod === 2 ? null : new Set([cut.left, cut.right]), {}],
       [AFT[lod], null, {}],
     ];
     for (const [zs, omit, extra] of runs) {
@@ -695,12 +723,13 @@ export function buildDreadnought(mats) {
       }
   }
   // deflector projector pods: five eggs per flank at the cutaway's positions, two riding the deck shoulder
+  // [height, z, length, width]; the two forward ones tuck under the hammerhead's rounded aft corners
   const PODS = [
-    [36, -78, 54, 21.6],
-    [12, -82, 43, 17.3],
-    [36, -30, 37, 16.2],
-    [21, 15, 60, 22.7],
-    [4.5, -42, 50, 22.7],
+    [31, -92, 56, 21.6],
+    [10.4, -106, 42, 19],
+    [31, -32, 40, 16.2],
+    [22, 15, 58, 21.6],
+    [5.5, -47, 56, 21.6],
   ];
   for (const lod of [0, 1, 2])
     for (const s of [-1, 1])
@@ -797,7 +826,7 @@ export function buildDreadnought(mats) {
         big: true,
       });
       if (lod === 0)
-        for (const z of [-118, 40, 138])
+        for (const z of [-120, -10, 40])
           hatch(add, {
             c: [s * 12, hullParams(z).yT + 0.1, z],
             n: [0, 1, 0],
@@ -808,13 +837,39 @@ export function buildDreadnought(mats) {
             color: GREY_LT,
             rimColor: RECESS_DK,
           });
-      // dark machinery recess on the belly slant forward of the band
-      const r = slantMid(-78, s);
-      add(surfaceBox(r.p, r.n, [0, 0, 1], 30, 7, 0.7, -0.5), "dark", {
-        color: RECESS_DK,
-        texel: 1 / 4,
-        lod,
-      });
+      // the long flank ledge with rounded ends beside the machinery box (the cutaway's slab under the
+      // crew-station dots), half sunk into the plating, its aft end running into the flare
+      {
+        const f = flank(86, 25.5, s);
+        const slab = new THREE.CapsuleGeometry(
+          3.5,
+          77,
+          lod === 0 ? 6 : 3,
+          lod === 0 ? 12 : 8,
+        );
+        slab.rotateX(Math.PI / 2);
+        slab.scale(1, 0.4, 1);
+        slab.translate(f.p[0] + s * 1.5, f.p[1], f.p[2]);
+        add(slab, "hull", {
+          color: GREY_LT.clone().multiplyScalar(0.97),
+          texel: 1 / 8,
+          lod,
+        });
+        const w = flank(112, 30, s);
+        slotRow(add, {
+          c: w.p,
+          n: w.n,
+          along: [0, 0, 1],
+          count: lod === 0 ? 6 : 3,
+          len: lod === 0 ? 2.2 : 5,
+          gap: 1.6,
+          h: 1.5,
+          lod,
+          panes: 1,
+          glow: WINDOW,
+          rim: RECESS_DK,
+        });
+      }
     }
   // raised spine strip along the mid deck, ventral machinery housing aft
   for (const lod of [0, 1]) {
@@ -1036,11 +1091,11 @@ export function buildDreadnought(mats) {
       });
       if (lod === 0)
         for (const [x, z] of [
-          [s * 18, 210],
-          [s * 38, 236],
+          [s * 6, 226],
+          [s * 6, 252],
         ])
           hatch(add, {
-            c: [x, BLK.yT + 0.1, z],
+            c: [x, hullParams(z).yT + 0.1, z],
             n: [0, 1, 0],
             along: [0, 0, 1],
             w: 6,
@@ -1080,13 +1135,13 @@ export function buildDreadnought(mats) {
       }
     }
   {
-    let z0 = 204;
-    while (z0 < 258) {
-      const z1 = Math.min(258, z0 + 10 + rand() * 8);
+    let z0 = Z_BLOCK + 1;
+    while (z0 < Z_HOU - 2) {
+      const z1 = Math.min(Z_HOU - 2, z0 + 9 + rand() * 7);
       for (const [xa, xb] of [
-        [-44, -18],
-        [-14, 14],
-        [18, 44],
+        [-42, -17],
+        [-13, 13],
+        [17, 42],
       ]) {
         if (rand() < 0.25) continue;
         add(
@@ -1113,9 +1168,10 @@ export function buildDreadnought(mats) {
   // stern face: three large pentagonal nozzles over two smaller ones, hyperdrive grille between
   // ---------------------------------------------------------------------------
   const NOZ = [];
-  for (const x of [-37, 0, 37]) NOZ.push({ x, y: 48, r: 17, rot: Math.PI / 2 });
-  for (const x of [-19, 19])
-    NOZ.push({ x, y: -27, r: 14.5, rot: -Math.PI / 2 });
+  for (const x of [-33.5, 0, 33.5])
+    NOZ.push({ x, y: 48, r: 15.2, rot: Math.PI / 2 });
+  for (const x of [-18.5, 18.5])
+    NOZ.push({ x, y: -26, r: 14, rot: -Math.PI / 2 });
   const RIM = 1.8;
   const sternTint = (x, y, z, o) => mix(GREY_DK, SOOT, 0.55, o);
   for (const lod of [0, 1, 2]) {
@@ -1186,28 +1242,28 @@ export function buildDreadnought(mats) {
   for (const lod of [0, 1]) {
     // recessed hyperdrive grille across the middle housing, slatted; vent strip along the keel
     add(
-      new THREE.BoxGeometry(92, 22, 1.2).translate(0, 11, Z_STERN - 0.3),
+      new THREE.BoxGeometry(84, 20, 1.2).translate(0, 11, Z_STERN - 0.3),
       "dark",
       { color: CORE, texel: 1 / 4, lod },
     );
     for (let i = 0; i < 5; i++)
       add(
-        new THREE.BoxGeometry(90, 1.2, 1.4).translate(
+        new THREE.BoxGeometry(82, 1.2, 1.4).translate(
           0,
-          2 + i * 4.5,
+          3 + i * 4,
           Z_STERN - 0.2,
         ),
         "dark",
         { color: RECESS, texel: 1 / 3, lod },
       );
-    for (const x of [-30, 30])
+    for (const x of [-28, 28])
       add(
-        new THREE.BoxGeometry(1.8, 22, 1.5).translate(x, 11, Z_STERN - 0.1),
+        new THREE.BoxGeometry(1.8, 20, 1.5).translate(x, 11, Z_STERN - 0.1),
         "dark",
         { color: RECESS_DK, texel: 1 / 3, lod },
       );
     add(
-      new THREE.BoxGeometry(56, 3.5, 1.0).translate(0, -44, Z_STERN + 0.4),
+      new THREE.BoxGeometry(30, 2.6, 1.0).translate(0, -43.2, Z_STERN + 0.4),
       "dark",
       { color: RECESS_DK, texel: 1 / 2, lod },
     );
@@ -1256,8 +1312,8 @@ export function buildDreadnought(mats) {
   for (const s of [-1, 1]) {
     HV([s * 14, Y_DECK + 0.6, -205], [0, 1, 0], [s * 0.2, 0.45, -1]);
     HV([s * 22, Y_DECK + 0.6, -150], [0, 1, 0], [s * 0.45, 0.5, -0.8]);
-    HV([s * 30, BLK.yT, 226], [0, 1, 0], [s * 0.5, 0.5, -0.6]);
-    HV([s * 13, BLK.yB, 226], [0, -1, 0], [s * 0.5, -0.5, -0.6]);
+    HV([s * 28, hullParams(232).yT, 232], [0, 1, 0], [s * 0.5, 0.5, -0.6]);
+    HV([s * 13, hullParams(205).yB, 205], [0, -1, 0], [s * 0.5, -0.5, -0.6]);
   }
   HV([0, MID.yT + 0.9, -70], [0, 1, 0], [0, 0.5, -1]);
   HV([0, MID.yT + 0.9, 8], [0, 1, 0], [0, 0.6, -0.8]);
@@ -1268,12 +1324,17 @@ export function buildDreadnought(mats) {
       LTS(flank(z, 9, s), [s * 0.7, 0.35, -0.6]);
     for (const z of [-222, -196, -170, -144])
       LTS(slantMid(z, s), [s * 0.5, -0.6, -0.6]);
-    for (const z of [-55, -15, 30, 140])
+    for (const z of [-55, -15, 30])
       LT(
         [s * 12, hullParams(z).yT + 0.1, z],
         [0, 1, 0],
         [s * 0.7, 0.45, -0.55],
       );
+    LT(
+      [s * 22, hullParams(250).yT + 0.1, 250],
+      [0, 1, 0],
+      [s * 0.7, 0.45, -0.55],
+    );
     for (const z of [214, 246]) LTS(flank(z, 46, s), [s * 0.8, 0.3, -0.5]);
     for (const z of [-60, 20])
       LT([s * 8, MID.yB, z], [0, -1, 0], [s * 0.6, -0.55, -0.6]);
