@@ -22,8 +22,8 @@ if (sets.includes('frontier')) {
   views.push({ name: 'town_dusk', q: `${TOWN}&time=0.74` });
   views.push({ name: 'town_midnight', q: `${TOWN}&time=0.0` });
 }
-// a river bend north of the town (water at sea level 48); yaw 180 = facing north (-z)
-if (sets.includes('shore')) views.push({ name: 'shore_noon', q: args.shore || 'x=-30&z=-96&y=58&yaw=180&pitch=-22&fly=1&time=0.45' });
+// the frontier coast east of the town (ocean at sea level 48, beach and a grass headland to the left)
+if (sets.includes('shore')) views.push({ name: 'shore_noon', q: args.shore || 'x=900&z=0&y=53&yaw=-60&pitch=-22&fly=1&time=0.42' });
 if (sets.includes('coruscant')) {
   views.push({ name: 'coruscant_noon', q: 'x=3000&z=0&y=140&fly=1&pitch=-20&time=0.5' });
   views.push({ name: 'coruscant_night', q: 'x=3000&z=0&y=140&fly=1&pitch=-20&time=0.0' });
