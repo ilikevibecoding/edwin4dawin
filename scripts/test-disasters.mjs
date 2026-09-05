@@ -4,7 +4,9 @@ import { launchPage } from './cdp.mjs';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, arr) => { if (a.startsWith('--')) acc.push([a.slice(2), arr[i + 1] && !arr[i + 1].startsWith('--') ? arr[i + 1] : true]); return acc; }, []));
 const base = args.url || 'http://localhost:5173';
-const ticks = parseInt(args.ticks || '400', 10);
+const ticksArg = parseInt(args.ticks || '400', 10);
+const MIN_TICKS = { beam: 700 }; // the beam only starts carving after approach + charge + fire (~512 ticks)
+const ticksFor = (type) => Math.max(ticksArg, MIN_TICKS[type] || 0);
 let failed = 0;
 const check = (name, ok, detail = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? '  (' + detail + ')' : ''}`); if (!ok) failed++; };
 
@@ -20,6 +22,7 @@ const worldHash = async () => page.evaluate(`(() => { let h = 0x811c9dc5; const 
 const pristine = await worldHash();
 
 for (const type of types) {
+  const ticks = ticksFor(type);
   console.log(`\n== ${type} ==`);
   const params = await page.evaluate(`JSON.stringify(game.disasters.defaults(${JSON.stringify(type)}))`);
   const startCmd = `game.disasters.command({type:'start', disaster:${JSON.stringify(type)}, seed: 7, params: ${params}})`;
