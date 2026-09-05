@@ -35,8 +35,11 @@ const MOON_IRRADIANCE = 1.0;
 const GROUND_ALBEDO = new THREE.Color(0.26, 0.24, 0.20);
 
 const KEYS: Key[] = [
-  { el: -18, sun: [0.5, 0.6, 0.85], sunI: 0.12, zen: [0.006, 0.010, 0.024], hor: [0.018, 0.024, 0.042], haze: [0.014, 0.018, 0.03], sunHaze: [0.02, 0.022, 0.03], amb: 0.15 },
-  { el: -8, sun: [0.5, 0.6, 0.85], sunI: 0.12, zen: [0.006, 0.011, 0.028], hor: [0.035, 0.035, 0.065], haze: [0.024, 0.026, 0.045], sunHaze: [0.06, 0.03, 0.03], amb: 0.16 },
+  // night: the dome is blue-black (the x3.5 night exposure lifts the zenith to ~sRGB 20, not 60); the glow over
+  // the city is added separately (cityGlowSky), so the horizon away from it stays dark
+  // moonlight (sunI) is kept low: with the night exposure a white hull under a x0.14 key read as a pale block
+  { el: -18, sun: [0.5, 0.6, 0.85], sunI: 0.09, zen: [0.0012, 0.002, 0.005], hor: [0.004, 0.0055, 0.012], haze: [0.003, 0.004, 0.008], sunHaze: [0.004, 0.0045, 0.007], amb: 0.15 },
+  { el: -8, sun: [0.5, 0.6, 0.85], sunI: 0.10, zen: [0.003, 0.006, 0.016], hor: [0.02, 0.022, 0.045], haze: [0.014, 0.016, 0.03], sunHaze: [0.05, 0.025, 0.025], amb: 0.16 },
   { el: -2, sun: [0.9, 0.35, 0.15], sunI: 0.06, zen: [0.015, 0.035, 0.10], hor: [0.42, 0.22, 0.2], haze: [0.22, 0.16, 0.2], sunHaze: [0.9, 0.35, 0.18], amb: 0.4 },
   // low sun: airmass extinction takes the direct beam well below its midday strength (keeps the sunset glitter path golden)
   { el: 4, sun: [1.0, 0.5, 0.22], sunI: 0.30, zen: [0.035, 0.10, 0.30], hor: [0.82, 0.48, 0.34], haze: [0.50, 0.40, 0.40], sunHaze: [1.0, 0.55, 0.3], amb: 0.85 },
@@ -67,7 +70,8 @@ export const WEATHER: Record<Weather, WeatherPreset> = {
   // threshold, most cells stay well below it); fair-weather cumulus here reach ~2 km of vertical development
   clear: { coverage: 0.27, hazeDensity: 1.5e-5, hazeHeight: 1400, windSpeed: 3.5, turbulence: 0.2, cloudBase: 1500, cloudTop: 3500, rain: 0, sunDim: 1 },
   scattered: { coverage: 0.37, hazeDensity: 1.9e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 3500, rain: 0, sunDim: 0.97 },
-  cloudy: { coverage: 0.70, hazeDensity: 3.2e-5, hazeHeight: 1100, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2000, rain: 0, sunDim: 0.72 },
+  // overcast: humid air under the deck (denser, taller haze) so the far end of the ceiling sinks into the horizon haze
+  cloudy: { coverage: 0.70, hazeDensity: 4.6e-5, hazeHeight: 1300, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2000, rain: 0, sunDim: 0.6 },
   storm: { coverage: 0.92, hazeDensity: 5.5e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 3200, rain: 1, sunDim: 0.4 },
 };
 
@@ -112,6 +116,12 @@ export class Atmosphere {
     uCloudSeed: { value: 0 },
     uNight: { value: 0 },
     uTime: { value: 0 },
+    /** Light pollution of the lit city (downtown / midtown core): xy world xz of the centre, z radius (m) of the lit
+     *  area, w radiance scale of the glow on the air and cloud bases above it (0 by day). */
+    uCityGlow: { value: new THREE.Vector4(-3200, -3900, 3500, 0) },
+    /** The same glow as the camera sees it, set per frame by Sky.render: xy horizontal unit direction (world xz) to
+     *  the centre, z angular width of the lit horizon (small far away, > 1 over the city), w horizon radiance scale. */
+    uCityGlowView: { value: new THREE.Vector4(0, -1, 0.3, 0) },
   };
   cloudOffset = new THREE.Vector2();
   windDir = new THREE.Vector2(1, 0.35).normalize();
@@ -149,13 +159,16 @@ export class Atmosphere {
     // (the night exposure boost would otherwise turn the dark-blue sky into a strong ground fill)
     s.ambientIntensity = k.amb;
     s.night = 1 - smoothstep(-12, -1, elevation);
-    // overcast: the dome flattens toward a neutral grey of the horizon's brightness (no blue cast under the deck)
-    const grey = smoothstep(0.45, 0.95, p.coverage);
+    // overcast: the dome flattens toward a neutral grey of the horizon's brightness (no blue cast under the deck).
+    // A 0.70 deck covers ~65 % of the sky, so it is already most of the way to a closed ceiling; the horizon
+    // haze under it is lit by the deck's underside, dimmer than a clear sky's horizon, so the far end of the
+    // ceiling meets a horizon of about its own brightness instead of a bright white band
+    const grey = smoothstep(0.4, 0.8, p.coverage);
     const horLum = s.horizon.r * 0.2126 + s.horizon.g * 0.7152 + s.horizon.b * 0.0722;
     const overcast = new THREE.Color(horLum, horLum, horLum).lerp(s.horizon, 0.3);
-    const zl = s.zenith.clone().lerp(overcast, grey * 0.8);
-    const hl = s.horizon.clone().lerp(overcast, grey * 0.7).multiplyScalar(lerp(1, 0.9, grey));
-    const hazeL = s.haze.clone().lerp(new THREE.Color(horLum, horLum, horLum), grey * 0.6).multiplyScalar(lerp(1, 0.9, grey));
+    const zl = s.zenith.clone().lerp(overcast, grey * 0.85);
+    const hl = s.horizon.clone().lerp(overcast, grey * 0.8).multiplyScalar(lerp(1, 0.72, grey));
+    const hazeL = s.haze.clone().lerp(new THREE.Color(horLum, horLum, horLum), grey * 0.7).multiplyScalar(lerp(1, 0.72, grey));
     // bounce light from the world below: sunlit ground plus its share of the sky, scaled by the mean albedo
     const skyIrr = s.zenith.clone().lerp(s.horizon, 0.3);
     s.ground.copy(s.sunColor).multiplyScalar(s.sunIntensity * Math.max(s.sunDir.y, 0) / Math.PI).add(skyIrr).multiply(GROUND_ALBEDO);
@@ -165,9 +178,12 @@ export class Atmosphere {
     u.uZenithColor.value.copy(zl);
     u.uHorizonColor.value.copy(hl);
     u.uHazeColor.value.copy(hazeL);
-    u.uSunHazeColor.value.copy(s.sunHaze).multiplyScalar(lerp(1, 0.6, grey));
+    u.uSunHazeColor.value.copy(s.sunHaze).multiplyScalar(lerp(1, 0.5, grey));
     u.uGroundColor.value.copy(s.ground);
-    u.uHazeDensity.value = p.hazeDensity;
+    // humid night air: distant city lights soften into the (city-lit) haze rather than staying pin sharp
+    u.uHazeDensity.value = p.hazeDensity * (1 + 0.8 * s.night);
+    // light pollution scale of the lit city; Sky.render derives the camera-relative glow from it every frame
+    u.uCityGlow.value.w = 0.016 * s.night;
     u.uHazeHeight.value = p.hazeHeight;
     u.uCloudCoverage.value = p.coverage;
     u.uCloudBase.value = p.cloudBase;

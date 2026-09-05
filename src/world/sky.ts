@@ -103,8 +103,11 @@ vec4 macroField(vec2 wp) {
  *  hf = height fraction in the slab, hn = fraction of this column's own height, H = column height. */
 float envelope(vec3 p, vec4 f, out float hf, out float hn, out float H) {
   float thick = uCloudTop - uCloudBase;
-  // base altitude: varies between cells (f.z) with a gentle ~1 km undulation (f.w) so no base is a ruler line
-  float base = uCloudBase + (f.z - 0.5) * 0.16 * thick + (f.w - 0.5) * 0.05 * thick;
+  float deck = smoothstep(0.45, 0.7, uCloudCoverage);
+  // base altitude: varies between cells (f.z) with a ~1 km undulation (f.w) so no base is a ruler line and
+  // neighbouring cumulus do not share one plane; a closed deck hangs its cells lower still (stratocumulus:
+  // the underside is a field of sagging lumps, not a ceiling plane)
+  float base = uCloudBase + (f.z - 0.5) * mix(0.22, 0.34, deck) * thick + (f.w - 0.5) * mix(0.08, 0.16, deck) * thick;
   hf = (p.y - base) / thick;
   float d = f.x - cloudThreshold();
   // base footprint (identical to cloudCoverage2D, so the ground shadows match)
@@ -118,13 +121,14 @@ float envelope(vec3 p, vec4 f, out float hf, out float hn, out float H) {
   H = 0.1 + 0.9 * sqrt(clamp(dg * 2.2, 0.0, 1.0));
   // a closed deck saturates the field, so its thickness (and the light coming through it) varies with
   // the turret field alone: give it a wider range so the underside shows thick dark cells and thin bright gaps
-  float deck = smoothstep(0.45, 0.7, uCloudCoverage);
   H = clamp(H * mix(mix(0.55, 0.28, deck), 1.1, f.w), 0.05, 1.0);
   hn = hf / H;
-  // cumulus keep a fairly sharp flat base (the shape noise still nibbles it into shallow lumps); a closed
-  // deck gets a soft one carved into hanging cells. The upper two thirds of the column are a soft ramp
-  // the shape noise cuts into cauliflower lobes several hundred metres tall.
-  float baseRamp = mix(0.09, 0.18, smoothstep(0.45, 0.7, uCloudCoverage));
+  // cumulus keep a fairly flat base, but a soft enough one for the shape noise to hang lumps and rags from
+  // it (a hard ramp read as bases sliced by a plane); a closed deck gets a softer one carved into hanging
+  // cells. The upper two thirds of the column are a soft ramp the shape noise cuts into cauliflower lobes.
+  // The ramp is capped at a fraction of the column's own height: a low tuft is otherwise all ramp and the
+  // noise shreds it into drifting fragments.
+  float baseRamp = min(mix(0.13, 0.22, deck), 0.35 * H);
   float v = smoothstep(0.0, baseRamp, hf) * (1.0 - smoothstep(0.25, 1.0, hn)) * (1.0 - smoothstep(0.9, 1.0, hf));
   // cov^2: the soft footprint fringe thins out for the noise to shred instead of forming a plate
   return cov * cov * v;
@@ -139,14 +143,15 @@ vec3 noiseCoord(vec3 p, vec4 f) {
 /** Shape-eroded density: solid interiors, cauliflower lobes where the envelope thins (top and edges). */
 float shapeDensity(float e, float hn, vec4 n) {
   float shape = clamp((n.r * 0.6 + n.g * 0.25 + n.a * 0.15 - 0.3) / 0.7, 0.0, 1.0);
-  // bases stay solid and slightly mottled; the erosion grows toward the top where it carves the lobes
-  float erosion = mix(0.7, 1.3, clamp(hn, 0.0, 1.0));
+  // bases are mottled and ragged (hanging fragments, holes where the column is thin); the erosion grows
+  // toward the top where it carves the lobes
+  float erosion = mix(0.8, 1.3, clamp(hn, 0.0, 1.0));
   return e * 1.2 - (1.0 - shape) * erosion;
 }
 
 /** Expected noised density for an envelope value (what shapeDensity averages to over the noise): the
  *  envelope alone would count the soft fringe outside the visible surface as cloud. */
-float meanDensity(float e, float hn) { return clamp(e * 1.2 - 0.5 * mix(0.7, 1.3, clamp(hn, 0.0, 1.0)), 0.0, 1.0); }
+float meanDensity(float e, float hn) { return clamp(e * 1.2 - 0.5 * mix(0.8, 1.3, clamp(hn, 0.0, 1.0)), 0.0, 1.0); }
 
 /** Density without edge detail (used by the light march). */
 float densityBase(vec3 p, vec4 f) {
@@ -210,8 +215,12 @@ float phase2(float c, float k) { return mix(hgN(c, 0.74 * k), hgN(c, -0.2 * k), 
 // with a flatter phase (light that has scattered several times has lost its direction, so the forward
 // peak toward a low sun lights the rims but not the shadowed cores). The slow tail keeps the shaded
 // walls at ~25 % of the lit crown while the base of a tall tower (~25 units of optical depth) drops to ~5 %.
+// Under a closed deck only the underside is ever seen, so the slow tail (what reaches it through the whole
+// sheet) is what sets its brightness: a smaller, faster-decaying tail gives an overcast a mid-grey ceiling
+// with dark thick cells and bright thin patches instead of a near-white sheet.
 vec3 scatter(float od, float c) {
-  return vec3(0.44 * exp(-od) * phase2(c, 1.0), 0.36 * exp(-0.25 * od) * phase2(c, 0.5), 0.20 * exp(-0.06 * od) * phase2(c, 0.2));
+  float deck = smoothstep(0.45, 0.7, uCloudCoverage);
+  return vec3(0.44 * exp(-od) * phase2(c, 1.0), 0.36 * exp(-0.25 * od) * phase2(c, 0.5), mix(0.20, 0.085, deck) * exp(-mix(0.06, 0.09, deck) * od) * phase2(c, 0.2));
 }
 
 void main() {
@@ -224,9 +233,10 @@ void main() {
   float nightMix = smoothstep(0.02, -0.08, uSunDir.y);
   vec3 moonDir = normalize(vec3(-uSunDir.x, max(0.25, -uSunDir.y * 0.8 + 0.3), -uSunDir.z));
   vec3 L = normalize(mix(uSunDir, moonDir, nightMix));
-  // moonlit cumulus sit a few times above the night sky, not at the daylight ratio: the night exposure
-  // boost (x3.5) would otherwise turn them white
-  vec3 lightCol = uSunColor * 2.9 * mix(1.0, 0.3, nightMix);
+  // the moon is a cool key of about one percent of the daylight one: a moonlit face sits 2-3x above the
+  // blue-black zenith, the shaded faces (which is what the camera sees from below) stay darker than the sky,
+  // so the clouds read as silhouettes against the stars with lit rims, not as daylight cumulus
+  vec3 lightCol = mix(uSunColor * 2.9, vec3(0.7, 0.78, 0.95) * 0.028, nightMix);
 
   float T = 1.0;
   vec3 col = vec3(0.0);
@@ -257,8 +267,18 @@ void main() {
     // sky light on the tops: hemisphere average of the dome (deep blue) whitened by aerosol scatter
     vec3 skyAmb = mix(uZenithColor, uHazeColor, 0.5) * 0.95;
     // bounce light on the bases: the sunlit sea and land (warm and dim at sunset, when the glowing
-    // horizon haze takes over), and at night the city's glow on the undersides
-    vec3 gndAmb = uGroundColor * 0.18 + uSunHazeColor * 0.32 * lowSun + vec3(1.0, 0.9, 0.8) * 0.035 * uNight;
+    // horizon haze takes over); at night the city's light pollution lights the undersides over the lit
+    // area (added per sample below: it falls off with the distance from the city)
+    vec3 gndAmb = uGroundColor * 0.18 + uSunHazeColor * 0.32 * lowSun;
+    float cityK = uCityGlow.w > 0.0 ? 1.4 : 0.0;
+    // the ceiling thins out over the last part of the march so its far end dissolves column by column (the
+    // thick cores last longest) instead of ending on one iso-distance line above the horizon
+    float farFade0 = 0.6 * uMaxDist, farFadeK = 1.0 / (0.4 * uMaxDist);
+    // a closed deck scatters far more light down through itself than a lone tower's base receives (multiple
+    // scattering across the whole sheet): its underside floor is higher and its cells contrast more
+    float deck = smoothstep(0.45, 0.7, uCloudCoverage);
+    float aoFloor = mix(0.12, 0.2, deck);
+    vec2 mottRange = mix(vec2(0.6, 1.3), vec2(0.45, 1.45), deck);
 
     int level = 0;          // 0 coarse, 1 fine, 2 surface
     int empty = 0;
@@ -272,6 +292,7 @@ void main() {
       vec4 f = macroField(p.xz);
       float hf, hn, H;
       float e = envelope(p, f, hf, hn, H);
+      e *= 1.0 - smoothstep(0.0, 1.0, (t - farFade0) * farFadeK);
       if (e <= 0.004) {
         // clear air: fall back to coarse steps after a couple of empty samples
         if (level > 0) { empty++; if (empty > 2) level = 0; }
@@ -317,9 +338,11 @@ void main() {
       float below = max(hf, 0.0) * thick * mix(1.3, 0.6, mott);
       // walls: a sample near the outer surface (envelope well below 1) sees half the sky sideways
       float side = (1.0 - 0.7 * e) * smoothstep(0.0, 0.3, hn) * 0.6;
-      float aoSky = max(mix(0.12, 1.0, exp(-above * 0.0022)), side);
+      float aoSky = max(mix(aoFloor, 1.0, exp(-above * 0.0022)), side);
       float aoGnd = max(mix(0.15, 1.0, exp(-below * 0.003)), side);
-      vec3 amb = (skyAmb * aoSky + gndAmb * aoGnd) * mix(0.6, 1.3, mott);
+      vec3 gnd = gndAmb;
+      if (cityK > 0.0) gnd += CITY_GLOW_COLOR * (cityK * cityGlowAt(p.xz));
+      vec3 amb = (skyAmb * aoSky + gnd * aoGnd) * mix(mottRange.x, mottRange.y, mott);
       vec3 S = lightCol * sunTerm + amb;
       float a = 1.0 - exp(-dens * SIGMA * dt);
       col += T * a * S;
@@ -338,8 +361,9 @@ void main() {
     vec3 far = uCamPos + dir * meanDist;
     c = applyAerial(c, uCamPos, far);
     // distant clouds sink into the horizon haze (long low-angle paths through humid air); the aerial
-    // perspective above already carries them to the haze colour, this only removes the cut-off at uMaxDist
-    float fade = exp(-meanDist * 1.0e-5) * (1.0 - smoothstep(0.7 * uMaxDist, uMaxDist, meanDist));
+    // perspective above already carries them to the haze colour and the march thins the envelope over its
+    // second half, this only removes what is left at uMaxDist
+    float fade = exp(-meanDist * 0.7e-5) * (1.0 - smoothstep(0.8 * uMaxDist, uMaxDist, meanDist));
     alpha *= fade;
     col = c * alpha;
   } else {
@@ -410,10 +434,11 @@ void main() {
   // and shadows cool rather than blue without touching the visible sky.
   vec3 fill = mix(uHazeColor, uGroundColor, 0.25);
   col = mix(col, fill, 0.65 * pow(1.0 - up, 0.3));
-  // clouds as a soft neutral brightening band so reflections and the IBL pick up overcast (grey, not blue) light
-  float cov = uCloudCoverage;
+  // clouds as a soft neutral brightening band so reflections and the IBL pick up overcast (grey, not blue)
+  // light; a closed deck is most of the sky, so the diffuse light under it is its grey underside
+  float cov = smoothstep(0.2, 0.95, uCloudCoverage) * 0.7;
   vec3 cloudCol = vec3(dot(uHorizonColor, vec3(0.2126, 0.7152, 0.0722))) * 1.15;
-  col = mix(col, cloudCol, cov * 0.35 * smoothstep(0.0, 0.3, dir.y));
+  col = mix(col, cloudCol, cov * smoothstep(0.0, 0.3, dir.y));
   vec3 sun = sunDisc(dir);
   col += min(sun, vec3(12.0));
   // sunlit ground below the horizon: bounce light for walls, hulls and undersides
@@ -526,6 +551,20 @@ export class Sky {
     return this.envMap;
   }
 
+  /** The city's light pollution as seen from this camera (shared uniform: dome, probe, haze and water all read it):
+   *  direction to the lit core, the angular width of the lit horizon (the whole horizon over the city) and the
+   *  horizon glow radiance, which falls off with the distance from the lit area. */
+  private updateCityGlow(camera: THREE.PerspectiveCamera): void {
+    const g = this.atmos.uniforms.uCityGlow.value as THREE.Vector4;
+    const v = this.atmos.uniforms.uCityGlowView.value as THREE.Vector4;
+    const dx = g.x - camera.position.x, dz = g.y - camera.position.z;
+    const d = Math.hypot(dx, dz);
+    if (d > 1) v.set(dx / d, dz / d, 0, 0); else v.set(0, -1, 0, 0);
+    const r = g.z / Math.max(d, 1);
+    v.z = Math.min(1.4, Math.max(0.1, r * 0.6));
+    v.w = g.w * Math.min(1, Math.pow(r, 0.8) * 1.2);
+  }
+
   /** Bake the macro coverage field around the camera's cloud-space position when it has drifted too far. */
   private updateCoverage(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera): void {
     const wind = this.atmos.uniforms.uCloudWind.value as THREE.Vector2;
@@ -545,6 +584,7 @@ export class Sky {
   render(renderer: THREE.WebGLRenderer, camera: THREE.PerspectiveCamera, width: number, height: number): void {
     const w = Math.max(2, Math.round(width * this.scale)), h = Math.max(2, Math.round(height * this.scale));
     if (this.cloudRT.width !== w || this.cloudRT.height !== h) this.cloudRT.setSize(w, h);
+    this.updateCityGlow(camera);
     this.updateCoverage(renderer, camera);
     const u = this.cloudMat.uniforms;
     u.uCamPos.value.copy(camera.position);
