@@ -67,6 +67,10 @@ const CHUNK_LEN = 1000;
  *  the heads go too (they are 45 m apart and merge into the deck line) */
 const THIN_DISTANCE = 2500;
 const HEAD_DISTANCE = 5000;
+/** beyond this the pier columns are a pixel or two wide and vanish against the water: the chunk's concrete mesh
+ *  then also draws its pier proxies (fattened, shaded columns and a dark soffit slab per span) so the causeway
+ *  keeps its rhythm of piers and its underside shadow line at the distances of the aerial views */
+const PIER_PROXY_DISTANCE = 450;
 /** peak radiance of the lamp heads (props' street lamps glow at 8 x night) */
 const LAMP_GLOW = 6.0;
 /** girder depth below the deck top (m), parapet height above it, kerb step of the shoulders */
@@ -372,6 +376,10 @@ interface Chunk {
   /** the thin steel mesh and the index count of its lamp-head prefix (drawn alone beyond THIN_DISTANCE) */
   steel: THREE.Mesh | null;
   headIndices: number;
+  /** the concrete mesh and the index count of its structure + deck prefix (the pier proxies follow it) */
+  concrete: THREE.Mesh | null;
+  proxyStart: number;
+  showProxies: boolean;
   center: THREE.Vector3; r: number;
   /** horizontal distance from the nearest camera to the chunk's sphere (this frame) */
   dist: number;
@@ -443,6 +451,10 @@ class BridgeCuller {
         c.steel.geometry.setDrawRange(0, c.dist > THIN_DISTANCE ? c.headIndices : Infinity);
         if (c.dist > HEAD_DISTANCE) c.steel.visible = false;
       }
+      if (c.concrete) {
+        c.showProxies = c.dist > PIER_PROXY_DISTANCE;
+        c.concrete.geometry.setDrawRange(0, c.showProxies ? Infinity : c.proxyStart);
+      }
     }
   }
 }
@@ -463,6 +475,8 @@ const C_CAP: Rgb = [1.08, 1.08, 1.07];       // parapet cap: pale, catches the l
 const C_SOFFIT: Rgb = [0.86, 0.86, 0.86];
 const C_UNDER: Rgb = [0.78, 0.78, 0.79];
 const C_WET: Rgb = [0.5, 0.5, 0.52];         // tidal band on the columns
+const C_PROXY: Rgb = [0.4, 0.4, 0.44];       // distance pier proxies: the shaded side of a pier as seen from afar
+const C_PROXY_SOFFIT: Rgb = [0.3, 0.3, 0.34]; // the deck's underside shadow line between the piers
 const C_FOOTING: Rgb = [0.74, 0.75, 0.76];
 const C_FOAM: Rgb = [1.85, 1.9, 1.92];       // wash around the footings (albedo ~0.9)
 const C_DECK: Rgb = [1, 1, 1];
@@ -508,7 +522,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
     const chunkOf = (s: number) => Math.min(nChunks - 1, Math.max(0, Math.floor(s / chunkLen)));
     // struct + deck: concrete; steel + heads: thin steel (railings, lamps); tall: pylons (concrete); arch: arch ribs
     // or stay cables (steel). Tall structure gets its own meshes so the low chunks keep low bounding boxes.
-    const parts = Array.from({ length: nChunks }, () => ({ struct: new Soup(5), deck: new Soup(5), steel: new Soup(1), heads: new Soup(1), tall: new Soup(5), arch: new Soup(1) }));
+    const parts = Array.from({ length: nChunks }, () => ({ struct: new Soup(5), deck: new Soup(5), steel: new Soup(1), heads: new Soup(1), tall: new Soup(5), arch: new Soup(1), proxy: new Soup(5) }));
 
     // traffic centreline (deck top) at 20 m spacing
     const n = Math.ceil(total / STEP);
@@ -647,13 +661,24 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         } else if (round) P.struct.cylinder(x, colBottom, z, w, top - colBottom, 12, C_PLAIN, false, NO_ROAD);
         else P.struct.box(x, colBottom, z, w, top - colBottom, d, yaw, 0, C_PLAIN, true, NO_ROAD);
       };
+      const proxyBottom = inWater ? -0.3 : colBottom;
       if (W >= 20 || heavy) {
         const ww = heavy ? W * 0.7 : W * 0.5, wt = heavy ? 3.2 : 2.2;
         shaft(f.x, f.z, ww, wt, capBottom, false);
         P.struct.box(f.x, capBottom, f.z, capW, capH, wt + 1.0, yaw, 0, C_PLAIN, false, NO_ROAD);
+        P.proxy.box(f.x, proxyBottom, f.z, ww + 2.4, capBottom - proxyBottom + 0.2, wt + 4.0, yaw, 0, C_PROXY, true, NO_ROAD);
       } else {
-        for (const off of [-W * 0.3, W * 0.3]) shaft(f.x + f.rx * off, f.z + f.rz * off, 2.4, 2.4, capBottom, true);
+        for (const off of [-W * 0.3, W * 0.3]) {
+          shaft(f.x + f.rx * off, f.z + f.rz * off, 2.4, 2.4, capBottom, true);
+          P.proxy.box(f.x + f.rx * off, proxyBottom, f.z + f.rz * off, 5.6, capBottom - proxyBottom + 0.2, 5.6, yaw, 0, C_PROXY, true, NO_ROAD);
+        }
         P.struct.box(f.x, capBottom, f.z, W + 5.6, capH, 2.6, yaw, 0, C_PLAIN, false, NO_ROAD);
+      }
+      // soffit slab of the span ahead: the dark underside line of the deck between this pier and the next
+      {
+        const s1 = Math.min(total, s + spacing);
+        const fm = frameAt((s + s1) / 2);
+        P.proxy.box(fm.x, fm.y - g - 1.7, fm.z, W * 0.94, 1.5, s1 - s - 1.5, yawAt(fm), 0, C_PROXY_SOFFIT, false, NO_ROAD);
       }
       // expansion joint across the carriageway over every pier
       P.steel.box(f.x, f.y + 0.03, f.z, cw, 0.04, 0.3, yaw, 0, S_DARK, false);
@@ -725,7 +750,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
     for (let k = 0; k < nChunks; k++) {
       const P = parts[k];
       allDecks.append(P.deck);
-      const chunk: Chunk = { meshes: [], steel: null, headIndices: 0, center: new THREE.Vector3(), r: 0, dist: Infinity };
+      const chunk: Chunk = { meshes: [], steel: null, headIndices: 0, concrete: null, proxyStart: 0, showProxies: false, center: new THREE.Vector3(), r: 0, dist: Infinity };
       const chunkBox = new THREE.Box3();
       const attach = (mesh: THREE.Mesh, cls: CasterClass) => {
         mesh.name = `${spec.id}#${k}`;
@@ -741,9 +766,15 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
       // outline already casts the deck's shadow)
       const structTris = P.struct.idx.length;
       P.struct.append(P.deck);
+      // the pier proxies come last so the near draw range stops short of them (see PIER_PROXY_DISTANCE)
+      const proxyStart = P.struct.idx.length;
+      P.struct.append(P.proxy);
       const cMesh = new THREE.Mesh(P.struct.build([['aRoadUv', 2], ['aRoadInfo', 3]]), concreteMat);
       cMesh.onBeforeShadow = (_r, _o, camera) => { culler.observe(camera); cMesh.geometry.setDrawRange(0, structTris); };
-      cMesh.onAfterShadow = () => { cMesh.geometry.setDrawRange(0, Infinity); };
+      cMesh.onAfterShadow = () => { cMesh.geometry.setDrawRange(0, chunk.showProxies ? Infinity : proxyStart); };
+      cMesh.geometry.setDrawRange(0, proxyStart);
+      chunk.concrete = cMesh;
+      chunk.proxyStart = proxyStart;
       attach(cMesh, 'all');
       // thin steel: lamp heads first so the far LOD can draw them alone
       if (P.heads.idx.length || P.steel.idx.length) {

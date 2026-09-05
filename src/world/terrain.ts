@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { LAYER_DEFAULT, LAYER_MAIN, LAYER_MIRROR, type ViewCull } from './culling';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
-import { HALF, MAP_N, WORLD_SIZE, type WorldMap } from './map';
+import { HALF, MAP_N, WORLD_SIZE, Zone, urbanGradient, type WorldMap } from './map';
+import { smoothstep } from '../core/noise';
 
 /**
  * Formerly a per-material white balance of the sky irradiance (the dome's IBL used to deliver ~2.5x the
@@ -15,6 +16,8 @@ export function balanceGroundIbl(_shader: { fragmentShader: string }): void {}
 export class MapTextures {
   height: THREE.DataTexture;
   zone: THREE.DataTexture;
+  /** baked hinterland detail (streets, block tone, urbanity, corridor strips), see bakeDetail */
+  detail: THREE.DataTexture;
   /** lowest and highest ground height (m) */
   readonly heightMin: number;
   readonly heightMax: number;
@@ -52,7 +55,116 @@ export class MapTextures {
     this.zone.wrapS = this.zone.wrapT = THREE.ClampToEdgeWrapping;
     this.zone.generateMipmaps = false;
     this.zone.needsUpdate = true;
+
+    this.detail = new THREE.DataTexture(bakeDetail(map), MAP_N, MAP_N, THREE.RGBAFormat, THREE.UnsignedByteType);
+    this.detail.minFilter = THREE.LinearFilter;
+    this.detail.magFilter = THREE.LinearFilter;
+    this.detail.wrapS = this.detail.wrapT = THREE.ClampToEdgeWrapping;
+    this.detail.generateMipmaps = false;
+    this.detail.needsUpdate = true;
   }
+}
+
+/** Baked ground detail for the hinterland shading, one texel per map cell (~10 m), linearly filtered:
+ *  R = street band (1 on the carriageway of a district street, arterial or highway, fading over a verge),
+ *  G = block tone (a hash constant over each street block, 0.5 where there is no grid),
+ *  B = urbanity (the shared urban gradient of map.ts, 0 in the far suburbs .. 1 in the cores),
+ *  A = corridor strip (1 within the commercial frontage of an arterial, fading over ~150 m).
+ *  Streets and the tone come straight from the district grids the road builder uses, so the far ground
+ *  carries the same lattice the road meshes draw near the camera. */
+function bakeDetail(map: WorldMap): Uint8Array {
+  const n = MAP_N;
+  const out = new Uint8Array(n * n * 4);
+  const cell = WORLD_SIZE / n;
+  // urbanity and corridor distance on a coarse lattice (40 m), bilinearly upsampled: both are smooth fields
+  const cn = 512, cs = WORLD_SIZE / cn;
+  const cUrban = new Float32Array((cn + 1) * (cn + 1)), cStrip = new Float32Array((cn + 1) * (cn + 1));
+  for (let j = 0; j <= cn; j++) for (let i = 0; i <= cn; i++) {
+    const s = urbanGradient(map.districts, map.roads, -HALF + i * cs, -HALF + j * cs);
+    cUrban[j * (cn + 1) + i] = s.urban;
+    cStrip[j * (cn + 1) + i] = 1 - smoothstep(30, 170, s.corridor);
+  }
+  const coarse = (arr: Float32Array, x: number, z: number) => {
+    const fx = (x + HALF) / cs, fz = (z + HALF) / cs;
+    const i0 = Math.max(0, Math.min(cn - 1, Math.floor(fx))), j0 = Math.max(0, Math.min(cn - 1, Math.floor(fz)));
+    const tx = fx - i0, tz = fz - j0;
+    const a = arr[j0 * (cn + 1) + i0], b = arr[j0 * (cn + 1) + i0 + 1], c = arr[(j0 + 1) * (cn + 1) + i0], d = arr[(j0 + 1) * (cn + 1) + i0 + 1];
+    return (a * (1 - tx) + b * tx) * (1 - tz) + (c * (1 - tx) + d * tx) * tz;
+  };
+  const urbanZone = (zn: number) => zn === Zone.RES_LOW || zn === Zone.RES_MID || zn === Zone.DOWNTOWN || zn === Zone.HOTEL || zn === Zone.INDUSTRIAL || zn === Zone.PARK || zn === Zone.LOT || zn === Zone.WETLAND_FLAT;
+  for (let j = 0; j < n; j++) {
+    const z = -HALF + (j + 0.5) * cell;
+    for (let i = 0; i < n; i++) {
+      const idx = j * n + i;
+      const zn = map.zone[idx];
+      out[idx * 4 + 1] = 128;
+      if (!urbanZone(zn)) continue;
+      const x = -HALF + (i + 0.5) * cell;
+      out[idx * 4 + 2] = Math.round(255 * coarse(cUrban, x, z));
+      out[idx * 4 + 3] = Math.round(255 * coarse(cStrip, x, z));
+    }
+  }
+  // nearest grid line of the block lattice: streets and per-block tone, written district by district over
+  // the district's own cells (first district wins, as in the road builder)
+  const lineDist = (v: number, lines: number[]): { d: number; k: number } => {
+    let lo = 0, hi = lines.length - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (lines[mid] <= v) lo = mid; else hi = mid; }
+    const d0 = Math.abs(v - lines[lo]), d1 = Math.abs(lines[hi] - v);
+    return { d: Math.min(d0, d1), k: lo };
+  };
+  const streetHalf = (zn: number) => (zn === Zone.DOWNTOWN ? 7 : zn === Zone.RES_MID || zn === Zone.HOTEL || zn === Zone.INDUSTRIAL ? 6 : 4.5);
+  const hash = (a: number, b: number, c: number) => {
+    let h = (a * 374761393 + b * 668265263 + c * 2246822519) | 0;
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+  };
+  map.districts.forEach((d, di) => {
+    const grid = map.grids.get(d.id);
+    if (!grid) return;
+    const c = Math.cos(d.rot), s = Math.sin(d.rot);
+    const r = Math.hypot(d.hw, d.hh) + 20;
+    const i0 = Math.max(0, Math.floor((d.cx - r + HALF) / cell)), i1 = Math.min(n - 1, Math.ceil((d.cx + r + HALF) / cell));
+    const j0 = Math.max(0, Math.floor((d.cz - r + HALF) / cell)), j1 = Math.min(n - 1, Math.ceil((d.cz + r + HALF) / cell));
+    const hw = streetHalf(d.zone);
+    for (let j = j0; j <= j1; j++) {
+      const z = -HALF + (j + 0.5) * cell;
+      for (let i = i0; i <= i1; i++) {
+        const idx = j * n + i;
+        if (map.zone[idx] !== d.zone || out[idx * 4 + 1] !== 128) continue;
+        const x = -HALF + (i + 0.5) * cell;
+        const dx = x - d.cx, dz = z - d.cz;
+        const lx = dx * c + dz * s, lz = -dx * s + dz * c;
+        if (Math.abs(lx) > d.hw || Math.abs(lz) > d.hh) continue;
+        const ax = lineDist(lx, grid.xs), az = lineDist(lz, grid.zs);
+        const dd = Math.min(ax.d, az.d);
+        out[idx * 4] = Math.round(255 * Math.max(0, Math.min(1, 1 - (dd - hw) / 7)));
+        out[idx * 4 + 1] = Math.round(1 + 253 * hash(ax.k, az.k, di + 1));
+      }
+    }
+  });
+  // arterials and highways: a wider band with a broad verge
+  for (const rd of map.roads) {
+    if (rd.cls !== 'highway' && rd.cls !== 'arterial' && rd.cls !== 'causeway') continue;
+    const hw = rd.width * 0.5, pad = hw + 12;
+    for (let k = 0; k < rd.pts.length - 1; k++) {
+      const [ax, az] = rd.pts[k], [bx, bz] = rd.pts[k + 1];
+      const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - pad + HALF) / cell)), i1 = Math.min(n - 1, Math.ceil((Math.max(ax, bx) + pad + HALF) / cell));
+      const j0 = Math.max(0, Math.floor((Math.min(az, bz) - pad + HALF) / cell)), j1 = Math.min(n - 1, Math.ceil((Math.max(az, bz) + pad + HALF) / cell));
+      const abx = bx - ax, abz = bz - az, len2 = abx * abx + abz * abz || 1;
+      for (let j = j0; j <= j1; j++) {
+        const z = -HALF + (j + 0.5) * cell;
+        for (let i = i0; i <= i1; i++) {
+          const x = -HALF + (i + 0.5) * cell;
+          const t = Math.max(0, Math.min(1, ((x - ax) * abx + (z - az) * abz) / len2));
+          const dd = Math.hypot(x - ax - abx * t, z - az - abz * t);
+          const v = Math.round(255 * Math.max(0, Math.min(1, 1 - (dd - hw) / 12)));
+          const idx = j * n + i;
+          if (v > out[idx * 4] && map.zone[idx] !== Zone.OCEAN && map.zone[idx] !== Zone.BAY) out[idx * 4] = v;
+        }
+      }
+    }
+  }
+  return out;
 }
 
 const RING_CELLS = 96; // cells across each ring (must be a multiple of 4)
@@ -159,6 +271,7 @@ vec3 tnormal = normalize(vec3(-hx, 2.0 * e, -hz));
 
 const TERRAIN_FRAG_PARS = /* glsl */ `
 uniform sampler2D uZoneTex;
+uniform sampler2D uDetailTex;
 uniform sampler2D uHeightTex;
 uniform float uWorldSize;
 uniform float uMapN;
@@ -198,11 +311,69 @@ vec3 openGround(vec2 wp, float n1, float n2, float n3, float n4, float dryness) 
   c = mix(c, soil, smoothstep(0.62, 0.74, n3) * 0.7);
   return c * (0.88 + 0.24 * n1);
 }
-vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, out float rough) {
+// the ground of the mid-rise ring: paved courts, service yards and worn lawns between the blocks
+vec3 midriseGround(float n1, float n2, vec2 wp) {
+  vec3 c = mix(vec3(0.36, 0.35, 0.33), vec3(0.48, 0.46, 0.42), n2) * (0.92 + 0.16 * n1);
+  return mix(c, vec3(0.22, 0.34, 0.14), smoothstep(0.6, 0.75, fbm3(wp * 0.02 + 1.0)) * 0.7);
+}
+// Suburban ground. Near the camera: lawns, dry yards and sandy lots under the street trees (the houses
+// themselves are instanced). Where the house instances go subpixel a baked mottle takes over: roofs at
+// house scale on their lots, pale commercial roofs and dark car parks along the arterials, each street
+// block a little greener, drier or paler than its neighbours, so the sprawl keeps its grain out to the
+// haze instead of paling into a beige field.
+vec3 suburbGround(vec2 wp, float n1, float n2, float n3, float n4, float canopy, float sandy, vec4 det, float dist) {
+  float tone = det.g;
+  vec3 c = openGround(wp, n1, n2, n3, n4, 0.12 + 0.35 * tone);
+  vec3 lot = vec3(0.46, 0.42, 0.35);
+  c = mix(c, lot, smoothstep(0.55, 0.7, fbm3(wp * 0.03 + 5.0)) * 0.6);
+  c *= 0.84 + 0.28 * tone;
+  c = mix(c, c * vec3(0.9, 1.04, 0.86), smoothstep(0.6, 0.9, tone) * 0.5);
+  float farF = smoothstep(1200.0, 3800.0, dist);
+  if (farF > 0.0) {
+    vec2 cellP = wp / 13.0;
+    vec2 cid = floor(cellP);
+    vec2 hh = hash22(cid + 0.37);
+    float cover = step(0.3 - 0.25 * det.b, hh.y);
+    // roof colours in the proportions of a sunbelt suburb: shingle greys, pale membrane, terracotta, tan, a few dark
+    vec3 roof = hh.x < 0.32 ? vec3(0.56, 0.54, 0.50) : hh.x < 0.5 ? vec3(0.74, 0.72, 0.66) : hh.x < 0.7 ? vec3(0.52, 0.31, 0.21) : hh.x < 0.86 ? vec3(0.54, 0.46, 0.34) : vec3(0.27, 0.26, 0.25);
+    vec2 f = fract(cellP) - 0.5;
+    float inRoof = step(max(abs(f.x), abs(f.y)), 0.38);
+    c = mix(c, roof, cover * inRoof * farF * 0.92);
+    // driveways, pool decks and pads fill much of what the roof leaves of the lot
+    c = mix(c, vec3(0.40, 0.39, 0.36), cover * (1.0 - inRoof) * step(0.45, hh.x) * farF * 0.6);
+    float strip = det.a * (1.0 - smoothstep(0.0, 0.5, canopy));
+    if (strip > 0.0) {
+      vec2 sid = floor(wp / 42.0 + 0.5);
+      vec2 sh = hash22(sid + 9.1);
+      vec3 com = sh.x < 0.55 ? vec3(0.80, 0.79, 0.75) : sh.x < 0.85 ? vec3(0.24, 0.24, 0.25) : vec3(0.62, 0.55, 0.42);
+      c = mix(c, com, strip * smoothstep(0.35, 0.5, sh.y) * farF * 0.8);
+    }
+  }
+  // the outer urban ring: the ground greys toward the mid-rise look where the gradient rises
+  float ub = smoothstep(0.45, 0.95, det.b + 0.15 * (n3 - 0.5));
+  c = mix(c, midriseGround(n1, n2, wp), ub * 0.85);
+  c = mix(c, canopyFloor(wp, n1, n2), canopy * (0.85 - 0.4 * ub));
+  return mix(c, vec3(0.64, 0.57, 0.42) * (0.92 + 0.16 * n2), sandy);
+}
+// farmland: rectangular fields of crops, fallow and pasture with hedgerows and ditches on their edges
+vec3 farmland(vec2 wp, float n2) {
+  vec2 fs = vec2(440.0, 270.0);
+  vec2 g = wp / fs;
+  vec2 id = floor(g);
+  vec2 h = hash22(id + 3.7);
+  vec3 crop = h.x < 0.25 ? vec3(0.30, 0.42, 0.16) : h.x < 0.45 ? vec3(0.52, 0.46, 0.25) : h.x < 0.6 ? vec3(0.40, 0.30, 0.20) : h.x < 0.8 ? vec3(0.62, 0.56, 0.36) : vec3(0.22, 0.34, 0.14);
+  crop *= (0.9 + 0.2 * h.y) * (0.94 + 0.12 * n2);
+  crop *= 1.0 + 0.04 * sin((h.y < 0.5 ? wp.x : wp.y) * 0.35);
+  vec2 f = abs(fract(g) - 0.5);
+  float edge = smoothstep(0.465, 0.5, max(f.x, f.y));
+  return mix(crop, vec3(0.12, 0.18, 0.08), edge * 0.8);
+}
+vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, vec4 det, out float rough) {
   float n1 = vnoise(wp * 0.35);
   float n2 = fbm3(wp * 0.045);
   float n3 = vnoise(wp * 0.008);
   float n4 = fbm3(wp * 0.0032 + 17.0);
+  float dist = length(cameraPosition - vWorldPos);
   rough = 0.9;
   vec3 c;
   // sandy fringe where the land ramps up from a sandy shore (sheltered lake and canal banks stay grassy)
@@ -236,7 +407,6 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     c = mix(dry, wet, wetness) * (0.92 + 0.16 * n2) * (0.95 + 0.1 * n1);
     c = mix(c, vec3(0.26, 0.23, 0.19), (1.0 - smoothstep(0.05, 0.3, h)) * 0.6);
     // close range: wind ripples in the dry sand, trampled paths and footprints where people walk
-    float dist = length(cameraPosition - vWorldPos);
     float closeF = 1.0 - smoothstep(60.0, 220.0, dist);
     if (closeF > 0.0) {
       float ripple = 0.5 + 0.5 * sin(dot(wp, vec2(0.83, 0.55)) * 5.5 + 2.5 * vnoise(wp * 0.6));
@@ -283,22 +453,21 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     // fairway stripes
     c *= 1.0 + 0.05 * sin(wp.x * 0.35 + wp.y * 0.12);
   } else if (zone == 5) {
-    // suburbs: lawns, dry yards and pale sandy lots, darkening under the street trees
-    c = openGround(wp, n1, n2, n3, n4, 0.45);
-    vec3 lot = vec3(0.54, 0.49, 0.41);
-    c = mix(c, lot, smoothstep(0.55, 0.7, fbm3(wp * 0.03 + 5.0)) * 0.8);
-    c = mix(c, canopyFloor(wp, n1, n2), canopy * 0.85);
-    c = mix(c, vec3(0.64, 0.57, 0.42) * (0.92 + 0.16 * n2), sandy);
+    c = suburbGround(wp, n1, n2, n3, n4, canopy, sandy, det, dist);
   } else if (zone == 19) {
-    // sawgrass marsh: tan-green prairie, dark tree islands (hammocks) where the canopy is dense, brown pools
+    // sawgrass marsh: tan-green prairie, dark tree islands (hammocks) where the canopy is dense, brown pools,
+    // and the darker wet sloughs running with the sheet flow (north-south) between the higher sawgrass ridges
     vec3 saw = mix(vec3(0.50, 0.49, 0.25), vec3(0.36, 0.41, 0.17), smoothstep(0.35, 0.65, n2));
     c = saw * (0.9 + 0.2 * n1);
+    float slough = smoothstep(0.52, 0.68, fbm3(wp * vec2(0.0028, 0.0009) + 6.0));
+    c = mix(c, vec3(0.27, 0.30, 0.16), slough * 0.7);
     c = mix(c, canopyFloor(wp, n1, n2), canopy);
     c = mix(c, vec3(0.16, 0.15, 0.10), 1.0 - smoothstep(-0.05, 0.2, h));
-    rough = 0.85;
+    rough = mix(0.85, 0.6, slough);
   } else if (zone == 6 || zone == 8) {
-    c = mix(vec3(0.36, 0.35, 0.33), vec3(0.48, 0.46, 0.42), n2) * (0.92 + 0.16 * n1);
-    c = mix(c, vec3(0.22, 0.34, 0.14), smoothstep(0.6, 0.75, fbm3(wp * 0.02 + 1.0)) * 0.7);
+    // mid-rise ring; at the frayed district edge (low urbanity) the ground is already the suburb's
+    float ub = smoothstep(0.3, 0.8, det.b + 0.1 * (n3 - 0.5));
+    c = mix(suburbGround(wp, n1, n2, n3, n4, canopy, sandy, det, dist), midriseGround(n1, n2, wp), zone == 8 ? 1.0 : ub);
     rough = 0.8;
   } else if (zone == 7) {
     c = mix(vec3(0.24, 0.24, 0.24), vec3(0.38, 0.37, 0.35), n2) * (0.92 + 0.16 * n1);
@@ -347,7 +516,20 @@ const TERRAIN_FRAG_MAIN = /* glsl */ `
   float expo = smoothVE.y;
   float coast = (zs.b - 0.5) * 512.0;
   float rough;
-  vec3 alb = zoneAlbedo(zone, vWorldPos.xz, vHeight, veg, coast, expo, rough);
+  float beyond = smoothstep(uWorldSize * 0.5 - 350.0, uWorldSize * 0.5 + 250.0, max(abs(vWorldPos.x), abs(vWorldPos.z)));
+  // the baked detail is clamped at the map edge, so it is faded out where the ground carries on beyond it
+  vec4 det = texture2D(uDetailTex, (vWorldPos.xz + vec2(uWorldSize * 0.5)) / uWorldSize) * (1.0 - beyond);
+  det.g = mix(0.5, det.g, 1.0 - beyond);
+  vec3 alb = zoneAlbedo(zone, vWorldPos.xz, vHeight, veg, coast, expo, det, rough);
+  // streets of the district grids and the arterials, baked so the lattice survives to the horizon where the
+  // road meshes are subpixel; the carriageway is dark, the verge and sidewalks a paler band
+  if (zone != 0 && zone != 1 && zone != 2 && zone != 17 && zone != 3 && zone != 12) {
+    float carriage = smoothstep(0.55, 0.9, det.r);
+    float verge = smoothstep(0.08, 0.5, det.r) * (1.0 - carriage);
+    alb = mix(alb, vec3(0.30, 0.30, 0.30) * (0.92 + 0.16 * hash12(floor(vWorldPos.xz * 0.15))), carriage * 0.9);
+    alb = mix(alb, alb * 1.12 + 0.03, verge * 0.6);
+    rough = mix(rough, 0.75, carriage);
+  }
   // wet band right at the waterline for every land zone (beaches shade their own swash zone)
   if (zone != 0 && zone != 1 && zone != 2 && zone != 17) {
     float wetBand = 1.0 - smoothstep(0.05, 0.45, vHeight);
@@ -357,14 +539,26 @@ const TERRAIN_FRAG_MAIN = /* glsl */ `
   // beyond the authored map the ground continues as the same kind of country: the clamped zone
   // texture gives a flat colour, so stamp tree cover and roof/lot patches on it so the sprawl
   // reads as endless texture fading into the haze instead of ending at a straight line
-  float beyond = smoothstep(uWorldSize * 0.5 - 350.0, uWorldSize * 0.5 + 250.0, max(abs(vWorldPos.x), abs(vWorldPos.z)));
   if (beyond > 0.0) {
     float n5 = fbm3(vWorldPos.xz * 0.02 + 11.0);
-    float n6 = vnoise(vWorldPos.xz * 0.035 + 4.0);
+    float n7 = fbm3(vWorldPos.xz * 0.0009 + 5.0);
     vec3 tree = vec3(0.09, 0.16, 0.06);
     vec3 farc = alb;
-    if (zone != 19) farc = mix(farc, vec3(0.52, 0.49, 0.44), smoothstep(0.55, 0.62, n6) * 0.7);
-    farc = mix(farc, tree, smoothstep(0.48, 0.6, n5) * 0.85);
+    if (zone == 19 || zone == 0 || zone == 1 || zone == 3) {
+      farc = mix(farc, tree, smoothstep(0.48, 0.6, n5) * 0.85);
+    } else {
+      // the sprawl thins into farmland and scrub within a few kilometres of the map edge: fields with
+      // hedgerows, then palmetto scrub and tree lines, the last subdivisions sitting in it as patches
+      float outD = max(abs(vWorldPos.x), abs(vWorldPos.z)) - uWorldSize * 0.5;
+      float rural = smoothstep(400.0, 3200.0, outD + 1400.0 * (n7 - 0.5));
+      vec3 scrub = mix(vec3(0.40, 0.38, 0.21), tree, smoothstep(0.46, 0.6, n5) * 0.85);
+      vec3 country = mix(farmland(vWorldPos.xz, n5), scrub, smoothstep(0.5, 0.66, fbm3(vWorldPos.xz * 0.0007 + 2.0)));
+      // beyond the farms the coastal plain gives way to the sawgrass wetland
+      vec3 marsh = mix(vec3(0.48, 0.47, 0.25), vec3(0.34, 0.39, 0.17), smoothstep(0.35, 0.65, n5));
+      marsh = mix(marsh, tree, smoothstep(0.55, 0.66, fbm3(vWorldPos.xz * 0.004 + 8.0)) * 0.9);
+      country = mix(country, marsh, smoothstep(5000.0, 9000.0, outD + 2000.0 * (n7 - 0.5)));
+      farc = mix(alb, country, rural);
+    }
     alb = mix(alb, farc, beyond);
   }
   diffuseColor.rgb *= alb;
@@ -384,6 +578,7 @@ export class Terrain {
     const uniforms = {
       uHeightTex: { value: textures.height },
       uZoneTex: { value: textures.zone },
+      uDetailTex: { value: textures.detail },
       uRingOffset: this.offsetUniform,
       uWorldSize: { value: WORLD_SIZE },
       uMapN: { value: MAP_N },
@@ -401,7 +596,7 @@ export class Terrain {
         .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${TERRAIN_FRAG_MAIN}`);
       balanceGroundIbl(shader);
     };
-    mat.customProgramCacheKey = () => 'terrain-v4';
+    mat.customProgramCacheKey = () => 'terrain-v5';
     this.material = mat;
     for (let level = 0; level < RINGS; level++) {
       for (const { geometry, box } of buildRing(level, level > 0)) {

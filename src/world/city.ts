@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Rng } from '../core/seed';
-import { clamp, lerp, smoothstep } from '../core/noise';
-import { Zone, type District, type WorldMap } from './map';
+import { clamp, lerp, perlin2, smoothstep } from '../core/noise';
+import { Zone, urbanGradient, type District, type WorldMap } from './map';
 import type { Block } from './roads';
 import { createFacadeMaterial } from './facade';
 import { LAYER_CAMERA, LAYER_CASCADE0, LAYER_MIRROR, MAX_CASCADES, layerMask, maskCasts, type ViewCull } from './culling';
@@ -351,6 +351,22 @@ function pickWeighted<T>(rng: Rng, items: readonly (readonly [T, number])[]): T 
   return items[items.length - 1][0];
 }
 
+/** Neighbourhood character at (x, z): `glass` > 0 favours curtain-wall / stone office towers, < 0 favours the
+ *  stucco, deco and brick families; `pastel` picks a hue window of the pastel palettes. Both wander at 350-450 m,
+ *  so the skyline is made of blocks of kin buildings (a glass office cluster, a pastel condo row) rather than
+ *  every tower rolling its family and tint independently. */
+function neighbourhood(x: number, z: number): { glass: number; pastel: number } {
+  return { glass: perlin2(x / 420 + 11.3, z / 420 - 5.7), pastel: 0.5 + 0.5 * perlin2(x / 330 - 9.1, z / 330 + 4.4) };
+}
+
+const GLASSY_STYLES = new Set<number>([S.GLASS_BLUE, S.GLASS_GREEN, S.STONE, S.GRID]);
+/** Family weights biased by the neighbourhood: glass / stone families gain where `glass` > 0, masonry where < 0. */
+function clusterWeights(items: readonly (readonly [Family, number])[], glass: number): (readonly [Family, number])[] {
+  const g = Math.max(0, glass), m = Math.max(0, -glass);
+  return items.map(([fam, w]) => [fam, w * (GLASSY_STYLES.has(fam.style) ? 1 + 1.6 * g - 0.6 * m : 1 + 1.6 * m - 0.6 * g)] as const);
+}
+
+
 // ------------------------------------------------------------------ city
 
 export interface CityBuild {
@@ -440,10 +456,18 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
 
   /** Per-building appearance drawn from a facade family. Roughly one building in six is dark at night (empty offices,
    *  unsold condos) and the rest sit toward the low end of the family's lit range so the lit towers stand out. */
-  const look = (fam: Family, r: Rng) => {
+  const look = (fam: Family, r: Rng, pastel = -1) => {
     const u = r.next();
     const lit = u < 0.16 ? r.range(0.0, 0.04) : lerp(fam.lit[0], fam.lit[1], Math.pow(r.next(), 1.6));
-    return { tint: r.pick(fam.tints), lit, warm: r.range(fam.warm[0], fam.warm[1]), variant: r.next() };
+    // with a neighbourhood hue given, the tint comes from a window of the family's palette around it (the
+    // palettes are ordered by hue), so neighbours share a colour family without being identical
+    let tint: string;
+    if (pastel >= 0 && fam.tints.length > 4) {
+      const n = fam.tints.length;
+      const k = Math.floor(pastel * (n - 1) + r.range(-1.6, 1.6) + 0.5);
+      tint = fam.tints[((k % n) + n) % n];
+    } else tint = r.pick(fam.tints);
+    return { tint, lit, warm: r.range(fam.warm[0], fam.warm[1]), variant: r.next() };
   };
 
   // rooftop equipment: penthouses, tanks, helipads, masts and spires
@@ -464,16 +488,41 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       place('box', px, pz, r.range(2, 4.5), r.range(1.5, 3), r.range(2, 4), rot, grey, S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
     }
     if (h > 40 && r.chance(0.35)) {
-      const [px, pz] = at(tw * 0.25, -td * 0.25);
+      const [px, pz] = at(tw * r.range(0.15, 0.32), -td * r.range(0.1, 0.3));
       place('cyl', px, pz, 3, 3.5, 3, rot, '#c9c9c4', S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+    }
+    // water tanks on the older masonry blocks, cooling towers in a row on the offices, a screen wall hiding
+    // the plant on some, antennas on many: every item at its own jittered spot and yaw
+    if (!glassy && h > 18 && r.chance(0.3)) {
+      const [px, pz] = at(-tw * r.range(0.1, 0.34), td * r.range(-0.3, 0.3));
+      const dia = r.range(2.6, 4.4);
+      place('cyl', px, pz, dia, r.range(2.8, 4.6), dia, rot + r.range(-0.5, 0.5), r.pick(['#d9d6cc', '#c9c4b8', '#8f8a80']), S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+    }
+    if (glassy && tw > 16 && r.chance(0.35)) {
+      const nct = r.int(2, 4), yaw = rot + (r.chance(0.5) ? 0 : Math.PI / 2) + r.range(-0.08, 0.08);
+      const [ox, oz] = [r.range(-tw * 0.25, tw * 0.25), r.range(-td * 0.25, td * 0.25)];
+      for (let i = 0; i < nct; i++) {
+        const [px, pz] = at(ox + (i - (nct - 1) / 2) * 3.4 * Math.cos(yaw - rot), oz + (i - (nct - 1) / 2) * 3.4 * Math.sin(yaw - rot));
+        place('oct', px, pz, 2.6, r.range(2.2, 3.2), 2.6, yaw, '#9da3a7', S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+      }
+    }
+    if (h > 50 && r.chance(0.28)) {
+      const side = r.chance(0.5) ? 1 : -1;
+      const [px, pz] = at(side * tw * 0.36, r.range(-td * 0.15, td * 0.15));
+      place('box', px, pz, 0.6, r.range(3, 4.5), td * r.range(0.45, 0.7), rot, '#b9bfc3', S.GRID, 3.5, { yBase: top - 0.2, margin: -1, lit: 0, variant: 0.3 });
+    }
+    const nAnt = r.chance(0.45) ? r.int(1, 3) : 0;
+    for (let i = 0; i < nAnt; i++) {
+      const [px, pz] = at(r.range(-tw * 0.4, tw * 0.4), r.range(-td * 0.4, td * 0.4));
+      place('frustum', px, pz, 0.7, r.range(5, 12), 0.7, rot + r.range(0, 1), '#d7dcdf', S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
     }
     if (h > 100 && r.chance(0.22)) {
       const dia = Math.min(18, Math.min(tw, td) * 0.5);
-      const [px, pz] = at(-tw * 0.18, td * 0.16);
+      const [px, pz] = at(-tw * r.range(0.1, 0.24), td * r.range(-0.2, 0.2));
       place('cyl', px, pz, dia, 0.5, dia, rot, '#444444', S.HELIPAD, 3, { yBase: top, margin: -1 });
     }
     if (h > 120 && r.chance(0.35)) {
-      const [px, pz] = at(tw * 0.3, td * 0.3);
+      const [px, pz] = at(tw * r.range(0.2, 0.34), td * r.range(-0.34, 0.34));
       place('frustum', px, pz, 1.6, r.range(14, 32), 1.6, rot, '#cfd8dc', S.CONCRETE, 3, { yBase: top, margin: -1 });
     }
     if (h > 150 && r.chance(0.3)) {
@@ -482,8 +531,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
   };
 
   /** Massing recipes for towers. Returns the roof height of the main body. */
-  const buildTower = (r: Rng, x: number, z: number, rot: number, fw: number, fd: number, h: number, fam: Family, recipe: number, detail = true): number | null => {
-    const lk = look(fam, r);
+  const buildTower = (r: Rng, x: number, z: number, rot: number, fw: number, fd: number, h: number, fam: Family, recipe: number, detail = true, pastel = -1): number | null => {
+    const lk = look(fam, r, pastel);
     const o = { lit: lk.lit, warm: lk.warm, variant: lk.variant };
     const cr = Math.cos(rot), sr = Math.sin(rot);
     const at = (ox: number, oz: number): [number, number] => [x + ox * cr - oz * sr, z + ox * sr + oz * cr];
@@ -550,6 +599,60 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         // pyramidal crown
         top = place('box', x, z, fw, h * 0.9, fd, rot, lk.tint, fam.style, fam.floorH, o);
         if (top !== null) { place('frustum', x, z, fw, h * 0.1 + 6, fd, rot, lk.tint, fam.style, fam.floorH, { ...o, yBase: top - 0.1, margin: -1 }); detail = false; }
+        break;
+      }
+      case 9: {
+        // podium + tower: a 3-5 storey base filling the lot with the tower standing off-centre on it
+        const pw = fw * r.range(1.25, 1.5), pd = fd * r.range(1.2, 1.45), ph = fam.floorH * r.int(3, 5) + 1;
+        const pk = fam.style === S.STONE || GLASSY_STYLES.has(fam.style) ? look(FAM.punched, r, pastel) : lk;
+        place('box', x, z, pw, ph, pd, rot, pk.tint, fam.style === S.STONE || GLASSY_STYLES.has(fam.style) ? S.PUNCHED : fam.style, fam.floorH, { lit: pk.lit, warm: pk.warm, variant: pk.variant });
+        tw = fw * 0.72; td = fd * 0.72;
+        const [tx, tz] = at((pw - tw) * 0.5 * r.range(-0.8, 0.8), (pd - td) * 0.5 * r.range(-0.8, 0.8));
+        top = place('box', tx, tz, tw, h, td, rot, lk.tint, fam.style, fam.floorH, o);
+        x = tx; z = tz;
+        break;
+      }
+      case 10: {
+        // slab with a rounded end: a bar of flats closed by a half-drum stair / lift tower of the same height
+        tw = Math.min(fw, fd) * 0.62; td = Math.max(fw, fd) * 1.05;
+        const end = r.chance(0.5) ? 1 : -1;
+        top = place('box', x, z, tw, h, td, rot, lk.tint, fam.style, fam.floorH, o);
+        const [ex, ez] = at(0, end * td * 0.5);
+        place('cyl', ex, ez, tw, h, tw, rot, lk.tint, fam.style, fam.floorH, o);
+        break;
+      }
+      case 11: {
+        // glass lantern crown with a spire: the office box stops a few floors short and a small lit glass box tops it
+        top = place('box', x, z, fw, h * 0.93, fd, rot, lk.tint, fam.style, fam.floorH, o);
+        if (top !== null) {
+          const g = look(FAM.glassBlue, r);
+          top = place('box', x, z, fw * 0.5, h * 0.07 + 5, fd * 0.5, rot, g.tint, S.GLASS_BLUE, 3.9, { lit: 0.85, warm: 0.3, variant: g.variant, yBase: top - 0.1, margin: -1 });
+          place('frustum', x, z, 2.4, r.range(10, 22), 2.4, rot, '#dfe4e8', S.CONCRETE, 3, { yBase: top ?? 0, margin: -1 });
+          detail = false;
+        }
+        break;
+      }
+      case 12: {
+        // sloped crown: the top storeys lean off to one side (a shear prism of the same facade)
+        top = place('box', x, z, fw, h * 0.86, fd, rot, lk.tint, fam.style, fam.floorH, o);
+        if (top !== null) { place('shear', x, z, fw, h * 0.14 + 3, fd, rot + (r.chance(0.5) ? 0 : Math.PI), lk.tint, fam.style, fam.floorH, { ...o, yBase: top - 0.1, margin: -1 }); detail = false; }
+        break;
+      }
+      case 13: {
+        // asymmetric pair: two bars sharing a party wall, one carrying on higher than the other
+        const a = at(-fw * 0.25, 0), b = at(fw * 0.25, 0);
+        const lo = h * r.range(0.55, 0.78);
+        top = place('box', a[0], a[1], fw * 0.5, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
+        place('box', b[0], b[1], fw * 0.5, lo, fd * r.range(0.8, 1.0), rot, lk.tint, fam.style, fam.floorH, o);
+        x = a[0]; z = a[1]; tw = fw * 0.5; td = fd;
+        break;
+      }
+      case 14: {
+        // cross plan: two thin slabs through each other, the shorter one a storey or two lower
+        const s1 = Math.min(fw, fd) * 0.45;
+        top = place('box', x, z, s1, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
+        place('box', x, z, fw, h * r.range(0.86, 0.96), s1, rot, lk.tint, fam.style, fam.floorH, o);
+        tw = s1; td = fd;
         break;
       }
       default:
@@ -653,6 +756,9 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
   });
 
   // ------------------------------------------------------------- district fills
+  // the urban gradient of the suburbs: blocks near the mid-rise districts and along the arterial corridors
+  // carry apartment blocks, shops and parking structures instead of houses, so the city thins out along
+  // its roads rather than ending at a district rectangle
   for (const d of map.districts) {
     const blocks = blocksByDistrict.get(d.id);
     const c = Math.cos(d.rot), s = Math.sin(d.rot);
@@ -667,15 +773,35 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       const [cxw, czw] = toWorld((bx0 + bx1) / 2, (bz0 + bz1) / 2);
       const distToCentre = Math.hypot(cxw - d.cx, czw - d.cz) / Math.max(d.hw, d.hh);
       const distToDowntown = Math.hypot(cxw - dt.cx, czw - dt.cz);
+      const nb = neighbourhood(cxw, czw);
       // density and height fall off with distance from downtown so the sprawl thins toward the edges
       const prox = 1 - smoothstep(600, 4000, distToDowntown);
       const sprawl = 1 - 0.45 * smoothstep(2500, 8500, distToDowntown);
       if (drng.next() > d.density * (d.zone === Zone.RES_LOW ? sprawl : 1)) continue; // empty lot / park block
       switch (d.zone) {
         case Zone.DOWNTOWN: fillDowntown(); break;
-        case Zone.RES_MID: fillMidrise(); break;
+        case Zone.RES_MID: {
+          // the mid-rise districts fray at their edges: outer blocks turn to walk-ups and houses where the
+          // shared urban gradient drops, so the boundary with the suburbs is ragged rather than ruled
+          const { urban, corridor } = urbanGradient(map.districts, map.roads, cxw, czw);
+          const u = drng.next();
+          if (urban < 0.3 && u > urban + 0.4) fillHouses();
+          else if (u > urban) fillLowRise(Math.max(urban, 0.55), corridor);
+          else fillMidrise();
+          break;
+        }
         case Zone.HOTEL: fillHotel(); break;
-        case Zone.RES_LOW: fillHouses(); break;
+        case Zone.RES_LOW: {
+          const { urban, corridor } = urbanGradient(map.districts, map.roads, cxw, czw);
+          const un = 0.5 + 0.5 * perlin2(cxw / 380 + 3.3, czw / 380 - 7.1);
+          const far = smoothstep(2200, 5500, distToDowntown);
+          const u = drng.next();
+          if (u < urban * 0.75) fillLowRise(urban, corridor);
+          else if (corridor < Math.max(bw, bd) * 0.6 + 20 && drng.next() < 0.45 + 0.3 * un) fillCommercial(corridor, far);
+          else if (far > 0.35 && corridor < 200 && drng.next() < 0.18) fillIndustrialLot();
+          else fillHouses();
+          break;
+        }
         case Zone.INDUSTRIAL: fillIndustrial(); break;
         default: break;
       }
@@ -703,10 +829,10 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           const [x, z] = toWorld(lx, lz);
           if (!landOK(x, z, fw, fd, d.rot) || !areaFree(x, z, fw + 6, fd + 6, d.rot)) continue;
           const fam: Family = h > 110
-            ? pickWeighted(drng, [[FAM.glassBlue, 0.34], [FAM.glassGreen, 0.16], [FAM.punched, 0.1], [FAM.balcony, 0.08], [FAM.deco, 0.08], [FAM.stone, 0.14], [FAM.grid, 0.1]] as const)
+            ? pickWeighted(drng, clusterWeights([[FAM.glassBlue, 0.34], [FAM.glassGreen, 0.16], [FAM.punched, 0.1], [FAM.balcony, 0.08], [FAM.deco, 0.08], [FAM.stone, 0.14], [FAM.grid, 0.1]] as const, nb.glass))
             : h > 60
-              ? pickWeighted(drng, [[FAM.glassBlue, 0.2], [FAM.glassGreen, 0.12], [FAM.punched, 0.16], [FAM.balcony, 0.14], [FAM.deco, 0.14], [FAM.stone, 0.1], [FAM.grid, 0.1], [FAM.brick, 0.04]] as const)
-              : pickWeighted(drng, [[FAM.glassBlue, 0.1], [FAM.glassGreen, 0.08], [FAM.punched, 0.2], [FAM.balcony, 0.12], [FAM.deco, 0.18], [FAM.stone, 0.06], [FAM.grid, 0.1], [FAM.brick, 0.16]] as const);
+              ? pickWeighted(drng, clusterWeights([[FAM.glassBlue, 0.2], [FAM.glassGreen, 0.12], [FAM.punched, 0.16], [FAM.balcony, 0.14], [FAM.deco, 0.14], [FAM.stone, 0.1], [FAM.grid, 0.1], [FAM.brick, 0.04]] as const, nb.glass))
+              : pickWeighted(drng, clusterWeights([[FAM.glassBlue, 0.1], [FAM.glassGreen, 0.08], [FAM.punched, 0.2], [FAM.balcony, 0.12], [FAM.deco, 0.18], [FAM.stone, 0.06], [FAM.grid, 0.1], [FAM.brick, 0.16]] as const, nb.glass));
           // podium: parking or retail base filling more of the lot
           if (h > 55 && drng.chance(0.6)) {
             const pw = Math.min(bw * 0.92, fw + drng.range(14, 36)), pd = Math.min(bd * 0.92, fd + drng.range(14, 36));
@@ -716,11 +842,11 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           }
           let recipe: number;
           const rr = drng.next();
-          if (fam.style === S.DECO && h > 60) recipe = rr < 0.55 ? 6 : rr < 0.8 ? 1 : 0;
-          else if (h > 110) recipe = rr < 0.28 ? 1 : rr < 0.4 ? 7 : rr < 0.52 ? 5 : rr < 0.62 ? 8 : rr < 0.72 ? 4 : rr < 0.8 ? 2 : 0;
-          else if (h > 60) recipe = rr < 0.18 ? 1 : rr < 0.3 ? 7 : rr < 0.42 ? 3 : rr < 0.5 ? 2 : rr < 0.58 ? 8 : 0;
-          else recipe = rr < 0.25 ? 3 : rr < 0.35 ? 2 : 0;
-          buildTower(drng, x, z, d.rot, fw, fd, h, fam, recipe);
+          if (fam.style === S.DECO && h > 60) recipe = rr < 0.5 ? 6 : rr < 0.75 ? 1 : rr < 0.88 ? 10 : 0;
+          else if (h > 110) recipe = rr < 0.22 ? 1 : rr < 0.32 ? 7 : rr < 0.42 ? 5 : rr < 0.5 ? 8 : rr < 0.58 ? 4 : rr < 0.64 ? 2 : rr < 0.72 ? 11 : rr < 0.79 ? 12 : rr < 0.86 ? 13 : rr < 0.92 ? 14 : 0;
+          else if (h > 60) recipe = rr < 0.15 ? 1 : rr < 0.25 ? 7 : rr < 0.35 ? 3 : rr < 0.42 ? 2 : rr < 0.49 ? 8 : rr < 0.6 ? 9 : rr < 0.68 ? 10 : rr < 0.75 ? 13 : rr < 0.8 ? 12 : 0;
+          else recipe = rr < 0.2 ? 3 : rr < 0.3 ? 2 : rr < 0.42 ? 9 : rr < 0.5 ? 13 : rr < 0.56 ? 10 : 0;
+          buildTower(drng, x, z, d.rot, fw, fd, h, fam, recipe, true, nb.pastel);
         }
         // mid-rise street wall: 4-12 storey buildings shoulder to shoulder along the block edges wherever the
         // towers left room, so the skyline has a body between the towers instead of bare lots
@@ -763,12 +889,14 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           let h = lerp(d.hMin, d.hMax, Math.pow(drng.next(), 2.0)) * lerp(0.75, 1.15, prox);
           h = clamp(h, d.hMin * 0.8, d.hMax);
           const fam = h > 50
-            ? pickWeighted(drng, [[FAM.balcony, 0.3], [FAM.punched, 0.2], [FAM.grid, 0.15], [FAM.deco, 0.1], [FAM.glassGreen, 0.15], [FAM.glassBlue, 0.1]] as const)
-            : pickWeighted(drng, [[FAM.brick, 0.28], [FAM.punched, 0.24], [FAM.deco, 0.16], [FAM.balcony, 0.16], [FAM.grid, 0.1], [FAM.concrete, 0.06]] as const);
+            ? pickWeighted(drng, clusterWeights([[FAM.balcony, 0.3], [FAM.punched, 0.2], [FAM.grid, 0.15], [FAM.deco, 0.1], [FAM.glassGreen, 0.15], [FAM.glassBlue, 0.1]] as const, nb.glass))
+            : pickWeighted(drng, clusterWeights([[FAM.brick, 0.28], [FAM.punched, 0.24], [FAM.deco, 0.16], [FAM.balcony, 0.16], [FAM.grid, 0.1], [FAM.concrete, 0.06]] as const, nb.glass));
           const rr = drng.next();
           const long = Math.max(bw, bd) > 90 && Math.min(fw, fd) > 20;
-          const recipe = h > 45 ? (rr < 0.25 ? 1 : rr < 0.35 ? 7 : rr < 0.5 && long ? 2 : rr < 0.6 ? 3 : 0) : (rr < 0.25 ? 3 : rr < 0.35 && long ? 2 : 0);
-          buildTower(drng, x, z, d.rot + drng.range(-0.03, 0.03), fw, fd, h, fam, recipe, h > 20);
+          const recipe = h > 45
+            ? (rr < 0.2 ? 1 : rr < 0.28 ? 7 : rr < 0.4 && long ? 2 : rr < 0.48 ? 3 : rr < 0.58 ? 9 : rr < 0.66 && long ? 10 : rr < 0.74 ? 13 : rr < 0.8 ? 12 : 0)
+            : (rr < 0.2 ? 3 : rr < 0.3 && long ? 2 : rr < 0.4 ? 9 : rr < 0.5 ? 13 : rr < 0.56 && long ? 10 : 0);
+          buildTower(drng, x, z, d.rot + drng.range(-0.03, 0.03), fw, fd, h, fam, recipe, h > 20, nb.pastel);
         }
       }
 
@@ -847,6 +975,143 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
               const [qx, qz] = toWorld(cx, lz + inward * (hd / 2 + 6));
               if (landOK(qx, qz, 6, 4, d.rot)) place('house', qx, qz, drng.range(5, 9), 0.4, drng.range(3.5, 5), d.rot, '#3fc4de', S.POOL, 3, { form: 2, margin: 0.5, yBase: map.heightAt(qx, qz) });
             }
+          }
+        }
+      }
+
+      /** Outer-ring urban block: walk-up apartment blocks, garden flats and the odd parking structure, 2-7 storeys,
+       *  denser and taller the more `urban` the block is (next to the mid-rise districts or on an arterial). */
+      function fillLowRise(urban: number, corridor: number): void {
+        const along = bw >= bd ? 'x' : 'z';
+        const L = Math.max(bw, bd), W = Math.min(bw, bd);
+        const onCorridor = corridor < 60;
+        // one parking structure per few corridor blocks: a bare concrete deck stack, wider than tall
+        if (onCorridor && drng.chance(0.18 * urban + 0.04)) {
+          const pw = Math.min(L * 0.55, drng.range(40, 70)), pd = Math.min(W * 0.8, drng.range(28, 48));
+          const [x, z] = toWorld((bx0 + bx1) / 2 + drng.range(-bw * 0.15, bw * 0.15), (bz0 + bz1) / 2);
+          const rot = d.rot + (along === 'x' ? 0 : Math.PI / 2);
+          if (landOK(x, z, pw, pd, rot) && areaFree(x, z, pw + 3, pd + 3, rot)) {
+            const h = 3.0 * drng.int(3, 6) + 1.2;
+            const top = place('box', x, z, pw, h, pd, rot, drng.pick(GREYS), S.CONCRETE, 3.0, { lit: 0.12, warm: 0.4, variant: 0.9 });
+            if (top !== null) {
+              // stair / lift towers at two corners and a lamp mast
+              place('box', ...toWorld((bx0 + bx1) / 2 - pw * 0.42, (bz0 + bz1) / 2 - pd * 0.38), 5, 4, 5, rot, '#a6a8a4', S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+              place('box', ...toWorld((bx0 + bx1) / 2 + pw * 0.42, (bz0 + bz1) / 2 + pd * 0.38), 5, 4, 5, rot, '#a6a8a4', S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+              place('frustum', x, z, 0.6, 9, 0.6, rot, '#c9ccce', S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+            }
+            return;
+          }
+        }
+        // a row of walk-ups along each long side, gaps between them for yards and parking
+        const rows: [number, number][] = along === 'x'
+          ? (bd >= 44 ? [[bz0 + 11, 0], [bz1 - 11, Math.PI]] : [[(bz0 + bz1) / 2, 0]])
+          : (bw >= 44 ? [[bx0 + 11, 0], [bx1 - 11, Math.PI]] : [[(bx0 + bx1) / 2, 0]]);
+        const from = along === 'x' ? bx0 : bz0, to = along === 'x' ? bx1 : bz1;
+        for (const [fixed, face] of rows) {
+          let cursor = from + drng.range(2, 10);
+          while (cursor < to - 14) {
+            const front = drng.range(16, 34), depth = drng.range(12, Math.min(22, W * 0.42));
+            if (cursor + front > to - 2) break;
+            const mid = cursor + front / 2;
+            cursor += front + drng.range(3, 14) * (1.3 - urban * 0.6);
+            if (drng.next() > 0.45 + 0.5 * urban) continue;
+            const lx = along === 'x' ? mid : fixed, lz = along === 'x' ? fixed : mid;
+            const w = along === 'x' ? front : depth, dd = along === 'x' ? depth : front;
+            const rot = d.rot + drng.range(-0.02, 0.02);
+            const [x, z] = toWorld(lx, lz);
+            if (!landOK(x, z, w, dd, rot) || !areaFree(x, z, w + 2, dd + 2, rot)) continue;
+            const fam = pickWeighted(drng, clusterWeights([[FAM.brick, 0.22], [FAM.punched, 0.3], [FAM.balcony, 0.22], [FAM.deco, 0.12], [FAM.concrete, 0.06], [FAM.grid, 0.08]] as const, nb.glass * 0.5));
+            const lk = look(fam, drng, nb.pastel);
+            const floors = clamp(Math.round(drng.range(2, 3.4) + urban * drng.range(1, 4)), 2, 7);
+            const h = fam.floorH * floors + 0.8;
+            const top = place('box', x, z, w, h, dd, rot, lk.tint, fam.style, fam.floorH, { lit: lk.lit, warm: lk.warm, variant: lk.variant, margin: 1.5 });
+            if (top === null) continue;
+            if (drng.chance(0.5)) place('box', x + drng.range(-w * 0.2, w * 0.2), z + drng.range(-dd * 0.2, dd * 0.2), drng.range(2.5, 5), drng.range(1.5, 3), drng.range(2.5, 4), rot, drng.pick(GREYS), S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+            if (floors >= 4 && drng.chance(0.3)) place('box', x, z, w * 0.5, 2.8, dd * 0.45, rot, drng.pick(GREYS), S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+            if (face === 0 && drng.chance(0.2)) {
+              // pool in the court behind (the first row faces outward, so its court lies toward +local)
+              const [qx, qz] = along === 'x' ? toWorld(mid, fixed + depth / 2 + 6) : toWorld(fixed + depth / 2 + 6, mid);
+              if (landOK(qx, qz, 8, 5, d.rot) && !occupied(qx, qz)) place('house', qx, qz, drng.range(6, 11), 0.4, drng.range(4, 6), d.rot, '#3fc4de', S.POOL, 3, { form: 2, margin: 0.5, yBase: map.heightAt(qx, qz) });
+            }
+          }
+        }
+      }
+
+      /** Corridor commerce: a strip mall or big-box store set back behind its parking, a petrol canopy or a
+       *  drive-through at the corner and a pylon sign at the kerb. Roofs are pale membrane, so from altitude these
+       *  read as the bright flat rectangles that line every arterial of a sunbelt city. */
+      function fillCommercial(corridor: number, far: number): void {
+        const along = bw >= bd ? 'x' : 'z';
+        const L = Math.max(bw, bd), W = Math.min(bw, bd);
+        const big = drng.chance(0.3 + 0.3 * far);
+        const fw = big ? Math.min(L * 0.7, drng.range(50, 90)) : Math.min(L * 0.8, drng.range(40, 95));
+        const fd = big ? Math.min(W * 0.6, drng.range(35, 60)) : Math.min(W * 0.45, drng.range(14, 22));
+        // the building sits at the back of the lot; the front (toward the block's long axis) is the car park
+        const back = drng.chance(0.5) ? 1 : -1;
+        const cx = (bx0 + bx1) / 2, cz = (bz0 + bz1) / 2;
+        const lx = along === 'x' ? cx + drng.range(-L * 0.08, L * 0.08) : cx + back * (W / 2 - fd / 2 - 3);
+        const lz = along === 'x' ? cz + back * (W / 2 - fd / 2 - 3) : cz + drng.range(-L * 0.08, L * 0.08);
+        const rot = d.rot + (along === 'x' ? 0 : Math.PI / 2);
+        const [x, z] = toWorld(lx, lz);
+        if (!landOK(x, z, fw, fd, rot) || !areaFree(x, z, fw + 3, fd + 3, rot)) { fillHouses(); return; }
+        const fam = big ? FAM.industrial : pickWeighted(drng, [[FAM.punched, 0.35], [FAM.deco, 0.3], [FAM.industrial, 0.2], [FAM.concrete, 0.15]] as const);
+        const lk = look(fam, drng, nb.pastel);
+        const h = big ? drng.range(8, 12) : drng.range(4.5, 7);
+        const top = place('box', x, z, fw, h, fd, rot, lk.tint, fam.style, fam.floorH, { lit: 0.35, warm: 0.7, variant: lk.variant, margin: 1 });
+        if (top === null) return;
+        // pale roof membrane with a few RTUs
+        place('box', x, z, fw + 0.4, 0.4, fd + 0.4, rot, drng.pick(['#e9e7e0', '#dfdcd3', '#d6d2c8', '#c9c7c0']), S.CONCRETE, 3, { yBase: top - 0.1, margin: -1 });
+        const nRtu = drng.int(1, big ? 6 : 3);
+        for (let i = 0; i < nRtu; i++) place('box', x + drng.range(-fw * 0.4, fw * 0.4), z + drng.range(-fd * 0.35, fd * 0.35), drng.range(1.8, 3.2), drng.range(1.0, 1.8), drng.range(1.8, 2.8), rot + drng.range(-0.1, 0.1), '#a9adb0', S.CONCRETE, 3, { yBase: top + 0.2, margin: -1 });
+        if (!big && drng.chance(0.5)) place('box', x, z, fw * drng.range(0.2, 0.4), 2.2, 1.0, rot, lk.tint, S.CONCRETE, 3, { yBase: top - 0.1, margin: -1 }); // parapet sign band
+        // outparcel at one end: petrol canopy (flat slab on posts) or a drive-through box
+        const endSide = drng.chance(0.5) ? 1 : -1;
+        const ox = along === 'x' ? cx + endSide * (L / 2 - 16) : cx - back * (W / 2 - 12);
+        const oz = along === 'x' ? cz - back * (W / 2 - 12) : cz + endSide * (L / 2 - 16);
+        const [px, pz] = toWorld(ox, oz);
+        if (drng.chance(0.55) && landOK(px, pz, 22, 16, rot) && areaFree(px, pz, 22, 16, rot)) {
+          if (drng.chance(0.5)) {
+            const cy = map.heightAt(px, pz);
+            place('box', px, pz, 20, 0.9, 13, rot, drng.pick(['#f3f3ee', '#e8382d', '#2c6fb5', '#f2b41c']), S.CONCRETE, 3, { yBase: cy + 5.2, margin: 0 });
+            for (const [sx, sz] of [[-6, -3.5], [6, -3.5], [-6, 3.5], [6, 3.5]]) {
+              const cr = Math.cos(rot), sr = Math.sin(rot);
+              place('box', px + sx * cr - sz * sr, pz + sx * sr + sz * cr, 0.7, 5.2, 0.7, rot, '#c9ccce', S.CONCRETE, 3, { margin: -1 });
+            }
+            place('box', px + 14 * Math.cos(rot), pz + 14 * Math.sin(rot), 9, 4.2, 7, rot, '#f1efe8', S.PUNCHED, 3.2, { lit: 0.6, warm: 0.6, margin: 0.5 });
+          } else {
+            const dk = look(FAM.deco, drng, nb.pastel);
+            place('box', px, pz, drng.range(12, 18), drng.range(4.5, 6), drng.range(9, 13), rot + drng.range(-0.1, 0.1), dk.tint, S.DECO, 3.3, { lit: 0.5, warm: 0.8, variant: dk.variant, margin: 1 });
+          }
+        }
+        // pylon sign at the kerb
+        const [sx, sz] = along === 'x' ? toWorld(lx + drng.range(-fw * 0.3, fw * 0.3), cz - back * (W / 2 - 4)) : toWorld(cx - back * (W / 2 - 4), lz + drng.range(-fw * 0.3, fw * 0.3));
+        if (landOK(sx, sz, 1, 1, 0)) {
+          const gy = map.heightAt(sx, sz);
+          place('box', sx, sz, 0.6, 8, 0.6, rot, '#9a9c9e', S.CONCRETE, 3, { margin: -1 });
+          place('box', sx, sz, 4.5, 2.6, 0.6, rot, drng.pick(['#e8382d', '#2c6fb5', '#f2b41c', '#ffffff', '#2f9e5b']), S.CONCRETE, 3, { yBase: gy + 8, margin: -1, lit: 1 });
+        }
+      }
+
+      /** Small industrial lot in the outer suburbs: a workshop shed or two, a yard and a tank, tin roofs. */
+      function fillIndustrialLot(): void {
+        const n = drng.int(1, 3);
+        for (let i = 0, placed = 0; i < n * 3 && placed < n; i++) {
+          const fw = drng.range(18, Math.min(50, bw * 0.7)), fd = drng.range(14, Math.min(34, bd * 0.7));
+          const lx = drng.range(bx0 + fw / 2, bx1 - fw / 2), lz = drng.range(bz0 + fd / 2, bz1 - fd / 2);
+          const rot = d.rot + drng.range(-0.04, 0.04);
+          const [x, z] = toWorld(lx, lz);
+          if (!landOK(x, z, fw, fd, rot) || !areaFree(x, z, fw + 4, fd + 4, rot)) continue;
+          placed++;
+          const lk = look(FAM.industrial, drng);
+          const h = drng.range(5.5, 9.5);
+          const top = place('box', x, z, fw, h, fd, rot, lk.tint, S.INDUSTRIAL, 4.0, { lit: lk.lit, warm: lk.warm, variant: lk.variant, margin: 2 });
+          if (top === null) continue;
+          if (drng.chance(0.6)) place('box', x, z, fw + 0.6, 0.5, fd + 0.6, rot, drng.pick(['#8f9599', '#b8bab6', '#7d8489', '#a2836a']), S.CONCRETE, 3, { yBase: top - 0.05, margin: -1 });
+          const nv = drng.int(0, 3);
+          for (let k = 0; k < nv; k++) place('cyl', x + drng.range(-fw * 0.35, fw * 0.35), z + drng.range(-fd * 0.3, fd * 0.3), 1.2, drng.range(0.8, 1.6), 1.2, 0, '#c4c7c9', S.CONCRETE, 3, { yBase: top + 0.3, margin: -1 });
+          if (drng.chance(0.4)) {
+            const [tx, tz] = toWorld(lx + fw / 2 + 7, lz + drng.range(-fd * 0.3, fd * 0.3));
+            if (landOK(tx, tz, 8, 8, 0) && !occupied(tx, tz)) place('cyl', tx, tz, drng.range(4, 7), drng.range(5, 9), drng.range(4, 7), 0, drng.pick(['#dcdcd4', '#cfd6dd', '#b7b9b3']), S.CONCRETE, 3);
           }
         }
       }
