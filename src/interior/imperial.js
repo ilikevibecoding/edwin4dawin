@@ -567,12 +567,26 @@ export function impConsole(kit, ctx, { x, z, y = 0, yaw = 0, w = 1.8, d = 0.8, h
     const sg = new THREE.PlaneGeometry(w - 0.3, 0.62);
     add("impScreen" + (screens[0] % 5), sg, 0, h + 0.42, -d / 2 + 0.123, { uv: "keep" });
   }
-  // collider (axis-aligned bound of the rotated footprint)
+  // collider: axis-aligned when the console is (near) axis-aligned; a yawed console is swept as a
+  // chain of small boxes along its width, so the footprint stays tight against walk lanes instead
+  // of inflating to the bound of the rotated rectangle (~40 % extra at 45°)
   const c = Math.abs(Math.cos(yaw));
   const s = Math.abs(Math.sin(yaw));
-  const ex = (w * c + d * s) / 2;
-  const ez = (w * s + d * c) / 2;
-  kit.collider([x - ex, y, z - ez], [x + ex, y + h, z + ez], "console");
+  const axisAligned = Math.min(c, s) < 0.05;
+  if (axisAligned) {
+    const ex = (w * c + d * s) / 2;
+    const ez = (w * s + d * c) / 2;
+    kit.collider([x - ex, y, z - ez], [x + ex, y + h, z + ez], "console");
+  } else {
+    const n = Math.max(2, Math.ceil(w / (d * 0.75)));
+    const seg = w / n;
+    const ex = (seg * c + d * s) / 2;
+    const ez = (seg * s + d * c) / 2;
+    for (let i = 0; i < n; i++) {
+      const p = local((i + 0.5) * seg - w / 2, 0, 0);
+      kit.collider([p.x - ex, y, p.z - ez], [p.x + ex, y + h, p.z + ez], "console");
+    }
+  }
   if (chair) impChair(kit, ctx, { x: local(0, 0, d / 2 + 0.55).x, z: local(0, 0, d / 2 + 0.55).z, y, yaw });
 }
 
