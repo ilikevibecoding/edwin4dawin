@@ -573,8 +573,6 @@ function buildHangarMouth(ctx) {
     const cx = (o.x0 + o.x1) / 2;
     const dome = (p) => clamp01(1 - Math.pow((2 * (p.x - cx)) / (o.x1 - o.x0), 2)) * clamp01(1 - Math.pow((2 * (p.z - zm)) / (o.z1 - o.z0), 2));
     sheet.grid(V(o.x0, yF(o.z0), o.z0), V(o.x1, yF(o.z0), o.z0), V(o.x1, yF(o.z1), o.z1), V(o.x0, yF(o.z1), o.z1), 4, 6, (p) => fc.clone().multiplyScalar(0.03 + 0.02 * dome(p)), 1, DOWN);
-    const fld = chunks.batch(zm, "far", "field");
-    fld.quad(V(o.x0, yF(o.z0) - 0.08, o.z0), V(o.x1, yF(o.z0) - 0.08, o.z0), V(o.x1, yF(o.z1) - 0.08, o.z1), V(o.x0, yF(o.z1) - 0.08, o.z1), 0xffffff, 1 / 12, DOWN);
   }
   // approach lights: white pairs along the sides, red across the fore / aft bars
   const em = chunks.batch(zm, "far", "exta_emit");

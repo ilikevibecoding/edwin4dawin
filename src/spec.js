@@ -271,7 +271,7 @@ function door(a, b, pos, axis, opts = {}) {
 // ---- Deck E: hangar deck --------------------------------------------------------------------
 {
   const y = DECKS.E.y;
-  room({ id: "hangar", name: "Main Hangar Bay", deck: "E", origin: [0, y, -30], size: [130, 40, 220], accent: "#ffb45a", kind: "hangar", fog: 0.0035, spawn: { x: -20, z: 90, yaw: 20, pitch: 2 }, tags: ["key"] });
+  room({ id: "hangar", name: "Main Hangar Bay", deck: "E", origin: [0, y, -30], size: [130, 40, 220], accent: "#ffb45a", kind: "hangar", fog: 0.0035, spawn: { x: -36, z: 78, yaw: 14, pitch: 1 }, tags: ["key"] });
   room({ id: "fighter_bay", name: "Fighter Maintenance & Refuelling", deck: "E", origin: [-95.4, y, -60], size: [50, 14, 80], accent: "#ffa040", fog: 0.008, spawn: { x: 22, z: 30, yaw: 30, pitch: 0 } });
   room({ id: "shuttle_bay", name: "Shuttle & Secondary Docking Bay", deck: "E", origin: [95.4, y, -60], size: [50, 18, 80], accent: "#a0c8ff", fog: 0.008, spawn: { x: -22, z: 30, yaw: -30, pitch: 0 } });
   room({ id: "cargo", name: "Cargo Storage & Logistics", deck: "E", origin: [0, y, 110.4], size: [80, 14, 60], accent: "#d0a060", fog: 0.01, spawn: { x: 0, z: -27, yaw: 180, pitch: -2 } });

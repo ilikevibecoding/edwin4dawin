@@ -547,8 +547,10 @@ inside except from view rooms (bridge, observation, hangar, flight control, Kest
 - The Kestrel bathroom mirror re-renders the scene (2.5M triangles in that one view).
 - Rooms are furnished by code; a few repeated fixtures (ceiling slot strips, wall gear pods) are
   recognisably modular at close range.
-- Hangar containment field from outside (`ext_hangar_mouth`) reads as a blue-lit opening; from inside
-  the opening's centre measures luma 14 (dark, stars visible).
+- Hangar containment field: the field material is now a faint desaturated additive lattice (0.035) and
+  the hangar spawn looks along the west deck lane (parked TIEs, bowser, racks, bay numbers) with the
+  opening at a grazing angle; from outside (`ext_hangar_mouth`) the mouth still reads as a flat lit pane
+  rather than a deep lit interior.
 - QA waypoint list needs re-pointing after the round-3 furniture changes (4 stair legs).
 - Fighters follow scripted spline paths; no avoidance, no pilots (hooks in `TrafficHooks`).
 - Flight / landing / net / audio are stubs with interfaces only (`systems/flight.js`, `systems/landing.js`,

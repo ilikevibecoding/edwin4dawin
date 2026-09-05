@@ -196,7 +196,7 @@ export function buildMaterials() {
     decalImp: new THREE.MeshStandardMaterial({ map: makeImperialDecals(1024, 19), transparent: true, depthWrite: false, roughness: 0.7, metalness: 0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2, envMapIntensity: 0.3 }),
     // hangar containment field (animated in main loop via map offset)
     // containment field: felt, not drawn — a faint additive shimmer with a barely-there lattice
-    field: new THREE.MeshBasicMaterial({ color: 0x4a7fff, map: makeFieldPattern(512, 12), transparent: true, opacity: 0.07, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
+    field: new THREE.MeshBasicMaterial({ color: 0x5d78b4, map: makeFieldPattern(512, 12), transparent: true, opacity: 0.035, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
     glowDisc: new THREE.MeshBasicMaterial({ map: makeGlowDisc(256, 0.3), color: 0xffffff, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
 
     // ---------------- Exterior ----------------
