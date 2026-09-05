@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Rng } from '../core/seed';
 import { clamp, lerp, perlin2, smoothstep } from '../core/noise';
-import { Zone, urbanGradient, type District, type WorldMap } from './map';
+import { Canopy, Zone, urbanGradient, type District, type WorldMap } from './map';
 import type { Block } from './roads';
 import { createFacadeMaterial } from './facade';
 import { LAYER_CAMERA, LAYER_CASCADE0, LAYER_MIRROR, MAX_CASCADES, layerMask, maskCasts, type ViewCull } from './culling';
@@ -845,6 +845,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       const bw = bx1 - bx0, bd = bz1 - bz0;
       if (bw < 12 || bd < 12) continue;
       const [cxw, czw] = toWorld((bx0 + bx1) / 2, (bz0 + bz1) / 2);
+      // the authored forest belts (the bay-shore fringe in front of the suburbs) carry no lots
+      if (map.canopyAt(cxw, czw) !== Canopy.NONE) continue;
       const distToCentre = Math.hypot(cxw - d.cx, czw - d.cz) / Math.max(d.hw, d.hh);
       const distToDowntown = Math.hypot(cxw - dt.cx, czw - dt.cz);
       const nb = neighbourhood(cxw, czw);
