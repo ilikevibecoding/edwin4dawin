@@ -717,6 +717,10 @@ export function createRoadside({ terrain, env = null, quality = 'high' } = {}) {
 
   return {
     group,
+    // The collision world reads the kit's buckets — every part posed in world
+    // space before the merge — for one exact collider each; without them it
+    // has to re-cluster parts out of the merged meshes' triangle order.
+    kit,
     update() {},
   };
 }
