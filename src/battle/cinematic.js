@@ -20,7 +20,7 @@ const _s = new THREE.Vector3();
 const _l = new THREE.Vector3();
 const _m = new THREE.Matrix4();
 const UP = new THREE.Vector3(0, 1, 0);
-const OBB_MARGIN = 1.12; // hull boxes inflated by this for the camera clearance
+const OBB_MARGIN = 1.2; // hull boxes inflated by this for the camera clearance
 
 // eased moves that are already travelling on the cut (slope 1.35 at the start, 0.65 at the end)
 const glide = (t) => t * (1.35 - 0.35 * t);

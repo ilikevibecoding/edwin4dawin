@@ -7,6 +7,10 @@ import base from "../vite.config.js";
 export default mergeConfig(
   base,
   defineConfig({
+    // own dependency cache: the workstream worktrees symlink node_modules and run their own Vite servers,
+    // which would otherwise fight over the same .vite/deps directory (stale "Outdated Optimize Dep" 504s,
+    // duplicate three.js instances)
+    cacheDir: "node_modules/.vite-live",
     server: {
       host: "127.0.0.1",
       port: 5174,
