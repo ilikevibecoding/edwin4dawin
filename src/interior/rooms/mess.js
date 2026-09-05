@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import { PALETTE } from "../../materials.js";
 import { roomShell, impWall, wallScreen, equipmentRack, crate, pipeRun, wallSegment } from "../imperial.js";
-import { pointLight, wallFrame } from "../builders.js";
+import { pointLight, wallFrame, ceilingFrame } from "../builders.js";
 import { rng } from "../../kit.js";
 import { decalRect, GRATE_TILE } from "../../textures.js";
 import { ensureCrewMaterials, SIGN, signRect, wallSign, floorSign, messTable, floorGrime, scuffRun, wallGrime, cableTray, ventGrille, valveWheel, gauge, intercom, stool, wallShelf, propFrame } from "./crewProps.js";
@@ -79,8 +79,11 @@ export function buildMess(kit, ctx) {
   const BAND_SIDES = ["zmin", "zmax", "xmax"];
   const warmTheme = { accent: "emitAmberDim", accent2: "emitWhiteDim" };
   roomShell(kit, ctx, {
-    // no white ceiling strips: the warm square fixtures own the light hierarchy
-    ceiling: { lights: false, strips: false, along: "x" },
+    // no white ceiling strips: the warm pendants own the light hierarchy. No fine-slat vent cells
+    // either: a cluster of them over the far right bay aliased into a fizzing checkerboard from the
+    // door (hidden until now under the blown lamp patches); the chunky grille modules below carry the
+    // extraction read instead
+    ceiling: { lights: false, strips: false, along: "x", styles: { panel: 0.9, greeble: 0.1 } },
     skip: BAND_SIDES,
     walls: { rows: [0, 0.5, 1.6, 2.7, H], paints: [[PALETTE.impLight, 1]], styles: { panel: 0.8, vent: 0.1, greeble: 0.1 }, theme: warmTheme },
   });
@@ -97,33 +100,73 @@ export function buildMess(kit, ctx) {
   }
 
   // ------------------------------------------------------------------ lights (6)
+  // The four dining lights hang 1.3 m under the ceiling (0.2 m below the pendant faces): at 0.7 m the
+  // ceiling plate right above each light clipped to a white patch that read as a blown lamp face.
   const warm = 0xffcf98;
+  const PEND_FACE = 2.95;
+  // pendant core: the shared emitAmberDim (1.2) tops out at R 239 on the near cores; this room-local
+  // amber at 0.95 keeps every part of the lamp face under 235
+  if (!ctx.materials.mess_pendCore) ctx.materials.mess_pendCore = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color("#ffb347"), emissiveIntensity: 0.95, roughness: 1, metalness: 0 });
   for (const [x, z] of [
     [8.6, -24.5],
     [8.6, -13.2],
     [15.6, -24.5],
     [15.6, -13.2],
-  ]) ctx.light(pointLight(warm, 17, 15, [x, H - 0.7, z]));
+  ]) ctx.light(pointLight(warm, 16, 15, [x, PEND_FACE - 0.33, z]));
   ctx.light(pointLight(0xffc48a, 9, 11, [20.9, 2.7, -20.0]));
   ctx.light(pointLight(0xeaf0ff, 12, 14, [26.2, H - 0.5, -19.5]));
-  // warm square ceiling fixtures over the table columns (the real lights hang under these). Two of the
-  // six differ: a louvred unit over the far mid column and a twin-tube unit with one tube ageing
-  // amber over the near right column, so the ceiling is not six identical squares.
+  // pendant luminaires over the table columns: a dark hood on two drop rods, a plain faint diffuser
+  // face (uv keep, no plate speckle) and a narrow warm core tube; the two over the far mid / near
+  // right columns carry louvres so the six are not identical
   for (const x of cols0) {
     for (const z of [-24.8, -13.2]) {
-      kit.box("paintedMetal", x, H - 0.05, z, 2.0, 0.08, 1.4, { color: PALETTE.impDark, texel: 2 });
-      if (x === 12.6 && z === -13.2) {
-        kit.box("emitWarmSoft", x, H - 0.095, z, 1.8, 0.02, 1.2, { uv: "keep" });
-        for (let k = 0; k < 7; k++) kit.box("paintedMetal", x - 0.75 + k * 0.25, H - 0.115, z, 0.05, 0.03, 1.28, { color: PALETTE.impBlack, texel: 2 });
-        kit.box("paintedMetal", x, H - 0.115, z, 1.7, 0.03, 0.05, { color: PALETTE.impBlack, texel: 2 });
-      } else if (x === 17.6 && z === -24.8) {
-        kit.box("paintedMetal", x, H - 0.09, z, 1.8, 0.02, 1.2, { color: PALETTE.impBlack, texel: 2 });
-        kit.cyl("emitWarmSoft", x, H - 0.15, z - 0.3, 0.05, 1.6, "x", { segments: 12, uv: "keep" });
-        kit.cyl("emitAmberDim", x, H - 0.15, z + 0.3, 0.05, 1.6, "x", { segments: 12, uv: "keep" });
-        for (const s of [-1, 1]) for (const e of [-1, 1]) kit.box("metal", x + e * 0.84, H - 0.15, z + s * 0.3, 0.08, 0.12, 0.12, { color: PALETTE.gunmetal });
-      } else {
-        kit.box("emitWarmSoft", x, H - 0.095, z, 1.8, 0.02, 1.2, { uv: "keep" });
-        for (const s of [-1, 1]) kit.box("paintedMetal", x + s * 0.6, H - 0.1, z, 0.04, 0.03, 1.3, { color: PALETTE.impBlack, texel: 2 });
+      const yf = PEND_FACE;
+      for (const s of [-1, 1]) {
+        kit.cyl("metal", x + s * 0.62, (yf + 0.2 + H) / 2, z, 0.012, H - yf - 0.2, "y", { color: PALETTE.gunmetal, segments: 6 });
+        kit.cyl("paintedMetal", x + s * 0.62, H - 0.02, z, 0.07, 0.04, "y", { color: PALETTE.impBlack, segments: 10, texel: 2 });
+      }
+      kit.box("paintedMetal", x, yf + 0.1, z, 1.9, 0.16, 0.72, { color: PALETTE.impDark, texel: 2 });
+      kit.box("paintedMetal", x, yf + 0.2, z, 1.5, 0.04, 0.5, { color: PALETTE.impBlack, texel: 2 });
+      kit.box("paintedMetal", x, yf + 0.015, z, 1.94, 0.03, 0.76, { color: PALETTE.impBlack, texel: 2 });
+      // diffuser block stands 5 cm proud of the rim so its faint sides read from across the room
+      kit.box("emitWhiteFaint", x, yf - 0.02, z, 1.7, 0.06, 0.54, { uv: "keep" });
+      kit.cyl("mess_pendCore", x, yf - 0.07, z, 0.028, 1.5, "x", { segments: 10, uv: "keep" });
+      for (const s of [-1, 1]) kit.box("metal", x + s * 0.78, yf - 0.06, z, 0.06, 0.08, 0.1, { color: PALETTE.gunmetal });
+      if ((x === 12.6 && z === -13.2) || (x === 17.6 && z === -24.8)) {
+        for (let k = 0; k < 6; k++) kit.box("paintedMetal", x - 0.625 + k * 0.25, yf - 0.06, z, 0.03, 0.02, 0.58, { color: PALETTE.impBlack, texel: 2 });
+      }
+    }
+  }
+  // ceiling bays: the panel grid is one 1.43 x 1.375 m module everywhere, so each bay between the
+  // pendant columns carries a transverse service run of a different module, alternating bay by bay:
+  // plain blank access plates in the first and third bay, extraction grilles in the second and fourth.
+  // The grilles are five chunky slats along x over a black recess: fine slats and the grate mesh quad
+  // both aliased into a checkerboard at the far bay's grazing angle
+  {
+    const nc = Math.round((max[0] - min[0]) / 1.4);
+    const cw = (max[0] - min[0]) / nc;
+    const nr = Math.round((max[2] - min[2]) / 1.4);
+    const rh = (max[2] - min[2]) / nr;
+    const cf = ceilingFrame(kit, min[0], min[2], H);
+    for (const [ci, kind] of [
+      [1, "plate"],
+      [5, "grille"],
+      [8, "plate"],
+      [11, "grille"],
+    ]) {
+      const u = (ci + 0.5) * cw;
+      for (let ri = 0; ri < nr; ri++) {
+        const v = (ri + 0.5) * rh;
+        if (kind === "plate") {
+          // plain plates; every fifth is a darker access hatch with a status lamp
+          const hatch = ri % 5 === 2;
+          cf.box("paintedMetal", u, v, 0.012, cw - 0.012, rh - 0.012, 0.024, { color: hatch ? PALETTE.impMid : PALETTE.impGrey, texel: 1.5 });
+          if (hatch) cf.box("emitAmberDim", u + cw * 0.3, v, 0.026, 0.05, 0.02, 0.006, { uv: "keep" });
+        } else {
+          cf.box("paintedMetal", u, v, 0.01, cw - 0.012, rh - 0.012, 0.02, { color: PALETTE.impMid, texel: 1.5 });
+          cf.box("paintedMetal", u, v, 0.035, 1.2, 1.1, 0.03, { color: PALETTE.impBlack, texel: 2 });
+          for (let k = -2; k <= 2; k++) cf.box("metal", u, v + k * 0.22, 0.06, 1.16, 0.07, 0.03, { color: PALETTE.impMid });
+        }
       }
     }
   }
