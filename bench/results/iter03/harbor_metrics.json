@@ -1,0 +1,244 @@
+{
+ "view": "harbor",
+ "stillUrl": "http://127.0.0.1:4173/?bench=harbor&w=1920&h=1080&quality=high&seed=20260904&freeze=1",
+ "setupMs": 6715,
+ "still": {
+  "warmupRenderMs": 8063.89999999851,
+  "renderMs": 16.300000000745058,
+  "metrics": {
+   "frames": 3,
+   "avgMs": 3371.533333333209,
+   "p99Ms": 8063.799999998882,
+   "minFps": 0.12401101217789859,
+   "avgFps": 0.29660095307774015,
+   "onePercentLowFps": 0.12401101217789859,
+   "calls": 1376,
+   "triangles": 12503464,
+   "points": 12,
+   "lines": 0,
+   "geometries": 532,
+   "textures": 39,
+   "programs": 40,
+   "jsHeapMB": 143.6481227874756,
+   "gpuMs": null,
+   "longTasks": 1,
+   "visibleObjects": 0,
+   "frame": 0,
+   "flying": false,
+   "telemetry": {
+    "airspeed": 47.48480543902742,
+    "altitude": 160,
+    "heading": 52,
+    "alpha": 0,
+    "stalled": false,
+    "onWater": false
+   },
+   "build": "e5be510f6628-2026-09-04T1019",
+   "view": "harbor",
+   "camera": {
+    "pos": [
+     -2113.5378942496473,
+     167.06981766526832,
+     -2489.4230378095826
+    ],
+    "quat": [
+     -0.1472893745330966,
+     -0.4324448968605357,
+     -0.07183782790981737,
+     0.8866434332978106
+    ],
+    "fov": 51.23162393317437
+   }
+  },
+  "landmarks": {
+   "planeCentroid": [
+    0.4999999999967488,
+    0.5638625382398366
+   ],
+   "bridgeStart": null,
+   "bridgeEnd": [
+    2.325187757771581,
+    0.29825854202797386
+   ],
+   "landmark:Meridian Tower": [
+    -1.1590672049735735,
+    -0.21190123392087823
+   ],
+   "landmark:Faro Bah\u00eda": [
+    -3.2121591248135766,
+    -0.20824453259379982
+   ],
+   "landmark:Twin Palms A": [
+    -1.7922063543684064,
+    0.09241019554543489
+   ],
+   "landmark:Twin Palms B": [
+    -1.4061938678655592,
+    0.0994882320413637
+   ],
+   "landmark:The Sail": [
+    -1.406959258877134,
+    0.062498113990121396
+   ],
+   "landmark:Terraces": [
+    -0.7793396328387168,
+    0.1580370662295536
+   ],
+   "landmark:Crown Plaza": [
+    -3.097062746630201,
+    -0.0964590916313931
+   ],
+   "landmark:Helix": [
+    -0.544443346298759,
+    0.10094233248742451
+   ],
+   "landmark:Aquamarine": null,
+   "bridge2End": [
+    1.7131876799596297,
+    0.23200803499295658
+   ],
+   "horizonCentre": [
+    -0.29195799962667,
+    0.1500020817090354
+   ]
+  }
+ },
+ "profile": {
+  "frames": 8,
+  "avgMs": 5194.9375,
+  "minMs": 5126.800000000745,
+  "maxMs": 5266.4000000003725,
+  "p95Ms": 5266.4000000003725,
+  "onePercentLowMs": 5266.4000000003725
+ },
+ "flight": {
+  "stepAndRenderMs": 90.69999999925494,
+  "metrics": {
+   "frames": 12,
+   "avgMs": 848.3166666664183,
+   "p99Ms": 8063.799999998882,
+   "minFps": 0.12401101217789859,
+   "avgFps": 1.1788050845796099,
+   "onePercentLowFps": 0.12401101217789859,
+   "calls": 1348,
+   "triangles": 12569190,
+   "points": 11,
+   "lines": 0,
+   "geometries": 541,
+   "textures": 40,
+   "programs": 40,
+   "jsHeapMB": 116.75026512145996,
+   "gpuMs": 5116.320066,
+   "longTasks": 1,
+   "visibleObjects": 0,
+   "frame": 90,
+   "flying": true,
+   "telemetry": {
+    "airspeed": 50.84913751663533,
+    "altitude": 150.07149924287853,
+    "heading": 47.675255110479156,
+    "alpha": 0.0383722067823669,
+    "stalled": false,
+    "onWater": false
+   },
+   "build": "e5be510f6628-2026-09-04T1019",
+   "view": "harbor",
+   "camera": {
+    "pos": [
+     -1987.1563600832487,
+     157.01072666074526,
+     -2583.802756493686
+    ],
+    "quat": [
+     -0.16339276655430401,
+     -0.3648363817909513,
+     -0.06572260617827999,
+     0.9142635054493605
+    ],
+    "fov": 51.669941601007
+   }
+  },
+  "landmarks": {
+   "planeCentroid": [
+    0.5383711478062715,
+    0.39157088192894063
+   ],
+   "bridgeStart": null,
+   "bridgeEnd": [
+    4.906705613329017,
+    0.4530564798259481
+   ],
+   "landmark:Meridian Tower": [
+    -0.9578377677639152,
+    -0.2325434785790398
+   ],
+   "landmark:Faro Bah\u00eda": [
+    -2.4306432615473166,
+    -0.200068436783975
+   ],
+   "landmark:Twin Palms A": [
+    -1.5858472273227107,
+    0.040776342541397004
+   ],
+   "landmark:Twin Palms B": [
+    -1.2663971800051481,
+    0.04958681176462265
+   ],
+   "landmark:The Sail": [
+    -1.0850289834810147,
+    0.031007197958320132
+   ],
+   "landmark:Terraces": [
+    -0.6816324418976929,
+    0.11438398718747239
+   ],
+   "landmark:Crown Plaza": [
+    -2.162281168509608,
+    -0.08982536523975504
+   ],
+   "landmark:Helix": [
+    -0.41523166222221186,
+    0.06542607740669959
+   ],
+   "landmark:Aquamarine": [
+    -24.056927585662507,
+    -2.69840563603808
+   ],
+   "bridge2End": [
+    2.542468691015167,
+    0.24768856706104098
+   ],
+   "horizonCentre": [
+    -0.0869439919029511,
+    0.12439340165763857
+   ]
+  }
+ },
+ "consoleErrors": 0,
+ "crops": {
+  "aircraft": [
+   797,
+   446,
+   324
+  ],
+  "environment": [
+   766,
+   346,
+   388
+  ],
+  "medium": [
+   425,
+   335,
+   302
+  ],
+  "distant": [
+   733,
+   65,
+   453
+  ]
+ },
+ "flicker": null,
+ "clip": {
+  "frameTimesMs": null
+ }
+}

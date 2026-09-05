@@ -1,0 +1,1851 @@
+{
+  "critic": "technical",
+  "tag": "iter02",
+  "build": "b0bbb50dc068-2026-09-04T0950",
+  "categoriesScored": [
+    20,
+    21,
+    23,
+    25,
+    26,
+    27
+  ],
+  "frames": {
+    "aerial-a": {
+      "scores": {
+        "20": 5,
+        "21": 6,
+        "23": 4,
+        "25": 3,
+        "26": 7,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 5,
+          "cells": "A1-H2, B5-H6, G7",
+          "condition": "still vs 90th flight frame from the same fixed camera; temporal behaviour inferred from source (sky.ts static hash12 jitter, vegetation.ts count thinning at 2000/3500/5000 m, game.ts PMREM refresh every 5 s)",
+          "evidence": "Cloud grain is a fixed per-pixel dither (hash12(gl_FragCoord) jitter at 0.6 render scale) that does not move with the clouds; the aircraft moved 470 px between still and flight without frame-to-frame smear, but vegetation tiles switch instance count at 2000/3500/5000 m and castShadow at 1800 m, and the environment map is rebuilt every 5 s.",
+          "defect": "Static dither grain on clouds and threshold-based tree/shadow popping plus a 5 s environment-map rebuild hitch are temporal defects a player sees in ordinary flight.",
+          "fix": "Replace the static jitter with blue-noise + temporal accumulation or a 3x3 depth-aware upsample, fade instance counts over 300 m instead of stepping, and time-slice the PMREM refresh over 6 frames.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 6,
+          "cells": "G7",
+          "condition": "HUD/telemetry consistency of the posed aircraft (112 KIAS, 1444 ft, +550 fpm, heading 326) and plausibility of the flight log (flighttest.json) against a 2.3 t bush floatplane",
+          "evidence": "HUD values match metrics telemetry (57.8 m/s = 112 kt, 440 m = 1444 ft); the log gives liftoff 64.7 KIAS at 20.8 s, 759 fpm at 95 KIAS, 109 KIAS at 74% power still accelerating (Vmax solves to ~138 kt), 45-degree turn 8.7 deg/s at 120 kt (theory 9.1), stall 53 KIAS at alpha 15.5 deg - all within DHC-2 class figures.",
+          "defect": "The approach ended in a nose-over to -76 deg pitch / -82 deg bank on land with no crash state (physics.ts has only two wheel contact points, both at x = -0.9 behind the CG), and post-stall the aircraft mushed at alpha 11-13 deg for 15 s with a +/-10 deg pitch phugoid.",
+          "fix": "Add the two bow-wheel contact points (2.3, -2.35, +/-1.25), steepen post-stall lift loss (3.5 -> 6.0 per rad), raise Cm_q from -18 to -22, cut elevator power 0.8 -> 0.45, and add a crash/reset state.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "A3-C3, G3-H3, C5-G6",
+          "condition": "compare near, mid and far detail: island trees at 1-2 km, skyline at 4-6 km, far shore at 8+ km",
+          "evidence": "Island trees are identical lollipop canopies (3 variants, same silhouette) at every distance; the far city and shore collapse into a uniform pale speckle with no haze gradient; buildings are unlit boxes at all ranges.",
+          "defect": "Clone trees and a speckled, un-hazed far shore break the detail gradient the reference shows.",
+          "fix": "Add per-instance canopy scale/shear noise and 6+ variants, add distance haze in the terrain/city materials (aerial perspective is only applied in post to depth, not to the city albedo speckle), and use an impostor atlas beyond 500 m.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "A3-H3, B5-H6, A1-H2, G7, H8",
+          "condition": "pixel inspection of horizon, shorelines, clouds and aircraft in still_grid.png and crops",
+          "evidence": "A straight, un-blended line separates haze band and sea across A3-H3; the island carries a constant-width pale foam band; clouds show fixed dither grain; the registration decal on the fuselage reads mirrored; a dark speck at H8 sits on the water with no wake or hull.",
+          "defect": "Hard horizon seam, uniform foam ring, dithered clouds and a mirrored decal are hard artifacts.",
+          "fix": "Blend water into the horizon haze with a 2-3 deg gradient in the water shader (dist > 6 km), modulate shore foam width with a shore-distance texture, fix the decal UV mirroring (flip u on the starboard copy), and denoise the cloud march.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 7,
+          "cells": "A1-A2, E1, H1",
+          "condition": "readability of HUD boxes over bright cloud and sky at 1920x1080",
+          "evidence": "White 20 px numerals on translucent dark boxes are legible; the 10 px grey labels (KIAS, ALT FT, V/S) sit at low contrast against the box; the HUD occupies < 5% of the frame and does not cover the reference composition.",
+          "defect": "Labels are too small and low-contrast; the bottom-left debug string overlaps the frame edge.",
+          "fix": "Raise label size to 13 px and contrast to >= 4.5:1, move the debug string outside the capture in bench mode.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "whole frame",
+          "condition": "renderer.info counters for the still and the 90th flight frame at 1920x1080 quality=high (3 CSM cascades, PCFSoft 2048^2, 4x MSAA HalfFloat target, logarithmic depth, bloom), judged against 60 FPS on a mid-range GPU",
+          "evidence": "still: 1295 draw calls, 9.87 M triangles, 634 geometries, 41 textures, 40 programs, JS heap 143 MB; flight frame: 1270 calls, 9.87 M triangles, heap 138 MB; console errors 1. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+          "defect": "~1,050-1,500 draw calls and 6-11 M triangles per frame (of which roughly two thirds are the three CSM shadow passes over instanced vegetation/buildings), a full-screen water shader with 4 gradient-noise layers + 5 fbm3 + PCFSoft on 3 cascades, logarithmicDepthBuffer forcing gl_FragDepth writes (no early-Z), a 24-step cloud march at 0.6 scale and 11 full-screen post passes; WebGL draw-call CPU cost alone (~1,300 calls) is estimated at 8-20 ms, so 60 FPS at 1080p on a mid-range GPU is unlikely. This view also logged 1 console error during capture.",
+          "fix": "Cut shadow work first (vegetation castShadow < 900 m, buildings < 1500 m, PCFSoft only on cascade 0, maxFar capped at 6 km), add impostor LOD for trees > 500 m, drop logarithmicDepthBuffer (near 2 m / far 40 km camera-relative) so early-Z returns, share/precompute the water fbm3 shore terms, time-slice the PMREM refresh, merge building kinds per tile into one instanced draw; target <= 650 calls and <= 4 M triangles. Resolve the console error (capture its text in metrics.json) before the next round.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "hardArtifacts": [
+        {
+          "type": "horizon seam",
+          "cells": "A3-H3",
+          "description": "straight un-blended line between haze and sea"
+        },
+        {
+          "type": "uniform foam ring",
+          "cells": "B5-H6",
+          "description": "constant-width pale band around the whole island"
+        },
+        {
+          "type": "dither/noise",
+          "cells": "A1-H2",
+          "description": "fixed per-pixel cloud march grain"
+        },
+        {
+          "type": "texture mirroring",
+          "cells": "G7",
+          "description": "registration decal mirrored on the visible side"
+        },
+        {
+          "type": "clone vegetation",
+          "cells": "C5-G6",
+          "description": "identical lollipop canopies"
+        },
+        {
+          "type": "floating object",
+          "cells": "H8",
+          "description": "dark speck on the water with no hull or wake"
+        }
+      ],
+      "worst3": [
+        "hard horizon seam A3-H3",
+        "uniform foam ring around the island B5-H6",
+        "fixed cloud dither grain A1-H2"
+      ],
+      "best3": [
+        "HUD telemetry matches renderer telemetry exactly",
+        "aircraft placed within 3% of the reference centroid (objective.json 0.033)",
+        "no z-fighting between terrain, roads and buildings at 4 km thanks to log depth"
+      ]
+    },
+    "cockpit-city": {
+      "scores": {
+        "20": 4,
+        "21": 1,
+        "23": 4,
+        "25": 2,
+        "26": 4,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 4,
+          "cells": "C3-H8",
+          "condition": "still vs flight frame from the cockpit camera; orientation smoothing from camera.ts (slerp 1-exp(-14 dt))",
+          "evidence": "Both frames are dominated by the same dark cabin geometry; the visible world strip A3-B8 moved smoothly between frames; camera jitter is 0.012 * shake, effectively zero here.",
+          "defect": "No temporal defect measurable because 75% of the frame is occluded by cabin geometry; the visible strip shows the same tree popping thresholds as other views.",
+          "fix": "Fix the eye position first, then re-evaluate temporal stability.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 1,
+          "cells": "C3-H8",
+          "condition": "cockpit camera eye placement vs cabin geometry",
+          "evidence": "The eye sits inside/behind the cabin shell: columns C-H rows 3-8 are flat dark fuselage surfaces, the wing underside occupies F2-H2 and a red strut tip D2-E2; no instrument panel or windshield frame is visible although the view promises them.",
+          "defect": "Camera clips into the cabin geometry and the view is unusable for flying.",
+          "fix": "Move model.cockpitEye forward/up so it sits between the panel top and the roof (roughly +0.25 m x, +0.12 m y), and put the exterior shell on a layer the cockpit camera does not render.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "A3-B8, C4-C8",
+          "condition": "detail gradient in the visible strip: coast at 1-3 km, tower edge at C4-C8",
+          "evidence": "Coast buildings are flat pastel boxes with no window detail at 1-2 km while the tower edge at C4-C8 is a single aliased vertical line; vegetation reads as green blobs.",
+          "defect": "Detail does not scale with distance; mid-range facades are as flat as far ones.",
+          "fix": "Add a facade window pattern that fades by distance and a proper mid-LOD for buildings inside 2 km.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 25,
+          "score": 2,
+          "cells": "C3-H8, C4-C8",
+          "condition": "pixel inspection of the cabin surfaces and window edges",
+          "evidence": "Cabin surfaces are one flat dark-blue tone with uniform roughness and no normal detail; the tower edge is aliased; the view intersects geometry.",
+          "defect": "Camera intersecting geometry and a uniform-roughness interior are hard failures.",
+          "fix": "Fix the eye placement, add interior materials (panel, glareshield, posts) and MSAA-friendly edge geometry.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 4,
+          "cells": "A1-A2, E1, H1, F2-H2",
+          "condition": "HUD readability and instrument visibility from the pilot seat",
+          "evidence": "HUD boxes are legible but the heading box E1 and THR/RPM boxes overlap the wing; the instrument panel is not in frame so the only flight data are HUD overlays.",
+          "defect": "Instrument panel absent from the cockpit view; HUD overlaps aircraft geometry.",
+          "fix": "Frame the panel in the cockpit camera and hide the exterior HUD boxes when in cockpit mode.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "whole frame",
+          "condition": "renderer.info counters for the still and the 90th flight frame at 1920x1080 quality=high (3 CSM cascades, PCFSoft 2048^2, 4x MSAA HalfFloat target, logarithmic depth, bloom), judged against 60 FPS on a mid-range GPU",
+          "evidence": "still: 1266 draw calls, 9.44 M triangles, 578 geometries, 36 textures, 40 programs, JS heap 113 MB; flight frame: 1255 calls, 9.45 M triangles, heap 114 MB; console errors 0. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+          "defect": "~1,050-1,500 draw calls and 6-11 M triangles per frame (of which roughly two thirds are the three CSM shadow passes over instanced vegetation/buildings), a full-screen water shader with 4 gradient-noise layers + 5 fbm3 + PCFSoft on 3 cascades, logarithmicDepthBuffer forcing gl_FragDepth writes (no early-Z), a 24-step cloud march at 0.6 scale and 11 full-screen post passes; WebGL draw-call CPU cost alone (~1,300 calls) is estimated at 8-20 ms, so 60 FPS at 1080p on a mid-range GPU is unlikely.",
+          "fix": "Cut shadow work first (vegetation castShadow < 900 m, buildings < 1500 m, PCFSoft only on cascade 0, maxFar capped at 6 km), add impostor LOD for trees > 500 m, drop logarithmicDepthBuffer (near 2 m / far 40 km camera-relative) so early-Z returns, share/precompute the water fbm3 shore terms, time-slice the PMREM refresh, merge building kinds per tile into one instanced draw; target <= 650 calls and <= 4 M triangles.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "hardArtifacts": [
+        {
+          "type": "camera clipping",
+          "cells": "C3-H8",
+          "description": "camera eye inside the cabin shell; fuselage covers most of the frame"
+        },
+        {
+          "type": "uniform roughness",
+          "cells": "C3-H8",
+          "description": "flat single-tone cabin surfaces"
+        },
+        {
+          "type": "aliasing",
+          "cells": "C4-C8",
+          "description": "tower edge is a stair-stepped single line"
+        }
+      ],
+      "worst3": [
+        "camera inside cabin geometry C3-H8",
+        "no instrument panel in a cockpit view",
+        "aliased tower edge C4-C8"
+      ],
+      "best3": [
+        "cockpit orientation smoothing (slerp) produced no visible lag between frames",
+        "HUD numerals legible",
+        "lowest JS heap of the round (113 MB)"
+      ]
+    },
+    "bridge-low": {
+      "scores": {
+        "20": 3,
+        "21": 3,
+        "23": 4,
+        "25": 2,
+        "26": 7,
+        "27": 4
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 3,
+          "cells": "A5-B6, D5-F6 vs B3",
+          "condition": "still vs 90th flight frame of the chase camera; water sparkle in crops",
+          "evidence": "The aircraft centroid jumped from (0.50, 0.57) to (0.19, 0.33) between still and flight; water at A5-B6 shows high-frequency specular speckle that will shimmer frame to frame.",
+          "defect": "Camera framing is unstable and the water sparkles.",
+          "fix": "Fix the look-target bug in camera.ts (fwd aliases this.tmp which is overwritten by acc) and clamp water roughness to >= 0.08 beyond 100 m.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "B3",
+          "condition": "chase camera tracking over 90 simulated frames (camera.ts) and posed physics (55 KIAS, 4 deg bank)",
+          "evidence": "In camera.ts the look target uses fwd after this.tmp has been reused for the spring acceleration, so the camera looks at position + 6 * acceleration; the aircraft drifted to the top-left quarter of the frame.",
+          "defect": "Chase camera fails to keep the aircraft near frame centre in ordinary flight.",
+          "fix": "Use a dedicated vector for fwd (or compute look before acc), soften the spring (k 60 -> 25, zeta 0.8) and add a terrain clearance test using heightAt instead of y < 1.2.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "C2-E3, F3, F2-H3",
+          "condition": "compare the near deck (C6-D8), far causeway (C2-E3) and port (F2-H3)",
+          "evidence": "Far causeway arch simplifies to a flat ribbon with no railing; containers at F3 are aliased 2-3 px blocks with no colour variation; the near deck edge is a clean but texture-less slab.",
+          "defect": "Detail drops abruptly instead of gracefully with distance.",
+          "fix": "Add a railing/lamp LOD and a container atlas with colour variation; give the deck edge a kerb normal map.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 25,
+          "score": 2,
+          "cells": "C6-D8, C2-E3, H3, A5-B6, E6",
+          "condition": "pixel inspection of bridge piers, ships, water and the aircraft shadow",
+          "evidence": "Bridge deck supports do not visibly reach the water, the ship hull at H3 sits above its waterline, water shows moire speckle, and the aircraft shadow is a blurred smudge from a coarse far cascade.",
+          "defect": "Floating bridge supports, floating boats, shimmer and a detached-looking blurred shadow are hard failures.",
+          "fix": "Extend piers below y=0 with a wet band, sink hulls 0.4 m, tighten cascade 0 (split 0-150 m) so near shadows are sharp.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 7,
+          "cells": "A1-A2, E1, H1",
+          "condition": "HUD legibility over sky and bridge",
+          "evidence": "Numerals legible; labels small and low-contrast; HUD does not cover the composition.",
+          "defect": "Small low-contrast labels.",
+          "fix": "Increase label size/contrast.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 4,
+          "cells": "whole frame",
+          "condition": "renderer.info counters for the still and the 90th flight frame at 1920x1080 quality=high (3 CSM cascades, PCFSoft 2048^2, 4x MSAA HalfFloat target, logarithmic depth, bloom), judged against 60 FPS on a mid-range GPU",
+          "evidence": "still: 1187 draw calls, 11.08 M triangles, 532 geometries, 39 textures, 40 programs, JS heap 143 MB; flight frame: 1343 calls, 10.70 M triangles, heap 113 MB; console errors 0. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+          "defect": "Heaviest triangle load of the round (11.08 M still / 10.70 M flight) from the port, causeway and mangrove tiles all inside the 1.8 km vegetation shadow radius. ~1,050-1,500 draw calls and 6-11 M triangles per frame (of which roughly two thirds are the three CSM shadow passes over instanced vegetation/buildings), a full-screen water shader with 4 gradient-noise layers + 5 fbm3 + PCFSoft on 3 cascades, logarithmicDepthBuffer forcing gl_FragDepth writes (no early-Z), a 24-step cloud march at 0.6 scale and 11 full-screen post passes; WebGL draw-call CPU cost alone (~1,300 calls) is estimated at 8-20 ms, so 60 FPS at 1080p on a mid-range GPU is unlikely.",
+          "fix": "Cut shadow work first (vegetation castShadow < 900 m, buildings < 1500 m, PCFSoft only on cascade 0, maxFar capped at 6 km), add impostor LOD for trees > 500 m, drop logarithmicDepthBuffer (near 2 m / far 40 km camera-relative) so early-Z returns, share/precompute the water fbm3 shore terms, time-slice the PMREM refresh, merge building kinds per tile into one instanced draw; target <= 650 calls and <= 4 M triangles.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "hardArtifacts": [
+        {
+          "type": "floating geometry",
+          "cells": "C6-D8",
+          "description": "bridge supports do not reach the water"
+        },
+        {
+          "type": "floating geometry",
+          "cells": "H3",
+          "description": "ship hull above the waterline"
+        },
+        {
+          "type": "shimmer",
+          "cells": "A5-B6",
+          "description": "high-frequency specular speckle on water"
+        },
+        {
+          "type": "aliasing",
+          "cells": "F3",
+          "description": "container stacks as 2-3 px stair-stepped blocks"
+        },
+        {
+          "type": "detached/blurred shadow",
+          "cells": "D5-F6",
+          "description": "aircraft shadow over-blurred by far cascade"
+        },
+        {
+          "type": "camera tracking failure",
+          "cells": "B3",
+          "description": "aircraft displaced to (0.19, 0.33) in the flight frame"
+        }
+      ],
+      "worst3": [
+        "chase camera loses the aircraft (flight frame B3)",
+        "bridge supports floating above water C6-D8",
+        "water shimmer A5-B6"
+      ],
+      "best3": [
+        "bridge deck traffic and geometry hold up at 45 m without z-fighting",
+        "log-depth keeps the far causeway free of depth artifacts",
+        "shadows are present on deck and water (receiveShadow on water works)"
+      ]
+    },
+    "skyline-high": {
+      "scores": {
+        "20": 5,
+        "21": 6,
+        "23": 4,
+        "25": 3,
+        "26": 7,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 5,
+          "cells": "A2-H2, C4-D5",
+          "condition": "still vs flight frame from a fixed camera at 900 m; marina and terrain crops",
+          "evidence": "Frames are stable between still and flight; the marina patch at C4-D5 is a noisy high-frequency mix of hull/mast pixels that will shimmer, and CSM maxFar re-fits (cam.y * 9) when altitude changes by > 200 m, shifting shadow resolution.",
+          "defect": "Marina shimmer and shadow-cascade re-fit pops in flight.",
+          "fix": "Filter thin masts (min 2 px screen width) and interpolate maxFar smoothly.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 6,
+          "cells": "G6",
+          "condition": "posed telemetry (65.5 m/s = 127 KIAS at 879 m) vs flight log plausibility",
+          "evidence": "Pose is coherent; log envelope plausible (see aerial-a); same global defects: landing nose-over on land, post-stall mush, chase look-target bug.",
+          "defect": "Global physics defects (2-wheel ground model, no crash state) and camera bug.",
+          "fix": "Add bow wheel contacts, crash state, fix camera.ts aliasing.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "A3-H3, B4-H5",
+          "condition": "terrain, skyline and far shore at 900 m",
+          "evidence": "Terrain shows visible height banding (stepped contour-like shading); far shore ends in a hard line; towers are flat boxes with repeated identical facades.",
+          "defect": "Terrain banding and clone facades.",
+          "fix": "Store heights as 16-bit or float instead of 8-bit, add facade variation and normal detail.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "A3-H3, B4-H5, C4-D5, A1-C1",
+          "condition": "pixel inspection of horizon, terrain, marina and clouds",
+          "evidence": "Hard horizon seam / far-terrain LOD line across row 3, terrain banding, a noisy marina patch, and a clipped cloud edge.",
+          "defect": "Horizon seam, banding and shimmer patch are hard artifacts.",
+          "fix": "Blend horizon, fix height quantisation, filter masts.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 7,
+          "cells": "A1-A2, E1, H1",
+          "condition": "HUD legibility",
+          "evidence": "Legible numerals, small labels.",
+          "defect": "Small low-contrast labels.",
+          "fix": "Increase label size/contrast.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "whole frame",
+          "condition": "renderer.info counters for the still and the 90th flight frame at 1920x1080 quality=high (3 CSM cascades, PCFSoft 2048^2, 4x MSAA HalfFloat target, logarithmic depth, bloom), judged against 60 FPS on a mid-range GPU",
+          "evidence": "still: 1059 draw calls, 9.05 M triangles, 509 geometries, 39 textures, 40 programs, JS heap 142 MB; flight frame: 1047 calls, 9.04 M triangles, heap 113 MB; console errors 0. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+          "defect": "~1,050-1,500 draw calls and 6-11 M triangles per frame (of which roughly two thirds are the three CSM shadow passes over instanced vegetation/buildings), a full-screen water shader with 4 gradient-noise layers + 5 fbm3 + PCFSoft on 3 cascades, logarithmicDepthBuffer forcing gl_FragDepth writes (no early-Z), a 24-step cloud march at 0.6 scale and 11 full-screen post passes; WebGL draw-call CPU cost alone (~1,300 calls) is estimated at 8-20 ms, so 60 FPS at 1080p on a mid-range GPU is unlikely.",
+          "fix": "Cut shadow work first (vegetation castShadow < 900 m, buildings < 1500 m, PCFSoft only on cascade 0, maxFar capped at 6 km), add impostor LOD for trees > 500 m, drop logarithmicDepthBuffer (near 2 m / far 40 km camera-relative) so early-Z returns, share/precompute the water fbm3 shore terms, time-slice the PMREM refresh, merge building kinds per tile into one instanced draw; target <= 650 calls and <= 4 M triangles.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "hardArtifacts": [
+        {
+          "type": "horizon seam",
+          "cells": "A3-H3",
+          "description": "hard far-terrain / horizon line"
+        },
+        {
+          "type": "banding",
+          "cells": "B4-H5",
+          "description": "stepped terrain height shading"
+        },
+        {
+          "type": "shimmer",
+          "cells": "C4-D5",
+          "description": "noisy marina hull/mast patch"
+        },
+        {
+          "type": "clipped cloud edge",
+          "cells": "A1-C1",
+          "description": "cloud cut off along a horizontal line"
+        }
+      ],
+      "worst3": [
+        "terrain height banding B4-H5",
+        "hard horizon seam A3-H3",
+        "marina shimmer patch C4-D5"
+      ],
+      "best3": [
+        "lowest draw-call count of the round (1,059)",
+        "skyline landmark within 1.6% of the reference position",
+        "stable framing from the fixed camera"
+      ]
+    },
+    "island-pass": {
+      "scores": {
+        "20": 3,
+        "21": 3,
+        "23": 4,
+        "25": 2,
+        "26": 7,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 3,
+          "cells": "D5-E6 vs H4",
+          "condition": "still vs 90th flight frame of the chase camera",
+          "evidence": "Aircraft centroid moved from (0.50, 0.56) to (0.88, 0.40); the camera swung off the aircraft during a gentle pass.",
+          "defect": "Unstable chase framing (camera.ts look-target aliasing).",
+          "fix": "Fix fwd/this.tmp aliasing; soften spring.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "H4",
+          "condition": "chase camera tracking and posed physics (54.5 m/s at 130 m)",
+          "evidence": "Camera fails to track; physics pose plausible.",
+          "defect": "Camera bug as in bridge-low.",
+          "fix": "Same fix as bridge-low.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "B4-G6",
+          "condition": "island vegetation and shore at 200-800 m",
+          "evidence": "Trees are the same 3 canopy variants with identical silhouettes; shoreline foam has constant width; sand-grass boundary is a hard line.",
+          "defect": "Clone trees and uniform shore.",
+          "fix": "More variants, foam width from shore-distance texture, blended shore materials.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 25,
+          "score": 2,
+          "cells": "E6-H7, D5-E6, B5-G6",
+          "condition": "pixel inspection of water depth transition, decal and shore",
+          "evidence": "A straight-edged step in water colour (height-texture texel edge) at E6-H7, mirrored registration decal, uniform foam ring, clone trees.",
+          "defect": "Hard geometric depth boundary in water, mirrored decal, uniform foam ring.",
+          "fix": "Bilinear/bicubic sample uHeightTex with a larger map or smooth depth by 2 texels; fix decal UVs; foam from distance field.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 7,
+          "cells": "A1-A2, E1, H1",
+          "condition": "HUD legibility",
+          "evidence": "Legible numerals, small labels.",
+          "defect": "Small low-contrast labels.",
+          "fix": "Increase label size/contrast.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "whole frame",
+          "condition": "renderer.info counters for the still and the 90th flight frame at 1920x1080 quality=high (3 CSM cascades, PCFSoft 2048^2, 4x MSAA HalfFloat target, logarithmic depth, bloom), judged against 60 FPS on a mid-range GPU",
+          "evidence": "still: 1185 draw calls, 6.23 M triangles, 515 geometries, 39 textures, 40 programs, JS heap 143 MB; flight frame: 1275 calls, 6.26 M triangles, heap 115 MB; console errors 0. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+          "defect": "~1,050-1,500 draw calls and 6-11 M triangles per frame (of which roughly two thirds are the three CSM shadow passes over instanced vegetation/buildings), a full-screen water shader with 4 gradient-noise layers + 5 fbm3 + PCFSoft on 3 cascades, logarithmicDepthBuffer forcing gl_FragDepth writes (no early-Z), a 24-step cloud march at 0.6 scale and 11 full-screen post passes; WebGL draw-call CPU cost alone (~1,300 calls) is estimated at 8-20 ms, so 60 FPS at 1080p on a mid-range GPU is unlikely.",
+          "fix": "Cut shadow work first (vegetation castShadow < 900 m, buildings < 1500 m, PCFSoft only on cascade 0, maxFar capped at 6 km), add impostor LOD for trees > 500 m, drop logarithmicDepthBuffer (near 2 m / far 40 km camera-relative) so early-Z returns, share/precompute the water fbm3 shore terms, time-slice the PMREM refresh, merge building kinds per tile into one instanced draw; target <= 650 calls and <= 4 M triangles.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "hardArtifacts": [
+        {
+          "type": "texture seam",
+          "cells": "E6-H7",
+          "description": "straight-edged step in water depth colour"
+        },
+        {
+          "type": "texture mirroring",
+          "cells": "D5-E6",
+          "description": "mirrored registration decal"
+        },
+        {
+          "type": "uniform foam ring",
+          "cells": "B5-G6",
+          "description": "constant-width shore foam"
+        },
+        {
+          "type": "clone vegetation",
+          "cells": "B4-G6",
+          "description": "identical canopies"
+        },
+        {
+          "type": "camera tracking failure",
+          "cells": "H4",
+          "description": "aircraft at (0.88, 0.40) in flight frame"
+        }
+      ],
+      "worst3": [
+        "chase camera swings off the aircraft (H4)",
+        "hard step in water depth colour E6-H7",
+        "clone trees / uniform foam ring"
+      ],
+      "best3": [
+        "lowest triangle count of the round (6.2 M)",
+        "shallow-water colour gradient reads correctly near the beach",
+        "no popping between still and flight vegetation"
+      ]
+    },
+    "harbor": {
+      "scores": {
+        "20": 3,
+        "21": 3,
+        "23": 4,
+        "25": 3,
+        "26": 7,
+        "27": 4
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 3,
+          "cells": "D5-E6 vs D2",
+          "condition": "still vs 90th flight frame of the chase camera",
+          "evidence": "Aircraft centroid moved from (0.50, 0.56) to (0.45, 0.20) - pushed to the top edge.",
+          "defect": "Unstable chase framing.",
+          "fix": "Fix camera.ts aliasing.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "D2",
+          "condition": "chase camera tracking and posed physics (47.5 m/s at 160 m)",
+          "evidence": "Camera fails to track; physics pose plausible.",
+          "defect": "Camera bug.",
+          "fix": "Same fix.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "B4-G7",
+          "condition": "harbor apron, quays, cranes and ships at 150-600 m",
+          "evidence": "Apron is a flat texture-less plane; quay edges are single lines; containers/cranes are unlit blocks.",
+          "defect": "Flat apron and block detail at mid range.",
+          "fix": "Add apron markings/normal map and crane LOD.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "D5-E6, B4-G7",
+          "condition": "aircraft shadow and apron inspection",
+          "evidence": "Aircraft shadow is an over-blurred smudge (far cascade texel ~ 3-6 m); apron has uniform roughness across the whole surface.",
+          "defect": "Blurred detached-looking shadow and uniform roughness.",
+          "fix": "Tighten cascade splits; vary apron roughness.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 7,
+          "cells": "A1-A2, E1, H1",
+          "condition": "HUD legibility",
+          "evidence": "Legible numerals, small labels.",
+          "defect": "Small low-contrast labels.",
+          "fix": "Increase label size/contrast.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 4,
+          "cells": "whole frame",
+          "condition": "renderer.info counters for the still and the 90th flight frame at 1920x1080 quality=high (3 CSM cascades, PCFSoft 2048^2, 4x MSAA HalfFloat target, logarithmic depth, bloom), judged against 60 FPS on a mid-range GPU",
+          "evidence": "still: 1356 draw calls, 11.30 M triangles, 525 geometries, 39 textures, 40 programs, JS heap 143 MB; flight frame: 1259 calls, 11.22 M triangles, heap 113 MB; console errors 0. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+          "defect": "11.30 M triangles and 1,356 draw calls with the port, downtown and vegetation tiles all casting into three cascades. ~1,050-1,500 draw calls and 6-11 M triangles per frame (of which roughly two thirds are the three CSM shadow passes over instanced vegetation/buildings), a full-screen water shader with 4 gradient-noise layers + 5 fbm3 + PCFSoft on 3 cascades, logarithmicDepthBuffer forcing gl_FragDepth writes (no early-Z), a 24-step cloud march at 0.6 scale and 11 full-screen post passes; WebGL draw-call CPU cost alone (~1,300 calls) is estimated at 8-20 ms, so 60 FPS at 1080p on a mid-range GPU is unlikely.",
+          "fix": "Cut shadow work first (vegetation castShadow < 900 m, buildings < 1500 m, PCFSoft only on cascade 0, maxFar capped at 6 km), add impostor LOD for trees > 500 m, drop logarithmicDepthBuffer (near 2 m / far 40 km camera-relative) so early-Z returns, share/precompute the water fbm3 shore terms, time-slice the PMREM refresh, merge building kinds per tile into one instanced draw; target <= 650 calls and <= 4 M triangles.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "hardArtifacts": [
+        {
+          "type": "blurred/detached shadow",
+          "cells": "D5-E6",
+          "description": "aircraft shadow smeared by coarse cascade"
+        },
+        {
+          "type": "uniform roughness",
+          "cells": "B4-G7",
+          "description": "flat texture-less apron"
+        },
+        {
+          "type": "camera tracking failure",
+          "cells": "D2",
+          "description": "aircraft at (0.45, 0.20) in flight frame"
+        }
+      ],
+      "worst3": [
+        "chase camera pushes the aircraft to the top edge (D2)",
+        "over-blurred aircraft shadow",
+        "flat texture-less apron"
+      ],
+      "best3": [
+        "harbor geometry has no z-fighting at quay/water",
+        "port lighting direction matches sun",
+        "stable heap (113-143 MB)"
+      ]
+    },
+    "water-landing": {
+      "scores": {
+        "20": 2,
+        "21": 1,
+        "23": 4,
+        "25": 3,
+        "26": 7,
+        "27": 4
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 2,
+          "cells": "D5-E6 vs off-screen",
+          "condition": "still vs 90th flight frame of the chase camera at 6 m altitude",
+          "evidence": "The aircraft is off-screen in the flight frame (planeCentroid null) while telemetry says onWater with 18 KIAS; the camera lost the subject within 1.5 s.",
+          "defect": "Total framing failure during the most dynamic moment (touchdown).",
+          "fix": "Fix camera.ts aliasing; add a hard clamp keeping the aircraft within the central 60% of the frame.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 1,
+          "cells": "whole frame",
+          "condition": "chase camera during water contact; physics water contact from physics.ts",
+          "evidence": "Aircraft off-screen; physics keel points sit 7-17 cm below the visual hull (bow -2.2 vs -2.08, step -2.24 vs -2.17, stern -2.15 vs -1.98) and heave damping 1800 N s/m per point gives zeta ~ 0.37, so touchdowns bounce.",
+          "defect": "Camera loses the aircraft; water contact is under-damped and mis-registered to the mesh.",
+          "fix": "Fix camera; move contact points onto the visual keel; raise point damping to 3500-4000 N s/m.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "A3-H4, B6-H8",
+          "condition": "channel shore and water detail at 5-300 m",
+          "evidence": "Near water shows the same 4-layer noise as far water with no micro-detail; shore foam constant width.",
+          "defect": "Missing near-field water detail.",
+          "fix": "Add a near normal-map layer < 40 m.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "D5-E6, A3-H3",
+          "condition": "aircraft, wake and horizon in the still",
+          "evidence": "No spray or bow wave in the still even at 6 m / 24.5 KIAS with flaps; the horizon is a hard line.",
+          "defect": "Missing wake/spray and hard horizon seam.",
+          "fix": "Trigger spray at agl < 3 m, blend horizon.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 7,
+          "cells": "A1-A2, E1, H1",
+          "condition": "HUD legibility",
+          "evidence": "Legible numerals, small labels.",
+          "defect": "Small low-contrast labels.",
+          "fix": "Increase label size/contrast.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 4,
+          "cells": "whole frame",
+          "condition": "renderer.info counters for the still and the 90th flight frame at 1920x1080 quality=high (3 CSM cascades, PCFSoft 2048^2, 4x MSAA HalfFloat target, logarithmic depth, bloom), judged against 60 FPS on a mid-range GPU",
+          "evidence": "still: 1505 draw calls, 11.35 M triangles, 537 geometries, 39 textures, 40 programs, JS heap 144 MB; flight frame: 1183 calls, 11.38 M triangles, heap 113 MB; console errors 0. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+          "defect": "Highest draw-call count of the round (1,505 in the still) and 11.35 M triangles; the flight frame emits 185 point primitives (spray) and 701 geometries, so spray adds per-frame geometry allocation. ~1,050-1,500 draw calls and 6-11 M triangles per frame (of which roughly two thirds are the three CSM shadow passes over instanced vegetation/buildings), a full-screen water shader with 4 gradient-noise layers + 5 fbm3 + PCFSoft on 3 cascades, logarithmicDepthBuffer forcing gl_FragDepth writes (no early-Z), a 24-step cloud march at 0.6 scale and 11 full-screen post passes; WebGL draw-call CPU cost alone (~1,300 calls) is estimated at 8-20 ms, so 60 FPS at 1080p on a mid-range GPU is unlikely.",
+          "fix": "Cut shadow work first (vegetation castShadow < 900 m, buildings < 1500 m, PCFSoft only on cascade 0, maxFar capped at 6 km), add impostor LOD for trees > 500 m, drop logarithmicDepthBuffer (near 2 m / far 40 km camera-relative) so early-Z returns, share/precompute the water fbm3 shore terms, time-slice the PMREM refresh, merge building kinds per tile into one instanced draw; target <= 650 calls and <= 4 M triangles.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "hardArtifacts": [
+        {
+          "type": "camera tracking failure",
+          "cells": "off-screen",
+          "description": "aircraft not visible in the flight frame"
+        },
+        {
+          "type": "horizon seam",
+          "cells": "A3-H3",
+          "description": "hard line"
+        },
+        {
+          "type": "missing effect",
+          "cells": "D5-E6",
+          "description": "no spray/bow wave close to the water"
+        }
+      ],
+      "worst3": [
+        "aircraft off-screen in the flight frame",
+        "no spray or bow wave at 6 m",
+        "hard horizon seam"
+      ],
+      "best3": [
+        "185 spray points are emitted once onWater (effects system exists)",
+        "low-altitude water colour gradient is coherent",
+        "HUD legible"
+      ]
+    },
+    "sunset": {
+      "scores": {
+        "20": 3,
+        "21": 4,
+        "23": 4,
+        "25": 2,
+        "26": 6,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 3,
+          "cells": "C5-H8, A1-H2",
+          "condition": "sun glitter and cloud grain in still vs flight frame",
+          "evidence": "Sun glitter path shows moire/sparkle from sub-pixel specular on 4-layer noise normals (roughness 0.045 near); cloud grain is static dither.",
+          "defect": "Specular shimmer and static grain.",
+          "fix": "Clamp roughness by distance (>= 0.08 at 100 m, 0.16 at 1 km), add specular AA (Tokuyoshi roughness filtering), denoise clouds.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 4,
+          "cells": "D4-E5",
+          "condition": "chase framing (flight centroid 0.47, 0.47) and physics pose",
+          "evidence": "Framing acceptable in this frame because spring acceleration happened to be small; the look-target bug is still present.",
+          "defect": "Latent camera bug.",
+          "fix": "Fix aliasing.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "A3-H3",
+          "condition": "skyline silhouette and far water",
+          "evidence": "Skyline is flat boxes; water beyond 3 km loses all normal detail (flattened toward horizon) abruptly.",
+          "defect": "Detail cut-off abrupt.",
+          "fix": "Smooth the horizon flattening range.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 25,
+          "score": 2,
+          "cells": "C5-H8, A3-H3, A1-H2",
+          "condition": "pixel inspection of glitter, horizon, clouds",
+          "evidence": "Moire in the glitter path, hard horizon seam, cloud dither grain.",
+          "defect": "Three hard artifacts.",
+          "fix": "As above.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 6,
+          "cells": "A1-A2, E1, H1",
+          "condition": "HUD over warm sky",
+          "evidence": "Grey labels lose contrast against the orange sky.",
+          "defect": "Low-contrast labels.",
+          "fix": "Add label outline.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "whole frame",
+          "condition": "renderer.info counters for the still and the 90th flight frame at 1920x1080 quality=high (3 CSM cascades, PCFSoft 2048^2, 4x MSAA HalfFloat target, logarithmic depth, bloom), judged against 60 FPS on a mid-range GPU",
+          "evidence": "still: 1161 draw calls, 8.68 M triangles, 524 geometries, 39 textures, 40 programs, JS heap 142 MB; flight frame: 1154 calls, 8.69 M triangles, heap 113 MB; console errors 0. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+          "defect": "~1,050-1,500 draw calls and 6-11 M triangles per frame (of which roughly two thirds are the three CSM shadow passes over instanced vegetation/buildings), a full-screen water shader with 4 gradient-noise layers + 5 fbm3 + PCFSoft on 3 cascades, logarithmicDepthBuffer forcing gl_FragDepth writes (no early-Z), a 24-step cloud march at 0.6 scale and 11 full-screen post passes; WebGL draw-call CPU cost alone (~1,300 calls) is estimated at 8-20 ms, so 60 FPS at 1080p on a mid-range GPU is unlikely.",
+          "fix": "Cut shadow work first (vegetation castShadow < 900 m, buildings < 1500 m, PCFSoft only on cascade 0, maxFar capped at 6 km), add impostor LOD for trees > 500 m, drop logarithmicDepthBuffer (near 2 m / far 40 km camera-relative) so early-Z returns, share/precompute the water fbm3 shore terms, time-slice the PMREM refresh, merge building kinds per tile into one instanced draw; target <= 650 calls and <= 4 M triangles.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "hardArtifacts": [
+        {
+          "type": "shimmer/moire",
+          "cells": "C5-H8",
+          "description": "sun glitter sparkle aliasing"
+        },
+        {
+          "type": "horizon seam",
+          "cells": "A3-H3",
+          "description": "hard line"
+        },
+        {
+          "type": "dither/noise",
+          "cells": "A1-H2",
+          "description": "cloud grain"
+        }
+      ],
+      "worst3": [
+        "sun glitter moire C5-H8",
+        "hard horizon seam",
+        "cloud grain"
+      ],
+      "best3": [
+        "camera framing happened to hold (0.47, 0.47)",
+        "sun direction consistent between glitter and shadows",
+        "8.7 M triangles - among the lighter frames"
+      ]
+    },
+    "cloudy": {
+      "scores": {
+        "20": 3,
+        "21": 3,
+        "23": 3,
+        "25": 2,
+        "26": 7,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 3,
+          "cells": "A1-H2, D5-E6 vs G5",
+          "condition": "still vs flight frame; cloud layer edge; chase framing",
+          "evidence": "Aircraft moved from (0.50, 0.56) to (0.76, 0.55); cloud base shows a hard flat lower edge (horizonFade smoothstep(0.012, 0.06, dir.y)) that will slide as the camera moves.",
+          "defect": "Unstable framing and a sliding hard cloud edge.",
+          "fix": "Fix camera aliasing; fade the cloud layer over dir.y 0.0-0.1 with distance-based extinction instead of a sharp cutoff.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "G5",
+          "condition": "chase tracking",
+          "evidence": "Aircraft drifted to the right third of the frame.",
+          "defect": "Camera bug.",
+          "fix": "Same fix.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 3,
+          "cells": "A2-C2, D4-G4",
+          "condition": "far shore, mid trees",
+          "evidence": "Far city is a uniform speckled pale texture with no haze; mid-range trees are cloned lollipops.",
+          "defect": "Detail gradient absent under overcast.",
+          "fix": "Apply aerial perspective to the city albedo; add variants.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 25,
+          "score": 2,
+          "cells": "A1-H2, A2-C2, B6-C7, E5-E6, E6-F6",
+          "condition": "pixel inspection",
+          "evidence": "Grainy dithered cloud texture with a hard flat lower edge; hard seam between far shore and sky; uniform foam band with a jagged dither at the sand/water blend (water discards at depth < -0.05); mirrored decal; a pier without visible supports.",
+          "defect": "Hard cloud edge, horizon seam, uniform foam ring with aliased shore, mirrored decal, floating pier.",
+          "fix": "Fade water alpha over 0-0.4 m depth instead of discard; extend pier piles below water; fix decal; denoise clouds.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 7,
+          "cells": "A1-A2, E1, H1",
+          "condition": "HUD legibility",
+          "evidence": "Legible.",
+          "defect": "Small labels.",
+          "fix": "Increase size.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "whole frame",
+          "condition": "renderer.info counters for the still and the 90th flight frame at 1920x1080 quality=high (3 CSM cascades, PCFSoft 2048^2, 4x MSAA HalfFloat target, logarithmic depth, bloom), judged against 60 FPS on a mid-range GPU",
+          "evidence": "still: 1281 draw calls, 10.08 M triangles, 629 geometries, 39 textures, 40 programs, JS heap 113 MB; flight frame: 1167 calls, 10.09 M triangles, heap 114 MB; console errors 0. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+          "defect": "~1,050-1,500 draw calls and 6-11 M triangles per frame (of which roughly two thirds are the three CSM shadow passes over instanced vegetation/buildings), a full-screen water shader with 4 gradient-noise layers + 5 fbm3 + PCFSoft on 3 cascades, logarithmicDepthBuffer forcing gl_FragDepth writes (no early-Z), a 24-step cloud march at 0.6 scale and 11 full-screen post passes; WebGL draw-call CPU cost alone (~1,300 calls) is estimated at 8-20 ms, so 60 FPS at 1080p on a mid-range GPU is unlikely.",
+          "fix": "Cut shadow work first (vegetation castShadow < 900 m, buildings < 1500 m, PCFSoft only on cascade 0, maxFar capped at 6 km), add impostor LOD for trees > 500 m, drop logarithmicDepthBuffer (near 2 m / far 40 km camera-relative) so early-Z returns, share/precompute the water fbm3 shore terms, time-slice the PMREM refresh, merge building kinds per tile into one instanced draw; target <= 650 calls and <= 4 M triangles.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "hardArtifacts": [
+        {
+          "type": "dither/noise + hard edge",
+          "cells": "A1-H2",
+          "description": "grainy cloud with a flat lower edge"
+        },
+        {
+          "type": "horizon seam",
+          "cells": "A2-C2",
+          "description": "far shore against sky"
+        },
+        {
+          "type": "uniform foam ring + aliasing",
+          "cells": "B6-C7",
+          "description": "constant-width band with jagged discard edge"
+        },
+        {
+          "type": "texture mirroring",
+          "cells": "E5-E6",
+          "description": "mirrored decal"
+        },
+        {
+          "type": "floating geometry",
+          "cells": "E6-F6",
+          "description": "pier without supports"
+        },
+        {
+          "type": "clone vegetation",
+          "cells": "D4-G4",
+          "description": "identical canopies"
+        },
+        {
+          "type": "camera tracking failure",
+          "cells": "G5",
+          "description": "aircraft at (0.76, 0.55)"
+        }
+      ],
+      "worst3": [
+        "dithered clouds with hard lower edge",
+        "jagged shore discard edge B6-C7",
+        "chase camera drift"
+      ],
+      "best3": [
+        "overcast lighting removes shadow acne entirely",
+        "consistent grey-blue water tone",
+        "heap 113 MB"
+      ]
+    },
+    "night": {
+      "scores": {
+        "20": 3,
+        "21": 3,
+        "23": 3,
+        "25": 1,
+        "26": 7,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 3,
+          "cells": "C2-F2, D5-E6 vs E4",
+          "condition": "window-light speckle and chase framing",
+          "evidence": "City lights are a field of 1 px white speckles that will flicker with any camera motion; aircraft moved to (0.58, 0.41).",
+          "defect": "Speckle shimmer and framing drift.",
+          "fix": "Render window lights as emissive texels with mip bias / bloom threshold instead of sub-pixel points; fix camera.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "E4",
+          "condition": "chase tracking",
+          "evidence": "Aircraft off-centre.",
+          "defect": "Camera bug.",
+          "fix": "Same fix.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 3,
+          "cells": "A3-B3, C2-F2",
+          "condition": "landmass and city at night",
+          "evidence": "Landmass is a flat unlit grey with a hard horizon; city is uniform speckle.",
+          "defect": "No detail gradient.",
+          "fix": "Night ambient from env map, street-light clusters.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 25,
+          "score": 1,
+          "cells": "A1-D1, C2-F2, E5, F7-H8, G3, A3-B3",
+          "condition": "pixel inspection of sky, city, aircraft, water and quay",
+          "evidence": "Daytime cumulus with a clipped horizontal edge at 22:00; water unlit and day-toned; a hard diagonal step in water depth colour F7-H8 and a lighter rectangular patch (height texel boundary); a bright white light at the prop hub rendering through the cowl (sorting); magenta beacon; no wingtip nav lights; a circular light disc on the water; cruise ship hull intersecting the quay at G3.",
+          "defect": "Sorting error, intersecting hull, texture seams, clipped clouds.",
+          "fix": "Depth-test the light sprites, move the ship 15 m off the quay, sample height texture smoothly, night-time cloud lighting.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 7,
+          "cells": "A1-A2, E1, H1",
+          "condition": "HUD at night",
+          "evidence": "Legible; boxes bright relative to scene.",
+          "defect": "HUD brightness not dimmed at night.",
+          "fix": "Scale HUD alpha with night.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "whole frame",
+          "condition": "renderer.info counters for the still and the 90th flight frame at 1920x1080 quality=high (3 CSM cascades, PCFSoft 2048^2, 4x MSAA HalfFloat target, logarithmic depth, bloom), judged against 60 FPS on a mid-range GPU",
+          "evidence": "still: 1146 draw calls, 9.41 M triangles, 510 geometries, 39 textures, 40 programs, JS heap 143 MB; flight frame: 1220 calls, 9.13 M triangles, heap 113 MB; console errors 0. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+          "defect": "~1,050-1,500 draw calls and 6-11 M triangles per frame (of which roughly two thirds are the three CSM shadow passes over instanced vegetation/buildings), a full-screen water shader with 4 gradient-noise layers + 5 fbm3 + PCFSoft on 3 cascades, logarithmicDepthBuffer forcing gl_FragDepth writes (no early-Z), a 24-step cloud march at 0.6 scale and 11 full-screen post passes; WebGL draw-call CPU cost alone (~1,300 calls) is estimated at 8-20 ms, so 60 FPS at 1080p on a mid-range GPU is unlikely.",
+          "fix": "Cut shadow work first (vegetation castShadow < 900 m, buildings < 1500 m, PCFSoft only on cascade 0, maxFar capped at 6 km), add impostor LOD for trees > 500 m, drop logarithmicDepthBuffer (near 2 m / far 40 km camera-relative) so early-Z returns, share/precompute the water fbm3 shore terms, time-slice the PMREM refresh, merge building kinds per tile into one instanced draw; target <= 650 calls and <= 4 M triangles.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "hardArtifacts": [
+        {
+          "type": "sorting error",
+          "cells": "E5",
+          "description": "prop-hub light drawn through opaque cowl"
+        },
+        {
+          "type": "intersection",
+          "cells": "G3",
+          "description": "cruise ship hull intersects the quay"
+        },
+        {
+          "type": "texture seam",
+          "cells": "F7-H8",
+          "description": "hard diagonal/rectangular step in water depth colour"
+        },
+        {
+          "type": "aliasing",
+          "cells": "C2-F2",
+          "description": "1 px window-light speckle"
+        },
+        {
+          "type": "clipped cloud edge",
+          "cells": "A1-D1",
+          "description": "cloud cut along a horizontal line"
+        },
+        {
+          "type": "horizon seam",
+          "cells": "A3-B3",
+          "description": "flat grey landmass against sky"
+        },
+        {
+          "type": "camera tracking failure",
+          "cells": "E4",
+          "description": "aircraft at (0.58, 0.41)"
+        }
+      ],
+      "worst3": [
+        "prop-hub light sorting error E5",
+        "ship hull intersecting the quay G3",
+        "window-light speckle aliasing C2-F2"
+      ],
+      "best3": [
+        "beacon and window emissives do bloom",
+        "HUD legible",
+        "9.4 M triangles - no extra night cost"
+      ]
+    },
+    "plane-rear-quarter": {
+      "scores": {
+        "20": 5,
+        "21": 4,
+        "23": 4,
+        "25": 2,
+        "26": 7,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 5,
+          "cells": "D6-F7, C1-D2",
+          "condition": "still vs flight frame, fixed camera, moored aircraft",
+          "evidence": "Aircraft yawed 240 -> 244 deg and moved 0.02 of frame width in 1.5 s with no wake; sailboat masts at C1-D2 are 1 px lines that will shimmer.",
+          "defect": "Drift without water response; mast shimmer.",
+          "fix": "Emit wake/foam from the contact points at any speed > 0.3 m/s; give masts a minimum 2 px width.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 4,
+          "cells": "D6-F7",
+          "condition": "rest attitude on water (physics.ts buoyancy vs model.ts float geometry)",
+          "evidence": "Physics rest datum solves to 1.95 m (sum k = 92 kN/m, W = 23.05 kN) which would submerge the visual keel (-2.27 m) by 0.32 m, yet the render shows the whole hull, water rudder and bow wheels above the surface with no waterline; wheels are extended while afloat.",
+          "defect": "Water contact is not registered to the mesh and gear state is wrong on water.",
+          "fix": "Align contact points to the visual keel, verify world water level under the marina (water discards where uHeightTex > -0.05), retract wheels when onWater.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "G3-H3, C1-D2",
+          "condition": "beach, houses and marina at 200-800 m",
+          "evidence": "Beach is a mechanically repeated grey-lilac band with a hard straight edge; houses identical white boxes; masts aliased.",
+          "defect": "Repetition and hard edges.",
+          "fix": "Vary house footprints/colours, blend beach edge, filter masts.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 25,
+          "score": 2,
+          "cells": "C5-E5, D6-F7, H4, B5-C6, A1-H1",
+          "condition": "pixel inspection of decal, floats, nav light, spine and clouds",
+          "evidence": "Registration N726BV mirrored; floats hovering above water; magenta beacon; flat unshaded green nav-light disc; hard specular seam along the fuselage spine; dithered clouds.",
+          "defect": "Floating geometry, mirrored decal, sorting/emissive errors.",
+          "fix": "As listed; beacon colour to red (#ff2a1a), nav light as emissive sphere.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 7,
+          "cells": "A1-A2, E1, H1",
+          "condition": "HUD legibility",
+          "evidence": "Legible.",
+          "defect": "Small labels.",
+          "fix": "Increase size.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "whole frame",
+          "condition": "renderer.info counters for the still and the 90th flight frame at 1920x1080 quality=high (3 CSM cascades, PCFSoft 2048^2, 4x MSAA HalfFloat target, logarithmic depth, bloom), judged against 60 FPS on a mid-range GPU",
+          "evidence": "still: 1105 draw calls, 8.89 M triangles, 481 geometries, 35 textures, 40 programs, JS heap 112 MB; flight frame: 1089 calls, 8.88 M triangles, heap 113 MB; console errors 0. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+          "defect": "~1,050-1,500 draw calls and 6-11 M triangles per frame (of which roughly two thirds are the three CSM shadow passes over instanced vegetation/buildings), a full-screen water shader with 4 gradient-noise layers + 5 fbm3 + PCFSoft on 3 cascades, logarithmicDepthBuffer forcing gl_FragDepth writes (no early-Z), a 24-step cloud march at 0.6 scale and 11 full-screen post passes; WebGL draw-call CPU cost alone (~1,300 calls) is estimated at 8-20 ms, so 60 FPS at 1080p on a mid-range GPU is unlikely.",
+          "fix": "Cut shadow work first (vegetation castShadow < 900 m, buildings < 1500 m, PCFSoft only on cascade 0, maxFar capped at 6 km), add impostor LOD for trees > 500 m, drop logarithmicDepthBuffer (near 2 m / far 40 km camera-relative) so early-Z returns, share/precompute the water fbm3 shore terms, time-slice the PMREM refresh, merge building kinds per tile into one instanced draw; target <= 650 calls and <= 4 M triangles.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "hardArtifacts": [
+        {
+          "type": "floating geometry",
+          "cells": "D6-F7",
+          "description": "float hulls, water rudder and bow wheels above the water with no waterline"
+        },
+        {
+          "type": "texture mirroring",
+          "cells": "C5-E5",
+          "description": "mirrored registration"
+        },
+        {
+          "type": "aliasing",
+          "cells": "C1-D2",
+          "description": "1 px sailboat masts"
+        },
+        {
+          "type": "texture seam",
+          "cells": "B5-C6",
+          "description": "hard specular seam on fuselage spine"
+        },
+        {
+          "type": "clone buildings",
+          "cells": "G3-H3",
+          "description": "identical white houses on a repeated beach band"
+        },
+        {
+          "type": "dither/noise",
+          "cells": "A1-H1",
+          "description": "cloud grain"
+        }
+      ],
+      "worst3": [
+        "floats hover above the water D6-F7",
+        "mirrored registration C5-E5",
+        "aliased masts C1-D2"
+      ],
+      "best3": [
+        "float paint reflections respond to viewing angle (grazing term)",
+        "no z-fighting between struts and deck",
+        "lowest geometry count of the round (481)"
+      ]
+    },
+    "plane-front-quarter": {
+      "scores": {
+        "20": 5,
+        "21": 4,
+        "23": 4,
+        "25": 2,
+        "26": 7,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 5,
+          "cells": "C5, B6-C6",
+          "condition": "still vs flight frame; propeller and floating yellow markers",
+          "evidence": "Propeller blades are sharp static slabs in both frames at rpm 0-0.2 (acceptable when off) but the yellow markers near the prop and at B6 change position between frames, i.e. detached parts follow a different transform.",
+          "defect": "Detached moving parts.",
+          "fix": "Parent the wheel/tip parts to the correct group.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 4,
+          "cells": "C6-F7",
+          "condition": "rest attitude on water",
+          "evidence": "Same hover as plane-rear-quarter: hull, bow wheels visible above water.",
+          "defect": "Water contact mis-registered.",
+          "fix": "Same fix.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "A4-B4, F3-H3",
+          "condition": "bridge and far wing detail",
+          "evidence": "Distant bridge aliased; panel lines aliased at 13 m.",
+          "defect": "Aliased lines.",
+          "fix": "Wider lines with AA texture.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 25,
+          "score": 2,
+          "cells": "C6-F7, E5-F5, C5, B6-C6, F4-H4",
+          "condition": "pixel inspection",
+          "evidence": "Floats above water; mirrored registration; propeller blade flat black slab with a thin vertical line artifact; yellow markers floating in the air; hard bright horizon line with aliased specular streaks; no reflection of the fuselage on the water (env-map-only reflections).",
+          "defect": "Floating geometry, mirrored decal, detached parts, horizon seam, missing local reflection.",
+          "fix": "Fix parenting, decal UVs, horizon blend; add planar or SSR reflection for the aircraft.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 7,
+          "cells": "A1-A2, E1, H1",
+          "condition": "HUD legibility",
+          "evidence": "Legible.",
+          "defect": "Small labels.",
+          "fix": "Increase size.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "whole frame",
+          "condition": "renderer.info counters for the still and the 90th flight frame at 1920x1080 quality=high (3 CSM cascades, PCFSoft 2048^2, 4x MSAA HalfFloat target, logarithmic depth, bloom), judged against 60 FPS on a mid-range GPU",
+          "evidence": "still: 1175 draw calls, 8.89 M triangles, 556 geometries, 35 textures, 40 programs, JS heap 142 MB; flight frame: 1163 calls, 8.89 M triangles, heap 138 MB; console errors 0. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+          "defect": "~1,050-1,500 draw calls and 6-11 M triangles per frame (of which roughly two thirds are the three CSM shadow passes over instanced vegetation/buildings), a full-screen water shader with 4 gradient-noise layers + 5 fbm3 + PCFSoft on 3 cascades, logarithmicDepthBuffer forcing gl_FragDepth writes (no early-Z), a 24-step cloud march at 0.6 scale and 11 full-screen post passes; WebGL draw-call CPU cost alone (~1,300 calls) is estimated at 8-20 ms, so 60 FPS at 1080p on a mid-range GPU is unlikely.",
+          "fix": "Cut shadow work first (vegetation castShadow < 900 m, buildings < 1500 m, PCFSoft only on cascade 0, maxFar capped at 6 km), add impostor LOD for trees > 500 m, drop logarithmicDepthBuffer (near 2 m / far 40 km camera-relative) so early-Z returns, share/precompute the water fbm3 shore terms, time-slice the PMREM refresh, merge building kinds per tile into one instanced draw; target <= 650 calls and <= 4 M triangles.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "hardArtifacts": [
+        {
+          "type": "floating geometry",
+          "cells": "C6-F7",
+          "description": "float hulls above water, no waterline"
+        },
+        {
+          "type": "floating geometry",
+          "cells": "B6-C6",
+          "description": "yellow markers detached in the air"
+        },
+        {
+          "type": "texture mirroring",
+          "cells": "E5-F5",
+          "description": "mirrored registration"
+        },
+        {
+          "type": "aliasing",
+          "cells": "F4-H4",
+          "description": "horizon specular streaks"
+        },
+        {
+          "type": "aliasing",
+          "cells": "A4-B4",
+          "description": "distant bridge"
+        },
+        {
+          "type": "missing reflection",
+          "cells": "C6-F7",
+          "description": "no fuselage reflection on the water"
+        }
+      ],
+      "worst3": [
+        "floats above water C6-F7",
+        "detached yellow markers B6-C6",
+        "mirrored registration E5-F5"
+      ],
+      "best3": [
+        "cowl and windshield geometry clean at 13 m with 4x MSAA",
+        "float paint Fresnel reads correctly",
+        "heap/draw calls in line with other views"
+      ]
+    },
+    "glass-sun": {
+      "scores": {
+        "20": 5,
+        "21": 4,
+        "23": 4,
+        "25": 1,
+        "26": 7,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 20,
+          "score": 5,
+          "cells": "B3-D4",
+          "condition": "still vs flight frame; glass",
+          "evidence": "Glass tint is constant between frames (view-dependent opacity term does not react to the sun behind the camera).",
+          "defect": "No specular response.",
+          "fix": "Add clearcoat highlight from the sun direction and env-map reflection with roughness 0.02.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 21,
+          "score": 4,
+          "cells": "G8-H8",
+          "condition": "rest attitude",
+          "evidence": "Float above water as in the other moored views.",
+          "defect": "Water contact mis-registered.",
+          "fix": "Same fix.",
+          "hardFailure": true,
+          "kind": "technical"
+        },
+        {
+          "category": 23,
+          "score": 4,
+          "cells": "G2-H3",
+          "condition": "horizon and far shore",
+          "evidence": "Hard bright horizon line.",
+          "defect": "Seam.",
+          "fix": "Blend.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 25,
+          "score": 1,
+          "cells": "B3-D4, C3, E3-F4, B3-C3, C2-D2, F2-G2, H3-H4",
+          "condition": "pixel inspection of glass, posts, decals, wing root",
+          "evidence": "Cockpit glass is a flat uniformly blue-tinted panel with a zig-zag stepped outline (splitGlass cuts along mesh triangles); opaque black rectangular window posts; a black slab intersects the glass near the strut root; a gap between wing and cabin roof (parasol mounting with floating wing); wing decals N726BV mirrored/duplicated; hard black doorstep box.",
+          "defect": "Mis-sorted/opaque-looking glass with stepped silhouette, intersecting slab, floating wing, mirrored decals.",
+          "fix": "Cut glass along a curve (re-tessellate the cabin at window frames), model posts as thin frames, close the wing-cabin gap, fix decals.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 7,
+          "cells": "A1-A2, E1, H1",
+          "condition": "HUD legibility",
+          "evidence": "Legible.",
+          "defect": "Small labels.",
+          "fix": "Increase size.",
+          "hardFailure": false,
+          "kind": "technical"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "whole frame",
+          "condition": "renderer.info counters for the still and the 90th flight frame at 1920x1080 quality=high (3 CSM cascades, PCFSoft 2048^2, 4x MSAA HalfFloat target, logarithmic depth, bloom), judged against 60 FPS on a mid-range GPU",
+          "evidence": "still: 1271 draw calls, 8.89 M triangles, 557 geometries, 35 textures, 40 programs, JS heap 142 MB; flight frame: 1251 calls, 8.89 M triangles, heap 113 MB; console errors 0. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+          "defect": "~1,050-1,500 draw calls and 6-11 M triangles per frame (of which roughly two thirds are the three CSM shadow passes over instanced vegetation/buildings), a full-screen water shader with 4 gradient-noise layers + 5 fbm3 + PCFSoft on 3 cascades, logarithmicDepthBuffer forcing gl_FragDepth writes (no early-Z), a 24-step cloud march at 0.6 scale and 11 full-screen post passes; WebGL draw-call CPU cost alone (~1,300 calls) is estimated at 8-20 ms, so 60 FPS at 1080p on a mid-range GPU is unlikely.",
+          "fix": "Cut shadow work first (vegetation castShadow < 900 m, buildings < 1500 m, PCFSoft only on cascade 0, maxFar capped at 6 km), add impostor LOD for trees > 500 m, drop logarithmicDepthBuffer (near 2 m / far 40 km camera-relative) so early-Z returns, share/precompute the water fbm3 shore terms, time-slice the PMREM refresh, merge building kinds per tile into one instanced draw; target <= 650 calls and <= 4 M triangles.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "hardArtifacts": [
+        {
+          "type": "stepped glass silhouette",
+          "cells": "B3-D4",
+          "description": "zig-zag outline from triangle-based split"
+        },
+        {
+          "type": "intersection",
+          "cells": "B3-C3",
+          "description": "black slab intersects glass near strut root"
+        },
+        {
+          "type": "floating geometry",
+          "cells": "C2-G2",
+          "description": "wing separated from cabin roof by a gap"
+        },
+        {
+          "type": "texture mirroring",
+          "cells": "C2-D2, F2-G2",
+          "description": "wing decals mirrored/duplicated"
+        },
+        {
+          "type": "opaque glass elements",
+          "cells": "E3-F4",
+          "description": "black rectangular posts"
+        },
+        {
+          "type": "horizon seam",
+          "cells": "G2-H3",
+          "description": "hard bright line"
+        },
+        {
+          "type": "floating geometry",
+          "cells": "G8-H8",
+          "description": "float above water"
+        }
+      ],
+      "worst3": [
+        "stepped, flat glass B3-D4",
+        "slab intersecting glass B3-C3",
+        "wing-cabin gap C2-G2"
+      ],
+      "best3": [
+        "interior is visible through the glass (transparency sorted with renderOrder 20)",
+        "sun-lit paint shading consistent with shadows",
+        "no shadow acne on the fuselage"
+      ]
+    }
+  },
+  "flightModel": {
+    "sources": [
+      "/workspace/bench/results/iter02/flighttest.json",
+      "/workspace/src/plane/physics.ts",
+      "/workspace/src/plane/camera.ts",
+      "/workspace/src/plane/model.ts (float sections, wheel positions)"
+    ],
+    "logSummary": {
+      "liftoff": "64.7 KIAS after 20.8 s (onWater false at t = 24 s, pitch 13.8 deg, alpha 11.6 deg)",
+      "climb": "759 fpm at 95 KIAS reaching 1006 ft; steady segment 82-92 KIAS, pitch 6-8 deg, alpha 1.7-3.7 deg, 650-750 fpm",
+      "cruise": "108.9 KIAS at 74% rpm still accelerating +0.3 kt/s; Vmax from maxThrust 7400 N * (1 - V/120) vs Cd0 0.034 + 0.048 CL^2 solves to ~71 m/s (138 kt)",
+      "turn": "44.9 deg bank, 260 deg in 30 s (8.7 deg/s steady after a 3 s roll-in) at 109-120 KIAS, altitude 1038 -> 1006 ft; theory 9.1 deg/s at 120 kt",
+      "stall": "53.3 KIAS, alpha 15.5 deg, nose drop from +8 to -3.4 deg pitch, -1697 fpm peak; then 15 s mush at alpha 11-13 deg with pitch swinging -3 to +16 deg without a stall flag",
+      "approach": "-600 fpm at 84 KIAS over land; touchdown null - at t = 335 s the aircraft hit terrain at 67 KIAS / -490 fpm, decelerated 67 -> 5.6 kt in 2 s (~1.5 g), pitched to -76.6 deg and rolled to -82 deg, then oscillated in that pose for 70 s (final: 9.9 KIAS wind, alt 14 ft, onWater false)"
+    },
+    "verdict": "The aerodynamic envelope is plausible for a 2.3 t DHC-2-class floatplane (stall 53-57 kt, cruise 109-138 kt, climb ~750 fpm, turn rate within 5% of theory). Control authority is excessive (steady roll rate ~146 deg/s at 60 m/s; 27 deg pitch-up with a +3600 fpm zoom in 4 s from cruise), post-stall behaviour is too benign and under-damped, the ground model has no forward support so any land contact nose-overs, there is no crash/reset state, and the water contact geometry is 7-17 cm below the visual hull while the rendered frames show the hull entirely above the water. The chase camera has a vector-aliasing bug that displaces its look target by 6x the spring acceleration.",
+    "parameters": [
+      {
+        "item": "inertia",
+        "current": "Ixx 3200, Iyy 7400, Izz 5600 kg m^2",
+        "suggest": "Ixx 5500, Iyy 9500, Izz 7000 (14.6 m span, floats add roll/yaw inertia)",
+        "reason": "roll response and yaw wander are too quick for a floatplane"
+      },
+      {
+        "item": "roll authority",
+        "current": "Cl_da 0.14 per unit stick, Clp -0.45",
+        "suggest": "Cl_da 0.06, keep Clp -0.45",
+        "reason": "steady roll rate p = (Cl_da/Clp) * 2V/b = 146 deg/s at 60 m/s; target 45-60 deg/s"
+      },
+      {
+        "item": "pitch authority / damping",
+        "current": "Cm_de 0.8, Cm_q -18, Cm_alpha -1.3",
+        "suggest": "Cm_de 0.45, Cm_q -22, Cm_alpha -1.1",
+        "reason": "log shows a 27 deg pitch-up and +3600 fpm zoom from 118 kt in 4 s (29 deg peak at 6 s) and a 10 s phugoid after the stall"
+      },
+      {
+        "item": "stall model",
+        "current": "alphaStall 0.27 rad, CLmax 1.7 (+0.5 flaps), post-stall slope -3.5/rad, buffet from alphaStall - 0.05",
+        "suggest": "post-stall slope -6/rad to CL 0.9 at alpha 25 deg, hysteresis (unstall below alphaStall - 0.03), buffet from alphaStall - 0.035, stall drag +0.12 -> +0.18",
+        "reason": "15 s mush at alpha 11-13 deg without stall flag and mild CL loss"
+      },
+      {
+        "item": "yaw",
+        "current": "Cn_beta -0.10, Cn_r -0.16, Cn_dr -0.075, Cn_da +0.012 (proverse)",
+        "suggest": "Cn_da -0.01 (adverse yaw), Cn_beta -0.08",
+        "reason": "aileron currently produces proverse yaw; a Beaver has adverse yaw"
+      },
+      {
+        "item": "thrust",
+        "current": "maxThrust 7400 N * (1 - V/120), rpm lag 0.7 s",
+        "suggest": "keep; optionally 7000 N with (1 - V/135) to hold 125 kt cruise at 75%",
+        "reason": "Vmax 138 kt and 109 kt at 74% are both plausible"
+      },
+      {
+        "item": "water contact",
+        "current": "bow (2.6,-2.2), step (-0.35,-2.24), stern (-2.3,-2.15); k 12/18/16 kN/m; damping 1800 N s/m per point; rest datum solves to 1.95 m",
+        "suggest": "bow (2.6,-2.08), step (-0.35,-2.17), stern (-2.3,-1.98) to match model.ts loft (yc - bot); damping 3500-4000 N s/m (zeta ~ 0.75 from 0.37); render a wet band + contact foam from the wake texture",
+        "reason": "visual hull floats above the water in three moored views; heave is under-damped"
+      },
+      {
+        "item": "ground contact",
+        "current": "only 2 wheel points (-0.9,-2.35,+/-1.25) qualify as wheels (cp.y < -2.3); k 52 kN/m capped at 0.5 m; hard floor datum = ground + 1.55 m",
+        "suggest": "add bow wheels (2.3,-2.35,+/-1.25) matching model.ts; hard floor = ground + 2.1 m so the clamp does not pre-load the springs 0.8 m; crash state when |pitch| > 45 deg on ground or impact > 4 m/s; explicit gear state instead of landBelow && y < 60",
+        "reason": "approach ended in a -76 deg nose-over held for 70 s"
+      },
+      {
+        "item": "rest damping",
+        "current": "omega *= 1 - 1.6 dt on water/ground",
+        "suggest": "keep 1.6 but apply also to velocity.y (0.8/s) when onWater and V < 3 m/s",
+        "reason": "idle-float alpha swings -3.3 to +3.7 deg from gusts at 0 speed"
+      },
+      {
+        "item": "chase camera",
+        "current": "k 60, c 2*0.9*sqrt(60) (zeta 0.9, wn 7.7 rad/s), feed-forward v*c/k, look = pos + fwd*6 where fwd aliases this.tmp overwritten by acc; ground clamp y >= 1.2 only",
+        "suggest": "use a separate tmpFwd; k 25, zeta 0.8; clamp camera y >= heightAt(x,z) + 2; keep bank coupling 0.18 and FOV +6 deg",
+        "reason": "flight frames show the aircraft at (0.19,0.33), (0.88,0.40), (0.45,0.20) and off-screen"
+      },
+      {
+        "item": "cockpit camera",
+        "current": "eye = model.cockpitEye, slerp 14/s, FOV base + 12",
+        "suggest": "move eye +0.25 m forward, +0.12 m up; render exterior shell on a hidden layer; FOV base + 8",
+        "reason": "cockpit-city frame is 75% cabin shell"
+      }
+    ]
+  },
+  "performance": {
+    "note": "Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure.",
+    "measured": {
+      "drawCallsRange": [
+        1047,
+        1505
+      ],
+      "trianglesRange": [
+        6233864,
+        11381376
+      ],
+      "geometriesRange": [
+        481,
+        701
+      ],
+      "texturesRange": [
+        35,
+        42
+      ],
+      "programs": 40,
+      "jsHeapMBRange": [
+        112.4,
+        143.5
+      ],
+      "consoleErrors": {
+        "aerial-a": 1
+      },
+      "perView": {
+        "aerial-a": {
+          "still": {
+            "calls": 1295,
+            "triangles": 9873136,
+            "geometries": 634,
+            "jsHeapMB": 143.1
+          },
+          "flight": {
+            "calls": 1270,
+            "triangles": 9869522,
+            "jsHeapMB": 138.4
+          }
+        },
+        "cockpit-city": {
+          "still": {
+            "calls": 1266,
+            "triangles": 9444448,
+            "geometries": 578,
+            "jsHeapMB": 112.6
+          },
+          "flight": {
+            "calls": 1255,
+            "triangles": 9446286,
+            "jsHeapMB": 113.5
+          }
+        },
+        "bridge-low": {
+          "still": {
+            "calls": 1187,
+            "triangles": 11076838,
+            "geometries": 532,
+            "jsHeapMB": 143.3
+          },
+          "flight": {
+            "calls": 1343,
+            "triangles": 10699110,
+            "jsHeapMB": 113.0
+          }
+        },
+        "skyline-high": {
+          "still": {
+            "calls": 1059,
+            "triangles": 9045118,
+            "geometries": 509,
+            "jsHeapMB": 142.0
+          },
+          "flight": {
+            "calls": 1047,
+            "triangles": 9042922,
+            "jsHeapMB": 112.8
+          }
+        },
+        "island-pass": {
+          "still": {
+            "calls": 1185,
+            "triangles": 6233864,
+            "geometries": 515,
+            "jsHeapMB": 143.2
+          },
+          "flight": {
+            "calls": 1275,
+            "triangles": 6261834,
+            "jsHeapMB": 115.3
+          }
+        },
+        "harbor": {
+          "still": {
+            "calls": 1356,
+            "triangles": 11302934,
+            "geometries": 525,
+            "jsHeapMB": 143.3
+          },
+          "flight": {
+            "calls": 1259,
+            "triangles": 11216338,
+            "jsHeapMB": 112.9
+          }
+        },
+        "water-landing": {
+          "still": {
+            "calls": 1505,
+            "triangles": 11351060,
+            "geometries": 537,
+            "jsHeapMB": 143.5
+          },
+          "flight": {
+            "calls": 1183,
+            "triangles": 11381376,
+            "jsHeapMB": 113.2
+          }
+        },
+        "sunset": {
+          "still": {
+            "calls": 1161,
+            "triangles": 8678700,
+            "geometries": 524,
+            "jsHeapMB": 141.9
+          },
+          "flight": {
+            "calls": 1154,
+            "triangles": 8693856,
+            "jsHeapMB": 112.9
+          }
+        },
+        "cloudy": {
+          "still": {
+            "calls": 1281,
+            "triangles": 10078362,
+            "geometries": 629,
+            "jsHeapMB": 112.8
+          },
+          "flight": {
+            "calls": 1167,
+            "triangles": 10093594,
+            "jsHeapMB": 113.9
+          }
+        },
+        "night": {
+          "still": {
+            "calls": 1146,
+            "triangles": 9406630,
+            "geometries": 510,
+            "jsHeapMB": 142.7
+          },
+          "flight": {
+            "calls": 1220,
+            "triangles": 9132764,
+            "jsHeapMB": 112.9
+          }
+        },
+        "plane-rear-quarter": {
+          "still": {
+            "calls": 1105,
+            "triangles": 8886460,
+            "geometries": 481,
+            "jsHeapMB": 112.4
+          },
+          "flight": {
+            "calls": 1089,
+            "triangles": 8884182,
+            "jsHeapMB": 112.9
+          }
+        },
+        "plane-front-quarter": {
+          "still": {
+            "calls": 1175,
+            "triangles": 8886640,
+            "geometries": 556,
+            "jsHeapMB": 141.7
+          },
+          "flight": {
+            "calls": 1163,
+            "triangles": 8887394,
+            "jsHeapMB": 138.3
+          }
+        },
+        "glass-sun": {
+          "still": {
+            "calls": 1271,
+            "triangles": 8891272,
+            "geometries": 557,
+            "jsHeapMB": 142.0
+          },
+          "flight": {
+            "calls": 1251,
+            "triangles": 8888802,
+            "jsHeapMB": 112.7
+          }
+        }
+      }
+    },
+    "biggestCosts": [
+      "Shadow passes: CSM with 3 cascades x 2048^2 PCFSoftShadowMap; vegetation tiles cast within 1800 m and building tiles within 2600 m, so every tree/building is drawn 4x; maxFar grows to cam.y*9 (up to 12 km). Roughly two thirds of the 9-11 M triangles and 1,300-1,600 draw calls are shadow work.",
+      "Water: a 70 km plane (frustumCulled=false, renderOrder 5, drawn last) whose fragment shader evaluates 4 noised() layers, 5 fbm3 (15 value-noise) + 1 vnoise, 3 texture fetches, PCFSoft on 3 cascades and env-map IBL per pixel; with logarithmicDepthBuffer the shader writes gl_FragDepth, so early-Z cannot skip water hidden behind terrain.",
+      "logarithmicDepthBuffer: true forces gl_FragDepth in every material and disables early-Z / hierarchical-Z for the whole scene, so city and vegetation overdraw is paid in full.",
+      "Sky: 24-step cloud ray march with a 4-step lightMarch per sample at 0.6 scale (~0.75 Mpx) every frame, plus PMREMGenerator.fromScene every 5 s (6 cube faces + prefilter) that produces a periodic hitch.",
+      "Post: HalfFloat 4x MSAA scene target (~66 MB colour + depth) resolve, aerial-perspective blit, bright pass, 3 bloom levels x (downsample + 2 blurs), composite = 11 full-screen passes.",
+      "Vegetation geometry: canopies are merged icosahedron puffs (detail 1) and 20-segment lofted palm trunks with double-sided alpha-to-coverage fronds; instance counts thin only past 2 km, so trees supply most of the triangle budget.",
+      "Draw-call granularity: InstancedMesh per (kind x 1.5 km tile) for 9 building kinds and per (type x variant x 4 km tile) for plants, then multiplied by 3 cascades; WebGL2 per-call CPU cost (~5-15 us) makes 1,300+ calls an 8-20 ms JS/driver load by itself."
+    ],
+    "reductions": [
+      {
+        "change": "Vegetation castShadow only for tiles < 900 m, buildings < 1500 m; PCFSoft on cascade 0 only (PCF on 1-2); cascade maps 2048/1024/1024; cap maxFar at 6 km",
+        "expected": "-35 to -45% draw calls, -40% triangles, no visible change in the approved frames (far shadows are already sub-texel)"
+      },
+      {
+        "change": "Impostor (2-triangle atlas billboard) LOD for trees beyond 500 m and canopy detail 0 beyond 1 km; thin instance count continuously from 1.5 km",
+        "expected": "-5 to -6 M triangles; silhouettes preserved at the screen sizes seen in all 13 views"
+      },
+      {
+        "change": "Disable logarithmicDepthBuffer; use near 2 m / far 40 km with camera-relative water/terrain offsets (already present in water.ts) and keep the water discard/terrain blend",
+        "expected": "early-Z restored: -20 to -30% fragment time on water/city; depth precision 0.5 m at 5 km is sufficient because the water is discarded where terrain is above -0.05 m"
+      },
+      {
+        "change": "Water shader: compute fbm3(wp*0.02) once (used twice), bake shore-distance/foam mask into a uZoneTex channel, branch out n3/whitecap beyond 300 m, receive shadows from cascades 0-1 only",
+        "expected": "-40% water fragment cost with identical look at the tested distances"
+      },
+      {
+        "change": "Sky: 16 steps at 0.5 scale with blue-noise jitter and 2-frame temporal accumulation; PMREM refresh time-sliced (one cube face per frame) and triggered only by |dHour| > 0.05",
+        "expected": "-1 to -2 ms and removal of the 5 s hitch; also removes the cloud grain artifact"
+      },
+      {
+        "change": "Post: 2x MSAA + SMAA (or 4x MSAA with RGB10A2 / R11G11B10 target), fold the bright pass into the first downsample, drop the third bloom level",
+        "expected": "-1 ms and -30 MB GPU memory"
+      },
+      {
+        "change": "Merge building kinds into one geometry per tile (kind via instance attribute) and 3 km plant tiles",
+        "expected": "city draws -80%, plant draws -60%"
+      }
+    ],
+    "estimate": "Current structure is estimated at 25-40 FPS on a GTX 1660 / RX 6600-class GPU at 1080p (CPU draw-call bound with 1,300-1,600 WebGL calls and GPU-bound on water + shadows). After the reductions: ~500-650 calls, 3-4 M triangles, ~10-12 ms GPU, 60 FPS plausible with headroom for spray and wakes."
+  },
+  "summary": {
+    "top5Defects": [
+      "Chase camera look-target bug (camera.ts: fwd aliases this.tmp, overwritten by the spring acceleration) - aircraft off-centre or off-screen in 7 of 8 chase flight frames",
+      "Floating geometry on water: float hulls, water rudder and bow wheels rendered above the surface with no waterline in plane-rear-quarter, plane-front-quarter and glass-sun; physics contact points sit 7-17 cm below the visual keel",
+      "Hard horizon seam and hard shore edges (water discard at depth < -0.05, horizonFade cutoff for clouds) in every exterior frame; hard steps in water depth colour from the height texture (island-pass, night)",
+      "Static per-pixel cloud dither at 0.6 render scale plus aliasing/shimmer on masts, containers, window lights and sun glitter",
+      "Mirrored registration decals and glass/geometry errors on the aircraft (stepped glass outline, black slab intersecting glass, wing-cabin gap, prop-hub light sorting error), and a land-contact model with no forward support that nose-overs on touchdown"
+    ],
+    "flightModelVerdict": "The aerodynamic envelope is plausible for a 2.3 t DHC-2-class floatplane (stall 53-57 kt, cruise 109-138 kt, climb ~750 fpm, turn rate within 5% of theory). Control authority is excessive (steady roll rate ~146 deg/s at 60 m/s; 27 deg pitch-up with a +3600 fpm zoom in 4 s from cruise), post-stall behaviour is too benign and under-damped, the ground model has no forward support so any land contact nose-overs, there is no crash/reset state, and the water contact geometry is 7-17 cm below the visual hull while the rendered frames show the hull entirely above the water. The chase camera has a vector-aliasing bug that displaces its look target by 6x the spring acceleration.",
+    "performanceVerdict": "Current structure is estimated at 25-40 FPS on a GTX 1660 / RX 6600-class GPU at 1080p (CPU draw-call bound with 1,300-1,600 WebGL calls and GPU-bound on water + shadows). After the reductions: ~500-650 calls, 3-4 M triangles, ~10-12 ms GPU, 60 FPS plausible with headroom for spray and wakes. Real-GPU FPS was not measurable on this VM: frames were rendered by SwiftShader (CPU) and 'renderMs' only measures JS submission time; category 27 is scored from draw calls, triangles, memory and pipeline structure."
+  }
+}

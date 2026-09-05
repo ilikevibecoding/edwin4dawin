@@ -1,0 +1,330 @@
+{
+ "view": "plane-rear-quarter",
+ "stillUrl": "http://127.0.0.1:4173/?bench=plane-rear-quarter&w=1920&h=1080&quality=high&seed=20260904&freeze=1",
+ "setupMs": 14791,
+ "still": {
+  "warmupRenderMs": 5.300000011920929,
+  "renderMs": 8.799999997019768,
+  "metrics": {
+   "frames": 3,
+   "avgMs": 59.70000000298023,
+   "p99Ms": 165,
+   "minFps": 6.0606060606060606,
+   "avgFps": 16.75041875963283,
+   "onePercentLowFps": 6.0606060606060606,
+   "calls": 366,
+   "triangles": 1357445,
+   "points": 0,
+   "lines": 0,
+   "geometries": 391,
+   "textures": 51,
+   "programs": 52,
+   "jsHeapMB": 236.68996143341064,
+   "gpuMs": null,
+   "longTasks": 1,
+   "visibleObjects": 0,
+   "frame": 0,
+   "flying": false,
+   "telemetry": {
+    "airspeed": 3.5000000000000004,
+    "altitude": 1.96,
+    "heading": 240,
+    "alpha": 0.010010347968418393,
+    "stalled": false,
+    "onWater": true
+   },
+   "build": "45d3ba89fc54-20260905T040053Z",
+   "view": "plane-rear-quarter",
+   "camera": {
+    "pos": [
+     425.9,
+     4.25,
+     1892.3
+    ],
+    "quat": [
+     0.01698165638926741,
+     -0.9732864123523028,
+     -0.07659930188133564,
+     -0.215772402841401
+    ],
+    "fov": 40
+   }
+  },
+  "landmarks": {
+   "planeCentroid": [
+    0.4989088770096805,
+    0.5068900397656646
+   ],
+   "bridgeStart": [
+    4.314924656624406,
+    0.23888753859519374
+   ],
+   "bridgeEnd": null,
+   "landmark:Meridian Tower": null,
+   "landmark:Bah\u00eda One": null,
+   "landmark:Faro Bah\u00eda": null,
+   "landmark:Twin Palms A": null,
+   "landmark:Twin Palms B": null,
+   "landmark:The Sail": null,
+   "landmark:Terraces": null,
+   "landmark:Crown Plaza": null,
+   "landmark:The Needle": null,
+   "landmark:Gateway": null,
+   "landmark:Helix": null,
+   "landmark:Aquamarine": null,
+   "bridge2End": null,
+   "horizonCentre": null,
+   "planeBoxMin": [
+    0.16681911919004194,
+    0.3061269508461627
+   ],
+   "planeBoxMax": [
+    0.9969213051017592,
+    0.8225685629245286
+   ],
+   "horizon": [
+    0.49999999999999994,
+    0.2824211633076892
+   ]
+  }
+ },
+ "profile": {
+  "frames": 8,
+  "avgMs": 7912.33749999851,
+  "minMs": 7839.0999999940395,
+  "maxMs": 8013.5,
+  "p95Ms": 8013.5,
+  "onePercentLowMs": 8013.5
+ },
+ "flight": {
+  "stepAndRenderMs": 41.5,
+  "metrics": {
+   "frames": 12,
+   "avgMs": 20.708333334575098,
+   "p99Ms": 165,
+   "minFps": 6.0606060606060606,
+   "avgFps": 48.28973842768783,
+   "onePercentLowFps": 6.0606060606060606,
+   "calls": 366,
+   "triangles": 1358087,
+   "points": 0,
+   "lines": 0,
+   "geometries": 391,
+   "textures": 51,
+   "programs": 52,
+   "jsHeapMB": 237.5056848526001,
+   "gpuMs": 7829.271126,
+   "longTasks": 1,
+   "visibleObjects": 0,
+   "frame": 90,
+   "flying": true,
+   "telemetry": {
+    "airspeed": 3.4259728309903696,
+    "altitude": 1.9595513845832604,
+    "heading": 242.78570850458146,
+    "alpha": 0.05770317448363842,
+    "stalled": false,
+    "onWater": true
+   },
+   "build": "45d3ba89fc54-20260905T040053Z",
+   "view": "plane-rear-quarter",
+   "camera": {
+    "pos": [
+     425.9,
+     4.25,
+     1892.3
+    ],
+    "quat": [
+     0.01698165638926741,
+     -0.9732864123523028,
+     -0.07659930188133564,
+     -0.215772402841401
+    ],
+    "fov": 40
+   }
+  },
+  "landmarks": {
+   "planeCentroid": [
+    0.4914483506146333,
+    0.5054814794397211
+   ],
+   "bridgeStart": [
+    4.314924656624406,
+    0.23888753859519374
+   ],
+   "bridgeEnd": null,
+   "landmark:Meridian Tower": null,
+   "landmark:Bah\u00eda One": null,
+   "landmark:Faro Bah\u00eda": null,
+   "landmark:Twin Palms A": null,
+   "landmark:Twin Palms B": null,
+   "landmark:The Sail": null,
+   "landmark:Terraces": null,
+   "landmark:Crown Plaza": null,
+   "landmark:The Needle": null,
+   "landmark:Gateway": null,
+   "landmark:Helix": null,
+   "landmark:Aquamarine": null,
+   "bridge2End": null,
+   "horizonCentre": null,
+   "planeBoxMin": [
+    0.15937863945203412,
+    0.3113568276122156
+   ],
+   "planeBoxMax": [
+    0.9779183905454367,
+    0.8188818206813819
+   ],
+   "horizon": [
+    0.49999999999999994,
+    0.2824211633076892
+   ]
+  }
+ },
+ "consoleErrors": 0,
+ "crops": {
+  "aircraft": [
+   795,
+   385,
+   324
+  ],
+  "environment": [
+   766,
+   346,
+   388
+  ],
+  "medium": [
+   425,
+   335,
+   302
+  ],
+  "distant": [
+   733,
+   65,
+   453
+  ]
+ },
+ "flicker": {
+  "meanAbsDiff": 1.3469818082906433,
+  "maxAbsDiff": 1.5521180629730225,
+  "frames": 60
+ },
+ "clip": {
+  "frames": 60,
+  "heapMB": [
+   288.2962055206299,
+   237.5243797302246,
+   237.68543529510498,
+   237.74687385559082,
+   237.8609619140625,
+   238.02394199371338
+  ],
+  "metrics": {
+   "frames": 62,
+   "avgMs": 10.37419354771414,
+   "p99Ms": 151.3999999910593,
+   "minFps": 6.605019815449495,
+   "avgFps": 96.39303483212349,
+   "onePercentLowFps": 6.605019815449495,
+   "calls": 358,
+   "triangles": 1325629,
+   "points": 0,
+   "lines": 0,
+   "geometries": 388,
+   "textures": 48,
+   "programs": 51,
+   "jsHeapMB": 238.0819206237793,
+   "gpuMs": null,
+   "longTasks": 1,
+   "visibleObjects": 0,
+   "frame": 180,
+   "flying": true,
+   "telemetry": {
+    "airspeed": 3.382188829194891,
+    "altitude": 1.9581365464259346,
+    "heading": 245.92470444804297,
+    "alpha": -0.0763116076613409,
+    "stalled": false,
+    "onWater": true
+   },
+   "build": "45d3ba89fc54-20260905T040053Z",
+   "view": "plane-rear-quarter",
+   "camera": {
+    "pos": [
+     425.9,
+     4.25,
+     1892.3
+    ],
+    "quat": [
+     0.01698165638926741,
+     -0.9732864123523028,
+     -0.07659930188133564,
+     -0.215772402841401
+    ],
+    "fov": 40
+   }
+  },
+  "frameTimesMs": [
+   8.200000002980232,
+   7.9000000059604645,
+   7.100000008940697,
+   7.9000000059604645,
+   16.599999994039536,
+   7.100000008940697,
+   7,
+   10.599999994039536,
+   7.5,
+   8.199999988079071,
+   7.299999997019768,
+   10.700000002980232,
+   7.799999997019768,
+   7,
+   13.700000002980232,
+   11.5,
+   12.899999991059303,
+   13.5,
+   9,
+   7.5,
+   10.399999991059303,
+   22.799999997019768,
+   7.9000000059604645,
+   8.899999991059303,
+   13.800000011920929,
+   6.299999997019768,
+   7.799999997019768,
+   6.899999991059303,
+   8.600000008940697,
+   12.900000005960464,
+   8,
+   11.599999994039536,
+   7.700000002980232,
+   7,
+   7.799999997019768,
+   13.599999994039536,
+   8.5,
+   6.4000000059604645,
+   10.599999994039536,
+   9.199999988079071,
+   6.5,
+   11.599999994039536,
+   5.800000011920929,
+   8.5,
+   10.700000002980232,
+   7.899999991059303,
+   9.799999997019768,
+   17.400000005960464,
+   11.599999994039536,
+   14.700000002980232,
+   9.599999994039536,
+   5.9000000059604645,
+   7.200000002980232,
+   6.299999997019768,
+   5.799999997019768,
+   17.299999997019768,
+   10.400000005960464,
+   9.100000008940697,
+   7.300000011920929,
+   6.700000002980232
+  ]
+ }
+}

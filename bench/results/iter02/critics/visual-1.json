@@ -1,0 +1,1764 @@
+{
+  "critic": "visual-1",
+  "tag": "iter02",
+  "frames": {
+    "aerial-a": {
+      "scores": {
+        "1": 6,
+        "2": 7,
+        "3": 6,
+        "4": 8,
+        "5": 4,
+        "6": 5,
+        "7": 5,
+        "8": 4,
+        "9": 5,
+        "10": 3,
+        "11": 3,
+        "12": 3,
+        "13": 4,
+        "14": 3,
+        "15": 5,
+        "16": 5,
+        "17": 3,
+        "18": 3,
+        "19": 4,
+        "20": 6,
+        "21": 5,
+        "22": 5,
+        "23": 6,
+        "24": 3,
+        "25": 4,
+        "26": 5,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 1,
+          "score": 6,
+          "cells": "A3-H8",
+          "condition": "still_grid vs reference_a; landmarks in metrics.json",
+          "evidence": "Horizon at y=0.212-0.235 vs reference 0.25; plane centroid (0.80,0.76) vs (0.813,0.752) and width 0.135 vs 0.1325; bridge start (0.418,0.512)/end (0.681,0.345) vs (0.395,0.475)/(0.735,0.325) so the island-to-upper-right direction matches; but the main island is a thin horizontal strip spanning x=0.05-0.98 at y=0.50-0.72 instead of the reference island filling the lower-left (x 0.18-0.56, y 0.55-0.92) and rows 7-8 are empty water.",
+          "defect": "Camera is too far/high from the island so the foreground sand flats and lagoon of the reference are replaced by 28% of frame of open water, and cloud cover is 18% vs 39%.",
+          "fix": "Move the camera ~40% closer and lower toward the island tip, enlarge the island footprint toward the camera, and add a second cumulus bank across C1-E2.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 2,
+          "score": 7,
+          "cells": "G6-H7",
+          "condition": "still_grid + crops/aircraft.png, blind outline comparison with reference floatplane",
+          "evidence": "High-wing, radial cowl, twin floats with spreader bars and a swept fin read as a Beaver at a glance; the fin is a thin tapered blade with a dark tip and the horizontal tail span is ~55% of the wing chord region, wider than the reference, and the wing is a constant-thickness plate with no dihedral.",
+          "defect": "Tail surfaces are oversized and the wing has no dihedral/washout so the outline is 'toy Beaver' rather than DHC-2.",
+          "fix": "Reduce horizontal stabiliser span ~15%, thicken the fin root, add 1-2 deg dihedral and a visible wing-strut pair.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 3,
+          "score": 6,
+          "cells": "G6-H7",
+          "condition": "crops/aircraft.png at 324 px crop, edge inspection",
+          "evidence": "Floats, N-struts, spreader bars, prop disc, fin and stabiliser are present and nothing intersects; the fuselage is a smooth tapered tube with no door, no steps, no aileron/flap seams; registration N726BV on the visible starboard side is rendered mirrored (glyphs flipped).",
+          "defect": "Mirrored registration texture on the starboard fuselage and absent control-surface seams.",
+          "fix": "Flip the UVs on the starboard decal (or use a separate unmirrored decal) and add flap/aileron gap lines to the wing.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 4,
+          "score": 8,
+          "cells": "G6-H7",
+          "condition": "projected span fraction vs reference_a.json aircraft.widthFraction",
+          "evidence": "Plane spans ~0.135 of frame width vs reference 0.1325 and sits at (0.80,0.76) vs (0.813,0.752); relative to the shore trees (~1/6 of the span vs ~1/4 in the reference) it reads slightly large against the world.",
+          "defect": "Aircraft-to-world scale slightly off because trees are undersized, not because the aircraft is.",
+          "fix": "Scale tree canopies up ~30% or place the camera closer so shore objects read at reference scale.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 5,
+          "score": 4,
+          "cells": "G6-H7",
+          "condition": "crops/aircraft.png, sun high behind-left",
+          "evidence": "Airframe is a uniform matte white (135-230 grey) with navy wingtips; no specular lobe on cowl, wing or floats, no panel lines, no weathering, and the reference's yellow (239,199,90) belly/cowl livery is absent.",
+          "defect": "Uniform roughness/albedo over the whole aircraft with no specular response.",
+          "fix": "Assign a clearcoat metal-paint material with roughness 0.25-0.35, add panel-line/rivet normal map and the yellow-white livery.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 6,
+          "score": 5,
+          "cells": "G6-G7",
+          "condition": "crops/aircraft.png cabin windows and windshield",
+          "evidence": "Cabin windows and windshield are flat dark-navy decals with no transparency, no reflection of sky and no interior visible.",
+          "defect": "Glass rendered as opaque dark paint.",
+          "fix": "Use a transparent glass material with Fresnel reflection and a simple interior (seats, panel) behind it.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 7,
+          "score": 5,
+          "cells": "A3-C3, G3-H3",
+          "condition": "still_grid + crops/distant.png",
+          "evidence": "Two downtown clusters (~40 box towers each) plus a suburb of identical small grey cubes at A3-B3; towers are flat-shaded prisms in grey/white/blue with no facade texture, no glass reflection and identical crispness front to back; the reference has one hazy skyline with varied tower shapes.",
+          "defect": "Prism towers with untextured faces and a second duplicate downtown.",
+          "fix": "Add window-grid facade textures with emissive/reflective glass, vary footprints and remove or shrink the second downtown.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 8,
+          "score": 4,
+          "cells": "A4-H6",
+          "condition": "still_grid, crops/environment.png, zoom on A6/B5 tip",
+          "evidence": "Islands are perfectly flat; the coast is a uniform-width grey-lavender band (not sand beige 184,167,148) with white speckle dots; the west tip ends in a straight-edged angular grey spit at A6/B5; the mainland is a flat untextured green plane to the horizon.",
+          "defect": "Uniform-width beach band and an angular slab-like spit replace the reference's irregular sand flats and shoals.",
+          "fix": "Generate beaches from a noise-driven distance field with variable width, add sandbars/shoals in the shallows, and give islands 2-5 m of relief.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 9,
+          "score": 5,
+          "cells": "A7-H8, E5-F6",
+          "condition": "row-mean water colour, still_grid",
+          "evidence": "Water grades from hazy (166,191,211) at y=0.24 to saturated cyan (9,142,192) at y=0.9 and lightens in the lagoon (131,192,216); the near water is an electric cyan far from the reference teal (80,148,171) and the foreground rows 7-8 show only soft blotches with no wave structure or depth-dependent colour.",
+          "defect": "Oversaturated near water and a near-featureless foreground plane.",
+          "fix": "Desaturate deep water toward (60,140,175), add depth-based absorption using a bathymetry texture and a normal-mapped wave field.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 10,
+          "score": 3,
+          "cells": "A7-H8, E5-F6",
+          "condition": "still_grid, all water regions",
+          "evidence": "No reflection of the aircraft, bridge, towers, boats or clouds anywhere, no sun glitter, and the lagoon shows no sky reflection.",
+          "defect": "Water has no reflection term.",
+          "fix": "Add planar or SSR reflection blended by Fresnel plus a sun specular lobe.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 11,
+          "score": 3,
+          "cells": "G8, E5, E3-F4",
+          "condition": "still_grid zooms on boats",
+          "evidence": "Boat at G8 is a dark blob with no wake; tiny grey boats at E3/F4 have no wakes; ~12 identical sailboats sit in one evenly spaced straight row at the E5 shore; the reference shows three speedboats with long bright V-wakes.",
+          "defect": "No wakes or hull-water interaction on any boat; marina row is evenly spaced clones.",
+          "fix": "Add wake meshes/foam trails to moving boats and jitter marina boat positions, headings and hull types.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 12,
+          "score": 3,
+          "cells": "B5-H6, A4-B4",
+          "condition": "crops/environment.png, tree zoom at E6",
+          "evidence": "Vegetation is two models (round lollipop canopy and palm) repeated hundreds of times at identical size on a flat bright lawn (75,131,104); canopy colour ~ (70-95,127-150) is far brighter than the reference (81,85,74); no continuous forest canopy, no undergrowth.",
+          "defect": "Clone trees at identical scale with cartoon colour.",
+          "fix": "Use 6-8 tree variants with random scale 0.7-1.4 and yaw, darker desaturated canopy colours, and cluster them into a dense forest with overlapping canopies.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 13,
+          "score": 4,
+          "cells": "D4-F3, G3-H3",
+          "condition": "still_grid, crops/medium.png, crops/distant.png",
+          "evidence": "Main bridge runs from the island (0.418,0.512) to the upper-right (0.681,0.345), matching the reference direction; but it is a thin deck at water level with a stippled dashed surface, a short two-rib arch with ~10 piers in the middle and no visible supports along the remaining ~80%; the second bridge at bridge2End (0.867,0.345) is a small arch on a straight grey band.",
+          "defect": "Bridge deck sits on the water with no piers so it reads as a floating strip.",
+          "fix": "Raise the deck 15-25 m on regularly spaced piers reaching the water, make the arch a full-height tied arch and add deck traffic.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 14,
+          "score": 3,
+          "cells": "A1-B1, E1-G2",
+          "condition": "zoom on cloud bands",
+          "evidence": "Both cloud masses are stippled point sprays with visible individual dots, uniform grey-white with no lit top or shaded base and a grey haze band underneath; cover ~18% vs reference 39%.",
+          "defect": "Dithered particle clouds with no volume shading.",
+          "fix": "Replace with volumetric or billboard-cluster cumulus with sun-facing highlight and ambient-shaded base, doubling the cover.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 15,
+          "score": 5,
+          "cells": "A2-H3",
+          "condition": "horizon zoom, crops/distant.png",
+          "evidence": "Far water pales toward (166,191,211) and towers desaturate, but the horizon is a razor-straight seam where the flat green plane meets sky (A3-D3) with no haze blend, and back-row towers keep the same contrast as front-row ones.",
+          "defect": "Hard horizon seam and haze that does not scale with distance inside the skyline.",
+          "fix": "Apply exponential height fog with a horizon blend and fade the ground plane into the sky colour over the last 5% of depth.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 16,
+          "score": 5,
+          "cells": "whole frame",
+          "condition": "sky/water/aircraft colour sampling",
+          "evidence": "Sun is high behind-left (fuselage port side lit, starboard shaded), matching the reference; but sky top is grey (108,131,148) vs reference (55,134,180), horizon sky is near-white (212,221,227), while water is oversaturated, giving a milky low-contrast scene.",
+          "defect": "Exposure/sky model washes the sky while water stays saturated.",
+          "fix": "Use a physical sky with deeper zenith blue and lower exposure by ~0.3 EV; tone-map with a filmic curve.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 17,
+          "score": 3,
+          "cells": "B5-H6, A3-C3",
+          "condition": "tree/building base inspection",
+          "evidence": "No cast shadows from trees, houses, towers, boats or the bridge on ground or water; only the aircraft has self-shading.",
+          "defect": "Shadow casting absent for the world.",
+          "fix": "Enable cascaded shadow maps for terrain objects with a 2-3 cascade setup.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 18,
+          "score": 3,
+          "cells": "G6-H7, A7-H8",
+          "condition": "specular inspection on aircraft and water",
+          "evidence": "No specular highlight on the white airframe, no sun glitter on the water, no reflections.",
+          "defect": "Specular term effectively missing.",
+          "fix": "Add sun specular to water and clearcoat specular to the aircraft.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 19,
+          "score": 4,
+          "cells": "whole frame",
+          "condition": "dominant colour comparison with reference_a.json",
+          "evidence": "Water (9,142,192) vs reference (80,148,171); lawn (75,131,104) vs vegetation (81,85,74); sky top (108,131,148) vs (55,134,180); sand grey-lavender vs warm beige (184,167,148).",
+          "defect": "Saturated cartoon palette instead of the reference's muted filmic grade.",
+          "fix": "Apply a LUT that desaturates greens/cyans by ~30% and warms the sand.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 20,
+          "score": 6,
+          "cells": "whole frame",
+          "condition": "still_grid vs flight.png (frame 90)",
+          "evidence": "World is static between frames (same clouds, boats moved ~35 px), no shimmer or popping visible; the plane moved from (0.80,0.76) to (0.305,0.338) while the HUD did not change.",
+          "defect": "HUD frozen between frames; otherwise stable.",
+          "fix": "Drive the HUD from the live telemetry each frame.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 21,
+          "score": 5,
+          "cells": "G7 -> C3",
+          "condition": "flight.png, telemetry heading 326->311, FIXED camera",
+          "evidence": "Fixed camera lets the plane leave the composition and become a speck at (0.305,0.338) by frame 90; heading changed 15 deg with no visible bank; still pose is wings-level whereas the reference banks 8-10 deg left.",
+          "defect": "Camera does not follow and the aircraft turns without banking.",
+          "fix": "Use a chase camera with lag and couple roll to yaw rate in the flight model.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 22,
+          "score": 5,
+          "cells": "whole frame",
+          "condition": "count of distinct objects per region",
+          "evidence": "Two downtowns, suburb field, five islands, marina, two bridges and a few boats exist, but the island interior is a road grid with ~8 houses and empty lots, roads dead-end at the lagoon sand, no traffic on the bridge and no people.",
+          "defect": "Sparse, unanchored props on an empty grid.",
+          "fix": "Fill the grid with houses, add cars on roads/bridge and moving boats with wakes.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 23,
+          "score": 6,
+          "cells": "B5-H6 vs E3-F3, B3-C3",
+          "condition": "near vs far detail",
+          "evidence": "Near-island trees are individually modelled while far islands use the same dot-style trees; far towers are as crisp as near ones with no LOD softening; the aircraft has far more detail than any world object.",
+          "defect": "No distance-based softening; detail budget concentrated on the aircraft.",
+          "fix": "Add atmospheric softening and lower-frequency impostors for far trees/towers.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 24,
+          "score": 3,
+          "cells": "B5-H6, E5, A3-B3",
+          "condition": "instance repetition inspection",
+          "evidence": "Same tree model repeated hundreds of times, 12 identical sailboats evenly spaced at E5, identical suburb cubes at A3-B3, two near-identical downtown clusters.",
+          "defect": "Clone trees/boats/buildings and evenly spaced objects.",
+          "fix": "Randomise scale/rotation/colour per instance and vary building footprints.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 4,
+          "cells": "G7, A1-G2, A3-D3, D4",
+          "condition": "artifact scan of every cell + console.txt",
+          "evidence": "Mirrored registration text on the fuselage; stippled cloud dither; white speckle 'foam' dots along every shoreline and in the lagoon; a straight-edged darker band across the water at D4; hard horizon seam; console.txt logs one 404 resource error.",
+          "defect": "Dithering, speckle noise and a hard seam are visible in ordinary play.",
+          "fix": "Fix the decal UVs, replace stipple clouds, replace foam dots with a shoreline foam texture, fix the missing resource.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 26,
+          "score": 5,
+          "cells": "A1-A2, E1, H1-H2, H8",
+          "condition": "HUD legibility and update check",
+          "evidence": "Panels KIAS 112 / ALT FT 1444 / V/S +550 / 326 NW / THR 75% / RPM 2100 / FIXED 14:35 are legible on dark translucent boxes in the corners and do not block the composition; flight.png shows the same values although telemetry is 55.9 m/s (109 kt), 450 m (1476 ft), 311 deg.",
+          "defect": "HUD does not update with telemetry.",
+          "fix": "Bind HUD fields to the simulation state each frame.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 27,
+          "score": 5,
+          "cells": "n/a",
+          "condition": "metrics.json counters (frame times come from a CPU software renderer and are ignored)",
+          "evidence": "1295 draw calls, 9.87 M triangles, 634 geometries, 41 textures, 40 programs; JS heap 143 MB still / 138 MB flight.",
+          "defect": "~10 M triangles and ~1300 draw calls per frame exceed a comfortable browser budget (1-3 M tris, <500 calls) and heap swings suggest allocation churn.",
+          "fix": "Instance trees/buildings, add LODs and merge static geometry to cut calls below 500 and triangles below 3 M.",
+          "hardFailure": false,
+          "kind": "performance"
+        }
+      ],
+      "worst3": [
+        "Bridge deck floats on the water with no piers along 80% of its length (D4-F3)",
+        "Clone lollipop trees on a neon lawn with no cast shadows (B5-H6)",
+        "Stippled particle clouds and a hard horizon seam over a flat green ground plane (A1-G2, A3-D3)"
+      ],
+      "best3": [
+        "Aircraft placement and scale match the reference (centroid 0.80,0.76 vs 0.813,0.752; span 0.135 vs 0.1325)",
+        "Bridge direction and skyline position match the reference layout (Meridian Tower at 0.311,0.223 vs 0.325,0.215)",
+        "Shallow-water lightening around shores and the lagoon gives a readable depth gradient"
+      ]
+    },
+    "cockpit-city": {
+      "scores": {
+        "1": 3,
+        "2": 4,
+        "3": 3,
+        "4": 4,
+        "5": 3,
+        "6": 2,
+        "7": 4,
+        "8": 4,
+        "9": 6,
+        "10": 3,
+        "11": 4,
+        "12": 3,
+        "13": 4,
+        "14": 6,
+        "15": 4,
+        "16": 4,
+        "17": 3,
+        "18": 2,
+        "19": 5,
+        "20": 5,
+        "21": 3,
+        "22": 4,
+        "23": 4,
+        "24": 3,
+        "25": 2,
+        "26": 5,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 1,
+          "score": 3,
+          "cells": "whole frame",
+          "condition": "fraction of frame showing the world through the windshield",
+          "evidence": "World is visible only in A3-B8 (~15% of the frame); the horizon sits at y=0.52 behind the post; the downtown landmarks projected at (0.51,0.51) are hidden behind the panel slab.",
+          "defect": "Eye point is too low/aft so the panel and post block the city the view is named for.",
+          "fix": "Raise and move the cockpit camera forward ~0.3 m and lower the glareshield so the horizon and towers are visible over the panel.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 3,
+          "score": 3,
+          "cells": "C4-C8, F5-G7, A1-H2",
+          "condition": "interior geometry inspection",
+          "evidence": "Post is an oversized box, the yoke stalk is a plain square bar at F5-G7 with no wheel, the wing underside is a flat plate that reads as paper-thin from below, and a yellow flat quad at F2-H2 does not match the white airframe.",
+          "defect": "Placeholder boxes and a paper-thin wing plate.",
+          "fix": "Replace with a modelled yoke/column, give the wing an airfoil thickness and proper underside skin, and remove or texture the yellow quad.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 6,
+          "score": 2,
+          "cells": "C3-H8, B7-C8",
+          "condition": "still_grid cockpit interior and windshield panes",
+          "evidence": "The panel/glareshield is a single flat navy slab covering ~75% of the frame with no instruments, gauges or switches; the windshield is a tinted pane whose triangular edge cuts as a hard line across the sky at C3-D4; a second, semi-opaque pane at B7-C8 washes the water behind it to flat pale blue; the centre post at C4-C8 is a plain box ~5% of frame width.",
+          "defect": "Opaque/hard-edged glass panes and an instrument-less slab where the cockpit should be.",
+          "fix": "Model a real panel (six-pack, throttle, yoke), give the glass a Fresnel-only tint with a framed edge, and thin the post to ~2% of frame width.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 18,
+          "score": 2,
+          "cells": "A1-E2, C3-D4, D3-H8",
+          "condition": "specular/reflection scan of glass, wing and panel",
+          "evidence": "No sky or interior reflection on the glass, no highlight on the panel edge or post, wing underside is a uniform grey with no bounce light from the water.",
+          "defect": "Specular and reflection terms absent inside the cockpit.",
+          "fix": "Add environment-map reflection to glass and a low-roughness clearcoat to painted interior parts.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "whole frame",
+          "condition": "camera pose vs telemetry; flight.png",
+          "evidence": "Camera follows the aircraft (position moved from (-900,321,1399) to (-953,320,1234)) but the eye point keeps 75% of the frame on the panel; heading drift 342->338 in 90 frames with no visible bank or pitch cue; HUD frozen at 119/1050/+200.",
+          "defect": "Cockpit eye point unusable for flying.",
+          "fix": "Set the eye at the design eye point with a 30-35 deg over-nose view and let head position follow pitch slightly.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 2,
+          "cells": "A1-E2, C3-D4, E1 (flight)",
+          "condition": "artifact scan; still_grid vs flight.png",
+          "evidence": "Clouds are visible through the wing underside at B2-C2 (single-sided/translucent wing), the glass tint boundary is a straight seam across the sky, and a dark sliver appears at (0.68,0.02-0.14) in flight.png that is absent in the still.",
+          "defect": "See-through wing, glass seam and a popping sliver.",
+          "fix": "Render the wing double-sided/opaque, frame the glass edge with a window post, and fix the culling of the strut/antenna that pops in.",
+          "hardFailure": true,
+          "kind": "visual"
+        }
+      ],
+      "worst3": [
+        "Instrument-less flat navy panel slab covering ~75% of the frame (D3-H8)",
+        "Clouds visible through the wing underside and a hard glass-tint seam across the sky (B2-C2, C3-D4)",
+        "Semi-opaque lower glass pane washing out the water (B7-C8)"
+      ],
+      "best3": [
+        "Sky gradient and soft cumulus at A2-B4 are the most convincing clouds of the round",
+        "Water at A7-B7 shows a fine ripple normal pattern and shallows gradient",
+        "Wing tip stripe and post/glass sorting are correct (glass in front of the post)"
+      ]
+    },
+    "bridge-low": {
+      "scores": {
+        "1": 6,
+        "2": 5,
+        "3": 6,
+        "4": 6,
+        "5": 4,
+        "6": 5,
+        "7": 5,
+        "8": 5,
+        "9": 6,
+        "10": 4,
+        "11": 3,
+        "12": 4,
+        "13": 4,
+        "14": 3,
+        "15": 5,
+        "16": 6,
+        "17": 6,
+        "18": 5,
+        "19": 5,
+        "20": 4,
+        "21": 3,
+        "22": 5,
+        "23": 5,
+        "24": 4,
+        "25": 3,
+        "26": 5,
+        "27": 4
+      },
+      "entries": [
+        {
+          "category": 5,
+          "score": 4,
+          "cells": "C5-F7",
+          "condition": "crops/aircraft.png material response, sun upper-right",
+          "evidence": "All surfaces share the same matte white response with no highlight on the wing top or cowl facing the sun; only faint panel lines on the wing top break the uniformity.",
+          "defect": "Uniform roughness across the whole aircraft.",
+          "fix": "Use a clearcoat paint material with roughness 0.25-0.35 and per-panel roughness variation.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 11,
+          "score": 3,
+          "cells": "C8-F8 deck wall, G3/H3 quay, flight.png top",
+          "condition": "water-structure interaction scan",
+          "evidence": "No foam, lapping or wetness where the deck wall and quay meet the water; the only boat (white hull at the port in flight.png) has no wake.",
+          "defect": "Water does not react to any structure or vessel.",
+          "fix": "Add a shoreline/structure foam mask along water-mesh intersections and wake trails to moving hulls.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 13,
+          "score": 4,
+          "cells": "C8-E8, D2-D3, F2-H3",
+          "condition": "deck, arch, quay and supports",
+          "evidence": "Deck has two lanes, yellow centre line, white dashes, parapets, lamp posts and one car, but the deck is a solid wall at water level with no piers along the visible length, the arch is two hairlines, the quay is a flat slab meeting the water with no dock wall, and containers float beside it.",
+          "defect": "Low causeway wall instead of a pier-supported bridge; quay/containers not anchored.",
+          "fix": "Raise the deck onto pier pairs every ~40 m, thicken the arch to a boxed tied-arch, add a fendered dock wall and remove floating containers.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 14,
+          "score": 3,
+          "cells": "A1-H1",
+          "condition": "sky band inspection",
+          "evidence": "The sky is a flat pale grey-white gradient with no cloud forms anywhere in the top 13% of the frame.",
+          "defect": "Clouds missing from the view.",
+          "fix": "Add a cumulus layer above the skyline consistent with the aerial view.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "D5-F7 (still) -> B3 (flight)",
+          "condition": "still_grid vs flight.png chase camera, telemetry heading 96->100, altitude 52->40 m",
+          "evidence": "With only a 4 deg heading change the chase camera swings from directly astern (horizon y=0.13, plane at (0.50,0.57)) to a steep downward view (horizon y~0.02, plane at (0.19,0.33)) and the bridge leaves the frame; altitude drops 12 m while HUD V/S reads 0.",
+          "defect": "Chase camera does not damp yaw/pitch and loses the subject and the landmark.",
+          "fix": "Use a spring-damped follow camera locked to the velocity vector with a max pitch offset of ~10 deg, and derive V/S from the simulation.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "G3-H3, D2, D5-E6",
+          "condition": "artifact scan of every cell",
+          "evidence": "Container stacks sit on the water beyond the quay edge at G3/H3 with no hull or freeboard, the arch is two hairline ribs at D2, the cabin roof is a flat tan box, and the port-side registration is mirrored.",
+          "defect": "Floating geometry and hairline/placeholder parts visible in ordinary play.",
+          "fix": "Snap container stacks to the quay or place them on a modelled ship hull; give the arch ribs real thickness; texture the cabin roof; fix the decal UV.",
+          "hardFailure": true,
+          "kind": "visual"
+        }
+      ],
+      "worst3": [
+        "Chase camera swings away and loses the plane and bridge within 90 frames",
+        "Container stacks floating on the water beside the quay (G3-H3)",
+        "Bridge deck as a water-level wall with hairline arch ribs and no piers (C8-E8, D2)"
+      ],
+      "best3": [
+        "Deck detail: lane markings, parapets, lamp posts and a car read correctly at low altitude",
+        "Soft, correctly shaped aircraft shadow on the water (C7-D7)",
+        "Water ripple normals with sun glitter and a hazed pastel skyline"
+      ]
+    },
+    "skyline-high": {
+      "scores": {
+        "1": 5,
+        "2": 5,
+        "3": 6,
+        "4": 6,
+        "5": 4,
+        "6": 5,
+        "7": 5,
+        "8": 3,
+        "9": 4,
+        "10": 3,
+        "11": 4,
+        "12": 4,
+        "13": 4,
+        "14": 3,
+        "15": 4,
+        "16": 5,
+        "17": 3,
+        "18": 3,
+        "19": 4,
+        "20": 6,
+        "21": 5,
+        "22": 5,
+        "23": 5,
+        "24": 4,
+        "25": 3,
+        "26": 5,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 8,
+          "score": 3,
+          "cells": "A3-H4, F4-G4",
+          "condition": "terrain and horizon inspection",
+          "evidence": "The mainland beyond the suburb is a flat, untextured bright-green plane extending to a razor-straight horizon across all eight columns; no relief, fields, roads or texture; coastline at F4-G5 is a smooth curve with a hairline sand band.",
+          "defect": "Featureless flat ground plane forms the horizon.",
+          "fix": "Add terrain heightfield with distant hills, a land-use texture (fields/roads/towns) and fog blending into the horizon.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 9,
+          "score": 4,
+          "cells": "G5-H6, A6-D7, F5-H8",
+          "condition": "water colour and band inspection",
+          "evidence": "Water is a single saturated cyan (~20,150,210) in the river, harbour and open bay with mild lightening at shores; a straight-edged darker rectangle crosses G5-H6 as if a tile boundary; no depth darkening in the shipping channel beside the quay.",
+          "defect": "Water shading shows a visible tile/band seam and no bathymetry.",
+          "fix": "Blend the water tiles/shading regions continuously and drive colour from a depth texture.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 10,
+          "score": 3,
+          "cells": "A6-D7, F5-H8",
+          "condition": "reflection scan of river and harbour",
+          "evidence": "No reflections of towers, cranes, ship or sky gradient in the river or harbour surfaces.",
+          "defect": "Water reflection term missing.",
+          "fix": "Add SSR/planar reflections with Fresnel blending.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 14,
+          "score": 3,
+          "cells": "B1-C2, F2-H2",
+          "condition": "cloud inspection",
+          "evidence": "One stippled particle cloud at B1-C2 with individual dots visible and a thin flat white band at F2-H2; no volume, no lit/shaded sides.",
+          "defect": "Dithered particle clouds without volume.",
+          "fix": "Use volumetric or shaded billboard-cluster cumulus.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 17,
+          "score": 3,
+          "cells": "D5-E6, A6-B7, D7-H8",
+          "condition": "shadow scan of towers, cranes, ship and aircraft",
+          "evidence": "No tower casts a shadow onto neighbouring streets or the quay, cranes and the cruise ship have no ground/water shadow, and the aircraft casts none.",
+          "defect": "World shadow casting absent.",
+          "fix": "Enable cascaded shadow maps for buildings and props.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 18,
+          "score": 3,
+          "cells": "D5-E6, whole water",
+          "condition": "specular scan",
+          "evidence": "No glints on water, no specular on tower glass faces even where they face the sun.",
+          "defect": "Specular term missing on water and glass.",
+          "fix": "Add sun specular to water and a glossy glass material for tower facades.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "G5-H6, B1-C2, A3-H4, F4-G4, F8",
+          "condition": "artifact scan of every cell",
+          "evidence": "A darker blue band with crisp parallel straight edges crosses the water at G5-H6; the cloud at B1-C2 is a stipple of visible dots; the horizon is a hard seam along the whole width at y=0.315; the suburb ends in a straight cut against the bare green plane at F4-G4; the cruise ship at F8 stands on a grey pontoon slab.",
+          "defect": "Seams, stipple and straight cut-offs visible at a glance.",
+          "fix": "Fix the water shading tile/seam, replace stipple clouds, fog the horizon, feather the suburb boundary with scattered lots and trees, and moor the ship against a real quay wall.",
+          "hardFailure": true,
+          "kind": "visual"
+        }
+      ],
+      "worst3": [
+        "Straight-edged dark water band across G5-H6 and a razor-straight horizon over a bare green plane",
+        "Empty flat quay slab covering ~20% of the frame with a box cruise ship on a pontoon (D7-H8)",
+        "Stippled particle cloud at B1-C2 and no shadows anywhere in the city"
+      ],
+      "best3": [
+        "Downtown tower clusters with varied heights and lit/dark faces read as a city from altitude (D5-E6, A6-B7)",
+        "River channel and bay layout with islands give a plausible coastal map",
+        "Port cranes and container rows add recognisable infrastructure detail (E7-H7)"
+      ]
+    },
+    "island-pass": {
+      "scores": {
+        "1": 6,
+        "2": 5,
+        "3": 6,
+        "4": 6,
+        "5": 4,
+        "6": 5,
+        "7": 5,
+        "8": 4,
+        "9": 6,
+        "10": 4,
+        "11": 3,
+        "12": 4,
+        "13": 5,
+        "14": 3,
+        "15": 5,
+        "16": 5,
+        "17": 3,
+        "18": 5,
+        "19": 4,
+        "20": 4,
+        "21": 3,
+        "22": 5,
+        "23": 5,
+        "24": 4,
+        "25": 4,
+        "26": 5,
+        "27": 6
+      },
+      "entries": [
+        {
+          "category": 11,
+          "score": 3,
+          "cells": "G4, A4-D4 beach",
+          "condition": "boat/wake and shoreline interaction scan",
+          "evidence": "A translucent grey V-shaped wake patch sits at G4 with no hull; no other vessels; the beach has a string of white dots instead of surf or wet sand.",
+          "defect": "Wake decal without a boat and no shoreline water interaction.",
+          "fix": "Attach wakes to hull instances only, and add a breaking-wave/foam band with wet-sand darkening along the beach.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 14,
+          "score": 3,
+          "cells": "C1-D1, F1-H1",
+          "condition": "cloud inspection",
+          "evidence": "Only thin stippled wisps of visible dots over a near-white sky; no cumulus volume.",
+          "defect": "Dithered wisps instead of clouds.",
+          "fix": "Add shaded cumulus billboards or volumetrics above the skyline.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 17,
+          "score": 3,
+          "cells": "A2-D4, A7-B8 (flight)",
+          "condition": "shadow scan of towers, palms and aircraft",
+          "evidence": "Forty-storey towers at A2-D3 cast no shadow onto the streets or beach, palms have no shadow; the aircraft shadow appears only in flight.png as a soft blob at A7-B8.",
+          "defect": "Building and vegetation shadows absent.",
+          "fix": "Enable shadow casting for buildings and trees with a 3-cascade shadow map.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 20,
+          "score": 4,
+          "cells": "whole frame",
+          "condition": "still_grid vs flight.png",
+          "evidence": "Camera orientation changes ~40 deg between the two frames for a 10 deg heading change; the water pattern is consistent and no popping is seen, but HUD values are identical to the still.",
+          "defect": "Camera instability and frozen HUD dominate the temporal impression.",
+          "fix": "Damp the camera and update HUD per frame.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "D5-F7 (still) -> H4-H5 (flight)",
+          "condition": "still_grid vs flight.png; telemetry heading 352->342, altitude 130->120 m",
+          "evidence": "A 10 deg heading change makes the chase camera pitch down and yaw so the horizon moves from y=0.15 to the top edge and the plane slides from (0.50,0.56) to (0.88,0.40), half clipped by the right edge; V/S shows 0 while altitude falls 10 m.",
+          "defect": "Chase camera is under-damped and loses the subject; V/S is not derived from the simulation.",
+          "fix": "Spring-damp the follow camera on the velocity vector and compute V/S from altitude rate.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 4,
+          "cells": "G4, E5-E7 fin, C1-H1, A4-D4",
+          "condition": "artifact scan of every cell",
+          "evidence": "Ghost wake at G4, hairline fin at E5-E6, stippled cloud wisps, dotted foam line along the beach, hard horizon at y=0.15.",
+          "defect": "Ghosted/translucent object and stipple noise visible in play.",
+          "fix": "Remove orphan wake decals, thicken the fin, replace stipple clouds and the dotted foam.",
+          "hardFailure": false,
+          "kind": "visual"
+        }
+      ],
+      "worst3": [
+        "Chase camera swings and half-clips the aircraft within 90 frames",
+        "Translucent wake patch with no boat at G4 and no shadows under 40-storey towers",
+        "Abrupt cyan-to-ultramarine water boundary (E3-H6) with oversaturated deep water"
+      ],
+      "best3": [
+        "Water ripple normals with sun glitter and a readable shallow-water gradient near the beach",
+        "Waterfront tower massing with faint window-grid textures and lit/dark faces (A2-D3)",
+        "Wing shows thickness, a flap/aileron line and panel texture from behind (C5-F6)"
+      ]
+    },
+    "harbor": {
+      "scores": {
+        "1": 4,
+        "2": 5,
+        "3": 6,
+        "4": 5,
+        "5": 4,
+        "6": 5,
+        "7": 5,
+        "8": 3,
+        "9": 5,
+        "10": 3,
+        "11": 3,
+        "12": 4,
+        "13": 3,
+        "14": 5,
+        "15": 5,
+        "16": 5,
+        "17": 3,
+        "18": 5,
+        "19": 4,
+        "20": 4,
+        "21": 3,
+        "22": 4,
+        "23": 5,
+        "24": 4,
+        "25": 3,
+        "26": 5,
+        "27": 4
+      },
+      "entries": [
+        {
+          "category": 8,
+          "score": 3,
+          "cells": "A3-G7, A2-D2",
+          "condition": "quay slab and island terrain inspection",
+          "evidence": "The quay is an untextured noise-grey plane covering ~40% of the frame that meets the water flush with a dotted line; islands are flat discs of lawn with a hairline sand ring; the horizon is a hard straight line.",
+          "defect": "Flat placeholder ground everywhere.",
+          "fix": "Add a raised quay with a concrete edge, painted lanes, container yards and terminal buildings; give islands beaches and relief.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 10,
+          "score": 3,
+          "cells": "A3-H8 water",
+          "condition": "reflection scan in calm harbour",
+          "evidence": "The flat-calm harbour shows no reflection of the ship, cranes, containers, bridge or aircraft.",
+          "defect": "Reflection term missing.",
+          "fix": "Add planar reflections for the harbour water.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 11,
+          "score": 3,
+          "cells": "B3-D3 boats, A3-G7 quay edge",
+          "condition": "wake and water-contact scan",
+          "evidence": "White boats beside the floating containers have no wakes; no foam or lapping along 40% of frame of quay edge.",
+          "defect": "No water interaction with any hull or wall.",
+          "fix": "Add wake trails and a shoreline foam mask at mesh intersections.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 13,
+          "score": 3,
+          "cells": "A3-D3, F3-G3, A3-G7",
+          "condition": "bridge, quay, cranes, ship inspection (still_grid, q_tl/q_tr crops)",
+          "evidence": "The arch bridge at A3-C3 is drawn as 1-px hairline arches and deck at water level; container stacks sit on the water beyond the quay at B3, C3 and D3 with no hull; the cruise ship at F3-G3 rests against a grey pontoon slab floating on the water; the quay is a flat slab with no dock wall, bollards, markings or vehicles.",
+          "defect": "Floating containers and pontoon, wireframe bridge, unmodelled quay wall.",
+          "fix": "Snap containers onto the quay or onto a modelled ship hull, give the bridge boxed girders and piers, add a fendered quay wall with lane markings and vehicles.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 17,
+          "score": 3,
+          "cells": "A3-G7, F3-G3, A4-E3",
+          "condition": "shadow scan of quay, cranes, ship and aircraft (still + flight)",
+          "evidence": "No shadow from cranes, containers or the ship on the quay, and the aircraft at 146 m casts no shadow on the quay in flight.png.",
+          "defect": "Shadows absent on land surfaces.",
+          "fix": "Enable shadow receiving on the quay/terrain and casting on props.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 21,
+          "score": 3,
+          "cells": "D5-F7 (still) -> D2-E3 (flight)",
+          "condition": "still_grid vs flight.png; heading 52->48, altitude 160->146 m",
+          "evidence": "The chase camera pitches ~30 deg down between frames for a 4 deg heading change, dropping the horizon out of the frame; V/S reads 0 while altitude falls 14 m.",
+          "defect": "Camera follows attitude changes without damping; V/S not simulated.",
+          "fix": "Damp the follow camera and compute V/S from altitude rate.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "B3-D3, A3-C3, A3-G7 edge, A1-H1",
+          "condition": "artifact scan of every cell",
+          "evidence": "Floating container clusters, hairline bridge lines, a string of white dots along the whole quay edge as 'foam', stipple at the E1 cloud edge, hard horizon at y=0.15, a white sail-shaped object standing on the quay at F3.",
+          "defect": "Floating geometry and noise artifacts visible in ordinary play.",
+          "fix": "Fix container placement, thicken bridge members, replace dot foam with a wetness/foam texture, remove the stray sail.",
+          "hardFailure": true,
+          "kind": "visual"
+        }
+      ],
+      "worst3": [
+        "Container stacks floating on the water beside the quay (B3-D3) and a cruise ship on a pontoon slab (F3-G3)",
+        "Empty flat quay slab covering ~40% of the frame with a dotted 'foam' edge (A3-G7)",
+        "Hairline wireframe arch bridge at water level (A3-C3)"
+      ],
+      "best3": [
+        "Hazed pastel skyline at E2-H2 reads as a distant city",
+        "Soft-edged cumulus at B1-C1 has believable shape",
+        "Water ripple normals with glitter beside the quay"
+      ]
+    },
+    "water-landing": {
+      "scores": {
+        "1": 5,
+        "2": 6,
+        "3": 5,
+        "4": 6,
+        "5": 4,
+        "6": 5,
+        "7": 5,
+        "8": 4,
+        "9": 5,
+        "10": 4,
+        "11": 3,
+        "12": 4,
+        "13": 4,
+        "14": 5,
+        "15": 5,
+        "16": 5,
+        "17": 6,
+        "18": 5,
+        "19": 4,
+        "20": 3,
+        "21": 2,
+        "22": 4,
+        "23": 5,
+        "24": 4,
+        "25": 4,
+        "26": 5,
+        "27": 4
+      },
+      "entries": [
+        {
+          "category": 5,
+          "score": 4,
+          "cells": "C5-F6",
+          "condition": "crops/aircraft.png material response with the sun high behind the camera",
+          "evidence": "Wing top, flaps, fuselage and floats share one matte response (~200-215 grey on the wing, uniform navy on floats) with no highlight on the sunlit upper surfaces; only faint panel lines and yellow flap-hinge strips break the uniformity.",
+          "defect": "Uniform roughness across the whole aircraft.",
+          "fix": "Use a clearcoat paint material (roughness 0.25-0.35) with per-panel roughness variation and a rivet/panel normal map.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 11,
+          "score": 3,
+          "cells": "C5-F6, D7-E7, E2-F2",
+          "condition": "float/water interaction scan in still and flight; boat dots at E2-F2",
+          "evidence": "Floats hang 5.5 m over glassy ripples with no disturbance, the frame that should show touchdown spray has no aircraft in it, and the three boat dots at E2-F2 leave no wakes; the only mark on the water is a flat yellow quad at E4.",
+          "defect": "No hull-water interaction is demonstrated anywhere in the landing view.",
+          "fix": "Add spray/wake particle emitters on float contact and wake trails on boats; keep the camera on the plane at touchdown.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 13,
+          "score": 4,
+          "cells": "A2-H2",
+          "condition": "shore2x crop of the bridge line at row 2",
+          "evidence": "The bridge is a 1-2 px grey deck line at water level across the whole frame width with two hairline arches at D2-E2 and F2 and no visible piers or approach ramps.",
+          "defect": "Bridge reads as a wire on the water rather than a pier-supported structure.",
+          "fix": "Raise the deck on piers reaching the water and give the arch ribs real thickness so they survive at distance.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 20,
+          "score": 3,
+          "cells": "whole frame",
+          "condition": "still_grid vs flight.png, 90 frames apart",
+          "evidence": "Camera orientation swings from looking down at the plane (horizon y=0.17) to looking up at the sky (horizon y=0.80) with the subject gone; HUD stays at 48 kt / 18 ft / +400 / 086 while telemetry reads 35 kt / 6 ft / 077; water and clouds themselves show no shimmer or popping.",
+          "defect": "Camera instability and a frozen HUD dominate the temporal behaviour.",
+          "fix": "Damp the camera and bind HUD fields to live telemetry each frame.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 21,
+          "score": 2,
+          "cells": "C5-F6 (still) -> off-frame (flight)",
+          "condition": "still_grid vs flight.png; telemetry altitude 5.5 m -> 1.96 m onWater, heading 86 -> 77, airspeed 24.5 -> 18.2 m/s",
+          "evidence": "At frame 90 the chase camera has pitched up so the horizon sits at y=0.805 and the aircraft is not in the frame at all (planeCentroid null); the touchdown happens unseen; the still shows a flaps-down approach at 18 ft with the HUD reading V/S +400.",
+          "defect": "Chase camera loses the aircraft completely during the landing and V/S is not derived from the simulation.",
+          "fix": "Lock the chase camera to the aircraft position with a spring-damped offset behind the velocity vector, clamp pitch, and compute V/S from altitude rate.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 4,
+          "cells": "A2-H2 horizon, E4, C5-F6, G3-H4, HUD",
+          "condition": "artifact scan of every cell",
+          "evidence": "Razor-straight horizon seam at y=0.17 across all eight columns; a 6x8 px flat yellow square floating at E4 (0.505,0.415); an untextured tan block on the cabin roof; the registration is mirrored on one fuselage side; a soft darker diagonal patch crosses G3-H4; HUD values frozen between frames.",
+          "defect": "Hard horizon seam plus placeholder/flat-quad objects visible in ordinary play.",
+          "fix": "Blend the horizon with height fog, model the buoy as a 3D float with reflection, texture the roof block, fix the decal UV.",
+          "hardFailure": true,
+          "kind": "visual"
+        }
+      ],
+      "worst3": [
+        "Chase camera loses the aircraft entirely at touchdown (frame 90 shows only sky and horizon)",
+        "Uniform matte airframe with an untextured tan block on the cabin roof and a mirrored registration (C5-F6)",
+        "Hard horizon seam over an electric-cyan bay with a flat yellow quad floating at E4"
+      ],
+      "best3": [
+        "Flaps-down landing configuration, water rudders and pointed float sterns are modelled (D5-F6)",
+        "Soft aircraft shadow on the water directly below the floats (D7-E7)",
+        "Water ripple normals with sun glitter and a clean haze fade toward the horizon; soft cumulus in flight.png"
+      ]
+    },
+    "sunset": {
+      "scores": {
+        "1": 6,
+        "2": 6,
+        "3": 5,
+        "4": 6,
+        "5": 4,
+        "6": 5,
+        "7": 5,
+        "8": 5,
+        "9": 7,
+        "10": 6,
+        "11": 3,
+        "12": 4,
+        "13": 4,
+        "14": 3,
+        "15": 6,
+        "16": 6,
+        "17": 4,
+        "18": 6,
+        "19": 6,
+        "20": 5,
+        "21": 5,
+        "22": 5,
+        "23": 5,
+        "24": 4,
+        "25": 3,
+        "26": 5,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 5,
+          "score": 4,
+          "cells": "C5-F6",
+          "condition": "plane2x crop, backlit by a low sun ahead of the aircraft",
+          "evidence": "The whole airframe is a uniform matte blue-grey (wing top ~ (68,82,126)); no rim highlight along the fuselage spine, cowl or wing leading edge and no glint on the navy floats although the sun is 10 deg above the horizon ahead.",
+          "defect": "Uniform roughness with no specular response to a grazing light.",
+          "fix": "Use a clearcoat paint material so the low sun produces rim highlights and float glints.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 11,
+          "score": 3,
+          "cells": "F3-F4 (still), flight.png (0.62-0.68, 0.45-0.82)",
+          "condition": "boat/wake scan across the whole water surface",
+          "evidence": "Two parallel dotted white streaks cross the glitter path at F3-F4 and a dotted streak runs across and under the bridge deck in flight.png, but there is no boat at either end of any streak; no other vessel or wake exists.",
+          "defect": "Orphan wake decals drawn as strings of dots, one passing through the bridge.",
+          "fix": "Attach wakes only to hull instances, render them as a foam texture strip and clip them against structures.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 13,
+          "score": 4,
+          "cells": "A3-E4, D4-E4 arch, flight.png bottom-left",
+          "condition": "islands2x and bridge_mid2x crops",
+          "evidence": "The deck carries a lane texture, lamp posts and cars, but it lies on the water surface with piers only under the short two-rib arch at D4-E4; the remaining ~90% of the visible span floats with no supports and the arch ribs are 1 px.",
+          "defect": "Bridge supports missing along most of the span.",
+          "fix": "Add regularly spaced piers reaching the water along the whole deck and give the arch ribs structural thickness.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 14,
+          "score": 3,
+          "cells": "A1-H1, C1-E1, flight.png C1-H1",
+          "condition": "cloud3x crop and flight_sky strip",
+          "evidence": "Clouds are brown-mauve smudges made of visible dots (stipple grain at 1x) along the top band and above the horizon; the large mass in flight.png has a grainy edge and a uniform tint with no sunlit rim or shaded underside even though the sun sits directly below it.",
+          "defect": "Dithered particle clouds with no volume shading at the one time of day when cloud lighting is most visible.",
+          "fix": "Replace with shaded billboard clusters or volumetrics; light the sun-facing rim warm and the base cool at low sun angles.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 17,
+          "score": 4,
+          "cells": "A3-A4, C3-D3, A3-E4 deck",
+          "condition": "long-shadow check at 17:53 sun elevation",
+          "evidence": "With the sun 10 deg above the horizon, trees on the islands and lamp posts on the deck cast no shadows on the lawn or deck; only the lit/unlit split on the fuselage suggests a direction.",
+          "defect": "World shadow casting absent at the time of day when shadows dominate the look.",
+          "fix": "Enable shadow maps for vegetation and infrastructure with a long-shadow cascade.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "A1-H1, F3-F4, A2-H2 seam, C5-F6",
+          "condition": "artifact scan of every cell in still_grid and flight.png",
+          "evidence": "Stipple grain on every cloud, dotted orphan wake lines crossing the bridge, a hard horizon seam at y=0.147, a mirrored registration on one fuselage side and an untextured tan block on the cabin roof.",
+          "defect": "Dither noise, floating decals and a hard seam visible in ordinary play.",
+          "fix": "Fix the cloud renderer, wake ownership, horizon fog and the aircraft decal/roof texture.",
+          "hardFailure": true,
+          "kind": "visual"
+        }
+      ],
+      "worst3": [
+        "Stippled brown cloud smudges with visible dot grain around the setting sun (A1-H1)",
+        "Orphan dotted wake streaks with no boats, one passing through the bridge deck (F3-F4)",
+        "Bridge deck floating on the water with piers only under the arch (A3-E4)"
+      ],
+      "best3": [
+        "Sun glitter path and the mauve-to-deep-blue water gradient reflecting the evening sky (F2-F4, whole water)",
+        "Warm sky gradient with a hazed, sunlit mainland strip (A1-H2)",
+        "Bridge deck detail: lane texture, lamp posts and cars are visible in flight.png"
+      ]
+    },
+    "cloudy": {
+      "scores": {
+        "1": 6,
+        "2": 6,
+        "3": 5,
+        "4": 6,
+        "5": 4,
+        "6": 5,
+        "7": 5,
+        "8": 4,
+        "9": 4,
+        "10": 3,
+        "11": 4,
+        "12": 4,
+        "13": 4,
+        "14": 2,
+        "15": 6,
+        "16": 4,
+        "17": 5,
+        "18": 4,
+        "19": 4,
+        "20": 5,
+        "21": 5,
+        "22": 5,
+        "23": 5,
+        "24": 3,
+        "25": 3,
+        "26": 5,
+        "27": 4
+      },
+      "entries": [
+        {
+          "category": 9,
+          "score": 4,
+          "cells": "A6-C8, F3-H4, E5-F5 lagoon",
+          "condition": "water colour vs sky colour",
+          "evidence": "Open water is a saturated cyan (33,130,161) under a grey sky; the shallows gradient near the beach (B6-C7) and the pale lagoon are good, but the deep water carries no grey sky reflection and no wave-scale change with distance.",
+          "defect": "Water colour disconnected from the sky it should reflect.",
+          "fix": "Drive the water base colour from the sky radiance and add depth-based absorption.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 10,
+          "score": 3,
+          "cells": "A6-C8, E5-F5, F3-H4",
+          "condition": "reflection scan of lagoon, marina basin and bay",
+          "evidence": "No reflection of the grey sky, trees, marina boats or the aircraft anywhere; the lagoon is a flat pale wash.",
+          "defect": "Water reflection term missing.",
+          "fix": "Add planar/SSR reflections blended by Fresnel.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 13,
+          "score": 4,
+          "cells": "D4-G3, F3-G3 arch",
+          "condition": "bridge2x crop",
+          "evidence": "The deck lies at water level from the island to the far shore with piers visible only under the hairline arch at F3-G3; red dots along the deck read as lights but there is no structure below the deck.",
+          "defect": "Bridge supports missing along most of the span.",
+          "fix": "Add piers reaching the water along the whole deck and thicken the arch ribs.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 14,
+          "score": 2,
+          "cells": "A1-H1, flight.png A1-H2",
+          "condition": "cloud3x crop of the sky band and flight_top strip",
+          "evidence": "The overcast is a grey-blue gradient with sprayed bands of individual white dots; there is no cloud base texture, no soft stratus layer, no variation in thickness and no volume, and the dot grain is visible at 1x in flight.png.",
+          "defect": "The 'cloudy' condition is represented by particle stipple rather than a cloud layer.",
+          "fix": "Render an overcast layer as a textured/volumetric stratus deck with a noise-driven base and let it drive ambient light.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 16,
+          "score": 4,
+          "cells": "whole frame",
+          "condition": "sky colour vs surface lighting comparison",
+          "evidence": "Sky zenith is grey (85,104,125) yet the fuselage shows a clear lit/shaded side split, the lawn is a saturated bright green, the beach is bright and the water is a sunny cyan (33,130,161); nothing in the scene responds to the overcast.",
+          "defect": "Lighting model ignores the sky condition; only the sky layer changed.",
+          "fix": "Scale direct sun intensity by cloud cover, raise ambient/sky light and desaturate water reflection colour from the sky.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 24,
+          "score": 3,
+          "cells": "A4-H8, E4-F4, flight.png A2-H2",
+          "condition": "instance repetition scan",
+          "evidence": "Round lollipop trees and palms repeat at identical size across the whole island, the mainland is a carpet of identical grey cubes to the horizon, marina piers are evenly spaced with the same hull models.",
+          "defect": "Clone trees/buildings and evenly spaced marina piers.",
+          "fix": "Randomise per-instance scale/yaw/colour, vary building footprints and jitter pier spacing/hull types.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "A1-H1, A5-C8 shore, C5-F6, A2-H2 seam",
+          "condition": "artifact scan of every cell in still_grid and flight.png",
+          "evidence": "Dot stipple across the entire sky, white speckle dots along every beach and lawn edge (beach2x), a mirrored registration on one fuselage side, a hard horizon seam at y=0.158 and red dotted pattern along the bridge deck.",
+          "defect": "Dithering, speckle noise and a seam visible in ordinary play.",
+          "fix": "Replace stipple clouds and dot foam with textures, fix the decal UVs and fog the horizon.",
+          "hardFailure": true,
+          "kind": "visual"
+        }
+      ],
+      "worst3": [
+        "Overcast rendered as sprayed dot bands with no cloud layer (A1-H1)",
+        "Sunny lighting (cyan water, lit/shaded fuselage, bright lawn) under a grey sky",
+        "Clone trees and cube carpet with white speckle along every shoreline (A4-H8)"
+      ],
+      "best3": [
+        "Hazed downtown skyline with plausible tower massing at D2-E2",
+        "Shallow-water gradient and lagoon around the island tip (B6-C7, E5-F5)",
+        "Marina with piers and mixed hull colours at E4-F4; visible prop disc in flight.png"
+      ]
+    },
+    "night": {
+      "scores": {
+        "1": 5,
+        "2": 6,
+        "3": 5,
+        "4": 6,
+        "5": 4,
+        "6": 4,
+        "7": 5,
+        "8": 4,
+        "9": 4,
+        "10": 2,
+        "11": 4,
+        "12": 4,
+        "13": 4,
+        "14": 2,
+        "15": 5,
+        "16": 3,
+        "17": 4,
+        "18": 3,
+        "19": 4,
+        "20": 5,
+        "21": 5,
+        "22": 5,
+        "23": 5,
+        "24": 4,
+        "25": 3,
+        "26": 5,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 5,
+          "score": 4,
+          "cells": "C5-F6",
+          "condition": "plane2x crop of the airframe at night",
+          "evidence": "The airframe is a uniform matte grey with a daylight lit/shaded split; the only night features are a white tail light with glow and a pink beacon; no red/green nav lights, no strobe, no landing light and no reflection of the lights on the fuselage.",
+          "defect": "Uniform roughness and an incomplete light set.",
+          "fix": "Add nav/strobe/landing lights with emissive meshes and light the airframe from them; use a clearcoat paint material.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 9,
+          "score": 4,
+          "cells": "A5-H8, B4-D4 shallows",
+          "condition": "water colour vs lighting condition",
+          "evidence": "Water grades from teal (54,92,114) to (11,61,84) with a daylight shallow-water pale wash around the islands; at night with no moon the surface should be near-black with only reflected light.",
+          "defect": "Water colour ignores the night lighting.",
+          "fix": "Drive water radiance from the sky/light sources so that at night only reflections and shore glow remain.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 10,
+          "score": 2,
+          "cells": "D3-F4 below the skyline, G3-H4 quay, E3-E7",
+          "condition": "reflection scan of the water under every light source",
+          "evidence": "The lit downtown at D2-E2 produces no reflected light streaks in the water directly below it, the ship and quay lights at G3 do not reflect, and the aircraft tail light casts nothing on the water; the surface is a uniform lit teal.",
+          "defect": "Water reflection term missing at the time of day when light reflections are the primary cue.",
+          "fix": "Add planar/SSR reflections of emissive geometry plus a specular lobe for point lights on the water.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 14,
+          "score": 2,
+          "cells": "B1-C1, G1-H1, flight.png A1-E1",
+          "condition": "cloud3x crop of the night sky band",
+          "evidence": "Clouds are flat light-grey rectangles with stippled top edges (the B1-C1 slab is a rounded rectangle), brighter than the sky with no visible light source, no volume and no underside lit by the city.",
+          "defect": "Rectangular stipple slabs standing in for clouds.",
+          "fix": "Use shaded billboard/volumetric clouds and light their bases with city glow at night.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 16,
+          "score": 3,
+          "cells": "whole frame",
+          "condition": "exposure/lighting check for 22:00 with no moon visible",
+          "evidence": "Islands are green with pale beach rims, the water is a lit teal (54,92,114), the airframe shows a daylight lit/shaded split (fuselage 119,126,136) and the shallows wash is visible, while the sky is slate (51,71,107); city windows are pure white dots with no glow or light pools.",
+          "defect": "Night is rendered as an under-exposed dusk with a directional sun still on.",
+          "fix": "Switch to a moon/sky-lit night model: drop direct light to a weak cool moonlight, crush the water and terrain toward near-black blue, add bloom and warm/cool window emissives with ground light pools.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 18,
+          "score": 3,
+          "cells": "D3-F4, C5-F6, G3",
+          "condition": "specular scan of water and aircraft",
+          "evidence": "No glints from the thousands of window lights on the water, no highlight on the airframe from the tail light or beacon, ship and cranes have no lit edges.",
+          "defect": "Specular response to emissive sources absent.",
+          "fix": "Add point-light specular from emissives and a clearcoat on the aircraft.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "B1-C1, D2-E2, A2-H2 seam, C5-F6",
+          "condition": "artifact scan of every cell",
+          "evidence": "Rectangular stippled cloud slabs, 1-px aliased white window dots across every building, a hard horizon seam at y=0.155 between the sky band and the dark ground plane, and a mirrored registration on one fuselage side.",
+          "defect": "Stipple, aliasing and a seam visible at a glance.",
+          "fix": "Fix the cloud renderer, render windows as emissive texture with bloom, fog the horizon and fix the decal UV.",
+          "hardFailure": true,
+          "kind": "visual"
+        }
+      ],
+      "worst3": [
+        "Lit skyline with no reflection in the water below it (D2-F4)",
+        "Dusk exposure at 22:00: teal water, green islands and a daylight-lit airframe",
+        "Rectangular stippled cloud slabs brighter than the night sky (B1-C1, G1-H1)"
+      ],
+      "best3": [
+        "Downtown massing reads as a lit night city at distance, including a spired tower (D2-E2)",
+        "Tail light glow and beacon give the aircraft a night identity (E5)",
+        "Stable chase camera keeps the horizon at y=0.155 between still and flight; a small boat with a faint wake in flight.png"
+      ]
+    },
+    "plane-rear-quarter": {
+      "scores": {
+        "1": 5,
+        "2": 5,
+        "3": 4,
+        "4": 6,
+        "5": 5,
+        "6": 5,
+        "7": 4,
+        "8": 4,
+        "9": 5,
+        "10": 2,
+        "11": 2,
+        "12": 3,
+        "13": 5,
+        "14": 6,
+        "15": 5,
+        "16": 6,
+        "17": 2,
+        "18": 3,
+        "19": 5,
+        "20": 6,
+        "21": 4,
+        "22": 5,
+        "23": 4,
+        "24": 4,
+        "25": 3,
+        "26": 5,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 2,
+          "score": 5,
+          "cells": "B4-H7",
+          "condition": "still_grid outline vs DHC-2 rear three-quarter reference",
+          "evidence": "High wing, twin floats with spreader bars, N-struts and a tapered rear fuselage read as a floatplane, but the vertical tail is a tall rectangular plate whose ventral part below the fuselage is as large as the dorsal fin (B4-C6, 0.25 of frame height), the wing is a constant-thickness slab with square tips and no dihedral, and the rounded Beaver fin/rudder outline is absent.",
+          "defect": "Tail proportions and the slab wing make the outline read as a generic high-wing model rather than a DHC-2.",
+          "fix": "Rebuild the fin/rudder with the Beaver's rounded outline and a small triangular seaplane ventral fin, give the wing an airfoil section, rounded tips and 1-2 deg dihedral.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 3,
+          "score": 4,
+          "cells": "D4-E5, B4-C6, D6-F7, H4, F5",
+          "condition": "fuselage2x, tail2x, floats2x, wingtip3x crops",
+          "evidence": "Registration N726BV and the 'Bahia Vista Air' slogan are mirrored on the port side; the fin is a single flat plate ~2 px thick seen edge-on; the wing tip is a squared slab with a flat green disc as the nav light; the floats hover ~1 m above the water with the ripple pattern visible beneath them and no waterline; a yellow tag on a string hangs in mid-air from the fuselage at F5; on the plus side the floats carry cleats, stern caps and water rudders and a boarding step exists.",
+          "defect": "Mirrored decal, paper-thin fin, hovering floats and a stray dangling object.",
+          "fix": "Unmirror the port decal UVs, model the fin with thickness and an airfoil, place the floats at their waterline with the hull bottom below the surface, attach the mooring line to a dock cleat or remove it.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 4,
+          "score": 6,
+          "cells": "B4-H7 vs B3-C4 boats and piers",
+          "condition": "aircraft size vs marina sailboats, pier planks and posts",
+          "evidence": "Fuselage length (~0.55 of frame) against the ~8 m sailboat hulls and pier planks behind gives a plausible 10-11 m aircraft; within the aircraft the fin is ~2x too tall relative to the fuselage depth.",
+          "defect": "World scale is right; internal tail proportion is wrong.",
+          "fix": "Reduce fin height to ~1.3x fuselage depth above the tailcone and shrink the ventral extension.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 5,
+          "score": 5,
+          "cells": "D4-E5 fuselage, C4-H4 wing, B4-C6 fin, D6-F7 floats",
+          "condition": "material response, sun high behind-left of camera",
+          "evidence": "The fuselage shows a real specular streak along the spine and a yellow/red cheatline with faint panel lines, but the wing, stabiliser, fin and floats are flat matte white with no highlight, no rivets or panel breaks and no weathering; the fin carries only a straight yellow band.",
+          "defect": "Specular/clearcoat exists on the fuselage but not on the rest of the airframe; no surface detail.",
+          "fix": "Apply the same clearcoat material to all painted parts and add a panel-line/rivet normal map plus subtle dirt streaks aft of exhausts and along float chines.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 6,
+          "score": 5,
+          "cells": "D4-E4",
+          "condition": "fuselage2x crop of the cabin glass",
+          "evidence": "Cabin windows are a heavy navy tint that is partly transparent, showing a headrest, seats and dark pillars; there is no sky or water reflection on the glass, the tint is uneven between panes, and the visible interior is a few box shapes.",
+          "defect": "Glass without Fresnel reflection and a box-level interior.",
+          "fix": "Use a glass material with environment reflection and lighter tint, and model seats, panel and yoke behind it.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 17,
+          "score": 2,
+          "cells": "D7-F8, B3-H3",
+          "condition": "shadow scan of water under the aircraft and around the marina, 14:00 sun",
+          "evidence": "The aircraft, 2 m above the surface at 14:00, casts no shadow on the water; pier posts, boats and trees cast none either.",
+          "defect": "Shadow casting absent for the aircraft and the marina.",
+          "fix": "Enable shadow maps for the aircraft and marina props and let the water receive them.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 18,
+          "score": 3,
+          "cells": "D7-F8, C3-H4",
+          "condition": "reflection/specular scan of the marina basin",
+          "evidence": "The calm basin shows no reflection of the aircraft, floats, masts or piers standing right at its surface; the only specular is the fuselage highlight streak and generic water glitter.",
+          "defect": "Water reflection term missing at close range.",
+          "fix": "Add planar reflections for near water with Fresnel blending.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 3,
+          "cells": "D4-E5, D6-F7, F5, H4, A3-H3",
+          "condition": "artifact scan of every cell",
+          "evidence": "Mirrored registration and slogan, floats hovering above the water, a yellow tag dangling from a line into empty air, a flat green disc for the nav light, faceted low-poly trees and boxy boats 30 m behind the aircraft, white speckle along the shore.",
+          "defect": "Floating geometry, mirrored decal and placeholder props visible in a close inspection shot.",
+          "fix": "Fix the decal, float placement and mooring line; replace the nav light with a lens mesh; raise background LOD near the marina.",
+          "hardFailure": true,
+          "kind": "visual"
+        }
+      ],
+      "worst3": [
+        "Floats hovering above the water with the ripple pattern visible beneath them (D6-F7)",
+        "Mirrored registration and slogan on the port fuselage (D5-E5)",
+        "Tall rectangular slab fin with an equally large ventral extension and no shadow or reflection of the aircraft on the water (B4-C6, D7-F8)"
+      ],
+      "best3": [
+        "Specular streak along the fuselage spine and the yellow/red cheatline give the fuselage a painted-metal look (D4-E5)",
+        "Floats carry cleats, stern caps and water rudders; N-struts and spreader bars are complete (D6-F7)",
+        "Green starboard nav light and semi-transparent cabin glass with visible seats (H4, D4-E4)"
+      ]
+    },
+    "plane-front-quarter": {
+      "scores": {
+        "1": 6,
+        "2": 6,
+        "3": 3,
+        "4": 6,
+        "5": 6,
+        "6": 4,
+        "7": 5,
+        "8": 4,
+        "9": 5,
+        "10": 2,
+        "11": 2,
+        "12": 4,
+        "13": 6,
+        "14": 6,
+        "15": 5,
+        "16": 6,
+        "17": 2,
+        "18": 4,
+        "19": 5,
+        "20": 5,
+        "21": 4,
+        "22": 5,
+        "23": 5,
+        "24": 4,
+        "25": 2,
+        "26": 5,
+        "27": 5
+      },
+      "entries": [
+        {
+          "category": 2,
+          "score": 6,
+          "cells": "B4-H7",
+          "condition": "still_grid outline vs DHC-2 front three-quarter reference",
+          "evidence": "Round navy cowl, deep cabin with a high wing, N-struts, twin floats and a tall tail read as a Beaver at a glance; the spinner is a sharp generic cone, the prop shows as a single upright paddle blade, the wing is a constant-thickness slab with a flat yellow underside and the fin plate reaches unusually low behind the cabin (F4-F5).",
+          "defect": "Spinner, prop and slab wing/fin break the outline on closer inspection.",
+          "fix": "Use the Beaver's blunt spinner/hub, a complete three-blade prop, an airfoil wing section and the rounded fin outline.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 3,
+          "score": 3,
+          "cells": "B5-C6 prop, D6-F7 floats, E4-F5 fuselage, E4 cabin",
+          "condition": "nose2x, water_left2x, floats2x, reg4x, cabin4x crops; still vs flight",
+          "evidence": "The propeller has one full blade, one edge-on sliver and one missing blade, while the yellow blade-tip quads float detached in the air at B6 and C6 and move between still and flight; the floats hover above the water with the ripple pattern visible beneath them and no waterline; the registration glyphs are mirrored on the port side (and the whole string is mirrored on the starboard side in the rear view); the pilot is a beige sphere with a blob headset; in flight.png a dotted line hangs from the cowl ring.",
+          "defect": "Detached prop tips, a missing blade, hovering floats and a mirrored decal in a dedicated aircraft inspection view.",
+          "fix": "Render prop blades double-sided with the tip stripe part of the blade mesh, place the floats at their waterline, fix the decal UVs on both sides, replace the sphere pilot with a low-poly figure.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 4,
+          "score": 6,
+          "cells": "B4-H7 vs A4-C4 bridge and F4-G4 towers",
+          "condition": "aircraft size vs bridge deck, lamp posts and skyline",
+          "evidence": "Cowl diameter, cabin height and float length (~0.84 of fuselage length) are consistent with a DHC-2 on Edo floats, and the aircraft sits at a believable size against the bridge deck and towers behind.",
+          "defect": "No scale error visible beyond the oversized fin plate.",
+          "fix": "Reduce fin height to the Beaver's proportion.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 5,
+          "score": 6,
+          "cells": "C4-C6 cowl, D4-F5 fuselage, C3-H3 wing, D6-F7 floats",
+          "condition": "material response with the sun to the right of the camera at 10:00",
+          "evidence": "The navy cowl carries a genuine glossy highlight, the fuselage shows a specular streak along the spine with visible rivet rows, panel lines and a blue/yellow/red livery; the wing underside is a flat unshaded yellow, the floats and struts are uniform matte grey/white, and there is no exhaust staining, chipped paint or metal/paint contrast.",
+          "defect": "Good clearcoat on cowl and fuselage, but the rest of the airframe is uniform matte and unweathered.",
+          "fix": "Extend the clearcoat to wing, floats and tail; add roughness variation, exhaust soot aft of the cowl and bare-metal leading edges.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 6,
+          "score": 4,
+          "cells": "D4-E4 windshield and cabin windows",
+          "condition": "cabin4x crop",
+          "evidence": "Windows are a heavy navy tint with no sky/water reflection and no Fresnel falloff; the interior is a beige sphere head, flat block seats and a dark upper strip across the windshield; the window frames are hard-edged posts.",
+          "defect": "Opaque-looking tinted glass over a placeholder interior.",
+          "fix": "Use a glass shader with environment reflection and 20-30% tint, model a proper panel/yoke/seats and a pilot figure.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 17,
+          "score": 2,
+          "cells": "B6-F8 water, D5-F5 belly, E4 cabin roof",
+          "condition": "shadow scan at 10:00 with the sun to the right",
+          "evidence": "The aircraft casts no shadow on the water 2 m below it; the wing casts no shadow on the cabin roof or fuselage flank, and the struts cast none on the floats; the belly is uniformly lit.",
+          "defect": "Neither cast nor self-shadowing is present on the aircraft.",
+          "fix": "Enable shadow casting/receiving on the aircraft and water with a high-resolution near cascade.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 18,
+          "score": 4,
+          "cells": "C4-C6 cowl, D4-F5 fuselage, B6-F8 water, D4-E4 glass",
+          "condition": "specular/reflection scan",
+          "evidence": "The cowl and fuselage highlights are the strongest specular response of the round, but the water shows no reflection of the aircraft directly above it, the glass reflects nothing and the floats have no highlight.",
+          "defect": "Reflections missing on water and glass; specular limited to two parts.",
+          "fix": "Add planar reflection for near water, environment reflection on glass and a clearcoat on floats.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 2,
+          "cells": "B6, C6, D6-F7, E4-F5, A4-H4 seam",
+          "condition": "artifact scan of every cell in still_grid and flight.png",
+          "evidence": "Two detached yellow prop-tip quads floating beside the nose (they move between frames), a missing prop blade, floats hovering above the water, mirrored registration glyphs, a dotted line hanging from the cowl in flight.png, and a hard horizon seam at y=0.42.",
+          "defect": "Floating and missing geometry on the hero asset in its inspection view.",
+          "fix": "Fix the prop mesh and tip decal, float placement, decal UVs and horizon fog.",
+          "hardFailure": true,
+          "kind": "visual"
+        }
+      ],
+      "worst3": [
+        "Detached yellow prop-tip quads floating beside the nose and a missing prop blade (B6, C6)",
+        "Floats hovering above the water with no waterline, shadow or reflection (D6-F7)",
+        "Sphere-headed pilot behind unreflective navy glass and mirrored registration glyphs (E4-F5)"
+      ],
+      "best3": [
+        "Glossy navy cowl with a real highlight and fuselage rivet/panel detail (C4-F5)",
+        "Blue/yellow/red livery with cheatlines reads as a painted floatplane",
+        "Bridge behind the aircraft shows an elevated deck on regularly spaced piers with traffic (A4-C4)"
+      ]
+    },
+    "glass-sun": {
+      "scores": {
+        "1": 5,
+        "2": 5,
+        "3": 3,
+        "4": 5,
+        "5": 5,
+        "6": 2,
+        "7": 5,
+        "8": 4,
+        "9": 5,
+        "10": 2,
+        "11": 2,
+        "12": 4,
+        "13": 6,
+        "14": 4,
+        "15": 5,
+        "16": 5,
+        "17": 2,
+        "18": 2,
+        "19": 5,
+        "20": 5,
+        "21": 5,
+        "22": 5,
+        "23": 4,
+        "24": 4,
+        "25": 2,
+        "26": 5,
+        "27": 4
+      },
+      "entries": [
+        {
+          "category": 2,
+          "score": 5,
+          "cells": "A2-H8",
+          "condition": "still_grid outline at close range vs DHC-2 side profile",
+          "evidence": "Round-section fuselage with correct frame spacing, a high wing on N-struts, a long side-window band with pillars and twin floats read as a Beaver from this distance; the wing underside is a fat rounded slab (E2-H2) rather than a flat-bottomed airfoil, the roof/glass boundary is a stepped sawtooth (C3-E3) and a flat black plate runs along the keel (C8-F6) that no DHC-2 carries.",
+          "defect": "Slab wing, stepped glass boundary and a keel plate distort the profile at close range.",
+          "fix": "Model the wing with an airfoil section, cut the window openings as smooth framed panes and remove or replace the keel plate.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 3,
+          "score": 3,
+          "cells": "A8-B8, C3-C4, E6-F6, E7-F8, C2-G5",
+          "condition": "tag3x, windshield, slab3x, farfloat_b4x and wingreg2x crops; still vs flight.png",
+          "evidence": "A box wearing a piece of the fuselage livery and the text N726BV floats detached in mid-air under the belly at A8-B8 and is gone in flight.png; a 1.2 m flat black plank hangs in front of the windshield at C3-C4; the window pillars are flat black plates; the keel plate's upper face intersects the yellow belly band in a serrated z-fighting line at E6-F6; the far float's rounded belly and stern cap are visible above the water with the deck plate overhanging the hull (E7-F8); the registration and slogan are mirrored in four places (C2, E2-F2, F4-G4, F5); rivets, panel lines, cleats and stern caps are modelled well.",
+          "defect": "Detached floating box, intersecting keel plate, hovering float and mirrored decals on the hero asset at inspection range.",
+          "fix": "Attach or delete the placard box, remove the windshield plank, give the keel plate and pillars real geometry with a z-offset, place the floats at their waterline and unmirror the decal UVs.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 4,
+          "score": 5,
+          "cells": "A4-G6 fuselage vs D4 pilot, E7-H8 floats, E2-H2 wing",
+          "condition": "part sizes against the pilot head and against each other",
+          "evidence": "Fuselage depth (~1.6 m from cheatline to roof) against the ~0.25 m pilot head and the ~0.9 m float diameter is consistent with a DHC-2 on Edo floats; the wing appears as a ~0.45 m thick rounded slab at the root, and the windshield plank and keel plate are over a metre long.",
+          "defect": "Wing thickness and the extra plates are out of scale; the primary volumes are right.",
+          "fix": "Thin the wing to a ~14% airfoil section and remove the oversized plates.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 5,
+          "score": 5,
+          "cells": "A4-G6 fuselage, E2-H2 wing, E7-H8 floats, D7-G8 struts",
+          "condition": "nose_left, wingreg2x and water3x crops; 15:30 sun behind the aircraft",
+          "evidence": "The fuselage skin carries rivet dimples along curved panel lines with a soft ambient gradient and a red/navy/yellow cheatline, the best surface detail of the round; but the white reads blue (142,180,211) with no sky reflection or clearcoat highlight, the yellow wing underside is one flat colour with faint noise, floats and struts are uniform matte grey and the keel plate, pillars and plank are unlit pure black.",
+          "defect": "Surface detail exists on the fuselage but every part shares one matte response and the secondary parts are unshaded.",
+          "fix": "Apply a clearcoat paint material to all painted parts, give the black plates a shaded material and add subtle exhaust and water staining on the floats.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 6,
+          "score": 2,
+          "cells": "B3-F4",
+          "condition": "glass2x, windshield and f_glass2x crops; sun at 15:30",
+          "evidence": "The windshield and side windows are a uniform navy (56,98,153) identical to the roof paint so no pane edge, frame or thickness is visible; there is no sky or sun reflection, no Fresnel falloff and no refraction of the interior; behind the tint the pilot is a beige sphere with a torus headset, the seats are a blue block and pink translucent boxes, and no panel, yoke or windshield posts exist.",
+          "defect": "Glass reads as opaque tinted paint over a placeholder interior in the dedicated glass view.",
+          "fix": "Use a transparent glass material with environment reflection, 20-30% tint and Fresnel, model the window frames, and build a low-poly cockpit with panel, yokes, seats and a pilot figure.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 17,
+          "score": 2,
+          "cells": "C3-F4 roof, D6-H8 water, E7-H8 floats",
+          "condition": "shadow scan at 15:30 with the sun behind the aircraft",
+          "evidence": "The wing casts no shadow on the roof or glass, the fuselage and keel plate cast none on the floats, the struts cast none on the float decks and the aircraft casts no shadow on the calm water at G5-H8.",
+          "defect": "Neither cast nor self-shadowing on the aircraft or the water.",
+          "fix": "Enable shadow casting and receiving for the aircraft with a high-resolution near cascade and let the water receive shadows.",
+          "hardFailure": false,
+          "kind": "visual"
+        },
+        {
+          "category": 18,
+          "score": 2,
+          "cells": "B3-F4 glass, A4-G6 fuselage, D6-H8 water",
+          "condition": "specular and reflection scan",
+          "evidence": "No specular highlight anywhere on the airframe, the glass reflects nothing and the water beside and beneath the floats shows no reflection of the floats, struts or fuselage; the struts have only Lambert cylinder shading.",
+          "defect": "Reflections and specular are missing under the one condition this view is designed to test.",
+          "fix": "Add environment reflection on glass and paint, planar reflection on the near water and a sun specular lobe.",
+          "hardFailure": true,
+          "kind": "visual"
+        },
+        {
+          "category": 25,
+          "score": 2,
+          "cells": "A8-B8, E6-F6, E7-F8, C2, E2-F2, F4-G4, F5, H2-H3, D1-E1",
+          "condition": "artifact scan of every cell in still_grid and flight.png",
+          "evidence": "A detached livery box floating under the belly, a serrated z-fighting line where the keel plate meets the belly band, floats with the water surface visible under their bellies, mirrored registration and slogan text in four places, stair-step aliasing on the strut end caps, a 1-px horizon seam with horizontal streak moire in the far water and stipple-grain clouds.",
+          "defect": "Floating geometry, z-fighting and mirrored decals on the hero asset at inspection range.",
+          "fix": "Fix the placard, offset the keel plate, place the floats, unmirror the decals, cap the struts smoothly, fog the horizon and replace the cloud stipple.",
+          "hardFailure": true,
+          "kind": "visual"
+        }
+      ],
+      "worst3": [
+        "Opaque navy glass with no sun or sky reflection over a sphere-headed pilot and box seats (B3-F4)",
+        "A box wearing the fuselage livery floats detached under the belly (A8-B8) and the keel plate z-fights with the belly band (E6-F6)",
+        "Floats visible above the water with no waterline, shadow or reflection (E7-H8)"
+      ],
+      "best3": [
+        "Rivet dimples and curved panel lines on the fuselage skin (A4-B6)",
+        "Complete float rigging: N-struts, spreader bars, cleats and stern caps with smooth shading (D7-H8)",
+        "Elevated bridge on regular piers with lamp posts and traffic at A3-B3 and a hazed skyline at F2-G3"
+      ]
+    }
+  }
+}

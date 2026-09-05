@@ -1,0 +1,488 @@
+{
+ "view": "island-pass",
+ "stillUrl": "http://127.0.0.1:4173/?bench=island-pass&w=1920&h=1080&quality=high&seed=20260904&freeze=1",
+ "setupMs": 16935,
+ "still": {
+  "warmupRenderMs": 25.299999997019768,
+  "renderMs": 9,
+  "metrics": {
+   "frames": 3,
+   "avgMs": 55.79999999701977,
+   "p99Ms": 133.19999998807907,
+   "minFps": 7.507507508179403,
+   "avgFps": 17.92114695436217,
+   "onePercentLowFps": 7.507507508179403,
+   "calls": 247,
+   "triangles": 568301,
+   "points": 0,
+   "lines": 0,
+   "geometries": 211,
+   "textures": 57,
+   "programs": 52,
+   "jsHeapMB": 291.56781578063965,
+   "gpuMs": null,
+   "longTasks": 1,
+   "visibleObjects": 0,
+   "passes": {
+    "wake": {
+     "calls": 1,
+     "triangles": 7298
+    },
+    "sky": {
+     "calls": 1,
+     "triangles": 2
+    },
+    "shadow": {
+     "calls": 59,
+     "triangles": 116324
+    },
+    "reflection": {
+     "calls": 61,
+     "triangles": 145352
+    },
+    "main": {
+     "calls": 114,
+     "triangles": 299303
+    },
+    "post": {
+     "calls": 11,
+     "triangles": 22
+    },
+    "cascades": [
+     {
+      "calls": 17,
+      "triangles": 25882
+     },
+     {
+      "calls": 23,
+      "triangles": 41974
+     },
+     {
+      "calls": 19,
+      "triangles": 48468
+     }
+    ],
+    "reflectionHidden": 83
+   },
+   "frame": 0,
+   "flying": false,
+   "telemetry": {
+    "airspeed": 53.69489959390053,
+    "altitude": 130,
+    "heading": 351.99999999999994,
+    "alpha": 0.010010347968418393,
+    "stalled": false,
+    "onWater": false
+   },
+   "build": "aa8b21f9f839-20260905T121546Z",
+   "view": "island-pass",
+   "camera": {
+    "pos": [
+     3352.098281419114,
+     137.15009610104863,
+     -2185.0624613037016
+    ],
+    "quat": [
+     -0.13610291487714732,
+     0.07035925552997425,
+     0.01887229405672116,
+     0.988012858337506
+    ],
+    "fov": 52.06816020559365
+   }
+  },
+  "landmarks": {
+   "planeCentroid": [
+    0.4981743944602285,
+    0.6731386949448366
+   ],
+   "bridgeStart": null,
+   "bridgeEnd": null,
+   "landmark:Meridian Tower": [
+    -0.8137131280841179,
+    0.06925671434358976
+   ],
+   "landmark:Bah\u00eda One": [
+    -0.9217671901030136,
+    0.0728657921644032
+   ],
+   "landmark:Faro Bah\u00eda": [
+    -0.919430669500352,
+    0.08854934395983016
+   ],
+   "landmark:Twin Palms A": [
+    -0.9743855693878367,
+    0.14017855901572945
+   ],
+   "landmark:Twin Palms B": [
+    -0.9635373949865196,
+    0.14043801701613762
+   ],
+   "landmark:The Sail": [
+    -0.7377505317896798,
+    0.12558393031916631
+   ],
+   "landmark:Terraces": [
+    -0.8784754647637163,
+    0.15421171849080118
+   ],
+   "landmark:Crown Plaza": [
+    -0.8058481751755904,
+    0.12403098750303548
+   ],
+   "landmark:The Needle": [
+    -0.6452258743934722,
+    0.11145557325825683
+   ],
+   "landmark:Gateway": [
+    -0.671823066981911,
+    0.15964390650603116
+   ],
+   "landmark:Helix": [
+    -0.6796875546414605,
+    0.14663917397289133
+   ],
+   "landmark:Aquamarine": [
+    -1.0635013162485996,
+    0.10525512383809615
+   ],
+   "bridge2End": null,
+   "horizonCentre": [
+    0.5870004254540292,
+    0.21705539539676755
+   ],
+   "planeBoxMin": [
+    0.22087378792517692,
+    0.5388497594217727
+   ],
+   "planeBoxMax": [
+    0.7732213204089433,
+    0.9113347230259101
+   ],
+   "horizon": [
+    0.5030626534104617,
+    0.21118299364265997
+   ]
+  }
+ },
+ "profile": {
+  "frames": 8,
+  "avgMs": 4842.362499998882,
+  "minMs": 4768.29999999702,
+  "maxMs": 4975.5,
+  "p95Ms": 4975.5,
+  "onePercentLowMs": 4975.5
+ },
+ "flight": {
+  "stepAndRenderMs": 47.6000000089407,
+  "metrics": {
+   "frames": 12,
+   "avgMs": 21.791666665424902,
+   "p99Ms": 133.19999998807907,
+   "minFps": 7.507507508179403,
+   "avgFps": 45.889101341047045,
+   "onePercentLowFps": 7.507507508179403,
+   "calls": 251,
+   "triangles": 713468,
+   "points": 14,
+   "lines": 0,
+   "geometries": 215,
+   "textures": 57,
+   "programs": 52,
+   "jsHeapMB": 292.74858379364014,
+   "gpuMs": 4789.089885,
+   "longTasks": 1,
+   "visibleObjects": 0,
+   "passes": {
+    "wake": {
+     "calls": 1,
+     "triangles": 7336
+    },
+    "sky": {
+     "calls": 1,
+     "triangles": 2
+    },
+    "shadow": {
+     "calls": 62,
+     "triangles": 197382
+    },
+    "reflection": {
+     "calls": 62,
+     "triangles": 155072
+    },
+    "main": {
+     "calls": 114,
+     "triangles": 353654
+    },
+    "post": {
+     "calls": 11,
+     "triangles": 22
+    },
+    "cascades": [
+     {
+      "calls": 14,
+      "triangles": 23300
+     },
+     {
+      "calls": 27,
+      "triangles": 43178
+     },
+     {
+      "calls": 21,
+      "triangles": 130904
+     }
+    ],
+    "reflectionHidden": 80
+   },
+   "frame": 90,
+   "flying": true,
+   "telemetry": {
+    "airspeed": 54.91624689553967,
+    "altitude": 126.80858169257567,
+    "heading": 343.7595949846537,
+    "alpha": 0.03521967943831908,
+    "stalled": false,
+    "onWater": false
+   },
+   "build": "aa8b21f9f839-20260905T121546Z",
+   "view": "island-pass",
+   "camera": {
+    "pos": [
+     3324.1586255613624,
+     133.92680614626295,
+     -2354.4909852981796
+    ],
+    "quat": [
+     -0.13138626462129416,
+     0.14164431175662187,
+     0.03944035928895258,
+     0.980366766304843
+    ],
+    "fov": 52.2447363281679
+   }
+  },
+  "landmarks": {
+   "planeCentroid": [
+    0.49626502498704345,
+    0.6789777729244204
+   ],
+   "bridgeStart": null,
+   "bridgeEnd": null,
+   "landmark:Meridian Tower": [
+    -0.4775315331319906,
+    0.06274527305681288
+   ],
+   "landmark:Bah\u00eda One": [
+    -0.5451981331908913,
+    0.06482716062953492
+   ],
+   "landmark:Faro Bah\u00eda": [
+    -0.5427475441205527,
+    0.07746000618360388
+   ],
+   "landmark:Twin Palms A": [
+    -0.5808110482542712,
+    0.1170092647156411
+   ],
+   "landmark:Twin Palms B": [
+    -0.5748793280268207,
+    0.11731880698598646
+   ],
+   "landmark:The Sail": [
+    -0.42751240663405443,
+    0.10956639013629055
+   ],
+   "landmark:Terraces": [
+    -0.5232506616534682,
+    0.1296592195120279
+   ],
+   "landmark:Crown Plaza": [
+    -0.4701784113178086,
+    0.1074401510456564
+   ],
+   "landmark:The Needle": [
+    -0.36677853743580946,
+    0.09919239888898101
+   ],
+   "landmark:Gateway": [
+    -0.3829409125036005,
+    0.13881177936431033
+   ],
+   "landmark:Helix": [
+    -0.39241609958228674,
+    0.1274527245344872
+   ],
+   "landmark:Aquamarine": [
+    -0.6295067906823213,
+    0.08902207326311173
+   ],
+   "bridge2End": null,
+   "horizonCentre": [
+    0.678354583482567,
+    0.23150260155431668
+   ],
+   "planeBoxMin": [
+    0.2191505214198548,
+    0.49952035883089063
+   ],
+   "planeBoxMax": [
+    0.7686374498837898,
+    0.9273873547763143
+   ],
+   "horizon": [
+    0.5066651102984077,
+    0.21571619590761199
+   ]
+  }
+ },
+ "consoleErrors": 0,
+ "crops": {
+  "aircraft": [
+   794,
+   564,
+   324
+  ],
+  "environment": [
+   766,
+   346,
+   388
+  ],
+  "medium": [
+   425,
+   335,
+   302
+  ],
+  "distant": [
+   733,
+   65,
+   453
+  ]
+ },
+ "flicker": {
+  "meanAbsDiff": 2.0154322385787964,
+  "maxAbsDiff": 2.5867881774902344,
+  "frames": 30
+ },
+ "clip": {
+  "frames": 30,
+  "heapMB": [
+   308.06042098999023,
+   291.99800205230713,
+   292.2929697036743
+  ],
+  "metrics": {
+   "frames": 32,
+   "avgMs": 10.68125000083819,
+   "p99Ms": 122.40000000596046,
+   "minFps": 8.169934640125028,
+   "avgFps": 93.62200116292821,
+   "onePercentLowFps": 8.169934640125028,
+   "calls": 225,
+   "triangles": 648648,
+   "points": 14,
+   "lines": 0,
+   "geometries": 207,
+   "textures": 54,
+   "programs": 52,
+   "jsHeapMB": 292.9969530105591,
+   "gpuMs": null,
+   "longTasks": 1,
+   "visibleObjects": 0,
+   "passes": {
+    "wake": {
+     "calls": 1,
+     "triangles": 7336
+    },
+    "sky": {
+     "calls": 1,
+     "triangles": 2
+    },
+    "shadow": {
+     "calls": 41,
+     "triangles": 145906
+    },
+    "reflection": {
+     "calls": 56,
+     "triangles": 144650
+    },
+    "main": {
+     "calls": 115,
+     "triangles": 350732
+    },
+    "post": {
+     "calls": 11,
+     "triangles": 22
+    },
+    "cascades": [
+     {
+      "calls": 25,
+      "triangles": 30238
+     },
+     {
+      "calls": 16,
+      "triangles": 115668
+     }
+    ],
+    "reflectionHidden": 87
+   },
+   "frame": 90,
+   "flying": true,
+   "telemetry": {
+    "airspeed": 54.810881011091894,
+    "altitude": 127.1039957834136,
+    "heading": 344.55187150545,
+    "alpha": 0.03879896494337558,
+    "stalled": false,
+    "onWater": false
+   },
+   "build": "aa8b21f9f839-20260905T121546Z",
+   "view": "island-pass",
+   "camera": {
+    "pos": [
+     3327.1141631036558,
+     134.22673410007505,
+     -2340.657921327987
+    ],
+    "quat": [
+     -0.13123232918833272,
+     0.13496395628287292,
+     0.037657519602718376,
+     0.9813993669743479
+    ],
+    "fov": 52.229394772667995
+   }
+  },
+  "frameTimesMs": [
+   6.299999997019768,
+   9.800000011920929,
+   9,
+   9.800000011920929,
+   11.099999994039536,
+   18.5,
+   11.299999997019768,
+   11.200000002980232,
+   8.599999994039536,
+   9.799999997019768,
+   9.5,
+   15.5,
+   7.300000011920929,
+   8,
+   7.200000002980232,
+   10.799999997019768,
+   8.099999994039536,
+   6.700000002980232,
+   7.200000002980232,
+   7,
+   8.100000008940697,
+   6.5999999940395355,
+   10.5,
+   8.700000002980232,
+   8.700000002980232,
+   8.799999997019768,
+   7.5,
+   6.5,
+   5.200000002980232,
+   9.600000008940697
+  ]
+ }
+}
