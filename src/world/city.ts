@@ -104,14 +104,26 @@ const PROXY_MIN_HEIGHT = 14;
 const CITY_EXTRAS = [{ name: 'aDims', itemSize: 3 }, { name: 'aStyle', itemSize: 4 }, { name: 'aStyle2', itemSize: 4 }];
 /** `lodR` is the horizontal half-diagonal of the tile (the shadow-distance metric); `center`, `r` and `height`
  *  bound the buildings in world space and are only used for culling; the arrays feed the kind's batches */
-interface CityTile extends BatchSource { mesh: THREE.InstancedMesh; kind: Kind; n: number; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodR: number; bits: number; cells: CellSource[] | null; cellsDrawn: boolean; mirrorCells: boolean }
+interface CityTile extends BatchSource { mesh: THREE.InstancedMesh; kind: Kind; n: number; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodR: number; bits: number; cells: CityCell[] | null; cellsDrawn: boolean; mirrorCells: boolean; /** cascades whose shadow batch holds the tile's cells */ shadowIn: number }
+/** A cell with its caster-routing result cached for the frame it was computed in. */
+interface CityCell extends CellSource { castBits: number; castFrame: number }
+/** shadow-only proxy of one kind (every building at least PROXY_MIN_HEIGHT tall) with its cells */
+interface CityProxy extends BatchSource { kind: Kind; n: number; cells: CityCell[] | null; /** cascades whose shadow batch holds the proxy's cells */ shadowIn: number }
 /** cells a tile in view is drawn by for the camera (built on first use), so the buildings of a tile the
  *  camera stands in that are outside the frustum are not submitted */
 const CITY_CELL = 250;
 const _perCascade = new Array<number>(MAX_CASCADES).fill(0);
+/** houses (the `house` kind: 4-10 m tall) are left out of the main pass beyond this: they are a pixel or two
+ *  there and the terrain's baked suburb ground (roof cells, drives, car parks: fully in from 3.8 km) stands in */
+export const HOUSE_FAR = 6000;
+/** the mirror image leaves out the city beyond this (a reflected tower there is a few blurred texels of the
+ *  half-resolution mirror, mostly faded to the environment sky by the roughness streak) and houses beyond
+ *  MIRROR_HOUSE_FAR (a reflected house is under a mirror texel tall there) */
+export const MIRROR_CITY_FAR = 3500;
+export const MIRROR_HOUSE_FAR = 2500;
 const _bp = new THREE.Vector3();
 /** grow `box` by building `i` of `t` the way the tile box was built (footprint half-diagonal x 0.6, height) */
-function boundBuilding(t: CityTile, i: number, box: THREE.Box3): void {
+function boundBuilding(t: BatchSource, i: number, box: THREE.Box3): void {
   const m = t.matrices, dims = t.extras[0];
   const x = m[i * 16 + 12], y = m[i * 16 + 13], z = m[i * 16 + 14];
   const r = Math.hypot(dims[i * 3], dims[i * 3 + 2]) * 0.6, h = dims[i * 3 + 1];
@@ -141,7 +153,12 @@ export class BuildingBatches {
   /** shadow-only proxies, one per kind, holding every building at least PROXY_MIN_HEIGHT tall: a cascade
    *  that would draw more per-tile meshes than this costs draws the proxies instead (a whole distant city
    *  for six draw calls) */
-  private readonly proxies: THREE.InstancedMesh[] = [];
+  private readonly proxies: CityProxy[] = [];
+  /** one shadow batch per kind and cascade: the cells (of the tiles, or of the kind's proxy when the cascade
+   *  is in proxy mode) that can shade that cascade's slice, in one draw */
+  private readonly shadowBatches = new Map<Kind, InstanceBatch<CityCell>[]>();
+  private proxyActive = 0;
+  private frame = 0;
   shadowDistance = 3200;
 
   constructor(nightUniform: THREE.IUniform<number>) {
@@ -196,7 +213,7 @@ export class BuildingBatches {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       this.group.add(mesh);
       const lodR = Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2;
-      this.tiles.push({ mesh, kind, n: list.length, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodR, bits: 0, cells: null, cellsDrawn: false, mirrorCells: false, matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: [dims, style, style2] });
+      this.tiles.push({ mesh, kind, n: list.length, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodR, bits: 0, cells: null, cellsDrawn: false, mirrorCells: false, shadowIn: 0, matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: [dims, style, style2] });
     }
     // camera / mirror batches per kind, sized for every building of that kind
     const perKind = new Map<Kind, number>();
@@ -214,9 +231,20 @@ export class BuildingBatches {
       this.mirrorBatches.set(kind, mir);
       this.mirrorMeshes.add(mir.mesh);
       this.group.add(cam.mesh, mir.mesh);
+      // shadow batches (the depth pass reads the instance matrices only: no colours or facade attributes)
+      const shadow: InstanceBatch<CityCell>[] = [];
+      for (let i = 0; i < MAX_CASCADES; i++) {
+        const b = new InstanceBatch<CityCell>(n, unit, this.material, [], false);
+        b.mesh.castShadow = true; b.mesh.receiveShadow = false;
+        b.mesh.layers.set(LAYER_CASCADE0 + i);
+        b.mesh.name = `city-${kind}-shadow-${i}`;
+        this.group.add(b.mesh);
+        shadow.push(b);
+      }
+      this.shadowBatches.set(kind, shadow);
     }
-    // shadow proxies: every building of a kind in one instanced mesh (the shadow pass only reads the
-    // instance matrices, so the facade attributes are not needed)
+    // shadow proxies: every building of a kind at least PROXY_MIN_HEIGHT tall as one instance source (matrices
+    // only), drawn cell by cell from the kind's shadow batches
     const byKind = new Map<Kind, Instance[]>();
     for (const [key, list] of this.lists) {
       const kind = key.split('|')[0] as Kind;
@@ -226,34 +254,58 @@ export class BuildingBatches {
     }
     for (const [kind, list] of byKind) {
       if (!list.length) continue;
-      const mesh = new THREE.InstancedMesh(this.geos[kind], this.material, list.length);
-      const box = new THREE.Box3();
+      const matrices = new Float32Array(list.length * 16), dims = new Float32Array(list.length * 3);
       list.forEach((inst, i) => {
         p.set(inst.x, inst.y, inst.z);
         q.setFromEuler(e.set(0, inst.rot, 0));
         s.set(inst.w, inst.h, inst.d);
-        mesh.setMatrixAt(i, m.compose(p, q, s));
-        const r = Math.hypot(inst.w, inst.d) * 0.6;
-        box.expandByPoint(p.set(inst.x - r, inst.y, inst.z - r));
-        box.expandByPoint(p.set(inst.x + r, inst.y + inst.h, inst.z + r));
+        m.compose(p, q, s).toArray(matrices, i * 16);
+        dims[i * 3] = inst.w; dims[i * 3 + 1] = inst.h; dims[i * 3 + 2] = inst.d;
       });
-      mesh.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.castShadow = true;
-      mesh.receiveShadow = false;
-      mesh.visible = false;
-      mesh.layers.mask = 0;
-      mesh.matrixAutoUpdate = false;
-      mesh.name = `shadow-proxy-${kind}`;
-      this.group.add(mesh);
-      this.proxies.push(mesh);
+      this.proxies.push({ kind, n: list.length, cells: null, shadowIn: 0, matrices, colors: null, extras: [dims] });
     }
+  }
+
+  /** Cells of a tile or proxy (built on first use), each bounded like the tile box. */
+  private static cellsOf(t: CityTile | CityProxy): CityCell[] {
+    if (t.cells) return t.cells;
+    const cells = splitCells(t, t.n, CITY_CELL, boundBuilding.bind(null, t)) as CityCell[];
+    for (const c of cells) { c.castBits = 0; c.castFrame = -1; }
+    return t.cells = cells;
+  }
+
+  /** Cascades a cell's buildings can shade this frame (box swept along the sun, plus the shadow cameras' own
+   *  frustums), computed once per cell and frame. */
+  private cellCast(c: CityCell, cull: ViewCull): number {
+    if (c.castFrame !== this.frame) {
+      c.castFrame = this.frame;
+      c.castBits = cull.boxCasterCascades(c.box, c.box.max.y - c.box.min.y);
+    }
+    return c.castBits;
+  }
+
+  /** Give cascade `i`'s batch of `kind` the cells of `src` that can shade it (`on` false removes them). False
+   *  when the batch is full (the caller then lets the mesh cast on its own). */
+  private placeShadow(src: CityTile | CityProxy, kind: Kind, i: number, on: boolean, cull: ViewCull): boolean {
+    const bit = 1 << i;
+    const batch = this.shadowBatches.get(kind)![i];
+    if (!on) {
+      if (src.shadowIn & bit) { for (const c of src.cells!) batch.set(c, 0); src.shadowIn &= ~bit; }
+      return true;
+    }
+    const cells = BuildingBatches.cellsOf(src);
+    let ok = true;
+    for (const c of cells) if (!batch.set(c, this.cellCast(c, cull) & bit ? c.count : 0)) ok = false;
+    if (!ok) { for (const c of cells) batch.set(c, 0); src.shadowIn &= ~bit; return false; }
+    src.shadowIn |= bit;
+    return true;
   }
 
   /** Per-tile visibility: a tile is drawn when its box is in view and casts shadows when it is within
    *  the shadow distance and its footprint, swept along the sun's shadow, can reach anything in view.
    *  Tiles that only cast leave the camera layer so the main pass skips them. */
   updateLod(camX: number, camZ: number, cull: ViewCull, camPos: THREE.Vector3, mirrorRange: number): void {
+    this.frame++;
     const perCascade = _perCascade;
     perCascade.fill(0);
     for (const t of this.tiles) {
@@ -264,30 +316,56 @@ export class BuildingBatches {
     // cascades where the per-tile meshes would cost more draws than the proxies take the proxies instead
     let proxyBits = 0;
     for (let i = 0; i < MAX_CASCADES; i++) if (perCascade[i] > this.proxies.length + 2) proxyBits |= 1 << i;
+    // proxy cascades draw the proxies' cells that can shade them (from the same shadow batches the tiles use:
+    // placed first, so a cascade leaving proxy mode has room for its tiles' cells this frame)
+    for (let i = 0; i < MAX_CASCADES; i++) {
+      const bit = 1 << i, on = (proxyBits & bit) !== 0;
+      if (!on && !(this.proxyActive & bit)) continue;
+      for (const p of this.proxies) this.placeShadow(p, p.kind, i, on, cull);
+    }
+    this.proxyActive = proxyBits;
+    const houseFar = HOUSE_FAR;
+    const mirrorFar = Math.min(mirrorRange, MIRROR_CITY_FAR);
     for (const t of this.tiles) {
       const inView = cull.boxInView(t.box);
-      // the camera draws the tile from its kind's batch, cell by cell (the cells in view); the tile's own
-      // mesh is left to the shadow passes (and to the camera only when the batch is full)
+      const house = t.kind === 'house';
+      // the camera draws the tile from its kind's batch, cell by cell (the cells in view; house cells beyond
+      // HOUSE_FAR are left to the baked suburb ground); the tile's own mesh is left to the shadow passes (and
+      // to the camera only when the batch is full)
       const batch = this.cameraBatches.get(t.kind)!;
       let batched = true;
       if (inView) {
-        const cells = t.cells ??= splitCells(t, t.n, CITY_CELL, boundBuilding.bind(null, t));
-        for (const c of cells) if (!batch.set(c, cull.boxInView(c.box) ? c.count : 0)) batched = false;
+        const cells = BuildingBatches.cellsOf(t);
+        for (const c of cells) {
+          let count = cull.boxInView(c.box) ? c.count : 0;
+          if (count && house && c.box.distanceToPoint(camPos) > houseFar) count = 0;
+          if (!batch.set(c, count)) batched = false;
+        }
         if (!batched) for (const c of cells) batch.set(c, 0);
         t.cellsDrawn = batched;
       } else if (t.cellsDrawn) {
         for (const c of t.cells!) batch.set(c, 0);
         t.cellsDrawn = false;
       }
-      let mask = layerMask('all', inView && !batched, t.bits & ~proxyBits);
+      // shadows: the cascades the tile can shade take its cells that can shade them from the kind's shadow
+      // batches; the tile's mesh casts on its own only into a cascade whose batch is full
+      let own = 0;
+      const shadowBits = t.bits & ~proxyBits;
+      for (let i = 0; i < MAX_CASCADES; i++) if (!this.placeShadow(t, t.kind, i, (shadowBits & (1 << i)) !== 0, cull)) own |= 1 << i;
+      let mask = layerMask('all', inView && !batched, own);
       const cast = maskCasts(mask);
       // the water mirrors the tiles within the reflection range (distance to the tile's bounding sphere),
-      // cell by cell against the mirror camera's frustum
-      const mirrored = inView && Math.max(0, t.center.distanceTo(camPos) - t.r) <= mirrorRange;
+      // cell by cell against the mirror camera's frustum and the mirror distance limits
+      const mirrored = inView && Math.max(0, t.center.distanceTo(camPos) - t.r) <= mirrorFar;
       const mirror = this.mirrorBatches.get(t.kind)!;
       if (mirrored) {
+        const far = house ? Math.min(mirrorFar, MIRROR_HOUSE_FAR) : mirrorFar;
         let ok = true;
-        for (const c of t.cells!) if (!mirror.set(c, cull.boxInMirror(c.box) ? c.count : 0)) ok = false;
+        for (const c of t.cells!) {
+          let count = cull.boxInMirror(c.box) ? c.count : 0;
+          if (count && c.box.distanceToPoint(camPos) > far) count = 0;
+          if (!mirror.set(c, count)) ok = false;
+        }
         if (!ok) { for (const c of t.cells!) mirror.set(c, 0); mask |= 1 << LAYER_MIRROR; }
         t.mirrorCells = ok;
       } else if (t.mirrorCells) {
@@ -300,10 +378,7 @@ export class BuildingBatches {
     }
     for (const b of this.cameraBatches.values()) b.commit();
     for (const b of this.mirrorBatches.values()) b.commit();
-    for (const p of this.proxies) {
-      p.visible = p.castShadow = proxyBits !== 0;
-      p.layers.mask = proxyBits << LAYER_CASCADE0;
-    }
+    for (const s of this.shadowBatches.values()) for (const b of s) b.commit();
   }
 }
 

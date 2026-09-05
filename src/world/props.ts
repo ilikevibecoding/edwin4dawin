@@ -24,12 +24,13 @@ interface ChunkMesh extends BatchSource {
    *  draw only the cells in the camera's / mirror camera's frustum */
   cellsLarge: PropCell[] | null; cellsAll: PropCell[] | null;
   /** batches the mesh is currently in, and the cells it is in them with */
-  inCamera: InstanceBatch | null; cameraCells: CellSource[] | null; inMirror: InstanceBatch | null; mirrorCells: CellSource[] | null;
+  inCamera: InstanceBatch | null; cameraCells: PropCell[] | null; inMirror: InstanceBatch | null; mirrorCells: PropCell[] | null;
   /** per cascade: the shadow batch the mesh's cells are in and those cells (see `placeShadow`) */
   inShadow: (InstanceBatch<PropCell> | null)[]; shadowCells: (PropCell[] | null)[];
 }
-/** A cell with its caster-routing result cached for the frame it was computed in. */
-interface PropCell extends CellSource { castBits: number; castFrame: number }
+/** A cell with its caster-routing result cached for the frame it was computed in, and the number of its
+ *  instances (a prefix: the indices are ascending and the mesh is ordered large-first) thicker than SMALL. */
+interface PropCell extends CellSource { castBits: number; castFrame: number; nLarge: number }
 /** the camera and mirror batches of one unit shape, plus its shadow batch per cascade (the cells of every
  *  casting chunk mesh that can shade that cascade's slice, in one draw) */
 interface PropBatches { camera: InstanceBatch; mirror: InstanceBatch; shadow: InstanceBatch<PropCell>[] }
@@ -49,11 +50,17 @@ const SMALL = 1.0;
 const LOD_DISTANCE = 350;
 /** objects thinner than SMALL are well under a pixel wide beyond this and leave the main pass */
 const SMALL_DISTANCE = 2500;
+/** the mirror image (half resolution, blurred by the water's roughness) leaves out objects thinner than SMALL
+ *  beyond MIRROR_SMALL_DISTANCE and everything beyond MIRROR_FAR (cell distances) */
+export const MIRROR_SMALL_DISTANCE = 800;
+export const MIRROR_FAR = 3500;
 /** objects at least this thick make up the shadow proxies drawn by the coarse cascades (a 2 m crate is under a texel there) */
 const PROXY_SIZE = 2.5;
 const _perCascade = new Array<number>(MAX_CASCADES).fill(0);
 /** draw calls a cascade's proxy batches cost (boxes + cylinders) */
 const PROXY_DRAWS = 2;
+
+const allOf = (c: PropCell): number => c.count;
 
 /** The placements at least PROXY_SIZE thick of `list` as an instance source (matrices only). */
 function proxySource(list: Placement[]): ProxySource | null {
@@ -315,11 +322,12 @@ export class Props {
   }
 
   private splitMesh(e: ChunkMesh, n: number): PropCell[] {
-    return this.splitSource(e, n, e.hi.boundingSphere!);
+    return this.splitSource(e, n, e.hi.boundingSphere!, e.large);
   }
 
-  /** `src` regrouped into PROP_CELL cells, each bounded by its instances' transformed unit spheres. */
-  private splitSource(src: BatchSource, n: number, unit: THREE.Sphere): PropCell[] {
+  /** `src` regrouped into PROP_CELL cells, each bounded by its instances' transformed unit spheres; `large` is
+   *  the length of the source's large prefix. */
+  private splitSource(src: BatchSource, n: number, unit: THREE.Sphere, large: number): PropCell[] {
     const sphere = new THREE.Sphere(), corner = new THREE.Vector3();
     const cells = splitCells(src, n, PROP_CELL, (i, box) => {
       this.m.fromArray(src.matrices, i * 16);
@@ -327,7 +335,12 @@ export class Props {
       box.expandByPoint(corner.copy(sphere.center).addScalar(-sphere.radius));
       box.expandByPoint(corner.copy(sphere.center).addScalar(sphere.radius));
     }) as PropCell[];
-    for (const c of cells) { c.castBits = 0; c.castFrame = -1; }
+    for (const c of cells) {
+      c.castBits = 0; c.castFrame = -1;
+      let k = 0;
+      while (k < c.count && c.indices[k] < large) k++;
+      c.nLarge = k;
+    }
     return cells;
   }
 
@@ -361,8 +374,8 @@ export class Props {
   private frame = 0;
 
   /** Put the cells of `e` that pass `inView` into `batch` (moving it out of the batch and cells it was in);
-   *  `cells` null removes it. False when it does not fit. */
-  private place(e: ChunkMesh, cells: CellSource[] | null, batch: InstanceBatch, slot: 'inCamera' | 'inMirror', inView: (box: THREE.Box3) => boolean): boolean {
+   *  `cells` null removes it. False when it does not fit. `countOf` (mirror) picks how much of a cell is drawn. */
+  private place(e: ChunkMesh, cells: PropCell[] | null, batch: InstanceBatch, slot: 'inCamera' | 'inMirror', inView: (box: THREE.Box3) => boolean, countOf: (c: PropCell) => number = allOf): boolean {
     const cellSlot = slot === 'inCamera' ? 'cameraCells' : 'mirrorCells';
     const prev = e[slot], prevCells = e[cellSlot];
     if (prev && (prev !== batch || prevCells !== cells)) {
@@ -371,7 +384,7 @@ export class Props {
     }
     if (cells === null) return true;
     let ok = true;
-    for (const c of cells) if (!batch.set(c, inView(c.box) ? c.count : 0)) ok = false;
+    for (const c of cells) if (!batch.set(c, inView(c.box) ? countOf(c) : 0)) ok = false;
     if (!ok) { for (const c of cells) batch.set(c, 0); e[slot] = null; e[cellSlot] = null; return false; }
     e[slot] = batch; e[cellSlot] = cells;
     return true;
@@ -399,6 +412,11 @@ export class Props {
     let proxyBits = 0;
     for (let i = 0; i < MAX_CASCADES; i++) if (perCascade[i] > PROXY_DRAWS && !cascadeIsFine(i)) proxyBits |= 1 << i;
     const inViewBox = (box: THREE.Box3) => cull.boxInView(box), inMirrorBox = (box: THREE.Box3) => cull.boxInMirror(box);
+    // how much of a cell the mirror draws: everything near, the large prefix to MIRROR_FAR, nothing beyond
+    const mirrorCountOf = (c: PropCell): number => {
+      const d = c.box.distanceToPoint(camPos);
+      return d > MIRROR_FAR ? 0 : d > MIRROR_SMALL_DISTANCE ? c.nLarge : c.count;
+    };
     for (const c of this.chunks) {
       const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
       const inView = cull.boxInView(c.box);
@@ -429,8 +447,8 @@ export class Props {
         const cast = maskCasts(mask);
         // the water mirrors the chunk meshes within the reflection range (distance to the mesh's bounding sphere)
         const sphere = e.mesh.boundingSphere!;
-        const mirrored = drawn && Math.max(0, sphere.center.distanceTo(camPos) - sphere.radius) <= mirrorRange;
-        if (!this.place(e, mirrored ? cells : null, pb.mirror, 'inMirror', inMirrorBox)) mask |= 1 << LAYER_MIRROR;
+        const mirrored = drawn && Math.max(0, sphere.center.distanceTo(camPos) - sphere.radius) <= Math.min(mirrorRange, MIRROR_FAR);
+        if (!this.place(e, mirrored ? cells : null, pb.mirror, 'inMirror', inMirrorBox, mirrorCountOf)) mask |= 1 << LAYER_MIRROR;
         e.mesh.visible = mask !== 0;
         e.mesh.castShadow = cast;
         e.mesh.layers.mask = mask;
@@ -448,7 +466,7 @@ export class Props {
         for (let k = 0; k < 2; k++) {
           const src = c.proxies[k];
           if (!src) continue;
-          const cells = c.proxyCells[k] ??= cast ? this.splitSource(src, src.count, this.proxyUnits[k]) : null;
+          const cells = c.proxyCells[k] ??= cast ? this.splitSource(src, src.count, this.proxyUnits[k], src.count) : null;
           if (!cells) continue;
           for (const cell of cells) pb.shapes[k].set(cell, cast && this.cellCast(cell, cull) & bit ? cell.count : 0);
         }
