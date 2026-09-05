@@ -21,7 +21,10 @@ interface ChunkMesh extends BatchSource { mesh: THREE.InstancedMesh; large: numb
 interface PropBatches { camera: InstanceBatch<ChunkMesh>; mirror: InstanceBatch<ChunkMesh> }
 
 /** Spatial chunk of props: boxes, large cylinders, small cylinders and lamps, one instanced mesh each. */
-interface PropChunk { meshes: ChunkMesh[]; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; /** cascade-index bitmask this frame */ bits: number }
+interface PropChunk { meshes: ChunkMesh[]; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; /** cascade-index bitmask this frame */ bits: number; /** the chunk's shadow-proxy instances (boxes / cylinders at least PROXY_SIZE thick) */ proxies: [ProxySource | null, ProxySource | null] }
+interface ProxySource extends BatchSource { count: number }
+/** shadow proxies of one coarse cascade: one instanced batch of boxes and one of cylinders */
+interface ProxyBatches { shapes: [InstanceBatch<ProxySource>, InstanceBatch<ProxySource>]; active: boolean }
 
 const CHUNK = 2500;
 /** objects thinner than this (pilings, poles, railings) cast into the nearest cascade only: their
@@ -34,6 +37,17 @@ const SMALL_DISTANCE = 2500;
 /** objects at least this thick make up the shadow proxies drawn by the coarse cascades (a 2 m crate is under a texel there) */
 const PROXY_SIZE = 2.5;
 const _perCascade = new Array<number>(MAX_CASCADES).fill(0);
+/** draw calls a cascade's proxy batches cost (boxes + cylinders) */
+const PROXY_DRAWS = 2;
+
+/** The placements at least PROXY_SIZE thick of `list` as an instance source (matrices only). */
+function proxySource(list: Placement[]): ProxySource | null {
+  const big = list.filter((p) => p.size >= PROXY_SIZE);
+  if (!big.length) return null;
+  const matrices = new Float32Array(big.length * 16);
+  big.forEach((p, i) => matrices.set(p.m.elements, i * 16));
+  return { matrices, colors: null, extras: [], count: big.length };
+}
 
 /** Static world dressing: marinas, port, airport, stadium, lighthouse, construction sites, lamps, seawalls.
  *  Everything is drawn from spatial chunks of instanced unit shapes; one material carries the colour,
@@ -54,9 +68,10 @@ export class Props {
   private readonly lamps: Placement[] = [];
   private readonly chunks: PropChunk[] = [];
   private readonly allBatches: PropBatches[] = [];
-  /** shadow-only proxies (all boxes, all cylinders at least PROXY_SIZE thick): a coarse cascade that would
-   *  draw more chunk meshes than this takes the two proxies instead */
-  private readonly proxies: THREE.InstancedMesh[] = [];
+  /** shadow-only proxies (boxes and cylinders at least PROXY_SIZE thick) per cascade: a coarse cascade that
+   *  would draw more chunk meshes than PROXY_DRAWS takes its two proxy batches instead, filled with the
+   *  proxies of the chunks that can cast into it */
+  private readonly proxyBatches: ProxyBatches[] = [];
   readonly cameraMeshes = new Set<THREE.Object3D>();
   readonly mirrorMeshes = new Set<THREE.Object3D>();
   private readonly mats: Record<string, THREE.MeshStandardMaterial>;
@@ -198,7 +213,7 @@ export class Props {
     this.counts.boxes = this.boxes.length; this.counts.cylinders = this.cyls.length; this.counts.lamps = this.lamps.length;
     const sphere = new THREE.Sphere(), corner = new THREE.Vector3(), white = new THREE.Color(0xffffff);
     for (const b of buckets.values()) {
-      const chunk: PropChunk = { meshes: [], box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, height: 0, bits: 0 };
+      const chunk: PropChunk = { meshes: [], box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, height: 0, bits: 0, proxies: [proxySource(b.boxes), proxySource([...b.cylLarge, ...b.cylSmall])] };
       // large instances first, so the first `large` instances are exactly the objects thicker than SMALL
       b.boxes.sort((u, v) => Number(isLarge(v)) - Number(isLarge(u)));
       /** `perVertex`: the unit carries colour / parameters per vertex (lamp) instead of per instance */
@@ -245,28 +260,22 @@ export class Props {
       this.counts.meshes += chunk.meshes.length;
     }
     this.counts.chunks = this.chunks.length;
-    const proxy = (list: Placement[], unit: THREE.BufferGeometry, name: string) => {
-      const big = list.filter((p) => p.size >= PROXY_SIZE);
-      if (!big.length) return;
-      const mesh = new THREE.InstancedMesh(unit, this.material, big.length);
-      const bounds = new THREE.Box3();
-      big.forEach((p, i) => {
-        mesh.setMatrixAt(i, p.m);
-        sphere.copy(unit.boundingSphere!).applyMatrix4(p.m);
-        bounds.expandByPoint(corner.copy(sphere.center).addScalar(-sphere.radius));
-        bounds.expandByPoint(corner.copy(sphere.center).addScalar(sphere.radius));
-      });
-      mesh.boundingSphere = bounds.getBoundingSphere(new THREE.Sphere());
-      mesh.instanceMatrix.needsUpdate = true;
-      mesh.castShadow = true; mesh.receiveShadow = false;
-      mesh.visible = false; mesh.layers.mask = 0;
-      mesh.matrixAutoUpdate = false;
-      mesh.name = name;
-      this.group.add(mesh);
-      this.proxies.push(mesh);
-    };
-    proxy(this.boxes, unitBox, 'shadow-proxy-boxes');
-    proxy(this.cyls, cylLo, 'shadow-proxy-cylinders');
+    // proxy batches per cascade, sized for every proxy instance of the world (the coarse cascades can
+    // cover most of it)
+    const nBoxProxies = this.boxes.filter((p) => p.size >= PROXY_SIZE).length, nCylProxies = this.cyls.filter((p) => p.size >= PROXY_SIZE).length;
+    for (let i = 0; i < MAX_CASCADES; i++) {
+      const shapes: [InstanceBatch<ProxySource>, InstanceBatch<ProxySource>] = [
+        new InstanceBatch<ProxySource>(Math.max(1, nBoxProxies), unitBox, this.material, [], false),
+        new InstanceBatch<ProxySource>(Math.max(1, nCylProxies), cylLo, this.material, [], false),
+      ];
+      shapes[0].mesh.name = `shadow-proxy-boxes-${i}`; shapes[1].mesh.name = `shadow-proxy-cylinders-${i}`;
+      for (const b of shapes) {
+        b.mesh.castShadow = true; b.mesh.receiveShadow = false;
+        b.mesh.layers.set(LAYER_CASCADE0 + i);
+        this.group.add(b.mesh);
+      }
+      this.proxyBatches.push({ shapes, active: false });
+    }
     this.boxes.length = 0; this.cyls.length = 0; this.lamps.length = 0;
   }
 
@@ -299,7 +308,7 @@ export class Props {
       for (let i = 0; i < MAX_CASCADES; i++) if (c.bits & (1 << i)) perCascade[i] += large;
     }
     let proxyBits = 0;
-    for (let i = 0; i < MAX_CASCADES; i++) if (perCascade[i] > this.proxies.length && !cascadeIsFine(i)) proxyBits |= 1 << i;
+    for (let i = 0; i < MAX_CASCADES; i++) if (perCascade[i] > PROXY_DRAWS && !cascadeIsFine(i)) proxyBits |= 1 << i;
     for (const c of this.chunks) {
       const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
       const inView = cull.boxInView(c.box);
@@ -328,9 +337,17 @@ export class Props {
       }
     }
     for (const b of this.allBatches) { b.camera.commit(); b.mirror.commit(); }
-    for (const p of this.proxies) {
-      p.visible = p.castShadow = proxyBits !== 0;
-      p.layers.mask = proxyBits << LAYER_CASCADE0;
+    // each proxy cascade draws the proxies of the chunks that can cast into it
+    for (let i = 0; i < MAX_CASCADES; i++) {
+      const on = (proxyBits & (1 << i)) !== 0;
+      const pb = this.proxyBatches[i];
+      if (!on && !pb.active) continue;
+      for (const c of this.chunks) {
+        const cast = on && (c.bits & (1 << i)) !== 0;
+        for (let k = 0; k < 2; k++) { const src = c.proxies[k]; if (src) pb.shapes[k].set(src, cast ? src.count : 0); }
+      }
+      for (const b of pb.shapes) b.commit();
+      pb.active = on;
     }
   }
 
