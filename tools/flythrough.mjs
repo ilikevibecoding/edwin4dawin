@@ -57,10 +57,10 @@ await page.evaluate(() => {
   d.setView("ext_far"); // enters deterministic mode (quality scaler off, grain frozen)
   d.freezeGrain = false;
   d.player.headBob = false;
+  d.setPaused(true); // render only on demand from here on
 });
 const frame = async () => {
-  const f0 = await page.evaluate(() => window.debugAPI.frames());
-  await page.waitForFunction((t) => window.debugAPI.frames() >= t, f0 + 1, { timeout: 240000 });
+  await page.evaluate(() => window.debugAPI.renderFrame());
 };
 
 let n = 0;
@@ -115,8 +115,8 @@ for (const seg of SEGMENTS) {
       d.advanceSim(step);
       d.advanceSky(step);
       d.pool.settle(d.modes.camera.position);
+      d.renderFrame();
     }, dt);
-    await frame();
     await page.screenshot({ path: resolve(outDir, `f${String(n).padStart(5, "0")}.jpg`), type: "jpeg", quality: 86 });
     n++;
     if (n % 24 === 0) console.log(`  ${n} frames`);

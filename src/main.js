@@ -454,6 +454,13 @@ const debugAPI = {
   frames() {
     return framesRendered;
   },
+  setPaused(v) {
+    paused = !!v;
+  },
+  renderFrame() {
+    step();
+    return framesRendered;
+  },
   getStats() {
     return {
       ...perf.stats(),
@@ -519,8 +526,15 @@ function updateWellPeek() {
 const timer = new THREE.Timer();
 let envCaptured = false;
 
+// Offline capture (tools/flythrough.mjs): pause the loop and render single frames on demand so the
+// page's main thread is free between captures.
+let paused = false;
 function frame() {
   requestAnimationFrame(frame);
+  if (paused) return;
+  step();
+}
+function step() {
   const now = performance.now();
   perf.beginFrame(now);
   timer.update();
