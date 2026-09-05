@@ -23,7 +23,7 @@ export class CraterPlan {
     this.m = manager;
     this.world = manager.world;
     this.cx = cx; this.cz = cz; this.R = R; this.D = D; this.g = groundY; this.seed = seed;
-    this.magmaR = Math.max(1.5, R * 0.3 + D * 0.4);
+    this.magmaR = Math.max(1.5, R * 0.45 + D * 0.15);   // the glowing pool: solid out to ~2/3 of this, then breaking up
     const outer = R + RIM_WIDTH;
     const tmp = [];
     for (let x = Math.floor(cx - outer); x <= Math.ceil(cx + outer); x++) {
@@ -133,8 +133,10 @@ export class CraterPlan {
       if (id === B.BEDROCK) return;
       const def = BLOCKS[id];
       if (def.shape !== SHAPE.CUBE) { this.m.setBlock(x, y, z, B.AIR); continue; }
-      // solid pool at the centre thinning out to scattered glowing cracks across the inner floor
-      const pMagma = d < this.magmaR ? 1.8 * (1 - d / this.magmaR) : d < this.R * 0.75 ? 0.06 : 0;
+      // solid pool at the centre (a flat-topped profile so it reads as one lake from the street and from above),
+      // breaking up toward its edge, then scattered glowing cracks across the inner floor
+      const q = d / this.magmaR;
+      const pMagma = d < this.magmaR ? 1.7 * (1 - q * q) : d < this.R * 0.75 ? 0.06 : 0;
       const magma = pMagma > 0 && hash2(x, z, this.seed + 7) < pMagma;
       this.m.setBlock(x, y, z, magma ? B.MAGMA : B.SCORCHED_STONE);
       if (magma && pMagma > 1.2 && this.m.budgetLeft > 0) this.m.setBlock(x, y - 1, z, B.MAGMA);
@@ -178,9 +180,10 @@ export const CRATER_RIM_WIDTH = RIM_WIDTH;
 // anyway) and waveR are processed in distance order as the front reaches them. Inside the crater plan's zone
 // (d <= craterR + RIM_WIDTH) only the fragile stuff (roofs, glass, fences, plants) is thrown so the impact reads
 // as one blast while the beam keeps eating the rest; outside it the top `peel` blocks of each column may be
-// removed (probability = fragility x falloff) and natural ground turns to ash / coarse dirt / dirt with a
-// probability that decays toward the wave radius. `front` is the radius actually reached (budget-limited), which
-// the visuals follow so the dust wall and the flying blocks stay together.
+// removed (probability = fragility x falloff, boosted on the blast-facing side and damped behind a solid
+// neighbour) and natural ground - never peeled - turns to ash / coarse dirt / dirt with a probability that decays
+// toward the wave radius. `front` is the radius actually reached (budget-limited), which the visuals follow so the
+// dust wall and the flying blocks stay together.
 export class WavePlan {
   constructor(manager, cx, cz, rInner, craterR, waveR, groundY, seed, strength) {
     this.m = manager;
@@ -210,14 +213,21 @@ export class WavePlan {
     this.done = n === 0;
   }
 
-  // Estimated number of blocks the wave will throw / scorch (for warnings()); cheap: uses expected values.
+  // Estimated number of blocks the wave will throw / scorch (for warnings()): expected values from every 4th
+  // column's top block (natural ground is only ever scorched, anything else may be thrown).
   estimate() {
     let thrown = 0, scorched = 0;
-    for (let i = 0; i < this.n; i++) {
-      const d = this.d[i];
-      if (d <= this.craterOuter) { thrown += 0.3; continue; }
-      const u = this.falloff(d);
-      thrown += 0.35 * Math.pow(1 - u, 1.5); scorched += 0.1 + 0.9 * Math.pow(1 - u, 1.4);
+    const step = 4, world = this.world;
+    for (let i = 0; i < this.n; i += step) {
+      const d = this.d[i], x = this.x[i], z = this.z[i];
+      let y = this.scanTop;
+      while (y > this.minY && world.getBlock(x, y, z) === B.AIR) y--;
+      if (y <= this.minY) continue;
+      const ground = isNaturalGround(world.getBlock(x, y, z));
+      if (d <= this.craterOuter) { if (!ground) thrown += 0.5 * step; continue; }
+      const u = this.falloff(d), w = Math.pow(1 - u, 1.5);
+      if (ground) scorched += (0.1 + 0.9 * Math.pow(1 - u, 1.4)) * step;
+      else thrown += 1.1 * w * step;
     }
     return { thrown: Math.round(thrown), scorched: Math.round(scorched) };
   }
@@ -245,19 +255,32 @@ export class WavePlan {
     const u = this.falloff(d);
     const inside = d <= this.craterOuter;
     const power = Math.pow(1 - u, 1.5) * (0.45 + 0.55 * this.strength);
+    // the neighbouring column on the blast-facing side (toward the impact)
+    const ex = x - Math.round((x + 0.5 - this.cx) / d), ez = z - Math.round((z + 0.5 - this.cz) / d);
     let y = this.scanTop;
     while (y > this.minY && world.getBlock(x, y, z) === B.AIR) y--;
     if (y <= this.minY) return;
-    // peel the top blocks: fragile materials first, fewer the farther out
+    // peel the top blocks: fragile materials first, fewer the farther out. Natural ground (streets, yards, fields)
+    // is never peeled - it gets scorched below - so the town is not left pitted. Outside the crater zone a block
+    // whose face toward the impact is open (a roof edge, or a neighbour the front tore away a moment ago -
+    // columns are processed nearest-first) is exposed and likely to go, while one shielded by a solid neighbour
+    // mostly survives: roofs read as torn open toward the blast rather than peppered at random.
     const peel = inside ? 2 : u < 0.3 ? 3 : u < 0.65 ? 2 : 1;
     let k = 0;
     while (k < peel && y > this.minY) {
       const id = world.getBlock(x, y, z);
       if (id === B.AIR) { y--; continue; }
       const def = BLOCKS[id];
+      if (isNaturalGround(id)) break;
       const frag = m.constructor.fragility(id);
       if (frag <= 0) break;
-      const p = inside ? (frag >= 0.6 ? 0.55 * (0.5 + 0.5 * this.strength) : 0) : frag * power * (k === 0 ? 1 : 0.55);
+      let p;
+      if (inside) p = frag >= 0.6 ? 0.55 * (0.5 + 0.5 * this.strength) : 0;
+      else {
+        const nb = world.getBlock(ex, y, ez);
+        const shielded = nb !== B.AIR && BLOCKS[nb].solid && !isPlant(BLOCKS[nb]);
+        p = Math.min(0.97, frag * power * (k === 0 ? 1 : 0.55) * (shielded ? 0.3 : 1.35));
+      }
       if (p > 0 && hash3(x, y, z, seed + 11) < p) {
         m.setBlock(x, y, z, B.AIR);
         this.removed++;
