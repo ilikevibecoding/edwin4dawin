@@ -310,6 +310,174 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.4), false), clearcoatRoughnessMap: toTexture(cc, false) };
 }
 
+/** Where the cabin lining changes: everything in body metres, converted through the fuselage layout. */
+export interface CabinLayout {
+  /** firewall / rear bulkhead stations */
+  front: number;
+  rear: number;
+  /** window sill, side-window top, cabin floor heights */
+  sill: number;
+  winTop: number;
+  floor: number;
+  /** door skin: front / aft station and bottom height (top is the sill) */
+  door: { x0: number; x1: number; yBot: number };
+  /** headliner cross seams (window pillar stations) */
+  bows: number[];
+}
+
+/**
+ * Cabin lining, laid out like the fuselage paint (same u/v, the inner shell is the outer loft inset): perforated
+ * vinyl headliner with stitched longitudinal seams and cross seams at the bows, darker toward the crest (the
+ * light comes in through the windows below it), dark window-band trim with a lighter sill ledge, vinyl sidewall
+ * panels with a woven fabric insert and a kick strip at the floor, and the door panel with its stitched border
+ * and map pocket. The normal map is a separate tileable vinyl grain (the material tiles it by `repeat`), so the
+ * grain stays fine at the 10 cm the headliner is from the pilot's eye while the seams live in the albedo.
+ */
+export function cabinMaps(lay: FuselageLayout, cab: CabinLayout): PbrMaps {
+  const w = 2048, h = 1024;
+  const rng = new Rng('cabin-lining');
+  const [ac, actx] = canvas(w, h);
+  const [rc, rctx] = canvas(w / 2, h / 2);
+  rctx.scale(0.5, 0.5);
+  const U = (x: number) => lay.uOf(x) * w;
+  const V = (v: number, side: 1 | -1) => (side > 0 ? v : 1 - v) * h;
+  const vAt = (x: number, y: number) => lay.vOf(x, y) ?? 0.5;
+  // dark trim everywhere the lining does not reach (window reveals sample the corner texel, the bulkheads the ends)
+  actx.fillStyle = '#2b2d31'; actx.fillRect(0, 0, w, h);
+  rctx.fillStyle = '#8c8c8c'; rctx.fillRect(0, 0, w, h);
+  /** fill between the v-curves of heights y0 > y1 over stations x0 > x1 (both sides) */
+  const band = (ctx: CanvasRenderingContext2D, x0: number, x1: number, y0: number, y1: number, style: string) => {
+    for (const side of [1, -1] as (1 | -1)[]) {
+      ctx.beginPath();
+      const n = 24;
+      for (let i = 0; i <= n; i++) { const x = x0 + (x1 - x0) * (i / n); const p = [U(x), V(vAt(x, y0), side)]; i === 0 ? ctx.moveTo(p[0], p[1]) : ctx.lineTo(p[0], p[1]); }
+      for (let i = n; i >= 0; i--) { const x = x0 + (x1 - x0) * (i / n); ctx.lineTo(U(x), V(vAt(x, y1), side)); }
+      ctx.closePath();
+      ctx.fillStyle = style; ctx.fill();
+    }
+  };
+  const { front, rear, sill, winTop, floor } = cab;
+  const FL = front + 0.02, RR = rear - 0.02;
+  // ---- headliner: from the crest down to the window tops, per column so the gradient follows the roof
+  for (let px = Math.floor(U(FL)); px <= U(RR); px += 4) {
+    const x = lay.xOf(px / w), vTop = vAt(x, winTop);
+    for (const side of [1, -1] as (1 | -1)[]) {
+      const g = actx.createLinearGradient(0, V(0, side), 0, V(vTop, side));
+      g.addColorStop(0, '#a7a39a'); g.addColorStop(0.45, '#bdb9b0'); g.addColorStop(1, '#cbc7be');
+      actx.fillStyle = g; actx.fillRect(px, Math.min(V(0, side), V(vTop, side)), 4, Math.abs(V(vTop, side) - V(0, side)));
+    }
+  }
+  // perforation: a fine stagger of darker dots (reads as texture from the seat, not as a grid)
+  const vTopMid = vAt(0.5, winTop);
+  for (let y = 0; y < vTopMid * h; y += 3) {
+    for (let x = U(FL) + ((y / 3) % 2) * 1.5; x < U(RR); x += 3) {
+      actx.fillStyle = `rgba(60,55,50,${0.07 + rng.next() * 0.06})`;
+      actx.fillRect(x, y, 1, 1); actx.fillRect(x, h - y - 1, 1, 1);
+    }
+  }
+  // stitched longitudinal seams at the crest and either side of it, following the roof's v at those half-widths
+  const seam = (ctx: CanvasRenderingContext2D, pts: [number, number][], dark: string, light: string, stitch = true) => {
+    ctx.lineWidth = 2.2; ctx.strokeStyle = dark; ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.stroke();
+    ctx.lineWidth = 1; ctx.strokeStyle = light; ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y + 2) : ctx.moveTo(x, y + 2))); ctx.stroke();
+    if (!stitch) return;
+    ctx.fillStyle = 'rgba(245,242,235,0.55)';
+    for (let i = 0; i < pts.length - 1; i++) { const [x0, y0] = pts[i], [x1, y1] = pts[i + 1]; for (let f = 0; f < 1; f += 0.25) ctx.fillRect(x0 + (x1 - x0) * f, y0 + (y1 - y0) * f - 4, 2.5, 1); }
+  };
+  for (const z of [0, 0.30, 0.56]) {
+    for (const side of [1, -1] as (1 | -1)[]) {
+      if (z === 0 && side < 0) continue;
+      const pts: [number, number][] = [];
+      for (let x = FL; x >= RR; x -= 0.04) pts.push([U(x), V(z === 0 ? 0.001 : lay.topV(x, z), side)]);
+      seam(actx, pts, 'rgba(70,64,58,0.7)', 'rgba(255,252,246,0.35)');
+    }
+  }
+  // cross seams / bows at the pillars
+  for (const x of cab.bows) {
+    for (const side of [1, -1] as (1 | -1)[]) {
+      const vT = vAt(x, winTop);
+      seam(actx, [[U(x), V(0, side)], [U(x), V(vT, side)]], 'rgba(70,64,58,0.8)', 'rgba(255,252,246,0.3)', false);
+    }
+  }
+  // ---- window band: dark vinyl trim (the pillars) with a pale ledge along the sill
+  band(actx, FL, RR, winTop, sill - 0.005, '#34373c');
+  band(actx, FL, RR, sill + 0.035, sill - 0.005, '#6a6e74');
+  band(actx, FL, RR, sill + 0.008, sill - 0.005, '#4a4d52');
+  band(rctx, FL, RR, winTop, sill, '#909090');
+  // ---- sidewall panels: upper vinyl, woven insert, lower vinyl, kick strip; darker toward the floor
+  band(actx, FL, RR, sill, floor - 0.05, '#8f8a81');
+  band(actx, FL, RR, 0.16, -0.12, '#5e5b55');
+  band(actx, FL, RR, floor + 0.12, floor - 0.05, '#2f3135');
+  band(rctx, FL, RR, sill, floor, '#7a7a7a');
+  band(rctx, FL, RR, 0.16, -0.12, '#dcdcdc');
+  band(rctx, FL, RR, floor + 0.12, floor - 0.05, '#a0a0a0');
+  // woven insert: two-direction fine hatch
+  { const v0 = vAt(0.5, 0.16), v1 = vAt(0.5, -0.12);
+    for (const side of [1, -1] as (1 | -1)[]) {
+      const ya = Math.min(V(v0, side), V(v1, side)), yb = Math.max(V(v0, side), V(v1, side));
+      for (let y = ya; y < yb; y += 3) for (let x = U(FL); x < U(RR); x += 3) {
+        actx.fillStyle = ((Math.floor(x / 3) + Math.floor(y / 3)) & 1) ? 'rgba(255,250,240,0.10)' : 'rgba(20,18,15,0.16)';
+        actx.fillRect(x, y, 3, 1.5);
+      }
+    }
+  }
+  // floor shadow (AO) up the sidewall and under the seats
+  for (const side of [1, -1] as (1 | -1)[]) {
+    const v0 = vAt(0.5, floor + 0.35), v1 = vAt(0.5, floor - 0.05);
+    const g = actx.createLinearGradient(0, V(v0, side), 0, V(v1, side));
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.42)');
+    actx.fillStyle = g; actx.fillRect(U(FL), Math.min(V(v0, side), V(v1, side)), U(RR) - U(FL), Math.abs(V(v1, side) - V(v0, side)));
+  }
+  // ---- door panel: its own vinyl shade, a stitched border 2 cm in, an armrest shadow and a map pocket
+  { const d = cab.door;
+    band(actx, d.x0, d.x1, sill - 0.002, d.yBot, '#9c968c');
+    band(rctx, d.x0, d.x1, sill, d.yBot, '#707070');
+    for (const side of [1, -1] as (1 | -1)[]) {
+      const rect = (x0: number, x1: number, y0: number, y1: number): [number, number][] => [[U(x0), V(vAt(x0, y0), side)], [U(x1), V(vAt(x1, y0), side)], [U(x1), V(vAt(x1, y1), side)], [U(x0), V(vAt(x0, y1), side)], [U(x0), V(vAt(x0, y0), side)]];
+      seam(actx, rect(d.x0 - 0.03, d.x1 + 0.03, sill - 0.03, d.yBot + 0.03), 'rgba(60,55,50,0.75)', 'rgba(255,252,246,0.3)');
+      // map pocket: a slab with its own top edge highlight and a shadow beneath
+      const pk = rect(d.x0 - 0.12, d.x1 + 0.12, -0.02, d.yBot + 0.10);
+      actx.beginPath(); pk.forEach(([x, y], i) => (i ? actx.lineTo(x, y) : actx.moveTo(x, y))); actx.closePath();
+      actx.fillStyle = '#7d7870'; actx.fill();
+      seam(actx, pk, 'rgba(40,36,32,0.8)', 'rgba(255,252,246,0.4)');
+      // armrest shadow band
+      const ar = rect(d.x0 - 0.10, d.x1 + 0.12, 0.20, 0.13);
+      actx.beginPath(); ar.forEach(([x, y], i) => (i ? actx.lineTo(x, y) : actx.moveTo(x, y))); actx.closePath();
+      actx.fillStyle = 'rgba(0,0,0,0.28)'; actx.fill();
+    }
+  }
+  // scuffs and grime: heel marks on the kick strips, hand grime around the door
+  grime(actx, rng, w, h, 60, 0.07, '30,26,22');
+  for (let i = 0; i < 50; i++) {
+    const side = rng.next() < 0.5 ? 1 : -1, x = rng.range(U(front), U(rear)), y = V(vAt(0.5, floor + rng.range(0.0, 0.14)), side as 1 | -1);
+    actx.strokeStyle = `rgba(20,18,16,${rng.range(0.1, 0.35)})`; actx.lineWidth = rng.range(0.6, 1.8);
+    actx.beginPath(); actx.moveTo(x, y); actx.lineTo(x + rng.range(-14, 14), y + rng.range(-3, 3)); actx.stroke();
+  }
+  // ---- tileable vinyl grain (height -> normal); the material repeats it many times over the lining
+  const S = 256;
+  const [gc, gctx] = canvas(S, S);
+  gctx.fillStyle = '#808080'; gctx.fillRect(0, 0, S, S);
+  for (let i = 0; i < 2600; i++) {
+    const x = rng.range(0, S), y = rng.range(0, S), r = rng.range(1.5, 5);
+    const g = gctx.createRadialGradient(x, y, 0, x, y, r);
+    const up = rng.next() < 0.5;
+    g.addColorStop(0, up ? 'rgba(255,255,255,0.28)' : 'rgba(0,0,0,0.28)'); g.addColorStop(1, up ? 'rgba(255,255,255,0)' : 'rgba(0,0,0,0)');
+    gctx.fillStyle = g;
+    for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) gctx.fillRect(x - r + ox, y - r + oy, r * 2, r * 2);
+  }
+  // leather-like crease network between the grain bumps (short dark strokes, wrapped so the tile stays seamless)
+  gctx.lineCap = 'round';
+  for (let i = 0; i < 900; i++) {
+    const x = rng.range(0, S), y = rng.range(0, S), a = rng.range(0, Math.PI * 2), l = rng.range(3, 11);
+    gctx.strokeStyle = `rgba(0,0,0,${rng.range(0.12, 0.3)})`; gctx.lineWidth = rng.range(0.7, 1.4);
+    for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) {
+      gctx.beginPath(); gctx.moveTo(x + ox, y + oy); gctx.lineTo(x + ox + Math.cos(a) * l, y + oy + Math.sin(a) * l); gctx.stroke();
+    }
+  }
+  const normal = toTexture(heightToNormal(gc, 2.0), false, 4);
+  normal.repeat.set(28, 14);
+  return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false, 4), normalMap: normal };
+}
+
 /**
  * Layout of the shared wing / tail paint: the wing occupies texture rows v 0 .. WING_V1 (root .. tip), the tail
  * surfaces the band TAIL_V0 .. 1 at the same metres-per-texel spanwise scale as the wing (TAIL_SPAN metres of
@@ -440,9 +608,11 @@ export function floatMaps(): PbrMaps {
  * and a row of placards / the compass card face. Everything is in metres so the gauge geometry (needles, cards)
  * built in model.ts lands exactly on the painted dials.
  */
-export const PANEL = { W: 1.30, H: 0.40, PPM: 1500, GRAIN: 120, PLACARDS: 90 } as const;
+export const PANEL = { W: 1.30, H: 0.40, PPM: 1500, GRAIN: 120, PLACARDS: 90, OVERHEAD: 550 } as const;
 const PANEL_PX = { w: Math.round(PANEL.W * PANEL.PPM), face: Math.round(PANEL.H * PANEL.PPM) };
-const ATLAS_H = PANEL_PX.face + PANEL.GRAIN + PANEL.PLACARDS;
+const ATLAS_H = PANEL_PX.face + PANEL.GRAIN + PANEL.PLACARDS + PANEL.OVERHEAD;
+/** overhead console face (metres; portrait: its top is the aft end, so the legends read upright from the seat) */
+export const OVERHEAD = { w: 0.16, h: 0.36 } as const;
 
 export interface GaugeDef { x: number; y: number; r: number; }
 /** dial centres and aperture radii (panel metres); the pilot sits at x = -0.30 */
@@ -489,7 +659,8 @@ const rad = (deg: number) => ((deg - 90) * Math.PI) / 180; // clockwise-from-12 
 /** atlas UV rectangle of a pixel rectangle (v flipped: the canvas is drawn top-down) */
 export interface UvRect { u0: number; v0: number; u1: number; v1: number; }
 const uvRect = (x0: number, y0: number, x1: number, y1: number): UvRect => ({ u0: x0 / PANEL_PX.w, v0: 1 - y1 / ATLAS_H, u1: x1 / PANEL_PX.w, v1: 1 - y0 / ATLAS_H });
-const GRAIN_Y = PANEL_PX.face, PLACARD_Y = PANEL_PX.face + PANEL.GRAIN;
+const GRAIN_Y = PANEL_PX.face, PLACARD_Y = PANEL_PX.face + PANEL.GRAIN, OVERHEAD_Y = PLACARD_Y + PANEL.PLACARDS;
+const OVERHEAD_PX = { w: Math.round(OVERHEAD.w * PANEL.PPM), h: Math.round(OVERHEAD.h * PANEL.PPM) };
 /** atlas regions used by the cockpit geometry (face, glare shield grain, placards, compass card) */
 export const PANEL_UV = {
   face: uvRect(0, 0, PANEL_PX.w, PANEL_PX.face),
@@ -500,6 +671,9 @@ export const PANEL_UV = {
   yoke: uvRect(674, PLACARD_Y + 6, 794, PLACARD_Y + 84),
   nameplate: uvRect(804, PLACARD_Y + 6, 1164, PLACARD_Y + 84),
   domeLens: uvRect(1174, PLACARD_Y + 6, 1254, PLACARD_Y + 84),
+  overhead: uvRect(4, OVERHEAD_Y + 4, 4 + OVERHEAD_PX.w, OVERHEAD_Y + 4 + OVERHEAD_PX.h),
+  /** sun visor face: tinted vinyl with a stitched edge */
+  visor: uvRect(300, OVERHEAD_Y + 4, 750, OVERHEAD_Y + 4 + 210),
 };
 
 function bezel(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, screws = true): void {
@@ -717,6 +891,48 @@ export function panelTexture(): { map: THREE.CanvasTexture; emissive: THREE.Canv
     label(ctx, x0 + 180, y0 + 24, 'BAHÍA VISTA AIR TAXI', 22, '#1c2d5a', 'bold italic'); label(ctx, x0 + 180, y0 + 56, 'GARZA 7 · FLOATPLANE · N726BV', 14, '#1c2d5a', 'normal'); }
   { const x0 = 1174, y0 = PLACARD_Y + 6; const g = ctx.createRadialGradient(x0 + 40, y0 + 39, 4, x0 + 40, y0 + 39, 40); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#c8cbd0');
     ctx.fillStyle = g; ctx.fillRect(x0, y0, 80, 78); }
+  // ---- overhead console face (seen from below): crinkle paint, fuel selector, cabin switches, trim indicator
+  ctx.fillStyle = '#000'; ctx.fillRect(0, OVERHEAD_Y, w, PANEL.OVERHEAD);
+  { const x0 = 4, y0 = OVERHEAD_Y + 4, ow = OVERHEAD_PX.w, oh = OVERHEAD_PX.h;
+    ctx.fillStyle = '#26292d'; ctx.fillRect(x0, y0, ow, oh);
+    for (let i = 0; i < 5000; i++) { ctx.fillStyle = `rgba(${rng.next() > 0.5 ? '255,255,255' : '0,0,0'},${rng.next() * 0.06})`; ctx.fillRect(x0 + rng.next() * ow, y0 + rng.next() * oh, 2, 2); }
+    ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 3; ctx.strokeRect(x0 + 2, y0 + 2, ow - 4, oh - 4);
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1.5; ctx.strokeRect(x0 + 6, y0 + 6, ow - 12, oh - 12);
+    for (const [sx, sy] of [[12, 12], [ow - 12, 12], [12, oh - 12], [ow - 12, oh - 12]]) screw(ctx, x0 + sx, y0 + sy, 5);
+    // fuel selector (aft end, nearest the pilot): a large rotary with LEFT / BOTH / RIGHT / OFF legends
+    const fx = x0 + ow / 2, fy = y0 + 100;
+    label(ctx, fx, y0 + 22, 'FUEL SELECTOR', 10, '#c8ccd2', 'normal');
+    ctx.fillStyle = '#3a3e44'; ctx.beginPath(); ctx.arc(fx, fy, 50, 0, 7); ctx.fill();
+    ctx.fillStyle = '#0e0f11'; ctx.beginPath(); ctx.arc(fx, fy, 42, 0, 7); ctx.fill();
+    for (const [d, t] of [[-90, 'LEFT'], [0, 'BOTH'], [90, 'RIGHT'], [180, 'OFF']] as [number, string][]) label(ctx, fx + Math.cos(rad(d)) * 66, fy + Math.sin(rad(d)) * 62, t, 9, d === 180 ? '#e0322a' : '#e8e8e8');
+    ctx.fillStyle = '#c0392b'; ctx.fillRect(fx - 9, fy - 38, 18, 60);
+    ctx.fillStyle = '#e8e8e8'; ctx.fillRect(fx - 2, fy - 36, 4, 14);
+    // cabin switches in a row across the console
+    const sw = ['CAB LT', 'MAP LT', 'DEFROST', 'FAN', 'PITOT'];
+    sw.forEach((s, i) => rocker(ctx, x0 + 30 + i * 45, y0 + 220, i === 0 || i === 2, s));
+    // elevator trim indicator: a slot across the console with NOSE UP / NOSE DN legends, pointer near neutral
+    const tx = x0 + 22, ty = y0 + 320, tw = ow - 44;
+    label(ctx, x0 + ow / 2, ty - 14, 'ELEVATOR TRIM', 9, '#c8ccd2', 'normal');
+    ctx.fillStyle = '#0e0f11'; ctx.fillRect(tx, ty, tw, 14);
+    for (let i = 0; i <= 10; i++) { ctx.fillStyle = '#e8e8e8'; ctx.fillRect(tx + (tw * i) / 10, ty + 16, i % 5 ? 1 : 2, i % 5 ? 5 : 9); }
+    ctx.fillStyle = '#ff9a2e'; ctx.fillRect(tx + tw * 0.46, ty + 2, 6, 10);
+    label(ctx, tx, ty + 36, 'NOSE DN', 8, '#c8ccd2', 'normal', 'left'); label(ctx, tx + tw, ty + 36, 'NOSE UP', 8, '#c8ccd2', 'normal', 'right');
+    placard(ctx, x0 + 22, y0 + 390, ow - 44, 30, ['FLAP PUMP → CLIMB'], '#f0f0f0', '#111214', 10);
+    placard(ctx, x0 + 22, y0 + 440, ow - 44, 30, ['HYDRAULIC FLAPS · 3 STROKES'], '#f0f0f0', '#111214', 8);
+    // emergency exit light housing at the forward end
+    ctx.fillStyle = '#3a3e44'; ctx.fillRect(x0 + ow / 2 - 40, y0 + oh - 60, 80, 34);
+    ctx.fillStyle = '#c0392b'; ctx.fillRect(x0 + ow / 2 - 34, y0 + oh - 54, 68, 22);
+    label(ctx, x0 + ow / 2, y0 + oh - 43, 'EXIT', 12, '#fff');
+  }
+  // ---- sun visor face: grey-beige vinyl (matches the headliner) with a stitched border and a pivot boss
+  { const x0 = 300, y0 = OVERHEAD_Y + 4, vw = 450, vh = 210;
+    const g = ctx.createLinearGradient(x0, y0, x0, y0 + vh); g.addColorStop(0, '#938e85'); g.addColorStop(1, '#7c7870');
+    ctx.fillStyle = g; ctx.fillRect(x0, y0, vw, vh);
+    for (let i = 0; i < 4000; i++) { ctx.fillStyle = `rgba(${rng.next() > 0.5 ? '255,255,255' : '0,0,0'},${rng.next() * 0.05})`; ctx.fillRect(x0 + rng.next() * vw, y0 + rng.next() * vh, 2, 2); }
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 4; ctx.strokeRect(x0 + 8, y0 + 8, vw - 16, vh - 16);
+    ctx.setLineDash([6, 5]); ctx.strokeStyle = 'rgba(230,225,210,0.55)'; ctx.lineWidth = 1.5; ctx.strokeRect(x0 + 12, y0 + 12, vw - 24, vh - 24); ctx.setLineDash([]);
+    ctx.fillStyle = '#1a1c1f'; ctx.beginPath(); ctx.arc(x0 + 40, y0 + 34, 16, 0, 7); ctx.fill(); screw(ctx, x0 + 40, y0 + 34, 6);
+  }
 
   const map = toTexture(c, true, 8);
   map.flipY = true; // panel canvas is drawn top-down like a normal image
@@ -876,29 +1092,74 @@ export function glassDirtTexture(): THREE.CanvasTexture {
  * Motion-blur disc for the spinning propeller: a faint translucent grey disc (denser near the hub where the blades
  * are wide) with three darker arcs smeared behind the blade positions and a faint yellow ring where the tips pass.
  */
-export function propDiscTexture(): THREE.CanvasTexture {
-  const s = 256, cx = s / 2, cy = s / 2;
+/**
+ * Motion-blurred propeller disc for a three-blade prop of the given geometry (metres; the disc mesh has radius
+ * `discR`). Per pixel: the time-averaged coverage of the blades at that radius (3 chord / 2 pi r, near solid at the
+ * shank, a few per cent at the tip), a ghost sector trailing each blade position (the disc turns with the hub, so at
+ * part blend the ghosts smear out of the crisp blades), fine radial streaks, and the yellow tip band as a brighter
+ * arc with a thin glint at the very tip. Angle convention: phi counter-clockwise from +x with y up, blade i at
+ * 90 deg + i 120 deg, turning toward increasing phi (model.ts: rotation.x += ..., disc rotated y by 90 deg).
+ */
+export function propDiscTexture(discR = 1.5, root = 0.16, length = 1.32, rootChord = 0.17, tipChord = 0.10, tipBand = 0.17): THREE.CanvasTexture {
+  const s = 512, cx = s / 2, cy = s / 2;
   const [c, ctx] = canvas(s, s);
-  const g = ctx.createRadialGradient(cx, cy, s * 0.07, cx, cy, s / 2);
-  g.addColorStop(0, 'rgba(40,40,44,0.4)');
-  g.addColorStop(0.35, 'rgba(40,40,44,0.18)');
-  g.addColorStop(0.9, 'rgba(40,40,44,0.13)');
-  g.addColorStop(1, 'rgba(40,40,44,0)');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, s, s);
-  // smeared blades: a continuous angular fade behind each blade position (a conic gradient, so no spokes)
-  const SMEAR = 1.3 / (Math.PI * 2);
-  for (let b = 0; b < 3; b++) {
-    const cg = ctx.createConicGradient((b / 3) * Math.PI * 2, cx, cy);
-    cg.addColorStop(0, 'rgba(18,18,22,0.2)');
-    cg.addColorStop(SMEAR * 0.5, 'rgba(18,18,22,0.08)');
-    cg.addColorStop(SMEAR, 'rgba(18,18,22,0)');
-    cg.addColorStop(1, 'rgba(18,18,22,0)');
-    ctx.fillStyle = cg;
-    ctx.beginPath(); ctx.arc(cx, cy, s * 0.49, 0, Math.PI * 2); ctx.fill();
+  const img = ctx.createImageData(s, s), d = img.data;
+  const rng = new Rng('prop-disc');
+  const maxChord = rootChord * 1.35;
+  const chordAt = (t: number) => {
+    const grow = THREE.MathUtils.smoothstep(t, 0, 0.42);
+    let ch = rootChord * 0.75 + (maxChord - rootChord * 0.75) * grow;
+    if (t > 0.42) ch = maxChord + (tipChord - maxChord) * ((t - 0.42) / 0.58);
+    if (t > 0.82) ch *= Math.sqrt(Math.max(1 - Math.pow((t - 0.82) / 0.18, 2), 0));
+    return Math.max(ch, 0.012);
+  };
+  // per-angle streak noise (smooth over ~1.5 deg so it reads as fine radial streaks, not spokes)
+  const NB = 720, streak = new Float32Array(NB);
+  for (let i = 0; i < NB; i++) streak[i] = rng.next();
+  const streakAt = (phi: number) => {
+    const f = ((phi / (Math.PI * 2)) % 1 + 1) % 1 * NB, i = Math.floor(f), a = f - i;
+    const v = streak[i % NB] * (1 - a) + streak[(i + 1) % NB] * a;
+    return 0.72 + 0.56 * v;
+  };
+  const SMEAR = 1.25, tipR = root + length;
+  for (let py = 0; py < s; py++) {
+    for (let px = 0; px < s; px++) {
+      const x = ((px + 0.5) / s * 2 - 1) * discR, y = (1 - (py + 0.5) / s * 2) * discR;
+      const r = Math.hypot(x, y), phi = Math.atan2(y, x);
+      const k = (py * s + px) * 4;
+      if (r < root * 0.7 || r > tipR + 0.01) { d[k + 3] = 0; continue; }
+      const t = THREE.MathUtils.clamp((r - root) / length, 0, 1);
+      const chord = r < root ? rootChord * 0.75 : chordAt(t);
+      // fraction of the circumference the three blades sweep through at this radius
+      const cover = Math.min(3 * chord / (2 * Math.PI * r), 1);
+      const uniform = Math.min(cover * 2.4, 0.9);
+      // ghost sectors trailing each blade position
+      let ghost = 0;
+      for (let b = 0; b < 3; b++) {
+        let back = (Math.PI / 2 + (b * 2 * Math.PI) / 3) - phi;
+        back = ((back % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+        if (back < SMEAR) ghost = Math.max(ghost, Math.pow(1 - back / SMEAR, 1.6) * Math.min(cover * 9, 0.7));
+      }
+      let alpha = 1 - (1 - uniform) * (1 - ghost);
+      alpha *= streakAt(phi + r * 0.4);
+      // fade at the rim (rounded tips sweep less) and out over the last centimetres
+      alpha *= 1 - THREE.MathUtils.smoothstep(r, tipR - 0.02, tipR + 0.01);
+      // blade body: dark blue-grey; the outer tipBand is the yellow tip paint, a brighter arc with a thin glint
+      let cr = 34, cg = 35, cb = 40;
+      const inTip = THREE.MathUtils.smoothstep(r, tipR - tipBand - 0.015, tipR - tipBand + 0.015);
+      if (inTip > 0) {
+        cr = cr + (222 - cr) * inTip; cg = cg + (176 - cg) * inTip; cb = cb + (48 - cb) * inTip;
+        alpha *= 1 + 0.9 * inTip;
+      }
+      const glint = Math.exp(-Math.pow((r - (tipR - 0.03)) / 0.012, 2));
+      cr += (255 - cr) * glint * 0.6; cg += (250 - cg) * glint * 0.6; cb += (230 - cb) * glint * 0.6;
+      alpha = Math.min(alpha + glint * 0.18, 1);
+      d[k] = cr; d[k + 1] = cg; d[k + 2] = cb; d[k + 3] = Math.round(alpha * 255);
+    }
   }
-  ctx.strokeStyle = 'rgba(200,170,60,0.28)'; ctx.lineWidth = 7;
-  ctx.beginPath(); ctx.arc(cx, cy, s * 0.46, 0, Math.PI * 2); ctx.stroke();
-  const t = new THREE.CanvasTexture(c);
-  t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+  ctx.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
 }

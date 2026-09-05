@@ -6,7 +6,7 @@ import {
   type FloatStation, type QuadBlock, type Section, type Surf, type WingSpec,
 } from './geometry';
 import {
-  CHEAT_LINE, DIAL, floatMaps, fuselageMaps, GAUGES, glassDirtTexture, GPS_SCREEN, GpsScreen, INSTRUMENT_ATLAS, instrumentAtlas, LIVERY, PANEL, PANEL_UV, panelTexture, propDiscTexture, tailV, wingMaps, wingV,
+  cabinMaps, CHEAT_LINE, DIAL, floatMaps, fuselageMaps, GAUGES, glassDirtTexture, GPS_SCREEN, GpsScreen, INSTRUMENT_ATLAS, instrumentAtlas, LIVERY, OVERHEAD, PANEL, PANEL_UV, panelTexture, propDiscTexture, tailV, wingMaps, wingV,
   type FuselageLayout, type GaugeDef, type UvRect,
 } from './textures';
 import type { FlightTelemetry } from './physics';
@@ -39,12 +39,12 @@ const SURF = {
   spinner: { color: 0xc4c8ce, roughness: 0.16, metalness: 0.95 },
   exhaust: { color: 0x5a4a3c, roughness: 0.6, metalness: 0.9 },
   rubber: { color: 0x111214, roughness: 0.92, metalness: 0.0 },
-  /** cabin lining: light matte headliner over the windows, dark window-band trim, grey sidewall panels below the sill */
-  headliner: { color: 0xc9c5bd, roughness: 0.92, metalness: 0.0 },
-  bow: { color: 0xdad6ce, roughness: 0.85, metalness: 0.0 },
-  trim: { color: 0x2e3136, roughness: 0.82, metalness: 0.04 },
-  sidewall: { color: 0x8a857d, roughness: 0.88, metalness: 0.0 },
-  doorTrim: { color: 0x9d988f, roughness: 0.86, metalness: 0.0 },
+  /** cabin trim: window-band / reveal vinyl, headliner bows, bulkheads (the lining itself is textured, see cabinMaps) */
+  bow: { color: 0x9a958c, roughness: 0.6, metalness: 0.0 },
+  trim: { color: 0x2e3136, roughness: 0.62, metalness: 0.04 },
+  sill: { color: 0x5c6066, roughness: 0.5, metalness: 0.1 },
+  bulkhead: { color: 0x6f6a62, roughness: 0.9, metalness: 0.0 },
+  visorArm: { color: 0x9a9ea4, roughness: 0.35, metalness: 0.9 },
   plastic: { color: 0x3a3d42, roughness: 0.7, metalness: 0.0 },
   lightPlastic: { color: 0xbfbcb4, roughness: 0.6, metalness: 0.0 },
   leather: { color: 0x7a5535, roughness: 0.55, metalness: 0.0 },
@@ -227,7 +227,7 @@ export class PlaneModel {
   readonly wingTipL = new THREE.Vector3(-0.04, 1.40, -7.5);
   readonly wingTipR = new THREE.Vector3(-0.04, 1.40, 7.5);
   /** pilot's eye: left seat, 0.13 m under the headliner (inner crest 1.13), at the windshield's vertical centre (0.99) */
-  readonly cockpitEye = new THREE.Vector3(1.0, 1.0, -0.30);
+  readonly cockpitEye = new THREE.Vector3(1.0, 0.93, -0.30);
   readonly exteriorMeshes: THREE.Mesh[] = [];
   readonly interiorMeshes: THREE.Object3D[] = [];
   readonly spanHalf = 7.5;
@@ -346,11 +346,13 @@ export class PlaneModel {
     // pane from the pilot seat, so no back faces are ever drawn. Every pane carries its own [0,1]^2 UV and physical
     // size (`aPane`, see paneGeometry) from which the shader draws a rubber seal of constant width, a soft vignette
     // toward the frame and a faint smudge film that only shows where the sun catches it.
+    // Roughness 0.06: the panes are a near mirror, so the sky / sun reflection is a sharp streak and not a milky
+    // sheet (the previous 0.25 spread the environment probe over the whole pane, which read as frosting).
     const glass = new THREE.MeshPhysicalMaterial({
-      color: 0x9fc3d2, transparent: true, opacity: 0.10, roughness: 0.25, metalness: 0.0, envMapIntensity: 1.0,
+      color: 0x9fc3d2, transparent: true, opacity: 0.05, roughness: 0.06, metalness: 0.0, envMapIntensity: 1.0,
       side: THREE.FrontSide, depthWrite: false, specularIntensity: 1.0, ior: 1.52, premultipliedAlpha: true,
     });
-    const glassUniforms = { uDirt: { value: glassDirtTexture() }, uEnvGain: { value: 3.0 }, uDirtAmount: { value: 0.35 } };
+    const glassUniforms = { uDirt: { value: glassDirtTexture() }, uEnvGain: { value: 1.6 }, uDirtAmount: { value: 0.16 } };
     glass.onBeforeCompile = (shader) => {
       Object.assign(shader.uniforms, glassUniforms);
       shader.vertexShader = shader.vertexShader
@@ -358,13 +360,21 @@ export class PlaneModel {
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPane = aPane;\nvPaneUv = uv;');
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', '#include <common>\nuniform sampler2D uDirt;\nuniform float uEnvGain;\nuniform float uDirtAmount;\nvarying vec4 vPane;\nvarying vec2 vPaneUv;')
+        // acrylic panes are never optically flat: a gentle low-frequency wobble of the shading normal bends the
+        // mirrored sky / sun streak across the pane (the "slight distortion" of real light-aircraft glazing)
+        .replace('#include <normal_fragment_maps>', /* glsl */ `
+          #include <normal_fragment_maps>
+          vec2 glassWob = vec2(sin(vPaneUv.x * 21.0 + vPaneUv.y * 6.0) + 0.5 * sin(vPaneUv.x * 47.0), cos(vPaneUv.y * 17.0 - vPaneUv.x * 4.0)) * 0.010;
+          normal = normalize(normal + vec3(glassWob, 0.0));
+        `)
         .replace('#include <opaque_fragment>', /* glsl */ `
           // distance to the nearest pane edge in metres (and to the centre post seal on the windshield)
           vec2 dm = vec2(min(vPaneUv.x, 1.0 - vPaneUv.x) * vPane.x, min(vPaneUv.y, 1.0 - vPaneUv.y) * vPane.y);
           float dEdge = min(dm.x, dm.y);
           if (vPane.z > 0.5) dEdge = min(dEdge, abs(vPaneUv.y - 0.5) * vPane.y - 0.006);
           float seal = 1.0 - smoothstep(0.008, 0.019, dEdge);
-          float vig = 1.0 - smoothstep(0.0, 0.26, dEdge);
+          // a narrow darkening against the seal only (the old 26 cm vignette covered a whole side pane and veiled it)
+          float vig = 1.0 - smoothstep(0.0, 0.07, dEdge);
           // the cabin side of the glass carries half the smudge film and catches no sun (the roof shades it)
           float inner = vPane.w;
           float dirt = texture2D(uDirt, vPaneUv * vPane.xy * 1.6).r * uDirtAmount * (1.0 - 0.5 * inner);
@@ -384,17 +394,22 @@ export class PlaneModel {
           vec3 glassSpec = reflectedLight.directSpecular * (1.0 + dirt * 2.0) + filmSheen + reflectedLight.indirectSpecular * uEnvGain * (1.0 + dirt * 1.5);
           // soft knee: the sun's mirror image stays bright but never clips to white
           glassSpec = 1.0 - exp(-glassSpec);
-          float glassA = clamp(diffuseColor.a + glassF * 0.85 + vig * 0.14 + dirt * 0.08, 0.0, 1.0);
-          vec3 glassCol = totalDiffuse * (diffuseColor.a + dirt * 0.08) + glassSpec * (1.0 - 0.5 * vig);
+          float glassA = clamp(diffuseColor.a + glassF * 0.85 + vig * 0.10 + dirt * 0.06, 0.0, 1.0);
+          // the tint veil is lit by the sky only: sun on the pane must not fill it with a bright diffuse haze
+          vec3 glassCol = reflectedLight.indirectDiffuse * 1.5 * (diffuseColor.a + dirt * 0.06) + glassSpec * (1.0 - 0.5 * vig);
           glassCol = mix(glassCol, totalDiffuse * 0.10, seal);
           glassA = mix(glassA, 1.0, seal);
           gl_FragColor = vec4(glassCol, glassA);
         `)
         .replace('#include <premultiplied_alpha_fragment>', '');
     };
-    glass.customProgramCacheKey = () => 'cockpit-glass-v7';
+    glass.customProgramCacheKey = () => 'cockpit-glass-v8';
     const plainPaint = new THREE.MeshPhysicalMaterial({ color: LIVERY.upper, roughness: 0.4, metalness: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.15 });
     const parts = partsMaterial();
+    // cabin lining: albedo / roughness in the fuselage layout, a tiled vinyl grain for the normals; the cabin sees
+    // less of the sky than the open air, so its ambient is turned down (the sun still comes in through the glass)
+    const cab = cabinMaps(layout, { front: CABIN_FRONT, rear: CABIN_REAR, sill: SILL, winTop: WIN_TOP, floor: FLOOR, door: { x0: 1.77, x1: 0.95, yBot: -0.42 }, bows: [1.81, 0.90, -0.47] });
+    const cabinMat = new THREE.MeshStandardMaterial({ map: cab.map, roughnessMap: cab.roughnessMap, normalMap: cab.normalMap, normalScale: new THREE.Vector2(0.7, 0.7), roughness: 1.0, metalness: 0.0, envMapIntensity: 0.62 });
     const panelTex = panelTexture();
     const panelMat = new THREE.MeshStandardMaterial({ map: panelTex.map, emissiveMap: panelTex.emissive, emissive: 0xffffff, emissiveIntensity: 0.12, roughness: 0.75, metalness: 0.0 });
     // live instrument parts: the atlas gives the ball / card art and flat colours, the vertex shader rotates each
@@ -421,7 +436,7 @@ export class PlaneModel {
     };
     instMat.customProgramCacheKey = () => 'cockpit-instruments-v2';
     const gpsMat = new THREE.MeshStandardMaterial({ map: this.gps.texture, emissiveMap: this.gps.texture, emissive: 0xffffff, emissiveIntensity: 0.55, roughness: 0.25, metalness: 0.0 });
-    this.materials.push(paint, wingPaint, floatPaint, glass, plainPaint, parts, panelMat, instMat, gpsMat);
+    this.materials.push(paint, wingPaint, floatPaint, glass, plainPaint, parts, cabinMat, panelMat, instMat, gpsMat);
     this.glassMaterial = glass;
     this.paintMaterial = paint;
     this.panelMat = panelMat; this.instMat = instMat; this.gpsMat = gpsMat;
@@ -438,17 +453,12 @@ export class PlaneModel {
 
     // ------------------------------------------------------------ fuselage shell, cabin, glass
     mesh(gridGeometry(outer, { quad: (i, j) => !isWindow(i, j), capStart: true, capEnd: true }), paint);
-    // fixed cabin surfaces that must not cast shadows (the skin already does): shell, window reveals, floor.
-    // The shell is lined by height: headliner above the window tops, dark trim through the window band (so the
-    // pillars between the panes read as slim dark posts) and grey sidewall panels below the sill.
+    // fixed cabin surfaces that must not cast shadows (the skin already does): the lined shell (headliner, window
+    // band, sidewalls and door panels painted by cabinMaps in the loft's own UVs), the bulkheads, window reveals, floor
     const cabinFixed = new Batch();
-    // the headliner darkens a little toward the window tops (soft shading where the fabric meets the trim)
-    const headlinerAt = (y: number): Surf => {
-      const f = THREE.MathUtils.smoothstep(y, WIN_TOP, WIN_TOP + 0.045);
-      return { ...SURF.headliner, color: new THREE.Color(SURF.headliner.color).multiplyScalar(0.78 + 0.22 * f).getHex() };
-    };
-    const lining = (_x: number, y: number) => (y >= WIN_TOP - 0.005 ? headlinerAt(y) : y >= SILL - 0.005 ? SURF.trim : SURF.sidewall);
-    cabinFixed.add(gridGeometry(inner, { i0: iFront, i1: iRear, quad: (i, j) => !isWindow(i, j), flip: true, capStart: true, capEnd: true }), undefined, lining);
+    const cabinShell = new Batch();
+    cabinShell.add(gridGeometry(inner, { i0: iFront, i1: iRear, quad: (i, j) => !isWindow(i, j), flip: true }));
+    cabinFixed.add(gridGeometry(inner, { i0: iFront, i1: iRear, quad: () => false, flip: true, capStart: true, capEnd: true }), undefined, SURF.bulkhead);
     for (const b of blocks) cabinFixed.add(revealGeometry(outer, inner, b), undefined, SURF.trim);
     cabinFixed.add(deckGeometry(innerSections, FLOOR, -1.55, 1.95, 0.01), undefined, SURF.carpet);
     // every pane with its own UV / size, outer panes first (seen from outside) then the flipped inner panes
@@ -471,6 +481,15 @@ export class PlaneModel {
     const wsBase = new THREE.Vector3(CABIN_FRONT, 0.81, 0), wsTop = new THREE.Vector3(1.85, 1.17, 0);
     const postPos = wsBase.clone().add(wsTop).multiplyScalar(0.5); postPos.y -= SKIN * 0.5;
     cabinKit.add(new THREE.BoxGeometry(wsBase.distanceTo(wsTop) + 0.04, 0.028, 0.026), at(postPos, [0, 0, Math.atan2(wsTop.y - wsBase.y, wsTop.x - wsBase.x)]), SURF.trim);
+    // window sills: a ledge along the bottom of every side window inside the reveal, and a slim cap over the top edge
+    const innerHalfAt = (x: number, y: number) => halfWidthAt(sectionAt(innerSections, x), y);
+    for (const [xf, xa, top] of sideWindows) {
+      for (const s of [-1, 1]) {
+        const xm = (xf + xa) / 2, len = xf - xa - 0.02;
+        cabinKit.add(new THREE.BoxGeometry(len, 0.022, 0.05), at([xm, SILL - 0.011, s * (innerHalfAt(xm, SILL) - 0.02)], [0, 0, 0], [1, 1, 1]), SURF.sill);
+        cabinKit.add(new THREE.BoxGeometry(len, 0.016, 0.03), at([xm, top + 0.008, s * (innerHalfAt(xm, top) - 0.012)]), SURF.trim);
+      }
+    }
 
     // ------------------------------------------------------------ exterior fittings (one merged mesh)
     const fittings = new Batch();
@@ -501,10 +520,16 @@ export class PlaneModel {
       const pivot = new THREE.Matrix4().makeRotationX((i / 3) * Math.PI * 2);
       blades.add(bladeGeo, pivot.clone().multiply(new THREE.Matrix4().makeTranslation(0, BLADE_ROOT, 0)), bladeSurf);
     }
-    this.propBlades = mesh(blades.build(), parts, { parent: this.propeller, receive: false });
-    const discMat = new THREE.MeshStandardMaterial({ map: propDiscTexture(), transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide, roughness: 0.6, color: 0x888888 });
+    // the blades get their own parts material so they can fade as the RPM rises (animate() cross-fades them with
+    // the blur disc between ~500 and ~1200 RPM); drawn just before the disc so the disc composites over them
+    const bladeMat = partsMaterial();
+    bladeMat.transparent = true;
+    this.materials.push(bladeMat);
+    this.propBlades = mesh(blades.build(), bladeMat, { parent: this.propeller, receive: false });
+    this.propBlades.renderOrder = 14;
+    const discMat = new THREE.MeshStandardMaterial({ map: propDiscTexture(), transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.0, color: 0xffffff });
     this.materials.push(discMat);
-    this.propDisc = new THREE.Mesh(new THREE.CircleGeometry(1.5, 40), discMat);
+    this.propDisc = new THREE.Mesh(new THREE.CircleGeometry(1.5, 48), discMat);
     this.propDisc.rotation.y = Math.PI / 2;
     this.propDisc.position.x = 0.05;
     this.propDisc.renderOrder = 15;
@@ -807,6 +832,35 @@ export class PlaneModel {
     // dome light in the headliner over the front seats
     cabinKit.add(new THREE.BoxGeometry(0.12, 0.024, 0.10), at([0.30, 1.117, 0]), SURF.lightPlastic);
     decal(PANEL_UV.domeLens, 0.075, 0.06, new THREE.Vector3(0.30, 1.1045, 0), new THREE.Vector3(0, -1, 0), new THREE.Vector3(1, 0, 0));
+    // sun visors: vinyl-covered boards hinged on a rod across the headliner behind the header, stowed forward
+    // along the roof (the pilot's drooping a few degrees from its clip)
+    for (const s of [-1, 1]) {
+      const hinge = new THREE.Vector3(1.58, 1.072, s * 0.42), swing = s < 0 ? 0.08 : 0.02;
+      cabinKit.add(new THREE.CylinderGeometry(0.006, 0.006, 0.20, 8), at(hinge, [Math.PI / 2, 0, 0]), SURF.visorArm);
+      for (const e of [-1, 1]) cabinKit.add(new THREE.BoxGeometry(0.03, 0.02, 0.016), at([hinge.x, hinge.y + 0.008, hinge.z + e * 0.095]), SURF.darkMetal);
+      const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, -swing));
+      const centre = new THREE.Vector3(0.15, -0.008, 0).applyQuaternion(q).add(hinge);
+      const bm = new THREE.Matrix4().compose(centre, q, new THREE.Vector3(1, 1, 1));
+      cabinKit.add(new THREE.BoxGeometry(0.28, 0.006, 0.15), bm, SURF.bow);
+      const face = new THREE.Vector3(0, -0.0035, 0).applyMatrix4(bm);
+      decal(PANEL_UV.visor, 0.28, 0.15, face, new THREE.Vector3(0, -1, 0).applyQuaternion(q), new THREE.Vector3(0, 0, -s));
+    }
+    // overhead console on the centreline just behind the header (Beaver style: fuel selector, cabin switches, trim
+    // indicator with its crank wheel on the port flank, the flap hand pump lever on the starboard flank)
+    const OC_X = 1.58, OC_LEN = 0.42, OC_Y = 1.068;
+    cabinKit.add(new THREE.BoxGeometry(OC_LEN, 0.032, 0.17), at([OC_X, OC_Y, 0]), SURF.plastic);
+    cabinKit.add(new THREE.BoxGeometry(OC_LEN + 0.02, 0.012, 0.19), at([OC_X, OC_Y + 0.012, 0]), SURF.trim);
+    decal(PANEL_UV.overhead, OVERHEAD.w, OVERHEAD.h, new THREE.Vector3(OC_X, OC_Y - 0.0165, 0), new THREE.Vector3(0, -1, 0), new THREE.Vector3(-1, 0, 0));
+    cabinKit.add(new THREE.CylinderGeometry(0.045, 0.045, 0.014, 20), at([OC_X - 0.06, OC_Y - 0.012, -0.092], [Math.PI / 2, 0, 0]), SURF.rubber);
+    cabinKit.add(new THREE.CylinderGeometry(0.012, 0.012, 0.02, 10), at([OC_X - 0.06, OC_Y - 0.012, -0.102], [Math.PI / 2, 0, 0]), SURF.metal);
+    cabinKit.add(new THREE.CylinderGeometry(0.009, 0.009, 0.16, 8), at([OC_X - 0.02, OC_Y - 0.09, 0.09], [0, 0, 0.35]), SURF.metal);
+    cabinKit.add(new THREE.SphereGeometry(0.018, 10, 8), at([OC_X - 0.02 + 0.055, OC_Y - 0.165, 0.09]), SURF.throttle);
+    // grab handles on the B-pillars behind the doors
+    for (const s of [-1, 1]) {
+      const z = s * (innerHalfAt(0.90, 0.85) - 0.025);
+      cabinKit.add(new THREE.CylinderGeometry(0.011, 0.011, 0.16, 8), at([0.90, 0.85, z]), SURF.plastic);
+      for (const e of [-1, 1]) cabinKit.add(new THREE.CylinderGeometry(0.008, 0.008, 0.03, 8), at([0.90, 0.85 + e * 0.07, z + s * 0.012], [Math.PI / 2, 0, 0]), SURF.plastic);
+    }
     // live instrument parts on the face (all one mesh, animated in the vertex shader)
     const kit = new InstrumentKit();
     const G = GAUGES;
@@ -877,8 +931,8 @@ export class PlaneModel {
     // pedal torque tube across the floor
     cabinKit.add(new THREE.CylinderGeometry(0.015, 0.015, 1.2, 8), at([1.93, FLOOR + 0.02, 0], [Math.PI / 2, 0, 0]), SURF.metal);
 
-    // seats: cushion top ~0.46 m over the floor so a seated pilot's eye lands at cockpitEye
-    const SEAT_Y = FLOOR + 0.40;
+    // seats: cushion top ~0.39 m over the floor so a seated pilot's eye (0.79 m over the cushion) lands at cockpitEye
+    const SEAT_Y = FLOOR + 0.33;
     // yokes: shaft entering the panel below the switch row, hub with a placard, ram's-horn wheel with grips
     const YOKE_HUB = new THREE.Vector3(YOKE_HUB_X, YOKE_HUB_Y, 0);
     const shaftIn = inPanel(0, -0.175, 0.0).setZ(0);
@@ -920,10 +974,15 @@ export class PlaneModel {
     // ------------------------------------------------------------ cockpit: seats, belts, pilot, door trim, headliner
     const seatGeo = new THREE.BoxGeometry(0.46, 0.12, 0.46), backGeo = new THREE.BoxGeometry(0.1, 0.55, 0.46), frameGeo = new THREE.BoxGeometry(0.26, 0.34, 0.26);
     const seats: [number, number][] = [[1.0, -0.34], [1.0, 0.34], [-0.2, -0.34], [-0.2, 0.34], [-1.0, 0]];
+    const headrestGeo = new THREE.BoxGeometry(0.11, 0.13, 0.24), postGeo = new THREE.CylinderGeometry(0.008, 0.008, 0.09, 8);
     for (const [x, z] of seats) {
       cabinKit.add(seatGeo, at([x, SEAT_Y, z]), SURF.leather);
       cabinKit.add(backGeo, at([x - 0.25, SEAT_Y + 0.33, z], [0, 0, 0.15]), SURF.leather);
       cabinKit.add(frameGeo, at([x, FLOOR + 0.17, z]), SURF.darkMetal);
+      // headrest on two posts above the seat back (the back leans aft by 0.15 rad)
+      const topX = x - 0.25 - Math.sin(0.15) * 0.275, topY = SEAT_Y + 0.33 + Math.cos(0.15) * 0.275;
+      for (const e of [-1, 1]) cabinKit.add(postGeo, at([topX - 0.01, topY + 0.04, z + e * 0.07], [0, 0, 0.15]), SURF.metal);
+      cabinKit.add(headrestGeo, at([topX - 0.03, topY + 0.13, z], [0, 0, 0.15]), SURF.leather);
     }
     const cushionTop = SEAT_Y + 0.06;
     const strap = (a: [number, number, number], b: [number, number, number], n: [number, number, number] = [0, 1, 0]) => cabinKit.add(strapGeometry(V3(...a), V3(...b), 0.045, 0.005, V3(...n)), undefined, SURF.belt);
@@ -934,20 +993,23 @@ export class PlaneModel {
       strap([x, yb, z - 0.24], [x, yb, z - 0.04]); strap([x, yb, z + 0.24], [x, yb, z + 0.04]);
       buckle([x, yb + 0.004, z]);
     }
-    strap([0.96, cushionTop + 0.01, -0.60], [1.07, 0.30, -0.36], [0.35, 1, 0]); strap([0.96, cushionTop + 0.01, -0.08], [1.07, 0.30, -0.32], [0.35, 1, 0]);
-    buckle([1.075, 0.30, -0.34], [0, 0, 0.35]);
-    strap([1.10, 0.78, -0.50], [1.09, 0.31, -0.32], [1, 0.1, 0]);           // across the chest
-    strap([1.0, 0.80, -0.50], [0.52, 0.96, -0.68], [0, 1, -0.3]);            // over the shoulder back to the sidewall anchor
-    strap([0.52, 0.96, 0.68], [0.74, 0.70, 0.46], [0, 1, 0.3]);              // copilot's shoulder strap draped over the seat back
+    const lapY = cushionTop + 0.09, chestY = SEAT_Y + 0.06 + 0.50;
+    strap([0.96, cushionTop + 0.01, -0.60], [1.07, lapY, -0.36], [0.35, 1, 0]); strap([0.96, cushionTop + 0.01, -0.08], [1.07, lapY, -0.32], [0.35, 1, 0]);
+    buckle([1.075, lapY, -0.34], [0, 0, 0.35]);
+    strap([1.10, chestY, -0.50], [1.09, lapY + 0.01, -0.32], [1, 0.1, 0]);           // across the chest
+    strap([1.0, chestY + 0.02, -0.50], [0.52, 0.96, -0.68], [0, 1, -0.3]);            // over the shoulder back to the sidewall anchor
+    strap([0.52, 0.96, 0.68], [0.74, SEAT_Y + 0.55, 0.46], [0, 1, 0.3]);              // copilot's shoulder strap draped over the seat back
     for (const s of [-1, 1]) cabinKit.add(new THREE.BoxGeometry(0.05, 0.05, 0.02), at([0.52, 0.96, s * 0.69]), SURF.darkMetal);
-    // pilot: torso, head with headset (eyes at cockpitEye), arms from the shoulders to the yoke grips
-    const headY = this.cockpitEye.y - 0.03;
-    cabinKit.add(new THREE.BoxGeometry(0.28, 0.58, 0.42), at([0.95, SEAT_Y + 0.06 + 0.29, -0.34]), SURF.shirt);
-    cabinKit.add(new THREE.SphereGeometry(0.11, 12, 10), at([0.98, headY, -0.34]), SURF.skin);
-    cabinKit.add(new THREE.TorusGeometry(0.115, 0.018, 6, 16, Math.PI), at([0.98, headY + 0.03, -0.34], [0, Math.PI / 2, 0]), SURF.headset);
-    for (const side of [-1, 1]) cabinKit.add(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 10), at([0.98, headY, -0.34 + side * 0.12], [Math.PI / 2, 0, 0]), SURF.headset);
+    // pilot: torso, head with headset, arms from the shoulders to the yoke grips. The eyes (cockpitEye) sit at the
+    // front of the head: with the cockpit camera's 5 cm near plane the head, headband and earcups must all be
+    // behind the eye or they fill the frame from inside
+    const headY = this.cockpitEye.y - 0.03, headX = this.cockpitEye.x - 0.10;
+    cabinKit.add(new THREE.BoxGeometry(0.28, 0.58, 0.42), at([headX - 0.02, SEAT_Y + 0.06 + 0.29, -0.34]), SURF.shirt);
+    cabinKit.add(new THREE.SphereGeometry(0.11, 12, 10), at([headX, headY, -0.34]), SURF.skin);
+    cabinKit.add(new THREE.TorusGeometry(0.115, 0.018, 6, 16, Math.PI), at([headX, headY + 0.03, -0.34], [0, Math.PI / 2, 0]), SURF.headset);
+    for (const side of [-1, 1]) cabinKit.add(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 10), at([headX, headY, -0.34 + side * 0.12], [Math.PI / 2, 0, 0]), SURF.headset);
     for (const side of [-1, 1]) {
-      const shoulder = V3(0.98, 0.74, -0.34 + side * 0.20), elbow = V3(1.20, 0.52, -0.34 + side * 0.23), wrist = V3(YOKE_HUB.x - 0.04, YOKE_HUB.y + 0.12, -0.34 + side * 0.165);
+      const shoulder = V3(headX, SEAT_Y + 0.06 + 0.52, -0.34 + side * 0.20), elbow = V3(1.20, 0.52, -0.34 + side * 0.23), wrist = V3(YOKE_HUB.x - 0.04, YOKE_HUB.y + 0.12, -0.34 + side * 0.165);
       cabinKit.add(strutGeometry(shoulder, elbow, 0.045, 8), undefined, SURF.shirt);
       cabinKit.add(strutGeometry(elbow, wrist, 0.04, 8), undefined, SURF.shirt);
       cabinKit.add(new THREE.SphereGeometry(0.045, 8, 6), at(elbow), SURF.shirt);
@@ -970,7 +1032,7 @@ export class PlaneModel {
     })();
     const doorBlocks: QuadBlock[] = [{ i0: si(1.77), i1: si(0.95), j0: jC, j1: jDoorBot }, { i0: si(1.77), i1: si(0.95), j0: R - jDoorBot, j1: R - jC }];
     for (const b of doorBlocks) {
-      cabinFixed.add(gridGeometry(doorGrid, { i0: b.i0, i1: b.i1, quad: (i, j) => inBlock(b, R, i, j), flip: true }), undefined, SURF.doorTrim);
+      cabinShell.add(gridGeometry(doorGrid, { i0: b.i0, i1: b.i1, quad: (i, j) => inBlock(b, R, i, j), flip: true }));
       cabinFixed.add(revealGeometry(inner, doorGrid, b), undefined, SURF.trim);
     }
     const doorHalf = (x: number, y: number) => halfWidthAt(sectionAt(doorSections, x), y);
@@ -999,12 +1061,15 @@ export class PlaneModel {
     cabinKit.add(new THREE.BoxGeometry(0.06, 0.08, 0.04), at([0.55, FLOOR + 0.06, 0.66]), SURF.darkMetal);
 
     mesh(cabinFixed.build(), parts, { exterior: false, cast: false });
+    mesh(cabinShell.build(), cabinMat, { exterior: false, cast: false });
     mesh(cabinKit.build(), parts, { exterior: false });
     const texturedGeo = mergeGeometries(textured);
     if (!texturedGeo) throw new Error('cockpit: textured parts have incompatible attributes');
     mesh(texturedGeo, panelMat, { exterior: false, cast: false });
 
     for (const m of this.materials) if ((m as THREE.MeshStandardMaterial).isMeshStandardMaterial) (m as THREE.MeshStandardMaterial).envMapIntensity = 1.0;
+    // the lining sees little sky: less environment light than the open-air parts (the sun still comes in through the glass)
+    cabinMat.envMapIntensity = 0.55;
     this.setInstruments(null, 0, 0);
   }
 
@@ -1020,11 +1085,18 @@ export class PlaneModel {
     this.elevator.rotation.z = pitch * 0.4;
     this.rudder.rotation.y = -yaw * 0.45;
     for (const wr of this.waterRudders) wr.rotation.y = -yaw * 0.5;
-    this.propeller.rotation.x += rpm * 2600 * (Math.PI * 2 / 60) * dt;
+    // the engine idles at 600 RPM (the tachometer's reading, setInstruments) and the prop turns at that speed too
+    const rpmVal = 600 + rpm * 2000;
+    this.propeller.rotation.x += rpmVal * (Math.PI * 2 / 60) * dt;
+    // cross-fade from crisp blades to the blur disc between ~500 and ~1200 RPM (at idle the blades are already a
+    // third of the way to a smear: 10 turns a second); above that only the disc and the spinner remain
+    const blend = Math.pow(THREE.MathUtils.clamp((rpmVal - 500) / 700, 0, 1), 0.6);
     const disc = this.propDisc.material as THREE.MeshBasicMaterial;
-    disc.opacity = THREE.MathUtils.clamp((rpm - 0.15) * 1.6, 0, 0.75);
-    // at speed the blur disc stands in for the blades; the spinner keeps turning
-    this.propBlades.visible = rpm < 0.55;
+    disc.opacity = 0.8 * blend;
+    const bladeMat = this.propBlades.material as THREE.MeshStandardMaterial;
+    bladeMat.opacity = 1 - blend;
+    this.propBlades.visible = blend < 0.999;
+    this.propBlades.castShadow = blend < 0.5;
     // position lights, rotating beacon and strobes: only emissive after dusk (`night` 0 by day .. 1 at night)
     const strobeOn = (time % 1.2) < 0.06 || ((time + 0.15) % 1.2) < 0.06;
     const glow = Math.pow(night, 0.6);

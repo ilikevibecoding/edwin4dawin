@@ -102,7 +102,8 @@ export class CascadeFitter {
     s.length = n - 1;
     if (n === 2) s[0] = h > 60 ? d1 : d0;
     else if (n >= 3) { s[0] = d0; s[1] = d1; for (let i = 2; i < n - 1; i++) s[i] = quant(Math.sqrt(s[i - 1] * maxFar)); }
-    const key = `${maxFar}|${s.join('|')}`;
+    // the cockpit camera moves the near plane in (camera.ts): the CSM's cascade uniforms depend on it
+    const key = `${maxFar}|${cam.near}|${s.join('|')}`;
     if (key !== this.lastKey) {
       this.lastKey = key;
       this.csm.maxFar = maxFar;

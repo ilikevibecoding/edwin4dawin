@@ -5,6 +5,9 @@ import type { PlaneModel } from './model';
 
 export type CameraMode = 'chase' | 'cockpit' | 'orbit' | 'fixed';
 
+/** near plane outside the aircraft (game.ts / bench.ts create the cameras with this) and from the pilot's seat */
+const WORLD_NEAR = 0.4, COCKPIT_NEAR = 0.05;
+
 /** Chase / cockpit cameras with inertia, speed-dependent FOV and turbulence shake. */
 export class FlightCamera {
   mode: CameraMode = 'chase';
@@ -51,6 +54,12 @@ export class FlightCamera {
     const shakeY = perlin2(this.time * 2.9, 4.3) * 0.10 * sway + perlin2(this.time * 11.0, 5.7) * 0.06 * buffet + perlin2(this.time * 15.0, 6.1) * 0.015 * hum;
     const shakeZ = perlin2(this.time * 2.1, 8.3) * 0.10 * sway + perlin2(this.time * 10.2, 9.1) * 0.06 * buffet + perlin2(this.time * 12.0, 7.7) * 0.015 * hum;
     if (this.mode === 'fixed') return;
+    // The headliner is 8-13 cm over the pilot's eye and the door 45 cm beside it: with the 0.4 m near plane
+    // used for the world (fine with the logarithmic depth buffer) the roof and the side walls were clipped
+    // away around the seat and the sky showed through the cabin above the windshield. In the seat the near
+    // plane sits at the pilot's nose.
+    const near = this.mode === 'cockpit' ? COCKPIT_NEAR : WORLD_NEAR;
+    if (cam.near !== near) { cam.near = near; cam.updateProjectionMatrix(); }
     if (this.mode === 'cockpit') {
       // eye position rides with the airframe; a little lag on orientation reads as head inertia
       const eye = this.tmp.copy(model.cockpitEye).applyQuaternion(flight.quaternion).add(flight.position);
