@@ -27,6 +27,7 @@ export function collectBoxes(world, region, out = []) {
     if (!def.solid) continue;
     for (const b of def.boxes) out.push(new AABB(x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5]));
   }
+  if (world.vehicles) world.vehicles.collectBoxes(region, out); // moving voxel structures (train, ships)
   return out;
 }
 
@@ -183,6 +184,7 @@ export class Player {
 
   // ctrl: {forward, strafe, jump, sneak, sprint}
   tick(ctrl) {
+    if (this.world.vehicles) this.world.vehicles.carry(this); // riding a vehicle: move with it before our own physics
     this.prevPos.copy(this.pos);
     this.prevWalkDist = this.walkDist;
     this.prevBob = this.bob;

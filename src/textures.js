@@ -508,6 +508,31 @@ P.magma = (t, r) => {
   for (let i = 0; i < 6; i++) { let x = r.int(0, 15), y = r.int(0, 15); for (let k = 0; k < r.int(4, 9); k++) { t.px(x, y, [255, 140 + r.int(0, 60), 30]); if (r.next() < 0.3) t.px((x + 1) & 15, y, [255, 200, 90]); if (r.next() < 0.5) x = (x + 1) & 15; else y = (y + 1) & 15; } }
 };
 P.charred_planks = (t, r) => { planks(t, r, [52, 44, 38], [28, 22, 18]); t.speckle([20, 16, 14], 24, r); t.speckle([120, 60, 20], 4, r); };
+// ---- Star Wars palette: pixel-art metal, panels and lights
+function panelBase(t, r, c, amt, groove) {
+  t.noisy(c, amt, r);
+  t.hline(0, 0, 15, groove); t.vline(0, 0, 15, groove);
+  t.hline(15, 0, 15, [Math.min(255, c[0] + 18), Math.min(255, c[1] + 18), Math.min(255, c[2] + 20)]); t.vline(15, 0, 15, [Math.min(255, c[0] + 12), Math.min(255, c[1] + 12), Math.min(255, c[2] + 14)]);
+}
+P.durasteel = (t, r) => { panelBase(t, r, [150, 154, 160], 6, [96, 100, 108]); t.hline(8, 1, 14, [128, 132, 138]); for (const [x, y] of [[3, 3], [12, 3], [3, 12], [12, 12]]) t.px(x, y, [104, 108, 114]); };
+P.durasteel_dark = (t, r) => { panelBase(t, r, [78, 82, 90], 5, [44, 46, 52]); t.vline(8, 1, 14, [66, 70, 78]); for (const [x, y] of [[3, 3], [12, 3], [3, 12], [12, 12]]) t.px(x, y, [110, 114, 122]); };
+P.panel_black = (t, r) => { panelBase(t, r, [30, 31, 36], 3, [12, 12, 16]); t.hline(7, 2, 13, [42, 44, 50]); };
+P.panel_red = (t, r) => { panelBase(t, r, [150, 34, 30], 8, [80, 16, 14]); t.hline(8, 1, 14, [120, 26, 24]); };
+P.panel_stripe = (t, r) => { panelBase(t, r, [78, 82, 90], 5, [44, 46, 52]); t.rect(0, 6, 16, 4, [176, 40, 34]); t.hline(6, 0, 15, [120, 26, 24]); t.hline(9, 0, 15, [120, 26, 24]); };
+P.glow_panel = (t, r) => { t.noisy([240, 244, 250], 4, r); t.border([200, 206, 216]); };
+P.glow_panel_blue = (t, r) => { t.noisy([110, 190, 255], 8, r); t.border([60, 120, 200]); t.rect(6, 6, 4, 4, [200, 236, 255]); };
+P.holo_sign = (t, r) => { t.fill([20, 24, 40]); for (let y = 2; y < 14; y += 3) t.hline(y, 2, 13, r.next() < 0.5 ? [60, 220, 255] : [255, 80, 220]); t.speckle([255, 255, 255], 6, r); t.border([40, 60, 90]); };
+P.console_top = (t, r) => { t.noisy([40, 42, 48], 4, r); for (let x = 2; x < 14; x += 3) for (let y = 2; y < 14; y += 3) t.px(x, y, [[60, 220, 120], [255, 60, 60], [80, 160, 255], [255, 200, 60]][r.int(0, 3)]); t.rect(2, 9, 12, 4, [30, 80, 120]); t.hline(10, 3, 12, [90, 200, 240]); t.border([70, 74, 82]); };
+P.console_side = (t, r) => { panelBase(t, r, [60, 63, 70], 4, [34, 36, 40]); t.rect(3, 4, 10, 3, [20, 60, 90]); t.px(5, 5, [80, 220, 120]); t.px(9, 5, [255, 80, 60]); };
+P.vent = (t, r) => { t.noisy([70, 74, 80], 4, r); for (let y = 2; y < 15; y += 3) t.hline(y, 1, 14, [24, 26, 30]); t.border([56, 60, 66]); };
+P.deck_plate = (t, r) => { t.noisy([64, 67, 74], 5, r); t.hline(7, 0, 15, [40, 42, 48]); t.vline(7, 0, 15, [40, 42, 48]); for (const [x, y] of [[2, 2], [12, 2], [2, 12], [12, 12], [5, 9], [10, 5]]) t.px(x, y, [96, 100, 108]); };
+P.steel_glass = (t, r) => { t.fill([120, 160, 200], 90); t.border([150, 190, 230], 200); t.px(3, 3, [220, 235, 255], 200); t.px(4, 4, [220, 235, 255], 160); };
+P.chrome = (t, r) => { t.noisy([196, 202, 212], 5, r); t.hline(3, 0, 15, [230, 236, 244]); t.hline(11, 0, 15, [150, 156, 166]); t.border([170, 176, 186]); };
+P.window_lit = (t, r) => { t.fill([36, 40, 52]); t.rect(2, 2, 5, 5, [255, 214, 140]); t.rect(9, 2, 5, 5, r.next() < 0.7 ? [255, 226, 160] : [60, 70, 90]); t.rect(2, 9, 5, 5, r.next() < 0.7 ? [250, 210, 130] : [50, 60, 80]); t.rect(9, 9, 5, 5, [255, 220, 150]); };
+P.window_dark = (t, r) => { t.fill([36, 40, 52]); for (const [x, y] of [[2, 2], [9, 2], [2, 9], [9, 9]]) t.rect(x, y, 5, 5, [40, 60, 90]); t.px(3, 3, [90, 130, 170]); t.px(10, 10, [80, 120, 160]); };
+P.city_lamp = (t, r) => { t.fill([255, 246, 220]); t.border([200, 190, 160]); t.rect(6, 6, 4, 4, [255, 255, 255]); };
+P.hull_plate = (t, r) => { t.noisy([122, 126, 134], 7, r); const g = [84, 88, 96]; t.hline(0, 0, 15, g); t.vline(0, 0, 15, g); if (r.next() < 0.5) t.hline(8, 0, 15, g); if (r.next() < 0.5) t.vline(5 + r.int(0, 6), 0, 15, g); t.speckle([150, 154, 162], 6, r); t.speckle([60, 62, 70], 4, r); };
+P.hull_trench = (t, r) => { t.noisy([44, 46, 52], 5, r); t.hline(5, 0, 15, [28, 30, 34]); t.hline(10, 0, 15, [28, 30, 34]); for (let x = 1; x < 16; x += 4) t.px(x, 7, [255, 200, 90]); };
 P.missing = (t, r) => { for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) t.px(x, y, ((x >> 3) + (y >> 3)) & 1 ? [255, 0, 255] : [0, 0, 0]); };
 
 function destroyStage(t, r, stage) {
@@ -544,6 +569,9 @@ const TILE_NAMES = [
   'gravestone', 'coarse_dirt', 'farmland', 'smooth_stone', 'plaster', 'white_planks', 'stripped_oak', 'snow',
   'coal_ore', 'iron_ore', 'gold_ore', 'pumpkin_side', 'pumpkin_top', 'trough',
   'scorched_stone', 'ash', 'magma', 'charred_planks',
+  'durasteel', 'durasteel_dark', 'panel_black', 'panel_red', 'panel_stripe', 'glow_panel', 'glow_panel_blue', 'holo_sign',
+  'console_top', 'console_side', 'vent', 'deck_plate', 'steel_glass', 'chrome', 'window_lit', 'window_dark', 'city_lamp',
+  'hull_plate', 'hull_trench',
 ];
 
 export const TILES = {};

@@ -20,6 +20,10 @@ export const B = {
   GOLD_BLOCK: 68, IRON_BLOCK: 69, PLASTER: 70, WHITE_PLANKS: 71, SNOW: 72, PUMPKIN: 73, TROUGH: 74, TABLE: 75,
   STONE_BRICK_SLAB_TOP: 76, SPRUCE_DOOR: 77,
   SCORCHED_STONE: 78, ASH: 79, MAGMA: 80, CHARRED_PLANKS: 81,
+  // Star Wars palette (Coruscant, Death Star, spaceport, vehicles)
+  DURASTEEL: 82, DURASTEEL_DARK: 83, PANEL_BLACK: 84, PANEL_RED: 85, GLOW_PANEL: 86, GLOW_PANEL_BLUE: 87,
+  HOLO_SIGN: 88, CONSOLE: 89, VENT: 90, DECK_PLATE: 91, STEEL_GLASS: 92, CHROME: 93, WINDOW_LIT: 94, WINDOW_DARK: 95,
+  CITY_LAMP: 96, PANEL_STRIPE: 97, HULL_PLATE: 98, HULL_TRENCH: 99,
 };
 
 export const BLOCKS = new Array(256);
@@ -138,6 +142,25 @@ export function initBlocks() {
   def(B.ASH, 'ash', { tex: same('ash'), sound: 'sand', hardness: 0.4 });
   def(B.MAGMA, 'magma_block', { tex: same('magma'), emit: 13, hardness: 1.5 });
   def(B.CHARRED_PLANKS, 'charred_planks', { tex: same('charred_planks'), sound: 'wood', hardness: 0.6 });
+  // --- Star Wars palette
+  def(B.DURASTEEL, 'durasteel', { tex: same('durasteel'), sound: 'metal', hardness: 3.0 });
+  def(B.DURASTEEL_DARK, 'dark_durasteel', { tex: same('durasteel_dark'), sound: 'metal', hardness: 3.0 });
+  def(B.PANEL_BLACK, 'black_panel', { tex: same('panel_black'), sound: 'metal', hardness: 2.0 });
+  def(B.PANEL_RED, 'red_panel', { tex: same('panel_red'), sound: 'metal', hardness: 2.0 });
+  def(B.PANEL_STRIPE, 'striped_panel', { tex: column('panel_stripe', 'durasteel_dark'), sound: 'metal', hardness: 2.0 });
+  def(B.GLOW_PANEL, 'glow_panel', { tex: same('glow_panel'), emit: 15, sound: 'glass', hardness: 0.5 });
+  def(B.GLOW_PANEL_BLUE, 'blue_glow_panel', { tex: same('glow_panel_blue'), emit: 14, sound: 'glass', hardness: 0.5 });
+  def(B.HOLO_SIGN, 'holo_sign', { tex: same('holo_sign'), emit: 12, sound: 'glass', hardness: 0.5 });
+  def(B.CONSOLE, 'console', { tex: [T('console_side'), T('console_side'), T('console_top'), T('durasteel_dark'), T('console_side'), T('console_side')], emit: 6, sound: 'metal', hardness: 2.0 });
+  def(B.VENT, 'vent_grate', { tex: same('vent'), sound: 'metal', hardness: 1.5 });
+  def(B.DECK_PLATE, 'deck_plate', { tex: same('deck_plate'), sound: 'metal', hardness: 2.5 });
+  def(B.STEEL_GLASS, 'tinted_glass', { tex: same('steel_glass'), opaque: false, cutout: true, sound: 'glass', hardness: 0.4, drop: 0 });
+  def(B.CHROME, 'chrome', { tex: same('chrome'), sound: 'metal', hardness: 3.0 });
+  def(B.WINDOW_LIT, 'lit_window', { tex: same('window_lit'), emit: 9, sound: 'glass', hardness: 0.5 });
+  def(B.WINDOW_DARK, 'dark_window', { tex: same('window_dark'), sound: 'glass', hardness: 0.5 });
+  def(B.CITY_LAMP, 'city_lamp', { tex: same('city_lamp'), emit: 15, sound: 'metal', hardness: 0.5 });
+  def(B.HULL_PLATE, 'hull_plate', { tex: same('hull_plate'), sound: 'metal', hardness: 4.0 });
+  def(B.HULL_TRENCH, 'hull_trench', { tex: same('hull_trench'), sound: 'metal', hardness: 4.0 });
 
   for (let i = 0; i < 256; i++) if (!BLOCKS[i]) BLOCKS[i] = BLOCKS[B.AIR];
 }
@@ -155,4 +178,6 @@ export const PALETTE = [
   B.PIANO, B.WHITE_WOOL, B.RED_WOOL, B.BLUE_WOOL, B.GREEN_WOOL, B.PLASTER, B.DIRT_PATH, B.MUD, B.COARSE_DIRT,
   B.FARMLAND, B.CACTUS, B.DEAD_BUSH, B.TALL_GRASS, B.DANDELION, B.POPPY, B.PUMPKIN, B.TROUGH, B.GRAVESTONE,
   B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.GOLD_BLOCK, B.IRON_BLOCK, B.SNOW, B.SCORCHED_STONE, B.ASH, B.MAGMA, B.CHARRED_PLANKS,
+  B.DURASTEEL, B.DURASTEEL_DARK, B.PANEL_BLACK, B.PANEL_RED, B.PANEL_STRIPE, B.GLOW_PANEL, B.GLOW_PANEL_BLUE, B.HOLO_SIGN, B.CONSOLE,
+  B.VENT, B.DECK_PLATE, B.STEEL_GLASS, B.CHROME, B.WINDOW_LIT, B.WINDOW_DARK, B.CITY_LAMP, B.HULL_PLATE, B.HULL_TRENCH,
 ];

@@ -24,6 +24,7 @@ import { PerfMonitor } from './perf.js';
 import { Permissions } from './permissions.js';
 import { SaveManager } from './save.js';
 import { DisasterManager } from './disasters/manager.js';
+import { VehicleManager } from './vehicles/manager.js';
 import { applyQuality, loadQualityName } from './quality.js';
 import { Tsunami } from './disasters/tsunami.js';
 import { Tornado } from './disasters/tornado.js';
@@ -175,6 +176,8 @@ export class Game {
     this.animals.particles = this.particles;
     this.train = new Train(this.scene, this.world, this.audio, this.particles);
     // disasters: deterministic, journaled, admin-controlled
+    this.vehicles = new VehicleManager(this);
+    this.world.vehicles = this.vehicles;
     this.disasters = new DisasterManager(this);
     {
       const qp = new URLSearchParams(location.search);
@@ -308,6 +311,7 @@ export class Game {
     this.accumulator += dt;
     let ticks = 0;
     while (this.accumulator >= TICK_DT && ticks < 5) {
+      this.vehicles.tick();
       this.tick(playing);
       this.accumulator -= TICK_DT;
       ticks++;
@@ -333,6 +337,7 @@ export class Game {
     }
     // disasters: visuals, debris, chunk relight/remesh, camera shake
     if (this.disasters) {
+      this.vehicles.update(dt, alpha, this.camera);
       this.disasters.update(dt, alpha, this.camera);
       const fx = this.disasters.effects;
       if (fx.shakeAmp > 0.001) { this.camera.position.add(fx.shakeOffset); this.camera.rotation.z += fx.shakeRot; }
