@@ -9,9 +9,11 @@ import { LANDMARK as market } from './market.js';
 import { LANDMARK as senate } from './senate.js';
 import { LANDMARK as temple } from './temple.js';
 import { LANDMARK as underworld } from './underworld.js';
+import { LANDMARK as plaza_monument } from './plaza_monument.js';
 
 const MODULE_LIST = [
   market,
+  plaza_monument,
   senate,
   temple,
   underworld,
