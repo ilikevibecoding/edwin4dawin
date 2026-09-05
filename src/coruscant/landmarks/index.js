@@ -14,6 +14,7 @@ import { LANDMARK as works } from './works.js';
 import { LANDMARK as detention } from './detention.js';
 import { LANDMARK as holonet } from './holonet.js';
 import { LANDMARK as medcenter } from './medcenter.js';
+import { LANDMARK as opera } from './opera.js';
 
 const MODULE_LIST = [
   market,
@@ -25,6 +26,7 @@ const MODULE_LIST = [
   detention,
   holonet,
   medcenter,
+  opera,
 ];
 
 const MODULES = new Map();
