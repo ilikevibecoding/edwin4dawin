@@ -34,8 +34,9 @@ export default defineRoom({
     // environment, so the painted plating needs the lift to stay ≥ 20 % grey under the fills
     floor: { color: 0x767a80 },
     // cool-white channel strips: the teal emitter (Kestrel key, intensity 2.4) mirrored in the metal
-    // tank rims as a blown streak; the wall strips stay teal
-    ceiling: { channels: 4, axis: "z", stripMat: "emitWhite" },
+    // tank rims as a blown streak; the wall strips stay teal. Ceiling plate two steps above impDark:
+    // 10 m up and lit only by the pendant fills' spill it rendered as a 5 % black plane (pass 3)
+    ceiling: { channels: 4, axis: "z", stripMat: "emitWhite", color: 0x6c7078 },
     doorDressing: { accent: "emitTeal" },
     // cable tray + pipe runs across the bare 4.7–5.4 m band of the forward and west walls (the east
     // and aft walls carry the catwalk at that height)

@@ -5,18 +5,19 @@
 // (through a real wall opening); one east pod is in FAULT (red ring, dark viewport, red pillar).
 // Centre: dark runway with the amber muster line, a boarding checkpoint (pedestal pair + open lane
 // gate) and a stretcher trolley near the door, numbered muster squares in front of every pod, mid-bay
-// pedestals; 24 housed suspended fixtures in three hall rows plus one pendant per pod; belt dividers
-// hold the west waiting area, the east has A-frame barriers at the FAULT pod and an information
-// pylon. Door end: lockers, O2 rack, console. Forward wall: status board (numbered tiles + text
-// strips), suit rack, supply shelves, locker banks. Amber accents; lights are descriptors (7 hatch
-// accents + the FAULT beacon + 2 cabin lights + 4 down-spots under the centreline fixtures; the
-// down-spot nearest the door is the shadow key, aimed down the runway).
+// pedestals; 26 housed suspended fixtures in three hall rows (+ two east-side pendants) plus one
+// pendant per pod; belt dividers hold the west waiting area, the east has A-frame barriers at the
+// FAULT pod and an information pylon. Door end: lockers, O2 rack, console. Forward wall: status
+// board (numbered tiles + text strips + LED row), suit rack, supply shelves, locker banks. Amber
+// accents; lights are descriptors (5 hatch accents + the FAULT beacon + 2 cabin lights + 4 down-spots
+// under the centreline fixtures + 2 east-side pendants; the down-spot nearest the door is the shadow
+// key, aimed 36° down the runway).
 // Motion (lighting round): one animated emitter mesh (glow.js atlas, 1 draw call) carries the FAULT
 // pod's rotating beacon drum + pulsing ring / tube strip / board tile, the READY pods' breathing
 // green caps, the runway guide dashes chasing toward the pods, the status board tiles' occasional
 // flicker and the open cabins' flickering lights; the beacon and cabin descriptors follow.
 import * as THREE from "three";
-import { insideOut } from "../../../kit.js";
+import { insideOut, rng } from "../../../kit.js";
 import { col } from "../_shared/palette.js";
 import { rail, WALL_T } from "../_shared/shell.js";
 import { placer, indicatorField, console as consoleProp, wallScreen, lockerBank, cabinet, floorLine, pipe, dropLight } from "../_shared/props.js";
@@ -378,7 +379,17 @@ export function detail(ctx, shell, room) {
       const desc = { type: "point", pos: Q.world(0, 2.45, -0.05), color: 0xffe8d0, intensity: 4.5, distance: 6, priority: 0.6 };
       ctx.lights.push(desc);
       cabins.push({ desc, row: cabinRow, phase: idx * 1.7 });
-    } else if (status !== "r") ctx.lights.push({ type: "point", pos: Q.world(0, 3.0, 1.9), color: 0xffb35c, intensity: 40, distance: 13, priority: 0.6 });
+    } else if (status !== "r" && !(yaw < 0 && idx >= 3)) {
+      // east pods 4 and 5 keep their pendant but not its descriptor: the door view's 104° frame ends
+      // at pod 2 on either side, the west-row camera faces away from them and from the east-row
+      // camera they hide behind the FAULT pod's platform and barrier — their two slots pay for the
+      // door-end wall wash and the pylon light. West pod 5 keeps its light: it fills the west-row
+      // foreground (its muster floor read 6 % with the pendant dark). 50 cd, 0.4 m under the
+      // diffuser: the muster floor in front of the pods carries the row views' centre (it read 18 %
+      // at 40); lifting the descriptor above the housing to halo the ceiling instead made the deck
+      // darker, not brighter — the painted marks want the direct light
+      ctx.lights.push({ type: "point", pos: Q.world(0, 3.0, 1.9), color: 0xffb35c, intensity: 50, distance: 13, priority: 0.6 });
+    }
   };
   STATION_Z.forEach((z, i) => station([IX0, Y, z], Math.PI / 2, WEST[i], i, 100 + i * 7));
   STATION_Z.forEach((z, i) => station([IX1, Y, z], -Math.PI / 2, EAST[i], i, 200 + i * 7));
@@ -601,11 +612,26 @@ export function detail(ctx, shell, room) {
       kit.box("emitAmber", -0.45, CY - 1.38, z + s * 0.072, 0.16, 0.16, 0.01);
     }
   }
-  // hall fixtures in three rows: a centreline row over the runway in the gaps between stations (the
-  // four down-spot fills hang under these) and two side rows on the pod rhythm over the muster floor
-  const FIX = [309.4, 314.3, 319.2, 324.0];
+  // hall fixtures in three rows: a centreline row over the runway (the three down-spots — two fills
+  // and the key — hang under these; two fills 6.6 m apart at 175/215 lay the same 22–26 lx runway
+  // three at 145/180/130 did, and the third slot became the west waiting-floor pendant) and two side
+  // rows on the pod rhythm over the muster floor (the door-end fixture sits 1.4 m nearer the door
+  // than the rhythm so its key rakes the checkpoint)
+  const FIX = [309.4, 316.0, 325.4];
   for (const z of FIX) dropLight(kit, PALETTE, [0, CY, z], { w: 2.4, d: 0.6, stem: 0.9, mat: "emitWarmSoft" });
   for (const x of [-8.2, 8.2]) for (const z of STATION_Z) dropLight(kit, PALETTE, [x, CY, z], { w: 2.0, d: 0.5, stem: 0.9, mat: "emitWarmSoft" });
+  // three more over the waiting floors between the muster strips and the runway, each with its own
+  // descriptor (below): east over the information pylon (the east waiting floor read 15 % from the
+  // east-row camera) and 2.2 m off the aft wall so the two door-end screens there hang in a wall
+  // wash instead of a 6 % wall; west over the divider queue (the west-row camera's centre-right is
+  // that floor — 8–13 m from the centreline fills it read 15 %, the pod accents stop 3 m short of
+  // it), 7.5 m ahead of that camera so its foreground deck gets the pendant at ~40° incidence
+  const SIDE_FIX = [
+    [12.4, 316.4],
+    [11.0, 327.5],
+    [-11.5, 319.5],
+  ];
+  for (const [x, z] of SIDE_FIX) dropLight(kit, PALETTE, [x, CY, z], { w: 2.0, d: 0.5, stem: 0.9, mat: "emitWarmSoft" });
   // overhead gantry beams tying the launch tubes together along each wall (hung between channels)
   for (const s of [-1, 1]) {
     kit.box("paintedMetal", s * 16.6, CY - 0.35, (IZ0 + IZ1) / 2, 0.32, 0.36, IZ1 - IZ0 - 1.0, { color: dark, texel: 4 });
@@ -690,7 +716,21 @@ export function detail(ctx, shell, room) {
         else B.box(st.s === "r" ? "emitRedImp" : "emitGreen", x + 0.38, y - 0.23, 0.025, 0.1, 0.1, 0.01);
       }
     }
-    indicatorField(B, 0, 1.45, 0.005, 5.8, 0.18, 51);
+    // bottom row: a matte field with two rows of 5 × 3.6 cm status LEDs — the shared indicatorField's
+    // 1.6 cm blocks were 1 px from the board camera (pass 3); mostly amber/green for a muster board
+    {
+      const rand = rng(51);
+      B.box("impPanel", 0, 1.45, 0.005, 5.8, 0.26, 0.02, { color: black, uv: "keep" });
+      const cols = 62;
+      for (let i = 0; i < cols; i++) {
+        for (const j of [-1, 1]) {
+          if (rand() < 0.35) continue;
+          const r = rand();
+          const m = r < 0.4 ? "emitAmber" : r < 0.7 ? "emitGreen" : r < 0.9 ? "emitBlue" : "emitRedImp";
+          B.box(m, -2.79 + i * (5.58 / (cols - 1)), 1.45 + j * 0.055, 0.018, 0.05, 0.036, 0.006);
+        }
+      }
+    }
     kit.collider([-3.3, Y, bz], [3.3, Y + 3.75, bz + 0.15], "status-board");
   }
   wallScreen(kit, [-5.6, Y + 2.6, IZ0 + 0.1], 0, 1.6, 1.0, "screenImp0", { accent: "emitAmber" });
@@ -762,22 +802,36 @@ export function detail(ctx, shell, room) {
   pipe(kit, PALETTE, [-19.0, Y + 5.4, IZ0 + 0.3], [19.0, Y + 5.4, IZ0 + 0.3], 0.06, { color: dark, bracket: 3 });
 
   // =============================================================================================
-  // LIGHTS: four warm spots under the centreline fixtures (their own pool slot, so the ten station
-  // lights — 7 hatch accents + beacon + 2 cabins — stay live) = 14 total. The spot nearest the door
-  // is the room's shadow KEY: aimed down the runway so the checkpoint pedestals, lane gate and
-  // stretcher trolley throw their shadows forward along the deck; the other three are fills at
-  // 33–40 % of the key (the rig's captured environment no longer lifts the floor, so the fills carry
-  // the far half — the hall reads brightest at the door and falls off toward the board).
+  // LIGHTS: three warm spots under the centreline fixtures (their own pool slot, so the eleven
+  // point lights — 5 hatch accents + beacon + 2 cabins + the 3 waiting-floor pendants — stay live)
+  // = 14 total. The spot nearest the door is the room's shadow KEY: 4.6 m up and 4.8 m behind the
+  // checkpoint, aimed 6.4 m down the runway (36° below the horizon) so the pedestals, lane gate,
+  // bollard and stretcher trolley throw shadows that rake forward along the deck instead of pooling
+  // under them; the other two are fills at 50–60 % of the key (the rig's captured environment no
+  // longer lifts the floor, so the fills carry the far half — the hall reads brightest at the door
+  // and falls off toward the board).
   // =============================================================================================
   FIX.forEach((z, i) => {
     if (i === FIX.length - 1) {
-      ctx.lights.push({ type: "spot", pos: [0, CY - 1.4, z], target: [0, Y, z - 2.5], color: 0xffe6cc, intensity: 400, distance: 40, angle: 1.05, penumbra: 0.45, priority: 1.0, shadow: true });
+      ctx.lights.push({ type: "spot", pos: [0, CY - 1.4, z], target: [0, Y, z - 6.4], color: 0xffe6cc, intensity: 360, distance: 40, angle: 1.15, penumbra: 0.4, priority: 1.0, shadow: true });
     } else {
       // near-hemispherical flat cones (83 deg, short penumbra) so the muster floor either side of
-      // the runway reads; the forward one is softer (it also lights the status board wall 4 m away)
-      ctx.lights.push({ type: "spot", pos: [0, CY - 1.4, z], target: [0, Y, z], color: 0xffe6cc, intensity: i === 0 ? 130 : 160, distance: 30, angle: 1.45, penumbra: 0.2, priority: 0.9 });
+      // the runway reads; the forward one is softer (it also lights the status board wall 4 m away);
+      // the second sits 6.6 m on, 9.4 m short of the key, so the checkpoint keeps the key's raking
+      // shadows (a fill straight over it clipped the check zone at 180 and flattened them at 130)
+      ctx.lights.push({ type: "spot", pos: [0, CY - 1.4, z], target: [0, Y, z], color: 0xffe6cc, intensity: i === 0 ? 175 : 215, distance: 30, angle: 1.45, penumbra: 0.2, priority: 0.9 });
     }
   });
+  // waiting-floor pendants: pylon light, the door-end wall wash and the west divider-queue light
+  // (housings with the hall fixtures); omnidirectional points hang 0.45 m under the diffuser so the
+  // housing rim above them is not blasted white (these hang on 0.9 m stems — above the housing they
+  // would sit 0.7 m under the ceiling and burn a disc into it)
+  ctx.lights.push({ type: "point", pos: [SIDE_FIX[0][0], CY - 1.5, SIDE_FIX[0][1]], color: 0xffe6cc, intensity: 40, distance: 14, priority: 0.7 });
+  ctx.lights.push({ type: "point", pos: [SIDE_FIX[1][0], CY - 1.5, SIDE_FIX[1][1]], color: 0xffe6cc, intensity: 36, distance: 14, priority: 0.7 });
+  // (84 cd: the west-row camera's foreground deck 5–8 m aft of it sits outside the key's cone and
+  // reads this pendant at grazing incidence — at 60 cd / 8.5 m the frame's bottom band measured
+  // 18 %, under policy B's 20)
+  ctx.lights.push({ type: "point", pos: [SIDE_FIX[2][0], CY - 1.5, SIDE_FIX[2][1]], color: 0xffe6cc, intensity: 84, distance: 15, priority: 0.7 });
 
   glow.build(ctx.group);
   return {
