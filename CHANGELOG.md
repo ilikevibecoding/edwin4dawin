@@ -51,6 +51,11 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
   sun, cores stay shaded); ambient split into sky (occluded from above) and ground bounce / city glow
   (occluded from below); moon key at night, stars occluded by cloud alpha. Presets: cloudTop 3500 (clear,
   scattered), 2000 (cloudy), 3200 (storm); coverage clear 0.27, scattered 0.37, cloudy 0.70.
+- Lead (after the iter08 capture): fuselage texture v is the ring's normalised arc length (4096-sample
+  table per section) instead of the superellipse parameter, which had squeezed the boxy cabin's side wall
+  into a few texels and smeared the livery text into vertical streaks (flagged by two iter08 critics); body
+  text is copied column by column at the local texels-per-metre so it keeps a constant physical height and
+  follows the sill. Verified on fresh glass-sun and plane-rear-quarter captures (bench/out/textfix).
 
 ## iter07 — wave 3 builders and lead fixes (deployed as a73e7fb62028-20260904T202825Z)
 - Water loop 2: physical absorption (red dies within a metre), bay/ocean reflectances re-derived, sediment
