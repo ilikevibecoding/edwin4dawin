@@ -783,18 +783,18 @@ export class PlaneModel {
       for (const [dy, flipY] of [[0.045, 0], [-0.04, Math.PI]] as const) {
         const patch = new THREE.CircleGeometry(0.22, 12);
         patch.scale(1.6, 1, 1);
-        lightKit.add(lit(patch, tint, channel, 0.10), at([tip.x - 0.05, tip.y + dy, sgn * 7.28], [-Math.PI / 2 + flipY, 0, 0]));
+        lightKit.add(lit(patch, tint, channel, 0.22), at([tip.x - 0.05, tip.y + dy, sgn * 7.28], [-Math.PI / 2 + flipY, 0, 0]));
       }
-      glows.push({ p: V3(tip.x, tip.y, zOut), tint, channel, size: 0.42 }, { p: V3(tip.x - 0.12, tip.y, zOut), tint: 0xf2f4ff, channel: LIGHT.strobe, size: 0.55 });
+      glows.push({ p: V3(tip.x, tip.y, zOut), tint, channel, size: 0.7 }, { p: V3(tip.x - 0.12, tip.y, zOut), tint: 0xf2f4ff, channel: LIGHT.strobe, size: 0.95 });
     }
     lightKit.add(lens(0.04, 0xf2f4ff, LIGHT.tail), at([-5.51, 0.33, 0]));
-    glows.push({ p: V3(-5.51, 0.33, 0), tint: 0xf2f4ff, channel: LIGHT.tail, size: 0.34 });
+    glows.push({ p: V3(-5.51, 0.33, 0), tint: 0xf2f4ff, channel: LIGHT.tail, size: 0.55 });
     // rotating beacon on the fin tip, and the landing light in the port wing's leading edge inboard of the strut
     lightKit.add(lens(0.05, 0xd81c1c, LIGHT.beacon), at([-4.80, 2.07, 0]));
-    glows.push({ p: V3(-4.80, 2.07, 0), tint: 0xd81c1c, channel: LIGHT.beacon, size: 0.55 });
+    glows.push({ p: V3(-4.80, 2.07, 0), tint: 0xd81c1c, channel: LIGHT.beacon, size: 0.95 });
     const landing = V3(WING_POS.x + wingXLE(wingSpec, 2.3) - 0.01, WING_POS.y + 0.02, -2.3);
     lightKit.add(lit(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 12), 0xfff2d8, LIGHT.landing), at(landing, [0, 0, Math.PI / 2]));
-    glows.push({ p: landing, tint: 0xfff0d0, channel: LIGHT.landing, size: 0.9 });
+    glows.push({ p: landing, tint: 0xfff0d0, channel: LIGHT.landing, size: 1.3 });
     this.lights = mesh(lightKit.build(), lightsMat, { cast: false, receive: false });
     // glow sprites: one camera-facing quad per lamp, expanded in the vertex shader, additive, fading with the
     // channel power (bloom alone left the lamps as hard 8 px stars); pushed toward the camera so the lens does not cut them
@@ -841,8 +841,8 @@ export class PlaneModel {
             float r = length(vCorner);
             if (r > 1.0) discard;
             // a bright core with a long soft skirt: the scatter of a point source in a slightly hazy night
-            float halo = pow(1.0 - r, 3.0) * 0.35 + pow(max(1.0 - r * 3.0, 0.0), 2.0) * 0.5;
-            gl_FragColor = vec4(vCol * halo * vPow * 0.045, 1.0);
+            float halo = pow(1.0 - r, 3.5) * 0.30 + pow(max(1.0 - r * 3.0, 0.0), 2.0) * 0.6;
+            gl_FragColor = vec4(vCol * halo * vPow * 0.07, 1.0);
           }`,
         transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: true,
       });
