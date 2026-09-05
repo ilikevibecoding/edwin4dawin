@@ -11,7 +11,7 @@ import { PALETTE } from "../../materials.js";
 import { impWall, impCeiling, impConsole, impChair, equipmentRack, pit, platform, railing, pipeRun, hologram, wallSegment } from "../imperial.js";
 import { pointLight, wallFrame, X_AXIS } from "../builders.js";
 import { rng } from "../../kit.js";
-import { decalRect } from "../../textures.js";
+import { decalRect, makeImperialScreen, makeCanvas, toTexture } from "../../textures.js";
 
 const X0 = -24;
 const X1 = 24;
@@ -101,12 +101,31 @@ function ensureMaterials(ctx) {
     m.brg_holoFill = m.holo.clone();
     m.brg_holoFill.map = null;
     m.brg_holoFill.color = new THREE.Color("#6fb4ff");
-    m.brg_holoFill.opacity = 0.34;
+    m.brg_holoFill.opacity = 0.3;
     m.brg_holoFill.side = THREE.FrontSide;
-    m.brg_holoLine = new THREE.LineBasicMaterial({ color: 0x8ec5ff, transparent: true, opacity: 0.3, blending: THREE.AdditiveBlending, depthWrite: false });
+    m.brg_holoLine = new THREE.LineBasicMaterial({ color: 0x8ec5ff, transparent: true, opacity: 0.28, blending: THREE.AdditiveBlending, depthWrite: false });
+    // header fixture line over every viewport hood (recessed diffuser on the mask face): three times
+    // the shared dim white, which ACES still keeps under clipping, so it reads from the sill at grade
+    m.brg_header = m.emitWhiteDim.clone();
+    m.brg_header.name = "brg_header";
+    m.brg_header.emissiveIntensity = 3.0;
+    // warm seam lamp along the lower edge of every hood
+    m.brg_seam = new THREE.MeshStandardMaterial({ color: 0x120c06, emissive: new THREE.Color("#ffb870"), emissiveIntensity: 1.3, roughness: 0.5, metalness: 0 });
+    // second screen atlas (own seeds, same three Imperial styles) so the paired consoles at the
+    // commander's position never show the same readout twice. The warning colours are the shared
+    // atlas's red / amber pulled back to ~75%: makeImperialScreen draws them at full strength, and
+    // at the screens' 1.4 emissive a full #ff4136 lands on 255 red after ACES
+    const atlasB = [makeImperialScreen(512, 256, 251, "#4a9dff", "#bf3329", 0), makeImperialScreen(512, 256, 252, "#4a9dff", "#e0a444", 1), makeImperialScreen(512, 256, 253, "#6ab4ff", "#e0a444", 2)];
+    atlasB.forEach((tex, i) => {
+      const mat = m.impScreen0.clone();
+      mat.emissiveMap = tex;
+      mat.name = "brg_scrB" + i;
+      m["brg_scrB" + i] = mat;
+    });
     // animated readouts: each owns a clone of its texture so the UV offset can move without touching
-    // the shared screens. brg_scroll is a strip chart creeping sideways, brg_step a list that redraws
-    // (jumps a row) about once a second; brg_pulse (above) breathes in intensity
+    // the shared screens. brg_scroll is a strip chart creeping sideways, brg_step a systems status
+    // list (own texture: rows only, so it wraps seamlessly) that redraws two rows at a time about once
+    // a second; brg_pulse (above) breathes in intensity
     const own = (src) => {
       const mat = src.clone();
       mat.emissiveMap = src.emissiveMap.clone();
@@ -117,7 +136,8 @@ function ensureMaterials(ctx) {
     };
     m.brg_scroll = own(m.impScreen1);
     m.brg_scroll.name = "brg_scroll";
-    m.brg_step = own(m.impScreen0);
+    m.brg_step = m.impScreen0.clone();
+    m.brg_step.emissiveMap = makeStatusList(ctx.seed + 909);
     m.brg_step.name = "brg_step";
     // unlit near-black for the window reveal (see buildWindowWall)
     m.brg_void = new THREE.MeshBasicMaterial({ color: 0x05060a });
@@ -148,6 +168,52 @@ function ensureMaterials(ctx) {
     m.brg_top.roughness = 0.4;
   }
   return { pulse: m.brg_pulse, alert: m.brg_alert, sweep: m.brg_sweep, cone: m.brg_cone, bright: m.brg_holoBright, fill: m.brg_holoFill, line: m.brg_holoLine, scroll: m.brg_scroll, step: m.brg_step };
+}
+
+/**
+ * Systems status list: sixteen 16 px rows of index block, status square, label, gauge trough with its
+ * fill and a value field; a few rows highlighted or in warning colours. No header, so the texture
+ * wraps seamlessly when brg_step jumps its UV offset two rows at a time.
+ */
+function makeStatusList(seed, accent = "#4a9dff", warn = "#ffb347", alert = "#ff4136") {
+  const w = 512;
+  const h = 256;
+  const c = makeCanvas(w, h);
+  const g = c.getContext("2d");
+  const rand = rng(seed);
+  const rgba = (hex, a) => `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${a})`;
+  g.fillStyle = "#020408";
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = rgba(accent, 0.07);
+  for (let x = 0; x < w; x += 12) g.fillRect(x, 0, 1, h);
+  const rowH = 16;
+  for (let r = 0; r < h / rowH; r++) {
+    const y = r * rowH;
+    const state = rand();
+    const hot = state < 0.12;
+    if (hot) {
+      g.fillStyle = rgba(alert, 0.14);
+      g.fillRect(8, y + 1, w - 16, rowH - 2);
+    }
+    g.fillStyle = rgba(accent, 0.5);
+    g.fillRect(14, y + 5, 22, 6);
+    // warning colours stay well under full strength: the list flashes to 1.65 emissive on each
+    // redraw, where a saturated red above ~0.7 alpha lands on 255 red after ACES (blue does not: the
+    // accent may run at 0.9)
+    g.fillStyle = hot ? rgba(alert, 0.66) : state < 0.3 ? rgba(warn, 0.75) : rgba(accent, 0.9);
+    g.fillRect(44, y + 5, 6, 6);
+    g.fillStyle = rgba(accent, 0.85);
+    g.fillRect(60, y + 5, 50 + rand() * 90, 6);
+    g.fillStyle = rgba(accent, 0.22);
+    g.fillRect(190, y + 4, 200, 8);
+    g.fillStyle = hot ? rgba(alert, 0.6) : state < 0.3 ? rgba(warn, 0.66) : rgba(accent, 0.75);
+    g.fillRect(190, y + 4, 200 * (0.15 + rand() * 0.8), 8);
+    g.fillStyle = rgba(accent, 0.6);
+    g.fillRect(410, y + 5, 30 + rand() * 40, 6);
+    g.fillStyle = rgba(accent, 0.35);
+    g.fillRect(470, y + 5, 28, 6);
+  }
+  return toTexture(c, { srgb: true, anisotropy: 4 });
 }
 
 // ---------------------------------------------------------------------------
@@ -340,11 +406,6 @@ function buildWindowWall(kit, ctx) {
   for (let k = 0; k < PANES; k++) {
     const xc = paneX(k);
     kit.box("impPanel", xc, WIN_Y1 + 0.95, Z0 + 0.71, 2.6, 0.9, 0.02, { color: PALETTE.impMid, uv: "keep" });
-    // recessed header lamp over every viewport hood: black trough in the fascia's underside with a dim
-    // diffuser core, so the header reads as a lit fixture line from anywhere on the walkway
-    kit.box("paintedMetal", xc, WIN_Y1 + 0.36, Z0 + 0.9, 2.5, 0.14, 0.2, BLACK);
-    kit.box("emitWhiteDim", xc, WIN_Y1 + 0.31, Z0 + 0.9, 2.3, 0.05, 0.16, { uv: "keep" });
-    kit.box("emitWhiteFaint", xc, WIN_Y1 + 0.3, Z0 + 0.79, 2.4, 0.03, 0.06, { uv: "keep" }); // lit lip on the room side
     // lamp pair + label on the fascia face, vent slats on every other pane
     kit.box("paintedMetal", xc - 0.9, WIN_Y1 + 0.75, Z0 + 0.73, 0.5, 0.16, 0.03, BLACK);
     kit.box(k % 4 === 1 ? "brg_red" : "emitBlue", xc - 1.05, WIN_Y1 + 0.75, Z0 + 0.75, 0.12, 0.05, 0.01, {});
@@ -376,22 +437,30 @@ function buildWindowWall(kit, ctx) {
     const hw = PANE_W / 2;
     const hl = paneLen / 2;
     // hole foot 0.4 m above the glass foot: it trims the steepest downward sightline (the lit tower
-    // terraces right under the bridge) while the hull further forward stays in view from the sill
+    // terraces right under the bridge) while the hull further forward stays in view from the sill.
+    // Hole top 1.2 m under the pane top (y 5.35): from the sill at grade the sightline through the top
+    // of the opening then clears the exterior's sunlit brow over the window strip, so the hood reads
+    // as a solid dark band closed by its seam lamp instead of a grey slab hanging in the view.
     const vFoot = -hl + 0.4;
-    const vTop = hl - 0.5;
+    const vTop = hl - 1.2;
     const shape = new THREE.Shape([new THREE.Vector2(-hw, -hl), new THREE.Vector2(hw, -hl), new THREE.Vector2(hw, hl + 0.1), new THREE.Vector2(-hw, hl + 0.1)]);
-    shape.holes.push(new THREE.Path([new THREE.Vector2(-1.3, vFoot), new THREE.Vector2(1.3, vFoot), new THREE.Vector2(1.1, vTop), new THREE.Vector2(-1.1, vTop)]));
+    shape.holes.push(new THREE.Path([new THREE.Vector2(-1.3, vFoot), new THREE.Vector2(1.3, vFoot), new THREE.Vector2(1.12, vTop), new THREE.Vector2(-1.12, vTop)]));
     const maskGeo = new THREE.ExtrudeGeometry(shape, { depth: 0.1, bevelEnabled: false });
-    // hood lamp: a dim lit seam along the top edge of every hood on the room face of the mask (the
-    // recessed fixture line over the viewports), so the hoods read as built architecture from the
-    // walkway. The tapered sides stay dark: lit side seams read as white stripes on the mullions.
-    const topGeo = new THREE.BoxGeometry(2.16, 0.02, 0.012);
+    // hood lamps on the room face of every mask, both in the bridge_window frame from the sill: a
+    // warm 30 mm seam along the hood's lower edge (the top edge of the opening) and, 0.6 m above it,
+    // the header fixture line: a black channel with a bright recessed diffuser. The tapered sides
+    // stay dark: lit side seams read as white stripes on the mullions.
+    const seamGeo = new THREE.BoxGeometry(2.2, 0.03, 0.012);
+    const chanGeo = new THREE.BoxGeometry(2.36, 0.11, 0.04);
+    const coreGeo = new THREE.BoxGeometry(2.24, 0.05, 0.012);
     const up = new THREE.Vector3(0, 1, 0).applyQuaternion(tilt);
     for (let k = 0; k < PANES; k++) {
       const c = new THREE.Vector3(paneX(k), yMid, zMid).addScaledVector(nIn, 0.19);
       kit.add("brg_frame", maskGeo.clone(), { pos: [c.x, c.y, c.z], quat: tilt });
       const face = c.clone().addScaledVector(nIn, 0.106);
-      kit.add("brg_hair", topGeo.clone(), { pos: face.clone().addScaledVector(up, vTop + 0.02).toArray(), quat: tilt });
+      kit.add("brg_seam", seamGeo.clone(), { pos: face.clone().addScaledVector(up, vTop + 0.025).toArray(), quat: tilt });
+      kit.add("paintedMetal", chanGeo.clone(), { pos: c.clone().addScaledVector(nIn, 0.12).addScaledVector(up, vTop + 0.6).toArray(), quat: tilt, color: PALETTE.impBlack, texel: 2 });
+      kit.add("brg_header", coreGeo.clone(), { pos: c.clone().addScaledVector(nIn, 0.136).addScaledVector(up, vTop + 0.6).toArray(), quat: tilt, uv: "keep" });
     }
   }
 
@@ -587,15 +656,16 @@ function buildPit(kit, ctx, s) {
 }
 
 /**
- * Three station builds alternated along a row: width, desk height, top of the canted back, and the
- * way the back and the slab are laid out — "main": one wide display beside a column of ticker bars,
- * slab with two button rows; "equal": three equal screens, slab with a keypad block; "split": one
- * tall screen beside two stacked half-height readouts, slab with a wide readout strip.
+ * Three station builds alternated along a row, told apart by silhouette first (back height and a
+ * hood on the tall one) and then by layout — "main": one wide display beside a column of ticker
+ * bars, slab with two button rows; "equal": three equal screens under a hooded back, slab with a
+ * keypad block; "split": a low back with one tall screen beside two stacked half-height readouts,
+ * slab with a wide readout strip.
  */
 const STATION_VARIANTS = [
-  { w: 1.9, h: 0.78, top: 1.5, n: 2, lay: "main", slab: "buttons" },
-  { w: 2.3, h: 0.8, top: 1.66, n: 3, lay: "equal", slab: "keypad" },
-  { w: 1.6, h: 0.76, top: 1.46, n: 2, lay: "split", slab: "strip" },
+  { w: 1.9, h: 0.78, top: 1.52, n: 2, lay: "main", slab: "buttons" },
+  { w: 2.3, h: 0.8, top: 1.74, n: 3, lay: "equal", slab: "keypad", hood: 0.16 },
+  { w: 1.6, h: 0.74, top: 1.36, n: 2, lay: "split", slab: "strip" },
 ];
 const screenMat = (s) => (typeof s === "string" ? s : "impScreen" + (s % 5));
 
@@ -689,6 +759,11 @@ export function pitStation(kit, ctx, { x, y = 0, z, yaw, variant = 0, screens = 
   const atB = (off, v, lift) => foot.clone().addScaledVector(right, off).addScaledVector(bUp, v).addScaledVector(bN, lift);
   kit.add("paintedMetal", new THREE.BoxGeometry(w, backH, 0.1), { pos: atB(0, backH / 2, 0).toArray(), quat: qb, color: PALETTE.impDark, texel: 1.5 });
   kit.add("paintedMetal", new THREE.BoxGeometry(w + 0.04, 0.06, 0.16), { pos: atB(0, backH - 0.03, 0).toArray(), quat: qb, color: PALETTE.impBlack, texel: 2 });
+  if (V.hood) {
+    // hooded back: a black cap overhanging the screens toward the operator with a faint lamp under it
+    kit.add("paintedMetal", new THREE.BoxGeometry(w + 0.08, 0.04, V.hood + 0.12), { pos: atB(0, backH + 0.01, V.hood / 2 - 0.02).toArray(), quat: qb, color: PALETTE.impBlack, texel: 2 });
+    kit.add("emitWhiteFaint", new THREE.BoxGeometry(w - 0.4, 0.012, 0.03), { pos: atB(0, backH - 0.016, V.hood - 0.04).toArray(), quat: qb, uv: "keep" });
+  }
   const n = V.n;
   const sh = backH - 0.4;
   const scr = (i) => (pulse && i === n - 1 ? pulse : screenMat(screens[i % screens.length]));
@@ -822,8 +897,10 @@ function buildWalkway(kit, ctx) {
   kit.boxMM("paintedMetal", [-2.9, 0, Z0 + 1.2], [2.9, 0.012, Z0 + 1.4], BLACK); // threshold plate at the apron
 }
 
-/** Low equipment post on the walkway kerb: dark column, a small canted readout facing the walkway (local
- *  -Z after yaw), a blue lamp slot on the pit side, led strip and a stencil. */
+/** Equipment post on the walkway kerb: dark column with mid-grey service plates on its fore and aft
+ *  faces (the faces the walkway sightlines see, so it never reads as one more black rail post), a
+ *  blue lamp ring under the cap, a small canted readout facing the walkway (local +Z after yaw), a
+ *  blue lamp slot on the pit side, led strip and a stencil. */
 function spinePost(kit, x, y, z, yaw, seed) {
   const q = new THREE.Quaternion().setFromAxisAngle(Y_AXIS, yaw);
   const P = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, y, z));
@@ -831,23 +908,34 @@ function spinePost(kit, x, y, z, yaw, seed) {
     const p = P(lx, ly, lz);
     return kit.add(mat, geo, { pos: [p.x, p.y, p.z], quat: qq, ...extra });
   };
-  const h = 1.08;
-  add("paintedMetal", new THREE.BoxGeometry(0.34, 0.05, 0.34), 0, 0.025, 0, BLACK);
-  add("paintedMetal", new THREE.BoxGeometry(0.24, h - 0.1, 0.24), 0, 0.05 + (h - 0.1) / 2, 0, DARK);
-  add("paintedMetal", new THREE.BoxGeometry(0.28, 0.05, 0.28), 0, h - 0.025, 0, BLACK);
-  add("brg_ring", new THREE.BoxGeometry(0.04, 0.5, 0.01), 0, 0.55, -0.125, {}); // slot toward the pit
-  add("leds", new THREE.BoxGeometry(0.16, 0.025, 0.01), 0, 0.3, 0.125, { uv: "keep" });
-  add("decal", new THREE.PlaneGeometry(0.16, 0.16), 0, 0.72, 0.121, { uv: "keep", uvRect: decalRect(seed % 16) });
+  const h = 1.18;
+  const bw = 0.28;
+  add("paintedMetal", new THREE.BoxGeometry(0.36, 0.05, 0.36), 0, 0.025, 0, BLACK);
+  add("paintedMetal", new THREE.BoxGeometry(bw, h - 0.1, bw), 0, 0.05 + (h - 0.1) / 2, 0, DARK);
+  add("brg_ring", new THREE.BoxGeometry(bw + 0.02, 0.02, bw + 0.02), 0, h - 0.09, 0, {});
+  add("paintedMetal", new THREE.BoxGeometry(0.32, 0.05, 0.32), 0, h - 0.025, 0, BLACK);
+  for (const s of [-1, 1]) {
+    // service plates on the fore / aft faces with a lamp and a led strip
+    const qf = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(Y_AXIS, (s * Math.PI) / 2));
+    add("impPanel", new THREE.BoxGeometry(0.012, 0.72, 0.2), s * (bw / 2 + 0.006), 0.5, 0, { color: PALETTE.impMid, uv: "keep" });
+    add("paintedMetal", new THREE.BoxGeometry(0.01, 0.06, 0.16), s * (bw / 2 + 0.017), 0.78, 0, BLACK);
+    add(s > 0 ? "emitBlue" : "emitAmber", new THREE.BoxGeometry(0.01, 0.025, 0.1), s * (bw / 2 + 0.023), 0.78, 0, {});
+    add("leds", new THREE.BoxGeometry(0.01, 0.025, 0.14), s * (bw / 2 + 0.018), 0.3, 0, { uv: "keep" });
+    add("decal", new THREE.PlaneGeometry(0.14, 0.14), s * (bw / 2 + 0.014), 0.58, 0, { uv: "keep", uvRect: decalRect((seed + s + 16) % 16) }, qf);
+  }
+  add("brg_ring", new THREE.BoxGeometry(0.04, 0.5, 0.01), 0, 0.6, -bw / 2 - 0.005, {}); // slot toward the pit
+  add("leds", new THREE.BoxGeometry(0.16, 0.025, 0.01), 0, 0.3, bw / 2 + 0.005, { uv: "keep" });
+  add("decal", new THREE.PlaneGeometry(0.16, 0.16), 0, 0.76, bw / 2 + 0.001, { uv: "keep", uvRect: decalRect(seed % 16) });
   // canted readout on top, screen toward the walkway, on a wedge block so it grows out of the cap
   const qt = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, 0.5));
-  add("paintedMetal", new THREE.BoxGeometry(0.26, 0.09, 0.16), 0, h + 0.02, -0.03, DARK);
-  add("paintedMetal", new THREE.BoxGeometry(0.3, 0.04, 0.22), 0, h + 0.04, 0.03, BLACK, qt);
+  add("paintedMetal", new THREE.BoxGeometry(0.3, 0.09, 0.18), 0, h + 0.02, -0.03, DARK);
+  add("paintedMetal", new THREE.BoxGeometry(0.34, 0.04, 0.24), 0, h + 0.04, 0.03, BLACK, qt);
   const up = new THREE.Vector3(0, 1, 0).applyQuaternion(qt);
-  const sg = new THREE.PlaneGeometry(0.24, 0.15);
+  const sg = new THREE.PlaneGeometry(0.28, 0.17);
   sg.rotateX(-Math.PI / 2);
   const sp = P(0, h + 0.04, 0.03).addScaledVector(up, 0.021);
-  kit.add(seed % 2 ? "brg_step" : "impScreen2", sg, { pos: sp.toArray(), quat: qt, uv: "keep" });
-  kit.collider([x - 0.17, y, z - 0.17], [x + 0.17, y + h + 0.1, z + 0.17], "post");
+  kit.add(seed % 2 ? "brg_step" : "brg_scrB2", sg, { pos: sp.toArray(), quat: qt, uv: "keep" });
+  kit.collider([x - 0.19, y, z - 0.19], [x + 0.19, y + h + 0.1, z + 0.19], "post");
 }
 
 // ---------------------------------------------------------------------------
@@ -863,25 +951,42 @@ function buildCommand(kit, ctx, mats) {
   kit.boxMM("paintedMetal", [-2.84, 0.1, CMD.z0 - 0.04], [2.84, y - 0.015, CMD.z1 + 0.04], BLACK);
   holoDais(kit, ctx, mats, 0, y, hz);
   // lectern consoles at the forward corners, screens toward the commander (operator side = aft), with
-  // a vertical screen bank on the far edge; the passage between each lectern and the dais stays open
-  for (const s of [-1, 1]) {
-    slabConsole(kit, {
-      x: s * 2.3,
-      y,
-      z: CMD.z0 + 0.42,
-      yaw: 0,
-      w: 0.9,
-      d: 0.5,
-      h: 1.1,
-      tilt: 0.4,
-      screens: [s > 0 ? "impScreen1" : "impScreen0"],
-      riser: 0.42,
-      riserScreens: s > 0 ? ["impScreen2", "impScreen0"] : ["brg_pulse", "impScreen2"],
-      pulse: "brg_pulse",
-      lampMat: "emitBlue",
-      seed: ctx.seed + 300 + s,
-    });
-  }
+  // a vertical screen bank on the far edge; the passage between each lectern and the dais stays open.
+  // The two are not a mirrored pair: port is the tall hooded twin-screen bank, starboard a lower,
+  // wider lectern with one wide readout from the second screen atlas.
+  slabConsole(kit, {
+    x: -2.3,
+    y,
+    z: CMD.z0 + 0.42,
+    yaw: 0,
+    w: 0.9,
+    d: 0.5,
+    h: 1.1,
+    tilt: 0.4,
+    screens: ["impScreen0"],
+    riser: 0.56,
+    riserScreens: ["brg_pulse", "impScreen2"],
+    hood: 0.16,
+    pulse: "brg_pulse",
+    lampMat: "emitBlue",
+    seed: ctx.seed + 299,
+  });
+  slabConsole(kit, {
+    x: 2.3,
+    y,
+    z: CMD.z0 + 0.42,
+    yaw: 0,
+    w: 1.1,
+    d: 0.5,
+    h: 0.98,
+    tilt: 0.4,
+    screens: ["brg_scrB1", "impScreen1"],
+    riser: 0.3,
+    riserScreens: ["brg_scrB0"],
+    pulse: "brg_pulse",
+    lampMat: "emitAmber",
+    seed: ctx.seed + 301,
+  });
 }
 
 /** Low octagonal holo dais: lit rings, two rim consoles on the aft side, tactical + ship holograms. */
@@ -900,10 +1005,14 @@ function holoDais(kit, ctx, mats, x, yBase, z) {
     const a = (i / 8) * Math.PI * 2 + Math.PI / 8;
     kit.box("brg_ring", x + Math.cos(a) * (DAIS_R - 0.09), yBase + 0.2, z + Math.sin(a) * (DAIS_R - 0.09), 0.1, 0.03, 0.1, {});
   }
-  // rim consoles: two angled control slabs on the aft rim (the commander stands between them)
+  // rim consoles: two angled control slabs on the aft rim (the commander stands between them). Not a
+  // mirrored pair: starboard is the flat slab with a tactical readout from the second atlas, port a
+  // taller slab whose breathing readout sits under a small hooded riser
   for (const s of [-1, 1]) {
     const a = s * 0.62;
-    slabConsole(kit, { x: x + Math.sin(a) * (DAIS_R - 0.17), y: top, z: z + Math.cos(a) * (DAIS_R - 0.17), yaw: a, w: 0.7, d: 0.38, h: 0.36, screens: [s > 0 ? "impScreen0" : "brg_pulse"], seed: ctx.seed + 40 + s, collide: false });
+    const p = { x: x + Math.sin(a) * (DAIS_R - 0.17), y: top, z: z + Math.cos(a) * (DAIS_R - 0.17), yaw: a, d: 0.38, seed: ctx.seed + 40 + s, collide: false };
+    if (s > 0) slabConsole(kit, { ...p, w: 0.7, h: 0.36, screens: ["brg_scrB0"] });
+    else slabConsole(kit, { ...p, w: 0.82, h: 0.42, screens: ["brg_pulse"], riser: 0.2, riserScreens: ["brg_scrB2"], hood: 0.08, lampMat: "emitAmber" });
   }
   kit.collider([x - DAIS_R, yBase, z - DAIS_R], [x + DAIS_R, top + 0.5, z + DAIS_R], "holotable"); // taller than a step: nobody climbs onto the table
 
@@ -950,9 +1059,10 @@ function holoDais(kit, ctx, mats, x, yBase, z) {
   ctx.anim((dt, t) => {
     wedge.rotation.z = -t * 1.3;
   });
-  // the ship itself above the tactical plot (kept below eye level so it sits against the dark sill
-  // from the aft door rather than against the planet through the glass)
-  shipHologram(ctx, mats, x, hy + 0.62, z, 0.5);
+  // the ship itself over the plot ring: small (0.8 m), its plan pitched 27 degrees toward the aft
+  // door so the dagger planform reads from the command platform, and well under the sightline from
+  // the platform to the glass (the eye is 2 m up on the platform, the ship tops out near 1.6 m)
+  shipHologram(ctx, mats, x, hy + 0.3, z, 0.24);
   // faint projector cone from the dais up to the plot
   const cone = new THREE.Mesh(new THREE.CylinderGeometry(1.4 * scale, 0.5, hy - top - 0.02, 32, 1, true), mats.cone);
   cone.position.set(x, (top + hy) / 2, z);
@@ -964,9 +1074,11 @@ function holoDais(kit, ctx, mats, x, yBase, z) {
 /**
  * Holographic Star Destroyer: two-tier wedge hull, ventral hangar bulge, neck + bridge tower with its
  * two sensor domes, five engine bells. Faint additive fill under a bright wire outline (two draw
- * calls), pitched nose-up so it reads from eye level, spinning slowly with a small bob.
+ * calls). Presented as a pitched plan: the whole projection plane is tilted `pitch` toward +Z (the
+ * aft door / command platform side) and the ship spins slowly about that tilted axis, with a small
+ * bob, so the wedge planform reads instead of a plank seen edge-on.
  */
-function shipHologram(ctx, mats, x, y, z, scale) {
+function shipHologram(ctx, mats, x, y, z, scale, pitch = 0.47) {
   const parts = [];
   const wedge = (nose, aft, halfAft, halfNose, thick, y0) => {
     const pts = halfNose > 0 ? [[-halfNose, nose], [halfNose, nose], [halfAft, aft], [-halfAft, aft]] : [[0, nose], [halfAft, aft], [-halfAft, aft]];
@@ -1011,16 +1123,16 @@ function shipHologram(ctx, mats, x, y, z, scale) {
     o.castShadow = false;
     o.receiveShadow = false;
   }
-  const sub = new THREE.Group();
-  sub.rotation.x = 0.2;
-  sub.add(fill, outline);
+  const spin = new THREE.Group();
+  spin.add(fill, outline);
   const group = new THREE.Group();
   group.position.set(x, y, z);
-  group.add(sub);
+  group.rotation.x = pitch;
+  group.add(spin);
   ctx.mesh(group);
   ctx.anim((dt, t) => {
-    group.rotation.y = t * 0.25 + 0.6;
-    group.position.y = y + Math.sin(t * 0.8 + 1.3) * 0.03;
+    spin.rotation.y = t * 0.25 + 0.6;
+    group.position.y = y + Math.sin(t * 0.8 + 1.3) * 0.02;
   });
   return group;
 }
@@ -1031,7 +1143,7 @@ function shipHologram(ctx, mats, x, y, z, scale) {
  * `screens` are material names. h < 0.6 builds just the slab on a short block (dais rim consoles).
  * `riser` > 0 adds a vertical screen bank standing on the slab's far edge, with a detailed rear plate.
  */
-function slabConsole(kit, { x, y, z, yaw, w = 0.8, d = 0.5, h = 1.15, screens = ["impScreen0"], tilt = 0.5, lampMat = "emitBlue", pulse = null, seed = 1, collide = true, riser = 0, riserScreens = null, panelCol = PALETTE.impMid }) {
+function slabConsole(kit, { x, y, z, yaw, w = 0.8, d = 0.5, h = 1.15, screens = ["impScreen0"], tilt = 0.5, lampMat = "emitBlue", pulse = null, seed = 1, collide = true, riser = 0, riserScreens = null, panelCol = PALETTE.impMid, hood = 0 }) {
   const q = new THREE.Quaternion().setFromAxisAngle(Y_AXIS, yaw);
   const qs = q.clone().multiply(new THREE.Quaternion().setFromAxisAngle(X_AXIS, tilt)); // +Z (operator) edge lower
   const P = (lx, ly, lz) => new THREE.Vector3(lx, ly, lz).applyQuaternion(q).add(new THREE.Vector3(x, y, z));
@@ -1112,6 +1224,12 @@ function slabConsole(kit, { x, y, z, yaw, w = 0.8, d = 0.5, h = 1.15, screens = 
     const topc = foot.clone().addScaledVector(rUp, riser + 0.02);
     kit.add("paintedMetal", new THREE.BoxGeometry(w + 0.04, 0.05, 0.12), { pos: topc.toArray(), quat: rq, color: PALETTE.impBlack, texel: 2 });
     kit.add(lampMat, new THREE.BoxGeometry(0.16, 0.02, 0.02), { pos: topc.clone().addScaledVector(rUp, 0.03).toArray(), quat: rq });
+    if (hood > 0) {
+      // hooded riser: a black cap plate overhanging the screens toward the operator, with a faint
+      // lamp on its underside (a second silhouette for otherwise paired consoles)
+      kit.add("paintedMetal", new THREE.BoxGeometry(w + 0.1, 0.04, hood + 0.1), { pos: topc.clone().addScaledVector(rN, hood / 2 - 0.01).addScaledVector(rUp, 0.04).toArray(), quat: rq, color: PALETTE.impBlack, texel: 2 });
+      kit.add("emitWhiteFaint", new THREE.BoxGeometry(w - 0.3, 0.012, 0.03), { pos: topc.clone().addScaledVector(rN, hood - 0.04).addScaledVector(rUp, 0.016).toArray(), quat: rq, uv: "keep" });
+    }
     // rear plate detail for the side facing away from the operator
     const rear = c.clone().addScaledVector(rN, -0.045);
     kit.add("impPanel1", new THREE.BoxGeometry(w - 0.14, riser - 0.14, 0.01), { pos: rear.toArray(), quat: rq, color: PALETTE.impMid, uv: "keep" });
@@ -1179,11 +1297,34 @@ function buildForward(kit, ctx) {
     // navigation stations: four different layouts and screen sets across the two pairs
     impConsole(kit, ctx, { x: s * 5.1, z: -46.6, yaw: 0, w: 2.0, screens: s > 0 ? [2, 1] : [2, 2], chair: true, seed: ctx.seed + 400 + s, lampMat: "emitAmber", layout: s > 0 ? "main" : "keypad" });
     impConsole(kit, ctx, { x: s * 7.6, z: -46.6, yaw: 0, w: 2.0, screens: s > 0 ? [0, 2] : [2, 0], chair: true, seed: ctx.seed + 402 + s, lampMat: "emitAmber", layout: s > 0 ? "keypad" : "equal" });
+    // their cheeks face the sill and the side floors: service plates instead of bare grey slabs
+    consoleCheek(kit, s * 4.095, -46.6, -s, ctx.seed + 420 + s);
+    consoleCheek(kit, s * 6.595, -46.6, -s, ctx.seed + 422 + s);
+    consoleCheek(kit, s * 8.605, -46.6, s, ctx.seed + 424 + s);
     // low equipment plinth between the nav pair and the pit head (keeps the aisle to the side floors open)
     kit.boxMM("paintedMetal", [Math.min(s * 4.2, s * 8.6), 0, -43.6], [Math.max(s * 4.2, s * 8.6), 0.45, -43.1], DARK);
     kit.boxMM("leds", [Math.min(s * 4.5, s * 8.3), 0.3, -43.1], [Math.max(s * 4.5, s * 8.3), 0.34, -43.09], { uv: "keep" });
     kit.collider([Math.min(s * 4.2, s * 8.6), 0, -43.6], [Math.max(s * 4.2, s * 8.6), 0.45, -43.1], "plinth");
   }
+}
+
+/**
+ * Service dressing for a console cheek (the vertical face at x = `fx`, normal ±X by `n`, spanning
+ * z ± 0.36 and y 0.12–0.72): the pit-station back's kit — recessed dark plate, vent grille, cable
+ * spine with clamps and a junction box, stencil, led strip and two status lamps.
+ */
+function consoleCheek(kit, fx, z, n, seed) {
+  const rand = rng(seed);
+  const at = (o) => fx + n * o;
+  kit.box("impPanel1", at(0.006), 0.42, z, 0.012, 0.52, 0.66, { color: PALETTE.impDark, uv: "keep" });
+  for (let i = 0; i < 5; i++) kit.box("paintedMetal", at(0.016), 0.5 + i * 0.05, z - 0.08, 0.012, 0.022, 0.4, BLACK);
+  kit.cyl("metal", at(0.05), 0.37, z + 0.24, 0.028, 0.74, "y", { color: PALETTE.impDark, segments: 10 });
+  for (const yy of [0.2, 0.6]) kit.box("metal", at(0.045), yy, z + 0.24, 0.09, 0.05, 0.1, { color: PALETTE.impBlack });
+  kit.box("paintedMetal", at(0.06), 0.06, z + 0.24, 0.12, 0.12, 0.16, BLACK);
+  const dq = new THREE.Quaternion().setFromAxisAngle(Y_AXIS, (n * Math.PI) / 2);
+  kit.add("decal", new THREE.PlaneGeometry(0.22, 0.22), { pos: [at(0.014), 0.3, z - 0.2], quat: dq, uv: "keep", uvRect: decalRect((seed + 5) % 16) });
+  kit.box("leds", at(0.014), 0.2, z + 0.02, 0.01, 0.025, 0.26, { uv: "keep" });
+  for (let i = 0; i < 2; i++) kit.box(rand() < 0.6 ? "emitBlue" : "emitAmber", at(0.016), 0.36, z + 0.02 + i * 0.09, 0.01, 0.03, 0.05, {});
 }
 
 // ---------------------------------------------------------------------------
@@ -1203,7 +1344,9 @@ function buildSideBay(kit, ctx, s, B, mats) {
   equipmentRack(kit, ctx, { side, u: u(-44.9), w: 1.4, h: 2.6, seed: ctx.seed + 2 + s, bounds: B, lit: "emitAmber" });
   deflectorBoard(kit, side, u(-41.2), B, s);
   display(kit, side, u(-37.2), DATUM + BAND_H / 2, 1.6, BAND_H, s > 0 ? "brg_scroll" : 2, B);
-  display(kit, side, u(-33), DATUM + 1.0, 4.2, 2.0, 0, B, true);
+  // the tactical display takes the second atlas's radar page: same style as the shared impScreen0
+  // but its alert rows are the toned-down red, so the one big screen in the frame never clips
+  display(kit, side, u(-33), DATUM + 1.0, 4.2, 2.0, "brg_scrB0", B, true);
   display(kit, side, u(-28.8), DATUM + BAND_H / 2, 1.6, BAND_H, s > 0 ? 2 : "brg_step", B);
   equipmentRack(kit, ctx, { side, u: u(-24.6), w: 1.4, h: 2.6, seed: ctx.seed + 3 + s, bounds: B });
   equipmentRack(kit, ctx, { side, u: u(-23.1), w: 1.4, h: 2.6, seed: ctx.seed + 4 + s, bounds: B, lit: s > 0 ? "emitRed" : "emitBlue" });

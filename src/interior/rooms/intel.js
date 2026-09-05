@@ -56,10 +56,11 @@ export function buildIntel(kit, ctx) {
   buildCentre(kit, ctx);
   buildFloorDetail(kit, ctx, B);
   buildProps(kit, ctx);
-  // 4 of 6 lights: the cold fixture over the table (wide and soft: the table top must not clip), one
-  // soft red source inside each ceiling trough, a faint cool fill over the command chair so it reads
-  // against the briefing wall
-  ctx.light(pointLight(0xc8dcff, 3.0, 12, [TABLE.x, CEIL - 0.25, TABLE.z]));
+  // 4 of 6 lights: the cold fixture over the table (wide and soft: the table top must not clip; it
+  // hangs 0.6 m under the fixture so the louvres and hood faces are not lit at point-blank range and
+  // stay under clipping too), one soft red source inside each ceiling trough, a faint cool fill over
+  // the command chair so it reads against the briefing wall
+  ctx.light(pointLight(0xc8dcff, 2.0, 12, [TABLE.x, CEIL - 0.6, TABLE.z]));
   for (const z of TROUGH_Z) ctx.light(pointLight(0xff3a2a, 3.0, 8, [-9.6, CEIL - 0.2, z]));
   ctx.light(pointLight(0xc8dcff, 2.0, 6, [CHAIR.x - 0.6, 2.5, CHAIR.z]));
   ctx.anim((dt, t) => {
