@@ -177,13 +177,11 @@ function modules(P) {
 // ------------------------------------------------------------------------------------------------ tower zone
 function tower(P) {
   const d = P.d, tw = TOWER;
-  if (d < tw.plinthDeck) return;
-  const inFoot = (x, z) => x >= tw.x0 && x <= tw.x1 && z >= tw.z0 && z <= tw.z1;
+  if (d < tw.bridgeDeck) return;
   const inBalcony = (x, z) => x >= tw.x0 && x <= tw.x1 && z > tw.z1 && z <= tw.balconyZ1;
   const inModule = (x, z) => Math.max(Math.abs(x - tw.module.mx), Math.abs(z - tw.module.mz)) <= 4;
   for (let x = tw.x0; x <= tw.x1; x++) for (let z = tw.z0; z <= tw.balconyZ1; z++) {
-    if (d === tw.plinthDeck) { P.setT(x, z, z >= tw.cantileverZ ? T.VOID : T.SOLID); continue; }
-    const foot = inFoot(x, z), balc = inBalcony(x, z);
+    const balc = inBalcony(x, z);
     if (d === tw.bridgeDeck) {
       if (balc) P.setT(x, z, T.VOID);
       else if (x === tw.x0 || x === tw.x1 || z === tw.z0 || z === tw.z1) P.setT(x, z, T.RWALL);

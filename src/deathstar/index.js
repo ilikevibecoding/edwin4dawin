@@ -65,7 +65,6 @@ function trenchLamp(px, pz) {
 }
 
 const towerCarve = { x0: TOWER.module.mx - 4, x1: TOWER.module.mx + 4, z0: TOWER.module.mz - 4, z1: TOWER.module.mz + 4 };
-const towerStrut = (x, z) => (x === TOWER.x0 + 1 || x === TOWER.x1 - 1) && (z === TOWER.z1 - 1 || z === TOWER.z1);
 const SL = { x0: -8, x1: 8, z0: 64, z1: 71, y0: deckFloorY(19), y1: deckFloorY(19) + 6 };   // superlaser chamber (see FIXED.superlaser)
 const TOWER_TOP = deckFloorY(N_DECKS) - 1;
 
@@ -162,11 +161,10 @@ export function fillChunk(chunk, plans) {
           if (id) blocks[base + y] = id;
         } else blocks[base + y] = DURASTEEL_DARK;
       }
-      // plinth under the tower (grows out of the hull) and two struts under the cantilevered front
-      if (inTower && !inCarve && (z < TOWER.cantileverZ || towerStrut(x, z))) {
+      // plinth under the tower: hull plating from the hull surface up to the tower base (not under the balcony)
+      if (inTower && !inCarve && z < TOWER.cantileverZ) {
         const hullTop = Math.floor(CY - 0.5 + Math.sqrt(Math.max(0, R2 - h2)));
-        const id = z < TOWER.cantileverZ ? DURASTEEL_DARK : DURASTEEL;
-        for (let y = Math.max(0, hullTop + 1); y < TOWER.yBase; y++) if (!blocks[base + y]) blocks[base + y] = id;
+        for (let y = Math.max(0, hullTop + 1); y < TOWER.yBase; y++) if (!blocks[base + y]) blocks[base + y] = HULL_PLATE;
       }
     }
   }

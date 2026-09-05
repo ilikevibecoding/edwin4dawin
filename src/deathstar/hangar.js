@@ -38,7 +38,7 @@ function fighter(sx, sz) {
 }
 shuttle(-9, 60);
 shuttle(10, 78);
-fighter(10, 46);
+fighter(-10, 82);
 
 // ---------------------------------------------------------------------------------------------- plan stamping
 // types = true: mark cell types (before rooms are packed); types = false: write blocks (after the generic render).
@@ -83,7 +83,7 @@ export function stampHangar(P, T, render = false) {
       if (onPad) floor = PANEL_STRIPE;
       if (x >= -1 && x <= 0 && z >= 50 && z <= 78 && z % 2 === 0) floor = PANEL_STRIPE;
       if (z >= 94 && z <= 98) floor = ((x >> 1) + (z >> 1)) % 2 === 0 ? PANEL_STRIPE : PANEL_BLACK;
-      if (x % 8 === 0 && z % 8 === 0) floor = GLOW_PANEL;
+      if (x % 6 === 0 && z % 6 === 0) floor = GLOW_PANEL;
       if ((x === -18 || x === 17) && z % 6 === 0) floor = GLOW_PANEL_BLUE;
       P.set(x, z, 0, floor);
     }

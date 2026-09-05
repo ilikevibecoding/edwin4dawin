@@ -17,8 +17,8 @@ export const OUTER = R + 5;           // largest surface radius (rim raise 4 + m
 export const N = 208, X0 = -104, Z0 = -104;
 
 // decks: floor at DECK_Y0 + d * DECK_H (1 floor + 5 clear + 1 ceiling). Decks 0..24 fill the sphere (y 40..214);
-// decks 25..28 exist only inside the overlook tower footprint above the hull.
-export const DECK_Y0 = 40, DECK_H = 7, N_DECKS = 29, TOP_SPHERE_DECK = 24;
+// decks 25..27 exist only inside the overlook tower footprint on top of the hull.
+export const DECK_Y0 = 40, DECK_H = 7, N_DECKS = 28, TOP_SPHERE_DECK = 24;
 export const deckFloorY = (d) => DECK_Y0 + d * DECK_H;
 export const deckOfY = (y) => Math.floor((y - DECK_Y0) / DECK_H);
 
@@ -90,13 +90,15 @@ export const HANGAR = {
   mouthZ: 90,                                    // from here on the box is the mouth cut through the hull
 };
 
-// --- overlook tower: straddles the hull above the dish; bridge (deck 26) and throne room (decks 27-28)
+// --- overlook tower on the hull above the dish: bridge (deck 25), double-height throne room (decks 26-27) whose
+// glass balcony (z 70..73) overhangs the bridge's front wall. The filler grows a hull-plated plinth from the hull
+// surface up to yBase under everything but the balcony.
 export const TOWER = {
-  x0: 4, x1: 21, z0: 46, z1: 69, balconyZ1: 73, cantileverZ: 64,
-  plinthDeck: 25, bridgeDeck: 26, throneDeck: 27, throneTop: 28,
+  x0: 4, x1: 21, z0: 46, z1: 69, balconyZ1: 73, cantileverZ: 70,
+  bridgeDeck: 25, throneDeck: 26, throneTop: 27,
   // stair/lift module in the tower's back-left corner: main door toward the 0-degree radial (-z) on the sphere decks,
   // a second door on its +x face (module frame fz = +4) into the bridge / throne room on the tower decks
-  module: { mx: 8, mz: 50, side: 3, d0: 2, d1: 27, doors2: [{ fx: 0, fz: 4, d0: 26, d1: 27 }] },
+  module: { mx: 8, mz: 50, side: 3, d0: 2, d1: 26, doors2: [{ fx: 0, fz: 4, d0: 25, d1: 26 }] },
   yBase: deckFloorY(25),
 };
 
