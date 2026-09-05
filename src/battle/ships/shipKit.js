@@ -28,7 +28,9 @@ export function shipMaterials(sun) {
       sun,
     );
   shared = {
-    hull: std(plating, {}), // tint via vertex colours
+    // the plating map averages ~0.44; the 1.4 colour scale normalises it to ~0.62 so a vertex tint of
+    // 0.95 lands near the warm-cream albedo of the film hulls and 0.35 near a dark neutral belly
+    hull: std(plating, { color: new THREE.Color(1.4, 1.4, 1.4) }), // tint via vertex colours
     dark: std(machinery, {}),
     // flat painted panels (stripes, insignia) — plating normal only
     paint: battlePatch(

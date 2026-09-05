@@ -14,6 +14,7 @@ import { Fleet } from "./fleet.js";
 import { Bolts } from "./weapons.js";
 import { Explosions } from "./explosions.js";
 import { Debris } from "./effects/debris.js";
+import { EnginePlumes } from "./enginePlumes.js";
 import { Fighters } from "./fighters.js";
 import { shipMaterials } from "./ships/shipKit.js";
 import { createBattle } from "./choreography.js";
@@ -73,6 +74,7 @@ const debris = new Debris(scene, Math.round(400 * Math.max(0.5, SCALE)), {
 });
 explosions.attachDebris(debris); // stepped from explosions.update
 bolts.attachMuzzleFlash(explosions);
+const plumes = new EnginePlumes(scene, 1200);
 const fighters = new Fighters(scene, sun, { scale: SCALE });
 const battle = createBattle({
   fleet,
@@ -571,6 +573,7 @@ const debugAPI = {
   bolts,
   explosions,
   debris,
+  plumes,
   fighters,
   battle,
   cinematic,
@@ -599,6 +602,7 @@ function step(fixedDt = null) {
   // give the first frames a still battle so shader compilation and layout settle
   if (framesRendered > 1 || fixedDt) battle.update(dt, camera.position);
   else fleet.update(0, camera.position);
+  plumes.update(fleet, t);
   if (cinematic.enabled) {
     cinematic.update(dt);
     if (cinematic.shotName !== lastShotShown) {

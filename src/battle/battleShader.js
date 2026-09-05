@@ -23,9 +23,9 @@ export function makeBattleSun() {
       value: BATTLE_SUN_COLOR.clone().multiplyScalar(BATTLE_SUN_INTENSITY),
     },
     // cool, dim starlight / space fill on up-facing normals
-    fillUp: { value: new THREE.Color(0.55, 0.65, 0.9) },
+    fillUp: { value: new THREE.Color(0.2, 0.24, 0.34) },
     // Coruscant's city light: warm and broad, strongest on down-facing normals
-    fillDown: { value: new THREE.Color(2.7, 1.95, 1.35) },
+    fillDown: { value: new THREE.Color(0.95, 0.72, 0.48) },
     planetDir: { value: new THREE.Vector3(0, -1, 0) },
   };
   return activeSun;
