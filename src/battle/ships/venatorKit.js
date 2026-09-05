@@ -129,6 +129,9 @@ export function loftProfile(
 /**
  * Surface frame on a loft: position and orthonormal frame on the strip of profile edge `j`, at parameter
  * `t` (0..1 along the edge) and depth `z`. `n` points out of the hull, `v` runs along z, `u` along the edge.
+ * The position and normal are taken on the strip's actual two triangles (diagonal a0-b1, as loftProfile
+ * builds them), not on the bilinear patch: tapering strips are twisted by metres, and detail placed on
+ * the patch would sink into one triangle and float over the other.
  */
 export function loftFrame(sections, j, t, z) {
   let i = 0;
@@ -138,20 +141,71 @@ export function loftFrame(sections, j, t, z) {
   const f = clamp((z - A.z) / (B.z - A.z), 0, 1);
   const np = A.pts.length;
   const k = (j + 1) % np;
-  const l2 = (p, q, s) => [lerp(p[0], q[0], s), lerp(p[1], q[1], s)];
-  const pa = l2(A.pts[j], A.pts[k], t);
-  const pb = l2(B.pts[j], B.pts[k], t);
-  const p = new THREE.Vector3(lerp(pa[0], pb[0], f), lerp(pa[1], pb[1], f), z);
-  const ea = [A.pts[k][0] - A.pts[j][0], A.pts[k][1] - A.pts[j][1]];
-  const eb = [B.pts[k][0] - B.pts[j][0], B.pts[k][1] - B.pts[j][1]];
-  const u = new THREE.Vector3(
-    lerp(ea[0], eb[0], f),
-    lerp(ea[1], eb[1], f),
-    0,
-  ).normalize();
-  const v = new THREE.Vector3(pb[0] - pa[0], pb[1] - pa[1], B.z - A.z).normalize();
-  const nrm = new THREE.Vector3().crossVectors(u, v).normalize();
+  const a0 = new THREE.Vector3(A.pts[j][0], A.pts[j][1], A.z);
+  const a1 = new THREE.Vector3(A.pts[k][0], A.pts[k][1], A.z);
+  const b0 = new THREE.Vector3(B.pts[j][0], B.pts[j][1], B.z);
+  const b1 = new THREE.Vector3(B.pts[k][0], B.pts[k][1], B.z);
+  const e1 = b1.clone().sub(a0);
+  const p = a0.clone();
+  const nrm = new THREE.Vector3();
+  if (t >= f) {
+    const e0 = a1.clone().sub(a0);
+    p.addScaledVector(e0, t - f).addScaledVector(e1, f);
+    nrm.crossVectors(e0, e1);
+  } else {
+    const e2 = b0.clone().sub(a0);
+    p.addScaledVector(e1, t).addScaledVector(e2, f - t);
+    nrm.crossVectors(e1, e2);
+  }
+  if (nrm.lengthSq() < 1e-12) {
+    // degenerate triangle (collapsed edge): fall back to the patch normal
+    const ea = a1.clone().sub(a0).setZ(0);
+    const eb = b1.clone().sub(b0).setZ(0);
+    const uu = ea.lerp(eb, f);
+    nrm.crossVectors(uu, new THREE.Vector3(0, 0, 1));
+  }
+  nrm.normalize();
+  const pa = a0.clone().lerp(a1, t);
+  const pb = b0.clone().lerp(b1, t);
+  const v = pb.sub(pa).normalize();
+  v.addScaledVector(nrm, -v.dot(nrm)).normalize();
+  const u = new THREE.Vector3().crossVectors(v, nrm).normalize();
   return { p, n: nrm, u, v };
+}
+
+// Length of profile edge j at depth z (interpolated between sections).
+export function loftEdgeLength(sections, j, z) {
+  let i = 0;
+  while (i + 2 < sections.length && sections[i + 1].z < z) i++;
+  const A = sections[i];
+  const B = sections[i + 1];
+  const f = clamp((z - A.z) / (B.z - A.z), 0, 1);
+  const k = (j + 1) % A.pts.length;
+  const p0 = [lerp(A.pts[j][0], B.pts[j][0], f), lerp(A.pts[j][1], B.pts[j][1], f)];
+  const p1 = [lerp(A.pts[k][0], B.pts[k][0], f), lerp(A.pts[k][1], B.pts[k][1], f)];
+  return Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+}
+
+/**
+ * Wrap a flat geometry (in its own XY plane, metres) onto the strip of profile edge `j`: x runs along the
+ * edge from parameter t0 at depth z0, y runs along z. Vertices are lifted `lift` metres off the surface, so
+ * decals stay flush on twisted strips where a flat quad would sink at the corners.
+ */
+export function mapToLoft(sections, j, t0, z0, geo, lift = 0.3) {
+  const g = geo.index ? geo.toNonIndexed() : geo;
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const a = pos.getX(i);
+    const z = z0 + pos.getY(i);
+    const len = loftEdgeLength(sections, j, z);
+    const fr = loftFrame(sections, j, t0 + a / len, z);
+    const p = fr.p.addScaledVector(fr.n, lift);
+    pos.setXYZ(i, p.x, p.y, p.z);
+  }
+  pos.needsUpdate = true;
+  g.deleteAttribute("normal");
+  g.computeVertexNormals();
+  return g;
 }
 
 // Right-handed basis matrix with local +Y = normal, +Z = along (projected), positioned at p.
@@ -237,6 +291,19 @@ export function flipGeometry(geo) {
 export function cylZ(r0, r1, len, seg = 16, open = false) {
   const g = new THREE.CylinderGeometry(r0, r1, len, seg, 1, open);
   g.rotateX(Math.PI / 2);
+  return g;
+}
+
+// Cylinder of radius r from point a to point b (Vector3 or [x, y, z]).
+export function tube(a, b, r, seg = 6) {
+  const pa = a.isVector3 ? a : new THREE.Vector3(...a);
+  const pb = b.isVector3 ? b : new THREE.Vector3(...b);
+  const d = pb.clone().sub(pa);
+  const len = d.length();
+  const g = new THREE.CylinderGeometry(r, r, len, seg, 1, false);
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize());
+  g.applyQuaternion(q);
+  g.translate((pa.x + pb.x) / 2, (pa.y + pb.y) / 2, (pa.z + pb.z) / 2);
   return g;
 }
 
