@@ -73,6 +73,8 @@ flat varying float vRound;
 ${GLSL_NOISE}
 // per-pane tilt of the glazing (view space), applied to the shading normal after it is computed
 vec3 facadeTilt = vec3(0.0);
+// how much of this fragment is glazing (drives the horizon-haze reflection fix below)
+float facadeGlass = 0.0;
 // integral from 0 to x of a unit-period pulse train that is 1 on [a, b) of every period
 float pulseInt(float x, float a, float b) { float f = floor(x); return f * (b - a) + clamp(x - f - a, 0.0, b - a); }
 // box-filtered pulse train: the fraction of the pixel footprint [x - w/2, x + w/2] covered by the pulse. Once the
@@ -114,6 +116,20 @@ vec3 fasciaPalette(float k) {
 `)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = normalize(normal + facadeTilt);`)
+      .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
+#if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
+if (facadeGlass > 0.0) {
+  // Seen from above, a pane's reflected ray dips below the horizon, where the probe stores the flat ground
+  // colour; the real ray crosses kilometres of air and shows the haze band instead, which is why distant
+  // towers read pale and sky-coloured rather than grey. Blend the below-horizon radiance toward the haze.
+  vec3 rv = inverseTransformDirection(reflect(-geometryViewDir, geometryNormal), viewMatrix);
+  float below = smoothstep(0.0, -0.2, rv.y) * facadeGlass;
+  if (below > 0.0) {
+    vec3 hz = textureCubeUV(envMap, envMapRotation * normalize(vec3(rv.x, 0.05, rv.z)), max(material.roughness, 0.3)).rgb * envMapIntensity;
+    radiance = mix(radiance, hz, 0.75 * below);
+  }
+}
+#endif`)
       .replace('#include <metalnessmap_fragment>', `#include <metalnessmap_fragment>
 {
   float style = vStyle.x;
@@ -254,6 +270,7 @@ normal = normalize(normal + facadeTilt);`)
     else if (style == 4.0 || style == 6.0 || style == 9.0 || style > 11.5) useWin = 0.0;
     float gx = fpulse(bu, x0, x1, pwu), gy = fpulse(fl, y0, y1, pwv);
     float glass = gx * gy * rowOn * useWin;
+    facadeGlass = glass;
     // position inside the pane and what is seen through it: a dark room with a lighter ceiling band along
     // the top, blinds or curtains drawn on some panes, the reveal's shadow along the head and one jamb
     float px = clamp((fx - x0) / max(x1 - x0, 0.01), 0.0, 1.0), py = clamp((fy - y0) / max(y1 - y0, 0.01), 0.0, 1.0);
