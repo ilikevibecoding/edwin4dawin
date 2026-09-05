@@ -89,6 +89,7 @@ const EXTERIOR_VIEW = Object.fromEntries(Object.entries(ROOMS).filter(([, r]) =>
 const zone = new ZoneManager(scene, mats);
 zone.exteriorVisible = new Set(Object.keys(EXTERIOR_VIEW));
 const player = new Player(camera, canvas, [], []);
+const lightAssign = { t: -1, pos: new THREE.Vector3(1e9, 0, 0) };
 const lifts = new LiftSystem({
   zone,
   mats,
@@ -556,7 +557,12 @@ function frame() {
     if (sunOn && !sun.shadow.autoUpdate) sun.shadow.needsUpdate = true;
     sun.shadow.autoUpdate = sunOn || !sun.shadow.map;
   }
-  lightPool.assign(zone.lightDescs(), modes.mode === "interior" ? player.position : camera.position);
+  const focus = modes.mode === "interior" ? player.position : camera.position;
+  if (zone.visChanged || t - lightAssign.t > 0.25 || lightAssign.pos.distanceToSquared(focus) > 1) {
+    lightAssign.t = t;
+    lightAssign.pos.copy(focus);
+    lightPool.assign(zone.lightDescs(), focus);
+  }
   lightPool.update(dt);
   zone.runAnimators(dt, t);
   lifts.update(dt, t);

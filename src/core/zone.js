@@ -248,13 +248,23 @@ export class ZoneManager {
     }
     this.visibleSet = vis;
     this.stats.visibleRooms = vis.size;
+    // the derived per-frame lists (colliders, lights, interactables) only change with this key
+    let key = this.current ? this.current.id : "-";
+    for (const r of vis) key += "," + r.id;
+    this.visChanged = key !== this._lastKey;
+    if (this.visChanged) {
+      this._lastKey = key;
+      this._cache = null;
+    }
     return vis;
   }
 
-  // Everything the player can collide with / stand on right now
-  collisionSets() {
+  _derived() {
+    if (this._cache) return this._cache;
     const colliders = [];
     const walkables = [];
+    const lights = [];
+    const interactables = [];
     const cur = this.current;
     const set = new Set(this.visibleSet);
     if (cur) {
@@ -263,34 +273,38 @@ export class ZoneManager {
       for (const p of cur.portals) set.add(this.rooms.get(p));
     }
     set.delete(undefined);
+    const seen = new Set();
     for (const r of set) {
       for (const c of r.colliders) colliders.push(c);
       for (const w of r.walkables) walkables.push(w);
-      for (const d of r.doors) for (const c of d.colliders) colliders.push(c);
+      // a door belongs to two rooms: push its colliders once (the blocker toggles via its own flag)
+      for (const d of r.doors) {
+        if (seen.has(d)) continue;
+        seen.add(d);
+        for (const c of d.colliders) colliders.push(c);
+      }
     }
-    // doors could be pushed twice (both rooms in set): dedupe cheaply
-    const seen = new Set();
-    const out = [];
-    for (const c of colliders) {
-      if (seen.has(c)) continue;
-      seen.add(c);
-      out.push(c);
+    for (const r of this.visibleSet) {
+      for (const l of r.lights) lights.push(l);
+      for (const it of r.interactables) interactables.push(it);
     }
-    this.stats.colliders = out.length;
-    return { colliders: out, walkables };
+    this.stats.colliders = colliders.length;
+    this.stats.lightDescs = lights.length;
+    this._cache = { sets: { colliders, walkables }, lights, interactables };
+    return this._cache;
+  }
+
+  // Everything the player can collide with / stand on right now (cached until visibility changes)
+  collisionSets() {
+    return this._derived().sets;
   }
 
   lightDescs() {
-    const out = [];
-    for (const r of this.visibleSet) for (const l of r.lights) out.push(l);
-    this.stats.lightDescs = out.length;
-    return out;
+    return this._derived().lights;
   }
 
   interactables() {
-    const out = [];
-    for (const r of this.visibleSet) for (const it of r.interactables) out.push(it);
-    return out;
+    return this._derived().interactables;
   }
 
   runAnimators(dt, t) {
