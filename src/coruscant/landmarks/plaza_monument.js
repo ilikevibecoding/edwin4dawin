@@ -213,6 +213,7 @@ function buildArcade(bp, lot, o) {
           if (m === 1 && (p === 2 || p === 3)) seatAt(x, 1, z, B.SPRUCE_SLAB);
           if (m === 1 && p === 10) { set(x, 1, z, B.DURASTEEL_DARK); set(x, 2, z, B.OAK_LEAVES); }
           if (m === 2 && p === 6) { set(x, 1, z, B.BARREL); }
+          if (m === 1 && p === 14) { set(x, 1, z, B.CONSOLE); set(x, 2, z, B.HOLO_SIGN); const [sx2, sz2] = cellOf(edge, 2, t); bp.spot(sx2, 1, sz2, 'stand'); }
           if (m === 1 && (p === 12 || p === 13 || p === 4 || p === 5)) { seatAt(x, 9, z, B.SPRUCE_SLAB); }
           if (m === 2 && (p === 0 || p === 8)) { set(x, 9, z, B.DURASTEEL_DARK); set(x, 10, z, p === 0 ? B.SPRUCE_LEAVES : B.OAK_LEAVES); }
           if (m === 2 && p === 9) { set(x, 9, z, B.TABLE); }
