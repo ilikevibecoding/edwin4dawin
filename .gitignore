@@ -6,3 +6,11 @@ dist/
 shots/smoke/
 shots/iter_skel*/
 .publish-stamp
+# harness output: only the curated milestone sets are tracked (shots/iter_baseline, shots/iter_m2_final)
+shots/iter_*/
+!shots/iter_baseline/
+!shots/iter_m2_final/
+shots/probe/
+shots/qa_walk/
+shots/fighters_*/
+shots/shuttle_*/
