@@ -127,22 +127,27 @@ export function layoutFleet({ models, rand, scale, addShip, boxes }) {
       k++;
     }
   }
+  // headings vary unit to unit (+-17 deg) and ship to ship on top (+-8 deg), pitch +-10 deg, roll
+  // to +-20 deg, so the line reads three-dimensional instead of a rank of parallel wedges
   const lineSpan = (units.length - 1) * 2600;
+  const YAW_UNIT = 0.3;
+  const PITCH = 0.17;
+  const ROLL = 0.35;
   units.forEach((size, u) => {
     const ux = -lineSpan / 2 + u * 2600 + rand.range(-250, 250);
     const uz = (u % 2 ? 650 : -650) + rand.range(-300, 300);
     const uy = rand.range(-650, 650);
-    const uyaw = Math.PI + rand.range(-0.22, 0.22);
+    const uyaw = Math.PI + rand.range(-YAW_UNIT, YAW_UNIT);
     if (size === 3) {
-      // wedge: leader ahead, two wingmen back and out
+      // wedge: leader ahead, two wingmen back and out, toed outward
       put(
         venatorModel(),
         ux,
         uy + rand.range(-100, 100),
         uz + 750,
-        uyaw + rand.range(-0.08, 0.08),
-        rand.range(-0.06, 0.06),
-        rand.range(-0.12, 0.12),
+        uyaw + rand.range(-0.14, 0.14),
+        rand.range(-PITCH, PITCH),
+        rand.range(-ROLL, ROLL),
         "line",
         groups.repLine,
       );
@@ -152,9 +157,9 @@ export function layoutFleet({ models, rand, scale, addShip, boxes }) {
           ux + s * 900,
           uy + rand.range(-260, 260),
           uz - 250 + rand.range(-150, 150),
-          uyaw + s * rand.range(0.05, 0.16),
-          rand.range(-0.1, 0.1),
-          s * rand.range(0.05, 0.28),
+          uyaw + s * rand.range(0.06, 0.24),
+          rand.range(-PITCH, PITCH),
+          s * rand.range(0.05, ROLL),
           "line",
           groups.repLine,
         );
@@ -164,9 +169,9 @@ export function layoutFleet({ models, rand, scale, addShip, boxes }) {
         ux - 480,
         uy + rand.range(-200, 200),
         uz + 380,
-        uyaw + rand.range(-0.1, 0.1),
-        rand.range(-0.08, 0.08),
-        rand.range(-0.2, 0.2),
+        uyaw + rand.range(-0.15, 0.15),
+        rand.range(-PITCH, PITCH),
+        rand.range(-ROLL, ROLL),
         "line",
         groups.repLine,
       );
@@ -175,9 +180,9 @@ export function layoutFleet({ models, rand, scale, addShip, boxes }) {
         ux + 480,
         uy + rand.range(-200, 200) - 300,
         uz - 380,
-        uyaw + rand.range(-0.1, 0.1),
-        rand.range(-0.08, 0.08),
-        rand.range(-0.2, 0.2),
+        uyaw + rand.range(-0.15, 0.15),
+        rand.range(-PITCH, PITCH),
+        rand.range(-ROLL, ROLL),
         "line",
         groups.repLine,
       );
@@ -188,8 +193,8 @@ export function layoutFleet({ models, rand, scale, addShip, boxes }) {
         uy,
         uz,
         uyaw,
-        rand.range(-0.08, 0.08),
-        rand.range(-0.2, 0.2),
+        rand.range(-PITCH, PITCH),
+        rand.range(-ROLL, ROLL),
         "line",
         groups.repLine,
       );
@@ -208,8 +213,8 @@ export function layoutFleet({ models, rand, scale, addShip, boxes }) {
       rand.range(-800, 800),
       (i % 2 ? 450 : -450) + rand.range(-250, 250),
       rand.range(-0.55, 0.55),
-      rand.range(-0.15, 0.15),
-      rand.range(-0.35, 0.35),
+      rand.range(-0.18, 0.18),
+      rand.range(-0.4, 0.4),
       "line",
       groups.sepScreen,
     );
@@ -242,9 +247,9 @@ export function layoutFleet({ models, rand, scale, addShip, boxes }) {
       c * 2400 + rand.range(-300, 300),
       rand.range(-700, 700),
       Math.abs(c) * 260 + rand.range(-300, 300),
-      rand.range(-0.3, 0.3),
-      rand.range(-0.1, 0.1),
-      rand.range(-0.25, 0.25),
+      rand.range(-0.4, 0.4),
+      rand.range(-0.17, 0.17),
+      rand.range(-0.35, 0.35),
       "line",
       groups.sepCarriers,
     );

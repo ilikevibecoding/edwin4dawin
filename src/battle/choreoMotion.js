@@ -14,8 +14,10 @@ const _ma = new THREE.Matrix4();
 const _mb = new THREE.Matrix4();
 const _q = new THREE.Quaternion();
 
-const MAX_TURN = 0.0045; // rad/s: a 90 degree heading change takes ~6 minutes
+const MAX_TURN = 0.012; // rad/s (0.7 deg/s): the line ships' weave peaks at about 0.5 deg/s
 const ACCEL = 0.7; // m/s^2: velocity changes are gradual
+const BANK_GAIN = 32; // roll per rad/s of heading rate: a 0.5 deg/s turn heels about 16 degrees
+const BANK_RATE = 0.06; // 1/s: the heel follows the turn over ~20 s
 
 export function updateGroups(groups, dt, time) {
   for (const g of Object.values(groups)) {
@@ -32,6 +34,7 @@ export function updateShipMotion(st, dt, time) {
   if (st.dead) return; // hulks: fleet.update integrates their tumble and drift, nothing steers them
   const hpFrac = st.hpFrac();
   const crippled = hpFrac < 0.45;
+  let yawRate = 0; // rate of the wanted heading (rad/s), banked into below
   if (st.group) {
     // formation slot in the group frame, with a slow personal wander so the line breathes
     const g = st.group;
@@ -51,18 +54,32 @@ export function updateShipMotion(st, dt, time) {
     if (m > 9) _v.multiplyScalar(9 / m);
     _want.copy(g.vel).add(_v);
     if (crippled) _want.multiplyScalar(0.35 + hpFrac); // engines failing: falls behind the line
-    dirFromYawPitch(g.yaw + st.yawOff, st.pitchOff, _dir);
+    // the heading weaves slowly about the ship's own offset (a few minutes per swing, up to ~0.5
+    // deg/s), so the line turns visibly while the slots hold
+    const wv = st.weave;
+    const ph = time * wv.omega + wv.phase;
+    const yawWander = wv.amp * Math.sin(ph);
+    const pitchWander = wv.pitchAmp * Math.sin(ph * 0.7 + 1.3);
+    yawRate = g.yawRate + wv.amp * wv.omega * Math.cos(ph);
+    dirFromYawPitch(
+      g.yaw + st.yawOff + yawWander,
+      st.pitchOff + pitchWander,
+      _dir,
+    );
   } else {
     // free ship: cruise along the nose with a slow constant turn (a wide loop over many minutes);
     // when far from the melee centre the turn tightens toward home so it eventually comes back
     st.headYaw += st.turn * dt;
+    yawRate = st.turn;
     _v.subVectors(st.home, s.position);
     const far = _v.length();
     if (far > 6500) {
       const wantYaw = Math.atan2(-_v.x, -_v.z);
       let d = wantYaw - st.headYaw;
       d = Math.atan2(Math.sin(d), Math.cos(d));
-      st.headYaw += THREE.MathUtils.clamp(d, -1, 1) * 0.004 * dt;
+      const extra = THREE.MathUtils.clamp(d, -1, 1) * 0.004;
+      st.headYaw += extra * dt;
+      yawRate += extra;
     }
     st.headPitch +=
       (Math.sin(time * 0.013 + st.phase) * 0.12 - st.headPitch) *
@@ -78,6 +95,7 @@ export function updateShipMotion(st, dt, time) {
         const spd = THREE.MathUtils.clamp(dist * 0.03, st.cruise, 60);
         _want.copy(_v).multiplyScalar(spd);
         _dir.copy(_v);
+        yawRate = 0;
       } else {
         st.arrive();
       }
@@ -95,10 +113,20 @@ export function updateShipMotion(st, dt, time) {
   steerToward(
     s,
     _dir,
-    MAX_TURN * authority * (st.agile > 0 ? 4 : 1),
+    MAX_TURN * authority * (st.agile > 0 ? 1.7 : 1),
     0.35,
     _ang,
   );
+  // bank into the turn: the heel follows the heading rate (a left turn, positive yaw rate about +Y,
+  // rolls the port side down, which is a positive rate about the local +Z nose axis)
+  const bankTarget = THREE.MathUtils.clamp(
+    yawRate * BANK_GAIN * authority,
+    -0.4,
+    0.4,
+  );
+  const bankRate = (bankTarget - st.bank) * BANK_RATE;
+  st.bank += bankRate * dt;
+  _ang.z += bankRate;
   // damage list: a slow roll (and a little pitch) drift that grows as the ship is hurt, bounded so a
   // crippled ship settles at a visible heel of up to ~30 degrees instead of rolling over
   const hurt = 1 - hpFrac;

@@ -254,6 +254,10 @@ export function updateGuns(st, dt, ctx) {
   }
 }
 
+// fighter-vs-fighter rounds that connect (3-round bursts every 2-5 s of a dogfight); together with the
+// point defence below this puts the mean fighter life at two to three minutes
+export const DOGFIGHT_HIT_CHANCE = 0.15;
+
 // Fighter lasers: called by fighters.update for every fighter that wants to shoot. A second argument (a
 // fighter quarry) means fighter-vs-fighter fire; otherwise the fighter strafes its anchor capital ship.
 export function makeFighterFire(ctx) {
@@ -263,9 +267,13 @@ export function makeFighterFire(ctx) {
     if (bolts.alive > 1250) return; // keep headroom in the bolt pool for the capital exchange
     const spec = BOLT_SPECS.fighter[f.side] || BOLT_SPECS.fighter.republic;
     if (quarry && quarry.pos) {
+      // lead: the quarry's `vel` is a unit heading, its speed is separate
       _aim.copy(quarry.pos);
       if (quarry.vel)
-        _aim.addScaledVector(quarry.vel, _aim.distanceTo(f.pos) / spec.speed);
+        _aim.addScaledVector(
+          quarry.vel,
+          (quarry.speed || 250) * (_aim.distanceTo(f.pos) / spec.speed),
+        );
       _aim.x += rand.range(-8, 8);
       _aim.y += rand.range(-8, 8);
       _aim.z += rand.range(-8, 8);
@@ -276,8 +284,10 @@ export function makeFighterFire(ctx) {
         kind: "fighter",
       });
       if (b) {
-        b.miss = rand() < 0.75;
+        // the bolt pool recycles records without clearing our flags: set every one of them
+        b.miss = rand() >= DOGFIGHT_HIT_CHANCE;
         b.fighterTarget = quarry;
+        b.pd = false;
       }
       return;
     }
@@ -290,16 +300,23 @@ export function makeFighterFire(ctx) {
       side: f.side,
       kind: "fighter",
     });
-    if (b) b.miss = rand() < 0.4;
+    if (b) {
+      b.miss = rand() < 0.4;
+      b.fighterTarget = null;
+      b.pd = false;
+    }
   };
 }
 
-// Point defence: every living capital ship sweeps the nearest enemy fighter inside 1.5 km with its
-// closest light emplacement (short teal/red bursts, ~28 % hits). Hits feed the fighter's health counter
-// through the fighter-vs-fighter path of the hit handler, so fighters die and relaunch from their
-// hangars. Uses the fighters' random stream, keeping the capital exchange reproducible.
+// Point defence: every living capital ship snaps a shot at the nearest enemy fighter inside 1.5 km from
+// its closest light emplacement every second or three (one short bolt, ~10 % hits: the swarms should
+// live two or three minutes, not seconds). Hits feed the fighter's health counter through the
+// fighter-vs-fighter path of the hit handler, so fighters die and relaunch from their hangars. Uses the
+// fighters' random stream, keeping the capital exchange reproducible.
 const _pd = new THREE.Vector3();
 const PD_RANGE2 = 1500 * 1500;
+export const PD_HIT_CHANCE = 0.1;
+export const PD_COOLDOWN = [1.05, 3.15];
 export function pointDefence(ctx, dt) {
   const { fleet, bolts, fighters, frand } = ctx;
   if (!fighters || !fighters.all) return;
@@ -309,7 +326,7 @@ export function pointDefence(ctx, dt) {
   if (bolts.alive > 1200) return;
   const list = fighters.all;
   for (const s of fleet.ships) {
-    if (s.health <= 0) continue;
+    if (!s.alive || s.health <= 0) continue;
     s.pdCool = (s.pdCool || 0) - 0.1;
     if (s.pdCool > 0) continue;
     let best = null;
@@ -351,22 +368,21 @@ export function pointDefence(ctx, dt) {
     _aim.x += frand.range(-10, 10);
     _aim.y += frand.range(-10, 10);
     _aim.z += frand.range(-10, 10);
-    for (let k = 0; k < 2; k++) {
-      const b = bolts.fire(_pd, _aim, {
-        ...spec,
-        length: 34,
-        radius: 1.1,
-        target: null,
-        side: s.side,
-        kind: "fighter",
-      });
-      if (b) {
-        b.miss = frand() < 0.72;
-        b.fighterTarget = best;
-      }
-      _aim.x += frand.range(-6, 6);
-      _aim.z += frand.range(-6, 6);
+    const miss = frand() >= PD_HIT_CHANCE;
+    s.pdCool = frand.range(PD_COOLDOWN[0], PD_COOLDOWN[1]);
+    const b = bolts.fire(_pd, _aim, {
+      ...spec,
+      length: 34,
+      radius: 1.1,
+      target: null,
+      side: s.side,
+      kind: "fighter",
+    });
+    if (b) {
+      b.miss = miss;
+      b.fighterTarget = best;
+      b.pd = true;
+      ctx.stats.pdShots++;
     }
-    s.pdCool = 0.35 + frand() * 0.7;
   }
 }
