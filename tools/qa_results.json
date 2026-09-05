@@ -1,8 +1,8 @@
 {
   "meta": {
     "base": "http://127.0.0.1:5173/",
-    "date": "2026-09-05T03:55:21.815Z",
-    "readyS": 18.5,
+    "date": "2026-09-05T07:23:22.375Z",
+    "readyS": 23.7,
     "node": "v22.14.0",
     "sections": [
       "1",
@@ -2411,7 +2411,7 @@
       "pageErrors": []
     },
     "spawns": {
-      "passed": 34,
+      "passed": 35,
       "total": 46,
       "rows": [
         {
@@ -2805,56 +2805,47 @@
           "floorY": 246,
           "legs": {
             "fwd": {
-              "moved": 2.63,
+              "moved": 6.58,
               "end": [
                 0,
                 246,
-                315.63
+                319.58
               ]
             },
             "back": {
-              "moved": 6.42,
+              "moved": 6.37,
               "end": [
                 0,
                 246,
-                309.21
+                313.22
               ]
             },
             "left": {
-              "moved": 1.61,
+              "moved": 6.59,
               "end": [
-                1.6,
+                6.58,
                 246,
-                308.99
+                313
               ]
             },
             "right": {
-              "moved": 3.2,
+              "moved": 6.37,
               "end": [
-                -1.6,
+                0.22,
                 246,
-                308.99
+                313
               ]
             }
           },
-          "maxOutside": 3.01,
+          "maxOutside": 0,
           "minY": 246,
           "maxY": 246,
-          "leftBounds": {
-            "leg": "back",
-            "pos": [
-              0,
-              246,
-              311.25
-            ],
-            "cell": "corridor_a",
-            "at": 1.4
-          },
+          "leftBounds": null,
           "stuckAtSpawn": false,
           "belowFloor": false,
           "aboveCeil": false,
-          "finalCell": "corridor_a",
-          "pass": false
+          "finalCell": "navigation",
+          "pass": true
         },
         {
           "room": "lobby_b",
@@ -3042,19 +3033,19 @@
               ]
             },
             "left": {
-              "moved": 6.59,
+              "moved": 1.31,
               "end": [
                 -5.4,
                 232,
-                281.18
+                275.89
               ]
             },
             "right": {
-              "moved": 6.37,
+              "moved": 3.09,
               "end": [
                 -5.4,
                 232,
-                274.82
+                272.8
               ]
             }
           },
@@ -3973,48 +3964,48 @@
           "room": "hangar",
           "kind": "hangar",
           "spawn": [
-            -20,
+            -36,
             -40,
-            60
+            48
           ],
           "floorY": -40,
           "legs": {
             "fwd": {
-              "moved": 2.31,
+              "moved": 5.55,
               "end": [
-                -22.25,
-                -39.5,
-                59.82
+                -37.66,
+                -40,
+                42.71
               ]
             },
             "back": {
-              "moved": 6.43,
+              "moved": 6.36,
               "end": [
-                -20.07,
+                -36.15,
                 -40,
-                65.85
+                48.89
               ]
             },
             "left": {
-              "moved": 3.49,
+              "moved": 6.51,
               "end": [
-                -22.52,
+                -42.49,
                 -40,
-                68.33
+                50.38
               ]
             },
             "right": {
               "moved": 6.37,
               "end": [
-                -16.54,
+                -36.31,
                 -40,
-                66.16
+                48.83
               ]
             }
           },
           "maxOutside": 0,
           "minY": -40,
-          "maxY": -39.5,
+          "maxY": -40,
           "leftBounds": null,
           "stuckAtSpawn": false,
           "belowFloor": false,
@@ -7158,7 +7149,7 @@
       "pageErrors": []
     },
     "stairs": {
-      "passed": 15,
+      "passed": 19,
       "total": 19,
       "rows": [
         {
@@ -8472,87 +8463,68 @@
                 6.2,
                 268.4
               ],
-              "reached": false,
-              "reason": "stuck",
+              "reached": true,
               "pos": [
-                7.02,
+                6.48,
                 232.3,
                 268.4
               ],
               "y": 232.3,
               "yExpected": 232.3,
-              "t": 1.7,
+              "t": 1.1,
               "cell": "briefing",
-              "blockers": [
-                {
-                  "tag": "emitter",
-                  "cell": "briefing",
-                  "min": [
-                    5.7,
-                    232.3,
-                    268.4
-                  ],
-                  "max": [
-                    6.7,
-                    232.4,
-                    269.4
-                  ]
-                }
-              ],
               "yOk": true
             }
           ],
-          "pass": false,
-          "finalY": 232.3,
-          "shot": "shots/qa_walk/stairs_briefing_briefing_dais_steps_0_3_.png"
+          "pass": true,
+          "finalY": 232.3
         },
         {
-          "name": "observation: spawn -> forward viewport wall (flat gallery)",
+          "name": "observation: spawn -> forward viewport wall (flat gallery, beside the data column)",
           "room": "observation",
           "start": [
-            0,
+            1.3,
             232,
             232
           ],
           "steps": [
             {
               "target": [
-                0,
-                219.6
+                1.3,
+                224
               ],
-              "reached": false,
-              "reason": "stuck",
+              "reached": true,
               "pos": [
-                0,
+                1.3,
                 232,
-                222.42
+                224.06
               ],
               "y": 232,
               "yExpected": 232,
-              "t": 3.6,
+              "t": 2.4,
               "cell": "observation",
-              "blockers": [
-                {
-                  "tag": "datacolumn",
-                  "cell": "observation",
-                  "min": [
-                    -0.5,
-                    232,
-                    221.1
-                  ],
-                  "max": [
-                    0.5,
-                    233.25,
-                    222.1
-                  ]
-                }
+              "yOk": true
+            },
+            {
+              "target": [
+                1.3,
+                219.6
               ],
+              "reached": true,
+              "pos": [
+                1.3,
+                232,
+                219.64
+              ],
+              "y": 232,
+              "yExpected": 232,
+              "t": 1.3,
+              "cell": "observation",
               "yOk": true
             }
           ],
-          "pass": false,
-          "finalY": 232,
-          "shot": "shots/qa_walk/stairs_observation_observation_spawn_forward_.png"
+          "pass": true,
+          "finalY": 232
         },
         {
           "name": "flight_control: upper tier -> lower tier at the window -> back up (+0.45)",
@@ -8602,52 +8574,102 @@
           "finalY": -23.55
         },
         {
-          "name": "comms: platform steps (+0.42)",
+          "name": "comms: platform steps (+0.42) via the E stair",
           "room": "comms",
           "start": [
-            -11.42,
+            -4.4,
             246,
             298
           ],
           "steps": [
             {
               "target": [
+                -6.3,
+                299.5
+              ],
+              "reached": true,
+              "pos": [
+                -6.1,
+                246,
+                299.34
+              ],
+              "y": 246,
+              "yExpected": 246,
+              "t": 0.7,
+              "cell": "comms",
+              "yOk": true
+            },
+            {
+              "target": [
+                -11,
+                299.5
+              ],
+              "reached": true,
+              "pos": [
+                -10.81,
+                246,
+                299.5
+              ],
+              "y": 246,
+              "yExpected": 246,
+              "t": 1.4,
+              "cell": "comms",
+              "yOk": true
+            },
+            {
+              "target": [
+                -13.5,
+                298
+              ],
+              "reached": true,
+              "pos": [
+                -13.46,
+                246,
+                298.03
+              ],
+              "y": 246,
+              "yExpected": 246,
+              "t": 0.9,
+              "cell": "comms",
+              "yOk": true
+            },
+            {
+              "target": [
+                -15.6,
+                298
+              ],
+              "reached": true,
+              "pos": [
+                -15.46,
+                246,
+                297.99
+              ],
+              "y": 246,
+              "yExpected": 246,
+              "t": 0.6,
+              "cell": "comms",
+              "yOk": true
+            },
+            {
+              "target": [
                 -18,
                 298
               ],
-              "reached": false,
-              "reason": "stuck",
+              "reached": true,
               "pos": [
-                -11.42,
-                246,
+                -17.84,
+                246.42,
                 298
               ],
-              "y": 246,
+              "y": 246.42,
               "yExpected": 246.42,
               "t": 0.7,
               "cell": "comms",
-              "blockers": [
-                {
-                  "tag": "console",
-                  "cell": "comms",
-                  "min": [
-                    -13.06,
-                    246,
-                    297.18
-                  ],
-                  "max": [
-                    -11.74,
-                    247.55,
-                    298.82
-                  ]
-                }
-              ],
-              "yOk": false
+              "yOk": true
             }
           ],
-          "pass": false,
-          "finalY": 246,
-          "shot": "shots/qa_walk/stairs_comms_comms_platform_steps_0_42_.png"
+          "pass": true,
+          "finalY": 246.42
         },
         {
           "name": "tactical: holo dais (+0.36) via W stair, off the dais, up to the N gallery (+0.36)",
@@ -8660,42 +8682,75 @@
           "steps": [
             {
               "target": [
-                13.5,
+                11,
                 298
               ],
-              "reached": false,
-              "reason": "stuck",
+              "reached": true,
               "pos": [
-                11.96,
+                10.98,
                 246.36,
                 298
               ],
               "y": 246.36,
               "yExpected": 246.36,
-              "t": 3,
+              "t": 2,
               "cell": "tactical",
-              "blockers": [
-                {
-                  "tag": "tank",
-                  "cell": "tactical",
-                  "min": [
-                    12.28,
-                    246.36,
-                    297.5
-                  ],
-                  "max": [
-                    15.52,
-                    247.28,
-                    298.5
-                  ]
-                }
+              "yOk": true
+            },
+            {
+              "target": [
+                7.5,
+                298
               ],
+              "reached": true,
+              "pos": [
+                7.68,
+                246,
+                298
+              ],
+              "y": 246,
+              "yExpected": 246,
+              "t": 1.1,
+              "cell": "tactical",
+              "yOk": true
+            },
+            {
+              "target": [
+                16.4,
+                292.3
+              ],
+              "reached": true,
+              "pos": [
+                16.15,
+                246,
+                292.37
+              ],
+              "y": 246,
+              "yExpected": 246,
+              "t": 4.2,
+              "cell": "tactical",
+              "yOk": true
+            },
+            {
+              "target": [
+                16.4,
+                288.6
+              ],
+              "reached": true,
+              "pos": [
+                16.4,
+                246.36,
+                288.79
+              ],
+              "y": 246.36,
+              "yExpected": 246.36,
+              "t": 1.1,
+              "cell": "tactical",
               "yOk": true
             }
           ],
-          "pass": false,
-          "finalY": 246.36,
-          "shot": "shots/qa_walk/stairs_tactical_tactical_holo_dais_0_36_vi.png"
+          "pass": true,
+          "finalY": 246.36
         },
         {
           "name": "shuttle_bay: boarding platform stair (+3.2)",
@@ -8764,8 +8819,8 @@
       "pass": true,
       "seconds": 360,
       "steps": 21600,
-      "simMs": 100,
-      "usPerStep": 4.62,
+      "simMs": 191,
+      "usPerStep": 8.84,
       "phaseTransitions": {
         "release": 8,
         "descend": 8,
@@ -8779,26 +8834,26 @@
       "cycles": [
         {
           "id": 17,
-          "launchedAt": 5.33,
-          "dockedAt": 190.68,
+          "launchedAt": 1.5,
+          "dockedAt": 186.85,
           "seconds": 185.35
         },
         {
           "id": 16,
-          "launchedAt": 73.68,
-          "dockedAt": 252.38,
+          "launchedAt": 69.85,
+          "dockedAt": 248.55,
           "seconds": 178.7
         },
         {
           "id": 15,
-          "launchedAt": 128.83,
-          "dockedAt": 309.17,
-          "seconds": 180.34
+          "launchedAt": 125,
+          "dockedAt": 305.33,
+          "seconds": 180.33
         },
         {
           "id": 14,
-          "launchedAt": 158.23,
-          "dockedAt": 333.73,
+          "launchedAt": 154.4,
+          "dockedAt": 329.9,
           "seconds": 175.5
         }
       ],
@@ -8808,7 +8863,7 @@
       "maxAirborne": 4,
       "hullViolations": 0,
       "hullViolationSamples": [],
-      "mouthWellSamples": 156,
+      "mouthWellSamples": 153,
       "nan": false,
       "stateRoundTrip": true,
       "stateBytes": 1168,
@@ -8824,22 +8879,22 @@
       },
       "phaseLog": [
         [
-          5.33,
+          1.5,
           17,
           "release"
         ],
         [
-          9.33,
+          5.5,
           17,
           "descend"
         ],
         [
-          22.25,
+          18.42,
           17,
           "exit"
         ],
         [
-          25.43,
+          21.6,
           17,
           "patrol"
         ],
@@ -8869,12 +8924,12 @@
           "docked"
         ],
         [
-          73.68,
+          69.85,
           16,
           "release"
         ],
         [
-          77.68,
+          73.85,
           16,
           "descend"
         ],
@@ -8884,17 +8939,17 @@
           "enter"
         ],
         [
+          83.35,
+          16,
+          "exit"
+        ],
+        [
           85.13,
           18,
           "approach"
         ],
         [
-          87.18,
-          16,
-          "exit"
-        ],
-        [
-          90.37,
+          86.53,
           16,
           "patrol"
         ],
@@ -8924,202 +8979,202 @@
           "docked"
         ],
         [
-          128.83,
+          125,
           15,
           "release"
         ],
         [
-          132.83,
+          129,
           15,
           "descend"
         ],
         [
-          145.28,
+          141.45,
           17,
           "approach"
         ],
         [
-          149.08,
+          145.25,
           15,
           "exit"
         ],
         [
-          152.27,
+          148.43,
           15,
           "patrol"
         ],
         [
-          158.23,
+          154.4,
           14,
           "release"
         ],
         [
-          162.23,
+          158.4,
           14,
           "descend"
         ],
         [
-          165.72,
+          161.88,
           17,
           "enter"
         ],
         [
-          174.63,
+          170.8,
           14,
           "exit"
         ],
         [
-          177.82,
+          173.98,
           14,
           "patrol"
         ],
         [
-          184.67,
+          180.83,
           17,
           "dock"
         ],
         [
-          190.68,
+          186.85,
           17,
           "docked"
         ],
         [
-          193.58,
+          189.75,
           13,
           "release"
         ],
         [
-          197.58,
+          193.75,
           13,
           "descend"
         ],
         [
-          210.48,
+          206.65,
           16,
           "approach"
         ],
         [
-          210.58,
+          206.75,
           13,
           "exit"
         ],
         [
-          213.77,
+          209.93,
           13,
           "patrol"
         ],
         [
-          230.92,
+          227.08,
           16,
           "enter"
         ],
         [
-          246.37,
+          242.53,
           16,
           "dock"
         ],
         [
-          252.38,
+          248.55,
           16,
           "docked"
         ],
         [
-          257,
+          253.17,
           12,
           "release"
         ],
         [
-          261,
+          257.17,
           12,
           "descend"
         ],
         [
-          271.6,
+          267.77,
           15,
           "approach"
         ],
         [
-          274.93,
+          271.1,
           12,
           "exit"
         ],
         [
-          278.12,
+          274.28,
           12,
           "patrol"
         ],
         [
-          293.68,
+          289.85,
           15,
           "enter"
         ],
         [
-          297.15,
+          293.32,
           14,
           "approach"
         ],
         [
-          303.15,
+          299.32,
           15,
           "dock"
         ],
         [
-          309.17,
+          305.33,
           15,
           "docked"
         ],
         [
-          318.65,
+          314.82,
           14,
           "enter"
         ],
         [
-          323.55,
+          319.72,
           11,
           "release"
         ],
         [
-          327.55,
+          323.72,
           11,
           "descend"
         ],
         [
-          327.72,
+          323.88,
           14,
           "dock"
         ],
         [
-          333.37,
+          329.53,
           13,
           "approach"
         ],
         [
-          333.73,
+          329.9,
           14,
           "docked"
         ],
         [
-          336.8,
+          332.97,
           11,
           "exit"
         ],
         [
-          339.98,
+          336.15,
           11,
           "patrol"
         ],
         [
-          353.78,
+          349.95,
           13,
           "enter"
         ],
         [
-          354.08,
+          350.25,
           10,
           "release"
         ],
         [
-          358.08,
+          354.25,
           10,
           "descend"
         ]
@@ -9169,26 +9224,26 @@
           },
           "framesOut": 36,
           "framesIn": 32,
-          "tOutS": 36.9,
-          "tInS": 31.5,
+          "tOutS": 100.2,
+          "tInS": 79,
           "fade": 0,
           "eyeAtPlayer": 0,
           "pageErrors": [],
-          "wallS": 68.8,
+          "wallS": 180,
           "pass": true
         },
         {
           "room": "hangar",
           "portal": true,
           "p0": [
-            -20,
-            -39.5,
-            60
+            -36,
+            -40,
+            48
           ],
           "p1": [
-            -20,
-            -39.5,
-            60
+            -36,
+            -40,
+            48
           ],
           "moved": 0,
           "yawSame": true,
@@ -9206,21 +9261,21 @@
           "back": {
             "mode": "interior",
             "pos": [
-              -20,
-              -37.8,
-              60
+              -36,
+              -38.3,
+              48
             ],
             "near": 0.1,
             "fov": 72
           },
           "framesOut": 36,
           "framesIn": 32,
-          "tOutS": 33.3,
-          "tInS": 30.7,
+          "tOutS": 94.2,
+          "tInS": 89.2,
           "fade": 0,
           "eyeAtPlayer": 0,
           "pageErrors": [],
-          "wallS": 64.6,
+          "wallS": 185.6,
           "pass": true
         },
         {
@@ -9259,14 +9314,14 @@
             "near": 0.1,
             "fov": 72
           },
-          "framesOut": 3,
-          "framesIn": 5,
-          "tOutS": 1.8,
-          "tInS": 2.4,
+          "framesOut": 4,
+          "framesIn": 3,
+          "tOutS": 5.9,
+          "tInS": 4.3,
           "fade": 0,
           "eyeAtPlayer": 0,
           "pageErrors": [],
-          "wallS": 4.9,
+          "wallS": 11.5,
           "pass": true
         }
       ]
@@ -9275,37 +9330,37 @@
       "rows": [
         {
           "view": "room:bridge",
-          "calls": 296,
-          "triangles": 735398,
-          "poolLights": 13,
+          "calls": 294,
+          "triangles": 746464,
+          "poolLights": 14,
           "visibleCells": 2,
           "textureMB": 264.6,
           "programs": 89,
-          "jsMs": 0.46,
-          "frameMs": 1250.79,
-          "geometries": 744,
-          "textures": 155,
+          "jsMs": 0.75,
+          "frameMs": 2333.9,
+          "geometries": 636,
+          "textures": 154,
           "mode": "interior",
           "current": "bridge",
-          "exteriorTriangles": 580806,
-          "jsHeapMB": 325.1
+          "exteriorTriangles": 588048,
+          "jsHeapMB": 340.8
         },
         {
           "view": "room:hangar",
-          "calls": 350,
-          "triangles": 1457386,
+          "calls": 339,
+          "triangles": 1485964,
           "poolLights": 19,
           "visibleCells": 3,
           "textureMB": 264.6,
           "programs": 89,
-          "jsMs": 0.56,
-          "frameMs": 1667.16,
-          "geometries": 744,
-          "textures": 155,
+          "jsMs": 0.83,
+          "frameMs": 2949.75,
+          "geometries": 636,
+          "textures": 154,
           "mode": "interior",
           "current": "hangar",
-          "exteriorTriangles": 580806,
-          "jsHeapMB": 325.2
+          "exteriorTriangles": 588048,
+          "jsHeapMB": 340.7
         },
         {
           "view": "room:reactor",
@@ -9315,31 +9370,31 @@
           "visibleCells": 1,
           "textureMB": 264.6,
           "programs": 89,
-          "jsMs": 0.46,
-          "frameMs": 1958.33,
-          "geometries": 744,
-          "textures": 155,
+          "jsMs": 0.67,
+          "frameMs": 3137.22,
+          "geometries": 636,
+          "textures": 154,
           "mode": "interior",
           "current": "reactor",
-          "exteriorTriangles": 580806,
-          "jsHeapMB": 325.4
+          "exteriorTriangles": 588048,
+          "jsHeapMB": 341
         },
         {
           "view": "room:corridor_c",
-          "calls": 95,
-          "triangles": 33214,
-          "poolLights": 13,
+          "calls": 89,
+          "triangles": 35776,
+          "poolLights": 8,
           "visibleCells": 1,
           "textureMB": 264.6,
           "programs": 89,
-          "jsMs": 0.49,
-          "frameMs": 1872.07,
-          "geometries": 744,
-          "textures": 155,
+          "jsMs": 0.57,
+          "frameMs": 2847.62,
+          "geometries": 636,
+          "textures": 154,
           "mode": "interior",
           "current": "corridor_c",
-          "exteriorTriangles": 580806,
-          "jsHeapMB": 325.2
+          "exteriorTriangles": 588048,
+          "jsHeapMB": 340.6
         },
         {
           "view": "room:medbay",
@@ -9349,93 +9404,93 @@
           "visibleCells": 1,
           "textureMB": 264.6,
           "programs": 91,
-          "jsMs": 0.42,
-          "frameMs": 1807.9,
-          "geometries": 781,
-          "textures": 156,
+          "jsMs": 0.49,
+          "frameMs": 2638.44,
+          "geometries": 673,
+          "textures": 155,
           "mode": "interior",
           "current": "medbay",
-          "exteriorTriangles": 580806,
-          "jsHeapMB": 325.4
+          "exteriorTriangles": 588048,
+          "jsHeapMB": 340.8
         },
         {
           "view": "cockpit",
-          "calls": 327,
-          "triangles": 1516052,
+          "calls": 326,
+          "triangles": 1554044,
           "poolLights": 19,
           "visibleCells": 2,
           "textureMB": 264.6,
           "programs": 91,
-          "jsMs": 0.4,
-          "frameMs": 2397.34,
-          "geometries": 781,
-          "textures": 156,
+          "jsMs": 0.47,
+          "frameMs": 3441.59,
+          "geometries": 673,
+          "textures": 155,
           "mode": "interior",
           "current": "kestrel",
-          "exteriorTriangles": 580806,
-          "jsHeapMB": 325.9
+          "exteriorTriangles": 588048,
+          "jsHeapMB": 341.1
         },
         {
           "view": "ext_hero",
-          "calls": 313,
-          "triangles": 1356162,
+          "calls": 311,
+          "triangles": 1358640,
           "poolLights": 19,
           "visibleCells": 2,
           "textureMB": 264.6,
           "programs": 91,
-          "jsMs": 0.38,
-          "frameMs": 2229.57,
-          "geometries": 781,
-          "textures": 156,
+          "jsMs": 0.47,
+          "frameMs": 3433.83,
+          "geometries": 673,
+          "textures": 155,
           "mode": "orbit",
           "current": "kestrel",
-          "exteriorTriangles": 580806,
-          "jsHeapMB": 326
+          "exteriorTriangles": 588048,
+          "jsHeapMB": 341.1
         },
         {
           "view": "ext_tower",
-          "calls": 391,
-          "triangles": 1685166,
+          "calls": 393,
+          "triangles": 1693160,
           "poolLights": 19,
           "visibleCells": 2,
           "textureMB": 264.6,
           "programs": 91,
-          "jsMs": 0.38,
-          "frameMs": 1817.03,
-          "geometries": 781,
-          "textures": 156,
+          "jsMs": 0.42,
+          "frameMs": 3014.12,
+          "geometries": 673,
+          "textures": 155,
           "mode": "orbit",
           "current": "kestrel",
-          "exteriorTriangles": 580806,
-          "jsHeapMB": 326.1
+          "exteriorTriangles": 588048,
+          "jsHeapMB": 341.2
         },
         {
           "view": "ext_belly",
-          "calls": 358,
-          "triangles": 1557676,
+          "calls": 355,
+          "triangles": 1561574,
           "poolLights": 19,
           "visibleCells": 2,
           "textureMB": 264.6,
           "programs": 91,
-          "jsMs": 0.45,
-          "frameMs": 1560.35,
-          "geometries": 781,
-          "textures": 156,
+          "jsMs": 0.37,
+          "frameMs": 2786.35,
+          "geometries": 673,
+          "textures": 155,
           "mode": "orbit",
           "current": "kestrel",
-          "exteriorTriangles": 580806,
-          "jsHeapMB": 326.3
+          "exteriorTriangles": 588048,
+          "jsHeapMB": 340.8
         }
       ],
       "textureMBNote": {
         "propertiesField": "undefined",
-        "uploadedTextures": 156
+        "uploadedTextures": 155
       },
       "pageErrors": []
     },
     "hygiene": {
       "buildLog": {
-        "total": 4498,
+        "total": 7132,
         "rooms": 45,
         "kindDefaults": [
           "lobby_a",
@@ -9538,7 +9593,7 @@
         "intrusions": []
       },
       "materials": {
-        "runtimeKeyCount": 176,
+        "runtimeKeyCount": 173,
         "referencedKeyCount": 110,
         "missing": [],
         "suspicious": [],
@@ -9549,19 +9604,16 @@
           "bridge_consoleGlow",
           "lobby_inlay_A",
           "lobby_ind_A",
-          "lobby_ring_A",
+          "lobby_ring_emitBlue",
           "lobby_lensHalf",
           "lobby_inlay_B",
           "lobby_ind_B",
-          "lobby_ring_B",
           "oq_warmDim",
           "lobby_inlay_C",
           "lobby_ind_C",
-          "lobby_ring_C",
           "roomsc_slot",
           "lobby_inlay_D",
           "lobby_ind_D",
-          "lobby_ring_D",
           "roomsd_decal",
           "roomsd_pulse",
           "roomsd_glow",
@@ -9585,8 +9637,7 @@
           "hangar_spillWarm",
           "hangar_tread",
           "lobby_inlay_E",
-          "lobby_ind_E",
-          "lobby_ring_E"
+          "lobby_ind_E"
         ],
         "oddPrefix": [
           "oq_warmDim",
@@ -9808,72 +9859,6 @@
             298
           ],
           "cell": "comms",
-          "at": 1.4
-        },
-        "stuckAtSpawn": false,
-        "belowFloor": false,
-        "aboveCeil": false,
-        "finalCell": "corridor_a",
-        "pass": false
-      }
-    },
-    {
-      "section": "spawns",
-      "item": "navigation",
-      "detail": {
-        "room": "navigation",
-        "kind": "room",
-        "spawn": [
-          0,
-          246,
-          313
-        ],
-        "floorY": 246,
-        "legs": {
-          "fwd": {
-            "moved": 2.63,
-            "end": [
-              0,
-              246,
-              315.63
-            ]
-          },
-          "back": {
-            "moved": 6.42,
-            "end": [
-              0,
-              246,
-              309.21
-            ]
-          },
-          "left": {
-            "moved": 1.61,
-            "end": [
-              1.6,
-              246,
-              308.99
-            ]
-          },
-          "right": {
-            "moved": 3.2,
-            "end": [
-              -1.6,
-              246,
-              308.99
-            ]
-          }
-        },
-        "maxOutside": 3.01,
-        "minY": 246,
-        "maxY": 246,
-        "leftBounds": {
-          "leg": "back",
-          "pos": [
-            0,
-            246,
-            311.25
-          ],
-          "cell": "corridor_a",
           "at": 1.4
         },
         "stuckAtSpawn": false,
@@ -10542,225 +10527,17 @@
         "finalCell": "lift_L2_E",
         "pass": false
       }
-    },
-    {
-      "section": "stairs",
-      "item": "briefing: dais steps (+0.3)",
-      "detail": {
-        "name": "briefing: dais steps (+0.3)",
-        "room": "briefing",
-        "start": [
-          10,
-          232,
-          268.4
-        ],
-        "steps": [
-          {
-            "target": [
-              6.2,
-              268.4
-            ],
-            "reached": false,
-            "reason": "stuck",
-            "pos": [
-              7.02,
-              232.3,
-              268.4
-            ],
-            "y": 232.3,
-            "yExpected": 232.3,
-            "t": 1.7,
-            "cell": "briefing",
-            "blockers": [
-              {
-                "tag": "emitter",
-                "cell": "briefing",
-                "min": [
-                  5.7,
-                  232.3,
-                  268.4
-                ],
-                "max": [
-                  6.7,
-                  232.4,
-                  269.4
-                ]
-              }
-            ],
-            "yOk": true
-          }
-        ],
-        "pass": false,
-        "finalY": 232.3,
-        "shot": "shots/qa_walk/stairs_briefing_briefing_dais_steps_0_3_.png"
-      }
-    },
-    {
-      "section": "stairs",
-      "item": "observation: spawn -> forward viewport wall (flat gallery)",
-      "detail": {
-        "name": "observation: spawn -> forward viewport wall (flat gallery)",
-        "room": "observation",
-        "start": [
-          0,
-          232,
-          232
-        ],
-        "steps": [
-          {
-            "target": [
-              0,
-              219.6
-            ],
-            "reached": false,
-            "reason": "stuck",
-            "pos": [
-              0,
-              232,
-              222.42
-            ],
-            "y": 232,
-            "yExpected": 232,
-            "t": 3.6,
-            "cell": "observation",
-            "blockers": [
-              {
-                "tag": "datacolumn",
-                "cell": "observation",
-                "min": [
-                  -0.5,
-                  232,
-                  221.1
-                ],
-                "max": [
-                  0.5,
-                  233.25,
-                  222.1
-                ]
-              }
-            ],
-            "yOk": true
-          }
-        ],
-        "pass": false,
-        "finalY": 232,
-        "shot": "shots/qa_walk/stairs_observation_observation_spawn_forward_.png"
-      }
-    },
-    {
-      "section": "stairs",
-      "item": "comms: platform steps (+0.42)",
-      "detail": {
-        "name": "comms: platform steps (+0.42)",
-        "room": "comms",
-        "start": [
-          -11.42,
-          246,
-          298
-        ],
-        "steps": [
-          {
-            "target": [
-              -18,
-              298
-            ],
-            "reached": false,
-            "reason": "stuck",
-            "pos": [
-              -11.42,
-              246,
-              298
-            ],
-            "y": 246,
-            "yExpected": 246.42,
-            "t": 0.7,
-            "cell": "comms",
-            "blockers": [
-              {
-                "tag": "console",
-                "cell": "comms",
-                "min": [
-                  -13.06,
-                  246,
-                  297.18
-                ],
-                "max": [
-                  -11.74,
-                  247.55,
-                  298.82
-                ]
-              }
-            ],
-            "yOk": false
-          }
-        ],
-        "pass": false,
-        "finalY": 246,
-        "shot": "shots/qa_walk/stairs_comms_comms_platform_steps_0_42_.png"
-      }
-    },
-    {
-      "section": "stairs",
-      "item": "tactical: holo dais (+0.36) via W stair, off the dais, up to the N gallery (+0.36)",
-      "detail": {
-        "name": "tactical: holo dais (+0.36) via W stair, off the dais, up to the N gallery (+0.36)",
-        "room": "tactical",
-        "start": [
-          4.4,
-          246,
-          298
-        ],
-        "steps": [
-          {
-            "target": [
-              13.5,
-              298
-            ],
-            "reached": false,
-            "reason": "stuck",
-            "pos": [
-              11.96,
-              246.36,
-              298
-            ],
-            "y": 246.36,
-            "yExpected": 246.36,
-            "t": 3,
-            "cell": "tactical",
-            "blockers": [
-              {
-                "tag": "tank",
-                "cell": "tactical",
-                "min": [
-                  12.28,
-                  246.36,
-                  297.5
-                ],
-                "max": [
-                  15.52,
-                  247.28,
-                  298.5
-                ]
-              }
-            ],
-            "yOk": true
-          }
-        ],
-        "pass": false,
-        "finalY": 246.36,
-        "shot": "shots/qa_walk/stairs_tactical_tactical_holo_dais_0_36_vi.png"
-      }
     }
   ],
   "summary": {
     "doors": "31/31",
-    "spawns": "34/46",
+    "spawns": "35/46",
     "lifts": "40/40",
-    "stairs": "15/19",
+    "stairs": "19/19",
     "fighters": "pass",
     "transitions": "3/3",
-    "failures": 16,
+    "failures": 11,
     "pageErrorsTotal": 0,
-    "wallSeconds": 325.8
+    "wallSeconds": 612.8
   }
 }

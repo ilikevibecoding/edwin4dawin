@@ -338,10 +338,10 @@
     { name: "reactor: entry walkway edge (strafe off the walkway over the grating at 47.4)", room: "reactor", start: [0, 48, 335], yaw: 180, keys: ["KeyA"], seconds: 2.0, expect: { y: 48 } },
     { name: "briefing: aisle steps up three tiers (+0.35 / +0.7 / +1.05)", room: "briefing", start: [4.4, 232, 273], yaw: -90, wps: [[12, 273, 232], [16.6, 273, 232.35], [20.1, 273, 232.7], [26, 273, 233.05]] },
     { name: "briefing: dais steps (+0.3)", room: "briefing", start: [10, 232, 268.4], yaw: 90, wps: [[6.2, 268.4, 232.3]] },
-    { name: "observation: spawn -> forward viewport wall (flat gallery)", room: "observation", start: [0, 232, 232], yaw: 0, wps: [[0, 219.6, 232]] },
+    { name: "observation: spawn -> forward viewport wall (flat gallery, beside the data column)", room: "observation", start: [1.3, 232, 232], yaw: 0, wps: [[1.3, 224, 232], [1.3, 219.6, 232]] },
     { name: "flight_control: upper tier -> lower tier at the window -> back up (+0.45)", room: "flight_control", start: [83.4, -24, -30], yaw: 90, wps: [[67, -30, -24], [81.5, -30, -23.55]] },
-    { name: "comms: platform steps (+0.42)", room: "comms", start: [-12, 246, 298], yaw: 90, wps: [[-18, 298, 246.42]] },
-    { name: "tactical: holo dais (+0.36) via W stair, off the dais, up to the N gallery (+0.36)", room: "tactical", start: [4.4, 246, 298], yaw: -90, wps: [[13.5, 298, 246.36], [10.5, 298, 246], [16.4, 292.3, 246], [16.4, 288.6, 246.36]] },
+    { name: "comms: platform steps (+0.42) via the E stair", room: "comms", start: [-4.4, 246, 298], yaw: 90, wps: [[-6.3, 299.5, 246], [-11.0, 299.5, 246], [-13.5, 298, 246], [-15.6, 298, 246], [-18.0, 298, 246.42]] },
+    { name: "tactical: holo dais (+0.36) via W stair, off the dais, up to the N gallery (+0.36)", room: "tactical", start: [4.4, 246, 298], yaw: -90, wps: [[11.0, 298, 246.36], [7.5, 298, 246], [16.4, 292.3, 246], [16.4, 288.6, 246.36]] },
     { name: "shuttle_bay: boarding platform stair (+3.2)", room: "shuttle_bay", start: [115.5, -40, -61.5], yaw: 90, wps: [[108.6, -61.5, -36.8]] },
     { name: "fighter_bay: cradle platform stair (+4.3)", room: "fighter_bay", start: [-97.3, -40, -69.5], yaw: 0, wps: [[-97.3, -79, -35.7]] },
   ];

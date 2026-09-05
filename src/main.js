@@ -521,6 +521,11 @@ const debugAPI = {
   cellInfo() {
     return cells.getStats();
   },
+  // walkable surfaces of one cell in world space (QA tooling uses this to aim stair legs)
+  cellFloors(id) {
+    const c = cells.cells.get(id);
+    return c ? c.floors.map((f) => ({ x0: f.x0, z0: f.z0, x1: f.x1, z1: f.z1, y: f.y, tag: f.tag, ramp: !!f.ramp })) : [];
+  },
   buildLog: () => buildLog,
   rooms: () => ROOMS.map((r) => ({ id: r.id, name: r.name, deck: r.deck, origin: r.origin, size: r.size, kind: r.kind })),
   advanceSky(dt) {

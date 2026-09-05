@@ -47,7 +47,9 @@ export function buildComms(kit, ctx, room) {
   // two standing console pods on the centreline between the door and the platform steps, both worked
   // from the door side facing the platform (their sloped control surfaces read from the door)
   station(kit, 8.6, 0, 0, 1.6, 0.85, { yaw: yawToward(8.6, 0, cx, cz), seed: 53, screens: ["scrGreen2", "scrBlue1"], accentKey, hoodKey: dimKey, height: 1.05, conduits: 1 });
-  station(kit, 4.2, 0, 0, 1.6, 0.85, { yaw: yawToward(4.2, 0, cx, cz), seed: 54, screens: ["scrBlue0", "scrGreen3"], accentKey, hoodKey: dimKey, height: 1.05, conduits: 1 });
+  // (the inner pod sits at x 6.1, not 4.2: the operator arc's inner stations reach x 4.36, so a pod any
+  // closer seals the pocket at the foot of the platform steps)
+  station(kit, 6.1, 0, 0, 1.6, 0.85, { yaw: yawToward(6.1, 0, cx, cz), seed: 54, screens: ["scrBlue0", "scrGreen3"], accentKey, hoodKey: dimKey, height: 1.05, conduits: 1 });
   const P = { x0: -5.2, x1: -0.8, z0: -2.2, z1: 2.2, y: 0.42 };
   kit.boxMM("impTrim", [P.x0, 0, P.z0], [P.x1, 0.36, P.z1], { color: PALETTE.impBlack, texel: 1 });
   kit.boxMM("impDeck", [P.x0 - 0.05, 0.36, P.z0 - 0.05], [P.x1 + 0.05, P.y, P.z1 + 0.05], { color: PALETTE.impGrey, texel: 0.7 });
