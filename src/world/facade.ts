@@ -140,7 +140,7 @@ normal = normalize(normal + facadeTilt);`)
   float rough = 0.75;
   float metal = 0.0;
   vec3 emis = vec3(0.0);
-  float grime = fbm3(vWorldPosF.xz * 0.11 + vWorldPosF.y * 0.07);
+  float grime = 0.62 * vnoise(vWorldPosF.xz * 0.11 + vWorldPosF.y * 0.07) + 0.38 * vnoise(vWorldPosF.xz * 0.27 - vWorldPosF.y * 0.15);
   float nightOn = smoothstep(0.03, 0.4, uNight);
   if (isTop) {
     if (style == 5.0) {
@@ -169,6 +169,11 @@ normal = normalize(normal + facadeTilt);`)
       // tower roofs: dark membrane on glass / stone / brick, pale on concrete and stucco
       vec3 base = glassy ? vec3(0.26, 0.27, 0.28) : style == 10.0 ? vec3(0.30, 0.29, 0.28) : style == 6.0 ? vec3(0.52, 0.52, 0.53) : style == 3.0 ? mix(vec3(0.66, 0.64, 0.60), wall, 0.35) : vec3(0.64, 0.64, 0.62);
       col = base * (0.85 + 0.3 * vnoise(vWorldPosF.xz * 0.6));
+      // gravel / membrane grain while it spans pixels, ponding stains at the low spots
+      float roofPx = fwidth(vWorldPosF.x) + fwidth(vWorldPosF.z);
+      float grain = vnoise(vWorldPosF.xz * 3.0);
+      col *= 1.0 + (0.12 * grain - 0.06) * (1.0 - smoothstep(0.15, 0.6, roofPx));
+      col *= 1.0 - 0.18 * smoothstep(0.62, 0.8, vnoise(vWorldPosF.xz * 0.25 + seed));
       // parapet coping around the edge, a shadow inside it, mechanical pads and rain staining
       float edgeD = min(min(meters.x, vDims.x - meters.x), min(meters.z, vDims.z - meters.z));
       float wm = fwidth(edgeD);
@@ -258,7 +263,7 @@ normal = normalize(normal + facadeTilt);`)
     float reveal = 1.0 - (0.32 * smoothstep(0.72, 1.0, py) + 0.14 * smoothstep(0.86, 1.0, px)) * vis;
     // per-pane micro tilt so each pane catches the sky and the sun a little differently
     {
-      vec3 rnd = vec3(hash12(vec2(colIdx + 3.1, floorIdx + facadeSeed)), hash12(vec2(colIdx + 7.7, floorIdx - facadeSeed)), hash12(vec2(colIdx - 2.3, floorIdx + 0.5 * seed))) - 0.5;
+      vec3 rnd = vec3(hash22(vec2(colIdx + 3.1, floorIdx + facadeSeed)), fract(paneH * 13.7)) - 0.5;
       vec3 nv = normalize(vNormal);
       facadeTilt = (rnd - nv * dot(rnd, nv)) * 0.06 * glass * vis;
     }
@@ -456,6 +461,15 @@ normal = normalize(normal + facadeTilt);`)
     } else {
       col = wall;
       rough = 0.8;
+    }
+    if (!mast && glassy) {
+      // the lower floors mirror the neighbouring blocks rather than open sky: the reflection darkens in soft
+      // vertical bands (the neighbours' silhouettes) that fade out with height
+      float nb = smoothstep(0.35, 0.75, vnoise(vec2(u * 0.045 + seed, floor(facadeSeed))));
+      float low = 1.0 - smoothstep(8.0, 70.0, v);
+      float occl = 0.35 * nb * low * glass;
+      metal *= 1.0 - occl;
+      col *= 1.0 - 0.5 * occl;
     }
     if (!mast) {
       // street level: shopfront glazing between piers with a fascia sign band on the walk-up families, a darker
