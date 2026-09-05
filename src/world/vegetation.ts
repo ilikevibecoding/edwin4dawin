@@ -4,7 +4,7 @@ import { perlin2, smoothstep } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { CELL, HALF, Zone, type WorldMap } from './map';
 import { balanceGroundIbl } from './terrain';
-import { layerMask, type ViewCull } from './culling';
+import { MAX_CASCADES, cascadeIsFine, layerMask, maskCasts, type ViewCull } from './culling';
 
 /**
  * Procedural planting. Two instanced geometry families cover six archetypes:
@@ -628,6 +628,9 @@ interface Plant { x: number; y: number; z: number; s: number; rot: number; lean:
 interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; }
 
 const TILE = 900;
+/** casting tiles a coarse cascade (texel over NEAR_TEXEL) draws at most, nearest first */
+const COARSE_SHADOW_TILES = 8;
+const _casting = new Array<number>(MAX_CASCADES).fill(0);
 // 3D distances to the planted footprint: at 420 m a 12 m crown is ~18 px tall (720p), where the card
 // is the better representation; the subdivided crown mesh is only worth its triangles closer than 200 m
 const NEAR_DISTANCE = 420;
@@ -955,18 +958,28 @@ export class Vegetation {
       tiles[j + 1] = t;
     }
     let budget = NEAR_BUDGET;
+    // coarse cascades take the nearest COARSE_SHADOW_TILES casting tiles only (each tile is a draw call per
+    // cascade and a crown's shadow there is a couple of texels); the tiles are already sorted nearest-first
+    const casting = _casting;
+    casting.fill(0);
     for (const t of tiles) {
       const near = t.d < NEAR_DISTANCE && budget >= t.n;
       if (near) budget -= t.n;
       const inView = cull.boxInView(t.box);
-      const shadow = t.d < this.shadowDistance && cull.casterInView(t.center, t.r, t.height);
+      let bits = t.d < this.shadowDistance ? cull.casterCascades(t.center, t.r, t.height) : 0;
+      for (let i = 0; bits >> i && i < MAX_CASCADES; i++) {
+        if (!(bits & (1 << i)) || cascadeIsFine(i)) continue;
+        if (casting[i] >= COARSE_SHADOW_TILES) bits &= ~(1 << i); else casting[i]++;
+      }
       const hi = t.hi !== null && t.d < HI_DISTANCE;
       t.near.visible = near && inView && !hi;
       if (t.hi) t.hi.visible = near && inView && hi;
       const drawCards = !near && inView && t.d < this.viewDistance;
+      const mask = layerMask('all', drawCards, bits);
+      const shadow = maskCasts(mask);
       t.far.visible = drawCards || shadow;
       t.far.castShadow = shadow;
-      t.far.layers.mask = layerMask('all', drawCards);
+      t.far.layers.mask = mask;
       // far cards: full density to 3 km, half at 5.5 km, a quarter beyond (a crown is ~1 px there)
       const frac = near ? 1 : t.d < 3000 ? 1 : t.d < 5500 ? 0.5 : 0.25;
       t.far.count = Math.max(1, Math.round(t.n * frac));

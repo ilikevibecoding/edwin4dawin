@@ -3,7 +3,7 @@ import { Rng } from '../core/seed';
 import { PORT_ISLAND, type WorldMap } from './map';
 import type { RoadSegment } from './roads';
 import { addNeutralVertexAttributes, cellKey, createBatchedPbrMaterial, mergeUnitParts } from './batching';
-import { activeCascade, layerMask, type ViewCull } from './culling';
+import { LAYER_CASCADE0, MAX_CASCADES, activeShadowPassIsFine, cascadeIsFine, layerMask, maskCasts, type ViewCull } from './culling';
 
 /** One placed unit shape: transform, source material and thickness (middle dimension, m). */
 interface Placement { m: THREE.Matrix4; mat: string; size: number }
@@ -19,7 +19,7 @@ function thickness(a: number, b: number, c: number): number {
 interface ChunkMesh { mesh: THREE.InstancedMesh; large: number; total: number; mainCount: number; hi: THREE.BufferGeometry; lo: THREE.BufferGeometry | null }
 
 /** Spatial chunk of props: boxes, large cylinders, small cylinders and lamps, one instanced mesh each. */
-interface PropChunk { meshes: ChunkMesh[]; box: THREE.Box3; center: THREE.Vector3; r: number; height: number }
+interface PropChunk { meshes: ChunkMesh[]; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; /** cascade-index bitmask this frame */ bits: number }
 
 const CHUNK = 2500;
 /** objects thinner than this (pilings, poles, railings) cast into the nearest cascade only: their
@@ -29,6 +29,9 @@ const SMALL = 1.0;
 const LOD_DISTANCE = 350;
 /** objects thinner than SMALL are well under a pixel wide beyond this and leave the main pass */
 const SMALL_DISTANCE = 2500;
+/** objects at least this thick make up the shadow proxies drawn by the coarse cascades (a 2 m crate is under a texel there) */
+const PROXY_SIZE = 2.5;
+const _perCascade = new Array<number>(MAX_CASCADES).fill(0);
 
 /** Static world dressing: marinas, port, airport, stadium, lighthouse, construction sites, lamps, seawalls.
  *  Everything is drawn from spatial chunks of instanced unit shapes; one material carries the colour,
@@ -48,6 +51,9 @@ export class Props {
   private readonly cyls: Placement[] = [];
   private readonly lamps: Placement[] = [];
   private readonly chunks: PropChunk[] = [];
+  /** shadow-only proxies (all boxes, all cylinders at least PROXY_SIZE thick): a coarse cascade that would
+   *  draw more chunk meshes than this takes the two proxies instead */
+  private readonly proxies: THREE.InstancedMesh[] = [];
   private readonly mats: Record<string, THREE.MeshStandardMaterial>;
   counts = { boxes: 0, cylinders: 0, lamps: 0, chunks: 0, meshes: 0 };
 
@@ -169,7 +175,7 @@ export class Props {
     this.counts.boxes = this.boxes.length; this.counts.cylinders = this.cyls.length; this.counts.lamps = this.lamps.length;
     const sphere = new THREE.Sphere(), corner = new THREE.Vector3(), white = new THREE.Color(0xffffff);
     for (const b of buckets.values()) {
-      const chunk: PropChunk = { meshes: [], box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, height: 0 };
+      const chunk: PropChunk = { meshes: [], box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, height: 0, bits: 0 };
       // large instances first, so the first `large` instances are exactly the objects thicker than SMALL
       b.boxes.sort((u, v) => Number(isLarge(v)) - Number(isLarge(u)));
       /** `perVertex`: the unit carries colour / parameters per vertex (lamp) instead of per instance */
@@ -199,8 +205,8 @@ export class Props {
           if (params) loGeo.setAttribute('aMatParams', params);
         }
         const entry: ChunkMesh = { mesh, large, total: list.length, mainCount: list.length, hi: geo, lo: loGeo };
-        // the far cascades only see the large prefix; the nearest one (and any non-CSM light) sees all
-        mesh.onBeforeShadow = () => { mesh.count = activeCascade() <= 0 ? entry.total : entry.large; };
+        // the coarse cascades only see the large prefix; the fine ones (and any non-CSM light) see all
+        mesh.onBeforeShadow = () => { mesh.count = activeShadowPassIsFine() ? entry.total : entry.large; };
         mesh.onAfterShadow = () => { mesh.count = entry.mainCount; };
         chunk.box.union(bounds);
         chunk.meshes.push(entry);
@@ -216,6 +222,28 @@ export class Props {
       this.counts.meshes += chunk.meshes.length;
     }
     this.counts.chunks = this.chunks.length;
+    const proxy = (list: Placement[], unit: THREE.BufferGeometry, name: string) => {
+      const big = list.filter((p) => p.size >= PROXY_SIZE);
+      if (!big.length) return;
+      const mesh = new THREE.InstancedMesh(unit, this.material, big.length);
+      const bounds = new THREE.Box3();
+      big.forEach((p, i) => {
+        mesh.setMatrixAt(i, p.m);
+        sphere.copy(unit.boundingSphere!).applyMatrix4(p.m);
+        bounds.expandByPoint(corner.copy(sphere.center).addScalar(-sphere.radius));
+        bounds.expandByPoint(corner.copy(sphere.center).addScalar(sphere.radius));
+      });
+      mesh.boundingSphere = bounds.getBoundingSphere(new THREE.Sphere());
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.castShadow = true; mesh.receiveShadow = false;
+      mesh.visible = false; mesh.layers.mask = 0;
+      mesh.matrixAutoUpdate = false;
+      mesh.name = name;
+      this.group.add(mesh);
+      this.proxies.push(mesh);
+    };
+    proxy(this.boxes, unitBox, 'shadow-proxy-boxes');
+    proxy(this.cyls, cylLo, 'shadow-proxy-cylinders');
     this.boxes.length = 0; this.cyls.length = 0; this.lamps.length = 0;
   }
 
@@ -228,21 +256,38 @@ export class Props {
    *  the view; meshes that only cast leave the camera layer. Beyond SMALL_DISTANCE the main pass draws
    *  the large prefix only; thin cylinders and lamps swap to the coarse prism beyond LOD_DISTANCE. */
   updateLod(camX: number, camZ: number, cull: ViewCull): void {
+    // coarse cascades that would draw more chunk meshes than the proxies cost take the proxies instead
+    const perCascade = _perCascade;
+    perCascade.fill(0);
+    for (const c of this.chunks) {
+      c.bits = cull.casterCascades(c.center, c.r, c.height);
+      let large = 0;
+      for (const e of c.meshes) if (e.large > 0) large++;
+      for (let i = 0; i < MAX_CASCADES; i++) if (c.bits & (1 << i)) perCascade[i] += large;
+    }
+    let proxyBits = 0;
+    for (let i = 0; i < MAX_CASCADES; i++) if (perCascade[i] > this.proxies.length && !cascadeIsFine(i)) proxyBits |= 1 << i;
     for (const c of this.chunks) {
       const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
       const inView = cull.boxInView(c.box);
-      const cast = cull.casterInView(c.center, c.r, c.height);
+      const bits = c.bits & ~proxyBits;
       const far = d > SMALL_DISTANCE;
       for (const e of c.meshes) {
         const n = far ? e.large : e.total;
         e.mainCount = n;
         e.mesh.count = n;
         const drawn = inView && n > 0;
+        const mask = layerMask(e.large > 0 ? 'all' : 'near', drawn, bits);
+        const cast = maskCasts(mask);
         e.mesh.visible = drawn || cast;
         e.mesh.castShadow = cast;
-        e.mesh.layers.mask = layerMask(e.large > 0 ? 'all' : 'near', drawn);
+        e.mesh.layers.mask = mask;
         if (e.lo) e.mesh.geometry = d > LOD_DISTANCE ? e.lo : e.hi;
       }
+    }
+    for (const p of this.proxies) {
+      p.visible = p.castShadow = proxyBits !== 0;
+      p.layers.mask = proxyBits << LAYER_CASCADE0;
     }
   }
 

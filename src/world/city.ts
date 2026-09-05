@@ -4,7 +4,7 @@ import { clamp, lerp, smoothstep } from '../core/noise';
 import { Zone, type District, type WorldMap } from './map';
 import type { Block } from './roads';
 import { createFacadeMaterial } from './facade';
-import { layerMask, type ViewCull } from './culling';
+import { LAYER_CASCADE0, MAX_CASCADES, layerMask, maskCasts, type ViewCull } from './culling';
 
 // ------------------------------------------------------------------ unit geometries
 // All are 1 m wide/deep centred on x/z and span y in [0,1]. Every geometry carries an `aPart` vertex
@@ -98,6 +98,10 @@ interface Instance {
   lit: number; warm: number; variant: number; form: number;
 }
 
+/** buildings shorter than this (houses, sheds) are left out of the far shadow proxies: their shadows are under a texel there */
+const PROXY_MIN_HEIGHT = 14;
+const _perCascade = new Array<number>(MAX_CASCADES).fill(0);
+
 /** Spatially tiled instance batches so far tiles can be frustum-culled and stop casting shadows. */
 export class BuildingBatches {
   readonly group = new THREE.Group();
@@ -111,7 +115,11 @@ export class BuildingBatches {
   private readonly tileOz = -4520;
   /** `lodR` is the horizontal half-diagonal of the tile (the shadow-distance metric); `center`, `r`
    *  and `height` bound the buildings in world space and are only used for culling. */
-  private readonly tiles: { mesh: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodR: number }[] = [];
+  private readonly tiles: { mesh: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodR: number; bits: number }[] = [];
+  /** shadow-only proxies, one per kind, holding every building at least PROXY_MIN_HEIGHT tall: a cascade
+   *  that would draw more per-tile meshes than this costs draws the proxies instead (a whole distant city
+   *  for six draw calls) */
+  private readonly proxies: THREE.InstancedMesh[] = [];
   shadowDistance = 3200;
 
   constructor(nightUniform: THREE.IUniform<number>) {
@@ -166,7 +174,40 @@ export class BuildingBatches {
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
       this.group.add(mesh);
       const lodR = Math.hypot(box.max.x - box.min.x, box.max.z - box.min.z) / 2;
-      this.tiles.push({ mesh, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodR });
+      this.tiles.push({ mesh, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodR, bits: 0 });
+    }
+    // shadow proxies: every building of a kind in one instanced mesh (the shadow pass only reads the
+    // instance matrices, so the facade attributes are not needed)
+    const byKind = new Map<Kind, Instance[]>();
+    for (const [key, list] of this.lists) {
+      const kind = key.split('|')[0] as Kind;
+      let all = byKind.get(kind);
+      if (!all) { all = []; byKind.set(kind, all); }
+      for (const inst of list) if (inst.h >= PROXY_MIN_HEIGHT) all.push(inst);
+    }
+    for (const [kind, list] of byKind) {
+      if (!list.length) continue;
+      const mesh = new THREE.InstancedMesh(this.geos[kind], this.material, list.length);
+      const box = new THREE.Box3();
+      list.forEach((inst, i) => {
+        p.set(inst.x, inst.y, inst.z);
+        q.setFromEuler(e.set(0, inst.rot, 0));
+        s.set(inst.w, inst.h, inst.d);
+        mesh.setMatrixAt(i, m.compose(p, q, s));
+        const r = Math.hypot(inst.w, inst.d) * 0.6;
+        box.expandByPoint(p.set(inst.x - r, inst.y, inst.z - r));
+        box.expandByPoint(p.set(inst.x + r, inst.y + inst.h, inst.z + r));
+      });
+      mesh.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+      mesh.instanceMatrix.needsUpdate = true;
+      mesh.castShadow = true;
+      mesh.receiveShadow = false;
+      mesh.visible = false;
+      mesh.layers.mask = 0;
+      mesh.matrixAutoUpdate = false;
+      mesh.name = `shadow-proxy-${kind}`;
+      this.group.add(mesh);
+      this.proxies.push(mesh);
     }
   }
 
@@ -174,13 +215,27 @@ export class BuildingBatches {
    *  the shadow distance and its footprint, swept along the sun's shadow, can reach anything in view.
    *  Tiles that only cast leave the camera layer so the main pass skips them. */
   updateLod(camX: number, camZ: number, cull: ViewCull): void {
+    const perCascade = _perCascade;
+    perCascade.fill(0);
     for (const t of this.tiles) {
       const d = Math.max(0, Math.hypot(t.center.x - camX, t.center.z - camZ) - t.lodR);
+      t.bits = d < this.shadowDistance ? cull.casterCascades(t.center, t.r, t.height) : 0;
+      for (let i = 0; i < MAX_CASCADES; i++) if (t.bits & (1 << i)) perCascade[i]++;
+    }
+    // cascades where the per-tile meshes would cost more draws than the proxies take the proxies instead
+    let proxyBits = 0;
+    for (let i = 0; i < MAX_CASCADES; i++) if (perCascade[i] > this.proxies.length + 2) proxyBits |= 1 << i;
+    for (const t of this.tiles) {
       const inView = cull.boxInView(t.box);
-      const cast = d < this.shadowDistance && cull.casterInView(t.center, t.r, t.height);
+      const mask = layerMask('all', inView, t.bits & ~proxyBits);
+      const cast = maskCasts(mask);
       t.mesh.castShadow = cast;
       t.mesh.visible = inView || cast;
-      t.mesh.layers.mask = layerMask('all', inView);
+      t.mesh.layers.mask = mask;
+    }
+    for (const p of this.proxies) {
+      p.visible = p.castShadow = proxyBits !== 0;
+      p.layers.mask = proxyBits << LAYER_CASCADE0;
     }
   }
 }

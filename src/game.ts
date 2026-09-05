@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { CSM } from 'three/examples/jsm/csm/CSM.js';
 import { REFLECTION_RANGE, REFLECTION_SCALE, type Params, type Quality } from './core/params';
+import { smoothstep } from './core/noise';
 import { Atmosphere } from './world/atmosphere';
 import { WorldMap } from './world/map';
 import { Sky } from './world/sky';
@@ -9,6 +10,7 @@ import { Water } from './world/water';
 import { WakeMap } from './render/wakes';
 import { PostPipeline } from './render/post';
 import { PlanarReflection, boundsRadius, distanceToBounds, trianglesOf } from './render/reflection';
+import { CascadeFitter, installCascadeDebug } from './render/shadows';
 import { buildRoadMeshes, buildRoadNetwork, createRoadMaterial, type RoadSegment } from './world/roads';
 import { buildBridges, type BridgeBuild } from './world/bridges';
 import { buildCity, type CityBuild } from './world/city';
@@ -18,7 +20,7 @@ import { Traffic } from './world/traffic';
 import { Aircraft } from './plane/aircraft';
 import { FlightCamera } from './plane/camera';
 import { Metrics } from './core/metrics';
-import { ViewCull, configureMainCamera, installCascadeRouting } from './world/culling';
+import { ViewCull, configureMainCamera, installCascadeRouting, layerMask, shadowPassStats } from './world/culling';
 
 export interface QualitySettings {
   samples: number;
@@ -52,6 +54,7 @@ export class Game {
   sky!: Sky;
   wakes!: WakeMap;
   csm!: CSM;
+  cascades!: CascadeFitter;
   post!: PostPipeline;
   reflection!: PlanarReflection;
   roads!: RoadSegment[];
@@ -61,8 +64,12 @@ export class Game {
   props!: Props;
   traffic!: Traffic;
   aircraft!: Aircraft;
+  /** airframe meshes that cast shadows, routed to the cascades their shadow can reach each frame */
+  private readonly airframeCasters: THREE.Object3D[] = [];
   flightCamera!: FlightCamera;
   readonly cull = new ViewCull();
+  /** draw calls / triangles of the last shadow pass per cascade (diagnostics) */
+  readonly shadowPassStats = shadowPassStats;
   width = 1;
   height = 1;
   time = 0;
@@ -127,11 +134,14 @@ export class Game {
     this.textures = new MapTextures(this.map, this.renderer);
 
     const q = this.quality;
+    this.cascades = new CascadeFitter(this.camera);
     this.csm = new CSM({
-      camera: this.camera, parent: this.scene, cascades: q.cascades, maxFar: q.shadowFar, mode: 'practical', shadowMapSize: q.shadowMapSize,
+      camera: this.camera, parent: this.scene, cascades: q.cascades, maxFar: q.shadowFar, mode: 'custom', customSplitsCallback: this.cascades.splitsCallback, shadowMapSize: q.shadowMapSize,
       lightDirection: new THREE.Vector3(0.3, -1, 0.2).normalize(), lightIntensity: 1, shadowBias: -0.0002, lightMargin: 300,
     });
+    this.cascades.attach(this.csm);
     this.csm.fade = true;
+    if (this.params.dbg.has('cascades')) installCascadeDebug();
     // route casters per cascade: thin / small objects only reach the near cascades (see culling.ts)
     installCascadeRouting(this.renderer, (l) => this.csm.lights.indexOf(l as THREE.DirectionalLight));
 
@@ -218,6 +228,7 @@ export class Game {
     await this.tick(progress, 'Pre-flighting the aircraft', 0.92);
     this.aircraft = new Aircraft((x, z) => this.map.heightAt(x, z), this.scene, this.wakes.scene);
     this.registerTree(this.aircraft.model.root);
+    this.aircraft.model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.castShadow) this.airframeCasters.push(o); });
     // surface decals, point sprites and trails are not mirrored (the sprites are sized for the main frame),
     // nor is the cabin interior (only visible through the glass)
     const fx = this.aircraft.effects;
@@ -303,7 +314,10 @@ export class Game {
     this.atmos.update(dt);
     const s = this.atmos.state;
     this.csm.lightDirection.copy(s.sunDir).negate();
-    for (const l of this.csm.lights) { l.intensity = s.sunIntensity; l.color.copy(s.sunColor); }
+    // under a broken / overcast deck the direct beam is partly scattered by the clouds: cast shadows lighten
+    // with the coverage (the key light itself is already dimmed by the weather preset)
+    const shadowStrength = 1 - 0.45 * smoothstep(0.45, 0.95, this.atmos.preset.coverage);
+    for (const l of this.csm.lights) { l.intensity = s.sunIntensity; l.color.copy(s.sunColor); l.shadow.intensity = shadowStrength; }
     this.envTimer += dt;
     // the IBL probe only depends on the sun position and weather (no clouds in the probe), so refresh it on
     // a time-of-day change; the old 5 s timer re-ran the PMREM (a multi-pass cubemap convolution) as a
@@ -325,26 +339,29 @@ export class Game {
     cam.updateMatrixWorld();
     const cx = cam.position.x, cz = cam.position.z;
     // shadow range grows with altitude so a high aerial still shows building shadows
-    const wantFar = Math.min(12000, Math.max(this.quality.shadowFar, cam.position.y * 9));
-    if (Math.abs(wantFar - this.csm.maxFar) > 200) { this.csm.maxFar = wantFar; this.csm.updateFrustums(); }
+    const wantFar = Math.min(12000, Math.max(this.quality.shadowFar, Math.round(cam.position.y * 9 / 250) * 250));
+    const planePos = this.aircraft.flight.position;
+    const groundY = Math.max(0, this.map.heightAt(cx, cz));
+    this.cascades.updateSplits(wantFar, planePos, 9, groundY);
+    // fit the cascades (replaces CSM.update: slab-clipped extents, depth range following the slice, biases per
+    // texel); the culling below routes casters by the cascade slices and texels this produces
+    this.cascades.fit(planePos.y + 5);
     // view / shadow-caster culling shared by the chunked world systems
     this.cull.update(cam, this.csm.maxFar, this.atmos.state.sunDir);
     this.terrain.update(cx, cz);
+    // casters reach as far as the cascades do; the canopy stops at half the range (a crown's shadow is a
+    // couple of texels there and every tile is a draw call per cascade)
+    this.city.batches.shadowDistance = this.csm.maxFar;
+    this.vegetation.shadowDistance = Math.max(1800, Math.min(3000, this.csm.maxFar * 0.4));
     this.vegetation.updateLod(cx, cz, this.cull);
     this.city.batches.updateLod(cx, cz, this.cull);
     this.props.updateLod(cx, cz, this.cull);
     this.traffic.updateCulling(this.cull);
+    // the airframe casts only into the cascades its shadow can reach (one in most views, not all three)
+    const airMask = layerMask('all', true, this.cull.casterCascades(planePos, 9, 5));
+    for (const o of this.airframeCasters) o.layers.mask = airMask;
     this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size);
     this.wakes.render(this.renderer, cx, cz);
-    this.csm.update();
-    for (const l of this.csm.lights) {
-      const sc = l.shadow.camera;
-      const texel = (sc.right - sc.left) / l.shadow.mapSize.width;
-      // normal bias proportional to the texel keeps flat terrain free of acne; 1.5 texels (0.8-4.9 m) was
-      // detaching every contact shadow, 0.6 keeps the aircraft/pier/tree shadows attached
-      l.shadow.normalBias = texel * 0.6;
-      l.shadow.bias = -0.0003;
-    }
     this.sky.render(this.renderer, cam, this.post.width, this.post.height);
     // the shadow cascades are rendered by the first of the two scene renders below (the mirror pass when it
     // runs, else the main pass) and reused by the second
