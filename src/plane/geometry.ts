@@ -61,6 +61,37 @@ export function sectionPerimeter(s: Section, steps = 64): number {
   return len;
 }
 
+/**
+ * Texture v of ring parameter t: the normalised arc length around the section (0 top, 0.5 belly, 1 top again).
+ * The raw superellipse parameter spends most of its range in the corners of a boxy section, so a texture mapped by
+ * t squeezes the whole flat side wall into a few texels (livery text there magnified into vertical smears).
+ */
+const ARC_STEPS = 4096; // a boxy section's whole side wall can sit inside 1/200 of the parameter range
+const arcTables = new WeakMap<Section, Float32Array>();
+function arcTable(s: Section): Float32Array {
+  let tab = arcTables.get(s);
+  if (tab) return tab;
+  tab = new Float32Array(ARC_STEPS + 1);
+  const a = sectionPoint(s, 0), b: [number, number] = [0, 0];
+  for (let i = 1; i <= ARC_STEPS; i++) {
+    sectionPoint(s, 0.5 * (i / ARC_STEPS), b);
+    tab[i] = tab[i - 1] + Math.hypot(b[0] - a[0], b[1] - a[1]);
+    a[0] = b[0]; a[1] = b[1];
+  }
+  const half = tab[ARC_STEPS] || 1e-9;
+  for (let i = 0; i <= ARC_STEPS; i++) tab[i] = 0.5 * tab[i] / half;
+  arcTables.set(s, tab);
+  return tab;
+}
+export function arcFraction(s: Section, t: number): number {
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+  if (t > 0.5) return 1 - arcFraction(s, 1 - t);
+  const tab = arcTable(s);
+  const f = t * 2 * ARC_STEPS, i = Math.min(Math.floor(f), ARC_STEPS - 1);
+  return tab[i] + (tab[i + 1] - tab[i]) * (f - i);
+}
+
 function lerpSection(a: Section, b: Section, f: number, x: number): Section {
   const l = (p: number, q: number) => p + (q - p) * f;
   const na = a.n ?? 2.2, nb = b.n ?? 2.2;
@@ -101,7 +132,7 @@ export function insetSections(sections: Section[], d: number): Section[] {
 
 /**
  * Vertex grid of a lofted body: S stations x (R+1) ring vertices. Ring parameters may differ per station
- * (so specific heights can be hit exactly), UV u runs along the body, v is the ring parameter.
+ * (so specific heights can be hit exactly), UV u runs along the body, v is the ring's normalised arc length.
  * Normals are those of the complete closed surface so any subset (body, glass) shades continuously.
  */
 export interface LoftGrid {
@@ -196,7 +227,7 @@ export function loftGrid(sections: Section[], ringT: (s: Section, i: number) => 
       sectionPoint(sections[i], t[i][j], p);
       const k = i * (R + 1) + j;
       pos[k * 3] = sections[i].x; pos[k * 3 + 1] = p[0]; pos[k * 3 + 2] = p[1];
-      uv[k * 2] = u[i]; uv[k * 2 + 1] = t[i][j];
+      uv[k * 2] = u[i]; uv[k * 2 + 1] = arcFraction(sections[i], t[i][j]);
     }
   }
   const forwardX = sections[S - 1].x >= sections[0].x;

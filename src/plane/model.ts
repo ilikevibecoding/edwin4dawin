@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
   Batch, bladeGeometry, deckGeometry, fairedStrutGeometry, floatHull, glareShieldGeometry, gridGeometry, halfWidthAt, humpGeometry, inBlock, insetSections, keyedRing, loftGrid,
-  paneGeometry, partsMaterial, placement, quadGeometry, revealGeometry, sectionAt, sectionPerimeter, spinnerGeometry, strapGeometry, strutGeometry, tOfHeight, weldSmooth, wingLowerY, wingPanel, wingUpperY, wingXLE, wingXTE, withStations,
+  arcFraction, paneGeometry, partsMaterial, placement, quadGeometry, revealGeometry, sectionAt, sectionPerimeter, spinnerGeometry, strapGeometry, strutGeometry, tOfHeight, weldSmooth, wingLowerY, wingPanel, wingUpperY, wingXLE, wingXTE, withStations,
   type FloatStation, type QuadBlock, type Section, type Surf, type WingSpec,
 } from './geometry';
 import {
@@ -293,7 +293,7 @@ export class PlaneModel {
     const iFront = si(CABIN_FRONT), iRear = si(CABIN_REAR);
 
     const noseX = sections[0].x, length = noseX - sections[sections.length - 1].x;
-    // v of height y between stations the way the mesh maps it: the ring parameter at each bracketing station,
+    // v of height y between stations the way the mesh maps it: the arc-length v at each bracketing station,
     // interpolated linearly along x (a section interpolated first would put the paint edges off the vertex rows)
     const vBetween = (x: number, y: number): number | null => {
       let i = 0;
@@ -302,9 +302,9 @@ export class PlaneModel {
       const f = THREE.MathUtils.clamp((a.x - x) / Math.max(a.x - b.x, 1e-6), 0, 1);
       const ta = tOfHeight(a, y), tb = tOfHeight(b, y);
       if (ta === null && tb === null) return null;
-      if (ta === null) return tb;
-      if (tb === null) return ta;
-      return ta + (tb - ta) * f;
+      if (ta === null) return arcFraction(b, tb!);
+      if (tb === null) return arcFraction(a, ta);
+      return arcFraction(a, ta) + (arcFraction(b, tb) - arcFraction(a, ta)) * f;
     };
     const layout: FuselageLayout = {
       length,
@@ -314,7 +314,7 @@ export class PlaneModel {
       topV: (x, z) => {
         const s = sectionAt(sections, x), n = s.n ?? 2.2;
         const r = Math.min(Math.abs(z) / s.w, 0.999);
-        return tOfHeight(s, s.yc + s.top * Math.pow(1 - Math.pow(r, n), 1 / n) * 0.999) ?? 0;
+        return arcFraction(s, tOfHeight(s, s.yc + s.top * Math.pow(1 - Math.pow(r, n), 1 / n) * 0.999) ?? 0);
       },
       perimeter: (x) => sectionPerimeter(sectionAt(sections, x)),
       sillY,

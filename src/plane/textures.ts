@@ -142,19 +142,39 @@ export interface FuselageLayout {
  * (v increasing upwards) a vertical flip. Glyphs are stretched by the local v/u scale ratio to stay isotropic.
  */
 function bodyText(ctx: CanvasRenderingContext2D, lay: FuselageLayout, w: number, h: number, text: string, x: number, y: number, heightM: number, weight: string, family: string, color: string): void {
-  const pxU = w / lay.length, pxV = h / lay.perimeter(x);
-  const v = lay.vOf(x, y) ?? 0.25;
+  const pxU = w / lay.length;
   const fontPx = heightM / 0.72 * pxU;
+  // the glyphs are rendered once in body metres (isotropic), then copied column by column so that every column
+  // sits at the local v of the text height and is scaled by the local texels-per-metre: the word follows the
+  // sill droop and keeps a constant physical height across stations whose perimeter changes
+  const boxH = Math.ceil(fontPx * 1.6);
+  const [tc, tctx] = canvas(w, boxH);
+  tctx.fillStyle = color;
+  tctx.font = `${weight} ${fontPx.toFixed(1)}px ${family}`;
+  tctx.textAlign = 'center';
+  tctx.textBaseline = 'middle';
+  tctx.fillText(text, w / 2, boxH / 2);
+  const textW = Math.ceil(tctx.measureText(text).width) + 4;
+  const u0 = lay.uOf(x) * w;
+  const dvdy = (xs: number): number => {
+    const a = lay.vOf(xs, y + 0.01), b = lay.vOf(xs, y - 0.01);
+    return a !== null && b !== null ? (b - a) / 0.02 : (h / lay.perimeter(xs)) / h;
+  };
   for (const side of [1, -1]) {
-    ctx.save();
-    ctx.translate(lay.uOf(x) * w, (side > 0 ? v : 1 - v) * h);
-    ctx.scale(side > 0 ? -1 : 1, side * (pxV / pxU));
-    ctx.fillStyle = color;
-    ctx.font = `${weight} ${fontPx.toFixed(1)}px ${family}`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(text, 0, 0);
-    ctx.restore();
+    for (let c = -textW / 2; c < textW / 2; c++) {
+      // starboard reads left-to-right from outside with the nose to the right, so its columns are mirrored in u
+      const du = u0 + (side > 0 ? -c : c);
+      const xs = lay.xOf(du / w);
+      const v = lay.vOf(xs, y) ?? 0.25;
+      const pxPerM = dvdy(xs) * h;                 // texels per metre of height at this column
+      const dh = boxH / pxU * pxPerM;              // destination height of the glyph box
+      const vc = (side > 0 ? v : 1 - v) * h;
+      ctx.save();
+      ctx.translate(du, vc);
+      ctx.scale(1, side > 0 ? 1 : -1);
+      ctx.drawImage(tc, w / 2 + c, 0, 1, boxH, 0, -dh / 2, 1, dh);
+      ctx.restore();
+    }
   }
 }
 
