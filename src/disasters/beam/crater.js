@@ -1,9 +1,12 @@
-// Deterministic crater carving for the orbital beam. A fixed, distance-sorted list of columns is prepared
-// once (from the world state at start); every simulation tick the crater is grown (radius and depth follow
-// the tick fraction) and blocks are removed top-down, innermost columns first, within the manager's edit
-// budget. All choices depend only on (x, z, seed) hashes and the tick -> identical on every client.
+// Deterministic crater carving + destruction wave for the orbital beam.
+// CraterPlan: a fixed, distance-sorted list of columns is prepared once (from the world state at start); every
+// simulation tick the crater is grown (radius and depth follow the tick fraction) and blocks are removed top-down,
+// innermost columns first, within the manager's edit budget.
+// WavePlan: the shock front that races outward from the impact across the town; as it passes a column it strips
+// the fragile top blocks (weighted by fragility and distance) and scorches the exposed ground in a decaying pattern.
+// All choices depend only on (x, y, z, seed) hashes and the tick -> identical on every client.
 import { BLOCKS, B, SHAPE } from '../../blocks.js';
-import { hash2 } from '../../rng.js';
+import { hash2, hash3 } from '../../rng.js';
 import { CHUNK_HEIGHT } from '../../constants.js';
 
 const RIM_WIDTH = 4;          // ring outside the crater that gets scorched (charred wood, ash, burnt plants)
@@ -73,9 +76,10 @@ export class CraterPlan {
     return n;
   }
 
-  // Grow the crater to fraction f (0..1) of its final size and apply edits within the manager's budget.
+  // Grow the crater to fraction f (0..1) of its final size and apply edits within the manager's budget, leaving
+  // `reserve` edits of this tick's budget untouched (shared with the destruction wave).
   // rNow = current radius, depthK = current depth fraction. Returns true when everything is finished.
-  step(f) {
+  step(f, reserve = 0) {
     const m = this.m;
     const rNow = this.R * Math.pow(Math.min(1, f), 0.7);
     const depthK = Math.min(1, f / 0.5);
@@ -83,13 +87,13 @@ export class CraterPlan {
     this.debrisThisTick = 0;
     let allDone = true;
     for (let i = 0; i < this.n; i++) {
-      if (m.budgetLeft <= 0) return false;
+      if (m.budgetLeft <= reserve) return false;
       const d = this.d[i], x = this.x[i], z = this.z[i];
       if (i >= this.inner) {
         // rim column: scorch when the crater edge gets close
         if (this.state[i] === STATE_DONE) continue;
         if (rNow < d - 3) return false;
-        if (!this.dressRim(i, x, z, d)) return false;
+        if (!this.dressRim(i, x, z, d, reserve)) return false;
         this.state[i] = STATE_DONE;
         continue;
       }
@@ -97,7 +101,7 @@ export class CraterPlan {
       // the bowl deepens towards this column's final (jittered) floor as depthK grows
       const floorNow = Math.max(this.floor[i], Math.round(this.g - (this.g - this.floor[i]) * depthK));
       while (this.top[i] > floorNow) {
-        if (m.budgetLeft <= 0) return false;
+        if (m.budgetLeft <= reserve) return false;
         const y = this.top[i];
         const id = this.world.getBlock(x, y, z);
         if (id !== B.AIR && id !== B.BEDROCK) {
@@ -109,7 +113,7 @@ export class CraterPlan {
       }
       if (this.state[i] === STATE_PENDING) {
         if (depthFinal && this.top[i] <= this.floor[i]) {
-          if (m.budgetLeft < 3) return false;
+          if (m.budgetLeft < 3 + reserve) return false;
           this.dressFloor(i, x, z, d);
           this.state[i] = STATE_DONE;
         } else allDone = false;
@@ -141,11 +145,11 @@ export class CraterPlan {
   // Ring outside the crater: wood chars, leaves and plants burn away, the ground turns to ash with a low
   // ragged ash lip right at the edge. Resumable (uses top[i] as the scan cursor); returns false when the
   // budget ran out before the column was finished.
-  dressRim(i, x, z, d) {
+  dressRim(i, x, z, d, reserve = 0) {
     const m = this.m;
     const minY = this.g - 6;
     while (this.top[i] >= minY) {
-      if (m.budgetLeft < 2) return false;
+      if (m.budgetLeft < 2 + reserve) return false;
       const y = this.top[i];
       const id = this.world.getBlock(x, y, z);
       if (id !== B.AIR) {
@@ -165,5 +169,119 @@ export class CraterPlan {
       this.top[i] = y - 1;
     }
     return true;
+  }
+}
+
+export const CRATER_RIM_WIDTH = RIM_WIDTH;
+
+// The expanding ring of destruction. Columns between rInner (the beam's own column, vaporised by the crater
+// anyway) and waveR are processed in distance order as the front reaches them. Inside the crater plan's zone
+// (d <= craterR + RIM_WIDTH) only the fragile stuff (roofs, glass, fences, plants) is thrown so the impact reads
+// as one blast while the beam keeps eating the rest; outside it the top `peel` blocks of each column may be
+// removed (probability = fragility x falloff) and natural ground turns to ash / coarse dirt / dirt with a
+// probability that decays toward the wave radius. `front` is the radius actually reached (budget-limited), which
+// the visuals follow so the dust wall and the flying blocks stay together.
+export class WavePlan {
+  constructor(manager, cx, cz, rInner, craterR, waveR, groundY, seed, strength) {
+    this.m = manager;
+    this.world = manager.world;
+    this.cx = cx; this.cz = cz; this.craterR = craterR; this.craterOuter = craterR + RIM_WIDTH; this.waveR = waveR;
+    this.g = groundY; this.seed = seed; this.strength = strength;
+    this.scanTop = Math.min(CHUNK_HEIGHT - 1, groundY + 48);
+    this.minY = groundY - 4;
+    const tmp = [];
+    const r0 = Math.max(0, rInner);
+    for (let x = Math.floor(cx - waveR); x <= Math.ceil(cx + waveR); x++) {
+      for (let z = Math.floor(cz - waveR); z <= Math.ceil(cz + waveR); z++) {
+        const dx = x + 0.5 - cx, dz = z + 0.5 - cz;
+        const d = Math.sqrt(dx * dx + dz * dz);
+        if (d > r0 && d <= waveR) tmp.push([x, z, d]);
+      }
+    }
+    tmp.sort((a, b) => (a[2] - b[2]) || (a[0] - b[0]) || (a[1] - b[1]));
+    const n = tmp.length;
+    this.n = n;
+    this.x = new Int32Array(n); this.z = new Int32Array(n); this.d = new Float32Array(n);
+    for (let i = 0; i < n; i++) { this.x[i] = tmp[i][0]; this.z[i] = tmp[i][1]; this.d[i] = tmp[i][2]; }
+    this.next = 0;             // first unprocessed column
+    this.front = r0;           // radius actually reached
+    this.removed = 0; this.scorched = 0;
+    this.onRemove = null;      // (x, y, z, id, d, power) cosmetic hook (debris)
+    this.done = n === 0;
+  }
+
+  // Estimated number of blocks the wave will throw / scorch (for warnings()); cheap: uses expected values.
+  estimate() {
+    let thrown = 0, scorched = 0;
+    for (let i = 0; i < this.n; i++) {
+      const d = this.d[i];
+      if (d <= this.craterOuter) { thrown += 0.3; continue; }
+      const u = this.falloff(d);
+      thrown += 0.35 * Math.pow(1 - u, 1.5); scorched += 0.1 + 0.9 * Math.pow(1 - u, 1.4);
+    }
+    return { thrown: Math.round(thrown), scorched: Math.round(scorched) };
+  }
+
+  falloff(d) { const u = (d - this.craterR) / Math.max(1, this.waveR - this.craterR); return u < 0 ? 0 : u > 1 ? 1 : u; }
+
+  // Advance the front to (at most) radius rNow, processing columns in order within the edit budget minus `reserve`.
+  // Returns true once every column has been processed.
+  step(rNow, reserve = 0) {
+    const m = this.m;
+    while (this.next < this.n && this.d[this.next] <= rNow) {
+      if (m.budgetLeft <= reserve + 4) return false; // out of budget: the front stays at the last processed column
+      this.column(this.next);
+      this.front = this.d[this.next];
+      this.next++;
+    }
+    if (this.next >= this.n) { this.front = this.waveR; this.done = true; return true; }
+    this.front = Math.max(this.front, Math.min(rNow, this.d[this.next])); // caught up with the target radius
+    return false;
+  }
+
+  column(i) {
+    const x = this.x[i], z = this.z[i], d = this.d[i];
+    const world = this.world, m = this.m, seed = this.seed;
+    const u = this.falloff(d);
+    const inside = d <= this.craterOuter;
+    const power = Math.pow(1 - u, 1.5) * (0.45 + 0.55 * this.strength);
+    let y = this.scanTop;
+    while (y > this.minY && world.getBlock(x, y, z) === B.AIR) y--;
+    if (y <= this.minY) return;
+    // peel the top blocks: fragile materials first, fewer the farther out
+    const peel = inside ? 2 : u < 0.3 ? 3 : u < 0.65 ? 2 : 1;
+    let k = 0;
+    while (k < peel && y > this.minY) {
+      const id = world.getBlock(x, y, z);
+      if (id === B.AIR) { y--; continue; }
+      const def = BLOCKS[id];
+      const frag = m.constructor.fragility(id);
+      if (frag <= 0) break;
+      const p = inside ? (frag >= 0.6 ? 0.55 * (0.5 + 0.5 * this.strength) : 0) : frag * power * (k === 0 ? 1 : 0.55);
+      if (p > 0 && hash3(x, y, z, seed + 11) < p) {
+        m.setBlock(x, y, z, B.AIR);
+        this.removed++;
+        if (this.onRemove) this.onRemove(x, y, z, id, d, power);
+        y--; k++;
+        continue;
+      }
+      if (def.shape === SHAPE.CUBE) break; // a surviving full block shields what is below
+      y--; k++;
+    }
+    if (inside) return;
+    // scorch the exposed natural ground in a pattern that thins out toward the wave radius
+    while (y > this.minY && world.getBlock(x, y, z) === B.AIR) y--;
+    if (y <= this.minY) return;
+    const id = world.getBlock(x, y, z);
+    if (!isNaturalGround(id)) return;
+    const h = hash2(x, z, seed + 3);
+    const ps = 0.1 + 0.9 * Math.pow(1 - u, 1.4);
+    if (h >= ps) return;
+    let nb;
+    if (u < 0.22) nb = B.ASH;
+    else if (u < 0.5) nb = h < ps * 0.45 ? B.ASH : B.COARSE_DIRT;
+    else nb = h < ps * 0.35 ? B.COARSE_DIRT : B.DIRT;
+    if (id === B.SAND || id === B.GRAVEL) nb = u < 0.3 ? B.ASH : id;
+    if (nb !== id && m.setBlock(x, y, z, nb)) this.scorched++;
   }
 }
