@@ -565,9 +565,9 @@ export function faceUV(g, texel) {
       const z = pos.getZ(t + k);
       let u;
       let v;
-      if (ny >= nx && ny >= nz) (u = x), (v = z);
-      else if (nx >= nz) (u = z), (v = y);
-      else (u = x), (v = y);
+      if (ny >= nx && ny >= nz) ((u = x), (v = z));
+      else if (nx >= nz) ((u = z), (v = y));
+      else ((u = x), (v = y));
       uv[(t + k) * 2] = u * texel;
       uv[(t + k) * 2 + 1] = v * texel;
     }
