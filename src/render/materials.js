@@ -158,6 +158,8 @@ const TILE_MATERIALS = {
   glow_panel: { cls: 'glow', detail: 'panel', emit: { lo: 212, hi: 236, sat: 0 } },
   glow_panel_blue: { cls: 'glow', detail: 'panel', emit: { lo: 125, hi: 160, sat: 0 } },
   holo_sign: { cls: 'glow', detail: 'panel', emit: { lo: 70, hi: 140, sat: 0 }, roughness: 0.3, metalness: 0.4 },
+  neon_pink: { cls: 'glow', detail: 'panel', emit: { lo: 120, hi: 200, sat: 0 }, roughness: 0.2, metalness: 0.3 },
+  neon_green: { cls: 'glow', detail: 'panel', emit: { lo: 120, hi: 200, sat: 0 }, roughness: 0.2, metalness: 0.3 },
   console_top: { cls: 'panel', emissive: 1, emit: { lo: 120, hi: 200, sat: 0.3 }, roughness: 0.35 },
   console_side: { cls: 'panel', emissive: 1, emit: { lo: 120, hi: 200, sat: 0.3 } },
   vent: { cls: 'panel', grooveT: 20 },

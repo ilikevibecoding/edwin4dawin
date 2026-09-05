@@ -27,6 +27,8 @@ export const B = {
   // gameplay states (ids from 100 upward; existing ids are never renumbered)
   OAK_DOOR_TOP: 100, OAK_DOOR_OPEN: 101, SPRUCE_DOOR_TOP: 102, SPRUCE_DOOR_OPEN: 103,
   WHEAT_0: 104, WHEAT_1: 105,
+  // undercity neon (ids 106+)
+  NEON_PINK: 106, NEON_GREEN: 107,
 };
 
 export const BLOCKS = new Array(256);
@@ -205,6 +207,8 @@ export function initBlocks() {
   def(B.CITY_LAMP, 'city_lamp', { tex: same('city_lamp'), emit: 15, sound: 'metal', hardness: 0.5 });
   def(B.HULL_PLATE, 'hull_plate', { tex: same('hull_plate'), sound: 'metal', hardness: 4.0 });
   def(B.HULL_TRENCH, 'hull_trench', { tex: same('hull_trench'), sound: 'metal', hardness: 4.0 });
+  def(B.NEON_PINK, 'neon_pink', { tex: same('neon_pink'), emit: 14, sound: 'glass', hardness: 0.4 });
+  def(B.NEON_GREEN, 'neon_green', { tex: same('neon_green'), emit: 14, sound: 'glass', hardness: 0.4 });
 
   for (let i = 0; i < 256; i++) if (!BLOCKS[i]) BLOCKS[i] = BLOCKS[B.AIR];
 }
@@ -235,4 +239,5 @@ export const PALETTE = [
   B.COAL_ORE, B.IRON_ORE, B.GOLD_ORE, B.GOLD_BLOCK, B.IRON_BLOCK, B.SNOW, B.SCORCHED_STONE, B.ASH, B.MAGMA, B.CHARRED_PLANKS,
   B.DURASTEEL, B.DURASTEEL_DARK, B.PANEL_BLACK, B.PANEL_RED, B.PANEL_STRIPE, B.GLOW_PANEL, B.GLOW_PANEL_BLUE, B.HOLO_SIGN, B.CONSOLE,
   B.VENT, B.DECK_PLATE, B.STEEL_GLASS, B.CHROME, B.WINDOW_LIT, B.WINDOW_DARK, B.CITY_LAMP, B.HULL_PLATE, B.HULL_TRENCH,
+  B.NEON_PINK, B.NEON_GREEN,
 ];

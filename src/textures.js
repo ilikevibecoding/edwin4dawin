@@ -524,6 +524,9 @@ P.panel_red = (t, r) => { panelBase(t, r, [150, 34, 30], 8, [80, 16, 14]); t.hli
 P.panel_stripe = (t, r) => { panelBase(t, r, [78, 82, 90], 5, [44, 46, 52]); t.rect(0, 6, 16, 4, [176, 40, 34]); t.hline(6, 0, 15, [120, 26, 24]); t.hline(9, 0, 15, [120, 26, 24]); };
 P.glow_panel = (t, r) => { t.noisy([240, 244, 250], 4, r); t.border([200, 206, 216]); };
 P.glow_panel_blue = (t, r) => { t.noisy([110, 190, 255], 8, r); t.border([60, 120, 200]); t.rect(6, 6, 4, 4, [200, 236, 255]); };
+// neon tubes: a dark housing with a bright saturated tube across the middle and a soft halo either side
+P.neon_pink = (t, r) => { t.fill([30, 14, 30]); t.rect(1, 5, 14, 6, [120, 30, 90]); t.rect(1, 6, 14, 4, [255, 70, 200]); t.rect(2, 7, 12, 2, [255, 190, 240]); t.border([50, 24, 50]); };
+P.neon_green = (t, r) => { t.fill([12, 30, 22]); t.rect(1, 5, 14, 6, [30, 120, 70]); t.rect(1, 6, 14, 4, [70, 255, 150]); t.rect(2, 7, 12, 2, [200, 255, 220]); t.border([24, 50, 36]); };
 P.holo_sign = (t, r) => { t.fill([20, 24, 40]); for (let y = 2; y < 14; y += 3) t.hline(y, 2, 13, r.next() < 0.5 ? [60, 220, 255] : [255, 80, 220]); t.speckle([255, 255, 255], 6, r); t.border([40, 60, 90]); };
 P.console_top = (t, r) => { t.noisy([40, 42, 48], 4, r); for (let x = 2; x < 14; x += 3) for (let y = 2; y < 14; y += 3) t.px(x, y, [[60, 220, 120], [255, 60, 60], [80, 160, 255], [255, 200, 60]][r.int(0, 3)]); t.rect(2, 9, 12, 4, [30, 80, 120]); t.hline(10, 3, 12, [90, 200, 240]); t.border([70, 74, 82]); };
 P.console_side = (t, r) => { panelBase(t, r, [60, 63, 70], 4, [34, 36, 40]); t.rect(3, 4, 10, 3, [20, 60, 90]); t.px(5, 5, [80, 220, 120]); t.px(9, 5, [255, 80, 60]); };
@@ -664,6 +667,7 @@ const TILE_NAMES = [
   'wheat_stage0', 'wheat_stage1',
   'item_apple', 'item_bread', 'item_wheat', 'item_seeds', 'item_beef_raw', 'item_beef_cooked', 'item_porkchop_raw', 'item_porkchop_cooked',
   'item_chicken_raw', 'item_chicken_cooked', 'item_bone', 'item_leather', 'item_feather', 'item_stick',
+  'neon_pink', 'neon_green',
 ];
 export const ITEM_TILE_NAMES = TILE_NAMES.filter((n) => n.startsWith('item_'));
 

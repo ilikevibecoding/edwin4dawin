@@ -62,7 +62,8 @@ function template(bp, rng, name, kind, x0, z0, x1, z1, y, side, doorU, doorW = 2
   return r;
 }
 // neon sign stack above a door: vertical holo strip with a chrome frame and coloured caps
-function neonStack(bp, x, y, z, h, cap) { bp.fill(x, y, z, x, y + h - 1, z, HOLO); bp.set(x, y + h, z, cap); bp.set(x, y - 1, z, TRIM); }
+const PINK = B.NEON_PINK, GREEN = B.NEON_GREEN;
+function neonStack(bp, x, y, z, h, cap) { for (let k = 0; k < h; k++) bp.set(x, y + k, z, (k % 3 === 1) ? HOLO : (cap === BLUE ? GREEN : PINK)); bp.set(x, y + h, z, cap); bp.set(x, y - 1, z, TRIM); }
 
 // A building: footprint (x0..x1, z0..z1 inclusive, outer walls), `floors` storeys of 5, the street door on `side`
 // (with a neon stack and awning), one room per floor from `rooms` (or a custom builder), a stair core in the
@@ -80,6 +81,19 @@ function building(bp, rng, spec) {
     for (let z = z0 + 1; z < z1; z++) for (const x of [x0, x1]) if ((z - z0) % 3 === 1) { bp.set(x, yb + 1, z, (z + f) % 2 ? B.WINDOW_LIT : B.WINDOW_DARK); bp.set(x, yb + 2, z, B.WINDOW_LIT); }
   }
   for (const [x, z] of [[x0, z0], [x1, z0], [x0, z1], [x1, z1]]) bp.fill(x, 1, z, x, h + 1, z, pal.frame);
+  // neon on the street face: coloured tubes along the floor bands (every other block) and vertical tubes running up
+  // both corners, pink or green per building - the canyon reads as lit signage rather than grey facades
+  {
+    const tube = ((x0 + z0) / 5 | 0) % 2 ? PINK : GREEN, tube2 = tube === PINK ? GREEN : PINK;
+    const fx = side === 'E' ? x1 : side === 'W' ? x0 : null, fz = side === 'S' ? z1 : side === 'N' ? z0 : null;
+    for (let f = 0; f < floors; f++) {
+      const yb = 1 + f * 5 + 4;
+      if (fx !== null) { for (let z = z0 + 1; z < z1; z++) if ((z - z0) % 2 === 0) bp.set(fx, yb, z, f % 2 ? tube : tube2); }
+      else { for (let x = x0 + 1; x < x1; x++) if ((x - x0) % 2 === 0) bp.set(x, yb, fz, f % 2 ? tube : tube2); }
+    }
+    if (fx !== null) { for (let y = 2; y <= h; y++) if (y % 4 !== 0) { bp.set(fx, y, z0, tube); bp.set(fx, y, z1, tube); } }
+    else { for (let y = 2; y <= h; y++) if (y % 4 !== 0) { bp.set(x0, y, fz, tube); bp.set(x1, y, fz, tube); } }
+  }
   // vents and pipes on the side walls
   for (let z = z0 + 2; z < z1 - 1; z += 5) { bp.set(x0, 3, z, B.VENT); bp.set(x1, 3, z, B.VENT); }
   // rooftop: tanks, vents, antenna
@@ -132,6 +146,33 @@ function building(bp, rng, spec) {
   return { x0, z0, x1, z1, h };
 }
 
+// Outlander Club: neon-lit bar along the back wall with bottle shelves, booths down both sides, a lit dance floor
+// in the middle under a chrome-and-neon canopy, a DJ console, neon columns, bartender and dancer spots
+function club(bp, rng, x0, z0, x1, z1, y, side, doorU) {
+  const r = new Room(bp, { x0, z0, x1, z1, y, h: 4, side, doorU, doorW: 2 }, 'night_club', {});
+  for (let u = 0; u < r.w; u++) for (let v = 0; v <= r.back; v++) r.putRaw(u, -1, v, (u + v) % 3 ? B.PANEL_BLACK : DARK);
+  // dance floor: a lit checker in the middle third
+  const du0 = Math.max(2, Math.floor(r.w / 2) - 4), du1 = Math.min(r.w - 3, du0 + 8), dv0 = 3, dv1 = Math.max(dv0 + 4, r.back - 6);
+  for (let u = du0; u <= du1; u++) for (let v = dv0; v <= dv1; v++) r.putRaw(u, -1, v, ((u + v) % 3 === 0) ? PINK : ((u + v) % 3 === 1) ? GREEN : BLUE);
+  for (let u = du0; u <= du1; u += 2) for (let v = dv0; v <= dv1; v += 2) r.putRaw(u, 3, v, (u + v) % 4 ? HOLO : GLOW);   // canopy rig
+  for (const [u, v] of [[du0 - 1, dv0 - 1], [du1 + 1, dv0 - 1], [du0 - 1, dv1 + 1], [du1 + 1, dv1 + 1]]) { r.put(u, 0, v, TRIM); r.put(u, 1, v, PINK); r.put(u, 2, v, GREEN); }   // neon columns
+  for (let k = 0; k < 3; k++) r.spot(du0 + 2 + k * 2, dv0 + 2, 'dance');
+  // bar along the back wall
+  const bv = r.back - 2;
+  r.counter(1, r.w - 2, bv, B.PANEL_BLACK, B.STONE_BRICK_SLAB);
+  for (let u = 1; u < r.w - 1; u++) if (u % 2) r.putRaw(u, 0, bv, PINK);   // lit counter front
+  for (let u = 0; u < r.w; u++) { r.put(u, 0, r.back, u % 4 === 1 ? B.CHEST : B.SHELF); r.put(u, 1, r.back, u % 3 ? B.SHELF : B.GLASS); r.put(u, 2, r.back, u % 2 ? HOLO : GREEN); }
+  for (let u = 2; u < r.w - 2; u += 3) r.seat(u, bv - 1);
+  r.work(r.cu, bv + 1, 'bartender'); r.work(r.cu - 3, bv + 1, 'bartender');
+  // booths down both side walls: bench, table, bench
+  for (let v = 2; v + 2 <= bv - 2; v += 4) { for (const u of [0, r.w - 1]) { r.seat(u, v, B.RED_WOOL); r.put(u, 0, v + 1, B.TABLE); r.seat(u, v + 2, B.RED_WOOL); r.putRaw(u, 2, v + 1, (v % 8) ? PINK : GREEN); } }
+  // DJ console on a plinth at the far side of the floor
+  r.put(du1 + 1, 0, dv1, B.PANEL_BLACK); r.put(du1 + 1, 1, dv1, B.CONSOLE); r.work(du1 + 1, dv1 - 1, 'dj');
+  // neon strip along the ceiling edges
+  for (let u = 0; u < r.w; u += 2) { r.putRaw(u, 3, 0, PINK); r.putRaw(u, 3, r.back, GREEN); }
+  r.finalize();
+  bp.room('night_club', x0 - 1, y, z0 - 1, x1 + 1, z1 + 1);
+}
 // Dex's Diner: chrome and red, counter with stools, booths, kitchen with furnaces, waitress droid spot
 function diner(bp, rng, x0, z0, x1, z1, y, side, doorU) {
   const r = new Room(bp, { x0, z0, x1, z1, y, h: 4, side, doorU, doorW: 2 }, 'diner', {});
@@ -201,8 +242,9 @@ function streets(bp, rng) {
   // puddles
   for (let k = 0; k < 40; k++) { const x = rng.int(2, bp.w - 3), z = rng.int(2, bp.d - 3); if (bp.get(x, 0, z) !== GLOW && bp.get(x, 0, z) !== KERB) bp.set(x, 0, z, B.WATER); }
   // lamp posts along the main and cross streets, holo totems at the corners
-  for (let z = 4; z < bp.d - 4; z += 8) { lamp(bp, MAIN.x0 + 1, 1, z, 3, B.CITY_LAMP); lamp(bp, MAIN.x1 - 1, 1, z + 4 < bp.d - 4 ? z + 4 : z, 3, B.CITY_LAMP); }
-  for (let x = 4; x < bp.w - 4; x += 8) { if (x >= MAIN.x0 - 2 && x <= MAIN.x1 + 2) continue; lamp(bp, x, 1, CROSS.z0 + 1, 3, B.CITY_LAMP); lamp(bp, x + 4, 1, CROSS.z1 - 1, 3, B.CITY_LAMP); }
+  // street lamps are neon-capped posts (pink one side, green the other) instead of the boulevard's white cubes
+  for (let z = 4; z < bp.d - 4; z += 8) { lamp(bp, MAIN.x0 + 1, 1, z, 3, B.NEON_PINK); lamp(bp, MAIN.x1 - 1, 1, z + 4 < bp.d - 4 ? z + 4 : z, 3, B.NEON_GREEN); }
+  for (let x = 4; x < bp.w - 4; x += 8) { if (x >= MAIN.x0 - 2 && x <= MAIN.x1 + 2) continue; lamp(bp, x, 1, CROSS.z0 + 1, 3, (x % 16 < 8) ? B.NEON_GREEN : B.LANTERN); lamp(bp, x + 4, 1, CROSS.z1 - 1, 3, (x % 16 < 8) ? B.LANTERN : B.NEON_PINK); }
   for (const [x, z] of [[MAIN.x0 - 2, CROSS.z0 - 2], [MAIN.x1 + 2, CROSS.z0 - 2], [MAIN.x0 - 2, CROSS.z1 + 2], [MAIN.x1 + 2, CROSS.z1 + 2]]) { bp.set(x, 1, z, B.PANEL_BLACK); bp.fill(x, 2, z, x, 5, z, HOLO); bp.set(x, 6, z, BLUE); }
 }
 
@@ -216,7 +258,9 @@ function deck(bp, rng, lot) {
     const rim = wells.some(([a, b, c, d]) => x >= a - 1 && x <= c + 1 && z >= b - 1 && z <= d + 1);
     bp.set(x, DECK_Y, z, rim ? GLOW : ((x % 8 === 0 || z % 8 === 0) ? B.DURASTEEL : DARK));
     if (rim) bp.set(x, DECK_Y + 1, z, B.IRON_BARS);
-    bp.set(x, DECK_Y - 1, z, (x % 12 === 6 && z % 12 === 6) ? BLUE : DARK);   // underside with blue light dots
+    // underside: neon runs down the main street's centre line, blue dots elsewhere every 6, so the strip is lit
+    // from above like a canyon roof rather than a black lid
+    bp.set(x, DECK_Y - 1, z, (x === MAIN.x0 + 5 && z % 3 !== 1) ? PINK : (x === MAIN.x1 - 5 && z % 3 !== 1) ? GREEN : (x % 6 === 3 && z % 6 === 3) ? BLUE : DARK);
   }
   // benches, planters and lamps on the deck
   for (let x = 8; x < bp.w - 8; x += 16) for (let z = 8; z < bp.d - 8; z += 16) {
@@ -299,7 +343,7 @@ export const LANDMARK = {
     // building specs: footprints in the four blocks, doors facing the streets
     const specs = [
       // south-west block (x 4..61, z 74..131): Outlander Club on the main street, pawn shop, flophouse, apartments
-      { x0: 40, z0: 74, x1: 61, z1: 95, floors: 3, side: 'E', rooms: ['night_club', 'lounge', 'studio'], custom: null, pal: P(3), neon: 5, sign: BLUE, balcony: true },
+      { x0: 40, z0: 74, x1: 61, z1: 95, floors: 3, side: 'E', rooms: ['night_club', 'lounge', 'studio'], custom: club, pal: P(3), neon: 5, sign: BLUE, balcony: true },
       { x0: 40, z0: 100, x1: 61, z1: 118, floors: 3, side: 'E', rooms: ['shop', 'hotel_room', 'hotel_room'], custom: pawn, pal: P(1), sign: RED },
       { x0: 8, z0: 74, x1: 35, z1: 91, floors: 2, side: 'N', rooms: ['workshop', 'family_apartment'], pal: P(4) },
       { x0: 8, z0: 96, x1: 35, z1: 118, floors: 4, side: 'E', rooms: ['restaurant', 'studio', 'studio', 'family_apartment'], pal: P(0), neon: 6, sign: GLOW, balcony: true },
@@ -333,7 +377,7 @@ export const LANDMARK = {
     for (const b of built) {
       for (let z = b.z0 + 3; z < b.z1 - 2; z += 7) { if ((b.x1 === MAIN.x0 - 5 || b.x1 === 61) && !bp.isAir(b.x1, 2, z) && !bp.isAir(b.x1, 1, z)) bp.set(b.x1, 2, z, B.VENT); if (b.x0 === 82 && !bp.isAir(b.x0, 2, z) && !bp.isAir(b.x0, 1, z)) bp.set(b.x0, 2, z, B.VENT); }   // never over a doorway
     }
-    for (let z = 6; z < bp.d - 6; z++) { if (z % 9 < 6) { bp.set(MAIN.x0 - 5, 9, z, (z % 2) ? BLUE : HOLO); bp.set(MAIN.x1 + 5, 9, z, (z % 2) ? RED : HOLO); } }
+    for (let z = 6; z < bp.d - 6; z++) { if (z % 9 < 6) { bp.set(MAIN.x0 - 5, 9, z, (z % 2) ? GREEN : HOLO); bp.set(MAIN.x1 + 5, 9, z, (z % 2) ? PINK : HOLO); } }
     deck(bp, rng, lot);
     // the south gangway lands on the deck; the undercity door is the lot door column at street level: keep the
     // street open there and frame it with holo pylons
