@@ -25,22 +25,25 @@ const RIP_PICKS = 44;             // candidate cells tested per tick
 const TOP_PICK_SHARE = 0.6;       // share of picks aimed at the topmost block of the column (roof-first)
 const SCAN_ABOVE = 24;            // blocks above the terrain surface searched for structures
 const GROUND_SCOUR = 0.12;        // rip probability multiplier for the terrain surface itself
-const CORE_CRACK = 0.55;          // within this fraction of the radius a strong funnel (intensity >= 0.8) also cracks masonry
+const CORE_CRACK = 0.6;           // within this fraction of the radius a strong funnel (intensity >= 0.8) also cracks masonry
 const CORE_CRACK_MIN_I = 0.8;
+const CORE_CRACK_BONUS = 0.9;     // masonry fragility added at the axis, fading to 0 at CORE_CRACK * radius
 // exposure faces (index stored with each queued rip): 0 = up, 1 = +x, 2 = -x, 3 = +z, 4 = -z
 const FX = [0, 1, -1, 0, 0], FY = [1, 0, 0, 0, 0], FZ = [0, 0, 0, 1, -1];
 const CAPTURE_TICKS = 80;         // a player held in / on the core this long (4 s) is thrown clear...
 const EJECT_TICKS = 60;           // ...and the wind lets go of them for 3 s
 // Decided rips are applied in bursts every RIP_BATCH_TICKS (0.8 s). The manager answers every touched chunk
-// with a full relight plus a remesh of that chunk and its 8 neighbours (~20 ms on this VM), so the number of
-// distinct chunks touched per second, not the block count, sets the price. A burst therefore tears out the
-// cells of ONE chunk (the one that has waited longest); a second chunk is flushed in the same burst only when
-// more than RIP_OVERFLOW cells are still queued, so the cost stays at ~1.25 relights/s in normal destruction
-// and never exceeds 2.5/s. Cells the funnel has left behind (> 2 radii away) are dropped instead of ripped.
+// with a full relight plus a remesh of that chunk and the neighbours whose border light changed (~20 ms on this
+// VM), so the number of distinct chunks touched per second, not the block count, sets the price. A burst
+// therefore tears out the cells of ONE chunk (the one that has waited longest); further chunks (up to
+// MAX_CHUNKS_PER_BURST) are flushed in the same burst only while more than RIP_OVERFLOW cells are still queued,
+// so the cost stays at ~1.25 relights/s in normal destruction and never exceeds 3.75/s (dense town blocks).
+// Cells the funnel has left behind (> 2 radii away) are dropped instead of ripped.
 const RIP_BATCH_TICKS = 16;
-const PENDING_MAX = 96;           // cells waiting for a burst (x,y,z,id,face each); a full queue drops new picks
+const PENDING_MAX = 128;          // cells waiting for a burst (x,y,z,id,face each); a full queue drops new picks
 const PENDING_STRIDE = 5;
-const RIP_OVERFLOW = 40;          // queued cells that justify a second chunk in the same burst
+const RIP_OVERFLOW = 40;          // queued cells that justify another chunk in the same burst
+const MAX_CHUNKS_PER_BURST = 3;
 const MAX_DEBRIS_PER_BURST = 16;  // debris launched per burst tick (~20 per second on average)
 const MAX_FLING_PER_TICK = 3;
 const ALERT_INTERVAL = 40;        // ticks between NPC/animal alerts (2 s)
@@ -62,9 +65,9 @@ export function ripFragility(id, q, intensity) {
   if (!d || id === B.AIR || id === B.BEDROCK || id === B.WATER) return 0;
   if (d.shape !== SHAPE.CUBE) return d.sound === 'stone' ? 0.6 : d.sound === 'metal' ? 0.7 : 1.2;   // fences, slabs, doors, signs, panes...
   switch (d.sound) {
-    case 'glass': return 1.2; case 'cloth': return 1.0; case 'grass': return 0.95; case 'wood': return 0.85;
+    case 'glass': return 1.2; case 'cloth': return 1.0; case 'grass': return 0.95; case 'wood': return 0.9;
     case 'gravel': case 'sand': return 0.6; case 'metal': return 0.4;
-    default: return 0.3 + (intensity >= CORE_CRACK_MIN_I && q < CORE_CRACK ? 0.4 * (1 - q / CORE_CRACK) : 0);   // brick/stone/plaster
+    default: return 0.3 + (intensity >= CORE_CRACK_MIN_I && q < CORE_CRACK ? CORE_CRACK_BONUS * (1 - q / CORE_CRACK) : 0);   // brick/stone/plaster
   }
 }
 
@@ -309,13 +312,13 @@ export class Tornado extends Disaster {
   }
 
   // Tear out queued cells: the chunk of the oldest queued cell is flushed (all of its cells), plus the next
-  // oldest chunk when the queue is still long. Cells of other chunks stay queued in order for the next burst.
+  // oldest chunks while the queue is still long. Cells of other chunks stay queued in order for the next burst.
   applyRips() {
     const pending = this.pending;
     if (!pending.length) return;
     this.spawned = 0;
     this.flushChunk(pending[0] >> 4, pending[2] >> 4);
-    if (pending.length > RIP_OVERFLOW * PENDING_STRIDE) this.flushChunk(pending[0] >> 4, pending[2] >> 4);
+    for (let n = 1; n < MAX_CHUNKS_PER_BURST && pending.length > RIP_OVERFLOW * PENDING_STRIDE; n++) this.flushChunk(pending[0] >> 4, pending[2] >> 4);
   }
 
   // Set every queued cell of chunk (kx, kz) to AIR (journaled, budgeted) and launch debris from the exposed
