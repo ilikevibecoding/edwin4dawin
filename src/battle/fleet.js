@@ -293,7 +293,9 @@ export class Fleet {
       }
       s.updateMatrix();
       const d = s.position.distanceTo(camPos) - s.model.bounds.radius;
-      s.lod = d < LOD_RANGES[0] ? 0 : d < LOD_RANGES[1] ? 1 : 2;
+      // LOD distances scale with the ship: a 140 m courier drops detail far sooner than a 3 km battleship
+      const k = THREE.MathUtils.clamp(s.model.bounds.radius / 600, 0.3, 2);
+      s.lod = d < LOD_RANGES[0] * k ? 0 : d < LOD_RANGES[1] * k ? 1 : 2;
     }
     // write instances per class per lod
     this.stats.drawn = [0, 0, 0];

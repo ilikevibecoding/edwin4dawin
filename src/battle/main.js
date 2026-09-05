@@ -74,7 +74,7 @@ const debris = new Debris(scene, Math.round(400 * Math.max(0.5, SCALE)), {
 });
 explosions.attachDebris(debris); // stepped from explosions.update
 bolts.attachMuzzleFlash(explosions);
-const plumes = new EnginePlumes(scene, 1200);
+const plumes = new EnginePlumes(scene, 2400);
 const fighters = new Fighters(scene, sun, { scale: SCALE });
 const battle = createBattle({
   fleet,
