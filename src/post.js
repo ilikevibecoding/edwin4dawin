@@ -1122,8 +1122,14 @@ const GRADES = {
       sharpen: 0.3,
       midPivot: 0.3,
       midContrast: 0.16,
-      knee: 0.82,
-      shoulder: 0.75,
+      // Lower knee, firmer shoulder than round 2's 0.82 / 0.75. The dusk sky
+      // tops out at a p95 of 0.71 and never reaches this, so it is untouched;
+      // what the shoulder catches is the specular of the low sun on the
+      // truck's brightwork, which the hero framing looks at from eleven
+      // degrees off the mirror direction. With the key down to 4.0 (sky.js)
+      // that lands at 0.74 p95 instead of clipping.
+      knee: 0.74,
+      shoulder: 0.95,
     },
   },
   overcast: {
@@ -1173,7 +1179,15 @@ const GRADES = {
     // It also keeps the star field out, which at 0.42 it was not: bloom over a
     // point-light field turns every star into a glowing ball and the sky fills
     // with what looks like snow.
-    bloom: { strength: 0.72, radius: 0.72, threshold: 2.0 },
+    //
+    // Radius 0.72 -> 0.35, strength 0.72 -> 0.55. The radius weights the
+    // small mips of the blur chain, and at 0.72 the roof bar's halo was the
+    // whole frame: with the lamps switched off the sky in the top-right of
+    // the hero dropped from 0.123 to 0.099 display luma and the door skin
+    // from 0.085 to 0.064 — a quarter of the sky's value was lamp veil, and
+    // it was grey, which is critic A's grey-blue night. At 0.35 the halo is
+    // a halo (sky 0.112 with the lamps on) and the lenses still bloom.
+    bloom: { strength: 0.55, radius: 0.35, threshold: 2.0 },
     clamp: 6.5,
     // A wider, weaker AO. At night almost everything is already dark and a
     // tight hard AO just adds black to black; what is worth having is the
@@ -1197,16 +1211,20 @@ const GRADES = {
       // at 0.030/0.040/0.062 the night frames were putting seventeen per cent
       // of their pixels under a luma of 0.02, against about one per cent for
       // the day reference.
-      // Nearly neutral, with only a hint of blue left in it.
-      //
       // A lift is added as `lift * (1 - col)`, so on a dark pixel it is not a
       // tint on the colour, it *is* the colour — and at night most of the frame
       // is dark pixels. At an R:B of 0.5 this term was setting the floor for
       // the tyres, the bumper, the trail and the foliage alike, which is why
       // they all measured within five degrees of hue 220 no matter what the
-      // lights were doing. The mode has a blue sky, blue fog and a blue key
-      // already; it does not need the grade to add a fourth.
-      lift: [0.04, 0.046, 0.06],
+      // lights were doing.
+      //
+      // Lower again, and cool. Until round 3 the sky dome rendered black (see
+      // NIGHT_SKY) and this lift was the only thing standing in for a sky, so
+      // it had to be high — and being near neutral it made the sky grey. The
+      // dome carries its own blue now, the ground is meant to go nearly black
+      // between the lamps, and the floor this sets is a blue-black at about
+      // 0.03 luma: under the sky, over pure black.
+      lift: [0.016, 0.022, 0.04],
       // Near neutral, on purpose.
       //
       // The cool of a night frame belongs in the *lift*, which is weighted by
@@ -1224,8 +1242,14 @@ const GRADES = {
       // albedo by a blue key darkens it without desaturating it. Rod vision
       // does the desaturating, and this is where that lives.
       saturation: 1.05,
-      saturationDark: 0.35,
-      darkTint: [0.9, 0.95, 1.1],
+      // Up from 0.35. The desaturation is right for the soil, which must not
+      // be the day's laterite red in the dark; but it was applied to
+      // everything under 0.3 luma, and at night that is the sky too — it
+      // took the dome's blue to grey (critic A: sky 45/48/60 against the
+      // round-1 34/40/58) along with the tyre and the door. Two thirds keeps
+      // the Purkinje read on the darks and leaves the sky its colour.
+      saturationDark: 0.68,
+      darkTint: [0.88, 0.94, 1.14],
       // Shallow: a steep curve on an image that lives in the bottom third is
       // exactly what crushes it.
       sCurve: 0.1,

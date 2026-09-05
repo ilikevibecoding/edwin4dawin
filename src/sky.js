@@ -53,16 +53,21 @@ vec2 octEncode( vec3 d ) {
   return o;
 }
 
-// One grid of stars.
+// One grid of point stars.
 //
-// Two numbers decide whether this reads as a sky or as a snowstorm, and both
-// were wrong by about a factor of four on the first pass. The radius is floored
-// at rather less than a pixel of the octahedral map, measured with a
-// derivative: floored *above* a pixel and every star is a visible disc, which
-// at 512 across is a disc the size of the moon. And the magnitude has to stay
-// under the bloom threshold for all but the top of the distribution, or the
-// convolution turns each one into a glowing ball and the frame fills with them.
-vec3 starGrid( vec2 o, float px, float cells, float fill, float radius, float gain ) {
+// A star is a point. At any pitch this renders at its footprint is the pixel,
+// so the footprint is fixed at half a pixel of the octahedral map (taken from
+// the derivative, so it neither crawls nor changes size with the camera) and
+// everything that says "star" is carried by the magnitude and the count.
+// Round 2 measured what happens when the count is authored for a radius and
+// the radius is then floored to a pixel: every one of ten thousand faint
+// stars became a whole lit pixel and 20 % of the sky read as snow. So the
+// grids are thin — a few thousand stars over the whole sphere, which is what
+// the eye gets at a dark site — and the magnitude is a steep power of the
+// hash: the median star is a pixel a few steps over the sky, only the top few
+// per cent read as a point of light at a glance, and the brightest of those
+// stay under the night bloom threshold so they are points and not balls.
+vec3 starGrid( vec2 o, float px, float cells, float fill, float lo, float hi, float steep ) {
   vec2 p = o * cells;
   vec2 c = floor( p );
   float h1 = hash( c + 3.17 );
@@ -70,23 +75,14 @@ vec3 starGrid( vec2 o, float px, float cells, float fill, float radius, float ga
   float h3 = hash( c + 27.31 );
   float h4 = hash( c + 41.03 );
   if ( h3 > fill ) return vec3( 0.0 );
-  vec2 pos = c + 0.18 + vec2( h1, h2 ) * 0.64;
+  vec2 pos = c + 0.15 + vec2( h1, h2 ) * 0.7;
   vec2 dv = p - pos;
-  // Floored on the derivative so the field cannot crawl or twinkle under
-  // motion, and the floor is the radius that matters: the authored radius is
-  // now well under it at any capture pitch. The old 0.16 / 0.22 cell radii
-  // were 1.2 and 3.6 *pixels* at 640 across — every star a soft disc, and the
-  // coarse grid's discs all the same size, which is the "uniform blobs" read.
-  float r = max( radius, px * cells * 0.62 );
+  float r = max( px * cells * 0.5, 1e-5 );
   float q = dot( dv, dv ) / ( r * r );
-  float s = exp( -q * 3.4 );
-  // Magnitudes: fourth power, so the field is mostly faint with a handful
-  // genuinely bright, and the bright end is bright — a first-magnitude star
-  // is a point that reads at a glance, not a slightly whiter speck. The top
-  // of the range stays under the night bloom threshold.
-  float mag = h4 * h4 * h4 * h4;
+  float s = exp( -q * 1.5 );
+  float mag = pow( h4, steep );
   vec3 tint = mix( vec3( 1.0, 0.90, 0.78 ), vec3( 0.74, 0.84, 1.0 ), h1 );
-  return tint * s * ( 0.05 + mag * 1.6 ) * gain;
+  return tint * s * ( lo + mag * hi );
 }
 
 // Ordered dither, a fraction of an 8-bit step, applied multiplicatively to
@@ -127,30 +123,32 @@ void main() {
   if ( uStars > 0.0 ) {
     vec2 o = octEncode( d );
     float px = length( fwidth( o ) );
-    // Thinned for an open sky. Under a canopy a tenth of the dome was visible
-    // and the density read as a sky; over a plain the same field is snow.
-    // Thinned again after the plain: at a capture's pixel pitch every star is
-    // floored to a whole pixel, so the count is what reads, not the radius.
-    // Three grids: a dense faint one, a sparse one that carries the bright
-    // stars, and a very fine dusting that only shows inside the Milky Way.
-    vec3 sf = starGrid( o, px, 210.0, 0.06, 0.03, 0.7 )
-            + starGrid( o + 7.3, px, 96.0, 0.03, 0.03, 1.2 );
-    // The Milky Way is a soft band round a tilted great circle, with the dark
-    // rift down its middle and a granular texture of unresolved stars. It is
-    // what stops the upper sky reading as an even wash of dots.
+    // Two grids. The dense one is the background field: about ten thousand
+    // faint points over the sphere, nearly all of them a pixel a few steps
+    // over the sky. The sparse one is the few hundred naked-eye stars, with a
+    // magnitude curve that puts a handful of first-magnitude points in any
+    // framing. Neither has a Milky Way dusting any more — see below.
+    vec3 sf = starGrid( o, px, 230.0, 0.045, 0.012, 0.55, 8.0 )
+            + starGrid( o + 7.3, px, 72.0, 0.05, 0.08, 1.1, 3.0 );
+    // The Milky Way is a band, not a dot field: the unresolved stars of the
+    // galactic plane are a smooth glow at any pixel this renders at, so that
+    // is what it is here — a soft profile round a tilted great circle, a
+    // broad faint skirt under it, a dust lane a little off its core, and a
+    // low-octave cloud structure along it. The dusting grid round 2 laid over
+    // it was a denser field of the same pixels as the sky and read as snow.
     vec3 axis = normalize( vec3( 0.42, 0.52, -0.74 ) );
     float along = dot( d, axis );
-    float band = exp( -pow( along / 0.26, 2.0 ) );
-    float rift = 1.0 - 0.55 * exp( -pow( ( along + 0.04 ) / 0.07, 2.0 ) );
-    float grain = fbm( o * 5.5 + 21.0 );
-    float mw = band * rift * ( 0.10 + grain * grain * 0.9 );
-    sf += vec3( 0.58, 0.64, 0.82 ) * mw * uMilkyWay;
-    sf += starGrid( o + 3.9, px, 420.0, 0.35, 0.03, 0.45 ) * band * uMilkyWay;
+    float band = exp( -pow( along / 0.21, 2.0 ) );
+    float skirt = exp( -pow( along / 0.48, 2.0 ) );
+    float lane = 1.0 - 0.62 * exp( -pow( ( along + 0.045 ) / 0.045, 2.0 ) );
+    float cloud = fbm( o * 3.0 + 21.0 );
+    float mw = band * lane * ( 0.45 + cloud * 0.8 ) + skirt * 0.16;
+    vec3 way = vec3( 0.62, 0.68, 0.86 ) * mw * 0.05 * uMilkyWay;
     // nothing in the first few degrees over the treeline, and less of it inside
     // the moon's own glow
-    sf *= smoothstep( -0.01, 0.20, h ) * ( 1.0 - haze * 0.72 );
-    sf *= 1.0 - smoothstep( 0.985, 0.9998, c ) * 0.85;
-    col += sf * uStars;
+    float gate = smoothstep( -0.01, 0.20, h ) * ( 1.0 - haze * 0.72 );
+    gate *= 1.0 - smoothstep( 0.985, 0.9998, c ) * 0.85;
+    col += ( sf * uStars + way ) * gate;
   }
 
   // aureole: wide warm bloom of forward-scattered light around the sun
@@ -192,14 +190,11 @@ void main() {
   gl_FragColor = vec4( col, 1.0 );
 }`;
 
-// Two ways to turn a hex into a linear radiance, and the difference matters.
-//
-// `lin` converts twice: `new Color(hex)` already lands in linear under three's
-// colour management, and `convertSRGBToLinear` on top of that darkens and
-// saturates it again. The night rig was tuned against that and is kept on it.
-// `rad` converts once, so the hex you read is the sRGB the sky will show at
-// unit exposure, which is the only way to author a gradient by eye.
-const lin = (hex, mul = 1) => new THREE.Color(hex).convertSRGBToLinear().multiplyScalar(mul);
+// A hex to a linear radiance, converted once: `new Color(hex)` already lands
+// in linear under three's colour management, so the hex you read is the sRGB
+// the sky will show at unit exposure, which is the only way to author a
+// gradient by eye. (The night rig used to run through `convertSRGBToLinear`
+// on top of that — converted twice — and its dome rendered black.)
 const rad = (hex, mul = 1) => new THREE.Color(hex).multiplyScalar(mul);
 
 /**
@@ -295,36 +290,46 @@ const DUSK_SKY = {
 };
 
 const NIGHT_SKY = {
-  zenith: lin(NIGHT.skyTop, 1.0),
-  horizon: lin(NIGHT.skyHorizon, 1.0),
+  // Converted once (`rad`), like the other three hours. On `lin` these hexes
+  // were converted twice and the dome rendered at about a hundredth of the
+  // value the hex reads as: the whole night sky sat under 0.01 display luma,
+  // and what every night frame showed as "sky" was the grade's shadow lift —
+  // which is grey. Critic A's 45/48/60 grey-blue was that. The dome carries
+  // its own blue now and the lift sits under it, so the sky is what the
+  // palette says it is and the ground can be read against it.
+  zenith: rad(NIGHT.skyTop, 1.0),
+  horizon: rad(NIGHT.skyHorizon, 1.0),
   // No brighter than the horizon it sits on. At 1.15 this was the pale band
   // every critic saw: a haze term lighter than the sky above it *and* than the
   // fog the ground went to, so the hills floated on a luminous strip. Held to
   // the horizon's own value the sky darkens smoothly to the ground line and
   // the fog below (`horizonOf` this) meets it there.
-  haze: lin(NIGHT.haze, 0.78),
-  anti: lin(NIGHT.haze, 0.8),
+  haze: rad(NIGHT.haze, 0.72),
+  anti: rad(NIGHT.haze, 0.72),
   antiGain: 0.0,
   warm: 0.0,
-  ground: lin(NIGHT.ground, 1.0),
-  sunColor: lin(NIGHT.moon),
-  cloudCol: lin(NIGHT.cloud, 0.9),
+  ground: rad(NIGHT.ground, 1.0),
+  sunColor: rad(NIGHT.moon),
+  cloudCol: rad(NIGHT.cloud, 0.6),
   // Small and hot rather than large and grey: the moon is a quarter of a
   // degree across and brighter than anything else in the sky.
   sunDisc: 26.0,
   envDisc: 5.0,
-  glow: 2.6,
+  glow: 2.0,
   envGlow: 1.6,
-  aureole: 0.30,
+  // A third of what it was, because the colour under it is thirty times
+  // brighter than it was: this is the moon's glow in the air, a soft gradient
+  // round the disc and not a second haze band.
+  aureole: 0.10,
   hazeFalloff: 9.0,
   cloud: 0.30,
   zenithPow: 0.55,
   disc: [0.999905, 0.999975],
-  // Points now, not discs (see `starGrid`), so the count can come back up a
-  // little without the field reading as snow, and the Milky Way carries the
-  // sense of a dark-sky night.
-  stars: 0.7,
-  milkyWay: 0.85,
+  // Unit gains. The field and the band are authored in `starGrid` and the
+  // Milky Way block of the shader at a dark-sky density; these are the dials
+  // for an A/B (`skyRig.skyMaterial.uniforms.uStars`), not a tuning.
+  stars: 1.0,
+  milkyWay: 1.0,
   moonDetail: 1.0,
 };
 
@@ -362,7 +367,24 @@ const MODES = {
     // a real pale blue, held down because the PMREM already carries the sky —
     // and the ground half is the ochre the whole plain bounces back, which is
     // what warms every underside and shadowed flank in the frame.
-    hemi: { sky: 0x93a9c2, ground: PALETTE.bounce, intensity: 0.5 },
+    //
+    // 0.5 -> 2.5, with the key down from 9.4 to 7.9 (palette) so the sunlit
+    // ground stays put. At 0.5 the key-to-sky ratio on a horizontal surface
+    // was 8.0 : 0.2, forty to one, and the shade under the camp's mess awning
+    // measured 0.065 display luma against 0.67 a metre away in the sun —
+    // three and a half stops, a hole. Ablated on that framing: GTAO off moved
+    // the shade 0.001, the hemisphere to zero moved it -0.019, the
+    // environment to zero -0.024, so the shade *is* these two terms and
+    // nothing else, and neither is anywhere near what an open sky puts on the
+    // ground (a fifth of the sun, not a fortieth). At 1.8 the shade sits at
+    // 0.11 and at 2.5 at 0.14, the chairs under the awning at 0.22 / 0.26,
+    // the contact shadow under the truck's chassis goes 0.050 -> 0.057 and
+    // the door skin 0.214 -> 0.222. Key to sky on a horizontal surface is
+    // now 6.7 : 1, which is a clear sky's diffuse fraction.
+    // The remaining gap to a 1.5-2 stop shade is on the receivers: the pad
+    // decal reads its environment at 0.25 and the terrain's own occlusion
+    // stack takes most of what the hemisphere gives it (see the report).
+    hemi: { sky: 0x93a9c2, ground: PALETTE.bounce, intensity: 2.5 },
     rim: { color: PALETTE.shadowTint, intensity: 0.38 },
     // The bounce card stays. A 58-degree sun leaves a door skin at half the
     // irradiance of the bonnet and open ground does not fill it; the card is
@@ -375,7 +397,11 @@ const MODES = {
     fog: { color: horizonOf(DAY_SKY), density: 0.0021, sunGain: 0.35, sunPow: 5.0, height: 0.016, heightMix: 1.0 },
     // A multiplier on each material's authored value, so day is a no-op.
     envIntensity: 1.0,
-    shadow: { radius: 1.2, bias: -0.00012, normalBias: 0.035, intensity: 1.0 },
+    // farRadius 2.4 texels (was the 1.5 default): the world map is 12.7 cm a
+    // texel, so this is a 30 cm filter on the camp's awning and tree shadows
+    // instead of 19 — the same five taps, spread wider. The near map, which
+    // is the truck's own shadow, is untouched.
+    shadow: { radius: 1.2, bias: -0.00012, normalBias: 0.035, intensity: 1.0, farRadius: 2.4 },
     // Columns of lit dust, faint. Under a canopy these were the shot; on a plain
     // at noon they are barely there, which is right.
     shafts: { color: PALETTE.dustLit, gain: 0.28, width: 1.7 },
@@ -398,9 +424,20 @@ const MODES = {
     // is the key/fill split this hour is about. The shadow boxes are as deep
     // as the sun needs (`shadowReach`), so none of that is clipped.
     //
-    // Brighter to compensate for the angle: the ground gets sin(6)/sin(15) of
-    // what it did, and it is the flanks that have to hold the exposure now.
-    key: { az: 296, el: 6, color: DUSK.sun, intensity: 7.0 },
+    // It was 7.0, "to compensate for the angle" — so the ground would keep
+    // what it had at fifteen degrees. That is backwards for a six-degree sun,
+    // which comes through nine air masses and is a fraction of the noon disc,
+    // and it was the whole of the round-2 dusk hero defect: a vertical face
+    // square to a 7.0 key gets more irradiance than noon puts on the ground,
+    // and from the hero camera — eleven degrees off the mirror direction of
+    // that sun on the truck's front — the specular of every bumper, slat and
+    // bar arrived at white. Measured on the grille region: key 7.0 mean 0.40
+    // / p95 0.81 / max 0.93; at 4.0 with the grade's knee under it (post.js)
+    // 0.33 / 0.74 / 0.88, the sky unchanged to a hundredth. The ground's
+    // direct is 0.42 now, a third of its indirect, which is what a plain
+    // looks like in the last half hour: lit sky, dim warm ground, long soft
+    // shadows rather than hard ones.
+    key: { az: 296, el: 6, color: DUSK.sun, intensity: 4.0 },
     sky: DUSK_SKY,
     // The hemisphere is diffuse only, the environment is diffuse *and*
     // specular, and it is the specular half that chalks a flank.
@@ -451,17 +488,26 @@ const MODES = {
     // frame. That is the shot. Sixty lit the near flank better and looked like
     // an underexposed afternoon.
     //
-    // Up from 1.6, with the fill and the hemisphere pulled down under it: the
-    // three of them were within a factor of two of each other, and a frame
-    // whose key, fill and ambient agree is a frame with no key. The moon now
-    // owns the tops and the far flank, the fill models the near flank at a
-    // third of it, and the undersides get almost nothing.
-    key: { az: 140, el: 43, color: NIGHT.moon, intensity: 2.1 },
+    // Down from 2.1. That was a key that put a pale murram pad at 0.42 display
+    // luma under a horizon of 0.12 — the ground brighter than the sky, which
+    // is the one thing a night frame cannot have — and it was doing so on a
+    // sky dome that rendered black, so nothing else in the frame was
+    // referenced to it. With the dome at its authored blue the moon is a
+    // low cool key: it models the tops and the far flank against the sky,
+    // an up-facing soil at about half the horizon's value, and the lamps are
+    // the brightest thing on the ground by a wide margin.
+    //
+    // And 0.4 with the dome darkened again (palette): measured on the camp
+    // approach, 0.55 left the pad at 0.088 against a horizon band of 0.114;
+    // 0.4 puts it at 0.078, and the sweep 0.35–0.9 moved the near ground by
+    // only ±0.01, so the moon is not what sets the floor here — the grade's
+    // lift and the environment are.
+    key: { az: 140, el: 43, color: NIGHT.moon, intensity: 0.4 },
     sky: NIGHT_SKY,
     // The ground half is near black. Moonlit earth bounces almost nothing, and
     // the 0x211c17 it had was what put the same value on the underside of a
     // wheel arch as on the bonnet above it.
-    hemi: { sky: NIGHT.hemiSky, ground: 0x0a0907, intensity: 0.3 },
+    hemi: { sky: NIGHT.hemiSky, ground: 0x0a0907, intensity: 0.22 },
     // A cool counter-key from behind the camera. At 0.16 it did nothing at all
     // and the truck's near flank was a single flat value; this is what puts an
     // edge on the roof line and the tyre shoulders on the shadow side.
@@ -479,7 +525,19 @@ const MODES = {
     // Down from 15: at that it matched the moon and the near flank was as
     // bright as the lit one. It is the fill for the shadow side, so it sits
     // under the key by about three to one.
-    fill: { color: 0x9db5d8, intensity: 8, angle: 0.6, throw: 13, az: 48, el: 14 },
+    // Held while the moon came down: it is a card, it reaches thirteen metres,
+    // and it is what keeps the door skin readable now that the key on the
+    // ground is a fraction of what it was.
+    //
+    // Up from 8 to 18. Ablated on the hero's door skin (60x60 at 330,170):
+    // 0.072 display luma with everything on; the rim doubled moved it 0.000,
+    // the hemisphere doubled 0.001, the environment doubled +0.018, the fill
+    // doubled +0.018, and with the environment off it fell to 0.054. So the
+    // near flank is lit by exactly two things, the fill and the probe, and
+    // critic A's "0.8 stops darker than round 1" door (0.133 then) comes
+    // back through the fill: each 8 of intensity is about +0.018 on the
+    // skin and +0.006 on the trail in front of it.
+    fill: { color: 0x9db5d8, intensity: 18, angle: 0.6, throw: 13, az: 48, el: 14 },
     // Thinner than the forest's 0.0082: a moonlit plain has kilometres of
     // visibility, and the fog's job here is only to put the far acacias under
     // the horizon band rather than to close the corridor.
@@ -494,7 +552,9 @@ const MODES = {
     // the night sky and is therefore as saturated as the night sky; the
     // hemisphere is a colour I can set. Same total ambient, more of it from the
     // term whose hue is under control.
-    envIntensity: 0.6,
+    // 0.8: the environment is a quarter of what the door skin has (see the
+    // fill), and the dome it is rendered from is 40 per cent darker now.
+    envIntensity: 0.8,
     shadow: { radius: 2.4, bias: -0.00018, normalBias: 0.05, intensity: 0.88, farRadius: 1.8, farStrength: 0.9 },
     shafts: { color: 0x9dbbe8, gain: 0.45, width: 1.4 },
     // Dust you can see across the whole frame needs a light source filling the
@@ -517,7 +577,13 @@ const MODES = {
     // surface is what puts a floor under the dark half and keeps the pool
     // reading as a textured surface rather than as noise. Down from 0.62 with
     // the rest of the ambient: the moonlit ground was reading at day value.
-    groundIndirect: 0.5,
+    //
+    // And down again, hard. The term this scales is `albedo * 0.5`, an unlit
+    // constant: at 0.5 it alone put 0.09 linear on a 0.35 albedo — display
+    // 0.33 — whatever the moon or the sky did, and it is why the camp pad
+    // read as a grey snowfield with no moon in frame. At 0.1 it is a floor
+    // under the ruts on the lamp-lit trail and nothing else.
+    groundIndirect: 0.1,
     surfaces: { dash: 2.1, film: 0.2, glass: 0.24 },
   },
 
@@ -1257,8 +1323,15 @@ const RETUNE = {
     overcast: { hue: HUE_GREY, sat: 0.9, mul: 0.45 },
   },
   uDirect: { dusk: { mul: 0.9 }, night: { mul: 0.55 }, overcast: { mul: 0.45 } },
-  uSky: { dusk: { hue: HUE_DUSK_COOL, mul: 1.0 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.3 }, overcast: { hue: HUE_GREY, sat: 0.9, mul: 1.5 } },
-  uGnd: { dusk: { hue: 0xa2734d, sat: 0.7, mul: 0.8 }, night: { hue: 0x35404a, mul: 0.24 }, overcast: { sat: 0.5, hue: 0x8a7e70, mul: 1.0 } },
+  // Night 0.3 / 0.24 -> 0.1 / 0.08. These only reach the bark now (the
+  // foliage bags meter the hemisphere themselves, below), and the bark's sky
+  // term is an *additive* amount, not a fraction of its albedo: at 0.3 of the
+  // day value a bole kept thirty per cent of noon skylight under a hemisphere
+  // that is at one per cent of noon and a crown floored at a tenth — which is
+  // the pale trunks under black crowns of `truck_night/forest.png`. A tenth
+  // puts the bole on the crown's own floor.
+  uSky: { dusk: { hue: HUE_DUSK_COOL, mul: 1.0 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.1 }, overcast: { hue: HUE_GREY, sat: 0.9, mul: 1.5 } },
+  uGnd: { dusk: { hue: 0xa2734d, sat: 0.7, mul: 0.8 }, night: { hue: 0x35404a, mul: 0.08 }, overcast: { sat: 0.5, hue: 0x8a7e70, mul: 1.0 } },
   uRim: { dusk: { hue: HUE_DUSK, mul: 1.4 }, night: { hue: HUE_NIGHT, mul: 0.3 }, overcast: { hue: HUE_GREY, mul: 0.4 } },
   // The far trees fog to the same lit dust the terrain does.
   uHazeCol: { dusk: { hue: 0xc98a5a, mul: 1.1 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.42 }, overcast: { hue: 0xb8b2a8, sat: 0.9, mul: 1.6 } },

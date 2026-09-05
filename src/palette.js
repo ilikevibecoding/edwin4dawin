@@ -121,7 +121,13 @@ export const SUN = {
   // stretching from them, low enough that a vertical panel still reads. The
   // 47 this replaces was a compromise with a conifer canopy that is gone.
   elevation: 58,
-  intensity: 9.4,
+  // 9.4 -> 7.9, traded against the day hemisphere (sky.js MODES.day.hemi,
+  // 0.5 -> 2.5). Measured on the camp's mess framing: sunlit dirt is
+  // 0.068 display luma per unit of key and 0.064 per unit of hemisphere, so
+  // the pair holds the sunlit ground within four per cent of where it was
+  // while the shade under the awning goes from 0.065 to 0.14. forest.js reads
+  // this for its key reference, so the crowns follow the change for free.
+  intensity: 7.9,
 };
 
 // ---------------------------------------------------------------------------
@@ -146,11 +152,22 @@ export const NIGHT = {
   // so the blue is put in deliberately rather than measured.
   moon: 0xaec6ee,
   moonLow: 0x8aa3d0,
-  skyTop: 0x070d1f,
-  skyHorizon: 0x18253d,
+  // Read as the sRGB the dome shows at unit exposure now (sky.js converts
+  // these once, like the other hours; it used to convert them twice and the
+  // dome rendered black under the grade's grey lift). Blue-black overhead,
+  // a deeper blue at the horizon where the air is thickest; the ground is
+  // meant to sit *under* the horizon band, not on it.
+  //
+  // Measured on the hero at 0x0a1330 / 0x1d2c4c: zenith 0.081 display luma
+  // (13/20/48), horizon band 0.114 (18/29/63) — blue, but a twilight blue,
+  // and with the lamps' bloom veil on top of it a grey-blue. Forty per cent
+  // darker in linear puts the zenith at 0.06 and the band under 0.09, which
+  // is still a colour and no longer a lit sky.
+  skyTop: 0x080f25,
+  skyHorizon: 0x17223b,
   // Air over the plain still scatters moonlight, and that band is the only
   // thing that puts a silhouette on the far acacias.
-  haze: 0x243651,
+  haze: 0x213049,
   ground: 0x04060a,
   cloud: 0x2c3a54,
   // Fog has to sit *under* the horizon band or the distance glows and the
