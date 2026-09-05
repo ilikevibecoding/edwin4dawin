@@ -32,7 +32,9 @@ export const CARS = [
 export const TRAIN_LENGTH = CARS[CARS.length - 1].x0 + CAR_LENGTH; // 74
 export const TRAIN_HEIGHT = 6;   // undercarriage, floor, 3 interior rows, roof
 // door openings on the platform side (grid z = 5), as car-local x offsets of the 2-wide doorways
-export const DOOR_OFFSETS = { engine: [10], passenger: [2, 10], observation: [2, 10] };
+// the engine has no passenger door: docked, it stands short of the platform at both stations (crew reach it through
+// the gangway), so a door there would open onto the drop
+export const DOOR_OFFSETS = { engine: [], passenger: [2, 10], observation: [2, 10] };
 // world x of every door's first cell when the train is docked with its west end at dockX0
 export function doorWorldXs(dockX0) {
   const out = [];
