@@ -65,9 +65,10 @@ export function buildExterior(scene, materials) {
   const stations = {
     exterior_far: { pos: [-1750, 680, -1950], look: [0, 60, 0] },
     exterior_medium: { pos: [-1100, 520, 300], look: [0, 60, 200] },
-    // front: 40 % closer than the old [220, 190, -1550] on the same ray (the ship filled ~15 % of the
-    // frame); the look point sits forward of midships so the bow tip 130 m ahead stays in frame
-    exterior_front: { pos: [132, 130, -930], look: [0, 20, -250] },
+    // front: starboard bow quarter, 450 m off the axis (from 132): at t = 40 the backdrop moon sits
+    // ~1° off dead astern, and from nearer the axis it was right behind the tower; from here the tower
+    // is 15° off the moon's centre (moon 6°, tower 4°), the bow tip stays in frame at the lower right
+    exterior_front: { pos: [450, 130, -930], look: [0, 20, -300] },
     exterior_close: { pos: [-420, 260, 560], look: [-80, 120, 520] },
     exterior_tower: { pos: [-260, 240, 330], look: [0, 185, 620] },
     exterior_bridge: { pos: [40, 196, 470], look: [0, 184, 592] },
@@ -77,8 +78,12 @@ export function buildExterior(scene, materials) {
     exterior_engines: { pos: [420, 120, 1300], look: [0, 10, 780] },
     exterior_plating: { pos: [-260, 92, -120], look: [-120, 40, -300] },
     exterior_trench: { pos: [-520, 4, 120], look: [-380, 0, 300] },
-    exterior_bow: { pos: [-150, 75, -890], look: [0, 18, -690] },
-    exterior_stern: { pos: [-380, 140, 960], look: [-60, 20, 760] },
+    // bow: 350 m off the axis to port (from 150) so the tower clears the backdrop moon by 14°; the
+    // look point is swung aft to keep the whole ship centred with the moon inside the right edge
+    exterior_bow: { pos: [-350, 75, -900], look: [-70, 18, -485] },
+    // stern: further astern and a little more on axis, 650 m from the tower — the tower (±10°) then
+    // sits in the 27° gap between the ocean world and the gas giant's ring tip instead of over the disc
+    exterior_stern: { pos: [-290, 140, 1202], look: [-60, 30, 760] },
     exterior_dorsal: { pos: [-700, 420, -300], look: [0, 60, 300] },
     exterior_dock: { pos: [-340, 14, 50], look: [-262, 0, 112] },
   };
