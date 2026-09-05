@@ -90,7 +90,9 @@ export class Door {
       // lintel status lamp on each face (large enough to read from the far end of a corridor)
       const lampN = n < 0 ? [n - 0.012, n] : [n, n + 0.012];
       this.boxUN(kit, "paintedMetal", -Math.min(0.6, w * 0.36) - 0.04, Math.min(0.6, w * 0.36) + 0.04, h + JAMB * 0.3 - 0.03, h + JAMB * 0.3 + 0.11, n < 0 ? n - 0.006 : n, n < 0 ? n : n + 0.006, { color: PALETTE.impBlack, texel: 2 });
-      this.boxUN(kit, st.lamp, -Math.min(0.6, w * 0.36), Math.min(0.6, w * 0.36), h + JAMB * 0.3, h + JAMB * 0.3 + 0.08, lampN[0], lampN[1]);
+      // dim variant: the full emitter was the brightest object in every lobby (r 254); the dim one
+      // still reads from the far end of a corridor
+      this.boxUN(kit, kit.materials && kit.materials[st.lamp + "Dim"] ? st.lamp + "Dim" : st.lamp, -Math.min(0.6, w * 0.36), Math.min(0.6, w * 0.36), h + JAMB * 0.3, h + JAMB * 0.3 + 0.08, lampN[0], lampN[1]);
       // blast doors carry their chevrons on the fixed header band, not on the sliding leaves
       if (st.hazard) {
         this.boxUN(kit, "hazard", -w / 2 - JAMB, -Math.min(0.6, w * 0.36) - 0.12, h + JAMB * 0.3 - 0.02, h + JAMB * 0.3 + 0.1, lampN[0], lampN[1], { texel: 3 });
@@ -103,8 +105,9 @@ export class Door {
         this.boxUN(kit, "emitRed", w / 2 + JAMB + 0.13, w / 2 + JAMB + 0.31, 1.18, 1.24, n < 0 ? n - 0.086 : n + 0.08, n < 0 ? n - 0.08 : n + 0.086);
       }
     }
-    // sill: dark plate with a hazard edge on the floor through the gap
-    this.boxUN(kit, "paintedMetal", -w / 2, w / 2, -0.01, 0.012, n0, n1, { color: PALETTE.impBlack, texel: 2 });
+    // sill: matte ribbed rubber tread through the gap (a glossy painted plate under the lobby light read
+    // as a speckled mat), hazard edge on blast doors and open portals
+    this.boxUN(kit, "rubber", -w / 2, w / 2, -0.01, 0.012, n0, n1, { color: PALETTE.rubber });
     if (st.hazard || st.leaves === 0) this.boxUN(kit, "hazard", -w / 2, w / 2, 0.012, 0.018, n0 + 0.05, n1 - 0.05, { texel: 3 });
     // recessed track light in the lintel underside (white) so the doorway reads from both rooms
     this.boxUN(kit, "emitWhite", -w / 2 + 0.2, w / 2 - 0.2, h - 0.02, h, (n0 + n1) / 2 - 0.03, (n0 + n1) / 2 + 0.03);

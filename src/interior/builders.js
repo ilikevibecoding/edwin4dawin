@@ -258,33 +258,43 @@ export function panelGrid(frame, length, height, opts = {}) {
           break;
         }
         case "greeble": {
-          // equipment panel: painted backing, a dark bezel, then a cluster of small devices
+          // equipment panel: painted backing, a plain dark bezel, then two or three fittings set out on a
+          // grid (junction box with its conduit drop, louvred vent, connector plate). Scattered random
+          // blocks on a speckled base read as noise from eye height.
           paintBox(cu, cv, -0.05, cw - gap * 2, ch - gap * 2, 0.06, plateCol);
-          frame.box("paintedMetal", cu, cv, -0.015, cw - 0.16, ch - 0.16, 0.01, { color: PALETTE.darkMetal, texel: 2 });
-          const n = 4 + Math.floor(rand() * 4);
-          for (let g = 0; g < n; g++) {
-            const gw = 0.06 + rand() * Math.min(0.18, cw * 0.25);
-            const gh = 0.04 + rand() * Math.min(0.14, ch * 0.25);
-            const gd = 0.025 + rand() * 0.05;
-            const gu = u0 + 0.15 + rand() * (cw - 0.3);
-            const gv = v0 + 0.15 + rand() * (ch - 0.3);
-            const cols = [PALETTE.gunmetal, PALETTE.steel, PALETTE.slate, PALETTE.darkMetal];
-            const r = rand();
-            if (r < 0.55) {
-              frame.box("metal", gu, gv, -0.01 + gd / 2, gw, gh, gd, { color: cols[Math.floor(rand() * cols.length)], texel: 3 });
-              if (rand() < 0.5) frame.box(rand() < 0.5 ? accent2 : accent, gu + gw * 0.3, gv, -0.01 + gd + 0.004, 0.018, 0.018, 0.008);
-            } else if (r < 0.8) {
-              frame.cylN("metal", gu, gv, -0.01 + gd / 2, 0.02 + rand() * 0.03, gd, { color: PALETTE.steel, segments: 12 });
+          frame.box("metal", cu, cv, -0.015, cw - 0.16, ch - 0.16, 0.01, { color: PALETTE.gunmetal });
+          const nCols = Math.max(1, Math.min(3, Math.floor((cw - 0.2) / 0.34)));
+          const slotW = (cw - 0.2) / nCols;
+          const first = Math.floor(rand() * 3);
+          const fw = Math.min(slotW - 0.08, 0.26);
+          const fh = Math.max(0.1, Math.min(ch - 0.34, 0.3));
+          for (let g = 0; g < nCols; g++) {
+            const gu = u0 + 0.1 + slotW * (g + 0.5);
+            const kind = (first + g) % 3;
+            if (kind === 0) {
+              // junction box: steel lid, one status lamp, conduit dropping to a clip near the kick
+              frame.box("metal", gu, cv, 0.03, fw, fh, 0.08, { color: PALETTE.gunmetal, texel: 3 });
+              frame.box("metal", gu, cv, 0.072, fw - 0.03, fh - 0.03, 0.006, { color: PALETTE.steel, texel: 3 });
+              frame.box(rand() < 0.5 ? accent2 : accent, gu + fw * 0.3, cv + fh * 0.3, 0.078, 0.018, 0.018, 0.006);
+              const drop = Math.max(0.04, cv - fh / 2 - v0 - 0.08);
+              frame.cylV("metal", gu, cv - fh / 2 - drop / 2, 0.02, 0.014, drop, { color: PALETTE.steel, segments: 8 });
+              frame.box("metal", gu, v0 + 0.12, 0.02, 0.05, 0.03, 0.045, { color: PALETTE.gunmetal });
+            } else if (kind === 1) {
+              // louvred vent
+              frame.box("metal", gu, cv, 0.005, fw, fh, 0.02, { color: PALETTE.darkMetal });
+              const nL = Math.max(3, Math.floor(fh / 0.045));
+              for (let l = 0; l < nL; l++) {
+                const lv = cv - fh / 2 + (l + 0.5) * (fh / nL);
+                frame.box("metal", gu, lv, 0.02, fw - 0.04, 0.012, 0.02, { color: PALETTE.steel, tilt: 0.55 });
+              }
             } else {
-              // small labelled plate
-              frame.box("painted", gu, gv, -0.005, gw + 0.04, gh + 0.02, 0.01, { color: PALETTE.cream, uv: "keep" });
-              frame.add("decal", new THREE.PlaneGeometry(gh, gh), gu, gv, 0.006, { uv: "keep", uvRect: decalRect(9 + Math.floor(rand() * 3)) });
+              // connector plate: two round couplings under a small stencil
+              frame.box("painted", gu, cv - 0.02, 0.0, fw, fh * 0.6, 0.012, { color: plateCol, uv: "keep" });
+              for (const sgn of [-1, 1]) frame.cylN("metal", gu + sgn * fw * 0.25, cv - 0.02, 0.02, 0.035, 0.04, { color: PALETTE.steel, segments: 12 });
+              frame.add("decal", new THREE.PlaneGeometry(0.12, 0.12), gu, cv + fh * 0.3 + 0.03, 0.006, { uv: "keep", uvRect: decalRect(9 + Math.floor(rand() * 3)) });
             }
           }
-          // a run of conduit feeding the panel
-          const pu = u0 + 0.1 + rand() * (cw - 0.2);
-          frame.cylV("metal", pu, cv, 0.0, 0.014, ch - 0.1, { color: PALETTE.steel, segments: 8 });
-          if (rand() < 0.7) frame.box("leds", u0 + cw * 0.5, v0 + 0.1, 0.0, Math.min(0.5, cw - 0.3), 0.045, 0.02, { uv: "keep" });
+          if (rand() < 0.6) frame.box("leds", cu, v0 + 0.1, 0.0, Math.min(0.5, cw - 0.3), 0.045, 0.02, { uv: "keep" });
           break;
         }
         case "strip": {

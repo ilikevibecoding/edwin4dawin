@@ -288,6 +288,7 @@ function addImperialMaterials(mats, std) {
   mats.emitWhite = emit("#f2f6ff", 2.6);
   mats.emitWhiteDim = emit("#dfe6f2", 1.15);
   mats.emitWhiteFaint = emit("#cfd8e6", 0.55); // lit fixture housings: reads as glowing, never clips
+  mats.emitBlueFaint = emit("#7fa6d9", 0.45); // corridor floor edge channels: a faint cool line, not a kerb
   mats.emitStrip = emit("#eef3ff", 1.3, { emissiveMap: makeDiffuser(256, 25) });
   mats.emitBlueDim = emit("#4a9dff", 1.3);
   mats.emitRedDim = emit("#c8261a", 0.95);

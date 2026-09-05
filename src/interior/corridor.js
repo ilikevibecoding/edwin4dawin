@@ -61,10 +61,10 @@ export function buildCorridor(kit, ctx) {
     const off = side * (halfW - 0.12);
     if (alongZ) {
       kit.boxMM("paintedMetal", [cx + off - 0.09, 0, min[2]], [cx + off + 0.09, 0.02, max[2]], { color: PALETTE.impBlack, texel: 2 });
-      kit.boxMM("emitWhiteFaint", [cx + off - 0.02, 0.02, min[2] + 0.2], [cx + off + 0.02, 0.03, max[2] - 0.2], { uv: "keep" });
+      kit.boxMM("emitBlueFaint", [cx + off - 0.015, 0.02, min[2] + 0.2], [cx + off + 0.015, 0.03, max[2] - 0.2], { uv: "keep" });
     } else {
       kit.boxMM("paintedMetal", [min[0], 0, cz + off - 0.09], [max[0], 0.02, cz + off + 0.09], { color: PALETTE.impBlack, texel: 2 });
-      kit.boxMM("emitWhiteFaint", [min[0] + 0.2, 0.02, cz + off - 0.02], [max[0] - 0.2, 0.03, cz + off + 0.02], { uv: "keep" });
+      kit.boxMM("emitBlueFaint", [min[0] + 0.2, 0.02, cz + off - 0.015], [max[0] - 0.2, 0.03, cz + off + 0.015], { uv: "keep" });
     }
   };
   strip(-1);
