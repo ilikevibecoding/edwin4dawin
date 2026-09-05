@@ -172,13 +172,16 @@ export function ceilingFixture(kit, x0, z0, x1, z1, y, { stripMat = "emitStrip",
   const xc = (x0 + x1) / 2;
   const zc = (z0 + z1) / 2;
   const dims = (w, len) => (alongX ? [len, w] : [w, len]);
-  const diff = diffuserMat !== undefined ? diffuserMat : stripMat === "emitWhiteDim" ? "emitWhiteFaint" : "emitWhiteDim";
+  // housing (tray) → diffuser face 20 mm below it → core lens 15 mm below that. The faint diffuser is
+  // always the lit fixture body; only the narrow core is bright. (Until round 5 the diffuser sat
+  // inside the housing box and was never visible, so every strip read as a dark tray with a hot core.)
+  const diff = diffuserMat !== undefined ? diffuserMat : "emitWhiteFaint";
   let [sx, sz] = dims(0.42, L + 0.2);
-  kit.box("paintedMetal", xc, y - 0.06, zc, sx, 0.1, sz, { color: PALETTE.impDark, texel: 2 });
+  kit.box("paintedMetal", xc, y - 0.05, zc, sx, 0.08, sz, { color: PALETTE.impDark, texel: 2 });
   [sx, sz] = dims(0.26, L);
-  if (diff) kit.box(diff, xc, y - 0.095, zc, sx, 0.02, sz, { uv: "keep" });
+  if (diff) kit.box(diff, xc, y - 0.1, zc, sx, 0.02, sz, { uv: "keep" });
   [sx, sz] = dims(0.07, L - 0.1);
-  kit.box(stripMat, xc, y - 0.11, zc, sx, 0.02, sz, { uv: "keep" });
+  kit.box(stripMat, xc, y - 0.115, zc, sx, 0.02, sz, { uv: "keep" });
 }
 
 export function impCeiling(kit, ctx, opts = {}) {
