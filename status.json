@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-05T11:54:55.641Z",
+  "updated": "2026-09-05T13:31:39.412Z",
   "phase": "Star Wars expansion: 7 builders running (gameplay 1:1, space train, towers+rooms, spaceport+ships, Death Star interior, HD textures, shaders/shadows/bloom); landmark wave next",
   "summary": "User round 2 feedback: references received (Coruscant skyline/platform/senate/plaza + Monument Plaza). New rubrics: 05 render quality (64x HD tiles, normal/material maps, cascaded sun shadows, HDR bloom + filmic tone mapping, atmospheric sky, water reflections, presets) and 06 landmarks (one builder per signature building). Layout now reserves 12 landmark lots (Senate 3x3, Jedi Temple 3x3, Monument Plaza 3x3, Uscru undercity 3x3, Works, CoCo market, Opera, 500 Republica, Chancellery, Medcenter, Detention, HoloNet); 421 towers + 12 landmarks + 8 plazas.",
   "links": [
@@ -135,8 +135,8 @@
     },
     {
       "name": "Coruscant signature landmarks (12 buildings, one builder each)",
-      "status": "7 builders running, 5 queued",
-      "detail": "Running: Senate, Jedi Temple, Monument Plaza, Uscru undercity, the Works, CoCo market, Opera. Queued (subagent slot limit): 500 Republica, Chancellery, Medcenter, Detention, HoloNet."
+      "status": "5 of 12 merged",
+      "detail": "Merged: CoCo Town market (builder), Jedi Temple, Galactic Senate and Uscru undercity strip (built by the lead after sub-agents starved), all rooms reachable and lit by the shared harness. Running: Monument Plaza, the Works. Pending: Opera, 500 Republica, Chancellery, Medcenter, Detention, HoloNet."
     },
     {
       "name": "Minecraft 1:1 gameplay (doors, chests, items, food, drops, farming, cooking, save v2)",
@@ -348,6 +348,10 @@
     {
       "time": "2026-09-05 11:54 UTC",
       "text": "Killed four orphaned headless Chromes (~2.5 cores) left by finished test harnesses; machine load dropping."
+    },
+    {
+      "time": "2026-09-05 13:31 UTC",
+      "text": "Jedi Temple (188 rooms), Galactic Senate (54 rooms, convocation chamber with pod rings), Uscru undercity (46 rooms, 15 neon buildings) merged; landmark modules declare footprints so the tower contract tests keep passing."
     }
   ],
   "issues": [
