@@ -572,7 +572,62 @@ function buildHangarMouth(ctx) {
     const fc = C(0x4f8fff);
     const cx = (o.x0 + o.x1) / 2;
     const dome = (p) => clamp01(1 - Math.pow((2 * (p.x - cx)) / (o.x1 - o.x0), 2)) * clamp01(1 - Math.pow((2 * (p.z - zm)) / (o.z1 - o.z0), 2));
-    sheet.grid(V(o.x0, yF(o.z0), o.z0), V(o.x1, yF(o.z0), o.z0), V(o.x1, yF(o.z1), o.z1), V(o.x0, yF(o.z1), o.z1), 4, 6, (p) => fc.clone().multiplyScalar(0.03 + 0.02 * dome(p)), 1, DOWN);
+    sheet.grid(V(o.x0, yF(o.z0), o.z0), V(o.x1, yF(o.z0), o.z0), V(o.x1, yF(o.z1), o.z1), V(o.x0, yF(o.z1), o.z1), 4, 6, (p) => fc.clone().multiplyScalar(0.02 + 0.015 * dome(p)), 1, DOWN);
+  }
+  // false interior at the top of the well shaft. The hangar cell's real ceiling is 40 m above the deck
+  // and from below it reads as a dim uniform grid under the field — a flat blue-glass slab. So the
+  // shaft carries a painted stand-in for what the opening should show: a dark ceiling plane, brighter
+  // under its two warm light troughs, with a 5 m deck-grid and the real ceiling's 12.5 m beam pitch,
+  // flood squares down the centreline, black rack rails with clamp silhouettes and two gantry bars
+  // hanging 1–1.6 m lower (parallax against the ceiling as the camera moves) and sparse amber rim
+  // lamps. Every face points down or outward (FrontSide exta_emit), so from the hangar deck it is all
+  // back-face culled and the opening still shows space; from outside the hangar's own floor-level field
+  // is hidden behind it and the faint sheet above is the only field layer. ≈ 420 triangles.
+  {
+    const em = chunks.batch(zm, "far", "exta_emit");
+    const yC = yF - 0.3;
+    const cx = (o.x0 + o.x1) / 2;
+    const base = new THREE.Color(0.06, 0.058, 0.055);
+    const beam = new THREE.Color(0.012, 0.012, 0.014);
+    const line = new THREE.Color(0.13, 0.13, 0.12);
+    const warm = new THREE.Color(1.0, 0.9, 0.74).multiplyScalar(2.2);
+    const black = new THREE.Color(0.005, 0.005, 0.007);
+    const railLit = new THREE.Color(0.9, 0.95, 1.0).multiplyScalar(0.35);
+    const Qd = (x0, z0, x1, z1, y, c) => em.quad(V(x0, y, z0), V(x1, y, z0), V(x1, y, z1), V(x0, y, z1), c, 1, DOWN);
+    // ceiling plane: lit under the troughs (x = ±20), falling off towards the walls and the centreline
+    const lit = (p) => Math.exp(-Math.pow((Math.abs(p.x - cx) - 20) / 11, 2));
+    em.grid(V(o.x0, yC, o.z0), V(o.x1, yC, o.z0), V(o.x1, yC, o.z1), V(o.x0, yC, o.z1), 12, 10, (p) => base.clone().multiplyScalar(0.45 + 1.7 * lit(p)), 1, DOWN);
+    for (let x = o.x0 + 5; x < o.x1 - 0.1; x += 5) Qd(x - 0.07, o.z0, x + 0.07, o.z1, yC - 0.02, line);
+    for (let z = o.z0 + 5; z < o.z1 - 0.1; z += 5) Qd(o.x0, z - 0.07, o.x1, z + 0.07, yC - 0.02, line);
+    for (let z = o.z0 + 12.5; z < o.z1 - 0.1; z += 12.5) Qd(o.x0, z - 0.7, o.x1, z + 0.7, yC - 0.04, beam);
+    for (const x of [cx - 20, cx + 20]) Qd(x - 0.45, o.z0 + 1, x + 0.45, o.z1 - 1, yC - 0.06, warm);
+    for (let z = o.z0 + 6.25; z < o.z1; z += 12.5) Qd(cx - 1.1, z - 1.1, cx + 1.1, z + 1.1, yC - 0.06, warm.clone().multiplyScalar(0.85));
+    // rack rails: black bars with a dim guide-light hairline on their inner edge, clamp silhouettes with
+    // the racks' amber yoke lamps (≈ 1 px each at 200 m: a dotted amber row flanking each trough)
+    const yoke = EMIT.amber.clone().multiplyScalar(0.7);
+    for (const s of [-1, 1]) {
+      const x = cx + s * 26;
+      Qd(x - 0.9, o.z0 + 0.5, x + 0.9, o.z1 - 0.5, yC - 1.1, black);
+      Qd(x - s * 1.05, o.z0 + 0.5, x - s * 0.9, o.z1 - 0.5, yC - 1.1, railLit);
+      for (let z = o.z0 + 6.25; z < o.z1; z += 12.5) {
+        Qd(x - 1.8, z - 1.3, x + 1.8, z + 1.3, yC - 1.3, black);
+        Qd(x - 0.6, z - 0.25, x + 0.6, z + 0.25, yC - 1.35, yoke);
+      }
+    }
+    for (const z of [zm - 25, zm + 25]) Qd(o.x0 + 0.5, z - 0.8, o.x1 - 0.5, z + 0.8, yC - 1.6, black);
+    // rim lamps: bottom and outward faces only (an inward or end face would show from the deck across
+    // the opening, where the eye sees ~2.5 m down the far well wall)
+    const amber = EMIT.amber.clone().multiplyScalar(0.5);
+    const lamp = (x, z, nx, nz) => {
+      const hx = 0.35 + Math.abs(nz) * 0.15;
+      const hz = 0.35 + Math.abs(nx) * 0.15;
+      const yl = yC - 0.9;
+      Qd(x - hx, z - hz, x + hx, z + hz, yl, amber);
+      if (nx) em.quad(V(x + nx * hx, yl, z - hz), V(x + nx * hx, yl, z + hz), V(x + nx * hx, yl + 0.5, z + hz), V(x + nx * hx, yl + 0.5, z - hz), amber, 1, V(nx, 0, 0));
+      else em.quad(V(x - hx, yl, z + nz * hz), V(x + hx, yl, z + nz * hz), V(x + hx, yl + 0.5, z + nz * hz), V(x - hx, yl + 0.5, z + nz * hz), amber, 1, V(0, 0, nz));
+    };
+    for (let z = o.z0 + 5; z < o.z1; z += 10) for (const s of [-1, 1]) lamp(s > 0 ? o.x1 - 0.55 : o.x0 + 0.55, z, s, 0);
+    for (let x = o.x0 + 6; x < o.x1; x += 12) for (const s of [-1, 1]) lamp(x, s > 0 ? o.z1 - 0.55 : o.z0 + 0.55, 0, s);
   }
   // approach lights: white pairs along the sides, red across the fore / aft bars
   const em = chunks.batch(zm, "far", "exta_emit");
