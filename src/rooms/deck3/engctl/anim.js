@@ -28,11 +28,21 @@ export const MODE = {
 };
 
 const PREFIX = "anim:";
+// mode flag: pieces whose emission is shaped by the shared fixture-diffuser map (centre-bright, 30 % at
+// the edges) — a flat panel reads as a diffuser over a source instead of a uniform slab. Needs uv "keep".
+const MAP_FLAG = 16;
 
-/** Virtual kit key. params: { phase, base, rate, aux:[x,y,z] } — the tint comes from the kit `color` opt. */
-export function animKey(mode, { phase = 0, base = 1, rate = 0, aux = [0, 0, 0] } = {}) {
-  return PREFIX + JSON.stringify([mode, phase, base, rate, aux]);
+/**
+ * Virtual kit key. params: { phase, base, rate, aux:[x,y,z], map } — the tint comes from the kit `color`
+ * opt; `base` is the emissive intensity (keep the brightest channel ≤ ~1.1: the rig's ACES puts 1.0 at
+ * 89 % and blooms above 1.15 luminance); `map: true` applies the diffuser gradient (uv "keep").
+ */
+export function animKey(mode, { phase = 0, base = 1, rate = 0, aux = [0, 0, 0], map = false } = {}) {
+  return PREFIX + JSON.stringify([mode + (map ? MAP_FLAG : 0), phase, base, rate, aux]);
 }
+
+/** Steady fixture face with the diffuser gradient: `animKey(MODE.STEADY, { base, map: true })`. */
+export const faceKey = (base = 0.9) => animKey(MODE.STEADY, { base, map: true });
 
 const GLSL_FUNCS = /* glsl */ `
 uniform float uTime;
@@ -107,6 +117,9 @@ function stamp(geo, mode, phase, base, rate, aux, tint) {
 /**
  * Collect the room's virtual `anim:` keys (and the static emitter keys in `adopt`) from the kit and
  * build the single animated emitter mesh. Call at the end of detail(), before the rig runs kit.build().
+ * `adopt` entries are a key ("emitWhite": keeps the material's intensity) or [key, base] (re-capped:
+ * the shared fallbacks sit at 1.3–1.6, which the rig's ACES + bloom renders as a white bar; 0.9–1.0
+ * keeps a face at 86–89 % with no bloom while it still reads as lit).
  * Returns { mesh, material, uniforms } — set `uniforms.uTime.value = t` in update().
  */
 export function buildAnimatedEmitters(ctx, { adopt = [] } = {}) {
@@ -121,12 +134,13 @@ export function buildAnimatedEmitters(ctx, { adopt = [] } = {}) {
     }
     kit.groups.delete(key);
   }
-  for (const key of adopt) {
+  for (const entry of adopt) {
+    const [key, cap] = Array.isArray(entry) ? entry : [entry, null];
     const list = kit.groups.get(key);
     if (!list) continue;
     const m = materials[key];
     const tint = m && m.emissive ? m.emissive : new THREE.Color(0xffffff);
-    const base = m && m.emissiveIntensity != null ? m.emissiveIntensity : 1;
+    const base = cap ?? (m && m.emissiveIntensity != null ? m.emissiveIntensity : 1);
     for (const g of list) {
       stamp(g, MODE.STEADY, 0, base, 0, [0, 0, 0], tint);
       geos.push(g);
@@ -137,7 +151,10 @@ export function buildAnimatedEmitters(ctx, { adopt = [] } = {}) {
   const merged = mergeGeometries(geos, false);
   merged.computeBoundingSphere();
   const uniforms = { uTime: { value: 0 } };
-  const material = new THREE.MeshStandardMaterial({ color: 0x0a0b0d, emissive: 0xffffff, emissiveIntensity: 1, roughness: 0.5, metalness: 0, vertexColors: true });
+  // the shared fixture-diffuser map rides along as the emissiveMap (so the shader has an emissive UV
+  // set); only pieces flagged `map` sample it — see the gated block below
+  const soft = materials.emitWarmSoft || materials.emitCoolSoft;
+  const material = new THREE.MeshStandardMaterial({ color: 0x0a0b0d, emissive: 0xffffff, emissiveIntensity: 1, roughness: 0.5, metalness: 0, vertexColors: true, emissiveMap: soft ? soft.emissiveMap : null });
   material.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = uniforms.uTime;
     shader.vertexShader = shader.vertexShader
@@ -148,7 +165,8 @@ export function buildAnimatedEmitters(ctx, { adopt = [] } = {}) {
         vAnim = aAnim;
         vAux = aAux;
         vAPos = position;
-        if (aAnim.y > 7.5 && aAnim.y < 8.5) {
+        float vMode = mod(aAnim.y, 16.0);
+        if (vMode > 7.5 && vMode < 8.5) {
           float th = aAnim.w * animSwing(uTime, aAnim.x);
           vec2 p = transformed.xy - aAux.xy;
           transformed.xy = aAux.xy + vec2(cos(th) * p.x - sin(th) * p.y, sin(th) * p.x + cos(th) * p.y);
@@ -158,9 +176,12 @@ export function buildAnimatedEmitters(ctx, { adopt = [] } = {}) {
       .replace("#include <common>", "#include <common>\nvarying vec4 vAnim; varying vec3 vAux; varying vec3 vAPos;\n" + GLSL_FUNCS)
       .replace(
         "#include <emissivemap_fragment>",
-        /* glsl */ `#include <emissivemap_fragment>
+        /* glsl */ `
+        #ifdef USE_EMISSIVEMAP
+        if (vAnim.y >= 15.5) totalEmissiveRadiance *= texture2D( emissiveMap, vEmissiveMapUv ).rgb;
+        #endif
         {
-          float aM = vAnim.y;
+          float aM = mod(vAnim.y, 16.0);
           float aP = vAnim.x;
           float aB = vAnim.z;
           float aR = vAnim.w;

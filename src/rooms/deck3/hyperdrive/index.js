@@ -7,8 +7,8 @@ import { defineRoom } from "../../deck2/_shared/room.js";
 import { IMP, col } from "../../deck2/_shared/palette.js";
 import { rail, WALL_T } from "../../deck2/_shared/shell.js";
 import { console as consoleProp, pipe, duct, tank, stairs, floorLine, cabinet, hazardStrip, indicatorField, placer, wallScreen } from "../../deck2/_shared/props.js";
-import { TAU, ring, strut, powerCabinet, cableTray, toolRack, monitorPedestal, junctionBox, ventGrille, valveStation, wallLamp, ceilingFixture, highBay, topScreens, labelCrate } from "../engctl/engprops.js";
-import { animKey, MODE, buildAnimatedEmitters, anim } from "../engctl/anim.js";
+import { TAU, ring, strut, powerCabinet, cableTray, toolRack, monitorPedestal, junctionBox, ventGrille, valveStation, wallLamp, ceilingFixture, fixtureFaceY, highBay, topScreens, labelCrate } from "../engctl/engprops.js";
+import { animKey, faceKey, MODE, buildAnimatedEmitters, anim } from "../engctl/anim.js";
 
 const Y = 12;
 const CEIL = 40;
@@ -64,13 +64,28 @@ export default defineRoom({
     // field-coil rings light fore→aft over 6 s (CHARGE), an energy bead runs along the hull slot strips
     // with the travelling blue light (BEAD), the housing disc and its step rings pulse during the hold
     // (BURST), then everything resets; the coil-bank amber lines flicker faintly (FAINT). The kit's static
-    // emitBlue pieces are folded into the same mesh, so the room stays at 16 calls.
+    // emitBlue and emitWhite pieces are folded into the same mesh, re-capped (blue 1.1, white 0.95: the
+    // shared fallbacks at 1.6 / 1.3 clipped the end-cap rings and the high-bay faces to white bars).
+    // Every fixture face (ceiling panels, wall floods, the hull service lamps) is FACE: a steady 0.9
+    // emitter shaped by the diffuser map, so a panel peaks at ~88 % and falls off toward its bezel.
     const BLUE = IMP.impBlue;
     const AMBER = IMP.impAmber;
     const WHITE = new THREE.Color("#dfe9ff");
-    const SLOT_KEY = animKey(MODE.BEAD, { base: 1.6, aux: [700, 44, 0] });
-    const BURST_BLUE = animKey(MODE.BURST, { base: 1.6 });
-    const BURST_WHITE = animKey(MODE.BURST, { base: 1.3 });
+    const WARM = new THREE.Color("#fff0dc");
+    const LAMP = new THREE.Color("#ffe8d0");
+    const FACE = faceKey(0.9);
+    // (BEAD peaks at 1.75 × base at the bead head, BURST at 1.9 × on the pulse crest: the bases keep the
+    // steady level ≤ 1.1 so only the moving head / the crest passes the bloom threshold, briefly)
+    const SLOT_KEY = animKey(MODE.BEAD, { base: 1.1, aux: [700, 44, 0] });
+    const BURST_BLUE = animKey(MODE.BURST, { base: 1.05 });
+    const BURST_WHITE = animKey(MODE.BURST, { base: 0.9 });
+    // console / pedestal screens: the shared layouts run at 1.1 and their white text clipped in the side
+    // view's foreground; room-local clones at 0.95 (same keys, so no extra draw calls)
+    for (const k of ["screenImp0", "screenImp1", "screenImp2", "screenImp3"]) {
+      if (!ctx.materials[k]) continue;
+      ctx.materials[k] = ctx.materials[k].clone();
+      ctx.materials[k].emissiveIntensity = 0.95;
+    }
 
     // ---- motivator body, seams, side slots -----------------------------------------------------------
     // hull: matte painted plates (impPanel, roughness 0.62) in 8 bays round × 12 along so the bevels
@@ -117,10 +132,16 @@ export default defineRoom({
     }
     // hull service lamps: housed heads on stand-off brackets along the port lower flank, one just aft
     // of each cradle clamp (the housing view's top-left is this flank at ~7 m and read as a void).
-    // Only the 741 head carries a point light (see the light list); the other two are emissive faces.
-    for (const z of [709, 725, 741]) {
+    // Faces are FACE at 0.85 of the hood width (a large dim diffuser inside the hood, not a small
+    // 1.3 emitter that bloomed into a 4-ray flare); the 743.5 head (between the 742 coil and the aft
+    // cap) throws a spot aft-down onto the housing disc's lower-port quadrant and the deck behind
+    // the rail (see the light list) — the other two are faces only. Not 741: there the hood sat
+    // inside the coil's forward ring (r 4.73–5.37 at z 741.1) and any aft-going cone hit that ring
+    // at < 1 m; not 739: that is forward of the housing camera (z 740.5), so the head left the frame
+    // and its cone caught the 738 cradle's black cabling 2 m away as two white streaks.
+    for (const z of [709, 725, 743.5]) {
       const [hx, hy] = onHull(3.7, 0.1);
-      wallLamp(kit, PALETTE, [hx, hy - 0.12, z], -Math.PI / 2, { w: 0.7, tilt: 1.05, face: 0.6 });
+      wallLamp(kit, PALETTE, [hx, hy - 0.12, z], -Math.PI / 2, { w: 0.7, tilt: 1.05, face: 0.85, mat: FACE, faceColor: LAMP });
     }
     // label band behind the forward cap: light painted band with two black pinstripes, a red unit
     // plaque and a white stencil plate on the port flank (toward the door)
@@ -159,8 +180,10 @@ export default defineRoom({
       const shrouded = ci === 2;
       const plaque = ci === 3;
       const sensor = ci === 4;
-      // inner ring: lights in sequence fore→aft (ring ci comes on at ci seconds of the 12 s cycle)
-      const chargeKey = animKey(MODE.CHARGE, { phase: ci / 6, base: doubled ? 1.5 : 1.6 });
+      // inner ring: lights in sequence fore→aft (ring ci comes on at ci seconds of the 12 s cycle);
+      // lit level = base, +30 % on the arrival flash only (at 1.6 the lit rings clipped pale in the
+      // door view's top-left)
+      const chargeKey = animKey(MODE.CHARGE, { phase: ci / 6, base: doubled ? 1.05 : 1.15 });
       // coil casing: matte painted segments (impPanel — dielectric, roughness 0.62 — in 4 m tiles), not
       // paintedMetal: the worn-metal map's roughness sits at 0.4, and a torus under a 2000 cd high-bay
       // mirrored it toward every floor camera as a clipped, bloomed streak along its crown
@@ -314,19 +337,26 @@ export default defineRoom({
       for (let k = 0; k < 7; k++) {
         const zc = 698.5 + k * 8;
         const cx = s * 22;
-        kit.boxMM("paintedMetal", [cx - 3.2, Y, zc - 2.7], [cx + 3.2, Y + 0.4, zc + 2.7], { color: black, texel: 2.5 });
+        // (base, top cap and corner posts are matte impPanel like the fins: their aisle faces sit on the
+        // same grazing line of sight from the side camera and mirrored the ceiling fixtures as bloomed
+        // white streaks when they were paintedMetal)
+        kit.boxMM("impPanel", [cx - 3.2, Y, zc - 2.7], [cx + 3.2, Y + 0.4, zc + 2.7], { color: black, texel: 0.25 });
         // dark core with thick fins; the heat glow is a thin amber line recessed in each fin gap
         kit.boxMM("paintedMetal", [cx - 2.6, Y + 0.4, zc - 2.3], [cx + 2.6, Y + 8.8, zc + 2.3], { color: dark, texel: 2.5 });
         // the heat lines flicker faintly (0.9–1.0), each bank on its own phase
         const faint = animKey(MODE.FAINT, { phase: (k + (s > 0 ? 7 : 0)) / 14, base: 1.5 });
         for (let i = 0; i < 9; i++) {
           const fy = Y + 1.0 + i * 0.9;
-          kit.boxMM("paintedMetal", [cx - 3.0, fy, zc - 2.5], [cx + 3.0, fy + 0.36, zc + 2.5], { color: mid, texel: 2.5 });
+          // fins: matte impPanel (roughness 0.62), not paintedMetal (0.4). The side camera stands 2 m
+          // off the port bank faces and sees the fin fronts 20–35 m down the wall at a 4–6° grazing
+          // angle, where Fresnel turns the 0.4 finish into a mirror for the 600 cd fixture behind
+          // them: every fin front became a 70 % white bar (the critic's "rack face 60 % white wash").
+          kit.boxMM("impPanel", [cx - 3.0, fy, zc - 2.5], [cx + 3.0, fy + 0.36, zc + 2.5], { color: mid, texel: 0.25 });
           if (i < 8) kit.boxMM(faint, [cx - 2.62, fy + 0.58, zc - 2.32], [cx + 2.62, fy + 0.68, zc + 2.32], { color: AMBER });
         }
-        kit.boxMM("paintedMetal", [cx - 3.2, Y + 8.8, zc - 2.7], [cx + 3.2, Y + 9.3, zc + 2.7], { color: black, texel: 2.5 });
+        kit.boxMM("impPanel", [cx - 3.2, Y + 8.8, zc - 2.7], [cx + 3.2, Y + 9.3, zc + 2.7], { color: black, texel: 0.25 });
         // rack frame: four corner posts and a name plate, so the amber lines sit on a visible rack
-        for (const [px, pz] of [[cx - 3.05, zc - 2.55], [cx + 3.05, zc - 2.55], [cx - 3.05, zc + 2.55], [cx + 3.05, zc + 2.55]]) kit.box("paintedMetal", px, Y + 4.6, pz, 0.24, 8.4, 0.24, { color: black, texel: 2.5 });
+        for (const [px, pz] of [[cx - 3.05, zc - 2.55], [cx + 3.05, zc - 2.55], [cx - 3.05, zc + 2.55], [cx + 3.05, zc + 2.55]]) kit.box("impPanel", px, Y + 4.6, pz, 0.24, 8.4, 0.24, { color: black, texel: 0.25 });
         kit.box("impPanel", cx - s * 2.615, Y + 0.72, zc, 0.03, 0.3, 1.2, { color: mid, uv: "keep" });
         kit.box(k % 2 ? "emitGreen" : "emitBlue", cx - s * 2.64, Y + 0.72, zc - 0.75, 0.01, 0.06, 0.16);
         kit.cyl("paintedMetal", cx - s * 1.0, Y + 9.6, zc, 0.55, 0.6, "y", { color: black, segments: 12 });
@@ -341,9 +371,9 @@ export default defineRoom({
       for (let k = 0; k < 7; k++) pipe(kit, PALETTE, [s * (X1 - 0.5), Y + 10.4, 698.5 + k * 8], [s * 25.2, Y + 9.0, 698.5 + k * 8], 0.12, { bracket: 3, color: black });
       for (const zc of [706, 722, 738]) ventGrille(kit, PALETTE, [s * X1, Y + 12.5, zc], s > 0 ? -Math.PI / 2 : Math.PI / 2, { w: 2.0, h: 0.8 });
       for (const zc of [700, 730, 746]) junctionBox(kit, PALETTE, [s * X1, Y + 11.4, zc], s > 0 ? -Math.PI / 2 : Math.PI / 2, { seed: seed++ });
-      // big housed floods at 12 m on each long wall, aimed down at the racks and the lane (fill lights
-      // sit in the outer two; the middle one is a fixture only)
-      for (const zc of [703, 719, 735]) wallLamp(kit, PALETTE, [s * X1, Y + 12, zc], s > 0 ? -Math.PI / 2 : Math.PI / 2, { w: 2.2, tilt: 0.9, face: 0.8 });
+      // big housed floods at 12 m on each long wall, aimed down at the racks and the lane (only the port
+      // aft one carries a fill point; the rest are fixtures only — see the light list)
+      for (const zc of [703, 719, 735]) wallLamp(kit, PALETTE, [s * X1, Y + 12, zc], s > 0 ? -Math.PI / 2 : Math.PI / 2, { w: 2.2, tilt: 0.9, face: 0.8, mat: FACE, faceColor: WARM });
     }
 
     // ---- floor: consoles facing the motivator, rails with openings, safety lines --------------------
@@ -414,6 +444,11 @@ export default defineRoom({
     kit.boxMM("emitBlue", [-2.2, Y + 5.05, Z0 + 0.12], [2.2, Y + 5.3, Z0 + 0.135]);
     for (const x of [-2.4, 2.4]) kit.boxMM("emitRedImp", [x - 0.1, Y + 5.05, Z0 + 0.12], [x + 0.1, Y + 5.3, Z0 + 0.135]);
     hazardStrip(kit, [-2.6, Z0 + 0.78], [2.6, Z0 + 1.9], Y + 0.006);
+    // door flood over the lintel sign: a wide hood facing into the hall, tilted 17° down at the
+    // motivator's forward cap (its spot is in the light list). The cap is the door view's top-left
+    // fifth and faces the forward wall, where nothing else can light it: the key sits 8 m aft of the
+    // cap plane and the fixtures all hang behind it, so it rendered as a 5 % black disc.
+    wallLamp(kit, PALETTE, [0, Y + 8.6, Z0], 0, { w: 1.6, tilt: 0.3, face: 0.8, mat: FACE, faceColor: WARM });
     // door status panels either side of the blast door (hole x −2..2; approach kept clear)
     for (const x of [-3.6, 3.6]) {
       const F = placer(kit, [x, 0, Z0], 0);
@@ -470,8 +505,10 @@ export default defineRoom({
       cableTray(kit, PALETTE, [s * 9.6, Y + 10.5, Z1 - 0.5], [s * 24, Y + 10.5, Z1 - 0.5], { w: 0.7 });
       // aft wall dressing between the bulkhead ribs and the tanks: two conduit runs on standoff
       // brackets ending in a manifold box, tilted wall screens, vent grilles, a service ladder to the tray
-      for (const [py, r, c] of [[Y + 4.6, 0.14, steel], [Y + 5.1, 0.1, black]]) {
-        pipe(kit, PALETTE, [s * 9.6, py, Z1 - 0.8], [s * 21.1, py, Z1 - 0.8], r, { bracket: 0, color: c, segments: 10 });
+      // (painted, not steel: the port run sits 4 m under the wall-wash spot and its steel finish
+      // mirrored the spot as a white bar the housing view saw in the middle of its R wall)
+      for (const [py, r, c] of [[Y + 4.6, 0.14, black], [Y + 5.1, 0.1, dark]]) {
+        pipe(kit, PALETTE, [s * 9.6, py, Z1 - 0.8], [s * 21.1, py, Z1 - 0.8], r, { bracket: 0, color: c, segments: 10, mat: "paintedMetal" });
       }
       for (const x of [10.6, 14.8, 19.0]) kit.boxMM("paintedMetal", [s * x - 0.12, Y + 4.4, Z1 - 0.8], [s * x + 0.12, Y + 5.3, Z1 - 0.02], { color: dark });
       kit.boxMM("paintedMetal", [Math.min(s * 21.05, s * 21.65), Y + 4.2, Z1 - 1.0], [Math.max(s * 21.05, s * 21.65), Y + 5.5, Z1 - 0.02], { color: black, texel: 2.5 });
@@ -487,10 +524,14 @@ export default defineRoom({
       kit.collider([s * 22.1 - 0.4, Y, Z1 - 0.4], [s * 22.1 + 0.4, Y + 3, Z1], "ladder");
     }
 
-    // floods on the aft wall around the housing, aimed down the bulkhead (fixtures only): two on the
-    // housing plate beside the disc rim, two on the wall outside the ribs (the housing view's top-left)
-    for (const x of [-6.5, 6.5]) wallLamp(kit, PALETTE, [x, Y + 12.8, Z1 - 0.65], Math.PI, { w: 2.0, tilt: 1.0, face: 0.8 });
-    for (const x of [-10.5, 10.5]) wallLamp(kit, PALETTE, [x, Y + 12.5, Z1], Math.PI, { w: 2.0, tilt: 1.0, face: 0.8 });
+    // floods on the aft wall around the housing, aimed down the bulkhead: two on the housing plate
+    // above the disc rim, two on the wall outside the ribs under the cable tray. The port outer one
+    // (x −10.5) carries the wall-wash spot (see the light list); the others are fixtures only. Heights
+    // are set by the housing camera (pitch 14°, top edge at 50°): at Y+12.5 / Y+12.8 both port hoods sat
+    // just over the frame's top edge, so the 35 %-of-frame R wall was lit by a fixture it never showed;
+    // at Y+9 (outer) and Y+11.5 (inner, x ±7.2 so its cheek clears the rim ring) they are in frame.
+    for (const x of [-7.2, 7.2]) wallLamp(kit, PALETTE, [x, Y + 11.5, Z1 - 0.65], Math.PI, { w: 2.0, tilt: 1.0, face: 0.8, mat: FACE, faceColor: WARM });
+    for (const x of [-10.5, 10.5]) wallLamp(kit, PALETTE, [x, Y + 9.0, Z1], Math.PI, { w: 2.0, tilt: 1.0, face: 0.8, mat: FACE, faceColor: WARM });
 
     // ---- ceiling: two big ducts along the hall and cross ducts, feeding the coil-bank trays ---------
     for (const s of [-1, 1]) {
@@ -501,11 +542,12 @@ export default defineRoom({
     duct(kit, PALETTE, [-12.4, CEIL - 1.0, 706], [12.4, CEIL - 1.0, 706], 0.9, 0.6, { color: mid });
     duct(kit, PALETTE, [-12.4, CEIL - 1.0, 733], [12.4, CEIL - 1.0, 733], 0.9, 0.6, { color: mid });
     // suspended hall fixtures over the two floor lanes on the cross-duct rhythm: framed housings on
-    // 13 m stems hanging just above gantry height, louvred white faces down (fills sit in the 733 pair
-    // and the port 711 one). They hang over the lane centres, 9.5 m off the hull flank: at x ±11 the
-    // fills were 6.5 m from the flank and mirrored in it as hot streaks in the side and housing views.
-    const FIX = [[-14, 711], [-14, 733], [14, 733]];
-    for (const z of [700, 711, 722, 733, 744]) for (const x of [-14, 14]) ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 3.2, d: 1.0, stem: 13, mat: "emitWhite" });
+    // 13 m stems hanging just above gantry height, louvred diffuser faces down (FACE: at emitWhite 1.3
+    // the three port panels in the side view were flat white rectangles). Their lights sit INSIDE the
+    // housings (see the light list). They hang over the lane centres, 9.5 m off the hull flank: at
+    // x ±11 the fills were 6.5 m from the flank and mirrored in it as hot streaks in the side and
+    // housing views.
+    for (const z of [700, 711, 722, 733, 744]) for (const x of [-14, 14]) ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 3.2, d: 1.0, stem: 13, mat: FACE, faceColor: WARM });
     // high-bay clusters: under the three wall-side cross ducts over the coil banks, and under the two
     // central ducts (the only ceiling the floor views see past the motivator). The 706 duct's row spans
     // the forward cradle; its port cluster (x −9, over the port rail) is the room's shadow key.
@@ -513,21 +555,34 @@ export default defineRoom({
     for (const x of [-9, 0, 9]) highBay(kit, PALETTE, [x, CEIL - 1.3, 706], { drop: 1.4 });
     for (const s of [-1, 1]) highBay(kit, PALETTE, [s * 5, CEIL - 1.3, 733], { drop: 1.4 });
 
-    // ---- lights (shell fills off, 14): shadow key over the forward cradle, blue-white keys under the
-    // gantry masts, warm fills under the suspended fixtures, wall floods off their hoods, the housing
-    // accent (pulses with the disc) and the travelling charge light.
+    // ---- lights (shell fills off, 14 = 4 spots + 10 points): shadow key over the forward cradle,
+    // blue-white keys under the gantry masts, fills inside six of the suspended fixtures, the port aft
+    // wall flood, the housing accent (pulses with the disc), the 743.5 service lamp's spot, the aft-wall
+    // wash spot and the door flood on the forward cap.
     // The hall is lit by these alone (no studio environment) across 12–24 m of air onto a ~2.5 % deck
     // (≈ 2.5 lx for 20 % grey, 6 lx for 45 %), so the key runs 1800 cd (3 lx on the port lane, ~6 lx on
     // the hull crown 15 m away — a spot lights nothing behind its cone, so its own cluster stays clean)
-    // and the fixture points 260–480 cd, each hung 1.6–2 m under its housing and ≥ 3.6 m off any wall
-    // so nothing near them clips. At 3000 cd the key mirrored in the forward coil and the 706 clamp as
-    // a bloomed white haze over the side view's top-left; the hull did the same at 1800 until it went
-    // matte and the key moved off the axis (see the key). -------------------------------------------
+    // and the fixture lights 300–600 cd, each INSIDE its housing (0.15 m over the face plane: a point
+    // hung under a face lit the bezel and louvres to white; inside, every housing face points away from
+    // it and the deck gets the same pool) and ≥ 3.6 m off any wall so nothing near them clips. At
+    // 3000 cd the key mirrored in the forward coil and the 706 clamp as a bloomed white haze over the
+    // side view's top-left; the hull did the same at 1800 until it went matte and the key moved off the
+    // axis (see the key).
+    // The rig keeps 12 points live and reserves 3 for the door neighbour (the reactor's high-priority
+    // core lights take them in every view here), so 9 of these 10 points are live per view: the one
+    // dropped is the farthest from that camera (distance / (0.5 + priority)) — the starboard 744
+    // fixture in the door and side views, the starboard 711 one in the housing and aft views. -------
     const L = (pos, color, intensity, distance, priority = 0.5) => {
       const d = { type: "point", pos, color, intensity, distance, priority };
       ctx.lights.push(d);
       return d;
     };
+    const S = (pos, target, color, intensity, distance, angle, penumbra, priority) => {
+      const d = { type: "spot", pos, target, color, intensity, distance, angle, penumbra, priority };
+      ctx.lights.push(d);
+      return d;
+    };
+    const FY = fixtureFaceY(CEIL - 0.02, 13) + 0.15; // inside the suspended housings
     // SHADOW KEY: in the port head of the 706 cluster row (x −9, over the port rail; head face y 36.5),
     // aimed at the cradle's port foot (9° toward the axis) with a 49° half-cone: full intensity from the
     // port wall racks to x +5, 70–85 % on the starboard lane. The motivator and its coils cast across the
@@ -539,36 +594,77 @@ export default defineRoom({
     ctx.lights.push({ type: "spot", pos: [-9, CEIL - 3.8, 706], target: [-5, Y, 706.5], color: 0xf4f6ff, intensity: 1800, distance: 64, angle: 0.85, penumbra: 0.5, priority: 1.5, shadow: true });
     L([0, GANTRY + 1.6, 714], 0x8ab0ff, 110, 38, 1.2); // gantry lamps: steady
     L([0, GANTRY + 1.6, 730], 0x8ab0ff, 110, 38, 1.2);
-    // three of the ten suspended fixtures carry fills (over the port lane by the side view, and the
-    // two over the aft consoles): 2 m under the faces, 480 cd → 3 lx on the lane centres 12.6 m down,
-    // the key's pool level, so the key still owns the shadows where both reach
-    for (const [x, z] of FIX) L([x, CEIL - 15.4, z], 0xfff0dc, 480, 40, z === 711 || x < 0 ? 1.5 : 1.2);
-    L([5, CEIL - 4.8, 733], 0xfff0dc, 260, 46, 0.8); // aft central cluster: lights the ceiling and ducts the door/side views see
-    // wall floods: in the fin gaps between the coil banks (their racks and amber lines get 100 lx),
-    // 9 m over the lanes
-    for (const s of [-1, 1]) for (const z of [703, 735]) L([s * (X1 - 3.6), Y + 9.0, z], 0xffcf90, 400, 34, z === 703 ? 1.5 : 1.2);
+    // six of the ten suspended fixtures carry points, 480 cd → 3 lx on the lane centres 14.6 m down,
+    // the key's pool level, so the key still owns the shadows where both reach:
+    // – port 711: the side view's rack bank sits 4.8 m off its axis and takes 3 lx on the fins →
+    //   ~40 % at the top fins fading to 25 % (the "60 % white wash" the critic saw on that bank was
+    //   the wall fill in the fin gap, see below, not this point)
+    // – port 733 (over the aft port console pair; ceiling + ducts the door view sees)
+    // – port 744 at 600 cd: the housing view's floor behind the rail, the aft wall (its 35 % "R wall"
+    //   strip at ~4 lx) and the 742 coil's outer face; the aft view's port rack bank at 742
+    // – starboard 700 at 600 cd, priority 1.7 so the aft camera (50 m away) keeps it: the forward
+    //   wall it sees past the motivator — the sealed shutter bay at x 11.4 and the wall over it take
+    //   1.4–5.5 lx as a wash fading toward the blast door (that wall sat at 8 % lit only by the 711
+    //   point's spill), the forward starboard bank's aisle face (5 lx) and the stair tower's upper
+    //   flights. It replaces the starboard 703 wall flood, whose wall and fin-top jobs it covers from
+    //   15 m at ~2 lx; the hood stays as a fixture.
+    // – starboard 711 at 300 cd: the side view's starboard ceiling half (was 5 % black with two
+    //   unlit panels) and the starboard lane
+    // – starboard 744 at 720 cd: the aft view's foreground deck (its camera stands at x 13, z 748.5
+    //   with no other light within 15 m — with the starboard point at 733 that floor sat at 22 %;
+    //   at 480 here 24 %) and the starboard aft bank's fins (3 lx)
+    L([-14, FY, 711], 0xfff0dc, 480, 40, 1.5);
+    L([-14, FY, 733], 0xfff0dc, 480, 40, 1.5);
+    L([-14, FY, 744], 0xfff0dc, 600, 42, 1.5);
+    L([14, FY, 700], 0xfff0dc, 600, 50, 1.7);
+    L([14, FY, 711], 0xfff0dc, 300, 40, 1.0);
+    L([14, FY, 744], 0xfff0dc, 720, 40, 1.2);
+    // wall flood: 5.5 m off the port wall over the aft coil-bank centreline, level with its hood. It
+    // washes the wall behind the aft port banks (8 lx at the hood fading to 3 lx five metres down: the
+    // housing view's left edge and the aft view's port bank) and skims the fins' end faces from above.
+    // NOT in the 2.6 m fin gaps: there a fill sat 0.8 m from the next bank's end face and lit its fin
+    // ends to 70 % white bars — the side view's hot rack. Priority 1.5 keeps it in the aft view's nine.
+    // The forward pair went: the port 703 flood's ~1 lx on the near banks' end faces was the last
+    // half-stop over the critic's 40 % on the side view's rack (the 711/733 fixtures give them 1 lx),
+    // and the starboard one is covered by the 700 fixture above.
+    L([-(X1 - 5.5), Y + 12.5, 735], 0xffcf90, 250, 34, 1.5);
     const HOUSING_I = 110;
     const housingLight = L([0, AX + 2, Z1 - 3.5], 0x6a9bff, HOUSING_I, 22, 1.2);
-    // port-flank service lamp at 741: 1 m off its head, washes the shadowed lower flank the housing
-    // view's top-left looks at
-    L([-5.1, AX - 3.1, 741], 0xffe8d0, 60, 14, 1.0);
-    // travelling charge light: rides the port slot strip (z 700 → 744 over the 6 s travel leg) at r 8.8
-    // from the axis — 3 m outside the coil casings, so each coil brightens as the charge passes and the
-    // hull flank takes a moving blue wash — in step with the bead on the strip; off during hold and
-    // reset. (At r 6.8 / 160 cd it passed 1.1 m from each casing and put 90 lx on it: a blown bulb.)
-    const CHARGE_I = 120;
-    const chargeLight = L([-8.5, AX + 2.2, 700], 0x5a8cff, 0, 18, 1.2);
+    // port-flank service lamp at 743.5: a 34° spot from just in front of its face, aimed aft-down at
+    // the housing disc (25° below horizontal) so its cone washes the disc's lower-port quadrant from
+    // 7 m (spots decay at 1.6: ~7.5 lx at 190 cd → ~50 % on the dark step rings, the "coil face" of the
+    // housing view; the lower disc measured 26 % mean at 150 cd against 18 % on the unwashed upper
+    // half) and its lower half reaches the deck behind the rail (z 747–751, ~2.5 lx). The aft cap's
+    // flange (z 746, r 4.5–4.8) is 36–38° off-axis, just outside the cone; the hull flank aft of the
+    // head is grazed (≤ 0.1 lx); the hood's cheeks are 36°+ off-axis, its canopy 120°. A point 1 m
+    // off the head lit the hood's inside and the coil tube 0.7 m away to a clipped blob with a 4-ray
+    // flare; a spot straight down lit only the deck, so the lamp still hit "nothing".
+    S([-4.54, AX - 2.68, 743.5], [-4.5, Y + 2, Z1 - 1], 0xffe8d0, 190, 20, 0.6, 0.5, 1.0);
+    // aft-wall wash: from the port outer hood (x −10.5, now Y+9 so the hood is in the housing frame),
+    // a 40° spot tilted 25° off the wall: the bulkhead 3–6 m under the lamp takes ~1 lx as a fading
+    // band (the wall right under the head sits outside the cone — no hot patch), the deck behind the
+    // rail (z 745–750) ~8 lx — with the service lamp and the 744 fixture ~13 lx, +0.7 stop on the
+    // ~8.5 lx that read 20 % (the deck map is charcoal under its tint). 320 cd, not 400: the spot is
+    // 3.5 m nearer the deck than before. The two conduits 4 m under it are black/dark paint.
+    S([-10.5, Y + 8.8, Z1 - 0.9], [-10.5, Y, Z1 - 5.0], 0xfff0dc, 320, 26, 0.7, 0.5, 1.3);
+    // door flood: from just in front of the hood over the blast door, a 40° half-cone aimed 15° down
+    // at the forward cap 5.5 m away (cap plates z 696.1–697.1, r ≤ 4.8 — the hub, the dark disc and the
+    // rim inside the cone to within 0.6 m of the top). 60 cd → ~3.5 lx on the cap: the mid rim to
+    // ~40 %, the dark disc ~20 %, the black hub ~10 % round its blue ring, which is the "bounce" the
+    // door view's top-left needed. The hull body takes nothing (its normals are radial, the lamp sits
+    // on the axis height); the cone's lower edge meets the deck at z 698 (~1.5 lx on the cradle base);
+    // the gantry end, the lintel sign and the wall behind the hood are outside it, and the door camera
+    // (66° off-axis) sees none of it on its own deck.
+    S([0, Y + 8.6, Z0 + 0.9], [0, AX - 0.8, MZ0 - 1.4], 0xffe8d0, 60, 16, 0.7, 0.5, 1.2);
+    // (the travelling charge light went for the fixture lights: the bead on the slot strip and the
+    // coil rings still carry the charge sequence; the descriptors light more of the room)
 
-    const emitters = buildAnimatedEmitters(ctx, { adopt: ["emitBlue"] });
+    const emitters = buildAnimatedEmitters(ctx, { adopt: [["emitBlue", 1.1], ["emitWhite", 0.95]] });
 
     return {
       update(dt, t) {
         emitters.uniforms.uTime.value = t;
-        const seq = anim.seq(t);
-        const bead = anim.bead(seq);
-        chargeLight.pos[2] = 700 + 44 * bead.pos;
-        chargeLight.intensity = CHARGE_I * bead.on;
-        housingLight.intensity = HOUSING_I * (1 + 1.3 * anim.burst(seq));
+        housingLight.intensity = HOUSING_I * (1 + 1.3 * anim.burst(anim.seq(t)));
       },
     };
   },

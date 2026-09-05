@@ -11,7 +11,7 @@ import { IMP, col } from "../../deck2/_shared/palette.js";
 import { rail } from "../../deck2/_shared/shell.js";
 import { placer, console as consoleProp, indicatorField, wallScreen, pipe, duct, pillar, stairs, holoTable, floorLine, cabinet, hazardStrip } from "../../deck2/_shared/props.js";
 import { arcLine, arcPos, powerCabinet, openPowerCabinet, cableTray, toolRack, junctionBox, ventGrille, yawBox, conduitBundle, ceilingFixture, topScreens, labelCrate, palletStack, wallLamp } from "./engprops.js";
-import { animKey, MODE, buildAnimatedEmitters, anim } from "./anim.js";
+import { animKey, faceKey, MODE, buildAnimatedEmitters, anim } from "./anim.js";
 
 const Y = 12;
 const CEIL = 22;
@@ -81,6 +81,8 @@ export default defineRoom({
     // on staggered phases in update().
     const WHITE = new THREE.Color("#dfe9ff");
     const screenMats = ["screenImp0", "screenImp1", "screenImp3"].map((k) => (ctx.materials[k] = ctx.materials[k].clone()));
+    // housed fixture faces: steady, diffuser gradient (centre 0.92 → 86 %, edges 30 %), tinted per lamp
+    const FACE = faceKey(0.92);
 
     // ---- console arcs facing the window --------------------------------------------------------
     // (a console = shared prop + two small angled desk screens + a dressed service back)
@@ -144,6 +146,11 @@ export default defineRoom({
     push(new THREE.TorusGeometry(1.2 * 0.55, 0.02, 6, 48), [0, 0.36, 0], [Math.PI / 2, 0, 0]);
     ctx.group.remove(holo.cone, holo.grid);
     const holoMat = holo.material;
+    // front faces only: the shared holo material is double-sided and additive, so through the open core
+    // rod and ring cylinders every pixel summed front + back (and both coincide at a cylinder's
+    // silhouette) — the ring edges stacked to 94 % even at opacity 0.27; front-sided the same stack
+    // peaks ~80 % and the rod still reads as a rod (its near half covers the silhouette)
+    holoMat.side = THREE.FrontSide;
     const schematic = new THREE.Mesh(mergeGeometries(geos, false), holoMat);
     schematic.position.set(CX, Y + 0.95 + 0.14, 592);
     ctx.group.add(schematic);
@@ -351,13 +358,16 @@ export default defineRoom({
     duct(kit, PALETTE, [-26.5, CEIL - 0.7, 596], [2.6, CEIL - 0.7, 596], 0.8, 0.45, { color: mid });
     duct(kit, PALETTE, [-26.5, CEIL - 0.7, 580], [-26.5, CEIL - 0.7, 596], 0.8, 0.45, { color: mid });
 
-    // ---- lights (shell fills off, 13): every pool hangs in a framed fixture 1 m under the ceiling, the
-    // point light 0.75 m below its face (positions keep clear of the trunks and ducts). The room is lit
-    // by these alone (no studio environment): against the ~2 % deck a pool needs ~5 lx for 20 % grey,
-    // so the fixtures run 190 cd (3 lx on the floor 7.9 m down, a 40 lx halo on the ceiling channels
-    // above — the ceiling is a lit plane, not a black one) and the pendants 80 cd. Points sit far enough
-    // below their housings that the black lips stay under 50 % grey. Priorities 0.8–1.2: the corridor's
-    // and the reactor's lights compete for the same 12 point / 4 spot slots through the walls. --------
+    // ---- lights (shell fills off, 13 = 2 spots + 11 points): every pool hangs in a framed fixture,
+    // and every point sits INSIDE its housing, 0.2 m over the face plane — a point hung under a face
+    // lights the bezel and louvres at 100–350 lx and they clip white (critic pass 3: the hanging panels
+    // were the brightest thing in the room); inside, nothing of the fixture faces it and the deck is
+    // lit exactly the same (points cast no shadow). The framed fixtures hang on 2.4 m stems so the
+    // point is 2.6 m under the ceiling (a 34 lx halo on the channels, not a 140 lx white disc). The
+    // room is lit by these alone: against the ~2 % deck a pool needs ~7 lx for 20 % grey, so the
+    // fixtures run 230 cd (4.4 lx on the floor 7.2 m down) and the pendants 140 cd (7.6 lx at 4.3 m).
+    // The pool gives the room 9 of its 11 points (the two farthest from the camera are off) and its
+    // spots; the corridor's and the reactor's nearest lights take the 3 neighbour slots. ------------
     const L = (pos, color, intensity, distance, priority = 0.5) => {
       const d = { type: "point", pos, color, intensity, distance, priority };
       ctx.lights.push(d);
@@ -369,34 +379,40 @@ export default defineRoom({
       [-6.5, 601, 0xffb060, 190, 22, 1.0, "emitAmber"],
       [-20, 577.5, 0xffc890, 190, 22, 0.8, "emitAmber"],
       [-3.5, 584, 0xffd0a0, 190, 22, 1.0, "emitAmber"],
-      [1, 606, 0xffc890, 170, 22, 0.8, "emitAmber"],
+      [1, 606, 0xffc890, 170, 22, 2.0, "emitAmber"], // (priority 2: the reactor's door camera sees this floor through the hole, past the corridor's lights)
     ];
-    for (const [x, z, color, intensity, distance, priority, mat] of FIXTURES) {
-      ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 2.4, d: 0.7, stem: 1.0, mat });
-      L([x, CEIL - 2.11, z], color, intensity, distance, priority);
+    for (const [x, z, color, intensity, distance, priority] of FIXTURES) {
+      ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 2.4, d: 0.7, stem: 2.4, mat: FACE, faceColor: IMP.impAmber });
+      L([x, CEIL - 2.58, z], color, intensity + 40, distance, priority);
     }
-    // low pendants for the open deck (policy C): housed fixtures on 5.5 m stems, faces 4.1 m over the
+    // low pendants for the open deck (policy C): housed fixtures on 5.5 m rods, faces 4.1 m over the
     // floor, so their pools land where the status and mezz cameras look — the strip north of the
     // western arcs (status bottom-left), the command post east of the holo (status bottom-right, cool
-    // tint, replacing the 8 m blue fixture at −9.5/591; turned along z to clear the x −12 trunk) and
-    // the open floor under the mezz camera (in place of the 8 m fixture at −20/588). 80 cd → 6 lx on
-    // the deck, 40 % of the key's 16 lx. Flush pendants (whole underside emissive, single rod): the
-    // point 0.5 m under the louvred housing lit its lips and louvres to 300 lx and the pendant read as
-    // one white blob in the status and door views.
+    // tint; turned along z to clear the x −12 trunk) and the open floor under the mezz camera. Each is
+    // a bezelled housing (black plate round an inset diffuser face at 0.92, no louvres) with its point
+    // inside; 140 cd → 7.6 lx on the deck, the door view's floor +1 stop (policy B).
     for (const [x, z, color, yaw] of [[-17, 595, 0xfff0dc, 0], [-10.6, 590, 0xd8e2ff, Math.PI / 2], [-20, 587, 0xfff0dc, 0]]) {
-      ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 2.0, d: 0.7, stem: 5.5, mat: "emitWhite", yaw, flush: true });
+      ceilingFixture(kit, PALETTE, [x, CEIL - 0.02, z], { w: 2.0, d: 0.7, stem: 5.5, mat: FACE, faceColor: new THREE.Color(color), yaw, rod: true, louvres: false });
       if (x === -10.6) {
         // SHADOW KEY: the command-post pendant, 0.5 m under its face, aimed at the holo table's near
         // side so the table, the three command consoles and the operators' stools cast across the
         // aisle toward the door and status cameras (57° half-cone, 42 m reach; 220 cd → 16 lx on the
         // deck at the table, the room's dominant pool)
         ctx.lights.push({ type: "spot", pos: [x, CEIL - 6.4, z], target: [-11.4, Y, 591.3], color, intensity: 220, distance: 42, angle: 1.0, penumbra: 0.5, priority: 1.0, shadow: true });
-      } else L([x, CEIL - 6.9, z], color, 60, 18, 1.2); // 1 m under the face (at 0.5 m its specular on the face doubled the glare), 3.1 m over the deck: 6 lx
+      } else L([x, CEIL - 5.68, z], color, 140, 18, 1.2); // inside the housing, 4.3 m over the deck: 7.6 lx
     }
-    L([-14, Y + 2.6, 609.6], 0xff8a30, 16, 9, 0.6); // spill from the sill indicators
-    // door-approach pool under the hooded lamp over the reactor door (1.3 m under its head, 2.2 m off
-    // the wall so the panel strip round the door stays under 65 % grey)
-    L([1, Y + 3.6, Z1 - 2.2], 0xfff0dc, 90, 14, 1.0);
+    // window flood: a hooded head high on the window wall over the dial row (the one fixture the window
+    // camera has in frame, policy C), a spot aimed 45° down at the console row — a spot, because a point
+    // 2 m off this light-grey wall would clip the panel behind its hood; 250 cd → 8–15 lx on the
+    // console tops, and the dial row under the hood catches its edge
+    wallLamp(kit, PALETTE, [-12, Y + 5.9, Z1], Math.PI, { w: 1.6, tilt: 0.85, face: 0.8, mat: FACE, faceColor: WHITE });
+    ctx.lights.push({ type: "spot", pos: [-12, Y + 5.55, Z1 - 0.62], target: [-12, Y, Z1 - 6.2], color: 0xfff0dc, intensity: 250, distance: 24, angle: 0.75, penumbra: 0.5, priority: 1.0 });
+    // door-approach pool under the hooded lamp over the reactor door (1.3 m under its head, 3.0 m off
+    // the wall: the panel strip round the door takes ~5 lx and stays under 60 % grey, and the door
+    // hole's light-grey jamb faces — which the reactor's door camera sees edge-on through the hole —
+    // take 4 lx instead of the 8 lx that clipped them to a white sliver at 2.2 m; the mat at the sill
+    // still gets ~4.5 lx and the pool centre sits 3 m in front of the door)
+    L([1, Y + 3.6, Z1 - 3.0], 0xfff0dc, 110, 14, 2.0); // (priority 2, policy E: the destination through the reactor's door)
     // cyan point over the holo table, breathing with the schematic's opacity
     const HOLO_I = 22;
     const holoLight = L([CX, Y + 2.3, 592], 0x4fd8ff, HOLO_I, 9, 1.0);
@@ -406,7 +422,9 @@ export default defineRoom({
     const ALERT_I = 14;
     const alertLight = L([-14, Y + 5.2, Z1 - 0.7], 0xffa028, ALERT_I, 10, 0.8);
 
-    const emitters = buildAnimatedEmitters(ctx, { adopt: ["emitWhite", "emitOrange"] });
+    // static emitters folded into the animated mesh, re-capped (policy A): white faces 0.95, the
+    // ceiling channel strips / floor lines / accents 0.9 amber, the indicator LEDs 0.95 green
+    const emitters = buildAnimatedEmitters(ctx, { adopt: [["emitWhite", 0.95], ["emitOrange", 1.0], ["emitAmber", 0.9], ["emitGreen", 0.95]] });
 
     return {
       update(dt, t) {
@@ -414,14 +432,15 @@ export default defineRoom({
         schematic.rotation.y = t * 0.35;
         schematic.position.y = Y + 0.95 + 0.14 + Math.sin(t * 0.8) * 0.03;
         const breathe = 0.5 + 0.5 * Math.sin(t * 2.0);
-        holoMat.opacity = 0.35 * (0.8 + 0.2 * breathe);
+        holoMat.opacity = 0.27 * (0.8 + 0.2 * breathe); // (0.35 stacked the ring layers to 95 %; 0.27 tops out ~85 %)
         holoLight.intensity = HOLO_I * (0.65 + 0.35 * breathe);
         alertLight.intensity = ALERT_I * anim.blink(t, ALERT.rate, ALERT.phase, ALERT.duty);
-        // screen content flicker: the three screen layouts jitter 0.97–1.13 (× 1.1 base) on staggered
-        // phases, with a rare short refresh dip
+        // screen content flicker: the three screen layouts jitter 0.97–1.13 (× 0.95 base: the white
+        // glyphs of the screen maps at 1.1 clipped in the door view) on staggered phases, with a rare
+        // short refresh dip
         for (let i = 0; i < screenMats.length; i++) {
           const dip = Math.max(0, Math.sin(t * 1.3 + i * 2.5) - 0.97) * 3;
-          screenMats[i].emissiveIntensity = 1.1 * (0.99 + 0.03 * Math.sin(t * 13.7 + i * 2.1) * Math.sin(t * 4.3 + i) + 0.03 * Math.sin(t * 0.9 + i * 1.7) - dip);
+          screenMats[i].emissiveIntensity = 0.95 * (0.99 + 0.03 * Math.sin(t * 13.7 + i * 2.1) * Math.sin(t * 4.3 + i) + 0.03 * Math.sin(t * 0.9 + i * 1.7) - dip);
         }
       },
     };
