@@ -30,9 +30,13 @@ export default defineRoom({
     lights: false, // the corridor generator pushes its own: key spot in the first fixture, fills under every second fixture (two mid bays add a downlight spot), long-throw lamp by the lobby door onto the far bulkhead
   },
   detail(ctx, shell, room) {
-    // lights: downlight spots in bays 6 and 8 (x −34 / −42, either side of the mid view's camera);
-    // motion: faulty fixture at bay 4 (x −26: in shot from the lobby door, and the one fill whose
-    // dropout carries no view's foreground deck), red beacon on the dead-end bulkhead
-    return corridorDetail(ctx, shell, room, { axis: "x", lobbyEnd: "max", accent: "emitBlue", seed: 21, screens: ["screenImp0", "screenImp1"], deadEnd: { screen: "screenImp1", kit: "cabinet", beacon: "red" }, farSpot: {}, midSpot: { bays: [6, 8] }, flickerBay: 4 });
+    // lights: key raked onto the bay-1 crate stack (x −14, south wall — the lobby-end view's fg-L);
+    // downlight spot in bay 8 (x −42, 5 m ahead of the mid view's camera) flagged as that view's
+    // shadow caster: the mid view's fg-L is the wall cabinet at x −42 on the south wall, 1.5 m up,
+    // and a downlight 2 m out from that wall is what puts its shadow on the panel under it (an
+    // alcove spot in the bay-7 niche at x −38 lit a niche beside the camera, out of frame); motion:
+    // faulty fixture at bay 4 (x −26: in shot from the lobby door, and the one fill whose dropout
+    // carries no view's foreground deck), red beacon on the dead-end bulkhead
+    return corridorDetail(ctx, shell, room, { axis: "x", lobbyEnd: "max", accent: "emitBlue", seed: 21, screens: ["screenImp0", "screenImp1"], deadEnd: { screen: "screenImp1", kit: "cabinet", beacon: "red" }, farSpot: {}, midSpot: { bays: [8], shadow: true }, flickerBay: 4 });
   },
 });

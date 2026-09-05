@@ -49,16 +49,21 @@ function detail(ctx) {
   A.issueCounter(kit, PALETTE, { ...COUNTER, y: Y, h: 0.9 });
   const cz = CAGE_Z;
   const top = Y + 4.3;
+  // cage bars: gunmetal paint (half the steel tint's albedo) at 1.5x the default pitch. The key hangs
+  // right over the cage, so steel bars 1.5 m in front of the door camera were the brightest thing in the
+  // door view (a picket fence of white verticals over 80 % of the frame) — darker and sparser they frame
+  // the counter and the room behind instead of covering it
+  const BAR = { pitch: 0.225, color: new THREE.Color(0x74787f) };
   // west flank in two runs around the open gate; east flank in one run
-  A.barWall(kit, PALETTE, [IX0, Y, cz], [GATE.x0, Y, cz], Y + 0.05, top, { tag: "cage-w1" });
-  A.barWall(kit, PALETTE, [GATE.x1, Y, cz], [COUNTER.x0, Y, cz], Y + 0.05, top, { tag: "cage-w2" });
-  A.barWall(kit, PALETTE, [COUNTER.x1, Y, cz], [IX1, Y, cz], Y + 0.05, top, { tag: "cage-e" });
+  A.barWall(kit, PALETTE, [IX0, Y, cz], [GATE.x0, Y, cz], Y + 0.05, top, { tag: "cage-w1", ...BAR });
+  A.barWall(kit, PALETTE, [GATE.x1, Y, cz], [COUNTER.x0, Y, cz], Y + 0.05, top, { tag: "cage-w2", ...BAR });
+  A.barWall(kit, PALETTE, [COUNTER.x1, Y, cz], [IX1, Y, cz], Y + 0.05, top, { tag: "cage-e", ...BAR });
   // above the counter: left / right of the hatch full height, hatch header above the opening
   const hx0 = -19.62;
   const hx1 = -18.38;
-  A.barWall(kit, PALETTE, [COUNTER.x0, Y, cz], [hx0, Y, cz], Y + 0.94, top, { collide: false });
-  A.barWall(kit, PALETTE, [hx1, Y, cz], [COUNTER.x1, Y, cz], Y + 0.94, top, { collide: false });
-  A.barWall(kit, PALETTE, [hx0, Y, cz], [hx1, Y, cz], Y + 1.76, top, { collide: false });
+  A.barWall(kit, PALETTE, [COUNTER.x0, Y, cz], [hx0, Y, cz], Y + 0.94, top, { collide: false, ...BAR });
+  A.barWall(kit, PALETTE, [hx1, Y, cz], [COUNTER.x1, Y, cz], Y + 0.94, top, { collide: false, ...BAR });
+  A.barWall(kit, PALETTE, [hx0, Y, cz], [hx1, Y, cz], Y + 1.76, top, { collide: false, ...BAR });
   kit.collider([COUNTER.x0, Y + 0.9, cz - 0.06], [COUNTER.x1, top, cz + 0.06], "cage-counter");
   // open gate leaf swung into the room along +Z at the gate's east post (solid kick panel, lock box)
   A.gateLeaf(kit, PALETTE, [GATE.x1 + 0.06, Y, cz + 0.1], [GATE.x1 + 0.06, Y, cz + 1.3], 2.3);
@@ -185,6 +190,10 @@ function detail(ctx) {
   // screen on the partition, the header sign over the walkway, a caged red beacon on the partition top
   consoleProp(kit, PALETTE, [-22.2, Y, 396.75], HALF, { w: 1.2, d: 0.7, h: 1.15, screens: 1, seed: 95, screenMat: "screenImp3" });
   wallScreen(kit, [-24.85, Y + 1.6, AL.z0 - 0.09], Math.PI, 1.6, 0.9, "screenImp3");
+  // red "range armed" status panel on the partition's room face, right of the status screen from the racks
+  // camera and under the red puck at x -22.8 / z 397: the racks view's red puck and beacon halo read as
+  // "alarm colour with no context" without a red status element on a wall
+  A.statusPanel(kit, PALETTE, [-26.9, Y + 2.05, AL.z0 - 0.04], Math.PI, { w: 0.8, h: 0.4 });
   const SIGN = [[AL.x1 + 0.04, Y + 2.8, 398.65], HALF];
   A.rangeSign(kit, PALETTE, SIGN[0], SIGN[1], { w: 2.0, h: 0.5, lamp: false }); // lamp breathes: fx batch below
   const BEACON = [-23.4, Y + 3.05, AL.z0 + 0.12];
@@ -235,8 +244,14 @@ function detail(ctx) {
       }
     }
   }
-  for (const x of [-22.8, -19.0, -15.2]) for (const z of [386.0, 391.0, 397.0]) A.ceilingFixture(kit, PALETTE, x, CEIL, z);
+  // the panel next to the beacon (x -22.8, z 397) carries a red lens: the beacon's red halo on the plating
+  // around a white puck read as a broken lamp from the door — as a red "range active" lamp over the range
+  // console the halo is its own
+  for (const x of [-22.8, -19.0, -15.2]) for (const z of [386.0, 391.0, 397.0]) A.ceilingFixture(kit, PALETTE, x, CEIL, z, x < -22 && z > 396 ? { mat: "emitRedImp" } : {});
   for (const x of [-23.8, -14.2]) A.ceilingFixture(kit, PALETTE, x, CEIL, 379.6);
+  // housed channel over the east-wall locker run (the lockers view's ceiling was a black plane with no
+  // fixture in frame; its fill hangs 1.7 m under it, see lights)
+  A.channelFixtureZ(kit, PALETTE, 384.6, 392.6, -12.6, CEIL);
   // cage floodlight: a smaller housed panel on the door axis between the vestibule pair and the cage
   // channel; the room's shadow key hangs at its mouth (see lights)
   A.ceilingFixture(kit, PALETTE, -19.0, CEIL, 380.3, { w: 0.7, d: 0.5 });
@@ -245,7 +260,7 @@ function detail(ctx) {
   // the top-left fifth of that view had no visible fixture; these sit at 40-45 deg left, 26-30 deg up
   for (const x of [-20.6, -23.2]) A.ceilingFixture(kit, PALETTE, x, CEIL, 382.64, { w: 0.6, d: 0.5 });
 
-  // ---- lights (14 descriptors: 12 point + 2 spots, one of them the shadow key) ----------------------
+  // ---- lights (14 descriptors: 11 point + 3 spots, one of them the shadow key) ----------------------
   // Point lights fall off with 1/d^2, so anything within ~1 m of a fill blows out: every fill sits
   // >= 1.6 m below the ceiling (no specular disc on the black plating) and >= 1.5 m from any fixture
   // housing, hood or tall prop top. Fixtures are emissive dressing; the fills explain themselves by
@@ -258,15 +273,28 @@ function detail(ctx) {
   // to ~6 m aft (the issue view's foreground; the door view sees the striped floor through the flank bars).
   lights.push({ type: "spot", pos: [-19, CEIL - 0.2, 380.3], target: [-19, Y, 384.6], color: 0xfff0e6, intensity: 110, distance: 24, angle: 0.8, penumbra: 0.4, priority: 1.2, shadow: true });
   lights.push({ type: "point", pos: [-19, Y + 3.0, 379.6], color: 0xffd9d0, intensity: 16, distance: 11, priority: 0.7 }); // vestibule, under the key's panel
-  lights.push({ type: "point", pos: [-16.5, Y + 3.0, 384.9], color: 0xffd9d0, intensity: 18, distance: 9, priority: 0.5 }); // issue side, aft of the cage channel
-  lights.push({ type: "point", pos: [-22.8, Y + 2.6, 386.0], color: warm, intensity: 20, distance: 10, priority: 0.5 }); // 2 m under the recessed panels
-  lights.push({ type: "point", pos: [-15.2, Y + 2.6, 386.0], color: warm, intensity: 20, distance: 10, priority: 0.5 });
+  // (round 4: the issue-side and 386 fills +45..65 % — the door view's floor beyond the cage sat at 8 % in
+  // the key's bar shadows and still read 12 % at +20 % with the floor tint one step lighter; the key at 150 cd
+  // gained it only 1 % because those flank slivers of deck sit at the edge of its cone. Doubling all three
+  // put the deck patches at 21 % but mirrored the two east fills into the mug tray on the counter top, so the
+  // east pair takes the smaller step and the west fill the larger one)
+  lights.push({ type: "point", pos: [-16.5, Y + 3.0, 384.9], color: 0xffd9d0, intensity: 32, distance: 9, priority: 0.6 }); // issue side, aft of the cage channel
+  lights.push({ type: "point", pos: [-22.8, Y + 2.6, 386.0], color: warm, intensity: 40, distance: 10, priority: 0.6 }); // 2 m under the recessed panels
+  lights.push({ type: "point", pos: [-15.2, Y + 2.6, 386.0], color: warm, intensity: 44, distance: 10, priority: 0.6 }); // (44: the lockers view's near floor; at 60 the locker fronts 1.3 m away read 60 %)
   lights.push({ type: "point", pos: [-22.8, Y + 2.6, 391.0], color: warm, intensity: 20, distance: 10, priority: 0.5 });
-  lights.push({ type: "point", pos: [-15.2, Y + 3.0, 388.8], color: warm, intensity: 18, distance: 9, priority: 0.5 }); // forward of the 2.4 m crate stack
+  // locker run: a wide soft spot (±69°, full to ±41°) under the east-wall channel, 2 m below the plating
+  // and 1.3 m off the wall, aimed at the deck — the lockers view's floor read 6 % and the weapon cart's
+  // top was a black slab (it is 1.7 m under this light). A spot rather than a point: the spot's 1.6
+  // falloff puts twice the light on the deck for the same candela, and the lockers' top third sits in
+  // the penumbra, so their light-grey fronts do not blow out 1.3 m from the source. 80 cd: at 36 the
+  // view's bottom band still read 9-11 % (the spot's pool is mostly under the cart from this camera and the
+  // fill at 386 does the near deck); 72 measured 16 % with the locker fronts unchanged (100 -> 100 luma at
+  // the near bank, 118 -> 126 at the far) and the cart top from 16 % to 27 %; no pixel clips.
+  lights.push({ type: "spot", pos: [-13.0, Y + 2.6, 388.4], target: [-13.0, Y, 388.4], color: warm, intensity: 80, distance: 9, angle: 1.2, penumbra: 0.4, priority: 0.7 });
   lights.push({ type: "point", pos: [-19.0, Y + 2.6, 395.3], color: warm, intensity: 16, distance: 9, priority: 0.5 }); // aft of the island bench hood
   lights.push({ type: "point", pos: [-14.6, Y + 2.8, 396.6], color: 0xffffff, intensity: 16, distance: 9, priority: 0.4 }); // east bench, clear of its hood
   lights.push({ type: "point", pos: [-17.6, Y + 2.8, 397.6], color: warm, intensity: 14, distance: 8, priority: 0.4 }); // aft wall: charge rack + crates
-  lights.push({ type: "point", pos: [-21.6, Y + 2.6, 397.0], color: 0xd8e2ff, intensity: 16, distance: 9, priority: 0.4 }); // range console, east of the alcove partition
+  lights.push({ type: "point", pos: [-21.6, Y + 2.6, 397.0], color: 0xffc4b4, intensity: 16, distance: 9, priority: 0.4 }); // range console, under the red-lens panel
   // inside the caged beacon; live: update() runs it round a 0.2 m circle with the drum's bright facet
   const beaconLight = { type: "point", pos: [BEACON[0], Y + 3.3, BEACON[2]], color: 0xff7a60, intensity: 5, distance: 6, priority: 0.4 };
   lights.push(beaconLight);
@@ -301,7 +329,7 @@ function detail(ctx) {
   const lampG = fx.group(P("impAmber"), 1.5);
   {
     const lp = A.rangeSignLamp(SIGN[0], SIGN[1]);
-    fx.box(lampG, lp.pos[0], lp.pos[1], lp.pos[2], 0.16, 0.16, 0.004, lp.rot);
+    fx.box(lampG, lp.pos[0], lp.pos[1], lp.pos[2], 0.12, 0.12, 0.004, lp.rot);
   }
   fx.build(ctx.group);
   const holoMat = ctx.materials.holo.clone();
@@ -336,9 +364,9 @@ function detail(ctx) {
         const p = (t + j * 0.9) % 4;
         fx.set(lockG[j], p < 0.18 || (p >= 0.3 && p < 0.48) ? 2.2 : 0.45);
       }
-      fx.set(lampG, 0.35 + 1.0 * breathe(t, 3.2));
+      fx.set(lampG, 0.3 + 0.7 * breathe(t, 3.2)); // peak 1.0 ≈ 88 % on the lens (1.35 bloomed)
       fx.commit();
-      holoMat.opacity = 0.35 * (0.78 + 0.25 * breathe(t, 1.8) + 0.05 * Math.sin(t * 9.0));
+      holoMat.opacity = 0.3 * (0.78 + 0.25 * breathe(t, 1.8) + 0.05 * Math.sin(t * 9.0));
     },
   };
 }
@@ -360,10 +388,13 @@ export default defineRoom({
     // from the middle of the room toward the east wall: locker bank left, open armour lockers centre
     // with the weapon cart parked 2.7 m ahead of the camera, rifle rack right (was a 13 m sightline
     // across the room with 45 % floor)
-    "d2-armory-lockers": { pos: [-16.6, Y, 387.6], yaw: -85, pitch: -1 },
+    // pitched up 5 deg so the locker-run channel is in frame (round 4: the view's ceiling was a black
+    // plane with no fixture)
+    "d2-armory-lockers": { pos: [-16.6, Y, 387.6], yaw: -85, pitch: 4 },
     // on the alcove's centreline (the previous spot had the 2.4 m crate stack filling the left foreground)
     "d2-armory-alcove": { pos: [-20.6, Y, 397.7], yaw: 86, pitch: -2 },
-    "d2-armory-issue": { pos: [-17.2, Y, 385.6], yaw: 18, pitch: -2 },
+    // 1 m back along the view axis (the bars filled 85 % of the frame from -17.2 / 385.6)
+    "d2-armory-issue": { pos: [-16.9, Y, 386.55], yaw: 18, pitch: -2 },
   },
   shell: {
     panelW: 1.6,
@@ -371,7 +402,10 @@ export default defineRoom({
     wallAlt: IMP.impGrey,
     corniceColor: IMP.impDark,
     stripMat: "emitRedImp",
-    floor: { color: IMP.impDark },
+    // impMid like the mess and security decks (was impDark): the deck read 6-8 % in the door and lockers
+    // views under fills that put the mess's floor at 22 %, and the half step 0x46494f still left the
+    // lockers view's bottom band at 10 %
+    floor: { color: IMP.impMid },
     // the room builds its own ceiling (slab + 2.4 m plates at texel 4): the shell's plated panels at
     // texel 2.5 read as dark speckle, its painted panels as grime blotches
     ceiling: false,

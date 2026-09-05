@@ -21,11 +21,14 @@ function worldRect(P, lx0, lz0, lx1, lz1) {
 }
 
 // Door-side status plate: matte black plate with an accent bar, a red bar, three white cells and a
-// green "ready" cell. pos sits ON the wall face (local z = 0), the plate is 0.07 proud.
+// green "ready" cell. pos sits ON the wall face (local z = 0), the plate is 0.07 proud. The plate is
+// matte (paintedMetal) like every small wall plate in these rooms: a darkGloss plate on a corridor
+// wall mirrors a centreline fill into a centreline camera as a flat-white blob with a bloom halo —
+// the critic's "wall lamp blooming" that no emitter cap could touch.
 export function statusPanel(kit, PALETTE, pos, yaw, { accent = "emitBlue" } = {}) {
   const P = placer(kit, pos, yaw);
   P.box("paintedMetal", 0, 0, 0.025, 0.34, 0.58, 0.04, { color: col(PALETTE, "impBlack") });
-  P.box("darkGloss", 0, 0, 0.055, 0.28, 0.52, 0.02);
+  P.box("paintedMetal", 0, 0, 0.055, 0.28, 0.52, 0.02, { color: col(PALETTE, "impDark") });
   P.box(accent, 0, 0.18, 0.069, 0.18, 0.05, 0.008);
   P.box("emitRedImp", 0, 0.09, 0.069, 0.18, 0.05, 0.008);
   for (let k = 0; k < 3; k++) P.box("emitWhite", -0.07 + k * 0.07, -0.03, 0.069, 0.04, 0.04, 0.008);
@@ -33,13 +36,23 @@ export function statusPanel(kit, PALETTE, pos, yaw, { accent = "emitBlue" } = {}
 }
 
 // Numbered bulkhead marker (abstract): dark plate, amber band, 1–4 white bars as the "number".
-export function bulkheadMarker(kit, PALETTE, pos, yaw, index) {
+// `emitTo` (an Emitters instance) puts the lit bar and digits in the animated-emitter mesh at `level`
+// instead of the kit: at 0.75 the amber bar sits at 1.13 and the digits at 0.98, under the bloom
+// threshold, so a marker seen from 7 m is a lit plate rather than a flaring lamp. The plate itself is
+// matte: as darkGloss (roughness 0.25) the two markers flanking a bay mirrored the far-end flood at
+// grazing incidence into the mid-corridor camera — Fresnel makes any gloss a mirror there — and read
+// as two white "wall lamps" blooming (cor-n mid), with nothing emitting.
+export function bulkheadMarker(kit, PALETTE, pos, yaw, index, { emitTo = null, level = 0.75 } = {}) {
   const P = placer(kit, pos, yaw);
-  P.box("darkGloss", 0, 0, 0.012, 0.26, 0.34, 0.02);
-  P.box("emitAmber", 0, 0.1, 0.026, 0.18, 0.06, 0.008);
+  P.box("paintedMetal", 0, 0, 0.012, 0.26, 0.34, 0.02, { color: col(PALETTE, "impBlack") });
+  const lit = (mat, lx, ly, lz, sx, sy, sz) => {
+    if (emitTo) emitTo.box(mat, ...P.world(lx, ly, lz), sx, sy, sz, { rot: [0, yaw, 0], level });
+    else P.box(mat, lx, ly, lz, sx, sy, sz);
+  };
+  lit("emitAmber", 0, 0.1, 0.026, 0.18, 0.06, 0.008);
   const n = 1 + (index % 4);
   const w = n * 0.065;
-  for (let k = 0; k < n; k++) P.box("emitWhite", -w / 2 + 0.03 + k * 0.065, -0.06, 0.026, 0.03, 0.11, 0.008);
+  for (let k = 0; k < n; k++) lit("emitWhite", -w / 2 + 0.03 + k * 0.065, -0.06, 0.026, 0.03, 0.11, 0.008);
 }
 
 // Wall junction box: dark body, black door plate, indicator field, status LED, optional pair of
@@ -50,7 +63,9 @@ export function junctionBox(kit, PALETTE, pos, yaw, { w = 0.5, h = 0.7, d = 0.14
   const black = col(PALETTE, "impBlack");
   P.box("paintedMetal", 0, 0, d / 2 + 0.005, w, h, d, { color: dark, texel: 2.5 });
   P.box("paintedMetal", 0, 0, d + 0.012, w - 0.08, h - 0.08, 0.014, { color: black });
-  indicatorField(P, 0, h / 2 - 0.16, d + 0.02, w - 0.16, 0.14, seed);
+  // matte indicator plate: the gloss one mirrored the next bay's fill into the lobby-end cameras
+  // (cor-e lobby-end, cor-w dead-end: a flat-white blob on the box where nothing emits)
+  indicatorField(P, 0, h / 2 - 0.16, d + 0.02, w - 0.16, 0.14, seed, { plate: "paintedMetal", plateColor: dark });
   P.box(accent, -w / 2 + 0.09, -h / 2 + 0.1, d + 0.023, 0.07, 0.02, 0.006);
   P.box("emitRedImp", -w / 2 + 0.2, -h / 2 + 0.1, d + 0.023, 0.04, 0.02, 0.006);
   P.box("metal", 0, -0.02, d + 0.03, 0.02, 0.22, 0.02, { color: col(PALETTE, "steel") });
@@ -312,8 +327,17 @@ export function engTank(kit, PALETTE, pos, yaw, { r = 0.8, h = 3.0, color, bands
   P.box("darkGloss", 0, 1.45, r + 0.06, 0.42, 0.36, 0.06);
   indicatorField(P, 0, 1.53, r + 0.092, 0.34, 0.12, seed);
   P.box(emit, 0, 1.36, r + 0.092, 0.26, 0.05, 0.01);
-  P.cyl("metal", 0, 1.0, r + 0.15, 0.16, 0.05, "z", { color: col(PALETTE, "impRed"), segments: 16 });
-  P.cyl("metal", 0, 1.0, r + 0.06, 0.025, 0.18, "z", { color: steel, segments: 8 });
+  // valve: a bonnet on the shell, a stem, and a hand-wheel built as a wheel — torus rim, hub and four
+  // spokes (a solid red disc here read as a red sphere / an uncaged beacon lamp from 8 m)
+  P.cyl("metal", 0, 1.0, r + 0.03, 0.07, 0.1, "z", { color: dark, segments: 12 });
+  P.cyl("metal", 0, 1.0, r + 0.1, 0.022, 0.2, "z", { color: steel, segments: 8 });
+  P.cyl("metal", 0, 1.0, r + 0.2, 0.045, 0.06, "z", { color: dark, segments: 10 });
+  P.add("metal", new THREE.TorusGeometry(0.17, 0.022, 8, 24), 0, 1.0, r + 0.2, { color: col(PALETTE, "impRed") });
+  for (let k = 0; k < 4; k++) {
+    const a = (k * Math.PI) / 4;
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, P.yaw, 0)).multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(0, 0, a)));
+    kit.add("metal", new THREE.BoxGeometry(0.34, 0.02, 0.02), { pos: P.world(0, 1.0, r + 0.2), quat: q, color: col(PALETTE, "impRed") });
+  }
   P.cyl("hazard", 0, 0.42, 0, r + 0.012, 0.08, "y", { segments: 28, uvScale: [2 * Math.PI * r * 2, 0.16] });
   P.collider([-r - 0.15, 0, -r - 0.15], [r + 0.15, h + 0.3, r + 0.15], "tank");
 }
@@ -356,7 +380,9 @@ export function serviceBay(kit, PALETTE, pos, yaw, { w = 2.4, h = 2.9, depth = 0
   P.box("paintedMetal", 0, h - 0.06, depth / 2 + 0.005, w - 2 * jamb, 0.12, depth - 0.1, { color: black });
   P.box(lightMat, 0, h - 0.13, depth / 2 + 0.005, w - 2 * jamb - 0.4, 0.02, 0.14);
   P.box("emitRedImp", 0, h + 0.2, depth + 0.012, 0.12, 0.05, 0.01);
-  P.box("impFloor", 0, 0.006, depth / 2 + 0.1, w - 2 * jamb - 0.04, 0.012, depth + 0.2, { color: black, texel: 1 });
+  // black floor plate ending at the jamb line: the props' contact shadows (alcove downlight) fall on
+  // the grey deck in front, not on a black plate where they cannot be seen
+  P.box("impFloor", 0, 0.006, depth / 2 + 0.01, w - 2 * jamb - 0.04, 0.012, depth + 0.02, { color: black, texel: 1 });
 }
 
 // Housed light fixture hanging from the plane y = top between axis-aligned world points a..b: two
@@ -428,6 +454,35 @@ export function keyLamp(kit, PALETTE, pos, top, { size = 0.9, depth = 0.22, emit
   kit.boxMM("paintedMetal", [x - s + rail, yb, z - 0.015], [x + s - rail, yb + 0.03, z + 0.015], { color: dark });
   kit.boxMM("paintedMetal", [x - 0.015, yb, z - s + rail], [x + 0.015, yb + 0.03, z + s - rail], { color: dark });
   return [x, top - 0.1 - 0.3, z]; // where the key spot goes
+}
+
+// Yoked flood: a stemmed can hanging from the plane y = top at `pos` (x, z) and pointed at `target`,
+// so a key aimed 30–60° off vertical has a fixture that visibly points where its light goes. Square
+// mount plate, stem, trunnion ring at the pivot, dark can along the aim with a deeper hood rim, and a
+// recessed emitter disc in the animated-emitter mesh `E` at `level` (0.85 → 1.1, under the bloom
+// threshold: a lit face, not a flare, when a camera looks into it). Layout along the aim from the
+// pivot: collar, closed body to `len` − 0.12, the emitter disc on the body's end cap, and the open hood
+// rim 7 cm past the disc face (the disc stays fully visible up to 40° off the aim — every lobby camera
+// looks into the cans at 15–30°; a first cut had the disc 2 cm inside the closed body, and the cans
+// read as black cylinders whose light came from nowhere). Returns the spot position — 4 cm past the
+// hood mouth, so the can's own geometry sits behind the light and casts nothing into the cone.
+export function yokedFlood(kit, PALETTE, E, pos, top, target, { stem = 0.45, r = 0.16, len = 0.42, level = 0.85, mat = "emitWhite" } = {}) {
+  const [x, , z] = pos;
+  const black = col(PALETTE, "impBlack");
+  const dark = col(PALETTE, "impDark");
+  const pivot = new THREE.Vector3(x, top - stem, z);
+  const d = new THREE.Vector3(target[0], target[1], target[2]).sub(pivot).normalize();
+  const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d);
+  const along = (t) => pivot.clone().addScaledVector(d, t).toArray();
+  const bodyLen = len - 0.12;
+  const bodyEnd = 0.03 + bodyLen;
+  kit.boxMM("paintedMetal", [x - 0.18, top - 0.04, z - 0.18], [x + 0.18, top, z + 0.18], { color: black, texel: 2.5 });
+  kit.cyl("paintedMetal", x, top - stem / 2 + 0.03, z, 0.03, stem - 0.02, "y", { color: black, segments: 10 });
+  kit.add("paintedMetal", new THREE.CylinderGeometry(r + 0.03, r + 0.03, 0.07, 18), { pos: along(0), quat: q, color: black, texel: 2.5 });
+  kit.add("impPanel", new THREE.CylinderGeometry(r, r, bodyLen, 18), { pos: along(0.03 + bodyLen / 2), quat: q, color: dark, uv: "keep" });
+  kit.add("paintedMetal", new THREE.CylinderGeometry(r + 0.015, r + 0.015, 0.12, 18, 1, true), { pos: along(bodyEnd + 0.03), quat: q, color: black, texel: 2.5 });
+  E.add(new THREE.CylinderGeometry(r * 0.7, r * 0.7, 0.012, 18), { pos: along(bodyEnd + 0.012), quat: q, mat, level });
+  return along(bodyEnd + 0.13);
 }
 
 // Lift-approach downlight: a smaller housed square on the ceiling over the approach lane whose emitter

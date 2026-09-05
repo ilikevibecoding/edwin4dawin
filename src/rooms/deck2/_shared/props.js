@@ -42,11 +42,13 @@ export function placer(kit, pos, yaw = 0) {
 const pick = (rand, arr) => arr[Math.floor(rand() * arr.length)];
 const LED_MATS = ["emitRedImp", "emitBlue", "emitAmber", "emitGreen", "emitWhite"];
 
-// Dense indicator field: rows of tiny emitters in Imperial red/blue/amber on a matte-black plate.
-// Local: plate centred at (lx, ly, lz) in the XY plane facing +Z.
-export function indicatorField(P, lx, ly, lz, w, h, seed = 1, { density = 1, weights = [0.45, 0.35, 0.15, 0.05] } = {}) {
+// Dense indicator field: rows of tiny emitters in Imperial red/blue/amber on a dark plate.
+// Local: plate centred at (lx, ly, lz) in the XY plane facing +Z. The plate is darkGloss by default;
+// `plate` / `plateColor` pick another kit key (a wall-mounted gloss plate in a corridor mirrors the
+// centreline fills into a centreline camera as a white blob — matte "paintedMetal" for those).
+export function indicatorField(P, lx, ly, lz, w, h, seed = 1, { density = 1, weights = [0.45, 0.35, 0.15, 0.05], plate = "darkGloss", plateColor = null } = {}) {
   const rand = rng(seed);
-  P.box("darkGloss", lx, ly, lz, w, h, 0.02);
+  P.box(plate, lx, ly, lz, w, h, 0.02, plateColor != null ? { color: plateColor } : {});
   const cols = Math.max(1, Math.floor((w - 0.06) / (0.05 / density)));
   const rows = Math.max(1, Math.floor((h - 0.06) / (0.06 / density)));
   for (let i = 0; i < cols; i++) {
@@ -263,8 +265,10 @@ export function tank(kit, PALETTE, pos, yaw, { r = 1.2, h = 4, color, bands = 3,
   P.collider([-r - 0.15, 0, -r - 0.15], [r + 0.15, h, r + 0.15], "tank");
 }
 
-// Structural pillar (square) with a recessed light strip on each face.
-export function pillar(kit, PALETTE, pos, size, h, { strip = true, faceColor } = {}) {
+// Structural pillar (square) with a recessed light strip on each face. `emitTo` (an Emitters
+// instance from lobby/motion.js) puts the strips in that mesh at `level` instead of the kit, so a
+// room can hold them under the bloom threshold (0.85 → 1.1) without a material of its own.
+export function pillar(kit, PALETTE, pos, size, h, { strip = true, faceColor, emitTo = null, level = 0.85 } = {}) {
   kit.box("paintedMetal", pos[0], pos[1] + h / 2, pos[2], size, h, size, { color: col(PALETTE, "impDark"), texel: 2.5 });
   // clean painted faces over the dark core (the worn-metal map at pillar scale reads as blotchy concrete)
   const fc = faceColor || col(PALETTE, "impMid");
@@ -277,8 +281,10 @@ export function pillar(kit, PALETTE, pos, size, h, { strip = true, faceColor } =
   kit.box("paintedMetal", pos[0], pos[1] + 0.15, pos[2], size + 0.1, 0.3, size + 0.1, { color: col(PALETTE, "impBlack") });
   kit.box("paintedMetal", pos[0], pos[1] + h - 0.2, pos[2], size + 0.1, 0.4, size + 0.1, { color: col(PALETTE, "impBlack") });
   if (strip) {
-    kit.box("emitWhite", pos[0], pos[1] + h / 2, pos[2] + size / 2 + 0.016, 0.05, h - 1.2, 0.006);
-    kit.box("emitWhite", pos[0], pos[1] + h / 2, pos[2] - size / 2 - 0.016, 0.05, h - 1.2, 0.006);
+    for (const s of [-1, 1]) {
+      if (emitTo) emitTo.box("emitWhite", pos[0], pos[1] + h / 2, pos[2] + s * (size / 2 + 0.016), 0.05, h - 1.2, 0.006, { level });
+      else kit.box("emitWhite", pos[0], pos[1] + h / 2, pos[2] + s * (size / 2 + 0.016), 0.05, h - 1.2, 0.006);
+    }
   }
   kit.collider([pos[0] - size / 2 - 0.05, pos[1], pos[2] - size / 2 - 0.05], [pos[0] + size / 2 + 0.05, pos[1] + h, pos[2] + size / 2 + 0.05], "pillar");
 }

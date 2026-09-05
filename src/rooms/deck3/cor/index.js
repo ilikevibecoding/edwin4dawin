@@ -20,8 +20,13 @@ export default defineRoom({
     // frame top lands on the bulkhead beam at z 573, so the nearest lamp in shot is the whole bay-2
     // fixture under it rather than a fixture cut off at the top edge
     "d3-cor-lobby-end": { pos: [7.1, Y, 568.8], yaw: 177, pitch: -3 },
-    "d3-cor-mid": { pos: [7.2, Y, 585], yaw: 174, pitch: -1 },
-    "d3-cor-engctl-door": { pos: [8, Y, 589], yaw: 96, pitch: 1 },
+    // mid: 0.8 m further from the east wall, 1.5 m back and tilted down 6°, so the fg-L locker row's
+    // base and the deck in front of it (where the alcove downlight puts its contact shadow) are in
+    // frame — at pitch −1 from z 585 the lockers were cut at the knees
+    "d3-cor-mid": { pos: [6.4, Y, 583.5], yaw: 184, pitch: -6 },
+    // engctl-door: up 5° from level so the bay-6 ceiling grille that lights this wall is in frame
+    // (the critic's crop had a black ceiling band with no fixture)
+    "d3-cor-engctl-door": { pos: [8, Y, 589], yaw: 96, pitch: 6 },
     "d3-cor-pipes": { pos: [5.9, Y, 600], yaw: -42, pitch: 12 },
   },
   shell: {
@@ -33,15 +38,21 @@ export default defineRoom({
     lights: false, // the corridor generator pushes its own: warm key spot in the first fixture, fills under every second fixture (two mid bays add a downlight spot), door flood 10.5 m short of the reactor blast door
   },
   detail(ctx, shell, room) {
-    // lights (4 spots): key, downlight spots in bays 4 and 6 (z 583 / 591, either side of the mid
-    // view's camera — dropping bay 6 cost the mid and engctl-door decks 9 % grey in a test run), and a
-    // door flood 10.5 m short of the reactor blast door aimed at it. The far end is a door, so no
-    // long-throw (it would shine into the reactor hall); a flood on the far beam lost the spot pool
-    // to engctl's and the reactor's keys from both named views. Brought forward to z 600.7 it weighs
-    // 21 from the lobby door (the reactor key 27, the mids at priority 0.1 → 24 and 37, so it takes the
-    // fourth slot there) and 10.5 from the mid view (mid4 7.5, mid6 12.0, key 12.0: engctl's key at
-    // 12.4 is the one culled). Motion: faulty fixture at bay 8 (z 599: 14 m ahead of the mid view),
-    // amber beacon hanging before the reactor blast door
-    return corridorDetail(ctx, shell, room, { axis: "z", lobbyEnd: "min", accent: "emitAmber", engineering: true, seed: 31, screens: ["screenImp3", "screenImp0"], fill: { color: 0xffd9b8 }, farFlood: { back: 10.5, aim: "end", intensity: 160 }, midSpot: { bays: [4, 6], priority: 0.1 }, flickerBay: 8, farBeacon: "amber" });
+    // lights (4 spots): key raked onto the bay-1 cabinet alcove (z 571, east wall — the lobby-end
+    // view's fg-L), downlight spot in bay 6 (z 591, ahead of the mid view's camera — dropping it cost
+    // the mid and engctl-door decks 9 % grey in a test run), alcove downlight in the bay-5 service bay
+    // (the locker row at z 587 on the east wall, the mid view's fg-L: it casts the lockers' contact
+    // shadow band onto the deck and is the shadow caster from the mid view), and a door flood 10.5 m
+    // short of the reactor blast door aimed at it. The far end is a door, so no long-throw (it would
+    // shine into the reactor hall); a flood on the far beam lost the spot pool to engctl's and the
+    // reactor's keys from both named views. Motion: faulty fixture at bay 8 (z 599: 14 m ahead of the
+    // mid view), amber beacon hanging before the reactor blast door; the last beam carries the lit
+    // amber lintel that marks the terminus from the lobby door
+    // Key cone 0.5 rad (0.7 elsewhere): the heavy coolant mains run on the east wall at 2.75–3.8 m,
+    // 1.3 m from the key and 24° off its raked axis, and the steel pipe seen end-on from the pipes
+    // view mirrored the key as a white blob at 29 m (the critic's "far wall lamp with a flare"). At
+    // 0.5 the pipe sits in the cone's outer penumbra (~25 % of the key), the bay-1 cabinet and its
+    // deck stay in the core (6–12° off axis).
+    return corridorDetail(ctx, shell, room, { axis: "z", lobbyEnd: "min", accent: "emitAmber", engineering: true, seed: 31, screens: ["screenImp3", "screenImp0"], fill: { color: 0xffd9b8 }, key: { angle: 0.5 }, farFlood: { back: 10.5, aim: "end", intensity: 160 }, midSpot: { bays: [6], priority: 0.1 }, alcoveSpot: { bay: 5 }, flickerBay: 8, farBeacon: "amber" });
   },
 });

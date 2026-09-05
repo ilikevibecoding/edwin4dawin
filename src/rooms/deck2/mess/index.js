@@ -27,6 +27,10 @@ const PART_Z = 403.85; // dining face of the half wall
 const PART_H = 2.2;
 const TABLE_COLS = [-57.5, -50.5, -41.5, -34.5];
 const TABLE_ROWS = [385.8, 389.4, 393.0, 396.6];
+const AISLE_Z = [389.4, 396.6]; // aisle pendants (rows 2 and 4)
+const WALL_LAMP = [IX0, Y + 3.1, 382.4]; // wall-arm work light over the beverage point
+const WALL_ARM = 1.2;
+const HOOD_LAMP_X = -52.15; // hood work lamp: in the gap between the oven and the open-hatch vat
 const hashSeed = 4171;
 
 function detail(ctx) {
@@ -54,6 +58,11 @@ function detail(ctx) {
   }
   // aisle edge lines (painted, not lit) from the door approach to the queue lane
   for (const x of [-47.5, -44.5]) kit.boxMM("paintedMetal", [x - 0.06, Y, 380.6], [x + 0.06, Y + 0.006, 400.1], { color: P("impWhite") });
+  // aisle pendants: 3 m warm bars over the centre aisle in line with table rows 2 and 4, each with a
+  // spot pool under it (see lights) — the aisle floor was an 8 % runway between the lit table blocks
+  for (const z of AISLE_Z) dropLight(kit, PALETTE, [-46, CEIL, z], { w: 3.0, d: 0.35, stem: 2.3, mat: "emitWarmSoft" });
+  // wall-arm work light over the beverage point (the hall view's far-right wall was an 8 % plane)
+  M.wallArmLight(kit, PALETTE, WALL_LAMP, HALF, { arm: WALL_ARM });
 
   // ---- entry zone: hand-wash trough (west of door), tray return (east of door); a freestanding
   //      recycling station stands on the exit path east of the aisle (the hall's empty forward-east
@@ -158,6 +167,8 @@ function detail(ctx) {
   M.vat(kit, PALETTE, [-50.5, Y, IZ1 - 0.62], Math.PI, { seed: 61, w: 2.4, h: 1.9, open: true });
   const HOOD = [[-58.0, Y + 2.4, IZ1 - 1.4], [-49.0, Y + 3.4, IZ1]];
   M.hood(kit, PALETTE, HOOD[0], HOOD[1], { tubes: false }); // tubes buzz: fx batch below
+  // warm work lamp under the hood's front lip over the cookers; the galley's hood spot sits inside it
+  M.hoodLamp(kit, PALETTE, HOOD_LAMP_X, HOOD[0][1], HOOD[0][2]);
   M.vertDuct(kit, PALETTE, -51.5, IZ1 - 0.7, Y + 3.4, CEIL, 0.8);
   M.sinkLine(kit, PALETTE, [-44, Y, IZ1 - 0.35], Math.PI, { len: 6, d: 0.7, basins: 3 });
   M.dishwasher(kit, PALETTE, [-38.6, Y, IZ1 - 0.5], Math.PI, { seed: 64 });
@@ -176,47 +187,72 @@ function detail(ctx) {
   wallScreen(kit, [IX0 + 0.09, Y + 2.95, 409.6], HALF, 1.6, 0.9, "screenImp0");
   wallScreen(kit, [IX1 - 0.09, Y + 2.95, 405.6], -HALF, 1.6, 0.9, "screenImp2");
   M.wallPanel(kit, PALETTE, [IX0 + 0.01, Y + 1.5, 410.6], HALF, 44);
-  // galley floor drain grate along the aft equipment line
-  kit.boxMM("grate", [-60.5, Y + 0.001, 409.75], [-31.0, Y + 0.009, 410.15]);
+  // galley floor drain along the aft equipment line: dark-tinted grate between two flat steel rails. The
+  // grate is a bare metal (metalness map) and untinted it mirrored the fills and the hood spot at the
+  // galley view's grazing angle: a white ladder down the middle of the frame instead of a drain channel.
+  kit.boxMM("grate", [-60.5, Y + 0.001, 409.75], [-31.0, Y + 0.009, 410.15], { color: dark });
+  for (const z of [409.72, 410.18]) kit.boxMM("paintedMetal", [-60.5, Y, z - 0.03], [-31.0, Y + 0.012, z + 0.03], { color: steel });
   // mezzanine-style service run at 5 m along the galley (aft) wall
   duct(kit, PALETTE, [IX0 + 0.2, Y + 5.0, IZ1 - 0.55], [IX1 - 0.2, Y + 5.0, IZ1 - 0.55], 0.7, 0.5, { color: mid });
   pipe(kit, PALETTE, [IX0 + 0.2, Y + 4.4, IZ1 - 0.35], [IX1 - 0.2, Y + 4.4, IZ1 - 0.35], 0.1, { color: steel, bracket: 4 });
   pipe(kit, PALETTE, [IX0 + 0.2, Y + 4.15, IZ1 - 0.3], [IX1 - 0.2, Y + 4.15, IZ1 - 0.3], 0.06, { color: P("impAmber"), bracket: 4 });
   for (let x = IX0 + 2; x < IX1 - 1; x += 4) kit.box("paintedMetal", x, Y + 4.68, IZ1 - 0.4, 0.12, 0.14, 0.8, { color: black, texel: 2.5 });
-  // galley ceiling fixtures (cool white)
-  for (const x of [-56, -46, -36]) dropLight(kit, PALETTE, [x, CEIL, 407.6], { w: 2.4, d: 0.5, stem: 1.0, mat: "emitWhite" });
+  // galley ceiling fixtures (cool white): hollow hoods with a recessed 3-segment emitter from the fx
+  // batch (the bare emitWhite bar clipped to a flat white slab from the galley aisle)
+  const GALLEY_FIX = [-56, -46, -36].map((x) => [x, CEIL, 407.6]);
+  for (const p of GALLEY_FIX) M.galleyFixture(kit, PALETTE, p);
 
-  // ---- lights (14 descriptors: 13 point + 1 shadow-casting spot; 1/d^2 falloff, so every fill keeps
-  //      >= 1.2 m from any fixture hood) -------------------------------------------------------------
-  // Pool note: the runtime keeps the 12 nearest point lights weighted by distance/(0.5+priority) and the
-  // west corridor's six priority-1 lights sit 6 m behind the door view, so the hall fills carry priority
-  // 1 and the serving fills 1.5 — otherwise the far counter loses its light exactly in the door view.
-  // hall fills between the table rows (z midway between rows, x between the columns: 1.2 m from the
-  // nearest hood end and 1.8 m from the rows either side), 2.5 m below the ceiling
-  for (const x of [-54, -38]) for (const z of [387.6, 391.2, 394.8]) lights.push({ type: "point", pos: [x, Y + 4.0, z], color: 0xffe0c0, intensity: 42, distance: 16, priority: 1.0 });
-  lights.push({ type: "point", pos: [-46, Y + 4.0, 381.5], color: 0xffe6d0, intensity: 30, distance: 13, priority: 0.7 });
+  // ---- lights (14 descriptors: 10 point + 4 spots, the serving key the one shadow caster; 1/d^2
+  //      falloff, so every fill keeps >= 1.2 m from any fixture hood) -----------------------------------
+  // Pool note: the runtime keeps the current room's 9 nearest point lights weighted by
+  // distance/(0.5+priority) (3 slots go to door-neighbour lights) and all 4 of its spots, so the hall
+  // fills carry priority 1 and the serving fills 1.5 — otherwise the far counter loses its light exactly
+  // in the door view. The one point that drops out per view is always out of that view's frame (the
+  // west galley fill from the hall/door/entry, the wall-arm light from the serving/galley).
+  // hall fills: two per side in the gaps between the table columns (x -54 / -38: 1.2 m from the nearest
+  // hood ends), between rows 1-2 and 3-4, 2.5 m below the ceiling. Four at 62 cd put the same light on
+  // the outer tables and the hall floor as the old six at 42 (at 55 the hall view's bottom band read
+  // 10.7 % against 12.4 % before the swap); the inner columns and the aisle now get the aisle spots.
+  for (const x of [-54, -38]) for (const z of [388.5, 393.9]) lights.push({ type: "point", pos: [x, Y + 4.0, z], color: 0xffe0c0, intensity: 62, distance: 16, priority: 1.0 });
+  // door approach: 24 cd (was 30 — its two specular glints on the service-band pipe read as the entry
+  // view's "wall lamps" and were asked down 20 %)
+  lights.push({ type: "point", pos: [-46, Y + 4.0, 381.5], color: 0xffe6d0, intensity: 24, distance: 13, priority: 0.7 });
+  // aisle pools: a spot 8 cm under each aisle pendant's diffuser, straight down, 57 deg half-angle so
+  // the two pools overlap at ~20 % between them and reach the inner tables' aisle edges
+  for (const z of AISLE_Z) lights.push({ type: "spot", pos: [-46, Y + 4.0, z], target: [-46, Y, z], color: 0xffe0c0, intensity: 55, distance: 12, angle: 1.0, penumbra: 0.45, priority: 1.0 });
+  // wall-arm work light: 11 cd, 1.2 m off the west wall under its hooded head (closer or stronger and
+  // the wall panel behind it blows out to a white disc)
+  lights.push({ type: "point", pos: [IX0 + WALL_ARM, Y + 2.95, WALL_LAMP[2]], color: 0xffd8b8, intensity: 11, distance: 9, priority: 0.8 });
   // serving line. KEY (the room's one shadow caster): a spot 0.3 m under the middle queue-lane fixture,
   // aimed at the counter centre: the towers, trays and the heat-lamp housings throw their shadows aft
   // onto the counter top and the half wall's plates. Not the heat-lamp header itself: a spot in the
   // header sits 0.5 m above and behind the six hanging lamps, which would shade the very counter it is
   // meant to light. Two warm fills at the counter ends (15 % of the key) carry the flanks.
   lights.push({ type: "spot", pos: [-46, Y + 3.9, 401.3], target: [-46, Y + 0.9, 403.1], color: 0xffe0c0, intensity: 95, distance: 34, angle: 1.0, penumbra: 0.5, priority: 1.5, shadow: true });
-  for (const x of [-50, -42]) lights.push({ type: "point", pos: [x, Y + 3.8, 402.5], color: 0xffe0c0, intensity: 14, distance: 10, priority: 1.5 });
-  // amber pool: 3 cm under the rim of the heat lamp at x -46.8 (it hung between two lamps at 7 cd, a bare
-  // hot disc on the counter 0.5 m below); 1.4 cd at 0.6 m tints the trays without a hotspot. Live: it
-  // follows that lamp's flicker in update().
-  const pool = { type: "point", pos: [-46.8, Y + 1.5, 403.2], color: 0xffb060, intensity: 1.4, distance: 3.2, priority: 0.4 };
-  lights.push(pool);
-  // galley: cool fills 0.8 m aft of the galley fixtures, 2.5 m below the ceiling, over the aisle between
-  // the islands and the appliance line. At z 409.2 / 4.5 m they sat 25 cm under the mezzanine duct's
-  // underside and 2 m in front of it: from the galley aisle that grazing pair read as the "hood lamp seen
-  // edge-on" streak where the hood meets the ceiling (clipped white + bloom); 1.6 m out and 0.5 m lower
-  // the same duct face peaks at ~230
-  for (const x of [-56, -46, -36]) lights.push({ type: "point", pos: [x, Y + 4.0, 408.4], color: 0xe8f0ff, intensity: 30, distance: 12, priority: 0.5 });
+  // (0.57 m under the queue-lane fixtures' diffuser plane and 0.9 m aft of them: at 3.8 m / 402.5 each fill's
+  // mirror point for the door camera fell 0.4 m short of the outer fixture's diffuser, and the grazing
+  // Fresnel tail of that reflection was the pair of "far pendants blooming to spheres" in the door view;
+  // from 3.5 m / 402.2 the mirror points land on bare ceiling between pendant row 4 and the fixtures)
+  for (const x of [-50, -42]) lights.push({ type: "point", pos: [x, Y + 3.5, 402.2], color: 0xffe0c0, intensity: 14, distance: 10, priority: 1.5 });
+  // (the 1.4 cd amber pool under heat lamp 3 went: its descriptor now pays for the hood spot)
+  // galley: cool fills 1.8 m under the west and centre galley fixtures' diffusers (so the housed bars
+  // are the fills' source), over the aisle between the islands and the appliance line. Earlier positions
+  // 0.8 m aft of the fixtures at 4 m grazed the hood top and the mezzanine duct face (streaks to ~230)
+  // while the aisle floor beside the islands sat at 11 %; centred over the aisle at 3.6 m / 52 cd the
+  // aisle reads ~20 % and the duct face gets less light than before. Neither fill's mirror point (camera
+  // at the galley view) lands on a steel island top. The hood spot carries the cooker line. The east fill
+  // (x -36) went to the wall-arm light: no view frames the east galley, whose dishwasher/sink/cabinets
+  // carry their own emitters.
+  for (const x of [-56, -46]) lights.push({ type: "point", pos: [x, Y + 3.6, 407.6], color: 0xe8f0ff, intensity: 52, distance: 12, priority: 0.5 });
+  // hood spot: warm, inside the work lamp under the hood's front lip, aimed at the foot of the cooker
+  // fronts (63 deg half-angle: the fronts within ~1.5 m get a top-down gradient, the floor in front of
+  // the appliance line a 4 m pool). A point there blows out the oven's top edge 0.5 m away; the cone
+  // keeps the light off everything above the lamp.
+  lights.push({ type: "spot", pos: [HOOD_LAMP_X, Y + 2.2, 410.13], target: [HOOD_LAMP_X, Y + 0.5, 410.48], color: 0xffd2a4, intensity: 26, distance: 9, angle: 1.1, penumbra: 0.3, priority: 0.6 });
 
   // ---- motion lighting: one additive emitter batch (1 draw call) ---------------------------------------
-  // heat lamps: each lamp's diffuser + indicator is its own group with a gentle seeded flicker; the amber
-  // pool descriptor follows lamp 3's curve. Hood under-light tubes: a fast 8 % buzz, tube 3 is the faulty
+  // heat lamps: each lamp's diffuser + indicator is its own group with a gentle seeded flicker. Hood
+  // under-light tubes: a fast 8 % buzz, tube 3 is the faulty
   // one and drops out now and then. Dispenser indicator plates: 6 LEDs each, slow state changes plus a
   // running cursor, so the four plates cycle instead of sitting frozen.
   const fx = new EmitBatch();
@@ -226,11 +262,28 @@ function detail(ctx) {
     for (const e of M.heatLampEmitters(x, Y + PART_H, 403.2, 0.45)) fx.box(g, ...e);
     return g;
   });
+  // hood under-lights: warm now, like the work lamp and the spot it houses (the hood is the cookers' own
+  // fixture, so everything under the vent is one colour)
   const tubeG = M.hoodTubes(HOOD[0], HOOD[1]).map((tb) => {
-    const g = fx.group(0xdfe9ff, 1.3);
+    const g = fx.group(0xffd8b0, 1.3);
     fx.box(g, ...tb);
     return g;
   });
+  // static housed emitters at <= 1.0 (~88 % after tone mapping): galley fixtures (centre 1.0, ends 0.6),
+  // the hood work lamp and the wall-arm light
+  const fixCentre = fx.group(0xdfe9ff, 1.0);
+  const fixEnd = fx.group(0xdfe9ff, 0.6);
+  for (const p of GALLEY_FIX) {
+    const [c, e0, e1] = M.galleyFixtureEmitters(p);
+    fx.box(fixCentre, ...c);
+    fx.box(fixEnd, ...e0);
+    fx.box(fixEnd, ...e1);
+  }
+  fx.box(fx.group(0xffd2a4, 1.0), ...M.hoodLampEmitter(HOOD_LAMP_X, HOOD[0][1], HOOD[0][2]));
+  {
+    const e = M.wallArmLightEmitter(WALL_LAMP, HALF, { arm: WALL_ARM });
+    fx.box(fx.group(0xffd8b8, 1.0), e.pos[0], e.pos[1], e.pos[2], e.size[0], e.size[1], e.size[2], e.rot);
+  }
   const ledCols = [
     [P("impRed"), 1.5],
     [P("impBlue"), 1.6],
@@ -254,7 +307,6 @@ function detail(ctx) {
   return {
     update(dt, t) {
       for (let j = 0; j < lampG.length; j++) fx.set(lampG[j], lampK(t, j));
-      pool.intensity = 1.4 * lampK(t, 2);
       for (let j = 0; j < tubeG.length; j++) {
         let k = 0.92 + 0.08 * noise(t, 30, 11 + j);
         if (j === 2 && noise(t, 3, 40) < 0.22) k *= 0.3;

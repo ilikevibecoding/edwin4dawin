@@ -66,7 +66,7 @@ function fixtureSpan(p, q, i, last, clearMin, clearMax) {
  */
 export function corridorDetail(ctx, shell, room, opts = {}) {
   const { kit, PALETTE } = ctx;
-  const { axis = "x", lobbyEnd = "max", accent = "emitBlue", engineering = false, seed = 1, screens = ["screenImp0"], deadEnd = {}, fill = {}, farSpot = null, farFlood = null, key = {}, midSpot = {}, farBeacon = null } = opts;
+  const { axis = "x", lobbyEnd = "max", accent = "emitBlue", engineering = false, seed = 1, screens = ["screenImp0"], deadEnd = {}, fill = {}, farSpot = null, farFlood = null, key = {}, midSpot = {}, alcoveSpot = null, farBeacon = null } = opts;
   const rand = rng(seed * 131 + 7);
   const E = new Emitters(ctx.materials);
   const motion = []; // update(t) closures
@@ -130,7 +130,7 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
       box(f, "impPanel", u, H / 2, WALL_T + 0.125, 0.4, H, 0.25, { color: dark, uv: "keep" });
       box(f, "impPanel", u, H / 2 + 0.2, WALL_T + 0.27, 0.26, H - 1.2, 0.04, { color: mid, uv: "keep" });
       box(f, "paintedMetal", u, 0.2, WALL_T + 0.28, 0.44, 0.4, 0.06, { color: black });
-      bulkheadMarker(kit, PALETTE, f.world(u, 2.75, WALL_T + 0.29), faceYaw(f), num);
+      bulkheadMarker(kit, PALETTE, f.world(u, 2.75, WALL_T + 0.29), faceYaw(f), num, { emitTo: E });
       aabb(f, u - 0.22, 0, WALL_T, u + 0.22, H, WALL_T + 0.3, "rib");
     }
     kit.boxMM("impPanel", pt(a - 0.2, C - 0.36, c0), pt(a + 0.2, C - 0.04, c1), { color: dark, uv: "keep" });
@@ -171,6 +171,9 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
       if (midK > 0) midKs.add(midK);
     }
   }
+  let keyDesc = null;
+  let keyA = 0;
+  const serviceBays = []; // { k, f, uc, kind } — filled by the bay loop; the key rake and alcove spot use them
   for (let i = 0; i < nBays; i++) {
     const span = fixtureSpan(bounds[i], bounds[i + 1], i, i === nBays - 1, clearMin, clearMax);
     if (!span) continue;
@@ -179,22 +182,26 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
     const faulty = k === flickerK;
     const pieces = housedStrip(kit, PALETTE, pt(span[0], 0, cc), pt(span[1], 0, cc), C, { w: 0.64, depth: 0.16, emitW: 0.14, mat: "emitWhite", louvre: 0.4, emitTo: faulty ? E : null });
     if (k === 0 && key !== false) {
-      // shadow key: a spot 0.3 m under the first fixture's emitter, aimed `reach` m down the deck so
-      // the ribs and the bay props throw their shadows away from the door (angle 0.75 keeps the cone
-      // off the ceiling behind it); its distance spans the corridor so the shadow camera reaches the far
-      // bays; priority 1 so it stays in the spot pool against the neighbour rooms' keys
-      ctx.lights.push({
+      // shadow key: a spot 0.3 m under the first fixture's emitter. Default aim is 9 m down the
+      // centreline (68° off vertical); once the bays are placed it is re-aimed to rake the first
+      // service bay instead (see `rake` below), so the crate stack / cabinet there sits in the cone's
+      // core at ~50° and throws a real shadow rather than being lit by the fills alone. Its distance
+      // spans the corridor so the shadow camera reaches the far bays; priority 1 so it out-ranks the
+      // other spots from the door-end views (the rig casts from the nearest shadow-flagged spot).
+      keyDesc = {
         type: "spot",
         pos: pt(m, C - 0.41, cc),
         target: pt(m + dir * (key.reach ?? 9), Y, cc),
         color: fill.color ?? 0xd6e2ff,
-        intensity: key.intensity ?? 200,
+        intensity: key.intensity ?? 160,
         distance: key.distance ?? Math.max(20, a1 - a0),
         angle: key.angle ?? 0.75,
         penumbra: 0.5,
         priority: 1,
         shadow: true,
-      });
+      };
+      keyA = m;
+      ctx.lights.push(keyDesc);
     }
     const lit = k % 2 === 0 || k === nBays - 1;
     const midBay = midKs.has(k);
@@ -209,6 +216,9 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
       // d / 0.7 against the key's and long-throw's d / 1.5): from the lobby door the mids at 15–24 m
       // rank behind the two door-end spots (which light the whole deck from there); from the mid views
       // they are 2–6 m away and take the first two slots whatever their priority.
+      // `midSpot.shadow` flags it as a shadow caster too: for a mid view whose foreground kit is
+      // wall-mounted (a cabinet at 1.5 m), the downlight 2 m out from that wall is the one light
+      // that puts the cabinet's shadow on the wall under it where the camera sees it
       ctx.lights.push({
         type: "spot",
         pos: pt(m, C - 0.41, cc),
@@ -219,6 +229,7 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
         angle: 1.1,
         penumbra: 0.5,
         priority: midSpot.priority ?? 0.2,
+        shadow: !!midSpot.shadow,
       });
     }
     const desc = lit
@@ -226,11 +237,13 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
           type: "point",
           pos: pt(m, fillY, cc),
           color: fill.color ?? 0xd6e2ff,
-          // the fill under the key fixture only lifts what the key's cone misses behind it; under a
-          // mid downlight it is the ceiling wash, the spot carries the deck
-          intensity: (fill.intensity ?? 36) * (k === 0 && key !== false ? 0.5 : midBay ? 0.6 : 1),
+          // the fill under the key fixture lifts what the key's cone misses behind it and is the
+          // light the lobby sees through the door (priority 1: the rig reserves 3 point slots for
+          // door-neighbours' nearest lights, and this one must be among them so the mouth is not
+          // black from the lobby); under a mid downlight it is the ceiling wash, the spot carries the deck
+          intensity: (fill.intensity ?? 36) * (k === 0 && key !== false ? 0.8 : midBay ? 0.6 : 1),
           distance: fill.distance ?? 12,
-          priority: Math.min(1, 0.5 + 0.125 * k),
+          priority: k === 0 ? 1 : Math.min(1, 0.5 + 0.125 * k),
         }
       : null;
     if (desc) ctx.lights.push(desc);
@@ -297,6 +310,12 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
     // and the bulkhead around it — mounted 9 m short of the door its pool weight from the lobby end
     // beats the neighbour rooms' keys that culled a flood on the far beam (d3-cor: the far end read
     // 17–21 % grey with the flood culled, 32 % in the round it was live).
+    // A deck flood faces the mid-corridor camera, so its cone must stay off the wall kit between them:
+    // aimed 8 m back with a 0.6 rad cone it lit the bay walls 6–10 m out at grazing incidence, and
+    // every marker plate, tray lip and conduit there mirrored it into the mid camera as a flat-white
+    // blob with a bloom halo (Fresnel: at grazing angles even matte kit is a mirror). `reach` 5 m and
+    // 0.5 rad keep the cone's upper edge under 2.6 m on the walls at 8 m while the deck in front of
+    // the far door still gets the core (measured: mid-view clipping 0.02 % → 0, pod-end deck unchanged).
     const endA = lobbyEnd === "min" ? clearMax : clearMin;
     const floodA = endA - dir * (farFlood.back ?? 0.4);
     const toEnd = farFlood.aim === "end";
@@ -305,11 +324,11 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
     ctx.lights.push({
       type: "spot",
       pos: pt(floodA, C - 0.5, floodC),
-      target: toEnd ? pt(lobbyEnd === "min" ? a1 - WALL_T : a0 + WALL_T, Y + 1.2, cc) : pt(floodA - dir * 8, Y, cc),
+      target: toEnd ? pt(lobbyEnd === "min" ? a1 - WALL_T : a0 + WALL_T, Y + 1.2, cc) : pt(floodA - dir * (farFlood.reach ?? 5), Y, cc),
       color: fill.color ?? 0xd6e2ff,
       intensity: farFlood.intensity ?? 140,
       distance: farFlood.distance ?? 20,
-      angle: 0.6,
+      angle: farFlood.angle ?? (toEnd ? 0.6 : 0.5),
       penumbra: 0.6,
       priority: 1,
     });
@@ -320,6 +339,16 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
     kit.add("impPanel", new THREE.BoxGeometry(...sz(0.5, 0.3, 0.44)), { pos: pt(floodA, C - 0.41, floodC), color: dark, uv: "keep" });
     kit.add("paintedMetal", new THREE.BoxGeometry(...sz(0.04, 0.2, 0.34)), { pos: pt(floodA + face * 0.25, C - 0.43, floodC), color: black });
     kit.add("emitWhite", new THREE.BoxGeometry(...sz(0.02, 0.1, 0.26)), { pos: pt(floodA + face * 0.265, C - 0.43, floodC) });
+  }
+  if (lobbyEnd === "min" ? endHoleMax : endHoleMin) {
+    // lit lintel at a far-end door: an accent bar the width of the deck along the lobby-facing side
+    // of the last bulkhead beam, 3.5 m before the hole (a blast hole reaches the cornice, so the beam
+    // is the lintel). Seen from the lobby door it marks the terminus as a lit threshold instead of a
+    // dark patch with a room beyond; in the emitter mesh at 75 % (1.13) so it does not flare at 25 m.
+    const farFrame = lobbyEnd === "min" ? frames[frames.length - 1] : frames[0];
+    const sz = (sa, sy, sc) => (axis === "x" ? [sa, sy, sc] : [sc, sy, sa]);
+    kit.add("paintedMetal", new THREE.BoxGeometry(...sz(0.02, 0.14, c1 - c0 - 0.7)), { pos: pt(farFrame - dir * 0.2, C - 0.2, cc), color: black, texel: 2.5 });
+    E.box(accent, ...pt(farFrame - dir * 0.216, C - 0.2, cc), ...sz(0.012, 0.08, c1 - c0 - 0.8), { level: 0.75 });
   }
   if (farBeacon) {
     // rotating beacon hanging from the ceiling 1.2 m before the far-end door, off the centreline on
@@ -437,6 +466,7 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
         const kind = bigKinds[bi++ % bigKinds.length];
         bayCentres.push(uc);
         occupied.push([uc - 1.55, uc + 1.55]);
+        serviceBays.push({ k: kOf(i), f, uc, kind });
         serviceBay(kit, PALETTE, f.world(uc, 0, WALL_T), yaw, { lightMat: kickMat });
         if (kind === "cabinet") {
           const colr = rand() < 0.5 ? mid : P("impGrey");
@@ -585,6 +615,87 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
     }
   });
 
+  // ---- key rake + alcove downlight ------------------------------------------------------------
+  // Rake: the key re-aimed from the centreline at the first service bay from the lobby door — 4 m
+  // along and 0.9 m off the wall (the props' inner edge), i.e. ~50° off vertical and 17° across.
+  // Aimed 9 m down the centreline (68°) the crate stack / cabinet there sat in the penumbra at half
+  // strength with the bay-2 fill on top of it, so it cast nothing readable; in the core at 50° the key
+  // gives it ~4 W/m² against ~1.3 from the fills. Half-angle 0.7 keeps the cone's upper edge under
+  // the ceiling (49° + 40° < 90°). Side effect wanted: the cone no longer runs the length of the deck,
+  // so the far-end view looking back into it (cor-n pod-end) loses the grazing sheen that clipped.
+  const firstBay = serviceBays.filter((sb) => sb.k >= 1).sort((p, q) => p.k - q.k)[0];
+  if (keyDesc && key.rake !== false && firstBay) {
+    const u = uOf(firstBay.f, keyA + dir * (key.rakeReach ?? 4.0));
+    keyDesc.target = firstBay.f.world(u, 0, WALL_T + 0.9);
+    keyDesc.angle = key.angle ?? 0.7;
+  }
+  // Alcove downlight: a spot in the service-bay header of the bay the manifest names (the bay in a
+  // mid view's foreground), 5 cm under the header's lit strip, aimed 1.2 m out from the wall. From
+  // the centreline nothing can put a shadow on the visible side of a prop that stands against the
+  // wall — its shadow falls into the wall — so this is the one placement that gives the lockers /
+  // drums / cabinet there a contact shadow band on the deck toward the camera. Flagged shadow like
+  // the key: the rig casts from the nearer of the two, so the door-end views keep the key's shadows
+  // and the mid view gets this one's (priority 1 so it beats the flood and mid spots there).
+  if (alcoveSpot) {
+    const want = alcoveSpot.bay;
+    const sb = serviceBays.find((s) => s.k === want) || serviceBays.slice().sort((p, q) => Math.abs(p.k - want) - Math.abs(q.k - want))[0];
+    if (sb) {
+      ctx.lights.push({
+        type: "spot",
+        pos: sb.f.world(sb.uc, 2.7, WALL_T + 0.305),
+        target: sb.f.world(sb.uc, 0, WALL_T + 1.5),
+        color: fill.color ?? 0xd6e2ff,
+        intensity: alcoveSpot.intensity ?? 50,
+        distance: alcoveSpot.distance ?? 9,
+        angle: 0.75,
+        penumbra: 0.5,
+        priority: 1,
+        shadow: true,
+      });
+    }
+  }
+
+  // ---- door-approach pinpoints ------------------------------------------------------------------
+  // Every door hole gets lit pinpoints within 5 m on this side so the corridor never shows a black
+  // interior from the room beyond: small hooded lamps on the front face of the bulkhead rib pair
+  // nearest the hole (3.7 m inside an end door; the pair flanking a side door), under the bay marker,
+  // facing across the deck. The ribs are the one wall surface with nothing at 2.3 m; the plain wall
+  // carries screens, boxes, trays and vents from 1 m to the cornice. The lit faces sit in the
+  // animated-emitter mesh at 85 % (1.1 — under the bloom threshold): clean lit dots, not flares.
+  const pinLamp = (f, u) => {
+    const p = f.world(u, 2.3, WALL_T + 0.36);
+    const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(0, faceYaw(f), 0));
+    const at = (dx, dy, dz) => {
+      const v = new THREE.Vector3(dx, dy, dz).applyQuaternion(q);
+      return [p[0] + v.x, p[1] + v.y, p[2] + v.z];
+    };
+    kit.add("paintedMetal", new THREE.BoxGeometry(0.24, 0.14, 0.14), { pos: p, quat: q, color: black, texel: 2.5 });
+    kit.add("paintedMetal", new THREE.BoxGeometry(0.3, 0.03, 0.2), { pos: at(0, 0.085, 0.02), quat: q, color: black, texel: 2.5 });
+    E.box("emitWhite", ...at(0, -0.01, 0.075), 0.16, 0.06, 0.01, { quat: q, level: 0.85 });
+  };
+  const lampFrames = new Set();
+  for (const fk of endKeys) {
+    if (!holes(fk).length) continue;
+    const endA = fk === endKeys[0] ? a0 + WALL_T : a1 - WALL_T;
+    const near = frames.filter((a) => Math.abs(a - endA) <= 5).sort((p, q) => Math.abs(p - endA) - Math.abs(q - endA))[0];
+    if (near !== undefined) lampFrames.add(near);
+  }
+  for (const fk of longKeys) {
+    for (const o of holes(fk)) {
+      const midP = F[fk].world((o.u0 + o.u1) / 2, 0, 0);
+      const ac = axis === "x" ? midP[0] : midP[2];
+      const near = frames.slice().sort((p, q) => Math.abs(p - ac) - Math.abs(q - ac))[0];
+      if (near !== undefined && Math.abs(near - ac) <= 5) lampFrames.add(near);
+    }
+  }
+  for (const a of lampFrames) {
+    for (const fk of longKeys) {
+      const f = F[fk];
+      const u = uOf(f, a);
+      if (!nearHole(fk, u, 0.5)) pinLamp(f, u);
+    }
+  }
+
   // ---- door treatments on every face ----------------------------------------------------------
   for (const fk of ["n", "s", "e", "w"]) {
     const f = F[fk];
@@ -594,7 +705,8 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
       const q = f.world(o.u1, 0, WALL_T + 0.4);
       hazardStrip(kit, [Math.min(p[0], q[0]), Math.min(p[2], q[2])], [Math.max(p[0], q[0]), Math.max(p[2], q[2])], Y + 0.014);
       // status panel on one flank, room sign plate (accent code + three "text" bars, top aligned with
-      // the panel) on the other, so neither panel beside a door is blank
+      // the panel) on the other, so neither panel beside a door is blank. Plates are matte: gloss
+      // plates on these walls mirror the centreline fills into the centreline cameras as white blobs
       const flanks = [];
       if (o.u1 + 0.95 <= f.L - WALL_T) flanks.push(o.u1 + 0.75);
       if (o.u0 - 0.95 >= WALL_T) flanks.push(o.u0 - 0.75);
@@ -602,16 +714,17 @@ export function corridorDetail(ctx, shell, room, opts = {}) {
       if (flanks.length > 1) {
         const su = flanks[1];
         box(f, "paintedMetal", su, 1.6, WALL_T + 0.02, 0.5, 0.28, 0.04, { color: black, texel: 2.5 });
-        box(f, "darkGloss", su, 1.6, WALL_T + 0.045, 0.44, 0.22, 0.01);
+        box(f, "paintedMetal", su, 1.6, WALL_T + 0.045, 0.44, 0.22, 0.01, { color: dark });
         box(f, accent, su - 0.14, 1.6, WALL_T + 0.055, 0.12, 0.12, 0.008);
         for (let k = 0; k < 3; k++) box(f, "paintedMetal", su + 0.09, 1.66 - k * 0.06, WALL_T + 0.055, 0.22, 0.025, 0.008, { color: P("impGrey") });
       }
       if (o.v1 < H - 0.9) {
         // door header marker (standard doors only; blast holes reach the cornice)
         const v = o.v1 + 0.5;
-        box(f, "darkGloss", (o.u0 + o.u1) / 2, v, WALL_T + 0.012, 0.7, 0.24, 0.02);
+        box(f, "paintedMetal", (o.u0 + o.u1) / 2, v, WALL_T + 0.012, 0.7, 0.24, 0.02, { color: dark });
         box(f, accent, (o.u0 + o.u1) / 2 - 0.2, v, WALL_T + 0.026, 0.16, 0.08, 0.008);
-        box(f, "emitWhite", (o.u0 + o.u1) / 2 + 0.12, v, WALL_T + 0.026, 0.3, 0.05, 0.008);
+        // the white bar in the emitter mesh at 85 % (1.1): a lit indicator, not a flare
+        E.box("emitWhite", ...f.world((o.u0 + o.u1) / 2 + 0.12, v, WALL_T + 0.026), ...f.size(0.3, 0.05, 0.008), { level: 0.85 });
       }
     }
   }

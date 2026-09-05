@@ -176,17 +176,25 @@ export function floodlight(kit, PALETTE, pos, yaw, { tilt = 0.9, post = 0.9, mat
 // Crane gantry over a walkway: two posts, an I-beam lintel with a hoist trolley (block, hook and
 // cable) hanging from it, hazard-banded beam ends, amber post strips. Spans local X, walkway along Z.
 // `lamp: ±1` hangs a hooded floodlight head under the beam aimed down the walkway toward local ±Z.
-export function portalArch(kit, PALETTE, pos, yaw, { span = 4.7, h = 4.5, post = 0.5, depth = 0.5, trolley = 0.3, lamp = 0, lampMat = "emitAmber" } = {}) {
+// `stripMat` / `beamMat`: the post strips and the beam strip (an animated key lets a room cap them; the
+// posts stand 2 m from a bridge camera and a 1.5 emitAmber strip there is a clipped white column).
+// The post strips sit in a recessed channel: a black plate with two proud cheeks either side.
+export function portalArch(kit, PALETTE, pos, yaw, { span = 4.7, h = 4.5, post = 0.5, depth = 0.5, trolley = 0.3, lamp = 0, lampMat = "emitAmber", lampColor = null, stripMat = "emitAmber", beamMat = stripMat } = {}) {
   const P = placer(kit, pos, yaw);
   const dark = col(PALETTE, "impDark");
   const black = col(PALETTE, "impBlack");
   const steel = col(PALETTE, "steel");
   for (const s of [-1, 1]) {
-    P.box("paintedMetal", (s * (span - post)) / 2, h / 2, 0, post, h, depth, { color: dark, texel: 2.5 });
-    P.box("paintedMetal", (s * (span - post)) / 2, 0.15, 0, post + 0.1, 0.3, depth + 0.1, { color: black });
-    P.box("emitAmber", (s * (span - post)) / 2, h * 0.55, depth / 2 + 0.006, 0.06, h * 0.5, 0.01);
-    P.box("emitAmber", (s * (span - post)) / 2, h * 0.55, -depth / 2 - 0.006, 0.06, h * 0.5, 0.01);
-    P.collider([(s * (span - post)) / 2 - post / 2 - 0.05, 0, -depth / 2 - 0.05], [(s * (span - post)) / 2 + post / 2 + 0.05, h, depth / 2 + 0.05], "arch");
+    const px = (s * (span - post)) / 2;
+    P.box("paintedMetal", px, h / 2, 0, post, h, depth, { color: dark, texel: 2.5 });
+    P.box("paintedMetal", px, 0.15, 0, post + 0.1, 0.3, depth + 0.1, { color: black });
+    for (const f of [-1, 1]) {
+      const z = f * (depth / 2);
+      P.box("paintedMetal", px, h * 0.55, z + f * 0.015, 0.26, h * 0.5 + 0.16, 0.03, { color: black });
+      for (const c of [-1, 1]) P.box("paintedMetal", px + c * 0.095, h * 0.55, z + f * 0.045, 0.05, h * 0.5 + 0.16, 0.09, { color: black });
+      P.box(stripMat, px, h * 0.55, z + f * 0.036, 0.06, h * 0.5, 0.01, { uv: "keep" });
+    }
+    P.collider([px - post / 2 - 0.05, 0, -depth / 2 - 0.05], [px + post / 2 + 0.05, h, depth / 2 + 0.05], "arch");
   }
   // I-beam: flanges + web, hazard bands at the ends, a rail under the beam for the trolley
   P.box("paintedMetal", 0, h + 0.52, 0, span, 0.08, depth, { color: black, texel: 2.5 });
@@ -203,7 +211,7 @@ export function portalArch(kit, PALETTE, pos, yaw, { span = 4.7, h = 4.5, post =
   P.box("metal", tx, h - 0.9, 0, 0.02, 0.8, 0.02, { color: steel });
   P.box("paintedMetal", tx, h - 1.42, 0, 0.26, 0.28, 0.2, { color: black });
   P.add("metal", new THREE.TorusGeometry(0.12, 0.025, 6, 12), tx, h - 1.68, 0, { rot: [0, yaw + Math.PI / 2, 0], color: steel });
-  P.box("emitAmber", 0, h + 0.64, 0, span - 0.4, 0.08, depth * 0.5);
+  P.box(beamMat, 0, h + 0.64, 0, span - 0.4, 0.08, depth * 0.5, { uv: "keep" });
   if (lamp) {
     // floodlight head on the far side of the trolley: stub + hood under the beam, head box tilted
     // 0.8 rad down toward local ±Z with its bright face on the low side (the pool light sits below it)
@@ -216,7 +224,7 @@ export function portalArch(kit, PALETTE, pos, yaw, { span = 4.7, h = 4.5, post =
     const c = [hx, h - 0.5, s * 0.32];
     const n = [0, -Math.sin(tilt), s * Math.cos(tilt)];
     kit.add("paintedMetal", new THREE.BoxGeometry(0.8, 0.4, 0.3), { pos: P.world(c[0], c[1], c[2]), quat: q, color: black, texel: 2.5 });
-    kit.add(lampMat, new THREE.BoxGeometry(0.64, 0.28, 0.02), { pos: P.world(c[0] + n[0] * 0.16, c[1] + n[1] * 0.16, c[2] + n[2] * 0.16), quat: q });
+    kit.add(lampMat, new THREE.BoxGeometry(0.64, 0.28, 0.02), { pos: P.world(c[0] + n[0] * 0.16, c[1] + n[1] * 0.16, c[2] + n[2] * 0.16), quat: q, uv: "keep", ...(lampColor ? { color: lampColor } : {}) });
   }
 }
 
@@ -234,30 +242,34 @@ export function wallLamp(kit, PALETTE, pos, yaw, { w = 0.9, tilt = 0.7, mat = "e
   const hc = P.world(0, 0.12, 0.5);
   kit.add("paintedMetal", new THREE.BoxGeometry(w - 0.1, 0.4, 0.3), { pos: hc, quat: q, color: black, texel: 2.5 });
   const fwd = new THREE.Vector3(0, 0, 0.155).applyQuaternion(q);
-  kit.add(mat, new THREE.BoxGeometry((w - 0.24) * face, 0.28 * face, 0.02), { pos: [hc[0] + fwd.x, hc[1] + fwd.y, hc[2] + fwd.z], quat: q, ...(faceColor ? { color: faceColor } : {}) });
+  kit.add(mat, new THREE.BoxGeometry((w - 0.24) * face, 0.28 * face, 0.02), { pos: [hc[0] + fwd.x, hc[1] + fwd.y, hc[2] + fwd.z], quat: q, uv: "keep", ...(faceColor ? { color: faceColor } : {}) });
   for (const s of [-1, 1]) P.box("paintedMetal", (s * (w - 0.06)) / 2, 0.1, 0.5, 0.06, 0.5, 0.7, { color: black });
 }
 
-// Ceiling fixture: framed housing on a stem with a louvred light face under it (the fill light sits
-// just below). The face hangs below the black bottom plate so it is visible from the floor.
-// `flush`: pendant variant on a single rod whose emitter is the whole underside — a point light hung
-// 0.5 m under a low pendant puts ~300 lx on any down-facing lip or louvre and clips it white (the
-// rig's black paint still has a 3–4 % specular term), so the pendant shows the light no dark face.
-export function ceilingFixture(kit, PALETTE, pos, { w = 2.4, d = 0.7, stem = 1.0, mat = "emitAmber", yaw = 0, flush = false } = {}) {
+// Ceiling fixture: framed housing on a stem with a light face under it, inset 0.12 m inside the black
+// bottom plate (the bezel), optionally louvred. `rod`: a single centre rod instead of two stems (the
+// pendant look). `flush`: kept for the old whole-underside pendant. The room's fill point belongs
+// INSIDE the housing (0.15 m over the face plane): a point hung under the face lights the bezel and
+// louvres at 100–300 lx and clips them white, while a point inside lights nothing of the fixture
+// itself (every outer face points away from it) and the deck exactly the same (points cast no shadow).
+export function ceilingFixture(kit, PALETTE, pos, { w = 2.4, d = 0.7, stem = 1.0, mat = "emitAmber", yaw = 0, flush = false, rod = false, louvres = true, faceColor = null } = {}) {
   const P = placer(kit, pos, yaw);
   const black = col(PALETTE, "impBlack");
   const dark = col(PALETTE, "impDark");
-  if (flush) P.box("paintedMetal", 0, -stem / 2, 0, 0.1, stem, 0.1, { color: black });
+  const faceOpts = { uv: "keep", ...(faceColor ? { color: faceColor } : {}) };
+  if (flush || rod) P.box("paintedMetal", 0, -stem / 2, 0, 0.1, stem, 0.1, { color: black });
   else for (const s of [-1, 1]) P.box("paintedMetal", (s * w) / 3, -stem / 2, 0, 0.06, stem, 0.06, { color: black });
   P.box("paintedMetal", 0, -stem - 0.16, 0, w, 0.32, d, { color: dark, texel: 2.5 });
   if (flush) {
-    P.box(mat, 0, -stem - 0.335, 0, w, 0.03, d, { uv: "keep" });
+    P.box(mat, 0, -stem - 0.335, 0, w, 0.03, d, faceOpts);
     return;
   }
   P.box("paintedMetal", 0, -stem - 0.33, 0, w - 0.16, 0.04, d - 0.16, { color: black });
-  P.box(mat, 0, -stem - 0.36, 0, w - 0.3, 0.02, d - 0.3, { uv: "keep" });
-  for (let i = 1; i < 4; i++) P.box("paintedMetal", -w / 2 + (i * w) / 4, -stem - 0.375, 0, 0.04, 0.05, d - 0.2, { color: black });
+  P.box(mat, 0, -stem - 0.36, 0, w - 0.3, 0.02, d - 0.3, faceOpts);
+  if (louvres) for (let i = 1; i < 4; i++) P.box("paintedMetal", -w / 2 + (i * w) / 4, -stem - 0.375, 0, 0.04, 0.05, d - 0.2, { color: black });
 }
+/** y of a ceilingFixture's face plane (for hanging its point light just inside the housing). */
+export const fixtureFaceY = (y, stem) => y - stem - 0.36;
 
 // High-bay cluster hung under a ceiling duct: a drop rod, a cross bar and three hooded heads (centre
 // one straight down, outer two splayed ±0.5 rad) with small emitter faces. `pos` is the hang point.
@@ -273,7 +285,7 @@ export function highBay(kit, PALETTE, pos, { drop = 1.4, mat = "emitWhite", yaw 
     const hc = P.world(x, -drop - 0.5, 0);
     kit.add("paintedMetal", new THREE.BoxGeometry(0.7, 0.6, 0.7), { pos: hc, quat: q, color: black, texel: 2.5 });
     const down = new THREE.Vector3(0, -0.305, 0).applyQuaternion(q);
-    kit.add(mat, new THREE.BoxGeometry(0.44, 0.02, 0.44), { pos: [hc[0] + down.x, hc[1] + down.y, hc[2] + down.z], quat: q });
+    kit.add(mat, new THREE.BoxGeometry(0.44, 0.02, 0.44), { pos: [hc[0] + down.x, hc[1] + down.y, hc[2] + down.z], quat: q, uv: "keep" });
   }
 }
 

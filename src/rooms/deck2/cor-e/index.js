@@ -30,9 +30,11 @@ export default defineRoom({
     lights: false, // the corridor generator pushes its own: key spot in the first fixture, fills under every second fixture (two mid bays add a downlight spot), long-throw lamp by the lobby door onto the far bulkhead
   },
   detail(ctx, shell, room) {
-    // lights: downlight spots in bays 6 and 8 (x 34 / 42, either side of the mid view's camera);
-    // motion: faulty fixture at bay 10 (x 50: the third fixture ahead of the mid view, and no view's
-    // foreground fill), red beacon on the dead-end bulkhead
-    return corridorDetail(ctx, shell, room, { axis: "x", lobbyEnd: "min", accent: "emitBlue", seed: 22, screens: ["screenImp2", "screenImp3"], deadEnd: { screen: "screenImp2", kit: "lockers", beacon: "red" }, farSpot: {}, midSpot: { bays: [6, 8] }, flickerBay: 10 });
+    // lights: key raked onto the bay-1 cabinet alcove (x 14, south wall — the lobby-end view's R),
+    // downlight spot in bay 8 (x 42, ahead of the mid view's camera), alcove downlight in the bay-7
+    // service bay (the locker row at x 38 on the south wall, the mid view's fg-R: it casts the
+    // lockers' contact shadow onto the deck); motion: faulty fixture at bay 10 (x 50: the third
+    // fixture ahead of the mid view, and no view's foreground fill), red beacon on the dead-end bulkhead
+    return corridorDetail(ctx, shell, room, { axis: "x", lobbyEnd: "min", accent: "emitBlue", seed: 22, screens: ["screenImp2", "screenImp3"], deadEnd: { screen: "screenImp2", kit: "lockers", beacon: "red" }, farSpot: {}, midSpot: { bays: [8] }, alcoveSpot: { bay: 7 }, flickerBay: 10 });
   },
 });

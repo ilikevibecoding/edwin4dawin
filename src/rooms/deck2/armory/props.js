@@ -10,19 +10,22 @@ const C = (PALETTE, k) => col(PALETTE, k);
 
 // Vertical bars between two world points at floor level (yFrom..yTo), one collider for the run.
 // Frame: bottom + top rails in dark paint. `gap` = [u0, u1] along the run left open (no bars/collider).
-export function barWall(kit, PALETTE, a, b, yFrom, yTo, { r = 0.02, pitch = 0.15, rails = true, tag = "bars", collide = true, railColor } = {}) {
+// `mat` defaults to painted steel: on the bare `metal` key every one of the ~40 bars in the door view
+// carried a white specular line and the cage read as a picket fence between the camera and the room.
+// `color` tints the bars (default the palette's steel).
+export function barWall(kit, PALETTE, a, b, yFrom, yTo, { r = 0.02, pitch = 0.15, rails = true, tag = "bars", collide = true, railColor, mat = "paintedMetal", color } = {}) {
   const dx = b[0] - a[0];
   const dz = b[2] - a[2];
   const len = Math.hypot(dx, dz);
   const axis = Math.abs(dx) > Math.abs(dz) ? "x" : "z";
   const n = Math.max(1, Math.floor(len / pitch));
-  const steel = C(PALETTE, "steel");
+  const bar = color ?? C(PALETTE, "steel");
   const dark = railColor ?? C(PALETTE, "impDark");
   for (let i = 0; i <= n; i++) {
     const t = n === 0 ? 0.5 : i / n;
     const x = a[0] + dx * t;
     const z = a[2] + dz * t;
-    kit.cyl("metal", x, (yFrom + yTo) / 2, z, r, yTo - yFrom, "y", { color: steel, segments: 6 });
+    kit.cyl(mat, x, (yFrom + yTo) / 2, z, r, yTo - yFrom, "y", { color: bar, segments: 6 });
   }
   if (rails) {
     const cx = (a[0] + b[0]) / 2;
@@ -454,7 +457,9 @@ export function shieldRig(kit, PALETTE, pos, yaw, { fieldTop = 2.9, field = true
 
 /**
  * The shield rig's three field boxes: [{ local: [lx, ly, lz, sx, sy, sz], pos (world), rot }] — two
- * crossed planes and the bright core column between the receptor and the emitter housing lip.
+ * crossed planes and the bright core column between the receptor and the emitter housing lip. The core
+ * is a single 8 cm plane across the rig's local X: as a 16 cm box its four additive faces stacked to six
+ * layers with the planes and the column's centre clipped to white from the alcove camera.
  */
 export function shieldField(pos, yaw, fieldTop = 2.9) {
   const fz = 1.2;
@@ -465,7 +470,7 @@ export function shieldField(pos, yaw, fieldTop = 2.9) {
   return [
     [1.4, h, 0.01],
     [0.01, h, 0.5],
-    [0.16, h, 0.16],
+    [0.01, h, 0.08],
   ].map(([sx, sy, sz]) => ({ local: [0, ym, fz, sx, sy, sz], pos: worldOf(pos, yaw, 0, ym, fz), size: [sx, sy, sz], rot: [0, yaw, 0] }));
 }
 
@@ -504,7 +509,6 @@ export function waitBench(kit, PALETTE, pos, yaw, { len = 2.4 } = {}) {
 export function gateLeaf(kit, PALETTE, a, b, yTop = 2.3) {
   const black = C(PALETTE, "impBlack");
   const dark = C(PALETTE, "impDark");
-  const steel = C(PALETTE, "steel");
   const x = a[0];
   const y = a[1];
   const z0 = Math.min(a[2], b[2]);
@@ -516,8 +520,9 @@ export function gateLeaf(kit, PALETTE, a, b, yTop = 2.3) {
   kit.box("paintedMetal", x, y + 0.45, cz, 0.06, 0.9, len - 0.08, { color: dark, texel: 2.5 }); // kick panel
   kit.box("paintedMetal", x, y + 0.45, cz, 0.07, 0.6, len - 0.3, { color: black, texel: 2.5 }); // recessed centre
   kit.box("paintedMetal", x, y + 0.94, cz, 0.08, 0.08, len, { color: black }); // mid rail
-  const n = Math.max(2, Math.floor((len - 0.16) / 0.14));
-  for (let i = 0; i <= n; i++) kit.cyl("metal", x, y + 0.9 + (yTop - 0.98) / 2, z0 + 0.08 + ((len - 0.16) * i) / n, 0.02, yTop - 0.98, "y", { color: steel, segments: 6 });
+  // leaf bars match the cage runs (painted gunmetal, 1.5x pitch)
+  const n = Math.max(2, Math.floor((len - 0.16) / 0.21));
+  for (let i = 0; i <= n; i++) kit.cyl("paintedMetal", x, y + 0.9 + (yTop - 0.98) / 2, z0 + 0.08 + ((len - 0.16) * i) / n, 0.02, yTop - 0.98, "y", { color: 0x74787f, segments: 6 });
   // lock box on the free end
   kit.box("paintedMetal", x, y + 1.1, z1 - 0.16, 0.14, 0.24, 0.16, { color: black });
   kit.box("emitRedImp", x + 0.072, y + 1.16, z1 - 0.16, 0.006, 0.03, 0.06);
@@ -585,6 +590,26 @@ export function channelFixture(kit, PALETTE, x0, x1, z, ceilY, { w = 0.5, mat = 
   }
 }
 
+// The same channel along world Z at cross position `x` (over the east-wall locker run).
+export function channelFixtureZ(kit, PALETTE, z0, z1, x, ceilY, { w = 0.5, mat = "emitWhite", segment = 2.0 } = {}) {
+  const black = C(PALETTE, "impBlack");
+  const dark = C(PALETTE, "impDark");
+  const mid = C(PALETTE, "impMid");
+  const len = z1 - z0;
+  const cz = (z0 + z1) / 2;
+  const drop = 0.16;
+  kit.box("paintedMetal", x, ceilY - 0.03, cz, w, 0.02, len, { color: black });
+  for (const sx of [-1, 1]) kit.box("paintedMetal", x + sx * (w / 2 - 0.025), ceilY - drop / 2, cz, 0.05, drop, len, { color: dark, texel: 4 });
+  for (const sz of [-1, 1]) kit.box("paintedMetal", x, ceilY - drop / 2, cz + sz * (len / 2 - 0.025), w - 0.1, drop, 0.05, { color: dark, texel: 4 });
+  for (const sx of [-1, 1]) kit.box("paintedMetal", x + sx * (w / 2), ceilY - drop - 0.01, cz, 0.1, 0.02, len + 0.1, { color: mid });
+  const nSeg = Math.max(1, Math.round(len / segment));
+  for (let i = 0; i < nSeg; i++) {
+    const s0 = z0 + (len * i) / nSeg + 0.12;
+    const s1 = z0 + (len * (i + 1)) / nSeg - 0.12;
+    kit.boxMM(mat, [x - 0.07, ceilY - drop + 0.06, s0], [x + 0.07, ceilY - drop + 0.07, s1]);
+  }
+}
+
 // Range header sign over the alcove walkway (front +Z): dark plate, red header bar, three white text
 // lines, hazard band along the bottom, amber "range active" lamp at the right.
 // `lamp: false` leaves the "range active" lamp to the room's animated emitter (see rangeSignLamp).
@@ -597,12 +622,28 @@ export function rangeSign(kit, PALETTE, pos, yaw, { w = 2.0, h = 0.5, lamp = tru
   const segs = 12;
   const bw = (w - 0.1) / segs;
   for (let k = 0; k < segs; k++) Q.box("paintedMetal", -(w - 0.1) / 2 + (k + 0.5) * bw, -h / 2 + 0.04, 0.065, bw, 0.06, 0.004, { color: k % 2 ? C(PALETTE, "impBlack") : AMBER_PAINT });
-  Q.box("paintedMetal", w / 2 - 0.3, -0.02, 0.07, 0.24, 0.24, 0.02, { color: C(PALETTE, "impDark") });
-  if (lamp) Q.box("emitAmber", w / 2 - 0.3, -0.02, 0.082, 0.16, 0.16, 0.004);
+  // "range active" lamp: a 12 cm lens sunk in a black bezel with a steel-grey rim (the bare 16 cm square on
+  // a dark plate read as a floating orange lozenge from the alcove camera)
+  Q.box("paintedMetal", w / 2 - 0.3, -0.02, 0.075, 0.3, 0.3, 0.03, { color: C(PALETTE, "impBlack") });
+  Q.box("paintedMetal", w / 2 - 0.3, -0.02, 0.092, 0.22, 0.22, 0.006, { color: C(PALETTE, "impMid") });
+  Q.box("paintedMetal", w / 2 - 0.3, -0.02, 0.097, 0.17, 0.17, 0.006, { color: C(PALETTE, "impBlack") });
+  if (lamp) Q.box("emitAmber", w / 2 - 0.3, -0.02, 0.102, 0.12, 0.12, 0.004);
 }
 
-/** The range sign's lamp as { pos, rot } (a 0.16 × 0.16 × 0.004 box) for a sign built with lamp:false. */
-export const rangeSignLamp = (pos, yaw, { w = 2.0 } = {}) => ({ pos: worldOf(pos, yaw, w / 2 - 0.3, -0.02, 0.082), rot: [0, yaw, 0] });
+// Red "range armed" status panel (front +Z): black plate with a steel rim, red header bar, two white text
+// lines, a column of three red LEDs — the alarm context for the red puck and the beacon in the racks view.
+export function statusPanel(kit, PALETTE, pos, yaw, { w = 0.8, h = 0.4 } = {}) {
+  const Q = placer(kit, pos, yaw);
+  Q.box("paintedMetal", 0, 0, 0.03, w, h, 0.06, { color: C(PALETTE, "impBlack"), texel: 2.5 });
+  Q.box("paintedMetal", 0, 0, 0.062, w - 0.06, h - 0.06, 0.004, { color: C(PALETTE, "impMid") });
+  Q.box("paintedMetal", 0, 0, 0.066, w - 0.1, h - 0.1, 0.004, { color: C(PALETTE, "impBlack") });
+  Q.box("emitRedImp", -0.04, h / 2 - 0.1, 0.07, w - 0.24, 0.07, 0.004);
+  for (let i = 0; i < 2; i++) Q.box("emitWhite", -0.1, -0.03 - i * 0.07, 0.07, (w - 0.36) * (1 - i * 0.3), 0.02, 0.004);
+  for (let k = 0; k < 3; k++) Q.box("emitRedImp", w / 2 - 0.1, h / 2 - 0.1 - k * 0.09, 0.07, 0.04, 0.04, 0.004);
+}
+
+/** The range sign's lamp as { pos, rot } (a 0.12 × 0.12 × 0.004 box) for a sign built with lamp:false. */
+export const rangeSignLamp = (pos, yaw, { w = 2.0 } = {}) => ({ pos: worldOf(pos, yaw, w / 2 - 0.3, -0.02, 0.102), rot: [0, yaw, 0] });
 
 // Caged red warning beacon on a base plate (used on top of the alcove partition): the room's red fill
 // sits inside it, so the light source is explained.

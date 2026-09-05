@@ -9,15 +9,17 @@
 // in the forward corners, fire point, comms pedestal + tilted screen aft, engineering pipe mains
 // along the port/starboard walls and hand-built service runs on the aft wall outside the lift zone.
 // Door surrounds come from the shell's doorDressing; the lift hole stays bare.
-// Lighting: warm shadow key under a high-bay lamp at the coffer centre (pillars, tanks and the work
-// station throw shadows), coffer fills under it, the breathing lift-approach downlight, the two
-// directory boards refreshing row by row and an amber hazard beacon turning above the corridor blast
-// door (light on a small circle + rotating drum) — one animated mesh plus the drum.
+// Lighting: warm shadow key in a yoked flood can in the aft-port corner, pointed forward past the
+// port-aft pillar at 56° off vertical (the pillar throws a band across the hub deck to the forward
+// wall, the work station's crate stack forward along the port wall), coffer fills under it, the
+// breathing lift-approach downlight, the two directory boards refreshing row by row and an amber hazard
+// beacon turning above the corridor blast door (light on a small circle + rotating drum) — one animated
+// mesh plus the drum.
 import { defineRoom } from "../../deck2/_shared/room.js";
 import { IMP } from "../../deck2/_shared/palette.js";
 import { WALL_T } from "../../deck2/_shared/shell.js";
 import { pillar, wallScreen, duct, console as consoleProp, floorLine } from "../../deck2/_shared/props.js";
-import { coffer, lightChannel, floorLane, hubRing, directoryBoard, bench, firePoint, junctionBox, wallVent, wallConduits, kickStrips, commsPedestal, serviceRun, workbench, toolBoard, wallCabinet, dressedCrate, dressedCabinet, statusPanel, engTank, keyLamp, approachLamp } from "../../deck2/lobby/props.js";
+import { coffer, lightChannel, floorLane, hubRing, directoryBoard, bench, firePoint, junctionBox, wallVent, wallConduits, kickStrips, commsPedestal, serviceRun, workbench, toolBoard, wallCabinet, dressedCrate, dressedCabinet, statusPanel, engTank, yokedFlood, approachLamp } from "../../deck2/lobby/props.js";
 import { Emitters, boardChase, breath, beacon } from "../../deck2/lobby/motion.js";
 
 const Y = 12;
@@ -37,9 +39,11 @@ export default defineRoom({
   views: {
     "d3-lobby-lift": { pos: [0.8, Y, 551.4], yaw: 176, pitch: -2 },
     "d3-lobby-cor-door": { pos: [8.6, Y, 557.0], yaw: 165, pitch: -1 },
-    // forward: up 6° beside the starboard-aft pillar (right frame edge), hub ring in the foreground;
-    // the old pose was 40 % bare deck with the nearest coffer strip at the top centre
-    "d3-lobby-forward": { pos: [3.0, Y, 562.2], yaw: 5, pitch: 6 },
+    // forward: up 6° with the hub ring in the foreground, 0.8 m port of the lane so both aft pillars
+    // clear the frame (at x 3.0 the starboard one stood < 1 m off and filled the right fifth; at x −2.0
+    // the port one still cut a slab off the left edge) — the port-aft pillar's shadow band enters
+    // from the left edge and runs up the deck to the forward wall
+    "d3-lobby-forward": { pos: [-0.8, Y, 562.2], yaw: -5, pitch: 6 },
     "d3-lobby-west": { pos: [-3.0, Y, 557.2], yaw: 82, pitch: -3 },
   },
   shell: {
@@ -72,11 +76,17 @@ export default defineRoom({
     // ---- crossing: pillars + coffer + perimeter channels -------------------------------------------
     const PX = 5.2;
     const PZ = [552.6, 559.4];
-    for (const sx of [-1, 1]) for (const z of PZ) pillar(kit, PALETTE, [sx * PX, Y, z], 0.8, H);
+    for (const sx of [-1, 1]) for (const z of PZ) pillar(kit, PALETTE, [sx * PX, Y, z], 0.8, H, { emitTo: E }); // strips at 85 %: no hot centre line
     // narrower coffer emitters than Deck 2 (0.10 m): under this lower ceiling the nearest strip sat
     // at the clipping limit from the forward view
     coffer(kit, PALETTE, [-PX - 0.4, PZ[0] - 0.4], [PX + 0.4, PZ[1] + 0.4], CEIL, { drop: 0.7, beam: 0.5, strips: 4, axis: "x", emitW: 0.1 });
-    const keyAt = keyLamp(kit, PALETTE, [0, 0, 556], CEIL - 0.34, { emit: 0.42 }); // high-bay at the coffer centre
+    // the key: a yoked flood can on the flat ceiling in the aft-port corner (outboard of the port
+    // channel, forward of the aft channel, inboard of the wall mains), pointed forward at the deck
+    // just inboard of the port-aft pillar's foot — the pillar 8° off its axis, 5.6 m along for 4.5 m
+    // of drop, 56° off vertical (a straight-down high-bay at the coffer centre had the pillars 45°
+    // off its axis and nothing cast readably)
+    const keyTarget = [-4.8, Y, 558.0];
+    const keyAt = yokedFlood(kit, PALETTE, E, [-8.6, 0, 563.6], CEIL, keyTarget, { stem: 0.5 });
     lightChannel(kit, PALETTE, [x0 + 0.3, 0, 562.6], [x1 - 0.3, 0, 562.6], CEIL);
     for (const sx of [-1, 1]) lightChannel(kit, PALETTE, [sx * 7.8, 0, z0 + 1.2], [sx * 7.8, 0, 561.4], CEIL);
 
@@ -143,26 +153,35 @@ export default defineRoom({
     wallScreen(kit, [-4.4, Y + 2.6, z1 - 0.08], yawS, 1.6, 0.9, "screenImp3", { tilt: 0.2, accent });
     dressedCabinet(kit, PALETTE, [-7.4, Y, z1 - 0.26], yawS, { w: 1.2, h: 1.8, d: 0.5, color: IMP.impMid, emit: accent, seed: 44 });
     wallVent(kit, PALETTE, [-7.4, Y + 4.3, z1], yawS, { w: 1.0, h: 0.45 });
+    // lift indicator: the corridor door-header marker (plate, amber cell, white bar at 85 % in the
+    // emitter mesh) 0.8 m above the T3 hole — the void itself stays undressed for D's door, and the
+    // plate sits above any door frame and under the cornice conduits
+    kit.box("paintedMetal", 0, Y + 3.7, z1 - 0.012, 0.7, 0.24, 0.02, { color: IMP.impDark });
+    kit.box(accent, -0.2, Y + 3.7, z1 - 0.026, 0.16, 0.08, 0.008);
+    E.box("emitWhite", 0.12, Y + 3.7, z1 - 0.026, 0.3, 0.05, 0.008, { level: 0.85 });
 
-    // ---- lights (13): warm shadow key spot 0.3 m under the high-bay lamp, straight down over the hub
-    //      (angle 1.1 so the cone reaches the tanks, bench and work station by the walls); coffer
-    //      fills 1.7 m under the ceiling (1.4 m under the coffer field) at ~40 % of the key's floor
-    //      irradiance; breathing lift-approach downlight; door glow, forward wall, work station, two
-    //      low deck fills, a starboard-channel fill; the beacon's orbiting light. Levels: with the
-    //      rig's environment capture the deck stopped borrowing the studio map's sheen (key 50 cd →
-    //      deck 6 % grey by the corridor door); key 150 / fills 40 put the hub at ~26 %.
+    // ---- lights (13): warm shadow key in the aft-port can, pointed forward past the port-aft pillar
+    //      (cone 0.85 / penumbra 0.4 → full to 29°; the pillar 8° off axis, the crate stack 37°, the
+    //      lift and forward cameras 18° — the far starboard pillar at 15 m gets too little to band).
+    //      The pillar's band runs forward-inboard across the hub deck to the forward wall (lift and
+    //      forward views), the crates' shadows forward along the port wall toward the workbench (west
+    //      view). Coffer fills 1.7 m under the ceiling at 26 cd (at 40 they filled the band to a 40 %
+    //      contrast; the key puts ~5 W/m² on the deck at the pillar's foot against ~2.5 of fill);
+    //      breathing lift-approach downlight; door glow, forward wall, work station, one low deck fill,
+    //      an aft-port wall pool, a starboard-channel fill; the beacon's orbiting light.
     const warm = 0xffd8b0;
-    ctx.lights.push({ type: "spot", pos: keyAt, target: [0, Y, 556], color: warm, intensity: 150, distance: 18, angle: 1.1, penumbra: 0.45, priority: 1, shadow: true });
-    for (const sx of [-1, 1]) for (const z of [554.4, 557.6]) ctx.lights.push({ type: "point", pos: [sx * 2.8, CEIL - 1.7, z], color: warm, intensity: 40, distance: 11, priority: 0.6 });
+    ctx.lights.push({ type: "spot", pos: keyAt, target: keyTarget, color: warm, intensity: 500, distance: 20, angle: 0.85, penumbra: 0.4, priority: 1, shadow: true });
+    for (const sx of [-1, 1]) for (const z of [554.4, 557.6]) ctx.lights.push({ type: "point", pos: [sx * 2.8, CEIL - 1.7, z], color: warm, intensity: 26, distance: 11, priority: 0.6 });
     ctx.lights.push({ type: "point", pos: [6.5, Y + 3.6, 563.2], color: 0xffc890, intensity: 36, distance: 8, priority: 0.4 });
     ctx.lights.push({ type: "point", pos: [0, Y + 3.4, 551.8], color: warm, intensity: 26, distance: 8, priority: 0.4 }); // 2.5 m off the forward wall: closer it drew a specular disc on the panel
     ctx.lights.push({ type: "point", pos: [x0 + 1.6, Y + 2.9, 555.0], color: 0xffc890, intensity: 18, distance: 6, priority: 0.4 });
-    // low deck fills over the port half of the deck (the strips and screens carried the exposure
-    // there and the deck fell off to ~12 % grey; one 7-cd fill lifted it to 16 %): one inside the
-    // amber work-area border, one under the port light channel over the open deck the west view
-    // looks across, both low enough to miss the screens' mirror direction
-    ctx.lights.push({ type: "point", pos: [x0 + 2.0, Y + 1.6, 554.8], color: 0xffd8b0, intensity: 24, distance: 8, priority: 0.4 });
-    ctx.lights.push({ type: "point", pos: [-6.2, Y + 2.0, 559.2], color: 0xffd8b0, intensity: 24, distance: 7, priority: 0.4 });
+    // low deck fill inside the amber work-area border, low enough to miss the screens' mirror
+    // direction; 12 cd (was 24: it is the light that would fill the crates' shadows on that deck)
+    ctx.lights.push({ type: "point", pos: [x0 + 2.0, Y + 1.6, 554.8], color: 0xffd8b0, intensity: 12, distance: 8, priority: 0.4 });
+    // aft-port wall pool under the channel for the comms pedestal / cabinet / fire-point corner: the
+    // key hangs over them pointing away (this replaces the low fill under the port channel over the
+    // open deck, which the key now carries)
+    ctx.lights.push({ type: "point", pos: [-6.0, CEIL - 1.6, 562.9], color: 0xffd8b0, intensity: 24, distance: 8, priority: 0.4 });
     // starboard channel fill over the deck between the bench and the corridor door: outside the key's
     // cone and 6 m from the nearest coffer fill, that deck sat at 10 % grey in the corridor-door view
     ctx.lights.push({ type: "point", pos: [7.8, CEIL - 1.5, 559.6], color: warm, intensity: 40, distance: 9, priority: 0.5 });

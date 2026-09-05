@@ -53,20 +53,33 @@ export function servingCounter(kit, PALETTE, { x0, x1, zFront, depth = 0.8, y, h
     kit.box("emitAmber", wx, y + h + 0.052, wz - 0.245, 0.2, 0.006, 0.012); // "hot" lamp ahead of the rim
   }
   kit.box("emitAmber", cx, y + h - 0.14, zFront - 0.02, len - 0.4, 0.02, 0.01);
-  // tray rail on brackets
+  // toe-kick light: a black lip over a 5 cm amber strip along the dining face (from the door the counter
+  // was one bright pixel line at 18 m; the kick band doubles the mark and gives the destination a base)
+  kit.box("paintedMetal", cx, y + 0.21, zFront - 0.02, len - 0.3, 0.02, 0.06, { color: black });
+  kit.box("emitAmber", cx, y + 0.165, zFront - 0.006, len - 0.4, 0.05, 0.012);
+  // tray rail on brackets: full counter length with a bracket at each end
   const rz = zFront - 0.28;
-  kit.cyl("metal", cx, y + 0.96, rz, 0.025, len - 0.2, "x", { color: steel, segments: 10 });
-  kit.cyl("metal", cx, y + 0.72, rz, 0.02, len - 0.2, "x", { color: steel, segments: 8 });
-  for (let bx = x0 + 0.5; bx <= x1 - 0.4; bx += 2.0) {
+  kit.cyl("metal", cx, y + 0.96, rz, 0.025, len, "x", { color: steel, segments: 10 });
+  kit.cyl("metal", cx, y + 0.72, rz, 0.02, len, "x", { color: steel, segments: 8 });
+  const nB = Math.max(2, Math.round(len / 2.0));
+  for (let i = 0; i <= nB; i++) {
+    const bx = x0 + 0.05 + (i * (len - 0.1)) / nB;
     kit.box("paintedMetal", bx, y + 0.96, zFront - 0.14, 0.05, 0.05, 0.28, { color: dark });
     kit.box("paintedMetal", bx, y + 0.72, zFront - 0.14, 0.05, 0.05, 0.28, { color: dark });
   }
-  // sneeze guard: glass panes on steel posts with a top rail
+  // sneeze guard: glass panes on steel posts with a top rail; at both ends the rail returns aft along
+  // the counter end to a corner post, so the guard closes the counter instead of stopping at the last pane
   const gz = zFront + 0.26;
   const panes = Math.max(1, Math.round(len / 2.5));
   for (let i = 0; i <= panes; i++) kit.cyl("metal", x0 + (i * len) / panes, y + h + 0.4, gz, 0.02, 0.72, "y", { color: steel, segments: 10 });
   for (let i = 0; i < panes; i++) kit.box("glass", x0 + (i + 0.5) * (len / panes), y + h + 0.5, gz, len / panes - 0.06, 0.42, 0.012, { uv: "keep" });
   kit.cyl("metal", cx, y + h + 0.75, gz, 0.02, len, "x", { color: steel, segments: 10 });
+  const ret = depth - 0.26;
+  for (const ex of [x0, x1]) {
+    kit.cyl("metal", ex, y + h + 0.75, gz + ret / 2, 0.02, ret, "z", { color: steel, segments: 10 });
+    kit.cyl("metal", ex, y + h + 0.4, gz + ret, 0.02, 0.72, "y", { color: steel, segments: 10 });
+    kit.box("glass", ex, y + h + 0.5, gz + ret / 2, 0.012, 0.42, ret - 0.06, { uv: "keep" });
+  }
   kit.collider([x0, y, rz - 0.05], [x1, y + h + 0.2, zFront + depth], "counter");
 }
 
@@ -280,7 +293,9 @@ export function hood(kit, PALETTE, min, max, { lamps = [0.09, 0.33, 0.69, 0.93],
     const nS = Math.floor(gh / 0.09);
     for (let k = 0; k < nS; k++) kit.box("paintedMetal", (a + b) / 2, gy - gh / 2 + 0.07 + k * 0.09, min[2] - 0.07, gw - 0.06, 0.035, 0.02, { color: steel });
   }
-  for (const y of [min[1] + 0.18, max[1] - 0.03]) kit.boxMM("metal", [min[0] - 0.04, y - 0.03, min[2] - 0.05], [max[0] + 0.04, y + 0.03, min[2]], { color: steel }); // edge rails
+  // edge rails: painted, not bare metal — seen edge-on from the galley aisle the bare top rail turned the
+  // galley fills into a clipped white streak along the hood's top edge
+  for (const y of [min[1] + 0.18, max[1] - 0.03]) kit.boxMM("paintedMetal", [min[0] - 0.04, y - 0.03, min[2] - 0.05], [max[0] + 0.04, y + 0.03, min[2]], { color: steel });
   kit.boxMM("paintedMetal", [min[0] + 0.1, min[1] - 0.02, min[2] + 0.1], [max[0] - 0.1, min[1], max[2] - 0.1], { color: black });
   kit.boxMM("paintedMetal", [min[0], min[1] - 0.05, min[2] - 0.05], [max[0], min[1] + 0.15, min[2]], { color: dark, texel: 2.5 });
   // under-lights run ACROSS the hood in channels with 16 cm side walls and steel lips: from the aisle
@@ -618,6 +633,92 @@ export function cupStand(kit, PALETTE, pos, yaw, { len = 1.2, d = 0.5, h = 0.9 }
   for (let k = 0; k < 4; k++) Q.box("paintedMetal", 0.15, 0.32 + k * 0.024, 0, 0.46, 0.018, 0.36, { color: k % 2 ? C(PALETTE, "impGrey") : C(PALETTE, "impMid") });
   Q.box("emitBlue", 0, h - 0.06, d / 2 + 0.005, len - 0.3, 0.012, 0.01);
   Q.collider([-len / 2, 0, -d / 2], [len / 2, h, d / 2], "cup-stand");
+}
+
+// Galley ceiling fixture: the shared dropLight's stem + housing, but the housing is a hollow hood (top
+// plate, 16 cm side walls with a steel rim) around a black recess plate, and the emitter is left to the
+// room's fx batch (galleyFixtureEmitters) so it sits at ~85 % with a centre-bright profile instead of
+// the flat clipped bar the pass-3 critic saw from the galley aisle. Seen from below at a low angle the
+// walls hide the far edge of the recessed emitter, so the housing edge reads.
+export function galleyFixture(kit, PALETTE, pos, { w = 2.4, d = 0.5, stem = 1.0 } = {}) {
+  const [x, y0, z] = pos;
+  const black = C(PALETTE, "impBlack");
+  const dark = C(PALETTE, "impDark");
+  const steel = C(PALETTE, "steel");
+  const top = y0 - stem;
+  kit.box("paintedMetal", x, y0 - stem / 2, z, 0.06, stem, 0.06, { color: black });
+  kit.box("paintedMetal", x, top - 0.01, z, w, 0.02, d, { color: dark, texel: 2.5 });
+  for (const s of [-1, 1]) kit.box("paintedMetal", x, top - 0.08, z + s * (d / 2 - 0.015), w, 0.16, 0.03, { color: dark, texel: 2.5 });
+  for (const s of [-1, 1]) kit.box("paintedMetal", x + s * (w / 2 - 0.015), top - 0.08, z, 0.03, 0.16, d, { color: dark, texel: 2.5 });
+  for (const s of [-1, 1]) kit.box("paintedMetal", x, top - 0.165, z + s * (d / 2 - 0.025), w + 0.02, 0.012, 0.05, { color: steel });
+  for (const s of [-1, 1]) kit.box("paintedMetal", x + s * (w / 2 - 0.025), top - 0.165, z, 0.05, 0.012, d + 0.02, { color: steel });
+  kit.box("paintedMetal", x, top - 0.09, z, w - 0.06, 0.01, d - 0.06, { color: black }); // recess plate
+}
+
+/** Emitter segments of a galley fixture as [cx, cy, cz, sx, sy, sz]: [centre 60 %, west end, east end]. */
+export function galleyFixtureEmitters(pos, { w = 2.4, d = 0.5, stem = 1.0 } = {}) {
+  const [x, y0, z] = pos;
+  const y = y0 - stem - 0.102;
+  const ew = w - 0.2;
+  const ed = d - 0.2;
+  const cw = ew * 0.6;
+  const endw = ew * 0.2;
+  return [
+    [x, y, z, cw, 0.012, ed],
+    [x - (cw + endw) / 2, y, z, endw, 0.012, ed],
+    [x + (cw + endw) / 2, y, z, endw, 0.012, ed],
+  ];
+}
+
+// Warm work lamp hung under the hood's front lip over the cookers (the galley's hood spot sits inside
+// it): black housing on two steel straps, a recessed diffuser (fx batch, hoodLampEmitter) behind 6 cm
+// lips with a steel rim. `yBottom` is the hood's underside, `zFront` its front face; the housing hangs
+// forward of the face so the lamp is seen under the vent from the galley aisle.
+export function hoodLamp(kit, PALETTE, x, yBottom, zFront, { w = 0.8, d = 0.34 } = {}) {
+  const black = C(PALETTE, "impBlack");
+  const steel = C(PALETTE, "steel");
+  const zc = zFront - d / 2;
+  const top = yBottom - 0.05; // under the hood's front lip
+  kit.box("paintedMetal", x, top - 0.06, zc, w, 0.12, d, { color: black, texel: 2.5 });
+  for (const s of [-1, 1]) kit.box("metal", x + s * 0.3, top + 0.06, zFront - 0.06, 0.05, 0.24, 0.02, { color: steel });
+  kit.box("paintedMetal", x, top - 0.15, zc - d / 2 + 0.015, w, 0.06, 0.03, { color: black });
+  for (const s of [-1, 1]) kit.box("paintedMetal", x + s * (w / 2 - 0.015), top - 0.15, zc, 0.03, 0.06, d, { color: black });
+  kit.box("paintedMetal", x, top - 0.18, zc - d / 2 + 0.02, w + 0.02, 0.012, 0.05, { color: steel });
+  for (const s of [-1, 1]) kit.box("paintedMetal", x + s * (w / 2 - 0.02), top - 0.18, zc, 0.05, 0.012, d + 0.02, { color: steel });
+}
+
+/** The hood lamp's diffuser as [cx, cy, cz, sx, sy, sz]. */
+export function hoodLampEmitter(x, yBottom, zFront, { w = 0.8, d = 0.34 } = {}) {
+  return [x, yBottom - 0.05 - 0.125, zFront - d / 2, w - 0.2, 0.012, d - 0.14];
+}
+
+// Wall-arm work light (front +Z into the room): wall plate, a steel arm with a stay, and a hooded head
+// at the arm's end whose diffuser (fx batch, wallArmLightEmitter) faces down; the room's point light
+// sits under the head, `arm` metres off the wall, so the wall behind gets a gradient and not a hotspot.
+export function wallArmLight(kit, PALETTE, pos, yaw, { arm = 1.1 } = {}) {
+  const Q = placer(kit, pos, yaw);
+  const black = C(PALETTE, "impBlack");
+  const dark = C(PALETTE, "impDark");
+  const steel = C(PALETTE, "steel");
+  Q.box("paintedMetal", 0, 0.1, 0.02, 0.3, 0.5, 0.04, { color: black, texel: 2.5 });
+  Q.cyl("metal", 0, 0.08, arm / 2, 0.025, arm, "z", { color: steel, segments: 8 });
+  // stay: from the top of the plate down to the arm's end
+  const stayLen = Math.hypot(arm, 0.28);
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(Math.PI / 2 + Math.atan2(0.28, arm), yaw, 0, "YXZ"));
+  kit.add("metal", new THREE.CylinderGeometry(0.015, 0.015, stayLen, 8), { pos: Q.world(0, 0.22, arm / 2), quat: q, color: steel });
+  // head: top plate + 14 cm walls (hollow hood) with a steel rim, black recess plate inside
+  Q.box("paintedMetal", 0, 0.05, arm, 0.44, 0.02, 0.6, { color: dark, texel: 2.5 });
+  for (const s of [-1, 1]) Q.box("paintedMetal", 0, -0.03, arm + s * 0.285, 0.44, 0.14, 0.03, { color: dark, texel: 2.5 });
+  for (const s of [-1, 1]) Q.box("paintedMetal", s * 0.205, -0.03, arm, 0.03, 0.14, 0.6, { color: dark, texel: 2.5 });
+  for (const s of [-1, 1]) Q.box("paintedMetal", s * 0.215, -0.1, arm, 0.05, 0.012, 0.62, { color: steel });
+  for (const s of [-1, 1]) Q.box("paintedMetal", 0, -0.1, arm + s * 0.295, 0.46, 0.012, 0.05, { color: steel });
+  Q.box("paintedMetal", 0, -0.035, arm, 0.38, 0.01, 0.54, { color: black }); // recess plate
+}
+
+/** The wall-arm light's diffuser: { pos, rot, size } for an fx box. */
+export function wallArmLightEmitter(pos, yaw, { arm = 1.1 } = {}) {
+  const Q = placer(null, pos, yaw);
+  return { pos: Q.world(0, -0.047, arm), rot: [0, yaw, 0], size: [0.34, 0.012, 0.5] };
 }
 
 // Supply container (1.2 m module) without the rubber bumpers of the shared crate.

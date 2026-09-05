@@ -31,14 +31,16 @@ export default defineRoom({
     // explicit bay order so the arm shares no service-bay kit position with cor-w / cor-e: seen from
     // the lobby door the first port alcove is a workbench (cor-w opens on a crate stack), the mid
     // bays are drums / cabinet / workbench rather than the three-locker row cor-e shows there
-    // lights (4 spots): key, downlight spots in bays 4 and 6 (z 352 / 344, either side of the mid
-    // view's camera), and the pod-end flood aimed back at the deck: with only the lobby and the escape
-    // bay as neighbours it stays live from the lobby door (the pod door reads lit from there), and
-    // from the pod end it is the one corridor spot live — the escape bay's three spots 5–15 m through
-    // that door take the rest of the pool — so it carries that deck (measured: without it the pod-end
-    // deck fell from 26 % to 17 % grey). No long-throw: both ends are doors, so the beam would shine
-    // through into the escape bay. Motion: faulty fixture at bay 8 (z 336: 14 m ahead of the mid view,
-    // the pod-end deck under it is carried by the flood); no bulkhead beacon (no bulkhead)
-    return corridorDetail(ctx, shell, room, { axis: "z", lobbyEnd: "max", accent: "emitBlue", seed: 23, screens: ["screenImp1", "screenImp2"], bigKinds: ["lockers", "drums", "cabinet", "workbench", "crates", "bench"], farFlood: {}, midSpot: { bays: [4, 6] }, flickerBay: 8 });
+    // lights (4 spots): key raked onto the bay-1 workbench alcove (z 364, west wall), downlight spot
+    // in bay 6 (z 344, ahead of the mid view's camera), alcove downlight in the bay-5 service bay (the
+    // drum pair at z 348 on the west wall, the mid view's fg-L barrel: it casts the barrel's contact
+    // shadow onto the deck), and the pod-end flood aimed back at the deck: with only the lobby and
+    // the escape bay as neighbours it stays live from the lobby door (the pod door reads lit from
+    // there), and from the pod end it is the one corridor spot live — the escape bay's three spots
+    // 5–15 m through that door take the rest of the pool — so it carries that deck (measured: without
+    // it the pod-end deck fell from 26 % to 17 % grey). No long-throw: both ends are doors, so the beam
+    // would shine through into the escape bay. Motion: faulty fixture at bay 8 (z 336: 14 m ahead of
+    // the mid view, the pod-end deck under it is carried by the flood); no bulkhead beacon (no bulkhead)
+    return corridorDetail(ctx, shell, room, { axis: "z", lobbyEnd: "max", accent: "emitBlue", seed: 23, screens: ["screenImp1", "screenImp2"], bigKinds: ["lockers", "drums", "cabinet", "workbench", "crates", "bench"], farFlood: {}, midSpot: { bays: [6] }, alcoveSpot: { bay: 5 }, flickerBay: 8 });
   },
 });

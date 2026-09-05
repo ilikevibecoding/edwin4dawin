@@ -36,7 +36,9 @@ export function barWall(kit, PALETTE, a, b, yFrom, yTo, { r = 0.025, pitch = 0.1
 // wall, a small housed ceiling plate at `ceilH` so the interior reads. `variant`:
 //  "standard" bedding + pillow · "occupied" bedding, folded blanket, tray + cup on the floor, jacket on
 //  a hook, datapad · "bare" slab only, no bedding (cell out of use, plate red).
-export function cellFittings(kit, PALETTE, pos, yaw, { w = 3.3, seed = 1, variant = "standard", mirror = false, ceilH = 3.4, plateMat = "emitWhite" } = {}) {
+// `ceilPlates: false` builds the two ceiling housings without their emitter plates (see cellCeilEmitters):
+// the room's fx batch carries them at a capped level, the `emitWhite` key clipped through the bars.
+export function cellFittings(kit, PALETTE, pos, yaw, { w = 3.3, seed = 1, variant = "standard", mirror = false, ceilH = 3.4, plateMat = "emitWhite", ceilPlates = true } = {}) {
   const Q = placer(kit, pos, yaw);
   const rand = rng(seed);
   const black = C(PALETTE, "impBlack");
@@ -100,8 +102,11 @@ export function cellFittings(kit, PALETTE, pos, yaw, { w = 3.3, seed = 1, varian
   Q.box("emitRedImp", 0, 2.2, 0.062, w - 1.0, 0.04, 0.006);
   Q.box("paintedMetal", 0, 2.75, 0.03, 0.9, 0.12, 0.06, { color: black });
   Q.box(plateMat, 0, 2.75, 0.062, 0.8, 0.05, 0.006);
-  // two housed ceiling plates per cell (back half + corridor half): hollow black housing, steel-grey lip,
+  // two housed ceiling plates per cell (back half + corridor half): hollow black housing, dark-grey lip,
   // emitter set up inside. One plate over the corridor half left the back of the cell reading black.
+  // The lips are impDark, not the steel-grey of the other housings: the cell fills sit 1.1 m under the
+  // corridor-half plate, and a mid-grey lip underside at that range clipped to white through the gate
+  // opening in the cells view (a 20–60 px sliver per cell); lit that hard, dark reads as a steel lip.
   for (const cz of [0.75, 2.1]) {
     const cx = 0;
     const yb = ceilH - 0.12;
@@ -109,14 +114,20 @@ export function cellFittings(kit, PALETTE, pos, yaw, { w = 3.3, seed = 1, varian
     for (const s of [-1, 1]) {
       Q.box("paintedMetal", cx, yb + 0.06, cz + s * 0.285, 0.6, 0.12, 0.03, { color: black });
       Q.box("paintedMetal", cx + s * 0.285, yb + 0.06, cz, 0.03, 0.12, 0.54, { color: black });
-      Q.box("paintedMetal", cx, yb - 0.01, cz + s * 0.31, 0.7, 0.02, 0.08, { color: mid });
-      Q.box("paintedMetal", cx + s * 0.31, yb - 0.01, cz, 0.08, 0.02, 0.54, { color: mid });
+      Q.box("paintedMetal", cx, yb - 0.01, cz + s * 0.31, 0.7, 0.02, 0.08, { color: dark });
+      Q.box("paintedMetal", cx + s * 0.31, yb - 0.01, cz, 0.08, 0.02, 0.54, { color: dark });
     }
-    Q.box(plateMat, cx, yb + 0.06, cz, 0.34, 0.01, 0.34);
+    if (ceilPlates) Q.box(plateMat, cx, yb + 0.06, cz, 0.34, 0.01, 0.34);
   }
   // floor drain
   Q.box("darkGloss", m * 0.3, 0.004, 1.6, 0.3, 0.008, 0.3);
   void rand;
+}
+
+/** The two ceiling plates of cellFittings(pos, yaw, { ceilH }) as { pos, rot, size } for an fx box. */
+export function cellCeilEmitters(pos, yaw, { ceilH = 3.4 } = {}) {
+  const Q = placer(null, pos, yaw);
+  return [0.75, 2.1].map((cz) => ({ pos: Q.world(0, ceilH - 0.06, cz), rot: [0, yaw, 0], size: [0.34, 0.01, 0.34] }));
 }
 
 // Cell door frame around a gap in a bar wall: two posts, lintel, lock panel with a red/blue LED
@@ -235,7 +246,8 @@ export function scanGate(kit, PALETTE, pos, yaw, { laneW = 2.4, halfSpan = [1.9,
   Q.box("darkGloss", 0, headerY - 0.025, 0, laneW - 0.2, 0.01, 0.16);
   Q.box("emitBlue", 0, headerY - 0.032, 0, laneW - 0.4, 0.006, 0.04);
   for (const sz of [-1, 1]) {
-    Q.box("darkGloss", 0, headerY + 0.15, sz * 0.225, laneW - 0.3, 0.12, 0.01);
+    // matte LED strip backing (in dark gloss it mirrored the wing fill as a clipped white blob at 8 m)
+    Q.box("paintedMetal", 0, headerY + 0.15, sz * 0.225, laneW - 0.3, 0.12, 0.01, { color: black });
     for (let i = 0; i < 5; i++) Q.box(i === 2 ? "emitRedImp" : "emitBlue", -0.5 + i * 0.25, headerY + 0.15, sz * 0.232, 0.05, 0.03, 0.006);
   }
   // side rails: two steel bars between posts, hazard-band panel below the top bar
@@ -371,7 +383,9 @@ export function scanPylon(kit, PALETTE, pos, yaw, { h = 2.3, clear = true } = {}
   Q.box("darkGloss", 0, h / 2 + 0.1, 0.237, 0.16, h - 0.6, 0.01);
   Q.box("emitBlue", 0, h / 2 + 0.1, 0.244, 0.05, h - 0.8, 0.006);
   Q.box("paintedMetal", 0, h + 0.05, 0.02, 0.5, 0.1, 0.5, { color: dark });
-  Q.box(clear ? "emitGreen" : "emitRedImp", 0, h + 0.13, 0.02, 0.22, 0.06, 0.22);
+  // status lamp: a lens sunk in a black bezel (the bare 22 cm cube bloomed to a white blob at 6 m)
+  Q.box("paintedMetal", 0, h + 0.13, 0.02, 0.24, 0.06, 0.24, { color: black });
+  Q.box(clear ? "emitGreen" : "emitRedImp", 0, h + 0.15, 0.02, 0.12, 0.03, 0.12);
   for (const y of [0.45, 0.85]) Q.box("emitRedImp", -0.13, y, 0.238, 0.03, 0.03, 0.006);
   // flanks: panel plate, sensor slot + strip so the pylon reads as equipment from the sides
   for (const sx of [-1, 1]) {
@@ -379,7 +393,11 @@ export function scanPylon(kit, PALETTE, pos, yaw, { h = 2.3, clear = true } = {}
     Q.box("darkGloss", sx * 0.237, h * 0.6, 0, 0.01, 1.2, 0.2);
     Q.box("emitRedImp", sx * 0.245, h * 0.6, 0, 0.006, 1.0, 0.03);
   }
-  Q.box("impPanel", 0, h / 2 + 0.1, -0.226, 0.36, h - 0.5, 0.012, { color: mid, uv: "keep" });
+  // back plate: matte paint, not the panel key. The desk camera sees the east pylon's back at a 10°
+  // grazing angle, and the corridor's ceiling fill 6 m north (points cast no shadows, so the door wall
+  // does not stop it) mirrored off the impPanel plate as a 95 % blob at the pylon top — the desk view's
+  // "door-frame lamp clipping at its top". With the corridor fill off the same pixels read 50 %.
+  Q.box("paintedMetal", 0, h / 2 + 0.1, -0.226, 0.36, h - 0.5, 0.012, { color: mid, texel: 2.5 });
   Q.collider([-0.35, 0, -0.35], [0.35, h + 0.16, 0.35], "pylon");
 }
 
