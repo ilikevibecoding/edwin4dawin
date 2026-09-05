@@ -97,7 +97,7 @@ function deckA({ kit, N, S, hx, hz, h, accentKey, accentHex, inlayKey, lifts, li
   kit.cyl("impTrim", 0, 0.003, -3.9, 1.55, 0.006, "y", { color: BLK, segments: 40 });
   kit.cyl("emitWhiteDim", 0, 0.004, -3.9, 1.6, 0.006, "y", { segments: 40, uv: "keep" });
   kit.cyl("impGloss", 0, 0.0055, -3.9, 1.5, 0.006, "y", { segments: 40 });
-  kit.add("decalImp", new THREE.PlaneGeometry(2.5, 2.5).rotateX(-Math.PI / 2), { pos: [0, 0.012, -3.9], uv: "keep", uvRect: impDecalRect(IMP_DECAL.cog) });
+  kit.add("decalImp", new THREE.PlaneGeometry(2.8, 2.8).rotateX(-Math.PI / 2), { pos: [0, 0.012, -3.9], uv: "keep", uvRect: impDecalRect(IMP_DECAL.cog) });
   deckInlay(kit, 0, 0.4, inlayKey, accentKey, 1.0);
   // lift thresholds: gloss plates edged in white
   for (const lf of lifts) {
@@ -109,10 +109,10 @@ function deckA({ kit, N, S, hx, hz, h, accentKey, accentHex, inlayKey, lifts, li
   // lights: cool white pendant over the inlay, white downlights in the alcove soffits, the deck accent
   // at the lifts, a small fill at the corridor door
   pendant(kit, 0, h, 0.4, accentKey);
-  kit.light({ type: "point", pos: [0, h - 1.8, 0.4], color: 0xe6eeff, intensity: lux(h - 1.8, 4.2), distance: 16, priority: 0.5 });
-  for (const s of [-1, 1]) kit.light({ type: "point", pos: [s * 3.75, 2.3, -hz + 0.6], color: 0xf2f6ff, intensity: 4.5, distance: 6, priority: 0.42 });
+  kit.light({ type: "point", pos: [0, h - 1.8, 0.4], color: 0xe6eeff, intensity: lux(h - 1.8, 6.0), distance: 17, priority: 0.5 });
+  for (const s of [-1, 1]) kit.light({ type: "point", pos: [s * 3.75, 2.3, -hz + 0.6], color: 0xf2f6ff, intensity: 5.5, distance: 8, priority: 0.42 });
   liftLights(7.0);
-  kit.light({ type: "point", pos: [0, h - 0.6, 4.4], color: 0xdfe8ff, intensity: lux(h - 0.6, 2.0), distance: 12, priority: 0.36 });
+  kit.light({ type: "point", pos: [0, h - 0.6, 4.4], color: 0xdfe8ff, intensity: lux(h - 0.6, 2.6), distance: 13, priority: 0.36 });
 }
 
 // ---------------------------------------------------------------------------
@@ -138,10 +138,10 @@ function deckB({ kit, N, S, walls, hx, hz, h, accentKey, accentHex, inlayKey, li
   // warm fill at the corridor door
   for (const [x, z] of [[-6.3, -2.8], [6.3, -2.8], [0, 0.2]]) {
     warmCan(kit, x, h, z, "emitAmberDim");
-    kit.light({ type: "point", pos: [x, h - 0.7, z], color: 0xffc890, intensity: lux(h - 0.7, x === 0 ? 2.6 : 2.2), distance: 11, priority: 0.5 - Math.abs(x) * 0.001 });
+    kit.light({ type: "point", pos: [x, h - 0.7, z], color: 0xffc890, intensity: lux(h - 0.7, x === 0 ? 4.0 : 3.6), distance: 12, priority: 0.5 - Math.abs(x) * 0.001 });
   }
   liftLights(4.5);
-  kit.light({ type: "point", pos: [0, h - 0.6, 4.4], color: 0xffd8b0, intensity: lux(h - 0.6, 1.6), distance: 10, priority: 0.36 });
+  kit.light({ type: "point", pos: [0, h - 0.6, 4.4], color: 0xffd8b0, intensity: lux(h - 0.6, 2.4), distance: 11, priority: 0.36 });
 }
 
 // ---------------------------------------------------------------------------
@@ -198,11 +198,11 @@ function deckD({ kit, N, S, walls, hx, hz, h, accentKey, accentHex, inlayKey, li
   // at the lifts (no pendant on this deck)
   for (const s of [-1, 1]) {
     highBayLamp(kit, s * 5.5, h - 0.5, -1.0, "emitAmberDim");
-    kit.light({ type: "point", pos: [s * 5.5, h - 1.1, -1.0], color: 0xffc890, intensity: lux(h - 1.1, 3.0), distance: 13, priority: 0.5 - (s > 0 ? 0.005 : 0) });
+    kit.light({ type: "point", pos: [s * 5.5, h - 1.1, -1.0], color: 0xffc890, intensity: lux(h - 1.1, 4.6), distance: 14, priority: 0.5 - (s > 0 ? 0.005 : 0) });
   }
-  kit.light({ type: "point", pos: [-5.0, 3.3, -hz + 1.6], color: 0xffa040, intensity: 5.0, distance: 7, priority: 0.42 });
+  kit.light({ type: "point", pos: [-5.0, 3.3, -hz + 1.6], color: 0xffa040, intensity: 7.0, distance: 8, priority: 0.42 });
   kit.light({ type: "point", pos: [10.2, 3.2, -hz + 1.9], color: 0xff4030, intensity: 2.5, distance: 5, priority: 0.34 });
-  liftLights(6.0);
+  liftLights(7.0);
 }
 
 // ---------------------------------------------------------------------------
@@ -224,12 +224,13 @@ function deckE({ kit, N, S, walls, hx, hz, h, accentKey, accentHex, inlayKey, li
   signPlate(S, hx, 2.5, 3.2, 1.1, { accentKey, decal: IMP_DECAL.glyphs3, decalW: 2.0, decalH: 0.34, hazard: true, badge: IMP_DECAL.hazard });
   // lights: the two work lights, a high bay lamp over the inlay, the accent at the lifts, a warm fill
   // at the hangar door
-  kit.light({ type: "point", pos: [-7.0, 2.3, -1.9], color: 0xfff2e0, intensity: 6.0, distance: 8, priority: 0.46 });
-  kit.light({ type: "point", pos: [6.5, 2.3, -1.2], color: 0xfff2e0, intensity: 6.0, distance: 8, priority: 0.455 });
+  kit.light({ type: "point", pos: [-7.0, 2.3, -1.9], color: 0xfff2e0, intensity: 8.0, distance: 9, priority: 0.46 });
+  kit.light({ type: "point", pos: [6.5, 2.3, -1.2], color: 0xfff2e0, intensity: 8.0, distance: 9, priority: 0.455 });
   highBayLamp(kit, 0, h - 0.5, 0.6, "emitAmberDim");
-  kit.light({ type: "point", pos: [0, h - 1.1, 0.6], color: 0xffc080, intensity: lux(h - 1.1, 2.8), distance: 13, priority: 0.5 });
-  liftLights(6.0);
-  kit.light({ type: "point", pos: [0, h - 0.6, -hz + 1.6], color: 0xffe8d0, intensity: lux(h - 0.6, 1.6), distance: 10, priority: 0.36 });
+  kit.light({ type: "point", pos: [0, h - 1.1, 0.6], color: 0xffc080, intensity: lux(h - 1.1, 4.0), distance: 14, priority: 0.5 });
+  liftLights(6.5);
+  // fill inside the hangar door, kept low and away from the lintel panel so the header does not bloom
+  kit.light({ type: "point", pos: [0, 2.2, -hz + 3.4], color: 0xffe8d0, intensity: 6.0, distance: 8, priority: 0.36 });
 }
 
 // ---------------------------------------------------------------------------

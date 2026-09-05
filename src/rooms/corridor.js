@@ -146,7 +146,7 @@ const PROFILE = {
   // B — officers: gloss runner with brass rails, pilasters, framed crest panels, warm cans, no troughs
   B: {
     wall: { altChance: 0.04, features: { vent: 0.03, equipment: 0.03, conduit: 0.0, light: 0.0, screen: 0.0 } },
-    floor: { lane: false, edgeLight: "emitAmberDim" },
+    floor: { lane: false },
     ceiling: { troughs: 0, beamStep: 5.5 },
     chamferKey: "emitAmberDim",
     chamferRibStep: 5.5,
@@ -158,13 +158,14 @@ const PROFILE = {
       let k = 0;
       for (const side of ["W", "E"]) {
         const F = walls[side].frame;
-        for (const z of ribs) pilaster(F, side === "W" ? d / 2 - z : z + d / 2, h, { w: 0.36 });
+        // pilasters and picture lights stop under the chamfer (its foot is 1.05 m below the ceiling)
+        for (const z of ribs) pilaster(F, side === "W" ? d / 2 - z : z + d / 2, h - 1.05, { w: 0.36 });
         for (const [a, b] of freeSpans(d, doorsU[side], 0.9, 2.6)) {
           const n = Math.max(1, Math.floor((b - a) / 5.5));
           for (let i = 0; i < n; i++, k++) {
             const u = a + ((i + 0.5) / n) * (b - a);
             if (ribs.some((z) => Math.abs((side === "W" ? d / 2 - z : z + d / 2) - u) < 1.0)) continue;
-            framedPanel(F, u, 1.85, 1.2, 1.5, { decal: decals[k % decals.length], glow: "emitAmberDim" });
+            framedPanel(F, u, 1.7, 1.2, 1.3, { decal: decals[k % decals.length], glow: "emitAmberDim" });
           }
         }
       }
@@ -187,7 +188,7 @@ const PROFILE = {
       const W = walls.W.frame;
       let k = 0;
       for (const [a, b] of freeSpans(d, doorsU.W, 0.9, 2.4)) {
-        cableTrayWall(W, a, b, 2.5, { seed: 11 + k, cables: 4, accentKey: "emitAmber" });
+        cableTrayWall(W, a, b, 2.38, { seed: 11 + k, cables: 4, accentKey: "emitAmber" });
         pipeWall(W, a, b, 1.95, 0.06, { color: PALETTE.impGreyDark, clampStep: 2.2, flangeStep: 4.4 });
         pipeWall(W, a, b, 1.72, 0.04, { color: PALETTE.impGrey, clampStep: 2.2, flangeStep: 6.6 });
         k++;
