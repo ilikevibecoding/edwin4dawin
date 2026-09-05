@@ -356,7 +356,10 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   float streak = vnoise(vec2((dot(wp, wd) + 4.5 * t) * 0.25, dot(wp, vec2(-wd.y, wd.x)) * 0.08 + 7.0));
   float caps = mix(0.08, smoothstep(0.7, 0.82, streak), capFade);
   float whitecap = caps * smoothstep(0.6, 0.9, val0) * smoothstep(7.0, 14.0, uWindSpeed) * smoothstep(2.0, 6.0, depth) * open * w0;
-  foam = clamp(foam + wake.r * 1.3 + whitecap, 0.0, 1.0);
+  // wake foam is churned water, never a flat sheet: a fine world-anchored grain modulates it (and keeps
+  // it below saturation) so a fresh float/hull wake reads as turbulent froth instead of a white bar
+  float wakeGrain = 0.55 + 0.45 * vnoise(wp * 1.7 + vec2(t * 0.6, 0.0)) * (0.6 + 0.8 * vnoise(wp * 4.3 - t * 0.9));
+  foam = clamp(foam + wake.r * 0.85 * wakeGrain + whitecap, 0.0, 0.92);
 
   wN = N; wV = V; wFoam = foam; wMss = mss; wDx = dxw; wDy = dyw;
   wBodyR = R;

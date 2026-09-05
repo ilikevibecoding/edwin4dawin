@@ -41,11 +41,12 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
   vertexShader: /* glsl */ `
     attribute float aAge;     // 0 fresh .. 1 old
     attribute float aSide;    // -1 .. 1 across the ribbon
-    varying float vAge; varying float vSide; varying vec2 vWp;
-    void main() { vAge = aAge; vSide = aSide; vWp = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+    attribute float aFade;    // 0 at a trail start / gap, 1 in the body
+    varying float vAge; varying float vSide; varying vec2 vWp; varying float vFade;
+    void main() { vAge = aAge; vSide = aSide; vFade = aFade; vWp = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
   `,
   fragmentShader: /* glsl */ `
-    varying float vAge; varying float vSide; varying vec2 vWp;
+    varying float vAge; varying float vSide; varying vec2 vWp; varying float vFade;
     uniform float uStrength;
     float h21(vec2 q) { return fract(sin(dot(q, vec2(127.1, 311.7))) * 43758.5453); }
     float vn(vec2 q) { vec2 i = floor(q), f = fract(q); f = f * f * (3.0 - 2.0 * f);
@@ -55,13 +56,15 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
       float life = 1.0 - vAge;
       // turbulent white core right behind the hull, fading and thinning with age, plus fainter V arms;
       // kept wide enough to survive the wake map's ~1.6 m texels (the old thin twin lines aliased into dots)
-      float core = (1.0 - smoothstep(0.0, 0.9, abs(vSide))) * (0.55 + 0.45 * (1.0 - smoothstep(0.0, 0.5, vAge)));
+      float core = (1.0 - smoothstep(0.0, 0.9, abs(vSide))) * (0.45 + 0.4 * (1.0 - smoothstep(0.0, 0.5, vAge)));
       float arms = smoothstep(0.45, 0.8, abs(vSide)) * (1.0 - smoothstep(0.85, 1.0, abs(vSide))) * 0.5;
-      // world-anchored breakup so a long wake reads as churned foam patches, not a chalk line
-      float breakup = 0.55 + 0.45 * vn(vWp * 0.35) * (0.7 + 0.6 * vn(vWp * 1.3 + 4.0));
-      float foam = (core + arms) * life * life * edge * uStrength * breakup;
-      vec2 n = vec2(sign(vSide) * 0.35 * life * edge, 0.0);
-      gl_FragColor = vec4(foam, 0.5 + n.x, 0.5 + n.y, edge * life);
+      // world-anchored breakup so a long wake reads as churned foam patches, not a chalk line; the
+      // contrast is highest right behind the hull where the fresh froth is most turbulent
+      float breakup = 0.4 + 0.6 * vn(vWp * 0.35) * (0.6 + 0.8 * vn(vWp * 1.3 + 4.0));
+      breakup = mix(breakup, 0.3 + 0.9 * vn(vWp * 2.6 + 11.0) * breakup, 1.0 - smoothstep(0.0, 0.25, vAge));
+      float foam = (core + arms) * life * life * edge * uStrength * breakup * vFade;
+      vec2 n = vec2(sign(vSide) * 0.35 * life * edge * vFade, 0.0);
+      gl_FragColor = vec4(foam, 0.5 + n.x, 0.5 + n.y, edge * life * vFade);
     }
   `,
   uniforms: { uStrength: { value: 1.0 } },
@@ -78,10 +81,10 @@ export const CONTRAIL_MATERIAL = new THREE.ShaderMaterial({
   vertexShader: /* glsl */ `
     #include <common>
     #include <logdepthbuf_pars_vertex>
-    attribute float aAge; attribute float aSide;
-    varying float vAge; varying float vSide;
+    attribute float aAge; attribute float aSide; attribute float aFade;
+    varying float vAge; varying float vSide; varying float vFade;
     void main() {
-      vAge = aAge; vSide = aSide;
+      vAge = aAge; vSide = aSide; vFade = aFade;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       #include <logdepthbuf_vertex>
     }
@@ -89,13 +92,13 @@ export const CONTRAIL_MATERIAL = new THREE.ShaderMaterial({
   fragmentShader: /* glsl */ `
     #include <common>
     #include <logdepthbuf_pars_fragment>
-    varying float vAge; varying float vSide;
+    varying float vAge; varying float vSide; varying float vFade;
     uniform float uStrength;
     void main() {
       #include <logdepthbuf_fragment>
       float edge = 1.0 - smoothstep(0.2, 1.0, abs(vSide));
       float life = (1.0 - vAge);
-      float a = edge * life * life * uStrength * smoothstep(0.0, 0.05, vAge);
+      float a = edge * life * life * uStrength * smoothstep(0.0, 0.05, vAge) * vFade;
       gl_FragColor = vec4(vec3(0.95, 0.97, 1.0), a);
     }
   `,
@@ -190,9 +193,12 @@ export class WakeTrail {
   private readonly positions: Float32Array;
   private readonly ages: Float32Array;
   private readonly sides: Float32Array;
-  private readonly points: { x: number; z: number; dx: number; dz: number; t: number }[] = [];
+  private readonly fades: Float32Array;
+  private readonly points: { x: number; z: number; dx: number; dz: number; t: number; fade: number }[] = [];
   private lastX = NaN;
   private lastZ = NaN;
+  /** points still to emit at reduced strength after a trail start or a gap */
+  private ramp = 0;
   private readonly geo: THREE.BufferGeometry;
 
   constructor(capacity: number, private width: number, private lifetime: number, strength = 1, material: THREE.ShaderMaterial = WAKE_MATERIAL) {
@@ -200,6 +206,7 @@ export class WakeTrail {
     this.positions = new Float32Array(capacity * 2 * 3);
     this.ages = new Float32Array(capacity * 2);
     this.sides = new Float32Array(capacity * 2);
+    this.fades = new Float32Array(capacity * 2);
     const idx: number[] = [];
     for (let i = 0; i < capacity - 1; i++) {
       const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
@@ -209,6 +216,7 @@ export class WakeTrail {
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
     this.geo.setAttribute('aAge', new THREE.BufferAttribute(this.ages, 1));
     this.geo.setAttribute('aSide', new THREE.BufferAttribute(this.sides, 1));
+    this.geo.setAttribute('aFade', new THREE.BufferAttribute(this.fades, 1));
     this.geo.setIndex(idx);
     this.geo.setDrawRange(0, 0);
     const mat = material.clone();
@@ -220,11 +228,23 @@ export class WakeTrail {
 
   /** Call every frame with the emitter's world position; `active` false lets the trail fade out. */
   update(x: number, z: number, time: number, active: boolean, speed: number): void {
-    if (active && (Number.isNaN(this.lastX) || Math.hypot(x - this.lastX, z - this.lastZ) > Math.max(2.0, speed * 0.25))) {
-      const dx = Number.isNaN(this.lastX) ? 1 : x - this.lastX, dz = Number.isNaN(this.lastZ) ? 0 : z - this.lastZ;
+    const RAMP = 4;
+    const fresh = Number.isNaN(this.lastX);
+    const dist = fresh ? 0 : Math.hypot(x - this.lastX, z - this.lastZ);
+    if (active && (fresh || dist > Math.max(2.0, speed * 0.25))) {
+      const dx = fresh ? 1 : x - this.lastX, dz = fresh ? 0 : z - this.lastZ;
       const l = Math.hypot(dx, dz) || 1;
-      this.points.push({ x, z, dx: dx / l, dz: dz / l, t: time });
-      if (this.points.length > this.capacity) this.points.shift();
+      // the emitter left the surface (bounce, skip, take-off) and came back: close the old ribbon with a
+      // zero-length invisible quad and start a new one here instead of bridging the gap with foam
+      const gap = !fresh && dist > Math.max(12, speed * 1.5);
+      if (gap) {
+        const last = this.points[this.points.length - 1];
+        if (last) this.points.push({ ...last, fade: 0 });
+      }
+      if (fresh || gap) this.ramp = RAMP;
+      const fade = this.ramp > 0 ? 1 - this.ramp-- / (RAMP + 1) : 1;
+      this.points.push({ x, z, dx: dx / l, dz: dz / l, t: time, fade });
+      while (this.points.length > this.capacity) this.points.shift();
       this.lastX = x; this.lastZ = z;
     }
     // drop expired
@@ -240,16 +260,19 @@ export class WakeTrail {
       this.positions[i * 6 + 3] = p.x + nx; this.positions[i * 6 + 4] = 0.05; this.positions[i * 6 + 5] = p.z + nz;
       this.ages[i * 2] = age; this.ages[i * 2 + 1] = age;
       this.sides[i * 2] = -1; this.sides[i * 2 + 1] = 1;
+      this.fades[i * 2] = p.fade; this.fades[i * 2 + 1] = p.fade;
     }
     this.geo.attributes.position.needsUpdate = true;
     this.geo.attributes.aAge.needsUpdate = true;
     this.geo.attributes.aSide.needsUpdate = true;
+    this.geo.attributes.aFade.needsUpdate = true;
     this.geo.setDrawRange(0, Math.max(0, (n - 1) * 6));
   }
 
   reset(): void {
     this.points.length = 0;
     this.lastX = NaN; this.lastZ = NaN;
+    this.ramp = 0;
     this.geo.setDrawRange(0, 0);
   }
 }
