@@ -8,26 +8,96 @@ import { InstanceBatch, splitCells, type CellSource } from './batching';
 import { LAYER_CAMERA, LAYER_MIRROR, MAX_CASCADES, cascadeIsFine, layerMask, maskCasts, type ViewCull } from './culling';
 
 /**
- * Procedural planting. Two instanced geometry families cover six archetypes:
- *  - crown trees (broadleaf hardwood, tall emergent, squat mangrove, low shrub, dune grass tussock): a
- *    main puff and two lobes of displaced icospheres on a short trunk (66 triangles; the main puff is
- *    subdivided to 126 within HI_DISTANCE). Lobe placement, squash and trunk length are per-instance
- *    shader parameters, so no two crowns share a silhouette. The crown shader adds wrap lighting in
- *    crown space (sunlit yellow-green cap, cool dark underside, per-crown yellowness), leaf-cluster
- *    noise, a ragged dissolved silhouette and perturbed normals up close, and a back-lit rim.
- *  - palms: bent, leaning, tapered trunk and seven drooping frond strips (52 triangles) with
- *    per-instance frond rotation and droop.
- * Every plant also exists as a 2-triangle camera-facing card whose texture blends between a side
- * view and a top view with the viewing elevation. Tiles of 900 m switch between the 3D meshes (near
- * the camera, up to an instance budget) and the cards (everything else), so a dense island canopy
- * costs about the same as the sparse planting it replaces. Cards are thinned with distance. Shadows
- * always come from the light-facing cards; for near tiles the card mesh sits on the shadow-only layers
- * so the main pass never touches it. Foliage receives shadow with one lookup per plant at the crown's
- * sun-facing point (VEG_SHADOWMAP_VERTEX), so crowns are shaded whole by taller neighbours and
- * buildings instead of being cut by the planar shadows of the cards. Tiles are culled against the
- * camera frustum with their own world-space boxes, and cast shadows only when their footprint can
- * shade something in view.
+ * Procedural planting. Two instanced geometry families cover eight archetypes:
+ *  - crown trees (broadleaf hardwood, tall emergent, squat mangrove, low shrub, dune grass tussock, sea
+ *    grape, slash pine): a trunk and four displaced icosphere puffs (86 triangles; the main puff is
+ *    subdivided to 146 within HI_DISTANCE). The puffs are arranged by one of eight CROWN LAYOUTS chosen
+ *    per plant (lobe angle / radius / size / height; some layouts hide a lobe), scaled by the
+ *    archetype's shape class (round, spreading, conical), then stretched anisotropically, lumped with a
+ *    per-plant noise displacement and given a per-plant crown height, so no two crowns share a
+ *    silhouette. The crown shader adds crown-space wrap lighting (sunlit cap, cooler underside), leaf
+ *    cluster noise, a ragged dissolved silhouette and perturbed normals up close.
+ *  - palms: bent, leaning, tapered trunk and nine drooping frond strips (68 triangles) with per-instance
+ *    frond rotation and droop.
+ * Foliage is lit with its own direct-light model (RE_Direct_Foliage): wrapped diffuse so a leaf mass is
+ * lit past the terminator, a translucency term for sun through the leaves, and a shadow floor (leaves
+ * scatter light, so a shaded crown keeps half the sun instead of going black).
+ * Every plant also exists as a 2-triangle camera-facing card whose texture blends between a side view
+ * and a top view with the viewing elevation. The card atlas is drawn from the same layouts (8 variants x
+ * 4 shape classes, side and top), so a card matches the silhouette and proportions of the 3D crown it
+ * stands in for. Tiles of 900 m switch between the 3D meshes (near the camera, up to an instance budget)
+ * and the cards (everything else), so a dense island canopy costs about the same as the sparse planting
+ * it replaces. Cards are thinned with distance. Shadows always come from the light-facing cards; for
+ * near tiles the card mesh sits on the shadow-only layers so the main pass never touches it. Foliage
+ * receives shadow with one lookup per plant at the crown's sun-facing point (VEG_SHADOWMAP_VERTEX), so
+ * crowns are shaded whole by taller neighbours and buildings instead of being cut by the planar shadows
+ * of the cards. Tiles are culled against the camera frustum with their own world-space boxes, and cast
+ * shadows only when their footprint can shade something in view.
  */
+
+// ---------------------------------------------------------------- crown layouts (shared by mesh, cards, atlas)
+
+/** 0 broadleaf, 1 emergent, 2 mangrove, 3 shrub, 4 palm, 5 dune grass tussock, 6 sea grape, 7 slash pine */
+type Archetype = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+/** shape class: 0 round (broadleaf, emergent), 1 spreading (mangrove, shrub, grass, sea grape), 2 conical (pine), 3 palm */
+function shapeClass(a: Archetype): number { return a === 4 ? 3 : a === 7 ? 2 : a <= 1 ? 0 : 1; }
+
+const VARIANTS = 8;
+/** Eight lobe layouts x three lobes: [angle, radius, size (0 = hidden), height] in unit-crown space. */
+const LOBES: number[][] = (() => {
+  const rng = new Rng('crown-layouts');
+  const out: number[][] = [];
+  for (let v = 0; v < VARIANTS; v++) {
+    const a0 = rng.range(0, Math.PI * 2);
+    const gap = 1.7 + rng.range(0, 0.9);
+    for (let k = 0; k < 3; k++) {
+      const hidden = (k === 2 && (v === 1 || v === 4 || v === 6)) || (k === 1 && v === 6);
+      out.push([a0 + k * gap + rng.range(-0.3, 0.3), rng.range(0.55, 0.95), hidden ? 0 : rng.range(0.45, 0.75), rng.range(-0.32, 0.28)]);
+    }
+  }
+  return out;
+})();
+const GLSL_LOBES = `const vec4 LOBES[${VARIANTS * 3}] = vec4[${VARIANTS * 3}](${LOBES.map((l) => `vec4(${l.map((x) => x.toFixed(4)).join(', ')})`).join(', ')});`;
+
+interface Puff { x: number; y: number; z: number; sx: number; sy: number; sz: number }
+/** Puff centres and half-extents of a crown relative to its centre (the same arithmetic as CROWN_VERTEX). */
+function layoutPuffs(cls: number, variant: number, squash: number): Puff[] {
+  const out: Puff[] = [];
+  if (cls === 2) out.push({ x: 0, y: 0, z: 0, sx: 0.6 * 1.15, sy: squash, sz: 0.6 * 1.05 });
+  else out.push({ x: 0, y: 0, z: 0, sx: 1.15, sy: squash, sz: 1.05 });
+  for (let k = 0; k < 3; k++) {
+    const [ang, rad, size, hgt] = LOBES[variant * 3 + k];
+    if (size <= 0) continue;
+    const c = Math.cos(ang), s = Math.sin(ang);
+    if (cls === 0) out.push({ x: c * rad * 0.95, y: hgt * squash, z: s * rad * 0.95, sx: 1.15 * size, sy: squash * size, sz: 1.05 * size });
+    else if (cls === 1) out.push({ x: c * rad * 1.3, y: (hgt * 0.35 - 0.05) * squash, z: s * rad * 1.3, sx: 1.15 * size * 1.15, sy: squash * size * 1.15, sz: 1.05 * size * 1.15 });
+    else out.push({ x: c * rad * 0.45, y: (-0.25 - 0.3 * k) * squash, z: s * rad * 0.45, sx: 1.15 * size * 0.55, sy: squash * size * 0.55 * 0.7, sz: 1.05 * size * 0.55 });
+  }
+  return out;
+}
+
+/** Card proportions per shape class: the atlas tile is drawn for a typical squash / trunk of the class and
+ *  covers `w` x `h` crown units with the trunk base at the bottom edge and the crown centre at `vc`. */
+interface CardClass { w: number; h: number; vc: number; squash: number; trunk: number }
+const CARD_CLASSES: CardClass[] = (() => {
+  const typical = [{ squash: 0.85, trunk: 0.55 }, { squash: 0.6, trunk: 0.12 }, { squash: 1.5, trunk: 0.8 }];
+  const out: CardClass[] = [];
+  for (let cls = 0; cls < 3; cls++) {
+    const { squash, trunk } = typical[cls];
+    const centreH = trunk + 0.85 * squash;
+    let half = 0, top = 0;
+    for (let v = 0; v < VARIANTS; v++) for (const p of layoutPuffs(cls, v, squash)) {
+      half = Math.max(half, Math.abs(p.x) + p.sx * 1.2, Math.abs(p.z) + p.sz * 1.2);
+      top = Math.max(top, p.y + p.sy * 1.2);
+    }
+    // the anisotropic stretch of the 3D crowns reaches 12 % past the layout
+    const w = half * 2 * 1.12 + 0.1, h = centreH + top + 0.1;
+    out.push({ w, h, vc: centreH / h, squash, trunk });
+  }
+  // palm: trunk to y = 1 (leaning up to ~0.25 aside), fronds 0.56 out and to y ~1.16
+  out.push({ w: 1.5, h: 1.35, vc: 1.0 / 1.35, squash: 0, trunk: 1 });
+  return out;
+})();
 
 // ---------------------------------------------------------------- procedural textures
 
@@ -67,100 +137,123 @@ function frondTexture(rng: Rng): THREE.CanvasTexture {
   return tex;
 }
 
-/** Impostor atlas, 6 square tiles: [crown side A, crown side B, palm side, crown top A, crown top B,
- *  palm top]. Grey = shading (tinted per instance), alpha = cut-out. Drawn with per-pixel noise so
- *  edges are ragged; the two crown variants differ in lobe layout so neighbouring cards do not match. */
-const ATLAS_TILES = 6;
+/** Impostor atlas: 8 columns (layout variants) x 8 rows (shape class side views 0-3, top views 4-7),
+ *  128 px tiles. R = shading (tinted per instance), G = trunk mask, alpha = cut-out. Each tile is drawn
+ *  from the same puff layout as the 3D crown of that class and variant, so cards and meshes share
+ *  silhouettes and proportions; edges are ragged with per-pixel noise. */
+const ATLAS_T = 128;
+const ATLAS_N = 8;
 function cardAtlas(rng: Rng): THREE.CanvasTexture {
-  const T = 128, w = T * ATLAS_TILES, h = T;
+  const T = ATLAS_T, w = T * ATLAS_N, h = T * ATLAS_N;
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
   const ctx = c.getContext('2d')!;
   const img = ctx.createImageData(w, h);
   const d = img.data;
-  const put = (x: number, y: number, g: number, a: number) => {
-    const i = (y * w + x) * 4;
-    if (a <= d[i + 3]) return;
-    d[i] = d[i + 1] = d[i + 2] = Math.round(255 * Math.min(1, Math.max(0, g)));
-    d[i + 3] = Math.round(255 * Math.min(1, a));
+  // canvas rows run top to bottom: v = 1 - y/T within a tile
+  const put = (col: number, row: number, x: number, y: number, g: number, trunk: number) => {
+    if (x < 0 || y < 0 || x >= T || y >= T) return;
+    const i = ((row * T + y) * w + col * T + x) * 4;
+    d[i] = Math.round(255 * Math.min(1, Math.max(0, g)));
+    d[i + 1] = trunk;
+    d[i + 2] = 0;
+    d[i + 3] = 255;
   };
-  // canvas rows run top to bottom: v = 1 - y/T
-  const blob = (tile: number, cx: number, cy: number, r: number, gTop: number, gBot: number, seed: number) => {
-    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+  /** shaded elliptical puff (side view): lit cap, dark belly, leaf clusters, ragged edge */
+  const blob = (col: number, row: number, cx: number, cy: number, rx: number, ry: number, gTop: number, gBot: number, seed: number) => {
+    const x0 = Math.max(0, Math.floor((cx - rx * 1.2) * T)), x1 = Math.min(T - 1, Math.ceil((cx + rx * 1.2) * T));
+    const y0 = Math.max(0, Math.floor((1 - cy - ry * 1.2) * T)), y1 = Math.min(T - 1, Math.ceil((1 - cy + ry * 1.2) * T));
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
       const u = (x + 0.5) / T, v = 1 - (y + 0.5) / T;
-      const dx = u - cx, dy = v - cy;
+      const dx = (u - cx) / rx, dy = (v - cy) / ry;
       const ang = Math.atan2(dy, dx);
-      const rr = r * (1 + 0.14 * perlin2(Math.cos(ang) * 2.1 + seed, Math.sin(ang) * 2.1 + seed * 0.7) + 0.06 * perlin2(u * 30 + seed, v * 30));
+      const rr = 1 + 0.15 * perlin2(Math.cos(ang) * 2.1 + seed, Math.sin(ang) * 2.1 + seed * 0.7) + 0.06 * perlin2(u * 30 + seed, v * 30);
       const dist = Math.hypot(dx, dy);
       if (dist > rr) continue;
       const k = dist / rr;
-      // lit from the top: bright cap, dark belly, ragged leaf clusters (seen from a shallow angle above,
-      // most of a crown is lit foliage, so the gradient is concentrated in the belly)
-      const lit = Math.pow(0.5 + 0.5 * (dy / rr), 0.6);
+      const lit = Math.pow(0.5 + 0.5 * (dy / rr), 0.7);
       const leaf = 0.5 + 0.5 * perlin2(u * 22 + seed * 3, v * 22 - seed);
-      const g = (gBot + (gTop - gBot) * lit) * (0.8 + 0.4 * leaf) * (1 - 0.3 * k * k) * (1 - 0.3 * smoothstep(-0.55, -1.0, dy / rr));
-      put(tile * T + x, y, g, 1);
+      const g = (gBot + (gTop - gBot) * lit) * (0.86 + 0.28 * leaf) * (1 - 0.22 * k * k);
+      put(col, row, x, y, g, 0);
     }
   };
-  const disc = (tile: number, cx: number, cy: number, r: number, seed: number) => {
-    for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+  /** top view of a puff: lit disc with lobed leaf clusters */
+  const disc = (col: number, row: number, cx: number, cy: number, r: number, gBase: number, seed: number) => {
+    const x0 = Math.max(0, Math.floor((cx - r * 1.2) * T)), x1 = Math.min(T - 1, Math.ceil((cx + r * 1.2) * T));
+    const y0 = Math.max(0, Math.floor((1 - cy - r * 1.2) * T)), y1 = Math.min(T - 1, Math.ceil((1 - cy + r * 1.2) * T));
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
       const u = (x + 0.5) / T, v = 1 - (y + 0.5) / T;
-      const dx = u - cx, dy = v - cy;
+      const dx = (u - cx) / r, dy = (v - cy) / r;
       const ang = Math.atan2(dy, dx);
-      const rr = r * (1 + 0.16 * perlin2(Math.cos(ang) * 2.3 + seed, Math.sin(ang) * 2.3 - seed));
+      const rr = 1 + 0.16 * perlin2(Math.cos(ang) * 2.3 + seed, Math.sin(ang) * 2.3 - seed);
       const dist = Math.hypot(dx, dy);
       if (dist > rr) continue;
       const k = dist / rr;
       const leaf = 0.5 + 0.5 * perlin2(u * 26 + seed, v * 26 + seed * 2);
       const lobes = 0.5 + 0.5 * perlin2(u * 9 - seed, v * 9 + seed);
-      const g = (0.62 + 0.5 * lobes) * (0.8 + 0.4 * leaf) * (1 - 0.45 * k * k);
-      put(tile * T + x, y, g, 1);
+      put(col, row, x, y, gBase * (0.72 + 0.4 * lobes) * (0.86 + 0.28 * leaf) * (1 - 0.3 * k * k), 0);
     }
   };
-  const trunk = (tile: number, cx: number, v0: number, v1: number, halfW: number, g: number) => {
+  const trunk = (col: number, row: number, cx0: number, cx1: number, v0: number, v1: number, halfW: number, g: number) => {
     for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
       const u = (x + 0.5) / T, v = 1 - (y + 0.5) / T;
-      if (v < v0 || v > v1 || Math.abs(u - cx) > halfW * (1 - 0.4 * (v - v0) / (v1 - v0))) continue;
-      put(tile * T + x, y, g * (0.85 + 0.3 * perlin2(u * 40, v * 40)), 1);
+      if (v < v0 || v > v1) continue;
+      const t = (v - v0) / (v1 - v0);
+      const cx = cx0 + (cx1 - cx0) * t * t;
+      if (Math.abs(u - cx) > halfW * (1 - 0.35 * t)) continue;
+      put(col, row, x, y, g * (0.85 + 0.3 * perlin2(u * 40, v * 40)), 255);
     }
   };
-  const frondStar = (tile: number, cx: number, cy: number, r: number, n: number, droop: number, seed: number) => {
+  /** palm crown: `n` fronds radiating from (cx, cy), thin ribs with leaflet ticks so they read as fronds */
+  const frondStar = (col: number, row: number, cx: number, cy: number, r: number, n: number, droop: number, seed: number, kx: number, ky: number) => {
     for (let k = 0; k < n; k++) {
-      const a = (k / n) * Math.PI * 2 + 0.4 * (perlin2(k * 1.7 + seed, seed) );
-      for (let s = 0; s <= 1; s += 0.01) {
-        const len = r * (0.75 + 0.25 * perlin2(k * 3.1, seed + k));
-        const x = cx + Math.cos(a) * len * s, y = cy + Math.sin(a) * len * s * (1 - droop) - droop * r * s * s;
-        const wdt = 0.045 * r * (1 - 0.5 * s) / 0.25;
-        for (let t = -1; t <= 1; t += 0.25) {
-          const px = x - Math.sin(a) * wdt * t, py = y + Math.cos(a) * wdt * t;
-          const ix = Math.floor(px * T), iy = Math.floor((1 - py) * T);
-          if (ix < 0 || iy < 0 || ix >= T || iy >= T) continue;
-          put(tile * T + ix, iy, 0.75 + 0.35 * s - 0.2 * Math.abs(t), 1);
+      const a = (k / n) * Math.PI * 2 + 0.35 * perlin2(k * 1.7 + seed, seed);
+      const len = r * (0.7 + 0.3 * perlin2(k * 3.1, seed + k));
+      for (let s = 0; s <= 1; s += 0.008) {
+        const x = cx + Math.cos(a) * len * s * kx, y = cy + (Math.sin(a) * len * s * (1 - droop) - droop * r * s * s * 1.1) * ky;
+        const wdt = 0.05 * (1 - 0.6 * s);
+        const leaflet = Math.sin(s * 95 + k) > 0.2 ? 1 : 0.35;
+        for (let t = -1; t <= 1; t += 0.2) {
+          const ext = Math.abs(t) < 0.3 ? 1 : leaflet;
+          if (ext < 0.5) continue;
+          const px = x - Math.sin(a) * wdt * t * kx, py = y + Math.cos(a) * wdt * t * ky * 0.8;
+          put(col, row, Math.floor(px * T), Math.floor((1 - py) * T), 0.72 + 0.45 * s - 0.25 * Math.abs(t), 0);
         }
       }
     }
   };
-  // 0: crown side view A (crown centre at v=0.5, radius 0.385; trunk below): round, two low lobes
-  trunk(0, 0.5, 0.0, 0.3, 0.035, 0.42);
-  blob(0, 0.5, 0.5, 0.385, 1.15, 0.58, 3.0 + rng.next());
-  blob(0, 0.36, 0.42, 0.2, 0.95, 0.52, 7.0 + rng.next());
-  blob(0, 0.63, 0.44, 0.19, 1.0, 0.54, 11.0 + rng.next());
-  // 1: crown side view B: taller, lopsided, with a high lobe and a gap in the skirt
-  trunk(1, 0.5, 0.0, 0.34, 0.03, 0.4);
-  blob(1, 0.47, 0.52, 0.34, 1.1, 0.55, 21.0 + rng.next());
-  blob(1, 0.66, 0.6, 0.22, 1.2, 0.6, 25.0 + rng.next());
-  blob(1, 0.3, 0.4, 0.17, 0.9, 0.5, 29.0 + rng.next());
-  blob(1, 0.56, 0.3, 0.16, 0.85, 0.48, 33.0 + rng.next());
-  // 2: palm side view (crown at v=0.5, fronds radius 0.23; trunk to the bottom)
-  trunk(2, 0.5, 0.0, 0.5, 0.022, 0.55);
-  frondStar(2, 0.5, 0.52, 0.24, 9, 0.35, 2.0 + rng.next());
-  // 3, 4: crown top views
-  disc(3, 0.5, 0.5, 0.4, 5.0 + rng.next());
-  disc(4, 0.5, 0.5, 0.38, 15.0 + rng.next());
-  disc(4, 0.68, 0.6, 0.2, 17.0 + rng.next());
-  // 5: palm top view
-  frondStar(5, 0.5, 0.5, 0.26, 9, 0.0, 6.0 + rng.next());
-  for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) { const i = ((y * w) + 5 * T + x) * 4; if (d[i + 3] === 0 && Math.hypot((x + 0.5) / T - 0.5, (y + 0.5) / T - 0.5) < 0.05) { d[i] = d[i + 1] = d[i + 2] = 140; d[i + 3] = 255; } }
+  for (let cls = 0; cls < 3; cls++) {
+    const cc = CARD_CLASSES[cls];
+    const kx = 1 / cc.w, ky = 1 / cc.h;
+    for (let v = 0; v < VARIANTS; v++) {
+      const seed = 3.0 + cls * 17 + v * 5.3 + rng.next();
+      const puffs = layoutPuffs(cls, v, cc.squash);
+      // side view (row cls): trunk, then puffs back to front
+      trunk(v, cls, 0.5, 0.5 + 0.02 * (v % 3 - 1), 0, cc.vc, (cls === 2 ? 0.05 : cls === 1 ? 0.045 : 0.07) * kx, 0.45);
+      const order = puffs.map((p, i) => ({ p, i })).sort((a, b) => a.p.z - b.p.z);
+      for (const { p, i } of order) {
+        const front = 0.5 + 0.5 * (p.z + 1) / 2;
+        blob(v, cls, 0.5 + p.x * kx, cc.vc + p.y * ky, p.sx * 1.08 * kx, p.sy * 1.08 * ky, 1.02 + 0.12 * front, 0.66 + 0.08 * front, seed + i * 7.1);
+      }
+      // top view (row cls + 4): discs in plan, the same centre so the side/top blend does not shift
+      for (const { p, i } of order) disc(v, cls + 4, 0.5 + p.x * kx, cc.vc + p.z * kx, Math.max(p.sx, p.sz) * 1.05 * kx, 0.88 + 0.16 * (p.y + 0.3), seed + i * 3.7);
+    }
+  }
+  {
+    const cc = CARD_CLASSES[3];
+    const kx = 1 / cc.w, ky = 1 / cc.h;
+    for (let v = 0; v < VARIANTS; v++) {
+      const seed = 60 + v * 4.1 + rng.next();
+      const lean = ((v % 4) - 1.5) * 0.09;
+      trunk(v, 3, 0.5, 0.5 + lean, 0, cc.vc, 0.05 * kx, 0.55);
+      frondStar(v, 3, 0.5 + lean, cc.vc + 0.02, 0.6, 7 + (v % 5), 0.3 + 0.05 * (v % 3), seed, kx, ky);
+      frondStar(v, 7, 0.5 + lean, cc.vc, 0.6, 8 + (v % 4), 0.0, seed + 1, kx, kx);
+      for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+        const i = (((7 * T) + y) * w + v * T + x) * 4;
+        if (d[i + 3] === 0 && Math.hypot((x + 0.5) / T - 0.5 - lean, 1 - (y + 0.5) / T - cc.vc) < 0.05) { d[i] = 140; d[i + 1] = 255; d[i + 2] = 0; d[i + 3] = 255; }
+      }
+    }
+  }
   ctx.putImageData(img, 0, 0);
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.NoColorSpace;
@@ -189,13 +282,13 @@ function puff(seed: number, part: number, detail = 0): { pos: number[]; nrm: num
   return { pos, nrm, part: parts };
 }
 
-/** Unit crown tree: trunk (3-sided prism, part 0) + main puff (part 1) + two side lobes (parts 2, 3),
- *  66 triangles. The shader places and sizes the lobes per instance so no two crowns match. The `hi`
- *  variant used within a couple of hundred metres subdivides the main puff (126 triangles). */
+/** Unit crown tree: trunk (4-sided prism, part 0) + main puff (part 1) + three lobes (parts 2-4),
+ *  88 triangles. The shader places and sizes the lobes per instance from the crown layouts. The `hi`
+ *  variant used within a couple of hundred metres subdivides the main puff (148 triangles). */
 function crownGeometry(hi = false): THREE.BufferGeometry {
   const pos: number[] = [], nrm: number[] = [], part: number[] = [], uv: number[] = [];
-  // trunk: 3 quads (6 tris) from y=0 to y=1, radius 0.045
-  const r = 0.045, sides = 3;
+  // trunk: 4 quads (8 tris) from y=0 to y=1, radius 0.07
+  const r = 0.07, sides = 4;
   for (let j = 0; j < sides; j++) {
     const a0 = (j / sides) * Math.PI * 2, a1 = ((j + 1) / sides) * Math.PI * 2;
     const x0 = Math.cos(a0) * r, z0 = Math.sin(a0) * r, x1 = Math.cos(a1) * r, z1 = Math.sin(a1) * r;
@@ -203,7 +296,7 @@ function crownGeometry(hi = false): THREE.BufferGeometry {
     const quad = [[x0, 0, z0], [x1, 0, z1], [x1, 1, z1], [x0, 0, z0], [x1, 1, z1], [x0, 1, z0]];
     for (const [x, y, z] of quad) { pos.push(x, y, z); nrm.push(nx, 0, nz); part.push(0); uv.push(0, y); }
   }
-  for (const [seed, pid] of [[3.1, 1], [8.7, 2], [14.3, 3]]) {
+  for (const [seed, pid] of [[3.1, 1], [8.7, 2], [14.3, 3], [21.9, 4]]) {
     const pf = puff(seed, pid, hi && pid === 1 ? 1 : 0);
     pos.push(...pf.pos); nrm.push(...pf.nrm); part.push(...pf.part);
     for (let i = 0; i < pf.part.length; i++) uv.push(0, 0);
@@ -213,17 +306,17 @@ function crownGeometry(hi = false): THREE.BufferGeometry {
   g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   g.setAttribute('aPart', new THREE.Float32BufferAttribute(part, 1));
-  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1.2, 0), 2.6);
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 1.4, 0), 3.0);
   return g;
 }
 
-/** Unit palm: curved tapered trunk (part 0, 3 segments x 4 sides) + 7 two-segment frond strips
- *  (parts 1..7) radiating from the top. uv.x selects frond/bark in the atlas, uv.y runs along. */
+/** Unit palm: curved tapered trunk (part 0, 3 segments x 4 sides) + 9 two-segment frond strips
+ *  (parts 1..9) radiating from the top. uv.x selects frond/bark in the atlas, uv.y runs along. */
 function palmGeometry(): THREE.BufferGeometry {
   const pos: number[] = [], nrm: number[] = [], uv: number[] = [], part: number[] = [];
   const segs = 3, sides = 4;
   const ring = (t: number): [number, number, number][] => {
-    const r = 0.045 * (1 - 0.3 * t);
+    const r = 0.05 * (1 - 0.3 * t);
     const out: [number, number, number][] = [];
     for (let j = 0; j <= sides; j++) { const a = (j / sides) * Math.PI * 2 + Math.PI / 4; out.push([Math.cos(a) * r, t, Math.sin(a) * r]); }
     return out;
@@ -238,10 +331,10 @@ function palmGeometry(): THREE.BufferGeometry {
       quad.forEach(([x, y, z], k) => { pos.push(x, y, z); nrm.push(nx, 0, nz); uv.push(us[k], y); part.push(0); });
     }
   }
-  const n = 7;
+  const n = 9;
   for (let k = 0; k < n; k++) {
     const a = (k / n) * Math.PI * 2;
-    const len = 0.56, width = 0.14;
+    const len = 0.56, width = 0.13;
     const pts: [number, number, number][] = [];
     for (let i = 0; i <= 2; i++) {
       const t = i / 2;
@@ -274,7 +367,7 @@ function cardGeometry(): THREE.BufferGeometry {
   g.setAttribute('position', new THREE.Float32BufferAttribute([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], 3));
   g.setAttribute('normal', new THREE.Float32BufferAttribute([0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1], 2));
-  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 2);
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), 2.5);
   return g;
 }
 
@@ -284,12 +377,15 @@ const COMMON_VERT = /* glsl */ `
 uniform float uTime;
 uniform float uWind;
 attribute float aPart;
-attribute vec4 aVar; // archetype, seed, crown squash / frond droop, trunk length
+attribute vec4 aVar; // archetype + layout variant / 16, seed, crown squash / frond droop, trunk length
 varying float vPart;
 varying vec3 vWP;
 varying vec3 vCrownN; // world-space direction from the puff centre (the undisplaced sphere normal)
+varying vec3 vRel; // position relative to the crown centre (unit crown space): continuous across the puffs
 varying float vSeed;
+varying float vArche;
 ${GLSL_NOISE}
+${GLSL_LOBES}
 `;
 
 // crown family: per-instance puff arrangement (positions are puff-local unit spheres)
@@ -299,6 +395,7 @@ vec3 objectNormal = normal;
 if (aPart > 0.5) objectNormal = normalize(mix(normalize(objectNormal * vec3(1.0, 1.0 / max(aVar.z, 0.3), 1.0)), vec3(0.0, 1.0, 0.0), 0.3));
 vCrownN = normalize((modelMatrix * instanceMatrix * vec4(normal, 0.0)).xyz);
 vSeed = aVar.y;
+vArche = floor(aVar.x + 0.001);
 #ifdef USE_TANGENT
 vec3 objectTangent = vec3( tangent.xyz );
 #endif
@@ -313,24 +410,42 @@ const CROWN_VERTEX = /* glsl */ `
 vec3 transformed = position;
 ${VEG_SHADOW_PROBE_VARS}
 {
+  float arche = floor(aVar.x + 0.001);
+  int variant = int(floor(fract(aVar.x) * 16.0 + 0.5));
   float seed = aVar.y;
   float squash = aVar.z;
   float trunkLen = aVar.w;
+  float cls = arche > 6.5 ? 2.0 : arche < 1.5 ? 0.0 : 1.0;
+  // per-plant anisotropy and crown height (the instance matrix yaws the whole plant already)
+  float h1 = hash11(seed * 23.1 + 1.0), h2 = hash11(seed * 47.3 + 2.0);
+  vec2 stretch = vec2(1.0 + 0.24 * (h1 - 0.5), 1.0 - 0.24 * (h1 - 0.5));
+  float centreY = trunkLen + 0.85 * squash + 0.12 * (h2 - 0.5) * squash;
   if (aPart < 0.5) {
-    transformed.y *= trunkLen + 0.25 * squash;
-    transformed.xz *= 0.8 + 0.5 * step(0.5, aVar.x) * step(aVar.x, 1.5);
+    // trunk: thinner on the spreading class and the pines, stouter on emergents; reaches into the main puff
+    float tr = cls > 1.5 ? 0.7 : cls > 0.5 ? 0.6 : arche > 0.5 ? 1.3 : 1.0;
+    transformed.xz *= tr;
+    transformed.y *= centreY - 0.3 * squash;
+    vRel = vec3(0.0, -1.0, 0.0);
   } else {
-    vegShadowC = (modelMatrix * instanceMatrix * vec4(0.0, trunkLen + 0.85 * squash, 0.0, 1.0)).xyz;
+    vegShadowC = (modelMatrix * instanceMatrix * vec4(0.0, centreY, 0.0, 1.0)).xyz;
     vegShadowR = 1.2 * length(instanceMatrix[0].xyz);
-    // main puff on the trunk axis; two lobes on opposite-ish sides at hashed radius, size and height
-    vec2 hs = hash22(vec2(seed * 91.7 + aPart * 3.0, seed * 37.1 - aPart));
-    vec2 hs2 = hash22(vec2(seed * 13.3 - aPart, seed * 71.9 + aPart * 5.0));
-    float main = step(aPart, 1.5);
-    float ang = hash11(seed * 3.7) * 6.2831 + (aPart - 2.0) * (2.2 + 1.3 * hs.x);
-    float rad = mix(0.5 + 0.4 * hs.y, 0.0, main);
-    float ps = mix(0.5 + 0.35 * hs2.x, 1.0, main);
-    vec3 centre = vec3(cos(ang) * rad, trunkLen + 0.85 * squash + mix(-0.2 + 0.5 * hs2.y, 0.0, main) * squash, sin(ang) * rad);
-    transformed = centre + transformed * ps * vec3(1.15, squash, 1.05);
+    vec3 c = vec3(0.0);
+    vec3 ps = vec3(1.15, squash, 1.05);
+    if (aPart > 1.5) {
+      vec4 L = LOBES[variant * 3 + int(aPart + 0.5) - 2];
+      float ca = cos(L.x), sa = sin(L.x);
+      if (cls < 0.5) { c = vec3(ca * L.y * 0.95, L.w * squash, sa * L.y * 0.95); ps *= L.z; }
+      else if (cls < 1.5) { c = vec3(ca * L.y * 1.3, (L.w * 0.35 - 0.05) * squash, sa * L.y * 1.3); ps *= L.z * 1.15; }
+      else { float k = aPart - 2.0; c = vec3(ca * L.y * 0.45, (-0.25 - 0.3 * k) * squash, sa * L.y * 0.45); ps *= L.z * 0.55; ps.y *= 0.7; }
+    } else if (cls > 1.5) {
+      ps.xz *= 0.6;
+    }
+    // per-plant lumpiness: a smooth displacement field over the sphere, so the puff stays watertight
+    float lump = vnoise(vec2(normal.x * 1.7 + normal.y * 0.8, normal.z * 1.7 - normal.y * 0.6) + seed * 31.0 + aPart * 7.0);
+    transformed = c + transformed * ps * (1.0 + 0.3 * (lump - 0.5));
+    transformed.xz *= stretch;
+    vRel = transformed / max(squash, 0.3);
+    transformed.y += centreY;
   }
   // wind: sway grows with height, phase from the instance position so no two plants move together
   vec3 iw = (instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
@@ -347,7 +462,9 @@ const CROWN_FRAG_PARS = /* glsl */ `
 varying float vPart;
 varying vec3 vWP;
 varying vec3 vCrownN;
+varying vec3 vRel;
 varying float vSeed;
+varying float vArche;
 float vegNear; // 1 within ~200 m of the camera, 0 beyond 320 m: gates the close-range leaf detail
 ${GLSL_NOISE}
 `;
@@ -358,7 +475,9 @@ const CROWN_FRAG = /* glsl */ `
   float camDist = length(toCam);
   vegNear = 1.0 - smoothstep(200.0, 320.0, camDist);
   if (vPart < 0.5) {
-    diffuseColor.rgb = vec3(0.30, 0.23, 0.16) * (0.8 + 0.4 * vnoise(vWP.xz * 3.0 + vWP.y * 2.0));
+    // bark: grey-brown, paler on the pines
+    vec3 bark = vArche > 6.5 ? vec3(0.36, 0.3, 0.24) : vec3(0.3, 0.24, 0.18);
+    diffuseColor.rgb = bark * (0.8 + 0.4 * vnoise(vWP.xz * 3.0 + vWP.y * 2.0));
   } else {
     vec3 cn = normalize(vCrownN);
     // close range: dissolve the outer band of each puff with leaf-cluster noise so the silhouette reads
@@ -368,22 +487,27 @@ const CROWN_FRAG = /* glsl */ `
       float clusters = vnoise(vWP.xz * 1.1 + vWP.y * 0.9) * 0.65 + 0.35 * vnoise(vWP.xz * 3.3 - vWP.y * 2.6);
       if (facing < 0.6 * clusters * vegNear) discard;
     }
-    // crown-space wrap lighting: a sunlit yellow-green cap, cooler and darker undersides, and a per-crown
-    // yellowness so neighbouring trees differ in more than their base tint
+    // per-plant hue and value jitter on top of the palette tint: neighbours differ in warmth and depth
     float yellow = hash11(vSeed * 41.7 + 3.0);
-    float cap = smoothstep(-0.55, 0.85, cn.y);
-    vec3 sunlit = diffuseColor.rgb * mix(vec3(1.08, 1.06, 0.94), vec3(1.2, 1.12, 0.78), yellow);
-    vec3 shade = diffuseColor.rgb * vec3(0.55, 0.6, 0.64);
+    float value = 0.86 + 0.28 * hash11(vSeed * 19.3 + 5.0);
+    diffuseColor.rgb *= value * mix(vec3(0.95, 1.0, 1.05), vec3(1.07, 1.02, 0.9), yellow);
+    // crown-space wrap: a sunlit cap and a cooler, only moderately darker underside (the direct light
+    // model adds its own wrap and translucency; the underside is lit by ground bounce, not black)
+    // the cap follows the whole crown (position relative to its centre) as much as the individual puff,
+    // so the seams where puffs intersect do not read as hard facets
+    float cap = smoothstep(-0.5, 0.85, 0.5 * cn.y + 0.5 * normalize(vRel).y);
+    vec3 sunlit = diffuseColor.rgb * vec3(1.04, 1.04, 0.97);
+    vec3 shade = diffuseColor.rgb * vec3(0.55, 0.62, 0.74);
     diffuseColor.rgb = mix(shade, sunlit, cap);
     // leaf clusters: fine value noise breaks the smooth shading of the puffs; gaps between clusters darken
     float leaf = vnoise(vWP.xz * 1.7 + vWP.y * 1.3);
-    diffuseColor.rgb *= 0.74 + 0.5 * leaf;
-    diffuseColor.rgb *= 1.0 - 0.35 * smoothstep(0.62, 0.9, vnoise(vWP.xz * 0.55 + vWP.y * 0.4 + 17.0));
+    diffuseColor.rgb *= 0.8 + 0.4 * leaf;
+    diffuseColor.rgb *= 1.0 - 0.3 * smoothstep(0.62, 0.9, vnoise(vWP.xz * 0.55 + vWP.y * 0.4 + 17.0));
   }
 }
 `;
 /** After the normal is known: leaf-cluster normal perturbation up close (sparkly, uneven lit clusters
- *  rather than smooth facets) and a thin back-lit translucency rim in the crown's own colour. */
+ *  rather than smooth facets). */
 const CROWN_NORMAL_FRAG = /* glsl */ `
 #include <normal_fragment_begin>
 if (vPart > 0.5 && vegNear > 0.0) {
@@ -399,22 +523,34 @@ if (vPart > 0.5 && vegNear > 0.0) {
   normal = normalize(normal + 0.4 * vegNear * g);
 }
 `;
-const CROWN_EMISSIVE_FRAG = /* glsl */ `
-#include <emissivemap_fragment>
-#if NUM_DIR_LIGHTS > 0
-if (vPart > 0.5) {
-  vec3 V = normalize(vViewPosition);
-  vec3 L = directionalLights[0].direction;
-  float rim = pow(1.0 - clamp(dot(normal, V), 0.0, 1.0), 3.0);
-  float backlit = clamp(dot(-V, L), 0.0, 1.0);
-  totalEmissiveRadiance += diffuseColor.rgb * vec3(1.05, 1.1, 0.7) * directionalLights[0].color * (0.07 * rim * backlit);
+
+/** Direct light on foliage, replacing RE_Direct_Physical: wrapped diffuse (a leaf mass is lit well past
+ *  the terminator), a translucency term (sun through the leaves toward a viewer on the far side, in the
+ *  crown's own yellow-shifted colour) and a damped specular. The CSM chunk hands over `directLight`
+ *  with the shadow term already applied, so shadows and cascade blending still work. */
+const foliageLighting = (isFoliage: string) => /* glsl */ `
+#include <lights_physical_pars_fragment>
+void RE_Direct_Foliage( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
+  float foliage = ${isFoliage};
+  float ndl = dot( geometryNormal, directLight.direction );
+  float wrap = 0.5 * foliage;
+  float dotNL = saturate( ( ndl + wrap ) / ( 1.0 + wrap ) );
+  float back = saturate( dot( -directLight.direction, geometryViewDir ) );
+  float trans = 0.4 * foliage * back * back * saturate( 0.7 - 0.7 * ndl );
+  vec3 irradiance = dotNL * directLight.color;
+  reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );
+  reflectedLight.directDiffuse += ( trans * directLight.color ) * BRDF_Lambert( material.diffuseColor * vec3( 1.05, 1.1, 0.8 ) );
+  // specular only where the surface really faces the light (the wrapped term would blow the GGX up at grazing angles)
+  reflectedLight.directSpecular += ( saturate( ndl ) * directLight.color ) * BRDF_GGX( directLight.direction, geometryViewDir, geometryNormal, material ) * mix( 1.0, 0.35, foliage );
 }
-#endif
+#undef RE_Direct
+#define RE_Direct RE_Direct_Foliage
 `;
 
 // palm family: per-instance frond rotation and droop about the trunk top, trunk lean
 const PALM_NORMAL = /* glsl */ `
 vec3 objectNormal = normal;
+vSeed = aVar.y;
 if (aPart > 0.5) {
   float seed = aVar.y;
   float rot = hash11(seed * 7.7 + aPart) * 0.9 - 0.45 + hash11(seed * 3.3) * 6.2831;
@@ -439,9 +575,11 @@ ${VEG_SHADOW_PROBE_VARS}
     float c = cos(rot), s = sin(rot);
     vec3 rel = transformed - vec3(0.0, 1.0, 0.0);
     rel.xz = mat2(c, -s, s, c) * rel.xz;
-    // extra droop toward the frond tip (uv.y = 1 at the base, 0 at the tip)
+    // extra droop toward the frond tip (uv.y = 1 at the base, 0 at the tip); some fronds hang dead
     float t = 1.0 - uv.y;
-    rel.y -= aVar.z * t * t * (0.6 + 0.8 * hash11(seed * 2.9 + aPart));
+    float dead = step(0.86, hash11(seed * 2.9 + aPart * 1.3));
+    rel.y -= aVar.z * t * t * (0.6 + 0.8 * hash11(seed * 2.9 + aPart)) + dead * t * 0.7;
+    rel.xz *= 1.0 - dead * 0.35 * t;
     transformed = vec3(0.0, 1.0, 0.0) + rel;
   }
   float bend = lean * transformed.y * transformed.y;
@@ -455,6 +593,14 @@ ${VEG_SHADOW_PROBE_VARS}
   transformed.z += cos(uTime * 1.1 + phase) * k * 0.6;
   vPart = aPart;
   vWP = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+}
+`;
+const PALM_FRAG = /* glsl */ `
+#include <color_fragment>
+if (vPart > 0.5) {
+  // per-plant frond warmth and value, like the crowns
+  float yellow = hash11(aVarSeed * 41.7 + 3.0);
+  diffuseColor.rgb *= (0.84 + 0.32 * hash11(aVarSeed * 19.3 + 5.0)) * mix(vec3(0.94, 1.0, 1.05), vec3(1.08, 1.03, 0.88), yellow);
 }
 `;
 
@@ -475,13 +621,13 @@ vec4 vegShadowPos = vegShadowR > 0.0 ? vec4(vegShadowC - vegL * vegShadowR, 1.0)
 ${THREE.ShaderChunk.shadowmap_vertex.replace(/worldPosition/g, 'vegShadowPos')}
 `;
 /** Foliage is never fully shadowed: leaves scatter and pass light, so a crown under a taller neighbour
- *  or a building keeps a third of the direct sun instead of going black. Wraps three's getShadow
+ *  or a building keeps half of the direct sun instead of going black. Wraps three's getShadow
  *  (already inlined by the CSM hook by the time the material's own hook runs). */
 const VEG_SHADOW_PARS_FRAG = /* glsl */ `
 #include <shadowmap_pars_fragment>
 #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
 float vegShadow( sampler2D shadowMap, vec2 shadowMapSize, float shadowIntensity, float shadowBias, float shadowRadius, vec4 shadowCoord ) {
-  return mix( 0.34, 1.0, getShadow( shadowMap, shadowMapSize, shadowIntensity, shadowBias, shadowRadius, shadowCoord ) );
+  return mix( 0.45, 1.0, getShadow( shadowMap, shadowMapSize, shadowIntensity, shadowBias, shadowRadius, shadowCoord ) );
 }
 #endif
 `;
@@ -490,22 +636,24 @@ function softenFoliageShadow(fragmentShader: string): string {
   return fragmentShader.replace(/\bgetShadow\(/g, 'vegShadow(').replace('#include <shadowmap_pars_fragment>', VEG_SHADOW_PARS_FRAG);
 }
 
-// cards: screen-aligned quads centred on the crown; texture blends side/top views with elevation
+// cards: screen-aligned quads over the plant; texture blends side/top views with elevation
 const CARD_VERT_PARS = /* glsl */ `
-attribute vec4 aVar; // archetype (0 crown, 1 palm), seed, card size (unit), crown centre height (unit)
+attribute vec4 aVar; // archetype + layout variant / 16, seed, card width (unit), card half height (unit) = crown centre height
 varying vec2 vCardUv;
 varying float vElev;
-varying float vCol; // atlas column of the side view (top view is 3 columns further)
+varying vec2 vTile; // atlas column (variant) and row (shape class) of the side view; the top view is 4 rows further
 `;
 const CARD_PROJECT = /* glsl */ `
 vec4 mvPosition;
 ${VEG_SHADOW_PROBE_VARS}
 {
+  float arche = floor(aVar.x + 0.001);
+  float variant = floor(fract(aVar.x) * 16.0 + 0.5);
   vec4 centre = instanceMatrix * vec4(0.0, aVar.w, 0.0, 1.0);
   vec3 wc = (modelMatrix * centre).xyz;
   float s = length(instanceMatrix[0].xyz);
   vegShadowC = wc;
-  vegShadowR = (aVar.x > 0.5 ? 0.6 : 1.2) * s;
+  vegShadowR = (arche > 3.5 && arche < 4.5 ? 0.6 : 1.2) * s;
   vec3 toCam = cameraPosition - wc;
   // the top view starts blending in from ~8 deg of elevation: a canopy seen from a shallow aerial angle
   // shows mostly lit tops, not the shaded flanks of the side view
@@ -513,34 +661,42 @@ ${VEG_SHADOW_PROBE_VARS}
   vec4 mvCentre = modelViewMatrix * centre;
   // mirror every other card so the same atlas tile reads as two silhouettes
   float flip = step(0.5, fract(aVar.y * 37.0)) * 2.0 - 1.0;
-  mvPosition = mvCentre + vec4(position.xy * aVar.z * s, 0.0, 0.0);
+  mvPosition = mvCentre + vec4(position.xy * vec2(aVar.z, 2.0 * aVar.w) * s, 0.0, 0.0);
   gl_Position = projectionMatrix * mvPosition;
   vCardUv = vec2(flip > 0.0 ? uv.x : 1.0 - uv.x, uv.y);
-  vCol = aVar.x > 0.5 ? 2.0 : step(0.5, fract(aVar.y * 11.0));
+  float cls = arche > 3.5 && arche < 4.5 ? 3.0 : arche > 6.5 ? 2.0 : arche < 1.5 ? 0.0 : 1.0;
+  vTile = vec2(variant, cls);
 }
 `;
 const CARD_FRAG_PARS = /* glsl */ `
 uniform sampler2D uAtlas;
 varying vec2 vCardUv;
 varying float vElev;
-varying float vCol;
+varying vec2 vTile;
+float vTrunk = 0.0; // trunk mask of the sampled texel (bark is lit as a plain surface, not as foliage)
+vec4 cardSample() {
+  // canvas row r (top down) is texture v in [1 - (r + 1) / 8, 1 - r / 8]; the top view sits 4 rows lower
+  vec2 side = vec2(vCardUv.x + vTile.x, 7.0 - vTile.y + vCardUv.y) / ${ATLAS_N}.0;
+  vec2 top = vec2(vCardUv.x + vTile.x, 3.0 - vTile.y + vCardUv.y) / ${ATLAS_N}.0;
+  return mix(texture2D(uAtlas, side), texture2D(uAtlas, top), vElev);
+}
 `;
 const CARD_DEPTH_FRAG = /* glsl */ `
 {
-  vec4 side = texture2D(uAtlas, vec2((vCardUv.x + vCol) / ${ATLAS_TILES}.0, vCardUv.y));
-  vec4 top = texture2D(uAtlas, vec2((vCardUv.x + vCol + 3.0) / ${ATLAS_TILES}.0, vCardUv.y));
-  diffuseColor.a = mix(side, top, vElev).a;
+  diffuseColor.a = cardSample().a;
 }
 `;
 const CARD_FRAG = /* glsl */ `
 #include <color_fragment>
 {
-  vec4 side = texture2D(uAtlas, vec2((vCardUv.x + vCol) / ${ATLAS_TILES}.0, vCardUv.y));
-  vec4 top = texture2D(uAtlas, vec2((vCardUv.x + vCol + 3.0) / ${ATLAS_TILES}.0, vCardUv.y));
-  vec4 t = mix(side, top, vElev);
+  vec4 t = cardSample();
   if (t.a < 0.5) discard;
-  // lit leaf mass yellows, shaded parts cool off: matches the 3D crowns' wrap lighting
-  diffuseColor.rgb *= t.r * 1.02 * mix(vec3(0.72, 0.82, 0.9), vec3(1.12, 1.04, 0.82), smoothstep(0.35, 1.05, t.r));
+  // lit leaf mass yellows, shaded parts cool off: matches the 3D crowns' wrap lighting; the trunk mask
+  // paints bark instead of tinted foliage
+  vec3 foliage = diffuseColor.rgb * t.r * mix(vec3(0.82, 0.86, 0.92), vec3(1.05, 1.03, 0.94), smoothstep(0.4, 1.05, t.r));
+  vec3 bark = vec3(0.3, 0.24, 0.18) * t.r * 1.6;
+  diffuseColor.rgb = mix(foliage, bark, t.g);
+  vTrunk = t.g;
 }
 `;
 
@@ -556,12 +712,12 @@ function crownMaterial(time: THREE.IUniform<number>, wind: THREE.IUniform<number
       .replace('#include <shadowmap_vertex>', VEG_SHADOWMAP_VERTEX);
     shader.fragmentShader = softenFoliageShadow(shader.fragmentShader)
       .replace('#include <common>', `#include <common>\n${CROWN_FRAG_PARS}`)
+      .replace('#include <lights_physical_pars_fragment>', foliageLighting('step(0.5, vPart)'))
       .replace('#include <color_fragment>', CROWN_FRAG)
-      .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG)
-      .replace('#include <emissivemap_fragment>', CROWN_EMISSIVE_FRAG);
+      .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-crown-v7';
+  mat.customProgramCacheKey = () => 'veg-crown-v8';
   return mat;
 }
 
@@ -575,10 +731,13 @@ function palmMaterial(tex: THREE.Texture, time: THREE.IUniform<number>, wind: TH
       .replace('#include <beginnormal_vertex>', PALM_NORMAL)
       .replace('#include <begin_vertex>', PALM_VERTEX)
       .replace('#include <shadowmap_vertex>', VEG_SHADOWMAP_VERTEX);
-    shader.fragmentShader = softenFoliageShadow(shader.fragmentShader).replace('#include <common>', `#include <common>\nvarying float vPart; varying vec3 vWP;`);
+    shader.fragmentShader = softenFoliageShadow(shader.fragmentShader)
+      .replace('#include <common>', `#include <common>\nvarying float vPart; varying vec3 vWP; varying float vSeed;\n#define aVarSeed vSeed\n${GLSL_NOISE}`)
+      .replace('#include <lights_physical_pars_fragment>', foliageLighting('step(0.5, vPart)'))
+      .replace('#include <color_fragment>', PALM_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-palm-v6';
+  mat.customProgramCacheKey = () => 'veg-palm-v7';
   return mat;
 }
 
@@ -594,7 +753,7 @@ function cardDepthMaterial(atlas: THREE.Texture): THREE.MeshDepthMaterial {
       .replace('#include <common>', `#include <common>\n${CARD_FRAG_PARS}`)
       .replace('#include <map_fragment>', CARD_DEPTH_FRAG);
   };
-  mat.customProgramCacheKey = () => 'veg-card-depth-v3';
+  mat.customProgramCacheKey = () => 'veg-card-depth-v4';
   return mat;
 }
 
@@ -608,10 +767,11 @@ function cardMaterial(atlas: THREE.Texture): THREE.MeshStandardMaterial {
       .replace('#include <shadowmap_vertex>', VEG_SHADOWMAP_VERTEX);
     shader.fragmentShader = softenFoliageShadow(shader.fragmentShader)
       .replace('#include <common>', `#include <common>\n${CARD_FRAG_PARS}`)
+      .replace('#include <lights_physical_pars_fragment>', foliageLighting('1.0 - vTrunk'))
       .replace('#include <color_fragment>', CARD_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-card-v7';
+  mat.customProgramCacheKey = () => 'veg-card-v8';
   return mat;
 }
 
@@ -624,10 +784,7 @@ const CARD_EXTRAS = [{ name: 'aVar', itemSize: 4 }];
 
 // ---------------------------------------------------------------- planting
 
-/** 0 broadleaf, 1 emergent, 2 mangrove, 3 shrub, 4 palm, 5 dune grass tussock */
-type Archetype = 0 | 1 | 2 | 3 | 4 | 5;
-
-interface Plant { x: number; y: number; z: number; s: number; rot: number; lean: number; tint: THREE.Color; arche: Archetype; seed: number; squash: number; trunk: number; }
+interface Plant { x: number; y: number; z: number; s: number; rot: number; lean: number; tint: THREE.Color; arche: Archetype; variant: number; seed: number; squash: number; trunk: number; }
 
 /** `lodCenter` / `lodR` describe the planted footprint (the LOD distance metric); `box`, `center`, `r`
  *  and `height` bound the drawn plants and cards and are only used for culling. */
@@ -655,6 +812,9 @@ const HI_DISTANCE = 200;
 const NEAR_BUDGET = 60000;
 /** card tiles closer than this (to their bounding sphere) are drawn into the water's mirror image */
 export const MIRROR_DISTANCE = 1500;
+/** culling growth per unit of scale: the widest crown sideways, the tallest card (pine) up */
+const GROW_SIDE = 2.6;
+const GROW_UP = 5.4;
 
 const _n23 = new THREE.Vector3(), _n31 = new THREE.Vector3(), _n12 = new THREE.Vector3(), _apex = new THREE.Vector3(), _p = new THREE.Vector3();
 /** Apex of a perspective frustum (the camera position): the common point of the right, bottom and top
@@ -669,23 +829,31 @@ function frustumApex(f: THREE.Frustum, out: THREE.Vector3, fallbackX: number, fa
   return out.set(0, 0, 0).addScaledVector(_n23, -p1.constant).addScaledVector(_n31, -p2.constant).addScaledVector(_n12, -p3.constant).divideScalar(det);
 }
 
-/** Base tints (sRGB), darkened/desaturated toward olive for the physical sun (the reference canopy averages
- *  ~(81,85,74) sRGB with sunlit yellow-green caps). About a third of the broadleaf crowns are bright, a
- *  third mid, a third dark. */
+/** Base tints (sRGB) per archetype: one unimodal olive band around the reference canopy (which averages
+ *  ~(81,85,74) sRGB for sunlit mixed canopy) with the hue spread carried by the species — grey-green
+ *  pines, yellow-green sea grape and shrubs, deeper emergents — and per-plant jitter on top. No entry is
+ *  near black: the darks of a canopy come from shading and shadow, not from the palette. */
 const PALETTE: Record<Archetype, string[]> = {
-  0: ['#6d7639', '#70763e', '#627137', '#777941', '#6e7239', '#4a6832', '#536a3a', '#3d5c2e', '#586e37', '#4f602d', '#344c29', '#35502a', '#304426', '#3d562f', '#364f39'],
-  1: ['#335528', '#3c5c2d', '#436832', '#2e4c25', '#4f6c37', '#254021'],
-  2: ['#365126', '#415a2b', '#2f4821', '#4a6134', '#3a522a', '#273c1f'],
-  3: ['#61753e', '#6e7c44', '#536835', '#79793f', '#817b42', '#6c7534'],
-  4: ['#5d7534', '#526c2d', '#697e3a', '#486228', '#73823f', '#5e7435'],
+  0: ['#4f6236', '#556538', '#485c33', '#5a683c', '#43572f', '#4d6238', '#5c663d', '#415434', '#51603a', '#4a5c36', '#586741', '#465833'],
+  1: ['#3f5533', '#445a34', '#3a5031', '#485e3a', '#405537', '#43583b'],
+  2: ['#435531', '#4a5b35', '#3f5030', '#4e5e39', '#475a2f'],
+  3: ['#5f6b3c', '#67703f', '#5b6839', '#6e7443', '#647045'],
+  4: ['#5a6c38', '#546535', '#61713d', '#4f6130', '#667542', '#586a37'],
   5: ['#8f7d4b', '#9a7f52', '#877b4b', '#7d7541', '#9e8359'],
+  6: ['#5f6d3a', '#6a7040', '#5b6836', '#727747', '#6b6a3a', '#626d3c'],
+  7: ['#465340', '#4b5740', '#414f3f', '#505b44', '#485542'],
 };
+/** linear-space gain on every tint: the wrap/translucency light model and the sun's warmth push the
+ *  rendered canopy toward yellow-green, so the base is pulled back toward the reference's grey olive */
+const CANOPY_GAIN = new THREE.Color(0.9, 0.82, 1.0);
 
 export class Vegetation {
   readonly group = new THREE.Group();
   readonly materials: THREE.MeshStandardMaterial[] = [];
   readonly uTime = { value: 0 };
   readonly uWind = { value: 0.5 };
+  /** the impostor atlas (exposed for inspection: `game.vegetation.atlas.image` is the canvas) */
+  readonly atlas: THREE.CanvasTexture;
   counts = { palms: 0, trees: 0, mangroves: 0, shrubs: 0 };
   private readonly tiles: Tile[] = [];
   shadowDistance = 1800;
@@ -696,7 +864,7 @@ export class Vegetation {
   readonly mirrorCards: THREE.InstancedMesh;
   private readonly cameraBatch: InstanceBatch;
   private readonly mirrorBatch: InstanceBatch;
-  /** the crowns of the near tiles' cells in view, one draw for the 66-triangle mesh and one for the subdivided one */
+  /** the crowns of the near tiles' cells in view, one draw for the 88-triangle mesh and one for the subdivided one */
   private readonly nearBatch: InstanceBatch<CellSource>;
   private readonly hiBatch: InstanceBatch<CellSource>;
 
@@ -704,6 +872,7 @@ export class Vegetation {
     const rng = new Rng('vegetation');
     const frondTex = frondTexture(rng.fork('fronds'));
     const atlas = cardAtlas(rng.fork('atlas'));
+    this.atlas = atlas;
     const crownMat = crownMaterial(this.uTime, this.uWind);
     const palmMat = palmMaterial(frondTex, this.uTime, this.uWind);
     const cardMat = cardMaterial(atlas);
@@ -729,26 +898,26 @@ export class Vegetation {
     this.group.add(this.nearBatch.mesh, this.hiBatch.mesh);
 
     const plants: Plant[] = [];
-    const tints: Record<Archetype, THREE.Color[]> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [] };
-    for (const k of [0, 1, 2, 3, 4, 5] as Archetype[]) tints[k] = PALETTE[k].map((c) => new THREE.Color(c));
+    const tints = {} as Record<Archetype, THREE.Color[]>;
+    for (const k of [0, 1, 2, 3, 4, 5, 6, 7] as Archetype[]) tints[k] = PALETTE[k].map((c) => new THREE.Color(c));
     /** `lean` is the trunk tilt in radians (palms only; the shader adds its own curvature on top). */
     const add = (arche: Archetype, x: number, z: number, y: number, s: number, prng: Rng, lean = 0) => {
       const tint = prng.pick(tints[arche]).clone();
-      tint.offsetHSL(prng.range(-0.035, 0.035), prng.range(-0.1, 0.08), prng.range(-0.09, 0.08));
-      // the palette was tuned while a shadow-bias bug kept two thirds of the canopy dark; with correct
-      // shadowing the sunlit crowns came out lime (aerial-a canopy mean 82,120,61 vs reference 81,85,74),
-      // so pull every tint toward its luminance and a touch darker
-      const luma = 0.30 * tint.r + 0.59 * tint.g + 0.11 * tint.b;
-      tint.lerp(new THREE.Color(luma, luma, luma), 0.42).multiplyScalar(0.9);
-      const squash = arche === 2 ? prng.range(0.5, 0.7) : arche === 3 ? prng.range(0.6, 0.85) : arche === 5 ? prng.range(0.32, 0.45) : arche === 1 ? prng.range(0.95, 1.25) : prng.range(0.7, 1.0);
-      const trunk = arche === 2 ? prng.range(0.15, 0.3) : arche === 3 || arche === 5 ? 0.02 : arche === 1 ? prng.range(0.6, 0.95) : prng.range(0.3, 0.55);
+      tint.offsetHSL(prng.range(-0.04, 0.04), prng.range(-0.1, 0.08), prng.range(-0.06, 0.06)).multiply(CANOPY_GAIN);
+      const squash = arche === 2 ? prng.range(0.5, 0.7) : arche === 3 ? prng.range(0.55, 0.8) : arche === 5 ? prng.range(0.32, 0.45) : arche === 6 ? prng.range(0.5, 0.72) : arche === 1 ? prng.range(0.95, 1.25) : arche === 7 ? prng.range(1.3, 1.7) : prng.range(0.72, 1.0);
+      const trunk = arche === 2 ? prng.range(0.15, 0.3) : arche === 3 || arche === 5 ? 0.02 : arche === 6 ? prng.range(0.08, 0.2) : arche === 1 ? prng.range(0.7, 1.05) : arche === 7 ? prng.range(0.6, 1.0) : prng.range(0.45, 0.75);
       const seed = prng.next();
-      plants.push({ x, y, z, s, rot: prng.range(0, Math.PI * 2), lean: arche === 4 ? (seed - 0.5) * 0.16 + lean : 0, tint, arche, seed, squash, trunk });
+      const variant = prng.int(0, VARIANTS - 1);
+      plants.push({ x, y, z, s, rot: prng.range(0, Math.PI * 2), lean: arche === 4 ? (seed - 0.5) * 0.16 + lean : 0, tint, arche, variant, seed, squash, trunk });
     };
     /** Coconut palm with a leaning, height-varied trunk (beaches, roadsides, marinas). */
-    const palm = (x: number, z: number, y: number, prng: Rng, sMin = 5.5, sMax = 11) => add(4, x, z, y - 0.15, prng.range(sMin, sMax), prng, prng.range(-0.14, 0.14));
+    const palm = (x: number, z: number, y: number, prng: Rng, sMin = 5.5, sMax = 11) => add(4, x, z, y - 0.15, sMin + (sMax - sMin) * Math.pow(prng.next(), 1.3), prng, prng.range(-0.14, 0.14));
+    /** young-to-old size draw: most trees are mid-sized, a few are large */
+    const size = (prng: Rng, min: number, max: number) => min + (max - min) * Math.pow(prng.next(), 1.5);
 
-    // cell walk over the map: candidates jittered inside each land cell, density from the veg channel
+    // cell walk over the map: candidates jittered inside each land cell, density from the veg channel and
+    // two clump fields (a 150 m grove field and a 32 m clearing field), so the canopy has dense knots,
+    // thin patches and gaps instead of an even sprinkle
     const n = map.n;
     const zone = map.zone, veg = map.veg, height = map.height;
     for (let j = 0; j < n; j++) {
@@ -761,6 +930,7 @@ export class Vegetation {
         const cx = -HALF + (i + 0.5) * CELL, cz = -HALF + (j + 0.5) * CELL;
         const clump = perlin2(cx / 150, cz / 150);
         const grove = perlin2(cx / 420 + 9.0, cz / 420 - 3.0);
+        const clearing = 0.5 + 0.5 * perlin2(cx / 32 + 4.4, cz / 32 - 7.7);
         let p = 0;
         let candidates = 1;
         switch (zn) {
@@ -777,21 +947,27 @@ export class Vegetation {
           default: p = 0;
         }
         if (p <= 0) continue;
+        // clearings: the densest zones lose ~40 % of their candidates where the clearing field is low
+        if (zn === Zone.PARK || zn === Zone.RES_LOW || zn === Zone.WETLAND_FLAT) p *= 0.6 + 0.4 * smoothstep(0.25, 0.6, clearing);
         for (let c = 0; c < candidates; c++) {
           const h = hash2(i, j, 7 + c * 3);
           if (h >= p) continue;
-          const jx = cx + (hash2(i, j, 8 + c * 3) - 0.5) * CELL * 1.1;
-          const jz = cz + (hash2(i, j, 9 + c * 3) - 0.5) * CELL * 1.1;
+          // jitter past the cell so the planting lattice never shows as rows
+          const jx = cx + (hash2(i, j, 8 + c * 3) - 0.5) * CELL * 1.7;
+          const jz = cz + (hash2(i, j, 9 + c * 3) - 0.5) * CELL * 1.7;
           const y = map.heightAt(jx, jz);
           if (y < 0.12) continue;
           const prng = new Rng(idx * 4 + c);
           const roll = prng.next();
           const coast = map.coastAt(jx, jz);
           const nearShore = coast > -110;
-          // crown radius is ~1.15 x scale, so a scale of 5 is a 12 m crown
+          // crown radius is ~1.3 x scale, so a scale of 5 is a 13 m crown
           if (zn === Zone.MANGROVE) {
             if (occupied(jx, jz)) continue;
-            add(2, jx, jz, y - 0.2, prng.range(2.4, 4.4), prng);
+            // mangrove belt with the odd sea grape and palm on its landward, higher side
+            if (y > 0.9 && roll < 0.08) add(6, jx, jz, y - 0.15, size(prng, 2.5, 4.2), prng);
+            else if (y > 1.0 && roll < 0.12) palm(jx, jz, y, prng, 5, 9);
+            else add(2, jx, jz, y - 0.2, size(prng, 2.2, 4.6), prng);
           } else if (zn === Zone.BEACH) {
             if (occupied(jx, jz)) continue;
             // the dry upper beach carries coconut palms in groves that come and go along the shore; sea
@@ -802,36 +978,48 @@ export class Vegetation {
             const clumpN = 0.5 + 0.5 * perlin2(jx / 28 + 8.8, jz / 28 + 1.2);
             const palmP = upper * (0.1 + 0.6 * smoothstep(0.35, 0.75, groveN));
             if (roll < palmP) palm(jx, jz, y, prng);
-            else if (y > 0.6 && clumpN > 0.6 && prng.chance(0.75)) add(3, jx, jz, y - 0.15, prng.range(1.2, 2.8), prng);
+            else if (y > 0.6 && clumpN > 0.6 && prng.chance(0.75)) add(prng.chance(0.6) ? 6 : 3, jx, jz, y - 0.15, size(prng, 1.4, 3.2), prng);
             else if (y > 0.45 && y < 1.35 && map.exposureAt(jx, jz) > 0.45 && prng.chance(0.22 * smoothstep(0.42, 0.6, 0.5 + 0.5 * perlin2(jx / 40 - 2.2, jz / 40 + 9.4)))) add(5, jx, jz, y - 0.1, prng.range(1.6, 3.0), prng);
           } else if (zn === Zone.WETLAND_FLAT) {
             if (y < 0.25 || occupied(jx, jz)) continue;
-            add(roll < 0.35 ? 1 : 0, jx, jz, y - 0.3, roll < 0.35 ? prng.range(7, 10) : prng.range(4, 6.5), prng);
+            // pine flatwoods with hardwood heads where the grove field is high
+            const pineShare = 0.55 - 0.3 * smoothstep(0.1, 0.5, grove);
+            if (roll < pineShare) add(7, jx, jz, y - 0.3, size(prng, 3.5, 6), prng);
+            else if (roll < pineShare + 0.2) add(1, jx, jz, y - 0.3, size(prng, 7, 10), prng);
+            else add(0, jx, jz, y - 0.3, size(prng, 3.6, 6.5), prng);
           } else {
             if (occupied(jx, jz)) continue;
             const dense = v > 0.7;
             if (zn === Zone.PARK || zn === Zone.RES_LOW || zn === Zone.GOLF) {
-              // coconut palms take over the canopy edge along the shore (first 45 m), then thin out inland
-              const shoreFringe = coast > -45 ? 0.55 : nearShore ? 0.3 : 0;
-              const palmShare = zn === Zone.GOLF ? 0.4 : zn === Zone.RES_LOW ? Math.max(dense ? 0.14 : 0.35, shoreFringe) : Math.max(shoreFringe, 0.08);
-              const emergentShare = dense ? 0.1 + 0.16 * smoothstep(0.1, 0.5, grove) : 0.05;
-              const shrubShare = dense ? 0.08 : 0.06;
-              if (roll < palmShare) palm(jx, jz, y, prng, 6, 11);
-              else if (roll < palmShare + emergentShare) add(1, jx, jz, y - 0.3, prng.range(7.5, 11), prng);
-              else if (roll < palmShare + emergentShare + shrubShare) add(3, jx, jz, y - 0.1, prng.range(1.3, 2.8), prng);
-              else add(0, jx, jz, y - 0.3, dense ? prng.range(4.2, 7.5) : prng.range(3.8, 6.5), prng);
+              // coconut palms take over the canopy edge along the shore (first 45 m), then thin out inland;
+              // sea grape fills the shore fringe under them; pines gather in groves inland
+              const shoreFringe = coast > -45 ? 0.5 : nearShore ? 0.28 : 0;
+              const palmShare = zn === Zone.GOLF ? 0.35 : zn === Zone.RES_LOW ? Math.max(dense ? 0.12 : 0.3, shoreFringe) : Math.max(shoreFringe, 0.08);
+              const seaGrapeShare = coast > -60 ? 0.25 : nearShore ? 0.12 : 0.05;
+              const pineShare = nearShore ? 0.02 : (zn === Zone.GOLF ? 0.2 : 0.06) + 0.16 * smoothstep(0.15, 0.55, -grove);
+              const emergentShare = dense ? 0.1 + 0.14 * smoothstep(0.1, 0.5, grove) : 0.05;
+              const shrubShare = dense ? 0.13 : 0.06;
+              let t = roll;
+              if ((t -= palmShare) < 0) palm(jx, jz, y, prng, 6, 11);
+              else if ((t -= seaGrapeShare) < 0) add(6, jx, jz, y - 0.15, size(prng, 2.4, 4.8), prng);
+              else if ((t -= pineShare) < 0) add(7, jx, jz, y - 0.3, size(prng, 3.4, 6), prng);
+              else if ((t -= emergentShare) < 0) add(1, jx, jz, y - 0.3, size(prng, 7, 11), prng);
+              else if ((t -= shrubShare) < 0) add(3, jx, jz, y - 0.1, size(prng, 1.3, 2.8), prng);
+              else add(0, jx, jz, y - 0.3, dense ? size(prng, 3.4, 8) : size(prng, 3.0, 6.8), prng);
             } else if (zn === Zone.INDUSTRIAL) {
-              add(roll < 0.5 ? 3 : 0, jx, jz, y - 0.2, roll < 0.5 ? prng.range(1.3, 2.4) : prng.range(3.5, 5.5), prng);
+              add(roll < 0.5 ? 3 : 0, jx, jz, y - 0.2, roll < 0.5 ? size(prng, 1.3, 2.4) : size(prng, 3.5, 5.5), prng);
             } else if (zn === Zone.AIRPORT) {
-              add(0, jx, jz, y - 0.3, prng.range(3.2, 5), prng);
+              add(roll < 0.3 ? 7 : 0, jx, jz, y - 0.3, roll < 0.3 ? size(prng, 3.5, 5.5) : size(prng, 3.2, 5), prng);
             } else {
-              add(4, jx, jz, y - 0.15, prng.range(6, 10), prng);
+              if (roll < 0.75) add(4, jx, jz, y - 0.15, size(prng, 6, 10), prng);
+              else add(roll < 0.9 ? 6 : 0, jx, jz, y - 0.2, size(prng, 2.5, 4.5), prng);
             }
           }
         }
       }
     }
-    // avenue palms along the authored roads and the island lanes
+    // avenue planting along the authored roads and the island lanes: mostly coconut palms at an uneven
+    // spacing with gaps, the odd pair, and a sea grape or shade tree between them
     const roadRng = new Rng('road-palms');
     const lines: { pts: [number, number][]; width: number; spacing: number }[] = [];
     for (const r of map.roads) if (r.cls === 'highway' || r.cls === 'arterial' || r.cls === 'causeway' || r.cls === 'street') lines.push({ pts: r.pts, width: r.width, spacing: r.cls === 'street' ? 24 : 19 });
@@ -843,16 +1031,21 @@ export class Vegetation {
         const len = Math.hypot(bx - ax, bz - az);
         if (len < 1) continue;
         const ux = (bx - ax) / len, uz = (bz - az) / len;
-        for (let t = 14; t < len - 8; t += line.spacing * roadRng.range(0.75, 1.3), k++) {
+        for (let t = 14; t < len - 8; t += line.spacing * roadRng.range(0.55, 1.7), k++) {
           const side = (k & 1) === 0 ? -1 : 1;
-          const off = line.width * 0.5 + roadRng.range(4.5, 8);
+          const off = line.width * 0.5 + roadRng.range(4.5, 9);
           const x = ax + ux * t - uz * off * side, z = az + uz * t + ux * off * side;
           const y = map.heightAt(x, z);
           if (y < 0.9) continue;
           const zn = map.zoneAt(x, z);
           if (zn === Zone.INDUSTRIAL || zn === Zone.AIRPORT || zn === Zone.WETLAND_FLAT || zn === Zone.LOT) continue;
-          if (roadRng.chance(0.18) || occupied(x, z)) continue;
-          palm(x, z, y, roadRng, 6.5, 11);
+          if (roadRng.chance(0.22) || occupied(x, z)) continue;
+          const kind = roadRng.next();
+          if (kind < 0.72) palm(x, z, y, roadRng, 5.5, 11);
+          else if (kind < 0.86) add(6, x, z, y - 0.15, size(roadRng, 2.4, 4.2), roadRng);
+          else add(0, x, z, y - 0.3, size(roadRng, 3.2, 5.5), roadRng);
+          // pairs: a second palm a few metres along
+          if (kind < 0.72 && roadRng.chance(0.2)) { const dx = ux * roadRng.range(3, 6), dz = uz * roadRng.range(3, 6); if (!occupied(x + dx, z + dz)) palm(x + dx, z + dz, map.heightAt(x + dx, z + dz), roadRng, 5, 9); }
         }
       }
     }
@@ -876,7 +1069,8 @@ export class Vegetation {
         if (y < 0.9 || occupied(x, z)) continue;
         const zn = map.zoneAt(x, z);
         if (zn === Zone.ROAD || zn === Zone.INDUSTRIAL || zn === Zone.LOT || zn === Zone.DOWNTOWN || zn === Zone.RES_MID) continue;
-        palm(x, z, y, marinaRng, 6, 10.5);
+        if (marinaRng.chance(0.8)) palm(x, z, y, marinaRng, 5.5, 10.5);
+        else add(6, x, z, y - 0.15, size(marinaRng, 2.4, 4), marinaRng);
       }
     }
     for (const p of plants) {
@@ -925,11 +1119,13 @@ export class Vegetation {
         sv.set(pl.s, pl.s, pl.s);
         near.setMatrixAt(i, m.compose(pv, q, sv));
         near.setColorAt(i, pl.tint);
-        nearVar[i * 4] = pl.arche; nearVar[i * 4 + 1] = pl.seed; nearVar[i * 4 + 2] = pl.arche === 4 ? 0.35 : pl.squash; nearVar[i * 4 + 3] = pl.trunk;
-        // card: unit size and crown-centre height matching the 3D crown
-        if (pl.arche === 4) { farVar[i * 4] = 1; farVar[i * 4 + 2] = 2.45; farVar[i * 4 + 3] = 1.0; }
-        else { farVar[i * 4] = 0; farVar[i * 4 + 2] = 3.1 * pl.squash + 0.3; farVar[i * 4 + 3] = pl.trunk + 0.9 * pl.squash; }
-        farVar[i * 4 + 1] = pl.seed;
+        const kind = pl.arche + pl.variant / 16;
+        nearVar[i * 4] = kind; nearVar[i * 4 + 1] = pl.seed; nearVar[i * 4 + 2] = pl.arche === 4 ? 0.35 : pl.squash; nearVar[i * 4 + 3] = pl.trunk;
+        // card: the shape class' tile proportions, stretched vertically so the tile's crown centre lands
+        // at this plant's crown centre (half height = card centre; the trunk base stays on the ground)
+        const cc = CARD_CLASSES[shapeClass(pl.arche)];
+        const centreH = pl.arche === 4 ? 1.0 : pl.trunk + 0.85 * pl.squash;
+        farVar[i * 4] = kind; farVar[i * 4 + 1] = pl.seed; farVar[i * 4 + 2] = cc.w; farVar[i * 4 + 3] = cc.h * 0.5 * (centreH / (cc.trunk + 0.85 * cc.squash || 1));
         box.expandByPoint(pv);
       });
       const nearVarAttr = new THREE.InstancedBufferAttribute(nearVar, 4);
@@ -957,15 +1153,15 @@ export class Vegetation {
       far.castShadow = false;
       far.customDepthMaterial = cardDepth;
       far.matrixAutoUpdate = false;
-      // LOD metric: the planted footprint grown by the largest crown radius (2.6 x scale)
+      // LOD metric: the planted footprint grown by the largest crown radius (GROW_SIDE x scale)
       const maxS = list.reduce((a, p) => Math.max(a, p.s), 0);
       const lod = box.getBoundingSphere(new THREE.Sphere());
-      lod.radius += maxS * 2.6;
-      // world-space culling bounds: plant positions grown by the largest crown sideways and by
-      // 3.7 x scale up (the card of a plant reaches trunk + crown + half a card above its base)
-      box.min.x -= maxS * 2.6; box.max.x += maxS * 2.6;
-      box.min.z -= maxS * 2.6; box.max.z += maxS * 2.6;
-      box.min.y -= 1; box.max.y += maxS * 3.7;
+      lod.radius += maxS * GROW_SIDE;
+      // world-space culling bounds: plant positions grown by the largest crown sideways and by the
+      // tallest card up
+      box.min.x -= maxS * GROW_SIDE; box.max.x += maxS * GROW_SIDE;
+      box.min.z -= maxS * GROW_SIDE; box.max.z += maxS * GROW_SIDE;
+      box.min.y -= 1; box.max.y += maxS * GROW_UP;
       const sphere = box.getBoundingSphere(new THREE.Sphere());
       near.boundingSphere = sphere;
       far.boundingSphere = sphere.clone();
@@ -986,9 +1182,9 @@ export class Vegetation {
   }
 
   private static cells(t: Tile): VegCells {
-    const grow = t.maxS * 2.6, up = t.maxS * 3.7;
+    const grow = t.maxS * GROW_SIDE, up = t.maxS * GROW_UP;
     const m = t.matrices;
-    // the same growth as the tile box: the largest crown sideways, trunk + crown + half a card up
+    // the same growth as the tile box: the largest crown sideways, the tallest card up
     const bound = (i: number, box: THREE.Box3) => {
       const x = m[i * 16 + 12], y = m[i * 16 + 13], z = m[i * 16 + 14];
       box.expandByPoint(_p.set(x - grow, y - 1, z - grow));
