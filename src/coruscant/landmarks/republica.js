@@ -47,23 +47,33 @@ const PLANS = [
 const RING = { nz: [34, 35], sz: [48, 49], wx: [50, 51], ex: [66, 67] };
 
 // ------------------------------------------------------------------------------------------------ masks
-// 0 outside, 1 wall cell (inside with an outside 4-neighbour), 2 interior
-const superellipse = (x, z, ax, az, p) => Math.pow(Math.abs(x + 0.5 - CX) / ax, p) + Math.pow(Math.abs(z + 0.5 - CZ) / az, p) <= 1;
-function buildMask(inside) {
+// 0 outside, 1 wall cell (inside with an outside 4-neighbour), 2 interior. A superellipse |dx/ax|^p + |dz/az|^p <= 1
+// around (CX, CZ) is one x-span per row (cell x is inside when |x + 0.5 - CX| <= half-width), so the masks are built
+// from row spans (xa > xb = empty row) instead of testing every cell.
+function spans(ax, az, p) {
+  const xa = new Int16Array(D), xb = new Int16Array(D);
+  for (let z = 0; z < D; z++) {
+    const t = Math.pow(Math.abs(z + 0.5 - CZ) / az, p), hw = t > 1 ? -1 : ax * Math.pow(1 - t, 1 / p);
+    xa[z] = Math.ceil(CX - 0.5 - hw); xb[z] = Math.floor(CX - 0.5 + hw);
+    if (hw < 0) { xa[z] = 1; xb[z] = 0; }
+  }
+  return { xa, xb };
+}
+function buildMask({ xa, xb }) {
   const m = new Uint8Array(W * D);
-  const ins = (x, z) => x >= 0 && z >= 0 && x < W && z < D && inside(x, z);
-  for (let x = 0; x < W; x++) for (let z = 0; z < D; z++) {
-    if (!ins(x, z)) continue;
-    m[x * D + z] = (ins(x - 1, z) && ins(x + 1, z) && ins(x, z - 1) && ins(x, z + 1)) ? 2 : 1;
+  const has = (x, z) => z >= 0 && z < D && x >= xa[z] && x <= xb[z];
+  for (let z = 0; z < D; z++) for (let x = Math.max(0, xa[z]); x <= Math.min(W - 1, xb[z]); x++) {
+    m[x * D + z] = (has(x - 1, z) && has(x + 1, z) && has(x, z - 1) && has(x, z + 1) && x > 0 && x < W - 1) ? 2 : 1;
   }
   return m;
 }
 let MASKS = null;
 function masks() {
   if (MASKS) return MASKS;
-  const tiers = TIERS.map((t) => buildMask((x, z) => superellipse(x, z, t.ax, t.az, 4)));
-  const podium = buildMask((x, z) => superellipse(x, z, PODIUM.ax, PODIUM.az, PODIUM.p) || (x >= WING.x0 && x <= WING.x1 && z >= WING.z0));
-  MASKS = { tiers, podium };
+  const tiers = TIERS.map((t) => buildMask(spans(t.ax, t.az, 4)));
+  const ps = spans(PODIUM.ax, PODIUM.az, PODIUM.p);
+  for (let z = WING.z0; z < D; z++) { ps.xa[z] = Math.min(ps.xa[z] > ps.xb[z] ? WING.x0 : ps.xa[z], WING.x0); ps.xb[z] = Math.max(ps.xb[z], WING.x1); }
+  MASKS = { tiers, podium: buildMask(ps) };
   return MASKS;
 }
 const M = (m, x, z) => (x < 0 || z < 0 || x >= W || z >= D) ? 0 : m[x * D + z];
@@ -118,9 +128,10 @@ function template(bp, rng, name, kind, x0, z0, x1, z1, y, side, doorU, doorW = 2
   return r;
 }
 // plaster wall ring around an interior rect, only on interior mask cells (the facade is already the outer wall)
-function wallRing(bp, m, x0, z0, x1, z1, y, id = WHITE, h = 4) {
-  for (let x = x0 - 1; x <= x1 + 1; x++) for (const z of [z0 - 1, z1 + 1]) if (M(m, x, z) === 2) bp.fill(x, y, z, x, y + h - 1, z, id);
-  for (let z = z0; z <= z1; z++) for (const x of [x0 - 1, x1 + 1]) if (M(m, x, z) === 2) bp.fill(x, y, z, x, y + h - 1, z, id);
+function wallRing(bp, m, x0, z0, x1, z1, y, id = WHITE, h = 4, trim = null) {
+  const put = (x, z) => { if (M(m, x, z) === 2) bp.fill(x, y, z, x, y + h - 1, z, (trim && (x + z) % 4 === 0) ? trim : id); };
+  for (let x = x0 - 1; x <= x1 + 1; x++) { put(x, z0 - 1); put(x, z1 + 1); }
+  for (let z = z0; z <= z1; z++) { put(x0 - 1, z); put(x1 + 1, z); }
 }
 
 // ------------------------------------------------------------------------------------------------ facades
@@ -757,6 +768,9 @@ function observatory(bp, rng, seed) {
 // ------------------------------------------------------------------------------------------------ podium
 function podiumShell(bp, seed) {
   const m = masks().podium;
+  // per wall row y: the walk level it belongs to and the row within that level (window rows 1..2, and 5..6 at the base)
+  const lvlAt = new Uint8Array(PLAZA + 1), rowAt = new Uint8Array(PLAZA + 1);
+  for (let y = 1; y <= PLAZA; y++) { let l = 1; for (const f of PODIUM_LEVELS) if (f <= y) l = f; lvlAt[y] = l; rowAt[y] = y - l; }
   for (let x = 0; x < W; x++) for (let z = 0; z < D; z++) {
     const v = m[x * D + z];
     if (!v) { bp.set(x, 0, z, ((x + z) % 7 === 0) ? DARK : ((x % 9 === 0 || z % 9 === 0) ? SMOOTH : PLATE)); continue; }
@@ -764,11 +778,11 @@ function podiumShell(bp, seed) {
       bp.fill(x, 1, z, x, 2, z, DARK);
       const ox = !M(m, x - 1, z) || !M(m, x + 1, z), oz = !M(m, x, z - 1) || !M(m, x, z + 1);
       const s = ox && !oz ? z : x, corner = ox && oz;
-      for (let y = 3; y <= PLAZA - 1; y++) {
-        const lvl = PODIUM_LEVELS.filter((l) => l <= y).pop(), r = y - lvl;
+      if (corner || s % 4 === 0) { bp.fill(x, 3, z, x, PLAZA - 1, z, CHROME); }
+      else for (let y = 3; y <= PLAZA - 1; y++) {
+        const lvl = lvlAt[y], r = rowAt[y];
         let id = WHITE;
-        if (corner || s % 4 === 0) id = CHROME;
-        else if (y === lvl - 1) id = CHROME;
+        if (lvlAt[y + 1] !== lvl) id = CHROME;
         else if (r >= 1 && r <= 2 || (lvl === 1 && (r === 5 || r === 6))) id = hash3(s >> 2, lvl, r > 3 ? 1 : 0, seed) < 0.55 ? LIT : GLASS;
         bp.set(x, y, z, id);
       }
@@ -779,6 +793,201 @@ function podiumShell(bp, seed) {
       bp.set(x, PLAZA, z, ((x % 6 === 0 || z % 6 === 0) ? PLATE : ((x + z) % 2 ? WHITE : SMOOTH)));
     }
   }
+}
+
+// ------------------------------------------------------------------------------------------------ podium interiors
+// Six levels under the plaza on a grid of 2-wide corridors (N-S at x 30/50/66/86, E-W at z 18/34/48/64) that leaves
+// 24 room blocks around the core, each split into two or four library rooms with framed doors onto a corridor.
+// Level 1 is the undercity arrival: the blocks inside the outer corridors are one double-height speeder garage
+// around the core (valet forecourt, droid bay, checkpoint in the wing); the perimeter blocks are two storeys of
+// service rooms with a mezzanine gallery (walk 6) looking into the hall.
+const PX = [[14, 28], [33, 48], [53, 64], [69, 84], [89, 103]];
+const PZ = [[6, 16], [21, 32], [37, 46], [51, 62], [67, 76]];
+const PCX = [[30, 31], [50, 51], [66, 67], [86, 87]], PCZ = [[18, 19], [34, 35], [48, 49], [64, 65]];
+const PODIUM_PLAN = {
+  1: { rooms: ['garage', 'droid_bay', 'workshop', 'storage', 'security_post', 'detention_cell', 'armory', 'server_room', 'laundry'], wall: DARK, trim: STEEL, floor: [PLATE, DARK] },
+  6: { rooms: ['barracks', 'hotel_room', 'kitchen', 'cafeteria', 'laundry', 'restroom', 'lounge', 'medbay', 'storage'], wall: WHITE, trim: CHROME, floor: [PLATE, SMOOTH] },
+  11: { rooms: ['reactor_room', 'control_room', 'server_room', 'comms_room', 'workshop', 'storage', 'laundry', 'armory', 'droid_bay'], wall: STEEL, trim: DARK, floor: [PLATE, B.HULL_PLATE] },
+  16: { rooms: ['barracks', 'hotel_room', 'studio', 'family_apartment', 'kitchen', 'cafeteria', 'restroom', 'gym', 'laundry', 'lounge'], wall: WHITE, trim: CHROME, floor: [SMOOTH, WHITE] },
+  21: { rooms: ['shop', 'market_stalls', 'clinic_ward', 'medbay', 'school_room', 'archive', 'bank_vault', 'library', 'storage', 'restroom'], wall: WHITE, trim: BLACK, floor: [SMOOTH, BRICK] },
+  26: { rooms: ['restaurant', 'cantina', 'night_club', 'arcade', 'holo_theatre', 'gallery', 'museum_hall', 'gym', 'lounge', 'kitchen'], wall: WHITE, trim: GOLD, floor: [B.RED_WOOL, SMOOTH] },
+  31: { rooms: ['open_plan_office', 'executive_office', 'meeting_room', 'council_chamber', 'hotel_room', 'lounge', 'archive', 'penthouse', 'library'], wall: WHITE, trim: CHROME, floor: [WHITE, SMOOTH] },
+};
+// the least-used template of the level that fits a w x d room (rotates through the list; deterministic ties)
+function fitTemplate(rng, list, w, d, used) {
+  const ok = list.filter((n) => { const t = ROOMS[n]; return t && w >= t.minW && d >= t.minD && w <= t.maxW && d <= t.maxD; });
+  const pool = ok.length ? ok : list;
+  const low = Math.min(...pool.map((n) => used.get(n) || 0));
+  const name = rng.pick(pool.filter((n) => (used.get(n) || 0) === low));
+  used.set(name, (used.get(name) || 0) + 1);
+  return name;
+}
+// one podium room: walls on interior cells only, framed door centred on the corridor side, library template, dressing
+function podiumRoom(bp, rng, m, lvl, x0, z0, x1, z1, y, side, used, forced = null) {
+  const isIn = (x, z) => M(m, x, z) === 2;
+  const alongX = side === 'N' || side === 'S';
+  let a = -1, b = -1, cells = 0;
+  if (alongX) { const wz = side === 'N' ? z0 - 1 : z1 + 1, cz = side === 'N' ? z0 - 2 : z1 + 2, rz = side === 'N' ? z0 : z1; for (let x = x0; x <= x1; x++) if (isIn(x, wz) && isIn(x, cz) && isIn(x, rz)) { if (a < 0) a = x; b = x; } }
+  else { const wx = side === 'W' ? x0 - 1 : x1 + 1, cx = side === 'W' ? x0 - 2 : x1 + 2, rx = side === 'W' ? x0 : x1; for (let z = z0; z <= z1; z++) if (isIn(wx, z) && isIn(cx, z) && isIn(rx, z)) { if (a < 0) a = z; b = z; } }
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) if (isIn(x, z)) cells++;
+  if (b - a < 1 || cells < 0.6 * (x1 - x0 + 1) * (z1 - z0 + 1)) return null;    // corner cut too deep: left open
+  wallRing(bp, m, x0, z0, x1, z1, y, lvl.wall, 4, lvl.trim);
+  const c = Math.floor((a + b) / 2);
+  const w = alongX ? x1 - x0 + 1 : z1 - z0 + 1, d = alongX ? z1 - z0 + 1 : x1 - x0 + 1;
+  const name = forced || fitTemplate(rng, lvl.rooms, w, d, used);
+  if (alongX) { const wz = side === 'N' ? z0 - 1 : z1 + 1; doorway(bp, c, wz, c + 1, wz, y, 3, GLOW, CHROME); }
+  else { const wx = side === 'W' ? x0 - 1 : x1 + 1; doorway(bp, wx, c, wx, c + 1, y, 3, GLOW, CHROME); }
+  const r = new Room(bp, { x0, z0, x1, z1, y, h: 4, side, doorU: alongX ? c - x0 : c - z0, doorW: 2, mask: isIn }, name, {});
+  (ROOMS[name] || ROOMS.storage).fn(r, rng, {});
+  dress(r, rng); r.ceilingLights(4); r.finalize();
+  bp.room(name, x0 - 1, y, z0 - 1, x1 + 1, z1 + 1);
+  return r;
+}
+// corridor floors and ceiling lights; perimeter mode (levels 1 and 6) paints only the outer ring and its stubs
+function podiumCorridors(bp, m, y, lvl, perimeter) {
+  const isIn = (x, z) => M(m, x, z) === 2;
+  const cell = (x, z, along) => {
+    if (!isIn(x, z)) return;
+    bp.set(x, y - 1, z, ((x + z) % 4 === 0) ? lvl.trim : ((x + z) % 2 ? lvl.floor[0] : lvl.floor[1]));
+    if (along % 3 === 0) bp.set(x, y + 4, z, GLOW);
+  };
+  PCX.forEach(([a, b], i) => { const outer = i === 0 || i === 3, z1 = perimeter ? (outer ? 77 : 17) : (outer ? 77 : 82); for (let x = a; x <= b; x++) for (let z = 6; z <= z1; z++) cell(x, z, z + (x - a)); });
+  PCZ.forEach(([a, b], i) => { for (let z = a; z <= b; z++) for (let x = 14; x <= 103; x++) { if (perimeter && i > 0 && x >= 30 && x <= 87) continue; cell(x, z, x + (z - a)); } });
+  // holo directories on the room corners at the crossings
+  for (const [a] of PCX) for (const [c] of PCZ) if (isIn(a, c) && !(perimeter && (a === 50 || a === 66) && c > 19)) { bp.set(a - 1, y + 1, c - 1, B.HOLO_SIGN); bp.set(a + 2, y + 1, c + 2, B.HOLO_SIGN); }
+}
+// a full podium level (or its perimeter blocks when the middle is the arrival hall)
+function podiumFloor(bp, rng, y, lvl, perimeter) {
+  const m = masks().podium, used = new Map();
+  podiumCorridors(bp, m, y, lvl, perimeter);
+  for (let xb = 0; xb < 5; xb++) for (let zb = 0; zb < 5; zb++) {
+    if (xb === 2 && zb === 2) continue;
+    if (perimeter && !(xb === 0 || xb === 4 || zb === 0)) continue;
+    const [x0, x1] = PX[xb], [z0, z1] = PZ[zb], hw = Math.ceil((x1 - x0 + 1) / 2);
+    [[x0, x0 + hw - 2], [x0 + hw, x1]].forEach(([hx0, hx1], i) => {
+      let side;
+      if (xb === 2) side = i ? 'E' : 'W';
+      else if (xb === 0 && i === 1) side = 'E';
+      else if (xb === 4 && i === 0) side = 'W';
+      else side = zb === 0 ? 'S' : zb === 4 ? 'N' : ((i + zb) % 2 ? 'N' : 'S');
+      const ns = side === 'N' || side === 'S';
+      const quarter = ns ? (zb > 0 && zb < 4 && rng.chance(0.55)) : rng.chance(0.5);
+      if (!quarter) { podiumRoom(bp, rng, m, lvl, hx0, z0, hx1, z1, y, side, used); return; }
+      const zm = z0 + Math.ceil((z1 - z0 + 1) / 2) - 1;
+      podiumRoom(bp, rng, m, lvl, hx0, z0, hx1, zm - 1, y, ns ? 'N' : side, used);
+      podiumRoom(bp, rng, m, lvl, hx0, zm + 1, hx1, z1, y, ns ? 'S' : side, used);
+    });
+  }
+  // the wing rooms (levels above the hall): both middle corridors run on to the south windows
+  if (!perimeter) {
+    podiumRoom(bp, rng, m, lvl, 43, 78, 48, 82, y, 'E', used);
+    podiumRoom(bp, rng, m, lvl, 53, 78, 57, 82, y, 'W', used);
+    podiumRoom(bp, rng, m, lvl, 59, 78, 64, 82, y, 'E', used);
+    podiumRoom(bp, rng, m, lvl, 69, 78, 74, 82, y, 'W', used);
+  }
+}
+// the undercity arrival hall (walk 1, clear to 9) and the staff mezzanine (walk 6) around it
+function arrivalHall(bp, rng, seed) {
+  const m = masks().podium, y = 1, my = 6;
+  const isIn = (x, z) => M(m, x, z) === 2;
+  const inHall = (x, z) => isIn(x, z) && ((x >= 33 && x <= 84 && z >= 21) || z >= 78) && !(x >= CORE.x0 && x <= CORE.x1 && z >= CORE.z0 && z <= CORE.z1);
+  // mezzanine slab over the perimeter bands and the gallery (x 30..32, 85..87, z 18..20), lit arcade underneath
+  for (let x = 14; x <= 103; x++) for (let z = 6; z <= 77; z++) {
+    if (!isIn(x, z) || !(x <= 32 || x >= 85 || z <= 20)) continue;
+    const gallery = (x >= 30 && x <= 32) || (x >= 85 && x <= 87) || (z >= 18 && z <= 20);
+    bp.set(x, my - 1, z, (gallery && (x + z) % 4 === 0) ? GLOW : ((x + z) % 2 ? WHITE : SMOOTH));
+  }
+  for (let z = 21; z <= 77; z++) { if (isIn(32, z)) bp.set(32, my, z, B.IRON_BARS); if (isIn(85, z)) bp.set(85, my, z, B.IRON_BARS); }
+  for (let x = 32; x <= 85; x++) if (!(x >= 47 && x <= 48) && !(x >= 69 && x <= 70)) bp.set(x, my, 20, B.IRON_BARS);
+  podiumFloor(bp, rng, y, PODIUM_PLAN[1], true);
+  podiumFloor(bp, rng, my, PODIUM_PLAN[6], true);
+  // hall floor: lanes around the core and up the middle, parking bays west and east, lit ceiling grid
+  for (let x = 33; x <= 84; x++) for (let z = 21; z <= 82; z++) {
+    if (!inHall(x, z)) continue;
+    const lane = (x >= 50 && x <= 51) || (x >= 66 && x <= 67) || (z >= 34 && z <= 35) || (z >= 48 && z <= 49) || (x >= 56 && x <= 61 && z >= 48);
+    let id = lane ? BLACK : ((x + z) % 2 ? PLATE : SMOOTH);
+    if (lane && (x === 56 || x === 61) && z >= 78) id = GOLD;
+    if (!lane && ((x >= 33 && x <= 40) || (x >= 77 && x <= 84) || (x >= 42 && x <= 49 && z >= 36 && z <= 63) || (x >= 68 && x <= 75 && z >= 36 && z <= 63)) && (z - 21) % 4 === 0) id = DARK;
+    bp.set(x, y - 1, z, id);
+    if (x % 4 === 0 && z % 4 === 0) bp.set(x, 10, z, GLOW);
+  }
+  for (let z = 51; z <= 77; z += 3) for (const x of [55, 62]) { bp.set(x, y - 1, z, GLOW); bp.set(x, y, z, B.IRON_BARS); bp.set(x, y + 1, z, BLUE); }
+  // parking: two rows of bays each side, most with a parked speeder, the rest with crates and charging posts
+  const bay = (x, z, dir, k) => {
+    if (rng.chance(0.72)) speeder(bp, x, y, z, dir, k % 2 ? STEEL : CHROME, k % 3 ? CHROME : DARK);
+    else { bp.fill(x + dir, y, z - 1, x + dir * 2, y, z + 1, B.CRATE); bp.set(x + dir * 2, y + 1, z, B.BARREL); bp.set(x + dir * 4, y, z, B.IRON_BARS); bp.set(x + dir * 4, y + 1, z, BLUE); }
+  };
+  let k = 0;
+  for (const z of [23, 27, 31, 38, 42, 46, 52, 56, 60, 68, 72, 76]) { bay(34, z, 1, k++); bay(83, z, -1, k++); }
+  for (const z of [38, 42, 46, 52, 56, 60]) { bay(48, z, -1, k++); bay(69, z, 1, k++); }
+  for (const z of [22, 30, 37, 47, 51, 61, 67, 77]) for (const x of [33, 84]) if (inHall(x, z)) { bp.set(x, y, z, B.SHELF); bp.set(x, y + 1, z, B.SHELF); }
+  for (const z of [25, 33, 44, 58, 70]) for (const x of [41, 76]) { bp.set(x, y, z, B.IRON_BARS); bp.set(x, y + 1, z, B.LANTERN); }
+  // pylons with lit bands, stairs up to the gallery, the droid bay block north of the core
+  for (const x of [49, 68]) for (const z of [33, 50, 64, 76]) { bp.fill(x, y, z, x, y + 8, z, CHROME); bp.set(x, y + 3, z, BLUE); bp.set(x, y + 7, z, BLUE); }
+  flightZ(bp, 47, 48, 30, -1, y, 5); flightZ(bp, 69, 70, 30, -1, y, 5);
+  for (const x of [46, 49, 68, 71]) for (let z = 21; z <= 30; z++) bp.fill(x, y, z, x, y + Math.floor((30 - z) / 2) + 1, z, B.IRON_BARS);
+  bp.fill(53, my - 1, 22, 64, my - 1, 32, PLATE);
+  podiumRoom(bp, rng, m, PODIUM_PLAN[1], 53, 22, 64, 32, y, 'S', new Map(), 'droid_bay');
+  wallRing(bp, m, 53, 22, 64, 32, my - 1, DARK, 1); wallRing(bp, m, 53, 22, 64, 32, my, B.IRON_BARS, 1);
+  for (let x = 54; x <= 63; x += 3) { bp.set(x, my, 27, B.VENT); bp.set(x, my, 26, DARK); }
+  // valet forecourt south of the core: desk, benches, planters, luggage droids, holo directory on the core wall
+  bp.fill(52, y, 51, 55, y, 51, BLACK); bp.fill(52, y + 1, 51, 55, y + 1, 51, SLAB); bp.set(53, y + 1, 51, B.CONSOLE); bp.work(54, y, 50, 'valet');
+  bp.fill(62, y, 51, 65, y, 51, BLACK); bp.fill(62, y + 1, 51, 65, y + 1, 51, SLAB); bp.set(64, y + 1, 51, B.CONSOLE); bp.work(63, y, 50, 'valet');
+  for (let z = 54; z <= 74; z += 3) for (const x of [52, 65]) { bp.set(x, y, z, SEAT); bp.spot(x, y, z, 'seat'); }
+  for (let z = 55; z <= 75; z += 6) for (const x of [53, 64]) planter(bp, x, y, z, (z % 2) ? B.OAK_LEAVES : B.SPRUCE_LEAVES);
+  for (const [x, z] of [[54, 58], [63, 66], [54, 70]]) { bp.set(x, y, z, B.IRON_BLOCK); bp.set(x, y + 1, z, B.IRON_BLOCK); bp.set(x, y + 2, z, BLUE); }
+  bp.fill(56, y + 3, CORE.z1, 57, y + 4, CORE.z1, B.HOLO_SIGN); bp.fill(60, y + 3, CORE.z1, 61, y + 4, CORE.z1, B.HOLO_SIGN);
+  for (const x of [54, 63]) { bp.set(x, y + 1, CORE.z1, BLUE); bp.set(x, y + 4, CORE.z1, BLUE); }
+  bp.spot(58, y, 60, 'stand'); bp.spot(59, y, 70, 'stand');
+  // the checkpoint in the wing: turnstile rails with a scanner arch over the lane, guard desks, benches, notices
+  for (let x = 43; x <= 74; x++) if (x < 55 || x > 62) bp.fill(x, y, 79, x, y + 1, 79, B.IRON_BARS);
+  for (const x of [55, 62]) { bp.fill(x, y, 79, x, y + 4, 79, B.PANEL_STRIPE); bp.set(x, y + 5, 79, BLUE); }
+  bp.fill(56, y + 5, 79, 61, y + 5, 79, GLOW); bp.fill(56, y + 6, 79, 61, y + 6, 79, CHROME);
+  for (const x0 of [45, 69]) { bp.fill(x0, y, 80, x0 + 2, y, 80, BLACK); bp.fill(x0, y + 1, 80, x0 + 2, y + 1, 80, SLAB); bp.set(x0 + 1, y + 1, 80, B.CONSOLE); bp.work(x0 + 1, y, 81, 'guard'); }
+  for (const x of [44, 50, 52, 65, 67, 73]) { bp.set(x, y, 82, SEAT); bp.spot(x, y, 82, 'seat'); }
+  for (const x of [43, 74]) planter(bp, x, y, 82, B.BIRCH_LEAVES);
+  for (const x of [48, 54, 63, 69]) bp.set(x, y + 2, 82, B.HOLO_SIGN);
+  for (const x of [46, 71]) { bp.fill(x, y + 7, 81, x, y + 8, 81, B.IRON_BARS); bp.set(x, y + 6, 81, B.LANTERN); }
+  // the undercity portal: chrome pilasters, lit lintel and the holo name over the 2 x 3 door
+  bp.fill(56, y, D - 1, 56, y + 6, D - 1, CHROME); bp.fill(61, y, D - 1, 61, y + 6, D - 1, CHROME);
+  bp.fill(57, y + 4, D - 1, 60, y + 4, D - 1, GLOW); bp.fill(57, y + 5, D - 1, 60, y + 6, D - 1, B.HOLO_SIGN);
+  bp.room('speeder_garage_w', 32, y, 20, 50, 78);
+  bp.room('speeder_garage_e', 67, y, 20, 85, 78);
+  bp.room('arrival_forecourt', 51, y, 47, 66, 78);
+  bp.room('undercity_checkpoint', WING.x0, y, 77, WING.x1, D - 1);
+}
+
+// the plaza on the podium roof (walk 36): tree squares, lamp posts and benches along the railing, two fountains, a
+// lit colonnade flanking the entrance wing, hedge parterres with a pond north of the tower
+function plaza(bp, rng) {
+  const pm = masks().podium, tm = TIERS[0].mask, y = PLAZA + 1;
+  const open = (x, z) => M(pm, x, z) === 2 && !M(tm, x, z) && !(x >= WING.x0 - 1 && x <= WING.x1 + 1 && z >= 60);
+  for (let x = 14; x <= 103; x++) for (let z = 6; z <= 77; z++) {
+    if (!open(x, z)) continue;
+    const edge = M(pm, x - 1, z) === 1 || M(pm, x + 1, z) === 1 || M(pm, x, z - 1) === 1 || M(pm, x, z + 1) === 1;
+    if (!edge) continue;
+    if ((x + z) % 8 === 0) lamp(bp, x, y, z, 3, B.CITY_LAMP);
+    else if ((x + z) % 8 === 4) { bp.set(x, y, z, SEAT); bp.spot(x, y, z, 'seat'); }
+  }
+  for (let k = 0; k < 36; k++) {
+    const a = (k / 36) * Math.PI * 2, x = Math.round(CX + 31 * Math.cos(a)), z = Math.round(CZ + 27 * Math.sin(a));
+    let ok = true; for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if (!open(x + dx, z + dz)) ok = false;
+    if (!ok) continue;
+    bp.fill(x - 1, y, z - 1, x + 1, y, z + 1, DARK); bp.set(x, y, z, B.GRASS);
+    tree(bp, x, y + 1, z, 4 + (k % 2), [B.OAK_LEAVES, B.BIRCH_LEAVES, B.SPRUCE_LEAVES][k % 3], [B.OAK_LOG, B.BIRCH_LOG, B.SPRUCE_LOG][k % 3]);
+  }
+  for (const x0 of [19, 91]) {
+    basin(bp, x0, 37, x0 + 8, 47, y); bp.fill(x0 + 1, y - 1, 38, x0 + 7, y - 1, 46, BLUE);
+    bp.fill(x0 + 4, y + 1, 42, x0 + 4, y + 3, 42, CLEAR); bp.set(x0 + 4, y + 4, 42, GLOW); bp.set(x0 + 4, y, 42, CHROME);
+    for (const dz of [-7, 7]) for (const dx of [2, 6]) { bp.set(x0 + dx, y, 42 + dz, SEAT); bp.spot(x0 + dx, y, 42 + dz, 'seat'); }
+  }
+  for (const x of [38, 79]) for (let z = 63; z <= 75; z += 3) { bp.fill(x, y, z, x, y + 4, z, CHROME); bp.set(x, y + 5, z, GLOW); planter(bp, x + (x < CX ? 2 : -2), y, z + 1, B.OAK_LEAVES); }
+  for (const x of [40, 77]) { statue(bp, x, y, 62, 3); }
+  for (let x = 30; x <= 87; x++) for (const z of [9, 18]) if (open(x, z) && (x % 7) !== 3) bp.set(x, y, z, (x % 2) ? B.OAK_LEAVES : B.SPRUCE_LEAVES);
+  for (let x = 32; x <= 86; x += 2) for (const z of [12, 15]) if (open(x, z) && (x < 52 || x > 65)) { bp.set(x, y - 1, z, B.GRASS); bp.set(x, y, z, (x % 3) ? B.POPPY : B.DANDELION); }
+  basin(bp, 53, 10, 64, 16, y); bp.fill(54, y - 1, 11, 63, y - 1, 15, BLUE); bp.set(58, y + 1, 13, CLEAR); bp.set(59, y + 1, 13, CLEAR); bp.set(58, y + 2, 13, GLOW); bp.set(59, y + 2, 13, GLOW);
+  for (const x of [46, 71]) statue(bp, x, y, 13, 3);
+  for (const [x, z] of [[24, 62], [93, 62], [24, 22], [93, 22]]) if (open(x, z)) lamp(bp, x, y, z, 3, B.CITY_LAMP);
 }
 
 // ------------------------------------------------------------------------------------------------ build
@@ -797,6 +1006,10 @@ export const LANDMARK = {
     const noLanding = new Set([6, 41, 56, 176]);
     coreShaft(bp, 1, 181);
     for (let y = 1; y <= 181; y += 5) coreLevel(bp, y, { up: y < 181, door: !noLanding.has(y), lifts: !noLanding.has(y) });
+    // podium: arrival hall with its mezzanine, then plant, staff, services, amenities and management levels; plaza
+    arrivalHall(bp, rng, seed);
+    for (const y of [11, 16, 21, 26, 31]) podiumFloor(bp, rng, y, PODIUM_PLAN[y], false);
+    plaza(bp, rng);
     // tower levels
     const club = { n1: 'library', n2: 'holo_theatre', n3: 'gallery', s1: 'cantina', s2: 'restaurant', s3: 'lounge', w: 'meditation_chamber', e: 'garden_terrace' };
     for (let ti = 0; ti < TIERS.length; ti++) {
