@@ -1377,11 +1377,13 @@ export function propDiscTexture(discR = 1.5, root = 0.16, length = 1.32, rootCho
       const inTip = THREE.MathUtils.smoothstep(r, tipR - tipBand - 0.015, tipR - tipBand + 0.015);
       if (inTip > 0) {
         cr = cr + (222 - cr) * inTip; cg = cg + (176 - cg) * inTip; cb = cb + (48 - cb) * inTip;
-        alpha *= 1 + 0.2 * inTip;
+        // the tip paint is brighter but sweeps no more of the disc than the dark blade: no coverage boost, or the
+        // band reads as a ring over the windshield instead of a tint
+        alpha *= 1 + 0.06 * inTip;
       }
       const glint = Math.exp(-Math.pow((r - (tipR - 0.03)) / 0.012, 2));
-      cr += (255 - cr) * glint * 0.35; cg += (250 - cg) * glint * 0.35; cb += (230 - cb) * glint * 0.35;
-      alpha = Math.min(alpha + glint * 0.05, 1);
+      cr += (255 - cr) * glint * 0.2; cg += (250 - cg) * glint * 0.2; cb += (230 - cb) * glint * 0.2;
+      alpha = Math.min(alpha + glint * 0.02, 1);
       d[k] = cr; d[k + 1] = cg; d[k + 2] = cb; d[k + 3] = Math.round(alpha * 255);
     }
   }

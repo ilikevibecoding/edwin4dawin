@@ -401,8 +401,8 @@ export class PlaneModel {
         // windshield (vPane.z) also carries a slow cylindrical bow across its width so the sun's image travels
         .replace('#include <normal_fragment_maps>', /* glsl */ `
           #include <normal_fragment_maps>
-          vec2 glassWob = vec2(sin(vPaneUv.x * 21.0 + vPaneUv.y * 6.0) + 0.5 * sin(vPaneUv.x * 47.0), cos(vPaneUv.y * 17.0 - vPaneUv.x * 4.0)) * 0.012;
-          if (vPane.z > 0.5) glassWob += vec2(sin(vPaneUv.x * 6.3) * 0.012, sin(vPaneUv.y * 12.6) * 0.016);
+          vec2 glassWob = vec2(sin(vPaneUv.x * 13.0 + vPaneUv.y * 9.0) + 0.5 * sin(vPaneUv.x * 29.0 - vPaneUv.y * 17.0), cos(vPaneUv.y * 11.0 - vPaneUv.x * 7.0) + 0.5 * cos(vPaneUv.y * 23.0 + vPaneUv.x * 5.0)) * 0.008;
+          if (vPane.z > 0.5) glassWob += vec2(sin(vPaneUv.x * 6.3) * 0.008, sin(vPaneUv.y * 12.6) * 0.010);
           normal = normalize(normal + vec3(glassWob, 0.0));
         `)
         .replace('#include <opaque_fragment>', /* glsl */ `
@@ -436,8 +436,8 @@ export class PlaneModel {
             vec3 sunL = directionalLights[0].direction;
             float sunNdh = saturate(dot(glassN, normalize(sunL + glassV)));
             float sunFacing = saturate(dot(glassN, sunL) * 4.0);
-            filmSheen = directionalLights[0].color * pow(sunNdh, 8.0) * (0.10 + dirt * 0.9) * sunFacing * (1.0 - 0.5 * inner);
-            sunGlint = directionalLights[0].color * (pow(sunNdh, 1400.0) * 2.5 + pow(sunNdh, 160.0) * 0.30) * sunFacing * (0.6 + 0.4 * glassFr) * (1.0 - 0.6 * inner);
+            filmSheen = directionalLights[0].color * pow(sunNdh, 12.0) * (0.03 + dirt * 0.5) * sunFacing * (1.0 - 0.5 * inner);
+            sunGlint = directionalLights[0].color * (pow(sunNdh, 2500.0) * 4.0 + pow(sunNdh, 300.0) * 0.35) * sunFacing * (0.6 + 0.4 * glassFr) * (1.0 - 0.6 * inner);
           #endif
           // the film only shows where it scatters light (sun sheen, a little of the sky reflection): as a diffuse
           // haze it would frost the panes and make them glow at night
@@ -445,6 +445,10 @@ export class PlaneModel {
           // soft knee: the sun's mirror image stays bright but never clips to white
           glassSpec = 1.0 - exp(-glassSpec);
           float glassA = clamp(diffuseColor.a + glassF * 0.85 + vig * 0.10 + dirt * 0.06, 0.0, 1.0);
+          // the sun's mirror image covers what is behind the pane (alpha blending would otherwise dilute the
+          // highlight to a grey smear over the cabin interior)
+          float glintL = 1.0 - exp(-max(sunGlint.r, max(sunGlint.g, sunGlint.b)));
+          glassA = max(glassA, glintL * 0.9);
           // the tint veil is lit by the sky only: sun on the pane must not fill it with a bright diffuse haze; the
           // dirt film scatters a little skylight (the veil the cabin side shows against the bright bay)
           vec3 glassCol = reflectedLight.indirectDiffuse * 1.5 * (diffuseColor.a + dirt * 0.22) + glassSpec * (1.0 - 0.5 * vig);
@@ -461,7 +465,7 @@ export class PlaneModel {
         `)
         .replace('#include <premultiplied_alpha_fragment>', '');
     };
-    glass.customProgramCacheKey = () => 'cockpit-glass-v9';
+    glass.customProgramCacheKey = () => 'cockpit-glass-v10';
     const plainPaint = new THREE.MeshPhysicalMaterial({ color: LIVERY.upper, roughness: 0.4, metalness: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.15 });
     const parts = partsMaterial();
     // Upwelling light from the water: the environment probe's lower half is a neutral fill, so a surface facing
@@ -1130,22 +1134,31 @@ export class PlaneModel {
           // hand: the palm lies against the grip's aft face, four fingers wrap the outboard side and curl in front of
           // it, the thumb hooks the inboard side; a watch on the left wrist
           const gripDir = arm[4].clone().sub(arm[3]).normalize();
-          const gc = arm[3].clone().lerp(arm[4], 0.5);
+          const gc = arm[3].clone().lerp(arm[4], 0.45);
+          const palmRot: [number, number, number] = [0, 0, -Math.atan2(gripDir.x, gripDir.y)];
+          // back of the hand: a flattened ovoid against the grip's aft face (seen from the seat it is the whole hand)
           const palm = gc.clone().add(new THREE.Vector3(-0.026, 0.0, 0));
-          yoke.add(new THREE.BoxGeometry(0.028, 0.085, 0.072), at(palm, [0, 0, Math.atan2(gripDir.x, gripDir.y) * -1]), SURF.skin);
+          const palmGeo = new THREE.SphereGeometry(0.04, 10, 8); palmGeo.scale(0.45, 1.0, 0.9);
+          yoke.add(palmGeo, at(palm, palmRot), SURF.skin);
+          // fingers wrap the outboard side and curl in front of the grip; the knuckles stand a little proud of the
+          // palm's outboard edge and its top so the row of them reads from behind and above
           for (let f = 0; f < 4; f++) {
-            const y = gc.y + 0.03 - f * 0.019, r = 0.0085;
-            const base = new THREE.Vector3(-0.024, y, s * (0.165 + 0.021)), knuckle = new THREE.Vector3(0.006, y, s * (0.165 + 0.018)), tip = new THREE.Vector3(0.018, y, s * 0.158);
-            yoke.add(new THREE.CapsuleGeometry(r, base.distanceTo(knuckle), 3, 8), at(base.clone().lerp(knuckle, 0.5), [0, 0, -Math.PI / 2]), SURF.skin);
+            const y = gc.y + 0.028 - f * 0.018, r = f === 3 ? 0.0075 : 0.0085;
+            const base = new THREE.Vector3(-0.030, y, s * (0.165 + 0.030)), knuckle = new THREE.Vector3(0.004, y - 0.002, s * (0.165 + 0.026)), tip = new THREE.Vector3(0.020, y - 0.004, s * 0.160);
+            yoke.add(strutGeometry(base, knuckle, r, 8), undefined, SURF.skin);
+            yoke.add(new THREE.SphereGeometry(r, 7, 6), at(knuckle), SURF.skin);
             yoke.add(strutGeometry(knuckle, tip, r * 0.9, 8), undefined, SURF.skin);
             yoke.add(new THREE.SphereGeometry(r * 0.9, 6, 5), at(tip), SURF.skin);
           }
-          const thumbA = new THREE.Vector3(-0.02, gc.y + 0.02, s * 0.145), thumbB = new THREE.Vector3(0.006, gc.y + 0.05, s * 0.15);
-          yoke.add(strutGeometry(thumbA, thumbB, 0.009, 8), undefined, SURF.skin);
-          yoke.add(new THREE.SphereGeometry(0.009, 6, 5), at(thumbB), SURF.skin);
+          // thumb: from the inboard side of the palm up and over the grip's inner face toward the switch
+          const thumbA = new THREE.Vector3(-0.026, gc.y + 0.012, s * 0.138), thumbB = new THREE.Vector3(-0.012, gc.y + 0.045, s * 0.146), thumbC = new THREE.Vector3(0.006, gc.y + 0.055, s * 0.152);
+          yoke.add(strutGeometry(thumbA, thumbB, 0.010, 8), undefined, SURF.skin);
+          yoke.add(new THREE.SphereGeometry(0.010, 7, 6), at(thumbB), SURF.skin);
+          yoke.add(strutGeometry(thumbB, thumbC, 0.009, 8), undefined, SURF.skin);
+          yoke.add(new THREE.SphereGeometry(0.009, 6, 5), at(thumbC), SURF.skin);
           // wrist from the palm back to where the sleeve's cuff takes over; the watch on the left one
           const wrist = WRIST(s);
-          yoke.add(strutGeometry(palm.clone().add(new THREE.Vector3(-0.014, -0.02, 0)), wrist, 0.026, 10), undefined, SURF.skin);
+          yoke.add(strutGeometry(palm.clone().add(new THREE.Vector3(-0.010, -0.028, 0)), wrist, 0.026, 10), undefined, SURF.skin);
           if (s < 0) {
             const wDir = palm.clone().sub(wrist).normalize();
             const wPos = wrist.clone().addScaledVector(wDir, 0.03);
