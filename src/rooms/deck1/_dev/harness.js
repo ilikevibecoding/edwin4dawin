@@ -199,7 +199,11 @@ let frozenTime = null;
 const timer = new THREE.Timer();
 const timeFn = () => (frozenTime !== null ? frozenTime : timer.getElapsed());
 
-const mods = import.meta.glob("../*/index.js");
+// Module discovery: a static map of the 11 Deck 1 folders (was Vite's import.meta.glob, which only exists at
+// Vite compile time — this also runs when the page is served without Vite, e.g. from jsDelivr, where harness.html's
+// import map supplies three, n8ao and postprocessing). Add a folder here when a new module lands.
+const DECK1_MODULES = ["bridge", "observation", "nav", "comms", "tactical", "intel", "officers", "corridor-port", "corridor-stbd", "spine", "lobby"];
+const mods = Object.fromEntries(DECK1_MODULES.map((name) => [`../${name}/index.js`, () => import(`../${name}/index.js`)]));
 
 function validate(m) {
   const b = m.bounds;
