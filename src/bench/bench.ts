@@ -40,7 +40,7 @@ export class Bench {
     // settle: one environment update with the plane static; the camera is then posed once more at its steady
     // flight state (not integrated: a spring step with the plane frozen would leave it a frame ahead)
     g.update(this.fixedDt, false);
-    if (v.camera.mode !== 'fixed') g.flightCamera.settle(g.aircraft.flight, g.aircraft.model);
+    if (v.camera.mode !== 'fixed') g.flightCamera.settle(g.aircraft.flight, g.aircraft.model, this.fixedDt);
     this.followOrigin.copy(g.aircraft.flight.position);
     this.flying = false;
     this.frame = 0;
@@ -101,7 +101,7 @@ export class Bench {
     } else {
       fc.mode = v.camera.mode;
       // the pose the camera holds in steady flight at the view's speed (the still and the clip share it)
-      fc.settle(g.aircraft.flight, g.aircraft.model);
+      fc.settle(g.aircraft.flight, g.aircraft.model, this.fixedDt);
     }
   }
 

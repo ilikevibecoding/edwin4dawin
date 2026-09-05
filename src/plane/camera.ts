@@ -60,9 +60,11 @@ export class FlightCamera {
    *  integrating. A chase camera settled behind a frozen aircraft would otherwise rest 12-13 m ahead of that pose
    *  (the velocity feed-forward with nothing moving) and lurch back over the first half second once the
    *  simulation runs — the bench still and the clip that continues from it now share one camera path. */
-  settle(flight: FlightModel, model: PlaneModel): void {
+  settle(flight: FlightModel, model: PlaneModel, stepDt = 0): void {
     if (this.mode === 'chase') {
-      this.pos.copy(this.chaseDesired(flight, this.tmp2));
+      // the spring in update() sees the aircraft already advanced by the frame it is about to integrate, so its
+      // discrete rest pose leads the analytic one by one frame of travel (v * dt)
+      this.pos.copy(this.chaseDesired(flight, this.tmp2)).addScaledVector(flight.velocity, stepDt);
       this.vel.copy(flight.velocity);
       this.initialised = true;
     } else {
