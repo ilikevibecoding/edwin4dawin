@@ -217,7 +217,8 @@ export class Game {
     for (const m of this.props.materials) this.registerLit(m);
     this.props.group.name = 'props';
     this.scene.add(this.props.group);
-    this.reflection.excludeChildrenWhen(this.props.group, beyondRange);
+    const props = this.props;
+    this.reflection.excludeChildrenWhen(props.group, (o, cam) => props.cameraMeshes.has(o) || (!props.mirrorMeshes.has(o) && beyondRange(o, cam)));
 
     await this.tick(progress, 'Planting palms and mangroves', 0.74);
     this.vegetation = new Vegetation(this.map, this.city.occupied);
@@ -367,7 +368,7 @@ export class Game {
     this.vegetation.shadowDistance = Math.max(1800, Math.min(3000, this.csm.maxFar * 0.4));
     this.vegetation.updateLod(cx, cz, this.cull, cam.position);
     this.city.batches.updateLod(cx, cz, this.cull, cam.position, this.reflection.range);
-    this.props.updateLod(cx, cz, this.cull);
+    this.props.updateLod(cx, cz, this.cull, cam.position, this.reflection.range);
     this.traffic.updateCulling(this.cull);
     // the airframe casts only into the cascades its shadow can reach: swept down to the ground under it, so
     // from altitude that is the cascade holding its ground shadow, not all three
