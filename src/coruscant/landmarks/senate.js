@@ -439,7 +439,7 @@ function approaches(bp, lot) {
 }
 
 export const LANDMARK = {
-  id: 'senate', name: 'Galactic Senate', span: [3, 3], height: 90,
+  id: 'senate', name: 'Galactic Senate', span: [3, 3], height: 90, minW: 160, minD: 170,
   build(bp, lot, ctx) {
     const rng = ctx.rng;
     bp.meta.name = 'Galactic Senate';

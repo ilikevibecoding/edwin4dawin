@@ -290,7 +290,7 @@ function junkMarket(bp, rng, x0, z0, x1, z1) {
 }
 
 export const LANDMARK = {
-  id: 'underworld', name: 'Uscru undercity strip', span: [3, 3], height: 35,
+  id: 'underworld', name: 'Uscru undercity strip', span: [3, 3], height: 35, minW: 140, minD: 130,
   build(bp, lot, ctx) {
     const rng = ctx.rng;
     bp.meta.name = 'Uscru undercity strip';

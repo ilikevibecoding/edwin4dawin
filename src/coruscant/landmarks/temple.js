@@ -743,7 +743,7 @@ function pierExits(bp, k, lx, lz, ox, oz) {
 
 // ------------------------------------------------------------------------------------------------ module
 export const LANDMARK = {
-  id: 'temple', name: 'Jedi Temple', span: [3, 3], height: 190,
+  id: 'temple', name: 'Jedi Temple', span: [3, 3], height: 190, minW: 160, minD: 160,
   build(bp, lot, ctx) {
     const rng = ctx.rng;
     const top = Math.min(bp.h - 6, 185);

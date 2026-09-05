@@ -63,7 +63,8 @@ const groundOf = (lot, layout) => (layout && layout.levels && layout.levels.grou
 export function buildBlueprint(lot, layout) {
   const ground = groundOf(lot, layout);
   // signature landmarks (docs/rubrics/06_landmarks.md) have their own module; anything else goes through the families
-  if (lot.kind === 'landmark') { const lm = landmarkFor(lot.family); if (lm) return buildSignature(lm, lot, layout); }
+  // (a module may declare the minimum footprint it was designed for; smaller lots fall back to the generic family)
+  if (lot.kind === 'landmark') { const lm = landmarkFor(lot.family); if (lm && lot.w >= (lm.minW || 0) && lot.d >= (lm.minD || 0)) return buildSignature(lm, lot, layout); }
   const rng = new RNG(lot.seed ?? 1);
   const fam = resolveFamily(lot, rng);
   const height = Math.max(10, lot.height ?? 60);

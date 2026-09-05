@@ -194,7 +194,7 @@ function cargoStack(bp, rng, x0, z0, x1, z1, y0, pool) {
 
 // ================================================================================================ build
 export const LANDMARK = {
-  id: 'market', name: 'CoCo Town market halls', span: [3, 2], height: 25,
+  id: 'market', name: 'CoCo Town market halls', span: [3, 2], height: 25, minW: 130, minD: 95,
   build(bp, lot, ctx) {
     const rng = ctx.rng;
     bp.meta.name = 'CoCo Town market halls';
