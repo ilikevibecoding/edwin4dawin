@@ -1,6 +1,6 @@
 # Status — D: hangar + ship systems (Deck 4 + infrastructure)
 
-Branch: `cursor/sd-hangar-systems-c071` · Last push: eeaa2618 · 2026-09-04 23:55 UTC
+Branch: `cursor/sd-hangar-systems-c071` · Last push: 6bc2f206 · 2026-09-05 04:40 UTC
 Run: `bc-27044d48-9403-4636-af76-59d715aec071` · Phase: 3 (two critic loops done; final hangar round landed; waiting on A's scaffold to merge)
 
 ## Summary (3–6 lines, what a reviewer needs to know right now)
@@ -115,7 +115,7 @@ traffic ≤ 40k tris / ≤ 6 draw calls. (Build times are with all 13 modules bu
 
 | Module | build ms | materials (draw calls) | tris | light descriptors | colliders | views |
 |---|---|---|---|---|---|---|
-| `d4-hangar` | 203 (155 alone) | 22 (+1 field shader) | 287.8k | 27 | 159 | deck, aperture, racks, aft-wall, balcony, bay-door, exterior |
+| `d4-hangar` | 188 (212–236 alone under a busy Vite) | 22 (+1 field shader) | 290.7k | 28 | 161 | deck, aperture, racks, aft-wall, balcony, bay-door, exterior |
 | `d4-fighter-bay` | 113 | 13 | 82.2k | 11 | 96 | door, cradles, gantry, racks |
 | `d4-shuttle-bay` | 68 | 15 | 62.7k | 13 | 80 | door, pad, gantry, staging, booth |
 | `d4-cargo-bay` | 111 | 14 | 93.6k | 14 | 72 | door, racking, loader, conveyor |
@@ -130,9 +130,10 @@ traffic ≤ 40k tris / ≤ 6 draw calls. (Build times are with all 13 modules bu
 | `sys-traffic` | 13 | 6 (all instanced/points) | 34.6k | 0 | 0 | approach (exterior), racks, hover, patrol (exterior) |
 
 Whole frame per view (includes post passes and the three systems): 67–200 draw calls, 170k–1.03 M
-triangles (budget 450 / 1.5 M; heaviest hangar frame after round 3: balcony view 183 calls / 1.02 M
-tris); load 11.2 s on this VM (budget 12 s — the hangar's ~200 ms build and the canvas atlases are the
-cost; see Remaining).
+triangles (budget 450 / 1.5 M; heaviest hangar frame after round 4: deck view 169 calls / 1.00 M tris);
+load 11.1 s on this VM (budget 12 s — the hangar's ~190 ms build and the canvas atlases are the cost;
+see Remaining). The hangar is at its descriptor limit (28/28) and within ~15 % of its tri and build
+budgets: any further hangar work must trade, not add.
 
 What each delivers:
 - **Doors** (§9.1): 15 door ids paired across Deck 4 (3 `to: null` future doors locked red). Frames,
@@ -261,11 +262,34 @@ What each delivers:
   the KEEP CLEAR plate is the non-slip band's blotchy wear at a grazing angle). Traffic: the arriving
   fighter's landing lamp clips to a white disc at the beam focus — being brought under clip.
 
+- Hangar round 4 (every change judged on a 640×360 downscale; measured sRGB luminance at that size,
+  r3 → r4): plate steps a third of a stop apart with gloss keyed to the step (adjacent plates in the
+  deck row 24/38/39/33 → 24/39/32/23), rough wear decals so tracks stay dark at grazing angles (track vs
+  plate −27 % → −41…50 %), doubled pad skids and door tug tracks, occlusion pools under every footprint
+  (crates 16 vs 31 → 16 vs 39); ceiling per-bay levels 1 / 0.45 / 0.2 with 15 % dead segments and 8.6 m
+  lens runs; the crane rebuilt hull-grey and self-lit with a 2.6 m hazard block at y −54, a work-light
+  pair and a load container (girder vs ceiling 26 vs 27 → 112 vs 27; block and pool read in the racks
+  frame); every strip housed / segmented / capped (`litChannel`), rails and lip strips at fixed EM
+  levels, the KEEP CLEAR light −2 stops with two lamp masts as its fixture — no pixel > 225 in the deck
+  frame, far-wall streak 236 → 196 max; end walls: lit base storey + falloff (gradient 1.8× → 3.7×),
+  3 m rib flanks at half the panel value, lit slot grilles, kick plate + covered trench, light columns
+  (aft) and shutter mass + giant numerals (bow), control band ±18.8 m with floor slab and rail posts;
+  aperture: clean rubber lip band with yellow lines (the "speckle" is gone), bolted/worn rail bar and
+  posts; BAY 1 stencil in frame, 0.9 m junction cabinets, threshold sill + flood; balcony pools 4.9 m off
+  the rings (pool 98 / ring 93 / edge 71 / outside 20), lit far-lane edges. The "port flood blob" the
+  critic saw in the deck/balcony frames is a `sys-traffic` fighter's engine glow in a port tier-2 slot
+  (raycast-verified), now compressed by the traffic glow shoulder. Collisions 24/24, clamps 0 mismatches.
+  Traffic: the clipped disc at the beam focus was the twin engine glow seen nozzle-on, not the lamp —
+  glow shader shoulder `1.4·(1−e^(−c/1.4))`, core 1.5 / halo 0.4 (peak 245 → 228, ≥ 230 px 62 → 2),
+  landing lamp peak 6.8 → 1.3 with a recessed lens; 22/22. Full deck `full-r4`: 13 modules, 61 views,
+  0 warnings, 0 page errors, load 11.1 s, hangar 188 ms.
+
 ## Remaining
-1. Hangar round 4 + traffic lamp fix in flight; fifth blind critic pass on the round-4 frames afterwards.
-   The hangar critic loop closes there unless it reports a geometry bug: four passes have taken it from
-   4–5 to 6.2 with every item mapped to a change, and the remaining spread to the corridors' 7 is the
-   lighting model (see Requests: shadow-casting key light), which no dressing pass can supply.
+1. Fifth blind critic pass on the round-4 frames (in flight). The hangar critic loop closes there unless
+   it reports a geometry bug: four passes have taken it from 4–5 to 6.2 with every item mapped to a
+   change, the hangar is at its descriptor limit and within ~15 % of its tri/build budgets, and the
+   remaining spread to the corridors' 7 is the lighting model (see Requests: shadow-casting key light),
+   which no dressing pass can supply.
 2. Load time 12.1 s with all 13 modules is at the §12 limit: the hangar builds in ~200 ms (limit 250) and
    the text/hazard/decal canvas atlases cost ~1 s; candidates are lazy per-room building (A's streaming
    plan already builds in chunks) and sharing one text atlas across modules.
