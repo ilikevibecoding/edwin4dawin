@@ -47,10 +47,13 @@ const FLIGHT = Math.round((GANTRY_Y - CAT_Y) / 2 / 0.18) * 0.3; // run of one fl
 const LANDING = 2.6;
 const GANTRY_Z1 = STAIR_Z0 - FLIGHT - LANDING - FLIGHT; // aft end of the boarding gantry (= top of the stairs)
 // floods: two ceiling spots over the apron centres, four rigs hanging to y = 11.5 over the aprons'
-// inner edges (clear of the opening and of the TIE paths, which run along the racks and the well)
+// inner edges (clear of the opening and of the TIE paths, which run along the racks and the well).
+// [x, z, intensity]: the aft spot sits 3 m off the tower's foot and lands on the deck the tower camera
+// looks along, so it runs at two thirds of the forward one (the white-out there was the environment
+// probe on the gloss, see hg_floor — the spot only added to it)
 const SPOTS = [
-  [0, -47],
-  [0, -143],
+  [0, -47, 360],
+  [0, -143, 540],
 ];
 const RIGS = [
   [-14, -134.5],
@@ -59,6 +62,9 @@ const RIGS = [
   [14, -55.5],
 ];
 const RIG_Y = 11.5;
+// elevated rails (catwalks, gantries, bridges) get a dark painted bar: bare steel up there caught the
+// rigs as a white line across the ceiling from the deck
+const RAIL = { mat: "paintedMetal", col: PALETTE.impMid };
 const YELLOW = new THREE.Color("#e2b93f");
 const PAINT_W = new THREE.Color("#dfe4ea");
 
@@ -95,7 +101,7 @@ export function buildHangar(kit, ctx) {
   ensureMaterials(ctx);
   const rand = rng(ctx.seed + 5);
 
-  floorSlabs(kit, B0);
+  floorSlabs(kit, ctx, B0);
   shellWalls(kit, ctx, B0);
   ceiling(kit, ctx, B0);
   const wellGroup = well(ctx);
@@ -126,7 +132,7 @@ export function buildHangar(kit, ctx) {
     const o = traffic ? traffic.bay.openness : 0;
     applyDoors(o);
     beacon(o, t, o > 0.001 && o < 0.999);
-    field(t, o);
+    field(t, o, dt);
     crane(t);
     lift(t);
     prevOpen = o;
@@ -167,6 +173,46 @@ function ensureMaterials(ctx) {
     f.opacity = 0.3;
     f.vertexColors = true;
     m.hg_field = f;
+  }
+  if (!m.hg_fieldScan) {
+    // second, fainter layer over the field: soft scan bands and a caustic mottle that crawl slowly
+    // along the bay, so the plane still reads as an energy field at the grazing angles the deck sees
+    // it from (the cell grid alone added nothing there and the field read as a black pit)
+    const s = m.hg_field.clone();
+    s.map = fieldScanTexture();
+    s.map.repeat.set(2, (HOLE.z1 - HOLE.z0) / 14);
+    s.color = new THREE.Color("#4a8cff");
+    s.opacity = 0.12;
+    m.hg_fieldScan = s;
+  }
+  if (!m.hg_fieldPulse) {
+    // expanding ring where a TIE crosses the field
+    const p = m.hg_field.clone();
+    p.map = null;
+    p.color = new THREE.Color("#8ec2ff");
+    p.opacity = 0.7;
+    p.vertexColors = false;
+    m.hg_fieldPulse = p;
+  }
+  if (!m.hg_spill) {
+    // warm light spilling out of the bay: what "lit hangar" reads as from 135 m below the hull (the
+    // hood faces and rig emitters are far too small at that range). One-sided, facing down, so only
+    // cameras under the hull see it; from the deck it is back-face culled
+    const w = m.hg_field.clone();
+    w.map = null;
+    w.color = new THREE.Color("#ffd9a8");
+    w.opacity = 0.35;
+    w.side = THREE.FrontSide;
+    m.hg_spill = w;
+  }
+  if (!m.hg_floor) {
+    // the deck's gloss: three ≥ r163 applies scene.environmentIntensity (0.35) to every material
+    // whose envMap is null, so floorGloss's envMapIntensity never took effect and the RoomEnvironment
+    // probe mirrored as a white-out on the deck wherever a camera looked along it at a shallow angle
+    // (tower view, aft apron). The slabs take the probe explicitly (floorSlabs' render hook) so this
+    // value is the one that applies; real lights still put their speculars on the black gloss
+    m.hg_floor = m.floorGloss.clone();
+    m.hg_floor.envMapIntensity = 0.12;
   }
   if (!m.hg_beaconRed) m.hg_beaconRed = m.emitRed.clone();
   if (!m.hg_beaconAmber) m.hg_beaconAmber = m.emitAmber.clone();
@@ -231,14 +277,28 @@ function ensureMaterials(ctx) {
 // ---------------------------------------------------------------------------
 // Floor: black gloss slabs around the opening
 // ---------------------------------------------------------------------------
-function floorSlabs(kit, B0) {
+function floorSlabs(kit, ctx, B0) {
   const [min, max] = B0;
   const pad = 0.4;
-  const slab = (x0, z0, x1, z1) => kit.boxMM("floorGloss", [x0, -0.12, z0], [x1, 0, z1], { texel: 0.33 });
+  // the slabs go on their own kit: hg_floor takes the scene's environment probe explicitly (see
+  // ensureMaterials), and the mesh hook below is where the probe is available
+  const fk = new Kit(ctx.materials);
+  const slab = (x0, z0, x1, z1) => fk.boxMM("hg_floor", [x0, -0.12, z0], [x1, 0, z1], { texel: 0.33 });
   slab(min[0] - pad, min[2] - pad, max[0] + pad, HOLE.z0); // forward apron
   slab(min[0] - pad, HOLE.z1, max[0] + pad, max[2] + pad); // aft apron
   slab(min[0] - pad, HOLE.z0, HOLE.x0, HOLE.z1); // port strip
   slab(HOLE.x1, HOLE.z0, max[0] + pad, HOLE.z1); // starboard strip
+  const floorGroup = new THREE.Group();
+  floorGroup.name = "hangarFloor";
+  for (const mesh of fk.build(floorGroup, { castShadow: true, receiveShadow: true })) {
+    mesh.onBeforeRender = (renderer, scene) => {
+      const m = mesh.material;
+      if (m.envMap || !scene.environment) return;
+      m.envMap = scene.environment;
+      m.needsUpdate = true;
+    };
+  }
+  ctx.mesh(floorGroup);
   // dark gutter along the walls
   const g = 0.2;
   for (const [x0, z0, x1, z1] of [
@@ -632,14 +692,14 @@ function structure(kit, ctx, B0) {
     const zStairEnd = GANTRY_Z1;
     platform(kit, ctx, { x0: Math.min(xi, xoNarrow), z0: zStairEnd, x1: Math.max(xi, xoNarrow), z1: -39.6, y: CAT_Y, thickness: 0.25, mat: "grate" });
     platform(kit, ctx, { x0: Math.min(xi, xoWide), z0: zEnd, x1: Math.max(xi, xoWide), z1: zStairEnd, y: CAT_Y, thickness: 0.25, mat: "grate" });
-    railing(kit, xi, -39.6, xi, zEnd, CAT_Y);
-    railing(kit, xi, zEnd, xoWide, zEnd, CAT_Y);
-    railing(kit, xoWide, zEnd, xoWide, zStairEnd - 0.1, CAT_Y);
+    railing(kit, xi, -39.6, xi, zEnd, CAT_Y, RAIL);
+    railing(kit, xi, zEnd, xoWide, zEnd, CAT_Y, RAIL);
+    railing(kit, xoWide, zEnd, xoWide, zStairEnd - 0.1, CAT_Y, RAIL);
     // the gantry stairs climb beside the narrow catwalk; where they are above head height the void
     // under them is fenced (outer edge of the narrow walk + the dead end of the wide walk)
     const zUnder = STAIR_Z0 - (2.0 / ((GANTRY_Y - CAT_Y) / 2)) * FLIGHT;
-    railing(kit, xoNarrow, zStairEnd - 0.1, xoNarrow, zUnder, CAT_Y);
-    railing(kit, xoNarrow, zStairEnd - 0.1, xoWide, zStairEnd - 0.1, CAT_Y);
+    railing(kit, xoNarrow, zStairEnd - 0.1, xoNarrow, zUnder, CAT_Y, RAIL);
+    railing(kit, xoNarrow, zStairEnd - 0.1, xoWide, zStairEnd - 0.1, CAT_Y, RAIL);
     // wall brackets: a beam under the walk every 6 m plus a knee brace
     for (let z = zEnd + 1; z < -40; z += 6) {
       kit.box("paintedMetal", s * 34.3, CAT_Y - 0.4, z, 3.4, 0.24, 0.24, { color: PALETTE.impDark, texel: 2 });
@@ -652,7 +712,7 @@ function structure(kit, ctx, B0) {
     const a = stairs(kit, ctx, { x: sx, z: STAIR_Z0, y0: CAT_Y, y1: midY, axis: "z", dir: -1, w: 1.5 });
     const landZ0 = STAIR_Z0 - a.total;
     platform(kit, ctx, { x0: Math.min(sx - 0.75, sx + 0.75), z0: landZ0 - LANDING, x1: Math.max(sx - 0.75, sx + 0.75), z1: landZ0, y: midY, thickness: 0.25, mat: "grate" });
-    railing(kit, s * 34.4, landZ0 - LANDING, s * 34.4, landZ0, midY);
+    railing(kit, s * 34.4, landZ0 - LANDING, s * 34.4, landZ0, midY, RAIL);
     const b = stairs(kit, ctx, { x: sx, z: landZ0 - LANDING, y0: midY, y1: GANTRY_Y, axis: "z", dir: -1, w: 1.5 });
     stairGuard(kit, { x: sx, z: STAIR_Z0, axis: "z", dir: -1, w: 1.5, y0: CAT_Y, y1: midY, total: a.total, sides: [-s] });
     stairGuard(kit, { x: sx, z: landZ0 - LANDING, axis: "z", dir: -1, w: 1.5, y0: midY, y1: GANTRY_Y, total: b.total, sides: [-s] });
@@ -904,9 +964,9 @@ function towerAndMezzanine(kit, ctx, B0) {
     const xStairEnd = s * (13.3 + run.total);
     platform(kit, ctx, { x0: Math.min(xa, xb), z0: -39.6, x1: Math.max(xa, xb), z1: -37.0, y: T.y0, thickness: 0.25, mat: "grate" });
     platform(kit, ctx, { x0: Math.min(xStairEnd, xb), z0: -37.0, x1: Math.max(xStairEnd, xb), z1: T.z1, y: T.y0, thickness: 0.25, mat: "grate" });
-    railing(kit, xa, -39.6, s * 32.5, -39.6, T.y0);
+    railing(kit, xa, -39.6, s * 32.5, -39.6, T.y0, RAIL);
     // railing along the walkway edge above the stair flight (the flight's top lands beyond it)
-    railing(kit, s * 13.3, -37.0, s * (13.3 + run.total - 0.4), -37.0, T.y0);
+    railing(kit, s * 13.3, -37.0, s * (13.3 + run.total - 0.4), -37.0, T.y0, RAIL);
     // solid parapet under the walkway edge so the stair well below reads as a bay, not a hole
     kit.boxMM("paintedMetal", [Math.min(xa, xStairEnd), T.y0 - 0.5, -37.1], [Math.max(xa, xStairEnd), T.y0 - 0.25, -36.95], { color: PALETTE.impBlack, texel: 2 });
   }
@@ -936,11 +996,11 @@ function racks(kit, ctx, B0) {
     platform(kit, ctx, { x0: gx0, z0: gz0, x1: gx1, z1: GANTRY_Z1, y: GANTRY_Y, thickness: 0.25, mat: "grate" });
     let zr = gz0;
     for (const rz of RACK_Z) {
-      railing(kit, s * 34.4, zr, s * 34.4, rz - 0.75, GANTRY_Y);
+      railing(kit, s * 34.4, zr, s * 34.4, rz - 0.75, GANTRY_Y, RAIL);
       zr = rz + 0.75;
     }
-    railing(kit, s * 34.4, zr, s * 34.4, GANTRY_Z1, GANTRY_Y);
-    railing(kit, s * 34.4, gz0, s * 35.9, gz0, GANTRY_Y);
+    railing(kit, s * 34.4, zr, s * 34.4, GANTRY_Z1, GANTRY_Y, RAIL);
+    railing(kit, s * 34.4, gz0, s * 35.9, gz0, GANTRY_Y, RAIL);
     for (let z = gz0 + 2; z < GANTRY_Z1; z += 9) {
       kit.box("paintedMetal", s * 35.2, GANTRY_Y - 0.45, z, 1.6, 0.2, 0.2, { color: PALETTE.impDark, texel: 2 });
       kit.add("paintedMetal", new THREE.BoxGeometry(0.14, 1.9, 0.14), { pos: [s * 35.0, GANTRY_Y - 1.2, z], rot: [0, 0, -s * 0.72], color: PALETTE.impDark, texel: 2 });
@@ -974,9 +1034,9 @@ function racks(kit, ctx, B0) {
       const bx0 = Math.min(s * 34.4, rx + s * 1.3);
       const bx1 = Math.max(s * 34.4, rx + s * 1.3);
       platform(kit, ctx, { x0: bx0, z0: rz - 0.55, x1: bx1, z1: rz + 0.55, y: GANTRY_Y, thickness: 0.2, mat: "grate" });
-      railing(kit, bx0, rz - 0.55, bx1, rz - 0.55, GANTRY_Y);
-      railing(kit, bx0, rz + 0.55, bx1, rz + 0.55, GANTRY_Y);
-      railing(kit, rx + s * 1.3, rz - 0.55, rx + s * 1.3, rz + 0.55, GANTRY_Y);
+      railing(kit, bx0, rz - 0.55, bx1, rz - 0.55, GANTRY_Y, RAIL);
+      railing(kit, bx0, rz + 0.55, bx1, rz + 0.55, GANTRY_Y, RAIL);
+      railing(kit, rx + s * 1.3, rz - 0.55, rx + s * 1.3, rz + 0.55, GANTRY_Y, RAIL);
       // ladder from the bridge end down to the hatch
       const lx = rx + s * 1.2;
       for (const dz of [-0.3, 0.3]) kit.box("metal", lx, (GANTRY_Y - 0.2 + RACK_Y + 1.5) / 2, rz + dz, 0.05, GANTRY_Y - 0.2 - (RACK_Y + 1.5), 0.05, { color: PALETTE.steel });
@@ -1241,8 +1301,8 @@ function fireCabinet(kit, ctx, side, u, bounds) {
 // the corridor and the two side bays (3 each).
 // ---------------------------------------------------------------------------
 function lighting(kit, ctx, B0) {
-  SPOTS.forEach(([x, z], i) => {
-    const s = new THREE.SpotLight(0xfff1de, 540 * LIGHT_SCALE, 62, 0.8, 0.6, 2);
+  SPOTS.forEach(([x, z, intensity], i) => {
+    const s = new THREE.SpotLight(0xfff1de, intensity * LIGHT_SCALE, 62, 0.8, 0.6, 2);
     s.position.set(x, CEIL - 2.9, z);
     s.target.position.set(x, 0, z);
     s.castShadow = i === 0; // the pool's shadow-casting slot goes to the aft apron flood
@@ -1292,14 +1352,17 @@ function bayDoors(ctx, wellGroup) {
           if ((i + j) % 2 === 0) k.boxMM("paintedMetal", [(px0 + px1) / 2 - 0.5, -0.03, (pz0 + pz1) / 2 - 0.5], [(px0 + px1) / 2 + 0.5, -0.015, (pz0 + pz1) / 2 + 0.5], { color: PALETTE.impBlack, texel: 2 });
         }
       }
-      // meeting edge: 0.6 m hazard band per leaf (1.2 m seam), coarse stripes, amber lit bar
+      // meeting edge: 0.6 m hazard band per leaf (1.2 m seam), coarse stripes, amber lit bar. Nothing
+      // on a leaf rises above y = -0.004: the open leaves park under the deck slab (-0.12 … 0), and
+      // the seam bar and edge bars used to stand proud of it as an amber line and white lines
+      // across the side strips (the hazard band also z-fought the slab top at exactly 0)
       const ex0 = s < 0 ? -0.7 : 0.05;
       const ex1 = s < 0 ? -0.05 : 0.7;
       k.boxMM("paintedMetal", [ex0 - 0.1, -0.17, za], [ex1 + 0.1, -0.03, zb], { color: PALETTE.impBlack, texel: 2 });
-      k.boxMM("hazard", [ex0, -0.03, za], [ex1, 0.0, zb], { texel: 0.35 });
-      k.boxMM("hg_seam", [s < 0 ? -0.2 : 0.06, -0.02, za + 0.6], [s < 0 ? -0.06 : 0.2, 0.012, zb - 0.6], {});
+      k.boxMM("hazard", [ex0, -0.03, za], [ex1, -0.012, zb], { texel: 0.35 });
+      k.boxMM("hg_seam", [s < 0 ? -0.2 : 0.06, -0.02, za + 0.6], [s < 0 ? -0.06 : 0.2, -0.004, zb - 0.6], {});
       // white edge bars along the leaf ends (fore / aft)
-      for (const z of [za + 0.2, zb - 0.2]) k.boxMM("hg_edge", [lo + 1.2, -0.02, z - 0.06], [hi - 1.2, 0.006, z + 0.06], {});
+      for (const z of [za + 0.2, zb - 0.2]) k.boxMM("hg_edge", [lo + 1.2, -0.02, z - 0.06], [hi - 1.2, -0.004, z + 0.06], {});
       // guide shoes at the fore / aft edges (ride in the well tracks)
       for (const z of [za + 0.15, zb - 0.15]) k.boxMM("metal", [lo, -1.0, z - 0.14], [hi, -0.2, z + 0.14], { color: PALETTE.gunmetal });
       // underside: deep ribs and running lights (the face seen from space)
@@ -1394,14 +1457,55 @@ function beacons(ctx) {
 }
 
 // ---------------------------------------------------------------------------
-// Magnetic containment field across the opening, just under deck level
+// Magnetic containment field across the opening, just under deck level: the cell-grid plane, a
+// fainter scrolling scan / caustic layer over it (what the deck sees at grazing angles), a pulse ring
+// where a TIE crosses, and the warm one-sided spill plane above it for cameras under the hull
 // ---------------------------------------------------------------------------
-function containmentField(ctx) {
-  const mat = ctx.materials.hg_field;
-  const w = HOLE.x1 - HOLE.x0 - 0.3;
-  const d = HOLE.z1 - HOLE.z0 - 0.3;
-  const FADE = 2.0; // the outer 2 m fade out (vertex colour → black adds nothing)
-  // 3 × 3 quads: the 16 vertices of a 4 × 4 grid are pulled to the fade ring, then coloured
+/** 128 × 256 tile: two soft scan bands along v plus a faint caustic mottle; repeats seamlessly. */
+function fieldScanTexture() {
+  const W = 128;
+  const H = 256;
+  const c = makeCanvas(W, H);
+  const g = c.getContext("2d");
+  g.fillStyle = "#000";
+  g.fillRect(0, 0, W, H);
+  // caustic mottle: soft blobs on a jittered grid, drawn wrapped so the tile repeats
+  const r = rng(7);
+  for (let i = 0; i < 26; i++) {
+    const x = r() * W;
+    const y = r() * H;
+    const rad = 14 + r() * 22;
+    const a = 0.05 + r() * 0.09;
+    for (const [dx, dy] of [
+      [0, 0],
+      [W, 0],
+      [-W, 0],
+      [0, H],
+      [0, -H],
+    ]) {
+      const grad = g.createRadialGradient(x + dx, y + dy, 0, x + dx, y + dy, rad);
+      grad.addColorStop(0, `rgba(255,255,255,${a})`);
+      grad.addColorStop(1, "rgba(255,255,255,0)");
+      g.fillStyle = grad;
+      g.fillRect(x + dx - rad, y + dy - rad, rad * 2, rad * 2);
+    }
+  }
+  // scan bands: a bright narrow line with a soft tail, twice per tile
+  for (const y0 of [40, 168]) {
+    const grad = g.createLinearGradient(0, y0 - 26, 0, y0 + 6);
+    grad.addColorStop(0, "rgba(255,255,255,0)");
+    grad.addColorStop(0.8, "rgba(255,255,255,0.45)");
+    grad.addColorStop(0.92, "rgba(255,255,255,1)");
+    grad.addColorStop(1, "rgba(255,255,255,0)");
+    g.fillStyle = grad;
+    g.fillRect(0, y0 - 26, W, 32);
+  }
+  return toTexture(c, { srgb: false, wrap: true, anisotropy: 4 });
+}
+
+/** Field plane geometry: a 3 × 3 quad grid whose outer ring fades to black over FADE metres. */
+function fieldPlane(w, d, faceDown) {
+  const FADE = 2.0;
   const geo = new THREE.PlaneGeometry(w, d, 3, 3);
   const pos = geo.attributes.position;
   const col = new Float32Array(pos.count * 3);
@@ -1416,22 +1520,76 @@ function containmentField(ctx) {
       col[v * 3] = col[v * 3 + 1] = col[v * 3 + 2] = inner;
     }
   }
-  // uvs follow the vertex positions so the 1 m cells stay square across the ring
+  // uvs follow the vertex positions so the texture cells stay square across the ring
   const uv = geo.attributes.uv;
   for (let v = 0; v < pos.count; v++) uv.setXY(v, pos.getX(v) / w + 0.5, pos.getY(v) / d + 0.5);
   geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
-  geo.rotateX(-Math.PI / 2);
-  const mesh = new THREE.Mesh(geo, mat);
-  mesh.position.set(0, FIELD_Y, (HOLE.z0 + HOLE.z1) / 2);
-  mesh.renderOrder = 4;
-  mesh.frustumCulled = true;
-  ctx.mesh(mesh);
-  return (t, o) => {
+  geo.rotateX(faceDown ? Math.PI / 2 : -Math.PI / 2);
+  return geo;
+}
+
+function containmentField(ctx) {
+  const m = ctx.materials;
+  const w = HOLE.x1 - HOLE.x0 - 0.3;
+  const d = HOLE.z1 - HOLE.z0 - 0.3;
+  const zc = (HOLE.z0 + HOLE.z1) / 2;
+  const layer = (mat, y, faceDown = false) => {
+    const mesh = new THREE.Mesh(fieldPlane(w, d, faceDown), mat);
+    mesh.position.set(0, y, zc);
+    mesh.renderOrder = 4;
+    mesh.frustumCulled = true;
+    ctx.mesh(mesh);
+    return mesh;
+  };
+  const mesh = layer(m.hg_field, FIELD_Y);
+  const scan = layer(m.hg_fieldScan, FIELD_Y + 0.05);
+  const spill = layer(m.hg_spill, FIELD_Y + 1.0, true);
+  // pulse ring at the crossing point, scaled per frame
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.82, 1, 48).rotateX(-Math.PI / 2), m.hg_fieldPulse);
+  ring.position.set(0, FIELD_Y + 0.08, zc);
+  ring.renderOrder = 5;
+  ring.visible = false;
+  ctx.mesh(ring);
+  // TIE crossings: traffic positions are world space; the field sits at origin.y + FIELD_Y
+  const traffic = ctx.traffic;
+  const origin = ctx.deck.origin;
+  const fieldWorldY = origin[1] + FIELD_Y;
+  const prevY = new Map();
+  let pulse = 0;
+  const PULSE = 0.4;
+  return (t, o, dt = 1 / 60) => {
     // slow drift + gentle breathing; it must stay see-through (0.3 ± 0.04)
-    mat.map.offset.set((t * 0.006) % 1, (-t * 0.009) % 1);
-    mat.opacity = 0.3 + 0.03 * Math.sin(t * 1.1) + 0.012 * Math.sin(t * 3.7);
+    m.hg_field.map.offset.set((t * 0.006) % 1, (-t * 0.009) % 1);
+    m.hg_fieldScan.map.offset.set((t * 0.004) % 1, (-t * 0.02) % 1);
+    if (traffic && traffic.fighters) {
+      for (const f of traffic.fighters) {
+        const y = f.position.y;
+        const py = prevY.get(f.id);
+        prevY.set(f.id, y);
+        if (py === undefined || f.state === "parked") continue;
+        // a real crossing this frame (not a teleport from a stale frame), inside the opening
+        if ((py - fieldWorldY) * (y - fieldWorldY) < 0 && Math.abs(y - py) < 6) {
+          const lx = f.position.x - origin[0];
+          const lz = f.position.z - origin[2];
+          if (lx > HOLE.x0 && lx < HOLE.x1 && lz > HOLE.z0 && lz < HOLE.z1) {
+            pulse = 1;
+            ring.position.set(lx, FIELD_Y + 0.08, lz);
+          }
+        }
+      }
+    }
+    pulse = Math.max(0, pulse - dt / PULSE);
+    const k = pulse * pulse * (3 - 2 * pulse);
+    m.hg_field.opacity = 0.3 + 0.03 * Math.sin(t * 1.1) + 0.012 * Math.sin(t * 3.7) + 0.4 * k;
+    m.hg_fieldScan.opacity = 0.12 + 0.35 * k;
+    if (pulse > 0) {
+      const rr = 3 + 11 * (1 - pulse);
+      ring.scale.set(rr, 1, rr);
+      m.hg_fieldPulse.opacity = 0.7 * k;
+    }
+    ring.visible = pulse > 0 && o > 0.002;
     // nothing of it shows under the shut leaves; skip the blend when closed
-    mesh.visible = o > 0.002;
+    mesh.visible = scan.visible = spill.visible = o > 0.002;
   };
 }
 
@@ -1458,7 +1616,12 @@ function gantryCrane(ctx) {
     k.box("emitAmber", s * 24.6, 25.65, -1.21, 0.6, 0.12, 0.01);
     k.box("emitRed", s * 24.9, 26.05, 0, 0.3, 0.3, 0.3);
   }
-  k.box("hg_lane", 0, GY0 - 0.01, 0, span - 4, 0.02, 0.4);
+  // work lights under the girder: a row of short warm lamps in shallow hoods. One 45 m strip here was
+  // the "white line across the ceiling" in the racks view (the deck looks up at the girder's underside)
+  for (let x = -span / 2 + 3; x <= span / 2 - 3; x += 6) {
+    k.box("paintedMetal", x, GY0 - 0.06, 0, 1.5, 0.12, 0.5, { color: PALETTE.impBlack, texel: 2 });
+    k.box("hg_flood", x, GY0 - 0.125, 0, 1.2, 0.02, 0.3);
+  }
   k.build(g);
   // trolley under the girder, twin cables, hook block, spreader frame and the slung wing
   const tk = new Kit(ctx.materials);
