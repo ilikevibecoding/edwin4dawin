@@ -278,14 +278,10 @@ vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist) {
 `;
 
 /** After shadowmap_pars_fragment: the shadow lookup of the CSM chunk, moved along the refracted view path (see the
- *  shadow offsets in WATER_FRAG_SURFACE). The near cascade averages the surface tap and the in-volume tap. */
+ *  shadow offset in WATER_FRAG_SURFACE). */
 const WATER_SHADOW_FN = /* glsl */ `
 #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
-float waterShadow(sampler2D map, DirectionalLightShadow s, vec4 coord, mat4 m, vec3 off, vec3 offBed, bool near) {
-  if (near) {
-    return 0.5 * (getShadow(map, s.shadowMapSize, s.shadowIntensity, s.shadowBias, s.shadowRadius, coord)
-                + getShadow(map, s.shadowMapSize, s.shadowIntensity, s.shadowBias, s.shadowRadius, coord + m * vec4(offBed, 0.0)));
-  }
+float waterShadow(sampler2D map, DirectionalLightShadow s, vec4 coord, mat4 m, vec3 off) {
   return getShadow(map, s.shadowMapSize, s.shadowIntensity, s.shadowBias, s.shadowRadius, coord + m * vec4(off, 0.0));
 }
 #endif
@@ -293,7 +289,7 @@ float waterShadow(sampler2D map, DirectionalLightShadow s, vec4 coord, mat4 m, v
 
 /** Runs after normal_fragment_begin: wave normal, body reflectance, foam. Leaves w* variables in main scope. */
 const WATER_FRAG_SURFACE = /* glsl */ `
-vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3 wDbg; float wDist; vec3 wShadowOff; vec3 wShadowOffBed;
+vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3 wDbg; float wDist; vec3 wShadowOff;
 {
   vec2 wp = vWorldPos.xz;
   vec2 dxw = dFdx(wp), dyw = dFdy(wp);
@@ -371,13 +367,13 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
     float wv = (val0 - 0.5) * 3.0;
     vec2 dwv = dval0 * 3.0;
     vec2 gw = swellSlope(wp, rot2(wd, -0.33), 11.6, 0.046, t, 1.0, wv, dwv) * fW0
-            + swellSlope(wp, rot2(wd, 0.21), 7.1, 0.050, t, 3.3, wv * 0.7, dwv * 0.7) * fW1
-            + swellSlope(wp, rot2(wd, -0.08), 4.7, 0.030, t, 5.9, wv * 0.5, dwv * 0.5) * fW2;
+            + swellSlope(wp, rot2(wd, 0.21), 7.1, 0.058, t, 3.3, wv * 0.7, dwv * 0.7) * fW1
+            + swellSlope(wp, rot2(wd, -0.08), 4.7, 0.038, t, 5.9, wv * 0.5, dwv * 0.5) * fW2;
     g += gw * grp;
   }
-  mss += chopF * windG * (setVar(11.6, 0.046) * (1.0 - fW0 * fW0) + setVar(7.1, 0.050) * (1.0 - fW1 * fW1) + setVar(4.7, 0.030) * (1.0 - fW2 * fW2)) * 1.1;
+  mss += chopF * windG * (setVar(11.6, 0.046) * (1.0 - fW0 * fW0) + setVar(7.1, 0.058) * (1.0 - fW1 * fW1) + setVar(4.7, 0.038) * (1.0 - fW2 * fW2)) * 1.1;
   float w1 = 1.0 - smoothstep(1.0, 2.2, foot);
-  float a1 = 0.10 * windG * mix(chopF, rippleF, 0.4);
+  float a1 = 0.12 * windG * mix(chopF, rippleF, 0.4);
   if (w1 > 0.001) g += chopSlope(wp, rot2(wd, -0.2), 5.0, 1.8, 2.7, t, 3.7, a1, val1, dval1) * w1;
   mss += a1 * a1 * (1.0 - w1 * w1);
   // wind streaks: the short waves are bunched into lanes a dozen metres long along the wind and a couple across
@@ -393,14 +389,17 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   if (w2 > 0.001 || fC0 > 0.001) {
     g += chopSlope(wp, rot2(wd, 0.3), 1.7, 1.4, 1.6, t, 7.1, a2, val2, dvalT) * w2;
     float grp2 = (0.45 + 1.1 * val1) * rippleF * windG * laneA;
-    float wv = (val1 - 0.5) * 2.4;
-    vec2 dwv = dval1 * 2.4;
+    // the crests meander by a good part of a wavelength (two crossing sets with straight crests drew a diamond lattice)
+    float wv = (val1 - 0.5) * 5.0 + (val2 - 0.5) * 1.5;
+    vec2 dwv = dval1 * 5.0 + dvalT * 1.5;
     float s0, s1, s2;
     g += (swellSlopeC(wp, rot2(wd, -0.35), 3.4, 0.030, t, 2.7, wv, dwv, s0) * fC0
         + swellSlopeC(wp, rot2(wd, 0.25), 2.15, 0.020, t, 8.1, wv * 0.7, dwv * 0.7, s1) * fC1
         + swellSlopeC(wp, rot2(wd, 0.05), 1.3, 0.011, t, 12.3, wv * 0.5, dwv * 0.5, s2) * fC2) * grp2;
-    // sin^6 lines (mean 0.156) of each resolved set, weighted by the group height
-    crestNet = ((pow(max(s0, 0.0), 6.0) - 0.156) * fC0 + (pow(max(s1, 0.0), 6.0) - 0.156) * (0.8 * fC1) + (pow(max(s2, 0.0), 6.0) - 0.156) * (0.6 * fC2)) * min(grp2, 1.5);
+    // sin^6 lines (mean 0.156) of each resolved set, weighted by the group height and broken into segments by
+    // the 1.7 m noise (a continuous network read as a grid)
+    float seg = 0.35 + 0.65 * smoothstep(0.3, 0.7, val2);
+    crestNet = ((pow(max(s0, 0.0), 6.0) - 0.156) * fC0 + (pow(max(s1, 0.0), 6.0) - 0.156) * (0.8 * fC1) + (pow(max(s2, 0.0), 6.0) - 0.156) * (0.5 * fC2)) * min(grp2, 1.5) * seg;
   }
   mss += a2 * a2 * (1.0 - w2 * w2) + rippleF * windG * laneA * (setVar(3.4, 0.030) * (1.0 - fC0 * fC0) + setVar(2.15, 0.020) * (1.0 - fC1 * fC1) + setVar(1.3, 0.011) * (1.0 - fC2 * fC2)) * 1.2;
   // capillary-scale ripples: resolved only within a hundred metres or so; laid in wind lanes
@@ -435,17 +434,12 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   // Shadow lookup point. The darkening the eye sees is the shadow volume along the refracted view path down to
   // the bed, so the lookup is carried a way down that path, where the wave slopes bend it: the shadow's edge
   // then wobbles with the surface instead of printing the caster's planform with a ruler. Only the wave-induced
-  // part of the refraction is used (the mean shift would detach the contact shadow from a floating hull).
+  // part of the refraction is used (the mean shift would detach the contact shadow from a floating hull; a
+  // second tap at the mean-shifted point read as a doubled shadow), and it is bounded so steep chop tears nothing.
   vec3 refr0 = refract(-V, vec3(0.0, 1.0, 0.0), 0.75);
-  float dSh = clamp(depth, 0.4, 3.0);
-  vec2 shOff = (refr.xz / max(-refr.y, 0.3) - refr0.xz / max(-refr0.y, 0.3)) * dSh;
-  shOff *= min(1.0, 0.5 / max(length(shOff), 1e-3));
+  vec2 shOff = (refr.xz / max(-refr.y, 0.3) - refr0.xz / max(-refr0.y, 0.3)) * clamp(depth, 0.4, 3.0);
+  shOff *= min(1.0, 0.4 / max(length(shOff), 1e-3));
   wShadowOff = vec3(shOff.x, 0.0, shOff.y);
-  // the near cascade takes a second tap at the point the refracted ray reaches two thirds of the way down to the
-  // bed (mean shift included): averaged with the surface tap it gives the shadow the soft, depth-wide edge of a
-  // volume seen obliquely while the surface tap keeps the contact shadow on a hull
-  vec2 bedOff = refr0.xz / max(-refr0.y, 0.3) * (0.66 * min(depth, 2.5)) + shOff;
-  wShadowOffBed = vec3(bedOff.x, 0.0, bedOff.y);
   float grainFade = 1.0 - smoothstep(3.0, 10.0, foot);
   float grain = mix(0.5, fbm2o(bedP * 0.045), grainFade);
   // sand ripples and burrow mounds resolve in the near field (landing, taxiing)
@@ -565,7 +559,7 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   // entered, so the sun-lit water around an aircraft-sized shadow keeps lighting the shadowed column from the side
   // and the shadow is a soft mid-tone, not the surface's own shadow. Only the bed of shallow water (which the
   // sunlight reaches straight down) goes properly dark; the sky irradiance is never shadowed by the aircraft.
-  float volumeLeak = 0.52 * (1.0 - exp(-wDbg.x / 2.2));
+  float volumeLeak = 0.45 * (1.0 - exp(-wDbg.x / 2.5));
   vec3 Ebody = reflectedLight.indirectDiffuse + mix(reflectedLight.directDiffuse, unsh, volumeLeak);
   float rSky = clamp(pow(wMss, 0.25), 0.05, 1.0);
   vec3 Rdir = reflect(-wV, wN);
@@ -598,7 +592,7 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   // of the long sunlit path: the shadowed water reads blue-grey next to the lit teal, not navy
   float shade = 1.0 - shadow;
   float bodyLum = dot(body, vec3(0.2126, 0.7152, 0.0722));
-  body = mix(body, vec3(bodyLum) * vec3(0.9, 0.97, 1.08), 0.3 * shade);
+  body = mix(body, vec3(bodyLum) * vec3(0.9, 0.97, 1.08), 0.22 * shade);
   // the CSM sun now carries physical irradiance (x6); the glitter BRDF was tuned for the old scale. The glitter is
   // shadowed at the surface, whose shadow is not the wobbling volume shadow looked up above: it only follows it in part
   vec3 glitter = sunCol * 0.25 * mix(1.0, shadow, 0.7) * sunGlitter(wN, wV, uSunDirW, wMss, vWorldPos.xz, wDx, wDy, uWaveTime);
@@ -651,7 +645,7 @@ export class Water {
       // include after this hook, so the chunk is inlined here with the lookup moved to the wave-refracted point
       const lights = THREE.ShaderChunk.lights_fragment_begin.replace(
         /getShadow\( directionalShadowMap\[ i \], directionalLightShadow\.shadowMapSize, directionalLightShadow\.shadowIntensity, directionalLightShadow\.shadowBias, directionalLightShadow\.shadowRadius, vDirectionalShadowCoord\[ i \] \)/g,
-        'waterShadow( directionalShadowMap[ i ], directionalLightShadow, vDirectionalShadowCoord[ i ], directionalShadowMatrix[ i ], wShadowOff, wShadowOffBed, UNROLLED_LOOP_INDEX == 0 )');
+        'waterShadow( directionalShadowMap[ i ], directionalLightShadow, vDirectionalShadowCoord[ i ], directionalShadowMatrix[ i ], wShadowOff )');
       shader.fragmentShader = (WATER_DEBUG ? `#define WATER_DEBUG ${WATER_DEBUG}\n` : '') + shader.fragmentShader
         .replace('#include <common>', `#include <common>\n${WATER_FRAG_PARS}`)
         .replace('#include <shadowmap_pars_fragment>', `#include <shadowmap_pars_fragment>\n${WATER_SHADOW_FN}`)
