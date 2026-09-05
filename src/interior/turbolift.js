@@ -282,7 +282,7 @@ export class Turbolift {
       }
       const phase = t * 7 - dir * i * 2.1; // one band lit at a time, sweeping with the ride
       const k = Math.pow(Math.max(0, Math.sin(phase)), 6);
-      m.emissiveIntensity = 0.25 + 3.2 * k;
+      m.emissiveIntensity = 0.25 + 1.8 * k; // peak below clip: at 3.45 the lit band was a blown white bar in the tour
     }
   }
 
