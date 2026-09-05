@@ -53,14 +53,15 @@ function build(bp, lot, ctx) {
     }
   };
   // 2 x 5 switchback stairwell in frame coordinates: columns uA (climbing in v) and uB (returning), rows v0+1..v0+5,
-  // door row v0. Ten steps per 5-block level; `doors` lists the walk levels that get a doorway (2 wide, 2 high).
+  // door row v0. Ten steps per 5-block level; `doors` lists the walk levels that get a doorway (2 wide, 3 high —
+  // the first step is right behind the lintel, so a 2-high door would catch the head of anyone stepping up).
   const switchback = (X, Z, uA, uB, v0, y0, y1, doors, trim = B.CHROME) => {
     const put = (u, y, v, id) => set(X(u, v), y, Z(u, v), id);
-    for (const u of [uA, uB]) for (let v = v0 + 1; v <= v0 + 5; v++) col(X(u, v), y0, Z(u, v), y1 + 3, FORCE_AIR);
+    for (const u of [uA, uB]) for (let v = v0 + 1; v <= v0 + 5; v++) col(X(u, v), y0, Z(u, v), y1 + 2, FORCE_AIR);
     for (let lvl = y0; lvl <= y1; lvl += 5) {
       if (doors.has(lvl)) {
-        for (const u of [uA, uB]) { put(u, lvl, v0, FORCE_AIR); put(u, lvl + 1, v0, FORCE_AIR); put(u, lvl + 2, v0, trim); }
-        put(uA, lvl + 3, v0, B.GLOW_PANEL);
+        for (const u of [uA, uB]) { for (let dy = 0; dy <= 2; dy++) put(u, lvl + dy, v0, FORCE_AIR); put(u, lvl + 3, v0, trim); }
+        put(uA, lvl + 4, v0, B.GLOW_PANEL);
       }
       // sub-floor under the next flight doubles as the ceiling of the flight below: a glow panel lights the well
       if (lvl > y0) for (let k = 0; k <= 3; k++) put(uA, lvl - 1, v0 + 1 + k, k === 0 ? B.GLOW_PANEL : B.DECK_PLATE);
@@ -768,7 +769,9 @@ function build(bp, lot, ctx) {
     carve(x, 5, SZ1, x, Y.roof - 1, SZ1);
     col(x, 5, SZ1 - 1, Y.roof - 1, B.HULL_PLATE);
     for (const wy of [7, 12, 17]) { set(x, wy, SZ1 - 1, lit()); set(x, wy + 1, SZ1 - 1, B.DURASTEEL_DARK); }
-    if ((x - SX0) % 8 === 5) col(x, 23, SZ1 - 1, 40, B.GLOW_PANEL); else { for (const wy of [26, 32, 38]) set(x, wy, SZ1 - 1, lit()); }
+    if ((x - SX0) % 8 === 5) col(x, 23, SZ1 - 1, 40, B.GLOW_PANEL);
+    else if ((x - SX0) % 8 === 3) { fill(x, 24, SZ1 - 1, x, 25, SZ1 - 1, B.WINDOW_LIT); fill(x, 30, SZ1 - 1, x, 31, SZ1 - 1, B.WINDOW_LIT); fill(x, 37, SZ1 - 1, x, 38, SZ1 - 1, B.WINDOW_LIT); }
+    else { for (const wy of [26, 29, 32, 35, 38, 41]) set(x, wy, SZ1 - 1, lit()); }
     set(x, 21, SZ1 - 1, B.PANEL_STRIPE); set(x, 42, SZ1 - 1, B.VENT);
     for (const y of [2, 3]) set(x, y, SZ1, x % 3 === 0 ? B.VENT : B.HULL_TRENCH);
   }
@@ -780,6 +783,7 @@ function build(bp, lot, ctx) {
   fill(62, Y.roof, SZ1 - 1, 93, 50, SZ1, B.DURASTEEL_DARK); fill(62, 50, SZ1, 93, 50, SZ1, B.PANEL_STRIPE); fill(64, 51, SZ1 - 1, 91, 51, SZ1, B.DURASTEEL_DARK);
   for (const x of [62, 93]) col(x, Y.roof, SZ1, 53, B.DURASTEEL_DARK);
   for (const x of [63, 92]) { col(x, 51, SZ1, 55, B.IRON_BARS); set(x, 56, SZ1, B.GLOW_PANEL_BLUE); }
+  for (const x of [65, 67, 69, 87, 89, 91]) { fill(x, 46, SZ1, x, 47, SZ1, B.WINDOW_LIT); set(x, 48, SZ1, B.HULL_PLATE); }   // lit gable windows
   // the furnace eye: a round vent-rimmed emblem in the gable, red ring and a molten core that glows at night
   for (let y = 41; y <= 51; y++) for (let x = DX - 5; x <= DX + 6; x++) {
     const dx = x + 0.5 - (DX + 1), dy = y + 0.5 - 46.5, q = dx * dx + dy * dy;
@@ -801,7 +805,9 @@ function build(bp, lot, ctx) {
         set(x, 34, z, B.PANEL_STRIPE); set(x, 35, z, B.PANEL_STRIPE); continue;
       }
       if (z >= SZ0 + 1 && z <= NZ1 - 1) { set(x, 7, z, lit()); set(x, 12, z, lit()); }
-      if (k === 5) col(x, 24, z, 40, B.GLOW_PANEL); else if (k === 3 || k === 7) { for (const wy of [27, 33, 39]) set(x, wy, z, lit()); }
+      if (k === 5) col(x, 24, z, 40, B.GLOW_PANEL);
+      else if (k === 3 || k === 7) { for (const wy of [25, 28, 31, 38, 41]) set(x, wy, z, lit()); }
+      else if (k === 2 || k === 6) { for (const wy of [27, 30, 40]) set(x, wy, z, lit()); }
       set(x, 21, z, B.PANEL_STRIPE); set(x, 34, z, B.PANEL_STRIPE); set(x, 35, z, B.PANEL_STRIPE);
       if (z > HZ0 && z < HZ1 && k === 4) { fill(x, 37, z, x, 39, z, B.VENT); }
     }
@@ -810,7 +816,7 @@ function build(bp, lot, ctx) {
     const k = (x - SX0) % 8;
     if (k < 2) { col(x, 34, SZ0, 35, B.PANEL_STRIPE); continue; }
     set(x, 7, SZ0, lit()); set(x, 12, SZ0, lit()); set(x, 21, SZ0, B.PANEL_STRIPE); set(x, 34, SZ0, B.PANEL_STRIPE); set(x, 35, SZ0, B.PANEL_STRIPE);
-    if (k === 5) col(x, 24, SZ0, 39, B.GLOW_PANEL); else if (k === 3) { for (const wy of [27, 33, 39]) set(x, wy, SZ0, lit()); }
+    if (k === 5) col(x, 24, SZ0, 39, B.GLOW_PANEL); else if (k === 3 || k === 7) { for (const wy of [25, 28, 31, 38, 41]) set(x, wy, SZ0, lit()); }
   }
   fill(SX0, 5, SZ0, SX1, 5, SZ0, B.HULL_TRENCH); fill(SX0, 5, SZ0, SX0, 5, SZ1, B.HULL_TRENCH); fill(SX1, 5, SZ0, SX1, 5, SZ1, B.HULL_TRENCH);
 }
