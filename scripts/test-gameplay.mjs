@@ -46,6 +46,12 @@ window.__t = {
   play() { game.input.locked = true; if (game.hud.screen) game.hud.screen = null; },
   async click(button) { window.__t.play(); await window.__t.frame(); game.input.mouseClicked[button] = true; game.input.mouseDown[button] = true; await window.__t.frame(); game.input.mouseDown[button] = false; await window.__t.frame(); },
   async hold(button, frames) { window.__t.play(); game.input.mouseDown[button] = true; game.input.mouseClicked[button] = true; await window.__t.frames(frames); game.input.mouseDown[button] = false; await window.__t.frame(); },
+  // hold the attack button until the aimed block at (x,y,z) is gone (released right away, so nothing behind it breaks)
+  async breakAt(x, y, z, maxFrames = 40) {
+    window.__t.play(); game.input.mouseDown[0] = true; game.input.mouseClicked[0] = true;
+    for (let i = 0; i < maxFrames && game.world.getBlock(x, y, z) !== 0; i++) await window.__t.frame();
+    game.input.mouseDown[0] = false; await window.__t.frame();
+  },
   key(code) { document.dispatchEvent(new KeyboardEvent('keydown', { code, bubbles: true })); document.dispatchEvent(new KeyboardEvent('keyup', { code, bubbles: true })); },
   async hudClick(x, y, button = 0, shift = false) {
     const h = game.hud; h.mouse.x = x; h.mouse.y = y;
@@ -66,6 +72,8 @@ window.__t = {
     };
   },
   ticks(n) { for (let i = 0; i < n; i++) game.tick(false); },
+  // the game's own module instance (Vite appends ?t= HMR timestamps after edits, so a plain import would be a copy)
+  mod(path) { const url = performance.getEntriesByType('resource').map((e) => e.name).find((u) => u.includes(path + '?') || u.endsWith(path)); return import(url || path); },
   inv() { return game.inventory.slots.map((s) => (s ? [s.id, s.count] : null)); },
   countOf(id) { return game.inventory.count(id); },
   snap() { const p = game.player; return { x: +p.pos.x.toFixed(2), y: +p.pos.y.toFixed(2), z: +p.pos.z.toFixed(2), health: p.health, food: p.food, sat: +p.saturation.toFixed(2) }; },
@@ -129,8 +137,8 @@ try {
     const crossedClosed = Math.sign(doorCentre - along(p1)) !== Math.sign(doorCentre - start);
     check('closed door blocks the player (thin panel collision)', !crossedClosed && Math.abs(along(p1) - doorCentre) > 0.3, `stopped at ${along(p1).toFixed(2)} (door ${doorCentre}, start ${start})`);
     // toggle with a right-click through the interaction code
-    const opens0 = await ev(`(() => { window.__doorSounds = { open: 0, close: 0 }; const a = game.audio, o = a.doorOpen.bind(a), c = a.doorClose.bind(a); a.doorOpen = (p) => { __doorSounds.open++; o(p); }; a.doorClose = (p) => { __doorSounds.close++; c(p); }; return true; })()`);
-    void opens0;
+    // door sounds are positional; count only the ones played at this door (NPCs open / close other doors meanwhile)
+    await ev(`(() => { window.__doorSounds = { open: 0, close: 0 }; const here = (p) => Math.abs(p.x - ${door.x + 0.5}) < 0.01 && Math.abs(p.z - ${door.z + 0.5}) < 0.01; const a = game.audio, o = a.doorOpen.bind(a), c = a.doorClose.bind(a); a.doorOpen = (p) => { if (here(p)) __doorSounds.open++; o(p); }; a.doorClose = (p) => { if (here(p)) __doorSounds.close++; c(p); }; return true; })()`);
     await ev(`(() => { game.player.teleport(${door.standX}, ${door.y}, ${door.standZ}); __t.aimAt(${door.x + 0.5}, ${door.y + 1.0}, ${door.z + 0.5}); })()`);
     await ev(`__t.click(2)`);
     const open = await ev(`[game.world.getBlock(${door.x}, ${door.y}, ${door.z}), game.world.getBlock(${door.x}, ${door.y + 1}, ${door.z}), __doorSounds.open]`);
@@ -231,9 +239,9 @@ try {
   await ev(`(() => { game.openScreen('inventory'); game.hud.invTab = 'items'; })()`);
   await ev(`__t.frames(2)`);
   const items = JSON.parse(await ev(`(async () => {
-    const { ITEMS, ITEM_PALETTE, MAX_STACK } = await import('/src/items.js');
-    const { BLOCKS } = await import('/src/blocks.js');
-    const { tilePixels } = await import('/src/textures.js');
+    const { ITEMS, ITEM_PALETTE, MAX_STACK } = await __t.mod('/src/items.js');
+    const { BLOCKS } = await __t.mod('/src/blocks.js');
+    const { tilePixels } = await __t.mod('/src/textures.js');
     const rows = ITEM_PALETTE.map((id) => {
       const it = ITEMS[id], def = BLOCKS[id];
       const px = tilePixels(def.tex[0]); let opaque = 0; for (let i = 3; i < px.length; i += 4) if (px[i] > 0) opaque++;
@@ -245,11 +253,13 @@ try {
   check('14 registered items, each with a painted 16x16 icon that renders through the HUD item path', items.n === 14 && items.maxStack === 64 && items.rows.every((r) => r.drawn === 'ok' && r.sameName && r.opaquePixels > 20 && r.opaquePixels < 256), items.rows.map((r) => `${r.name}:${r.opaquePixels}px`).join(' '));
   const foods = Object.fromEntries(items.rows.filter((r) => r.food).map((r) => [r.name, [r.food.hunger, r.food.saturation]]));
   check('Minecraft food values', foods.Apple[0] === 4 && foods.Apple[1] === 2.4 && foods.Bread[0] === 5 && foods.Bread[1] === 6 && foods.Steak[0] === 8 && foods.Steak[1] === 12.8 && foods['Cooked Chicken'][0] === 6 && foods['Cooked Chicken'][1] === 7.2 && foods['Raw Beef'][0] === 3 && foods['Raw Chicken'][1] === 1.2, JSON.stringify(foods));
+  await ev(`(() => { game.hud.mouse.x = 4; game.hud.mouse.y = 4; })()`); // no tooltip over the icon rows
+  await ev(`__t.frames(2)`);
   await shot('items_tab');
   await ev(`game.closeScreen()`);
   await ev(`__t.frame()`);
-  // eat an apple by holding right-click while looking at plain ground
-  await ev(`(() => { const p = game.player; __t.aimAt(p.pos.x, p.pos.y - 1, p.pos.z + 1.5); __t.play(); game.input.mouseDown[2] = true; game.input.mouseClicked[2] = true; })()`);
+  // eat an apple by holding right-click while standing outdoors looking at plain ground (no block "use" action there)
+  await ev(`(() => { const p = game.player; p.flying = false; p.teleport(-8.5, game.world.surfaceY(-9, 2) + 1, 2.5); const yaw = -70 * Math.PI / 180; __t.aimAt(p.pos.x - Math.sin(yaw) * 3, p.pos.y - 0.6, p.pos.z - Math.cos(yaw) * 3); __t.play(); game.input.mouseDown[2] = true; game.input.mouseClicked[2] = true; })()`);
   await page.sleep(800);
   const mid = JSON.parse(await ev(`JSON.stringify({ eating: !!game.player.eating, ticks: game.player.eating && game.player.eating.ticks, food: game.player.food, apples: __t.countOf(${I.APPLE}), chews: __chews })`));
   check('holding right-click with an apple starts eating (progress + chewing sounds)', mid.eating && mid.ticks > 4 && mid.chews >= 2 && mid.apples === 3, JSON.stringify(mid));
@@ -292,32 +302,39 @@ try {
       p.teleport(a.pos.x - 1.6, a.pos.y + 0.2, a.pos.z);
       __t.aimAt(a.pos.x, a.pos.y + 0.7, a.pos.z);
       const start = { x: a.pos.x, z: a.pos.z };
+      // the hit state (hurt timer, knockback, red flash) only lasts a few ticks: sample it from inside the hit / render calls
+      const A = game.animals, origHit = A.hit.bind(A), origRender = A.render.bind(A);
+      window.__hit = null;
+      A.hit = (an, from, dmg) => { const r = origHit(an, from, dmg); if (an === a && !window.__hit) window.__hit = { health: a.health, hurt: a.hurt, knock: !!a.knock, panic: a.panic, flash: 0, viaClick: game.input.mouseClicked[0] }; return r; };
+      A.render = (al, dt, cam) => { origRender(al, dt, cam); if (window.__hit) window.__hit.flash = Math.max(window.__hit.flash, a.model.material.uniforms.uHurt.value); };
       await __t.click(0);
-      const afterClick = { health: a.health, hurt: a.hurt, knock: !!a.knock, panic: a.panic, flash: a.model.material.uniforms.uHurt.value };
+      A.hit = origHit; A.render = origRender;
       __t.ticks(6);
       const moved = Math.hypot(a.pos.x - start.x, a.pos.z - start.z);
-      return JSON.stringify({ afterClick, moved: +moved.toFixed(2) });
+      return JSON.stringify({ afterClick: window.__hit, moved: +moved.toFixed(2), healthNow: a.health });
     })()`));
-    check('left-click hits the cow: -1 health, hurt flash, knockback, flees', hitRes.afterClick.health === 9 && hitRes.afterClick.hurt > 0 && hitRes.afterClick.flash === 1 && hitRes.afterClick.panic && hitRes.moved > 0.3, JSON.stringify(hitRes));
+    const h = hitRes.afterClick;
+    check('left-click hits the cow: -1 health, hurt flash, knockback, flees', h && h.health === 9 && h.hurt > 0 && h.flash === 1 && h.knock && h.panic && hitRes.moved > 0.3, JSON.stringify(hitRes));
     await shot('cow_hit');
     const death = JSON.parse(await ev(`(async () => {
       const a = game.animals.list.find((a) => a.id === ${c.id});
-      const dropsBefore = game.drops.items.length;
+      const dropsBefore = game.drops.items.length, beefBefore = __t.countOf(${I.BEEF_RAW}), leatherBefore = __t.countOf(1011);
       while (!a.dead) game.animals.hit(a, { x: a.pos.x - 1, z: a.pos.z }, 1);
       const dropped = game.drops.items.slice(dropsBefore).map((d) => [d.id, d.count]);
       const at = { x: a.pos.x, y: a.pos.y, z: a.pos.z };
       let removedAfter = -1;
       for (let i = 1; i <= 30; i++) { game.animals.tick(game.player, game.sky); if (!game.animals.list.includes(a)) { removedAfter = i; break; } }
-      return JSON.stringify({ dropped, removedAfter, at });
+      return JSON.stringify({ dropped, removedAfter, at, beefBefore, leatherBefore });
     })()`));
     const beef = death.dropped.filter((d) => d[0] === I.BEEF_RAW).reduce((n, d) => n + d[1], 0);
-    check('killing the cow drops 1-3 raw beef (+ leather) and the body vanishes after 1 s', beef >= 1 && beef <= 3 && death.removedAfter > 15 && death.removedAfter <= 21, JSON.stringify(death));
+    const leather = death.dropped.filter((d) => d[0] === 1011).reduce((n, d) => n + d[1], 0);
+    check('killing the cow drops 1-3 raw beef (+ 0-2 leather) and the body vanishes after 1 s', beef >= 1 && beef <= 3 && leather <= 2 && death.removedAfter > 15 && death.removedAfter <= 21, JSON.stringify(death));
     const pick = JSON.parse(await ev(`(async () => {
       const p = game.player; p.flying = true; p.teleport(${death.at.x}, ${death.at.y}, ${death.at.z});
       for (let i = 0; i < 40; i++) game.tick(false);
       return JSON.stringify({ beef: __t.countOf(${I.BEEF_RAW}), leather: __t.countOf(1011), dropsLeft: game.drops.items.length });
     })()`));
-    check('walking over the drops picks up the beef', pick.beef === beef, JSON.stringify(pick));
+    check('walking over the drops picks up the beef (and leather)', pick.beef === death.beefBefore + beef && pick.leather === death.leatherBefore + leather, JSON.stringify({ ...pick, beefBefore: death.beefBefore, dropped: beef }));
   }
 
   // ------------------------------------------------------------------ 5. wheat: harvest, replant, growth
@@ -326,26 +343,27 @@ try {
   const wh = JSON.parse(wheat);
   check('found mature wheat on farmland (ranch field)', !!wh, wheat);
   if (wh) {
+    // hover above the crop and look straight down so the ray only crosses air before the target (fields are dense)
     const harvest = JSON.parse(await ev(`(async () => {
-      const p = game.player; p.flying = true; p.teleport(${wh.x + 0.5}, ${wh.y}, ${wh.z + 2.2});
-      __t.aimAt(${wh.x + 0.5}, ${wh.y + 0.4}, ${wh.z + 0.5});
+      const p = game.player; p.flying = true; p.teleport(${wh.x + 0.5}, ${wh.y + 1.6}, ${wh.z + 0.5});
+      __t.aimAt(${wh.x + 0.5}, ${wh.y + 0.3}, ${wh.z + 0.5});
       const before = game.drops.items.length;
-      await __t.hold(0, 6);
-      return JSON.stringify({ block: game.world.getBlock(${wh.x}, ${wh.y}, ${wh.z}), drops: game.drops.items.slice(before).map((d) => [d.id, d.count]) });
+      await __t.breakAt(${wh.x}, ${wh.y}, ${wh.z});
+      return JSON.stringify({ block: game.world.getBlock(${wh.x}, ${wh.y}, ${wh.z}), farmland: game.world.getBlock(${wh.x}, ${wh.y - 1}, ${wh.z}), drops: game.drops.items.slice(before).map((d) => [d.id, d.count]) });
     })()`));
     const gotWheat = harvest.drops.some((d) => d[0] === I.WHEAT), gotSeeds = harvest.drops.some((d) => d[0] === I.SEEDS);
-    check('breaking mature wheat drops wheat + seeds', harvest.block === B.AIR && gotWheat && gotSeeds, JSON.stringify(harvest));
+    check('breaking mature wheat drops wheat + seeds (farmland stays)', harvest.block === B.AIR && harvest.farmland === B.FARMLAND && gotWheat && gotSeeds, JSON.stringify(harvest));
     const picked = JSON.parse(await ev(`(async () => { const p = game.player; p.teleport(${wh.x + 0.5}, ${wh.y}, ${wh.z + 0.5}); for (let i = 0; i < 30; i++) game.tick(false); return JSON.stringify({ wheat: __t.countOf(${I.WHEAT}), seeds: __t.countOf(${I.SEEDS}) }); })()`));
     check('picked up the wheat and seeds', picked.wheat >= 1 && picked.seeds >= 1, JSON.stringify(picked));
-    // replant: select seeds, right-click the farmland's top face
+    // replant: select seeds, right-click the farmland's top face (looking down through the now-empty crop cell)
     const plant = JSON.parse(await ev(`(async () => {
       const inv = game.inventory; inv.selected = inv.slots.findIndex((s) => s && s.id === ${I.SEEDS});
       const seedsBefore = inv.count(${I.SEEDS});
-      const p = game.player; p.teleport(${wh.x + 0.5}, ${wh.y}, ${wh.z + 2.2});
-      __t.aimAt(${wh.x + 0.5}, ${wh.y - 0.05}, ${wh.z + 0.5});
+      const p = game.player; p.flying = true; p.teleport(${wh.x + 0.5}, ${wh.y + 1.6}, ${wh.z + 0.5});
+      __t.aimAt(${wh.x + 0.5}, ${wh.y - 0.5}, ${wh.z + 0.5});
       await __t.click(2);
       const ent = game.world.getBlockEntity(${wh.x}, ${wh.y}, ${wh.z});
-      return JSON.stringify({ block: game.world.getBlock(${wh.x}, ${wh.y}, ${wh.z}), seeds: inv.count(${I.SEEDS}), seedsBefore, entity: ent && ent.type });
+      return JSON.stringify({ block: game.world.getBlock(${wh.x}, ${wh.y}, ${wh.z}), seeds: inv.count(${I.SEEDS}), seedsBefore, entity: ent && ent.type, hit: game.lastHit && [game.lastHit.x, game.lastHit.y, game.lastHit.z, game.lastHit.id, game.lastHit.face] });
     })()`));
     check('right-click with seeds on farmland plants a wheat seedling (1 seed used, crop entity)', plant.block === B.WHEAT_0 && plant.seeds === plant.seedsBefore - 1 && plant.entity === 'crop', JSON.stringify(plant));
     const grow = JSON.parse(await ev(`(() => { game.cropStageTicks = 40; const stages = []; for (let i = 0; i < 12; i++) { __t.ticks(10); stages.push(game.world.getBlock(${wh.x}, ${wh.y}, ${wh.z})); } game.cropStageTicks = 400; return JSON.stringify({ stages, entity: !!game.world.getBlockEntity(${wh.x}, ${wh.y}, ${wh.z}) }); })()`));
@@ -355,35 +373,71 @@ try {
 
   // ------------------------------------------------------------------ 6. furnace cooking / baking
   log('\n== Cooking ==');
-  const furnace = await ev(`JSON.stringify((() => { const solid = (x, y, z) => game.world.getBlockDef(x, y, z).solid; for (const f of __t.find([${B.FURNACE}], 30)) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { if (!solid(f.x + dx, f.y, f.z + dz) && !solid(f.x + dx, f.y + 1, f.z + dz)) return { ...f, sx: f.x + dx + 0.5, sz: f.z + dz + 0.5 }; } return null; })())`);
+  // a furnace with an all-air cell next to it; the player stands there and aims at the centre of the facing side
+  const furnace = await ev(`JSON.stringify((() => {
+    const air = (x, y, z) => game.world.getBlock(x, y, z) === 0;
+    const clear = (x, z) => game.npcs.list.every((n) => Math.hypot(n.pos.x - x, n.pos.z - z) > 3) && game.animals.list.every((a) => Math.hypot(a.pos.x - x, a.pos.z - z) > 3); // nobody standing in the way of the ray
+    for (const f of __t.find([${B.FURNACE}], 30)) for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      if (air(f.x + dx, f.y, f.z + dz) && air(f.x + dx, f.y + 1, f.z + dz) && clear(f.x + dx + 0.5, f.z + dz + 0.5)) return { ...f, sx: f.x + dx + 0.5, sz: f.z + dz + 0.5, ax: f.x + 0.5 + dx * 0.45, az: f.z + 0.5 + dz * 0.45 };
+    }
+    return null;
+  })())`);
   const fu = JSON.parse(furnace);
   check('found a furnace', !!fu, furnace);
   if (fu) {
     const cook = JSON.parse(await ev(`(async () => {
       const inv = game.inventory; inv.set(2, ${I.BEEF_RAW}, 2); inv.selected = 2;
-      const p = game.player; p.flying = true; p.teleport(${fu.sx}, ${fu.y}, ${fu.sz}); __t.aimAt(${fu.x + 0.5}, ${fu.y + 0.5}, ${fu.z + 0.5});
+      const p = game.player; p.flying = true; p.teleport(${fu.sx}, ${fu.y}, ${fu.sz}); __t.aimAt(${fu.ax}, ${fu.y + 0.5}, ${fu.az});
       await __t.click(2);
-      const started = !!game.cooking, rawAfter = inv.count(${I.BEEF_RAW});
+      const started = !!game.cooking, rawAfter = inv.count(${I.BEEF_RAW}), cookedBefore = inv.count(${I.BEEF_COOKED});
+      const diag = { hit: game.lastHit && [game.lastHit.x, game.lastHit.y, game.lastHit.z, game.lastHit.id], looking: game.lookingAtName, screen: game.hud.screen, locked: game.input.locked, dead: p.dead };
       __t.ticks(61);
-      return JSON.stringify({ started, rawAfter, cooked: inv.count(${I.BEEF_COOKED}), busy: !!game.cooking });
+      return JSON.stringify({ started, rawAfter, cookedBefore, cooked: inv.count(${I.BEEF_COOKED}), busy: !!game.cooking, ...diag });
     })()`));
-    check('right-click raw beef on a furnace cooks it into steak after 3 s', cook.started && cook.rawAfter === 1 && cook.cooked === 1 && !cook.busy, JSON.stringify(cook));
+    check('right-click raw beef on a furnace cooks it into steak after 3 s', cook.started && cook.rawAfter === 1 && cook.cooked === cook.cookedBefore + 1 && !cook.busy, JSON.stringify(cook));
     const bake = JSON.parse(await ev(`(async () => {
       const inv = game.inventory; inv.set(3, ${I.WHEAT}, 3); inv.selected = 3;
-      __t.aimAt(${fu.x + 0.5}, ${fu.y + 0.5}, ${fu.z + 0.5});
+      const wheatBefore = inv.count(${I.WHEAT}), breadBefore = inv.count(${I.BREAD});
+      __t.aimAt(${fu.ax}, ${fu.y + 0.5}, ${fu.az});
       await __t.click(2);
       __t.ticks(61);
-      return JSON.stringify({ wheat: inv.count(${I.WHEAT}), bread: inv.count(${I.BREAD}) });
+      return JSON.stringify({ wheatBefore, wheat: inv.count(${I.WHEAT}), breadBefore, bread: inv.count(${I.BREAD}) });
     })()`));
-    check('3 wheat bake into bread on the furnace', bake.wheat === 0 && bake.bread >= 1, JSON.stringify(bake));
+    check('3 wheat bake into bread on the furnace', bake.wheat === bake.wheatBefore - 3 && bake.bread === bake.breadBefore + 1, JSON.stringify(bake));
   }
 
   // ------------------------------------------------------------------ 7. save & reload
   log('\n== Save / reload ==');
+  // leave the door open (a player-set state is never auto-closed) so the reload has a non-default door state to restore
+  let doorOpenBefore = null;
+  if (door) {
+    doorOpenBefore = await ev(`(async () => {
+      game.player.flying = true; game.player.teleport(${door.standX}, ${door.y}, ${door.standZ}); __t.aimAt(${door.x + 0.5}, ${door.y + 1.0}, ${door.z + 0.5});
+      for (let i = 0; i < 2 && !game.world.getBlockDef(${door.x}, ${door.y}, ${door.z}).doorOpen; i++) await __t.click(2);
+      return [game.world.getBlock(${door.x}, ${door.y}, ${door.z}), game.world.getBlock(${door.x}, ${door.y + 1}, ${door.z})];
+    })()`);
+    check('door left open before saving', doorOpenBefore[0] === B.OAK_DOOR_OPEN || doorOpenBefore[0] === B.SPRUCE_DOOR_OPEN, doorOpenBefore.join(','));
+  }
+  // plant a second seed on a neighbouring farmland cell: a young crop (block + growth timer entity) must survive the reload
+  let seedling = null;
+  if (wh) {
+    seedling = JSON.parse(await ev(`(async () => {
+      const inv = game.inventory; if (inv.count(${I.SEEDS}) < 1) inv.set(4, ${I.SEEDS}, 2); inv.selected = inv.slots.findIndex((s) => s && s.id === ${I.SEEDS});
+      let cell = null;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0]]) { const x = ${wh.x} + dx, z = ${wh.z} + dz; if (game.world.getBlock(x, ${wh.y - 1}, z) === ${B.FARMLAND} && game.world.getBlock(x, ${wh.y}, z) !== ${B.AIR} && game.world.getBlockDef(x, ${wh.y}, z).growth >= 0) { game.world.setBlock(x, ${wh.y}, z, ${B.AIR}); game.onPlayerEdit(x, ${wh.y}, z, ${B.AIR}); cell = { x, z }; break; } if (game.world.getBlock(x, ${wh.y - 1}, z) === ${B.FARMLAND} && game.world.getBlock(x, ${wh.y}, z) === ${B.AIR}) { cell = { x, z }; break; } }
+      if (!cell) return 'null';
+      game.player.flying = true; game.player.teleport(cell.x + 0.5, ${wh.y + 1.6}, cell.z + 0.5); __t.aimAt(cell.x + 0.5, ${wh.y - 0.5}, cell.z + 0.5);
+      await __t.click(2);
+      const ent = game.world.getBlockEntity(cell.x, ${wh.y}, cell.z);
+      return JSON.stringify({ ...cell, block: game.world.getBlock(cell.x, ${wh.y}, cell.z), entity: ent && ent.type });
+    })()`));
+    check('a second seed is planted before saving', seedling && seedling.block === B.WHEAT_0 && seedling.entity === 'crop', JSON.stringify(seedling));
+  }
   const before = JSON.parse(await ev(`(() => { const p = game.player; p.flying = false; p.health = 17; p.food = 13; p.saturation = 2.5; p.teleport(-6.5, ${wh ? wh.y : 60}, 3.5); game.persistNow(); return JSON.stringify({ snap: __t.snap(), inv: __t.inv(), key: game.save.key, raw: localStorage.getItem(game.save.key).length }); })()`));
   check('save written to localStorage (v2 with player, inventory, entities)', before.raw > 100 && before.key.includes(':v2:'), `${before.raw} bytes at ${before.key}`);
-  page.close();
-  page = await launchPage(`${base}/?time=0.45`, { profile });
+  // reload in the same tab (a plain navigation, like a player pressing F5) without the position / fresh URL params
+  await ev(`(() => { window.__old = true; location.href = ${JSON.stringify(`${base}/?time=0.45`)}; })()`);
+  for (let i = 0; i < 100; i++) { await page.sleep(200); const gone = await ev('!window.__old').catch(() => false); if (gone) break; }
   await page.waitForGame(180000);
   await ev(HELPERS);
   await page.sleep(1000);
@@ -396,11 +450,11 @@ try {
   }
   if (door) {
     const d = await ev(`(async () => { game.player.teleport(${door.standX}, ${door.y}, ${door.standZ}); for (let i = 0; i < 40; i++) { await __t.frame(); if (game.world.isLoaded(${door.x}, ${door.z})) break; } return [game.world.getBlock(${door.x}, ${door.y}, ${door.z}), game.world.getBlock(${door.x}, ${door.y + 1}, ${door.z})]; })()`);
-    check('reload restores door states from the edit list', d[0] === B.OAK_DOOR || d[0] === B.SPRUCE_DOOR, d.join(','));
+    check('reload restores the door state (still open) from the edit list', d[0] === doorOpenBefore[0] && d[1] === doorOpenBefore[1], d.join(','));
   }
   if (wh) {
-    const cropAfter = await ev(`(async () => { game.player.teleport(${wh.x + 0.5}, ${wh.y}, ${wh.z + 2}); for (let i = 0; i < 40; i++) { await __t.frame(); if (game.world.isLoaded(${wh.x}, ${wh.z})) break; } return game.world.getBlock(${wh.x}, ${wh.y}, ${wh.z}); })()`);
-    check('reload restores the replanted (now mature) wheat', cropAfter === B.WHEAT, String(cropAfter));
+    const cropAfter = JSON.parse(await ev(`(async () => { game.player.teleport(${wh.x + 0.5}, ${wh.y}, ${wh.z + 2}); for (let i = 0; i < 40; i++) { await __t.frame(); if (game.world.isLoaded(${wh.x}, ${wh.z})) break; } const s = ${JSON.stringify(seedling)}; const ent = s && game.world.getBlockEntity(s.x, ${wh.y}, s.z); return JSON.stringify({ mature: game.world.getBlock(${wh.x}, ${wh.y}, ${wh.z}), seedling: s ? game.world.getBlock(s.x, ${wh.y}, s.z) : null, seedlingEntity: ent ? ent.type + ':' + ent.age : null }); })()`));
+    check('reload restores the regrown wheat and the young seedling with its growth timer', cropAfter.mature === B.WHEAT && (!seedling || ((cropAfter.seedling === B.WHEAT_0 || cropAfter.seedling === B.WHEAT_1) && cropAfter.seedlingEntity && cropAfter.seedlingEntity.startsWith('crop:'))), JSON.stringify(cropAfter));
   }
   const errs = page.exceptions.slice(0, 3);
   check('no uncaught exceptions during the run', errs.length === 0, errs.join(' | '));

@@ -439,6 +439,7 @@ export class Game {
     const handLight = this.world.sampleLight(eye.x, eye.y, eye.z);
     const held = this.inventory.held;
     this.hand.update(dt, held ? held.id : 0, handLight, bob, this.viewBobbing);
+    this.poseHeldItem(held);
     this.animateEating();
 
     // render
@@ -570,14 +571,22 @@ export class Game {
       if (r === 'done') { this.inventory.consume(this.inventory.selected, 1); this.hud.xp = Math.min(1, this.hud.xp + 0.005); }
     } else p.stopEating();
   }
+  // Non-block items are flat quads without the pixel thickness Minecraft extrudes, so the oblique flat-block pose of
+  // hand.js shows them edge-on; turn them towards the camera at a slight angle so the icon reads in first person.
+  poseHeldItem(held) {
+    const m = this.hand.blockMesh;
+    if (!m || !held || !isItem(held.id)) return;
+    m.rotation.set(-0.2, -0.35, 0.12);
+    m.position.x -= 0.06; m.position.y += 0.06;
+  }
   // Eating animation: the held item is pulled towards the mouth and bobs with each bite (applied on top of hand.js).
   animateEating() {
     const e = this.player.eating, m = this.hand.blockMesh;
     if (!e || !m) return;
     const k = Math.min(1, e.ticks / 4);
-    const bite = Math.abs(Math.sin(this.time * 21));
-    m.position.x -= 0.26 * k; m.position.y += (0.14 + bite * 0.07) * k; m.position.z += 0.14 * k;
-    m.rotation.x += 0.45 * k; m.rotation.z += 0.25 * k;
+    const bite = Math.abs(Math.cos(this.time * Math.PI / 0.2)); // one bob every 4 ticks, like Minecraft's eat transform
+    m.position.x -= 0.38 * k; m.position.y += (0.26 + bite * 0.08) * k; m.position.z += 0.1 * k;
+    m.rotation.x += 0.45 * k; m.rotation.z += 0.3 * k;
   }
 
   // Crops advance one stage every cropStageTicks (age is kept in the crop's block entity so growth survives reloads).

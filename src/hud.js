@@ -446,7 +446,7 @@ export class HUD {
     this.text('Inventory', gx, mainY - 9 * s, '#404040', false, Math.max(1, s - 1));
     this.drawPlayerSlots(inv, gx, mainY, hotbarY);
     this.drawHoverHighlight();
-    this.text('Click pick up / place  -  right-click split  -  shift-click quick move', gx, py + ph - 9 * s, '#606060', false, Math.max(1, s - 1));
+    this.text('LMB move   RMB split   Shift quick-move', gx, py + ph - 9 * s, '#606060', false, Math.max(1, s - 1));
     // interactions
     const button = this.mouse.clicked ? 0 : this.mouse.rclicked ? 2 : -1;
     if (button >= 0) {
