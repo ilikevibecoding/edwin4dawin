@@ -540,36 +540,49 @@ function paintPlaza(p) {
 }
 
 // ------------------------------------------------------------------------------------------------ frontier mini spaceport
-// A single pad and a tiny terminal on a deck at the hyperlane-station level (floor y 90, walking at 91) carried on
-// pillars over the forest east of the frontier town, inside the reserved x 240..300, z -40..40. The terminal's west
-// door opens onto a stub at the deck edge (x 252, z -3..3) for the station builder to bridge to.
+// A single pad and a tiny terminal on a roof deck above the hyperlane station (deck top y 98, walking at 99: the
+// station canopy level, two blocks above the train corridor which ends at y 96), inside the reserved x 240..300,
+// z -40..40. The north half stands on pillars over the forest, the rest rests on the station's canopy columns and
+// waiting hall. A small balcony (x 248..251, |z| <= 4) overlooks the track at the deck's west edge; the station
+// builder's stair from the platform arrives on the deck at x 256, z 8..9 (through the opening it cuts at x 252..255).
 export const FRONTIER = {
-  x0: 250, z0: -26, x1: 298, z1: 27,                         // structure AABB (x1, z1 exclusive)
-  deck: { x0: 252, z0: -24, x1: 295, z1: 23 },
-  terminal: { x0: 254, x1: 266, z0: -8, z1: 8 },
+  x0: 246, z0: -26, x1: 298, z1: 27,                         // structure AABB (x1, z1 exclusive)
+  deck: { x0: 252, z0: -24, x1: 297, z1: 23 },              // x1 297 keeps the pad's service strip (x 295..296) on the deck
+  balcony: { x0: 248, x1: 251, z0: -4, z1: 4 },              // footprint including its kerbs
+  terminal: { x0: 256, x1: 268, z0: -10, z1: 6 },
   pad: { x: 282, z: 0 },
 };
-export const FRONTIER_DECK_TOP = 90, FRONTIER_DECK_Y = 91;
+export const FRONTIER_DECK_TOP = 98, FRONTIER_DECK_Y = 99;
+// True for the cells whose floor is the frontier deck (deck + balcony): the station builder leaves them alone.
+export function onFrontierDeck(x, z) {
+  const d = FRONTIER.deck, b = FRONTIER.balcony;
+  return (x >= d.x0 && x <= d.x1 && z >= d.z0 && z <= d.z1) || (x >= b.x0 && x <= b.x1 && z >= b.z0 && z <= b.z1);
+}
 
 function paintFrontier(p) {
-  const F = FRONTIER, d = F.deck, Y = FRONTIER_DECK_TOP, W = FRONTIER_DECK_Y;
+  const F = FRONTIER, d = F.deck, b = F.balcony, Y = FRONTIER_DECK_TOP, W = FRONTIER_DECK_Y;
   if (!p.overlaps(F.x0, F.z0, F.x1, F.z1)) return;
   const [x0, x1] = p.xRange(d.x0, d.x1), [z0, z1] = p.zRange(d.z0, d.z1);
   for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
     p.set(x, Y - 1, z, DD); p.set(x, Y, z, PLATE);
+    if (z > -6) continue;                                                                   // over the station: carried by its canopy columns and hall
     const px = (x - d.x0) % 12, pz = (z - d.z0) % 12;
-    if (px <= 1 && pz <= 1) p.col(x, z, 40, Y - 2, DD);                                  // 2x2 pillars on a 12 grid
+    if (px <= 1 && pz <= 1) p.col(x, z, 40, Y - 2, DD);                                  // 2x2 pillars on a 12 grid (north half)
     else if (px === 0 || pz === 0) p.set(x, Y - 2, z, DD);                                // girders
   }
-  // parapet (striped kerb + glass) with lamp posts, open at the station stub on the west edge
+  // parapet (striped kerb + glass) with lamp posts; the west kerb opens onto the balcony (|z| <= 3)
   const kerb = (x, z) => { p.set(x, W, z, STR); p.set(x, W + 1, z, GL); };
   for (let z = d.z0; z <= d.z1; z++) { if (abs(z) > 3) kerb(d.x0, z); kerb(d.x1, z); }
   for (let x = d.x0; x <= d.x1; x++) { kerb(x, d.z0); kerb(x, d.z1); }
   for (const x of [d.x0, d.x1]) for (const z of [d.z0, d.z1]) { p.col(x, z, W, W + 2, DD); p.set(x, W + 3, z, LAMP); }
   for (const z of [-4, 4]) { p.col(d.x0, z, W, W + 2, DD); p.set(d.x0, W + 3, z, LAMP); }
-  for (let x = d.x0; x <= d.x0 + 1; x++) for (const z of [-3, 3]) p.set(x, Y, z, LINE);   // stub markings
-  p.col(d.x0 + 1, 5, W, W + 2, DD); p.set(d.x0 + 1, W + 3, 5, HOLO);                     // "hyperlane station" sign post
-  // tiny terminal: dark base, glass band, glass roof with a durasteel frame, doors west (stub) and east (pad)
+  // balcony over the track: floor with stub markings, kerbs on its three open sides
+  for (let x = b.x0; x <= b.x1; x++) for (let z = b.z0; z <= b.z1; z++) {
+    const edge = x === b.x0 || abs(z) === 4;
+    p.set(x, Y - 1, z, DD); p.set(x, Y, z, edge ? DD : abs(z) === 3 && x >= b.x1 - 1 ? LINE : PLATE);
+    if (edge) kerb(x, z);
+  }
+  // tiny terminal: dark base, glass band, glass roof with a durasteel frame, doors west (deck) and east (pad)
   const T = F.terminal, roof = W + 5;
   for (let x = T.x0; x <= T.x1; x++) for (let z = T.z0; z <= T.z1; z++) {
     if (!p.overlaps(x, z, x, z)) continue;
@@ -586,7 +599,7 @@ function paintFrontier(p) {
   for (const z of [-4, 4]) for (let x = T.x0 + 3; x <= T.x1 - 3; x++) if (x !== T.x0 + 6) p.set(x, W, z, SLAB);   // benches
   p.box(T.x1 - 3, W, T.z1 - 3, T.x1 - 1, W, T.z1 - 3, DD); p.set(T.x1 - 2, W, T.z1 - 3, CON);              // check-in counter
   p.box(T.x0 + 1, W, T.z1 - 2, T.x0 + 1, W + 1, T.z1 - 1, B.SHELF); p.set(T.x0 + 1, W + 2, T.z1 - 1, BLUE); // kiosk shelf
-  for (const [x, z] of [[T.x0 + 3, -6], [T.x1 - 3, -6], [T.x0 + 3, 6], [T.x1 - 3, 6]]) p.set(x, roof - 1, z, GLOW);
+  for (const x of [T.x0 + 3, T.x1 - 3]) for (const z of [T.z0 + 2, T.z1 - 2]) p.set(x, roof - 1, z, GLOW);  // ceiling lights
   for (let x = T.x1 + 1; x < F.pad.x - S.padHalf; x++) for (const z of [-3, 3]) p.set(x, Y, z, LINE);        // walkway to the pad
   paintPad(p, F.pad, 0, Y);
   for (const x of [d.x0 + 22, d.x0 + 34]) for (const z of [d.z0, d.z1]) { p.col(x, z, W, W + 2, DD); p.set(x, W + 3, z, LAMP); }

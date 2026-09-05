@@ -8,13 +8,15 @@ export const ROUTE = {
   deckY: 89,       // solid deck layer of the track (DURASTEEL_DARK); the guide rails sit on it at railY
   railY: 90,       // RAIL blocks (non-solid) and the train's undercarriage layer
   floorY: 92,      // walking surface inside the cars and on the station platforms (top of block 91)
-  x0: 222, x1: 2564, // track extent (inclusive), with buffer stops beyond both stations
+  // track extent (inclusive), with buffer stops beyond both stations; the east end stops at x 2548 so that the
+  // concourse (x 2549..2560) and the spaceport's covered bridge (x 2561..2575) stay clear of the track
+  x0: 222, x1: 2548,
   supportEvery: 32,
   trainZ0: -3,     // the train occupies cells z = -3 .. 2 (6 wide)
   trainWidth: 6,
   platformZ0: 3, platformZ1: 10, // platforms are on the +z (south) side, flush with the train's wall
   frontier: { name: 'Frontier Station', dockX0: 226, platformX0: 240, platformX1: 300 },
-  coruscant: { name: 'Coruscant Spaceport', dockX0: 2486, platformX0: 2500, platformX1: 2560 },
+  coruscant: { name: 'Coruscant Spaceport', dockX0: 2459, platformX0: 2473, platformX1: 2533 },
 };
 
 // Car layout along the train's grid x (west to east): engine, three passenger cars, observation car.
@@ -45,10 +47,10 @@ export const SCHEDULE = {
   doorLead: 1.5,  // doors close this long before departure
   doorLag: 0.5,   // doors open this long after arrival
 };
-const DIST = ROUTE.coruscant.dockX0 - ROUTE.frontier.dockX0; // 2260
+const DIST = ROUTE.coruscant.dockX0 - ROUTE.frontier.dockX0; // 2233
 const ACC = SCHEDULE.vmax / SCHEDULE.accel;
 const RAMP_DIST = 0.5 * ACC * SCHEDULE.accel * SCHEDULE.accel; // 120
-export const RIDE_TIME = SCHEDULE.accel * 2 + (DIST - 2 * RAMP_DIST) / SCHEDULE.vmax; // ~83.3 s
+export const RIDE_TIME = SCHEDULE.accel * 2 + (DIST - 2 * RAMP_DIST) / SCHEDULE.vmax; // ~82.4 s
 export const PERIOD = 2 * (SCHEDULE.dwell + RIDE_TIME);
 
 // distance travelled and speed after tau seconds of a ride
@@ -62,7 +64,7 @@ function rideProfile(tau) {
 }
 
 // Train state at a tick: west-end world x, speed (blocks/s, signed by direction), phase, station docked at,
-// destination, doors. Pure function of the tick (period ~207 s), so identical for every client.
+// destination, doors. Pure function of the tick (period ~205 s), so identical for every client.
 export function trainState(tick) {
   const t = ((tick * TICK_DT) % PERIOD + PERIOD) % PERIOD;
   const D = SCHEDULE.dwell, R = RIDE_TIME;
