@@ -202,6 +202,11 @@ hud.startEl.addEventListener("click", (e) => {
 });
 hud.showStart();
 hud.setMode("exterior");
+hud.setHint(
+  TOUCH
+    ? "drag: orbit · pinch: zoom · button: cinematic camera"
+    : "drag orbit · right-drag pan · wheel zoom · WASD/QE fly · C cinematic camera",
+);
 hud.setLocation("Coruscant orbit · Open Circle Fleet");
 document.addEventListener("keydown", (e) => {
   if (e.code === "KeyC" && !e.repeat) {
@@ -258,6 +263,12 @@ canvas.addEventListener("mousedown", () => {
 // touch: one finger orbits, two fingers pinch-zoom; a button toggles the cinematic camera
 if (TOUCH) {
   hud.setTouch(true);
+  const keys = hud.startEl.querySelector(".keys");
+  const hint = hud.startEl.querySelector(".hint");
+  if (keys)
+    keys.textContent =
+      "drag: orbit · pinch: zoom · Cinematic button: film camera";
+  if (hint) hint.textContent = "Tap to watch the battle";
   const pointers = new Map();
   let pinch = 0;
   canvas.addEventListener("pointerdown", (e) => {

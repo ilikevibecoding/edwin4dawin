@@ -14,7 +14,8 @@ export function createHUD() {
   const modehint = $("modehint");
   const HINTS = {
     interior: "WASD move · Shift run · E interact · V exterior view",
-    exterior: "drag orbit · right-drag pan · wheel zoom · WASD/QE fly · B board",
+    exterior:
+      "drag orbit · right-drag pan · wheel zoom · WASD/QE fly · B board",
     transition: "",
   };
   const TOUCH_HINTS = {
@@ -84,6 +85,10 @@ export function createHUD() {
     setLocation(text) {
       location.textContent = text || "";
     },
+    // free-form control hint (scenes with their own control scheme)
+    setHint(text) {
+      modehint.textContent = text || "";
+    },
     setMode(mode) {
       modehint.textContent = (touch ? TOUCH_HINTS : HINTS)[mode] || "";
       if (mode !== "interior") start.classList.add("hidden");
@@ -94,11 +99,16 @@ export function createHUD() {
       document.body.classList.toggle("touch", on);
       const keys = start.querySelector(".keys");
       const hint = start.querySelector(".hint");
-      if (on && keys) keys.textContent = "left half: move · right half: look · buttons: interact / exterior view";
+      if (on && keys)
+        keys.textContent =
+          "left half: move · right half: look · buttons: interact / exterior view";
       if (on && hint) hint.textContent = "Tap to take the deck";
     },
     toggleStats(force) {
-      stats.classList.toggle("hidden", force === undefined ? undefined : !force);
+      stats.classList.toggle(
+        "hidden",
+        force === undefined ? undefined : !force,
+      );
     },
     startEl: start,
   };
