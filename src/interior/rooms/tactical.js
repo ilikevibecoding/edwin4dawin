@@ -20,60 +20,86 @@ import { makeCanvas, toTexture, decalRect } from "../../textures.js";
 // ---------------------------------------------------------------------------
 
 /**
- * Emissive text atlas: one canvas texture with one label per row, registered once on ctx.materials
- * under `key`. Returns { key, rect(i), aspect(i) } so a label can be placed with the right aspect:
+ * Emissive text atlas: one canvas texture holding every label, registered once on ctx.materials
+ * under `key`. Labels are shelf-packed (widest first, several per 48 px row) so the canvas is only
+ * as large as the text needs — a 17-label sign set fits in ~1024×336 instead of a 96 px row per label
+ * (the closest sign in any rubric view is still ~1.4× oversampled at 1280×720).
+ * Returns { key, rect(i), aspect(i) } so a label can be placed with the right aspect:
  * `kit.add(atlas.key, new PlaneGeometry(h * atlas.aspect(i), h), { uv: "keep", uvRect: atlas.rect(i) })`.
  */
 export function labelAtlas(ctx, key, labels, opts = {}) {
-  const { w = 1024, rowH = 96, color = "#dfe7f5", accent = "#4a9dff", bg = "#07090d", intensity = 1.3 } = opts;
-  const rows = labels.length;
+  const { w: wMax = 1024, rowH = 48, color = "#dfe7f5", accent = "#4a9dff", bg = "#07090d", intensity = 1.3 } = opts;
   const cache = (ctx.materials.__labelAtlas ||= {});
   if (!cache[key]) {
-    const c = makeCanvas(w, rowH * rows);
-    const g = c.getContext("2d");
-    g.fillStyle = bg;
-    g.fillRect(0, 0, w, rowH * rows);
-    const widths = [];
-    labels.forEach((label, i) => {
-      const spec = typeof label === "string" ? { text: label } : label;
-      const y0 = i * rowH;
-      let px = rowH * 0.56;
-      const setFont = () => (g.font = `bold ${px.toFixed(1)}px "DejaVu Sans", "Liberation Sans", Arial, sans-serif`);
-      setFont();
+    const font = (px) => `bold ${px.toFixed(1)}px "DejaVu Sans", "Liberation Sans", Arial, sans-serif`;
+    const spacing = (g, px) => {
       if ("letterSpacing" in g) g.letterSpacing = `${(px * 0.12).toFixed(1)}px`;
-      let tw = g.measureText(spec.text).width;
-      const maxW = w - rowH * 1.6;
+    };
+    // measure every label at the nominal size; anything wider than the atlas is shrunk to fit
+    const meas = makeCanvas(16, 16).getContext("2d");
+    const pad = rowH * 0.8; // accent end-bars + margins around the text block
+    const gap = Math.round(rowH * 0.25); // guard between cells so mip filtering does not bleed a neighbour in
+    const items = labels.map((label, i) => {
+      const spec = typeof label === "string" ? { text: label } : label;
+      let px = rowH * 0.56;
+      meas.font = font(px);
+      spacing(meas, px);
+      let tw = meas.measureText(spec.text).width;
+      const maxW = wMax - pad - 2 * gap;
       if (tw > maxW) {
         px *= maxW / tw;
-        setFont();
-        tw = g.measureText(spec.text).width;
+        meas.font = font(px);
+        spacing(meas, px);
+        tw = meas.measureText(spec.text).width;
       }
-      const acc = spec.accent || accent;
-      const barW = rowH * 0.1;
+      return { i, spec, px, tw, cw: Math.ceil(tw + pad), x0: 0, row: 0 };
+    });
+    // shelf packing: widest first, left to right, a new shelf when a cell does not fit
+    const shelves = [];
+    for (const it of [...items].sort((a, b) => b.cw - a.cw)) {
+      let s = shelves.find((sh) => sh.x + it.cw + gap <= wMax);
+      if (!s) {
+        s = { x: gap, row: shelves.length };
+        shelves.push(s);
+      }
+      it.x0 = s.x;
+      it.row = s.row;
+      s.x += it.cw + gap;
+    }
+    const w = Math.min(wMax, Math.ceil(Math.max(...shelves.map((s) => s.x)) / 32) * 32);
+    const h = shelves.length * rowH;
+    const c = makeCanvas(w, h);
+    const g = c.getContext("2d");
+    g.fillStyle = bg;
+    g.fillRect(0, 0, w, h);
+    const barW = rowH * 0.1;
+    for (const it of items) {
+      const y0 = it.row * rowH;
+      const xc = it.x0 + it.cw / 2;
       // accent end-bars hugging the text block
-      g.fillStyle = acc;
-      g.fillRect(w / 2 - tw / 2 - rowH * 0.4, y0 + rowH * 0.25, barW, rowH * 0.5);
-      g.fillRect(w / 2 + tw / 2 + rowH * 0.4 - barW, y0 + rowH * 0.25, barW, rowH * 0.5);
-      g.fillStyle = spec.color || color;
+      g.fillStyle = it.spec.accent || accent;
+      g.fillRect(xc - it.tw / 2 - rowH * 0.4, y0 + rowH * 0.25, barW, rowH * 0.5);
+      g.fillRect(xc + it.tw / 2 + rowH * 0.4 - barW, y0 + rowH * 0.25, barW, rowH * 0.5);
+      g.font = font(it.px);
+      spacing(g, it.px);
+      g.fillStyle = it.spec.color || color;
       g.textAlign = "center";
       g.textBaseline = "middle";
-      g.fillText(spec.text, w / 2, y0 + rowH * 0.53);
-      widths.push(tw + rowH * 0.8);
-    });
+      g.fillText(it.spec.text, xc, y0 + rowH * 0.53);
+    }
     const tex = toTexture(c, { srgb: true, wrap: false });
     ctx.materials[key] = new THREE.MeshStandardMaterial({ color: 0x000000, emissive: 0xffffff, emissiveMap: tex, emissiveIntensity: intensity, roughness: 0.35, metalness: 0 });
-    cache[key] = { widths, w, rowH, rows };
+    cache[key] = { rects: items.map((it) => [it.x0 / w, 1 - ((it.row + 1) * rowH) / h, (it.x0 + it.cw) / w, 1 - (it.row * rowH) / h]), aspects: items.map((it) => it.cw / rowH) };
   }
   const info = cache[key];
   return {
     key,
-    rows,
+    rows: labels.length,
     rect(i) {
-      const half = info.widths[i] / 2 / info.w;
-      return [0.5 - half, 1 - (i + 1) / info.rows, 0.5 + half, 1 - i / info.rows];
+      return info.rects[i];
     },
     aspect(i) {
-      return info.widths[i] / info.rowH;
+      return info.aspects[i];
     },
   };
 }
@@ -412,7 +438,7 @@ export function buildTactical(kit, ctx) {
   // recessed floor light channels: two along the gangway edges running from the door into the well,
   // and a ring channel around the table, so the deck between the door and the hologram reads
   const channel = (x0, z0, x1, z1) => {
-    kit.boxMM("paintedMetal", [x0, 0.002, z0], [x1, 0.008, z1], { color: PALETTE.impBlack, texel: 2 });
+    kit.boxMM("rubber", [x0, 0.002, z0], [x1, 0.008, z1], { color: PALETTE.impBlack, texel: 4 });
     const alongX = x1 - x0 > z1 - z0;
     const c = alongX ? [(z0 + z1) / 2, 0] : [(x0 + x1) / 2, 0];
     if (alongX) kit.boxMM("emitBlueDim", [x0 + 0.1, 0.006, c[0] - 0.02], [x1 - 0.1, 0.012, c[0] + 0.02]);
@@ -420,7 +446,7 @@ export function buildTactical(kit, ctx) {
   };
   channel(cx + 3.0, gz0 + 0.3, max[0] - 1.0, gz0 + 0.46);
   channel(cx + 3.0, gz1 - 0.46, max[0] - 1.0, gz1 - 0.3);
-  kit.add("paintedMetal", new THREE.RingGeometry(2.42, 2.7, 72).rotateX(-Math.PI / 2), { pos: [cx, 0.004, cz], color: PALETTE.impBlack, texel: 2 });
+  kit.add("rubber", new THREE.RingGeometry(2.42, 2.7, 72).rotateX(-Math.PI / 2), { pos: [cx, 0.004, cz], color: PALETTE.impBlack, texel: 4 });
   kit.add("emitBlueDim", new THREE.RingGeometry(2.54, 2.58, 72).rotateX(-Math.PI / 2), { pos: [cx, 0.009, cz] });
   // blue guide strips on the well floor at the platform bases (the well edge only; the gangway is plain)
   const guide = (x0, z0, x1, z1) => kit.boxMM("emitBlue", [x0, 0.004, z0], [x1, 0.03, z1]);
@@ -874,7 +900,7 @@ function ceilingStructure(kit, ctx, cx, cz, H) {
   // recessed channel on the underside: a faint diffuser body carries the ring, a thin blue core is
   // the only bright element (the old full-width blue + white rings clipped to one white halo)
   kit.add("paintedMetal", new THREE.RingGeometry(3.45, 3.98, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.001, cz], color: PALETTE.impBlack, texel: 2 });
-  kit.add("emitWhiteFaint", new THREE.RingGeometry(3.52, 3.86, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.004, cz], uv: "keep" });
+  kit.add("emitWhiteFaint", new THREE.RingGeometry(3.58, 3.80, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.004, cz], uv: "keep" });
   kit.add("emitBlue", new THREE.RingGeometry(3.66, 3.72, 72).rotateX(Math.PI / 2), { pos: [cx, yTop - beamH - 0.007, cz] });
   // eight downlight fixtures at the octagon corners: faint pad with a small dim core
   for (let i = 0; i < 8; i++) {

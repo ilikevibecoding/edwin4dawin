@@ -521,7 +521,7 @@ function washroom(kit, ctx, labels, r) {
   const cz = (r.za + r.zb) / 2;
   // raised wet floor with a drain channel along the middle
   kit.boxMM("floorGloss", [r.xa + 0.05, 0, r.za + 0.05], [r.xb - 0.05, 0.05, r.zb - 0.05], { texel: 0.5 });
-  kit.boxMM("paintedMetal", [r.xa + 0.05, 0.05, r.za + 0.05], [r.xb - 0.05, 0.06, r.zb - 0.05], { color: PALETTE.impBlack, texel: 2 });
+  kit.boxMM("rubber", [r.xa + 0.05, 0.05, r.za + 0.05], [r.xb - 0.05, 0.06, r.zb - 0.05], { color: PALETTE.impBlack, texel: 4 });
   kit.boxMM("floorGloss", [r.xa + 0.1, 0.06, r.za + 0.1], [r.xb - 0.1, 0.075, r.zb - 0.1], { texel: 0.5 });
   kit.collider([r.xa, 0, r.za], [r.xb, 0.075, r.zb], "wetfloor");
   for (let k = 0; k < 6; k++) kit.cyl("metal", r.xa + 1.0 + k * 0.9, 0.078, cz, 0.06, 0.006, "y", { color: PALETTE.impBlack, segments: 12 });
@@ -558,7 +558,7 @@ function washroom(kit, ctx, labels, r) {
       const sx1 = sx0 + 1.1;
       // side partitions and a back panel, tray on the floor
       for (const x of [sx0, sx1]) kit.boxMM("impPanel", [x - 0.02, 0.075, sz0], [x + 0.02, 2.2, r.zb - 0.02], { color: PALETTE.impLight, uv: "keep" });
-      kit.boxMM("paintedMetal", [sx0, 0.075, sz0 - 0.02], [sx1, 0.11, r.zb], { color: PALETTE.impBlack, texel: 2 });
+      kit.boxMM("rubber", [sx0, 0.075, sz0 - 0.02], [sx1, 0.11, r.zb], { color: PALETTE.impBlack, texel: 4 });
       kit.boxMM("bridgeGlass", [sx0 + 0.04, 0.11, sz0 - 0.01], [sx1 - 0.04, 2.1, sz0 + 0.01]);
       kit.boxMM("paintedMetal", [sx0 - 0.03, 2.2, sz0 - 0.03], [sx1 + 0.03, 2.28, r.zb], { color: PALETTE.impDark, texel: 2 });
       kit.box("emitWhiteSoft", (sx0 + sx1) / 2, 2.19, (sz0 + r.zb) / 2, 0.8, 0.015, 0.3, { uv: "keep" });
