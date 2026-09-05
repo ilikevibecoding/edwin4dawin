@@ -150,7 +150,9 @@ export class Bench {
   metrics(): unknown {
     const m = this.game.metrics.snapshot();
     const t = this.game.aircraft.flight.telemetry;
-    return { ...m, frame: this.frame, flying: this.flying, telemetry: { airspeed: t.airspeed, altitude: t.altitude, heading: t.heading, alpha: t.alpha, stalled: t.stalled, onWater: t.onWater }, build: window.__build, view: this.view?.id ?? null, camera: { pos: this.game.camera.position.toArray(), quat: this.game.camera.quaternion.toArray(), fov: this.game.camera.fov } };
+    const g = this.game;
+    const passes = { ...g.passStats, cascades: g.shadowPassStats.calls.map((c, i) => ({ calls: c, triangles: g.shadowPassStats.triangles[i] })), reflectionHidden: g.reflection.stats.hidden };
+    return { ...m, passes, frame: this.frame, flying: this.flying, telemetry: { airspeed: t.airspeed, altitude: t.altitude, heading: t.heading, alpha: t.alpha, stalled: t.stalled, onWater: t.onWater }, build: window.__build, view: this.view?.id ?? null, camera: { pos: this.game.camera.position.toArray(), quat: this.game.camera.quaternion.toArray(), fov: this.game.camera.fov } };
   }
 
   /** Project world point to screen-normalised coordinates (for objective landmark metrics). */

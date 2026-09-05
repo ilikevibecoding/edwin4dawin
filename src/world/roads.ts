@@ -263,20 +263,47 @@ export function buildRoadMeshes(map: WorldMap, segments: RoadSegment[], material
       along += len;
     }
   }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
-  g.setAttribute('aRoadUv', new THREE.Float32BufferAttribute(uv, 2));
-  g.setAttribute('aRoadInfo', new THREE.Float32BufferAttribute(info, 3));
-  g.setIndex(idx);
-  g.computeBoundingSphere();
-  const mesh = new THREE.Mesh(g, material);
-  mesh.receiveShadow = true;
-  mesh.castShadow = false;
-  mesh.renderOrder = 2;
-  mesh.frustumCulled = false;
-  return [mesh];
+  // one vertex buffer, one index range per ROAD_CHUNK-metre cell (triangles bucketed by centroid, in their
+  // original order) so the renderer frustum-culls the network instead of drawing all ~250 k triangles
+  // wherever the camera looks; each chunk carries the bounds of its own vertices
+  const position = new THREE.Float32BufferAttribute(pos, 3);
+  const normal = new THREE.Float32BufferAttribute(nrm, 3);
+  const roadUv = new THREE.Float32BufferAttribute(uv, 2);
+  const roadInfo = new THREE.Float32BufferAttribute(info, 3);
+  const chunks = new Map<number, number[]>();
+  for (let t = 0; t < idx.length; t += 3) {
+    const a = idx[t], b = idx[t + 1], c = idx[t + 2];
+    const cx = (pos[a * 3] + pos[b * 3] + pos[c * 3]) / 3, cz = (pos[a * 3 + 2] + pos[b * 3 + 2] + pos[c * 3 + 2]) / 3;
+    const key = Math.floor((cx + 10000) / ROAD_CHUNK) * 4096 + Math.floor((cz + 10000) / ROAD_CHUNK);
+    let list = chunks.get(key);
+    if (!list) { list = []; chunks.set(key, list); }
+    list.push(a, b, c);
+  }
+  const meshes: THREE.Mesh[] = [];
+  const box = new THREE.Box3(), v = new THREE.Vector3();
+  for (const list of chunks.values()) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', position);
+    g.setAttribute('normal', normal);
+    g.setAttribute('aRoadUv', roadUv);
+    g.setAttribute('aRoadInfo', roadInfo);
+    g.setIndex(list);
+    box.makeEmpty();
+    for (const i of list) box.expandByPoint(v.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]));
+    g.boundingBox = box.clone();
+    g.boundingSphere = box.getBoundingSphere(new THREE.Sphere());
+    const mesh = new THREE.Mesh(g, material);
+    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    mesh.renderOrder = 2;
+    mesh.matrixAutoUpdate = false;
+    meshes.push(mesh);
+  }
+  return meshes;
 }
+
+/** Road network chunk size (m): a cell is one draw call when in view. */
+const ROAD_CHUNK = 3000;
 
 export function createRoadMaterial(): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0.0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });

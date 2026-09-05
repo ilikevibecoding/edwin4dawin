@@ -4,7 +4,8 @@ import { perlin2, smoothstep } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { CELL, HALF, Zone, type WorldMap } from './map';
 import { balanceGroundIbl } from './terrain';
-import { MAX_CASCADES, cascadeIsFine, layerMask, maskCasts, type ViewCull } from './culling';
+import { InstanceBatch, splitCells, type CellSource } from './batching';
+import { LAYER_CAMERA, LAYER_MIRROR, MAX_CASCADES, cascadeIsFine, layerMask, maskCasts, type ViewCull } from './culling';
 
 /**
  * Procedural planting. Two instanced geometry families cover six archetypes:
@@ -614,6 +615,13 @@ function cardMaterial(atlas: THREE.Texture): THREE.MeshStandardMaterial {
   return mat;
 }
 
+// ---------------------------------------------------------------- card batches
+
+/** instances a card batch can hold; tiles that do not fit fall back to their own card mesh */
+const CAMERA_CARDS = 262144;
+const MIRROR_CARDS = 32768;
+const CARD_EXTRAS = [{ name: 'aVar', itemSize: 4 }];
+
 // ---------------------------------------------------------------- planting
 
 /** 0 broadleaf, 1 emergent, 2 mangrove, 3 shrub, 4 palm, 5 dune grass tussock */
@@ -625,9 +633,18 @@ interface Plant { x: number; y: number; z: number; s: number; rot: number; lean:
  *  and `height` bound the drawn plants and cards and are only used for culling. */
 /** `hi` (crown family only) is the subdivided mesh drawn instead of `near` when the camera is within
  *  HI_DISTANCE of the tile's plants; it shares the instance buffers of `near`. */
-interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; }
+interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; cells: VegCells | null; nearBatch: InstanceBatch<CellSource> | null; cardCells: boolean; mirrorCells: boolean; maxS: number; }
+
+/** The VEG_CELL-metre cells of a tile (built the first time the tile is drawn near or in full): the same
+ *  cells once with the 3D mesh's per-instance attribute and once with the card's, so the batches draw
+ *  only the cells of a tile that are in view (the tile as a whole draws every plant, most of them behind
+ *  the camera when it stands inside the tile). */
+interface VegCells { near: CellSource[]; cards: CellSource[] }
 
 const TILE = 900;
+const VEG_CELL = 150;
+/** instances the near crown batches hold each (the tile's own mesh draws the tiles that do not fit) */
+const NEAR_CROWNS = 32768;
 /** casting tiles a coarse cascade (texel over NEAR_TEXEL) draws at most, nearest first */
 const COARSE_SHADOW_TILES = 8;
 const _casting = new Array<number>(MAX_CASCADES).fill(0);
@@ -636,8 +653,10 @@ const _casting = new Array<number>(MAX_CASCADES).fill(0);
 const NEAR_DISTANCE = 420;
 const HI_DISTANCE = 200;
 const NEAR_BUDGET = 60000;
+/** card tiles closer than this (to their bounding sphere) are drawn into the water's mirror image */
+export const MIRROR_DISTANCE = 1500;
 
-const _n23 = new THREE.Vector3(), _n31 = new THREE.Vector3(), _n12 = new THREE.Vector3(), _apex = new THREE.Vector3();
+const _n23 = new THREE.Vector3(), _n31 = new THREE.Vector3(), _n12 = new THREE.Vector3(), _apex = new THREE.Vector3(), _p = new THREE.Vector3();
 /** Apex of a perspective frustum (the camera position): the common point of the right, bottom and top
  *  side planes (three.js orders them right, left, bottom, top, far, near). Falls back to `fallback`. */
 function frustumApex(f: THREE.Frustum, out: THREE.Vector3, fallbackX: number, fallbackZ: number): THREE.Vector3 {
@@ -671,6 +690,15 @@ export class Vegetation {
   private readonly tiles: Tile[] = [];
   shadowDistance = 1800;
   viewDistance = 9000;
+  /** cards of every tile drawn as cards this frame, in one draw for the camera */
+  readonly cameraCards: THREE.InstancedMesh;
+  /** the same for the card tiles the water mirrors (within MIRROR_DISTANCE), on the mirror-only layer */
+  readonly mirrorCards: THREE.InstancedMesh;
+  private readonly cameraBatch: InstanceBatch;
+  private readonly mirrorBatch: InstanceBatch;
+  /** the crowns of the near tiles' cells in view, one draw for the 66-triangle mesh and one for the subdivided one */
+  private readonly nearBatch: InstanceBatch<CellSource>;
+  private readonly hiBatch: InstanceBatch<CellSource>;
 
   constructor(map: WorldMap, occupied: (x: number, z: number) => boolean) {
     const rng = new Rng('vegetation');
@@ -685,6 +713,20 @@ export class Vegetation {
     const crownGeoHi = crownGeometry(true);
     const palmGeo = palmGeometry();
     const cardGeo = cardGeometry();
+    this.cameraBatch = new InstanceBatch(CAMERA_CARDS, cardGeo, cardMat, CARD_EXTRAS, true, cardDepth);
+    this.cameraCards = this.cameraBatch.mesh;
+    this.cameraCards.layers.set(LAYER_CAMERA);
+    this.cameraCards.name = 'cards';
+    this.mirrorBatch = new InstanceBatch(MIRROR_CARDS, cardGeo, cardMat, CARD_EXTRAS, true, cardDepth);
+    this.mirrorCards = this.mirrorBatch.mesh;
+    this.mirrorCards.layers.set(LAYER_MIRROR);
+    this.mirrorCards.name = 'cards-mirror';
+    this.group.add(this.cameraCards, this.mirrorCards);
+    this.nearBatch = new InstanceBatch<CellSource>(NEAR_CROWNS, crownGeo, crownMat, CARD_EXTRAS, true);
+    this.nearBatch.mesh.name = 'crowns-near';
+    this.hiBatch = new InstanceBatch<CellSource>(NEAR_CROWNS, crownGeoHi, crownMat, CARD_EXTRAS, true);
+    this.hiBatch.mesh.name = 'crowns-hi';
+    this.group.add(this.nearBatch.mesh, this.hiBatch.mesh);
 
     const plants: Plant[] = [];
     const tints: Record<Archetype, THREE.Color[]> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [] };
@@ -930,7 +972,7 @@ export class Vegetation {
       far.visible = false;
       this.group.add(near, far);
       if (hi) { hi.boundingSphere = sphere.clone(); this.group.add(hi); }
-      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0 });
+      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, extras: [farVar], cells: null, nearBatch: null, cardCells: false, mirrorCells: false, maxS });
     };
     for (const t of byTile.values()) {
       if (t.crown.length) build(t.crown, crownGeo, crownMat, crownGeoHi);
@@ -943,16 +985,31 @@ export class Vegetation {
     this.uWind.value = wind;
   }
 
+  private static cells(t: Tile): VegCells {
+    const grow = t.maxS * 2.6, up = t.maxS * 3.7;
+    const m = t.matrices;
+    // the same growth as the tile box: the largest crown sideways, trunk + crown + half a card up
+    const bound = (i: number, box: THREE.Box3) => {
+      const x = m[i * 16 + 12], y = m[i * 16 + 13], z = m[i * 16 + 14];
+      box.expandByPoint(_p.set(x - grow, y - 1, z - grow));
+      box.expandByPoint(_p.set(x + grow, y + up, z + grow));
+    };
+    const nearVar = t.near.geometry.getAttribute('aVar').array as Float32Array;
+    const near = splitCells({ matrices: m, colors: t.colors, extras: [nearVar] }, t.n, VEG_CELL, bound);
+    return { near, cards: near.map((c) => ({ ...c, extras: t.extras })) };
+  }
+
   /** Per-tile LOD: the nearest tiles (within NEAR_DISTANCE, up to an instance budget) draw the 3D
    *  meshes (the subdivided crown mesh inside HI_DISTANCE); every other tile draws camera-facing cards,
    *  thinned with distance. Shadows always come from the card mesh (light-facing crown blobs), which for
    *  near tiles is kept off the camera layer. Tiles outside the view are not drawn; tiles whose shadow
    *  cannot reach the view do not cast. */
-  updateLod(camX: number, camZ: number, cull: ViewCull): void {
+  updateLod(camX: number, camZ: number, cull: ViewCull, camPos?: THREE.Vector3): void {
     const tiles = this.tiles;
     // the LOD metric is the 3D distance: from altitude a canopy 500 m away is a few pixels per crown and
     // the cards are the better representation; the camera height comes from the view frustum's apex
     const camY = frustumApex(cull.viewFrustum, _apex, camX, camZ).y;
+    const cam = camPos ?? _apex;
     for (const t of tiles) t.d = Math.max(0, Math.sqrt((t.lodCenter.x - camX) ** 2 + (t.lodCenter.z - camZ) ** 2 + (t.lodCenter.y - camY) ** 2) - t.lodR);
     // in-place insertion sort by distance: the order barely changes between frames, so this is
     // linear and allocation-free (the budget below is spent nearest-first)
@@ -977,17 +1034,67 @@ export class Vegetation {
         if (casting[i] >= COARSE_SHADOW_TILES) bits &= ~(1 << i); else casting[i]++;
       }
       const hi = t.hi !== null && t.d < HI_DISTANCE;
-      t.near.visible = near && inView && !hi;
-      if (t.hi) t.hi.visible = near && inView && hi;
+      const near3d = near && inView;
+      // crown tiles drawn in 3D go through the near batches cell by cell (only the cells in view); the
+      // tile's own mesh is the fallback when the batch is full
+      let batched3d = false;
+      if (t.hi !== null && (near3d || t.nearBatch !== null)) {
+        const batch = near3d ? (hi ? this.hiBatch : this.nearBatch) : null;
+        const cells = (t.cells ??= Vegetation.cells(t)).near;
+        if (t.nearBatch !== null && t.nearBatch !== batch) { for (const c of cells) t.nearBatch.set(c, 0); t.nearBatch = null; }
+        if (batch !== null) {
+          batched3d = true;
+          for (const c of cells) if (!batch.set(c, cull.boxInView(c.box) ? c.count : 0)) batched3d = false;
+          if (!batched3d) { for (const c of cells) batch.set(c, 0); t.nearBatch = null; } else t.nearBatch = batch;
+        }
+      }
+      t.near.visible = near3d && !hi && !batched3d;
+      if (t.hi) t.hi.visible = near3d && hi && !batched3d;
       const drawCards = !near && inView && t.d < this.viewDistance;
-      const mask = layerMask('all', drawCards, bits);
-      const shadow = maskCasts(mask);
-      t.far.visible = drawCards || shadow;
-      t.far.castShadow = shadow;
-      t.far.layers.mask = mask;
       // far cards: full density to 3 km, half at 5.5 km, a quarter beyond (a crown is ~1 px there)
       const frac = near ? 1 : t.d < 3000 ? 1 : t.d < 5500 ? 0.5 : 0.25;
-      t.far.count = Math.max(1, Math.round(t.n * frac));
+      const count = Math.max(1, Math.round(t.n * frac));
+      // the camera draws the tile's cards from the shared batch; the tile's own card mesh is left to the
+      // shadow passes (and to the camera only when the batch is full)
+      // tiles drawn at full density go into the camera batch cell by cell (only the cells in view);
+      // thinned tiles draw their first `count` cards, whose selection the cells would change
+      let batched: boolean;
+      if (drawCards && frac === 1) {
+        const cells = (t.cells ??= Vegetation.cells(t)).cards;
+        this.cameraBatch.set(t, 0);
+        batched = true;
+        for (const c of cells) if (!this.cameraBatch.set(c, cull.boxInView(c.box) ? c.count : 0)) batched = false;
+        if (!batched) for (const c of cells) this.cameraBatch.set(c, 0);
+        t.cardCells = batched;
+      } else {
+        if (t.cardCells) { for (const c of t.cells!.cards) this.cameraBatch.set(c, 0); t.cardCells = false; }
+        batched = this.cameraBatch.set(t, drawCards ? count : 0);
+      }
+      let mask = layerMask('all', drawCards && !batched, bits);
+      const shadow = maskCasts(mask);
+      // the water mirrors the card tiles within MIRROR_DISTANCE of the camera (the same test the reflection
+      // pass applied to the separate tile meshes: distance to the tile's bounding sphere)
+      const mirrored = drawCards && Math.max(0, t.center.distanceTo(cam) - t.r) <= MIRROR_DISTANCE;
+      if (mirrored && frac === 1) {
+        // full-density tiles cell by cell against the mirror camera's frustum
+        const cells = (t.cells ??= Vegetation.cells(t)).cards;
+        this.mirrorBatch.set(t, 0);
+        let ok = true;
+        for (const c of cells) if (!this.mirrorBatch.set(c, cull.boxInMirror(c.box) ? c.count : 0)) ok = false;
+        if (!ok) { for (const c of cells) this.mirrorBatch.set(c, 0); mask |= 1 << LAYER_MIRROR; }
+        t.mirrorCells = ok;
+      } else {
+        if (t.mirrorCells) { for (const c of t.cells!.cards) this.mirrorBatch.set(c, 0); t.mirrorCells = false; }
+        if (!this.mirrorBatch.set(t, mirrored ? count : 0)) mask |= 1 << LAYER_MIRROR;
+      }
+      t.far.visible = mask !== 0;
+      t.far.castShadow = shadow;
+      t.far.layers.mask = mask;
+      t.far.count = count;
     }
+    this.cameraBatch.commit();
+    this.mirrorBatch.commit();
+    this.nearBatch.commit();
+    this.hiBatch.commit();
   }
 }

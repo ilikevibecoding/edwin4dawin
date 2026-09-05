@@ -8,6 +8,8 @@ export class WakeMap {
   readonly camera: THREE.OrthographicCamera;
   readonly center = new THREE.Vector2();
   readonly size: number;
+  /** every wake ribbon (boats, floats) in one draw; trails are created with it as their target */
+  readonly batch = new WakeBatch();
 
   constructor(resolution = 1024, size = 3200) {
     this.size = size;
@@ -15,11 +17,13 @@ export class WakeMap {
     this.rt.texture.wrapS = this.rt.texture.wrapT = THREE.ClampToEdgeWrapping;
     this.camera = new THREE.OrthographicCamera(-size / 2, size / 2, size / 2, -size / 2, 1, 400);
     this.camera.up.set(0, 0, -1);
+    this.scene.add(this.batch.mesh);
   }
 
   get texture(): THREE.Texture { return this.rt.texture; }
 
   render(renderer: THREE.WebGLRenderer, camX: number, camZ: number): void {
+    this.batch.upload();
     this.center.set(Math.round(camX / 8) * 8, Math.round(camZ / 8) * 8);
     this.camera.position.set(this.center.x, 200, this.center.y);
     this.camera.lookAt(this.center.x, 0, this.center.y);
@@ -203,27 +207,128 @@ export class HullStamp {
   }
 }
 
-/** Fixed-capacity trail of quads following an emitter. Positions are in world space. */
-export class WakeTrail {
+/**
+ * Every wake ribbon of the wake map in one draw. Each trail keeps its own ribbon arrays; before the map is
+ * rendered the batch copies the live points of every trail, in the order the trails were added (the order
+ * the separate meshes used to be drawn in, so the blending of crossing wakes is unchanged), into shared
+ * buffers and builds the index for the quads that exist this frame. The trail strength, a uniform of the
+ * per-trail materials before, rides along as a flat per-vertex attribute.
+ */
+export class WakeBatch {
   readonly mesh: THREE.Mesh;
-  private readonly capacity: number;
-  private readonly positions: Float32Array;
-  private readonly ages: Float32Array;
-  private readonly sides: Float32Array;
-  private readonly fades: Float32Array;
+  private readonly trails: WakeTrail[] = [];
+  private readonly geo = new THREE.BufferGeometry();
+  private capacity = 0;
+  private positions = new Float32Array(0);
+  private ages = new Float32Array(0);
+  private sides = new Float32Array(0);
+  private fades = new Float32Array(0);
+  private strengths = new Float32Array(0);
+  private index = new Uint32Array(0);
+
+  constructor() {
+    const mat = WAKE_MATERIAL.clone();
+    mat.vertexShader = mat.vertexShader
+      .replace('attribute float aFade;', 'attribute float aFade; attribute float aStrength;')
+      .replace('varying float vFade;', 'varying float vFade; flat varying float vStrength;')
+      .replace('vFade = aFade;', 'vFade = aFade; vStrength = aStrength;');
+    mat.fragmentShader = mat.fragmentShader
+      .replace('varying float vFade;', 'varying float vFade; flat varying float vStrength;')
+      .replace('uniform float uStrength;', '')
+      .replace('* uStrength *', '* vStrength *');
+    mat.uniforms = {};
+    this.geo.setDrawRange(0, 0);
+    this.mesh = new THREE.Mesh(this.geo, mat);
+    this.mesh.frustumCulled = false;
+    this.mesh.matrixAutoUpdate = false;
+  }
+
+  add(trail: WakeTrail): void {
+    this.trails.push(trail);
+    this.capacity += trail.capacity;
+  }
+
+  /** Gather the ribbons of every trail into the shared buffers. */
+  upload(): void {
+    if (this.positions.length !== this.capacity * 6) this.allocate();
+    let v = 0, n = 0;
+    const { positions, ages, sides, fades, strengths, index } = this;
+    for (const t of this.trails) {
+      const pts = t.count;
+      if (pts === 0) continue;
+      const verts = pts * 2;
+      positions.set(t.positions.subarray(0, verts * 3), v * 3);
+      ages.set(t.ages.subarray(0, verts), v);
+      sides.set(t.sides.subarray(0, verts), v);
+      fades.set(t.fades.subarray(0, verts), v);
+      strengths.fill(t.strength, v, v + verts);
+      for (let i = 0; i < pts - 1; i++) {
+        const a = v + i * 2, b = a + 1, c = a + 2, d = a + 3;
+        index[n++] = a; index[n++] = c; index[n++] = b; index[n++] = b; index[n++] = c; index[n++] = d;
+      }
+      v += verts;
+    }
+    const g = this.geo;
+    for (const name of ['position', 'aAge', 'aSide', 'aFade', 'aStrength']) {
+      const attr = g.getAttribute(name) as THREE.BufferAttribute;
+      attr.clearUpdateRanges();
+      if (v > 0) attr.addUpdateRange(0, v * attr.itemSize);
+      attr.needsUpdate = true;
+    }
+    const idx = g.index!;
+    idx.clearUpdateRanges();
+    if (n > 0) idx.addUpdateRange(0, n);
+    idx.needsUpdate = true;
+    g.setDrawRange(0, n);
+  }
+
+  private allocate(): void {
+    const cap = this.capacity;
+    this.positions = new Float32Array(cap * 6);
+    this.ages = new Float32Array(cap * 2);
+    this.sides = new Float32Array(cap * 2);
+    this.fades = new Float32Array(cap * 2);
+    this.strengths = new Float32Array(cap * 2);
+    this.index = new Uint32Array(Math.max(6, cap * 6));
+    const g = this.geo;
+    g.dispose();
+    g.setAttribute('position', new THREE.BufferAttribute(this.positions, 3).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('aAge', new THREE.BufferAttribute(this.ages, 1).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('aSide', new THREE.BufferAttribute(this.sides, 1).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('aFade', new THREE.BufferAttribute(this.fades, 1).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('aStrength', new THREE.BufferAttribute(this.strengths, 1).setUsage(THREE.DynamicDrawUsage));
+    g.setIndex(new THREE.BufferAttribute(this.index, 1).setUsage(THREE.DynamicDrawUsage));
+  }
+}
+
+/** Fixed-capacity trail of quads following an emitter. Positions are in world space. Standalone trails
+ *  (contrails, wingtip vortices in the main scene) own a mesh; trails given a WakeBatch are drawn by it. */
+export class WakeTrail {
+  /** null for a batched trail */
+  readonly mesh: THREE.Mesh | null = null;
+  readonly capacity: number;
+  readonly strength: number;
+  readonly positions: Float32Array;
+  readonly ages: Float32Array;
+  readonly sides: Float32Array;
+  readonly fades: Float32Array;
+  /** live points (vertices = 2 * count, quads = count - 1) */
+  count = 0;
   private readonly points: { x: number; z: number; dx: number; dz: number; t: number; fade: number }[] = [];
   private lastX = NaN;
   private lastZ = NaN;
   /** points still to emit at reduced strength after a trail start or a gap */
   private ramp = 0;
-  private readonly geo: THREE.BufferGeometry;
+  private readonly geo: THREE.BufferGeometry | null = null;
 
-  constructor(capacity: number, private width: number, private lifetime: number, strength = 1, material: THREE.ShaderMaterial = WAKE_MATERIAL) {
+  constructor(capacity: number, private width: number, private lifetime: number, strength = 1, target: THREE.ShaderMaterial | WakeBatch = WAKE_MATERIAL) {
     this.capacity = capacity;
+    this.strength = strength;
     this.positions = new Float32Array(capacity * 2 * 3);
     this.ages = new Float32Array(capacity * 2);
     this.sides = new Float32Array(capacity * 2);
     this.fades = new Float32Array(capacity * 2);
+    if (target instanceof WakeBatch) { target.add(this); return; }
     const idx: number[] = [];
     for (let i = 0; i < capacity - 1; i++) {
       const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
@@ -236,7 +341,7 @@ export class WakeTrail {
     this.geo.setAttribute('aFade', new THREE.BufferAttribute(this.fades, 1));
     this.geo.setIndex(idx);
     this.geo.setDrawRange(0, 0);
-    const mat = material.clone();
+    const mat = target.clone();
     mat.uniforms.uStrength.value = strength;
     this.mesh = new THREE.Mesh(this.geo, mat);
     this.mesh.frustumCulled = false;
@@ -279,17 +384,21 @@ export class WakeTrail {
       this.sides[i * 2] = -1; this.sides[i * 2 + 1] = 1;
       this.fades[i * 2] = p.fade; this.fades[i * 2 + 1] = p.fade;
     }
-    this.geo.attributes.position.needsUpdate = true;
-    this.geo.attributes.aAge.needsUpdate = true;
-    this.geo.attributes.aSide.needsUpdate = true;
-    this.geo.attributes.aFade.needsUpdate = true;
-    this.geo.setDrawRange(0, Math.max(0, (n - 1) * 6));
+    this.count = n;
+    const geo = this.geo;
+    if (!geo) return;
+    geo.attributes.position.needsUpdate = true;
+    geo.attributes.aAge.needsUpdate = true;
+    geo.attributes.aSide.needsUpdate = true;
+    geo.attributes.aFade.needsUpdate = true;
+    geo.setDrawRange(0, Math.max(0, (n - 1) * 6));
   }
 
   reset(): void {
     this.points.length = 0;
     this.lastX = NaN; this.lastZ = NaN;
     this.ramp = 0;
-    this.geo.setDrawRange(0, 0);
+    this.count = 0;
+    this.geo?.setDrawRange(0, 0);
   }
 }

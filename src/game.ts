@@ -14,13 +14,13 @@ import { CascadeFitter, installCascadeDebug } from './render/shadows';
 import { buildRoadMeshes, buildRoadNetwork, createRoadMaterial, type RoadSegment } from './world/roads';
 import { buildBridges, type BridgeBuild } from './world/bridges';
 import { buildCity, type CityBuild } from './world/city';
-import { Vegetation } from './world/vegetation';
+import { MIRROR_DISTANCE, Vegetation } from './world/vegetation';
 import { Props } from './world/props';
 import { Traffic } from './world/traffic';
 import { Aircraft } from './plane/aircraft';
 import { FlightCamera } from './plane/camera';
 import { Metrics } from './core/metrics';
-import { ViewCull, configureMainCamera, installCascadeRouting, layerMask, shadowPassStats } from './world/culling';
+import { LAYER_MAIN, ViewCull, configureMainCamera, installCascadeRouting, layerMask, shadowPassStats } from './world/culling';
 
 export interface QualitySettings {
   samples: number;
@@ -39,6 +39,8 @@ export const QUALITY: Record<Quality, QualitySettings> = {
   high: { samples: 4, shadowMapSize: 2048, cascades: 3, cloudSteps: 24, skyScale: 0.6, shadowFar: 3500, anisotropy: 8, bloom: true },
   ultra: { samples: 4, shadowMapSize: 4096, cascades: 4, cloudSteps: 32, skyScale: 1.0, shadowFar: 5000, anisotropy: 16, bloom: true },
 };
+
+export type PassName = 'wake' | 'sky' | 'shadow' | 'reflection' | 'main' | 'post';
 
 export class Game {
   readonly renderer: THREE.WebGLRenderer;
@@ -70,6 +72,11 @@ export class Game {
   readonly cull = new ViewCull();
   /** draw calls / triangles of the last shadow pass per cascade (diagnostics) */
   readonly shadowPassStats = shadowPassStats;
+  /** draw calls / triangles of the last frame per pass (diagnostics; renderer.info deltas, so free) */
+  readonly passStats: Record<PassName, { calls: number; triangles: number }> = {
+    wake: { calls: 0, triangles: 0 }, sky: { calls: 0, triangles: 0 }, shadow: { calls: 0, triangles: 0 },
+    reflection: { calls: 0, triangles: 0 }, main: { calls: 0, triangles: 0 }, post: { calls: 0, triangles: 0 },
+  };
   width = 1;
   height = 1;
   time = 0;
@@ -92,6 +99,7 @@ export class Game {
     this.renderer.info.autoReset = false;
     this.camera = new THREE.PerspectiveCamera(50, 16 / 9, 0.4, 60000);
     configureMainCamera(this.camera);
+    this.camera.layers.enable(LAYER_MAIN);
     this.atmos = new Atmosphere(params.seed);
     if (params.time !== null) this.atmos.hour = params.time;
     if (params.weather) this.atmos.setWeather(params.weather);
@@ -194,7 +202,10 @@ export class Game {
     this.scene.add(this.city.batches.group);
     // building tiles and prop chunks carry world-space bounds: mirror those within the reflection range
     const beyondRange = (o: THREE.Object3D, cam: THREE.PerspectiveCamera) => distanceToBounds(o, cam) > reflRange;
-    this.reflection.excludeChildrenWhen(this.city.batches.group, beyondRange);
+    // (the buildings in view are drawn from per-kind batches: the camera ones stay out of the mirror, the
+    // mirror ones hold exactly the tiles within range)
+    const cityB = this.city.batches;
+    this.reflection.excludeChildrenWhen(cityB.group, (o, cam) => cityB.cameraMeshes.has(o) || (!cityB.mirrorMeshes.has(o) && beyondRange(o, cam)));
     // roads occupy ground so trees keep off them
     for (const s of this.roads) {
       const len = Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]);
@@ -207,7 +218,8 @@ export class Game {
     for (const m of this.props.materials) this.registerLit(m);
     this.props.group.name = 'props';
     this.scene.add(this.props.group);
-    this.reflection.excludeChildrenWhen(this.props.group, beyondRange);
+    const props = this.props;
+    this.reflection.excludeChildrenWhen(props.group, (o, cam) => props.cameraMeshes.has(o) || (!props.mirrorMeshes.has(o) && beyondRange(o, cam)));
 
     await this.tick(progress, 'Planting palms and mangroves', 0.74);
     this.vegetation = new Vegetation(this.map, this.city.occupied);
@@ -215,24 +227,26 @@ export class Game {
     this.vegetation.group.name = 'vegetation';
     this.scene.add(this.vegetation.group);
     // mirror only the card impostors, and only within 1.5 km: the 3D near-tile meshes are far too heavy for
-    // a blurred mirror image and farther tiles blur into the environment sky anyway
-    this.reflection.excludeChildrenWhen(this.vegetation.group, (tile, cam) => trianglesOf(tile) > 64 || distanceToBounds(tile, cam) > 1500);
+    // a blurred mirror image and farther tiles blur into the environment sky anyway. The cards come from the
+    // vegetation's mirror batch (its camera batch holds every card tile in view, so it stays out)
+    const veg = this.vegetation;
+    this.reflection.excludeChildrenWhen(veg.group, (tile, cam) => tile === veg.cameraCards || (tile !== veg.mirrorCards && (trianglesOf(tile) > 64 || distanceToBounds(tile, cam) > MIRROR_DISTANCE)));
 
     await this.tick(progress, 'Launching boats and traffic', 0.86);
-    this.traffic = new Traffic(this.map, this.roads, this.bridges.routes, this.wakes.scene, this.params.seed, this.props.mooredBoatPositions);
+    this.traffic = new Traffic(this.map, this.roads, this.bridges.routes, this.wakes.batch, this.params.seed, this.props.mooredBoatPositions);
     for (const m of this.traffic.materials) this.registerLit(m);
     this.traffic.group.name = 'traffic';
     this.scene.add(this.traffic.group);
     for (const c of this.traffic.contrailMeshes) { c.name = 'contrail'; this.scene.add(c); }
 
     await this.tick(progress, 'Pre-flighting the aircraft', 0.92);
-    this.aircraft = new Aircraft((x, z) => this.map.heightAt(x, z), this.scene, this.wakes.scene);
+    this.aircraft = new Aircraft((x, z) => this.map.heightAt(x, z), this.scene, this.wakes.batch);
     this.registerTree(this.aircraft.model.root);
     this.aircraft.model.root.traverse((o) => { if ((o as THREE.Mesh).isMesh && o.castShadow) this.airframeCasters.push(o); });
     // surface decals, point sprites and trails are not mirrored (the sprites are sized for the main frame),
     // nor is the cabin interior (only visible through the glass)
     const fx = this.aircraft.effects;
-    this.reflection.exclude(fx.stampL.mesh, fx.stampR.mesh, fx.spray.points, fx.exhaust.points, fx.vortexL.mesh, fx.vortexR.mesh, ...this.traffic.contrailMeshes, ...this.aircraft.model.interiorMeshes);
+    this.reflection.exclude(fx.stampL.mesh, fx.stampR.mesh, fx.spray.points, fx.exhaust.points, fx.vortexL.mesh!, fx.vortexR.mesh!, ...this.traffic.contrailMeshes, ...this.aircraft.model.interiorMeshes);
     this.flightCamera = new FlightCamera(this.camera);
     this.flightCamera.groundHeight = (x, z) => Math.max(0, this.map.heightAt(x, z));
     // default spawn: on the water at the downtown seaplane base facing east
@@ -348,14 +362,14 @@ export class Game {
     this.cascades.fit(planePos.y + 5);
     // view / shadow-caster culling shared by the chunked world systems
     this.cull.update(cam, this.csm.maxFar, this.atmos.state.sunDir);
-    this.terrain.update(cx, cz);
+    this.terrain.update(cx, cz, this.cull);
     // casters reach as far as the cascades do; the canopy stops at half the range (a crown's shadow is a
     // couple of texels there and every tile is a draw call per cascade)
     this.city.batches.shadowDistance = this.csm.maxFar;
     this.vegetation.shadowDistance = Math.max(1800, Math.min(3000, this.csm.maxFar * 0.4));
-    this.vegetation.updateLod(cx, cz, this.cull);
-    this.city.batches.updateLod(cx, cz, this.cull);
-    this.props.updateLod(cx, cz, this.cull);
+    this.vegetation.updateLod(cx, cz, this.cull, cam.position);
+    this.city.batches.updateLod(cx, cz, this.cull, cam.position, this.reflection.range);
+    this.props.updateLod(cx, cz, this.cull, cam.position, this.reflection.range);
     this.traffic.updateCulling(this.cull);
     // the airframe casts only into the cascades its shadow can reach: swept down to the ground under it, so
     // from altitude that is the cascade holding its ground shadow, not all three
@@ -363,16 +377,40 @@ export class Game {
     const airMask = layerMask('all', true, this.cull.casterCascades(planePos, 9, airHeight));
     for (const o of this.airframeCasters) o.layers.mask = airMask;
     this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size);
+    const info = this.renderer.info.render;
+    const ps = this.passStats;
+    const mark = this.markPass;
+    this.passCalls0 = info.calls; this.passTriangles0 = info.triangles;
     this.wakes.render(this.renderer, cx, cz);
+    mark('wake');
     this.sky.render(this.renderer, cam, this.post.width, this.post.height);
+    mark('sky');
     // the shadow cascades are rendered by the first of the two scene renders below (the mirror pass when it
     // runs, else the main pass) and reused by the second
     this.renderer.shadowMap.needsUpdate = true;
     this.reflection.render(this.scene, cam);
+    mark('reflection');
     this.renderer.setRenderTarget(this.post.target);
     this.renderer.render(this.scene, cam);
+    mark('main');
+    // the shadow pass ran inside whichever scene render came first: split it out of that pass
+    let sc = 0, st = 0;
+    for (let i = 0; i < shadowPassStats.calls.length; i++) { sc += shadowPassStats.calls[i]; st += shadowPassStats.triangles[i]; }
+    ps.shadow.calls = sc; ps.shadow.triangles = st;
+    const host = this.reflection.uniforms.uReflParams.value.x > 0 ? ps.reflection : ps.main;
+    host.calls -= sc; host.triangles -= st;
     this.post.finish(cam, this.time);
+    mark('post');
     if (this.params.dbg.has('reflview')) this.reflection.debugBlit();
     this.metrics.endFrame();
   }
+
+  private passCalls0 = 0;
+  private passTriangles0 = 0;
+  /** Close the pass `name` on the renderer.info counters (deltas since the previous mark; a few integer ops). */
+  private readonly markPass = (name: PassName): void => {
+    const info = this.renderer.info.render, p = this.passStats[name];
+    p.calls = info.calls - this.passCalls0; p.triangles = info.triangles - this.passTriangles0;
+    this.passCalls0 = info.calls; this.passTriangles0 = info.triangles;
+  };
 }
