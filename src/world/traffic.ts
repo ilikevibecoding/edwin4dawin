@@ -422,7 +422,7 @@ export class Traffic {
       // the deck's carriageway layout (see bridges.ts): lanes of 3.3 m, a 0.3 m median half-width on six lanes
       const cw = clamp(b.lanes * 3.3, 8, b.width - 4), laneW = cw / b.lanes, median = b.lanes >= 6 ? 0.3 : 0;
       this.carRoutes.push({ pts: b.pts.map((p) => p.clone().add(new THREE.Vector3(0, 0.25, 0))), length: this.len3(b.pts), lanes: b.lanes, width: b.width, laneOff0: median + laneW * 0.5, laneW });
-      routeDensity.push(b.traffic * 2.4);
+      routeDensity.push(b.traffic * 3.0);
     }
     for (const s of roads) {
       if (s.cls !== 'street') continue;
@@ -456,6 +456,9 @@ export class Traffic {
       const base = multi ? 24 : 13;
       for (const dir of [1, -1] as const) for (let lane = 0; lane < lanesPerDir; lane++) {
         const laneSpeed = base * (1.12 - 0.1 * lane);
+        // the queue is spread over the whole route: gaps average the route length per vehicle, with a wide
+        // spread (platoons and open stretches) but never under the minimum headway
+        const meanGap = r.length / perQueue;
         let s = rng.range(0, r.length);
         for (let i = 0; i < perQueue; i++) {
           const outer = lane === lanesPerDir - 1;
@@ -463,7 +466,7 @@ export class Traffic {
           const h = heavy ? heavyOf() : null;
           const color = new THREE.Color(h ? h.color : rng.pick(carColors));
           this.cars.push({ route: ri, s, dir, lane, speed: laneSpeed * rng.range(0.99, 1.01) * (h && h.len > 6 ? 0.92 : 1), color, kind: h ? 1 : 0, scale: h ? h.scale : unit });
-          s = (s + (h ? h.len : 4.4) + MIN_HEADWAY + rng.range(0, 3) * rng.range(0, 30) + rng.range(4, 40)) % r.length;
+          s = (s + Math.max((h ? h.len : 4.4) + MIN_HEADWAY, meanGap * rng.range(0.3, 1.7))) % r.length;
         }
       }
     }

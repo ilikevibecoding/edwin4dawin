@@ -212,7 +212,7 @@ const CONCRETE_FRAG = /* glsl */ `
   } else {
     // run-off streaks down the faces and a little grime
     float streak = fbm3(vec2(vWorldPosR.x + vWorldPosR.z, vWorldPosR.y * 0.25) * 0.7);
-    diffuseColor.rgb *= 0.90 + 0.14 * streak;
+    diffuseColor.rgb *= mix(0.90 + 0.14 * streak, 0.80 + 0.22 * streak, vRoadInfo.y);
     // formwork: lift joints every 3.2 m up every face; on the piers and pylons (aRoadInfo.y = 1) panel joints
     // every 2.4 m along the face too (only the world axis that varies across the face draws them)
     float fwY = max(fwidth(vWorldPosR.y), 1e-4);
@@ -646,7 +646,7 @@ const C_CAP: Rgb = [1.08, 1.08, 1.07];       // parapet cap: pale, catches the l
 const C_SOFFIT: Rgb = [0.86, 0.86, 0.86];
 const C_UNDER: Rgb = [0.78, 0.78, 0.79];
 const C_WET: Rgb = [0.5, 0.5, 0.52];         // tidal band on the columns
-const C_PROXY: Rgb = [0.3, 0.3, 0.34];       // distance pier proxies: the shaded side of a pier as seen from afar
+const C_PROXY: Rgb = [0.34, 0.34, 0.38];       // distance pier proxies: the shaded side of a pier as seen from afar
 const C_PROXY_SOFFIT: Rgb = [0.22, 0.22, 0.26]; // the deck's underside shadow line between the piers
 const C_FOOTING: Rgb = [0.74, 0.75, 0.76];
 const C_FOAM: Rgb = [1.85, 1.9, 1.92];       // wash around the footings (albedo ~0.9)
@@ -836,11 +836,9 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         P.struct.box(x, -1.0, z, w + 2.4, 1.6, d + 2.4, yaw, 0, C_FOOTING, false, NO_ROAD);
         P.struct.disc(x, 0.05, z, (w + 2.4) * 0.5 + 0.9, (d + 2.4) * 0.5 + 0.9, 12, C_FOAM, NO_ROAD);
       };
-      if (W >= 20 || heavy) {
-        // wall pier whose stem flares out to the cap (the classic causeway hammerhead): the sloping faces run
-        // from the water right up to the cap edge, so the stem is in view from above the deck as well as from
-        // the side, and the cap never reads as a block hanging under the fascia
-        const ww = heavy ? W * 0.7 : W * 0.5, wt = heavy ? 3.2 : 2.2;
+      if (heavy) {
+        // arch springing: a wall pier whose stem flares out to the cap
+        const ww = W * 0.7, wt = 3.2;
         const topW = capW - 3.0, topT = wt + 0.6;
         const bottom = inWater ? 0.55 : colBottom;
         const widthAt = (y: number) => lerp(ww, topW, clamp((y - bottom) / (capBottom - bottom), 0, 1));
@@ -854,18 +852,24 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         P.struct.box(f.x, capBottom, f.z, capW, capH, wt + 1.0, yaw, 0, C_PLAIN, false, PIER_INFO);
         P.proxy.prism(f.x, proxyBottom, f.z, ww + 2.4, wt + 4.0, f.x, capTop + 0.1, f.z, capW, wt + 4.0, yaw, C_PROXY, NO_ROAD);
       } else {
-        // twin round columns at the fascia line under a cap beam
-        for (const off of [-(hw + 0.4), hw + 0.4]) {
+        // column bent: round columns under a cap beam, the outer pair standing outboard of the fascia (the
+        // classic causeway bent), so from above the deck the columns are seen going down to the water beside
+        // the deck edge instead of the cap reading as a block hanging under it; wide decks get a third column
+        const dia = W >= 20 ? 3.0 : 2.4;
+        const outer = hw + (W >= 20 ? 1.2 : 0.9);
+        const offs = W >= 20 ? [-outer, 0, outer] : [-outer, outer];
+        const cw2 = W >= 20 ? capW : W + 5.6;
+        for (const off of offs) {
           const x = f.x + f.rx * off, z = f.z + f.rz * off;
           if (inWater) {
-            footing(x, z, 2.4, 2.4);
+            footing(x, z, dia, dia);
             const wetTop = Math.min(capBottom, 1.9);
-            P.struct.cylinder(x, 0.55, z, 2.4, wetTop - 0.55, 12, C_WET, false, PIER_INFO);
-            P.struct.cylinder(x, wetTop, z, 2.4, capBottom - wetTop, 12, C_PLAIN, false, PIER_INFO);
-          } else P.struct.cylinder(x, colBottom, z, 2.4, capBottom - colBottom, 12, C_PLAIN, false, PIER_INFO);
+            P.struct.cylinder(x, 0.55, z, dia, wetTop - 0.55, 12, C_WET, false, PIER_INFO);
+            P.struct.cylinder(x, wetTop, z, dia, capBottom - wetTop, 12, C_PLAIN, false, PIER_INFO);
+          } else P.struct.cylinder(x, colBottom, z, dia, capBottom - colBottom, 12, C_PLAIN, false, PIER_INFO);
         }
-        P.struct.box(f.x, capBottom, f.z, W + 5.6, capH, 2.6, yaw, 0, C_PLAIN, false, PIER_INFO);
-        P.proxy.box(f.x, proxyBottom, f.z, W + 5.6, capTop - proxyBottom + 0.1, 5.6, yaw, 0, C_PROXY, true, NO_ROAD);
+        P.struct.box(f.x, capBottom, f.z, cw2, capH, dia + 0.4, yaw, 0, C_PLAIN, false, PIER_INFO);
+        P.proxy.box(f.x, proxyBottom, f.z, cw2, capTop - proxyBottom + 0.1, dia + 3.0, yaw, 0, C_PROXY, true, NO_ROAD);
       }
       // soffit slab of the span ahead: the dark underside line of the deck between this pier and the next
       {
