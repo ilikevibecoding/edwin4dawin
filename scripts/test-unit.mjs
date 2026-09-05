@@ -5,11 +5,26 @@ import { BlockJournal } from '../src/disasters/journal.js';
 import { Disaster } from '../src/disasters/base.js';
 import { SaveManager } from '../src/save.js';
 import { World } from '../src/world.js';
+import { initBlocks, B, BLOCKS, DOOR_SETS, WHEAT_STAGES, doorPanelBoxes } from '../src/blocks.js';
+import { Inventory, mergeInto, initItems, I, ITEMS, MAX_STACK, isItem, foodOf, cookedOf } from '../src/items.js';
+import { DoorController, setDoorOpen, doorBottomY } from '../src/doors.js';
+import { isPassable, standHeight } from '../src/npc/pathfinding.js';
 
 let passed = 0, failed = 0;
 function test(name, fn) {
   try { fn(); passed++; console.log(`PASS ${name}`); }
   catch (e) { failed++; console.log(`FAIL ${name}\n   ${e.message}`); }
+}
+
+// Block / item registries work without the texture atlas (tile lookups fall back to 0)
+initBlocks(); initItems();
+const memStorage = () => { const store = new Map(); return { store, getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v), removeItem: (k) => store.delete(k) }; };
+// A one-chunk world (chunk 0,0 generated, unlit) for door / block entity tests
+function testWorld() {
+  const w = new World(null);
+  const c = w.getOrCreateChunk(0, 0); c.generated = true;
+  w.fill = (x0, y0, z0, x1, y1, z1, id) => { for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) w.setBlock(x, y, z, id); };
+  return w;
 }
 
 test('RNG is deterministic per seed and differs across seeds', () => {
@@ -80,6 +95,185 @@ test('SaveManager keeps disaster-journaled cells out of the save until committed
   assert.equal(s2.applyToChunk(chunk), 3);
   assert.equal(chunk.blocks[((1 & 15) * 16 + (2 & 15)) * 256 + 60], 9);
   s2.clear(); assert.equal(store.size, 0);
+});
+
+test('SaveManager v2 persists block entities, player state and inventory; v1 saves migrate', () => {
+  const st = memStorage();
+  st.setItem('frontier-craft:v1:7', JSON.stringify({ version: 1, edits: [[3, 60, 4, 9], [3, 61, 4, 0]] }));
+  const s = new SaveManager(7, st);
+  assert.equal(s.count, 2, 'v1 edits are loaded');
+  assert.equal(s.migrated, true);
+  s.setEntity(10, 60, 10, { type: 'chest', slots: [{ id: I.BREAD, count: 2 }, null] });
+  s.setEntity(11, 60, 10, { type: 'crop', age: 120 });
+  s.setEntity(11, 60, 10, null); // removed again
+  s.setPlayer({ x: 1.5, y: 60, z: 2.5, yaw: 0.3, pitch: -0.1, health: 17, food: 13, saturation: 2.5 });
+  s.setInventory({ slots: [[B.OAK_PLANKS, 64], null, [I.APPLE, 3]], selected: 2 });
+  s.flush();
+  assert.equal(st.getItem('frontier-craft:v1:7') !== null, true, 'the old key is left alone until clear()');
+  const raw = JSON.parse(st.getItem('frontier-craft:v2:7'));
+  assert.equal(raw.version, 2);
+  assert.equal(raw.edits.length, 2);
+  assert.deepEqual(raw.entities, [{ type: 'chest', slots: [{ id: I.BREAD, count: 2 }, null], x: 10, y: 60, z: 10 }]);
+  assert.equal(raw.player.health, 17);
+  const s2 = new SaveManager(7, st);
+  assert.equal(s2.migrated, false);
+  assert.equal(s2.count, 2);
+  assert.deepEqual(s2.getEntity(10, 60, 10).slots, [{ id: I.BREAD, count: 2 }, null]);
+  assert.equal(s2.getEntity(11, 60, 10), null);
+  assert.deepEqual(s2.player, { x: 1.5, y: 60, z: 2.5, yaw: 0.3, pitch: -0.1, health: 17, food: 13, saturation: 2.5 });
+  assert.deepEqual(s2.inventory, { slots: [[B.OAK_PLANKS, 64], null, [I.APPLE, 3]], selected: 2 });
+  const w = testWorld();
+  assert.equal(s2.restoreEntities(w), 1);
+  const ent = w.getBlockEntity(10, 60, 10);
+  assert.equal(ent.type, 'chest');
+  ent.slots[0].count = 60; // restored entities are copies: editing the world's entity does not touch the save until setEntity
+  assert.equal(s2.getEntity(10, 60, 10).slots[0].count, 2);
+  s2.clear();
+  assert.equal(st.store.size, 0, 'clear removes v1 and v2 keys');
+});
+
+test('Inventory: 64-stacks, addStack leftovers, canAdd, remove, serialize round trip (unknown ids dropped)', () => {
+  assert.equal(MAX_STACK, 64);
+  const inv = new Inventory(4);
+  assert.equal(inv.addStack(I.APPLE, 70), 0, 'everything fits: a full stack of 64 plus a second stack of 6');
+  assert.deepEqual(inv.slots.map((s) => s && [s.id, s.count]), [[I.APPLE, 64], [I.APPLE, 6], null, null]);
+  assert.equal(inv.addStack(I.APPLE, 200), 200 - 58 - 128, 'tops up the 6-stack to 64, fills the two free slots, returns the rest');
+  inv.set(1, I.APPLE, 6); inv.set(2, null); inv.set(3, null);
+  inv.set(2, B.STONE, 64); inv.set(3, B.STONE, 64);
+  assert.equal(inv.canAdd(I.APPLE, 58), true);
+  assert.equal(inv.canAdd(I.APPLE, 59), false);
+  assert.equal(inv.canAdd(I.BREAD, 1), false, 'no free slot and no bread stack');
+  assert.equal(inv.addStack(I.BREAD, 1), 1, 'nothing fits: everything is returned');
+  assert.equal(inv.count(I.APPLE), 70);
+  assert.equal(inv.remove(I.APPLE, 71), false);
+  assert.equal(inv.remove(I.APPLE, 8), true, 'removes from the last slots first');
+  assert.deepEqual(inv.slots.map((s) => s && [s.id, s.count]), [[I.APPLE, 62], null, [B.STONE, 64], [B.STONE, 64]]);
+  inv.selected = 2;
+  const data = JSON.parse(JSON.stringify(inv.serialize()));
+  data.slots[1] = [999, 5]; // an id that is not a block or item: dropped on load
+  const inv2 = new Inventory(4);
+  assert.equal(inv2.deserialize(data), true);
+  assert.deepEqual(inv2.slots.map((s) => s && [s.id, s.count]), [[I.APPLE, 62], null, [B.STONE, 64], [B.STONE, 64]]);
+  assert.equal(inv2.selected, 2);
+  assert.equal(new Inventory(4).deserialize(null), false);
+});
+
+test('Item registry: 14 items >= 1000 with Minecraft food values and cooking pairs; blocks are not items', () => {
+  const ids = Object.keys(ITEMS).map(Number);
+  assert.equal(ids.length, 14);
+  for (const id of ids) { assert.ok(id >= 1000); assert.equal(isItem(id), true); assert.equal(BLOCKS[id].displayName, ITEMS[id].displayName); assert.equal(BLOCKS[id].icon, 'flat'); }
+  assert.equal(isItem(B.OAK_PLANKS), false);
+  assert.deepEqual(foodOf(I.APPLE), { hunger: 4, saturation: 2.4 });
+  assert.deepEqual(foodOf(I.BREAD), { hunger: 5, saturation: 6 });
+  assert.deepEqual(foodOf(I.BEEF_COOKED), { hunger: 8, saturation: 12.8 });
+  assert.deepEqual(foodOf(I.CHICKEN_RAW), { hunger: 2, saturation: 1.2 });
+  assert.equal(foodOf(I.WHEAT), null);
+  assert.equal(cookedOf(I.BEEF_RAW), I.BEEF_COOKED);
+  assert.equal(cookedOf(I.PORKCHOP_RAW), I.PORKCHOP_COOKED);
+  assert.equal(cookedOf(I.CHICKEN_RAW), I.CHICKEN_COOKED);
+  assert.equal(cookedOf(I.BEEF_COOKED), null);
+});
+
+test('mergeInto follows the quick-move slot order (hotbar first, from the right) and merges before filling', () => {
+  const slots = new Array(6).fill(null);
+  slots[4] = { id: I.APPLE, count: 60 };
+  const order = [5, 4, 3, 2, 1, 0];
+  const from = { id: I.APPLE, count: 10 };
+  assert.equal(mergeInto(slots, from, order), true);
+  assert.deepEqual(slots.map((s) => s && [s.id, s.count]), [null, null, null, null, [I.APPLE, 64], [I.APPLE, 6]], 'tops up the existing stack, remainder goes to the first free slot in order');
+  const big = { id: B.STONE, count: 300 };
+  assert.equal(mergeInto(slots, big, order), false);
+  assert.equal(big.count, 300 - 4 * 64, 'four free slots take 256');
+});
+
+test('Doors: closed = bottom + top ids with a thin panel across the doorway, open = one id with no collision', () => {
+  const w = testWorld();
+  // wall along x at z=5 with a door in it at x=5 (bottom y=60, top y=61)
+  w.fill(0, 59, 0, 15, 59, 15, B.STONE);
+  w.fill(0, 60, 5, 15, 61, 5, B.OAK_PLANKS);
+  w.setBlock(5, 60, 5, B.OAK_DOOR); w.setBlock(5, 61, 5, B.OAK_DOOR_TOP);
+  assert.equal(BLOCKS[B.OAK_DOOR].solid, true);
+  assert.deepEqual(doorPanelBoxes(w, 5, 60, 5), [[0, 0, 0.4375, 1, 1, 0.5625]], 'panel spans x, thin in z (passage along z)');
+  assert.deepEqual(doorPanelBoxes(w, 5, 61, 5), [[0, 0, 0.4375, 1, 1, 0.5625]]);
+  assert.equal(doorBottomY(w, 5, 61, 5), 60, 'the top half knows its bottom');
+  assert.equal(doorBottomY(w, 5, 60, 5), 60);
+  assert.equal(doorBottomY(w, 6, 60, 5), null);
+  assert.equal(setDoorOpen(w, 5, 60, 5, true), true);
+  assert.equal(w.getBlock(5, 60, 5), B.OAK_DOOR_OPEN); assert.equal(w.getBlock(5, 61, 5), B.OAK_DOOR_OPEN);
+  assert.equal(BLOCKS[B.OAK_DOOR_OPEN].solid, false); assert.deepEqual(BLOCKS[B.OAK_DOOR_OPEN].boxes, []);
+  assert.equal(doorBottomY(w, 5, 61, 5), 60, 'open halves resolve to the bottom too');
+  assert.equal(setDoorOpen(w, 5, 60, 5, true), false, 'already open');
+  assert.equal(setDoorOpen(w, 5, 60, 5, false), true);
+  assert.equal(w.getBlock(5, 60, 5), B.OAK_DOOR); assert.equal(w.getBlock(5, 61, 5), B.OAK_DOOR_TOP);
+  // NPC pathfinding treats closed doors as passable and standable cells
+  assert.equal(isPassable(B.OAK_DOOR), true); assert.equal(isPassable(B.OAK_DOOR_TOP), true); assert.equal(isPassable(B.OAK_PLANKS), false);
+  assert.equal(standHeight(w, 5, 60, 5), 60);
+  assert.equal(standHeight(w, 4, 60, 5), null, 'the wall next to it is not');
+  // generated doors (two bottom ids stacked) are normalised to bottom + top
+  w.setBlock(8, 60, 5, B.SPRUCE_DOOR); w.setBlock(8, 61, 5, B.SPRUCE_DOOR);
+  assert.equal(w.normalizeDoors(w.getChunk(0, 0)), 1);
+  assert.equal(w.getBlock(8, 61, 5), B.SPRUCE_DOOR_TOP);
+  assert.equal(DOOR_SETS.spruce.open, B.SPRUCE_DOOR_OPEN);
+});
+
+test('DoorController: NPCs open a closed door within a block and it closes 1 s after they left; player toggles stick', () => {
+  const w = testWorld();
+  w.fill(0, 59, 0, 15, 59, 15, B.STONE);
+  w.fill(0, 60, 5, 15, 61, 5, B.OAK_PLANKS);
+  w.setBlock(5, 60, 5, B.OAK_DOOR); w.setBlock(5, 61, 5, B.OAK_DOOR_TOP);
+  const dc = new DoorController(w, null);
+  const changes = []; dc.onChange = (x, y, z, open) => changes.push(open);
+  const npc = { state: 'walk', path: [{ x: 5, y: 60, z: 5 }, { x: 5, y: 60, z: 6 }], pathIndex: 0, pos: { x: 5.5, y: 60, z: 2.5 } };
+  dc.update([npc], null);
+  assert.equal(w.getBlock(5, 60, 5), B.OAK_DOOR, 'three blocks away: still closed');
+  npc.pos.z = 4.4;                                    // within 1.25 blocks of the door cell centre
+  dc.update([npc], null);
+  assert.equal(w.getBlock(5, 60, 5), B.OAK_DOOR_OPEN); assert.equal(w.getBlock(5, 61, 5), B.OAK_DOOR_OPEN);
+  assert.equal(dc.held.size, 1);
+  for (let i = 0; i < 40; i++) { npc.pos.z = 5.5; dc.update([npc], null); } // standing in the doorway keeps it open
+  assert.equal(w.getBlock(5, 60, 5), B.OAK_DOOR_OPEN);
+  npc.pos.z = 8.5;                                    // walked through
+  for (let i = 0; i < 19; i++) dc.update([npc], null);
+  assert.equal(w.getBlock(5, 60, 5), B.OAK_DOOR_OPEN, 'still open 0.95 s after leaving');
+  dc.update([npc], null);
+  assert.equal(w.getBlock(5, 60, 5), B.OAK_DOOR, 'closed after 20 ticks'); assert.equal(w.getBlock(5, 61, 5), B.OAK_DOOR_TOP);
+  assert.equal(dc.held.size, 0);
+  assert.deepEqual(changes, [true, false]);
+  // a door the player opened is never auto-closed, and a door closing never traps the player standing in it
+  assert.deepEqual(dc.toggle(5, 61, 5), { x: 5, y: 60, z: 5, open: true });
+  for (let i = 0; i < 60; i++) dc.update([], null);
+  assert.equal(w.getBlock(5, 60, 5), B.OAK_DOOR_OPEN);
+  assert.deepEqual(dc.toggle(5, 60, 5), { x: 5, y: 60, z: 5, open: false });
+  npc.pos.z = 4.4; dc.update([npc], null); npc.pos.z = 9;
+  const player = { box: { x0: 5.2, x1: 5.8, y0: 60, y1: 61.8, z0: 5.2, z1: 5.8 } };
+  for (let i = 0; i < 60; i++) dc.update([npc], player);
+  assert.equal(w.getBlock(5, 60, 5), B.OAK_DOOR_OPEN, 'player in the doorway: stays open');
+  player.box.z0 = 8; player.box.z1 = 8.6;
+  for (let i = 0; i < 21; i++) dc.update([npc], player);
+  assert.equal(w.getBlock(5, 60, 5), B.OAK_DOOR);
+  assert.equal(dc.toggles, 6);
+});
+
+test('Block entities: kept per position, handed to onBlockEntityLost when the block is replaced (setBlock and setBlockRaw)', () => {
+  const w = testWorld();
+  w.fill(0, 59, 0, 15, 59, 15, B.STONE);
+  w.setBlock(3, 60, 3, B.CHEST);
+  const ent = w.setBlockEntity(3, 60, 3, { type: 'chest', slots: new Array(27).fill(null) });
+  assert.equal(ent.x, 3); assert.equal(w.getBlockEntity(3, 60, 3), ent);
+  assert.equal(w.getBlockEntity(3, 61, 3), null);
+  const lost = [];
+  w.onBlockEntityLost = (x, y, z, e, newId) => { lost.push([x, y, z, e.type, newId]); w.removeBlockEntity(x, y, z); };
+  w.setBlock(3, 60, 3, B.AIR);
+  assert.deepEqual(lost, [[3, 60, 3, 'chest', B.AIR]]);
+  assert.equal(w.getBlockEntity(3, 60, 3), null);
+  // crops: a growth-stage change keeps the entity (same entity kind), any other block drops it
+  w.setBlock(4, 59, 4, B.FARMLAND); w.setBlock(4, 60, 4, WHEAT_STAGES[0]);
+  w.setBlockEntity(4, 60, 4, { type: 'crop', age: 0 });
+  w.setBlock(4, 60, 4, WHEAT_STAGES[1]);
+  assert.equal(w.getBlockEntity(4, 60, 4).type, 'crop', 'growing to the next stage keeps the timer');
+  w.setBlockRaw(4, 60, 4, B.AIR); // a disaster (journal restore path) breaking the crop
+  assert.equal(lost.length, 2); assert.equal(w.getBlockEntity(4, 60, 4), null);
+  assert.equal(BLOCKS[WHEAT_STAGES[0]].growth, 0); assert.equal(BLOCKS[WHEAT_STAGES[2]].growth, 2); assert.equal(WHEAT_STAGES[2], B.WHEAT);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);
