@@ -4,7 +4,7 @@ import { perlin2, smoothstep } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { CELL, HALF, Zone, type WorldMap } from './map';
 import { balanceGroundIbl } from './terrain';
-import { MAX_CASCADES, cascadeIsFine, layerMask, maskCasts, type ViewCull } from './culling';
+import { LAYER_CAMERA, LAYER_MIRROR, MAX_CASCADES, cascadeIsFine, layerMask, maskCasts, type ViewCull } from './culling';
 
 /**
  * Procedural planting. Two instanced geometry families cover six archetypes:
@@ -614,6 +614,166 @@ function cardMaterial(atlas: THREE.Texture): THREE.MeshStandardMaterial {
   return mat;
 }
 
+// ---------------------------------------------------------------- card batches
+
+/** instances a card batch can hold; tiles that do not fit fall back to their own card mesh */
+const CAMERA_CARDS = 262144;
+const MIRROR_CARDS = 32768;
+/** a batch is compacted when more than this fraction of it is holes */
+const COMPACT_HOLES = 0.3;
+/** collapsed card (scale 0, far under the ground) written into freed slots: draws no fragments */
+const HOLE_MATRIX = new Float32Array([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -5000, 0, 1]);
+
+interface CardRange { start: number; count: number }
+
+/**
+ * The card impostors of many tiles in one instanced draw. Every tile drawn as cards this frame owns a
+ * contiguous range of the batch holding copies of its first `count` instances (the thinned prefix), so
+ * the camera pass draws all the card tiles in view in a single call instead of one per tile and family.
+ * Cards are alpha-tested and depth-written, so their draw order does not matter and a tile's range can
+ * sit anywhere: a tile that leaves the view frees its range (filled with collapsed cards), a tile that
+ * enters takes the first free range that fits, and the batch is compacted once the holes add up. Only
+ * the ranges touched this frame are uploaded, so a tile crossing the frustum edge costs a few kilobytes,
+ * not a rebuild of every card in view.
+ */
+class CardBatch {
+  readonly mesh: THREE.InstancedMesh;
+  private readonly matrices: Float32Array;
+  private readonly colors: Float32Array;
+  private readonly vars: Float32Array;
+  private readonly varAttr: THREE.InstancedBufferAttribute;
+  /** high-water mark: instances [0, used) are drawn */
+  private used = 0;
+  private holes = 0;
+  private readonly free: CardRange[] = [];
+  private readonly ranges = new Map<Tile, CardRange>();
+  private dirtyMin = Infinity;
+  private dirtyMax = 0;
+
+  constructor(readonly capacity: number, cardGeo: THREE.BufferGeometry, material: THREE.Material, depth: THREE.Material) {
+    const geo = new THREE.BufferGeometry();
+    for (const name of ['position', 'normal', 'uv']) geo.setAttribute(name, cardGeo.getAttribute(name));
+    geo.boundingSphere = cardGeo.boundingSphere;
+    this.vars = new Float32Array(capacity * 4);
+    this.varAttr = new THREE.InstancedBufferAttribute(this.vars, 4);
+    this.varAttr.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('aVar', this.varAttr);
+    const mesh = new THREE.InstancedMesh(geo, material, capacity);
+    this.matrices = mesh.instanceMatrix.array as Float32Array;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.colors = new Float32Array(capacity * 3);
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(this.colors, 3);
+    mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    mesh.customDepthMaterial = depth;
+    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    mesh.frustumCulled = false;
+    mesh.matrixAutoUpdate = false;
+    mesh.count = 0;
+    mesh.visible = false;
+    this.mesh = mesh;
+  }
+
+  /** Give `tile` exactly `count` instances in the batch (0 removes it). False when it does not fit. */
+  set(tile: Tile, count: number): boolean {
+    const cur = this.ranges.get(tile);
+    if (cur) {
+      if (cur.count === count) return true;
+      this.release(tile, cur);
+    }
+    if (count === 0) return true;
+    const start = this.alloc(count);
+    if (start < 0) return false;
+    this.matrices.set(tile.matrices.subarray(0, count * 16), start * 16);
+    this.colors.set(tile.colors.subarray(0, count * 3), start * 3);
+    this.vars.set(tile.vars.subarray(0, count * 4), start * 4);
+    this.ranges.set(tile, { start, count });
+    this.touch(start, count);
+    return true;
+  }
+
+  has(tile: Tile): boolean {
+    return this.ranges.has(tile);
+  }
+
+  /** Upload the ranges written this frame and finish the draw setup. */
+  commit(): void {
+    if (this.holes > COMPACT_HOLES * this.used && this.used > 4096) this.compact();
+    if (this.dirtyMin < this.dirtyMax) {
+      const s = this.dirtyMin, n = this.dirtyMax - this.dirtyMin;
+      const m = this.mesh.instanceMatrix, c = this.mesh.instanceColor!, v = this.varAttr;
+      m.clearUpdateRanges(); m.addUpdateRange(s * 16, n * 16); m.needsUpdate = true;
+      c.clearUpdateRanges(); c.addUpdateRange(s * 3, n * 3); c.needsUpdate = true;
+      v.clearUpdateRanges(); v.addUpdateRange(s * 4, n * 4); v.needsUpdate = true;
+      this.dirtyMin = Infinity; this.dirtyMax = 0;
+    }
+    this.mesh.count = this.used;
+    this.mesh.visible = this.used > 0;
+  }
+
+  private touch(start: number, count: number): void {
+    if (start < this.dirtyMin) this.dirtyMin = start;
+    if (start + count > this.dirtyMax) this.dirtyMax = start + count;
+  }
+
+  private release(tile: Tile, r: CardRange): void {
+    this.ranges.delete(tile);
+    for (let i = 0; i < r.count; i++) this.matrices.set(HOLE_MATRIX, (r.start + i) * 16);
+    this.touch(r.start, r.count);
+    // merge into the free list (sorted by start)
+    const free = this.free;
+    let k = 0;
+    while (k < free.length && free[k].start < r.start) k++;
+    const prev = k > 0 ? free[k - 1] : null, next = k < free.length ? free[k] : null;
+    if (prev && prev.start + prev.count === r.start) {
+      prev.count += r.count;
+      if (next && prev.start + prev.count === next.start) { prev.count += next.count; free.splice(k, 1); }
+    } else if (next && r.start + r.count === next.start) {
+      next.start = r.start; next.count += r.count;
+    } else free.splice(k, 0, { start: r.start, count: r.count });
+    this.holes += r.count;
+    // a hole at the end just lowers the high-water mark
+    const last = free[free.length - 1];
+    if (last && last.start + last.count === this.used) { this.used = last.start; this.holes -= last.count; free.pop(); }
+  }
+
+  private alloc(count: number): number {
+    const free = this.free;
+    for (let i = 0; i < free.length; i++) {
+      const f = free[i];
+      if (f.count < count) continue;
+      const start = f.start;
+      f.start += count; f.count -= count;
+      if (f.count === 0) free.splice(i, 1);
+      this.holes -= count;
+      return start;
+    }
+    if (this.used + count > this.capacity) return -1;
+    const start = this.used;
+    this.used += count;
+    return start;
+  }
+
+  /** Move every range down over the holes (in start order, so ranges never overtake each other). */
+  private compact(): void {
+    const list = [...this.ranges.entries()].sort((a, b) => a[1].start - b[1].start);
+    let w = 0;
+    for (const [, r] of list) {
+      if (r.start !== w) {
+        this.matrices.copyWithin(w * 16, r.start * 16, (r.start + r.count) * 16);
+        this.colors.copyWithin(w * 3, r.start * 3, (r.start + r.count) * 3);
+        this.vars.copyWithin(w * 4, r.start * 4, (r.start + r.count) * 4);
+        r.start = w;
+      }
+      w += r.count;
+    }
+    this.touch(0, w);
+    this.used = w;
+    this.holes = 0;
+    this.free.length = 0;
+  }
+}
+
 // ---------------------------------------------------------------- planting
 
 /** 0 broadleaf, 1 emergent, 2 mangrove, 3 shrub, 4 palm, 5 dune grass tussock */
@@ -625,7 +785,7 @@ interface Plant { x: number; y: number; z: number; s: number; rot: number; lean:
  *  and `height` bound the drawn plants and cards and are only used for culling. */
 /** `hi` (crown family only) is the subdivided mesh drawn instead of `near` when the camera is within
  *  HI_DISTANCE of the tile's plants; it shares the instance buffers of `near`. */
-interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; }
+interface Tile { near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; vars: Float32Array; }
 
 const TILE = 900;
 /** casting tiles a coarse cascade (texel over NEAR_TEXEL) draws at most, nearest first */
@@ -636,6 +796,8 @@ const _casting = new Array<number>(MAX_CASCADES).fill(0);
 const NEAR_DISTANCE = 420;
 const HI_DISTANCE = 200;
 const NEAR_BUDGET = 60000;
+/** card tiles closer than this (to their bounding sphere) are drawn into the water's mirror image */
+export const MIRROR_DISTANCE = 1500;
 
 const _n23 = new THREE.Vector3(), _n31 = new THREE.Vector3(), _n12 = new THREE.Vector3(), _apex = new THREE.Vector3();
 /** Apex of a perspective frustum (the camera position): the common point of the right, bottom and top
@@ -671,6 +833,12 @@ export class Vegetation {
   private readonly tiles: Tile[] = [];
   shadowDistance = 1800;
   viewDistance = 9000;
+  /** cards of every tile drawn as cards this frame, in one draw for the camera */
+  readonly cameraCards: THREE.InstancedMesh;
+  /** the same for the card tiles the water mirrors (within MIRROR_DISTANCE), on the mirror-only layer */
+  readonly mirrorCards: THREE.InstancedMesh;
+  private readonly cameraBatch: CardBatch;
+  private readonly mirrorBatch: CardBatch;
 
   constructor(map: WorldMap, occupied: (x: number, z: number) => boolean) {
     const rng = new Rng('vegetation');
@@ -685,6 +853,15 @@ export class Vegetation {
     const crownGeoHi = crownGeometry(true);
     const palmGeo = palmGeometry();
     const cardGeo = cardGeometry();
+    this.cameraBatch = new CardBatch(CAMERA_CARDS, cardGeo, cardMat, cardDepth);
+    this.cameraCards = this.cameraBatch.mesh;
+    this.cameraCards.layers.set(LAYER_CAMERA);
+    this.cameraCards.name = 'cards';
+    this.mirrorBatch = new CardBatch(MIRROR_CARDS, cardGeo, cardMat, cardDepth);
+    this.mirrorCards = this.mirrorBatch.mesh;
+    this.mirrorCards.layers.set(LAYER_MIRROR);
+    this.mirrorCards.name = 'cards-mirror';
+    this.group.add(this.cameraCards, this.mirrorCards);
 
     const plants: Plant[] = [];
     const tints: Record<Archetype, THREE.Color[]> = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [] };
@@ -925,7 +1102,7 @@ export class Vegetation {
       far.visible = false;
       this.group.add(near, far);
       if (hi) { hi.boundingSphere = sphere.clone(); this.group.add(hi); }
-      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0 });
+      this.tiles.push({ near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, vars: farVar });
     };
     for (const t of byTile.values()) {
       if (t.crown.length) build(t.crown, crownGeo, crownMat, crownGeoHi);
@@ -943,11 +1120,12 @@ export class Vegetation {
    *  thinned with distance. Shadows always come from the card mesh (light-facing crown blobs), which for
    *  near tiles is kept off the camera layer. Tiles outside the view are not drawn; tiles whose shadow
    *  cannot reach the view do not cast. */
-  updateLod(camX: number, camZ: number, cull: ViewCull): void {
+  updateLod(camX: number, camZ: number, cull: ViewCull, camPos?: THREE.Vector3): void {
     const tiles = this.tiles;
     // the LOD metric is the 3D distance: from altitude a canopy 500 m away is a few pixels per crown and
     // the cards are the better representation; the camera height comes from the view frustum's apex
     const camY = frustumApex(cull.viewFrustum, _apex, camX, camZ).y;
+    const cam = camPos ?? _apex;
     for (const t of tiles) t.d = Math.max(0, Math.sqrt((t.lodCenter.x - camX) ** 2 + (t.lodCenter.z - camZ) ** 2 + (t.lodCenter.y - camY) ** 2) - t.lodR);
     // in-place insertion sort by distance: the order barely changes between frames, so this is
     // linear and allocation-free (the budget below is spent nearest-first)
@@ -975,14 +1153,24 @@ export class Vegetation {
       t.near.visible = near && inView && !hi;
       if (t.hi) t.hi.visible = near && inView && hi;
       const drawCards = !near && inView && t.d < this.viewDistance;
-      const mask = layerMask('all', drawCards, bits);
-      const shadow = maskCasts(mask);
-      t.far.visible = drawCards || shadow;
-      t.far.castShadow = shadow;
-      t.far.layers.mask = mask;
       // far cards: full density to 3 km, half at 5.5 km, a quarter beyond (a crown is ~1 px there)
       const frac = near ? 1 : t.d < 3000 ? 1 : t.d < 5500 ? 0.5 : 0.25;
-      t.far.count = Math.max(1, Math.round(t.n * frac));
+      const count = Math.max(1, Math.round(t.n * frac));
+      // the camera draws the tile's cards from the shared batch; the tile's own card mesh is left to the
+      // shadow passes (and to the camera only when the batch is full)
+      const batched = this.cameraBatch.set(t, drawCards ? count : 0);
+      let mask = layerMask('all', drawCards && !batched, bits);
+      const shadow = maskCasts(mask);
+      // the water mirrors the card tiles within MIRROR_DISTANCE of the camera (the same test the reflection
+      // pass applied to the separate tile meshes: distance to the tile's bounding sphere)
+      const mirrored = drawCards && Math.max(0, t.center.distanceTo(cam) - t.r) <= MIRROR_DISTANCE;
+      if (!this.mirrorBatch.set(t, mirrored ? count : 0)) mask |= 1 << LAYER_MIRROR;
+      t.far.visible = mask !== 0;
+      t.far.castShadow = shadow;
+      t.far.layers.mask = mask;
+      t.far.count = count;
     }
+    this.cameraBatch.commit();
+    this.mirrorBatch.commit();
   }
 }

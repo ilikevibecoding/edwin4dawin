@@ -20,6 +20,7 @@ export const LAYER_DEFAULT = 0;
 export const LAYER_CAMERA = 1; // camera visibility for objects that opt out of default casting
 export const LAYER_CASCADE0 = 2; // cascade i renders layer LAYER_CASCADE0 + i
 export const MAX_CASCADES = 4;
+export const LAYER_MIRROR = 6; // seen by the water's mirror camera only (objects that stand in for others there)
 
 /** Which cascades an object casts into: every cascade, those with texels under MID_TEXEL, or under NEAR_TEXEL only. */
 export type CasterClass = 'all' | 'mid' | 'near';

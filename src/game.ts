@@ -14,7 +14,7 @@ import { CascadeFitter, installCascadeDebug } from './render/shadows';
 import { buildRoadMeshes, buildRoadNetwork, createRoadMaterial, type RoadSegment } from './world/roads';
 import { buildBridges, type BridgeBuild } from './world/bridges';
 import { buildCity, type CityBuild } from './world/city';
-import { Vegetation } from './world/vegetation';
+import { MIRROR_DISTANCE, Vegetation } from './world/vegetation';
 import { Props } from './world/props';
 import { Traffic } from './world/traffic';
 import { Aircraft } from './plane/aircraft';
@@ -222,8 +222,10 @@ export class Game {
     this.vegetation.group.name = 'vegetation';
     this.scene.add(this.vegetation.group);
     // mirror only the card impostors, and only within 1.5 km: the 3D near-tile meshes are far too heavy for
-    // a blurred mirror image and farther tiles blur into the environment sky anyway
-    this.reflection.excludeChildrenWhen(this.vegetation.group, (tile, cam) => trianglesOf(tile) > 64 || distanceToBounds(tile, cam) > 1500);
+    // a blurred mirror image and farther tiles blur into the environment sky anyway. The cards come from the
+    // vegetation's mirror batch (its camera batch holds every card tile in view, so it stays out)
+    const veg = this.vegetation;
+    this.reflection.excludeChildrenWhen(veg.group, (tile, cam) => tile === veg.cameraCards || (tile !== veg.mirrorCards && (trianglesOf(tile) > 64 || distanceToBounds(tile, cam) > MIRROR_DISTANCE)));
 
     await this.tick(progress, 'Launching boats and traffic', 0.86);
     this.traffic = new Traffic(this.map, this.roads, this.bridges.routes, this.wakes.batch, this.params.seed, this.props.mooredBoatPositions);
@@ -360,7 +362,7 @@ export class Game {
     // couple of texels there and every tile is a draw call per cascade)
     this.city.batches.shadowDistance = this.csm.maxFar;
     this.vegetation.shadowDistance = Math.max(1800, Math.min(3000, this.csm.maxFar * 0.4));
-    this.vegetation.updateLod(cx, cz, this.cull);
+    this.vegetation.updateLod(cx, cz, this.cull, cam.position);
     this.city.batches.updateLod(cx, cz, this.cull);
     this.props.updateLod(cx, cz, this.cull);
     this.traffic.updateCulling(this.cull);

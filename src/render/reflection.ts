@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Atmosphere } from '../world/atmosphere';
-import { configureMainCamera } from '../world/culling';
+import { LAYER_MIRROR, configureMainCamera } from '../world/culling';
 import { GLSL_AERIAL, GLSL_ATMOS_UNIFORMS, GLSL_CLOUD_FIELD, GLSL_NOISE, GLSL_SKY } from './shaders/common.glsl';
 
 /**
@@ -209,6 +209,7 @@ export class PlanarReflection {
    *  @param range distance (m) beyond which the game leaves buildings, props and terrain out of the mirror image */
   constructor(private readonly renderer: THREE.WebGLRenderer, atmos: Atmosphere, readonly scale: number, readonly range: number) {
     configureMainCamera(this.camera);
+    this.camera.layers.enable(LAYER_MIRROR);
     const depthTexture = new THREE.DepthTexture(1, 1, THREE.UnsignedIntType);
     this.sceneRT = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthTexture, depthBuffer: true, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
     // the mip levels are allocated by three.js from the length of texture.mipmaps (set in setSize) and rendered
