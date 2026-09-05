@@ -113,6 +113,29 @@ peak 387 in flight, peak 1 701 particles; 45/50 alive with 5 staged deaths; 0 fi
 13 cinematic cuts in 80 s, camera never inside a hull; `battle.update` ≤ 0.69 ms per 1/60 step;
 texture memory 38 MB; page ready 6.6 s here (planet bake now off the main thread).
 
-## Review wave 2
+## Review wave 2 (re-scoring the fixed scene)
 
-_re-scoring in progress_
+| class | before | after | notes |
+| --- | --- | --- | --- |
+| Venator | 47/90 | **61/90** | turrets 4 (slew as a group, bolts leave the muzzles), flanks/belly 4, scale 4, weapons 4, motion 4; still khaki in oblique light, deck seam a hairline, weathering 2 |
+| Providence | 52/90 | **56/90** | tower 4, hangar bays 4, scale 4; LOD tint step, masonry seam, plain stern |
+| Munificent | 49/90 | **62/90** | silhouette 5, pincer 4, bulb 4, colour 4, damage 3; dead hulls kept lit windows (fixed since), tiling |
+| Recusant | 51/90 | **56/90** | orientation 4, spine 4; flat stern plate, pod, weak at 10 km |
+
+Battle composition: **2.4 → 3.4 / 5** — detonations 1.5 → 3.5, impacts 2 → 3.5, HUD 2 → 4, bolts 2.5 → 3.5,
+fighters 2 → 3, planet 2 → 3, lighting 2 → 3, pacing 2.5 → 3.5, sky 3.5 → 4; nothing regressed. All four
+classes remain distinguishable at 10 km. Remaining top items: planet ground colour/structure, hexagonal
+fireball edges, static flame licks, scorch readability, bolt heads, two-stage flak, hull-breaking deaths,
+composition variety.
+
+### Integrator polish (landed)
+
+Dead hulls now go dark (emissive parts per instance), engine glow discs are gradients instead of
+clipped white, the city fill is less saturated (cream-grey shadows), the planet ground is violet-indigo
+again, cinematic labels drop ship ids, the phone HUD stays on one line.
+
+## Polish wave
+
+_effects (fireball edges, animated licks, scorch, flak, bolt heads, near-camera fade) and ships (Venator
+colour/seam/connecting deck, Providence LOD tint + seam + stern, Recusant stern/pod/LOD 2, Munificent
+arms, weathering, class colour separation) — in progress_
