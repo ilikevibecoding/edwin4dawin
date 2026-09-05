@@ -219,6 +219,7 @@ export class Game {
     this.vehicles = new VehicleManager(this);
     this.world.vehicles = this.vehicles;
     this.disasters = new DisasterManager(this);
+    this.blockDefs = BLOCKS;   // read-only handle for tooling (test scripts normalise dynamic blocks such as doors and crops)
     {
       const qp = new URLSearchParams(location.search);
       applyQuality(this, loadQualityName(qp, this.renderer), { persist: false, renderDistance: !qp.has('rd') });
