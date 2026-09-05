@@ -45,7 +45,7 @@ export class RenderPipeline {
     this._tmpColor = new THREE.Color();
     this._size = new THREE.Vector2();
     this.setSize(window.innerWidth, window.innerHeight);
-    if (game.disasters && game.disasters.debris) this.shadows.addCaster(game.disasters.debris.mesh);
+    this._debrisCaster = null;   // the debris InstancedMesh is registered as a caster once the disaster manager exists
     this.applyPreset(QUALITY[game.quality] || QUALITY.cinematic);
     // dev-only material maps (`?normaltest=1` raised-square normals, `?matdebug=1` maps derived from the atlas)
     const qp = new URLSearchParams(location.search);
@@ -130,6 +130,8 @@ export class RenderPipeline {
       return;
     }
     this.updateLighting();
+    const debris = this.game.disasters && this.game.disasters.debris ? this.game.disasters.debris.mesh : null;
+    if (debris && debris !== this._debrisCaster) { this.shadows.addCaster(debris); this._debrisCaster = debris; }
     const autoMatrices = scene.matrixWorldAutoUpdate;
     if (this.shadows.count > 0) {
       this.shadows.render(scene, camera, SHADING_UNIFORMS.uSunDir.value, this.game.terrain.group);
