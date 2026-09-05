@@ -115,7 +115,7 @@ export function buildOfficers(kit, ctx) {
   // door frames + plates
   // the spine corridor lies at -z of the north wall (+ZS) and at +z of the south wall (-ZS)
   // (cabin 1 and 2 doors are only 0.5 m apart, so cabin 1's fittings sit east of its door)
-  doorFrame(kit, ctx, labels, cab1.doorX, ZS, DOOR_W, DOOR_H, -1, 1, { extra: "readout", lampSide: -1 });
+  doorFrame(kit, ctx, labels, cab1.doorX, ZS, DOOR_W, DOOR_H, -1, 1, { extra: "readout", lampSide: -1, release: true });
   doorFrame(kit, ctx, labels, cab2.doorX, ZS, DOOR_W, DOOR_H, -1, 2, { extra: "dnd", lamp: "emitRed", lampSide: -1, extraSide: -1 });
   doorFrame(kit, ctx, labels, cab3.doorX, -ZS, DOOR_W, DOOR_H, +1, 3, { extra: "keypad", lampSide: -1, extraSide: -1 });
   doorFrame(kit, ctx, labels, cab4.doorX, -ZS, DOOR_W, DOOR_H, +1, 4, { extra: "vacant", lamp: "emitBlue" });
@@ -224,7 +224,8 @@ function partition(kit, ctx, a, b, H, { seed = 1, openingsAt = [], faces = ["lig
       if (flip) [u0, u1] = [L - u1, L - u0];
       return { type: "door", u0, u1, v0: 0, v1: h };
     });
-  const style = (k) => (k === "light" ? { styles: CORR_STYLES, paints: CORR_PAINTS } : { styles: DARK_STYLES, paints: IMP_PAINTS_DARK });
+  // corridor faces carry no random stencils: signage there is placed by hand at reading height
+  const style = (k) => (k === "light" ? { styles: CORR_STYLES, paints: CORR_PAINTS, theme: { decals: false } } : { styles: DARK_STYLES, paints: IMP_PAINTS_DARK });
   const o = T / 2;
   impWall(kit, ctx, "zmin", { from: [a[0] + nx * o, a[1] + nz * o], to: [b[0] + nx * o, b[1] + nz * o], height: H, noDoors: true, openings: ops(false), seed: seed * 7 + 1, tag: "partition", panelW: 1.15, ...style(faces[0]) });
   impWall(kit, ctx, "zmin", { from: [b[0] - nx * o, b[1] - nz * o], to: [a[0] - nx * o, a[1] - nz * o], height: H, noDoors: true, openings: ops(true), seed: seed * 7 + 2, tag: "partition", panelW: 1.15, ...style(faces[1]) });
@@ -236,9 +237,10 @@ function partition(kit, ctx, a, b, H, { seed = 1, openingsAt = [], faces = ["lig
  * Open door frame in a spine wall at (x, zWall): jambs, lintel with a light strip, threshold, name
  * plate. `extra` varies the fittings beside each door: "readout" (occupancy screen), "dnd" (red
  * sub-plate), "keypad" (entry keypad), "vacant" (blue sub-plate); `lampSide` puts the status lamp
- * east (+1) or west (-1) of the opening.
+ * east (+1) or west (-1) of the opening; `release` adds the door's emergency-release box past the
+ * lamp at hand height (black plate, EMERG RELEASE stencil, pull bar, red tell-tale).
  */
-function doorFrame(kit, ctx, labels, x, zWall, w, h, corridorDir, label, { wide = false, extra = null, lamp = "emitAmber", lampSide = 1, extraSide = -lampSide } = {}) {
+function doorFrame(kit, ctx, labels, x, zWall, w, h, corridorDir, label, { wide = false, extra = null, lamp = "emitAmber", lampSide = 1, extraSide = -lampSide, release = false } = {}) {
   // corridorDir: -1 → corridor is on the -z side of the wall, +1 → on the +z side
   const z0 = zWall - T / 2 - 0.03;
   const z1 = zWall + T / 2 + 0.03;
@@ -268,6 +270,16 @@ function doorFrame(kit, ctx, labels, x, zWall, w, h, corridorDir, label, { wide 
   const lx = x + lampSide * (w / 2 + 0.3);
   kit.box("paintedMetal", lx, 1.45, zf, 0.12, 0.2, 0.04, { color: PALETTE.impBlack, texel: 2 });
   kit.box(lamp, lx, 1.5, out(0.025), 0.05, 0.05, 0.01);
+  if (release) {
+    const rx = lx + lampSide * 0.36;
+    const zFace = zWall + corridorDir * (T / 2);
+    const zFront = out(0.036);
+    kit.box("paintedMetal", rx, 1.4, (zFace + zFront) / 2, 0.32, 0.4, Math.abs(zFront - zFace), { color: PALETTE.impBlack, texel: 2 });
+    kit.add("decal", new THREE.PlaneGeometry(0.28, 0.28).rotateY(yaw), { pos: [rx, 1.47, out(0.042)], uv: "keep", uvRect: decalRect(13) });
+    kit.box("metal", rx, 1.26, out(0.05), 0.16, 0.025, 0.03, { color: PALETTE.steel });
+    for (const s of [-1, 1]) kit.box("metal", rx + s * 0.07, 1.26, out(0.04), 0.02, 0.025, 0.045, { color: PALETTE.steel });
+    kit.box("emitRedDim", rx + 0.11, 1.26, out(0.038), 0.03, 0.02, 0.006);
+  }
   // per-door fittings beside the door (pushed out past the lamp when they share its side)
   const ex = x + extraSide * (w / 2 + 0.42 + (extraSide === lampSide ? 0.4 : 0));
   const plateAt = (i, ph) => signAt(kit, labels, i, { x: ex + extraSide * ((ph * labels.aspect(i)) / 2 - 0.15), y: 1.5, z: zf, yaw, h: ph });
@@ -407,12 +419,17 @@ function cabin(kit, ctx, labels, c, variant) {
     kit.add("impScreen" + ((variant + 1) % 5), new THREE.PlaneGeometry(0.22, 0.5).rotateY(sx > 0 ? Math.PI / 2 : -Math.PI / 2), { pos: [fx + sx * 0.045, 1.55, mz(0.6)], uv: "keep" });
     for (let k = 0; k < 3; k++) kit.box(k === 1 ? "emitAmberDim" : "emitBlueDim", fx + sx * 0.045, 1.15 - k * 0.07, mz(0.6), 0.006, 0.03, 0.06);
   }
-  // desk against the wall opposite the door side, screen above, chair in front
+  // desk against the wall opposite the door side, screen above, chair in front. Cabin 03 (variant 2)
+  // is the one whose interior the corridor camera sees: its door looks diagonally onto the desk wall
+  // between 1.2 and 4.4 m in, so its desk sits 1.15 m deeper than the others (with the wall screen
+  // over it) and its chair is pushed back and turned to face the door.
+  const inSight = variant === 2;
   {
+    const dOff = inSight ? 1.15 : 0;
     const dxA = sx > 0 ? c.xb - 0.7 : c.xa;
     const dxB = sx > 0 ? c.xb : c.xa + 0.7;
-    const dz0 = mz(0.75);
-    const dz1 = mz(2.35);
+    const dz0 = mz(0.75 + dOff);
+    const dz1 = mz(2.35 + dOff);
     const dzA = Math.min(dz0, dz1);
     const dzB = Math.max(dz0, dz1);
     kit.boxMM("paintedMetal", [dxA, 0.7, dzA], [dxB, 0.76, dzB], { color: PALETTE.impDark, texel: 1.5 });
@@ -442,9 +459,18 @@ function cabin(kit, ctx, labels, c, variant) {
       kit.box("paintedMetal", lx - sx * 0.08, 1.22, lz, 0.22, 0.05, 0.14, { color: PALETTE.impBlack, texel: 3 });
       kit.box("officers_warm", lx - sx * 0.08, 1.19, lz, 0.18, 0.012, 0.1, { uv: "keep" });
     }
-    impChair(kit, ctx, { x: sx > 0 ? dxA - 0.45 : dxB + 0.45, z: scz + (rand() - 0.5) * 0.3, yaw: -sx * Math.PI / 2 + (rand() - 0.5) * 0.5 });
-    // wall screen over the desk's door end and a hooded task light along the desk
-    const wsz = mz(1.15);
+    if (inSight) {
+      // the wedge the corridor camera sees through the 0.32 m deep jambs is narrow and diagonal: at
+      // the chair's distance from the desk wall only 1.2–2.1 m in shows, so the chair sits pulled
+      // back at the desk's near corner, turned to face the opening
+      const chx = sx > 0 ? dxA - 0.45 : dxB + 0.45;
+      const chz = mz(1.73);
+      impChair(kit, ctx, { x: chx, z: chz, yaw: Math.atan2(-(c.doorX - chx), -(nearZ - chz)) });
+    } else {
+      impChair(kit, ctx, { x: sx > 0 ? dxA - 0.45 : dxB + 0.45, z: scz + (rand() - 0.5) * 0.3, yaw: -sx * Math.PI / 2 + (rand() - 0.5) * 0.5 });
+    }
+    // wall screen over the desk's door end (over its middle in cabin 03) and a hooded task light along the desk
+    const wsz = inSight ? scz : mz(1.15);
     wallScreen(kit, ctx, { side: eastWest, u: sx > 0 ? wsz - c.za : c.zb - wsz, v: 2.0, w: 1.0, h: 0.6, screen: (variant + 2) % 5, bounds });
     const wf = mx(W); // face of the desk wall
     kit.box("paintedMetal", wf - sx * 0.07, 1.42, (dzA + dzB) / 2, 0.14, 0.06, dzB - dzA - 0.2, { color: PALETTE.impDark, texel: 2 });
