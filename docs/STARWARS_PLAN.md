@@ -55,6 +55,8 @@ the disaster rounds; each has a critic. Phase F is done first because everyone c
 - `docs/rubrics/02_coruscant.md` — Coruscant city (≥ 10× the town) with furnished interiors, spaceport and ship traffic.
 - `docs/rubrics/03_minecraft_gameplay.md` — Minecraft-faithful movement and interaction (jump, doors, chests, food, combat/drops, crafting later).
 - `docs/rubrics/04_spaceport_space_train.md` — Spaceport + rideable space train (and the later spaceship travel).
+- `docs/rubrics/05_render_quality.md` — The "4K Minecraft with shaders" look: 64x HD tiles, normal/material maps, cascaded sun shadows, HDR bloom + filmic tone mapping, atmospheric sky, water reflections, presets.
+- `docs/rubrics/06_landmarks.md` — Coruscant signature buildings, one builder per building (Senate, Jedi Temple, Monument Plaza, Opera, 500 Republica, Chancellery, Uscru undercity, medcenter, detention centre, the Works, HoloNet tower, CoCo Town market).
 
 ## 3. NPC plan for Coruscant (design only for now; the user wants interiors first)
 
