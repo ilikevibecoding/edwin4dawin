@@ -47,6 +47,7 @@ export class Vehicle {
     this.mesh = null;
     this.meshes = [];
     this.riders = new Map();     // entity -> { dx, dy, dz, x, y, z } (last displacement, position after it)
+    this.shoveTick = new Map();  // entity -> last tick the moving hull pushed it (damage only on first contact)
     this.playerCarried = false;  // the local player was displaced this tick
     this.playerDelta = new THREE.Vector3();
     this._tmp = [0, 0];
@@ -198,7 +199,57 @@ export class Vehicle {
       if (entity.vel && moved < TELEPORT_DIST) { entity.vel.x += was.dx; entity.vel.z += was.dz; if (was.dy > 0) entity.vel.y += was.dy; }
       this.riders.delete(entity);
       if (entity.vehicle === this) entity.vehicle = null;
+    } else if (this.moving()) {
+      this.shove(entity);
     }
+  }
+
+  moving() { const p = this.prev, c = this.cur; return p.x !== c.x || p.y !== c.y || p.z !== c.z || p.yaw !== c.yaw; }
+
+  // Does the entity's box intersect a solid cell of the vehicle at the current pose?
+  overlapsEntity(box) {
+    const out = this.collectBoxes(box, []);
+    for (const b of out) if (b.x0 < box.x1 && b.x1 > box.x0 && b.y0 < box.y1 && b.y1 > box.y0 && b.z0 < box.z1 && b.z1 > box.z0) return true;
+    return false;
+  }
+
+  // The vehicle moved into an entity that is not riding it (standing on the track as the train arrives): push the
+  // entity ahead of it along the motion, like a moving wall; an entity pinned against the world is lifted onto the
+  // roof instead of being left inside the hull. Small pushes (bumping a door frame while walking inside) are absorbed.
+  shove(entity) {
+    const pos = entity.pos, hw = (entity.width || 0.6) / 2, h = entity.height || 1.8;
+    const box = new AABB(pos.x - hw, pos.y, pos.z - hw, pos.x + hw, pos.y + h, pos.z + hw);
+    if (!this.overlapsEntity(box)) return;
+    const l = this.toGrid(pos.x, pos.y, pos.z, this.prev, { x: 0, y: 0, z: 0 });
+    const n = this.toWorld(l.x, l.y, l.z, this.cur, { x: 0, y: 0, z: 0 });
+    let dx = n.x - pos.x, dz = n.z - pos.z;
+    const speed = Math.hypot(dx, dz);
+    if (speed < 1e-6) return;                        // rotating / vertical only: leave the entity alone
+    dx /= speed; dz /= speed;
+    const world = this.game && this.game.world;
+    const solidAt = (x, y, z) => { if (!world) return false; const d = BLOCKS[world.getBlock(Math.floor(x), Math.floor(y), Math.floor(z))]; return !!(d && d.solid); };
+    const sx = pos.x, sz = pos.z;
+    let clear = false;
+    for (let i = 0; i < 40 && !clear; i++) {
+      pos.x += dx * 0.25; pos.z += dz * 0.25;
+      box.x0 = pos.x - hw; box.x1 = pos.x + hw; box.z0 = pos.z - hw; box.z1 = pos.z + hw;
+      if (solidAt(pos.x, pos.y + 0.5, pos.z) || solidAt(pos.x, pos.y + h - 0.2, pos.z)) break;   // pinned against the world
+      clear = !this.overlapsEntity(box);
+    }
+    if (!clear) {
+      // lift onto the roof above the original column
+      pos.x = sx; pos.z = sz;
+      const b = this.bounds;
+      let top = b ? b.y1 : pos.y + 3;
+      pos.y = top + 0.01;
+      if (entity.vel) entity.vel.y = Math.max(entity.vel.y || 0, 0);
+    }
+    // first contact hurts a little (a train hit you); while it keeps pushing you there is no further damage
+    if (entity.vel) { entity.vel.x += dx * speed; entity.vel.z += dz * speed; }
+    if (entity.onGround !== undefined) entity.onGround = false;
+    const tick = this.game ? this.game.tickCount || 0 : 0, last = this.shoveTick.get(entity);
+    this.shoveTick.set(entity, tick);
+    if (this.game && entity === this.game.player && typeof entity.damage === 'function' && speed > 0.35 && (last === undefined || tick - last > 20)) entity.damage(2);
   }
 
   // ---------------------------------------------------------------- rendering
