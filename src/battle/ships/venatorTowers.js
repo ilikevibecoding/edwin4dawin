@@ -230,7 +230,9 @@ export function buildTowers(ctx) {
     );
   }
 
-  // ---- stepped structure behind the towers, down toward the stern
+  // ---- stepped structure behind the towers, down toward the stern; each step's rear face carries a
+  // dark machinery recess with a window row (the cutaway packs the hyperdrive and compressor here)
+  let yBelow = b.y1;
   for (const st of BLOCK.steps) {
     const pl = prismPoly(rect(st.hx, st.z0, st.z1), t2.y1 - 0.01, st.y1, {
       inset: 2,
@@ -238,6 +240,55 @@ export function buildTowers(ctx) {
       capTag: "top",
     });
     addPrism(pl, { ...terraceTints, front: GREY_WING });
+    if (mid) {
+      const yTopFace = st.y1;
+      const yBot = t2.y1;
+      const h = yTopFace - yBot;
+      add(
+        boxMM(
+          [-st.hx + 6, yBot + h * 0.35, Z(st.z1) - 1.5],
+          [st.hx - 6, yBot + h * 0.7, Z(st.z1) + 0.6],
+        ),
+        "dark",
+        { color: DARK_TRENCH, texel: 1 / 8 },
+      );
+      add(
+        quadFacing(
+          [0, yBot + h * 0.52, Z(st.z1) + 0.8],
+          [0, 0, 1],
+          [0, 1, 0],
+          st.hx * 1.5,
+          1.8,
+        ),
+        "windows",
+        { color: ROW_WARM, uv: "keep" },
+      );
+      // the exposed strip of the mass in front of this step, above it: dark band with vents
+      add(
+        boxMM(
+          [-st.hx + 10, st.y1 + 3, Z(st.z0) - 1.2],
+          [st.hx - 10, Math.min(yBelow - 3, st.y1 + 12), Z(st.z0) + 0.4],
+        ),
+        "dark",
+        { color: DARK_TRENCH, texel: 1 / 8 },
+      );
+      if (fine)
+        for (let i = 0; i < 6; i++) {
+          const x = (rand() - 0.5) * (st.hx * 1.6);
+          const w = 3 + rand() * 6;
+          const d = 3 + rand() * 8;
+          const z0 = Z(st.z0 + 8) + rand() * (st.z1 - st.z0 - 16 - d);
+          add(
+            boxMM(
+              [x - w / 2, st.y1, z0],
+              [x + w / 2, st.y1 + 1 + rand() * 3, z0 + d],
+            ),
+            rand() < 0.5 ? "dark" : "hull",
+            { color: rand() < 0.5 ? DARK : GREY_FLANK, texel: 1 / 4 },
+          );
+        }
+    }
+    yBelow = st.y1;
   }
   if (mid) {
     // engine housings: two long cowls on the upper terrace either side of the steps, and sensor domes
