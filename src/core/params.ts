@@ -32,7 +32,7 @@ export interface Params {
   grid: boolean;
   debug: boolean;
   debugRoads: boolean;
-  /** comma-separated debug switches: noterrain, noshadow, nowake, noveg, nocity, norefl (no water reflection pass), reflview (blit the mirror image over the frame) */
+  /** comma-separated debug switches: noterrain, noshadow, nowake, noveg, nocity, norefl (no water reflection pass), reflview (blit the mirror image over the frame), cascades (tint lit surfaces by shadow cascade and shadow term) */
   dbg: Set<string>;
 }
 

@@ -6,7 +6,7 @@ import type { RoadSegment } from './roads';
 import type { BridgeRoute } from './bridges';
 import { CONTRAIL_MATERIAL, WakeTrail } from '../render/wakes';
 import { PbrSoup, cellKey, createBatchedPbrMaterial } from './batching';
-import { layerMask, setCasterClass, type ViewCull } from './culling';
+import { layerMask, maskCasts, setCasterClass, type ViewCull } from './culling';
 
 // ------------------------------------------------------------------ boats
 
@@ -566,10 +566,12 @@ export class Traffic {
     for (const ch of this.carChunks) {
       if (!ch.n || ch === this.carOverflow) continue;
       const inView = cull.boxInView(ch.box);
-      const cast = cull.casterInView(ch.center, ch.r, 2.5);
+      const bits = cull.casterCascades(ch.center, ch.r, 2.5);
+      const mask = layerMask('mid', inView, bits);
+      const cast = maskCasts(mask);
       ch.mesh.visible = inView || cast;
       ch.mesh.castShadow = cast;
-      ch.mesh.layers.mask = layerMask('mid', inView);
+      ch.mesh.layers.mask = mask;
     }
   }
 }

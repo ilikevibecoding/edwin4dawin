@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import type { BridgeSpec, Vec2, WorldMap } from './map';
 import { clamp, lerp, smoothstep } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
-import { ViewCull, layerMask, type CasterClass } from './culling';
+import { ALL_CASCADES, ViewCull, layerMask, maskCasts, type CasterClass } from './culling';
 
 export interface BridgeRoute {
   id: string;
@@ -63,8 +63,6 @@ export interface BridgeBuild {
 /** target chunk length along a bridge (m); every chunk gets its own meshes and bounds so the view and the
  *  shadow cascades only draw the stretches they can see */
 const CHUNK_LEN = 1000;
-/** chunks farther than this stop casting (the city tiles use the same range) */
-const SHADOW_DISTANCE = 3200;
 /** beyond this the railings / posts are under a pixel wide and only the lamp heads stay drawn; beyond HEAD_DISTANCE
  *  the heads go too (they are 45 m apart and merge into the deck line) */
 const THIN_DISTANCE = 2500;
@@ -368,7 +366,7 @@ const _up = new THREE.Vector3(0, 1, 0);
 
 /** One mesh of a chunk with its own world bounds: the deck box stops at the parapets, the railing box at the lamp
  *  heads and the pylons / cables have their own, so looking up from the deck draws none of them. */
-interface ChunkMesh { mesh: THREE.Mesh; cls: CasterClass; box: THREE.Box3; height: number; inView: boolean; cast: boolean; }
+interface ChunkMesh { mesh: THREE.Mesh; cls: CasterClass; box: THREE.Box3; height: number; inView: boolean; /** cascade-index bitmask this frame */ cast: number; }
 interface Chunk {
   meshes: ChunkMesh[];
   /** the thin steel mesh and the index count of its lamp-head prefix (drawn alone beyond THIN_DISTANCE) */
@@ -418,25 +416,28 @@ class BridgeCuller {
 
     if (this.seen.size) { this.cameras = [...this.seen]; this.seen.clear(); }
     if (!this.cameras.length) return; // until a chunk has been drawn the renderer's frustum test alone applies
-    for (const c of this.chunks) { c.dist = Infinity; for (const m of c.meshes) { m.inView = false; m.cast = false; } }
+    for (const c of this.chunks) { c.dist = Infinity; for (const m of c.meshes) { m.inView = false; m.cast = 0; } }
     for (const cam of this.cameras) {
       const camX = cam.position.x, camZ = cam.position.z;
       // shadow range: the game grows the CSM far plane with altitude (see game.ts); a superset is safe here
-      this.cull.update(cam, clamp(cam.position.y * 9, 5000, 12000), this.sunDir);
+      const range = clamp(cam.position.y * 9, 5000, 12000);
+      this.cull.update(cam, range, this.sunDir);
       for (const c of this.chunks) {
         const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
         c.dist = Math.min(c.dist, d);
         for (const m of c.meshes) {
           if (!m.inView && this.cull.boxInView(m.box)) m.inView = true;
-          if (!m.cast && d < SHADOW_DISTANCE && this.casterInView(m)) m.cast = true;
+          if (d < range) m.cast |= this.cull.boxCasterCascades(m.box, m.height);
         }
       }
     }
     for (const c of this.chunks) {
       for (const m of c.meshes) {
-        m.mesh.castShadow = m.cast;
-        m.mesh.visible = m.inView || m.cast;
-        m.mesh.layers.mask = layerMask(m.cls, m.inView);
+        const mask = layerMask(m.cls, m.inView, m.cast);
+        const cast = maskCasts(mask);
+        m.mesh.castShadow = cast;
+        m.mesh.visible = m.inView || cast;
+        m.mesh.layers.mask = mask;
       }
       if (c.steel) {
         c.steel.geometry.setDrawRange(0, c.dist > THIN_DISTANCE ? c.headIndices : Infinity);
@@ -444,19 +445,7 @@ class BridgeCuller {
       }
     }
   }
-
-  /** ViewCull's sphere test is far too loose for a 1 km sliver of causeway (the sphere is 500 m tall): sweep the
-   *  mesh's box along the shadow direction instead and test that against the shadow-range frustum. */
-  private casterInView(m: ChunkMesh): boolean {
-    const len = m.height * this.cull.spread;
-    const sd = this.cull.shadowDir;
-    _swept.copy(m.box);
-    if (sd.x > 0) _swept.max.x += sd.x * len; else _swept.min.x += sd.x * len;
-    if (sd.z > 0) _swept.max.z += sd.z * len; else _swept.min.z += sd.z * len;
-    return this.cull.shadowFrustum.intersectsBox(_swept);
-  }
 }
-const _swept = new THREE.Box3();
 
 class BridgeGroup extends THREE.Group {
   constructor(readonly culler: BridgeCuller) { super(); }
@@ -744,7 +733,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         mesh.receiveShadow = true;
         mesh.onBeforeRender = (_r, _s, camera) => { culler.observe(camera); };
         const box = mesh.geometry.boundingBox!;
-        chunk.meshes.push({ mesh, cls, box, height: box.max.y - box.min.y, inView: true, cast: true });
+        chunk.meshes.push({ mesh, cls, box, height: box.max.y - box.min.y, inView: true, cast: ALL_CASCADES });
         chunkBox.union(box);
         group.add(mesh);
       };

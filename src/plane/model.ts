@@ -327,6 +327,10 @@ export class PlaneModel {
       map: fus.map, roughnessMap: fus.roughnessMap, normalMap: fus.normalMap, normalScale: new THREE.Vector2(0.55, 0.55),
       color: 0xffffff, roughness: 1.0, metalness: 0.0, clearcoat: 0.7, clearcoatRoughness: 1.0, clearcoatRoughnessMap: fus.clearcoatRoughnessMap, envMapIntensity: 1.0,
     });
+    // the shadow pass normally records back faces, which for a closed hull is the belly: the cabin inside it
+    // would count as lit. Recording both sides puts the roof and window frames into the map so the cockpit
+    // is shaded except where the sun comes through the glass (the texel-sized normal bias covers the acne).
+    paint.shadowSide = THREE.DoubleSide;
     // vertexColors: wingPanel() shades the faces inside the hinge gaps dark so the gap reads as a line
     const wingPaint = new THREE.MeshPhysicalMaterial({
       map: wing.map, roughnessMap: wing.roughnessMap, normalMap: wing.normalMap, normalScale: new THREE.Vector2(0.5, 0.5),
