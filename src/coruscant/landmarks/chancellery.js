@@ -109,7 +109,7 @@ function dressCorridors(plan) {
     if (!plan.isCorr(x, z) || (x + z) % 4 !== 1) continue;
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const nx = x + dx, nz = z + dz;
-      if (plan.isCorr(nx, nz)) continue;
+      if (plan.isCorr(nx, nz) || bp.get(nx + dx, y, nz + dz) === 0) continue;   // never the outer skin
       if (bp.get(nx, y + 2, nz) === STONE && bp.get(nx, y + 1, nz) === STONE && bp.get(nx, y, nz) === STONE) { bp.set(nx, y + 2, nz, GLOW); bp.set(nx, y, nz, PLASTER); bp.set(nx, y + 1, nz, PLASTER); }
     }
   }
@@ -320,7 +320,13 @@ function core(bp, levels) {
     doorway(bp, 35, 30, 35, 31, y, 3, BLUE);
     bp.set(37, y + 4, 30, GLOW); bp.set(42, y + 4, 30, GLOW);
     bp.room('stair_core', 35, y, 27, 45, 33);
-    if (last) { bp.fill(36, y + 4, 28, 44, y + 4, 32, DARK); bp.set(40, y + 4, 30, GLOW); continue; }
+    if (last) {
+      // roof exit vestibule: ceiling, a directory totem, benches, planters and vents along the blind east wall
+      bp.fill(36, y + 4, 28, 44, y + 4, 32, DARK); bp.set(40, y + 4, 30, GLOW);
+      totem(bp, 44, y, 30); bench(bp, 44, y, 28); bench(bp, 44, y, 32); planter(bp, 43, y, 28, B.OAK_LEAVES); planter(bp, 43, y, 32, B.SPRUCE_LEAVES);
+      for (const x of [37, 40]) { bp.set(x, y, 28, B.VENT); bp.set(x, y, 32, B.VENT); bp.set(x, y + 1, 28, BLUE); bp.set(x, y + 1, 32, HOLO); }
+      continue;
+    }
     bp.fill(39, y + 4, 28, 44, y + 4, 32, AIR);
     for (let k = 0; k < 5; k++) for (const z of [28, 29]) tread(bp, 38 + k, z, y + 0.5 * (k + 1));
     for (const x of [43, 44]) for (let z = 28; z <= 32; z++) tread(bp, x, z, y + 2.5);
@@ -337,8 +343,11 @@ function pickKind(rng, pool = TOWER_POOL) {
   for (const [k, w] of pool) { r -= w; if (r <= 0) return k; }
   return pool[0][0];
 }
-// rooms along one strip of a band: alongX strips run in x with depth in z, else in z with depth in x
-function strip(plan, rng, alongX, u0, u1, v0, v1, target, prefer, kinds) {
+// rooms along one strip of a band: alongX strips run in x with depth in z, else in z with depth in x; `skip` is an
+// optional [a, b] range of u reserved for a hand-built room (its walls at a-1 and b+1)
+function strip(plan, rng, alongX, u0, u1, v0, v1, target, prefer, kinds, skip = null) {
+  if (skip) return strip(plan, rng, alongX, u0, skip[0] - 2, v0, v1, target, prefer, kinds) + strip(plan, rng, alongX, skip[1] + 2, u1, v0, v1, target, prefer, kinds);
+  if (u1 - u0 + 1 < 4) return 0;
   let n = 0;
   for (const [a, b] of segments(u0, u1, target, rng)) {
     const w = b - a + 1;
@@ -383,7 +392,7 @@ function towerFloor(bp, rng, tier, y, special = null) {
   };
   const S = special || {};
   // outer band strips (interior cells); the south strip (by the entrance side) gets the guard post on single-band tiers
-  strip(plan, rng, true, x0 + 1, x1 - 1, z1 - dz + 2, z1 - 1, 9, ['N'], S.south || (tier.inner ? null : kinds));
+  strip(plan, rng, true, x0 + 1, x1 - 1, z1 - dz + 2, z1 - 1, 9, ['N'], S.south || (tier.inner ? null : kinds), S.southSkip || null);
   strip(plan, rng, true, x0 + 1, x1 - 1, z0 + 1, z0 + dz - 2, 9, ['S'], null);
   strip(plan, rng, false, z0 + dz + 4, z1 - dz - 4, x0 + 1, x0 + dx - 2, 9, ['E'], null);
   strip(plan, rng, false, z0 + dz + 4, z1 - dz - 4, x1 - dx + 2, x1 - 1, 9, ['W'], null);
@@ -454,9 +463,14 @@ function lobbyFurnish(bp, rng, y) {
   for (const z of [44, 48, 52, 56]) { statue(bp, 26, y, z); statue(bp, 54, y, z); lampPost(bp, 27, y, z - 2, 2, LANTERN); lampPost(bp, 53, y, z - 2, 2, LANTERN); }
   for (const [x, z] of [[30, 45], [30, 55], [51, 45], [51, 55]]) { bp.set(x, y, z, B.TABLE); for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) bench(bp, x + dx, y, z + dz); }
   for (const [x, z] of [[24, 40], [56, 40], [24, 60], [56, 60], [33, 44], [48, 44]]) planter(bp, x, y, z, (x + z) % 2 ? B.OAK_LEAVES : B.SPRUCE_LEAVES);
-  totem(bp, 36, y, 44); totem(bp, 45, y, 44);
-  // chrome columns at the void edge
+  totem(bp, 36, y, 44); totem(bp, 45, y, 44); totem(bp, 22, y, 50); totem(bp, 58, y, 50);
+  // waiting corners under the mezzanine, planters and red banners along the side galleries
+  for (const [x, z] of [[29, 40], [52, 40]]) { bp.set(x, y, z, B.TABLE); for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) bench(bp, x + dx, y, z + dz); }
+  for (const z of [44, 48, 52, 56]) { planter(bp, 23, y, z, (z % 8) ? B.OAK_LEAVES : B.SPRUCE_LEAVES); planter(bp, 57, y, z, (z % 8) ? B.SPRUCE_LEAVES : B.OAK_LEAVES); }
+  for (const z of [42, 46, 50, 54, 58]) for (const x of [23, 57]) { bp.set(x, y + 3, z, B.RED_WOOL); bp.set(x, y + 2, z, (z % 8 === 2) ? B.GOLD_BLOCK : B.RED_WOOL); }
+  // chrome columns at the void edge, chandeliers over the hall
   for (const x of [25, 55]) for (const z of [42, 50, 58]) { bp.fill(x, y, z, x, 9, z, CHR); bp.set(x, 5, z, BLUE); }
+  for (const x of [30, 40, 50]) for (const z of [46, 54]) { bp.set(x, 9, z, BARS); bp.set(x, 8, z, LANTERN); for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) bp.set(x + dx, 8, z + dz, (dx + dz + x) % 2 ? GLOW : CHR); }
   bp.spot(40, y, 55, 'stand'); bp.spot(41, y, 47, 'stand');
 }
 // briefing theatre x 7..30, z 3..22: raised stage at the south end with the holo screen, four rising rows of desks
@@ -513,6 +527,9 @@ function podiumMezzanine(bp, rng) {
   for (const [x, z] of [[23, 44], [23, 52], [57, 44], [57, 52], [30, 60], [50, 60]]) { bench(bp, x, y, z); planter(bp, x, y, z + 1, B.SPRUCE_LEAVES); }
   for (const [x, z] of [[23, 40], [57, 40], [40, 60]]) totem(bp, x, y, z);
   for (let x = 26; x <= 54; x += 4) for (const z of [41, 59]) bp.set(x, y + 3, z, LANTERN);
+  for (const z of [46, 50, 56]) { planter(bp, 22, y, z, B.OAK_LEAVES); planter(bp, 58, y, z, B.SPRUCE_LEAVES); }
+  for (const x of [27, 51]) { planter(bp, x, y, 38, (x % 2) ? B.OAK_LEAVES : B.SPRUCE_LEAVES); bench(bp, x + 1, y, 38); bench(bp, x + 2, y, 38); }
+  for (const [x, z] of [[22, 60], [58, 60], [22, 39], [58, 39]]) { bp.set(x, y, z, CHR); bp.set(x, y + 1, z, CHR); bp.set(x, y + 2, z, BLUE); }
   bp.room('mezzanine_gallery', 21, y, 37, 59, 62);
   // rooms
   makeRoom(plan, rng, 'lounge', 7, 28, 17, 33, { prefer: ['S'] });
@@ -551,15 +568,291 @@ function podiumTop(bp, rng) {
   dressCorridors(plan);
 }
 
+// ------------------------------------------------------------------------------------------------ Chancellor's floor
+// the whole top floor: the ring's south leg is the red antechamber with guard posts, the office fills the south half
+// behind a curved steel-glass window wall that bows out over the facade; study, secretariat, dining, records and a
+// Red Guard post around the rest of the ring
+function chancellorFloor(bp, rng) {
+  const y = TOP, plan = new Plan(bp, y);
+  corridor(plan, RING.x0, RING.z0, RING.x1, RING.z0 + 2);
+  corridor(plan, RING.x0, RING.z0 + 3, RING.x0 + 2, RING.z1 - 3); corridor(plan, RING.x1 - 2, RING.z0 + 3, RING.x1, RING.z1 - 3);
+  // antechamber
+  bp.fill(RING.x0, y, RING.z1 - 2, RING.x1, y + 3, RING.z1, AIR);
+  paintFloor(bp, RING.x0, RING.z1 - 2, RING.x1, RING.z1, y - 1, 'red');
+  plan.mark(RING.x0, RING.z1 - 2, RING.x1, RING.z1);
+  for (let x = RING.x0; x <= RING.x1; x += 3) bp.set(x, y + 4, 39, (x % 2) ? GLOW : BLUE);
+  statue(bp, 33, y, 39); statue(bp, 47, y, 39);
+  guardKiosk(bp, 37, y, 40, 0, -1); guardKiosk(bp, 44, y, 40, 0, -1);
+  totem(bp, 32, y, 40); totem(bp, 48, y, 40);
+  for (const x of [34, 46]) { bp.set(x, y + 1, 41, RED); bp.set(x, y + 2, 41, GLOW); }
+  bp.room('antechamber', RING.x0 - 1, y, RING.z1 - 3, RING.x1 + 1, RING.z1 + 1);
+  chancellorOffice(bp, rng);
+  makeRoom(plan, rng, 'executive_office', 25, 28, 30, 40, { prefer: ['E'], floor: 'red' });
+  makeRoom(plan, rng, 'open_plan_office', 50, 28, 55, 40, { prefer: ['W'] });
+  makeRoom(plan, rng, 'guard_post', 25, 18, 36, 22, { prefer: ['S'], floor: 'red' });
+  makeRoom(plan, rng, 'restaurant', 38, 18, 43, 22, { prefer: ['S'] });
+  makeRoom(plan, rng, 'archive', 45, 18, 55, 22, { prefer: ['S'] });
+  dressCorridors(plan);
+}
+const ARC_R = 19, ARC_CZ = 33;
+const arcZ = (x) => Math.round(ARC_CZ + Math.sqrt(ARC_R * ARC_R - (x - 40.5) * (x - 40.5)));   // first wall cell of the window arc
+function chancellorOffice(bp, rng) {
+  const y = TOP, x0 = 25, x1 = 55, zN = 42;
+  for (let x = x0; x <= x1; x++) {
+    const zw = arcZ(x), zi = zw - 1;
+    const wz1 = Math.max(zw, (x > x0 ? arcZ(x - 1) : 0) - 1, (x < x1 ? arcZ(x + 1) : 0) - 1);
+    bp.fill(x, y, zN, x, y + 3, zi, AIR);
+    for (let z = zN; z <= wz1; z++) {
+      const d = Math.hypot(x - 40.5, z - 46.5);
+      const edge = x === x0 || x === x1 || z === zN;
+      bp.set(x, y - 1, z, edge ? BLACK : (d > 2.2 && d < 3.4) ? B.GOLD_BLOCK : ((x + z) % 5 === 0 ? RED : B.RED_WOOL));
+      bp.set(x, y + 4, z, ((x % 3 === 0) && (z % 3 === 0)) ? GLOW : (d > 5.5 && d < 6.6 ? BLUE : DARK));
+    }
+    // the curved window wall: steel glass between chrome mullions, chrome head, railing on the bay roof
+    for (let z = zw; z <= wz1; z++) { bp.fill(x, y, z, x, y + 2, z, (x % 3 === 1) ? CHR : GLASS); bp.set(x, y + 3, z, CHR); bp.set(x, y + 4, z, CHR); bp.set(x, y + 5, z, BARS); }
+    // corbelled underside where the bay hangs over the tier's south face
+    if (wz1 > 47) for (let z = 48; z <= wz1; z++) { bp.set(x, y - 2, z, DARK); if (z <= wz1 - 1) bp.set(x, y - 3, z, STEEL); if (z <= wz1 - 2) bp.set(x, y - 4, z, DARK); if (z === 48) bp.set(x, y - 2, z, (x % 2) ? BLUE : DARK); }
+  }
+  // red north wall with chrome pilasters and gold-topped banners, the grand door in the middle
+  for (let x = x0; x <= x1; x++) for (let yy = y; yy <= y + 3; yy++) bp.set(x, yy, zN - 1, (x % 4 === 0) ? CHR : (yy === y + 3 ? DARK : RED));
+  for (const x of [27, 31, 49, 53]) { bp.fill(x, y, zN - 1, x, y + 2, zN - 1, B.RED_WOOL); bp.set(x, y + 3, zN - 1, B.GOLD_BLOCK); }
+  doorway(bp, 39, zN - 1, 42, zN - 1, y, 3, B.GOLD_BLOCK);
+  // desk before the window, the Chancellor's chair, guest chairs, statues, holo table, lounge, plants, lights
+  bp.set(39, y, 48, B.TABLE); bp.set(40, y, 48, CONSOLE); bp.set(41, y, 48, CONSOLE); bp.set(42, y, 48, B.TABLE); bp.set(40, y + 1, 48, HOLO);
+  bench(bp, 40, y, 49); bp.work(40, y, 49, 'chancellor'); bench(bp, 41, y, 49);
+  bench(bp, 38, y, 46); bench(bp, 43, y, 46); bp.set(39, y, 45, B.TABLE); bp.set(42, y, 45, B.TABLE);
+  for (const [sx, sz] of [[29, 45], [33, 48], [48, 48], [52, 45], [27, 43], [54, 43]]) { statue(bp, sx, y, sz); bp.set(sx, y - 1, sz, GLOW); }
+  for (let x = 28; x <= 30; x++) bp.set(x, y, 43, BLACK); bp.set(29, y + 1, 43, HOLO); bp.set(28, y + 1, 43, CONSOLE);
+  for (const [bx, bz] of [[27, 43], [31, 43], [28, 44], [30, 44]]) if (bp.isAir(bx, y, bz)) bench(bp, bx, y, bz);
+  bp.set(51, y, 43, B.TABLE); bench(bp, 50, y, 43); bench(bp, 52, y, 43); bench(bp, 51, y, 44); bp.set(51, y + 1, 43, LANTERN);
+  planter(bp, 26, y, 42, B.SPRUCE_LEAVES); planter(bp, 54, y, 42, B.SPRUCE_LEAVES); planter(bp, 36, y, 50, B.OAK_LEAVES); planter(bp, 45, y, 50, B.OAK_LEAVES);
+  guardKiosk(bp, 36, y, 43, 0, -1); guardKiosk(bp, 45, y, 43, 0, -1);
+  for (const x of [34, 47]) { bp.set(x, y + 3, 46, LANTERN); }
+  bp.set(40, y + 3, 44, LANTERN); bp.set(41, y + 3, 44, LANTERN);
+  bp.spot(40, y, 44, 'stand'); bp.spot(35, y, 46, 'stand'); bp.spot(46, y, 46, 'stand');
+  bp.room('chancellor_office', x0 - 1, y, zN - 1, x1 + 1, 53);
+}
+// the roof of the top tier: core house for the stair and lifts, terrace furnishing, four corner pylons, the lit
+// disc and glass dome that crown the tower
+function coreHouse(bp) { bp.fill(CORE.x0, TOP + 5, CORE.z0, CORE.x1, TOP + 8, CORE.z1, BLACK); }
+function crown(bp) {
+  const y = TOP + 5, t = TIERS[3];   // 111 = roof walk level
+  // core house dressing and cap
+  for (let x = CORE.x0; x <= CORE.x1; x++) for (let z = CORE.z0; z <= CORE.z1; z++) {
+    const edge = x === CORE.x0 || x === CORE.x1 || z === CORE.z0 || z === CORE.z1;
+    if (edge && bp.get(x, y + 1, z) === BLACK && (x + z) % 3 === 0) bp.set(x, y + 1, z, BLUE);
+    if (edge && bp.get(x, y + 2, z) === BLACK && (x + z) % 4 === 0) bp.set(x, y + 2, z, B.WINDOW_LIT);
+  }
+  // disc over the house (r 8.5 around the core centre) and the glass dome
+  for (let x = 31; x <= 50; x++) for (let z = 23; z <= 42; z++) {
+    const d = Math.hypot(x - 40.5, z - 32.5);
+    if (d > 8.5) continue;
+    bp.set(x, y + 4, z, d > 7.5 ? CHR : ((x + z) % 3 === 0 ? BLUE : DARK));
+    bp.set(x, y + 5, z, d > 7.5 ? ((x + z) % 2 ? GLOW : CHR) : (d > 5.5 && d <= 6.5 ? BLUE : PLATE));
+    if (d <= 4.5) {
+      const h = Math.min(4, Math.max(1, Math.round(Math.sqrt(20.25 - d * d))));
+      bp.set(x, y + 5 + h, z, d < 1.2 ? BLUE : GLASS);
+      if (d > 3.3) for (let yy = y + 6; yy < y + 5 + h; yy++) bp.set(x, yy, z, ((x + z) % 3) ? GLASS : CHR);
+    }
+  }
+  bp.fill(40, y + 6, 32, 41, y + 7, 33, GLOW);
+  // the office bay's roof carries its own parapet; drop the terrace railing where it would cross the bay
+  for (let x = 25; x <= 55; x++) if (arcZ(x) >= 48) bp.set(x, y, 47, AIR);
+  // corner pylons
+  for (const [px, pz] of [[t.x0 + 1, t.z0 + 1], [t.x1 - 2, t.z0 + 1], [t.x0 + 1, t.z1 - 2], [t.x1 - 2, t.z1 - 2]]) {
+    bp.fill(px, y, pz, px + 1, y + 6, pz + 1, STEEL); bp.fill(px, y + 7, pz, px + 1, y + 7, pz + 1, BLUE);
+    for (let yy = y + 1; yy <= y + 5; yy += 2) { bp.set(px, yy, pz, DARK); bp.set(px + 1, yy, pz + 1, DARK); }
+  }
+  // terrace: planters and benches along the parapet, lamps, vents, holo pylons; the roof itself is painted by roofTerrace
+  for (let x = t.x0 + 3; x <= t.x1 - 3; x += 2) for (const z of [t.z0 + 1, t.z1 - 1]) {
+    if (x % 8 === 0) lampPost(bp, x, y, z, 2, LAMP); else if (x % 8 === 4) bench(bp, x, y, z + (z < 32 ? 1 : -1)); else planter(bp, x, y, z, (x % 3) ? B.OAK_LEAVES : B.SPRUCE_LEAVES);
+  }
+  for (let z = t.z0 + 3; z <= t.z1 - 3; z += 2) for (const x of [t.x0 + 1, t.x1 - 1]) {
+    if (z % 8 === 0) lampPost(bp, x, y, z, 2, LAMP); else if (z % 8 === 4) bench(bp, x + (x < 40 ? 1 : -1), y, z); else planter(bp, x, y, z, (z % 3) ? B.OAK_LEAVES : B.SPRUCE_LEAVES);
+  }
+  for (let x = CORE.x0 - 2; x <= CORE.x1 + 2; x += 2) for (const z of [CORE.z0 - 2, CORE.z1 + 2]) { if (bp.isAir(x, y, z)) { bp.set(x, y, z, (x % 4) ? B.VENT : BLACK); if (x % 4 === 0) bp.set(x, y + 1, z, HOLO); } }
+  for (let z = CORE.z0; z <= CORE.z1; z += 2) for (const x of [CORE.x0 - 2, CORE.x1 + 2]) { if (bp.isAir(x, y, z) && !(x === CORE.x0 - 2 && (z === 30 || z === 31))) bp.set(x, y, z, B.VENT); }
+  for (const [tx, tz] of [[28, 24], [52, 24], [28, 40], [52, 40]]) { bp.set(tx, y, tz, B.TABLE); for (const [dx, dz] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) bench(bp, tx + dx, y, tz + dz); }
+  bp.room('roof_terrace', t.x0, y, t.z0, t.x1, t.z1);
+}
+
+// ------------------------------------------------------------------------------------------------ sky lobby (y 36)
+// the boulevard-level lobby behind the approach deck: reception desk, Senate Guard kiosks, statues, planters
+function skyLobby(plan, rng) {
+  const bp = plan.bp, y = plan.y, x0 = 30, x1 = 50, z0 = 52, z1 = 57;
+  bp.fill(x0, y, z0, x1, y + 3, z1, AIR);
+  paintFloor(bp, x0, z0, x1, z1, y - 1, 'stone');
+  for (let z = z0; z <= z1; z++) for (const x of [40, 41]) bp.set(x, y - 1, z, (z % 3 === 0) ? GLOW : B.RED_WOOL);
+  for (let x = x0; x <= x1; x += 3) for (let z = z0 + 1; z <= z1; z += 4) bp.set(x, y + 4, z, GLOW);
+  dressWalls(bp, x0, z0, x1, z1, y, 4);
+  plan.mark(x0, z0, x1, z1);
+  // entrance in the south face and the wide opening to the corridor
+  doorway(bp, 39, z1 + 1, 42, z1 + 1, y, 3, GLOW); bp.door(40, y, z1 + 1, 'S');
+  doorway(bp, 38, z0 - 1, 43, z0 - 1, y, 3, BLUE);
+  for (let x = 36; x <= 45; x++) { bp.set(x, y, 54, BLACK); bp.set(x, y + 1, 54, (x === 40 || x === 41) ? CONSOLE : SLAB); }
+  bp.set(35, y, 54, CHR); bp.set(46, y, 54, CHR); bp.set(35, y + 1, 54, BLUE); bp.set(46, y + 1, 54, BLUE);
+  for (const x of [38, 43]) { bp.set(x, y, 53, SLAB); bp.work(x, y, 53, 'receptionist'); }
+  bp.set(40, y + 2, 53, HOLO); bp.set(41, y + 2, 53, HOLO);
+  guardKiosk(bp, 36, y, 56, 0, 1); guardKiosk(bp, 45, y, 56, 0, 1);
+  for (const [sx, sz] of [[31, 53], [31, 56], [49, 53], [49, 56]]) statue(bp, sx, y, sz);
+  planter(bp, 33, y, 57, B.SPRUCE_LEAVES); planter(bp, 47, y, 57, B.SPRUCE_LEAVES);
+  for (const x of [33, 34, 46, 47]) bench(bp, x, y, 52);
+  totem(bp, 32, y, 52); totem(bp, 48, y, 52);
+  bp.room('sky_lobby', x0 - 1, y, z0 - 1, x1 + 1, z1 + 1);
+}
+
+// ------------------------------------------------------------------------------------------------ landing platform
+// the approach deck (y 35) from the tower's south face to the disc, on a stalk, with lit edge rows and railings
+function approachDeck(bp) {
+  const y = DECK_Y, z0 = 59, z1 = 79;
+  for (let z = z0; z <= z1; z++) for (let x = 35; x <= 46; x++) {
+    const edge = x === 35 || x === 46;
+    bp.set(x, y, z, edge ? ((z % 2) ? GLOW : CHR) : ((x === 40 || x === 41) ? B.RED_WOOL : ((z % 4 === 0) ? DARK : PLATE)));
+    if (edge) bp.set(x, y + 1, z, BARS);
+    if (x >= 36 && x <= 45) bp.set(x, y - 1, z, DARK);
+    if (x >= 38 && x <= 43) bp.set(x, y - 2, z, (z % 3) ? STEEL : BLUE);
+  }
+  for (let z = z0 + 2; z <= z1; z += 6) for (const x of [35, 46]) { bp.set(x, y + 2, z, BARS); bp.set(x, y + 3, z, LAMP); }
+  // stalk under the deck and the chrome props on the podium roof edge
+  bp.fill(38, 1, 68, 43, 32, 71, DARK);
+  for (let yy = 1; yy <= 32; yy++) for (const [cx, cz] of [[38, 68], [43, 68], [38, 71], [43, 71]]) bp.set(cx, yy, cz, (yy % 5 === 0) ? BLUE : CHR);
+  bp.fill(37, 1, 67, 44, 6, 72, DARK); for (const z of [67, 72]) for (let x = 38; x <= 43; x += 2) bp.set(x, 2, z, BLUE), bp.set(x, 5, z, B.VENT);
+  bp.fill(37, 33, 67, 44, 33, 72, STEEL);
+  for (const x of [36, 45]) { bp.fill(x, 16, 61, x, 33, 61, CHR); bp.set(x, 25, 61, BLUE); bp.fill(x, 33, 60, x, 33, 62, STEEL); }
+  bp.room('approach_deck', 34, y + 1, z0 - 1, 47, z1 + 1);
+}
+// the disc pavilion: lit rim rows, railing with lamps, the landing pad with its markings, the stalk with the lift and
+// the helix stair wrapped around it, an annular glass canopy on chrome posts, a parked Senate shuttle
+function discPavilion(bp) {
+  const y = DECK_Y, cx = 40.5, cz = 90.5, R = 12.5;
+  const dist = (x, z) => Math.hypot(x + 0.5 - cx, z + 0.5 - cz);
+  for (let x = 28; x <= 53; x++) for (let z = 78; z <= 103; z++) {
+    const d = dist(x, z);
+    if (d > R) continue;
+    const join = (z <= 81 && x >= 36 && x <= 45) || (z >= 100 && x >= 38 && x <= 43);   // approach deck / gangway joins
+    if (d > R - 1 && !join) { bp.set(x, y, z, ((x + z) % 2) ? GLOW : CHR); bp.set(x, y + 1, z, BARS); }
+    else if (d > 8.5) bp.set(x, y, z, (d > 9.5 && d <= 10.5 && (x + z) % 2 === 0) ? BLUE : ((x % 4 === 0 || z % 4 === 0) ? DARK : PLATE));
+    else bp.set(x, y, z, (d > 7.5) ? GLOW : ((x === 40 || x === 41 || z === 90 || z === 91) && (x + z) % 2 === 0 ? GLOW : ((x + z) % 2 ? BLACK : DARK)));
+    // underside: dark plate with blue light rows, radial ribs and a ring
+    bp.set(x, y - 1, z, (d > R - 1.5 && (x + z) % 3 === 0) ? BLUE : DARK);
+    const a = Math.atan2(z + 0.5 - cz, x + 0.5 - cx), rib = Math.abs(((a / (Math.PI / 4)) + 0.5) % 1 - 0.5) < 0.08;
+    if ((rib && d > 2) || (d > 10.5 && d <= 11.5)) bp.set(x, y - 2, z, STEEL);
+  }
+  // railing lamps
+  for (let k = 0; k < 12; k++) { const a = k * Math.PI / 6 + Math.PI / 12; const x = Math.round(cx - 0.5 + Math.cos(a) * (R - 0.6)), z = Math.round(cz - 0.5 + Math.sin(a) * (R - 0.6)); bp.set(x, y + 2, z, BARS); bp.set(x, y + 3, z, LAMP); }
+  // stalk: 4x4 housing from the ground to the pad with the lift inside; doors south at the ground, north at the pad
+  bp.fill(39, 1, 89, 42, y + 4, 92, DARK);
+  for (let yy = 1; yy <= y + 3; yy++) for (const [sx, sz] of [[39, 89], [42, 89], [39, 92], [42, 92]]) bp.set(sx, yy, sz, (yy % 5 === 0) ? BLUE : CHR);
+  bp.fill(39, y + 5, 89, 42, y + 5, 92, CHR); bp.set(40, y + 5, 90, BLUE); bp.set(41, y + 5, 91, BLUE);
+  bp.fill(40, 1, 90, 41, y + 3, 91, AIR);
+  bp.lift(40, 90, 1, y + 1);
+  bp.fill(40, 1, 92, 41, 3, 92, AIR); bp.set(39, 3, 92, BLUE); bp.set(42, 3, 92, BLUE);
+  bp.fill(40, y + 1, 89, 41, y + 3, 89, AIR); bp.set(39, y + 3, 89, BLUE); bp.set(42, y + 3, 89, BLUE);
+  bp.set(40, y + 2, 92, HOLO); bp.set(41, y + 2, 92, HOLO);
+  // helix stair around the stalk: ring x 37..44 / z 87..94, half a block per outer cell, 14 blocks per loop, starting
+  // at the south (by the ground-level lift door) and arriving on the pad north of the housing after 2.5 turns
+  const helixF = (x, z) => { const a = Math.atan2(z + 0.5 - cz, x + 0.5 - cx); return (((a - Math.PI / 2) / (2 * Math.PI)) % 1 + 1) % 1; };
+  const carve = new Map();
+  for (let x = 37; x <= 44; x++) for (let z = 87; z <= 94; z++) {
+    if (x >= 39 && x <= 42 && z >= 89 && z <= 92) continue;
+    const f = helixF(x, z);
+    let top = 0;
+    for (let k = 0; k < 3; k++) {
+      const s = Math.round((1 + 14 * (f + k)) * 2) / 2;
+      if (s >= y + 1) continue;
+      tread(bp, x, z, s, PLATE); top = s;
+    }
+    if (top >= 31.5) carve.set(x * 200 + z, top);
+  }
+  // head room through the pad where the last treads pass under it, railing around the resulting opening
+  for (const [key, s] of carve) { const x = Math.floor(key / 200), z = key % 200; bp.fill(x, Number.isInteger(s) ? s : Math.floor(s) + 1, z, x, y, z, AIR); }
+  for (const [key] of carve) {
+    const x = Math.floor(key / 200), z = key % 200;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const nx = x + dx, nz = z + dz;
+      if (carve.has(nx * 200 + nz) || (nx >= 39 && nx <= 42 && nz >= 89 && nz <= 92) || !bp.isAir(nx, y + 1, nz) || bp.isAir(nx, y, nz)) continue;
+      bp.set(nx, y + 1, nz, BARS);
+    }
+  }
+  // outer railing of the helix (ring x 36..45 / z 86..95) following the treads, lanterns on some posts
+  for (let x = 36; x <= 45; x++) for (let z = 86; z <= 95; z++) {
+    if (x > 36 && x < 45 && z > 86 && z < 95) continue;
+    const f = helixF(x, z);
+    for (let k = 0; k < 3; k++) { const s = Math.round((1 + 14 * (f + k)) * 2) / 2, yy = Math.ceil(s); if (yy < y - 2) { bp.set(x, yy, z, BARS); if ((x + z) % 5 === 0) bp.set(x, yy + 1, z, LANTERN); } }
+  }
+  // canopy: chrome posts and an annular steel-glass roof with lit rims
+  for (let k = 0; k < 6; k++) {
+    const a = Math.PI / 4 + k * Math.PI / 2 + (k >= 4 ? Math.PI / 4 : 0);
+    const px = Math.round(cx - 0.5 + Math.cos(a) * 9.5), pz = Math.round(cz - 0.5 + Math.sin(a) * 9.5);
+    bp.fill(px, y + 1, pz, px, y + 6, pz, CHR); bp.set(px, y + 4, pz, BLUE);
+  }
+  for (let x = 30; x <= 51; x++) for (let z = 80; z <= 101; z++) {
+    const d = dist(x, z);
+    if (d > 10 || d <= 6) continue;
+    bp.set(x, y + 7, z, (d > 9 || d <= 7) ? ((x + z) % 2 ? GLOW : CHR) : GLASS);
+  }
+  // the Senate shuttle parked on the east half of the pad
+  bp.fill(44, y + 2, 89, 52, y + 4, 92, STEEL); bp.fill(45, y + 3, 90, 51, y + 3, 91, AIR);
+  bp.fill(53, y + 3, 90, 53, y + 3, 91, GLASS); bp.fill(52, y + 4, 90, 52, y + 4, 91, GLASS);
+  bp.fill(46, y + 5, 90, 48, y + 6, 91, DARK); bp.set(47, y + 7, 90, BLUE);
+  bp.fill(44, y + 3, 90, 44, y + 3, 91, BLUE);
+  for (const [gx, gz] of [[45, 89], [45, 92], [51, 89], [51, 92]]) bp.set(gx, y + 1, gz, BARS);
+  bp.fill(47, y + 1, 92, 48, y + 1, 93, PLATE); bp.spot(48, y + 1, 94, 'stand'); bp.work(36, y + 1, 96, 'deck officer');
+  // benches and holo totems on the pad's west half
+  for (const [bx, bz] of [[33, 88], [33, 93], [35, 84], [35, 97]]) bench(bp, bx, y + 1, bz);
+  totem(bp, 31, y + 1, 90); totem(bp, 40, y + 1, 99); planter(bp, 34, y + 1, 86, B.SPRUCE_LEAVES); planter(bp, 34, y + 1, 95, B.SPRUCE_LEAVES);
+  bp.room('landing_pavilion', 27, y + 1, 77, 54, 104);
+  // link to the boulevard gangway on the front door column
+  for (let z = 103; z <= bp.d - 1; z++) for (let x = 37; x <= 44; x++) { if (dist(x, z) <= R) continue; bp.set(x, y, z, (x === 37 || x === 44) ? CHR : PLATE); if (x === 37 || x === 44) bp.set(x, y + 1, z, BARS); }
+  for (const x of [39, 42]) bp.fill(x, y + 1, bp.d - 1, x, y + 4, bp.d - 1, CHR);
+  bp.fill(40, y + 4, bp.d - 1, 41, y + 4, bp.d - 1, GLOW); bp.set(37, y + 3, 104, LAMP); bp.set(44, y + 3, 104, LAMP); bp.set(37, y + 2, 104, BARS); bp.set(44, y + 2, 104, BARS);
+  bp.fill(40, y + 1, bp.d - 1, 41, y + 3, bp.d - 1, AIR);
+  bp.door(DOOR_X, y + 1, bp.d - 1, 'S');
+}
+// ------------------------------------------------------------------------------------------------ forecourt
+// ceremonial avenue from the gate to the portico: red carpets, statue rows, lamps, planters, a reflecting pool
+// between the two stalks, garden squares with ring pools east and west, pavements around the podium
+function forecourt(bp) {
+  const y = 1;
+  for (let z = 63; z <= bp.d - 1; z++) for (const x of [33, 34, 47, 48]) bp.set(x, 0, z, B.RED_WOOL);
+  for (let z = 64; z <= 104; z += 2) for (const x of [31, 50]) bp.set(x, 0, z, GLOW);
+  for (let z = 66; z <= 102; z += 6) { statue(bp, 29, y, z); statue(bp, 52, y, z); }
+  for (let z = 69; z <= 105; z += 6) { lampPost(bp, 27, y, z, 3, LAMP); lampPost(bp, 54, y, z, 3, LAMP); planter(bp, 29, y, z, (z % 4) ? B.OAK_LEAVES : B.SPRUCE_LEAVES); planter(bp, 52, y, z, (z % 4) ? B.OAK_LEAVES : B.SPRUCE_LEAVES); }
+  // reflecting pool on the axis between the deck stalk and the disc stalk
+  bp.fill(36, 0, 74, 45, 0, 84, B.WATER); bp.walls(36, 0, 74, 45, 0, 84, CHR);
+  for (let z = 75; z <= 83; z += 2) { bp.set(36, y, z, BARS); bp.set(45, y, z, BARS); }
+  bp.set(40, 0, 79, GLOW); bp.set(41, 0, 79, GLOW);
+  // garden squares with ring pools
+  for (const gx of [16, 65]) {
+    for (let x = gx - 8; x <= gx + 8; x++) for (let z = 76; z <= 92; z++) {
+      const d = Math.hypot(x - gx, z - 84);
+      if (d <= 4) bp.set(x, 0, z, d <= 1.5 ? CHR : B.WATER);
+      else if (d <= 5) bp.set(x, 0, z, CHR);
+      else if (d <= 8 && (Math.round(d) === 7) && (x + z) % 2 === 0) planter(bp, x, y, z, B.OAK_LEAVES);
+      else if (d <= 8 && Math.round(d) === 6 && (x + z) % 3 === 0) bench(bp, x, y, z);
+    }
+    bp.set(gx, y, 84, CHR); bp.set(gx, y + 1, 84, GLOW);
+    for (const [lx, lz] of [[gx - 7, 77], [gx + 7, 77], [gx - 7, 91], [gx + 7, 91]]) lampPost(bp, lx, y, lz, 3, LAMP);
+    bp.room('garden', gx - 9, y, 75, gx + 9, 93);
+  }
+  // pavements around the podium and along the lot edges
+  for (let z = 2; z <= 62; z += 4) for (const x of [2, 78]) { if (z % 12 === 2) lampPost(bp, x, y, z, 3, LAMP); else planter(bp, x, y, z, (z % 8) ? B.OAK_LEAVES : B.SPRUCE_LEAVES); }
+  for (let x = 8; x <= 72; x += 4) { if (x % 16 === 8) lampPost(bp, x, y, 0, 3, LAMP); else if (x < 36 || x > 45) planter(bp, x, y, 0, B.SPRUCE_LEAVES); }
+  for (let x = 8; x <= 72; x += 8) for (const z of [64, 100]) if (x < 26 || x > 55) { totem(bp, x, y, z); }
+  // rear door canopy
+  bp.fill(38, 4, 0, 43, 4, 1, STEEL); bp.set(40, 4, 1, GLOW); bp.set(41, 4, 1, GLOW); for (const x of [38, 43]) bp.fill(x, 1, 1, x, 3, 1, CHR);
+}
+
 // ------------------------------------------------------------------------------------------------ facade + roofs
 // paints the four faces of a tier: chrome slab bands, durasteel pilasters every 4, glass where a room is behind
 // (lit window blocks elsewhere), dark heads with blue accents, stone-brick corners
 function facade(bp, tier) {
   const { x0, x1, z0, z1, y0, y1 } = tier;
   const paint = (x, y, z, u, len, inX, inZ) => {
+    if (bp.get(x, y, z) !== STONE) return;    // only the raw shell: doors, frames and the office's window wall stay
     const r = (y - (y0 - 1)) % 5;
     let id;
-    if (y === y0 - 1 || y === y1) id = (u % 8 === 0) ? BLUE : CHR;
+    if (r === 0) id = (u % 8 === 0) ? BLUE : CHR;
     else if (u === 0 || u === len - 1) id = BRICK;
     else if (u % 4 === 0) id = STEEL;
     else if (r === 2 || r === 3) id = bp.isAir(inX, y, inZ) ? GLASS : ((u % 2) ? B.WINDOW_LIT : STONE);
@@ -578,7 +871,7 @@ function roofTerrace(bp, tier, next) {
   for (let x = tier.x0; x <= tier.x1; x++) for (let z = tier.z0; z <= tier.z1; z++) {
     if (next && x >= next.x0 && x <= next.x1 && z >= next.z0 && z <= next.z1) continue;
     const edge = x === tier.x0 || x === tier.x1 || z === tier.z0 || z === tier.z1;
-    bp.set(x, y, z, edge ? CHR : ((x % 4 === 0 || z % 4 === 0) ? DARK : PLATE));
+    if (!isEmit(bp.get(x, y, z))) bp.set(x, y, z, edge ? CHR : ((x % 4 === 0 || z % 4 === 0) ? DARK : PLATE));   // room ceiling lights show as lit deck tiles
     if (edge) bp.set(x, w, z, BARS);
   }
   if (!next) return;
@@ -593,6 +886,7 @@ function roofTerrace(bp, tier, next) {
   }
   // vents and blue light strips along the next tier's base
   for (let x = next.x0 + 2; x <= next.x1 - 2; x += 3) { bp.set(x, w, next.z0 - 1, (x % 2) ? B.VENT : BLUE); bp.set(x, w, next.z1 + 1, (x % 2) ? B.VENT : BLUE); }
+  for (let z = next.z0 + 2; z <= next.z1 - 2; z += 3) { bp.set(next.x0 - 1, w, z, (z % 2) ? B.VENT : BLUE); bp.set(next.x1 + 1, w, z, (z % 2) ? B.VENT : BLUE); }
 }
 // terrace doors from the corridor corner bays of the tier above onto the setback terraces
 function terraceDoors(bp, tier, lower) {
@@ -631,17 +925,26 @@ export const LANDMARK = {
     for (let x = 0; x < bp.w; x++) for (let z = 0; z < bp.d; z++) bp.set(x, 0, z, ((x % 6 === 0) || (z % 6 === 0)) ? BRICK : ((x + z) % 2 ? PLASTER : STONE));
     // solid tier masses (rooms are carved from them, walls are what remains)
     for (const t of TIERS) bp.fill(t.x0, t.y0 - 1, t.z0, t.x1, t.y1, t.z1, STONE);
-    // floors
+    // floors: podium, tower floors (the boulevard-level floor carries the sky lobby behind the landing platform),
+    // the Chancellor's floor on top
     podiumGround(bp, rng); podiumMezzanine(bp, rng); podiumTop(bp, rng);
-    for (let ti = 1; ti < TIERS.length; ti++) for (const y of TIERS[ti].floors) towerFloor(bp, rng, TIERS[ti], y);
-    // the core through every level
-    const levels = [];
-    for (const t of TIERS) levels.push(...t.floors);
-    levels.push(TOP);
-    core(bp, levels);
-    // skins, setbacks, terraces
+    for (let ti = 1; ti < TIERS.length; ti++) for (const y of TIERS[ti].floors) {
+      if (y === DECK_Y + 1) towerFloor(bp, rng, TIERS[ti], y, { southSkip: [30, 50], after: (plan) => skyLobby(plan, rng) });
+      else towerFloor(bp, rng, TIERS[ti], y);
+    }
+    chancellorFloor(bp, rng);
+    // skins, setbacks, terraces (before the core: the top roof slab must not close the stair up to the roof)
     for (let ti = 0; ti < TIERS.length; ti++) { facade(bp, TIERS[ti]); roofTerrace(bp, TIERS[ti], TIERS[ti + 1] || null); }
     for (let ti = 1; ti < TIERS.length; ti++) terraceDoors(bp, TIERS[ti], TIERS[ti - 1]);
+    // the core through every level up to the roof exit in the core house, then the crown
+    coreHouse(bp);
+    const levels = [];
+    for (const t of TIERS) levels.push(...t.floors);
+    levels.push(TOP, TOP + 5);
+    core(bp, levels);
+    crown(bp);
+    // the landing platform, the forecourt, the doors
+    approachDeck(bp); discPavilion(bp); forecourt(bp);
     entrances(bp, lot);
     bp.meta.lobby = { x: bp.wx(40), y: bp.wy(1), z: bp.wz(52) };
     bp.meta.floors = [...levels, DECK_Y + 1].map((y) => bp.wy(y));
