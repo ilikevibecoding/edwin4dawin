@@ -48,7 +48,8 @@ defRoom('garden_terrace', { minW: 5, minD: 4, tags: ['green', 'public'] }, (r, r
     if (f < 0.25) r.put(u, 0, v, B.TALL_GRASS); else if (f < 0.35) r.put(u, 0, v, rng.chance(0.5) ? B.POPPY : B.DANDELION);
   }
   r.put(0, 0, r.back, B.OAK_LEAVES); r.put(0, 1, r.back, B.OAK_LEAVES); r.put(r.w - 1, 0, r.back, B.OAK_LEAVES); r.put(r.w - 1, 1, r.back, B.OAK_LEAVES);
-  if (r.w >= 7 && r.d >= 6) { for (let u = 2; u < r.w - 2; u++) { r.put(u, 0, r.back - 1, B.SMOOTH_STONE); } r.putRaw(3, -1, r.back - 1, B.WATER); if (r.w >= 8) r.putRaw(4, -1, r.back - 1, B.WATER); r.putRaw(2, -1, r.back - 1, B.SMOOTH_STONE); r.putRaw(r.w - 3, -1, r.back - 1, B.SMOOTH_STONE); for (let u = 2; u < r.w - 2; u++) r.put(u, 0, r.back - 1, B.AIR); }
+  // pond: a shallow basin standing on the floor (the floor slab itself stays intact for the room below)
+  if (r.w >= 7 && r.d >= 6) { for (let u = 2; u < r.w - 2; u++) r.putRaw(u, -1, r.back - 1, B.SMOOTH_STONE); r.put(3, 0, r.back - 1, B.WATER); if (r.w >= 8) r.put(4, 0, r.back - 1, B.WATER); }
   r.seat(1, 2); r.seat(r.w - 2, 2);
   r.put(r.cu, 0, r.back - 1, B.OAK_FENCE); r.put(r.cu, 1, r.back - 1, B.LANTERN);
   r.spot(r.cu, 2, 'stand');
@@ -59,7 +60,7 @@ defRoom('garden_terrace', { minW: 5, minD: 4, tags: ['green', 'public'] }, (r, r
 defRoom('greenhouse', { minW: 5, minD: 4, tags: ['green'] }, (r, rng, ctx) => {
   for (let u = 0; u < r.w; u++) for (let v = 2; v <= r.back; v++) {
     if (!r.free(u, v)) continue;
-    if (v % 3 === 1) { if (u > 0 && u < r.w - 1) r.putRaw(u, -1, v, B.WATER); continue; }
+    if (v % 3 === 1) { if (u > 0 && u < r.w - 1) r.putRaw(u, -1, v, B.GLOW_PANEL_BLUE); continue; } // lit hydroponic channel in the floor
     r.putRaw(u, -1, v, B.FARMLAND); r.put(u, 0, v, rng.chance(0.85) ? B.WHEAT : B.PUMPKIN);
   }
   for (let v = 2; v <= r.back; v++) if (v % 3 === 1) { r.putRaw(0, -1, v, B.SMOOTH_STONE); r.putRaw(r.w - 1, -1, v, B.SMOOTH_STONE); }
@@ -103,7 +104,7 @@ defRoom('meditation_chamber', { minW: 5, minD: 5, tags: ['civic', 'green'] }, (r
   const c = r.cu, v = Math.floor((r.back + 2) / 2);
   r.put(c, 0, v, B.SMOOTH_STONE); r.put(c, 1, v, B.LANTERN);
   for (const [du, dv] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) r.put(c + du, 0, v + dv, B.SMOOTH_STONE);
-  r.putRaw(c - 1, -1, v, B.WATER); r.putRaw(c + 1, -1, v, B.WATER); r.put(c - 1, 0, v, B.AIR); r.put(c + 1, 0, v, B.AIR);
+  r.put(c - 1, 0, v, B.WATER); r.put(c + 1, 0, v, B.WATER);
   for (const [du, dv] of [[-2, -1], [-2, 1], [2, -1], [2, 1], [0, 2], [0, -2]]) { if (r.put(c + du, 0, v + dv, B.WHITE_WOOL)) r.spot(c + du, v + dv, 'seat'); }
   r.planter(0, r.back); r.planter(r.w - 1, r.back); r.planter(0, 2); r.planter(r.w - 1, 2);
   r.lantern(1, r.back - 1); r.lantern(r.w - 2, r.back - 1);
