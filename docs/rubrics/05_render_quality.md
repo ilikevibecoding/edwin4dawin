@@ -116,16 +116,19 @@ the fallback (`npm run material-table` and the unit test both check this).
 
 ### Performance
 
-- Measured in headless Chrome (SwiftShader) on this 4-core VM while ~20 other processes were running (load average
-  18-28): full build of the three 1024x1024 atlases with 7 mip levels for 118 tiles = 280-395 ms wall, of which
-  refine 240-350 ms, mip assembly 7-16 ms, canvas + texture creation 20-70 ms. Node (`scripts/test-textures.mjs`):
-  same work cold 180-330 ms wall; warm (JIT compiled) 40 ms.
-- The cold cost is V8 tier-up, not the algorithm: the cold pass triggers ~60 scavenges (boxed doubles in not-yet-
-  optimised loops) against 1 in a warm pass, and the concurrent TurboFan compiles land late on a loaded machine. What
+- Measured in headless Chrome (SwiftShader) on this 4-core VM while ~20 other builders' processes were running (load
+  average 24-28, i.e. 6-7x oversubscribed): full build of the three 1024x1024 atlases with 7 mip levels for 118 tiles,
+  10 consecutive page loads = 194 / 265 / 268 / 302 / 309 / 309 / 331 / 340 / 359 / 424 ms wall (median 309; the 424
+  had a 147 ms canvas upload stall, normally 20-30 ms). Split: refine 170-320 ms, mip assembly 7-13 ms, canvas +
+  texture creation 20-30 ms. Node (`scripts/test-textures.mjs`): the same work cold 180-400 ms wall; warm (JIT
+  compiled) 40 ms. Log: `/opt/cursor/artifacts/r2_atlas_build_time.log`.
+- The cold cost is V8 tier-up, not the algorithm: fully unoptimised (`node --no-opt --no-maglev`) one pass takes
+  ~900 ms and ~800 scavenges, warm optimised 40 ms and 1 scavenge; the cold pass sits in between (~60 scavenges: the
+  boxed doubles of the loops that run before their TurboFan code lands, which on a loaded machine is late). What
   helped: shared noise banks + per-tile index transforms instead of per-tile noise, scratch buffers and slab-allocated
   outputs, precomputed pair similarities for the edge-aware weights, fused colour-channel and noise passes, hoisting
   material reads out of hot loops, one fixed object shape for material descriptors. On an idle machine the build is
-  well under the 350 ms budget; under this VM's load the measurement straddles it (worst 395 ms).
+  well under the 350 ms budget; under this VM's load 7 of 10 samples are under it.
 
 ### Known imperfections / follow-ups
 
