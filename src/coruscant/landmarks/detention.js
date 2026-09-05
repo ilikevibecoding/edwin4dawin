@@ -225,6 +225,7 @@ function stairCore(bp, tx0, tz0, f0, f1, roofTo, doorSide = 'E') {
     const level = walk(f), east = (f - f0) % 2 === 0, xs = east ? [tx0 + 1, tx0 + 2] : [tx0 + 5, tx0 + 6];
     stairZ(bp, xs[0], xs[1], east ? tz0 + 1 : tz0 + 10, east ? 1 : -1, level, 5);
     bp.fill(tx0 + 1, level + 4, east ? tz0 + 9 : tz0 + 1, tx0 + 6, level + 4, east ? tz0 + 10 : tz0 + 2, PLATE);
+    bp.fill(tx0 + 3, level + 4, tz0 + 1, tx0 + 4, level + 4, tz0 + 10, PLATE);     // catwalk joining the landing to the door
     bp.set(tx0 + 3, level + 3, east ? tz0 + 10 : tz0 + 1, GLOW); bp.set(tx0 + 4, level + 3, east ? tz0 + 1 : tz0 + 10, RED);
     bp.room('stairwell', tx0, level, tz0, tx0 + 7, tz0 + 11);
   }
