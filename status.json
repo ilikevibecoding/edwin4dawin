@@ -1,7 +1,7 @@
 {
-  "updated": "2026-09-05T04:39:51.235Z",
-  "phase": "Round 4: Death Star superlaser, panel redesign, wave-swept villagers, more destruction",
-  "summary": "New request: a Death Star-style battle station far in the sky corner that arrives while villagers look up and wonder, four green tributary beams converging into a pulsing focus, a green main beam and a wave of destruction; a simpler, friendlier panel with a Cinematic/Balanced/Light quality selector; flood sweeps people off their feet; a more destructive tornado; creative flight (done).",
+  "updated": "2026-09-05T05:29:01.756Z",
+  "phase": "Round 4 complete",
+  "summary": "Death Star superlaser, friendlier panel with quality + view distance (up to 24 chunks), wave-swept villagers, rougher tornado, creative flight. Tests 39/39 + mp 8/8, hosted build refreshed, demo recorded, PR updated.",
   "links": [
     {
       "label": "Pull request #17",
@@ -80,8 +80,8 @@
     },
     {
       "name": "Superlaser sequence + destruction wave",
-      "status": "merged, critic ACCEPT WITH NITS -> fixes running",
-      "detail": "Arrival with villagers looking up, 4 staggered green tributaries into a pulsing focus, fast diagonal green beam, destruction wave to 62 blocks; fixing: player re-hit by the wave, blast used flood lines, pitted streets, placement lower in the sky corner, bigger magma pool."
+      "status": "merged, critic fixes landed",
+      "detail": "Player safe from the wave (one hit, survives), dry blast, streets intact, station lower in the sky corner, bigger magma lake, night hull readable."
     },
     {
       "name": "Panel redesign",
@@ -125,6 +125,14 @@
   ],
   "screenshots": [
     {
+      "src": "img/r4_superlaser.png",
+      "caption": "Round 4: the green superlaser firing into the town (from the recorded demo) (05:29 UTC)"
+    },
+    {
+      "src": "img/r4_station.png",
+      "caption": "Round 4: the battle station over the rooftops while villagers wonder (05:29 UTC)"
+    },
+    {
       "src": "img/final_beam_impact.png",
       "caption": "Final beam impact seen from the street (from the recorded demo) (14:29 UTC)"
     },
@@ -155,14 +163,6 @@
     {
       "src": "img/beam_impact.png",
       "caption": "Orbital beam impact: shockwave, sparks, debris, fleeing NPCs (09:08 UTC)"
-    },
-    {
-      "src": "img/tornado_plains.png",
-      "caption": "Tornado funnel approaching over the plains (08:59 UTC)"
-    },
-    {
-      "src": "img/tornado_street.png",
-      "caption": "Tornado tearing down main street: orbiting debris, NPCs fleeing (08:59 UTC)"
     }
   ],
   "log": [
@@ -237,6 +237,10 @@
     {
       "time": "2026-09-05 04:39 UTC",
       "text": "Round 4 critics: Death Star ACCEPT WITH NITS, flood ACCEPT WITH NITS, panel ACCEPT WITH NITS; fixes in progress; view distance 16/24 added."
+    },
+    {
+      "time": "2026-09-05 05:29 UTC",
+      "text": "Round 4 shipped: all critics' must-fix items landed; dist rebuilt; Death Star demo recorded."
     }
   ],
   "issues": [
