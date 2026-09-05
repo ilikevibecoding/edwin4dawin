@@ -37,6 +37,8 @@ const ROOF = 10;                   // service block roof slab
 const SLOT0 = 18, NSLOT = 18;      // stall grid along z: post at 18 + 4k, stall cells +1..+3 (k = 0..17)
 const XAISLE = 8;                  // cross aisle slot (k = 8 -> z 51..53)
 const SOUTH_STAIR0 = 82;           // south stairs climb from z 82 to 91, north stairs from 27 down to 18
+// west cell of a hall's 2-wide gable door: centred in the middle aisle
+const hallDoorX = (h) => { const a0 = h.xa + 10, a1 = h.xb - 10; return a0 + ((a1 - a0 + 1) >> 1) - 1; };
 
 // elliptical vault profile: roof block height for a column at distance d from the centre line
 function vaultY(d, hw, eave, rise) {
@@ -87,6 +89,18 @@ function partition(a, y) {
   if ((a & 3) === 0) return B.DURASTEEL_DARK;
   if (y === 5 || y === 1) return B.PANEL_STRIPE;
   return B.PLASTER;
+}
+// walls facing the loading yard: hull plating over a trench course, hazard band at truck height, durasteel slab
+// line, the upper offices' lit windows, dark pilasters every 4
+function dockWall(a, y) {
+  if ((a & 3) === 0) return B.DURASTEEL_DARK;
+  switch (y) {
+    case 1: return B.HULL_TRENCH;
+    case 4: return B.PANEL_STRIPE;
+    case 5: return B.DURASTEEL;
+    case 7: case 8: return B.WINDOW_LIT;
+    default: return B.HULL_PLATE;
+  }
 }
 // gable above the eaves: tinted glass in a durasteel frame, lit window bands where the gable sits over a flat roof
 function gableBlock(a, y, eave, top) {
@@ -191,6 +205,7 @@ export const LANDMARK = {
     court(bp, rng);
     yard(bp, rng);
     rooftop(bp, rng);
+    southFront(bp);
     entrances(bp, lot);
   },
 };
@@ -202,9 +217,10 @@ function pave(bp) {
   // pavement margin round the lot with dark seams every 8
   for (let x = 0; x < W; x++) for (const z of [0, D - 1, D - 2]) bp.set(x, 0, z, (x & 7) === 0 ? B.DURASTEEL_DARK : B.DECK_PLATE);
   for (let z = 0; z < D; z++) for (const x of [0, W - 1]) bp.set(x, 0, z, (z & 7) === 0 ? B.DURASTEEL_DARK : B.DECK_PLATE);
-  // approach lamps in front of the hall facades and lit paving dots leading to the doors
-  for (const x of [7, 19, 31, 44, 90, 103, 115, 127]) lampPost(bp, x, D - 1, 1);
+  // approach lamps flanking each hall door and lit paving dots leading to the doors
+  for (const h of HALLS) { const xd = hallDoorX(h); lampPost(bp, xd - 7, D - 1, 1); lampPost(bp, xd + 8, D - 1, 1); }
   for (let x = 51; x <= 83; x += 4) bp.set(x, 0, D - 1, B.GLOW_PANEL);
+  for (const h of HALLS) { const xd = hallDoorX(h); bp.fill(xd, 0, D - 2, xd + 1, 0, D - 1, B.GLOW_PANEL); }
 }
 
 // ------------------------------------------------------------------------------------------------ shell
@@ -244,6 +260,8 @@ function shell(bp) {
   for (const [x, top] of [[HALLS[0].xb + 1, partyTop(HALLS[0])], [HALLS[2].xb + 1, partyTop(HALLS[2])]]) {
     for (let z = ZSB1; z <= ZS + 1; z++) for (let y = 1; y <= top; y++) bp.set(x, y, z, inner(z, y, top));
   }
+  // durasteel corner posts where the outer / party walls meet the gable line
+  for (const [x, top] of [[1, tW], [W - 2, tE], [HALLS[0].xb + 1, partyTop(HALLS[0])], [HALLS[2].xb + 1, partyTop(HALLS[2])]]) bp.fill(x, 1, ZS + 1, x, top, ZS + 1, B.DURASTEEL);
   const topC = yrC(COURT.xa);
   for (const x of [COURT.xa - 1, COURT.xb + 1]) {
     for (let z = ZSB0; z <= ZCS + 1; z++) {
@@ -258,8 +276,9 @@ function shell(bp) {
     const yr = hallRoof(h);
     for (let x = h.xa; x <= h.xb; x++) {
       const top = yr(x);
-      for (let y = 1; y <= top; y++) bp.set(x, y, ZSB1, y <= ROOF ? partition(x, y) : gableBlock(x, y, EAVE_H, top));
-      bp.set(x, 5, ZSB1, B.PANEL_STRIPE);
+      const yardSide = x <= 37;
+      for (let y = 1; y <= top; y++) bp.set(x, y, ZSB1, y <= ROOF ? (yardSide ? dockWall(x, y) : partition(x, y)) : gableBlock(x, y, EAVE_H, top));
+      bp.set(x, 5, ZSB1, yardSide ? B.DURASTEEL : B.PANEL_STRIPE);
     }
   }
   for (let x = COURT.xa; x <= COURT.xb; x++) {
@@ -507,12 +526,13 @@ function court(bp, rng) {
   for (let x = xa + 5; x <= xb - 5; x += 5) { if (x >= cx - 6 && x <= cx + 5) continue; bp.set(x, 1, 16, B.OAK_SLAB); bp.spot(x, 1, 16, 'seat'); planter(bp, x + 1, 16, 1); }
   bp.room('balcony_north', xa - 1, GAL + 1, ZSB1, xb + 1, 19);
 
-  // --- south end: security post (west) and clinic (east) under the south balcony bar, entrance lobby between
+  // --- south end: the balcony deck first (the rooms below hang their ceiling lights in it), then the security post
+  // (west) and clinic (east) under the south balcony bar, entrance lobby between
+  for (let x = xa; x <= xb; x++) for (let z = 91; z <= ZCS; z++) bp.set(x, GAL, z, ((x + z) & 1) ? B.DECK_PLATE : B.DURASTEEL_DARK);
   securityPost(bp);
   clinic(bp);
   lobby(bp);
   // south balcony (y 5) with the gallery bar
-  for (let x = xa; x <= xb; x++) for (let z = 91; z <= ZCS; z++) bp.set(x, GAL, z, ((x + z) & 1) ? B.DECK_PLATE : B.DURASTEEL_DARK);
   for (let x = xa; x <= xb; x++) bp.set(x, GAL + 1, 91, B.IRON_BARS);
   for (const x of [xa + 3, xa + 11, cx, xb - 11, xb - 3]) { bp.fill(x, GAL + 1, 91, x, GAL + 2, 91, B.IRON_BARS); bp.set(x, GAL + 3, 91, B.CITY_LAMP); }
   for (let x = cx - 7; x <= cx + 7; x++) {
@@ -550,7 +570,7 @@ function securityPost(bp) {
   bp.fill(xa + 1, 1, 91, xa + 1, 2, 92, B.IRON_BARS); bp.fill(xa, 1, 93, xa, 2, 93, B.IRON_BARS);
   bp.set(xa, 1, 91, B.STONE_BRICK_SLAB); bp.spot(xa, 1, 92, 'stand');
   bp.set(xa + 4, 1, 91, B.CHEST); bp.set(xa + 4, 2, 91, B.PANEL_RED); bp.set(xa + 4, 1, 93, B.TABLE); bp.set(xa + 4, 2, 93, B.CONSOLE);
-  bp.set(xa + 2, GAL, 93, B.GLOW_PANEL); bp.set(xa + 2, GAL, 95, B.GLOW_PANEL_BLUE);
+  bp.set(xa + 2, GAL, 93, B.GLOW_PANEL); bp.set(xa + 2, GAL, 95, B.GLOW_PANEL_BLUE); bp.set(xa + 4, GAL, 92, B.GLOW_PANEL);
   bp.room('security_post', xa - 1, 1, 90, xa + 5, ZCS + 1);
 }
 
@@ -562,14 +582,20 @@ function clinic(bp) {
   bp.fill(x0, 1, 90, x0, 4, 90, B.DURASTEEL);
   doorway(bp, x0 + 2, 90, x0 + 3, 90, 1, 2, B.GLOW_PANEL_BLUE);
   bp.set(x0 + 4, 3, 90, B.PANEL_RED); bp.set(x0 + 1, 3, 90, B.HOLO_SIGN);
-  // two beds with monitors and a curtain between, medic desk, medicine cabinet, sink
+  // clean chequered floor; red cross on the lobby-facing wall (reads from both sides)
+  for (let x = x0 + 1; x <= xb; x++) for (let z = 91; z <= ZCS; z++) bp.set(x, 0, z, ((x + z) & 1) ? B.PLASTER : B.SMOOTH_STONE);
+  bp.set(x0, 2, 93, B.PANEL_RED); bp.fill(x0, 3, 92, x0, 3, 94, B.PANEL_RED); bp.set(x0, 4, 93, B.PANEL_RED);
+  // two beds with monitors and a curtain between, medic desk, medicine cabinets, sink, bacta drum
   bp.set(x0 + 1, 1, ZCS, B.BED_HEAD); bp.set(x0 + 1, 1, 95, B.BED_FOOT); bp.set(x0 + 2, 1, ZCS, B.CONSOLE); bp.bed(x0 + 2, 1, 95);
   bp.set(xb, 1, ZCS, B.BED_HEAD); bp.set(xb, 1, 95, B.BED_FOOT); bp.set(xb - 1, 1, ZCS, B.CONSOLE); bp.bed(xb - 1, 1, 95);
   bp.fill(x0 + 3, 1, 95, x0 + 3, 2, ZCS, B.WHITE_WOOL);
   bp.set(x0 + 1, 1, 92, B.TABLE); bp.set(x0 + 1, 1, 91, B.CONSOLE); bp.set(x0 + 2, 1, 92, SEAT); bp.work(x0 + 2, 1, 92, 'medic');
-  bp.fill(xb, 1, 91, xb, 2, 92, B.SHELF); bp.set(xb, 1, 93, B.TROUGH); bp.set(xb, 2, 93, B.CHROME);
+  bp.fill(x0 + 1, 1, 94, x0 + 1, 3, 94, B.SHELF); bp.set(x0 + 1, 1, 93, B.CHEST); bp.set(x0 + 1, 3, 93, B.GLOW_PANEL_BLUE);
+  bp.fill(xb, 1, 91, xb, 2, 92, B.SHELF); bp.set(xb, 1, 93, B.TROUGH); bp.set(xb, 2, 93, B.CHROME); bp.set(xb, 3, 92, B.HOLO_SIGN);
+  bp.set(xb, 1, 94, B.IRON_BLOCK); bp.set(xb, 2, 94, B.STEEL_GLASS); bp.set(xb, 3, 94, B.GLOW_PANEL_BLUE);
   bp.set(x0 + 1, 2, 91, B.HOLO_SIGN);
   bp.set(x0 + 3, GAL, 93, B.GLOW_PANEL_BLUE); bp.set(x0 + 1, GAL, 95, B.GLOW_PANEL); bp.set(xb, GAL, 95, B.GLOW_PANEL);
+  bp.set(x0 + 4, GAL, 91, B.GLOW_PANEL); bp.set(x0 + 2, GAL, 92, B.GLOW_PANEL);
   bp.room('clinic', x0, 1, 90, xb + 1, ZCS + 1);
 }
 
@@ -577,7 +603,6 @@ function lobby(bp) {
   const x0 = COURT.xa + 6, x1 = COURT.xb - 6, cx = 67;
   bp.fill(x0, 0, 91, x1, 0, ZCS, B.STONE_BRICKS);
   for (let x = x0 + 1; x <= x1 - 1; x += 2) bp.set(x, 0, 92, B.GLOW_PANEL);
-  for (let x = x0; x <= x1; x++) for (let z = 91; z <= ZCS; z++) bp.set(x, GAL, z, ((x + z) & 1) ? B.DECK_PLATE : B.DURASTEEL_DARK);
   for (const x of [cx - 7, cx, cx + 7]) bp.set(x, GAL, 93, B.GLOW_PANEL);
   totem(bp, cx - 3, 93, 1); totem(bp, cx + 3, 93, 1);
   for (const x of [x0, x1]) { bp.fill(x, 1, 93, x, 1, 94, B.OAK_SLAB); bp.spot(x, 1, 93, 'seat'); planter(bp, x, 95, 1, B.BIRCH_LEAVES); planter(bp, x, 91, 1); }
@@ -598,8 +623,8 @@ function serviceBlock(bp, rng) {
     bp.set(x, GAL, z, ((x + z) & 1) ? B.DURASTEEL_DARK : B.DECK_PLATE);
     bp.set(x, ROOF, z, ((x >> 1) + (z >> 1)) & 1 ? B.DECK_PLATE : B.DURASTEEL_DARK);
   }
-  // partitions (full height) and the upper-only partition over the arcade
-  for (const x of [38, 87, 94, 104, 116]) for (let z = ZSB0; z <= ZSB1; z++) for (let y = 1; y <= ROOF - 1; y++) bp.set(x, y, z, partition(z, y));
+  // partitions (full height; the storage block's yard side is dock-plated) and the upper-only partition over the arcade
+  for (const x of [38, 87, 94, 104, 116]) for (let z = ZSB0; z <= ZSB1; z++) for (let y = 1; y <= ROOF - 1; y++) bp.set(x, y, z, x === 38 ? dockWall(z, y) : partition(z, y));
   for (let x = 39; x <= 49; x++) for (let y = 1; y <= ROOF - 1; y++) bp.set(x, y, 7, partition(x, y));
   for (let x = 88; x <= 93; x++) for (let y = 1; y <= ROOF - 1; y++) bp.set(x, y, 7, partition(x, y));
   for (let z = z0; z <= z1; z++) for (let y = GAL + 1; y <= ROOF - 1; y++) bp.set(67, y, z, partition(z, y));
@@ -721,6 +746,9 @@ function yard(bp, rng) {
   bp.fill(10, 7, 3, 10, 7, 11, B.DURASTEEL); bp.fill(10, 5, 9, 10, 6, 9, B.IRON_BARS); bp.set(10, 4, 9, B.CRATE);
   for (const [x, z] of [[3, 3], [36, 3], [36, 12], [20, 12]]) lampPost(bp, x, z, 1);
   bp.set(30, 1, 6, B.DURASTEEL_DARK); bp.set(30, 2, 6, B.CHROME); bp.work(31, 1, 6, 'cargo droid');
+  // charging post and fuel drums beside the pad
+  bp.fill(18, 1, 3, 18, 2, 3, B.DURASTEEL_DARK); bp.set(18, 3, 3, B.GLOW_PANEL_BLUE); bp.set(19, 1, 3, B.IRON_BARS);
+  bp.fill(20, 1, 3, 21, 1, 3, B.BARREL); bp.set(20, 2, 3, B.BARREL);
   // stacked cargo: crate walls along the west wall, barrel and hay pallets by the storage doors, pumpkin crates
   cargoStack(bp, rng, x0, 3, x0 + 1, 11, 1, [B.CRATE, B.CRATE, B.BARREL, B.HAY_BALE]);
   cargoStack(bp, rng, 33, 5, 36, 8, 1, [B.BARREL, B.CRATE, B.HAY_BALE, B.CRATE]);
@@ -764,16 +792,32 @@ function rooftop(bp, rng) {
   rng.next();
 }
 
+// ------------------------------------------------------------------------------------------------ south front
+// depth for the flat gable line: dark buttresses with lamps either side of each hall door, striped wool awnings on
+// fence posts over the doors, holo billboards in the glass gables (hall names, the market's name over the court)
+function southFront(bp) {
+  const zf = ZS + 2;   // one block in front of the hall gables (the court facade stands at ZCS + 1 = zf + 1)
+  for (const h of HALLS) {
+    const xd = hallDoorX(h), xm = Math.floor((h.xa + h.xb) / 2);
+    for (const x of [xd - 4, xd + 5]) { bp.fill(x, 1, zf, x, 10, zf, B.DURASTEEL_DARK); bp.set(x, 11, zf, B.CHROME); bp.set(x, 12, zf, B.CITY_LAMP); }
+    bp.fill(xd - 2, 1, zf, xd - 2, 3, zf, B.OAK_FENCE); bp.fill(xd + 3, 1, zf, xd + 3, 3, zf, B.OAK_FENCE);
+    for (let x = xd - 2; x <= xd + 3; x++) bp.set(x, 4, zf, (x - xd) & 1 ? B.WHITE_WOOL : B.RED_WOOL);
+    bp.fill(xm - 4, 15, ZS + 1, xm + 4, 18, ZS + 1, B.PANEL_BLACK); bp.fill(xm - 3, 16, ZS + 1, xm + 3, 17, ZS + 1, B.HOLO_SIGN);
+  }
+  const cx = (COURT.xa + COURT.xb) >> 1;
+  bp.fill(cx - 8, 18, ZCS + 1, cx + 8, 22, ZCS + 1, B.PANEL_BLACK); bp.fill(cx - 7, 19, ZCS + 1, cx + 7, 21, ZCS + 1, B.HOLO_SIGN);
+}
+
 // ------------------------------------------------------------------------------------------------ entrances
 function entrances(bp, lot) {
   const D = bp.d;
   const dx = lot.door ? lot.door.x - lot.x0 : 67;
-  // main doors in the court facade at the lot's door column, plus two more each side; chrome frames
-  for (const x of [dx - 7, dx, dx + 7]) { doorway(bp, x, D - 1, x + 1, D - 1, 1, 3, B.CHROME); bp.door(x, 1, D - 1, 'S'); }
+  // main doors in the court facade at the lot's door column, plus two more each side; chrome frames, lit lintels
+  for (const x of [dx - 7, dx, dx + 7]) { doorway(bp, x, D - 1, x + 1, D - 1, 1, 3, B.GLOW_PANEL); bp.door(x, 1, D - 1, 'S'); }
   // hall doors in the gables (middle aisle), side doors at the cross aisle, the yard gate
   for (const h of HALLS) {
-    const a0 = h.xa + 10, a1 = h.xb - 10, xd = a0 + ((a1 - a0 + 1) >> 1) - 1;   // 2 wide, centred in the middle aisle
-    doorway(bp, xd, ZS + 1, xd + 1, ZS + 1, 1, 3, B.CHROME); bp.door(xd, 1, ZS + 1, 'S');
+    const xd = hallDoorX(h);
+    doorway(bp, xd, ZS + 1, xd + 1, ZS + 1, 1, 3, B.GLOW_PANEL); bp.door(xd, 1, ZS + 1, 'S');
   }
   bp.door(1, 1, SLOT0 + 4 * XAISLE + 1, 'W'); bp.door(bp.w - 2, 1, SLOT0 + 4 * XAISLE + 1, 'E');
   bp.door(17, 1, ZSB0, 'N');
