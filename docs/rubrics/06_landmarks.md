@@ -79,7 +79,9 @@ Fixed (see CHANGELOG round 5): landmark visibility (neighbour height cap + bluep
 layer), violet night sky, Senate arch/door/office/pods/dome, Temple hangar and garden light, Uscru door grate and
 Chancellery door post, civic furnishing in signature rooms, Opera walls and box, Medcenter garden, HoloNet billboard
 image, Uscru neon canyon and Outlander Club. Re-measured: Temple hangar 0% below light 6 (was 76%), Temple garden 1%
-(was 8%, 0 black cells), Senate pit 0% (was 15%).
+(was 8%, 0 black cells), Senate pit 0% (was 15%). Room metadata now carries a `floor` box per room (the cells
+with a real floor and headroom), so overhanging rectangles (Republica apartments, Opera tiers) are no longer a
+planning hazard.
 
-Open nits: room rectangles overhanging rakes/facades (Republica apartments, Opera tiers - metadata only), Chancellery
+Open nits: Chancellery
 disc pavilion stalk and blue-cube halo, Works yards and Market arcade filler, Republica's slender massing.

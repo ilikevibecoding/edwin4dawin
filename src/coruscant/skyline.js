@@ -12,10 +12,15 @@ const INSET = 0.35;
 
 const VERT = /* glsl */ `
 attribute float aSeed;
+attribute vec2 aCenter;
+uniform vec3 uCamPos; uniform float uChunkFar;
 varying vec3 vWorld;
 varying float vSeed;
 varying float vDist;
 void main() {
+  // boxes inside the streamed radius are hidden by their real building: push them out of clip space so they cost no
+  // fill (the fragment fade alone would still shade every covered pixel)
+  if (distance(aCenter, uCamPos.xz) < uChunkFar * 0.8) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vWorld = vec3(0.0); vSeed = 0.0; vDist = 0.0; return; }
   vec4 wp = modelMatrix * vec4(position, 1.0);
   vWorld = wp.xyz; vSeed = aSeed;
   vec4 mv = viewMatrix * wp;
@@ -97,15 +102,16 @@ export function buildSkyline(layout) {
   const boxes = lots.map((l) => ({ x0: l.x0 + INSET, x1: l.x1 - INSET, z0: l.z0 + INSET, z1: l.z1 - INSET, y1: g0 + l.height - 0.5, id: l.id }));
   for (const b of landmarkBoxes(layout)) boxes.push(b);
   const n = boxes.length;
-  const pos = new Float32Array(n * 24 * 3), seed = new Float32Array(n * 24), idx = new Uint32Array(n * 36);
-  let pi = 0, si = 0, ii = 0, vbase = 0;
+  const pos = new Float32Array(n * 24 * 3), seed = new Float32Array(n * 24), ctr = new Float32Array(n * 24 * 2), idx = new Uint32Array(n * 36);
+  let pi = 0, si = 0, ci = 0, ii = 0, vbase = 0;
   for (const l of boxes) {
     const x0 = l.x0, x1 = l.x1, z0 = l.z0, z1 = l.z1, y0 = g0, y1 = l.y1;
+    const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
     const c = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
     // 6 faces x 4 verts (separate verts so derivatives give flat normals)
     const faces = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]];
     for (const f of faces) {
-      for (const k of f) { pos[pi++] = c[k][0]; pos[pi++] = c[k][1]; pos[pi++] = c[k][2]; seed[si++] = (l.id % 97) / 97 + (l.landmark ? 2 : 0); }
+      for (const k of f) { pos[pi++] = c[k][0]; pos[pi++] = c[k][1]; pos[pi++] = c[k][2]; seed[si++] = (l.id % 97) / 97 + (l.landmark ? 2 : 0); ctr[ci++] = cx; ctr[ci++] = cz; }
       idx[ii++] = vbase; idx[ii++] = vbase + 1; idx[ii++] = vbase + 2; idx[ii++] = vbase; idx[ii++] = vbase + 2; idx[ii++] = vbase + 3;
       vbase += 4;
     }
@@ -119,10 +125,13 @@ export function buildSkyline(layout) {
   const gidx = new Uint32Array([0, 2, 1, 0, 3, 2]);
   const allPos = new Float32Array(pos.length + gpos.length); allPos.set(pos); allPos.set(gpos, pos.length);
   const allSeed = new Float32Array(seed.length + 4); allSeed.set(seed); allSeed.set(gseed, seed.length);
+  // the ground sheet is never culled: its centre is parked far away from any camera
+  const allCtr = new Float32Array(ctr.length + 8); allCtr.set(ctr); for (let i = 0; i < 4; i++) { allCtr[ctr.length + i * 2] = 1e6; allCtr[ctr.length + i * 2 + 1] = 1e6; }
   const allIdx = new Uint32Array(idx.length + 6); allIdx.set(idx); for (let i = 0; i < 6; i++) allIdx[idx.length + i] = gidx[i] + vbase;
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.BufferAttribute(allPos, 3));
   geo.setAttribute('aSeed', new THREE.BufferAttribute(allSeed, 1));
+  geo.setAttribute('aCenter', new THREE.BufferAttribute(allCtr, 2));
   geo.setIndex(new THREE.BufferAttribute(allIdx, 1));
   geo.computeBoundingSphere();
   const mat = new THREE.ShaderMaterial({

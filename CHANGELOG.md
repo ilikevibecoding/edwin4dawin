@@ -103,6 +103,10 @@ the integration branch and in the committed `dist/` build; landmark builders sti
   - Uscru: two new emissive blocks (`neon_pink`, `neon_green`); neon tubes along every floor band and up the facade
     corners, neon door stacks and street lamps, pink/green lines on the deck underside; the Outlander Club has a lit
     dance floor under a holo canopy, neon columns, a bar with a lit front and bottle shelves, booths and a DJ plinth.
+  - Measured after the fix round (same SwiftShader VM, Light, Senate view at 10 chunks, `bench/r5b_coruscant_senate_light.json`,
+    with a second headless Chrome running alongside): 141 draw calls (was 144), 928k tris (was 1.08M, the capped
+    neighbours), JS 2.7 ms, 467 MB heap (was 506), 0 exceptions; impostor boxes inside the streamed radius are culled
+    in the vertex shader so the 4.7k landmark boxes cost no fill.
   - Not addressed this round: room rectangles that overhang rakes/facades (Republica apartments, Opera tiers; metadata
     only, no NPCs spawn yet), the Chancellery disc pavilion's stalk, Works yards and Market arcade filler, and 500
     Republica's slender massing (its lot is 2 x 2 blocks).
