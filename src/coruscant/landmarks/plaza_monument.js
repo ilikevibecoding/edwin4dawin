@@ -60,8 +60,9 @@ function build(bp, lot, ctx) {
       const band = Math.floor(d) % 12 === 0;
       if (band) id = B.STONE_BRICKS;
       else {
+        // dark paving with joint lines every 6 blocks and the odd deck plate / vent grate
         const h = H2(x, z, 1);
-        id = h < 0.05 ? B.DECK_PLATE : h < 0.06 ? B.VENT : (((x >> 2) + (z >> 2)) & 1) ? B.DURASTEEL_DARK : B.PANEL_BLACK;
+        id = h < 0.03 ? B.DECK_PLATE : h < 0.038 ? B.VENT : (x % 6 === 0 || z % 6 === 0) ? B.DURASTEEL_DARK : B.PANEL_BLACK;
       }
     }
     set(x, 0, z, id);
@@ -86,8 +87,9 @@ function build(bp, lot, ctx) {
       if (m < 0.12) set(x, top + 1, z, B.OAK_LEAVES); else if (m < 0.38) set(x, top + 1, z, B.TALL_GRASS);
     }
   });
-  // uplights in the ledge, kerb railing with lamp posts, causeways at the cardinal points
-  for (let k = 0; k < 8; k++) { const a = k * TAU / 8 + TAU / 16; set(Math.round(CX + 8.3 * Math.cos(a)), 0, Math.round(CZ + 8.3 * Math.sin(a)), B.GLOW_PANEL); }
+  // spotlights in the ledge, blue lights under the water, kerb railing with lamp posts, causeways at the cardinal points
+  for (let k = 0; k < 16; k++) { const a = k * TAU / 16 + TAU / 32; set(Math.round(CX + 8.4 * Math.cos(a)), 0, Math.round(CZ + 8.4 * Math.sin(a)), B.GLOW_PANEL); }
+  for (let k = 0; k < 12; k++) { const a = k * TAU / 12 + TAU / 24; set(Math.round(CX + 11.5 * Math.cos(a)), 0, Math.round(CZ + 11.5 * Math.sin(a)), B.GLOW_PANEL_BLUE); }
   disc(CX, CZ, R_KERB, (x, z, dx, dz, q) => {
     if (q <= R_WATER * R_WATER) return;
     const onBridge = (Math.abs(dx) <= 1 || Math.abs(dz) <= 1);
@@ -138,7 +140,7 @@ function build(bp, lot, ctx) {
   pavAngles.forEach((deg, i) => {
     const a = deg * TAU / 360, rad = 44 + rng.int(-2, 2);
     const cx = Math.round(CX + rad * Math.cos(a)), cz = Math.round(CZ + rad * Math.sin(a));
-    const R0 = rng.pick([7, 8, 8, 9]), Hc = rng.pick([11, 12, 13, 14, 15]);
+    const R0 = rng.pick([6, 7, 7, 8]), Hc = rng.pick([15, 16, 17, 18, 19]);
     buildPavilion(bp, { cx, cz, R0, Hc, kind: kinds[i], twoBands: rng.chance(0.5), rng, set, get, isFree, disc, seatAt, H2 });
   });
 
@@ -203,7 +205,7 @@ function buildArcade(bp, lot, o) {
         } else if (m === RIM_D - 1) {
           // inner colonnade: columns every 4, lit fascia beam
           if (t % 4 === 0) { fill(x, 1, z, x, 6, z, B.DURASTEEL); set(x, 1, z, B.CHROME); set(x, 7, z, B.PANEL_STRIPE); if (t % 16 === 0) { set(x, 9, z, B.DURASTEEL); set(x, 10, z, B.CITY_LAMP); } }
-          else set(x, 7, z, (t & 1) ? B.WINDOW_LIT : B.PANEL_STRIPE);
+          else set(x, 7, z, (t % 4 === 2) ? B.WINDOW_LIT : B.PANEL_STRIPE);
         } else {
           // arcade interior: ceiling lights, benches and planters against the outer wall, terrace furniture on the roof
           if (m === 1 && t % 4 === 2) set(x, 8, z, B.GLOW_PANEL);
@@ -272,16 +274,20 @@ function buildPavilion(bp, o) {
     if (!inR(q, R0)) set(x, 4, z, ((x + z) & 1) ? B.CITY_LAMP : B.WINDOW_LIT);
     else set(x, 4, z, ((dx + 30) % 3 === 0 && (dz + 30) % 3 === 0) ? B.GLOW_PANEL : B.PANEL_BLACK);
   });
-  // cone with one or two lit bands and a lamp tip
-  const yb1 = 5 + Math.round(Hc * 0.4), yb2 = 5 + Math.round(Hc * 0.72);
+  // dark cone with eight seam ribs, one or two lit bands and a lamp tip
+  const yb1 = 5 + Math.round(Hc * 0.38), yb2 = 5 + Math.round(Hc * 0.7);
   for (let y = 5; y <= 5 + Hc; y++) {
     const r = R0 * (1 - (y - 5) / Hc);
     if (r < 0.5) { set(cx, y, cz, B.CITY_LAMP); break; }
     disc(cx, cz, r, (x, z, dx, dz, q) => {
       const ring = !inR(q, r - 1);
-      let id = (y % 3 === 0) ? B.DURASTEEL_DARK : B.PANEL_BLACK;
-      if (ring && y === yb1) id = B.WINDOW_LIT;
-      else if (ring && twoBands && y === yb2) id = B.GLOW_PANEL;
+      let id = B.PANEL_BLACK;
+      if (ring) {
+        const a = wrap(Math.atan2(dz, dx));
+        for (let k = 0; k < 8; k++) if (angDiff(a, k * TAU / 8 + TAU / 16) * r <= 0.5) id = B.DURASTEEL_DARK;
+        if (y === yb1) id = B.WINDOW_LIT;
+        else if (twoBands && y === yb2) id = B.GLOW_PANEL;
+      }
       set(x, y, z, id);
     });
   }
@@ -511,8 +517,8 @@ function buildRotunda(bp, o) {
     for (const [u, v] of [[2, -3], [2, 0], [2, 3]]) { if (table(u, v, 6)) { put(u + 1, v, 6, B.CONSOLE); seat(u - 1, v, 6); work(u - 1, v, 6, 'officer'); } }
     wallRow((u, v, s) => { if (s % 2 === 0 && v < 0 && u > -3) put(u, v, 7, B.HOLO_SIGN); else if (s % 4 === 3 && u > -3) { put(u, v, 6, B.CHEST); } });
     put(-1, 4, 6, B.BOOKSHELF); put(-1, 4, 7, B.BOOKSHELF); put(0, 4, 6, B.BOOKSHELF); put(0, 4, 7, B.BOOKSHELF);
-    if (isFree(X(4), 6, Z(4)) && isFree(X(4), 6, Z(5))) { set(X(4), 6, Z(5), B.BED_HEAD); set(X(4), 6, Z(4), B.BED_FOOT); bp.bed(X(3), 6, Z(4)); }
-    if (isFree(X(4), 6, Z(-4)) && isFree(X(4), 6, Z(-5))) { set(X(4), 6, Z(-5), B.BED_HEAD); set(X(4), 6, Z(-4), B.BED_FOOT); bp.bed(X(3), 6, Z(-4)); }
+    if (isFree(X(4), 6, Z(4)) && isFree(X(4), 6, Z(5))) { set(X(4), 6, Z(5), B.BED_HEAD); set(X(4), 6, Z(4), B.BED_FOOT); bp.bed(X(5), 6, Z(4)); }
+    if (isFree(X(4), 6, Z(-4)) && isFree(X(4), 6, Z(-5))) { set(X(4), 6, Z(-5), B.BED_HEAD); set(X(4), 6, Z(-4), B.BED_FOOT); bp.bed(X(5), 6, Z(-4)); }
     put(5, 0, 6, B.CHEST); put(-2, -3, 6, B.CRATE);
     spot(0, 0, 6);
   } else {
@@ -539,7 +545,7 @@ function buildFurniture(bp, o) {
     for (let dx = -3; dx <= 3; dx++) for (let dz = -3; dz <= 3; dz++) {
       const m = Math.max(Math.abs(dx), Math.abs(dz));
       if (m === 3) { set(fx + dx, 1, fz + dz, B.SMOOTH_STONE); if (Math.abs(dx) === 3 && Math.abs(dz) === 3) { set(fx + dx, 2, fz + dz, B.STONE_BRICKS); set(fx + dx, 3, fz + dz, B.LANTERN); } }
-      else if (m === 2) set(fx + dx, 1, fz + dz, B.WATER);
+      else if (m === 2) { set(fx + dx, 0, fz + dz, ((dx + dz) & 1) ? B.GLOW_PANEL_BLUE : B.CHROME); set(fx + dx, 1, fz + dz, B.WATER); }
       else set(fx + dx, 1, fz + dz, B.CHROME);
     }
     set(fx, 2, fz, B.CHROME); set(fx, 3, fz, B.GLOW_PANEL_BLUE); set(fx, 4, fz, B.IRON_BARS); set(fx, 5, fz, B.WATER);
