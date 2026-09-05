@@ -756,21 +756,24 @@ function buildHangarModule(materials, rand) {
     walls.box("hullDark", 0, (yL0 + yL1) / 2, s * (lz + 0.3), 2 * lx, yL1 - yL0, 0.6, linerTone, 0.05);
   }
   walls.build(g, { name: "hangarModuleWalls" });
-  // light strips on the skirt's inner faces (two per face) and the liner (three per wall)
+  // light strips on the skirt's inner faces (two per face) and the liner (three per wall): warm and
+  // at half strength (vertex tint scales ext_window's emissive) so they sit under the amber mouth
+  // markers instead of reading as white bars from below
+  const STRIP_TINT = 0x9c7a52;
   const lit = new Batcher(materials);
   for (const sl of [1.6, 4.3]) {
     const px = topX + sl * Math.sin(th) - 0.1 * Math.cos(th);
     const py = yT - sl * Math.cos(th) - 0.1 * Math.sin(th);
     const pz = topZ + sl * Math.sin(th) - 0.1 * Math.cos(th);
     for (const s of [-1, 1]) {
-      lit.rbox("ext_window", s * px, py, 0, 0.16, 0.35, 2 * topZ - 4, 0, 0, s * th, 0xffffff, 0.05);
-      lit.rbox("ext_window", 0, py, s * pz, 2 * topX - 4, 0.35, 0.16, -s * th, 0, 0, 0xffffff, 0.05);
+      lit.rbox("ext_window", s * px, py, 0, 0.16, 0.35, 2 * topZ - 4, 0, 0, s * th, STRIP_TINT, 0.05);
+      lit.rbox("ext_window", 0, py, s * pz, 2 * topX - 4, 0.35, 0.16, -s * th, 0, 0, STRIP_TINT, 0.05);
     }
   }
   for (const y of [-43.5, -39.5, -35.5]) {
     for (const s of [-1, 1]) {
-      lit.box("ext_window", s * (lx - 0.06), y, 0, 0.1, 0.3, 2 * lz - 6, 0xffffff, 0.05);
-      lit.box("ext_window", 0, y, s * (lz - 0.06), 2 * lx - 6, 0.3, 0.1, 0xffffff, 0.05);
+      lit.box("ext_window", s * (lx - 0.06), y, 0, 0.1, 0.3, 2 * lz - 6, STRIP_TINT, 0.05);
+      lit.box("ext_window", 0, y, s * (lz - 0.06), 2 * lx - 6, 0.3, 0.1, STRIP_TINT, 0.05);
     }
   }
   lit.build(g, { name: "hangarStrips", castShadow: false });
