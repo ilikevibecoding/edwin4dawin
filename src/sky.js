@@ -285,12 +285,13 @@ export class Sky {
       const night = 1 - this.dayFactor;
       const haze = new THREE.Color(0.78, 0.66, 0.52);
       const glow = new THREE.Color(0.55, 0.30, 0.14);   // sodium/neon city glow on the night horizon
-      u.uSkyHorizon.value.lerp(haze, co * 0.55).lerp(glow, co * night * 0.6);
-      u.uSkyVoid.value.lerp(haze, co * 0.4).lerp(glow, co * night * 0.35);
-      // the glow band uses the sunset machinery: a warm band all around the horizon (azimuth term is small at night)
+      // the haze itself stays the grey-brown smog of the old look (ACES already warms it a little); the glow is a
+      // band hugging the horizon through the sunset machinery (exp(-7|y|): gone ~15 degrees up), all around at night
+      u.uSkyHorizon.value.lerp(haze, co * 0.55).lerp(glow, co * night * 0.22);
+      u.uSkyVoid.value.lerp(haze, co * 0.4).lerp(glow, co * night * 0.12);
       u.uSunsetColor.value.lerp(glow, co * night);
-      u.uSunsetStrength.value = Math.max(u.uSunsetStrength.value, co * night * 0.7);
-      this.fogColor.lerp(haze, co * 0.45).lerp(glow, co * night * 0.4);
+      u.uSunsetStrength.value = Math.max(u.uSunsetStrength.value, co * night * 0.45);
+      this.fogColor.lerp(haze, co * 0.45).lerp(glow, co * night * 0.2);
       this.cloudMat.opacity *= 1 - co;      // the city sits above its cloud deck; towers punch through nothing
     }
   }
