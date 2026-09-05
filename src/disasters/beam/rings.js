@@ -29,7 +29,7 @@ void main() {
   float rad = r.y < 0.0 ? r.x : r.x + aEdge * r.y;
   float y = r.y < 0.0 ? r.w - aEdge * r.y : r.w;
   // curtains billow: the top edge undulates around the ring
-  if (r.y < 0.0) { float w = 0.85 + 0.15 * sin(aAngle * 9.0 + uTime * 1.7) * sin(aAngle * 4.0 - uTime * 1.1); y = r.w - aEdge * r.y * w; rad += aEdge * (w - 1.0) * 3.0; }
+  if (r.y < 0.0) { float w = 0.92 + 0.08 * sin(aAngle * 9.0 + uTime * 1.7) * sin(aAngle * 4.0 - uTime * 1.1); y = r.w - aEdge * r.y * w; rad += aEdge * (w - 1.0) * 6.0; }
   vec3 world = vec3(c.x + cos(aAngle) * rad, y, c.z + sin(aAngle) * rad);
   vEdge = aEdge; vAlpha = r.z; vColor = uColors[i]; vVert = r.y < 0.0 ? 1.0 : 0.0; vAngle = aAngle;
   gl_Position = projectionMatrix * viewMatrix * vec4(world, 1.0);
@@ -42,12 +42,15 @@ varying float vVert;
 varying float vAngle;
 varying vec4 vColor;
 void main() {
-  // flat rings fade at both edges; vertical bands are solid at the ground and fade towards the top
-  float a = mix(sin(vEdge * 3.14159), 1.0 - smoothstep(0.25, 1.0, vEdge), vVert) * vAlpha;
-  // dusty texture on curtains
+  // flat rings fade at both edges; vertical bands are dense up to about half their height and thin out to the top
+  float a = mix(sin(vEdge * 3.14159), 1.0 - smoothstep(0.6, 1.0, vEdge), vVert) * vAlpha;
+  // dusty texture on curtains: two scales of puffs, and a dust wall is darker at its foot and sunlit at the top
   float tex = 0.8 + 0.2 * sin(vAngle * 31.0 + vEdge * 6.0 + uTime * 2.3) * sin(vAngle * 13.0 - uTime * 1.3);
-  a *= mix(1.0, tex, vVert * vColor.w);
-  gl_FragColor = vec4(vColor.rgb * a, a * vColor.w);
+  tex *= 0.9 + 0.1 * sin(vAngle * 71.0 - vEdge * 9.0 + uTime * 3.1);
+  float k = vVert * vColor.w;
+  a *= mix(1.0, tex, k);
+  vec3 col = vColor.rgb * mix(1.0, 0.7 + 0.55 * vEdge, k);
+  gl_FragColor = vec4(col * a, a * vColor.w);
 }`;
 
 export class RingSet {

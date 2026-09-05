@@ -35,7 +35,7 @@ const CARVE_EVERY = 4;
 const WAVE_RESERVE = 150;
 const WAVE_SPEED = 18;            // average front speed (blocks/s); the front starts ~2x faster and eases out
 const MAX_DEBRIS_PER_BURST = 24;  // crater debris (~6 blocks per tick on average)
-const MAX_WAVE_DEBRIS_PER_TICK = 14;
+const MAX_WAVE_DEBRIS_PER_TICK = 10;
 const SMOKE_CAP = 2400;           // never push the shared particle pool above this
 const SPARK_CAP = 1300;
 const TRIB_START = 0.2;           // tributaries start igniting at this fraction of the charge...
@@ -383,7 +383,7 @@ export class OrbitalBeam extends Disaster {
     const dx = x + 0.5 - this.cx, dz = z + 0.5 - this.cz;
     const dd = Math.max(0.5, Math.sqrt(dx * dx + dz * dz));
     const sp = 8 + 16 * power + this.rng.next() * 5, up = 7 + 12 * power + this.rng.next() * 5;
-    this.throwBlock(x, y, z, id, (dx / dd) * sp + (this.rng.next() - 0.5) * 5, up, (dz / dd) * sp + (this.rng.next() - 0.5) * 5, 0.4 + this.rng.next() * 0.4, 5 + this.rng.next() * 3);
+    this.throwBlock(x, y, z, id, (dx / dd) * sp + (this.rng.next() - 0.5) * 5, up, (dz / dd) * sp + (this.rng.next() - 0.5) * 5, 0.4 + this.rng.next() * 0.4, 4.5 + this.rng.next() * 2.5);
   }
 
   throwBlock(x, y, z, id, vx, vy, vz, size, life) {
@@ -558,10 +558,10 @@ export class OrbitalBeam extends Disaster {
       const front = this.frontRadius(alpha, paused);
       const k = clamp01(front / this.waveR);
       const since = this.waveDoneTick < 0 ? 0 : clamp01((t - this.waveDoneTick / 20) / 4);
-      const fade = (1 - since) * (0.35 + 0.65 * (1 - k * k));
+      const fade = (1 - since) * (0.6 + 0.4 * (1 - k * k));
       if (fade > 0.01 && front > 1) {
-        rings.setColor(0, 0.66, 0.58, 0.48, 1); rings.set(0, front, -(5 + 10 * Math.sqrt(k)), fade, y);
-        rings.setColor(1, 0.8, 1, 0.75, 0); rings.set(1, front - 0.3, -(1.4 + 2 * k), 0.95 * (1 - k) * (1 - k) * (1 - since), y);
+        rings.setColor(0, 0.5, 0.4, 0.3, 1); rings.set(0, front, -(7 + 13 * Math.sqrt(k)), fade, y);
+        rings.setColor(1, 0.8, 1, 0.75, 0); rings.set(1, front - 0.3, -(1.4 + 2 * k), 0.9 * Math.pow(1 - k, 1.5) * (1 - since), y);
         rings.setColor(2, 0.78, 0.68, 0.56, 0.9); rings.set(2, Math.max(1, front - 3 - 6 * k), 5 + 7 * k, 0.55 * (1 - since) * (0.4 + 0.6 * k), this.impactY + 0.3 + 1.2 * k);
       } else { rings.hide(0); rings.hide(1); rings.hide(2); }
     } else { rings.hide(0); rings.hide(1); rings.hide(2); }
