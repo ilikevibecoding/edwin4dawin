@@ -518,7 +518,7 @@ export class NPCManager {
       npc.pos.y = h !== null ? h : Math.ceil(ny);
       const impact = Math.min(1, -a.vy / 25);
       npc.hurt = 0.5; npc.health = Math.max(1, npc.health - Math.round(impact * 8));
-      npc.stunned = 1.5 + impact * 3;
+      npc.stunned = npc.swept > 0 ? 0.4 : 1.5 + impact * 3; // wave-thrown: back on their feet before the water takes them
       npc.air = null;
       npc.airSpin = 0;
       this.audio.step('gravel', npc.pos, 1.5);
@@ -535,7 +535,12 @@ export class NPCManager {
     if (npc.talkCooldown > 0) npc.talkCooldown -= dt;
     if (npc.shoutCooldown > 0) npc.shoutCooldown -= dt;
     if (npc.air) { this.updateAirborne(npc, dt); return; }
-    if (npc.stunned > 0) { npc.stunned -= dt; npc.state = 'idle'; npc.idleTimer = Math.max(npc.idleTimer, 0.2); return; }
+    if (npc.stunned > 0) {
+      npc.stunned -= dt; npc.state = 'idle'; npc.idleTimer = Math.max(npc.idleTimer, 0.2);
+      // a stunned body in water still floats (falls through to the swimming block) instead of lying on the flooded street
+      if (this.world.getBlock(Math.floor(npc.pos.x), Math.floor(npc.pos.y + 0.2), Math.floor(npc.pos.z)) === B.WATER) npc.swept = Math.max(npc.swept || 0, 2);
+      else return;
+    }
     if (npc.panic && this.tickCount > npc.panicUntil) { npc.panic = false; npc.trapped = 0; }
     // water: float at the surface and wade slowly; shout for help when stuck
     const feet = this.world.getBlock(Math.floor(npc.pos.x), Math.floor(npc.pos.y + 0.2), Math.floor(npc.pos.z));

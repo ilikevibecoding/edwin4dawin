@@ -271,7 +271,7 @@ export class AnimalManager {
     if (air.vy < 0 && (solidAt(a.pos.x, ny, a.pos.z) || ny < 1)) {
       const h = standHeight(w, Math.floor(a.pos.x), Math.floor(a.pos.y + 0.01), Math.floor(a.pos.z));
       a.pos.y = h !== null ? h : Math.ceil(ny);
-      a.air = null; a.airSpin = 0; a.stunned = 2 + a.rng.range(0, 2);
+      a.air = null; a.airSpin = 0; a.stunned = (a.swept || 0) > 0 ? 0.4 : 2 + a.rng.range(0, 2);
       if (a.spec.sound) this.audio[a.spec.sound](a.pos);
       return;
     }
@@ -291,7 +291,7 @@ export class AnimalManager {
       if (far && !this.alertInfo) continue;
       const dt = 0.05;
       if (a.air) { this.updateAirborne(a, dt); continue; }
-      if (a.stunned > 0) { a.stunned -= dt; continue; }
+      if (a.stunned > 0) { a.stunned -= dt; if (this.world.getBlock(Math.floor(a.pos.x), Math.floor(a.pos.y + 0.2), Math.floor(a.pos.z)) !== B.WATER) continue; }
       if (a.panic && performance.now() > a.panicUntil) a.panic = false;
       // float in water (checked at body height too, so animals standing in pens on fence blocks still surface)
       const feet = this.world.getBlock(Math.floor(a.pos.x), Math.floor(a.pos.y + 0.2), Math.floor(a.pos.z));
