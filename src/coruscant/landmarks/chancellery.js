@@ -872,7 +872,7 @@ function forecourt(bp) {
   }
   // pavements around the podium and along the lot edges
   for (let z = 2; z <= 62; z += 4) for (const x of [2, 78]) { if (z % 12 === 2) lampPost(bp, x, y, z, 3, LAMP); else planter(bp, x, y, z, (z % 8) ? B.OAK_LEAVES : B.SPRUCE_LEAVES); }
-  for (let x = 8; x <= 72; x += 4) { if (x % 16 === 8) lampPost(bp, x, y, 0, 3, LAMP); else if (x < 36 || x > 45) planter(bp, x, y, 0, B.SPRUCE_LEAVES); }
+  for (let x = 8; x <= 72; x += 4) { if (x >= 36 && x <= 45) continue; if (x % 16 === 8) lampPost(bp, x, y, 0, 3, LAMP); else planter(bp, x, y, 0, B.SPRUCE_LEAVES); }   // nothing in the rear door's approach
   for (let x = 8; x <= 72; x += 8) for (const z of [64, 100]) if (x < 26 || x > 55) { totem(bp, x, y, z); }
   // rear door canopy
   bp.fill(38, 4, 0, 43, 4, 1, STEEL); bp.set(40, 4, 1, GLOW); bp.set(41, 4, 1, GLOW); for (const x of [38, 43]) bp.fill(x, 1, 1, x, 3, 1, CHR);

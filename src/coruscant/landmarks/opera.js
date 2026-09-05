@@ -64,8 +64,10 @@ function doorway(bp, x0, z0, x1, z1, y, h = 3, frame = TRIM, lintel = GLOW) {
 function lampPost(bp, x, y, z, h = 2, id = B.CITY_LAMP) { bp.fill(x, y, z, x, y + h - 1, z, BARS); bp.set(x, y + h, z, id); }
 
 const DRESS = [B.SHELF, B.CHEST, B.CRATE, B.BARREL, B.BOOKSHELF, B.CONSOLE];
-function dress(r, rng) {
-  for (let u = 1; u < r.w - 1; u += 2) if (r.free(u, r.back) && r.empty(u, 0, r.back) && r.empty(u, 1, r.back)) { const id = rng.pick(DRESS); r.put(u, 0, r.back, id === B.CONSOLE ? BLACK : id); if (id === B.SHELF || id === B.CONSOLE || id === B.BOOKSHELF) r.put(u, 1, r.back, id); }
+const CIVIC = new Set(['courtroom', 'control_room', 'executive_office', 'meeting_room', 'lobby_atrium', 'archive', 'library', 'medbay', 'clinic_ward', 'council_chamber', 'holo_theatre', 'observation_deck', 'gallery', 'museum_hall', 'lounge', 'restaurant', 'cafeteria', 'open_plan_office']);
+// civic rooms get shelves, consoles, benches, planters and holo boards; the crate-and-barrel filler is for stores
+function dress(r, rng, civic = false) {
+  for (let u = 1; u < r.w - 1; u += 2) if (r.free(u, r.back) && r.empty(u, 0, r.back) && r.empty(u, 1, r.back)) { const id = rng.pick(civic ? DRESS.filter((d) => d !== B.CRATE && d !== B.BARREL && d !== B.CHEST) : DRESS); r.put(u, 0, r.back, id === B.CONSOLE ? BLACK : id); if (id === B.SHELF || id === B.CONSOLE || id === B.BOOKSHELF) r.put(u, 1, r.back, id); }
   for (let v = 2; v < r.back; v += 3) for (const u of [0, r.w - 1]) if (r.free(u, v) && r.empty(u, 0, v) && r.empty(u, 1, v)) { if ((u + v) % 4 === 0) r.planter(u, v, B.OAK_LEAVES); else { r.put(u, 0, v, TRIM); r.put(u, 1, v, (v % 2) ? HOLO : GLOW); } }
   if (r.w >= 10 && r.d >= 8) {
     let k = 0;
@@ -73,7 +75,7 @@ function dress(r, rng) {
       if (!r.free(u, v) || !r.empty(u, 0, v) || !r.free(u + 1, v) || !r.empty(u + 1, 0, v)) continue;
       const kind = (k++ + u) % 4;
       if (kind === 0) { r.table(u, v); r.table(u + 1, v); r.seat(u - 1, v); r.seat(u + 2, v); r.seat(u, v + 1); r.seat(u + 1, v - 1); }
-      else if (kind === 1) { r.put(u, 0, v, B.CRATE); r.put(u, 1, v, B.CRATE); r.put(u + 1, 0, v, B.BARREL); r.put(u, 0, v + 1, B.CHEST); }
+      else if (kind === 1) { if (civic) { r.table(u, v); r.table(u + 1, v); r.seat(u, v + 1); r.seat(u + 1, v + 1); r.put(u - 1, 0, v, B.SHELF); } else { r.put(u, 0, v, B.CRATE); r.put(u, 1, v, B.CRATE); r.put(u + 1, 0, v, B.BARREL); r.put(u, 0, v + 1, B.CHEST); } }
       else if (kind === 2) { r.fill(u, 0, v, u, 2, v + 1, TRIM); r.put(u, 3, v, GLOW); r.put(u + 1, 0, v, B.SHELF); r.put(u + 1, 1, v, B.SHELF); }
       else { r.planter(u, v, B.OAK_LEAVES); r.seat(u + 1, v); r.seat(u, v + 1); r.put(u + 1, 0, v + 1, RWOOL); }
     }
@@ -83,7 +85,7 @@ function template(bp, rng, name, kind, x0, z0, x1, z1, y, side, doorU, doorW = 2
   carve(bp, x0, z0, x1, z1, y, floor);
   const r = new Room(bp, { x0, z0, x1, z1, y, h: 4, side, doorU, doorW, backDoorU }, kind, {});
   (ROOMS[name] || ROOMS.storage).fn(r, rng, {});
-  if (r.w * r.d >= 60) dress(r, rng);
+  if (r.w * r.d >= 60) dress(r, rng, CIVIC.has(name) || CIVIC.has(kind));
   r.ceilingLights(4, lights); r.finalize();
   bp.room(kind, x0 - 1, y, z0 - 1, x1 + 1, z1 + 1);
   return r;
@@ -212,6 +214,18 @@ function auditorium(bp, rng) {
       bp.set(x, y - 1, z, stage ? B.OAK_PLANKS : CARPET);
     }
   }
+  // the horseshoe wall: red wool panels between gold bands at the balcony levels with glow strips, so the house reads
+  // as a red-and-gold opera interior instead of the bare dark shell
+  for (let z = STAGE.z1 + 2; z <= 53; z++) {
+    const hw = halfW(z);
+    for (const wx of [ELL.cx - hw - 1, ELL.cx + hw]) {
+      for (let yy = y; yy <= 46; yy++) {
+        if (bp.isAir(wx, yy, z)) continue;
+        const band = yy === 34 || yy === 39 || yy === 45;
+        bp.set(wx, yy, z, band ? ((z % 4 === 0) ? GLOW : GOLD) : ((z % 6 === 0) ? GOLD : RWOOL));
+      }
+    }
+  }
   // proscenium wall with the opening, red curtains and gold frame
   for (let x = ELL.cx - halfW(STAGE.z1 + 1); x <= ELL.cx + halfW(STAGE.z1 + 1) - 1; x++) for (let yy = y; yy <= 46; yy++) bp.set(x, yy, STAGE.z1 + 1, DARK);
   bp.fill(34, y, STAGE.z1 + 1, 60, y + 13, STAGE.z1 + 1, AIR);
@@ -279,12 +293,24 @@ function auditorium(bp, rng) {
   const bx0 = 70, bx1 = 76, bz0 = 32, bz1 = 38, by = 31;
   bp.fill(bx0 - 1, by - 1, bz0 - 1, bx1 + 1, by + 5, bz1 + 1, GOLD);
   carve(bp, bx0, bz0, bx1, bz1, by, RWOOL, 5);
+  // red walls with gold pilasters every third block and a gold cornice, the gold shell shows only as trim
+  for (let yy = by; yy <= by + 3; yy++) {
+    for (let z = bz0; z <= bz1; z++) bp.set(bx1 + 1, yy, z, ((z - bz0) % 3 === 0 || yy === by + 3) ? GOLD : RWOOL);
+    for (let x = bx0; x <= bx1; x++) for (const z of [bz0 - 1, bz1 + 1]) bp.set(x, yy, z, ((x - bx0) % 3 === 0 || yy === by + 3) ? GOLD : RWOOL);
+  }
   bp.fill(bx0 - 1, by, bz0, bx0 - 1, by + 1, bz1, AIR);                                  // open front toward the stage side
   bp.fill(bx0 - 1, by, bz0, bx0 - 1, by, bz1, BARS); bp.fill(bx0 - 1, by + 2, bz0, bx0 - 1, by + 3, bz1, AIR);
-  for (let z = bz0 + 1; z <= bz1 - 1; z += 2) { bp.set(bx0 + 1, by, z, RWOOL); bp.spot(bx0 + 1, by, z, 'seat'); bp.set(bx0 + 3, by, z, RWOOL); bp.spot(bx0 + 3, by, z, 'seat'); }
-  bp.set(bx0 + 2, by, bz0 + 3, GOLD); bp.set(bx0 + 2, by + 1, bz0 + 3, SLAB); bp.spot(bx0 + 2, by + 1, bz0 + 3, 'seat');
-  bp.set(bx1, by, bz0 + 1, B.TABLE); bp.set(bx1, by, bz1 - 1, B.CHEST); bp.set(bx1 - 1, by + 4, bz0 + 3, GLOW); bp.set(bx0 + 2, by + 4, bz0 + 1, B.LANTERN); bp.set(bx0 + 2, by + 4, bz1 - 1, B.LANTERN);
-  for (let z = bz0; z <= bz1; z += 2) bp.set(bx1 + 1, by + 2, z, HOLO);
+  // the Chancellor's throne on a gold dais at the centre, two aides' seats, drapes down both sides, a refreshment table
+  // with gold goblets, holo emblem behind, guards at the door
+  for (let z = bz0; z <= bz1; z++) bp.set(bx0, by - 1, z, GOLD);
+  bp.fill(bx0 + 2, by, bz0 + 2, bx0 + 3, by, bz0 + 4, GOLD);
+  bp.set(bx0 + 2, by + 1, bz0 + 3, RWOOL); bp.set(bx0 + 3, by + 1, bz0 + 3, GOLD); bp.set(bx0 + 3, by + 2, bz0 + 3, GOLD); bp.spot(bx0 + 2, by + 1, bz0 + 3, 'seat');
+  for (const z of [bz0 + 1, bz1 - 1]) { bp.set(bx0 + 1, by, z, RWOOL); bp.spot(bx0 + 1, by, z, 'seat'); }
+  for (const z of [bz0, bz1]) for (let yy = by; yy <= by + 4; yy++) bp.set(bx0 + 1, yy, z, (yy % 2) ? RWOOL : GOLD);   // drapes
+  bp.set(bx1, by, bz0 + 2, B.TABLE); bp.set(bx1, by, bz0 + 3, B.TABLE); bp.set(bx1, by + 1, bz0 + 2, GOLD); bp.set(bx1, by, bz0 + 4, B.TABLE); bp.set(bx1, by + 1, bz0 + 4, GOLD);
+  bp.fill(bx1 + 1, by + 1, bz0 + 2, bx1 + 1, by + 3, bz0 + 4, HOLO); bp.set(bx1 + 1, by + 2, bz0 + 3, GOLD);
+  bp.fill(bx0 + 1, by + 4, bz0 + 1, bx1 - 1, by + 4, bz1 - 1, RWOOL); for (let z = bz0 + 1; z <= bz1 - 1; z += 2) bp.set(bx0 + 3, by + 4, z, GLOW);
+  bp.set(bx1 - 1, by + 4, bz0 + 3, GLOW); bp.work(bx1 - 1, by, bz0 + 1, 'red guard'); bp.work(bx1 - 1, by, bz1 - 1, 'red guard');
   bp.room('chancellor_box', bx0 - 1, by, bz0 - 1, bx1 + 1, bz1 + 1);
   // antechamber behind the box and the private corridor south to the wing at walk 31
   carve(bp, bx1 + 2, bz0, bx1 + 7, bz1, by, RWOOL);

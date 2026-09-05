@@ -133,7 +133,7 @@ function chamber(bp, rng) {
     if (r > R_HALL) continue;
     const top = Math.round(domeH(r + 2.2)) - 1;
     bp.fill(x, 1, z, x, top, z, AIR);
-    bp.set(x, 0, z, (Math.floor(r) % 4 === 0) ? B.PANEL_BLACK : (r < PODIUM_R + 2 ? GLOW : STONE));
+    bp.set(x, 0, z, (Math.floor(r) % 4 === 0) ? ((x + z) % 3 === 0 ? GLOW : B.PANEL_BLACK) : (r < PODIUM_R + 2 ? GLOW : STONE));
     // dome ceiling lights above the hall (every 6th cell on the inner surface)
     if (x % 6 === 0 && z % 6 === 0 && r > 6) bp.set(x, top + 1, z, GLOW);
   }

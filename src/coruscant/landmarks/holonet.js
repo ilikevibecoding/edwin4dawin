@@ -53,8 +53,10 @@ function doorway(bp, x0, z0, x1, z1, y, h = 3, frame = TRIM, lintel = GLOW) {
 function lampPost(bp, x, y, z, h = 2, id = B.CITY_LAMP) { bp.fill(x, y, z, x, y + h - 1, z, BARS); bp.set(x, y + h, z, id); }
 
 const DRESS = [B.SHELF, B.CRATE, B.BARREL, B.CHEST, B.CONSOLE, B.BOOKSHELF];
-function dress(r, rng) {
-  for (let u = 1; u < r.w - 1; u += 2) if (r.free(u, r.back) && r.empty(u, 0, r.back) && r.empty(u, 1, r.back)) { const id = rng.pick(DRESS); r.put(u, 0, r.back, id === B.CONSOLE ? BLACK : id); if (id === B.SHELF || id === B.CONSOLE || id === B.BOOKSHELF) r.put(u, 1, r.back, id); }
+const CIVIC = new Set(['courtroom', 'control_room', 'executive_office', 'meeting_room', 'lobby_atrium', 'archive', 'library', 'medbay', 'clinic_ward', 'council_chamber', 'holo_theatre', 'observation_deck', 'gallery', 'museum_hall', 'lounge', 'restaurant', 'cafeteria', 'open_plan_office']);
+// civic rooms get shelves, consoles, benches, planters and holo boards; the crate-and-barrel filler is for stores
+function dress(r, rng, civic = false) {
+  for (let u = 1; u < r.w - 1; u += 2) if (r.free(u, r.back) && r.empty(u, 0, r.back) && r.empty(u, 1, r.back)) { const id = rng.pick(civic ? DRESS.filter((d) => d !== B.CRATE && d !== B.BARREL && d !== B.CHEST) : DRESS); r.put(u, 0, r.back, id === B.CONSOLE ? BLACK : id); if (id === B.SHELF || id === B.CONSOLE || id === B.BOOKSHELF) r.put(u, 1, r.back, id); }
   for (let v = 2; v < r.back; v += 3) for (const u of [0, r.w - 1]) if (r.free(u, v) && r.empty(u, 0, v) && r.empty(u, 1, v)) { if ((u + v) % 4 === 0) r.planter(u, v, B.OAK_LEAVES); else { r.put(u, 0, v, BLACK); r.put(u, 1, v, (v % 2) ? HOLO : BLUE); } }
   if (r.w >= 10 && r.d >= 8) {
     let k = 0;
@@ -63,7 +65,7 @@ function dress(r, rng) {
       const kind = (k++ + u) % 4;
       if (kind === 0) { r.table(u, v); r.table(u + 1, v); r.seat(u - 1, v); r.seat(u + 2, v); r.seat(u, v + 1); r.seat(u + 1, v - 1); }
       else if (kind === 1) { r.put(u, 0, v, BLACK); r.put(u, 1, v, B.CONSOLE); r.put(u + 1, 0, v, BLACK); r.put(u + 1, 1, v, B.CONSOLE); r.seat(u, v + 1); r.seat(u + 1, v + 1); }
-      else if (kind === 2) { r.fill(u, 0, v, u, 2, v + 1, TRIM); r.put(u, 3, v, GLOW); r.put(u + 1, 0, v, B.CRATE); r.put(u + 1, 0, v + 1, B.BARREL); }
+      else if (kind === 2) { r.fill(u, 0, v, u, 2, v + 1, TRIM); r.put(u, 3, v, GLOW); if (civic) { r.seat(u + 1, v); r.seat(u + 1, v + 1); } else { r.put(u + 1, 0, v, B.CRATE); r.put(u + 1, 0, v + 1, B.BARREL); } }
       else { r.fill(u, 0, v, u, 2, v + 2, BLACK); r.put(u, 1, v + 1, HOLO); r.seat(u + 1, v + 1); r.seat(u - 1, v + 1); }
     }
   }
@@ -72,7 +74,7 @@ function template(bp, rng, name, kind, x0, z0, x1, z1, y, side, doorU, doorW = 2
   carve(bp, x0, z0, x1, z1, y, floor);
   const r = new Room(bp, { x0, z0, x1, z1, y, h: 4, side, doorU, doorW }, kind, {});
   (ROOMS[name] || ROOMS.storage).fn(r, rng, {});
-  if (r.w * r.d >= 60) dress(r, rng);
+  if (r.w * r.d >= 60) dress(r, rng, CIVIC.has(name) || CIVIC.has(kind));
   r.ceilingLights(4, lights); r.finalize();
   bp.room(kind, x0 - 1, y, z0 - 1, x1 + 1, z1 + 1);
   return r;
@@ -263,12 +265,23 @@ function podiumFloor(bp, rng, f, plan) {
 // ---------------------------------------------------------------------------------------------------- exterior
 // a whole-wall screen: chrome frame, holo panels with lit "pixel" rows and blue highlights so it reads as a live
 // broadcast from across the city
-function screenBlock(a, y, blue) { return ((a + y) % 7 === 0) ? BLUE : ((y % 5 === 2 && a % 3 !== 0) ? GLOW : (blue && (a * 3 + y) % 11 === 0) ? LIT : HOLO); }
+// a "broadcast still" as bold lit shapes: a glowing planet disc with a blue orbit ring on a dark holo field, caption
+// bars of lit windows underneath - contiguous high-contrast panels that read from across the city and at night
+function screenBlock(u, v, w, h) {
+  const cx = w * 0.5, cy = h * 0.6, r = Math.min(w, h) * 0.26;
+  const d = Math.hypot(u - cx, v - cy);
+  if (d <= r) return ((u + v) % 5 === 0) ? BLUE : GLOW;                       // the planet
+  if (Math.abs(d - r * 1.45) < 0.9 && Math.abs(v - cy) < r * 0.55) return BLUE;   // orbit ring
+  if (v < h * 0.22 && v > h * 0.06 && u > w * 0.12 && u < w * 0.88 && (Math.floor(u / 3) % 2 === 0)) return LIT;   // caption bars
+  return ((u * 7 + v * 3) % 23 === 0) ? BLUE : HOLO;
+}
 function billboard(bp, x0, y0, x1, y1, z, blue = false) {
-  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) bp.set(x, y, z, (x === x0 || x === x1 || y === y0 || y === y1) ? TRIM : screenBlock(x, y, blue));
+  const w = x1 - x0 + 1, h = y1 - y0 + 1;
+  for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) bp.set(x, y, z, (x === x0 || x === x1 || y === y0 || y === y1) ? TRIM : screenBlock(x - x0, y - y0, w, h));
 }
 function billboardX(bp, z0, y0, z1, y1, x) {
-  for (let z = z0; z <= z1; z++) for (let y = y0; y <= y1; y++) bp.set(x, y, z, (z === z0 || z === z1 || y === y0 || y === y1) ? TRIM : screenBlock(z, y, true));
+  const w = z1 - z0 + 1, h = y1 - y0 + 1;
+  for (let z = z0; z <= z1; z++) for (let y = y0; y <= y1; y++) bp.set(x, y, z, (z === z0 || z === z1 || y === y0 || y === y1) ? TRIM : screenBlock(z - z0, y - y0, w, h));
 }
 function facade(bp, box, yBase, yTop, pilaster = 6) {
   const { x0, z0, x1, z1 } = box;

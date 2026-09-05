@@ -331,7 +331,7 @@ export const LANDMARK = {
     for (const [x, z, side] of [[50, 91, 'S'], [50, 100, 'N'], [92, 91, 'S'], [92, 96, 'N'], [50, 35, 'S'], [50, 40, 'N'], [92, 35, 'S'], [92, 40, 'N']]) doorway(bp, x, z, x + 1, z, 6, 3, TRIM, BLUE);
     // steam vents and grime on the street walls, wall neon strips at the second-floor line along the main street
     for (const b of built) {
-      for (let z = b.z0 + 3; z < b.z1 - 2; z += 7) { if (b.x1 === MAIN.x0 - 5 || b.x1 === 61) bp.set(b.x1, 2, z, B.VENT); if (b.x0 === 82) bp.set(b.x0, 2, z, B.VENT); }
+      for (let z = b.z0 + 3; z < b.z1 - 2; z += 7) { if ((b.x1 === MAIN.x0 - 5 || b.x1 === 61) && !bp.isAir(b.x1, 2, z) && !bp.isAir(b.x1, 1, z)) bp.set(b.x1, 2, z, B.VENT); if (b.x0 === 82 && !bp.isAir(b.x0, 2, z) && !bp.isAir(b.x0, 1, z)) bp.set(b.x0, 2, z, B.VENT); }   // never over a doorway
     }
     for (let z = 6; z < bp.d - 6; z++) { if (z % 9 < 6) { bp.set(MAIN.x0 - 5, 9, z, (z % 2) ? BLUE : HOLO); bp.set(MAIN.x1 + 5, 9, z, (z % 2) ? RED : HOLO); } }
     deck(bp, rng, lot);

@@ -53,8 +53,10 @@ function doorway(bp, x0, z0, x1, z1, y, h = 3, frame = TRIM, lintel = GLOW) {
 function lampPost(bp, x, y, z, h = 2, id = B.CITY_LAMP) { bp.fill(x, y, z, x, y + h - 1, z, BARS); bp.set(x, y + h, z, id); }
 
 const DRESS = [B.SHELF, B.CHEST, B.CONSOLE, B.CRATE, B.BOOKSHELF, B.BARREL];
-function dress(r, rng) {
-  for (let u = 1; u < r.w - 1; u += 2) if (r.free(u, r.back) && r.empty(u, 0, r.back) && r.empty(u, 1, r.back)) { const id = rng.pick(DRESS); r.put(u, 0, r.back, id === B.CONSOLE ? BLACK : id); if (id === B.SHELF || id === B.CONSOLE || id === B.BOOKSHELF) r.put(u, 1, r.back, id); }
+const CIVIC = new Set(['courtroom', 'control_room', 'executive_office', 'meeting_room', 'lobby_atrium', 'archive', 'library', 'medbay', 'clinic_ward', 'council_chamber', 'holo_theatre', 'observation_deck', 'gallery', 'museum_hall', 'lounge', 'restaurant', 'cafeteria', 'open_plan_office']);
+// civic rooms get shelves, consoles, benches, planters and holo boards; the crate-and-barrel filler is for stores
+function dress(r, rng, civic = false) {
+  for (let u = 1; u < r.w - 1; u += 2) if (r.free(u, r.back) && r.empty(u, 0, r.back) && r.empty(u, 1, r.back)) { const id = rng.pick(civic ? DRESS.filter((d) => d !== B.CRATE && d !== B.BARREL && d !== B.CHEST) : DRESS); r.put(u, 0, r.back, id === B.CONSOLE ? BLACK : id); if (id === B.SHELF || id === B.CONSOLE || id === B.BOOKSHELF) r.put(u, 1, r.back, id); }
   for (let v = 2; v < r.back; v += 3) for (const u of [0, r.w - 1]) if (r.free(u, v) && r.empty(u, 0, v) && r.empty(u, 1, v)) { if ((u + v) % 4 === 0) r.planter(u, v, B.OAK_LEAVES); else { r.put(u, 0, v, TRIM); r.put(u, 1, v, (v % 2) ? HOLO : BLUE); } }
   if (r.w >= 10 && r.d >= 8) {
     let k = 0;
@@ -72,7 +74,7 @@ function template(bp, rng, name, kind, x0, z0, x1, z1, y, side, doorU, doorW = 2
   carve(bp, x0, z0, x1, z1, y, floor);
   const r = new Room(bp, { x0, z0, x1, z1, y, h: 4, side, doorU, doorW }, kind, {});
   (ROOMS[name] || ROOMS.storage).fn(r, rng, {});
-  if (r.w * r.d >= 60) dress(r, rng);
+  if (r.w * r.d >= 60) dress(r, rng, CIVIC.has(name) || CIVIC.has(kind));
   r.ceilingLights(4, lights); r.finalize();
   bp.room(kind, x0 - 1, y, z0 - 1, x1 + 1, z1 + 1);
   return r;
@@ -144,6 +146,8 @@ function morgue(bp, rng, x0, z0, x1, z1, y, side, doorU) {
 function bactaHall(bp, rng, x0, z0, x1, z1, y) {
   carve(bp, x0, z0, x1, z1, y, STONE, 14);
   patternFloor(bp, x0, z0, x1, z1, y - 1, STONE, BWOOL, 5);
+  for (let x = x0 + 2; x <= x1 - 2; x += 5) for (let z = z0 + 2; z <= z1 - 2; z += 5) bp.set(x, y - 1, z, GLOW);   // lit floor grid under the tanks
+  for (let z = z0 + 2; z <= z1 - 2; z += 4) for (const yy of [y + 3, y + 8]) { bp.set(x0 - 1, yy, z, BLUE); bp.set(x1 + 1, yy, z, GLOW); }
   const tanks = [];
   for (let k = 0; k < 6; k++) { const cx = x0 + 5 + (k % 2) * 10, cz = z0 + 7 + Math.floor(k / 2) * 16; tanks.push([cx, cz]); }
   for (const [cx, cz] of tanks) {
@@ -229,8 +233,14 @@ function ambulancePad(bp) {
 }
 function roofGarden(bp) {
   const y = GARDEN_Y, x0 = TOWER.x0, z0 = TOWER.z0, x1 = TOWER.x1, z1 = TOWER.z1;
-  patternFloor(bp, x0, z0, x1, z1, y - 1, WHITE, STONE, 5);
+  // lawns between stone paths (a 6-grid), hedges and trees in the lawn squares
+  for (let x = x0 + 1; x <= x1 - 1; x++) for (let z = z0 + 1; z <= z1 - 1; z++) {
+    const path = (x - x0) % 6 === 0 || (z - z0) % 6 === 0 || (x >= 37 && x <= 47 && z >= 44 && z <= 56) || (x >= STAIR.x - 1 && x <= STAIR.x + 8 && z >= STAIR.z - 1 && z <= STAIR.z + 12) || (x >= 52 && x <= 61 && z >= 36 && z <= 41);
+    bp.set(x, y - 1, z, path ? ((x + z) % 2 ? WHITE : STONE) : B.GRASS);
+    if (!path && (x + z) % 7 === 0) bp.set(x, y, z, (x % 3) ? B.POPPY : B.DANDELION);
+  }
   bp.walls(x0, y, z0, x1, y, z1, TRIM); bp.walls(x0, y + 1, z0, x1, y + 1, z1, BARS);
+  for (let x = x0 + 4; x <= x1 - 4; x += 12) for (let z = z0 + 4; z <= z1 - 4; z += 12) { if (x >= STAIR.x - 2 && x <= STAIR.x + 9 && z >= STAIR.z - 2 && z <= STAIR.z + 13) continue; if (x >= 51 && x <= 62 && z >= 35 && z <= 42) continue; bp.fill(x, y, z, x, y + 2, z, B.OAK_LOG); bp.fill(x - 1, y + 2, z - 1, x + 1, y + 4, z + 1, B.OAK_LEAVES); bp.set(x, y + 5, z, B.OAK_LEAVES); }
   for (let x = x0 + 3; x <= x1 - 3; x += 6) for (let z = z0 + 3; z <= z1 - 3; z += 6) {
     if (x >= STAIR.x - 1 && x <= STAIR.x + 8 && z >= STAIR.z - 1 && z <= STAIR.z + 12) continue;
     if (x >= 52 && x <= 61 && z >= 36 && z <= 41) continue;

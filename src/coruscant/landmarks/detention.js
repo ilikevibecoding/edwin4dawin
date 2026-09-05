@@ -61,8 +61,10 @@ function lampPost(bp, x, y, z, h = 2, id = B.CITY_LAMP) { bp.fill(x, y, z, x, y 
 // Extra dressing for big rooms so the library templates (sized for tower floors) do not leave them bare:
 // lockers / crates / consoles along the back wall, wall lights and planters on the sides, furniture islands
 const DRESS = [B.SHELF, B.CRATE, B.BARREL, B.CHEST, B.CONSOLE, B.IRON_BLOCK];
-function dress(r, rng) {
-  for (let u = 1; u < r.w - 1; u += 2) if (r.free(u, r.back) && r.empty(u, 0, r.back) && r.empty(u, 1, r.back)) { const id = rng.pick(DRESS); r.put(u, 0, r.back, id === B.CONSOLE ? BLACK : id); if (id === B.SHELF || id === B.CONSOLE) r.put(u, 1, r.back, id); }
+const CIVIC = new Set(['courtroom', 'control_room', 'executive_office', 'meeting_room', 'lobby_atrium', 'archive', 'library', 'medbay', 'clinic_ward', 'council_chamber', 'holo_theatre', 'observation_deck', 'gallery', 'museum_hall', 'lounge', 'restaurant', 'cafeteria', 'open_plan_office']);
+// civic rooms get shelves, consoles, benches, planters and holo boards; the crate-and-barrel filler is for stores
+function dress(r, rng, civic = false) {
+  for (let u = 1; u < r.w - 1; u += 2) if (r.free(u, r.back) && r.empty(u, 0, r.back) && r.empty(u, 1, r.back)) { const id = rng.pick(civic ? DRESS.filter((d) => d !== B.CRATE && d !== B.BARREL && d !== B.CHEST) : DRESS); r.put(u, 0, r.back, id === B.CONSOLE ? BLACK : id); if (id === B.SHELF || id === B.CONSOLE) r.put(u, 1, r.back, id); }
   for (let v = 2; v < r.back; v += 3) for (const u of [0, r.w - 1]) if (r.free(u, v) && r.empty(u, 0, v) && r.empty(u, 1, v)) { if ((u + v) % 4 === 0) r.planter(u, v, B.OAK_LEAVES); else { r.put(u, 0, v, BLACK); r.put(u, 1, v, (v % 2) ? HOLO : RED); } }
   if (r.w >= 10 && r.d >= 8) {
     let k = 0;
@@ -70,7 +72,7 @@ function dress(r, rng) {
       if (!r.free(u, v) || !r.empty(u, 0, v) || !r.free(u + 1, v) || !r.empty(u + 1, 0, v)) continue;
       const kind = (k++ + u) % 4;
       if (kind === 0) { r.table(u, v); r.table(u + 1, v); r.seat(u - 1, v); r.seat(u + 2, v); r.seat(u, v + 1); r.seat(u + 1, v - 1); }
-      else if (kind === 1) { r.put(u, 0, v, B.CRATE); r.put(u, 1, v, B.CRATE); r.put(u + 1, 0, v, B.BARREL); r.put(u, 0, v + 1, B.CHEST); }
+      else if (kind === 1) { if (civic) { r.table(u, v); r.table(u + 1, v); r.seat(u, v + 1); r.seat(u + 1, v + 1); r.put(u - 1, 0, v, B.SHELF); } else { r.put(u, 0, v, B.CRATE); r.put(u, 1, v, B.CRATE); r.put(u + 1, 0, v, B.BARREL); r.put(u, 0, v + 1, B.CHEST); } }
       else if (kind === 2) { r.fill(u, 0, v, u, 2, v + 1, TRIM); r.put(u, 3, v, GLOW); r.put(u + 1, 0, v, BLACK); r.put(u + 1, 1, v, B.CONSOLE); r.seat(u + 1, v + 1); }
       else { r.fill(u, 0, v, u, 2, v + 2, BLACK); r.put(u, 1, v + 1, HOLO); r.seat(u + 1, v + 1); r.seat(u - 1, v + 1); }
     }
@@ -81,7 +83,7 @@ function template(bp, rng, name, kind, x0, z0, x1, z1, y, side, doorU, doorW = 2
   carve(bp, x0, z0, x1, z1, y, floor);
   const r = new Room(bp, { x0, z0, x1, z1, y, h: 4, side, doorU, doorW }, kind, {});
   (ROOMS[name] || ROOMS.storage).fn(r, rng, {});
-  if (r.w * r.d >= 60) dress(r, rng);
+  if (r.w * r.d >= 60) dress(r, rng, CIVIC.has(name) || CIVIC.has(kind));
   r.ceilingLights(4, lights); r.finalize();
   bp.room(kind, x0 - 1, y, z0 - 1, x1 + 1, z1 + 1);
   return r;

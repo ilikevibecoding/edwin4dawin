@@ -388,6 +388,8 @@ function fountains(bp, rng) {
   // low light: lantern posts at every path crossing, lit pool rims, glow bands on the walls and the spire piers at
   // y 4 and y 12 (the 22-block ceiling is too far for its lights to reach the ground), flowers on the lawns
   for (let x = x0; x <= x1; x += 12) for (let z = z0; z <= z1; z += 14) { const px = x + 2, pz = z + 2; if (px < x1 && pz < z1 && !inCorner(px, pz)) lamp(bp, px, y0, pz, 3, B.LANTERN); }
+  for (let x = x0 + 8; x <= x1 - 2; x += 12) for (let z = z0 + 9; z <= z1 - 2; z += 14) { if (!inCorner(x, z) && bp.isAir(x, y0, z) && bp.get(x, 0, z) !== B.WATER) lamp(bp, x, y0, z, 3, B.LANTERN); }
+  for (let x = x0; x <= x1; x += 6) for (let z = z0; z <= z1; z += 7) if (!inCorner(x, z) && bp.get(x, 0, z) === STONE2) bp.set(x, 0, z, GLOW);   // lit path tiles
   for (let x = x0 + 4; x <= x1 - 8; x += 12) for (let z = z0 + 3; z <= z1 - 8; z += 14) { if (inCorner(x + 3, z + 3) || inCorner(x, z) || inCorner(x + 6, z + 6)) continue; for (const [gx, gz] of [[x, z], [x + 6, z], [x, z + 6], [x + 6, z + 6]]) bp.set(gx, 0, gz, GLOW); }
   for (let x = x0; x <= x1; x += 4) for (const z of [z0, z1]) for (const y of [y0 + 3, y0 + 11]) if (bp.get(x, y, z) !== AIR && !inCorner(x, z)) bp.set(x, y, z, GLOW);
   for (let z = z0; z <= z1; z += 4) for (const x of [x0, x1]) for (const y of [y0 + 3, y0 + 11]) if (bp.get(x, y, z) !== AIR) bp.set(x, y, z, GLOW);
@@ -414,9 +416,16 @@ function hangar(bp, rng) {
   bp.fill(0, 0, mz0 - 2, T1.x0, 0, mz1 + 2, PLATE);
   for (let z = mz0 - 2; z <= mz1 + 2; z++) { bp.set(0, 0, z, B.PANEL_STRIPE); bp.set(T1.x0 - 1, 0, z, B.PANEL_STRIPE); }
   for (let z = mz0; z <= mz1; z += 4) bp.set(2, 0, z, B.CITY_LAMP);
+  // low-level light: the 20-block ceiling lights never reach the floor, so the hangar gets lit floor strips, glow
+  // bands on the walls at y 3 and y 9, lamp posts along the back wall and hanging light rigs at y 8
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) if (!inCorner(x, z) && ((z - z0) % 4 === 0 && (x - x0) % 4 === 2)) bp.set(x, 0, z, GLOW);
+  for (let z = z0; z <= z1; z += 3) for (const yy of [y0 + 2, y0 + 8]) { if (bp.get(x1 + 1, yy, z) !== AIR) bp.set(x1 + 1, yy, z, GLOW); if (!inCorner(x0 - 1, z) && bp.get(x0 - 1, yy, z) !== AIR) bp.set(x0 - 1, yy, z, GLOW); }
+  for (let x = x0; x <= x1; x += 3) for (const yy of [y0 + 2, y0 + 8]) for (const zz of [z0 - 1, z1 + 1]) if (!inCorner(x, zz) && bp.get(x, yy, zz) !== AIR) bp.set(x, yy, zz, GLOW);
+  for (let z = z0 + 5; z <= z1 - 5; z += 9) { bp.fill(x1 - 2, y0, z, x1 - 2, y0 + 3, z, B.IRON_BARS); bp.set(x1 - 2, y0 + 4, z, B.CITY_LAMP); }
+  for (let x = x0 + 8; x <= x1 - 8; x += 10) for (let z = z0 + 8; z <= z1 - 8; z += 12) { if (inCorner(x, z)) continue; bp.fill(x, y0 + 9, z, x, y0 + 11, z, B.IRON_BARS); bp.fill(x - 1, y0 + 8, z - 1, x + 1, y0 + 8, z + 1, B.IRON_BARS); bp.set(x, y0 + 8, z, GLOW); for (const [dx, dz] of [[1, 1], [-1, -1], [1, -1], [-1, 1]]) bp.set(x + dx, y0 + 8, z + dz, GLOW); }
   // landing circle on the hangar floor, fuel and cargo along the back wall, tool benches, a control cabin
   const cx = 30, cz = (z0 + z1) >> 1;
-  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) { const d = Math.hypot(x - cx, z - cz); if (d > 10 && d <= 11) bp.set(x, 0, z, B.PANEL_STRIPE); if (d < 1.5) bp.set(x, 0, z, GLOW); }
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) { const d = Math.hypot(x - cx, z - cz); if (d > 10 && d <= 11) bp.set(x, 0, z, (x + z) % 2 ? B.PANEL_STRIPE : GLOW); if (d < 1.5) bp.set(x, 0, z, GLOW); }
   for (let z = z0 + 2; z <= z1 - 2; z += 3) { bp.set(x1, y0, z, B.CRATE); bp.set(x1, y0 + 1, z, (z % 2) ? B.BARREL : B.CRATE); bp.set(x1 - 1, y0, z + 1, B.BARREL); }
   for (let z = z0 + 1; z <= z1 - 1; z += 9) { bp.set(x0 + 1, y0, z, B.TABLE); bp.set(x0 + 1, y0, z + 1, B.ANVIL); bp.set(x0 + 1, y0, z + 2, B.CONSOLE); bp.work(x0 + 2, y0, z + 1, 'mechanic'); }
   bp.fill(x1 - 6, y0 + 7, z0 + 1, x1, y0 + 7, z0 + 5, PLATE); bp.walls(x1 - 6, y0 + 8, z0 + 1, x1, y0 + 10, z0 + 5, GLASS); bp.fill(x1 - 5, y0 + 8, z0 + 2, x1 - 1, y0 + 10, z0 + 4, AIR);
