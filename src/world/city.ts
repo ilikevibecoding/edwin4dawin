@@ -785,8 +785,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           // shared urban gradient drops, so the boundary with the suburbs is ragged rather than ruled
           const { urban, corridor } = urbanGradient(map.districts, map.roads, cxw, czw);
           const u = drng.next();
-          if (u > urban + 0.25) fillHouses();
-          else if (u > urban - 0.1) fillLowRise(Math.max(urban, 0.6), corridor);
+          if (urban < 0.3 && u > urban + 0.4) fillHouses();
+          else if (u > urban) fillLowRise(Math.max(urban, 0.55), corridor);
           else fillMidrise();
           break;
         }

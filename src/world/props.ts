@@ -854,7 +854,7 @@ export class Props {
       paint('white', lu, laneV - 7, 4.5, 0.18);
       paint('white', lu, laneV + 7, 4.5, 0.18);
     }
-    for (let lu = -P.hw + 60; lu < P.hw - 120; lu += 1) paint('yellow', lu + 0.5, laneV, 1.0, 0.16); // centre line
+    for (let lu = -P.hw + 60; lu < P.hw - 120; lu += 60) paint('yellow', lu + 30, laneV, 60, 0.16); // centre line
     for (let k = 0; k < 14; k++) {
       // hatched keep-clear boxes and pedestrian crossings at random spots along the lane
       const hu = rng.range(-P.hw + 80, P.hw - 160), hv = laneV + rng.pick([-16, 16]);
@@ -892,34 +892,42 @@ export class Props {
     // ---- south apron: a second yard of stacks in ragged rows, reach stackers and trucks at work, light masts
     const quayS = P.hh;
     const yardS0 = 182, yardS1 = quayS - 34;
-    for (let bu = -P.hw + 70; bu < P.hw - 120; bu += rng.range(110, 150)) {
-      if (bu > 60 && bu < 470) continue; // cruise terminal
-      const bw = rng.range(60, 95);
+    for (let bu = -P.hw + 250; bu < P.hw - 120;) {
+      const bw = rng.range(70, 120);
+      if (bu > 40 && bu < 480) { bu = 480; continue; } // cruise terminal
       const mode = rng.next();
-      if (mode < 0.22) {
+      if (mode < 0.15) {
         // open hardstand: painted bays and a few parked trailers / trucks
-        for (let k = 0; k < 8; k++) paint('white', bu + k * 4 + 4, yardS0 + 30, 0.15, 14);
-        const nt = rng.int(1, 4);
+        for (let k = 0; k < 10; k++) paint('white', bu + k * 4 + 4, yardS0 + 30, 0.15, 14);
+        const nt = rng.int(2, 6);
         for (let k = 0; k < nt; k++) truck(bu + rng.range(8, bw - 8), rng.range(yardS0 + 18, yardS1 - 10), rng.pick([0, Math.PI]) + jitter(0.06), rng.chance(0.5));
+        bu += bw + rng.range(10, 20);
         continue;
       }
       const g = ground(bu + bw / 2, (yardS0 + yardS1) / 2);
-      if (g < 1) continue;
-      const tall = rng.range(1, 3.5);
+      if (g < 1) { bu += bw + 14; continue; }
+      // rows of stacks fill the strip's depth, a truck aisle every three or four rows, the block leaning to one
+      // colour with stack heights wandering along it
+      const tall = rng.range(1.2, 3.6);
       const bays = Math.floor(bw / 13.2);
-      for (let r = 0; r < 4; r++) {
-        if (rng.chance(0.15)) continue; // aisle
-        const v = yardS0 + 6 + r * 6.4 + jitter(0.4);
+      const blockMat = rng.pick(CONTAINERS);
+      let v = yardS0 + 4, rowsSinceAisle = 0, aisleEvery = rng.int(3, 5);
+      while (v < yardS1 - 4) {
+        if (rowsSinceAisle >= aisleEvery) { v += 7; rowsSinceAisle = 0; aisleEvery = rng.int(3, 5); if (rng.chance(0.4)) truck(bu + rng.range(8, bw - 8), v - 3.5, rng.pick([0, Math.PI]) + jitter(0.03), rng.chance(0.5)); continue; }
+        const vj = v + jitter(0.3);
         for (let c = 0; c < bays; c++) {
-          if (rng.chance(0.3)) continue;
-          const n = Math.min(5, Math.max(1, Math.round(tall + rng.range(-1.6, 1.8))));
-          stackAt(bu + 7 + c * 13.2, v, g, n);
+          if (rng.chance(0.28)) continue;
+          const n = Math.min(5, Math.max(1, Math.round(tall + rng.range(-1.6, 1.8) + 0.8 * Math.sin(c * 1.7 + bu))));
+          const mat = rng.chance(0.6) ? blockMat : rng.pick(CONTAINERS);
+          for (let k = 0; k < n; k++) jbox(k === 0 || rng.chance(0.5) ? mat : rng.pick(CONTAINERS), bu + 7 + c * 13.2 + jitter(0.25), g + k * 2.6, vj + jitter(0.12), 12.2, 2.6, 2.44, jitter(0.012));
         }
+        v += 2.9; rowsSinceAisle++;
       }
       occupy(bu + bw / 2, (yardS0 + yardS1) / 2, bw * 0.6);
-      if (rng.chance(0.55)) reachStacker(bu + rng.range(5, bw - 5), yardS1 - 6 + jitter(3), rng.range(0, Math.PI * 2), rng.chance(0.6));
-      if (rng.chance(0.3)) straddle(bu + rng.range(10, bw - 10), yardS0 - 12 + jitter(2), rng.pick([0, Math.PI / 2]) + jitter(0.1));
-      if (rng.chance(0.4)) truck(bu + rng.range(8, bw - 8), yardS0 - 14 + jitter(3), rng.pick([0, Math.PI]) + jitter(0.05), rng.chance(0.6));
+      if (rng.chance(0.6)) reachStacker(bu + rng.range(5, bw - 5), yardS1 - 12 + jitter(3), rng.range(0, Math.PI * 2), rng.chance(0.6));
+      if (rng.chance(0.35)) straddle(bu + rng.range(10, bw - 10), yardS0 - 12 + jitter(2), rng.pick([0, Math.PI / 2]) + jitter(0.1));
+      if (rng.chance(0.5)) truck(bu + rng.range(8, bw - 8), yardS0 - 14 + jitter(3), rng.pick([0, Math.PI]) + jitter(0.05), rng.chance(0.6));
+      bu += bw + rng.range(12, 24);
     }
     for (let mu = -P.hw + 90 + rng.range(0, 60); mu < P.hw - 160; mu += rng.range(95, 150)) {
       if (mu > 90 && mu < 440) continue;

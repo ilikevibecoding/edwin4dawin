@@ -645,13 +645,18 @@ export function urbanGradient(districts: District[], roads: RoadSpec[], x: numbe
     if (x < r.minX || x > r.maxX || z < r.minZ || z > r.maxZ) continue;
     corridor = Math.min(corridor, sdPolyline(x, z, r.pts) - r.hw);
   }
-  let edgeD = 5000;
-  for (const u of f.urban) edgeD = Math.min(edgeD, sdBox(x, z, u.cx, u.cz, u.hw, u.hh, u.rot));
+  let edgeD = 5000, size = 1000;
+  for (const u of f.urban) {
+    const d = sdBox(x, z, u.cx, u.cz, u.hw, u.hh, u.rot);
+    if (d < edgeD) { edgeD = d; size = Math.min(u.hw, u.hh); }
+  }
   const un = 0.5 + 0.5 * perlin2(x / 380 + 3.3, z / 380 - 7.1);
   let urban: number;
   if (edgeD < 0) {
-    // inside a core the edge frays inward: the outer 150-500 m of the district lose urbanity where the noise is low
-    const fray = smoothstep(-(180 + 380 * un), -30, edgeD) * (0.25 + 0.75 * (1 - un));
+    // inside a core the edge frays inward: the outer 150-500 m of the district lose urbanity where the noise is
+    // low (no deeper than a third of a small district's half-size, so the island cores keep their centres)
+    const depth = Math.min(180 + 380 * un, size * 0.35);
+    const fray = smoothstep(-depth, -30, edgeD) * (0.25 + 0.75 * (1 - un));
     urban = 1 - 0.85 * fray;
   } else {
     urban = (1 - smoothstep(100, 1100, edgeD)) * (0.4 + 0.7 * un) + (1 - smoothstep(20, 140, corridor)) * (0.25 + 0.5 * un);

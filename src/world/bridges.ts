@@ -475,7 +475,8 @@ const C_CAP: Rgb = [1.08, 1.08, 1.07];       // parapet cap: pale, catches the l
 const C_SOFFIT: Rgb = [0.86, 0.86, 0.86];
 const C_UNDER: Rgb = [0.78, 0.78, 0.79];
 const C_WET: Rgb = [0.5, 0.5, 0.52];         // tidal band on the columns
-const C_PROXY: Rgb = [0.5, 0.5, 0.53];       // distance pier proxies: the shaded side of a pier as seen from afar
+const C_PROXY: Rgb = [0.4, 0.4, 0.44];       // distance pier proxies: the shaded side of a pier as seen from afar
+const C_PROXY_SOFFIT: Rgb = [0.3, 0.3, 0.34]; // the deck's underside shadow line between the piers
 const C_FOOTING: Rgb = [0.74, 0.75, 0.76];
 const C_FOAM: Rgb = [1.85, 1.9, 1.92];       // wash around the footings (albedo ~0.9)
 const C_DECK: Rgb = [1, 1, 1];
@@ -665,11 +666,11 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         const ww = heavy ? W * 0.7 : W * 0.5, wt = heavy ? 3.2 : 2.2;
         shaft(f.x, f.z, ww, wt, capBottom, false);
         P.struct.box(f.x, capBottom, f.z, capW, capH, wt + 1.0, yaw, 0, C_PLAIN, false, NO_ROAD);
-        P.proxy.box(f.x, proxyBottom, f.z, ww + 1.6, capBottom - proxyBottom + 0.2, wt + 3.2, yaw, 0, C_PROXY, true, NO_ROAD);
+        P.proxy.box(f.x, proxyBottom, f.z, ww + 2.4, capBottom - proxyBottom + 0.2, wt + 4.0, yaw, 0, C_PROXY, true, NO_ROAD);
       } else {
         for (const off of [-W * 0.3, W * 0.3]) {
           shaft(f.x + f.rx * off, f.z + f.rz * off, 2.4, 2.4, capBottom, true);
-          P.proxy.box(f.x + f.rx * off, proxyBottom, f.z + f.rz * off, 4.6, capBottom - proxyBottom + 0.2, 4.6, yaw, 0, C_PROXY, true, NO_ROAD);
+          P.proxy.box(f.x + f.rx * off, proxyBottom, f.z + f.rz * off, 5.6, capBottom - proxyBottom + 0.2, 5.6, yaw, 0, C_PROXY, true, NO_ROAD);
         }
         P.struct.box(f.x, capBottom, f.z, W + 5.6, capH, 2.6, yaw, 0, C_PLAIN, false, NO_ROAD);
       }
@@ -677,7 +678,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
       {
         const s1 = Math.min(total, s + spacing);
         const fm = frameAt((s + s1) / 2);
-        P.proxy.box(fm.x, fm.y - g - 1.3, fm.z, W * 0.92, 1.1, s1 - s - 1.5, yawAt(fm), 0, C_PROXY, false, NO_ROAD);
+        P.proxy.box(fm.x, fm.y - g - 1.7, fm.z, W * 0.94, 1.5, s1 - s - 1.5, yawAt(fm), 0, C_PROXY_SOFFIT, false, NO_ROAD);
       }
       // expansion joint across the carriageway over every pier
       P.steel.box(f.x, f.y + 0.03, f.z, cw, 0.04, 0.3, yaw, 0, S_DARK, false);
