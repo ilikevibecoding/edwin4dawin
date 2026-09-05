@@ -117,6 +117,20 @@ noon figure; dawn/dusk are the deliberate filmic look (brighter sky, longer shad
 
 ### Integrator wiring (materials R1 could not edit)
 
+Merging this branch onto the base (which already carries R2's `cursor/render-hd-textures-54d6`) conflicts in two
+files, both checked with a read-only `git merge-tree` of the two heads and a smoke run of the resolved tree:
+
+- `src/render/materialMaps.js` (add/add): take R1's file. It is a superset of R2's (same `getMaterialMaps()` /
+  `setMaterialMaps(normal, material)` semantics and placeholder values, plus `onMaterialMaps`, `bindMaterialMaps`,
+  the shared uniforms and the dev generators); R2's `src/textures.js` (`buildAtlas` -> `setMaterialMaps`) and
+  `scripts/test-textures.mjs` (Node import, "material-map hook called") run unchanged against it.
+- `docs/rubrics/05_render_quality.md`: keep both status sections (R2's, then this one).
+
+On the resolved tree `test-unit`, `test-textures`, `test-coruscant-towers`, `test-spaceport` and `test-deathstar`
+pass, and the town at four times, Coruscant noon/night and the coast render with 0 exceptions and no shader warnings;
+R2's normal convention (`normalFromHeight`: R = +u, G = toward the tile top) is the one the tangent frame expects,
+and all three atlases are sampled with the colour atlas's `vUv`, so the 1024 px maps line up texel for texel.
+
 All three materials already share `SHARED.uSkyLight / uSkyTint / uFogColor / uFogNear / uFogFar / uFlash` from
 `src/entityMaterial.js`; the recipe adds the sun, its shadows and (optionally) specular through the shared chunk.
 `src/entityMaterial.js` is the worked example (`#if FANCY` blocks, `bindShading`, `userData.shadowCaster`).
@@ -160,8 +174,8 @@ All three materials already share `SHARED.uSkyLight / uSkyTint / uFogColor / uFo
 
 ### Known gaps
 
-- Normal/material atlases: flat placeholders until R2's `setMaterialMaps` call lands; the derived `?matdebug=1` maps
-  are a dev aid, not shipping content.
+- Normal/material atlases: flat placeholders on this branch; R2's `setMaterialMaps` call is already on the base, so
+  the merged tree ships the real maps (see the merge notes above). The derived `?matdebug=1` maps are a dev aid.
 - Real-GPU performance (criterion 8's 60 fps @ 1080p) is unmeasured here (SwiftShader only). Draw calls roughly
   double on Cinematic (shadow pass); the post chain is a bright pass, 4 downsamples and 4 upsamples (half resolution
   and below), the composite and optionally FXAA.
