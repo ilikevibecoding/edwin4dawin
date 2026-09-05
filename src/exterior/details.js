@@ -248,6 +248,13 @@ export const TERRACES = [
   { out: 13, h: 6 },
   { out: 6.5, h: 12 },
 ];
+/**
+ * Hangar approach lane on the ventral plateau: a fore-aft corridor 1.2 × the module's half-width,
+ * from 190 m ahead of the module to the reactor collar. The only place hatch rims are lit, and marked
+ * by paired lane lights every 40 m (none across the module itself).
+ */
+export const LANE = { halfWidth: HANGAR.module.x * 1.2, z0: -262, z1: 184, pitch: 40, lampX: HANGAR.module.x + 9 };
+
 export function heavyTurretX(z) {
   const t0 = CITY.tiers[0];
   return t0.hw0 + ((t0.hw1 - t0.hw0) * (z - t0.zs)) / (t0.ze - t0.zs) + HEAVY_TURRETS.offset;
@@ -534,10 +541,11 @@ export function buildDetails(materials, hull, sup) {
         const ox = ventral ? 0 : (rand() - 0.5) * (a.w - hw - 2);
         const oz = ventral ? 0 : (rand() - 0.5) * (a.l - hl - 2);
         out.boxes.push(onPlate(a, ox, 0.16, oz, hw, 0.5, hl, grey(tone * (rand() < 0.5 ? 0.9 : 1.05), 1.0)));
-        // the lit amber rim only where crews work at night: the hangar approach lane (ventral, abeam
-        // of the module) and the heavy-turret bases; elsewhere a dark unlit rim (the lit ones scattered
-        // over the dorsal plates read as stray landing markers)
-        const lane = ventral && Math.abs(x) < HANGAR.module.x + 40 && z > HANGAR.module.z0 - 80 && z < HANGAR.module.z1 + 40;
+        // the lit amber rim only where crews work at night: the hangar approach lane (ventral, a
+        // fore-aft corridor no wider than 1.2 × the module, ending at the reactor collar) and the
+        // heavy-turret bases; elsewhere a dark unlit rim (lit rims scattered around the bay on all four
+        // sides read as random bracket outlines)
+        const lane = ventral && Math.abs(x) <= LANE.halfWidth && z > LANE.z0 && z < LANE.z1;
         const turretBase = a.side > 0 && a.isPlateau && HEAVY_TURRETS.zs.some((tz) => Math.hypot(Math.abs(x) - heavyTurretX(tz), z - tz) < HEAVY_TURRETS.padR + 26);
         if (lane || turretBase) global.dim.push(onPlate(a, ox, 0.02, oz, hw + 0.8, 0.12, hl + 0.8, null));
         else out.boxes.push(onPlate(a, ox, 0.02, oz, hw + 0.8, 0.12, hl + 0.8, grey(0.3, 1.02)));
@@ -697,7 +705,9 @@ export function buildDetails(materials, hull, sup) {
         }
         const nl = Math.floor(L / 2);
         for (let k = 0; k < nl; k++) out.big.push(onPlate(f, 0, 1.55, -L / 2 + (k + 0.5) * (L / nl), W - 1.5, 0.3, 0.5, grey(0.5, 1.02)));
-        out.lights.push(onPlate(f, W / 2 + 1.9, 1.0, 0, 0.5, 0.3, L * 0.8, null));
+        // lit slot beside the housing on the dim hatch-rim emitter (the full exterior light blew out
+        // to a white bar over the louvres from the trench station)
+        global.dim.push(onPlate(f, W / 2 + 1.9, 1.0, 0, 0.5, 0.3, L * 0.8, null));
         greebles += 6 + nl;
       }
     }
@@ -892,6 +902,13 @@ export function buildDetails(materials, hull, sup) {
         global.wedges.push({ m: _m.compose(_p, _q, _s).clone(), c: grey(0.6 + rand() * 0.1) });
       }
     }
+  }
+
+  // --- hangar approach lane: paired lane lights every 40 m along the ventral corridor (LANE), flat
+  // 2.4 m pads on the dim hatch-rim emitter, skipping the module footprint
+  for (let z = LANE.z0 + 2; z <= LANE.z1; z += LANE.pitch) {
+    if (z > HANGAR.module.z0 - 8 && z < HANGAR.module.z1 + 8) continue;
+    for (const s of [-1, 1]) global.dim.push(plateauItem(-1, s * LANE.lampX, z, 2.4, 0.3, 2.4, null));
   }
 
   // --- navigation lights: red port / green starboard running lights along the trench lip, warm white
