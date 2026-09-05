@@ -10,15 +10,18 @@ import { LAYER_CAMERA, LAYER_DEFAULT, LAYER_MAIN, LAYER_MIRROR, MAX_CASCADES, ca
 /**
  * Procedural planting. Two instanced geometry families cover eight archetypes:
  *  - crown trees (broadleaf hardwood, tall emergent, squat mangrove, low shrub, dune grass tussock, sea
- *    grape, slash pine): a trunk and four displaced icosphere puffs (86 triangles; the main puff is
- *    subdivided to 146 within HI_DISTANCE). The puffs are arranged by one of eight CROWN LAYOUTS chosen
- *    per plant (lobe angle / radius / size / height; some layouts hide a lobe), scaled by the
- *    archetype's shape class (round, spreading, conical), then stretched anisotropically, lumped with a
- *    per-plant noise displacement and given a per-plant crown height, so no two crowns share a
- *    silhouette. The crown shader adds crown-space wrap lighting (sunlit cap, cooler underside), leaf
- *    cluster noise, a ragged dissolved silhouette and perturbed normals up close.
- *  - palms: bent, leaning, tapered trunk and nine drooping frond strips (68 triangles) with per-instance
- *    frond rotation and droop.
+ *    grape, slash pine): a trunk and four displaced icosphere puffs (88 triangles beyond HI_DISTANCE;
+ *    244 with the main puff subdivided and 48 leaf-cluster fringe cards inside it; 664 inside
+ *    ULTRA_DISTANCE). The puffs are arranged by one of eight CROWN LAYOUTS chosen per plant (lobe angle
+ *    / radius / size / height; some layouts hide a lobe), scaled by the archetype's shape class (round,
+ *    spreading, conical), then stretched anisotropically, lumped with a per-plant noise displacement
+ *    and sized by a per-species height in metres (HEIGHTS), so no two crowns share a silhouette and none
+ *    outgrows its species. The crown shader adds crown-space wrap lighting (sunlit cap, cooler
+ *    underside), leaf cluster noise, a ragged dissolved silhouette and perturbed normals up close; the
+ *    fringe cards are camera-facing leaf clusters seeded on the puff surface that break the polygonal
+ *    outline at 100-400 m.
+ *  - palms: bent, leaning, tapered trunk and thirteen arching frond strips (102 triangles) with
+ *    per-instance frond rotation and droop, the atlas fronds shaded in grey and tinted per plant.
  * Foliage is lit with its own direct-light model (RE_Direct_Foliage): wrapped diffuse so a leaf mass is
  * lit past the terminator, a translucency term for sun through the leaves, and a shadow floor (leaves
  * scatter light, so a shaded crown keeps half the sun instead of going black).
@@ -125,7 +128,7 @@ function frondTexture(rng: Rng): THREE.CanvasTexture {
     const t = i / 58;
     const y = h - 16 - t * (h - 30);
     const len = (fw / 2 - 3) * (0.5 + 0.5 * Math.sin(Math.PI * Math.min(1, t * 1.12)));
-    const shade = 0.62 + 0.3 * t + 0.12 * Math.sin(t * 7 + i);
+    const shade = 0.7 + 0.28 * t + 0.1 * Math.sin(t * 7 + i);
     ctx.fillStyle = grey(shade);
     for (const side of [-1, 1]) {
       ctx.beginPath();
@@ -360,9 +363,9 @@ const FRINGE_COUNT: [number, number][] = [[0, 0], [24, 8], [24, 8]];
 /** Unit crown tree: trunk (4-sided prism, part 0) + main puff (part 1) + three lobes (parts 2-4) and,
  *  on the two nearer levels, the leaf-cluster fringe cards. The shader places and sizes the lobes per
  *  instance from the crown layouts. Three tessellations: level 0 (88 triangles) beyond HI_DISTANCE, level
- *  1 inside it (the same puffs plus 48 fringe cards that hide the polygonal outline: 184), level 2 inside
- *  ULTRA_DISTANCE (main puff subdivided twice, lobes once, fringe: 664), where a 15 m crown fills a tenth
- *  of the frame and the fringe alone cannot round 20 faces off. */
+ *  1 inside it (main puff subdivided once plus 48 fringe cards that hide the polygonal outline: 244),
+ *  level 2 inside ULTRA_DISTANCE (main puff subdivided twice, lobes once, fringe: 664), where a 15 m crown
+ *  fills a tenth of the frame and the fringe alone cannot round 20 faces off. */
 function crownGeometry(level = 0): THREE.BufferGeometry {
   const pos: number[] = [], nrm: number[] = [], part: number[] = [], uv: number[] = [];
   // trunk: 4 quads (8 tris) from y=0 to y=1, radius 0.07
@@ -375,7 +378,7 @@ function crownGeometry(level = 0): THREE.BufferGeometry {
     for (const [x, y, z] of quad) { pos.push(x, y, z); nrm.push(nx, 0, nz); part.push(0); uv.push(0, y); }
   }
   for (const [seed, pid] of [[3.1, 1], [8.7, 2], [14.3, 3], [21.9, 4]]) {
-    const pf = puff(seed, pid, level > 1 ? (pid === 1 ? 2 : 1) : 0);
+    const pf = puff(seed, pid, pid === 1 ? Math.min(level, 2) : level > 1 ? 1 : 0);
     pos.push(...pf.pos); nrm.push(...pf.nrm); part.push(...pf.part);
     for (let i = 0; i < pf.part.length; i++) uv.push(0, 0);
     const fc = FRINGE_COUNT[Math.min(level, 2)][pid === 1 ? 0 : 1];
@@ -435,7 +438,8 @@ function palmGeometry(): THREE.BufferGeometry {
         uv.push(side * 0.5, 1 - row / segs2);
       }
     };
-    for (let i = 0; i < segs2; i++) { const b = i * 2; tri(b, b + 2, b + 1); tri(b + 1, b + 2, b + 3); }
+    // wound so the front face is the frond's upper side (the shader lights the underside as the top too)
+    for (let i = 0; i < segs2; i++) { const b = i * 2; tri(b, b + 1, b + 2); tri(b + 1, b + 3, b + 2); }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -485,9 +489,10 @@ vArche = floor(aVar.x + 0.001);
 vec3 objectTangent = vec3( tangent.xyz );
 #endif
 `;
-/** Fringe cards start at this aPart (FRINGE_PART) and fade out over this camera distance band (m) */
-const FRINGE_FADE_NEAR = 340;
-const FRINGE_FADE_FAR = 420;
+/** Fringe cards shrink away over this camera distance band (m); the cells hand over to cards at NEAR_DISTANCE
+ *  (420 m) before it starts, so the fade only ever applies to the level-0 fallback */
+const FRINGE_FADE_NEAR = 440;
+const FRINGE_FADE_FAR = 520;
 /** Vegetation shadow lookup: one sample per plant at the crown's sun-facing point (see
  *  VEG_SHADOWMAP_VERTEX); `vegShadowR` = 0 keeps the per-fragment lookup (trunks). */
 const VEG_SHADOW_PROBE_VARS = /* glsl */ `
@@ -711,10 +716,12 @@ ${VEG_SHADOW_PROBE_VARS}
     float c = cos(rot), s = sin(rot);
     vec3 rel = transformed - vec3(0.0, 1.0, 0.0);
     rel.xz = mat2(c, -s, s, c) * rel.xz;
-    // extra droop toward the frond tip (uv.y = 1 at the base, 0 at the tip); some fronds hang dead
+    // a little extra per-frond droop toward the tip (uv.y = 1 at the base, 0 at the tip) on top of the
+    // geometry's arc, kept small so the crown stays the compact coconut star the atlas card draws (the
+    // old 0.6-1.4 x squash hung the tips a trunk length down: "weeping willow" palms); some fronds hang dead
     float t = 1.0 - uv.y;
     float dead = step(0.86, hash11(seed * 2.9 + aPart * 1.3));
-    rel.y -= aVar.z * t * t * (0.6 + 0.8 * hash11(seed * 2.9 + aPart)) + dead * t * 0.7;
+    rel.y -= aVar.z * t * t * (0.05 + 0.2 * hash11(seed * 2.9 + aPart)) + dead * t * 0.7;
     rel.xz *= 1.0 - dead * 0.35 * t;
     transformed = vec3(0.0, 1.0, 0.0) + rel;
   }
@@ -747,6 +754,16 @@ if (vPart > 0.5) {
   // trunk: grey-brown bark, the ring shading from the atlas (the instance tint is the frond colour)
   diffuseColor.rgb = vec3(0.34, 0.29, 0.24) * (0.5 + 0.9 * sampledDiffuseColor.r);
 }
+`;
+
+/** Fronds are thin leaves: seen from below they are lit through, so the underside keeps the upper side's
+ *  normal instead of the flipped one three gives double-sided back faces (which made every frond seen from
+ *  under or behind a black stroke). */
+const PALM_NORMAL_FRAG = /* glsl */ `
+#include <normal_fragment_begin>
+#ifdef DOUBLE_SIDED
+if (vPart > 0.5) normal *= faceDirection;
+#endif
 `;
 
 /** Replaces <shadowmap_vertex>. A crown is a translucent mass of leaves, not a hard ball: looking the
@@ -907,10 +924,11 @@ function palmMaterial(tex: THREE.Texture, time: THREE.IUniform<number>, wind: TH
     shader.fragmentShader = softenFoliageShadow(shader.fragmentShader)
       .replace('#include <common>', `#include <common>\nvarying float vPart; varying vec3 vWP; varying float vSeed;\n#define aVarSeed vSeed\n${GLSL_NOISE}`)
       .replace('#include <lights_physical_pars_fragment>', foliageLighting('step(0.5, vPart)'))
-      .replace('#include <color_fragment>', PALM_FRAG);
+      .replace('#include <color_fragment>', PALM_FRAG)
+      .replace('#include <normal_fragment_begin>', PALM_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-palm-v8';
+  mat.customProgramCacheKey = () => 'veg-palm-v9';
   return mat;
 }
 
