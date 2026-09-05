@@ -429,20 +429,38 @@ export function tintDecal(
   return g;
 }
 
-// Round decal (scorch ring): radial colour from `inner` at the centre to `outer` at the rim.
-export function scorchDecal(frame, r, inner, outer, seg = 16, lift = 0.1) {
-  const g = new THREE.CircleGeometry(r, seg).toNonIndexed();
-  g.rotateX(-Math.PI / 2);
+// Scorch weight along the radius (0 = centre, 1 = rim): a blast core, a lighter halo, a soot ring at
+// ~70 % and a soft fade to the base at the rim — an impact burn rather than a blurred dark spot.
+export function scorchWeight(k) {
+  const core = Math.max(0, 1 - k / 0.3) ** 1.2;
+  const ring = Math.exp(-(((k - 0.7) / 0.14) ** 2));
+  const haze = Math.max(0, 1 - k) * 0.35;
+  return Math.min(1, 0.95 * core + 0.8 * ring + haze);
+}
+
+/**
+ * Scorch disc in the xy plane facing +z (non-indexed), `rings` radial subdivisions so the profile above
+ * is actually sampled: vertex colours mix `outer` (the base tint, [r, g, b]) toward `inner` (full soot).
+ */
+export function scorchDisc(r, inner, outer, seg = 14, rings = 6) {
+  const g = new THREE.RingGeometry(r * 0.02, r, seg, rings).toNonIndexed();
   const pos = g.attributes.position;
   const col = new Float32Array(pos.count * 3);
   for (let i = 0; i < pos.count; i++) {
-    const k = Math.min(1, Math.hypot(pos.getX(i), pos.getZ(i)) / r);
-    const t = k * k;
-    col[i * 3] = lerp(inner[0], outer[0], t);
-    col[i * 3 + 1] = lerp(inner[1], outer[1], t);
-    col[i * 3 + 2] = lerp(inner[2], outer[2], t);
+    const k = Math.min(1, Math.hypot(pos.getX(i), pos.getY(i)) / r);
+    const w = scorchWeight(k);
+    col[i * 3] = lerp(outer[0], inner[0], w);
+    col[i * 3 + 1] = lerp(outer[1], inner[1], w);
+    col[i * 3 + 2] = lerp(outer[2], inner[2], w);
   }
   g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+  return g;
+}
+
+// Round scorch decal lying on a surface frame, `inner` soot at the core and ring, `outer` base at the rim.
+export function scorchDecal(frame, r, inner, outer, seg = 14, lift = 0.1) {
+  const g = scorchDisc(r, inner, outer, seg);
+  g.rotateX(-Math.PI / 2);
   const p = frame.p.clone().addScaledVector(frame.n, lift);
   g.applyMatrix4(frameMatrix(p, frame.n, frame.v));
   return g;
@@ -556,13 +574,14 @@ export function cylZ(r0, r1, len, seg = 16, open = false) {
   return g;
 }
 
-// Cylinder of radius r from point a to point b (Vector3 or [x, y, z]).
-export function tube(a, b, r, seg = 6) {
+// Cylinder of radius r from point a to point b (Vector3 or [x, y, z]); `open` drops the end caps for
+// runs whose ends are buried or butt against the next segment.
+export function tube(a, b, r, seg = 6, open = false) {
   const pa = a.isVector3 ? a : new THREE.Vector3(...a);
   const pb = b.isVector3 ? b : new THREE.Vector3(...b);
   const d = pb.clone().sub(pa);
   const len = d.length();
-  const g = new THREE.CylinderGeometry(r, r, len, seg, 1, false);
+  const g = new THREE.CylinderGeometry(r, r, len, seg, 1, open);
   const q = new THREE.Quaternion().setFromUnitVectors(
     new THREE.Vector3(0, 1, 0),
     d.normalize(),

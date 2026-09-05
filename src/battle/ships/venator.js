@@ -38,6 +38,7 @@ import {
   plateMM,
   tintDecal,
   scorchDecal,
+  scorchDisc,
   groove,
   grooveMM,
   facetedDome,
@@ -746,20 +747,15 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
     g.setAttribute("color", new THREE.BufferAttribute(col, 3));
     return mapToLoft(secs, j, t, z, g, 0.12);
   };
-  const loftScorch = (secs, j, t, z, r, inner, outer) => {
-    const g = new THREE.CircleGeometry(r, 14).toNonIndexed();
-    const pos = g.attributes.position;
-    const col = new Float32Array(pos.count * 3);
-    for (let i = 0; i < pos.count; i++) {
-      const k = Math.min(1, Math.hypot(pos.getX(i), pos.getY(i)) / r);
-      const tt = k * k;
-      col[i * 3] = lerp(inner.r, outer.r, tt);
-      col[i * 3 + 1] = lerp(inner.g, outer.g, tt);
-      col[i * 3 + 2] = lerp(inner.b, outer.b, tt);
-    }
-    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
-    return mapToLoft(secs, j, t, z, g, 0.12);
-  };
+  const loftScorch = (secs, j, t, z, r, inner, outer) =>
+    mapToLoft(
+      secs,
+      j,
+      t,
+      z,
+      scorchDisc(r, inner.toArray(), outer.toArray(), 14),
+      0.12,
+    );
   // soot streak colour: full soot at the aft edge (v = +1) fading forward, fading to the base at the sides
   const streakFn =
     (base, strength = 1) =>
@@ -1408,6 +1404,21 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
           },
         },
       );
+      // aft wing deck beside the rear block (plates pick up the stern soot through plateTint)
+      flatField(
+        s,
+        { u0: 166, u1: 262, v0: Z(796), v1: Z(1082) },
+        DECK_Y,
+        CREAM,
+        {
+          max: fine ? 56 : 90,
+          keep: 0.22,
+          skip: 0.22,
+          clipU1: (z) => wDeck(z - zBow) - 6,
+          avoid: (c, cu, cv) =>
+            Math.hypot(cu - (wDeck(800) - 9), cv - Z(800)) < 14,
+        },
+      );
       // turret base plinths: an octagonal skirt plate under each heavy turret
       for (const zr of TURRET_ZR) {
         const tx = s * turretX(zr);
@@ -1556,6 +1567,43 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
       color: mulColor(CREAM, 0.92),
       texel: 1 / 8,
     });
+    // hump top between the tower shafts: centre groove, hatch rows, vent grilles, equipment boxes
+    if (fine) {
+      const yH = T2_Y + 16;
+      add(grooveMM(-0.6, 0.6, Z(942), Z(988), yH), "dark", {
+        color: DARK_SEAM,
+        texel: 1 / 4,
+      });
+      for (const s of [-1, 1]) {
+        for (let zr = 945; zr < 987; zr += 7)
+          add(
+            boxMM(
+              [s * 33 - 1.4, yH, Z(zr) - 1.4],
+              [s * 33 + 1.4, yH + 0.45, Z(zr) + 1.4],
+            ),
+            "dark",
+            { color: DARK, texel: 1 / 3 },
+          );
+        for (let zr = 948; zr < 986; zr += 12)
+          add(
+            mbox(s, 6, 13, yH - 0.1, yH + 0.5, Z(zr) - 2.6, Z(zr) + 2.6),
+            "dark",
+            { color: DARK_SEAM, texel: 1 / 3 },
+          );
+        add(mbox(s, 16, 27, yH - 0.2, yH + 4, Z(956), Z(970)), "hull", {
+          color: mulColor(CREAM, 0.9),
+          texel: 1 / 6,
+        });
+        add(mbox(s, 17, 26, yH + 4, yH + 4.4, Z(957), Z(969)), "dark", {
+          color: DARK,
+          texel: 1 / 3,
+        });
+        add(cylY(0.5, 0.7, 9, 6).translate(s * 21, yH + 8.5, Z(978)), "dark", {
+          color: DARK,
+          texel: 1 / 3,
+        });
+      }
+    }
     add(boxMM([-34, T2_Y - 1, Z(1010)], [34, T2_Y + 9, Z(1062)]), "hull", {
       color: sootColor(mulColor(CREAM, 0.95), Z(1040)),
       texel: 1 / 10,
@@ -1815,6 +1863,35 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
               texel: 1 / 3,
             },
           );
+        // the platform top itself: hatch rows along both edges, vent grilles, two equipment boxes
+        if (fine) {
+          const yP = T2_Y + 9;
+          for (const s of [-1, 1]) {
+            for (let zr = 1016; zr < 1060; zr += 7)
+              add(
+                boxMM(
+                  [s * 29 - 1.4, yP, Z(zr) - 1.4],
+                  [s * 29 + 1.4, yP + 0.45, Z(zr) + 1.4],
+                ),
+                "dark",
+                { color: DARK, texel: 1 / 3 },
+              );
+            for (let zr = 1018; zr < 1058; zr += 12)
+              add(
+                mbox(s, 11, 17, yP - 0.1, yP + 0.5, Z(zr) - 2.6, Z(zr) + 2.6),
+                "dark",
+                { color: DARK_SEAM, texel: 1 / 3 },
+              );
+            add(mbox(s, 17, 25, yP - 0.2, yP + 3, Z(1014), Z(1024)), "hull", {
+              color: sootColor(mulColor(CREAM, 0.92), Z(1019)),
+              texel: 1 / 6,
+            });
+            add(mbox(s, 18, 24, yP + 3, yP + 3.4, Z(1015), Z(1023)), "dark", {
+              color: DARK,
+              texel: 1 / 3,
+            });
+          }
+        }
       }
       // two more dish/mast clusters on the terrace-2 wings
       for (const s of [-1, 1]) {
@@ -1885,11 +1962,53 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
             },
           );
         }
+        // terrace-2 wings: a hatch row inboard of the edge pipe and vent grilles along the tower shafts
+        for (const s of [-1, 1]) {
+          for (let zr = 888; zr < 1064; zr += 8) {
+            if (rand() < 0.2) continue;
+            add(
+              boxMM(
+                [s * 101 - 1.5, T2_Y, Z(zr) - 1.5],
+                [s * 101 + 1.5, T2_Y + 0.5, Z(zr) + 1.5],
+              ),
+              "dark",
+              { color: DARK, texel: 1 / 3 },
+            );
+          }
+          for (let zr = 922; zr < 1002; zr += 11) {
+            add(
+              mbox(s, 83, 90, T2_Y - 0.1, T2_Y + 0.5, Z(zr) - 3.6, Z(zr) + 3.6),
+              "dark",
+              { color: DARK_SEAM, texel: 1 / 3 },
+            );
+          }
+          // second hatch row and a conduit along the terrace-1 ledge, outboard of the first row
+          for (let zr = 866; zr < 1072; zr += 8) {
+            if (rand() < 0.25) continue;
+            add(
+              boxMM(
+                [s * 137 - 1.4, T1_Y, Z(zr) - 1.4],
+                [s * 137 + 1.4, T1_Y + 0.45, Z(zr) + 1.4],
+              ),
+              "dark",
+              { color: DARK, texel: 1 / 3 },
+            );
+          }
+          add(
+            cylZ(0.9, 0.9, Z(1050) - Z(870), 6).translate(
+              s * 131,
+              T1_Y + 0.9,
+              (Z(870) + Z(1050)) / 2,
+            ),
+            "dark",
+            { color: DARK, texel: 1 / 3 },
+          );
+        }
       }
     }
     if (mid) {
       // greeble field on the terraces: hatches, boxes, domes, dishes, masts, vents, pipes
-      const N = fine ? 150 : 30;
+      const N = fine ? 210 : 30;
       for (let i = 0; i < N; i++) {
         const onT2 = rand() < 0.62;
         const y = onT2 ? T2_Y : T1_Y;
@@ -2735,6 +2854,151 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
         },
       );
     }
+    // belly machinery: conduit pairs and a hatch row beside the keel, then scattered vent grilles,
+    // machinery blocks, hanging masts, pipe runs and dim service lights — all kept off the keel spine and
+    // the docking bays. Blocks take a lighter belly tone so they read against the dark plating.
+    {
+      const bellyFrame = (x, zr) => {
+        const s = x < 0 ? -1 : 1;
+        const t = clamp(Math.abs(x) / wBelly(zr), 0.01, 0.99);
+        return loftFrame(
+          secs,
+          s > 0 ? EDGE.bellyR : EDGE.bellyL,
+          s > 0 ? t : 1 - t,
+          Z(zr),
+        );
+      };
+      const inBay = (x, zr, pad = 6) => {
+        for (const [zrA, zrB, xA, xB] of BELLY_BAYS)
+          if (
+            zr > zrA - pad &&
+            zr < zrB + pad &&
+            Math.abs(x) > xA - pad &&
+            Math.abs(x) < xB + pad
+          )
+            return true;
+        return false;
+      };
+      const bellyDark = DARK;
+      for (const s of [-1, 1]) {
+        // conduits follow the belly's slope section by section
+        for (const [xx, r] of [
+          [19.5, 1.4],
+          [23.5, 0.9],
+        ]) {
+          if (!fine && r < 1) continue;
+          const stops = [
+            380,
+            ...SECTIONS_FULL.filter((z) => z > 380 && z < 1060),
+            1060,
+          ];
+          for (let i = 0; i + 1 < stops.length; i++) {
+            const a = bellyFrame(s * xx, stops[i]);
+            const b = bellyFrame(s * xx, stops[i + 1]);
+            add(
+              tube(
+                a.p.addScaledVector(a.n, r * 0.7),
+                b.p.addScaledVector(b.n, r * 0.7),
+                r,
+                6,
+                i > 0 && i + 2 < stops.length,
+              ),
+              "dark",
+              { color: bellyDark, texel: 1 / 3 },
+            );
+          }
+          if (fine)
+            for (let zr = 400; zr < 1060; zr += 44) {
+              const fr = bellyFrame(s * xx, zr);
+              add(surfaceBox(fr, [r * 2 + 1.6, r * 1.6, 1.6]), "dark", {
+                color: bellyDark,
+                texel: 1 / 3,
+              });
+            }
+        }
+        // hatch row outboard of the conduits
+        if (fine)
+          for (let zr = 372; zr < 1064; zr += 9) {
+            if (rand() < 0.15) continue;
+            const fr = bellyFrame(s * 29.5, zr);
+            add(surfaceBox(fr, [3.2, 0.5, 3.2]), "dark", {
+              color: bellyDark,
+              texel: 1 / 3,
+            });
+          }
+      }
+      const N = fine ? 70 : 16;
+      for (let i = 0; i < N; i++) {
+        const zr = 360 + rand() * 700;
+        const wb = wBelly(zr);
+        const x = (rand() < 0.5 ? -1 : 1) * (35 + rand() * (wb - 41));
+        if (inBay(x, zr)) continue;
+        const fr = bellyFrame(x, zr);
+        const zz = Z(zr);
+        const kind = rand();
+        if (kind < 0.4) {
+          // machinery block in a lighter belly tone with a dark cap plate
+          const w = 5 + rand() * 12;
+          const d = 6 + rand() * 18;
+          const h = 1.5 + rand() * 4;
+          add(surfaceBox(fr, [w, h, d]), "hull", {
+            color: sootColor(mulColor(BELLY, 1.2 + rand() * 0.25), zz),
+            texel: 1 / 8,
+          });
+          if (fine && rand() < 0.5)
+            add(
+              surfaceBox(fr, [w - 1.5, 0.5, d - 1.5], { sink: -(h - 0.1) }),
+              "dark",
+              { color: bellyDark, texel: 1 / 4 },
+            );
+        } else if (kind < 0.62) {
+          // dark vent grille, flush
+          add(surfaceBox(fr, [4 + rand() * 6, 0.6, 6 + rand() * 10]), "dark", {
+            color: DARK_SEAM,
+            texel: 1 / 3,
+          });
+        } else if (kind < 0.78) {
+          // hanging antenna mast on a base block
+          const h = 8 + rand() * 18;
+          add(surfaceBox(fr, [2.4, 1.2, 2.4]), "dark", {
+            color: bellyDark,
+            texel: 1 / 3,
+          });
+          add(
+            tube(fr.p, fr.p.clone().addScaledVector(fr.n, h), 0.55, 6),
+            "dark",
+            { color: bellyDark, texel: 1 / 3 },
+          );
+        } else if (kind < 0.9) {
+          // pipe run along the belly
+          const len = 20 + rand() * 50;
+          const r = 0.8 + rand() * 0.9;
+          const m = frameMatrix(
+            fr.p.clone().addScaledVector(fr.n, r + 0.3),
+            fr.n,
+            fr.v,
+          );
+          const pipe = new THREE.CylinderGeometry(r, r, len, 6);
+          pipe.rotateX(Math.PI / 2);
+          pipe.applyMatrix4(m);
+          add(pipe, "dark", { color: bellyDark, texel: 1 / 3 });
+        } else if (fine) {
+          // dim cool service light strip
+          const p = fr.p.clone().addScaledVector(fr.n, 0.35);
+          add(
+            quadFacing(
+              p.toArray(),
+              fr.n.toArray(),
+              [0, 0, 1],
+              0.8,
+              6 + rand() * 8,
+            ),
+            "windows",
+            { color: mulColor(ROW_COOL, 0.8), uv: "keep" },
+          );
+        }
+      }
+    }
     // lower flank: two layered bands of long plates (upper band prouder), then smaller plates and the
     // flank insignia
     for (const s of [-1, 1]) {
@@ -2881,7 +3145,7 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
           fr.v,
         );
         add(orientedBox([h - 1, 12, 3.2], ribM), "hull", {
-          color: sootColor(mulColor(FLANK, 0.85), Z(zr)),
+          color: sootColor(mulColor(FLANK, 0.72), Z(zr)),
           texel: 1 / 6,
         });
       }
@@ -3080,7 +3344,13 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
     // scorch rings at the fixed weathering points (deck, wings, terraces, belly)
     const scorch = (frame, r, base) =>
       add(
-        scorchDecal(frame, r, sootOf(base, 1).toArray(), base.toArray(), 16),
+        scorchDecal(
+          frame,
+          r,
+          mulColor(sootOf(base, 1), 0.7).toArray(),
+          base.toArray(),
+          14,
+        ),
         "hull",
         {
           color: null,
@@ -3088,7 +3358,7 @@ function buildLod(lod, { open = false, seed = 7 } = {}) {
         },
       );
     for (const w of SCORCH_POINTS) scorch(flat(w.x, w.y, w.z), w.r, CREAM);
-    const sootB = sootOf(BELLY, 1);
+    const sootB = mulColor(sootOf(BELLY, 1), 0.7);
     add(loftScorch(secs, EDGE.bellyR, 0.55, Z(450), 9, sootB, BELLY), "hull", {
       color: null,
       texel: hullTexel,
