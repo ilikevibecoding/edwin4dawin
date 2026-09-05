@@ -327,6 +327,14 @@ What each delivers:
 ## Blockers
 None. No scaffold yet — working against the contract text with the local shim.
 
+## Preview (D's own branch, not the integrated build)
+Static Vite build of the Deck 4 dev harness (all 10 rooms + 3 systems on the registry shim), rebuilt by hand
+from this branch and pushed to `cursor/sd-hangar-systems-play-c071` (generated files only):
+https://raw.githack.com/ilikevibecoding/edwin4dawin/cursor/sd-hangar-systems-play-c071/index.html
+(githack shows a one-click "Open the page" interstitial first). Controls: click to take the deck, WASD, mouse,
+E interact, F3 stats; `?spawn=<room-id>`, `?only=` / `?skip=`. Verified headless: 13 modules, 0 warnings,
+0 page errors, ready in 23 s from the CDN. A: ignore or delete once the integrated build is up.
+
 ## Requests for integrator
 - `d4-hangar` bounds extend to y = -85 (the aperture lip/rails/machinery D owns per §6.2 sit below
   the -72 floor). Please let the Deck 4 envelope floor be -85 for the hangar, or exempt it from the
