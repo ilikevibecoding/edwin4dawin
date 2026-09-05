@@ -178,7 +178,7 @@ export const TOWER = {
   hz1: 26, // half sizes at the top
   headY0: up(206),
   headY1: up(232),
-  headHx: 26,
+  headHx: 30, // heads 1.5x the shaft width, 6 m apart (the reference heads nearly touch)
   headHz: 50, // T-head half sizes (front rounded), the head runs 100 m fore-aft
   headZ: 897, // head centre (zr): rear flush with the shaft top, nose 48 m ahead of it
   sensorY1: up(246),
