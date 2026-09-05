@@ -644,7 +644,7 @@ interface VegCells { near: CellSource[]; cards: CellSource[] }
 const TILE = 900;
 const VEG_CELL = 150;
 /** instances the near crown batches hold each (the tile's own mesh draws the tiles that do not fit) */
-const NEAR_CROWNS = 65536;
+const NEAR_CROWNS = 32768;
 /** casting tiles a coarse cascade (texel over NEAR_TEXEL) draws at most, nearest first */
 const COARSE_SHADOW_TILES = 8;
 const _casting = new Array<number>(MAX_CASCADES).fill(0);
