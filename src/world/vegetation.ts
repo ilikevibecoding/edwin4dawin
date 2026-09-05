@@ -499,11 +499,11 @@ const CROWN_FRAG = /* glsl */ `
     // so the seams where puffs intersect do not read as hard facets
     float cap = smoothstep(-0.5, 0.85, 0.5 * cn.y + 0.5 * normalize(vRel).y);
     vec3 sunlit = diffuseColor.rgb * vec3(1.04, 1.04, 0.97);
-    vec3 shade = diffuseColor.rgb * vec3(0.55, 0.62, 0.74);
+    vec3 shade = diffuseColor.rgb * vec3(0.6, 0.66, 0.72);
     diffuseColor.rgb = mix(shade, sunlit, cap);
     // leaf clusters: fine value noise breaks the smooth shading of the puffs; gaps between clusters darken
     float leaf = vnoise(vWP.xz * 1.7 + vWP.y * 1.3);
-    diffuseColor.rgb *= 0.8 + 0.4 * leaf;
+    diffuseColor.rgb *= 0.82 + 0.36 * leaf;
     diffuseColor.rgb *= 1.0 - 0.3 * smoothstep(0.62, 0.9, vnoise(vWP.xz * 0.55 + vWP.y * 0.4 + 17.0));
   }
 }
@@ -536,17 +536,32 @@ void RE_Direct_Foliage( const in IncidentLight directLight, const in vec3 geomet
   float foliage = ${isFoliage};
   float ndl = dot( geometryNormal, directLight.direction );
   float wrap = 0.5 * foliage;
-  float dotNL = saturate( ( ndl + wrap ) / ( 1.0 + wrap ) );
+  // the sun that enters the crown from the top scatters out of every side: a floor under the wrapped term,
+  // so a puff facing away from the sun is lit like the inside of the leaf mass rather than a hard surface
+  float dotNL = max( saturate( ( ndl + wrap ) / ( 1.0 + wrap ) ), 0.14 * foliage );
   float back = saturate( dot( -directLight.direction, geometryViewDir ) );
-  float trans = 0.4 * foliage * back * back * saturate( 0.7 - 0.7 * ndl );
+  float trans = 0.65 * foliage * back * back * saturate( 0.7 - 0.7 * ndl );
   vec3 irradiance = dotNL * directLight.color;
   reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );
   reflectedLight.directDiffuse += ( trans * directLight.color ) * BRDF_Lambert( material.diffuseColor * vec3( 1.05, 1.1, 0.8 ) );
   // specular only where the surface really faces the light (the wrapped term would blow the GGX up at grazing angles)
   reflectedLight.directSpecular += ( saturate( ndl ) * directLight.color ) * BRDF_GGX( directLight.direction, geometryViewDir, geometryNormal, material ) * mix( 1.0, 0.35, foliage );
 }
+// a crown is a scattering volume, not a solid surface: leaves light each other, so the shade side sees
+// more of the sky and ground bounce than its own normal alone would collect, and sky light that enters
+// from the top comes back out of the sides and underside
+void RE_IndirectDiffuse_Foliage( const in vec3 irradiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
+  float foliage = ${isFoliage};
+  vec3 irr = irradiance;
+  #ifdef USE_ENVMAP
+  irr = mix( irr, getIBLIrradiance( vec3( 0.0, 1.0, 0.0 ) ) * vec3( 1.0, 1.0, 0.85 ), 0.5 * foliage );
+  #endif
+  reflectedLight.indirectDiffuse += irr * BRDF_Lambert( material.diffuseColor ) * ( 1.0 + 0.6 * foliage );
+}
 #undef RE_Direct
 #define RE_Direct RE_Direct_Foliage
+#undef RE_IndirectDiffuse
+#define RE_IndirectDiffuse RE_IndirectDiffuse_Foliage
 `;
 
 // palm family: per-instance frond rotation and droop about the trunk top, trunk lean
@@ -623,19 +638,21 @@ vec4 vegShadowPos = vegShadowR > 0.0 ? vec4(vegShadowC - vegL * vegShadowR, 1.0)
 ${THREE.ShaderChunk.shadowmap_vertex.replace(/worldPosition/g, 'vegShadowPos')}
 `;
 /** Foliage is never fully shadowed: leaves scatter and pass light, so a crown under a taller neighbour
- *  or a building keeps half of the direct sun instead of going black. Wraps three's getShadow
- *  (already inlined by the CSM hook by the time the material's own hook runs). */
+ *  or a building keeps a fifth of the direct sun instead of going black. Wraps three's getShadow. */
 const VEG_SHADOW_PARS_FRAG = /* glsl */ `
 #include <shadowmap_pars_fragment>
 #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
 float vegShadow( sampler2D shadowMap, vec2 shadowMapSize, float shadowIntensity, float shadowBias, float shadowRadius, vec4 shadowCoord ) {
-  return mix( 0.45, 1.0, getShadow( shadowMap, shadowMapSize, shadowIntensity, shadowBias, shadowRadius, shadowCoord ) );
+  return mix( 0.2, 1.0, getShadow( shadowMap, shadowMapSize, shadowIntensity, shadowBias, shadowRadius, shadowCoord ) );
 }
 #endif
 `;
 function softenFoliageShadow(fragmentShader: string): string {
-  // rename the (inlined) lookups first; the wrapper inserted afterwards must keep calling getShadow
-  return fragmentShader.replace(/\bgetShadow\(/g, 'vegShadow(').replace('#include <shadowmap_pars_fragment>', VEG_SHADOW_PARS_FRAG);
+  // the CSM patches ShaderChunk.lights_fragment_begin (where the lookups are) and three expands the
+  // include only after onBeforeCompile, so the chunk is expanded here and its lookups renamed; the
+  // wrapper inserted afterwards must keep calling getShadow
+  const lights = THREE.ShaderChunk.lights_fragment_begin.replace(/\bgetShadow\(/g, 'vegShadow(');
+  return fragmentShader.replace('#include <lights_fragment_begin>', lights).replace('#include <shadowmap_pars_fragment>', VEG_SHADOW_PARS_FRAG);
 }
 
 // cards: screen-aligned quads over the plant; texture blends side/top views with elevation
@@ -850,7 +867,12 @@ const PALETTE: Record<Archetype, string[]> = {
 };
 /** linear-space gain on every tint: the wrap/translucency light model and the sun's warmth push the
  *  rendered canopy toward yellow-green, so the base is pulled back toward the reference's grey olive */
-const CANOPY_GAIN = new THREE.Color(0.9, 0.82, 1.0);
+const CANOPY_GAIN = new THREE.Color(0.75, 0.6, 0.68);
+/** how far every tint is pulled toward its own luminance (linear) after the gain: the reference canopy is
+ *  a grey olive, and desaturating this way keeps the hue instead of flipping low-saturation tints purple */
+const CANOPY_DESAT = 0.4;
+const _hsl = { h: 0, s: 0, l: 0 };
+const _grey = new THREE.Color();
 
 export class Vegetation {
   readonly group = new THREE.Group();
@@ -914,7 +936,14 @@ export class Vegetation {
     /** `lean` is the trunk tilt in radians (palms only; the shader adds its own curvature on top). */
     const add = (arche: Archetype, x: number, z: number, y: number, s: number, prng: Rng, lean = 0) => {
       const tint = prng.pick(tints[arche]).clone();
-      tint.offsetHSL(prng.range(-0.04, 0.04), prng.range(-0.1, 0.08), prng.range(-0.06, 0.06)).multiply(CANOPY_GAIN);
+      // jitter in sRGB HSL: in the linear working space these tints have a lightness of 0.05-0.08, so
+      // offsetHSL there (a ±0.06 swing) clamped about one plant in a hundred to black and left many more
+      // near black — the "near-black clone crowns" of the iter08 frames
+      tint.getHSL(_hsl, THREE.SRGBColorSpace);
+      tint.setHSL(_hsl.h + prng.range(-0.03, 0.03), THREE.MathUtils.clamp(_hsl.s + prng.range(-0.06, 0.08), 0, 1), THREE.MathUtils.clamp(_hsl.l + prng.range(-0.05, 0.05), 0, 1), THREE.SRGBColorSpace);
+      tint.multiply(CANOPY_GAIN);
+      const lum = 0.2126 * tint.r + 0.7152 * tint.g + 0.0722 * tint.b;
+      tint.lerp(_grey.setScalar(lum), CANOPY_DESAT);
       const squash = arche === 2 ? prng.range(0.5, 0.7) : arche === 3 ? prng.range(0.55, 0.8) : arche === 5 ? prng.range(0.32, 0.45) : arche === 6 ? prng.range(0.5, 0.72) : arche === 1 ? prng.range(0.95, 1.25) : arche === 7 ? prng.range(1.3, 1.7) : prng.range(0.72, 1.0);
       const trunk = arche === 2 ? prng.range(0.15, 0.3) : arche === 3 || arche === 5 ? 0.02 : arche === 6 ? prng.range(0.08, 0.2) : arche === 1 ? prng.range(0.7, 1.05) : arche === 7 ? prng.range(0.6, 1.0) : prng.range(0.45, 0.75);
       const seed = prng.next();
