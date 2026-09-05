@@ -1,7 +1,7 @@
 {
-  "updated": "2026-09-05T13:31:39.412Z",
-  "phase": "Star Wars expansion: 7 builders running (gameplay 1:1, space train, towers+rooms, spaceport+ships, Death Star interior, HD textures, shaders/shadows/bloom); landmark wave next",
-  "summary": "User round 2 feedback: references received (Coruscant skyline/platform/senate/plaza + Monument Plaza). New rubrics: 05 render quality (64x HD tiles, normal/material maps, cascaded sun shadows, HDR bloom + filmic tone mapping, atmospheric sky, water reflections, presets) and 06 landmarks (one builder per signature building). Layout now reserves 12 landmark lots (Senate 3x3, Jedi Temple 3x3, Monument Plaza 3x3, Uscru undercity 3x3, Works, CoCo market, Opera, 500 Republica, Chancellery, Medcenter, Detention, HoloNet); 421 towers + 12 landmarks + 8 plazas.",
+  "updated": "2026-09-05T14:06:31.413099Z",
+  "phase": "Star Wars expansion: integration build is live (render pipeline + HD tiles + Coruscant skyline + 5 landmarks); 4 landmark builders running (Works, Opera, 500 Republica, Chancellery); Medcenter, Detention, HoloNet queued; critics and verification next",
+  "summary": "Everything merged so far is in the hosted build: Minecraft 1:1 gameplay (hunger/food, chests with contents that survive disasters, doors, crops, crafting), the space train + hyperlane + two stations (frontier roof-deck spaceport, Coruscant glass concourse), the Coruscant spaceport with landing/take-off ship traffic along boulevard lanes, the Death Star shell + walkable interior (hangar, corridors, throne room, reactor), 421 Coruscant towers with generated interiors, five signature landmarks (CoCo Town market, Jedi Temple, Galactic Senate, Uscru undercity, Monument Plaza), 64x HD tiles with normal/material maps, cascaded sun shadows, HDR bloom + ACES tone mapping, atmospheric sky, a far-skyline impostor layer so Coruscant reads to the horizon, and admin-panel Travel buttons (town, stations, spaceport, Senate, Monument Plaza, skyline, Death Star exterior/hangar). Verified on the merged tree: unit 11/11, textures 11/11, spaceport 15/15, Death Star 8/8, towers 6/6, disaster determinism 40/40; production bundle smoke-tested at the town, station and Death Star hangar with 0 exceptions.",
   "links": [
     {
       "label": "Pull request #17",
@@ -167,6 +167,21 @@
       "name": "Admin panel: Travel",
       "status": "merged",
       "detail": "Travel section: frontier town, frontier station, spaceport, Senate, Monument Plaza, Coruscant skyline, Death Star exterior and hangar; destination chunks generated before the teleport; aerial spots start in flight."
+    },
+    {
+      "name": "SW rubric 5: render quality (HD tiles, shadows, HDR post, sky)",
+      "status": "merged",
+      "detail": "R2: 64px refined tiles + normal/material atlases (11/11 tests). R1: per-pixel PBR-lite lighting, 2-cascade texel-snapped sun shadows, half-float HDR with capped bloom, ACES + time-of-day exposure, vignette, depth-gated FXAA, Rayleigh/Mie sky shared with fog and reflections; presets Cinematic/Balanced/Light switch live; debris, vehicles, ships and the tsunami crest wired into the shading chunk. Light preset A/B within 15% of the old path."
+    },
+    {
+      "name": "SW rubric 6: signature landmarks",
+      "status": "5 of 12 merged",
+      "detail": "Merged: CoCo Town market halls (43 rooms), Jedi Temple (5 spires, archives, council chamber), Galactic Senate (dome, rotunda, chancellor suite), Uscru undercity strip (gangways, cantinas, junk markets), Monument Plaza (Umate rock, radial light strips, pavilions). Building now: the Works, Galaxies Opera House, 500 Republica, Chancellery. Queued: Medcenter, Detention Center, HoloNet. Each must pass the harness (every room lit, furnished, reachable on foot, deterministic)."
+    },
+    {
+      "name": "SW: Coruscant far skyline",
+      "status": "merged",
+      "detail": "One-draw-call impostor layer (inset tower boxes + ground sheet) with its own long fog and a lit-window lattice at night; the real chunks stream ~10 chunks out, the impostors carry the skyline to ~1000 blocks. Coruscant fog now starts at 0.85x render distance."
     }
   ],
   "metrics": [
