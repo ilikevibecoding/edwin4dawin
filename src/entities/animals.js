@@ -234,16 +234,18 @@ export class AnimalManager {
   }
   clearAlert() { this.alertInfo = null; for (const a of this.list) { a.panic = false; a.air = null; a.stunned = 0; a.swept = 0; } }
   // A wave front sweeps animals within `radius` of (x,z) off their feet: they tumble, then thrash in the water.
-  sweep(x, z, radius, dirX, dirZ, strength = 12) {
-    const r2 = radius * radius;
+  sweep(x, z, radius, dirX, dirZ, strength = 12, opts = {}) {
+    const r2 = radius * radius, water = opts.water !== false, now = performance.now();
     for (const a of this.list) {
       const dx = a.pos.x - x, dz = a.pos.z - z;
-      if (dx * dx + dz * dz > r2 || (a.swept || 0) > 0) continue;
+      if (dx * dx + dz * dz > r2 || (a.swept || 0) > 0 || a.air) continue;
+      if (a.blastAt && now - a.blastAt < 2000) continue; // one hit per pass
+      a.blastAt = now;
       const k = strength * a.rng.range(0.6, 1.1) * (a.spec.height > 1.2 ? 0.7 : 1.1);
       this.applyImpulse(a, dirX * k + a.rng.range(-3, 3), 6 + k * 0.35, dirZ * k + a.rng.range(-3, 3));
-      if (this.particles) this.particles.splash(a.pos.x, a.pos.y + 0.3, a.pos.z, 10, 1.1);
+      if (water && this.particles) this.particles.splash(a.pos.x, a.pos.y + 0.3, a.pos.z, 10, 1.1);
       a.air.spin = a.rng.range(-10, 10);
-      a.swept = 4 + a.rng.range(0, 2);
+      if (water) a.swept = 4 + a.rng.range(0, 2);
       a.panic = true; a.panicUntil = performance.now() + 90000;
       if (a.spec.sound) this.audio[a.spec.sound](a.pos);
     }

@@ -40,6 +40,7 @@ const LINES = {
   trapped: ["Help! I can't swim!", 'Somebody get me out of here!', "I'm stuck! Help!", 'Over here! Help!'],
   sky: ["What's that in the sky?", 'Is that... a moon?', 'Look up! What in tarnation is that?', "That ain't no star.", "Somebody fetch the sheriff. Look at the sky!", "It's getting bigger...", 'Ma, come look at this!', 'Lord have mercy, what IS that?', 'Is it coming closer?', "I don't like the look of that."],
   swept: ['Whoa-oa-oa!', "I can't- glub- help!", 'The water took me!', 'Hold on to something!', 'Aaah! Grab my hand!'],
+  blast: ['Aaargh!', 'Get down!', 'My ears!', "It's the end of the world!", 'Everything is on fire!', "I can't see! I can't see!"],
 };
 
 const PANIC_SPEED = 4.2;
@@ -289,20 +290,24 @@ export class NPCManager {
   }
   watchMove(point) { if (this.watchInfo) { this.watchInfo.x = point.x; this.watchInfo.y = point.y; this.watchInfo.z = point.z; } }
   clearWatch() { if (this.watchInfo) { this.watchInfo = null; for (const npc of this.list) if (npc.watcher) { npc.watcher = false; npc.idleTimer = Math.min(npc.idleTimer, npc.rng.range(0.2, 1.5)); npc.lookAt = null; } } }
-  // A wave front (or blast) sweeps everyone within `radius` of (x,z) off their feet in direction (dirX,dirZ):
-  // they tumble through the air, then flail helplessly in the water for a few seconds before they can swim.
-  sweep(x, z, radius, dirX, dirZ, strength = 12) {
-    const r2 = radius * radius;
+  // A wave front or a blast sweeps everyone within `radius` of (x,z) off their feet in direction (dirX,dirZ):
+  // they tumble through the air; a WATER sweep (default) then leaves them flailing helplessly for a few seconds
+  // before they can swim, a dry blast (`opts.water === false`) knocks them down with a proper landing stun.
+  // opts: { water: true|false, lines: 'swept'|'blast'|..., cooldownTicks }
+  sweep(x, z, radius, dirX, dirZ, strength = 12, opts = {}) {
+    const r2 = radius * radius, water = opts.water !== false, lines = opts.lines || (water ? 'swept' : 'blast');
     for (const npc of this.list) {
       const dx = npc.pos.x - x, dz = npc.pos.z - z;
-      if (dx * dx + dz * dz > r2 || npc.swept > 0) continue;
+      if (dx * dx + dz * dz > r2 || npc.swept > 0 || npc.air) continue;
+      if (npc.blastTick !== undefined && this.tickCount - npc.blastTick < (opts.cooldownTicks || 40)) continue; // one hit per pass
+      npc.blastTick = this.tickCount;
       const k = strength * npc.rng.range(0.7, 1.15);
       this.applyImpulse(npc, dirX * k + npc.rng.range(-3, 3), 7 + k * 0.35, dirZ * k + npc.rng.range(-3, 3));
-      if (this.game && this.game.particles) this.game.particles.splash(npc.pos.x, npc.pos.y + 0.3, npc.pos.z, 12, 1.2);
+      if (water && this.game && this.game.particles) this.game.particles.splash(npc.pos.x, npc.pos.y + 0.3, npc.pos.z, 12, 1.2);
       npc.air.spin = npc.rng.range(-12, 12);
-      npc.swept = 4 + npc.rng.range(0, 2);
+      if (water) npc.swept = 4 + npc.rng.range(0, 2);
       npc.panic = true; npc.panicUntil = Math.max(npc.panicUntil, this.tickCount + 20 * 90);
-      this.shout(npc, 'swept', 0.5);
+      this.shout(npc, lines, 0.5);
     }
   }
   clearAlert() {
