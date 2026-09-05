@@ -23,7 +23,10 @@ const EAST_CABIN_X1 = 76;
 const CABIN = 8;
 const WT = 0.15; // partition half thickness
 const CABIN_WHITE = 0xffdcb4; // cabin ceiling lamps: warm white, so the amber wall lamp stays the cabin's single amber lamp
-const STRIP = "emitWarm"; // warm wall strips / ceiling channel instead of the spine's blue-white (officers' accent)
+// warm wall strips / ceiling channel instead of the spine's blue-white (officers' accent). offLamp (module-local, 1.15),
+// not the shared emitWarm (1.7): at 1.7 the strips tonemapped to 248/230/178 and the round-4 critic read every one as
+// a pure-white bar; at 1.15 they stay visibly warm (236/208/152) with no bloom.
+const STRIP = "offLamp";
 
 // cabins whose door leaf is closed (no real light inside; they read from the corridor status lamp only).
 // Open: captain w0 and w1 (the critic's cabin views). w2/e2 were open in round 2 but their doorways sit 19–32 m
