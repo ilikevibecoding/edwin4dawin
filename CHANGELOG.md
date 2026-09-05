@@ -64,6 +64,9 @@ seed) in both. `npm run mp-test` automates this with three headless clients incl
   brow row, iris contrast checked against the skin tone), natural unsynchronised blinking (`npc/blink.js`);
   pig and chicken eyes redrawn with whites/pupils/glint; horse eyes thicker with coat-aware contrast, lashes and
   nostrils moved so they no longer read as low eyes; cow side-eye widened.
+- **Creative flight** - double-tap `Space` toggles flight (Minecraft rules: Space rises, Shift descends, sprint doubles
+  the speed to ~22 blocks/s, landing ends flight, switching off mid-air gives normal fall damage); quick taps are latched
+  so they are not lost between slow frames; disaster wind only buffets a flying observer; `?fly=1` starts airborne.
 - **Performance tooling** - `PerfMonitor` (frame/JS/GPU timing via `EXT_disjoint_timer_query`, draw calls,
   memory, long tasks, entity counters, network bytes, load time) shown on `F3` and in the admin panel;
   `scripts/bench.mjs`, `scripts/cdp.mjs`, `scripts/test-unit.mjs`, `scripts/test-disasters.mjs`,

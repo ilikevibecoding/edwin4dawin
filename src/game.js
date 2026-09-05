@@ -137,6 +137,7 @@ export class Game {
     this.player.teleport(sx, sy, sz);
     this.player.yaw = this.startYaw; // default: face east toward town
     this.player.pitch = params.has('pitch') ? parseFloat(params.get('pitch')) * Math.PI / 180 : -0.08;
+    if (params.get('fly') === '1') this.player.flying = true; // start airborne (observer / demo vantage)
     this.spawnPoint = { x: sx, y: sy, z: sz };
 
     this.bindEvents();

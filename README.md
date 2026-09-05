@@ -44,6 +44,8 @@ Requires a WebGL-capable browser. Click the game once to grab the mouse.
 
 `Ctrl` is intentionally not used for sprinting because `Ctrl+W` closes the browser tab.
 
+URL parameters for demos and screenshots: `?x=&y=&z=&yaw=&pitch=&time=&fly=1` (e.g. `?x=-8&z=2&y=88&yaw=90&pitch=-35&fly=1` starts you hovering above the main street).
+
 ## Disasters (administrator controls)
 
 Three deterministic, fully reversible disasters can be triggered manually from the in-game control panel (`F4`):
