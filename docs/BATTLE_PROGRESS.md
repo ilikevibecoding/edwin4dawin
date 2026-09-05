@@ -134,8 +134,41 @@ Dead hulls now go dark (emissive parts per instance), engine glow discs are grad
 clipped white, the city fill is less saturated (cream-grey shadows), the planet ground is violet-indigo
 again, cinematic labels drop ship ids, the phone HUD stays on one line.
 
-## Polish wave
+## Polish wave (merged)
 
-_effects (fireball edges, animated licks, scorch, flak, bolt heads, near-camera fade) and ships (Venator
-colour/seam/connecting deck, Providence LOD tint + seam + stern, Recusant stern/pod/LOD 2, Munificent
-arms, weathering, class colour separation) — in progress_
+- Effects: rotated-octave fbm fireballs with torn rims, hot cores, rolling lobes and soot intrusions;
+  thin blue-white shock rings; 2–3 animated licks per fire with their own phase/size/lean; wreck fires never
+  age out (flame layer reserves 15 % for licks, smallest live fire evicted first); scorch stamps on every
+  heavy hit at 1.5× (merge on re-hit), 3× under fires, darker soot with a heat rim; capsule bolts with a
+  saturated red tip (300 m head rgb 248/107/74, 3 km 219/68/49); two-stage flak (white-orange core with
+  rays → dark ragged puff); near-camera fade (60–150 m). 6 effect draw calls; pools peak add 1171/1400,
+  flame 688/840, smoke 1851/2800, scorch 1790/2100 over 240 s.
+- Ships: Venator cream-white palette (deck sat 0.10, oblique flank 0.03), 10 m × 4 m recessed deck seam
+  with lit strips, connecting deck between the towers, brighter open bay; Providence stable grey across
+  LODs (LOD 0/1/2 within 6 sRGB), one plate scale, recessed channels, deep nozzle bells + stern vents;
+  Recusant deep bells between pylons, solid LOD 2 spine (reads at 10 km), pod collar/girders/sensors,
+  gunmetal grey; Munificent blade-like pincer arms, cooler tan, soot bands. LOD 0/1/2: Venator 33.1k /
+  9.2k / 1.1k, Providence 49.6k / 10.1k / 2.0k, Munificent 24.5k / 9.5k / 1.6k, Recusant 23.5k / 10.8k / 1.5k.
+- Integrator: dead hulls go dark (emissive instance colour), gradient engine discs, lower-saturation fill,
+  violet-indigo ground.
+
+### Final measurements (software GL, 1280×720)
+
+`tools/battle-verify.mjs` **14/14**: max 107 calls / 0.90 M tris over 33 views; 58.9 k bolts in 191 s,
+peak 388 in flight, 1 846 particles; 45/50 ships alive with 5 staged deaths; 0 fighters inside hulls;
+13 cinematic cuts in 80 s, camera never inside a hull; `battle.update` ≤ 0.94 ms per 1/60 step (with two
+other Chrome instances loading the machine); texture memory 38 MB; 27 shader programs; production build
+OK (battle entry 229 kB gzip 81 kB + shared three.js chunk; planet bake worker 3.6 kB).
+
+Phone (emulated iPhone 13, DPR capped at 1.0, fleet scale 0.6): 27 ships, 222 fighters, 92 calls,
+529 k tris, cinematic auto-starts, one-finger orbit and the Cinematic button work, no errors.
+
+## Known limitations / next steps
+
+- Hulls do not break apart on death (wrecks keep their geometry under fires, debris and smoke).
+- Flak still clusters at 2–3 km in some inserts; the flak *rate* in the choreography is the remaining knob.
+- The Venator belly reads slightly warm under the city fill even with a neutral albedo.
+- Below ~5 km the planet's pin layers magnify into soft blooms (no low-pass shots are in the shot list).
+- Frame rates on real GPUs were not measured (software GL only); the technical review estimates 60+ fps
+  on discrete GPUs, ~20–25 % of an integrated GPU at 1.5 DPR, and main-thread cost as the phone risk.
+- No sound in the battle scene yet (the ISD scene's audio system could drive distant rumbles and bolts).
