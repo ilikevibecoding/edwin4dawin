@@ -320,21 +320,23 @@ export class PlaneEffects {
           // emission station: at the bow in the hump phase, spread over the forebody chine when planing
           const ax = lerp(2.3, 0.4 + this.rng.next() * 1.6, planing);
           const p = this.tmp.copy(bow).setX(ax).setZ(bow.z + side * 0.3).applyQuaternion(q).add(flight.position);
-          const sheet = this.rng.next() < 0.6;
-          const lat = (1.6 + this.rng.next() * 2.6) * (0.6 + 0.6 * hump) + speed * 0.06;
-          const up = 1.2 + this.rng.next() * 2.2 + speed * 0.07;
+          const sheet = this.rng.next() < 0.45;
+          const lat = (1.4 + this.rng.next() * 2.4) * (0.6 + 0.6 * hump) + speed * 0.05;
+          const up = 1.0 + this.rng.next() * 2.0 + speed * 0.06;
           // sheets leave the chine nearly still in the water's frame (the float runs on ahead of them)
           const carry = sheet ? 0.12 : 0.22;
+          // sheets are short and wide (a blister of water, not a spike) and translucent; the droplet clusters
+          // carry the mist the sheets break into
           this.spray.emit({
             x: p.x, y: 0.12, z: p.z,
-            vx: v.x * carry + right.x * side * lat + (this.rng.next() - 0.5) * 0.8,
+            vx: v.x * carry + right.x * side * lat + (this.rng.next() - 0.5) * 1.2,
             vy: up,
-            vz: v.z * carry + right.z * side * lat + (this.rng.next() - 0.5) * 0.8,
-            life: sheet ? 0.5 + this.rng.next() * 0.45 : 0.4 + this.rng.next() * 0.5, age: 0,
+            vz: v.z * carry + right.z * side * lat + (this.rng.next() - 0.5) * 1.2,
+            life: sheet ? 0.45 + this.rng.next() * 0.4 : 0.45 + this.rng.next() * 0.55, age: 0,
             size: 1, tile: sheet ? 0 : 1,
-            len: sheet ? 1.1 + this.rng.next() * 1.3 + speed * 0.03 : 0.45 + this.rng.next() * 0.5,
-            wid: sheet ? 0.35 + this.rng.next() * 0.35 : 0.45 + this.rng.next() * 0.5,
-            alpha: sheet ? 0.55 + 0.35 * this.rng.next() : 0.5 + 0.3 * this.rng.next(),
+            len: sheet ? 0.7 + this.rng.next() * 0.8 + speed * 0.015 : 0.5 + this.rng.next() * 0.7,
+            wid: sheet ? 0.55 + this.rng.next() * 0.5 : 0.5 + this.rng.next() * 0.7,
+            alpha: sheet ? 0.3 + 0.25 * this.rng.next() : 0.3 + 0.25 * this.rng.next(),
           });
         }
       }
