@@ -559,7 +559,7 @@ export function impConsole(kit, ctx, { x, z, y = 0, yaw = 0, w = 1.8, d = 0.8, h
     }
   }
   // status lamps on the cheeks
-  for (const s of [-1, 1]) add(rand() < 0.7 ? lampMat : "emitRed", new THREE.BoxGeometry(0.02, 0.05, 0.05), s * (w / 2 + 0.006), h - 0.45, -d * 0.2);
+  for (const s of [-1, 1]) add(rand() < 0.7 ? lampMat : "emitRedDim", new THREE.BoxGeometry(0.02, 0.05, 0.05), s * (w / 2 + 0.006), h - 0.45, -d * 0.2);
   if (tall) {
     // rear riser with a large vertical display (bridge pit stations)
     add("paintedMetal", new THREE.BoxGeometry(w, 0.9, 0.12), 0, h + 0.4, -d / 2 + 0.05, { color: PALETTE.impDark, texel: 1.5 });
@@ -649,7 +649,7 @@ export function equipmentRack(kit, ctx, { side, u, w = 1.2, h = 2.4, d = 0.6, se
     const sh = 0.12 + rand() * 0.25;
     frame.box("metal", u, y + sh / 2, d + 0.02, w - 0.24, sh - 0.03, 0.03, { color: rand() < 0.5 ? PALETTE.impBlack : PALETTE.impMid, texel: 2 });
     const nl = 1 + Math.floor(rand() * 4);
-    for (let i = 0; i < nl; i++) frame.box(rand() < 0.15 ? "emitRed" : lit, u - w / 2 + 0.2 + i * 0.09, y + sh / 2, d + 0.038, 0.03, 0.02, 0.008);
+    for (let i = 0; i < nl; i++) frame.box(rand() < 0.15 ? "emitRedDim" : lit, u - w / 2 + 0.2 + i * 0.09, y + sh / 2, d + 0.038, 0.03, 0.02, 0.008);
     if (rand() < 0.3) frame.box("leds", u + w * 0.2, y + sh / 2, d + 0.038, w * 0.3, 0.02, 0.008, { uv: "keep" });
     y += sh;
   }
@@ -671,7 +671,7 @@ export function crate(kit, ctx, { x, y = 0, z, sx = 1.2, sy = 1.0, sz = 1.2, yaw
   add("paintedMetal", new THREE.BoxGeometry(sx + 0.03, sy * 0.12, sz + 0.03), 0, sy * 0.06, 0, { color: PALETTE.impBlack, texel: 2 });
   add("paintedMetal", new THREE.BoxGeometry(sx + 0.03, sy * 0.1, sz + 0.03), 0, sy - sy * 0.05, 0, { color: PALETTE.impBlack, texel: 2 });
   for (const s of [-1, 1]) add("paintedMetal", new THREE.BoxGeometry(0.06, sy, sz + 0.04), s * (sx / 2 - 0.2), sy / 2, 0, { color: PALETTE.impBlack, texel: 2 });
-  add(rand() < 0.8 ? "emitBlue" : "emitRed", new THREE.BoxGeometry(0.12, 0.03, 0.01), sx * 0.25, sy * 0.5, sz / 2 + 0.006);
+  add(rand() < 0.8 ? "emitBlueDim" : "emitRedDim", new THREE.BoxGeometry(0.12, 0.03, 0.01), sx * 0.25, sy * 0.5, sz / 2 + 0.006);
   add("decal", new THREE.PlaneGeometry(Math.min(0.4, sy * 0.4), Math.min(0.4, sy * 0.4)), -sx * 0.2, sy * 0.5, sz / 2 + 0.004, { uv: "keep", uvRect: decalRect(Math.floor(rand() * 16)) });
   const c = Math.abs(Math.cos(yaw));
   const s = Math.abs(Math.sin(yaw));

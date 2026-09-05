@@ -1375,7 +1375,9 @@ export function makeCityLights(size = 512, seed = 141, density = 0.035) {
 
 // Imperial console UI: monochrome blue (or red / amber) readouts on black — hex-cell grids, target
 // rings, text-like blocks, scrolling bars. Distinct from the freighter's teal screens.
-export function makeImperialScreen(w = 512, h = 256, seed = 151, accent = "#4a9dff", warn = "#ff4136", style = 0) {
+// warn defaults to a deep red: a saturated #ff4136 at the shared screens' 1.4 emissive clips its red
+// channel after ACES on every console in the ship
+export function makeImperialScreen(w = 512, h = 256, seed = 151, accent = "#4a9dff", warn = "#bf3329", style = 0) {
   const c = makeCanvas(w, h);
   const ctx = c.getContext("2d");
   const rand = mulberry32(seed);
