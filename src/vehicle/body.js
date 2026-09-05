@@ -116,7 +116,7 @@ export function lampReady(key, geo, mode = LAMP_HOT[key]) {
 // The panes too: a depth pass has no alpha, so a 26 per cent windscreen would
 // throw a *solid* shadow across the whole dash and the cabin daylight model is
 // built on the sun coming through it.
-const UNSHADOWED = new Set(['reflector', 'headlight', 'lensClear', 'lensRibbed', 'amber', 'taillight', 'reverseLamp', 'glass', 'glassSide', 'glassDark']);
+const UNSHADOWED = new Set(['reflector', 'barReflector', 'headlight', 'lensClear', 'lensRibbed', 'amber', 'taillight', 'reverseLamp', 'glass', 'glassSide', 'glassDark']);
 
 /**
  * `Kit.emit` with the per-piece recentring done right.

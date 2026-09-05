@@ -594,7 +594,9 @@ function pillarSpot(k) {
   const dz = z + 0.02;
   k.add('trimGloss', new THREE.CylinderGeometry(0.068, 0.062, 0.1, 18), { pos: [bx, dy, dz], rot: [Math.PI / 2 + rot[0], rot[1], 0] });
   k.add('trimGloss', new THREE.CylinderGeometry(0.03, 0.05, 0.03, 12), { pos: [bx, dy + 0.006, dz - 0.062], rot: [Math.PI / 2 + rot[0], rot[1], 0] });
-  k.add('reflector', new THREE.CylinderGeometry(0.06, 0.028, 0.05, 18, 1, true), {
+  // on the bar pods' key, so the gear kit has one reflector bucket (a merged
+  // mesh per key is a draw call) and this cone shares their dimmer bowl glow
+  k.add('barReflector', new THREE.CylinderGeometry(0.06, 0.028, 0.05, 18, 1, true), {
     pos: [bx + 0.003, dy - 0.003, dz + 0.03],
     rot: [Math.PI / 2 + rot[0], rot[1], 0],
   });
@@ -773,16 +775,24 @@ function fridgeSlide(k) {
  * each pod's x (width `w` is the 1/e half-width), clamped to 1, so the lit-lamp
  * shaping in `applyLampGlow` fires over each pod and not over the plastic
  * between them. Same attribute `hotSpot` writes; only the shape differs.
+ *
+ * Radial, not a stripe (round 6). The first cut was a function of x alone, so
+ * each lobe lit the cover's full 75 mm height: nine 80 x 75 mm rectangles,
+ * which from the hero camera (7 px between pods) were the bar — hiding the
+ * LED discs behind them left nine bright squares peaking at Y 0.77, and the
+ * rectangles plus their bloom filled the gaps to 0.8 of the peaks. A disc the
+ * size of the optic behind it is the scatter a cover actually shows.
  */
 function barLobes(geo, xs, w) {
   const pos = geo.attributes.position;
   const hot = new Float32Array(pos.count);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i);
+    const y = pos.getY(i);
     let s = 0;
     for (const xi of xs) {
-      const t = (x - xi) / w;
-      s += Math.exp(-t * t);
+      const t = ((x - xi) * (x - xi) + y * y) / (w * w);
+      s += Math.exp(-t);
     }
     hot[i] = Math.min(1, s);
   }
@@ -801,7 +811,9 @@ function lightBar(k) {
   const n = 9;
   for (let i = 0; i < n; i++) {
     const x = (i - (n - 1) / 2) * (len / n);
-    k.add('reflector', new THREE.CylinderGeometry(0.032, 0.026, 0.05, 14), {
+    // `barReflector`, not `reflector` (round 6): the headlamp bowls' key with
+    // a dimmer, steeper bowl glow — see materials.js for the number.
+    k.add('barReflector', new THREE.CylinderGeometry(0.032, 0.026, 0.05, 14), {
       pos: [x, y, z + 0.045],
       rot: [Math.PI / 2, 0, 0],
     });
@@ -815,7 +827,16 @@ function lightBar(k) {
     // 154, so the pods were the slab, not the cover. At 0.25 the pod peaks
     // at 2.3: lit, just over the threshold, with a tenth of a headlamp's
     // bloom energy.
-    k.add('headlight', hotSpot(new THREE.CylinderGeometry(0.024, 0.024, 0.01, 12), 0.25), {
+    //
+    // 0.25 -> 0.12 (round 6): the residual in the hero's bar box was still
+    // the pods — hiding them took 532 px over Y 0.5 to 269 — because 2.3 is
+    // over the night bloom threshold of 2.0 and the high pass is a hard cut,
+    // so every pod bloomed into an 8 px ball and nine balls 7 px apart are a
+    // slab. At 0.12 the pod peaks at 1.87 (luma 1.6): a lit LED at Y 0.85 in
+    // the frame that does not bloom, with the housing dark between. That is
+    // the round-5 lighting brief in as many words: "the light bar under the
+    // bloom threshold with nine pods readable".
+    k.add('headlight', hotSpot(new THREE.CylinderGeometry(0.024, 0.024, 0.01, 12), 0.12), {
       pos: [x, y, z + 0.072],
       rot: [Math.PI / 2, 0, 0],
     });
@@ -827,11 +848,12 @@ function lightBar(k) {
   // lens's 0.1 alpha that is 0.68 of flat radiance laid over every pixel of the
   // bar — the 60 px plateau at Y 0.7 critic B measured, with the nine optics
   // buried under it. The cover now carries a nine-lobe mask in the same
-  // `lampHot` attribute: a Gaussian at each pod's x, 30 mm wide, so the cover
-  // scatters light *at the pods* and stays clear between them. The box is
-  // subdivided along its length so the lobes have vertices to live on.
-  const cover = new THREE.BoxGeometry(len - 0.02, 0.075, 0.012, 88, 1, 1);
-  barLobes(cover, Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * (len / n)), 0.03);
+  // `lampHot` attribute: a Gaussian disc at each pod, 28 mm to 1/e, so the
+  // cover scatters light *at the pods* and stays clear between them. The box
+  // is subdivided along its length and its height so the discs have vertices
+  // to live on (four rows: the lobe is read at y = 0, +-19 and +-37 mm).
+  const cover = new THREE.BoxGeometry(len - 0.02, 0.075, 0.012, 88, 4, 1);
+  barLobes(cover, Array.from({ length: n }, (_, i) => (i - (n - 1) / 2) * (len / n)), 0.028);
   k.add('barCover', cover, { pos: [0, y, z + 0.078] });
   // mounts
   for (const side of [-1, 1]) {

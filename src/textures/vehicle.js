@@ -1864,6 +1864,88 @@ export function treadMaps(rows = 9) {
   });
 }
 
+/**
+ * The windscreen's wiper geometry, shared by the pane's film
+ * (`glassLayerMap`), its roughness (`glassRoughness`) and, mirrored, the
+ * cabin's own film (interior.js `screenFilmTexture`), so every layer agrees
+ * about where the glass is clean. Pane uv: u across the 1.54 m screen, v up
+ * the 0.81 m rake; `dy` is scaled by WIPER_DY so a radius is in u units
+ * (1 u = 1.54 m; the true ratio is 0.526, 0.56 is the interior canvas's
+ * 288 / 512 and both layers have always used it).
+ *
+ * An opposed pair, which is what body.js `wipers` parks on the cowl: spindles
+ * at u 0.12 and 0.88 just above the bottom edge, each blade parked pointing
+ * inboard and 14 degrees up (the 3D blade runs 0.48 m in from its spindle at
+ * that angle), sweeping up through vertical to 112 degrees — past its own
+ * spindle towards the A pillar, as an opposed blade does, so the sides of the
+ * pane are cleared — and the two sectors overlap down the middle. Reach 0.56
+ * u (0.86 m of arm and blade), heel 0.08 u. The two rims cross at (0.5,
+ * 0.76): a V of dust at the top centre, the upper corners never reached, a
+ * dusty triangle under the parked blades that the cowl mostly hides, and the
+ * middle of the pane clean.
+ *
+ * Round 5 drew a tandem pair pivoting below the glass at u 0.3 and 0.76 with
+ * reaches of 0.98 and 0.78 u, which put both outer rims a full pane-height
+ * above the header: the only sweep edges that landed on the glass were the
+ * heels', a line 0.23 up the pane, so the film read as a band above the
+ * blades and not as arcs — all three critics. The roughness map meanwhile
+ * drew one arc about the bottom centre. The blades in the frame are the
+ * opposed pair, so the film now follows them.
+ */
+const WIPER_DY = 0.56;
+const WIPER_PARK = 0.245;
+const WIPER_TOP = 1.95;
+const WIPER_BLADES = [
+  // pivot u, pivot v, from angle, to angle, heel r, tip r
+  [0.12, 0.03, WIPER_PARK, WIPER_TOP, 0.08, 0.56],
+  [0.88, 0.03, Math.PI - WIPER_TOP, Math.PI - WIPER_PARK, 0.08, 0.56],
+];
+
+/**
+ * 1 where a blade has been, 0 where not. The edge is soft over `soft` u —
+ * 0.013 is 2 cm, the width of the smear a rubber leaves at the end of its
+ * travel; round 5 ramped over 5 cm radially and 4 cm along the arc. `grow`
+ * widens each sector, which is how the ridge of dust the blade pushes ahead
+ * of itself is found: `wiperSweep(u, v, w) - wiperSweep(u, v)` is the band
+ * `w` wide just outside the sweep and nowhere inside it.
+ */
+export function wiperSweep(u, v, grow = 0, soft = 0.013) {
+  let s = 0;
+  for (const [pu, pv, a0, a1, r0, r1] of WIPER_BLADES) {
+    const dx = u - pu;
+    const dy = (v - pv) * WIPER_DY;
+    const r = Math.hypot(dx, dy);
+    const ang = Math.atan2(dy, dx);
+    // distance inside the sector: along the arc for the angular limits, so
+    // the edge is the same 2 cm at the heel and at the tip
+    const e = Math.min(Math.min(ang - a0, a1 - ang) * r, r - r0, r1 - r) + grow;
+    s = Math.max(s, smoothstep(0, soft, e));
+  }
+  return s;
+}
+
+/**
+ * The line a parked blade leaves: the dust its rubber dragged to a stop, a
+ * centimetre wide, just above the blade's edge (the blade is 16 mm wide and
+ * the smear is on the side it sweeps towards) along the park ray from 3 cm
+ * off the spindle to the tip 0.48 m in — the 3D blade's own extent, not the
+ * sweep's, since the reach beyond the blade is the arm's.
+ */
+export function wiperPark(u, v) {
+  let s = 0;
+  for (const [pu, pv, a0, a1] of WIPER_BLADES) {
+    const park = pu < 0.5 ? a0 : a1;
+    const dx = u - pu;
+    const dy = (v - pv) * WIPER_DY;
+    const r = Math.hypot(dx, dy);
+    // signed distance across the park ray, positive on the swept side
+    const d = (pu < 0.5 ? 1 : -1) * (-Math.sin(park) * dx + Math.cos(park) * dy);
+    const along = smoothstep(0.02, 0.05, r) * (1 - smoothstep(0.3, 0.33, r));
+    s = Math.max(s, Math.exp(-(((d - 0.014) / 0.006) ** 2)) * along);
+  }
+  return s;
+}
+
 /** Windscreen film: wiper arcs, dust build-up in the corners. */
 export function glassRoughness(kind = 'screen') {
   return cached(`veh.glassRough.${kind}`, () =>
@@ -1890,13 +1972,16 @@ export function glassRoughness(kind = 'screen') {
           const edge = smoothstep(0.4, 0.5, Math.abs(cx)) + smoothstep(0.4, 0.5, Math.abs(v - 0.5));
           return clamp(0.02 + (dust * 0.12 + streak * 0.08 + rearLow * 0.2 + edge * 0.16 + spots * 0.14) * 0.25, 0.02, 0.2);
         }
-        const cy = v - 0.12;
-        const r = Math.hypot(cx * 1.15, cy);
-        const wipe = smoothstep(0.52, 0.58, r) + (1 - smoothstep(0.1, 0.16, r));
+        // Rough where the film is — outside the two sweeps — and glass inside
+        // them, the same two sectors the film draws (round 6; this map used
+        // to draw one arc about the bottom centre, over a film that drew two,
+        // and the reflection's haze edge sat where no dust edge was).
+        const swept = wiperSweep(u, v);
+        const wipe = 1 - swept;
         const edge = smoothstep(0.36, 0.5, Math.abs(cx)) + smoothstep(0.72, 1.0, v);
-        // hard water spots outside the swept arc, which is where the reflection
-        // breaks up and stops looking like a mirror offcut
-        return clamp(0.015 + wipe * 0.09 + dust * 0.05 + edge * 0.2 + spots * smoothstep(0.44, 0.6, r) * 0.16, 0.015, 0.46);
+        // hard water spots outside the swept arcs, which is where the
+        // reflection breaks up and stops looking like a mirror offcut
+        return clamp(0.015 + wipe * 0.09 + dust * 0.05 + edge * 0.2 * (1 - swept * 0.7) + spots * wipe * 0.16, 0.015, 0.46);
       },
       // Every glass map is authored with v running bottom-to-top, the way a
       // PlaneGeometry's uvs do. Data textures are uploaded row 0 first, so
@@ -1966,37 +2051,19 @@ export function glassLayerMap(kind = 'screen') {
         let band = 0;
         let frit;
         if (kind === 'screen') {
-          // two blades pivoting off the bottom edge, so the clean region is
-          // the union of two annular sectors — the same pair the interior's
-          // own film draws, so the two layers agree about where the dirt is
-          // Tandem blades: both park along the bottom edge pointing right and
-          // sweep up and over to the left. The first cut had both stopping at
-          // vertical, so the left third of the screen was never cleaned and the
-          // whole pane read as one even haze. `grow` widens the arcs, which is
-          // how the ridge the blade pushes the dust into is found: the band
-          // just outside the sweep and not inside it.
-          const sweep = (grow) => {
-            let s = 0;
-            for (const [pu, pv, a0, a1, r0, r1] of [
-              [0.3, -0.16, -0.06, 2.55, 0.22, 0.98],
-              [0.76, -0.16, -0.1, 2.45, 0.2, 0.78],
-            ]) {
-              const dx = u - pu;
-              const dy = (v - pv) * 0.56;
-              const r = Math.hypot(dx, dy);
-              const ang = Math.atan2(dy, dx);
-              if (ang > a0 - grow && ang < a1 + grow && r > r0 - grow * 0.5 && r < r1 + grow) {
-                const eA = Math.min(ang - a0 + grow, a1 + grow - ang);
-                const eR = Math.min(r - r0 + grow * 0.5, r1 + grow - r);
-                s = Math.max(s, Math.min(1, eA * 14) * Math.min(1, eR * 30));
-              }
-            }
-            return s;
-          };
-          const swept = sweep(0);
-          // the blade's ridge: a soft band of pushed dust outside the arc,
-          // heaviest at the top of the sweep and thinning down the sides
-          const ridge = clamp(sweep(0.055) - swept) * (0.55 + 0.45 * smoothstep(0.3, 0.7, v));
+          // The opposed pair's two sectors (`wiperSweep`, shared with the
+          // roughness map and the cabin's film): the clean region is their
+          // union, the edge soft over 2 cm.
+          const swept = wiperSweep(u, v);
+          // the blade's ridge: a soft band of pushed dust 4 cm wide outside
+          // the arc, heaviest at the top of the sweep and thinning down the
+          // sides. It was 8.5 cm wide; at 640 x 360 that was a smudge round
+          // the sweep rather than a line at its edge.
+          const ridge = clamp(wiperSweep(u, v, 0.028) - swept) * (0.55 + 0.45 * smoothstep(0.3, 0.7, v));
+          // the smear where each blade parks (round 6, critic C): the dust the
+          // rubber dragged to a stop, a line a centimetre wide just above the
+          // parked blade's edge
+          const park = wiperPark(u, v);
           // Low-contrast: a film of fines is an even haze that thickens towards
           // the edges, not a blotch pattern. The first cut at 0.55 of noise read
           // as frost from three metres.
@@ -2012,14 +2079,37 @@ export function glassLayerMap(kind = 'screen') {
           const low = (1 - smoothstep(0.02, 0.34, v)) * (0.7 + 0.3 * blotch);
           // the corners the arcs never reach keep their film; the header band
           // is down to a trace now the floor no longer runs up to it
-          const corner = smoothstep(0.3, 0.5, Math.abs(cx)) * 0.45 + smoothstep(0.82, 1.0, v) * 0.12;
+          const corner = smoothstep(0.3, 0.5, Math.abs(cx)) * 0.2 + smoothstep(0.82, 1.0, v) * 0.12;
           const ledge = (1 - smoothstep(0.0, 0.1, v)) * 0.45;
           // floor and blotch settled: full weight at the cowl, a quarter of it
           // over the part of the screen the driver looks through
           const s = settle(0.25);
+          // What the blades never reach keeps its film (round 6): the V at
+          // the top between the two rims, the upper corners, the triangle
+          // under the parked blades. Nothing wipes it, so it carries the
+          // film the settled floor never gave it (a twentieth at the header,
+          // so the rim edge had nothing to be the edge of). Light — a film,
+          // not the cowl's cake: the critics' brief is dust outside the arcs
+          // at 1.5-2x the veil inside, with the ridge line drawing the rim.
+          // Faded out below v 0.28, where the settled floor is the film.
+          const unswept = (1 - swept) * (0.7 + 0.3 * blotch) * 0.2 * smoothstep(0.08, 0.28, v);
+          // The cowl film (`low`, `ledge`, the settled floor) is thinned
+          // (round 6): it used to lie almost entirely inside the old sweep,
+          // where the blades took nine tenths of it; under the opposed pair's
+          // parked blades it is all outside, and at full weight the wedge
+          // beneath them was a white slab a fifth of the pane high. The pane
+          // as a whole carried a 0.093 mean of film at round 5; the first cut
+          // of the arcs, with the wedge and the lower corners at full weight,
+          // put it at 0.211 and cost the glass gauntlet's ws_close 0.015 of
+          // veil and 0.04 of see-through. Cowl 0.82 -> 0.40 (round 5's 0.44),
+          // lower outer corners 0.68 -> 0.43, the V at the header held at
+          // 0.30: pane mean 0.125, with the arcs still drawn by what is
+          // outside them.
           dust = clamp(
-            ((0.14 + blotch * 0.24) * s + corner + ledge + low * 0.5) * (1 - swept * 0.9) +
-              ridge * 0.5 +
+            ((0.1 + blotch * 0.16) * s + corner + ledge * 0.25 + low * 0.15) * (1 - swept * 0.9) +
+              unswept +
+              ridge * 0.45 +
+              park * 0.3 +
               grit * 0.14 * s * (1 - swept * 0.6),
           );
           // Factory shade band: about 120 mm of the 810 mm pane, graded out.

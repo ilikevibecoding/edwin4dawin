@@ -83,12 +83,12 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
   // 0.55 penumbra spread what was left into a gradient with no edge. Half the
   // cone angle was also above the horizon, lighting the acacia crowns rather
   // than the road. Now: a low beam. Aimed down six degrees so the pool centres
-  // about 10 m out, a 26 degree half-angle whose lower edge reaches the dirt
-  // 1.7 m ahead of the bumper and whose top stays under 20 degrees, a 0.3
-  // penumbra for a pool with an edge, and the intensity set per hour by
-  // `setHour` (see BEAM).
+  // about 10 m out, a 22 degree half-angle (0.384 rad — the lighting round-4
+  // hand-off; it was 26.4) whose lower edge reaches the dirt 2 m ahead of the
+  // bumper and whose top stays under 16 degrees, a 0.3 penumbra for a pool
+  // with an edge, and the intensity set per hour by `setHour` (see BEAM).
   for (const sx of [-1, 1]) {
-    const spot = new THREE.SpotLight(PALETTE.headlight, 0, 34, 0.46, 0.3, 0.4);
+    const spot = new THREE.SpotLight(PALETTE.headlight, 0, 34, 0.384, 0.3, 0.4);
     spot.position.set(sx * 0.72, headY, headlightZ);
     spot.target.position.set(sx * 0.95, headY - 2.3, headlightZ + 22);
     lamps.add(spot, spot.target);
@@ -121,18 +121,28 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
   // lenses in round 5: at `lens` 2.2 with the uniform hot-spot the whole 1.3 m
   // cover sat over the night bloom threshold and read as one white slab with
   // the nine optics invisible (critic B: 1 435 px over Y 0.5 in the hero's bar
-  // box against 53 in round 2). At 0.5 with the nine-lobe mask the cover
-  // scatters a little at each pod and the `headlight` discs behind it are what
-  // bloom.
+  // box against 53 in round 2). At 0.4 with the nine-disc mask the cover
+  // scatters a little at each pod; the `headlight` discs behind it sit just
+  // under the bloom threshold (round 6, see details.js `lightBar`).
   //
   // Dusk `lens` 0.8 -> 0.3 and `head` 3.6 -> 2.4 (round 5, critic B): the
   // dusk grille box measured p95 Y 0.56 against a sky p95 of 0.45, a lit lamp
   // still a third of a stop over the sky it is seen against. A and C hold the
   // grille to p95 <= sky p95 + 0.1 with 0 % clip.
+  //
+  // Dusk `beam` 22 -> 3.5 and `bar` 26 -> 4 (round 6). The dusk `front` view
+  // had 30 % of the ground bottom-right brighter than the sky's p95, and the
+  // lighting builder proved it was these two spots and nothing else: post off
+  // changed no pixel, lamps at 0 took it to 0 %, and the sweep ran x0.5 26 %,
+  // x0.35 20 %, x0.25 11 %, x0.15 3 %. At the dusk exposure the pool from a
+  // 22-unit spot on dirt 10 m out is brighter than a sky still lit by the sun;
+  // a real low beam at that hour is barely visible on the ground and the lens
+  // is what reads. The lens read comes from `head`/`lens`/`cover` and the
+  // bowl glow, none of which move with the spot.
   const BEAM = {
     off: { beam: 0, bar: 0, head: 1.6, amber: 1.1, tail: 1.6, lens: 0, cover: 0 },
-    dusk: { beam: 22, bar: 26, head: 2.4, amber: 1.9, tail: 2.6, lens: 0.3, cover: 0.15 },
-    night: { beam: 40, bar: 46, head: 9.0, amber: 3.2, tail: 4.0, lens: 2.2, cover: 0.5 },
+    dusk: { beam: 3.5, bar: 4, head: 2.4, amber: 1.9, tail: 2.6, lens: 0.3, cover: 0.15 },
+    night: { beam: 40, bar: 46, head: 9.0, amber: 3.2, tail: 4.0, lens: 2.2, cover: 0.4 },
   };
   // a lit lamp in daylight or under cloud is a lamp lit against a bright frame
   BEAM.day = BEAM.dusk;
@@ -150,7 +160,7 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
 
   // Every lamp material carries the lit-lamp shaping from `applyLampGlow`
   // (hot core, bleached centre, glowing dish); `uLampOn` is the switch for it.
-  const lampKeys = ['headlight', 'taillight', 'amber', 'reverseLamp', 'lensClear', 'lensRibbed', 'barCover', 'reflector'];
+  const lampKeys = ['headlight', 'taillight', 'amber', 'reverseLamp', 'lensClear', 'lensRibbed', 'barCover', 'reflector', 'barReflector'];
   function setLampGlow(on) {
     for (const key of lampKeys) {
       const u = materials[key]?.userData?.lamp;
@@ -177,10 +187,22 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
     // the lit-lamp shaping saturates at dusk's exposure as readily as the
     // emissive does, so its core follows the hour too
     const coreScale = state.hour === 'dusk' ? 0.55 : 1;
+    // The glowing dish too (round 6, critic B's dusk grille). Ablated on the
+    // dusk hero: the headlamp bowls were the brightest thing in the grille
+    // aperture (p95 0.54 against 0.42 with the lamps off), and it was the
+    // bowl glow, not a mirror — zeroing `uLampBowl` took the aperture to
+    // 0.45 while cutting the env map to a fifth, halving the analytic
+    // reflection and flattening the roughness each moved it by 0.00. At
+    // half glow the dish still reads lit (bowl p95 0.51 against 0.40 unlit)
+    // and the aperture sits at 0.49, inside the critics' sky + 0.1 band.
+    const bowlScale = state.hour === 'dusk' ? 0.5 : 1;
     for (const key of lampKeys) {
       const u = materials[key]?.userData?.lamp;
-      if (u && u.uLampCoreBase === undefined) u.uLampCoreBase = u.uLampCore.value;
-      if (u) u.uLampCore.value = u.uLampCoreBase * coreScale;
+      if (!u) continue;
+      if (u.uLampCoreBase === undefined) u.uLampCoreBase = u.uLampCore.value;
+      u.uLampCore.value = u.uLampCoreBase * coreScale;
+      if (u.uLampBowlBase === undefined) u.uLampBowlBase = u.uLampBowl.value;
+      u.uLampBowl.value = u.uLampBowlBase * bowlScale;
     }
     setLampGlow(on);
   }

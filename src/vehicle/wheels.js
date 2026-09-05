@@ -248,26 +248,24 @@ function letterMask() {
     ctx.fillText(text, 0, 0);
     ctx.restore();
   };
-  // the widest, most visible part of the sidewall carries the brand
-  line('RIDGELINE', 0.26, 0.812, 25);
-  line('GRAPPLER  M/T', 0.26, 0.779, 12);
-  line('LT315/70R17', 0.74, 0.812, 19);
-  line('TUBELESS  RADIAL', 0.74, 0.779, 10, '600');
-  line('MAX LOAD 1655kg  MAX PRESS 550kPa', 0.5, 0.918, 7, '500');
-  line('DOT R4LK RG9R 4218   E4', 0.5, 0.902, 6, '500');
-  // moulding lines top and bottom of the brand block
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2;
-  for (const v of [0.752, 0.858]) {
-    ctx.beginPath();
-    ctx.moveTo(0, v * TH);
-    ctx.lineTo(TW, v * TH);
-    ctx.stroke();
-  }
-  // moulded wear indicators and directional arrows around the shoulder step
+  // The widest, most visible part of the sidewall carries the brand. Sized
+  // for the frame rather than the swatch (round 6): a texel row here is
+  // 1.55 mm of sidewall and the wheel view puts 280 px on a metre of tyre, so
+  // the old 25 px brand was 28 mm of rubber and eight pixels of frame — the
+  // lettering the critics could not read. A 35-inch mud terrain moulds its
+  // brand at 35-40 mm, and 34 px here is 36 mm, ten pixels in the wheel view.
+  // The band runs from v 0.75 (a mould ring at r 0.37) to 0.88 (the second
+  // ring at r 0.29); the brand sits on the section's widest point, r 0.33.
+  line('RIDGELINE', 0.26, 0.828, 34);
+  line('GRAPPLER  M/T', 0.26, 0.769, 15);
+  line('LT315/70R17', 0.74, 0.828, 27);
+  line('TUBELESS  RADIAL', 0.74, 0.769, 13, '600');
+  line('MAX LOAD 1655kg  MAX PRESS 550kPa', 0.26, 0.912, 8, '500');
+  line('DOT R4LK RG9R 4218   E4', 0.74, 0.912, 8, '500');
+  // moulded wear indicators and directional arrows on the shoulder step
   for (let i = 0; i < 16; i++) {
     ctx.save();
-    ctx.translate(((i + 0.5) / 16) * TW, 0.714 * TH);
+    ctx.translate(((i + 0.5) / 16) * TW, 0.69 * TH);
     ctx.beginPath();
     ctx.moveTo(-6, 5);
     ctx.lineTo(6, 5);
@@ -290,25 +288,49 @@ function carcassMaps() {
   return cached('wheel.carcass', () => {
     const lett = letterMask();
     const band = (v, a, b) => smoothstep(a, a + 0.008, v) * (1 - smoothstep(b - 0.008, b, v));
+    const bell = (v, c, w) => Math.exp(-(((v - c) / w) ** 2));
 
-    const protector = (v) => band(v, 0.955, 0.995);
+    // The outboard sidewall, bead to shoulder, as the fleet's round-4 tyre
+    // has it and at the hero's own resolution (round 6). v 0.65 is the
+    // shoulder (r 0.412) and 1.0 the bead (r 0.238), 1.55 mm a texel:
+    //   0.655-0.71  shoulder step with its sipes and the wear arrows
+    //   0.735       first mould ring (r 0.37)
+    //   0.75-0.88   the lettering band, recessed a shade, letters raised
+    //   0.89        second mould ring (r 0.29)
+    //   0.912       the DOT and load lines
+    //   0.95        rim-protector ridge (the profile's crest is at r 0.263),
+    //               with a gutter either side where the fines settle
+    //   0.985-1.0   bead lip
+    // The inboard face keeps its bead ribbing and ribs; nothing looks at it.
+    const protector = (v) => bell(v, 0.95, 0.018);
+    const gutters = (v) => bell(v, 0.922, 0.012) + bell(v, 0.977, 0.01);
+    const rings = (v) => bell(v, 0.735, 0.006) + bell(v, 0.89, 0.006);
+    const letterBand = (v) => smoothstep(0.748, 0.762, v) - smoothstep(0.87, 0.884, v);
+    const beadLip = (v) => band(v, 0.982, 1.01);
+    const shoulder = (v) => band(v, 0.655, 0.712);
 
     const hf = heightField(TW, TH, (x, y) => {
       const u = x / TW;
       const v = y / TH;
       const pebble = worley(u * 74, v * 46, 74, 21).f1;
       let h = smoothstep(0.0, 0.4, pebble) * 0.2 + fbm(u * 30, v * 20, { octaves: 3, period: 30, seed: 9 }) * 0.14;
-      // decorative radial ribs up the sidewalls
+      // Shoulder sipes: short radial grooves, 36 a half turn, wandering a
+      // little so the ring of them is not a gear. The inboard shoulder keeps
+      // the old decorative ribs.
+      const sipeN = Math.sin(u * Math.PI * 2 * 36 + fbm(u * 3, v * 3, { octaves: 2, period: 3, seed: 5 }) * 2);
+      h -= shoulder(v) * smoothstep(0.55, 0.9, sipeN) * 0.3;
       const ribs = Math.abs(Math.sin(u * Math.PI * 88));
-      h += smoothstep(0.4, 1.0, ribs) * (band(v, 0.7, 0.76) + band(v, 0.24, 0.3)) * 0.45;
-      // circumferential steps: rim protector, bead ribbing, shoulder ledge
-      h += protector(v) * 0.6;
+      h += smoothstep(0.4, 1.0, ribs) * band(v, 0.24, 0.3) * 0.45;
+      // circumferential relief: bead ribbing (inboard), the ridge and its
+      // gutters, the two mould rings, the bead lip
       h += band(v, 0.005, 0.04) * 0.4;
-      h += band(v, 0.845, 0.872) * 0.22;
-      // Moulded lettering. With the albedo now within a stop of the carcass the
-      // relief is the only thing making it legible, so it is worth most of the
-      // height range on its own.
-      h += lett[y * TW + x] * 0.95;
+      h += protector(v) * 0.6 - gutters(v) * 0.14;
+      h += rings(v) * 0.34;
+      h += beadLip(v) * 0.3;
+      // Moulded lettering: raised off a slightly recessed band. The relief and
+      // the dust that settles in the recess (see dustAt) are what make it
+      // legible; the albedo shift on the letters themselves is small.
+      h += letterBand(v) * (-0.08 + lett[y * TW + x] * 0.95);
       // crown: siping across the void floor
       const sipe = Math.abs(Math.sin(u * Math.PI * LUG_ROWS * 2));
       h -= (1 - smoothstep(0.0, 0.22, sipe)) * band(v, 0.36, 0.64) * 0.3;
@@ -317,9 +339,14 @@ function carcassMaps() {
 
     // Two separate layers of filth, both darker than the rubber is bright.
     // Dust only survives where nothing wipes it — down in the crown voids, in
-    // the bead valley, and in thrown streaks — so the lettering band and the
-    // lug crowns stay black rubber. dc is the distance from the crown centre:
-    // 0..0.15 is the tread, 0.28..0.42 the sidewall, 0.45+ the bead.
+    // the bead valley, in thrown streaks, and (round 6) in the moulded
+    // recesses of the sidewall: the lettering band round the raised letters,
+    // the gutters either side of the rim protector, the shoulder sipes. That
+    // is how the lettering on a dusty tyre reads in the first place — pale
+    // fines round black letters — and it is what the fleet's sidewall does.
+    // The letter tops and the ridge crest are rubbed back to rubber. dc is
+    // the distance from the crown centre: 0..0.15 is the tread, 0.28..0.42
+    // the sidewall, 0.45+ the bead.
     const dustAt = (u, v) => {
       const dc = Math.abs(v - 0.5);
       const g = fbm(u * 9, v * 7, { octaves: 5, period: 9, seed: 31 });
@@ -330,6 +357,14 @@ function carcassMaps() {
       d *= 0.4 + g * 0.95;
       d += smoothstep(0.68, 0.96, streak) * 0.14;
       return clamp(d);
+    };
+    // The fines in the sidewall's moulded recesses, outboard face. A film,
+    // so it thins where the blotch is thin rather than filling the recess
+    // like paint; nothing on the letter tops or the ridge crest.
+    const recessAt = (u, v, l) => {
+      const g = fbm(u * 9, v * 7, { octaves: 5, period: 9, seed: 31 });
+      const recess = letterBand(v) * (1 - l) * 0.7 + Math.min(1, gutters(v)) * 0.55 + shoulder(v) * 0.3;
+      return clamp(recess * (0.5 + g * 0.7) * (1 - protector(v) * 0.8));
     };
     // Cake is thick earth, and thick earth only stays where the section is
     // horizontal or sheltered: the void floors and the shoulder step. It used to
@@ -348,6 +383,11 @@ function carcassMaps() {
     const rub = SRGB(0x24292f);
     const dust = SRGB(0x46433d);
     const cake = SRGB(0x3d3327);
+    // Laterite fines dried on a vertical face: paler than the thrown dust and
+    // nearly neutral (r:b 1.2), so the band round the letters reads as a grey
+    // film, 1.7 stops over the rubber, and not as the tan the sidewall wore in
+    // round 3.
+    const fines = SRGB(0x5c574e);
     // Moulded lettering is rubber, not paint: it reads by relief in the normal
     // map and by taking a different specular, so the albedo shift is only just
     // enough to stop the raised faces disappearing in shade.
@@ -362,7 +402,12 @@ function carcassMaps() {
         const l = lett[y * TW + x];
         let c = mix3(rub, cake, cakeAt(u, v));
         c = mix3(c, dust, dustAt(u, v) * (1 - l * 0.85));
-        c = mix3(c, pale, l * 0.28);
+        // dried fines in the recesses: paler and greyer than the thrown dust,
+        // the same laterite gone to powder on a vertical face
+        c = mix3(c, fines, recessAt(u, v, l));
+        // letter tops and the mould rings: rubbed, so a shade paler than the
+        // recess's rubber and a good deal darker than the fines round them
+        c = mix3(c, pale, Math.min(1, l * 0.35 + rings(v) * 0.3));
         // rim protector: bare rubber scraped grey by rock
         const scuff = protector(v) * smoothstep(0.35, 0.8, fbm(u * 22, v * 6, { octaves: 3, period: 22, seed: 77 }));
         c = mix3(c, rock, scuff * 0.6);
@@ -384,7 +429,7 @@ function carcassMaps() {
         // Raised and scrubbed rubber is glossier than the dusty flats around it.
         // With the tyre this dark the specular break is most of what separates
         // the lettering, the shoulder and the packed voids from each other.
-        return clamp(0.62 + dustAt(u, v) * 0.34 + cakeAt(u, v) * 0.16 - protector(v) * 0.22 - l * 0.3);
+        return clamp(0.62 + dustAt(u, v) * 0.34 + recessAt(u, v, l) * 0.3 + cakeAt(u, v) * 0.16 - protector(v) * 0.22 - rings(v) * 0.15 - l * 0.3);
       },
       { repeat: [2, 1], flipY: false },
     );

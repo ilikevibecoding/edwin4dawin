@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { Kit, bend, bolt, profile, rbox, rivet, transform, tube } from '../lib/geo.js';
 import { SUN } from '../palette.js';
-import { CABIN_ATLAS, CABIN_CELLS, CABIN_DIALS, paintPeelNormal, rubberMaps, vinylMaps, wovenCardMaps } from '../textures/vehicle.js';
+import { CABIN_ATLAS, CABIN_CELLS, CABIN_DIALS, paintPeelNormal, rubberMaps, vinylMaps, wiperSweep, wovenCardMaps } from '../textures/vehicle.js';
 import { emitPieces } from './body.js';
 import { SPEC as S } from './spec.js';
 
@@ -1028,27 +1028,11 @@ function screenFilmTexture() {
       const ex = Math.max(0, 1 - Math.min(u, 1 - u) * 3.4);
       const ey = Math.max(0, 1 - Math.min(v, 1 - v) * 4.2);
       const edge = Math.min(0.6, ex * 0.34 + ey * 0.38 + 0.26);
-      // wipers: two blades pivoting off the bottom edge, so the clean region is
-      // the union of two annular sectors
-      // The same two arcs the body's pane draws (`glassLayerMap('screen')`),
-      // mirrored: this plane is turned to face the cab, so its u runs the other
-      // way along the screen. Both blades park along the bottom edge and sweep
-      // up and over, so between them they clear the whole width.
-      let swept = 0;
-      for (const [pu, pv, a0, a1, r0, r1] of [
-        [0.7, 1.16, 0.59, 3.13, 0.22, 0.98],
-        [0.24, 1.16, 0.69, 3.13, 0.2, 0.78],
-      ]) {
-        const dx = u - pu;
-        const dy = (v - pv) * (H / W);
-        const r = Math.hypot(dx, dy);
-        const ang = Math.atan2(-dy, dx);
-        if (ang > a0 && ang < a1 && r > r0 && r < r1) {
-          const eA = Math.min(ang - a0, a1 - ang);
-          const eR = Math.min(r - r0, r1 - r);
-          swept = Math.max(swept, Math.min(1, eA * 30) * Math.min(1, eR * 48));
-        }
-      }
+      // wipers: the same two sectors the body's pane draws (`wiperSweep`,
+      // textures/vehicle.js — the opposed pair body.js parks on the cowl),
+      // mirrored: this plane is turned to face the cab, so its u runs the
+      // other way along the screen, and the canvas's y runs down the pane.
+      const swept = wiperSweep(1 - u, 1 - v);
       // streaks inside the swept band: the blade leaves fine arcs behind it
       const streak = swept * (0.5 + 0.5 * Math.sin((u * 46 + v * 9) * Math.PI));
       let a = (0.1 + 0.62 * blotch) * edge;

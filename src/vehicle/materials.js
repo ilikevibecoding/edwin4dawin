@@ -763,6 +763,39 @@ export function vehicleMaterials(env = null) {
     // The dish is what a bright rim streak is *for*: the bowl sweeps its normal
     // through the whole hemisphere, so a narrow hot band at the skyline lands as
     // one bright arc across the stamping and leaves the rest of the cone dark.
+    // (Round 6 checked whether this arc was the dusk grille's "mirrored
+    // aureole": halving `strength` live moved the dusk aperture's p95 by
+    // 0.000. It is the bowl glow, scaled per hour in index.js.)
+    band: 0.75,
+    trees: 0.35,
+    line: 0.3,
+    ground: 0x120e09,
+    wall: 0x1f1e16,
+    rim: 0xffe8c4,
+    sky: 0x93b0cc,
+  });
+  // The roof bar's nine pod reflectors, split off `reflector` (round 6) so
+  // they can carry a dimmer bowl. The pods are short cylinders whose front
+  // caps face the camera squarely, so at `bowl` 0.6 each cap was a 64 mm
+  // disc glowing at 0.6 of radiance behind a 48 mm LED — nine of them 147 mm
+  // apart, and the residual 417 px over Y 0.5 in the night hero's bar box was
+  // that ring of glow round every pod, with the cover's specular on top. Same
+  // maps, same brightwork and lamp tags with the same flags, so it shares the
+  // reflector's program (the values differ in the uniforms only): +0 programs.
+  m.barReflector = new THREE.MeshStandardMaterial({
+    map: reflect.map,
+    color: 0x83898e,
+    normalMap: reflect.normal,
+    roughnessMap: reflect.rough,
+    normalScale: new THREE.Vector2(1.3, 1.3),
+    metalness: 0.95,
+    roughness: 1.0,
+    envMapIntensity: 0.28,
+    side: THREE.DoubleSide,
+  });
+  applyBrightwork(m.barReflector, {
+    tag: 'refl',
+    strength: 0.62,
     band: 0.75,
     trees: 0.35,
     line: 0.3,
@@ -905,12 +938,20 @@ export function vehicleMaterials(env = null) {
   // white centre, which is the reading of a lit lamp.
   applyLampGlow(m.lensClear, { tag: 'lensClear', core: 7.0, bleach: 0.55, coreExp: 2.0 });
   applyLampGlow(m.lensRibbed, { tag: 'lensRibbed', core: 7.0, bleach: 0.55, coreExp: 2.0 });
-  applyLampGlow(m.barCover, { tag: 'barCover', core: 3.0, bleach: 0.4, coreExp: 1.5 });
+  // core 3.0 -> 2.2 (round 6), with the lobe now a disc the size of the optic
+  // rather than a stripe the height of the cover: at `cover` 0.4 the disc's
+  // centre is 0.4 x 0.86 x 3.2 = 1.1 of radiance at the cover's 0.1 alpha —
+  // 0.11 in the frame, a Y 0.35 halo round a Y 0.85 LED, not a second pod.
+  applyLampGlow(m.barCover, { tag: 'barCover', core: 2.2, bleach: 0.4, coreExp: 1.5 });
   // The dish behind every clear lens throws the bulb's light straight back at the
   // camera when it is on: the whole aperture glows, graded by how squarely each
   // stamped step faces the eye, which is what separates a lit headlamp from a
   // bright dot in a grey bowl.
   applyLampGlow(m.reflector, { tag: 'reflector', core: 0, bleach: 0, bowl: 0.6, bowlColor: 0xfff0d2, bowlExp: 3.0 });
+  // The bar pods: a third of the headlamp bowls' glow, and steeper, so only
+  // the cap squarely behind each LED lights and the ring round it stays the
+  // housing's grey. The LED disc (`headlight`, hot 0.12) is the pod's read.
+  applyLampGlow(m.barReflector, { tag: 'reflector', core: 0, bleach: 0, bowl: 0.2, bowlColor: 0xf4f6ff, bowlExp: 6.0 });
 
   // --- decals --------------------------------------------------------------
   // Tinted well off white and left rough. At full white the tailgate wordmark
