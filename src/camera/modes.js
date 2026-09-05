@@ -92,7 +92,8 @@ export class ModeManager {
       const w = HANGAR.well;
       const cx = (w.x0 + w.x1) / 2;
       const cz = (w.z0 + w.z1) / 2;
-      return { pts: [cam, new THREE.Vector3(cx, HANGAR.deckY - 30, cz), new THREE.Vector3(cx - 80, HANGAR.deckY - 220, cz - 120), new THREE.Vector3(-380, -460, 120)], crossY: HANGAR.deckY - 2, fade: false };
+      // first out over the well at eye height, then straight down through it (never through the deck)
+      return { pts: [cam, new THREE.Vector3(cx, cam.y, cz), new THREE.Vector3(cx, HANGAR.deckY - 30, cz), new THREE.Vector3(cx - 80, HANGAR.deckY - 220, cz - 120), new THREE.Vector3(-380, -460, 120)], crossY: HANGAR.deckY - 2, fade: false };
     }
     return { pts: [cam, cam.clone()], fade: true };
   }

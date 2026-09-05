@@ -38,7 +38,7 @@ const SEGMENTS = [
   // 7. turbolift ride down to the hangar (lift2 from deck B)
   { s: 12, mode: "ride", lift: "lift2", deck: "D" },
   // 8. hangar deck walk toward the well
-  { s: 8, mode: "walk", from: { x: -34.5, z: 479.5, yaw: -90, pitch: -2 }, to: { x: -24, z: 470, yaw: -60, pitch: -6 }, zone: "hangar" },
+  { s: 8, mode: "walk", from: { x: -34.5, z: 479.5, yaw: -90, pitch: -2 }, to: { x: -24, z: 470, yaw: -60, pitch: -6 }, zone: "hangar", y: -80 },
   // 9. exit through the well to the exterior (scripted transition)
   { s: 5.5, mode: "exit" },
   // 10. final orbit
@@ -101,11 +101,11 @@ for (const seg of SEGMENTS) {
         d.modes.orbit.setPose(p, true);
       }, pose);
     } else if (seg.mode === "walk") {
-      const p = { x: lerp(seg.from.x, seg.to.x, ease(k)), z: lerp(seg.from.z, seg.to.z, ease(k)), yaw: lerp(seg.from.yaw, seg.to.yaw, ease(k)), pitch: lerp(seg.from.pitch, seg.to.pitch, ease(k)), zone: seg.zone };
+      const p = { x: lerp(seg.from.x, seg.to.x, ease(k)), z: lerp(seg.from.z, seg.to.z, ease(k)), yaw: lerp(seg.from.yaw, seg.to.yaw, ease(k)), pitch: lerp(seg.from.pitch, seg.to.pitch, ease(k)), zone: seg.zone, y: seg.y ?? null };
       await page.evaluate((q) => {
         const d = window.debugAPI;
-        if (d.mode() !== "interior" || d.zone() !== q.zone) d.modes.setInterior({ ...q, y: null });
-        d.player.setPose(q.x, q.z, q.yaw, q.pitch);
+        if (d.mode() !== "interior" || d.zone() !== q.zone) d.modes.setInterior({ ...q });
+        d.player.setPose(q.x, q.z, q.yaw, q.pitch, q.y);
         d.player.frozen = true;
         d.interior.update(0, d.player);
       }, p);
