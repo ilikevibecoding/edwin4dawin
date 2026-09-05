@@ -482,6 +482,11 @@ function court(bp, rng) {
       if (((z - 33) / 6) & 1) planter(bp, x + (x < cx ? -2 : 2), z + 3, 1, B.BIRCH_LEAVES);
     }
   }
+  // more tables in the centre lane between the kiosks and the fountain
+  for (const z of [44, 48, 70, 74]) for (const x of [cx - 2, cx + 2]) {
+    bp.set(x, 1, z, B.TABLE);
+    for (const [sx, sz] of [[x - 1, z], [x + 1, z], [x, z - 1], [x, z + 1]]) { bp.set(sx, 1, sz, B.OAK_SLAB); bp.spot(sx, 1, sz, 'seat'); }
+  }
   for (let z = 32; z <= 88; z += 14) { lampPost(bp, xa + 6, z, 1); lampPost(bp, xb - 6, z, 1); }
   // --- fountain: ring basin with a glowing pool and a chrome light column
   bp.disc(cx + 0.5, 58.5, 6.5, 0, 0, B.STONE_BRICKS); bp.disc(cx + 0.5, 58.5, 4.5, 1, 1, B.DURASTEEL_DARK, true);
