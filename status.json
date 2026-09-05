@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-05T00:39:46.030Z",
+  "updated": "2026-09-05T04:39:51.235Z",
   "phase": "Round 4: Death Star superlaser, panel redesign, wave-swept villagers, more destruction",
   "summary": "New request: a Death Star-style battle station far in the sky corner that arrives while villagers look up and wonder, four green tributary beams converging into a pulsing focus, a green main beam and a wave of destruction; a simpler, friendlier panel with a Cinematic/Balanced/Light quality selector; flood sweeps people off their feet; a more destructive tornado; creative flight (done).",
   "links": [
@@ -71,27 +71,27 @@
     {
       "name": "Creative flight",
       "status": "merged",
-      "detail": "Double-tap Space to fly (Minecraft rules), ?fly=1 starts airborne; verified with per-tick tests and a real-input desktop recording."
+      "detail": "Double-tap Space to fly; ?fly=1; view distance up to 24 chunks."
     },
     {
       "name": "Death Star station model",
-      "status": "builder running",
-      "detail": "Original blocky Death-Star-inspired sphere: trench, superlaser dish, panel plating, window lights; far in the sky, fog-resistant, <= 4 draw calls."
+      "status": "merged, critic PASS",
+      "detail": "Voxel-meshed sphere (trench, dish, 8 rim emitters, window lights), 2 draw calls, fog-proof; night hull readability pass in progress."
     },
     {
       "name": "Superlaser sequence + destruction wave",
-      "status": "builder running",
-      "detail": "Arrival from the sky corner (villagers stop and stare), 4 green tributaries igniting one by one, pulsing focus, diagonal green main beam, expanding destruction wave through the town."
+      "status": "merged, critic ACCEPT WITH NITS -> fixes running",
+      "detail": "Arrival with villagers looking up, 4 staggered green tributaries into a pulsing focus, fast diagonal green beam, destruction wave to 62 blocks; fixing: player re-hit by the wave, blast used flood lines, pitted streets, placement lower in the sky corner, bigger magma pool."
     },
     {
       "name": "Panel redesign",
-      "status": "builder running",
-      "detail": "Disaster cards, big primary action, slim status strip, key sliders + collapsed Advanced, quality selector."
+      "status": "merged, critic ACCEPT WITH NITS -> fixes done",
+      "detail": "Cards, big Start / Start & watch, bearing lines ('Station 210 blocks SW, high in the sky'), fits 720p, keyboard focus trap, quality + view distance (8/12/16/24) controls."
     },
     {
       "name": "Flood sweep + tornado damage",
-      "status": "builder running",
-      "detail": "Wave front knocks NPCs/animals/player off their feet (tumble, flail, carried by the current); tornado +40-60% damage; flood damage up."
+      "status": "merged, critic ACCEPT WITH NITS -> regression fixed",
+      "detail": "77 of 82 townsfolk/animals launched by the front, town floods fully (0 dry street cells), +49% destruction, tornado rougher; fixed: bodies sinking below the flooded floor, player follow-through (bobs back up), splash bursts."
     }
   ],
   "metrics": [
@@ -233,6 +233,10 @@
     {
       "time": "2026-09-05 00:39 UTC",
       "text": "Round 4 started: shared hooks committed (watch, sweep, quality presets, 400 edits/tick); 4 builders launched."
+    },
+    {
+      "time": "2026-09-05 04:39 UTC",
+      "text": "Round 4 critics: Death Star ACCEPT WITH NITS, flood ACCEPT WITH NITS, panel ACCEPT WITH NITS; fixes in progress; view distance 16/24 added."
     }
   ],
   "issues": [
