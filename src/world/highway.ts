@@ -694,6 +694,11 @@ const FAR_DEST: Record<string, { toEnd: string[]; toStart: string[] }> = {
 const TOLL: Record<string, { s: number; name: string }> = {
   'south-hwy-mainland': { s: 3706, name: 'PEAJE ISLAS' },
 };
+/** Pedestrian overpasses (stations): mid-block between two district streets, where the median barrier has cut the
+ *  grid's at-grade crossings for people on foot. */
+const FOOTBRIDGES: Record<string, number[]> = {
+  'south-hwy-mainland': [1842, 2964],
+};
 
 // ------------------------------------------------------------------ build
 
@@ -736,6 +741,8 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     // -------------------------------------------------------- median barrier: continuous, opened at the arterial junctions and through the toll plaza
     const toll = TOLL[c.id] && TOLL[c.id].s > 80 && TOLL[c.id].s < c.total - 80 ? TOLL[c.id] : null;
     const nearPlaza = (s: number, r: number) => toll !== null && Math.abs(s - toll.s) < r;
+    const footbridges = (FOOTBRIDGES[c.id] ?? []).filter((s) => s > 60 && s < c.total - 60);
+    const nearFoot = (s: number, r: number) => footbridges.some((b) => Math.abs(b - s) < r);
     const openings: Run[] = majors.map((j) => ({ s0: j.s - 19, s1: j.s + 19 }));
     if (toll) openings.push({ s0: toll.s - 48, s1: toll.s + 48 });
     const endPad = 1.2;
@@ -897,7 +904,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     // -------------------------------------------------------- delineator posts every 50 m on both shoulders (not where the rail carries the reflectors)
     for (const side of [-1, 1] as const) {
       for (let s = 25; s < c.total - 8; s += 50) {
-        if (railedAt(s, side) || nearJunction(s, 14) || nearPlaza(s, 60)) continue;
+        if (railedAt(s, side) || nearJunction(s, 14) || nearPlaza(s, 60) || nearFoot(s, 16)) continue;
         const f = frameAt(c, s);
         const aP = side * (hw + 0.7);
         const px = f.x + f.rx * aP, pz = f.z + f.rz * aP;
@@ -910,7 +917,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     // -------------------------------------------------------- gantries and their sign panels
     interface Gantry { s: number; dir: 1 | -1; panels: { lines: string[]; arrow: Arrow; tab?: string }[]; }
     const gantries: Gantry[] = [];
-    const addGantry = (g: Gantry) => { if (g.s > 40 && g.s < c.total - 40 && !nearPlaza(g.s, 110) && !gantries.some((o) => Math.abs(o.s - g.s) < 320)) gantries.push(g); };
+    const addGantry = (g: Gantry) => { if (g.s > 40 && g.s < c.total - 40 && !nearPlaza(g.s, 110) && !nearFoot(g.s, 100) && !gantries.some((o) => Math.abs(o.s - g.s) < 320)) gantries.push(g); };
     const dest = (b: BridgeSpec | null, atEnd: boolean): { lines: string[]; tab: string } | null => {
       if (!b) return null;
       const d = DEST[b.id];
@@ -997,7 +1004,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
 
     // -------------------------------------------------------- lighting: barrier-mounted twin-arm poles every 60 m
     for (let s = 32; s < c.total - 12; s += POLE_SPACING) {
-      if (nearGantry(s, 24) || openings.some((o) => s > o.s0 - 4 && s < o.s1 + 4)) continue;
+      if (nearGantry(s, 24) || nearFoot(s, 9) || openings.some((o) => s > o.s0 - 4 && s < o.s1 + 4)) continue;
       const f = frameAt(c, s);
       const yaw = yawAt(f);
       const base = f.y + BARRIER_H;
@@ -1166,9 +1173,52 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       }
     }
 
+    // -------------------------------------------------------- pedestrian overpasses: a concrete span on two columns at the verges, solid parapets,
+    // a straight stair down each verge (mirrored, so the pair reads as a Z from the air), lit at night
+    for (const sB of footbridges) {
+      const f = frameAt(c, sB);
+      const yaw = yawAt(f);
+      const part = P(sB);
+      const roadY = f.y;
+      const CLEAR = 5.8, DECK_T = 0.35, DECK_W = 2.4;
+      const aCol = hw + 2.4;
+      const spanL = 2 * aCol + 2.0;
+      const at2 = (a: number, ds: number) => { const g = frameAt(c, sB + ds); return new THREE.Vector3(g.x + g.rx * a, 0, g.z + g.rz * a); };
+      part.conc.box(f.x, roadY + CLEAR, f.z, spanL, DECK_T, DECK_W, yaw, 0, C_PEDESTAL, false, [0, 0, 0]);
+      for (const e of [-1, 1]) {
+        const q = at2(0, e * (DECK_W / 2 - 0.05));
+        part.thin.box(q.x, roadY + CLEAR + DECK_T, q.z, spanL, 1.15, 0.08, yaw, 0, S_DARK, false, [0, 0, 0], true);
+      }
+      for (const side of [-1, 1] as const) {
+        const q = at2(side * aCol, 0);
+        const ground = Math.min(surfaceAt(c, sB, side * hw) - ROAD_LIFT, map.heightAt(q.x, q.z));
+        part.conc.cylinder(q.x, ground - 0.3, q.z, 0.7, roadY + CLEAR - (ground - 0.3), 12, C_PEDESTAL, true, [0, 0, 0], true);
+        // the stair leaves the landing along the verge, descending toward -s on the left verge and +s on the right
+        const dir = side;
+        const run = 12.0, rise = roadY + CLEAR - ground;
+        const slope = Math.hypot(run, rise);
+        const pitch = dir * Math.atan2(rise, run);   // a positive pitch lowers the +s end (box pitches about its local x)
+        const mid = at2(side * aCol, dir * (DECK_W / 2 + run / 2));
+        const midY = ground + rise / 2;
+        part.conc.box(mid.x, midY - DECK_T / 2, mid.z, 2.0, DECK_T, slope, yaw, pitch, C_PEDESTAL, false, [0, 0, 0]);
+        for (const e of [-1, 1]) {
+          const r = at2(side * aCol + e * 0.98, dir * (DECK_W / 2 + run / 2));
+          part.thin.box(r.x, midY + DECK_T / 2, r.z, 0.08, 1.1, slope, yaw, pitch, S_DARK, false, [0, 0, 0], true);
+        }
+        // a column under the middle of the stair
+        const cm = at2(side * aCol, dir * (DECK_W / 2 + run / 2));
+        part.conc.cylinder(cm.x, ground - 0.3, cm.z, 0.45, rise / 2 + 0.3 - DECK_T / 2, 10, C_PEDESTAL, true, [0, 0, 0], true);
+        // a lamp on each landing
+        const lp = at2(side * (aCol + 0.9), 0);
+        part.thin.cylinder(lp.x, roadY + CLEAR + DECK_T, lp.z, 0.1, 3.6, 6, S_POLE, true, [0, 0, 0], true);
+        part.heads.box(lp.x, roadY + CLEAR + DECK_T + 3.55, lp.z, 0.4, 0.15, 0.25, yaw, 0, S_HEAD, false, [1, 0, 0], 'point');
+      }
+      part.proxy.box(f.x, roadY + CLEAR, f.z, spanL, DECK_T + 1.1, DECK_W, yaw, 0, C_PEDESTAL, false, []);
+    }
+
     for (const dir of [1, -1] as const) {
       for (let s = dir > 0 ? 140 : c.total - 140; dir > 0 ? s < c.total - 60 : s > 60; s += dir * 900) {
-        if (nearGantry(s, 60) || nearJunction(s, 30) || nearPlaza(s, 120)) continue;
+        if (nearGantry(s, 60) || nearJunction(s, 30) || nearPlaza(s, 120) || nearFoot(s, 30)) continue;
         groundSign(s, dir, 0.75, 0.75, atlas.speed('90'), S_DARK, false, 1, 2.0);
       }
     }
