@@ -292,3 +292,43 @@ pitching 2 deg and rolling 5 deg over 8 s. No harness tolerance was touched (res
    camera's foreground.
 Verification queued on dist7 (`/tmp/waterphys/r8`: height-map probe at taxi and hump speed, taxi and swell chase
 frames for A/B against r4b, the r3c wake views for the boat lanes).
+
+## Round 9 — the harness without a browser; a wreck that sits askew; froth that dies in time
+
+The machine's two Chrome slots were held for over an hour by other builders' sessions (one with no idle timeout)
+with seven sessions queued, so this round is the work that needs no browser: physics run in Node, and shader
+defects found by reading the wake shader against what a stopping hull does.
+
+1. **The flight harness ported to Node** (`/tmp/waterphys/flightnode.mjs`, `sim.bundle.mjs` = esbuild of
+   `physics.ts` + `waves.ts` + `map.ts` + the weather table): the real `WorldMap` heightfield (24 s to generate),
+   the CPU wave field the floats ride, the `water-landing` setup as the flight model sees it (clear weather: 3.5
+   m/s wind from the atmosphere's fixed direction, turbulence 0.2, the bench clock at 30 s + 1/30) and the page
+   suite line for line minus the chase-camera centroid test (renderer camera). 19 / 19 physics checks pass,
+   deterministic, 2 s of compute against ~10 min of SwiftShader. Parity with the last page run (`flight_r2.json`):
+   every test flown in still air (roll 50.8 deg/s, elevator 18.7 deg/s peak / 1 overshoot / 0.75 s, turn -4.2 %,
+   stall 5.2 s / 21.5 m, phugoid 0.116) matches to the last digit; the contact tests differ by a few percent
+   (touchdown sink 1.41 vs 1.34 m/s, takeoff into wind 19.97 vs 20.12 s, rest pitch 0.03 vs 0.01 deg) because the
+   gust field is Perlin noise of the model's own clock, which the page had advanced before the suite began. The
+   page harness stays the authority (queued as job 021 on dist8); this is the regression alarm for `physics.ts`.
+2. **A righted nose-over came up level** (ditching matrix, `wheels` and any straight nose-first entry): the
+   kinematic roll-back marked both bows split at 0.6 / 0.6, so the wreck sat 17 cm low and level, as if merely
+   wetted, while the wing-strike wreck listed 12 deg. The roll back onto the floats comes over the lower wing (the
+   shortest rotation to level), and that side's float is dragged through the water with its strut wrenched: it
+   now floods to the deck (0.85) while the other stays half full (0.6). The `wheels` case ends 50 cm low with a
+   17.6 deg list (was 17 cm, level); `nose` (0.92 / 0.60, 21 deg) and `slam` (0.92 / 0.68, 21 deg) keep the
+   asymmetry their own impacts gave them. Node harness after: 19 / 19, unchanged metrics (`physics.ts`).
+3. **The lane's froth was written in track distance, so it never died behind a hull that stopped.** Every
+   time-like decay of the foam pass (fresh churn, prop wash, lane fade, slick fade, arm-crest steepness) is a
+   function of `d`, the ribbon distance from the point to the hull, which equals speed x time only while the hull
+   keeps going. When a hull slows or stops, the points just astern keep `d ~ 0`: the churn at the transom held its
+   full density for the ribbon's whole life (30 s for a float, longer for a boat), decaying only with the ribbon
+   age term `life^2`, and the slick never let go of the hull. Numbers for a float stopping from 12 m/s (0.85
+   m/s^2, 14 s): the points laid at 6 m/s, 13 s after they were laid, sat 21 m behind the stopped hull, lane
+   density 0.128 x life^2 with the lane fade at 0.72; a hull that had kept going would have them 78 m astern, at
+   0.049 with the fade gone and the remnant patches at full weight, the slick at 0.37 instead of 1. Fixed: the
+   vertex already carries the point's age (`vExt.y`, unused until now); the foam pass reads its decays at
+   `dEq = max(d, speed * ageS)`, and the stern-slope envelope runs with the train (`d + shift`) as the height pass
+   had it all along. A hull under way is unchanged (`d = speed * ageS` on a steady track, and an accelerating
+   hull's old points have `speed * ageS < d`); a stopping hull's lane now dissolves in place into sparse patches
+   over 10-15 s and its slick lets go over ~20 s (`wakes.ts`). Verification frames queued (`/tmp/waterphys/r9`:
+   a float decelerating to a stop from the chase view at 0 / 4 / 10 / 20 s and from abeam at 10 / 20 s).

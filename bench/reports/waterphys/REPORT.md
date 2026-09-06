@@ -36,7 +36,12 @@ Frame numbers are 10 fps clip frames (frame n = n/10 s). Change size vs the r1 b
   speed, not the striking tip's**: the second wing of a slewing wreck meets the water at 24 m/s of tip speed on
   150°/s of yaw while the airframe is down to 17 m/s, and it used to flood its float as hard as the first strike
   so every wing-strike wreck ended level. It now lists 12° onto the struck side (flood 0.49 / 0.80). A nose-over
-  forces both bows to flood ≥ 0.6 so the righted wreck sits deep.
+  splits both bows (flood ≥ 0.6) and the roll back onto the floats comes over the lower wing, whose float is
+  dragged through the water and its strut wrenched (≥ 0.85): the righted wreck sits 50 cm low with a 17° list
+  instead of level and 17 cm low as if merely wetted.
+- **A deeply flooded hull met the water cleanly**, as if set down in it. The wake ribbon head now carries each
+  float's immersion (from the wreck's flood level): the hull outline widens 35 % to the section that cuts the
+  surface and the meniscus becomes a patchy collar of foam and bubbles a few decimetres wide.
 - **A flooding hull boils**: the air driven out of a split float breaks the surface in bursts of drops and small
   froth splats while it fills, and the churn keeps bubbling for ~25 s, so the wreck no longer lies in glassy
   water seconds after it stops.
@@ -63,6 +68,22 @@ Frame numbers are 10 fps clip frames (frame n = n/10 s). Change size vs the r1 b
   and prop-wash limited to seconds of travel (not hull-lengths, so a ship's dense band is ~120 m not 260 m),
   Kelvin arms broken only within a couple of hull-lengths and only above a Froude threshold (a ship's arms are
   glassy, a runabout's break near the hull), beam-sized dark windows carved into the coarse lane.
+- **The taxi wake did not read at all**: behind two floats at 3.8 m/s the water was glass with two soft smudges
+  10 m astern, though the 5 cm transverse train and the arm crests were in the height map. Three causes, all
+  fixed: the height map was 8-bit (a 5 cm wave over 9 m changed 8 mm between the two texels of the normal's
+  difference — two quanta — so its slope decoded to a 0.9° staircase or nothing; now half float); the arm crests
+  at displacement speed were 2.7 cm (now 4–5 cm); and the one cue that carries a taxi wake in reality — the
+  **slick road** where the hull's turbulence has wiped the short ripples off the surface — was missing: the water
+  shader now keeps the short ripple sets apart and adds them after the wake maps are read, scaled down 80 % inside
+  the lane's coverage, so the lane lies as a smooth road mirroring the sky in the rippled sea, behind a taxiing
+  float and behind every boat. The coverage outlasts the froth (2.2 lane lengths for a float, 4 for a ship, toward
+  a kilometre at 11 kt) and float lanes live 30 s (a 16 s ribbon ended in the chase camera's foreground).
+- **The lane's froth never died behind a hull that stopped.** Every time-like decay of the foam pass was written
+  in ribbon distance, which is speed × time only while the hull keeps going; the points just astern of a stopped
+  hull kept `d ≈ 0`, so the churn held its transom density for the ribbon's whole life and the slick never let go.
+  The pass now reads its decays at `max(d, speed × age)`, the distance the point would lie behind a hull that had
+  kept going: a stopping hull's lane dissolves in place into sparse patches over 10–15 s and its slick lets go
+  over ~20 s; a hull under way is unchanged.
 
 ### 10 — Water wave physics; float wave-following
 
@@ -80,6 +101,12 @@ Frame numbers are 10 fps clip frames (frame n = n/10 s). Change size vs the r1 b
   slight at idle taxi.
 - Budgets, every captured view: ≤ 289 draw calls (< 400) and ≤ 0.94 M triangles (< 1.5 M); console clean
   (0 messages) in all of them.
+- **Flight harness in Node** (`/tmp/waterphys/flightnode.mjs`: the real map heightfield, the CPU wave field and
+  the flight model bundled with esbuild, the page suite line for line minus the chase-camera test): 19 / 19 physics
+  checks pass, deterministic, in 2 s of compute, on every physics commit of this branch. It matches the page
+  harness to the last digit on every still-air test (roll, elevator, turn, stalls, phugoid) and within a few
+  percent on the contact tests (the gust field is noise of the model's own clock, which the page advances before
+  the suite). The page harness remains the authority for `allPass`.
 
 ## Perf
 
@@ -100,11 +127,12 @@ next attack).
 
 ## Weakest points remaining / highest-value next attack
 
-1. **A deeply flooded hull has no wet line or foam collar where its geometry cuts the surface** — it fades into
-   clear water. This needs a hull-waterline decal from `model.ts` (see hooks). Highest value for 11/12.
+1. **The wet line on a deeply flooded hull itself**: the water now wears a foam collar around it (r8), but the
+   hull's paint shows no waterline stain or sheen where it cuts the surface. This needs a hull-waterline decal
+   from `model.ts` (see hooks). Highest value for 11/12.
 2. **The interleaved A/B perf ratio for the mid-map pass** is not yet measured; do it on two preview ports.
-3. Wake **stopping / turning / shore interaction** and **1 km persistence** are only spot-checked (the `turn100`
-   and ship views); a dedicated round is owed.
+3. Wake **turning / shore interaction** and **1 km persistence** are only spot-checked (the `turn100` and ship
+   views); stopping is handled (r9) but its frames are still to be reviewed.
 4. Reflections/glitter over the churned lane (cat 26) are only lightly touched.
 
 ## Failed / reverted candidates
