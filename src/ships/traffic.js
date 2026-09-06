@@ -125,8 +125,8 @@ function makeRoute(segs) {
   for (const s of segs) {
     s.t0 = t0; t0 += s.dur;
     if (s.anim === undefined) s.anim = anim({});
-    if (s.reserveLead && !phases.includes('reservation')) phases.push('reservation');
     if (!phases.includes(s.phase)) phases.push(s.phase);
+    if (s.reserveLead && !phases.includes('reservation')) phases.push('reservation');   // the tail of a fly segment
   }
   return { segs, period: t0, phases };
 }

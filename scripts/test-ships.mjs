@@ -476,9 +476,8 @@ if (cdpUrl) {
       const r = await page.evaluate(`(async () => {
         const tr = game.shipTraffic, p = game.player;
         const i = tr.ships.findIndex((s) => s.pad === 0);
-        // jump the clock so pad 1's ship is 1 s into its boarding phase
-        const seg = tr.ships[i].route.segs.find((s) => s.phase === 'boarding');
-        const ticks = tr.ticksUntil(i, 'boarding'); game.vehicles.tickCount += ticks + 20;
+        // jump the clock so pad 1's ship is 1 s into its servicing phase (doors open; departure follows within ~16 s)
+        const ticks = tr.ticksUntil(i, 'servicing'); game.vehicles.tickCount += ticks + 20;
         for (const v of game.vehicles.list) if (v.tick) { v.tick(game.vehicles.tickCount); }
         await new Promise((r) => setTimeout(r, 1500));
         tr.promoteNear(p.pos, 200);
@@ -491,16 +490,21 @@ if (cdpUrl) {
         const inner = v.gridToWorld(v.model.door.inner[0] + 0.5, v.model.door.inner[1], v.model.door.inner[2] + 0.5);
         const boarded = Math.hypot(p.pos.x - inner.x, p.pos.z - inner.z) < 1.5;
         const log = [], t0 = performance.now();
-        let inside = 0, total = 0, phases = new Set(), flew = false;
-        while (performance.now() - t0 < 45000) {
+        let inside = 0, total = 0, phases = new Set(), flew = false, maxDrift = 0;
+        const l0 = v.worldToGrid(p.pos.x, p.pos.y, p.pos.z);
+        while (performance.now() - t0 < 80000) {
           await new Promise((r) => setTimeout(r, 500));
           const b = v.bounds, ph = v.state.phase; phases.add(ph);
           if (ph === 'fly' || ph === 'departure' || ph === 'climb') flew = true;
-          if (flew && ph === 'fly') { total++; if (p.pos.x >= b.x0 - 0.5 && p.pos.x <= b.x1 + 0.5 && p.pos.y >= b.y0 - 0.5 && p.pos.y <= b.y1 + 0.5 && p.pos.z >= b.z0 - 0.5 && p.pos.z <= b.z1 + 0.5) inside++; }
+          if (flew && ph === 'fly') {
+            total++;
+            if (p.pos.x >= b.x0 - 0.5 && p.pos.x <= b.x1 + 0.5 && p.pos.y >= b.y0 - 0.5 && p.pos.y <= b.y1 + 0.5 && p.pos.z >= b.z0 - 0.5 && p.pos.z <= b.z1 + 0.5) inside++;
+            const l = v.worldToGrid(p.pos.x, p.pos.y, p.pos.z); maxDrift = Math.max(maxDrift, Math.hypot(l.x - l0.x, l.z - l0.z));
+          }
           if (flew && ph === 'fly' && total >= 60) break;
         }
         const riding = v.isPlayerRiding();
-        return { used, boarded, inside, total, riding, phases: [...phases], pos: [p.pos.x, p.pos.y, p.pos.z].map((n) => Math.round(n)), hud: game.hud.messages ? game.hud.messages.slice(-4).map((m) => m.text || m) : null };
+        return { used, boarded, inside, total, riding, maxDrift: +maxDrift.toFixed(2), speed: +v.cur.speed.toFixed(1), phases: [...phases], pos: [p.pos.x, p.pos.y, p.pos.z].map((n) => Math.round(n)), hud: game.hud.messages ? game.hud.messages.slice(-3).map((m) => m.text || m) : null };
       })()`);
       console.log(`   ride: ${JSON.stringify(r)}`);
       assert.ok(r.used && r.boarded, 'boarded through onUse');
