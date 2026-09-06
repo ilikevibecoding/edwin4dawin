@@ -244,3 +244,17 @@ Why it reduces the defect: the water mirrors the cloud the player sees, in the c
 neutral grey by day, salmon at sunset, blue-grey at dusk — instead of a second, unrelated shade of grey.
 Evidence to capture: `low30` (three cumulus over the bridge at 14:00, r7 without any cloud term vs r10),
 `tod1745`, `aerial-a` (cloud and its mirror in one frame), `cloudy` (the deck: unchanged).
+
+## Audit — repetition in the wave stack (defect 2), offline
+
+The numpy port of the resolved slope field (`tools/wavefield.py`: the four swell sets with their phase warp and
+groups, the three wind-sea sets, the three noise chop layers, the capillary sets, the lanes and the gust field,
+open deep water at 3.5 m/s) was autocorrelated over three squares (`tools/repeat.py`, Hann window, lags up to a
+quarter of the extent): a lattice or synchronised crests would put a secondary peak of 0.5–1 at the repeat
+vector. Found: 400 m at 0.5 m/px, largest |correlation| beyond 8 m 0.13 (at 12 m, the 11.6 m set's own period);
+2.4 km at 2.5 m/px, beyond 60 m 0.10; 8 km at 8 m/px, beyond 300 m 0.11; ring means 0.014–0.046 everywhere.
+The sets' wavelengths (340 / 83 / 51.3 / 33.7 / 14 / 11.6 / 7.1 / 5 / 4.7 / 3.4 / 2.15 / 1.7 / 1.3 / 0.5 m) and
+headings are incommensurate and each carries a noise phase warp, so nothing beats into a grid. In the stills at
+30 / 300 / 1500 m (r7 `low30`, `chase30`, `down300`, `high1500`; r9/r10 `chase30`, `aeriala`) no lattice is
+visible either; motion is checked with the 24-frame `water-landing` clips of the base and final builds (flicker
+metric, below).
