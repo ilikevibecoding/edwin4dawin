@@ -57,7 +57,9 @@ float swLine(float d, float h, float fw) { return clamp((min(h, d + 0.5 * fw) - 
 const SW_MAIN = /* glsl */ `
 {
   float across = vSw.x, along = vSw.y, kind = vSw.z;
-  float ramp = fract(vSw.w), slabW = floor(vSw.w + 1e-3) * 0.1;
+  // w = 10 * slab width (integer) + ramp (0..0.98): decoded tolerant of interpolation rounding (35.99999 is 36 + 0)
+  float wInt = floor(vSw.w + 0.005);
+  float ramp = max(vSw.w - wInt, 0.0), slabW = wInt * 0.1;
   vec2 wp = vWorldPosS.xz;
   float fp = max(length(fwidth(wp)), 1e-4);
   float fwA = max(fwidth(across), 1e-4), fwL = max(fwidth(along), 1e-4);
