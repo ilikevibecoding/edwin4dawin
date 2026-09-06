@@ -222,3 +222,60 @@ The previous vegetation agent's loop-5 commits were lost with the VM; rounds 1�
 - **Why**: a trunk under a crown is lit by the sky it sees around the horizon, not the whole dome; a leaf mass
   is translucent at its edges only; a crown at 5–50 m is a shell of clusters with hollows, not a ball.
 - **Measured**: `r16` (below).
+
+## Round 12 — the understory's occlusion (commit 080da4a6)
+- **Wrong** (`r14-palm`): the shrub the camera finder stood in was a near-black card — the understory took
+  its `occ` from `occludePlants` run over its own list, where a shrub's only neighbours are shrubs (0), and
+  then the card shader's shade × 0.5 occlusion darkening sat on top of a shade band already at ×0.3.
+- **Changed**: `occludePlants(plants, receivers)` — the canopy plants occlude, the understory receives (a
+  shrub under a closed hardwood stand 0.8–0.9, one under a few palms 0.3–0.5), capped at 0.88 so no card is
+  black; the canopy's own occlusion is unchanged.
+
+## Round 6c (budget) — the level-2 band under an aerial camera (commits 7893174b, b9d81eef)
+- **Measured**: pose C 1 511 198 (r15, with the level-1 budget) → 1 499 554 at `ULTRA_DISTANCE` 130 (r16) →
+  **1 485 754** at 100 and at 80 (r17, r18): 186 level-2 crowns stay whatever the distance, because the LOD
+  metric is the distance to the *cell box* — a 150 m cell whose top is its tallest crown, 12–18 m under a
+  130 m camera — so every cell under the camera is 'inside' 80 m. The level-2 count under pose C is now fixed
+  by geometry, not the constant; the pose sits 14 k under the budget and the rest of the bench views run
+  0.88–1.39 M. A metric on the *nearest crown* rather than the box would free those 186 × 280 triangles; left
+  as is (a 10 m crown at 80 m is 80 px, held by level 1 — the constant is where it should be).
+
+## Round 13 / 13b — the near puffs wear a leaf carpet (commits 3fbb3334, cf3989e9, 170616ef)
+- **Wrong** (`r16-park`, 3–10 m under the park canopy): the round-11 noise hollows were too few and too round;
+  the puffs were still balls of plasticine, and their undersides stood lit like a lone tree's.
+- **Changed**: two seamless leaf-carpet tiles in the atlas (hardwood leaves; pine needles), laid over the
+  puff faces in world space (a tile per 1.4 m; `textureGrad` with the un-wrapped derivatives so the tile seam
+  never picks a mip) and sampled **triplanar** — the three world planes blended by the fourth power of the puff
+  normal (13b: a hard pick of one plane drew straight seams across a puff where its facets change plane and
+  streaked the leaves on the oblique faces). Its gaps open where the carpet's coverage falls under a threshold
+  that rises in the hollows of the cluster field (`0.45 + 0.3 (0.5 − clusters)`, fading out by 150 m) and show
+  the far side of the shell, dark (double-sided crown material, back faces × 0.5). The lower crown of a plant
+  in a dense stand is *buried* (`vOcc × (1 − 0.6 capUp)`): the pale sunlit leaf × (1 − 0.7 buried), the direct
+  sun × (1 − 0.5 buried).
+- **Found on the way** (`r16-leaf`, `r17-leaf` atlas dumps): the leaf-cluster texture was flipped — three
+  flips a canvas texture by default, so the fringe cards had read the wrong atlas row all along: the hardwoods
+  wore the sea grape's round leaves and the pine's tufts (the 'starbursts' and 'hands' of rounds 9 and 11 were
+  the wrong species' tiles), and the round-13 carpet on the puffs read the cluster tiles (a netting of big
+  gaps) while the fringe cards read the carpets (big leaf-covered rectangles). `flipY = false` (170616ef).
+- **Measured** (`r18`, build 170616ef): park 264 / 1 220 879, low 185 / 1 134 647, mid 254 / 1 389 843, pose C
+  243 / 1 485 754, pose A 187 / 883 618, prq 231 / 936 987, aerial-a 290 / 1 094 024; console clean. `r18-park`
+  (crop `r18-park-crown`): the mid puffs at 8–20 m read as a leafy mottled shell with dark hollows — foliage,
+  not clay. What is still wrong there: the crowns are **khaki-brown**, no green in them (lit hue 52°, sat 0.27
+  in `r18-low` against the card canopy's 61° beyond 420 m: the R12b split, matched to the hazed aerial
+  reference, is the wrong colour for a leaf at 5 m); the nearest 'puffs' in the frame — smooth balls with soft
+  edges, no leaf, one cluster of them black — are **not puffs**: they are the understory's *cards* at 2–4 m,
+  the atlas disc's lobes magnified to the size of the frame (the understory was cards-only); a near pine
+  (`r18-low`, bottom) is a **teal haze** (mean hue 156°): the needle carpet covers 27 % of its tile (not the
+  55 % the comment claimed), its mip-blended R (the per-leaf shade, over black clear texels) reads 0.2 and
+  darkens the whole crown to where the sky's reflection is what is left.
+
+## Round 12b — canopy bands against the reference (commit 81a16506)
+- **Measured** (`canopy3.py`, the broader canopy mask `b < g`, lum < 170, box (700,560)–(1080,800)): reference
+  shade [49, 56, 51] hue 135°, lit [165, 153, 131] hue 38°, dark fraction 0.148, p50 91 / p90 155. r17 shade
+  [47, 55, 51] **hue 154°**, lit [136, 139, 108] hue 66°, dark 0.209, p50 85 / p90 132.
+- **Changed**: cards shade ×[0.42, 0.36, 0.25] (warmer, a little lighter), lit ×[2.25, 1.96, 2.0] (paler); 3D
+  crowns shade ×[0.56, 0.5, 0.4], sunlit ×[1.58, 1.4, 1.36].
+- **Measured** (`r18-aerial-a`): shade [48, 54, 51] hue 147°, lit [137, 139, 110] hue 64°, dark 0.21, p50 85 /
+  p90 133 — the shade moved a third of the way; the lit band is dimmer (p90 133 vs 155) and greener than the
+  reference's hazed pinkish-beige tips. The remaining gap is the atmosphere's (haze and exposure over 4 km),
+  not the leaf's: left here.
