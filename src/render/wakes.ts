@@ -318,8 +318,8 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         g += -fwd * (0.07 * tw * sin(6.2832 * (d + shift) / lam));
         // coverage (the water shader's slick: the lane's short ripples are wiped): the turbulence outlasts the
         // froth by a good margin, so the smooth road behind a hull runs on past the end of its foam (a taxiing
-        // float's for a minute, a ship's toward a kilometre)
-        float slickFade = 1.0 - smoothstep(0.0, laneLen * 2.2, d);
+        // float's for a minute, a ship's toward a kilometre: 4 lane lengths on a 4 m half-beam, ~800 m at 11 kt)
+        float slickFade = 1.0 - smoothstep(0.0, laneLen * mix(2.2, 4.0, smoothstep(1.0, 4.0, w0)), d);
         cover = max(max(laneMask * slickFade * 0.9, armBump * armEnv * 0.8), min(foam * 3.0, 1.0)) * 0.9 + 0.1;
       } else {
         // ---- hull zone: ax metres behind the bow (negative ahead of the stem); nothing pushes water on a hull
