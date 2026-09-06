@@ -163,6 +163,24 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     actx.fillStyle = 'rgba(40,42,46,0.55)'; actx.fillRect(du1 - 46, V(hv) - 7, 30, 14);
     hctx.fillStyle = '#5a5a5a'; hctx.fillRect(du1 - 46, V(hv) - 7, 30, 14);
   }
+  // window seals: every side window sits in a black rubber glazing strip ~3 cm wide, half of it on the skin around
+  // the cut-out (the other half is over the cut-out and never seen). Drawn as the window outline stroked in the
+  // albedo now and matte / uncoated in the packed maps below, with a soft lip in the height map.
+  const windowOutline = (ctx: CanvasRenderingContext2D, style: string, lw: number) => {
+    ctx.strokeStyle = style; ctx.lineWidth = lw; ctx.lineJoin = 'round';
+    for (const side of [1, -1]) {
+      const V = (v: number) => (side > 0 ? v : 1 - v) * h;
+      for (const [xf, xa, top] of lay.windows) {
+        ctx.beginPath();
+        for (let k = 0; k <= 6; k++) { const x = xf + (xa - xf) * (k / 6); ctx[k ? 'lineTo' : 'moveTo'](lay.uOf(x) * w, V(vLow(x, top))); }
+        for (let k = 6; k >= 0; k--) { const x = xf + (xa - xf) * (k / 6); ctx.lineTo(lay.uOf(x) * w, V(vLow(x, lay.windowSill))); }
+        ctx.closePath(); ctx.stroke();
+      }
+    }
+  };
+  windowOutline(hctx, '#6c6c6c', 6);
+  windowOutline(hctx, '#8c8c8c', 2.5);
+  windowOutline(actx, 'rgb(14,14,16)', 6);
   // exhaust staining: a streak trailing aft from the exhaust stubs (starboard side, low), darkest at the stubs and
   // widening as it fades; the roughness map gets the same streak (soot is matte)
   const stubU = lay.uOf(2.75), stubV = vLow(2.75, -0.5), sootEndU = lay.uOf(-0.9);
@@ -241,6 +259,9 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     kctx.closePath();
     kctx.fill();
   }
+  // the glazing rubber: matte (0.85) and uncoated
+  windowOutline(rctx, '#d9d9d9', 6);
+  windowOutline(kctx, '#000000', 6);
   grime(rctx, rng, w, h, 160, 0.25, '150,150,150');
   for (let i = 0; i < 400; i++) {
     rctx.strokeStyle = `rgba(120,120,120,${rng.range(0.2, 0.5)})`;

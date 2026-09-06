@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Batch, deckHeight, fairedStrutGeometry, floatHull, sprayRailGeometry, strutGeometry, wingLowerY, type FloatStation, type WingSpec } from '../geometry';
+import { Batch, deckHeight, fairedStrutGeometry, floatHull, halfWidthAt, sectionAt, sprayRailGeometry, strutGeometry, wingLowerY, type FloatStation, type WingSpec } from '../geometry';
 import { SURF } from '../textures';
 import { at, V3, WING_POS, type BuildContext } from './context';
 
@@ -18,6 +18,7 @@ export interface FloatsBuild {
 export function buildFloats(ctx: BuildContext, wingSpec: WingSpec): FloatsBuild {
   const { mesh, root, fittings } = ctx;
   const { floatPaint, parts } = ctx.mat;
+  const { sections } = ctx.fuselage;
   const waterRudders: THREE.Group[] = [];
   // ------------------------------------------------------------ floats & struts
   // EDO-style hull: hard chine at yc, V bottom (deadrise) to the keel, near-vertical sides, crowned deck; the
@@ -97,15 +98,27 @@ export function buildFloats(ctx: BuildContext, wingSpec: WingSpec): FloatsBuild 
     fittings.add(strutGeometry(rDeck.clone().add(V3(-0.05, 0.03, 0)), fBelly, 0.022), undefined, SURF.strut);
     shoe(fDeck, UPV, 0.22); shoe(rDeck, UPV, 0.22);
     shoe(fBelly, DOWNV, 0.16); shoe(rBelly, DOWNV, 0.16);
-    // wing struts (V) from shoes on the outboard deck edge to the wing underside, with a jury strut between them
-    const fWing = V3(1.25, deckAt(1.25), side * 1.36), rWing = V3(-0.3, deckAt(-0.3), side * 1.36);
-    const frontTop = strutTop(0.25).setZ(side * strutZ), rearTop = strutTop(-0.85).setZ(side * strutZ);
-    fittings.add(fairedStrutGeometry(fWing, frontTop, 0.12, 0.045), undefined, SURF.strut);
-    fittings.add(fairedStrutGeometry(rWing, rearTop, 0.12, 0.045), undefined, SURF.strut);
-    fittings.add(strutGeometry(frontTop.clone().setY(frontTop.y - 0.05), rearTop.clone().setY(rearTop.y - 0.05), 0.03), undefined, SURF.strut);
-    shoe(fWing, UPV, 0.16); shoe(rWing, UPV, 0.16);
-    // wing strut root fittings under the wing
-    for (const top of [frontTop, rearTop]) fittings.add(new THREE.BoxGeometry(0.16, 0.03, 0.10), at(top.clone().setY(top.y - 0.02)), SURF.darkMetal);
+    // Lift strut: one streamlined strut per side from the lower longeron just behind the door's aft post up to the
+    // wing's front-spar fitting at 40 % span, braced by a jury-strut pair (a shallow V in side view) from the strut's
+    // upper third to the wing. The earlier pair of struts rose from the float decks: nothing on a production
+    // floatplane carries wing loads through the floats, the floats hang on their own struts.
+    const rootFit = V3(0.88, -0.43, side * (halfWidthAt(sectionAt(sections, 0.88), -0.43) - 0.01));
+    const topFit = strutTop(0.0).setZ(side * strutZ); // 24 % chord at z 2.9: the front spar
+    fittings.add(fairedStrutGeometry(rootFit, topFit, 0.15, 0.055), undefined, SURF.strut);
+    const strutDir = topFit.clone().sub(rootFit).normalize();
+    // root fitting: a hinge block on the skin with the strut's end in a saddle; wing end: a cuff plate under the skin
+    fittings.add(new THREE.BoxGeometry(0.16, 0.12, 0.05), at(rootFit.clone().add(V3(0, 0.02, side * 0.005)), [0, 0, 0]), SURF.darkMetal);
+    fittings.add(new THREE.BoxGeometry(0.22, 0.03, 0.14), at(topFit.clone().setY(topFit.y - 0.025)), SURF.darkMetal);
+    for (const t of [0.05, 0.94]) fittings.add(new THREE.CylinderGeometry(0.04, 0.04, 0.03, 10), new THREE.Matrix4().compose(rootFit.clone().lerp(topFit, t), new THREE.Quaternion().setFromUnitVectors(V3(0, 1, 0), strutDir), V3(1, 1, 1)), SURF.darkMetal);
+    // jury struts: from the strut at 62 % of its length up to the wing underside at 10 % and 63 % chord
+    const jury = rootFit.clone().lerp(topFit, 0.62);
+    for (const dx of [0.24, -0.70]) {
+      const jz = Math.abs(jury.z) + 0.02;
+      const up = V3(WING_POS.x + dx, WING_POS.y + wingLowerY(wingSpec, dx, jz) + 0.02, side * jz);
+      fittings.add(strutGeometry(jury, up, 0.013, 6), undefined, SURF.strut);
+      fittings.add(new THREE.BoxGeometry(0.05, 0.02, 0.06), at(up.clone().setY(up.y - 0.012)), SURF.darkMetal);
+    }
+    fittings.add(new THREE.BoxGeometry(0.07, 0.06, 0.08), new THREE.Matrix4().compose(jury, new THREE.Quaternion().setFromUnitVectors(V3(0, 1, 0), strutDir), V3(1, 1, 1)), SURF.darkMetal);
     // water rudder hung off the stern on two transom brackets: a vertical hinge post carrying a balanced blade
     // below the keel line and a steering cross-horn above the deck; the whole assembly yaws with the rudder pedals
     const WR = V3(-2.81, -1.80, zc);

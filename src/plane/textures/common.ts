@@ -218,6 +218,9 @@ export interface FuselageLayout {
   perimeter(x: number): number;
   /** height of the livery's sill line (bottom of the white upper body) at station x */
   sillY(x: number): number;
+  /** side window cut-outs [front x, aft x, top height] and their common sill height (the glazing seals follow them) */
+  windows: [number, number, number][];
+  windowSill: number;
 }
 
 /**

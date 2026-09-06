@@ -143,6 +143,8 @@ export function buildFuselageFrame(): FuselageFrame {
     },
     perimeter: (x) => sectionPerimeter(sectionAt(sections, x)),
     sillY,
+    windows: sideWindows,
+    windowSill: SILL,
   };
   return { sections, innerSections, ring, outer, inner, R, jA, jB, jC, si, sideWindows, blocks, windshield, isWindow, iFront, iRear, innerHalfAt, layout };
 }
