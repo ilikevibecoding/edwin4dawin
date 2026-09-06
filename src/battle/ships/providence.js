@@ -1,11 +1,11 @@
 // Providence-class carrier/destroyer (Separatist), 1088 m. Original procedural geometry matched to the
 // reference views of the Invisible Hand: a long slender dagger whose section is taller than it is wide
-// (flat dorsal ridge, egg shoulders, a vertical flank belt, a deep forward chin), a narrow dorsal spine
-// with mast clusters running into the wide citadel block, a thin command tower raked 30° aft carrying
-// the hammerhead bridge pod ~240 m above the datum with a forward comms spar, a swept ventral fin, a
-// recessed hangar trough with square bay openings along the aft flanks, and a small blunt stern with a
-// tall array of seven engine bells. Blue-grey plating with dark slate rectangles and yellow hazard
-// patches, rust trims on the tower edges. Three complete LODs, five materials.
+// (chisel beak, flat dorsal ridge, egg shoulders, a vertical flank belt, a deep forward chin), a dorsal
+// spine deck with mast clusters running into the broad citadel block, a thin command tower raked 30°
+// aft carrying the flat hammerhead bridge pod ~226 m above the datum with a forward comms spar, a swept
+// ventral fin, a recessed hangar trough with square bay openings along the aft flanks, and a small
+// blunt stern with a 49 m engine drum ringed by six nozzles. Blue-grey plating with dark slate bands
+// and yellow hazard ladders, rust trims on the tower edges. Three complete LODs, five materials.
 import * as THREE from "three";
 import { assemble, part } from "./shipKit.js";
 import {
