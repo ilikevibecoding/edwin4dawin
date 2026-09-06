@@ -40,3 +40,25 @@ Baseline = `bench/out/highway-r0` (commit 6130eae7, before any highway work).
 | 16 | 9:00 from 300 m | pole shadow strokes every 60 m across the pavement (shadow proxies working); the barrier's shadow is a hairline | ok |
 | 17 | landing (garza-west, Garza end) | camera inside the shore vegetation; re-shot from over the water | re-shot r4 |
 | 18 | top-down 120 m | a district street runs adjacent to the highway's south edge for kilometres (the grid's frontage street): the verge on that side is under it (correct, hidden) | noted for the City / Street Detail agents |
+
+## Round 4 — verges, junctions, plaza, footbridges (cb323374 … 0db2ef9c; `/tmp/highway/shots8`)
+
+| # | view | what reads wrong | status |
+|---|------|------------------|--------|
+| 19 | top-down 120 m, 200 m along | the verge reads as the same dry tone as the ground; the corridor has no edges | fixed cb323374: 12 m mown strips in four terrain-draped rows (gravel band, mower stripes, swale), green against the dry lots |
+| 20 | junction 60 m | the barrier terminals end bare; nothing marks the opening from the air | fixed 7beec3c3 / b6ea564f: sand-drum crash cushions, signal mast arms with lit aspects at night, 1 km / 300 m advance signs |
+| 21 | 200 m along (east end) | the causeway approach is the only structure on 4 km of highway: nothing else breaks the ribbon | toll plaza bcbeb7b0 (lit canopy, islands, booths), pedestrian overpasses cdecc7f3 |
+| 22 | top-down 120 m | delineators, chevrons, a signal mast and a footbridge stair stood in the frontage street; a gantry column stood in it | fixed 0db2ef9c: `makeRoadTest` — dropped, stepped out or spanned |
+| 23 | aerial-a, bridge-low | the causeway decks were one pale slab: carriageway and shoulders the same concrete tone | fixed 9328156b: asphalt lanes between pale concrete shoulders and kerbs |
+| 24 | dev 2 m on the verge (`cam=-4400,2,2690`) | camera was under the pavement (surface at y≈5.5 there): a grey void | camera error, re-shot at y 7.3 in r5 |
+
+## Round 5 — the pavement itself (`/tmp/highway/shots11` pale shoulders, `shots12` full course, `shots13` pools + box lift)
+
+| # | view | what reads wrong | status |
+|---|------|------------------|--------|
+| 25 | 600 m along, 1500 m | with everything above in place the highway was still a *pale* ribbon at 600 m+ and, at 1500 m, no darker than a 10 m street: the pavement tone (roads.ts, 0.30–0.40) is the barrier's, the ground's and the shoulders'. The Street Detail branch keeps that tone, so the request alone would not land | fixed: **wearing course** in highway.ts — dark lane asphalt (0.11–0.17) with its own paint, an older paler shoulder mix (0.20–0.27) over the joint, 2 cm over roads.ts' pavement, 15 cm short of its edge; the decks match (bridges.ts). At 600 m the corridor is now a dark ribbon with a bright spine; at 1500 m it is the darkest road line in the grid |
+| 26 | 600 m along (shots11) | lanes dark but shoulders left pale: the ribbon's mean tone was no darker than the streets, so from 1500 m nothing had changed | fixed in shots12 (the shoulders take the course too) |
+| 27 | junction 60 m (shots11/12) | inside the arterial's box a pale diagonal band: the crossing road's pavement (its own rows) stands a few cm over the highway's and pokes through the 2 cm course | fixed shots13: the course ramps up 6 cm over the 15 m before every junction box and rides over both pavements there |
+| 28 | night 300 m | the median lighting is a string of lit dots but the pavement under the poles is unlit: no pools, so the highway does not read as *lit* from the air | fixed shots13: each course strip knows its nearest pole (vertex colour) and the shader lays a warm pool across both carriageways under it, driven by the lamps' night curve |
+| 29 | junction 60 m | the sloped barrier terminal reads as a flat pale wedge from above (its top is the pale cap) | cosmetic; a darker cap on the last 7 m would help — left |
+| 30 | all aerial | the mown verge is a fresh green at 120–200 m but does not register at 600 m+ against the lots' pale grass | open: a stronger (irrigated) verge tone is the next lever after the pavement; weigh against looking painted |

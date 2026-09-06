@@ -21,7 +21,7 @@ import { ALL_CASCADES, MAX_CASCADES, ViewCull, cascadeIsFine, layerMask, maskCas
 
 export interface HighwayBuild {
   group: THREE.Group;
-  counts: { chains: number; chunks: number; meshes: number; poles: number; gantries: number; guardrailM: number; barrierM: number; vergeM: number; signs: number; triangles: number };
+  counts: { chains: number; chunks: number; meshes: number; poles: number; gantries: number; guardrailM: number; barrierM: number; vergeM: number; paveM: number; signs: number; triangles: number };
 }
 
 // ------------------------------------------------------------------ constants
@@ -52,6 +52,16 @@ const ARM_REACH = 2.9;
  *  terrain row by row so it follows the ground; the swale lies between the 5 and 8 m rows */
 const VERGE_ROWS: readonly number[] = [0, 1.8, 5.0, 8.0, 12.0];
 const VERGE_GRAVEL_W = 0.7;
+/** wearing course over the pavement: from the barrier foot (tucked 1.5 cm under the F-profile's 61 cm base) to
+ *  15 cm short of the pavement edge, 2 cm up; the lane asphalt ends at the shoulder joint (the decks' carriageway
+ *  edge, bridges.ts) and the shoulder is an older, paler mix; lane paint at the lanes the traffic drives (traffic.ts:
+ *  1.5 and 4.7 m from the centre line) */
+const PAVE_IN = 0.29;
+const PAVE_JOINT = 6.95;
+const PAVE_EDGE_INSET = 0.15;
+const PAVE_UP = 0.02;
+const PAVE_LANE_LINE = 3.1;
+const PAVE_EDGE_LINE = 6.35;
 const _n = new THREE.Vector3(), _d = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 
 // ------------------------------------------------------------------ colours (multiply the material colour)
@@ -130,6 +140,54 @@ const CONCRETE_FRAG = /* glsl */ `
     cover *= 1.0 - isGrass * swale * (0.14 + 0.08 * n);
     diffuseColor.rgb = mix(cover, gravel, band);
     roughnessFactor = 0.97;
+  } else if (kind > 3.5 && kind < 4.5) {
+    // wearing course: dark lane asphalt with its own paint (yellow beside the barrier, dashed lane line, edge line
+    // with a rumble band outside it), each lane resurfaced in its own 300 m contracts, wheel paths rubbed darker,
+    // patch repairs, reflective cracks; over the sealed joint the shoulder is an older, paler mix, dusty toward the
+    // verge. The vertex colour carries the slow wear (braking rubber on the approaches to the junctions). flag: 0
+    // paint, 1 a street mouth (no edge line), 2 a junction box or the toll plaza (no paint), 3 the median gap between
+    // barrier terminals (double yellow). Fine detail fades to its mean as a pixel grows past it: nothing shimmers.
+    float flag = floor((kind - 4.0) * 10.0 + 0.5);
+    float along = vInfoH.y;
+    float xm = abs(vInfoH.z);
+    float fwA = max(fwidth(along), 1e-4);
+    float fwX = max(fwidth(xm), 1e-4);
+    float nC = fbm3(vWorldPosH.xz * 0.15);
+    float n2 = vnoise(vWorldPosH.xz * 1.7);
+    float onShoulder = step(${PAVE_JOINT.toFixed(2)}, xm);
+    vec3 asphalt = mix(vec3(0.11, 0.11, 0.105), vec3(0.17, 0.165, 0.16), nC) * (0.94 + 0.12 * n2);
+    float lane = step(${PAVE_LANE_LINE.toFixed(2)}, xm);
+    float secTone = 0.84 + 0.32 * hash11(floor((along + lane * 137.0) / 310.0) * 7.0 + lane + 11.0);
+    asphalt *= mix(secTone, 1.0, 0.3);
+    float wheel = exp(-pow((abs(xm - mix(1.5, 4.7, lane)) - 0.8) * 2.5, 2.0)) * (1.0 - onShoulder);
+    asphalt *= 1.0 - 0.10 * wheel;
+    vec3 shoulderMix = mix(vec3(0.20, 0.20, 0.19), vec3(0.27, 0.265, 0.25), nC) * (0.95 + 0.10 * n2);
+    shoulderMix *= 1.0 + 0.12 * smoothstep(${(PAVE_JOINT + 1.5).toFixed(2)}, 10.6, xm) * (0.5 + 0.5 * fbm3(vWorldPosH.xz * 0.5 + 3.0));
+    asphalt = mix(asphalt, shoulderMix, onShoulder);
+    asphalt *= 1.0 - 0.14 * smoothstep(0.62, 0.72, fbm3(vWorldPosH.xz * 0.04 + 8.0));
+    float crack = aaLine((fract(along / 13.7) - 0.5) * 13.7, 0.02, fwA) * step(0.45, hash11(floor(along / 13.7) + 5.0)) * (1.0 - smoothstep(0.3, 1.0, fwA));
+    asphalt *= 1.0 - 0.3 * crack;
+    asphalt *= 1.0 - 0.35 * aaLine(xm - ${PAVE_JOINT.toFixed(2)}, 0.035, fwX);
+    float noPaint = step(1.5, flag) * (1.0 - step(2.5, flag));
+    float gap = step(2.5, flag);
+    float edgeOn = 1.0 - step(0.5, flag);
+    float dashPulse = mix(aaLine((fract(along / 9.0) - 0.17) * 9.0, 1.53, fwA), 0.34, smoothstep(2.0, 6.0, fwA));
+    float white = (aaLine(xm - ${PAVE_LANE_LINE.toFixed(2)}, 0.06, fwX) * dashPulse + aaLine(xm - ${PAVE_EDGE_LINE.toFixed(2)}, 0.075, fwX) * edgeOn) * (1.0 - gap);
+    float yellow = aaLine(xm - mix(0.62, 0.15, gap), 0.06, fwX);
+    float paintWear = (0.7 + 0.3 * smoothstep(0.3, 0.7, fbm3(vec2(along * 0.7, xm * 3.0)))) * (1.0 - noPaint);
+    white *= paintWear;
+    yellow *= paintWear;
+    vec3 col = mix(asphalt, vec3(0.80, 0.80, 0.78), white);
+    col = mix(col, vec3(0.85, 0.66, 0.16), yellow);
+    float rumble = step(6.5, xm) * (1.0 - step(6.85, xm)) * edgeOn * mix(aaLine((fract(along / 0.3) - 0.5) * 0.3, 0.05, fwA), 0.33, smoothstep(0.1, 0.3, fwA));
+    col *= 1.0 - 0.28 * rumble;
+    diffuseColor.rgb = col * vColor.r;
+    roughnessFactor = 0.84 - 0.05 * wheel;
+    // the lamp pool of the nearest lighting pole (vColor.b: its station): twin cobra heads 2.9 m either side of the
+    // median, 11.4 m up, so the pool is a broad lozenge across both carriageways that fades over ~25 m along
+    float dPole = along - vColor.b;
+    hwPool = exp(-pow(dPole / 12.0, 2.0)) * exp(-pow(max(abs(xm) - 2.9, 0.0) / 7.5, 2.0));
+    hwPoolTint = col;
   } else {
     diffuseColor.rgb *= 0.9 + 0.2 * n;
     // run-off streaks down the pedestals
@@ -138,19 +196,23 @@ const CONCRETE_FRAG = /* glsl */ `
 }
 `;
 
-function createConcreteMaterial(pixelScale: THREE.IUniform<number>): THREE.MeshStandardMaterial {
+/** `lampGlow`: the night factor of the lamps (bridges.ts lampGlowFor), which lights the wearing course's lamp pools */
+function createConcreteMaterial(pixelScale: THREE.IUniform<number>, lampGlow: THREE.IUniform<number>): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: 0xb8b4aa, roughness: 0.9, metalness: 0.0, vertexColors: true, transparent: true, depthWrite: true });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uPixelScale = pixelScale;
+    shader.uniforms.uLampGlow = lampGlow;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 aAxis; attribute vec3 aInfo; varying vec3 vInfoH; varying float vCover; varying vec3 vWorldPosH; uniform float uPixelScale;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>\nvInfoH = aInfo;\n${MIN_WIDTH_VERT}\nvWorldPosH = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec3 vInfoH; varying float vCover; varying vec3 vWorldPosH;\n${GLSL_NOISE}\n${GLSL_AA_LINE}`)
+      .replace('#include <common>', `#include <common>\nvarying vec3 vInfoH; varying float vCover; varying vec3 vWorldPosH; uniform float uLampGlow;\n${GLSL_NOISE}\n${GLSL_AA_LINE}`)
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.a *= vCover;')
-      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${CONCRETE_FRAG}`);
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\nfloat hwPool = 0.0; vec3 hwPoolTint = vec3(0.0);\n${CONCRETE_FRAG}`)
+      // the lamp pools: warm sodium-white light reflected by the course (its own tint, so the paint shines brighter)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.82, 0.55) * hwPoolTint * (hwPool * 0.9 * uLampGlow);');
   };
-  mat.customProgramCacheKey = () => 'highway-concrete-v1';
+  mat.customProgramCacheKey = () => 'highway-concrete-v2';
   return mat;
 }
 
@@ -606,7 +668,9 @@ function panel(soup: Soup, centre: THREE.Vector3, normal: THREE.Vector3, w: numb
 
 // ------------------------------------------------------------------ per-frame culling
 
-interface ChunkMesh { mesh: THREE.Mesh; cls: CasterClass; box: THREE.Box3; height: number; inView: boolean; cast: number; shadowOnly?: boolean; }
+/** `shadowOnly`: a proxy drawn by the coarse shadow cascades only; `receiveOnly`: a surface the cameras draw and
+ *  no cascade does (the wearing course) */
+interface ChunkMesh { mesh: THREE.Mesh; cls: CasterClass; box: THREE.Box3; height: number; inView: boolean; cast: number; shadowOnly?: boolean; receiveOnly?: boolean; }
 interface Chunk {
   meshes: ChunkMesh[];
   steel: THREE.Mesh | null;
@@ -627,7 +691,7 @@ class HighwayCuller {
   private readonly seen = new Set<THREE.PerspectiveCamera>();
   private cameras: THREE.PerspectiveCamera[] = [];
 
-  constructor(private readonly steel: THREE.MeshStandardMaterial) {}
+  constructor(private readonly steel: THREE.MeshStandardMaterial, private readonly lampGlow: THREE.IUniform<number>) {}
 
   observe(camera: THREE.Camera): void {
     if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) this.seen.add(camera as THREE.PerspectiveCamera);
@@ -641,7 +705,9 @@ class HighwayCuller {
       if (this.sunDir.lengthSq() > 1e-6) this.sunDir.normalize(); else this.sunDir.set(0, 1, 0);
       keyIntensity = this.sun.intensity;
     }
-    this.steel.emissiveIntensity = LAMP_GLOW * lampGlowFor(this.sunDir, keyIntensity);
+    const glow = lampGlowFor(this.sunDir, keyIntensity);
+    this.steel.emissiveIntensity = LAMP_GLOW * glow;
+    this.lampGlow.value = glow;
     if (this.seen.size) { this.cameras = [...this.seen]; this.seen.clear(); }
     if (!this.cameras.length) return;
     for (const c of this.chunks) { c.dist = Infinity; for (const m of c.meshes) { m.inView = false; m.cast = 0; } }
@@ -663,7 +729,7 @@ class HighwayCuller {
     for (let i = 0; i < MAX_CASCADES; i++) if (!cascadeIsFine(i)) coarse |= 1 << i;
     for (const c of this.chunks) {
       for (const m of c.meshes) {
-        const mask = m.shadowOnly ? layerMask('mid', false, m.cast & coarse) : layerMask(m.cls, m.inView, m.cast);
+        const mask = m.shadowOnly ? layerMask('mid', false, m.cast & coarse) : m.receiveOnly ? layerMask('mid', m.inView, 0) : layerMask(m.cls, m.inView, m.cast);
         const cast = maskCasts(mask);
         m.mesh.castShadow = cast;
         m.mesh.visible = m.shadowOnly ? cast : m.inView || cast;
@@ -722,13 +788,14 @@ const FOOTBRIDGES: Record<string, number[]> = {
 
 export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit: (m: THREE.Material) => void): HighwayBuild {
   const pixelScale: THREE.IUniform<number> = { value: 1000 };
+  const lampGlow: THREE.IUniform<number> = { value: 0 };
   const atlas = new SignAtlas();
-  const concreteMat = createConcreteMaterial(pixelScale);
+  const concreteMat = createConcreteMaterial(pixelScale, lampGlow);
   const steelMat = createSteelMaterial(pixelScale, atlas.texture);
   registerLit(concreteMat); registerLit(steelMat);
   // shadow proxies are only ever drawn by the shadow cameras (depth material): the cheapest material will do
   const proxyMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-  const culler = new HighwayCuller(steelMat);
+  const culler = new HighwayCuller(steelMat, lampGlow);
   const group = new HighwayGroup(culler);
   const _size = new THREE.Vector2();
   const observe = (renderer: THREE.WebGLRenderer, camera: THREE.Camera) => {
@@ -737,7 +804,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     const h = rt ? rt.height : renderer.getDrawingBufferSize(_size).y;
     pixelScale.value = 0.5 * h * camera.projectionMatrix.elements[5];
   };
-  const counts: HighwayBuild['counts'] = { chains: 0, chunks: 0, meshes: 0, poles: 0, gantries: 0, guardrailM: 0, barrierM: 0, vergeM: 0, signs: 0, triangles: 0 };
+  const counts: HighwayBuild['counts'] = { chains: 0, chunks: 0, meshes: 0, poles: 0, gantries: 0, guardrailM: 0, barrierM: 0, vergeM: 0, paveM: 0, signs: 0, triangles: 0 };
   const chains = buildChains(map, segments);
   counts.chains = chains.length;
 
@@ -754,7 +821,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     // steel is accumulated in three soups per chunk so the LOD prefixes can be laid out: heads | thin | posts
     // `proxy`: fat stand-ins (poles, gantry trusses, guardrail walls) drawn into the coarse shadow cascades only,
     // so the furniture keeps its shadow strokes from the air where the thin steel is not worth a shadow pass
-    const parts = Array.from({ length: nChunks }, () => ({ conc: new Soup(3, true), heads: new Soup(3, true), thin: new Soup(3, true), posts: new Soup(3, true), signs: new Soup(3, true), proxy: new Soup(3, false) }));
+    const parts = Array.from({ length: nChunks }, () => ({ conc: new Soup(3, true), pave: new Soup(3, true), heads: new Soup(3, true), thin: new Soup(3, true), posts: new Soup(3, true), signs: new Soup(3, true), proxy: new Soup(3, false) }));
     const P = (s: number) => parts[chunkOf(s)];
 
     // -------------------------------------------------------- median barrier: continuous, opened at the arterial junctions and through the toll plaza
@@ -1043,8 +1110,11 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     const nearGantry = (s: number, r: number) => gantries.some((g) => Math.abs(g.s - s) < r);
 
     // -------------------------------------------------------- lighting: barrier-mounted twin-arm poles every 60 m
+    /** stations of the poles that stand (the wearing course lays a lamp pool under each at night) */
+    const poleStations: number[] = [];
     for (let s = 32; s < c.total - 12; s += POLE_SPACING) {
       if (nearGantry(s, 24) || nearFoot(s, 9) || openings.some((o) => s > o.s0 - 4 && s < o.s1 + 4)) continue;
+      poleStations.push(s);
       const f = frameAt(c, s);
       const yaw = yawAt(f);
       const base = f.y + BARRIER_H;
@@ -1060,6 +1130,92 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         part.heads.box(hx, top - 0.38, hz, 0.78, 0.22, 0.34, yaw, 0, S_HEAD, false, [1, 0, 0], 'point');
       }
       counts.poles++;
+    }
+
+    // -------------------------------------------------------- wearing course: dark asphalt over both carriageways, 2 cm up on the pavement.
+    // roads.ts shades the whole highway as pale sun-bleached concrete-asphalt - the tone of the barrier, the dry ground
+    // and the district streets - so from 300 m up the corridor is a pale ribbon whatever stands on it. The course runs
+    // from the barrier foot to the pavement edge and carries the lane paint: dark lanes, a paler shoulder over the
+    // joint (the decks' carriageway edge), the pale barrier between - a dark ribbon twice a street's width with a
+    // bright spine, which is what a highway is from 600 m. Drop this block when roads.ts darkens its highway lanes.
+    {
+      interface PaintBox { s0: number; s1: number; side: -1 | 0 | 1; flag: number; }
+      // where the paint stops: the mouths of the side streets (1: no edge line), the junction boxes and the plaza (2)
+      const boxes: PaintBox[] = junctions.map((j) => ({ s0: j.s - (j.major ? 12 : 8), s1: j.s + (j.major ? 12 : 8), side: j.side, flag: j.major ? 2 : 1 }));
+      if (toll) boxes.push({ s0: toll.s - 40, s1: toll.s + 40, side: 0, flag: 2 });
+      // braking rubber darkens a carriageway over the last 90 m before its junction boxes and the plaza
+      const brakes: { s: number; r: number }[] = majors.map((j) => ({ s: j.s, r: 14 }));
+      if (toll) brakes.push({ s: toll.s, r: 42 });
+      const tone = (s: number, side: -1 | 1): number => {
+        let t = 1;
+        for (const b of brakes) {
+          const ahead = side * (b.s - s);
+          if (ahead > -b.r) t = Math.min(t, 1 - 0.13 * (1 - clamp((ahead - b.r) / 90, 0, 1)));
+        }
+        return t;
+      };
+      // through a junction box the crossing road's pavement (its own rows over the same terrain) can stand a few cm
+      // over the highway's: the course ramps up 6 cm over the 15 m before a box and rides over both there
+      const lift = (s: number, sideBoxes: PaintBox[]): number => {
+        let k = 0;
+        for (const b of sideBoxes) k = Math.max(k, 1 - Math.max(0, Math.max(b.s0 - s, s - b.s1)) / 15);
+        return 0.06 * k;
+      };
+      // the pole whose lamp pool a strip lies in (strips are cut halfway between poles so every strip has one)
+      const midpoints = poleStations.slice(1).map((s, i) => (s + poleStations[i]) / 2);
+      const poleFor = (s: number): number => {
+        let best = -1e4;
+        for (const p of poleStations) if (Math.abs(p - s) < Math.abs(best - s)) best = p;
+        return best;
+      };
+      /** one strip of the course between stations sa and sb, a0..a1 across; the vertex colour carries (wear tone,
+       *  1, station of the nearest lighting pole) for the shader */
+      const quad = (sa: number, sb: number, a0: number, a1: number, kind: number, tA: number, tB: number, up: (s: number) => number) => {
+        const soup = P((sa + sb) / 2).pave;
+        const fa = frameAt(c, sa), fb = frameAt(c, sb);
+        const base = soup.vertexCount;
+        const pole = poleFor((sa + sb) / 2);
+        const v = (f: Frame, s: number, a: number, t: number) => soup.vertex(f.x + f.rx * a, surfaceAt(c, s, a) + PAVE_UP + up(s), f.z + f.rz * a, 0, 1, 0, [t, 1, pole], [kind, s, a]);
+        v(fa, sa, a0, tA); v(fb, sb, a0, tB); v(fb, sb, a1, tB); v(fa, sa, a1, tA);
+        _a.set(fb.x - fa.x, 0, fb.z - fa.z).cross(_b.set(fb.x + fb.rx * a1 - fa.x - fa.rx * a0, 0, fb.z + fb.rz * a1 - fa.z - fa.rz * a0));
+        if (_a.y >= 0) soup.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+        else soup.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+      };
+      const cutsBetween = (s0: number, s1: number, extra: number[]): number[] => {
+        const cuts = new Set<number>(stations(c, s0, s1));
+        for (let k = 1; k < nChunks; k++) { const s = k * chunkLen; if (s > s0 + 0.05 && s < s1 - 0.05) cuts.add(s); }
+        for (const s of [...extra, ...midpoints]) if (s > s0 + 0.05 && s < s1 - 0.05) cuts.add(s);
+        return [...cuts].sort((p, q) => p - q);
+      };
+      for (const side of [-1, 1] as const) {
+        const mine = boxes.filter((b) => b.side === 0 || b.side === side);
+        const ss = cutsBetween(0, c.total, mine.flatMap((b) => [b.s0, b.s1, b.s0 - 15, b.s1 + 15]));
+        const up = (s: number) => lift(s, mine);
+        for (let i = 0; i + 1 < ss.length; i++) {
+          const sa = ss[i], sb = ss[i + 1];
+          if (sb - sa < 0.05) continue;
+          const sm = (sa + sb) / 2;
+          let flag = 0;
+          for (const b of mine) if (sm > b.s0 && sm < b.s1) flag = Math.max(flag, b.flag);
+          quad(sa, sb, side * PAVE_IN, side * (hw - PAVE_EDGE_INSET), 4 + flag * 0.1, tone(sa, side), tone(sb, side), up);
+        }
+        counts.paveM += c.total;
+      }
+      // the median gap between the barrier terminals: a double yellow up to the junction box, plain through it
+      const plain = boxes.filter((b) => b.flag === 2);
+      const upMid = (s: number) => lift(s, plain);
+      for (const o of openings) {
+        const s0 = Math.max(0, o.s0), s1 = Math.min(c.total, o.s1);
+        if (s1 - s0 < 1) continue;
+        const ss = cutsBetween(s0, s1, plain.flatMap((b) => [b.s0, b.s1, b.s0 - 15, b.s1 + 15]));
+        for (let i = 0; i + 1 < ss.length; i++) {
+          const sa = ss[i], sb = ss[i + 1];
+          if (sb - sa < 0.05) continue;
+          const sm = (sa + sb) / 2;
+          const inBox = plain.some((b) => sm > b.s0 && sm < b.s1);
+          quad(sa, sb, -PAVE_IN, PAVE_IN, inBox ? 4.2 : 4.3, 1, 1, upMid);
+        }
+      }
     }
 
     // -------------------------------------------------------- guide signs on the shoulder before the arterial junctions, speed limits, chevrons
@@ -1337,6 +1493,15 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         g.deleteAttribute('aUv');
         return g;
       };
+      if (p.pave.idx.length) {
+        // drawn first of the transparent meshes (before the thin steel it lies under, whose coverage alpha must
+        // blend against it, not against the pale pavement below), never a caster, never cut by distance
+        const m = new THREE.Mesh(p.pave.build([['aInfo', 3]]), concreteMat);
+        attach(m, 'mid', false);
+        chunk.meshes[chunk.meshes.length - 1].receiveOnly = true;
+        m.castShadow = false;
+        m.renderOrder = -1;
+      }
       if (p.conc.idx.length) {
         const g = p.conc.build([['aInfo', 3]]);
         const m = new THREE.Mesh(g, concreteMat);

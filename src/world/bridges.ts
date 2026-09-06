@@ -185,12 +185,13 @@ const CONCRETE_FRAG = /* glsl */ `
     float n = fbm3(vWorldPosR.xz * 0.11);
     // 43 cm grain: band-limited (fades to its mean once a pixel spans a good part of its wavelength)
     float n2 = mix(vnoise(vWorldPosR.xz * 2.3), 0.5, smoothstep(0.12, 0.4, fp));
-    // sun-bleached asphalt wearing course over the concrete deck, well darker than the pale concrete shoulders and
-    // kerbs: from the air the deck reads as dark carriageways between pale edges (and the pale median barrier),
-    // not as one pale slab
+    // asphalt wearing course over the concrete deck (the tones of the highway's wearing course, highway.ts, so the
+    // carriageway runs unbroken over the abutment joint): dark lanes, an older paler mix on the shoulders, pale
+    // concrete kerbs and parapets outside - from the air the deck reads as a dark ribbon with bright edges and a
+    // bright median spine over the water, not as one pale slab
     float onShoulder = clamp((abs(xm) - width * 0.5 - 0.005) / fwX + 0.5, 0.0, 1.0);
-    vec3 conc = mix(vec3(0.19, 0.19, 0.185), vec3(0.27, 0.265, 0.255), n) * (0.94 + 0.12 * n2);
-    vec3 shoulder = mix(vec3(0.42, 0.42, 0.40), vec3(0.52, 0.51, 0.49), n) * (0.96 + 0.08 * n2);
+    vec3 conc = mix(vec3(0.11, 0.11, 0.105), vec3(0.17, 0.165, 0.16), n) * (0.94 + 0.12 * n2);
+    vec3 shoulder = mix(vec3(0.20, 0.20, 0.19), vec3(0.27, 0.265, 0.25), n) * (0.95 + 0.10 * n2);
     // the deck's 6 m joints reflect through the asphalt as faint transverse cracks; paving-lane seams at the lane edges
     float laneW = width / max(lanes, 1.0);
     float u = xm + width * 0.5;
