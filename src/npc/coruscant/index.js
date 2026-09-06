@@ -23,7 +23,7 @@ const TICK = 0.05;
 const _dir = new THREE.Vector3();
 export const SPAWN_R = 96, DESPAWN_R = 128, MAX_LIVE = 150;
 const SPAWN_PER_CYCLE = 10, CYCLE_TICKS = 10;
-const INDOOR_PENALTY = 40, INDOOR_MARGIN = 24, INDOOR_MAX = 20, OWN_LOT_MAX = 110;   // see spawnCycle
+const INDOOR_PENALTY = 40, INDOOR_MARGIN = 24, INDOOR_MAX = 20, OWN_LOT_MAX = 110, BEHIND_PENALTY = 30;   // see spawnCycle
 const RECYCLE_AGE = 160, RECYCLE_PER_CYCLE = 4;                    // out-of-sight recycling: min age (ticks), rate
 const WANDER_MIN = 4, WANDER_MAX = 24, STROLL_P = 0.4;             // idle seconds on a street spot; share of arrivals already strolling
 const SKIP_TICKS = 200;                                            // 10 s before retrying someone who could not be placed
@@ -98,6 +98,14 @@ export class CoruscantPopulation {
     return Math.hypot(dx, dz);
   }
 
+  // is the place of activity `a` behind the camera (its centre more than 60 degrees off the view direction)?
+  behind(a, p) {
+    let cx, cz;
+    if (a.lot === PORT) { cx = 2646; cz = 0; }
+    else { const r = a.lot != null ? this.lotCentres[a.lot] : null; if (!r) return false; cx = (r.x0 + r.x1) / 2; cz = (r.z0 + r.z1) / 2; }
+    const dx = cx - p.x, dz = cz - p.z, d = Math.hypot(dx, dz) || 1;
+    return (dx * this.view.x + dz * this.view.z) / d < -0.5;
+  }
   // lot the player stands in (null on the streets / plazas / port)
   playerLot(p) {
     for (const l of this.layout.lots) if (l.kind !== 'plaza' && p.x >= l.x0 && p.x < l.x1 && p.z >= l.z0 && p.z < l.z1) return l.id;
@@ -145,12 +153,17 @@ export class CoruscantPopulation {
       const own = inLot != null && a.lot === inLot && this.isIndoor(person, a);
       const indoor = !own && this.isIndoor(person, a);
       if (indoor && d > SPAWN_R - INDOOR_MARGIN) continue;
-      cands.push([indoor ? d + INDOOR_PENALTY : d, person, a, indoor, own]);
+      // places wholly behind the camera come after the ones in front (the budget fills the view first; they still
+      // spawn when it allows, so turning round is not an empty street)
+      const behind = d > 6 && this.behind(a, p);
+      cands.push([d + (indoor ? INDOOR_PENALTY : 0) + (behind ? BEHIND_PENALTY : 0), person, a, indoor, own]);
     }
     cands.sort((a, b) => a[0] - b[0]);
     let n = 0;
+    // an empty street fills faster (arriving in a district, the first seconds after loading) than a full one tops up
+    const perCycle = SPAWN_PER_CYCLE + Math.floor((MAX_LIVE - this.live.length) / 10);
     for (const [, person, a, indoor, own] of cands) {
-      if (n >= SPAWN_PER_CYCLE || this.live.length >= MAX_LIVE) break;
+      if (n >= perCycle || this.live.length >= MAX_LIVE) break;
       if (indoor && indoorLive >= indoorMax) continue;
       if (own && ownLive >= OWN_LOT_MAX) continue;
       if (this.spawn(person, a)) { n++; if (indoor) indoorLive++; if (own) ownLive++; }

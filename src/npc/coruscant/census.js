@@ -19,7 +19,7 @@ const LEISURE_KINDS = new Set(['holo_arcade', 'cantina', 'archive', 'gym', 'gene
 const STREET_BASE = 56;
 // extra street people anchored on each district's plaza (the core plazas carry the midday crowd of rubric row 4;
 // nightlife districts lose half of theirs to the night shift)
-const PLAZA_REGULARS = { senate: 210, market: 150, financial: 130, default: 90 };
+const PLAZA_REGULARS = { senate: 240, market: 170, financial: 200, default: 90 };
 const STREET_MIX = {
   senate: [['senate guard', 4], ['protocol droid', 3], ['aide', 3], ['journalist', 3], ['tourist', 4], ['courier', 2], ['jedi', 1], ['security officer', 2]],
   financial: [['clerk', 5], ['executive', 2], ['courier', 5], ['security officer', 2], ['protocol droid', 1], ['sweeper droid', 2], ['tourist', 1], ['journalist', 1]],

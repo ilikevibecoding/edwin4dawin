@@ -37,7 +37,10 @@ export class Planner {
       // the port is 350 blocks long: a crew's spot is one of its kind near the player (the far pads' spots would only
       // be skipped as out of the spawn ring), the hash still decides which
       if (within) { const near = cands.filter((s) => Math.hypot(s.x - within.x, s.z - within.z) <= within.r); if (near.length) cands = near; }
-      return this.pickFree(cands, npc, act, (s) => ({ ...s, lot: null, level: 'port', port: true }));
+      // off duty, a share of the crews stroll the apron rather than sit (the evening crowd is bigger than the benches)
+      const stroll = act === 'leisure' && rng() < 0.45;
+      const s = stroll ? null : this.pickFree(cands, npc, act, (d) => ({ ...d, lot: null, level: 'port', port: true }));
+      return s || this.portStroll(npc, rng, within, cands);
     }
     const lot = lotId != null ? this.layout.lots[lotId] : null;
     if (lot && lot.kind === 'plaza') return this.plazaSpot(npc, lot, act, rng, within);
@@ -51,6 +54,8 @@ export class Planner {
     const yaw = li.faceOf(s.x, s.y, s.z);
     return { ...s, lot: lotId, level: 'lot', yaw };
   }
+  // The first free spot of the list from the person's hash onwards; null when every one is taken (nobody stands in
+  // somebody else's spot: the caller finds them a place to stroll)
   pickFree(cands, npc, act, decorate) {
     if (!cands.length) return null;
     const start = Math.floor(hash2(npc.person.key & 0xffff, act.length * 7 + (npc.person.slot || 0), npc.person.key >>> 16) * cands.length) % cands.length;
@@ -60,8 +65,24 @@ export class Planner {
       const who = this.pop.occupied.get(key);
       if (who === undefined || who === npc.id) return { ...decorate(s), key };
     }
-    const s = cands[start];
-    return { ...decorate(s), key: 'p' + s.x + ',' + s.y + ',' + s.z };
+    return null;
+  }
+  // A cell of the spaceport deck to stand or stroll on: near where the camera looks when the player is at the port,
+  // else around the spots of the person's own kind (the pads of a crew, the terminal of a passenger)
+  portStroll(npc, rng, within = null, cands = []) {
+    const tries = [];
+    if (within) { const vc = this.viewCentre(within); tries.push([vc.x, vc.z, Math.min(NEAR_R, within.r)], [within.x, within.z, within.r]); }
+    if (cands.length) { const c = cands[Math.floor(rng() * cands.length)]; tries.push([c.x, c.z, 16]); }
+    tries.push([2621, 0, 60]);
+    for (const [x, z, r] of tries) for (let t = 0; t < 6; t++) {
+      const c = this.nav.randomPoint('port', x, z, r, { next: rng });
+      if (!c) continue;
+      if (within && (Math.hypot(c.x - within.x, c.z - within.z) > within.r || Math.hypot(c.x - within.x, c.z - within.z) < PERSONAL_R)) continue;
+      if (within && t < 3 && !this.inView(within, c.x, c.z)) continue;
+      if (this.pop.idleCount(c.x, c.z, 4) > 6) continue;
+      return { ...c, lot: null, level: 'port', kind: 'street', port: true, yaw: rng() * Math.PI * 2 };
+    }
+    return null;
   }
   // Is block (x, z) where the player sees it: in front of the camera, VIEW_MIN..VIEW_MAX blocks away? Without a
   // camera direction (offline, tests) every cell qualifies.

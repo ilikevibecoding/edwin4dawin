@@ -1,26 +1,29 @@
 // Coruscant crowd census over CDP (rubric 07 rows 4, 6, 10, 11): loads 5 vantage points x 3 times of day in headless
 // Chrome, lets the population settle, and reports per view the visible / live / walking / stuck citizens and the
 // failed transitions (trips that had to be retargeted, path legs that failed), plus draw calls and heap.
-//   node scripts/npc-census.mjs --url http://localhost:5214/ [--wait 20000] [--out /tmp/npc-census.json] [--rd 8]
+//   node scripts/npc-census.mjs --url http://localhost:5214/ [--ticks 400] [--wait 90000] [--out /tmp/npc-census.json] [--rd 8]
 //   optional: --spots '[{"name":"x","x":2975,"z":120,"y":97.2,"yaw":0,"pitch":-2}]'  --times '0.5,0.8,0'
-// One headless Chrome at a time (software GL); ~25 s per view.
+// Each view settles for --ticks simulation ticks (20 per second of game time; software GL runs the loop well below
+// real time, so the wait is counted in ticks, capped at --wait ms of wall clock). One headless Chrome at a time.
 import { launchPage } from './cdp.mjs';
 import { writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 const args = Object.fromEntries(process.argv.slice(2).reduce((acc, a, i, arr) => { if (a.startsWith('--')) acc.push([a.slice(2), arr[i + 1] && !arr[i + 1].startsWith('--') ? arr[i + 1] : true]); return acc; }, []));
 const base = args.url || 'http://localhost:5214/';
-const wait = parseInt(args.wait || '20000', 10);
+const wait = parseInt(args.wait || '90000', 10);
+const ticks = parseInt(args.ticks || '400', 10);
 const out = args.out || '/tmp/npc-census.json';
 const rd = args.rd || '8';
 // the five vantage points: Senate plaza, market plaza, financial plaza (the core districts: boulevard decks, feet 97),
-// the Uscru undercity strip (ground, feet 61) and the spaceport apron between the pad pairs (deck, feet 97)
+// the Uscru undercity strip (ground, feet 61) and the spaceport apron looking east over the pads (deck, feet 97;
+// yaw 0 faces -z, yaw -90 faces +x)
 const SPOTS = args.spots ? JSON.parse(args.spots) : [
   { name: 'senate_plaza', x: 2975, z: 120, y: 97.2, yaw: 0, pitch: -2, core: true },
   { name: 'market_plaza', x: 2806, z: -34, y: 97.2, yaw: 0, pitch: -2, core: true },
   { name: 'financial_plaza', x: 3352, z: -34, y: 97.2, yaw: 0, pitch: -2, core: true },
   { name: 'undercity_strip', x: 2748, z: 386, y: 61.2, yaw: 0, pitch: 3, core: false },
-  { name: 'spaceport_apron', x: 2616, z: -62, y: 97.2, yaw: 90, pitch: -4, core: false },
+  { name: 'spaceport_apron', x: 2616, z: -62, y: 97.2, yaw: -90, pitch: -4, core: false },
 ];
 const TIMES = (args.times || '0.5,0.8,0').split(',').map(Number);   // noon, 19:12, midnight
 const label = (t) => { const h = (t * 24) % 24; return `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`; };
@@ -40,7 +43,15 @@ for (const t of TIMES) for (const s of SPOTS) {
   try {
     await page.waitForGame(180000);
     await page.evaluate('game.input.locked = true; game.input.onLockChange = null; "ok"');
-    await page.sleep(wait);
+    // the population attaches itself once the game loop runs; then let the crowd settle for `ticks` simulation ticks
+    const t0 = Date.now();
+    let tick = 0;
+    while (Date.now() - t0 < wait) {
+      tick = await page.evaluate('(game.coruscant && game.coruscant.population) ? game.coruscant.population.tickCount : -1');
+      if (tick >= ticks) break;
+      await page.sleep(1000);
+    }
+    row.ticks = tick; row.settleMs = Date.now() - t0;
     const c = await page.evaluate(`JSON.stringify(${CENSUS})`);
     Object.assign(row, JSON.parse(c));
     row.exceptions = page.exceptions.length;
@@ -49,7 +60,7 @@ for (const t of TIMES) for (const s of SPOTS) {
   page.close();
   rows.push(row);
   const r = row;
-  console.log(`${r.spot.padEnd(16)} ${r.time}  live ${String(r.live ?? '-').padStart(3)}  visible ${String(r.visible ?? '-').padStart(3)} (outdoors ${String(r.visibleOutdoors ?? '-').padStart(3)})  within96 ${String(r.within96 ?? '-').padStart(3)}  unseen indoors/other level ${r.unseenIndoors ?? '-'}/${r.otherLevel ?? '-'}  walking ${String(r.walking ?? '-').padStart(3)}  stuck ${r.stuckNow ?? '-'}/${r.stuck ?? '-'}  trips ${r.trips ?? '-'} failed ${r.tripsFailed ?? '-'} retargets ${r.retargets ?? '-'} (${r.failRate != null ? (r.failRate * 100).toFixed(1) + '%' : '-'})  legs ${r.legs ?? '-'}/${r.legsFailed ?? '-'} failed  lifts ${r.lifts ?? '-'}  unplaceable ${r.unplaceable ?? '-'}  draws ${r.draws ?? '-'} heap ${r.heapMB ?? '-'}MB${r.error ? '  ERROR ' + r.error : ''}${r.exceptions ? '  exceptions ' + r.exceptions : ''}`);
+  console.log(`${r.spot.padEnd(16)} ${r.time}  ticks ${String(r.ticks ?? '-').padStart(3)} (${Math.round((r.settleMs || 0) / 1000)} s)  live ${String(r.live ?? '-').padStart(3)}  visible ${String(r.visible ?? '-').padStart(3)} (outdoors ${String(r.visibleOutdoors ?? '-').padStart(3)})  within96 ${String(r.within96 ?? '-').padStart(3)}  unseen indoors/other level ${r.unseenIndoors ?? '-'}/${r.otherLevel ?? '-'}  walking ${String(r.walking ?? '-').padStart(3)}  stuck ${r.stuckNow ?? '-'}/${r.stuck ?? '-'}  trips ${r.trips ?? '-'} failed ${r.tripsFailed ?? '-'} retargets ${r.retargets ?? '-'} (${r.failRate != null ? (r.failRate * 100).toFixed(1) + '%' : '-'})  legs ${r.legs ?? '-'}/${r.legsFailed ?? '-'} failed  lifts ${r.lifts ?? '-'}  unplaceable ${r.unplaceable ?? '-'}  draws ${r.draws ?? '-'} heap ${r.heapMB ?? '-'}MB${r.error ? '  ERROR ' + r.error : ''}${r.exceptions ? '  exceptions ' + r.exceptions : ''}`);
 }
 
 // rubric checks: <= 150 live objects, >= 120 visible in core districts at midday, < 2% failed transitions overall
@@ -70,6 +81,6 @@ const summary = {
 console.log('\nsummary', JSON.stringify(summary));
 console.log(`live <= 150: ${summary.liveOk ? 'PASS' : 'FAIL'} (max ${maxLive}) | >= 120 visible in a core district at noon: ${summary.noonCoreOk ? 'PASS' : 'FAIL'} | failed transitions < 2%: ${summary.failOk ? 'PASS' : 'FAIL'} (${(summary.failRate * 100).toFixed(2)}% of ${trips} trips)`);
 mkdirSync(dirname(out), { recursive: true });
-writeFileSync(out, JSON.stringify({ date: new Date().toISOString(), base, wait, rd, rows, summary }, null, 1));
+writeFileSync(out, JSON.stringify({ date: new Date().toISOString(), base, ticks, wait, rd, rows, summary }, null, 1));
 console.log(`wrote ${out}`);
 process.exit(bad || !summary.liveOk || !summary.failOk ? 1 : 0);
