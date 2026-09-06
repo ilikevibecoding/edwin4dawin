@@ -37,8 +37,8 @@ dense districts) is sampled by the road and sidewalk materials for the lamp pool
   promenade, highway poles; footings 0.65–0.75 m behind the curb face, validated against a carriageway index so
   nothing stands in a road.
 - Two draws per cell (sidewalk soup, large kit soup) plus a small kit soup within 450 m; sidewalks switch to a coarse
-  index beyond 500 m; everything culled against the camera at 1.5 km, kits cast into the fine cascades within 700 m,
-  nothing mirrored.
+  index beyond 500 m; everything culled against the camera at 1.5 km; only the large kits cast (into the two fine
+  cascades, within 300 m: drawn into both cascades the kits cost as much again as the street pass), nothing mirrored.
 
 **`src/world/props.ts`** — lamps by kind (arterial 11 m double reach, street 8.5 m single arm, pedestrian lantern,
 highway cobra) with arm yaw, hi/lo instanced LODs, and additive point sprites per chunk for the luminaires from 160 m
