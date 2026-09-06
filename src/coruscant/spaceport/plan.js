@@ -3,7 +3,7 @@
 // north / south of the old port stay where they are), so the port grows the Coruscant way: an ELEVATED APRON at the
 // deck level (top layer 96, feet on 97) cantilevered west over the lower city on pylons down to the terraces.
 //
-//   x 2132 .. 2487  the west apron over the lower city (bands 0..3 of the ring), z -358 .. 357
+//   x 2116 .. 2487  the west apron over the lower city (bands 0..3 of the ring), z -358 .. 357
 //   x 2488 .. 2575  the plateau strip: the Coruscant station sits in an open cut, the freight lane runs underneath
 //   x 2576 .. 2716  the original deck (east terminal, 8 domestic pads, tower, hangar, fuel farm, yards)
 // Deck area 356 x 716 + 229 x 353 = 335,733 cells (the old SPACEPORT rect was 232 x 360 = 83,520: x 4.02).
@@ -15,8 +15,8 @@ export const DECK_TOP = 96;              // top block layer of the deck
 export const DECK_Y = DECK_TOP + 1;      // walking surface / landing-gear height on the pads
 export const STATION_Y = 90;             // floor layer of the Coruscant train platform bridge
 
-export const RECT = { x0: 2130, z0: -360, x1: 2720, z1: 360 };           // structure AABB (x1, z1 exclusive)
-export const APRON = { x0: 2132, x1: 2487, z0: -358, z1: 357 };          // the west apron deck (inclusive)
+export const RECT = { x0: 2114, z0: -360, x1: 2720, z1: 360 };           // structure AABB (x1, z1 exclusive)
+export const APRON = { x0: 2116, x1: 2487, z0: -358, z1: 357 };          // the west apron deck (inclusive)
 export const PLATEAU_DECK = { x0: 2488, x1: 2716, z0: -176, z1: 176 };   // plateau strip + the original deck
 export const OLD_DECK_X0 = 2576;
 // holes in the plateau deck: the Coruscant station's open cut and the covered bridge / half-step ramp east of it
@@ -36,7 +36,7 @@ export const FREIGHT_RAMP_BOX = { x0: 2478, x1: 2487, z0: -75, z1: -3 };  // the
 // 4x4 pylons under the apron (cells x-1..x+2 / z-1..z+2) from the girder layer down to the lower-city terrace,
 // clear of the hyperlane slot, the freight trenches (z = 168k) and service corridors (z = 42 + 84k) of the ring, the
 // freight ramp and the terminus undercroft (which gets its own row south of its wall).
-export const PYLON_XS = [2150, 2190, 2230, 2270, 2310, 2350, 2390, 2430, 2470];
+export const PYLON_XS = [2120, 2150, 2190, 2230, 2270, 2310, 2350, 2390, 2430, 2466];   // the last row clears the station cut (x 2472)
 export const PYLON_ZS = [-350, -300, -260, -220, -180, -140, -100, -60, -20, 20, 60, 100, 140, 180, 220, 260, 300, 350];
 export function pylonZ(x, z) {
   if (z === 20 && x >= 2190 && x <= 2350) return 58;                       // under the terminus wall instead of its platforms
@@ -161,7 +161,7 @@ export const WEST_TOWER = { x0: 2142, x1: 2149, z0: 330, z1: 337, cabY: 145, roo
 // the original east tower (cab at 151)
 export const EAST_TOWER = { x0: 2688, x1: 2695, z0: -4, z1: 3, cabY: 151, roofY: 156 };
 // emergency stair towers (painter.js switchbackTower, 16 x 6) at the apron edges, deck 97 down to the terrace
-export const EMERGENCY_STAIRS = [{ x0: 2340, z0: -358 }, { x0: 2440, z0: 352 }, { x0: 2133, z0: 20 }, { x0: 2133, z0: -226 }];
+export const EMERGENCY_STAIRS = [{ x0: 2340, z0: -358 }, { x0: 2440, z0: 352 }, { x0: 2117, z0: 20 }, { x0: 2117, z0: -226 }];
 
 // ------------------------------------------------------------------------------------------------ cargo terminal
 // North wing: container yard with two portal cranes, the hauler dock (two L bays + manifest office), the conveyor into
@@ -220,19 +220,19 @@ export const EAST = {
 export const HALLS = [
   { key: 'customs', name: 'Westport Customs Hall', purpose: 'customs', rect: TZ.customs, front: 'S', doors: [{ side: 'S', x: 2329, z: -15 }],
     spots: [[2313, -37], [2341, -37], [2320, -35], [2328, -35], [2336, -35], [2344, -35]] },
-  { key: 'cafe', name: 'Departures Caf', purpose: 'caf', rect: TZ.cafe, front: 'E', doors: [{ side: 'E', x: 2278, z: 45 }], spots: [[2250, 40], [2250, 50]] },
+  { key: 'cafe', name: 'Departures Caf', purpose: 'caf', rect: TZ.cafe, front: 'E', doors: [{ side: 'E', x: 2278, z: 45 }], spots: [[2248, 42], [2248, 50]] },
   { key: 'shop1', name: 'Concourse Traders', purpose: 'general_store', rect: TZ.shop1, front: 'N', doors: [{ side: 'N', x: 2300, z: 46 }], spots: [[2296, 50], [2306, 50]] },
   { key: 'shop2', name: 'Spaceport Provisions', purpose: 'grocery', rect: TZ.shop2, front: 'N', doors: [{ side: 'N', x: 2338, z: 46 }], spots: [[2332, 50], [2344, 50]] },
   { key: 'terminal', name: 'Westport Grand Terminal', purpose: 'transit_station', rect: TERMINAL, front: 'W',
     doors: [{ side: 'W', x: 2240, z: -23 }, { side: 'W', x: 2240, z: 22 }, { side: 'E', x: 2359, z: -23 }, { side: 'E', x: 2359, z: 22 }, { side: 'E', x: 2359, z: 44 }, { side: 'N', x: 2302, z: -46 }, { side: 'N', x: 2329, z: -46 }, { side: 'S', x: 2281, z: 60 }, { side: 'S', x: 2317, z: 60 }],
-    spots: [[2250, -31], [2256, -31], [2264, -31], [2278, -31], [2284, -31], [2292, -31], [2303, -22], [2260, -40], [2286, -40]] },
+    spots: [[2250, -31], [2256, -31], [2264, -31], [2278, -31], [2284, -31], [2292, -31], [2303, -22], [2260, -43], [2286, -43]] },
   { key: 'cargo', name: 'Westport Cargo Terminal', purpose: 'depot', rect: CARGO.hall, front: 'S', doors: [{ side: 'S', x: 2409, z: -250 }, { side: 'E', x: 2478, z: -300 }],
     spots: [[2444, -266], [2444, -272], [2400, -290], [2440, -320]] },
   { key: 'manifest', name: 'Hauler Dock Manifest Office', purpose: 'depot', rect: CARGO.office, front: 'W', doors: [{ side: 'W', x: 2304, z: -234 }], spots: [[2311, -238], [2311, -228]] },
   { key: 'hangar1', name: 'Repair Hangar 1', purpose: 'repair_shop', rect: HANGARS[0], front: 'N', doors: [{ side: 'N', x: 2217, z: 262 }], spots: [[2202, 300], [2233, 300]] },
   { key: 'hangar2', name: 'Repair Hangar 2', purpose: 'repair_shop', rect: HANGARS[1], front: 'N', doors: [{ side: 'N', x: 2269, z: 262 }], spots: [[2254, 300], [2285, 300]] },
   { key: 'hangar3', name: 'Repair Hangar 3', purpose: 'hangar', rect: HANGARS[2], front: 'N', doors: [{ side: 'N', x: 2321, z: 262 }], spots: [[2306, 300], [2337, 300]] },
-  { key: 'dealer', name: 'Westport Starship Showroom', purpose: 'ship_dealer', rect: DEALER, front: 'W', doors: [{ side: 'W', x: 2666, z: 122 }, { side: 'N', x: 2687, z: 90 }], spots: [[2688, 122], [2669, 150]] },
-  { key: 'guard', name: 'Coruscant Guard Post - Security Apron', purpose: 'security_station', rect: SECURITY.post, front: 'N', doors: [{ side: 'N', x: 2427, z: 204 }], spots: [[2427, 212], [2416, 226], [2438, 226]] },
+  { key: 'dealer', name: 'Westport Starship Showroom', purpose: 'ship_dealer', rect: DEALER, front: 'W', doors: [{ side: 'W', x: 2666, z: 122 }, { side: 'N', x: 2687, z: 90 }], spots: [[2668, 115], [2680, 152]] },
+  { key: 'guard', name: 'Coruscant Guard Post - Security Apron', purpose: 'security_station', rect: SECURITY.post, front: 'N', doors: [{ side: 'N', x: 2427, z: 204 }], spots: [[2424, 212], [2430, 212], [2440, 232]] },
   { key: 'east', name: 'East Terminal (domestic)', purpose: 'transit_station', rect: EAST.terminal, front: 'W', doors: [{ side: 'W', x: 2592, z: 0 }, { side: 'E', x: 2650, z: 0 }], spots: [[2606, -31], [2636, -31]] },
 ];

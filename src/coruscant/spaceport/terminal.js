@@ -124,7 +124,7 @@ function paintNorthHall(p) {
     p.set(ax + 1, W, -30, M.TABLE); p.set(ax + 2, W, -30, M.CON);
   }
   for (let x = 2316; x <= 2348; x++) p.set(x, W, -34, (x & 3) === 0 ? M.CON : M.DD);
-  for (const bx of [2312, 2340]) { p.box(bx, W, -38, bx + 2, W, -36, M.DD); p.walls(bx, W + 1, -38, bx + 2, W + 2, -36, M.GL); p.box(bx, W + 3, -38, bx + 2, W + 3, -36, M.DD); p.set(bx + 1, W + 3, -37, M.GLOW); p.set(bx + 1, W + 1, -38, M.CON); p.box(bx + 1, W + 1, -36, bx + 1, W + 2, -36, M.AIR); }
+  for (const bx of [2312, 2340]) { p.box(bx, F, -38, bx + 2, F, -36, M.DD); p.walls(bx, W, -38, bx + 2, W + 2, -36, M.GL); p.box(bx, W + 3, -38, bx + 2, W + 3, -36, M.DD); p.set(bx + 1, W + 3, -37, M.GLOW); p.set(bx + 1, W, -38, M.CON); p.box(bx + 1, W, -36, bx + 1, W + 1, -36, M.AIR); }
   p.box(2350, W, -40, 2357, W + 2, -40, M.BARS); p.box(2350, W, -44, 2350, W + 2, -41, M.BARS); p.box(2350, W + 3, -44, 2357, W + 3, -40, M.DD); p.box(2353, W, -40, 2354, W + 1, -40, M.AIR); p.set(2355, W, -43, M.SLAB);
   p.box(2310, W, -20, 2325, W, -20, M.STR); p.box(2317, W, -21, 2319, W + 2, -19, M.DD); p.box(2317, W, -20, 2319, W + 1, -20, M.AIR); p.set(2318, W + 2, -20, M.BLUE);
 }
@@ -150,7 +150,7 @@ function paintSouthHall(p) {
     doorX(p, dx, dx + 3, S.z0); p.box(dx, W + 3, S.z0, dx + 3, W + 4, S.z0, M.HOLO);
     p.box(S.x0 + 1, W, S.z1, S.x1 - 1, W + 1, S.z1, M.SHELF); p.box(S.x0 + 1, W + 2, S.z1, S.x1 - 1, W + 2, S.z1, M.GLOW);
     p.box(S.x0 + 3, W, S.z0 + 5, S.x0 + 9, W, S.z0 + 5, M.DD); p.set(S.x0 + 6, W, S.z0 + 5, M.CON);
-    for (let x = S.x0 + 12; x <= S.x1 - 2; x++) for (let z = S.z0 + 3; z <= S.z1 - 2; z++) if (hash2(x, z, 73) < 0.18) p.set(x, W, z, hash2(x, z, 74) < 0.6 ? M.CRATE : M.BARREL);
+    for (let x = S.x0 + 12; x <= S.x1 - 2; x++) for (let z = S.z0 + 3; z <= S.z1 - 2; z++) if (z !== S.z0 + 4 && hash2(x, z, 73) < 0.18) p.set(x, W, z, hash2(x, z, 74) < 0.6 ? M.CRATE : M.BARREL);   // z0 + 4: the clerks' aisle
   }
   // toilets: solid walls, two doors with blue / white markers, a centre partition, basins and stalls, ceiling lights
   const Tt = TZ.toilets;

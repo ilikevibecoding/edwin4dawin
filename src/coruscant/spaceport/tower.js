@@ -27,7 +27,13 @@ export function paintTower(p, T) {
   // core column with stairwell lights
   p.box(cx0, W, cz0, cx1, cabY - 1, cz1, M.DD);
   for (let y = W + 2; y < cabY; y += 4) { p.set(cx0, y, cz0, M.BLUE); p.set(cx1, y, cz1, M.BLUE); }
-  // spiral stair on the interior ring (20 cells, half a block per cell)
+  // cab floor (16 x 16) with the stairwell opening over the interior ring; the core column reaches the cab floor
+  p.box(T.x0 - 4, cabY, T.z0 - 4, T.x1 + 4, cabY, T.z1 + 4, M.D);
+  p.box(T.x0 + 1, cabY, T.z0 + 1, T.x1 - 1, cabY, T.z1 - 1, M.AIR);
+  p.box(cx0, cabY, cz0, cx1, cabY, cz1, M.DD);
+  // spiral stair on the interior ring (20 cells, half a block per cell), painted after the opening so its top treads
+  // stand in it: the last tread's walking level is the cab floor's (cabY + 1), and the walker steps off it onto the
+  // shaft wall cell beside it, where the railing leaves a gap
   const ring = [];
   for (let x = T.x0 + 1; x <= T.x1 - 1; x++) ring.push([x, T.z0 + 1]);
   for (let z = T.z0 + 2; z <= T.z1 - 1; z++) ring.push([T.x1 - 1, z]);
@@ -40,11 +46,9 @@ export function paintTower(p, T) {
     if (half) { p.set(x, top, z, M.SLAB); p.set(x, top - 1, z, M.DD); }
     else { p.set(x, top - 1, z, M.DD); p.set(x, top - 2, z, M.DD); }
   }
-  // cab (16 x 16)
-  p.box(T.x0 - 4, cabY, T.z0 - 4, T.x1 + 4, cabY, T.z1 + 4, M.D);
-  p.box(T.x0 + 1, cabY, T.z0 + 1, T.x1 - 1, cabY, T.z1 - 1, M.AIR);                     // stairwell opening
-  p.box(cx0, cabY, cz0, cx1, cabY, cz1, M.DD);                                           // core column reaches the cab floor
-  p.set(T.x1 - 1, cabY, T.z1 - 1, M.DD); p.set(T.x1 - 1, cabY, T.z1 - 2, M.SLAB);        // last steps
+  const wallOf = ([x, z]) => z === T.z0 + 1 ? [x, T.z0] : x === T.x1 - 1 ? [T.x1, z] : z === T.z1 - 1 ? [x, T.z1] : [T.x0, z];
+  const gap = [wallOf(ring[kMax % 20]), wallOf(ring[(kMax - 1) % 20])];
+  const inGap = (x, z) => gap.some(([gx, gz]) => gx === x && gz === z);
   p.walls(T.x0 - 4, cabY + 1, T.z0 - 4, T.x1 + 4, cabY + 1, T.z1 + 4, M.DD);              // sill ring
   p.walls(T.x0 - 4, cabY + 2, T.z0 - 4, T.x1 + 4, cabY + 4, T.z1 + 4, M.GL);
   for (const x of [T.x0 - 4, T.x1 + 4]) for (const z of [T.z0 - 4, T.z1 + 4]) p.col(x, z, cabY + 1, cabY + 4, M.D);
@@ -53,8 +57,8 @@ export function paintTower(p, T) {
   p.walls(T.x0 - 3, cabY + 6, T.z0 - 3, T.x1 + 3, cabY + 6, T.z1 + 3, M.DD);              // roof lip
   for (const x of [T.x0 - 3, T.x1 + 3]) for (const z of [T.z0 - 3, T.z1 + 3]) p.set(x, cabY + 6, z, M.RED);
   // stairwell railing (glass) around the opening, gap at the arrival
-  for (let x = T.x0; x <= T.x1; x++) for (const z of [T.z0, T.z1]) p.set(x, cabY + 1, z, M.GL);
-  for (let z = T.z0; z <= T.z1; z++) { p.set(T.x0, cabY + 1, z, M.GL); if (z <= cz1) p.set(T.x1, cabY + 1, z, M.GL); }
+  for (let x = T.x0; x <= T.x1; x++) for (const z of [T.z0, T.z1]) if (!inGap(x, z)) p.set(x, cabY + 1, z, M.GL);
+  for (let z = T.z0; z <= T.z1; z++) for (const x of [T.x0, T.x1]) if (!inGap(x, z)) p.set(x, cabY + 1, z, M.GL);
   // console ring along the cab windows, holo column on the antenna base
   for (let x = T.x0 - 3; x <= T.x1 + 3; x++) for (let z = T.z0 - 3; z <= T.z1 + 3; z++) {
     if (x === T.x0 - 3 || x === T.x1 + 3 || z === T.z0 - 3 || z === T.z1 + 3) p.set(x, cabY + 1, z, ((x + z) & 1) ? M.CON : M.DD);

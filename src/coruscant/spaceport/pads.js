@@ -3,7 +3,7 @@
 // (fuel bowser, pad console, gate board on a mast, container stack, a portal gantry on the large pads). Blast walls
 // stand in the gaps of each pad field; walk lines lead from every pad toward its terminal.
 import { M, LINE, paintNumber, lampPost, numberBoard } from './painter.js';
-import { PADS, padHalf, DECK_TOP, DECK_Y } from './plan.js';
+import { PADS, padHalf, DECK_TOP, DECK_Y, HUMP } from './plan.js';
 import { hash3 } from '../../rng.js';
 
 const abs = Math.abs;
@@ -37,7 +37,7 @@ export function paintPad(p, pad, gate, fy, H = padHalf(pad)) {
   const n = H >= 24 ? 6 : H >= 18 ? 4 : 3;
   for (let k = 0; k < n; k++) {
     const cx = sx + (k & 1), cz = pz1 - 2 - (k >> 1) * 2;
-    const h = Math.floor(hash3(cx, gate, cz, 31) * 3);
+    const h = k === 0 ? 1 + Math.floor(hash3(cx, gate, cz, 31) * 2) : Math.floor(hash3(cx, gate, cz, 31) * 3);   // the first slot always holds a container
     if (h > 0) p.box(cx, W, cz, cx, W - 1 + h, cz, hash3(cx, gate, cz, 32) < 0.7 ? M.CRATE : M.BARREL);
   }
   if (H >= 24) {
@@ -103,7 +103,7 @@ function paintWalks(p) {
   }
   for (const c of COLLECTORS) {
     if (c.z !== undefined) { if (p.overlaps(c.x0, c.z, c.x1, c.z)) for (let x = c.x0; x <= c.x1; x++) if ((x & 7) < 5) mark(x, c.z, x); }
-    else if (p.overlaps(c.x, c.z0, c.x, c.z1)) for (let z = c.z0; z <= c.z1; z++) if ((z & 7) < 5) mark(c.x, z, z);
+    else if (p.overlaps(c.x, c.z0, c.x, c.z1)) for (let z = c.z0; z <= c.z1; z++) if ((z & 7) < 5 && (z < HUMP.z0 || z > HUMP.z1)) mark(c.x, z, z);   // not into the train slot
   }
   // lamp posts along the field A / B aprons and the east strip
   for (const z of [-70, 92]) for (let x = 2170; x <= 2290; x += 20) lampPost(p, x, z, DECK_Y);

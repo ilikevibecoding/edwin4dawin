@@ -51,8 +51,8 @@ function paintYardAndDock(p) {
     for (let x = D.x0; x <= D.x1 + 6; x++) { p.set(x, F, D.z0, (x & 3) === 0 ? M.GLOW : LINE); p.set(x, F, D.z1, (x & 3) === 0 ? M.GLOW : LINE); }
     for (let z = D.z0; z <= D.z1; z += 4) p.set(D.x1 + 6, F, z, M.RED);
     for (let x = D.x0; x <= D.x1; x += 24) { lampPost(p, x, D.z0 - 1, W, 4); }
-    // tug / loader park south of the bays: marked squares with crates
-    for (let k = 0; k < 4; k++) { const x = D.x0 + 8 + k * 14; p.ring(x, F, D.z1 - 8, x + 5, D.z1 - 4, LINE); if (hash2(k, 9, 63) < 0.7) p.box(x + 1, W, D.z1 - 7, x + 4, W + 1, D.z1 - 5, k & 1 ? M.HP : M.STR); }
+    // tug / loader park on the dock's south strip (south of the bays' hazard borders): marked squares with crates
+    for (let k = 0; k < 4; k++) { const x = D.x0 + 8 + k * 14; p.ring(x, F, D.z1 - 4, x + 5, D.z1, LINE); if (hash2(k, 9, 63) < 0.7) p.box(x + 1, W, D.z1 - 3, x + 4, W + 1, D.z1 - 1, k & 1 ? M.HP : M.STR); }
   }
   // manifest office: a small solid hall with a glass front toward the dock, counter, consoles, holo manifest board
   const O = C.office;

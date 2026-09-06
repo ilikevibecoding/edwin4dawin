@@ -26,14 +26,14 @@ function paintFence(p) {
   // "SECURITY" header on a gantry over the gate
   const gw = S.gateW;
   p.col(S.x0, gw.z0 - 1, W, W + 3, M.DD); p.col(S.x0, gw.z1 + 1, W, W + 3, M.DD); p.box(S.x0, W + 4, gw.z0 - 1, S.x0, W + 4, gw.z1 + 1, M.HOLO);
-  for (let z = gw.z0; z <= gw.z1; z++) p.set(S.x0, W + 1, z, (z & 1) ? M.RED : M.STR);           // barrier arm
-  p.box(S.x0 + 1, W, gw.z1 + 2, S.x0 + 3, W, gw.z1 + 4, M.DD); p.walls(S.x0 + 1, W + 1, gw.z1 + 2, S.x0 + 3, W + 2, gw.z1 + 4, M.GL); p.box(S.x0 + 1, W + 3, gw.z1 + 2, S.x0 + 3, W + 3, gw.z1 + 4, M.DD);
-  p.set(S.x0 + 2, W + 3, gw.z1 + 3, M.GLOW); p.set(S.x0 + 2, W + 1, gw.z1 + 2, M.CON); p.box(S.x0 + 3, W + 1, gw.z1 + 3, S.x0 + 3, W + 2, gw.z1 + 3, M.AIR);
+  for (let z = gw.z0; z <= gw.z1; z++) p.set(S.x0, W + 3, z, (z & 1) ? M.RED : M.STR);           // barrier arm (raised: the gate is open)
+  p.box(S.x0 + 1, F, gw.z1 + 2, S.x0 + 3, F, gw.z1 + 4, M.DD); p.walls(S.x0 + 1, W, gw.z1 + 2, S.x0 + 3, W + 2, gw.z1 + 4, M.GL); p.box(S.x0 + 1, W + 3, gw.z1 + 2, S.x0 + 3, W + 3, gw.z1 + 4, M.DD);
+  p.set(S.x0 + 2, W + 3, gw.z1 + 3, M.GLOW); p.set(S.x0 + 2, W, gw.z1 + 2, M.CON); p.box(S.x0 + 3, W, gw.z1 + 3, S.x0 + 3, W + 1, gw.z1 + 3, M.AIR);
   const gn = S.gateN;
   p.col(gn.x0 - 1, S.z0, W, W + 3, M.DD); p.col(gn.x1 + 1, S.z0, W, W + 3, M.DD); p.box(gn.x0 - 1, W + 4, S.z0, gn.x1 + 1, W + 4, S.z0, M.HOLO);
-  for (let x = gn.x0; x <= gn.x1; x++) p.set(x, W + 1, S.z0, (x & 1) ? M.RED : M.STR);
-  p.box(gn.x1 + 2, W, S.z0 + 1, gn.x1 + 4, W, S.z0 + 3, M.DD); p.walls(gn.x1 + 2, W + 1, S.z0 + 1, gn.x1 + 4, W + 2, S.z0 + 3, M.GL); p.box(gn.x1 + 2, W + 3, S.z0 + 1, gn.x1 + 4, W + 3, S.z0 + 3, M.DD);
-  p.set(gn.x1 + 3, W + 3, S.z0 + 2, M.GLOW); p.set(gn.x1 + 2, W + 1, S.z0 + 2, M.CON); p.box(gn.x1 + 3, W + 1, S.z0 + 3, gn.x1 + 3, W + 2, S.z0 + 3, M.AIR);
+  for (let x = gn.x0; x <= gn.x1; x++) p.set(x, W + 3, S.z0, (x & 1) ? M.RED : M.STR);
+  p.box(gn.x1 + 2, F, S.z0 + 1, gn.x1 + 4, F, S.z0 + 3, M.DD); p.walls(gn.x1 + 2, W, S.z0 + 1, gn.x1 + 4, W + 2, S.z0 + 3, M.GL); p.box(gn.x1 + 2, W + 3, S.z0 + 1, gn.x1 + 4, W + 3, S.z0 + 3, M.DD);
+  p.set(gn.x1 + 3, W + 3, S.z0 + 2, M.GLOW); p.set(gn.x1 + 2, W, S.z0 + 2, M.CON); p.box(gn.x1 + 3, W, S.z0 + 3, gn.x1 + 3, W + 1, S.z0 + 3, M.AIR);
   // walk lines from the gates to the pads' service side and on to the post's door
   const post = S.post;
   for (let x = S.x0 + 1; x <= post.x0 + 9; x++) { p.set(x, F, gw.z0 - 2, (x & 3) === 0 ? M.GLOW : LINE); p.set(x, F, gw.z1 + 6, (x & 3) === 0 ? M.GLOW : LINE); }
