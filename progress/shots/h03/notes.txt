@@ -12,3 +12,4 @@ merged veg5: 8694c03b Vegetation defect log: the black box bisected to the city'
 merged terrain5: 16fe638b Terrain: park paths kept as pixel-wide fading lines to 5 m/px instead of breaking up past 
 fixup not needed: streets-highway-lamps.patch
 build: 7fe5d685 from /home/ubuntu/wt-integration
+cdn: pinned data.json serves h03
