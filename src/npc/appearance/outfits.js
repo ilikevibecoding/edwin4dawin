@@ -110,7 +110,9 @@ export const OUTFITS = [
     paint(ctx) {
       const { r, p } = ctx;
       OUTFITS_BY_ID.senate_guard.paint({ ...ctx, p: { ...p, plume: p.helmet }, geometry: [] });
-      wideVisor(r, '#0c1018', '#3c5a8a', 4, 6, 2, 12);
+      // the late-war helmet closes the faceplate: dark visor over the whole face, chin guard below
+      on(r, HF, 2, 3, 12, 13, shade(p.helmet, 0.9));
+      wideVisor(r, '#0c1018', '#3c5a8a', 3, 9, 2, 12); chinGuard(r, shade(p.helmet, 0.85));
       ctx.geometry.push(openHelmetGeo(p.helmet, p.trim), openRobeGeo(p.robe));
       ctx.helmet = true; ctx.armour = true;
     },
