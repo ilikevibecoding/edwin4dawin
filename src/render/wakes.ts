@@ -152,7 +152,7 @@ const WAKE_GLSL_COMMON = /* glsl */ `
 
 const WAKE_VERTEX = /* glsl */ `
   attribute vec4 aA;      // age (0 fresh .. 1 old), side (-1 .. 1 across), fade (0 at a gap), speed (m/s; < 0 over the hull of a hull going astern)
-  attribute vec4 aGeom;   // distance behind the transom (m), ribbon half-width (m), travel direction xz
+  attribute vec4 aGeom;   // distance behind the transom (m), signed across-position of the vertex (m, + to the right), travel direction xz
   attribute vec4 aExt;    // path curvature (1/m, + turning toward +right), age (s), stern-wave advance (m), odometer (m along the track)
   attribute vec4 aTrail;  // strength, hull half-beam (m), transom-to-bow length (m), lane length (m)
   attribute vec4 aTrail2; // prop wash (0..1), planing speed (m/s), churn (foam persistence), immersion (0 at the hull's waterline .. 1 decks awash)
@@ -193,7 +193,7 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
     ${WAKE_GLSL_COMMON}
     void main() {
       float age = vA.x, side = vA.y, fade = vA.z, speed = vA.w;
-      float d = vGeom.x, hw = max(vGeom.y, 1e-3);
+      float d = vGeom.x;
       vec2 fwd = normalize(vGeom.zw);
       vec2 right = vec2(-fwd.y, fwd.x);           // side +1 of the ribbon
       float curv = vExt.x, ageS = vExt.y, shift = vExt.z, odo = vExt.w;
@@ -208,9 +208,10 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
       // just astern of a stopped boat kept its transom density (d ~ 0) for the ribbon's whole life instead of
       // dissolving in the 10-15 s it takes, and its slick never let go of the hull (r9)
       float dEq = max(d, aspd * ageS);
-      float y = side * hw;                         // signed metres across the track
+      // signed metres across the track, carried per vertex (the two sides of a turning ribbon differ in width)
+      float y = vGeom.y;
       float ay = abs(y);
-      float s = sign(side);
+      float s = y < 0.0 ? -1.0 : 1.0;
       float life = 1.0 - age;
       float spd = smoothstep(0.6, 5.0, aspd);      // how hard the hull is pushing water
       // froth needs breaking water: a hull at taxi speed leaves a smooth turbulent lane with a few streaks of
@@ -427,15 +428,15 @@ export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
     ${WAKE_GLSL_COMMON}
     void main() {
       float age = vA.x, side = vA.y, fade = vA.z, speed = vA.w;
-      float d = vGeom.x, hw = max(vGeom.y, 1e-3);
+      float d = vGeom.x;
       float w0 = vTrail.y, lead = vTrail.z;
       float curv = vExt.x, shift = vExt.z;
       float planeV = max(vTrail2.y, 1.0);
       float aspd = abs(speed);
       float hs = max(speed, 0.0);
       float laneLen = vTrail.w * clamp(aspd / 8.0, 0.5, 1.6);
-      float ay = abs(side * hw);
-      float s = sign(side);
+      float ay = abs(vGeom.y);
+      float s = vGeom.y < 0.0 ? -1.0 : 1.0;
       float life = 1.0 - age;
       float spd = smoothstep(0.6, 5.0, aspd);
       float planing = smoothstep(planeV * 0.75, planeV * 1.25, aspd);
@@ -958,17 +959,25 @@ export class WakeTrail {
     this.mesh.matrixAutoUpdate = false;
   }
 
-  /** Ribbon half-width at distance d behind the transom: the Kelvin envelope (arm crest plus its skirt) while
-   *  the arms show, narrowing to the turbulent lane once the shader has faded them out; a turning track's outer
-   *  arm spreads further, by the curvature term the shader applies. */
-  private wakeHalf(d: number, curv: number): number {
+  /** Ribbon width on side s (+1 right, -1 left) at distance d behind the transom: the Kelvin envelope (arm crest
+   *  plus its skirt) while the arms show, narrowing to the turbulent lane once the shader has faded them out. In a
+   *  turn the shader closes the inner arm on the track by up to 60 % and spreads the outer one by as much, so the
+   *  two sides differ (r10: both sides used to take the outer width, and with the envelope 19.5 deg wide a
+   *  ribbon 30 m astern of a float is wider than a taxi turn's radius: the inner edge ran past the turn's centre
+   *  and every quad there folded over its neighbour, drawn twice with its across-coordinate mirrored, doubling
+   *  the height pass; half the ribbon behind a float in a 15 m turn, a runabout in a 40 m one, a yacht in 60 m). */
+  private wakeHalf(d: number, curv: number, s: number): number {
     const w0 = this.halfWidth;
     const lane = (w0 * 1.05 + 0.45 * Math.sqrt(Math.max(d, 0) * Math.max(w0, 0.15))) * 1.4;
     const armLen = this.laneLen * 2.5 * 1.6;   // the shader's arm length at the fastest speed factor
-    const armY = (w0 * 0.8 + (d + this.lead) * TAN_KELVIN) * (1 + Math.min(Math.abs(curv) * d * 0.6, 0.6)) + (0.45 + 0.3 * w0 + 0.012 * d) * 3.0;
+    const asym = clamp(curv * s * d * 0.6, -0.6, 0.6);   // > 0 on the inner side of the turn
+    const armY = (w0 * 0.8 + (d + this.lead) * TAN_KELVIN) * (1 - asym) + (0.45 + 0.3 * w0 + 0.012 * d) * 3.0;
     const env = 1 - smoothstep(armLen, armLen * 1.15, d);
     // never narrower than the far map's texel-wide minimum lane
-    return Math.max(lane, armY * env, 2.0);
+    let w = Math.max(lane, armY * env, 2.0);
+    // the inner edge stops short of the turn's centre (the local radius 1 / curv), or the quads fold
+    if (asym > 0) w = Math.min(w, 0.9 / Math.abs(curv));
+    return w;
   }
 
   /** A jump longer than this between samples is the emitter leaving the water and coming back, not motion
@@ -980,8 +989,7 @@ export class WakeTrail {
 
   /** Pull point i toward the midpoint of its neighbours: the emitter (a float on a rolling, yawing hull, a boat
    *  in waves) wanders a few centimetres between samples and, drawn at centimetre texels, that made the lane
-   *  centreline a zigzag with the sample period instead of the smooth track water actually keeps. Also
-   *  measures the path curvature at the point (signed: + turning toward the ribbon's +right side). */
+   *  centreline a zigzag with the sample period instead of the smooth track water actually keeps. */
   private relax(i: number): void {
     const pts = this.points;
     if (i < 1 || i >= pts.length - 1) return;
@@ -991,26 +999,38 @@ export class WakeTrail {
     p.z = 0.5 * p.z + 0.25 * (a.z + b.z);
     const dx = b.x - a.x, dz = b.z - a.z, l = Math.hypot(dx, dz);
     if (l > 1e-6) { p.dx = dx / l; p.dz = dz / l; }
-    // heading change between the two legs over their mean length; right = (-dz, dx), so a positive cross
-    // product (ax * bz - az * bx) is a turn toward +right
-    const ax = p.x - a.x, az = p.z - a.z, bx = b.x - p.x, bz = b.z - p.z;
-    const la = Math.hypot(ax, az), lb = Math.hypot(bx, bz);
-    if (la > 1e-3 && lb > 1e-3) {
-      const cross = (ax * bz - az * bx) / (la * lb);
-      const dot = clamp((ax * bx + az * bz) / (la * lb), -1, 1);
-      p.curv = clamp(Math.atan2(cross, dot) / (0.5 * (la + lb)), -0.2, 0.2);
-    }
   }
 
-  private writeVertexPair(i: number, x: number, z: number, dx: number, dz: number, w: number, age: number, fade: number, speed: number, dist: number, curv: number, ageS: number, shift: number, odo: number): void {
-    const nx = -dz * w, nz = dx * w;
+  /** Path curvature at point i (1/m, signed: + turning toward the ribbon's +right side): the heading change
+   *  between the two legs over their mean length. Measured every frame from the relaxed track (r10: measured
+   *  once, when the point was relaxed while its newer neighbour still sat raw, it came out a third low on a
+   *  15 m circle, and the width clamp that keeps the inner edge inside the turn relies on it). */
+  private curvature(i: number): number {
+    const pts = this.points;
+    if (i < 1 || i >= pts.length - 1) return 0;
+    const a = pts[i - 1], p = pts[i], b = pts[i + 1];
+    if (a.fade === 0 || p.fade === 0 || b.fade === 0) return 0;
+    // right = (-dz, dx), so a positive cross product (ax * bz - az * bx) is a turn toward +right
+    const ax = p.x - a.x, az = p.z - a.z, bx = b.x - p.x, bz = b.z - p.z;
+    const la = Math.hypot(ax, az), lb = Math.hypot(bx, bz);
+    if (la < 1e-3 || lb < 1e-3) return 0;
+    const cross = (ax * bz - az * bx) / (la * lb);
+    const dot = clamp((ax * bx + az * bz) / (la * lb), -1, 1);
+    return clamp(Math.atan2(cross, dot) / (0.5 * (la + lb)), -0.2, 0.2);
+  }
+
+  /** one vertex pair: the left vertex wL metres to the left of the track point, the right one wR to the right;
+   *  aGeom.y carries the vertex's signed across-position (-wL / +wR), which interpolates linearly over the quad
+   *  as the position does (side x half-width would not once the two sides differ) */
+  private writeVertexPair(i: number, x: number, z: number, dx: number, dz: number, wL: number, wR: number, age: number, fade: number, speed: number, dist: number, curv: number, ageS: number, shift: number, odo: number): void {
+    const rx = -dz, rz = dx;
     const p = this.positions, a = this.a, g = this.geom, e = this.ext;
-    p[i * 6] = x - nx; p[i * 6 + 1] = 0.05; p[i * 6 + 2] = z - nz;
-    p[i * 6 + 3] = x + nx; p[i * 6 + 4] = 0.05; p[i * 6 + 5] = z + nz;
+    p[i * 6] = x - rx * wL; p[i * 6 + 1] = 0.05; p[i * 6 + 2] = z - rz * wL;
+    p[i * 6 + 3] = x + rx * wR; p[i * 6 + 4] = 0.05; p[i * 6 + 5] = z + rz * wR;
     for (let k = 0; k < 2; k++) {
       const v = (i * 2 + k) * 4;
       a[v] = age; a[v + 1] = k === 0 ? -1 : 1; a[v + 2] = fade; a[v + 3] = speed;
-      g[v] = dist; g[v + 1] = w; g[v + 2] = dx; g[v + 3] = dz;
+      g[v] = dist; g[v + 1] = k === 0 ? -wL : wR; g[v + 2] = dx; g[v + 3] = dz;
       e[v] = curv; e[v + 1] = ageS; e[v + 2] = shift; e[v + 3] = odo;
     }
   }
@@ -1094,7 +1114,8 @@ export class WakeTrail {
         const p = this.points[i];
         const tailAge = full * (1 - Math.min(1, (i + 0.5) / tailSpan));
         const age = Math.min(1, Math.max((time - p.t) / this.lifetime, tailAge));
-        this.writeVertexPair(i, p.x, p.z, p.dx, p.dz, this.halfWidth * (0.6 + 1.8 * age), age, p.fade, p.speed, 0, 0, 0, 0, 0);
+        const cw = this.halfWidth * (0.6 + 1.8 * age);
+        this.writeVertexPair(i, p.x, p.z, p.dx, p.dz, cw, cw, age, p.fade, p.speed, 0, 0, 0, 0, 0);
       }
       this.count = n;
       const geo = this.geo!;
@@ -1115,20 +1136,23 @@ export class WakeTrail {
       // stern waves laid at this point have travelled speed * ageS since; the hull has moved d: the surplus is
       // how far the train has run on past where a steadily moving hull would have it
       const shift = Math.max(0, Math.min(p.speed * ageS - d, 4 * this.lead + 40));
-      this.writeVertexPair(i, p.x, p.z, p.dx, p.dz, this.wakeHalf(d, p.curv), age, p.fade, p.speed, d, p.curv, ageS, shift, p.odo);
+      // the end points take their neighbour's curvature (the tail quad is the widest: symmetric there, it would
+      // still fold in a turn)
+      p.curv = this.curvature(i === 0 ? 1 : i === n - 1 ? n - 2 : i);
+      this.writeVertexPair(i, p.x, p.z, p.dx, p.dz, this.wakeHalf(d, p.curv, -1), this.wakeHalf(d, p.curv, 1), age, p.fade, p.speed, d, p.curv, ageS, shift, p.odo);
     }
     let count = n;
     if (head) {
       // live head: transom pair at the emitter, then the bow pair ahead of the stem; a gap point just before
       // the head (emitter back on the water this frame) keeps the head from bridging to the old ribbon
       const last = n ? this.points[n - 1] : null;
-      const w = this.wakeHalf(0, 0);
+      const w = this.wakeHalf(0, 0, 1);
       const bridge = last && (last.fade === 0 || Math.hypot(x - last.x, z - last.z) > this.gapDist(speed) || this.drySpell > GAP_DRY_S);
       const odoHead = this.odometer + (last ? Math.hypot(x - last.x, z - last.z) : 0);
       if (bridge && last) {
         // invisible markers at both ends of the bridging quad
-        this.writeVertexPair(count++, last.x, last.z, last.dx, last.dz, w, 0, 0, speed, 0, 0, 0, 0, odoHead);
-        this.writeVertexPair(count++, x, z, dx, dz, w, 0, 0, speed, 0, 0, 0, 0, odoHead);
+        this.writeVertexPair(count++, last.x, last.z, last.dx, last.dz, w, w, 0, 0, speed, 0, 0, 0, 0, odoHead);
+        this.writeVertexPair(count++, x, z, dx, dz, w, w, 0, 0, speed, 0, 0, 0, 0, odoHead);
       }
       const bowMargin = 0.6 + 0.15 * speed + 0.4 * this.halfWidth;
       // a point laid this frame sits a few centimetres behind the transom pair: give the transom pair the same
@@ -1140,9 +1164,9 @@ export class WakeTrail {
       const headSpeed = along < -0.2 ? -speed : speed;
       // a stopping hull: the last stern waves run on under and ahead of it
       const lastShift = last && !bridge ? Math.max(0, Math.min(last.speed * (time - last.t) - Math.hypot(x - last.x, z - last.z), 4 * this.lead + 40)) : 0;
-      this.writeVertexPair(count, x, z, tdx, tdz, w, 0, 1, headSpeed, 0, 0, 0, lastShift, odoHead);
+      this.writeVertexPair(count, x, z, tdx, tdz, w, w, 0, 1, headSpeed, 0, 0, 0, lastShift, odoHead);
       const hx = x + dx * (this.lead + bowMargin), hz = z + dz * (this.lead + bowMargin);
-      this.writeVertexPair(count + 1, hx, hz, dx, dz, w, 0, 1, headSpeed, -(this.lead + bowMargin), 0, 0, lastShift, odoHead + this.lead + bowMargin);
+      this.writeVertexPair(count + 1, hx, hz, dx, dz, w, w, 0, 1, headSpeed, -(this.lead + bowMargin), 0, 0, lastShift, odoHead + this.lead + bowMargin);
       count += 2;
     }
     this.count = count;
