@@ -3,7 +3,8 @@
 // DisasterManager and is NOT written to the save unless an administrator explicitly commits it, so a disaster can
 // never silently corrupt the main save. Saved edits are applied as a sparse overlay whenever a chunk is generated.
 //
-// Format v2: {version: 2, edits: [[x,y,z,id], ...], entities: [{x,y,z,type,...}], player: {...}|null, inventory: {...}|null}
+// Format v2: {version: 2, edits: [[x,y,z,id], ...], entities: [{x,y,z,type,...}], player: {...}|null, inventory: {...}|null,
+//             economy: {...}|null}   (economy: wallet, vendor stock deltas, owned ships, apartment, active job; optional)
 // v1 saves ({version: 1, edits}) are migrated on load.
 import { CHUNK_SIZE as CS, CHUNK_HEIGHT } from './constants.js';
 
@@ -20,6 +21,7 @@ export class SaveManager {
     this.entities = new Map();  // posKey -> {x,y,z,type,...} (plain JSON data)
     this.player = null;         // {x,y,z,yaw,pitch,health,food,saturation}
     this.inventory = null;      // {slots: [[id,count]|null], selected}
+    this.economy = null;        // {credits, stockDay, sold, ownedShips, apartment, job, stats} (src/economy/economy.js)
     this.dirty = false;
     this.enabled = true;
     this.disasterCells = new Set(); // cells currently owned by an active disaster journal (excluded from save)
@@ -45,6 +47,7 @@ export class SaveManager {
       if (Array.isArray(data.entities)) for (const e of data.entities) if (e && typeof e.x === 'number') this.entities.set(SaveManager.posKey(e.x, e.y, e.z), e);
       this.player = data.player && typeof data.player.x === 'number' ? data.player : null;
       this.inventory = data.inventory && Array.isArray(data.inventory.slots) ? data.inventory : null;
+      this.economy = data.economy && typeof data.economy === 'object' ? data.economy : null;
       this.dirty = this.migrated; // a migrated save is rewritten in the new format on the next flush
     } catch (e) { console.warn('save load failed', e); }
   }
@@ -119,6 +122,15 @@ export class SaveManager {
     this.inventory = JSON.parse(s);
     this.scheduleWrite();
   }
+  // Economy state (wallet, vendor stock deltas, owned ships, rented apartment, active job): one JSON blob per world.
+  setEconomy(data) {
+    if (!this.enabled) return;
+    const s = JSON.stringify(data);
+    if (this.economy && this._ecoJson === s) return;
+    this._ecoJson = s;
+    this.economy = JSON.parse(s);
+    this.scheduleWrite();
+  }
 
   scheduleWrite() {
     this.dirty = true;
@@ -129,7 +141,7 @@ export class SaveManager {
   serialize() {
     const edits = [];
     for (const m of this.byChunk.values()) for (const e of m.values()) edits.push(e);
-    return { version: VERSION, edits, entities: [...this.entities.values()], player: this.player, inventory: this.inventory };
+    return { version: VERSION, edits, entities: [...this.entities.values()], player: this.player, inventory: this.inventory, economy: this.economy };
   }
 
   flush() {
@@ -139,7 +151,7 @@ export class SaveManager {
   }
 
   clear() {
-    this.byChunk.clear(); this.count = 0; this.entities.clear(); this.player = null; this.inventory = null; this._invJson = null; this.dirty = false;
+    this.byChunk.clear(); this.count = 0; this.entities.clear(); this.player = null; this.inventory = null; this._invJson = null; this.economy = null; this._ecoJson = null; this.dirty = false;
     if (this.storage) { this.storage.removeItem(this.key); this.storage.removeItem(this.legacyKey); }
   }
 }

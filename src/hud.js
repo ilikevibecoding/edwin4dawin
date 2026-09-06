@@ -46,6 +46,48 @@ const FOOD = [
   '##.......',
   '.........',
 ];
+// Republic credit chip (rubric 08): a gold-edged blue card with a contact strip (economy wallet readout)
+const CHIP_EDGE = [
+  '.##########.',
+  '#..........#',
+  '#..........#',
+  '#..........#',
+  '#..........#',
+  '#..........#',
+  '#..........#',
+  '.##########.',
+];
+const CHIP_FACE = [
+  '............',
+  '.##########.',
+  '.##########.',
+  '.##########.',
+  '.##########.',
+  '.##########.',
+  '.##########.',
+  '............',
+];
+const CHIP_STRIP = [
+  '............',
+  '............',
+  '..###.......',
+  '..#.#..####.',
+  '..###.......',
+  '.......####.',
+  '............',
+  '............',
+];
+const ARROW = [
+  '....#....',
+  '...###...',
+  '..#####..',
+  '.###.###.',
+  '##..#..##',
+  '....#....',
+  '....#....',
+  '....#....',
+  '....#....',
+];
 
 const tileCanvasCache = new Map();
 function tileCanvas(tile, shade = 1) {
@@ -107,6 +149,7 @@ export class HUD {
     this.game = game;
     this.scale = 3;
     this.messages = []; // {text, time}
+    this.toasts = [];   // {text, color, time} - economy / entrance notices above the hotbar (rubric 07 #2, 08)
     this.itemNameTimer = 0;
     this.lastSelected = -1;
     this.selectorX = 0;
@@ -145,6 +188,11 @@ export class HUD {
   addMessage(text) {
     this.messages.push({ text, time: performance.now() });
     if (this.messages.length > 8) this.messages.shift();
+  }
+  // Short notice drawn centred above the hotbar for ~3.5 s (entering a building, credits earned, job events).
+  toast(text, color = '#ffffff') {
+    this.toasts.push({ text, color, time: performance.now() });
+    if (this.toasts.length > 3) this.toasts.shift();
   }
 
   text(t, x, y, color = '#ffffff', shadow = true, scale = this.scale) {
@@ -255,6 +303,77 @@ export class HUD {
     ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(bx, by, 182 * s, 5 * s);
     ctx.fillStyle = '#2e3a2e'; ctx.fillRect(bx + s, by + s, 180 * s, 3 * s);
     ctx.fillStyle = '#80ff20'; ctx.fillRect(bx + s, by + s, Math.floor(180 * s * clamp(this.xp, 0, 1)), 3 * s);
+  }
+
+  // --- economy readouts (rubric 08 #1, #4; rubric 07 #2) -------------------------------------------------------
+  // Credit chip icon (12x8 px units): gold edge, blue face, gold contact strip.
+  drawChip(x, y, s) {
+    this.pixelArt(CHIP_EDGE, x + s, y + s, 'rgba(0,0,0,0.6)', s);
+    this.pixelArt(CHIP_EDGE, x, y, '#e8b640', s);
+    this.pixelArt(CHIP_FACE, x, y, '#2e6fd8', s);
+    this.pixelArt(CHIP_STRIP, x, y, '#ffd866', s);
+  }
+  // Wallet: chip + balance in a hotbar-styled box to the right of the hotbar (creative shows the balance greyed).
+  drawWallet(game, hotbarY) {
+    const ctx = this.ctx, s = this.scale, W = this.canvas.width;
+    const p = game.player;
+    if (!p || p.credits == null) return;
+    const text = String(p.credits | 0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+    const tw = measureText(text, s);
+    const w = 12 * s + 4 * s + tw + 8 * s, h = 14 * s;
+    const x = Math.floor(W / 2 + 91 * s) + 4 * s, y = hotbarY + 4 * s;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(140,140,140,0.75)';
+    ctx.fillRect(x, y, w, s); ctx.fillRect(x, y + h - s, w, s); ctx.fillRect(x, y, s, h); ctx.fillRect(x + w - s, y, s, h);
+    this.drawChip(x + 3 * s, y + 3 * s, s);
+    this.text(text, x + 12 * s + 6 * s, y + 3 * s, game.mode === 'creative' ? '#c8c8c8' : '#ffd866');
+    if (game.mode === 'creative') this.text('creative', x + w - measureText('creative', Math.max(1, s - 1)) - 2 * s, y + h + 2 * s, '#a0a0a0', true, Math.max(1, s - 1));
+  }
+  // Active job (one line + countdown) with a compass arrow to the current target, above the item-name line.
+  drawJobStrip(game, hotbarY) {
+    const eco = game.economy;
+    if (!eco || !eco.jobs || !eco.jobs.active) return;
+    const ctx = this.ctx, s = this.scale, W = this.canvas.width, ls = Math.max(1, s - 1);
+    const status = eco.jobs.status() || '';
+    const left = eco.jobs.remaining(), hoursLeft = left * 24;
+    const timeTxt = hoursLeft >= 1 ? `${Math.round(hoursLeft)}h` : `${Math.max(0, Math.round(hoursLeft * 60))} min`;
+    const tgt = eco.jobs.target(), p = game.player.pos;
+    const dist = tgt ? Math.round(Math.hypot(tgt.x - p.x, tgt.z - p.z)) : null;
+    const right = `+${eco.jobs.active.job.reward}cr  ${dist != null ? `${dist}m  ` : ''}${timeTxt}`;
+    const tw = measureText(status, ls), rw = measureText(right, ls);
+    const w = Math.min(W - 20 * s, 14 * s + tw + 6 * s + rw + 6 * s), h = 12 * s;
+    const x = Math.floor(W / 2 - w / 2), y = hotbarY - 46 * s;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(80,140,200,0.7)'; ctx.fillRect(x, y, w, s); ctx.fillRect(x, y + h - s, w, s);
+    // compass arrow: rotated to the target relative to the view direction (yaw 0 faces -z; turning right lowers yaw)
+    const cx = x + 7 * s, cy = y + 6 * s;
+    if (tgt) {
+      const rel = Math.atan2(-(tgt.x - p.x), -(tgt.z - p.z)) - game.player.yaw;
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(-rel);
+      this.pixelArt(ARROW, -4.5 * ls, -4.5 * ls, '#000000', ls);
+      this.pixelArt(ARROW, -4.5 * ls - ls * 0.5, -4.5 * ls - ls * 0.5, '#ffd866', ls);
+      ctx.restore();
+    } else { ctx.fillStyle = '#6a7a8a'; ctx.fillRect(cx - ls, cy - ls, 2 * ls, 2 * ls); }
+    ctx.save(); ctx.beginPath(); ctx.rect(x + 14 * s, y, w - 14 * s - rw - 8 * s, h); ctx.clip();
+    this.text(status, x + 14 * s, y + 2 * s + (s - ls), '#ffffff', true, ls);
+    ctx.restore();
+    this.text(right, x + w - rw - 4 * s, y + 2 * s + (s - ls), hoursLeft < 2 ? '#ff7070' : '#ffd866', true, ls);
+  }
+  drawToasts(hotbarY) {
+    const now = performance.now(), s = this.scale, W = this.canvas.width;
+    let y = hotbarY - 62 * s;
+    for (let i = this.toasts.length - 1; i >= 0; i--) {
+      const t = this.toasts[i];
+      const age = now - t.time;
+      if (age > 3500) { this.toasts.splice(i, 1); continue; }
+      const alpha = age < 150 ? age / 150 : age > 2800 ? 1 - (age - 2800) / 700 : 1;
+      const w = measureText(t.text, s);
+      this.ctx.globalAlpha = Math.max(0, alpha);
+      this.ctx.fillStyle = 'rgba(0,0,0,0.6)'; this.ctx.fillRect(Math.floor(W / 2 - w / 2) - 4 * s, y - 2 * s, w + 8 * s, 12 * s);
+      this.textCentered(t.text, W / 2, y, t.color);
+      this.ctx.globalAlpha = 1;
+      y -= 14 * s;
+    }
   }
 
   drawChat() {
@@ -543,10 +662,20 @@ export class HUD {
       if (this.debug) this.drawDebug(game.debugLines());
       this.mouse.clicked = false; return;
     }
+    if (this.screen === 'shop' || this.screen === 'jobs') { // economy DOM screen (src/ui/shop.js) is on top
+      const hotbarY = this.drawHotbar(game.inventory);
+      this.drawWallet(game, hotbarY);
+      this.drawChat();
+      if (this.debug) this.drawDebug(game.debugLines());
+      this.mouse.clicked = false; this.mouse.rclicked = false; return;
+    }
 
     this.drawCrosshair();
     const hotbarY = this.drawHotbar(game.inventory);
     this.drawStatusBars(player, hotbarY);
+    this.drawWallet(game, hotbarY);
+    this.drawJobStrip(game, hotbarY);
+    this.drawToasts(hotbarY);
     this.drawChat();
     // NPC name under crosshair
     if (game.lookingAtName) {

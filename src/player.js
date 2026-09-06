@@ -116,6 +116,7 @@ export class Player {
     this.saturation = 5;   // Minecraft spawn value; drained before food (see tick)
     this.exhaustion = 0;
     this.foodTimer = 0;
+    this.credits = 250;    // Republic credits (rubric 08): the wallet; owned by src/economy/economy.js, saved per world
     this.eating = null;    // {id, ticks} while the use key is held with food (32 ticks = 1.6 s)
     this.fallDistance = 0;
     this.walkDist = 0;

@@ -35,6 +35,8 @@ import { OrbitalBeam } from './disasters/orbitalBeam.js';
 import { AdminPanel } from './ui/adminPanel.js';
 import { NetClient } from './net/client.js';
 import { RenderPipeline } from './render/pipeline.js';
+import { Economy } from './economy/economy.js';
+import { Signs } from './coruscant/signs.js';
 
 const WORLD_SEED = 1337;
 
@@ -236,6 +238,8 @@ export class Game {
     this.disasters.register(Tornado);
     this.disasters.register(OrbitalBeam);
     this.adminPanel = new AdminPanel(this);
+    this.economy = new Economy(this);   // wallet, vendors, jobs, housing, ships (src/economy/economy.js)
+    this.signs = new Signs(this);       // entrance signs + enter/leave toasts (src/coruscant/signs.js)
     // multiplayer (optional): ?server=ws://host:port
     const params = new URLSearchParams(location.search);
     const serverUrl = params.get('server');
@@ -309,6 +313,7 @@ export class Game {
   }
   closeScreen() {
     if (this.hud.screen === 'admin' && this.adminPanel) { this.adminPanel.close(); this.hudCanvas.style.pointerEvents = ''; }
+    if ((this.hud.screen === 'shop' || this.hud.screen === 'jobs') && this.economy) this.economy.closeUI();
     if (this.hud.screen === 'chest') this.closeChest();
     // a stack still on the cursor goes back into the inventory (or onto the ground when that is full), like Minecraft
     const cur = this.hud.cursorItem;
@@ -563,6 +568,8 @@ export class Game {
     if (this.animals) this.animals.tick(this.player, this.sky);
     if (this.train) this.train.tick(this.player);
     if (this.doors && this.npcs) this.doors.update(this.npcs.list, this.player); // NPCs open doors ahead, close behind
+    if (this.economy) this.economy.tick();
+    if (this.signs) this.signs.update(this.player);
     this.tickCrops();
     this.tickCooking();
     // online, the network client steps the disaster clock against the server tick instead
@@ -738,6 +745,7 @@ export class Game {
     // the vehicle tick goes with the player so a reload puts the space train where it was (a rider is not stranded)
     this.save.setPlayer({ x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, food: p.food, saturation: p.saturation, mode: p.mode, vehicleTick: this.vehicles ? this.vehicles.tickCount : 0 });
     this.save.setInventory(this.inventory.serialize());
+    if (this.economy) this.economy.persist();
   }
   persistNow() {
     if (!this.save) return;
@@ -819,6 +827,7 @@ export class Game {
       const vhit = useClick && this.vehicles ? this.vehicles.raycast(eye, dir, REACH) : null;
       if (vhit && (!hit || vhit.dist < hit.dist)) { if (vhit.vehicle.onUse(p, this, vhit)) { this.hand.startSwing(); this.placeCooldown = 0.5; } }
       else if (entityHit && !hit) { this.npcs.talk(entityHit.npc, this); this.hand.startSwing(); this.placeCooldown = 0.5; }
+      else if (useClick && this.economy && this.economy.onUseClick(eye, dir, hit)) { this.hand.startSwing(); this.placeCooldown = 0.5; } // shop consoles, job boards, repair markers, your bed
       else if (hit && this.useBlock(hit, useClick)) { this.hand.startSwing(); }
       else if (hit && !p.eating) this.placeBlock(hit);
       this.placeCooldown = useClick ? 0.25 : 0.2;
@@ -915,6 +924,7 @@ export class Game {
     this.breakCooldown = 0.25;
     this.hud.xp = Math.min(1, this.hud.xp + 0.004);
     if (this.npcs) this.npcs.onWorldChanged(hit.x, hit.y, hit.z);
+    if (this.economy) this.economy.onBlockBroken(hit.x, hit.y, hit.z); // cleanup jobs count broken debris
     this.onPlayerEdit(hit.x, hit.y, hit.z, B.AIR);
   }
 
