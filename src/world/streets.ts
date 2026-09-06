@@ -65,7 +65,7 @@ const SW_MAIN = /* glsl */ `
   float fwA = max(fwidth(across), 1e-4), fwL = max(fwidth(along), 1e-4);
   float n = fbm3(wp * 0.21);
   float grain = mix(vnoise(wp * 3.1), 0.5, smoothstep(0.1, 0.4, fp));
-  vec3 conc = mix(vec3(0.36, 0.35, 0.33), vec3(0.46, 0.45, 0.42), n) * (0.94 + 0.12 * grain);
+  vec3 conc = mix(vec3(0.32, 0.31, 0.29), vec3(0.42, 0.41, 0.38), n) * (0.94 + 0.12 * grain);
   bool face = vSwNrm.y < 0.5;
   float fade = 1.0 - smoothstep(0.15, 0.5, fp); // fine detail vanishes from altitude
   float slabFade = 1.0 - smoothstep(0.3, 1.0, fp); // per-slab tones (1.5 m) average out before they can sparkle
@@ -118,11 +118,11 @@ const SW_MAIN = /* glsl */ `
     }
   }
   col *= 1.0 - 0.4 * joint;
-  // tactile pad on the dished corner ramps
-  if (ramp > 0.03) {
+  // tactile pad (0.6 m deep) on the fully dished part of the corner ramp
+  if (ramp > 0.4) {
     float dots = mix(smoothstep(0.55, 0.75, vnoise(wp * 7.0)), 0.4, smoothstep(0.05, 0.2, fp));
     vec3 pad = vec3(0.72, 0.52, 0.18) * (0.85 + 0.25 * dots);
-    col = mix(col, pad, smoothstep(0.03, 0.2, ramp) * (1.0 - step(${CURB_TOP.toFixed(2)} + 1.2, across)) * (face ? 0.0 : 1.0));
+    col = mix(col, pad, smoothstep(0.45, 0.8, ramp) * (1.0 - step(${CURB_TOP.toFixed(2)} + 0.65, across)) * (face ? 0.0 : 1.0));
   }
   // damp stain and grime toward the curb, weathering blotches
   col *= 1.0 - 0.1 * smoothstep(0.6, 0.75, fbm3(wp * 0.05 + 8.0));
@@ -640,7 +640,9 @@ export class Streets {
       // the pavement height under the arc: blend the two edges' heights by arc parameter
       const ya = roadEdgeY(k.a.chain, k.sA, k.sideA), yb = roadEdgeY(k.b.chain, k.sB, k.sideB);
       const yRoad = ya + (yb - ya) * u;
-      const ramp = 0.98 * smooth(0.2, 0.42, u) * smooth(0.8, 0.58, u);
+      // one diagonal ramp at the apex of the return: ~1.2 m of full dish with 1.3 m flares (the whole middle 60 %
+      // of the arc dished read as a yellow band around every corner from 60 m)
+      const ramp = 0.98 * smooth(0.3, 0.44, u) * smooth(0.7, 0.56, u);
       const row = this.profileRow(soup, p[0], p[1], nx, nz, yRoad, along, { w, light, kind: K_WALK }, ramp, cap);
       if (prev) this.link(soup, prev, row);
       prev = row;
