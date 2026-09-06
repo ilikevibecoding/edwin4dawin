@@ -132,6 +132,8 @@ uniform sampler2D uHeightTex;
 uniform sampler2D uZoneTex; // r: zone id, g: vegetation, b: 128 + 0.5 * signed distance to the coastline (m)
 uniform sampler2D uWakeTex;
 uniform vec4 uWakeRegion; // center.xy, size, unused
+uniform sampler2D uWakeMidTex;    // mid wake map ahead of the camera (render/wakes.ts)
+uniform vec4 uWakeMidRegion;      // center.xy, size (0 = none), unused
 uniform sampler2D uWakeNearTex;   // fine wake map around the aircraft (render/wakes.ts)
 uniform vec4 uWakeNearRegion;     // center.xy, size, w: 1 while the displaced near patch is drawn over the region
 uniform sampler2D uWakeHeightTex; // signed hull-wave elevation over the near region (R up, G down)
@@ -510,6 +512,12 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   vec2 wuv = vec2(wp.x - uWakeRegion.x, uWakeRegion.y - wp.y) / uWakeRegion.z + 0.5;
   vec4 wakeFar = vec4(0.0);
   if (all(greaterThan(wuv, vec2(0.0))) && all(lessThan(wuv, vec2(1.0)))) wakeFar = texture2D(uWakeTex, wuv);
+  // the mid map (0.4 m texels ahead of the camera) replaces the far one inside its region (soft edge)
+  vec2 muv = vec2(wp.x - uWakeMidRegion.x, uWakeMidRegion.y - wp.y) / max(uWakeMidRegion.z, 1.0) + 0.5;
+  if (uWakeMidRegion.z > 1.0 && all(greaterThan(muv, vec2(0.0))) && all(lessThan(muv, vec2(1.0)))) {
+    vec2 med = min(muv, 1.0 - muv);
+    wakeFar = mix(wakeFar, texture2D(uWakeMidTex, muv), smoothstep(0.0, 0.1, min(med.x, med.y)));
+  }
   // the fine map around the aircraft replaces the coarse one where it is defined (soft edge)
   vec2 nuv = vec2(wp.x - uWakeNearRegion.x, uWakeNearRegion.y - wp.y) / uWakeNearRegion.z + 0.5;
   vec4 wake = wakeFar;
@@ -758,12 +766,14 @@ export class Water {
   private readonly offset = { value: new THREE.Vector3() };
   readonly uniforms: Record<string, THREE.IUniform>;
 
-  constructor(textures: MapTextures, wakeTex: THREE.Texture, wakeNearTex: THREE.Texture = wakeTex, wakeHeightTex: THREE.Texture = wakeTex, wakeHeightTexel = 0.125) {
+  constructor(textures: MapTextures, wakeTex: THREE.Texture, wakeNearTex: THREE.Texture = wakeTex, wakeHeightTex: THREE.Texture = wakeTex, wakeHeightTexel = 0.125, wakeMidTex: THREE.Texture = wakeTex) {
     this.uniforms = {
       uHeightTex: { value: textures.height },
       uZoneTex: { value: textures.zone },
       uWakeTex: { value: wakeTex },
       uWakeRegion: { value: new THREE.Vector4(0, 0, 3000, 0) },
+      uWakeMidTex: { value: wakeMidTex },
+      uWakeMidRegion: { value: new THREE.Vector4(0, 0, 0, 0) },
       uWakeNearTex: { value: wakeNearTex },
       uWakeHeightTex: { value: wakeHeightTex },
       uWakeHeightTexel: { value: wakeHeightTexel },
@@ -843,7 +853,7 @@ export class Water {
     for (const k of Object.keys(u) as (keyof ReflectionUniforms)[]) this.uniforms[k].value = u[k].value;
   }
 
-  update(camX: number, camZ: number, time: number, windSpeed: number, windDir: THREE.Vector2, sunDir: THREE.Vector3, wakeCenter: THREE.Vector2, wakeSize: number, wakeNearCenter?: THREE.Vector2, wakeNearSize = 0): void {
+  update(camX: number, camZ: number, time: number, windSpeed: number, windDir: THREE.Vector2, sunDir: THREE.Vector3, wakeCenter: THREE.Vector2, wakeSize: number, wakeNearCenter?: THREE.Vector2, wakeNearSize = 0, wakeMidCenter?: THREE.Vector2, wakeMidSize = 0): void {
     this.offset.value.set(Math.round(camX / 50) * 50, 0, Math.round(camZ / 50) * 50);
     this.uniforms.uWaveTime.value = time;
     this.uniforms.uWindSpeed.value = windSpeed;
@@ -851,5 +861,6 @@ export class Water {
     this.uniforms.uSunDirW.value.copy(sunDir);
     this.uniforms.uWakeRegion.value.set(wakeCenter.x, wakeCenter.y, wakeSize, 0);
     if (wakeNearCenter && wakeNearSize > 0) { const r = this.uniforms.uWakeNearRegion.value as THREE.Vector4; r.set(wakeNearCenter.x, wakeNearCenter.y, wakeNearSize, r.w); }
+    if (wakeMidCenter && wakeMidSize > 0) (this.uniforms.uWakeMidRegion.value as THREE.Vector4).set(wakeMidCenter.x, wakeMidCenter.y, wakeMidSize, 0);
   }
 }
