@@ -136,6 +136,16 @@ function boundBuilding(t: BatchSource, i: number, box: THREE.Box3): void {
   box.expandByPoint(_bp.set(x + r, y + h, z + r));
 }
 
+/** Yaw convention of the whole city: every lot, street grid (roads.ts `toWorld`), footprint test and offset helper
+ *  rotates local (x, z) by `rot` as x' = x cos - z sin, z' = x sin + z cos. Three's `Euler(0, rot, 0)` is the
+ *  inverse of that (local +x lands on (cos, -sin)), so the instance matrices take -rot: with +rot every building
+ *  stood yawed 2·rot off its own street (13.75 deg on the hotel strip, whose grid turns -0.12 rad), and the twin /
+ *  slot / L-shape recipes and the crown fins, which offset their parts with the lot convention, were skewed by the
+ *  same angle against their own faces. */
+function yawQuaternion(q: THREE.Quaternion, e: THREE.Euler, rot: number): THREE.Quaternion {
+  return q.setFromEuler(e.set(0, -rot, 0));
+}
+
 /** Spatially tiled instance batches so far tiles can be frustum-culled and stop casting shadows. */
 export class BuildingBatches {
   readonly group = new THREE.Group();
@@ -194,7 +204,7 @@ export class BuildingBatches {
       const box = new THREE.Box3();
       list.forEach((inst, i) => {
         p.set(inst.x, inst.y, inst.z);
-        q.setFromEuler(e.set(0, inst.rot, 0));
+        yawQuaternion(q, e, inst.rot);
         s.set(inst.w, inst.h, inst.d);
         mesh.setMatrixAt(i, m.compose(p, q, s));
         mesh.setColorAt(i, inst.color);
@@ -264,7 +274,7 @@ export class BuildingBatches {
       const matrices = new Float32Array(list.length * 16), dims = new Float32Array(list.length * 3);
       list.forEach((inst, i) => {
         p.set(inst.x, inst.y, inst.z);
-        q.setFromEuler(e.set(0, inst.rot, 0));
+        yawQuaternion(q, e, inst.rot);
         s.set(inst.w, inst.h, inst.d);
         m.compose(p, q, s).toArray(matrices, i * 16);
         dims[i * 3] = inst.w; dims[i * 3 + 1] = inst.h; dims[i * 3 + 2] = inst.d;
@@ -540,10 +550,10 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
    *  Trims carry roof = -1 (aStyle.w) so the shader skips its mast, crown, beacon and ground-grime paths on them. */
   const TRIM_LIGHT = new THREE.Color('#e9e7e1'), TRIM_DARK = new THREE.Color('#3c3f43'), TRIM_GLASS = new THREE.Color('#9fb6c8');
   const addTrims = (x: number, y: number, z: number, w: number, h: number, d: number, rot: number, style: number, floorH: number, wall: THREE.Color) => {
-    // offsets rotate the way the instance matrix does (Matrix4.makeRotationY: x' = x c + z s, z' = -x s + z c)
+    // offsets rotate with the lot convention (see yawQuaternion): x' = x c - z s, z' = x s + z c
     const cr = Math.cos(rot), sr = Math.sin(rot);
     const trim = (ox: number, oy: number, oz: number, tw: number, th: number, td: number, col: THREE.Color, st: number) =>
-      batches.add('trim', { x: x + ox * cr + oz * sr, y: y + oy, z: z - ox * sr + oz * cr, w: tw, h: th, d: td, rot, color: col, style: st, floorH: 3, seed: 0, roof: -1, lit: 0, warm: 0.5, variant: 0.5, form: 0 });
+      batches.add('trim', { x: x + ox * cr - oz * sr, y: y + oy, z: z + ox * sr + oz * cr, w: tw, h: th, d: td, rot, color: col, style: st, floorH: 3, seed: 0, roof: -1, lit: 0, warm: 0.5, variant: 0.5, form: 0 });
     const glassy = style === S.GLASS_BLUE || style === S.GLASS_GREEN || style === S.STONE;
     if (style === S.BALCONY || style === S.HOTEL) {
       // the slab rings the two long faces; the balustrade stands at its edge (shader: slab 0-14 %, rail to 42 %)
