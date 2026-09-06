@@ -49,10 +49,19 @@
 <script>
 const $ = (s) => document.querySelector(s);
 let data = null, itemSel = 'all', beforeTag = null, afterTag = null;
+// Data and frames come from jsDelivr (purged by tools/progress-snapshot.sh after every publish) so this page
+// renders from any host that serves HTML — githack, htmlpreview, a local preview — without CORS or stale caches.
+const CDN = 'https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@gh-pages/progress/';
+const local = location.protocol === 'file:' || /localhost|127\.0\.0\.1/.test(location.host);
+const BASE = local ? '' : CDN;
 
 async function load() {
-  const r = await fetch('data.json?ts=' + Date.now(), { cache: 'no-store' });
-  const d = await r.json();
+  let d;
+  try {
+    d = await (await fetch(BASE + 'data.json?ts=' + Date.now(), { cache: 'no-store' })).json();
+  } catch (e) {
+    d = await (await fetch('data.json?ts=' + Date.now(), { cache: 'no-store' })).json();
+  }
   const hadLatest = data && data.snapshots.length ? data.snapshots[data.snapshots.length - 1].tag : null;
   data = d;
   const tags = d.snapshots.map((s) => s.tag);
@@ -75,7 +84,7 @@ function fillSelects() {
   const last = data.snapshots[data.snapshots.length - 1];
   $('#status').innerHTML = `${data.snapshots.length} snapshot${data.snapshots.length === 1 ? '' : 's'} · latest ${last ? last.time.replace('T', ' ') + ' UTC (build ' + last.build + ')' : '—'}<br>page re-checks every 5 min; a new snapshot lands about once an hour`;
 }
-function img(tag, label) { return `shots/${tag}/${label}.jpg`; }
+function img(tag, label) { return `${BASE}shots/${tag}/${label}.jpg`; }
 function render() {
   const main = $('#main');
   const items = itemSel === 'all' ? data.items : data.items.filter((i) => i.id === itemSel);
