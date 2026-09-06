@@ -255,7 +255,8 @@ function loft(sections, color, o = {}) {
  * Lofted body along +Z from octagonal cross sections [{ z, hw, y0, y1, x?, c?, color?, mask?, emis? }]:
  * a rectangle hw x (y1 - y0) with its corners chamfered by fraction `c` (default 0.36) of the half-width
  * and half-height, so fuselages read as rounded rather than boxy. 16 triangles per segment, colour per
- * segment from its first section, optional fan caps (capStart/capEnd, 6 triangles each).
+ * segment from its first section, optional fan caps (capStart/capEnd, 8 triangles each). A section's
+ * `side: { color, mask }` recolours the two vertical flank faces of its segment (stripes for free).
  */
 function loft8(sections, color, o = {}) {
   const rings = sections.map((s) => {
@@ -288,9 +289,12 @@ function loft8(sections, color, o = {}) {
       (S.z + T.z) / 2,
     ];
     const pos = [];
+    const flank = [];
     for (let k = 0; k < 8; k++) {
       const k1 = (k + 1) & 7;
-      quadOut(pos, A[k], A[k1], B[k1], B[k], centre);
+      // ring points 2-3 and 6-7 are the vertical flank faces
+      const arr = S.side && (k === 2 || k === 6) ? flank : pos;
+      quadOut(arr, A[k], A[k1], B[k1], B[k], centre);
     }
     if (i === 0 && o.capStart) {
       const cc = [S.x || 0, (S.y0 + S.y1) / 2, S.z];
@@ -310,6 +314,10 @@ function loft8(sections, color, o = {}) {
         S.emis !== undefined ? S.emis : o.emis || 0,
       ),
     );
+    if (flank.length)
+      parts.push(
+        paint(rawGeo(flank), S.side.color, S.side.mask || 0, S.side.emis || 0),
+      );
   }
   return merge(parts);
 }
@@ -512,39 +520,36 @@ const RED_ENGINE = new THREE.Color(1.0, 0.25, 0.15);
 // ---------------------------------------------------------------------------
 
 // ARC-170 (Incom/Subpro): 14.5 m long, 22.6 m span with the S-foils open, 4.78 m high. Reference facts
-// (ICS cutaway, film stills): a long flattened fuselage with a broad blunt nose; the greenhouse for pilot
+// (ICS cutaway, film stills): a long flattened fuselage with a broad wedge nose; the greenhouse for pilot
 // and copilot runs from ~25 % to ~48 % of the length, the astromech sits behind it at mid-length and the
 // rear-facing tail gunner's canopy at 55–68 %; two 2 m intake nacelles flank the cockpit with their mouths
 // at ~35 % of the length and nozzles at ~85 %; the wings root on the nacelles with a 6.5 m chord and taper
-// to 3 m paddle tips 11.3 m out, each wing split into an upper and a lower S-foil opened ±11°; one long
-// medium laser cannon per wing at a foil tip (port upper, starboard lower) reaching the nose line; two
-// small tail stabilisers and two aft cannons. Light grey with red intake lips, nose cheeks and wing tips.
+// straight to 3 m squared tips 11.3 m out, each wing split into an upper and a lower S-foil opened ±11°;
+// one long medium laser cannon per wing at a foil tip (port upper, starboard lower) reaching the nose
+// line; two small tail stabilisers and two aft cannons. Light grey with red intake lips, a red stripe
+// along each flank from the nose to the intakes and a red band along the inner leading edge of each wing.
 function arc170() {
   const P = [];
+  const stripe = { color: WHITE, mask: 1 };
   P.push(
     loft8(
       [
-        { z: -7.25, hw: 0.4, y0: -0.18, y1: 0.2 },
-        { z: -6.2, hw: 0.82, y0: -0.4, y1: 0.38 },
-        { z: -4.4, hw: 1.05, y0: -0.58, y1: 0.56 },
-        { z: -1.4, hw: 1.08, y0: -0.7, y1: 0.6 },
-        { z: 2.4, hw: 1.0, y0: -0.7, y1: 0.58 },
-        { z: 5.2, hw: 0.72, y0: -0.5, y1: 0.48 },
+        { z: -7.25, hw: 0.5, y0: -0.16, y1: 0.16, side: stripe },
+        { z: -5.0, hw: 1.0, y0: -0.48, y1: 0.42, side: stripe },
+        { z: -2.0, hw: 1.12, y0: -0.7, y1: 0.6 },
+        { z: 1.8, hw: 1.02, y0: -0.7, y1: 0.58 },
+        { z: 5.0, hw: 0.7, y0: -0.5, y1: 0.46 },
         { z: 7.25, hw: 0.3, y0: -0.2, y1: 0.26 },
       ],
       GREY,
       { capStart: true, capEnd: true, c: 0.4 },
     ),
   );
-  // red cheeks along the forward fuselage sides and the nose saddle
-  for (const s of [-1, 1])
-    P.push(box(s * 0.98, 0.02, -4.7, 0.16, 0.5, 3.2, WHITE, { mask: 1 }));
-  P.push(box(0, 0.45, -5.6, 1.2, 0.1, 1.6, WHITE, { mask: 1 }));
   // greenhouse: pilot + copilot, then the astromech, then the rear-facing gunner canopy
   P.push(
     loft(
       [
-        { z: -4.4, hw: 0.5, y0: 0.55, y1: 0.6 },
+        { z: -4.4, hw: 0.5, y0: 0.5, y1: 0.56 },
         { z: -3.4, hw: 0.74, y0: 0.55, y1: 1.28 },
         { z: -1.0, hw: 0.76, y0: 0.55, y1: 1.34 },
         { z: 0.0, hw: 0.6, y0: 0.55, y1: 0.8 },
@@ -558,8 +563,7 @@ function arc170() {
     loft(
       [
         { z: 1.2, hw: 0.56, y0: 0.55, y1: 0.78 },
-        { z: 2.0, hw: 0.7, y0: 0.55, y1: 1.24 },
-        { z: 3.6, hw: 0.62, y0: 0.55, y1: 1.16 },
+        { z: 2.4, hw: 0.7, y0: 0.55, y1: 1.24 },
         { z: 4.6, hw: 0.42, y0: 0.5, y1: 0.58 },
       ],
       GLASS,
@@ -587,7 +591,7 @@ function arc170() {
     P.push(cyl(nx, ny, 1.75, 0.98, 0.9, 6.8, GREY, { seg: 6 }));
     P.push(disc(nx, ny, -2.35, 0.98, DARK, { seg: 6, flip: true }));
     P.push(disc(nx, ny, 5.15, 0.76, BLUE_ENGINE, { seg: 6, emis: 2.2 }));
-    // S-foils: upper and lower, ±11° open, broad root chord tapering to red paddle tips
+    // S-foils: upper and lower, ±11° open, straight taper from the 6.5 m root chord to the squared tip
     for (const v of [-1, 1]) {
       const d = v * 0.19;
       const at = (r) => [s * (2.9 + r * Math.cos(d)), ny + r * Math.sin(d)];
@@ -595,9 +599,7 @@ function arc170() {
         panel(
           [
             { p: at(0), lead: -1.9, trail: 4.6 },
-            { p: at(6.4), lead: -0.4, trail: 3.9 },
-            { p: at(6.5), lead: -0.4, trail: 3.9, color: WHITE, mask: 1 },
-            { p: at(8.4), lead: 0.3, trail: 3.6, color: WHITE, mask: 1 },
+            { p: at(8.4), lead: 0.3, trail: 3.5 },
           ],
           0.2,
           GREY,
@@ -608,7 +610,7 @@ function arc170() {
         panel(
           [
             { p: at(0.3), lead: -1.85, trail: -1.0 },
-            { p: at(3.4), lead: -1.1, trail: -0.45 },
+            { p: at(3.6), lead: -1.0, trail: -0.4 },
           ],
           0.26,
           WHITE,
@@ -630,18 +632,18 @@ function arc170() {
 // boxy fuselage with an amber bubble canopy on the nose, two 1.1 m engine pods on the upper corners with
 // round intakes forward, a swept dorsal fin between them, and two big folding wings hinged low on the
 // flanks that swing 45° below horizontal in flight (an inverted Y from the front). The wings are about the
-// body's length with a nearly constant 3 m chord and a laser cannon housing at each squared tip. White-grey
-// with maroon nose, fin band and long wing panels.
+// body's length with a nearly constant 3.5 m chord and a laser cannon housing at each squared tip.
+// White-grey with a maroon nose, and broad maroon panels along the mid-chord of the fin and both wings.
 function v19() {
   const P = [];
   P.push(
     loft8(
       [
-        { z: -2.6, hw: 0.38, y0: -0.3, y1: 0.22 },
-        { z: -1.6, hw: 0.8, y0: -0.56, y1: 0.5 },
+        { z: -3.0, hw: 0.36, y0: -0.28, y1: 0.2 },
+        { z: -1.9, hw: 0.8, y0: -0.56, y1: 0.5 },
         { z: 0.2, hw: 0.9, y0: -0.66, y1: 0.6 },
-        { z: 1.8, hw: 0.86, y0: -0.62, y1: 0.6 },
-        { z: 2.6, hw: 0.62, y0: -0.46, y1: 0.5 },
+        { z: 2.0, hw: 0.86, y0: -0.62, y1: 0.6 },
+        { z: 3.0, hw: 0.6, y0: -0.46, y1: 0.5 },
       ],
       GREY,
       { capStart: true, capEnd: true, c: 0.3 },
@@ -651,9 +653,9 @@ function v19() {
   P.push(
     loft(
       [
-        { z: -2.2, hw: 0.36, y0: 0.3, y1: 0.36 },
-        { z: -1.5, hw: 0.5, y0: 0.4, y1: 1.02 },
-        { z: -0.5, hw: 0.52, y0: 0.5, y1: 1.06 },
+        { z: -2.5, hw: 0.36, y0: 0.3, y1: 0.36 },
+        { z: -1.7, hw: 0.5, y0: 0.4, y1: 1.02 },
+        { z: -0.6, hw: 0.52, y0: 0.5, y1: 1.06 },
         { z: 0.1, hw: 0.4, y0: 0.58, y1: 0.66 },
       ],
       AMBER_GLASS,
@@ -661,70 +663,89 @@ function v19() {
     ),
   );
   // maroon nose band
-  P.push(box(0, 0.26, -2.0, 0.6, 0.1, 1.0, WHITE, { mask: 1 }));
-  // dorsal fin: swept, with a maroon band and tip
+  P.push(box(0, 0.24, -2.4, 0.6, 0.1, 1.0, WHITE, { mask: 1 }));
+  // dorsal fin: swept leading edge, straight trailing edge, maroon mid-chord panel
   P.push(
     panel(
       [
-        { p: [0, 0.55], lead: -0.4, trail: 2.5 },
-        { p: [0, 2.0], lead: 0.35, trail: 2.55 },
-        { p: [0, 2.1], lead: 0.4, trail: 2.55, color: WHITE, mask: 1 },
-        { p: [0, 3.4], lead: 1.15, trail: 2.6, color: WHITE, mask: 1 },
+        { p: [0, 0.55], lead: -0.4, trail: 2.7 },
+        { p: [0, 3.5], lead: 1.3, trail: 2.8 },
       ],
       0.16,
       GREY,
     ),
   );
+  P.push(
+    panel(
+      [
+        { p: [0, 0.9], lead: 0.5, trail: 2.1 },
+        { p: [0, 3.2], lead: 1.75, trail: 2.4 },
+      ],
+      0.18,
+      WHITE,
+      { mask: 1, capEnd: false },
+    ),
+  );
   // main rear engine
-  P.push(disc(0, 0.05, 2.62, 0.38, BLUE_ENGINE, { seg: 6, emis: 2.0 }));
+  P.push(disc(0, 0.05, 3.02, 0.38, BLUE_ENGINE, { seg: 6, emis: 2.0 }));
   const a = 0.8; // wing droop (rad below horizontal)
   for (const s of [-1, 1]) {
     // engine pods on the upper corners
-    P.push(cyl(s * 1.0, 0.62, 0.5, 0.5, 0.52, 2.9, GREY, { seg: 6 }));
-    P.push(disc(s * 1.0, 0.62, 1.96, 0.5, BLUE_ENGINE, { seg: 6, emis: 2.2 }));
-    P.push(disc(s * 1.0, 0.62, -0.96, 0.46, DARK, { seg: 6, flip: true }));
+    P.push(cyl(s * 1.0, 0.62, 0.7, 0.5, 0.52, 3.2, GREY, { seg: 6 }));
+    P.push(disc(s * 1.0, 0.62, 2.31, 0.5, BLUE_ENGINE, { seg: 6, emis: 2.2 }));
+    P.push(disc(s * 1.0, 0.62, -0.91, 0.46, DARK, { seg: 6, flip: true }));
     // wing hinge barrel low on the flank
-    P.push(cyl(s * 1.05, -0.3, 0.6, 0.3, 0.3, 0.8, GREY_DARK, { axis: "x" }));
-    // folding wing: near-constant 3 m chord, squared tip, long maroon panel along the outer leading edge
+    P.push(cyl(s * 1.05, -0.3, 0.7, 0.3, 0.3, 0.8, GREY_DARK, { axis: "x" }));
+    // folding wing: near-constant chord, squared tip, broad maroon mid-chord panel on both faces
     const L = 4.9;
     const px = (r) => s * (1.05 + r * Math.cos(a));
     const py = (r) => -0.3 - r * Math.sin(a);
     P.push(
       panel(
         [
-          { p: [px(0.2), py(0.2)], lead: -1.3, trail: 2.4 },
-          { p: [px(1.7), py(1.7)], lead: -1.1, trail: 2.35, color: WHITE, mask: 1 },
-          { p: [px(3.9), py(3.9)], lead: -0.9, trail: 2.25 },
-          { p: [px(L), py(L)], lead: -0.75, trail: 2.15, color: WHITE, mask: 1 },
+          { p: [px(0.2), py(0.2)], lead: -1.2, trail: 2.5 },
+          { p: [px(L), py(L)], lead: -0.7, trail: 2.2 },
         ],
         0.2,
         GREY,
         { capStart: true },
       ),
     );
-    // wingtip laser cannon: housing at the leading corner, long barrel ahead
+    P.push(
+      panel(
+        [
+          { p: [px(0.5), py(0.5)], lead: -0.4, trail: 1.9 },
+          { p: [px(L - 0.3), py(L - 0.3)], lead: 0.0, trail: 1.65 },
+        ],
+        0.22,
+        WHITE,
+        { mask: 1, capEnd: false },
+      ),
+    );
+    // wingtip laser cannon: housing at the leading corner, barrel ahead
     P.push(cyl(px(L - 0.25), py(L - 0.25), -0.3, 0.26, 0.26, 1.4, GUN, { seg: 6 }));
-    P.push(box(px(L - 0.25), py(L - 0.25), -2.2, 0.12, 0.12, 2.6, GUN));
+    P.push(box(px(L - 0.25), py(L - 0.25), -1.9, 0.12, 0.12, 1.8, GUN));
   }
   return merge(P);
 }
 
 // Eta-2 Actis Jedi interceptor (Kuat Systems): 5.47 m long, 4.3 m wide. Reference facts (Revenge of the
-// Sith model): a small cockpit pod at the rear centre with a bubble canopy, the astromech socket in the
-// starboard wing root beside it, twin ion engines at the pod's flanks; two flat delta wing panels whose
-// inner edges run forward to two nose points a metre apart, each inner edge carrying a long laser
-// cannon; the outer edges carry radiator panels that split open into a V in combat. Painted pod and wing
-// stripes (yellow or red) over grey-white.
+// Sith model): an arrowhead — a slim central body whose spine runs from the tail to the nose, with the
+// bubble-canopy cockpit at 55–80 % of the length and the astromech socket in the starboard wing root
+// beside it, twin ion engines at the pod's flanks; two thick-rooted wedge wings whose leading edges sweep
+// 60° from the nose prongs to the tips at 70 % of the length, each prong carrying a laser cannon; the
+// tips carry radiator panels that split open into a V in combat. Painted body and wing roots (yellow or
+// red) over grey-white wings.
 function eta2() {
   const P = [];
   P.push(
     loft8(
       [
-        { z: -0.9, hw: 0.28, y0: -0.18, y1: 0.22 },
-        { z: -0.1, hw: 0.5, y0: -0.42, y1: 0.4 },
-        { z: 1.1, hw: 0.55, y0: -0.48, y1: 0.44 },
-        { z: 2.2, hw: 0.44, y0: -0.36, y1: 0.4 },
-        { z: 2.75, hw: 0.3, y0: -0.2, y1: 0.28 },
+        { z: -2.6, hw: 0.16, y0: -0.1, y1: 0.12, color: GREY, mask: 0 },
+        { z: -0.8, hw: 0.5, y0: -0.4, y1: 0.36 },
+        { z: 0.8, hw: 0.56, y0: -0.5, y1: 0.44 },
+        { z: 2.1, hw: 0.46, y0: -0.4, y1: 0.4 },
+        { z: 2.75, hw: 0.3, y0: -0.22, y1: 0.28 },
       ],
       WHITE,
       { capStart: true, capEnd: true, mask: 1, c: 0.4 },
@@ -733,119 +754,107 @@ function eta2() {
   P.push(
     loft(
       [
-        { z: -0.4, hw: 0.3, y0: 0.36, y1: 0.42 },
-        { z: 0.3, hw: 0.4, y0: 0.4, y1: 0.98 },
-        { z: 1.3, hw: 0.4, y0: 0.44, y1: 0.94 },
-        { z: 1.9, hw: 0.3, y0: 0.4, y1: 0.46 },
+        { z: -0.3, hw: 0.3, y0: 0.34, y1: 0.4 },
+        { z: 0.4, hw: 0.4, y0: 0.4, y1: 0.98 },
+        { z: 1.4, hw: 0.4, y0: 0.44, y1: 0.94 },
+        { z: 2.0, hw: 0.3, y0: 0.4, y1: 0.46 },
       ],
       GLASS,
       { bottom: false, emis: 0.3 },
     ),
   );
   // astromech socket on the starboard wing root
-  P.push(dome(1.0, 0.1, 0.5, 0.36, GREY_DARK, { ws: 6, hs: 2 }));
+  P.push(dome(1.05, 0.14, 0.3, 0.36, GREY_DARK, { ws: 6, hs: 2 }));
   for (const s of [-1, 1]) {
-    // delta wing panel: inner edge runs to the nose point, outer edge nearly parallel to the axis
+    // wedge wing: 0.6 m thick painted root flattening to a thin grey outer panel, leading edge swept
+    // from the nose prong to the tip
     P.push(
       panel(
         [
-          { p: [s * 0.45, 0.02], lead: -2.72, trail: 2.4 },
-          { p: [s * 1.4, 0.02], lead: -1.75, trail: 1.95 },
-          { p: [s * 2.1, 0.02], lead: -1.05, trail: 1.65 },
+          { p: [s * 0.45, 0.0], lead: -2.4, trail: 2.5, thick: 0.6, color: WHITE, mask: 1 },
+          { p: [s * 1.2, 0.0], lead: -1.1, trail: 2.35, thick: 0.22 },
+          { p: [s * 2.05, 0.0], lead: 0.35, trail: 2.2, thick: 0.12 },
         ],
         0.14,
         GREY,
       ),
     );
-    // painted stripe along the wing's leading half
-    P.push(
-      panel(
-        [
-          { p: [s * 0.7, 0.1], lead: -2.3, trail: -1.4 },
-          { p: [s * 1.9, 0.1], lead: -1.1, trail: -0.2 },
-        ],
-        0.02,
-        WHITE,
-        { mask: 1, capEnd: false },
-      ),
-    );
-    // radiator panels at the outer edge, split open above and below (45°)
+    // radiator panels at the tip, split open above and below (45°)
     for (const v of [-1, 1]) {
       P.push(
         panel(
           [
-            { p: [s * 2.1, 0.0], lead: -1.0, trail: 1.6 },
-            { p: [s * 2.95, v * 0.85], lead: -0.8, trail: 1.5, color: WHITE, mask: 1 },
+            { p: [s * 2.05, 0.0], lead: 0.4, trail: 2.2 },
+            { p: [s * 2.95, v * 0.85], lead: 0.6, trail: 2.1 },
           ],
           0.1,
           GREY,
         ),
       );
     }
-    // laser cannon along the inner edge reaching past the nose point, and the ion engine beside the pod
-    P.push(box(s * 0.62, 0.12, -1.4, 0.16, 0.16, 3.2, GUN));
-    P.push(cyl(s * 0.85, -0.1, 1.6, 0.3, 0.34, 1.9, GREY_DARK, { seg: 6 }));
-    P.push(disc(s * 0.85, -0.1, 2.56, 0.3, BLUE_ENGINE, { seg: 6, emis: 2.2 }));
+    // laser cannon on the nose prong, and the ion engine beside the pod
+    P.push(box(s * 0.7, 0.04, -1.6, 0.16, 0.16, 2.8, GUN));
+    P.push(cyl(s * 0.9, -0.08, 1.7, 0.3, 0.34, 1.8, GREY_DARK, { seg: 6 }));
+    P.push(disc(s * 0.9, -0.08, 2.61, 0.3, BLUE_ENGINE, { seg: 6, emis: 2.2 }));
   }
   return merge(P);
 }
 
 // pointed blade along a polyline of hinge -> (elbow) -> tip with a diamond cross section: `pts` are the
-// centreline points, `w`/`t` the half-width/half-thickness at the widest station
+// centreline points, `w`/`t` the half-width/half-thickness at the widest station (the elbow); o.root is
+// the width fraction at the hinge (default a point), the tip is always a point
 function blade(pts, w, t, color, o = {}) {
   const st = [];
   const n = pts.length;
+  const root = o.root !== undefined ? o.root : 0.06;
   for (let i = 0; i < n; i++) {
-    const k = i === 0 || i === n - 1 ? 0.06 : i === 1 ? 1 : 0.7;
+    const k = i === 0 ? root : i === n - 1 ? 0.06 : i === 1 ? 1 : 0.7;
     st.push({ p: pts[i], w: Math.max(0.03, w * k), t: Math.max(0.02, t * k) });
   }
   return tube(st, color, { diamond: true, ...o });
 }
 
-// Vulture droid (Xi Char / Haor Chall): 3.5 m body, 6.96 m long and ~7 m across in flight. Reference facts
-// (TCW render, film stills): the body IS the head — a sleek 1 m wide bullet with the eye cowl on its
-// front top carrying two vertical red photoreceptor slits, tapering to a tail; shoulder blocks on the
-// flanks carry two wing pairs, each pair an upper and a lower blade stacked with a small gap, thick and
-// pointed, swept 40° forward of lateral and bent down at the elbow so the tips sit ahead of the nose.
-// Laser cannons under the lower blade tips, thruster aft. Blue-grey plating with lighter plates.
+// Vulture droid (Xi Char / Haor Chall): 3.6 m body, 6.96 m long and ~7 m across in flight. Reference facts
+// (TCW render, film stills): the body IS the head — a slender 1 m wide flat-topped bullet with two
+// vertical red photoreceptor slits on its front top, tapering to a tail with the thruster; shoulder blocks
+// on the rear flanks carry two wing pairs, each pair an upper and a lower blade stacked with a gap that
+// widens toward the tips; the blades run out to an elbow beside the nose then sweep forward and outward
+// so the tips sit 3 m ahead of the nose — a dart from above, an X from ahead. Laser cannons under the
+// lower blade tips. Blue-grey plating with lighter plates.
 function vulture() {
   const P = [];
   P.push(
     loft8(
       [
-        { z: -1.75, hw: 0.2, y0: -0.12, y1: 0.16 },
-        { z: -1.15, hw: 0.44, y0: -0.34, y1: 0.46 },
-        { z: -0.3, hw: 0.52, y0: -0.46, y1: 0.5 },
-        { z: 0.7, hw: 0.46, y0: -0.4, y1: 0.36 },
-        { z: 1.75, hw: 0.14, y0: -0.12, y1: 0.12 },
+        { z: -1.7, hw: 0.16, y0: -0.1, y1: 0.12 },
+        { z: -0.9, hw: 0.4, y0: -0.3, y1: 0.4 },
+        { z: 0.1, hw: 0.5, y0: -0.42, y1: 0.42 },
+        { z: 1.1, hw: 0.42, y0: -0.36, y1: 0.32 },
+        { z: 1.9, hw: 0.28, y0: -0.24, y1: 0.22 },
       ],
       WHITE,
       { capStart: true, capEnd: true, mask: 1, c: 0.45 },
     ),
   );
-  // eye cowl on the front top with the two red slits
-  P.push(
-    dome(0, 0.28, -1.0, 0.42, DROID_LIGHT, { ws: 6, hs: 2, sz: 1.5, sy: 0.9 }),
-  );
+  // two red photoreceptor slits leaning back along the nose slope
   for (const s of [-1, 1])
-    P.push(box(s * 0.13, 0.5, -1.42, 0.07, 0.28, 0.1, RED_EYE, { emis: 0.9 }));
+    P.push(
+      box(s * 0.12, 0.3, -1.2, 0.07, 0.26, 0.1, RED_EYE, { emis: 0.9, rx: -0.35 }),
+    );
   // thruster
-  P.push(cyl(0, -0.05, 1.6, 0.2, 0.26, 0.5, DROID_DARK, { seg: 6 }));
-  P.push(disc(0, -0.05, 1.86, 0.2, AMBER_ENGINE, { seg: 6, emis: 2.2 }));
+  P.push(cyl(0, -0.02, 1.95, 0.2, 0.26, 0.4, DROID_DARK, { seg: 6 }));
+  P.push(disc(0, -0.02, 2.16, 0.2, AMBER_ENGINE, { seg: 6, emis: 2.2 }));
   for (const s of [-1, 1]) {
-    // shoulder block
-    P.push(box(s * 0.62, 0.0, 0.3, 0.36, 0.5, 0.9, DROID_DARK));
+    // shoulder block on the rear flank
+    P.push(box(s * 0.56, 0.0, 1.0, 0.3, 0.5, 1.0, DROID_DARK));
     for (const v of [-1, 1]) {
-      // upper/lower blades of the pair: out and slightly apart to the elbow, then forward and down
-      const hinge = [s * 0.8, v * 0.2, 0.3];
-      const elbow = [s * 2.2, v * 0.34 + 0.15, -0.5];
-      const tip = [s * 3.5, v * 0.42 - 0.35, -2.55];
-      P.push(blade([hinge, elbow, tip], 0.3, 0.16, WHITE, { mask: 1 }));
+      // upper/lower blades of the pair: out to the elbow beside the nose, then forward and outward
+      const hinge = [s * 0.7, v * 0.3, 1.3];
+      const elbow = [s * 1.6, v * 0.5, -0.4];
+      const tip = [s * 3.3, v * 0.62, -4.9];
+      P.push(blade([hinge, elbow, tip], 0.34, 0.16, WHITE, { mask: 1, root: 0.4 }));
       // laser cannon under the lower blade near the tip
-      if (v < 0)
-        P.push(
-          box(s * 3.05, -0.55, -1.9, 0.12, 0.12, 1.2, DROID_DARK),
-        );
+      if (v < 0) P.push(box(s * 2.75, -0.7, -3.6, 0.1, 0.1, 1.2, DROID_DARK));
     }
   }
   return merge(P);
@@ -858,7 +867,7 @@ function vulture() {
 // cannon. Dark grey-blue with light plates.
 function tri() {
   const P = [];
-  P.push(sphere(0, 0, 0.3, 1.0, DROID_MID, { ws: 8, hs: 4 }));
+  P.push(sphere(0, 0, 0.3, 1.0, DROID_MID, { ws: 10, hs: 5 }));
   P.push(torus(0, 0, 1.5, 1.3, 0.18, DROID_DARK, { radial: 3, tubular: 9 }));
   for (let i = 0; i < 3; i++) {
     const a = Math.PI / 2 + (i * Math.PI * 2) / 3; // one arm up, two down-and-out
@@ -870,10 +879,10 @@ function tri() {
       tube(
         [
           { p: at(1.3, 1.5), w: 0.36, t: 0.1, u: rad },
-          { p: at(1.85, 0.4), w: 0.46, t: 0.1, u: rad, color: WHITE, mask: 1 },
-          { p: at(1.9, -1.0), w: 0.44, t: 0.09, u: rad, color: WHITE, mask: 1 },
+          { p: at(1.85, 0.4), w: 0.56, t: 0.1, u: rad, color: WHITE, mask: 1 },
+          { p: at(1.9, -1.0), w: 0.5, t: 0.09, u: rad, color: WHITE, mask: 1 },
           { p: at(1.5, -2.3), w: 0.3, t: 0.08, u: rad },
-          { p: at(1.0, -3.2), w: 0.1, t: 0.06, u: rad },
+          { p: at(1.0, -3.2), w: 0.06, t: 0.04, u: rad },
         ],
         DROID_DARK,
       ),
@@ -900,87 +909,87 @@ function tri() {
 }
 
 // Hyena-class droid bomber (Baktoid): 12 m long. Reference facts (TCW stills): the Vulture's big brother
-// — a flat, wide wedge fuselage with the eye dome at the very front top and a smaller sensor dome behind
-// it to starboard, big hinge blocks at the rear flanks carrying two wing pairs of broad, thick blades
-// stacked with a gap, swept 30° forward so the tips reach ahead of the nose (span ≈ length), twin ion
-// drives at the tail and a bomb rack under the belly. Dark grey with lighter plates.
+// — a flat, wide wedge fuselage (3.3 m across, under 1 m deep) with a low brow at the front top carrying
+// the two red photoreceptor slits and a smaller sensor dome behind it to starboard, big hinge blocks at
+// the rear flanks carrying two wing pairs of broad, thick root-hinged blades stacked with a gap, swept
+// 30° forward so the tips reach ahead of the nose (span ≈ length), twin ion drives at the tail and a bomb
+// rack under the belly. Dark grey with lighter plates.
 function hyena() {
   const P = [];
   P.push(
     loft8(
       [
-        { z: -3.6, hw: 0.5, y0: -0.24, y1: 0.26 },
-        { z: -2.3, hw: 1.2, y0: -0.5, y1: 0.46 },
-        { z: -0.4, hw: 1.5, y0: -0.56, y1: 0.5 },
-        { z: 1.8, hw: 1.6, y0: -0.56, y1: 0.5 },
-        { z: 3.6, hw: 1.25, y0: -0.5, y1: 0.46 },
-        { z: 5.4, hw: 0.7, y0: -0.34, y1: 0.36 },
+        { z: -4.0, hw: 0.7, y0: -0.16, y1: 0.16 },
+        { z: -2.6, hw: 1.3, y0: -0.4, y1: 0.42 },
+        { z: -0.6, hw: 1.55, y0: -0.5, y1: 0.46 },
+        { z: 1.8, hw: 1.65, y0: -0.5, y1: 0.44 },
+        { z: 3.8, hw: 1.3, y0: -0.44, y1: 0.4 },
+        { z: 5.6, hw: 0.6, y0: -0.26, y1: 0.28 },
       ],
       WHITE,
       { capStart: true, capEnd: true, mask: 1, c: 0.4 },
     ),
   );
-  // eye dome at the front top and the sensor dome behind it to starboard
+  // low brow at the front top with the eye slits, and the sensor dome behind it to starboard
   P.push(
-    dome(0, 0.35, -2.4, 0.9, DROID_LIGHT, { ws: 6, hs: 2, sz: 1.35, sy: 1.0 }),
+    dome(0, 0.3, -2.6, 0.9, DROID_LIGHT, { ws: 6, hs: 2, sz: 1.4, sy: 0.45 }),
   );
   for (const s of [-1, 1])
-    P.push(box(s * 0.2, 0.75, -3.35, 0.1, 0.42, 0.14, RED_EYE, { emis: 0.9 }));
-  P.push(dome(0.9, 0.45, -0.3, 0.55, DROID_LIGHT, { ws: 6, hs: 2, sz: 1.3 }));
+    P.push(
+      box(s * 0.22, 0.5, -3.4, 0.1, 0.3, 0.12, RED_EYE, { emis: 0.9, rx: -0.5 }),
+    );
+  P.push(dome(1.0, 0.44, -0.4, 0.5, DROID_LIGHT, { ws: 6, hs: 2, sz: 1.3 }));
   // twin ion drives at the tail
   for (const s of [-1, 1]) {
-    P.push(cyl(s * 0.75, -0.02, 5.6, 0.42, 0.46, 1.0, DROID_DARK, { seg: 6 }));
-    P.push(disc(s * 0.75, -0.02, 6.11, 0.4, AMBER_ENGINE, { seg: 6, emis: 2.2 }));
+    P.push(cyl(s * 0.95, -0.02, 5.5, 0.42, 0.46, 1.0, DROID_DARK, { seg: 6 }));
+    P.push(disc(s * 0.95, -0.02, 6.01, 0.4, AMBER_ENGINE, { seg: 6, emis: 2.2 }));
   }
   // bomb rack under the belly
-  P.push(box(0, -0.8, 1.2, 1.7, 0.5, 3.0, DROID_DARK));
+  P.push(box(0, -0.75, 1.2, 1.7, 0.5, 3.0, DROID_DARK));
   for (const s of [-1, 1]) {
     // hinge block on the rear flank
-    P.push(box(s * 1.75, 0.0, 2.6, 0.7, 0.9, 1.6, DROID_DARK));
+    P.push(box(s * 1.8, 0.0, 2.8, 0.7, 0.9, 1.8, DROID_DARK));
     for (const v of [-1, 1]) {
-      const hinge = [s * 2.1, v * 0.42, 2.6];
-      const elbow = [s * 4.2, v * 0.6 + 0.1, 0.2];
-      const tip = [s * 5.9, v * 0.75 - 0.3, -5.6];
-      P.push(blade([hinge, elbow, tip], 0.62, 0.26, WHITE, { mask: 1 }));
+      const hinge = [s * 2.15, v * 0.45, 2.8];
+      const elbow = [s * 4.3, v * 0.62 + 0.05, 0.4];
+      const tip = [s * 6.0, v * 0.8 - 0.2, -5.8];
+      P.push(blade([hinge, elbow, tip], 0.9, 0.26, WHITE, { mask: 1, root: 0.75 }));
     }
   }
   return merge(P);
 }
 
 // HMP droid gunship (Baktoid Fleet Ordnance): 12.3 m long, 11 m wide, 3.1 m high. Reference facts (ICS
-// cutaway, TCW renders): a broad flat shield body — a rounded plan nearly as wide as it is long, widest
-// at 55 % of the length, narrowing to a blocky sensor head at the nose with a raised spine and two red
-// light bars; a big circular reactor cap on the dorsal centre-rear; the outer thirds of the body are the
-// drooping wings with missile racks below and the drives at the trailing edge; two 1.6 m spherical laser
-// turrets with twin barrels hang under the forward corners and a chin cannon under the head. Light grey
-// with blue-grey dorsal plating.
+// cutaway, TCW renders): an arrowhead shield body 7.6 m across — broadly rounded aft, widest at 60 % of
+// the length, narrowing to the blocky sensor head at the nose (raised spine, two red light bars, chin
+// cannon); a big circular reactor cap on the dorsal centre-rear; two broad, thick arms leave the flanks
+// and sweep 30° forward to the front corners, each ending in a 1.7 m spherical laser turret with twin
+// barrels hanging below and carrying a missile rack underneath; twin drives at the trailing edge. Light
+// grey with blue-grey dorsal plating.
 function hmp() {
   const P = [];
-  // plan outline (x, z), starboard half mirrored to port, from the nose clockwise
+  // shell plan outline (x, z), starboard half mirrored to port, from the nose clockwise
   const half = [
-    [0.0, -6.15],
-    [1.3, -5.85],
-    [2.7, -4.9],
-    [4.1, -3.3],
-    [5.15, -1.2],
-    [5.5, 1.0],
-    [5.0, 3.1],
-    [3.7, 4.9],
-    [1.9, 5.9],
+    [0.0, -4.6],
+    [1.5, -4.3],
+    [2.8, -3.2],
+    [3.6, -1.4],
+    [3.8, 0.8],
+    [3.4, 3.0],
+    [2.2, 4.6],
   ];
   const outline = [];
   for (const p of half) outline.push(p);
-  outline.push([0, 6.15]);
+  outline.push([0, 5.3]);
   for (let i = half.length - 1; i > 0; i--) outline.push([-half[i][0], half[i][1]]);
   P.push(
     shell(
       outline,
-      0,
+      0.4,
       [0.55],
-      (u) => (u === 0 ? 0.95 : u < 1 ? 0.7 : 0.16),
-      (u) => (u === 0 ? -0.85 : u < 1 ? -0.66 : -0.16),
+      (u) => (u === 0 ? 1.0 : u < 1 ? 0.8 : 0.12),
+      (u) => (u === 0 ? -0.7 : u < 1 ? -0.55 : -0.12),
       {
-        sag: (x) => 0.3 * (Math.abs(x) / 5.5) ** 2,
         top: [{ color: WHITE, mask: 1 }, { color: HMP_LIGHT }],
         bottom: [{ color: HMP_LIGHT }, { color: HMP_LIGHT }],
         rim: { color: DROID_MID },
@@ -988,25 +997,39 @@ function hmp() {
     ),
   );
   // reactor cap on the dorsal centre-rear
-  P.push(cyl(0, 0.95, 1.6, 2.0, 2.0, 0.3, DROID_DARK, { seg: 8, open: true }));
-  P.push(disc(0, 1.11, 1.6, 2.0, DROID_MID, { seg: 8, axis: "y" }));
-  // sensor head: blocky face with a raised spine and two red light bars, chin cannon below
-  P.push(box(0, -0.1, -5.7, 1.7, 1.0, 1.8, DROID_DARK));
-  P.push(box(0, 0.35, -5.9, 0.4, 0.5, 1.6, DROID_MID));
+  P.push(cyl(0, 0.9, 1.4, 1.9, 1.9, 0.3, DROID_DARK, { seg: 8, axis: "y" }));
+  P.push(disc(0, 1.06, 1.4, 1.9, DROID_MID, { seg: 8, axis: "y" }));
+  // sensor head: blocky face under the shell's nose with a raised spine and two red light bars, chin
+  // cannon below
+  P.push(box(0, -0.15, -5.3, 1.9, 1.1, 1.8, DROID_DARK));
+  P.push(box(0, 0.42, -5.2, 0.5, 0.5, 1.6, DROID_MID));
   for (const s of [-1, 1])
     P.push(
-      box(s * 0.55, 0.05, -6.62, 0.55, 0.08, 0.06, RED_EYE, { emis: 0.9, rz: s * 0.25 }),
+      box(s * 0.6, 0.05, -6.22, 0.6, 0.08, 0.06, RED_EYE, { emis: 0.9, rz: s * 0.25 }),
     );
-  P.push(box(0, -0.75, -5.6, 0.16, 0.16, 2.6, GUN));
+  P.push(box(0, -0.85, -5.6, 0.16, 0.16, 2.6, GUN));
   for (const s of [-1, 1]) {
-    // ball turret under the forward corner with twin barrels
-    P.push(sphere(s * 2.6, -1.05, -3.4, 0.8, DROID_MID, { ws: 6, hs: 3 }));
-    P.push(box(s * 2.42, -1.05, -5.0, 0.1, 0.1, 2.2, GUN));
-    P.push(box(s * 2.78, -1.05, -5.0, 0.1, 0.1, 2.2, GUN));
-    // missile rack under the wing and the drive at the trailing edge
-    P.push(box(s * 4.0, -0.75, 1.4, 1.1, 0.7, 2.6, DROID_DARK));
-    P.push(cyl(s * 2.6, -0.1, 5.0, 0.42, 0.46, 0.9, DROID_DARK, { seg: 6 }));
-    P.push(disc(s * 2.6, -0.1, 5.46, 0.4, BLUE_ENGINE, { seg: 6, emis: 2.0 }));
+    // swept arm: thick flat wing from the shell flank forward and outward to the turret pod
+    P.push(
+      tube(
+        [
+          { p: [s * 2.6, -0.05, 1.2], w: 1.5, t: 0.36 },
+          { p: [s * 4.4, -0.1, -2.0], w: 1.3, t: 0.32 },
+          { p: [s * 5.2, -0.2, -4.6], w: 0.9, t: 0.28 },
+        ],
+        HMP_LIGHT,
+      ),
+    );
+    // ball turret under the arm tip with twin barrels
+    P.push(sphere(s * 5.1, -0.8, -4.4, 0.85, DROID_MID, { ws: 6, hs: 3 }));
+    P.push(box(s * 4.9, -0.8, -6.0, 0.1, 0.1, 2.2, GUN));
+    P.push(box(s * 5.3, -0.8, -6.0, 0.1, 0.1, 2.2, GUN));
+    // missile rack under the arm and the drive at the trailing edge
+    P.push(
+      box(s * 4.1, -0.75, -1.3, 1.2, 0.6, 2.6, DROID_DARK, { ry: -s * 0.42 }),
+    );
+    P.push(cyl(s * 1.8, -0.15, 4.9, 0.42, 0.46, 1.0, DROID_DARK, { seg: 6 }));
+    P.push(disc(s * 1.8, -0.15, 5.41, 0.4, BLUE_ENGINE, { seg: 6, emis: 2.0 }));
   }
   return merge(P);
 }
@@ -1057,8 +1080,8 @@ export const FIGHTER_DEFS = {
     paint: [0x8e2c2a],
     engine: {
       pos: [
-        [-1.0, 0.62, 2.1],
-        [1.0, 0.62, 2.1],
+        [-1.0, 0.62, 2.45],
+        [1.0, 0.62, 2.45],
       ],
       size: 1.2,
       tail: 5,
@@ -1082,8 +1105,8 @@ export const FIGHTER_DEFS = {
     paint: [0xe0b83a],
     engine: {
       pos: [
-        [-0.85, -0.1, 2.6],
-        [0.85, -0.1, 2.6],
+        [-0.9, -0.08, 2.72],
+        [0.9, -0.08, 2.72],
       ],
       size: 1.1,
       tail: 6,
@@ -1106,8 +1129,8 @@ export const FIGHTER_DEFS = {
     paint: [0xb0362c],
     engine: {
       pos: [
-        [-0.85, -0.1, 2.6],
-        [0.85, -0.1, 2.6],
+        [-0.9, -0.08, 2.72],
+        [0.9, -0.08, 2.72],
       ],
       size: 1.1,
       tail: 6,
@@ -1128,7 +1151,7 @@ export const FIGHTER_DEFS = {
     spacing: 22,
     paint: [0x4a5262, 0x3e4552, 0x555c68, 0x434a58],
     engine: {
-      pos: [[0, -0.05, 1.9]],
+      pos: [[0, -0.02, 2.24]],
       size: 1.3,
       tail: 5,
       color: [1.0, 0.5, 0.2],
@@ -1169,8 +1192,8 @@ export const FIGHTER_DEFS = {
     paint: [0x3b3f47, 0x444952, 0x363a41],
     engine: {
       pos: [
-        [-0.75, -0.02, 6.2],
-        [0.75, -0.02, 6.2],
+        [-0.95, -0.02, 6.12],
+        [0.95, -0.02, 6.12],
       ],
       size: 1.6,
       tail: 4,
@@ -1195,8 +1218,8 @@ export const FIGHTER_DEFS = {
     paint: [0x3f5677, 0x36506e],
     engine: {
       pos: [
-        [-2.6, -0.1, 5.55],
-        [2.6, -0.1, 5.55],
+        [-1.8, -0.15, 5.52],
+        [1.8, -0.15, 5.52],
       ],
       size: 1.3,
       tail: 3,
