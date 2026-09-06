@@ -322,10 +322,13 @@ defects found by reading the wake shader against what a stopping hull does.
    function of `d`, the ribbon distance from the point to the hull, which equals speed x time only while the hull
    keeps going. When a hull slows or stops, the points just astern keep `d ~ 0`: the churn at the transom held its
    full density for the ribbon's whole life (30 s for a float, longer for a boat), decaying only with the ribbon
-   age term `life^2`, and the slick never let go of the hull. Numbers for a float stopping from 12 m/s (0.85
-   m/s^2, 14 s): the points laid at 6 m/s, 13 s after they were laid, sat 21 m behind the stopped hull, lane
-   density 0.128 x life^2 with the lane fade at 0.72; a hull that had kept going would have them 78 m astern, at
-   0.049 with the fade gone and the remnant patches at full weight, the slick at 0.37 instead of 1. Fixed: the
+   age term `life^2`, and the slick never let go of the hull. Numbers from the ribbon driven in Node
+   (`/tmp/waterphys/stopnode.mjs`: the float's WakeTrail from 12 m/s at -0.85 m/s^2, stopped at 14.1 s, the
+   foam pass's centreline density evaluated per ribbon point as the shader writes it): 6 s after the stop the
+   point laid at 5.6 m/s, 12.5 s earlier, lies 18 m astern with lane density 0.115 x life^2 (lane fade 0.75) and
+   the slick at 0.94; a hull that had kept going would have it 70 m astern, at 0.041 with the fade gone, the
+   remnant patches at full weight and the slick at 0.40. 11 s after the stop the old formula still holds a
+   full-strength slick (0.84-1.0) over the 50 m behind the hull. Under way the two agree within 10 %. Fixed: the
    vertex already carries the point's age (`vExt.y`, unused until now); the foam pass reads its decays at
    `dEq = max(d, speed * ageS)`, and the stern-slope envelope runs with the train (`d + shift`) as the height pass
    had it all along. A hull under way is unchanged (`d = speed * ageS` on a steady track, and an accelerating
