@@ -94,6 +94,9 @@ float cloudShadow(vec3 wp) {
   float k = (uCloudBase - wp.y) / max(uSunDir.y, 0.15);
   vec2 sp = wp.xz + uSunDir.xz * k;
   float c = cloudCoverage2D(sp);
+  // the raymarched cloud's footprint is cov^2 (sky.ts envelope: the soft fringe is shredded by the noise), so the
+  // shadow uses the same footprint instead of a wider, softer disc than the cloud that casts it
+  c *= c;
   return 1.0 - 0.72 * c * smoothstep(0.0, 0.25, uSunDir.y);
 }
 `;

@@ -84,6 +84,15 @@ in vec2 vUv;
 
 const float SIGMA = 0.03;         // extinction per metre at unit density (dense cumulus)
 const float NOISE_SCALE = 1.0 / 2600.0;
+// base relief: the base altitude is displaced by a perlin fetch (periods 325/162/81 m, normalised std 0.16), so
+// +-60 m one sigma, ~150 m extremes: sagging pouches and hanging rags instead of the ramp's iso-plane
+const float BASE_WARP = 380.0;
+// the base can sit this far below uCloudBase (cell-to-cell variation + the ~1 km undulation + the warp), so the
+// march and the light march start there instead of planing those cells off at uCloudBase
+float slabBottom() {
+  float deck = smoothstep(0.45, 0.7, uCloudCoverage);
+  return uCloudBase - mix(0.15, 0.25, deck) * (uCloudTop - uCloudBase) - BASE_WARP * 0.45;
+}
 
 // interleaved gradient noise: a pure function of the pixel position, so frames are reproducible
 float ign(vec2 px) { return fract(52.9829189 * fract(0.06711056 * px.x + 0.00583715 * px.y)); }
@@ -95,18 +104,42 @@ vec4 macroField(vec2 wp) {
   return texture(uCovTex, uv);
 }
 
-/** Vertical envelope of the layer (before noise): a flat base whose footprint is exactly cloudCoverage2D
+/** Smooth (pre-warp) base altitude of the column: varies between cells (f.z) with a ~1 km undulation (f.w) so
+ *  no base is a ruler line and neighbouring cumulus do not share one plane; a closed deck hangs its cells lower
+ *  still (stratocumulus: the underside is a field of sagging lumps, not a ceiling plane). */
+float baseAltitude(vec4 f) {
+  float thick = uCloudTop - uCloudBase;
+  float deck = smoothstep(0.45, 0.7, uCloudCoverage);
+  return uCloudBase + (f.z - 0.5) * mix(0.22, 0.34, deck) * thick + (f.w - 0.5) * mix(0.08, 0.16, deck) * thick;
+}
+
+vec3 noiseCoord(vec3 p, vec4 f) {
+  vec3 q = (p + vec3(uCloudWind.x, 0.0, uCloudWind.y)) * NOISE_SCALE;
+  // slow domain warp breaks the tiling of the 64^3 texture. Driven mainly by the ~10 km tower field: a warp of
+  // 0.9 tile per unit of the ~1 km turret field compressed the noise 3x horizontally along turret gradients and
+  // drew vertical drapery through every cloud once the channels had contrast
+  return q + vec3(f.y * 0.8 + f.w * 0.15, f.z * 0.25, f.y * 0.5 + f.w * 0.1);
+}
+
+/** Geometric relief of the base: the height coordinate is displaced by an isotropic perlin fetch, faded out
+ *  above a third of the slab so the crown keeps its own shape. hf0 = height fraction over the smooth base. */
+float baseWarp(vec3 q, float hf0) {
+  float fade = 1.0 - smoothstep(0.2, 0.35, hf0);
+  if (fade <= 0.0) return 0.0;
+  float n = texture(uNoise3D, q * 2.0 + vec3(0.23, 0.71, 0.47)).a;
+  return (n - 0.5) * BASE_WARP * fade;
+}
+
+/** Vertical envelope of the layer (before noise): a base whose footprint is exactly cloudCoverage2D
  *  (so the ground shadows still match), columns whose height is set by how far the raw field exceeds the
  *  threshold (cell interiors tower, edges stay low), by the slow "tower" field (some masses develop
  *  vertically, others stay flat) and by the ~1 km turret field. Returns coverage * vertical profile;
- *  hf = height fraction in the slab, hn = fraction of this column's own height, H = column height. */
-float envelope(vec3 p, vec4 f, out float hf, out float hn, out float H) {
+ *  hf = height fraction in the slab, hn = fraction of this column's own height, H = column height.
+ *  warp = base relief (m) added to the smooth base altitude. */
+float envelope(vec3 p, vec4 f, float warp, out float hf, out float hn, out float H) {
   float thick = uCloudTop - uCloudBase;
   float deck = smoothstep(0.45, 0.7, uCloudCoverage);
-  // base altitude: varies between cells (f.z) with a ~1 km undulation (f.w) so no base is a ruler line and
-  // neighbouring cumulus do not share one plane; a closed deck hangs its cells lower still (stratocumulus:
-  // the underside is a field of sagging lumps, not a ceiling plane)
-  float base = uCloudBase + (f.z - 0.5) * mix(0.22, 0.34, deck) * thick + (f.w - 0.5) * mix(0.08, 0.16, deck) * thick;
+  float base = baseAltitude(f) + warp;
   hf = (p.y - base) / thick;
   float d = f.x - cloudThreshold();
   // base footprint (identical to cloudCoverage2D, so the ground shadows match)
@@ -122,42 +155,43 @@ float envelope(vec3 p, vec4 f, out float hf, out float hn, out float H) {
   // the turret field alone: give it a wider range so the underside shows thick dark cells and thin bright gaps
   H = clamp(H * mix(mix(0.55, 0.28, deck), 1.1, f.w), 0.05, 1.0);
   hn = hf / H;
-  // cumulus keep a fairly flat base, but a soft enough one for the shape noise to hang lumps and rags from
-  // it (a hard ramp read as bases sliced by a plane); a closed deck gets a softer one carved into hanging
-  // cells. The upper two thirds of the column are a soft ramp the shape noise cuts into cauliflower lobes.
-  // The ramp is capped at a fraction of the column's own height: a low tuft is otherwise all ramp and the
-  // noise shreds it into drifting fragments.
-  float baseRamp = min(mix(0.13, 0.22, deck), 0.35 * H);
+  // the condensation level is sharp: a short ramp (150 m on a 2.2 km slab) that the base warp bends into pouches
+  // and the noise rags; the old 290 m ramp read as bases sliced by a plane because its iso-surface was the base.
+  // A closed deck gets a softer one carved into hanging cells. The upper two thirds of the column are a soft ramp
+  // the shape noise cuts into cauliflower lobes. The ramp is capped at a fraction of the column's own height:
+  // a low tuft is otherwise all ramp and the noise shreds it into drifting fragments.
+  float baseRamp = min(mix(0.07, 0.16, deck), 0.35 * H);
   float v = smoothstep(0.0, baseRamp, hf) * (1.0 - smoothstep(0.25, 1.0, hn)) * (1.0 - smoothstep(0.9, 1.0, hf));
   // cov^2: the soft footprint fringe thins out for the noise to shred instead of forming a plate
   return cov * cov * v;
 }
 
-vec3 noiseCoord(vec3 p, vec4 f) {
-  vec3 q = (p + vec3(uCloudWind.x, 0.0, uCloudWind.y)) * NOISE_SCALE;
-  // slow domain warp breaks the tiling of the 64^3 texture
-  return q + vec3(f.w * 0.9, f.z * 0.53, f.w * 0.6);
-}
-
-/** Shape-eroded density: solid interiors, cauliflower lobes where the envelope thins (top and edges). */
+/** Shape-eroded density: solid interiors, cauliflower lobes where the envelope thins (top and edges).
+ *  The noise channels are normalised (mean 0.5, std 0.16); the composite shape term is given a 1.3 gain so a
+ *  one-sigma lobe moves the surface by a useful fraction of the envelope. */
 float shapeDensity(float e, float hn, vec4 n) {
-  float shape = clamp((n.r * 0.6 + n.g * 0.25 + n.a * 0.15 - 0.3) / 0.7, 0.0, 1.0);
+  float shape = 0.5 + (n.r * 0.6 + n.g * 0.25 + n.a * 0.15 - 0.5) * 1.3;
   // bases are mottled and ragged (hanging fragments, holes where the column is thin); the erosion grows
   // toward the top where it carves the lobes
-  float erosion = mix(0.8, 1.3, clamp(hn, 0.0, 1.0));
+  float erosion = mix(0.9, 1.3, clamp(hn, 0.0, 1.0));
   return e * 1.2 - (1.0 - shape) * erosion;
 }
 
 /** Expected noised density for an envelope value (what shapeDensity averages to over the noise): the
  *  envelope alone would count the soft fringe outside the visible surface as cloud. */
-float meanDensity(float e, float hn) { return clamp(e * 1.2 - 0.5 * mix(0.8, 1.3, clamp(hn, 0.0, 1.0)), 0.0, 1.0); }
+float meanDensity(float e, float hn) { return clamp(e * 1.2 - 0.5 * mix(0.9, 1.3, clamp(hn, 0.0, 1.0)), 0.0, 1.0); }
 
-/** Density without edge detail (used by the light march). */
+/** Density without edge detail (used by the light march); the base relief is included so the pouches shade
+ *  one another. */
 float densityBase(vec3 p, vec4 f) {
+  float thick = uCloudTop - uCloudBase;
+  float hf0 = (p.y - baseAltitude(f)) / thick;
+  if (hf0 > 1.0 || hf0 < -BASE_WARP * 0.5 / thick) return 0.0;
+  vec3 q = noiseCoord(p, f);
   float hf, hn, H;
-  float e = envelope(p, f, hf, hn, H);
+  float e = envelope(p, f, baseWarp(q, hf0), hf, hn, H);
   if (e <= 0.002) return 0.0;
-  vec4 n = texture(uNoise3D, noiseCoord(p, f));
+  vec4 n = texture(uNoise3D, q);
   return clamp(shapeDensity(e, hn, n), 0.0, 1.0);
 }
 
@@ -165,20 +199,23 @@ float densityBase(vec3 p, vec4 f) {
  *  lighting can mottle the undersides without another fetch. detFade (0..1) relaxes the erosion toward its
  *  mean where the march step is far longer than the detail noise's ~10-30 m features: sampled that
  *  coarsely the detail only adds grain that re-rolls as the camera moves, not shape. */
-float densityFull(vec3 p, vec4 f, float e, float hn, float detFade, out float mott) {
-  vec3 q = noiseCoord(p, f);
-  vec4 n = texture(uNoise3D, q);
+float densityFull(vec3 q, vec4 n, float e, float hf, float hn, float detFade, out float mott) {
   mott = n.a;
   float d = shapeDensity(e, hn, n);
   if (d <= 0.0) return 0.0;
-  // worley erosion, billowy lobes at the base and sides, wispier toward the top
+  // worley erosion: billowy lobes on the sides, wispier toward the top. In the thin part of the base zone the
+  // worley is inverted (holes at the feature points, cloud left along the cell walls): rags, scud and fraying
+  // fringes hang under the base instead of round bumps; the dense interior of the base keeps its lumps
   float det = texture(uNoise3D, q * 3.0 + vec3(0.37, 0.11, 0.73)).g;
   float wisp = texture(uNoise3D, q * 5.0 + vec3(0.61, 0.29, 0.17)).b;
+  float baseZone = (1.0 - smoothstep(0.0, 0.12, hf)) * (1.0 - smoothstep(0.3, 0.9, e)) * 0.7;
+  det = mix(det, 1.0 - det, baseZone);
   float er = mix(mix(det, wisp, smoothstep(0.45, 1.0, hn)), 0.5, detFade);
   // remap (rather than subtract) so eroded edges keep a steep density gradient: crisp cauliflower lobes
   float k = 0.5 * (1.0 - er);
   d = (d - k) / (1.0 - k);
-  return clamp(d * 2.5, 0.0, 1.0);
+  // a slightly softer density ramp in the base zone: rags stay translucent instead of cutting to opaque
+  return clamp(d * mix(2.0, 2.5, smoothstep(0.0, 0.15, hf)), 0.0, 1.0);
 }
 
 /** Optical depth toward the light. Three short steps sample the noised density (lobes shadow their
@@ -192,12 +229,13 @@ float lightOD(vec3 p, vec3 L, float H, float hf) {
   float t = 0.0;
   float s = 24.0;
   float last = 0.0;
+  float bottom = slabBottom();
   for (int i = 0; i < 6; i++) {
     vec3 q = p + L * (t + s * 0.5);
-    if (q.y > uCloudTop + 1.0 || q.y < uCloudBase - 300.0) break;
+    if (q.y > uCloudTop + 1.0 || q.y < bottom) break;
     vec4 f = macroField(q.xz);
     if (i < 3) last = densityBase(q, f);
-    else { float qhf, qhn, qH; last = meanDensity(envelope(q, f, qhf, qhn, qH), qhn); }
+    else { float qhf, qhn, qH; last = meanDensity(envelope(q, f, 0.0, qhf, qhn, qH), qhn); }
     od += last * s;
     t += s;
     s *= 2.0;
@@ -214,14 +252,19 @@ float hgN(float c, float g) { float g2 = g * g; return (1.0 - g2) / pow(1.0 + g2
 float phase2(float c, float k) { return mix(hgN(c, 0.74 * k), hgN(c, -0.2 * k), 0.42); }
 // Beer-Lambert with a cheap multiple-scattering approximation: 3 octaves of attenuated extinction, each
 // with a flatter phase (light that has scattered several times has lost its direction, so the forward
-// peak toward a low sun lights the rims but not the shadowed cores). The slow tail keeps the shaded
-// walls at ~25 % of the lit crown while the base of a tall tower (~25 units of optical depth) drops to ~5 %.
+// peak toward a low sun lights the rims but not the shadowed cores). Cumulus: the shaded walls stay at
+// ~20 % of the lit crown (od 4), the base of a 500 m tower (od 6-9 along the sun) at 7-13 %, the base of a
+// tall tower (od 25) at ~0.5 % (ambient only). The old tail (0.20 e^-0.06 od) returned 14 % of the sun at od 6
+// and lit every base to a pale sRGB ~205 marshmallow; a real fair-weather base sits at sRGB 110-160.
 // Under a closed deck only the underside is ever seen, so the slow tail (what reaches it through the whole
-// sheet) is what sets its brightness: a smaller, faster-decaying tail gives an overcast a mid-grey ceiling
+// sheet) is what sets its brightness: a small, faster-decaying tail gives an overcast a mid-grey ceiling
 // with dark thick cells and bright thin patches instead of a near-white sheet.
 vec3 scatter(float od, float c) {
   float deck = smoothstep(0.45, 0.7, uCloudCoverage);
-  return vec3(0.44 * exp(-od) * phase2(c, 1.0), 0.36 * exp(-0.25 * od) * phase2(c, 0.5), mix(0.20, 0.085, deck) * exp(-mix(0.06, 0.09, deck) * od) * phase2(c, 0.2));
+  float p1 = phase2(c, 1.0), p2 = phase2(c, 0.5), p3 = phase2(c, 0.2);
+  vec3 cumulus = vec3(0.478 * exp(-od) * p1, 0.37 * exp(-0.3 * od) * p2, 0.152 * exp(-0.2 * od) * p3);
+  vec3 sheet = vec3(0.44 * exp(-od) * p1, 0.36 * exp(-0.25 * od) * p2, 0.085 * exp(-0.09 * od) * p3);
+  return mix(cumulus, sheet, deck);
 }
 
 void main() {
@@ -246,9 +289,10 @@ void main() {
   vec3 col = vec3(0.0);
   float ro_y = uCamPos.y;
   float t0 = -1.0, t1 = -1.0;
-  float tb = (uCloudBase - ro_y) / dir.y;
+  float bottom = slabBottom();
+  float tb = (bottom - ro_y) / dir.y;
   float tt = (uCloudTop - ro_y) / dir.y;
-  if (ro_y < uCloudBase) { if (dir.y > 0.008) { t0 = tb; t1 = tt; } }
+  if (ro_y < bottom) { if (dir.y > 0.008) { t0 = tb; t1 = tt; } }
   else if (ro_y > uCloudTop) { if (dir.y < -0.008) { t0 = tt; t1 = tb; } }
   else { t0 = 0.0; t1 = dir.y > 0.0 ? tt : tb; }
   float meanDist = 0.0;
@@ -257,14 +301,16 @@ void main() {
     float pathLen = t1 - t0;
     // three step sizes: coarse through clear air, fine inside the envelope, and a surface step that
     // resolves the silhouette while the ray is still mostly transparent. The fine step is budget-limited
-    // over the slab crossing and grows with distance (pixel footprint).
+    // over the slab crossing and grows with distance (pixel footprint). The budget share assumes most of a
+    // long crossing is skipped at the coarse step (only the columns are marched finely).
     float budget = uCloudSteps * 8.0;
-    float dtF = max(pathLen / (budget * 0.6), 36.0 + t0 * 0.003);
+    float dtF = max(pathLen / (budget * 0.8), 36.0 + t0 * 0.003);
     float dtC = dtF * 3.0;
     float dtS = dtF * (1.0 / 3.0);
     float t = t0 + ign(gl_FragCoord.xy) * dtF;
     // long steps (grazing rays through a wide slab, low step budgets) cannot resolve the detail erosion
     float detFade = smoothstep(70.0, 220.0, dtF);
+    float thick = uCloudTop - uCloudBase;
 
     float cosSun = dot(dir, L);
     float forward = smoothstep(0.3, 0.95, cosSun);
@@ -285,7 +331,8 @@ void main() {
     // scattering across the whole sheet): its underside floor is higher and its cells contrast more
     float deck = smoothstep(0.45, 0.7, uCloudCoverage);
     float aoFloor = mix(0.12, 0.2, deck);
-    vec2 mottRange = mix(vec2(0.6, 1.3), vec2(0.38, 1.5), deck);
+    // the mottling noise is normalised (std 0.16, 2.5x the old raw amplitude): a narrower range keeps the same swing
+    vec2 mottRange = mix(vec2(0.72, 1.2), vec2(0.5, 1.4), deck);
 
     int level = 0;          // 0 coarse, 1 fine, 2 surface
     int empty = 0;
@@ -297,9 +344,18 @@ void main() {
       if (float(i) >= budget || t > t1 || T < 0.01) break;
       vec3 p = uCamPos + dir * t;
       vec4 f = macroField(p.xz);
+      // cheap rejection on the smooth envelope before any noise fetch: outside the footprint, above the
+      // column or below the deepest possible base (warp included)
+      float hf0 = (p.y - baseAltitude(f)) / thick;
+      float covTest = f.x - cloudThreshold();
       float hf, hn, H;
-      float e = envelope(p, f, hf, hn, H);
-      e *= 1.0 - smoothstep(0.0, 1.0, (t - farFade0) * farFadeK);
+      float e = 0.0;
+      vec3 q = vec3(0.0);
+      if (covTest > 0.0 && hf0 < 1.0 && hf0 > -BASE_WARP * 0.5 / thick) {
+        q = noiseCoord(p, f);
+        e = envelope(p, f, baseWarp(q, hf0), hf, hn, H);
+        e *= 1.0 - smoothstep(0.0, 1.0, (t - farFade0) * farFadeK);
+      }
       if (e <= 0.004) {
         // clear air: fall back to coarse steps after a couple of empty samples
         if (level > 0) { empty++; if (empty > 2) level = 0; }
@@ -313,7 +369,8 @@ void main() {
         continue;
       }
       float mott;
-      float dens = densityFull(p, f, e, hn, detFade, mott);
+      vec4 n = texture(uNoise3D, q);
+      float dens = densityFull(q, n, e, hf, hn, detFade, mott);
       if (dens <= 0.003) {
         empty++;
         if (level == 2 && empty > 1) level = 1;
@@ -340,7 +397,6 @@ void main() {
       // (the crown is open to the sky, the flat base of a tall tower sees almost none of it; thin cells
       // stay bright underneath). The overhead thickness is modulated by the low-frequency shape noise so
       // the bases read as mottled (hollows between the lobes let more light through), not an even grey.
-      float thick = uCloudTop - uCloudBase;
       float above = max(H - hf, 0.0) * thick * mix(1.3, 0.6, mott);
       float below = max(hf, 0.0) * thick * mix(1.3, 0.6, mott);
       // walls: a sample near the outer surface (envelope well below 1) sees half the sky sideways
@@ -376,6 +432,32 @@ void main() {
   } else {
     alpha = 0.0;
     col = vec3(0.0);
+  }
+
+  // ---- thin high veil (cirrus) behind the cumulus: a 2D layer at 9 km in the fair-weather presets so the sky
+  // above the cumulus is not an empty gradient. Fibres run along the wind (anisotropic domain, ~8:1), patches
+  // of ~40 km come from a low-frequency mask, and the layer drifts faster than the cumulus (jet-level wind).
+  float cirrusAmount = 1.0 - smoothstep(0.35, 0.55, uCloudCoverage);
+  if (cirrusAmount > 0.0 && dir.y > 0.015 && uCamPos.y < 8500.0 && alpha < 0.999) {
+    float tc = (9000.0 - uCamPos.y) / dir.y;
+    vec2 cp = uCamPos.xz + dir.xz * tc + uCloudWind * 2.5;
+    const vec2 wd = vec2(0.9439, 0.3303);                 // Atmosphere.windDir
+    vec2 fc = vec2(dot(cp, wd), dot(cp, vec2(-wd.y, wd.x)));
+    float mask = texture(uNoise3D, vec3(fc.x / 60000.0, 0.13, fc.y / 22000.0)).a;
+    float fib = texture(uNoise3D, vec3(fc.x / 24000.0 + 0.5, 0.67, fc.y / 2600.0)).b;
+    float fib2 = texture(uNoise3D, vec3(fc.x / 9000.0 + 0.2, 0.41, fc.y / 900.0)).b;
+    float veil = smoothstep(0.42, 0.85, mask + (fib - 0.5) * 0.9 + (fib2 - 0.5) * 0.5);
+    // optically thin (od ~0.1-0.4): ice crystals scatter strongly forward (bright near the sun) plus a diffuse
+    // share; the aerial perspective to 9 km takes the low veil into the horizon haze
+    float ac = veil * 0.34 * cirrusAmount * smoothstep(0.015, 0.1, dir.y);
+    if (ac > 0.001) {
+      float cosSun = dot(dir, L);
+      vec3 skyAmbC = mix(uZenithColor, uHazeColor, 0.5);
+      vec3 cCol = lightCol * (0.07 + 0.09 * min(hgN(cosSun, 0.75), 6.0)) + skyAmbC * 0.6;
+      cCol = applyAerial(cCol, uCamPos, uCamPos + dir * tc);
+      col += (1.0 - alpha) * ac * cCol;
+      alpha += (1.0 - alpha) * ac;
+    }
   }
   gl_FragColor = vec4(col, 1.0 - alpha);
 }
