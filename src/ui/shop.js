@@ -70,6 +70,7 @@ export class ShopUI {
     this.walletNote = h('span', { class: 'sh-wallet-note', id: 'sh-wallet-note' });
     this.closeBtn = h('button', { class: 'sh-close', type: 'button', title: 'Close (Esc)', 'aria-label': 'Close', text: '\u00d7', onclick: () => this.game.closeScreen() });
     this.greetEl = h('p', { class: 'sh-greeting', id: 'sh-greeting' });
+    this.marketEl = h('p', { class: 'sh-market', id: 'sh-market', hidden: true });   // v2: menu / waiting-for / district notice
     this.goodsEl = h('div', { class: 'sh-grid', id: 'sh-goods' });
     this.goodsTitle = h('h3', { text: 'For sale' });
     this.goodsSec = h('section', { class: 'sh-section', id: 'sh-goods-section' }, this.goodsTitle, this.goodsEl);
@@ -88,7 +89,7 @@ export class ShopUI {
         h('div', { class: 'sh-title' }, this.titleEl, this.subEl),
         h('div', { class: 'sh-wallet', title: 'Your wallet (Republic credits)' }, h('span', { class: 'sh-chip' }), this.walletEl, h('span', { text: ' cr' }), this.walletNote),
         this.closeBtn),
-      h('div', { class: 'sh-body' }, this.greetEl, this.activeEl, this.jobsSec, this.goodsSec, this.ownedEl, this.invSec),
+      h('div', { class: 'sh-body' }, this.greetEl, this.marketEl, this.activeEl, this.jobsSec, this.goodsSec, this.ownedEl, this.invSec),
       h('footer', { class: 'sh-footer' }, this.flashEl, this.hintEl));
     this.root.addEventListener('keydown', (e) => e.stopPropagation());
     this.root.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -130,6 +131,7 @@ export class ShopUI {
     this.titleEl.textContent = p.name;
     this.subEl.textContent = `${CATEGORY_LABEL[p.category] || p.category} \u00b7 ${KIND_LABEL(p.kind)} \u00b7 ${fmtHours(p.hours)} \u00b7 ${status}${mult !== 1 ? ` \u00b7 district prices \u00d7${mult}` : ''}`;
     this.greetEl.textContent = c.npc ? `<${c.npc.name}> ${p.greeting}` : `\u201c${p.greeting}\u201d`;
+    this.renderMarket();
     this.renderOwned();
     if (c.mode === 'jobs') {
       this.jobsSec.hidden = false; this.goodsSec.hidden = true; this.invSec.hidden = true;
@@ -142,6 +144,24 @@ export class ShopUI {
       this.renderInventory();
       this.hintEl.textContent = 'Left-click buys 1 \u00b7 Shift+click buys 8 \u00b7 click your items to sell \u00b7 Esc closes';
     }
+  }
+
+  // Visible economic state (rubric 15 #13): what is off the menu, what the business is waiting for, the district's
+  // latest notice. Hidden for vendors without a Business record (or with ?economy=0).
+  renderMarket() {
+    const c = this.ctx, eco = this.eco, p = c.purpose;
+    const b = eco.bizOf ? eco.bizOf(p.id) : null;
+    if (!b || c.mode === 'jobs') { this.marketEl.hidden = true; this.marketEl.replaceChildren(); return; }
+    const bits = [];
+    const menu = eco.menuFor(p.id);
+    if (menu && b.role === 'food') bits.push(h('span', { class: 'sh-market-menu', id: 'sh-menu', text: menu.off.length ? `Off the menu today: ${menu.off.map((k) => (GOODS[k] && GOODS[k].label) || k.replace(/_/g, ' ')).join(', ')}` : 'Everything on the menu is in stock' }));
+    const w = eco.waitingFor(p.id);
+    if (w) bits.push(h('span', { class: 'sh-market-wait', id: 'sh-waiting', text: w.text }));
+    const n = eco.noticeFor(p.district);
+    if (n && n.items.length) bits.push(h('span', { class: 'sh-market-notice', id: 'sh-notice', text: `${p.district} noticeboard: ${n.items[0].text}` }));
+    bits.push(h('span', { class: 'sh-market-funds', id: 'sh-funds', text: `Till: ${fmt(b.funds)} cr \u00b7 ${b.units()} units in stock \u00b7 ${b.suppliers.length} supplier${b.suppliers.length === 1 ? '' : 's'}` }));
+    this.marketEl.replaceChildren(...bits);
+    this.marketEl.hidden = false;
   }
 
   renderOwned() {
@@ -166,15 +186,19 @@ export class ShopUI {
       const price = eco.priceOf(p, entry);
       if (g.service) { this.goodsEl.append(this.serviceCard(p, entry, g, price)); continue; }
       const stock = eco.stockOf(p.id, entry);
+      const q = eco.quote ? eco.quote(p.id, entry.item) : null;   // v2: both quotes and the scarcity factor
+      const trend = q && q.factor > 1.05 ? ' \u2191' : q && q.factor < 0.95 ? ' \u2193' : '';
+      const stockText = stock > 0 ? `${stock} in stock${q && q.target ? ` / ${q.target}` : ''}` : (q ? 'sold out - awaiting shipment' : 'sold out');
       const card = h('button', {
         class: 'sh-card' + (stock <= 0 ? ' sh-soldout' : '') + (!eco.canAfford(price) ? ' sh-poor' : ''), type: 'button',
-        title: `${displayName(g.id)} - ${price} cr each - ${stock} in stock (restocks daily). Click: buy 1, Shift+click: buy 8.`,
+        title: `${displayName(g.id)} - ${price} cr each - ${stock} in stock${q ? ` (asking \u00d7${q.factor.toFixed(2)}${q.disruption ? `, disruption ${q.disruption > 0 ? '+' : ''}${q.disruption.toFixed(2)}` : ''}; ${q.sell != null ? `buys back at ${q.sell} cr` : 'does not buy this back'})` : ' (restocks daily)'}. Click: buy 1, Shift+click: buy 8.`,
         onclick: (e) => { eco.buy(p, entry, e.shiftKey ? 8 : 1); },
       },
       itemIcon(g.id),
       h('span', { class: 'sh-name', text: displayName(g.id) }),
-      h('span', { class: 'sh-price' }, h('span', { class: 'sh-chip sh-chip-sm' }), `${price} cr`),
-      h('span', { class: 'sh-stock', text: stock > 0 ? `${stock} in stock` : 'sold out' }));
+      h('span', { class: 'sh-price' }, h('span', { class: 'sh-chip sh-chip-sm' }), `${price} cr${trend}`),
+      h('span', { class: 'sh-stock', text: stockText }),
+      q && q.sell != null ? h('span', { class: 'sh-quote', text: `buys at ${q.sell}` }) : null);
       this.goodsEl.append(card);
     }
   }

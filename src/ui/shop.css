@@ -191,3 +191,10 @@
   .sh-hint { display: none; }
   .sh-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
 }
+
+/* economy v2: visible state (menu, waiting-for, district noticeboard, the till) and the buy-back quote on cards */
+.sh-market { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; line-height: 1.4; color: var(--sh-dim); padding: 6px 10px; background: var(--sh-well); border-left: 3px solid var(--sh-dim); margin: 0; }
+.sh-market-menu { color: var(--sh-text); }
+.sh-market-wait { color: var(--sh-red); }
+.sh-market-notice { color: var(--sh-gold); }
+.sh-quote { font-size: 11px; color: var(--sh-green); }

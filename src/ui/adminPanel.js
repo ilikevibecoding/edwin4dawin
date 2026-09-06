@@ -319,6 +319,9 @@ export class AdminPanel {
     this.ecoHint = h('p', { class: 'ap-help', id: 'ap-eco-hint', text: 'Wallet: n/a' });
     this.btnGrant = h('button', { class: 'ap-btn', id: 'ap-btn-grant', type: 'button', text: 'Grant 10,000 credits', title: 'Adds 10,000 Republic credits to your wallet', onclick: () => this._onGrant() });
     this.btnEcoReset = h('button', { class: 'ap-btn', id: 'ap-btn-eco-reset', type: 'button', text: 'Reset economy', title: 'Wallet back to 250, no ships, no apartment, fresh vendor stock, no job', onclick: () => this._onEcoReset() });
+    // economy v2 (rubric 15 #13): ledger totals, businesses by funds / stock, shipments in transit, sample quotes, day
+    this.ecoCity = h('pre', { class: 'ap-help ap-eco-city', id: 'ap-eco-city', text: '' });
+    this.lastEcoCityAt = 0;
     this.developer = h('details', { class: 'ap-disclosure', id: 'ap-developer' },
       h('summary', {}, h('span', { text: 'Developer' }), this.perfEl),
       h('div', { class: 'ap-disclosure-body' },
@@ -334,7 +337,8 @@ export class AdminPanel {
         h('div', { class: 'ap-dev-block', id: 'ap-economy' },
           h('div', { class: 'ap-dev-head' }, h('span', { class: 'ap-dev-title', text: 'Economy' })),
           this.ecoHint,
-          h('div', { class: 'ap-btn-row' }, this.btnGrant, this.btnEcoReset)),
+          h('div', { class: 'ap-btn-row' }, this.btnGrant, this.btnEcoReset),
+          this.ecoCity),
         this.statsEl));
     this.developer.addEventListener('toggle', () => { if (this.store.ui.developer !== this.developer.open) { this.store.ui.developer = this.developer.open; this._scheduleSave(); } });
 
@@ -995,6 +999,40 @@ export class AdminPanel {
     if (!eco) { setText(this.ecoHint, 'Wallet: n/a'); return; }
     const s = eco.summary();
     setText(this.ecoHint, `Wallet: ${fmtInt(s.credits)} cr${s.mode === 'creative' ? ' (creative: never charged)' : ''} \u00b7 ships: ${s.ships.length ? s.ships.join(', ') : 'none'} \u00b7 apartment: ${s.apartment || 'none'} \u00b7 job: ${s.job || 'none'}`);
+    this._refreshEconomyCity();
+  }
+  // The city section of the Developer footer, at most once a second: the honest ledger (sources / sinks / conservation),
+  // the richest and the poorest businesses, the biggest stocks, shipments by state and the first few in transit, sample
+  // quotes and the day counter. Text only, so it stays cheap while the panel is open.
+  _refreshEconomyCity() {
+    const eco = this.game.economy;
+    if (!this.ecoCity) return;
+    if (!eco || !eco.v2) { setText(this.ecoCity, eco ? 'City economy: off (?economy=0) - wallet and daily stock only.' : ''); return; }
+    const now = performance.now();
+    if (now - this.lastEcoCityAt < 1000) return;
+    this.lastEcoCityAt = now;
+    const v = eco.v2, r = eco.cityReport(), L = r.ledger;
+    const cat = (o) => Object.entries(o).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${fmtInt(n)}`).join(', ') || '-';
+    const byFunds = v.businesses.slice().sort((a, b) => b.funds - a.funds);
+    const byStock = v.businesses.slice().sort((a, b) => b.stockValue() - a.stockValue()).slice(0, 4);
+    const live = eco.shipments().filter((x) => x.state !== 'ordered').slice(0, 5);
+    const shipLine = (x) => `${x.id} ${x.state} ${x.goods.map((g) => `${g.qty} ${g.good}`).join('+') || 'order'} ${x.from === 'offworld' ? 'offworld' : '#' + x.from}->#${x.to} by ${x.carrier.kind}${x.carrier.name ? ' ' + x.carrier.name : ''}${x.held ? ' HELD' : ''}${x.detained ? ' DETAINED' : ''}`;
+    const diner = v.businesses.find((b) => b.kind === 'diner'), depot = v.businesses.find((b) => b.kind === 'depot'), clinic = v.businesses.find((b) => b.kind === 'clinic');
+    const q = (b, g) => { if (!b) return ''; const x = v.quote(b, g); return x ? `${b.name}: ${g} buy ${x.buy ?? '-'} / sell ${x.sell ?? '-'} (stock ${x.stock}/${x.target}, x${x.factor})` : ''; };
+    const up = r.uptime;
+    setText(this.ecoCity, [
+      `Day ${r.day} ${String(Math.floor(r.hour)).padStart(2, '0')}:${String(Math.floor((r.hour % 1) * 60)).padStart(2, '0')} \u00b7 ${r.businesses} businesses \u00b7 ${r.households} households (${r.residents} residents) \u00b7 W = ${fmtInt(r.wealth)} cr (funds ${fmtInt(r.funds)} + stock ${fmtInt(r.stockValue)} + wallet ${fmtInt(r.player)} + cargo)`,
+      `Ledger: sources ${fmtInt(L.sourceSum)} - sinks ${fmtInt(L.sinkSum)} = ${fmtInt(L.net)} \u00b7 ${fmtInt(L.entries)} entries \u00b7 conservation drift ${fmtInt(v.drift())} cr`,
+      `  sources: ${cat(L.sources)}`,
+      `  sinks:   ${cat(L.sinks)}`,
+      `Today: ${r.today.meals} meals (${r.today.unmetMeals} unmet), ${r.today.treatments} treatments, ${r.today.delivered}/${r.today.created} shipments delivered, ${r.today.unloads} freighter unloadings \u00b7 uptime medical ${Math.round((up.medical ?? 1) * 100)}% utility ${Math.round((up.utility ?? 1) * 100)}% transit ${Math.round((up.transit ?? 1) * 100)}%`,
+      `Richest: ${byFunds.slice(0, 3).map((b) => `${b.name} ${fmtInt(b.funds)}`).join(', ')} \u00b7 poorest: ${byFunds.slice(-3).map((b) => `${b.name} ${fmtInt(b.funds)}`).join(', ')}`,
+      `Biggest stocks: ${byStock.map((b) => `${b.name} ${fmtInt(b.stockValue())} cr (${fmtInt(b.units())} u)`).join(', ')}`,
+      `Shipments: ${Object.entries(r.byState).map(([k, n]) => `${k} ${n}`).join(', ') || 'none'}${r.holds.length ? ` \u00b7 held freighters: ${r.holds.map(([i, h]) => `ship ${i} (${h.reason}, ${h.bill} cr)`).join(', ')}` : ''}${r.crates ? ` \u00b7 crates ${r.crates.instances} in ${r.crates.drawCalls} draw call` : ''}`,
+      ...live.map((x) => `  ${shipLine(x)}`),
+      `Quotes: ${[q(diner, 'bread'), q(depot, 'staples'), q(clinic, 'medical')].filter(Boolean).join(' \u00b7 ')}`,
+      `Notices: ${r.notices.filter((n) => n.items.length).map((n) => `${n.district}: ${n.items[0].text}`).join(' | ') || 'none'}`,
+    ].join('\n'));
   }
 
   _onLiveIntensity() {
