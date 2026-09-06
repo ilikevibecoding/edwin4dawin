@@ -11,3 +11,4 @@ merged facade3: c4e85411 Facades: the probe's sun aureole stood in the mirrored 
 merged veg5: 25446639 Vegetation loop 6 WIP (round 14, runtime verification pending): the understory draws its s
 merged terrain5: f4c324f8 terrain5 report: round 3 defect entry
 build: 637747df from /home/ubuntu/wt-integration
+cdn: pinned data.json serves h04
