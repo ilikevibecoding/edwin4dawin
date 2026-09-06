@@ -10,9 +10,13 @@ import { initBlocks, B, BLOCKS, SHAPE } from '../src/blocks.js';
 import { blueprintFor, buildBlueprint, blueprintCacheSize, clearBlueprintCache, roomList, FAMILIES } from '../src/coruscant/buildings.js';
 import { getLayout, LEVELS } from '../src/coruscant/layout.js';
 import { FORCE_AIR } from '../src/coruscant/blueprint.js';
-import { lotCrown, resolveFamily, DISTRICT_MIX } from '../src/coruscant/towers/index.js';
+import { lotCrown, resolveFamily, DISTRICT_MIX, VARIETY_RADIUS } from '../src/coruscant/towers/index.js';
 import { CROWN_STYLES, CROWN_MIN_HEIGHT, CROWN_OPTIONS } from '../src/coruscant/crowns.js';
 import { STRIP_MIN_HEIGHT } from '../src/coruscant/towers/strips.js';
+import { RHYTHMS, PALETTES } from '../src/coruscant/facade.js';
+import { ENVELOPES } from '../src/coruscant/towers/envelope.js';
+import { towerPieces } from '../src/coruscant/skyline.js';
+import { ROOM_FUNCTIONS, roomFunction } from '../src/npc/coruscant/rooms.js';
 import { SPACEPORT, DECK_Y } from '../src/coruscant/spaceport.js';
 import { routePose, buildShips } from '../src/ships/traffic.js';
 
@@ -231,14 +235,14 @@ function roomAudit(bp, l) {
 // Exterior shell above local level yMin: the first block seen from each of the four sides on every row and the
 // topmost block of every column (what a viewer sees of the facade and the crown). A ray that meets carved air
 // (FORCE_AIR: a doorway, bridge opening or terrace cut) before a block is looking into the interior and is dropped.
-// -> [{x, y, z, v}]
+// -> [{x, y, z, v, depth}] (depth: air cells the side ray crossed before the hit, 0 at the lot edge)
 function shell(bp, yMin) {
   const out = [];
   const ray = (x0, y, z0, dx, dz) => {
-    for (let x = x0, z = z0; x >= 0 && z >= 0 && x < bp.w && z < bp.d; x += dx, z += dz) {
+    for (let x = x0, z = z0, depth = 0; x >= 0 && z >= 0 && x < bp.w && z < bp.d; x += dx, z += dz, depth++) {
       const v = at(bp, x, y, z);
       if (v === FORCE_AIR) return;
-      if (v !== 0) { out.push({ x, y, z, v }); return; }
+      if (v !== 0) { out.push({ x, y, z, v, depth }); return; }
     }
   };
   for (let y = yMin; y < bp.h; y++) {
@@ -426,6 +430,182 @@ test('rubric 11: fill time per tower blueprint with crowns + strips <= 1.15x the
   console.log(`     ${TOWERS.length} towers: ${on.toFixed(3)} ms / tower dressed vs ${off.toFixed(3)} ms flat-roofed (x${(on / off).toFixed(3)}); budget x1.15`);
   assert.ok(on / off <= 1.15, `crowns + strips cost x${(on / off).toFixed(3)}`);
   assert.ok(on <= 5, `${on.toFixed(2)} ms per tower is too slow for streaming`);
+});
+
+// ------------------------------------------------------------------------------------------ rubric 18: architecture v2
+// docs/rubrics/18_architecture_v2.md: the city must read as Coruscant, not New York. The audits run over every tower
+// lot of layout 1337 (421 towers, 319 of them >= 60) from the blueprints' architecture record (meta.arch, written by
+// towers/tiered.js) and, where the record could lie, from the blocks themselves.
+const ARCH = (l) => { const bp = buildBlueprint(l, CITY); return { bp, a: bp.meta.arch }; };
+const glazing = (v) => v === B.WINDOW_BAND_LIT || v === B.WINDOW_SLIT_LIT;
+
+test('rubric 18 row 1: no window grids - every tower facade is ribbon / slit / curtain / panel / strip / industrial, lit glazing forms lines', () => {
+  assert.ok(!RHYTHMS.includes('grid') && !RHYTHMS.includes('punched'), 'grid / punched are gone from facade.js');
+  const hist = new Map(); let bad = 0;
+  for (const l of TOWERS) {
+    const { a } = ARCH(l);
+    assert.ok(a && a.rhythm, `tower ${l.id} has no architecture record`);
+    hist.set(a.rhythm, (hist.get(a.rhythm) || 0) + 1);
+    if (!RHYTHMS.includes(a.rhythm)) bad++;
+  }
+  // the blocks agree: a lit glazing cell on the shell has a lit glazing neighbour along its band (ribbon / curtain)
+  // or above / below it (slit) - lines of light, never a lattice of single squares
+  let lone = 0, litCells = 0;
+  for (const l of TALL.filter((_, i) => i % 6 === 0)) {
+    const bp = buildBlueprint(l, CITY);
+    const sh = shell(bp, 10).filter((c) => glazing(c.v)), cells = new Set(sh.map((c) => `${c.x},${c.y},${c.z}`));
+    for (const c of sh) {
+      litCells++;
+      // (a band runs on around a chamfered corner: the diagonal neighbours count)
+      if (![[1, 0, 0], [-1, 0, 0], [0, 0, 1], [0, 0, -1], [0, 1, 0], [0, -1, 0], [1, 0, 1], [1, 0, -1], [-1, 0, 1], [-1, 0, -1]].some(([dx, dy, dz]) => cells.has(`${c.x + dx},${c.y + dy},${c.z + dz}`))) lone++;
+    }
+  }
+  console.log(`     rhythms over ${TOWERS.length} towers: ${[...hist].map(([k, v]) => `${k} ${v}`).join(', ')}; ${litCells} lit glazing cells sampled, ${lone} without a lit neighbour`);
+  assert.equal(bad, 0);
+  assert.ok(lone <= litCells * 0.02, `${lone} of ${litCells} lit glazing cells are isolated squares`);
+});
+
+test('rubric 18 row 2: >= 70% of towers >= 60 are non-rectangular on most floors (masked plans, >= 3-step tapers, discs, buttresses); the corners really are cut', () => {
+  let nonRect = 0; const kinds = new Map(), why = new Map();
+  for (const l of TALL) {
+    const { a } = ARCH(l);
+    assert.ok(ENVELOPES.includes(a.envelope), `envelope ${a.envelope}`);
+    kinds.set(a.envelope, (kinds.get(a.envelope) || 0) + 1);
+    const floors = a.tiers.reduce((s, t) => s + (t.f1 - t.f0 + 1), 0);
+    const masked = a.tiers.filter((t) => t.masked).reduce((s, t) => s + (t.f1 - t.f0 + 1), 0);
+    const areas = a.tiers.map((t) => (t.ext.x1 - t.ext.x0 + 1) * (t.ext.z1 - t.ext.z0 + 1));
+    let steps = 0; for (let i = 1; i < areas.length; i++) if (areas[i] < areas[i - 1]) steps++;
+    const discs = a.tiers.filter((t) => t.disc).length;
+    const reason = masked * 2 > floors ? 'masked' : steps >= 3 ? 'taper' : discs >= 2 ? 'discs' : a.buttresses >= 2 ? 'buttress' : null;
+    if (reason) { nonRect++; why.set(reason, (why.get(reason) || 0) + 1); }
+  }
+  // the blocks agree: at a masked tier's middle floor at least two of its four wall-rect corners are air (cut)
+  let checked = 0, confirmed = 0;
+  for (const l of TALL.filter((_, i) => i % 3 === 0)) {
+    const { bp, a } = ARCH(l);
+    const t = a.tiers.find((tt) => tt.masked && tt.f1 > tt.f0);
+    if (!t) continue;
+    checked++;
+    const y = 5 * Math.floor((t.f0 + t.f1) / 2) + 2, e = t.ext;
+    const cut = [[e.x0, e.z0], [e.x1, e.z0], [e.x0, e.z1], [e.x1, e.z1]].filter(([x, z]) => isAir(at(bp, x, y, z))).length;
+    if (cut >= 2) confirmed++;
+  }
+  console.log(`     ${nonRect}/${TALL.length} non-rectangular (${[...why].map(([k, v]) => `${k} ${v}`).join(', ')}); envelopes ${[...kinds].map(([k, v]) => `${k} ${v}`).join(', ')}; corners cut on ${confirmed}/${checked} sampled masked tiers`);
+  assert.ok(nonRect >= TALL.length * 0.7, `${nonRect} of ${TALL.length} tall towers are non-rectangular (< 70%)`);
+  assert.ok(confirmed >= checked * 0.95, `only ${confirmed} of ${checked} masked tiers have cut corners in the blocks`);
+});
+
+test('rubric 18 row 3: no two towers within 120 blocks share (family, envelope, crown, palette); district palettes stay legible', () => {
+  const recs = TALL.map((l) => { const { bp, a } = ARCH(l); return { l, cx: l.x0 + l.w / 2, cz: l.z0 + l.d / 2, pal: a.palette, key: `${bp.meta.family}|${a.envelope}|${bp.meta.crown ? bp.meta.crown.style : '-'}|${a.palette}` }; });
+  const clashes = [];
+  for (let i = 0; i < recs.length; i++) for (let j = i + 1; j < recs.length; j++) {
+    const p = recs[i], q = recs[j], dx = p.cx - q.cx, dz = p.cz - q.cz;
+    if (dx * dx + dz * dz <= VARIETY_RADIUS * VARIETY_RADIUS && p.key === q.key) clashes.push(`${p.l.id} & ${q.l.id}: ${p.key}`);
+  }
+  const byDistrict = new Map();
+  for (const r of recs) { const m = byDistrict.get(r.l.district) || new Map(); m.set(r.pal, (m.get(r.pal) || 0) + 1); byDistrict.set(r.l.district, m); }
+  for (const [d, m] of byDistrict) console.log(`     ${d.padEnd(13)} ${[...m].sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ')}`);
+  for (const r of recs) assert.ok(PALETTES[r.pal], `palette ${r.pal}`);
+  const distinct = new Set(recs.map((r) => r.key)).size;
+  console.log(`     ${distinct} distinct (family, envelope, crown, palette) tuples over ${recs.length} tall towers; ${clashes.length} clashes within ${VARIETY_RADIUS} blocks`);
+  assert.equal(clashes.length, 0, clashes.slice(0, 5).join('; '));
+  // district character: the senate district is white / bronze / grey, the financial district black / steel, never the
+  // residential sand or the entertainment neon (and vice versa)
+  const pals = (d) => [...(byDistrict.get(d) || new Map()).keys()];
+  assert.ok(!pals('senate').some((p) => /^(res_sand|ent_)/.test(p)), `senate district palettes ${pals('senate')}`);
+  assert.ok(!pals('financial').some((p) => /^(res_sand|ent_|ind_)/.test(p)), `financial district palettes ${pals('financial')}`);
+});
+
+test('rubric 18 row 4: tower exteriors use the Coruscant palette only - no stone, brick, plaster fields, wood or wool above the podium (all 421 towers)', () => {
+  const banned = /BRICK|STONE|COBBLE|PLASTER|OAK|SPRUCE|BIRCH|PLANK|WOOL|LOG|CARPET|DIRT|GRASS|GRAVEL|TERRACOTTA|CONCRETE|CLAY/, foliage = /LEAVES|VINE|PLANT|FLOWER/;
+  // furniture (rugs, slab seats) seen through an open loggia (the civic towers' top-floor colonnade) is not cladding
+  const furniture = /WOOL|CARPET|SLAB/;
+  const hist = new Map(), offenders = new Map(); let where = null;
+  for (const l of TOWERS) {
+    const bp = buildBlueprint(l, CITY);
+    for (const c of shell(bp, 10)) {
+      const name = BLOCKS[c.v] ? BLOCKS[c.v].name : 'id' + c.v;
+      hist.set(name, (hist.get(name) || 0) + 1);
+      const N = name.toUpperCase();
+      if (banned.test(N) && !foliage.test(N) && !(furniture.test(N) && c.depth > 0)) { offenders.set(name, (offenders.get(name) || 0) + 1); where = where || `${bp.meta.family} ${l.id} ${name} at ${c.x},${c.y},${c.z}`; }
+    }
+  }
+  const total = [...hist.values()].reduce((s, v) => s + v, 0);
+  console.log(`     ${TOWERS.length} towers, ${total} shell cells: ${[...hist].sort((a, b) => b[1] - a[1]).slice(0, 12).map(([k, v]) => `${k} ${(100 * v / total).toFixed(1)}%`).join(', ')}`);
+  assert.equal(offenders.size, 0, `off-palette exterior blocks: ${[...offenders].map(([k, v]) => `${k} x${v}`).join(', ')} (first: ${where})`);
+});
+
+test('rubric 18 row 5: a lit ring ledge or a shell change at least every 20 floors on towers >= 60; landing decks or balcony rings on >= 50% of towers >= 80', () => {
+  let maxGap = 0, worst = null, withDeck = 0, tall80 = 0, ledgeFloors = 0, decks = 0;
+  for (const l of TALL) {
+    const { bp, a } = ARCH(l);
+    const nF = bp.meta.floors.length;
+    assert.ok(a.ledgeEvery >= 3 && a.ledgeEvery <= 20, `ledge cadence ${a.ledgeEvery}`);
+    // marks: shell changes (every tier's first floor) and lit rings (a slab row on the shell >= 50% emissive)
+    const marks = new Set([0, nF]);
+    for (const t of a.tiers) if (t.f0 > 0) marks.add(t.f0);
+    const rows = new Map();
+    for (const c of shell(bp, 5)) { if (c.y % 5 !== 0 || c.y / 5 >= nF) continue; const e = rows.get(c.y / 5) || { n: 0, lit: 0 }; e.n++; if (emits(c.v)) e.lit++; rows.set(c.y / 5, e); }
+    for (const [f, e] of rows) if (e.n >= 8 && e.lit >= e.n * 0.5) { marks.add(f); ledgeFloors++; }
+    const ms = [...marks].sort((p, q) => p - q);
+    for (let i = 1; i < ms.length; i++) if (ms[i] - ms[i - 1] > maxGap) { maxGap = ms[i] - ms[i - 1]; worst = `${bp.meta.family} ${l.id} floors ${ms[i - 1]}..${ms[i]}`; }
+    if (l.height >= 80) {
+      tall80++; decks += a.decks;
+      // a cantilevered deck, an overhanging disc (its rim is a balcony ring) or the railed terraces of a setback tower
+      if (a.decks > 0 || a.tiers.some((t) => t.disc && t.f0 > 0) || (bp.meta.family === 'setback' && a.tiers.length > 1)) withDeck++;
+    }
+  }
+  console.log(`     ${ledgeFloors} lit ring floors over ${TALL.length} towers, longest run without a ledge / shell change ${maxGap} floors (${worst}); ${withDeck}/${tall80} towers >= 80 carry decks or balcony rings (${decks} landing decks)`);
+  assert.ok(maxGap <= 20, `${worst}: ${maxGap} floors without a lit ledge or a shell change`);
+  assert.ok(withDeck >= tall80 * 0.5, `${withDeck} of ${tall80} towers >= 80 have decks or balcony rings (< 50%)`);
+});
+
+test('rubric 18 row 7: 40 sampled towers - every room kind is one W4 staffs, 0 unreachable, 0 unlit, every spot stands on a block', () => {
+  const sample = TALL.filter((_, i) => i % 8 === 0).slice(0, 40);
+  assert.equal(sample.length, 40);
+  let rooms = 0, spots = 0, floating = 0; const unreachable = [], unlit = [], unknown = new Set(), kinds = new Set();
+  for (const l of sample) {
+    const bp = buildBlueprint(l, CITY);
+    const bad = roomAudit(bp, l);
+    unreachable.push(...bad.unreachable.map((r) => `${bp.meta.family} ${l.id} ${r}`)); unlit.push(...bad.unlit.map((r) => `${bp.meta.family} ${l.id} ${r}`));
+    for (const r of bp.meta.rooms) { rooms++; kinds.add(r.kind); if (!ROOM_FUNCTIONS[r.kind]) unknown.add(r.kind); }
+    for (const s of bp.meta.spots) { spots++; if (isAir(at(bp, s.x - l.x0, s.y - bp.y0 - 1, s.z - l.z0))) floating++; }
+  }
+  console.log(`     ${rooms} rooms of ${kinds.size} kinds, ${spots} spots; unreachable ${unreachable.length}, unlit ${unlit.length}, floating ${floating}, kinds unknown to ROOM_FUNCTIONS: ${unknown.size ? [...unknown].join(', ') : 'none'}`);
+  assert.equal(unreachable.length, 0, unreachable.slice(0, 4).join('; '));
+  assert.equal(unlit.length, 0, unlit.slice(0, 4).join('; '));
+  assert.equal(unknown.size, 0, `room kinds W4 does not staff: ${[...unknown].join(', ')}`);
+  assert.ok(floating <= spots * 0.005, `${floating} of ${spots} spots float over air`);
+  for (const k of Object.keys(ROOM_FUNCTIONS)) assert.ok(roomFunction(k), k);
+});
+
+test('rubric 18 row 8: skyline impostors follow the envelopes - pieces match the built shells (footprint, chamfer, height) on every tall tower', () => {
+  const INSET = 0.35;
+  let tiers = 0, footprint = 0, chamfer = 0, hErr = 0, towers = 0, octagons = 0;
+  for (const l of TALL) {
+    const { bp, a } = ARCH(l);
+    const { pieces } = towerPieces(l, LEVELS.ground);
+    const body = pieces.filter((p) => !p.crown && !p.glow);
+    assert.ok(body.length >= 1, `tower ${l.id} has no impostor body`);
+    towers++;
+    hErr += Math.abs(Math.max(...body.map((p) => p.y1)) - (bp.y0 + roofY(bp) + 0.5));
+    for (const t of a.tiers) {
+      if (t.f1 < t.f0) continue;
+      tiers++;
+      const y = bp.y0 + 5 * (t.f0 + t.f1 + 1) / 2, cx = l.x0 + (t.ext.x0 + t.ext.x1 + 1) / 2, cz = l.z0 + (t.ext.z0 + t.ext.z1 + 1) / 2;
+      const p = body.find((q) => y >= q.y0 && y <= q.y1 && cx >= q.x0 && cx <= q.x1 && cz >= q.z0 && cz <= q.z1);
+      if (!p) continue;
+      const e = { x0: p.x0 - INSET - l.x0, x1: p.x1 + INSET - 1 - l.x0, z0: p.z0 - INSET - l.z0, z1: p.z1 + INSET - 1 - l.z0 };
+      if (Math.abs(e.x0 - t.ext.x0) <= 1 && Math.abs(e.x1 - t.ext.x1) <= 1 && Math.abs(e.z0 - t.ext.z0) <= 1 && Math.abs(e.z1 - t.ext.z1) <= 1) footprint++;
+      if ((p.chamfer > 0) === !!t.masked) chamfer++;
+      if (p.chamfer > 0) octagons++;
+    }
+  }
+  console.log(`     ${towers} towers, ${tiers} shells: footprint agrees on ${footprint}, chamfer on ${chamfer} (${octagons} faceted prisms), mean |body height error| ${(hErr / towers).toFixed(2)} blocks`);
+  assert.ok(footprint >= tiers * 0.9, `impostor footprints agree on ${footprint} of ${tiers} shells`);
+  assert.ok(chamfer >= tiers * 0.9, `impostor chamfers agree on ${chamfer} of ${tiers} shells`);
+  assert.ok(hErr / towers <= 2, `mean body height error ${(hErr / towers).toFixed(2)}`);
+  assert.ok(octagons >= tiers * 0.5, 'most impostor shells are faceted, not boxes');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

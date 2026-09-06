@@ -124,12 +124,12 @@ function archPlan(layout) {
     const envs = seededOrder(envelopeCandidates(family, lot), seed, 0x21), pals = seededOrder(paletteNames(family, lot.district), seed, 0x22);
     const rhys = seededOrder(rhythmNames(family), seed, 0x23);
     const cx = lot.x0 + lot.w / 2, cz = lot.z0 + lot.d / 2;
+    // same-family neighbours whatever their crown (the crown planner may fall back to another style on a small top
+    // shell, so two planned-different crowns can be built the same): envelopes vary first, palettes second
     const nearFam = done.filter((d) => { const dx = d.cx - cx, dz = d.cz - cz; return dx * dx + dz * dz <= R2 && d.family === family; });
-    const near = nearFam.filter((d) => d.crown === crown);
     let pick = null;
-    // envelopes vary first (the silhouette), palettes second
     outer: for (let j = 0; j < pals.length; j++) for (let i = 0; i < envs.length; i++) {
-      if (!near.some((d) => d.envelope === envs[i] && d.palette === pals[j])) { pick = { envelope: envs[i], palette: pals[j] }; break outer; }
+      if (!nearFam.some((d) => d.envelope === envs[i] && d.palette === pals[j])) { pick = { envelope: envs[i], palette: pals[j] }; break outer; }
     }
     if (!pick) pick = { envelope: envs[0], palette: pals[0] };
     // the rhythm least used by the same family nearby (ties by the seeded order)

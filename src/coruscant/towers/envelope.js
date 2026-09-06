@@ -242,15 +242,21 @@ function fitCorners(e, want, p, must, front) {
 }
 
 // Silhouette of an envelope for the far impostors: per shell the wall rect (blueprint-local, inclusive) and the
-// chamfer to cut off its corners (0 = box). Rounded plans read as octagons at impostor distance.
+// chamfer to cut off its corners (0 = box), measured from the mask itself - the mean corner cut along the shell's
+// end rows - so a shell whose corners the plan would not let go (fitCorners at radius 0) is drawn as the box it is.
+// Rounded plans read as octagons at impostor distance.
 export function envelopeProfile(env) {
   const F = env.frame, out = [];
   env.tiers.forEach((t, i) => {
     const clip = { u0: t.inset.l, u1: F.Iu - 1 - t.inset.r, v0: t.inset.f, v1: F.Iv - 1 - t.inset.b };
     const e = F.rect(clip.u0 - 1, clip.v0 - 1, clip.u1 + 1, clip.v1 + 1);
     const small = Math.min(e.x1 - e.x0 + 1, e.z1 - e.z0 + 1);
-    const chamfer = t.shape === 'rect' ? 0 : t.shape === 'ellipse' ? Math.round(small * 0.29) : t.shape === 'rounded' ? Math.round(small * 0.2) : clamp(Math.round(small * 0.22), 2, 6);
-    out.push({ f0: t.f0, f1: t.f1, ext: e, chamfer: Math.min(chamfer, Math.floor((small - 2) / 2)), shape: t.shape, disc: !!t.disc, stalk: !!t.stalk, index: i });
+    let chamfer = 0;
+    if (env.mask && t.shape !== 'rect') {
+      const cut = (x0, z, dx) => { let n = 0; for (let x = x0; x >= e.x0 && x <= e.x1 && !env.mask(x, z, i, e); x += dx) n++; return n; };
+      chamfer = Math.round((cut(e.x0, e.z0, 1) + cut(e.x1, e.z0, -1) + cut(e.x0, e.z1, 1) + cut(e.x1, e.z1, -1)) / 4);
+    }
+    out.push({ f0: t.f0, f1: t.f1, ext: e, chamfer: Math.min(chamfer, Math.floor((small - 2) / 2)), shape: chamfer > 0 ? t.shape : 'rect', disc: !!t.disc, stalk: !!t.stalk, index: i });
   });
   return out;
 }

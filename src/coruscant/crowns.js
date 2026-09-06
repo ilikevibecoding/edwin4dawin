@@ -570,7 +570,8 @@ function paintCap(bp, plan, last, y0, style, o) {
     }
     case 'dome': {
       const layers = Math.max(2, Math.min(H - 4, Math.round(Math.min(W(e), D(e)) * 0.4)));
-      domeCap(bp, e, y0 + 1, layers, { body: plan.style === 'spire' ? B.PLASTER : B.DURASTEEL });
+      // the 500-Republica dome is the tower's own panel (bronze / pale) with chrome rings, never a plaster field (rubric 18 rule 10)
+      domeCap(bp, e, y0 + 1, layers, { body: plan.style === 'spire' ? (style.wall === B.DURASTEEL ? B.PANEL_LIGHT : style.wall) : B.DURASTEEL });
       const fh = Math.min(plan.cap.finial ? 6 : 3, H - layers - 2);
       return 1 + layers + finial(bp, cx, y0 + 1 + layers, cz, fh, plan.style === 'spire' ? B.GLOW_PANEL : B.GLOW_PANEL_BLUE);
     }

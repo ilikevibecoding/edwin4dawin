@@ -73,8 +73,9 @@ void main() {
   float glow = tower * step(5.5, vStyle.x);
   float night = clamp(1.0 - uSkyLight * 1.2, 0.0, 1.0);
   float sky = 0.25 + 0.75 * uSkyLight;
+  // (0.72: the terrain's sun / ambient shading lands a sunlit texel at about that fraction of its albedo)
   float facet = 0.80 + 0.14 * abs(N.x) + 0.06 * max(N.z, 0.0);
-  vec3 body = vTint * sky * mix(facet, 1.12, top);
+  vec3 body = vTint * sky * 0.72 * mix(facet, 1.12, top);
   // the facade lattice: u along the face, floors of 5 blocks above the ground, one module of pitch cells
   float u = abs(N.x) > 0.5 ? vWorld.z : vWorld.x;
   float hf = (vWorld.y - uGroundY) / 5.0;
@@ -92,7 +93,8 @@ void main() {
   float ledge = tower * side * above * step(fy, 0.2) * step(mod(fl, max(vStyle.z, 3.0)), 0.5);
   // glazing: a continuous band per floor (ribbon 2 rows, curtain 3 rows between fins) lit floor by floor, or one
   // slit per module (slit / panel) lit column by column - lines either way; panel fields skip every fifth floor
-  float litFloor = step(0.45, hash(vec3(fl, seedI, 3.0)));
+  // (with strips the blueprint lights ~22% of its bands, without ~45%: the strips carry the night look)
+  float litFloor = step(mix(0.55, 0.78, step(0.5, vStyle.y)), hash(vec3(fl, seedI, 3.0)));
   float litCol = step(0.4, hash(vec3(floor((u + phase) / pitch), seedI, 5.0)));
   float fin = band(su, 1.0, 2.0);
   float mid = floor(pitch * 0.5);
@@ -114,7 +116,7 @@ void main() {
   col = mix(col, glassCol, glass);
   col = mix(col, body * 0.55, seam);
   col = mix(col, vec3(0.72, 0.75, 0.80) * sky, chrome);
-  vec3 lineCol = mix(vec3(0.80, 0.83, 0.88) * sky, lightCol * 1.15, night);
+  vec3 lineCol = mix(mix(vec3(0.62, 0.68, 0.78), vec3(0.78, 0.72, 0.62), vStyle.w) * sky, lightCol * 1.15, night);
   col = mix(col, lineCol, max(strip, ledge));
   vec3 lmCol = mix(vec3(0.35, 0.40, 0.50) * sky, warm, night * litFloor);
   col = mix(col, lmCol, lmBand);

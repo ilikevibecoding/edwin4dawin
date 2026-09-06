@@ -84,7 +84,11 @@ const LIT = { senate: 0.45, financial: 0.5, residential: 0.4, industrial: 0.25, 
 const WOOLS = [B.RED_WOOL, B.BLUE_WOOL, B.GREEN_WOOL, B.WHITE_WOOL];
 
 export function paletteNames(family, district) {
-  return FAMILY_PALETTES[family] || DISTRICT_PALETTES[district] || DISTRICT_PALETTES.financial;
+  const fam = FAMILY_PALETTES[family];
+  if (!fam) return DISTRICT_PALETTES[district] || DISTRICT_PALETTES.financial;
+  // a family list still respects the district: neon accents stay in the entertainment district (rule 11)
+  const ok = fam.filter((p) => district === 'entertainment' || !p.startsWith('ent_'));
+  return ok.length ? ok : fam;
 }
 // the facade modules a family may take (the variety pass in towers/index.js deals one per tower so neighbours differ)
 export function rhythmNames(family) {
