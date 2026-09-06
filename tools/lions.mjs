@@ -487,12 +487,15 @@ if (walkFrames > 0) {
   // Plant the camera once, in world space, side-on to the path and aimed
   // ahead of where the lion starts, so it walks through the frame and a stance
   // foot has to hold its pixel while the body passes over it. Eight metres off
-  // with a 30° lens the frame is 4.3 m wide; at the default step the strip
-  // covers two stride cycles (about a quarter cycle per frame, so a planted
-  // foot must hold for two or three consecutive frames) and the lion travels
-  // 2.4 m, from the left third to the right. The first strips stepped 0.12 s
-  // at 6 m — 0.84 m of travel, a quarter of the frame — and two of three
-  // round-4 critics could not judge planting from it.
+  // with a 30° lens the frame is 4.3 m tall and 7.6 m wide; at the default
+  // step the strip covers two stride cycles (about a quarter cycle per frame,
+  // so a planted foot must hold for two or three consecutive frames) and the
+  // lion travels 2.4 m. The first strips stepped 0.12 s at 6 m — 0.84 m of
+  // travel, a quarter of the frame — and two of three round-4 critics could
+  // not judge planting from it. The camera stands 2.2 m up: at 1.3 m the
+  // ground was 9° off and the 0.56 m paw decal was four rows, behind the paw,
+  // so no round-5 critic could see contact under a planted foot (the probe
+  // holds it at machine precision); at 15° it is seven rows, in front.
   const walkStep = Number(arg('step', '0.3'));
   const world = await page.evaluate(() => {
     const lion = window.__lion;
@@ -500,7 +503,7 @@ if (walkFrames > 0) {
     const c = Math.cos(b.yaw);
     const s = Math.sin(b.yaw);
     const w = (v) => [b.pos.x + v[0] * c + v[2] * s, lion.root.position.y + v[1], b.pos.z - v[0] * s + v[2] * c];
-    return { pos: w([8.0, 1.3, 1.2]), look: w([0.0, 0.55, 1.2]) };
+    return { pos: w([8.0, 2.2, 1.2]), look: w([0.0, 0.55, 1.2]) };
   });
   for (let i = 0; i < walkFrames; i++) {
     await capture('walk', { world, fov: 30 }, i);

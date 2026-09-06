@@ -71,7 +71,11 @@ const SHOTS = [
   // frame was that piece. The target is the main pane's centre. A real mirror
   // from here shows sky over horizon over plain, with the truck's own rear
   // flank filling the inboard fifth of the glass.
-  { name: 'mirror', pos: [0.3, 1.6, -0.16], target: [1.13, 1.657, 0.805], fov: 18 },
+  // `glass` narrows the pane mask to the mirror glass, and `minCover` fails the
+  // run when it holds under 3 % of the frame: the round-5 set shot this view
+  // with the camera off the cab (a pre-roll pitch), every critic scored a
+  // frame with no mirror in it, and nothing in the tool said so.
+  { name: 'mirror', pos: [0.3, 1.6, -0.16], target: [1.13, 1.657, 0.805], fov: 18, glass: '_mirrorGlass(_|$)', minCover: 3 },
   { name: 'dusk_ws', time: 'dusk', pos: [2.7, 1.75, 5.6], target: [0.0, 1.6, 0.6], fov: 22 },
   { name: 'night_int', time: 'night', lights: true, pos: [0.3, 1.6, -0.16], target: [0.2, 1.24, 9.0], fov: 62 },
   { name: 'night_ext', time: 'night', lights: true, pos: [3.6, 1.7, 4.2], target: [0.1, 1.45, 0.5], fov: 30 },
@@ -132,13 +136,14 @@ async function main() {
   );
 
   const rows = [];
+  let coverFail = false;
   for (const s of shots) {
     const ts = Date.now();
     const res = await page.evaluate(
       ({ s, glassRe }) => {
         const api = window.debugAPI;
         const { camera, vehicle, scene, renderer } = api.objects;
-        const re = new RegExp(glassRe);
+        const re = new RegExp(s.glass || glassRe);
 
         if (api.timeOfDay !== (s.time || 'day')) api.setTimeOfDay(s.time || 'day');
         api.setLights(!!s.lights);
@@ -309,6 +314,10 @@ async function main() {
         .toFixed(3)}  hot ${(res.hot * 100).toFixed(1)}%  flick ${res.flick.toFixed(3)}  | frame ${res.mean.toFixed(3)} clip ${res.clipPct
         .toFixed(2)}%  (${((Date.now() - ts) / 1000).toFixed(0)}s)`,
     );
+    if (s.minCover && res.cover < s.minCover) {
+      coverFail = true;
+      log(`FAIL ${s.name}: the pane covers ${res.cover.toFixed(1)}% of the frame (needs ${s.minCover}%) — the camera is not on it`);
+    }
   }
 
   await page.evaluate(() => {
@@ -320,6 +329,7 @@ async function main() {
   await writeFile(path.join(outDir, 'metrics.json'), JSON.stringify({ round, rows }, null, 2));
   log(`sheet -> ${path.join(outDir, 'sheet.png')}  (${((Date.now() - t0) / 1000).toFixed(0)}s total)`);
   await browser.close();
+  if (coverFail) process.exitCode = 1;
 }
 
 main().catch((e) => {
