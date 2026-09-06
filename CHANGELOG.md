@@ -35,6 +35,21 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 - The VM was rebuilt mid-wave-7 (all worktrees and `/tmp` lost; only pushed branches survived): builders now push
   after every commit and keep evidence in the repo.
 
+## Unreleased — wave 7 (in progress; hourly page at `progress/`)
+- Hourly before/after page for the user (`progress/index.html`, published to gh-pages by
+  `tools/progress-hourly.sh` -> `progress-snapshot.sh` -> `progress-publish.sh`): every hour the integration
+  worktree takes the lead branch plus every pushed builder branch (rerere replays the lead's recorded conflict
+  resolutions; `tools/integration-fixups/*.patch` reconcile semantics across branches, e.g. streets skip highway
+  lamps when `highway.ts` lights the highway), typechecks, builds, and shoots 22 fixed views from one Chrome
+  (`bench/scripts/shots.mjs`; one slot for the batch instead of one per view). Snapshot `h00` is the lead build
+  before the wave; the page pins its data to the gh-pages commit on jsDelivr because the branch URLs stayed stale
+  for hours after purges.
+- Bench `?fly=<s>` runs the view's clip inputs for `s` seconds before the frozen frame (a still of the floats 1 s
+  after touchdown or planing 4 s later; the water-landing stills were all airborne at t = 0).
+- Chrome gate (`tools/chrome-gate.sh`, installed as `/usr/local/bin/google-chrome`): two machine-wide slots for
+  builders, slot 3 reserved for the progress snapshot by process ancestry; `CHROME_SLOTS` is ignored after two
+  builders found it and held a third browser for an hour each.
+
 ## iter09 — wave 5 builders (deployed as aa8b21f9f839-20260905T121546Z)
 - Iteration 08 scored (bench/results/iter08/scores.md): no category regressed; aircraft geometry +1.5,
   wakes +1.5, ten categories +1.0; flat at 5.0: vegetation and repetition. Wave 5 targeted those plus
