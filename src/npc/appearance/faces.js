@@ -31,7 +31,7 @@ export const FACIAL_HAIR = ['none', 'stubble', 'mustache', 'goatee', 'beard', 'c
 export const HAIR_STYLES = ['none', 'buzz', 'short', 'side_part', 'slicked', 'medium', 'long', 'curly', 'afro', 'braids', 'bun', 'ponytail', 'mohawk', 'undercut', 'topknot'];
 export const HAIR_COLOURS = [
   { id: 'black', c: '#17161a' }, { id: 'dark_brown', c: '#2f1f13' }, { id: 'brown', c: '#4b3121' }, { id: 'chestnut', c: '#6d4327' }, { id: 'auburn', c: '#7f3b1e' },
-  { id: 'red', c: '#a5532b' }, { id: 'blond', c: '#c9a25b' }, { id: 'platinum', c: '#e6dcc0' }, { id: 'grey', c: '#8d8d8d' }, { id: 'white', c: '#e9e9e9' },
+  { id: 'red', c: '#a5532b' }, { id: 'blond', c: '#c39644' }, { id: 'platinum', c: '#e6dcc0' }, { id: 'grey', c: '#8d8d8d' }, { id: 'white', c: '#e9e9e9' },
 ];
 export const AGES = ['young', 'adult', 'middle', 'elder']; // wrinkle / greying levels; 'child' is a fifth age with a body scale
 export const MARKINGS = ['none', 'freckles', 'scar', 'tattoo', 'face_paint', 'mole'];
@@ -281,7 +281,11 @@ export function paintHead(r, face, sp, rng) {
   }
 
   // hair on the head faces (volume parts - buns, tails, afros - are geometry, see species/compose)
-  if (hairy && face.hairStyle !== 'none') paintHair(r, face, hair, skin, rng);
+  if (hairy && face.hairStyle !== 'none') {
+    paintHair(r, face, hair, skin, rng);
+    // a fringe may cover brow row 2; the lower brow row always stays visible so every face keeps brows over its eyes
+    for (const [x0, flip] of [[EYE_A_X, false], [EYE_B_X, true]]) { const row = flip ? mirror(bm[1]) : bm[1]; for (let i = 0; i < 5; i++) if (row[i] === 'B') P(x0 + i, 3, browColour); }
+  }
 
   const lidColour = shade(skin, 0.85);
   let strip = null;
@@ -290,7 +294,7 @@ export function paintHead(r, face, sp, rng) {
     for (const p of eyePixels) { x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
     strip = { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
   }
-  return { eyeRects, browRects, eyePixels, iris, lid: lidColour, strip, eyeKind, faceRect: [F[0], F[1], 16, 16] };
+  return { eyeRects, browRects, eyePixels, iris, lid: lidColour, strip, eyeKind, faceRect: [F[0], F[1], 16, 16], browColour, skin, hair: hairy ? hair : null };
 }
 
 function paintHair(r, face, hair, skin, rng) {
@@ -344,7 +348,7 @@ export function hairGeometry(face, hairColour) {
 export const CANONICAL_MIN_DIFF = 0.14;
 let canonical = null;
 export function canonicalFaces(paintHeadOnly, count = 100) {
-  if (canonical && canonical.length >= count) return canonical.slice(0, count);
+  if (canonical && canonical.length >= count) { const s = canonical.slice(0, count); s.tried = canonical.tried; return s; }
   const out = [];
   const F = REG.headFront;
   const need = Math.ceil(CANONICAL_MIN_DIFF * F[2] * F[3]);

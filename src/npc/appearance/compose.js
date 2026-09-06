@@ -31,8 +31,11 @@ export function outfitFitsSpecies(outfit, sp) {
   const hg = outfit.headgear || 'none';
   if (hg === 'none' || hg === 'goggles') return true;
   if (hg === 'cap' || hg === 'hood' || hg === 'headdress') return capOK(sp);
-  return helmetOK(sp); // helmet, mask, open_helmet
+  if (hg === 'mask') return !LOWER_FACE_GEOMETRY.has(sp.id); // breath masks / face masks sit on the lower face
+  return helmetOK(sp); // helmet, open_helmet
 }
+// species whose snout / tusks / jowls / stalks occupy the lower face (no masks); helmets are gated by sp.headgear
+const LOWER_FACE_GEOMETRY = new Set(['rodian', 'bothan', 'gran', 'aqualish', 'ithorian', 'sullustan', 'mon_calamari']);
 
 // ---------------------------------------------------------------------------------------------------------------
 // Choice step: everything except the pixels. Deterministic in (seed, opts). Also used by describeAppearance(id).
@@ -150,7 +153,19 @@ export function paintAppearance(choice) {
   };
   outfit.paint(ctx);
   if (!outfit.model) applyWear(r, wear, wearRng, { armour: ctx.armour, patchColours: ctx.patchColours || undefined });
-  else if (wear !== 'clean') { for (const part of parts) for (const rect of new Set(Object.values(part.uv))) { const n = Math.round(rect[2] * rect[3] * 0.08); for (let k = 0; k < n; k++) r.mul(rect[0] + wearRng.int(0, rect[2] - 1), rect[1] + wearRng.int(0, rect[3] - 1), wearRng.chance(0.5) ? 0.85 : 1.1); } }
+  else if (wear !== 'clean') {
+    // box-model droids: scuffs on every part; patched adds mismatched replacement plates and rust streaks
+    const patched = wear === 'patched';
+    for (const part of parts) for (const rect of new Set(Object.values(part.uv))) {
+      const n = Math.round(rect[2] * rect[3] * (patched ? 0.14 : 0.08));
+      for (let k = 0; k < n; k++) r.mul(rect[0] + wearRng.int(0, rect[2] - 1), rect[1] + wearRng.int(0, rect[3] - 1), wearRng.chance(0.5) ? 0.8 : 1.12);
+      if (patched && rect[2] >= 4 && rect[3] >= 3 && wearRng.chance(0.6)) {
+        const pw = wearRng.int(1, 2), ph = wearRng.int(1, 2), px = rect[0] + wearRng.int(0, rect[2] - pw), py = rect[1] + wearRng.int(0, rect[3] - ph);
+        r.rect(px, py, pw, ph, wearRng.chance(0.5) ? '#6a5a4a' : '#55585e');
+        if (wearRng.chance(0.5)) r.vline(px, py + ph, Math.min(rect[1] + rect[3] - 1, py + ph + 2), '#7a4a2a'); // rust run below the plate
+      }
+    }
+  }
 
   // textures for the geometry boxes, packed in the free area; painters are stripped so the records stay plain data
   const fallback = () => alloc.alloc(2, 2);

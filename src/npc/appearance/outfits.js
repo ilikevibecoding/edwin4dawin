@@ -64,7 +64,7 @@ const collarFanGeo = (c) => ({ kind: 'collar', part: 'fan_collar', attach: 'body
 const hoodUpOverlay = (c) => ({ part: 'head', inflate: 0.7, colour: c, faceOpening: true });
 
 // wear list helpers
-const CW = ['clean', 'worn'], WP = ['worn', 'patched'], ALLW = ['clean', 'worn', 'patched'], CL = ['clean'];
+const CW = ['clean', 'worn'], WP = ['worn', 'patched'], ALLW = ['clean', 'worn', 'patched'];
 
 // small shared painters
 const uniformBase = (r, skin, tunic, trous, bootC, sleeves = tunic) => { shirt(r, tunic, sleeves); trousers(r, trous); boots(r, bootC); hands(r, skin); };
@@ -127,6 +127,8 @@ export const OUTFITS = [
       on(r, F, 6, 4, 4, 8, shade(p.armour, 0.85)); on(r, F, 3, 3, 1, 10, p.trim); on(r, F, 12, 3, 1, 10, p.trim);
       helmetBase(r, p.armour); wideVisor(r, '#0a0c12', '#4a6aa8', 5, 4, 2, 12); chinGuard(r, shade(p.armour, 0.85)); on(r, HF, 7, 9, 2, 5, shade(p.armour, 0.8));
       band(r, 'arm', 0, 2, p.trim);
+      const unit = ctx.rng.int(1, 15); // squad code dots on the back plate
+      for (let k = 0; k < 4; k++) if (unit & (1 << k)) px(r, B, 4 + k * 2, 16, p.trim);
       ctx.geometry.push(openHelmetGeo(p.armour, p.trim));
       ctx.helmet = true;
     },
@@ -244,7 +246,7 @@ export const OUTFITS = [
     paint(ctx) { paintJedi(ctx, { master: true }); },
   },
   {
-    id: 'temple_guard', name: 'Jedi Temple Guard', faction: 'jedi', role: 'temple_guard', headgear: 'mask', wear: CL,
+    id: 'temple_guard', name: 'Jedi Temple Guard', faction: 'jedi', role: 'temple_guard', headgear: 'mask', wear: CW,
     describe: 'Jedi Temple Guard: gold and tan layered robes, hood, featureless mask, yellow lightsaber pike',
     colourways: [cw('gold', 'gold', { robe: '#c9a648', inner: '#e4d6a8', hood: '#b89440', mask: '#dccb92', boots: '#3a2a18' }),
       cw('tan', 'tan', { robe: '#b8985a', inner: '#e8dcc0', hood: '#a8884a', mask: '#e0d2a8', boots: '#3a2a18' }),
@@ -263,7 +265,7 @@ export const OUTFITS = [
   },
   // ================================================================= Senators (six planetary styles)
   {
-    id: 'senator_naboo', name: 'Naboo senatorial gown', faction: 'senate', role: 'senator', headgear: 'headdress', wear: CL,
+    id: 'senator_naboo', name: 'Naboo senatorial gown', faction: 'senate', role: 'senator', headgear: 'headdress', wear: CW,
     describe: 'Naboo-style senatorial gown with gold embroidery, wide sleeves and a tall arched headdress',
     colourways: [cw('crimson_gold', 'crimson / gold', { gown: '#7a1c2c', embroider: '#d8b050', head: '#d8b050', jewel: '#e04040' }),
       cw('violet_silver', 'violet / silver', { gown: '#4a2a6a', embroider: '#c8c8d8', head: '#c8c8d8', jewel: '#8a60d0' }),
@@ -278,7 +280,7 @@ export const OUTFITS = [
     },
   },
   {
-    id: 'senator_alderaan', name: 'Alderaanian gown', faction: 'senate', role: 'senator', headgear: 'none', wear: CL,
+    id: 'senator_alderaan', name: 'Alderaanian gown', faction: 'senate', role: 'senator', headgear: 'none', wear: CW,
     describe: 'Alderaan-style flowing gown in pale silver-white with a blue sash and silver hem',
     colourways: [cw('white_blue', 'white / blue', { gown: '#e6e8ec', sash: '#4a6ab0', trim: '#b8bcc8' }),
       cw('ivory_silver', 'ivory / silver', { gown: '#ece4d4', sash: '#8a8aa0', trim: '#c8c0b0' }),
@@ -292,13 +294,13 @@ export const OUTFITS = [
     },
   },
   {
-    id: 'senator_chandrila', name: 'Chandrilan robe', faction: 'senate', role: 'senator', headgear: 'none', wear: CL,
+    id: 'senator_chandrila', name: 'Chandrilan robe', faction: 'senate', role: 'senator', headgear: 'none', wear: CW,
     describe: 'Chandrilan senator: a simple plain robe with a white inner collar and a corded belt',
     colourways: [cw('sky', 'sky blue', { robe: '#6f8fa8', inner: '#eaeaea', cord: '#3a4a58' }), cw('sage', 'sage', { robe: '#7a9a78', inner: '#f0eee0', cord: '#3a4a38' }), cw('dove', 'dove grey', { robe: '#8a8a94', inner: '#f0f0f4', cord: '#404048' })],
     paint(ctx) { const { r, p, skin } = ctx; fillPart(r, 'body', p.robe); fillPart(r, 'arm', p.robe); fillPart(r, 'leg', p.robe); hands(r, skin); vNeck(r, p.inner, 4); belt(r, p.cord, null, 18, 1); boots(r, shade(p.robe, 0.6), 21); px(r, F, 8, 5, '#d8c890'); ctx.geometry.push(skirtGeo(p.robe, 8, { part: 'robe_skirt' })); },
   },
   {
-    id: 'senator_corellia', name: 'Corellian formal jacket', faction: 'senate', role: 'senator', headgear: 'none', wear: CL,
+    id: 'senator_corellia', name: 'Corellian formal jacket', faction: 'senate', role: 'senator', headgear: 'none', wear: CW,
     describe: 'Corellian formal jacket with gold epaulettes and double buttons, bloodstripe trousers, high boots',
     colourways: [cw('black_gold', 'black / gold', { jacket: '#1e2224', trous: '#2a2e32', stripe: '#d0a030', trim: '#d8b050', boots: '#141414' }),
       cw('green_gold', 'green / gold', { jacket: '#1f2e26', trous: '#242c28', stripe: '#d0a030', trim: '#d8b050', boots: '#141414' }),
@@ -306,26 +308,26 @@ export const OUTFITS = [
     paint(ctx) { const { r, p, skin } = ctx; shirt(r, p.jacket); trousers(r, p.trous); boots(r, p.boots, 15); hands(r, skin); doubleButtons(r, p.trim, 4, 4, 3); shoulderTabs(r, p.trim); collar(r, p.trim, 6, 1); legStripe(r, p.stripe, 3, 1); belt(r, shade(p.jacket, 0.7), p.trim, 19, 1); },
   },
   {
-    id: 'senator_rodia', name: 'Rodian trader sash', faction: 'senate', role: 'senator', headgear: 'none', wear: CL, species: ['rodian'],
+    id: 'senator_rodia', name: 'Rodian trader sash', faction: 'senate', role: 'senator', headgear: 'none', wear: CW, species: ['rodian'],
     describe: 'Rodian senator: beige tunic with a wide jewelled trader sash and beaded cuffs',
     colourways: [cw('purple_gold', 'purple / gold', { tunic: '#c8b48a', sash: '#4a2a6a', bead: '#e0b040' }), cw('teal_gold', 'teal / gold', { tunic: '#d0c090', sash: '#1f5a5a', bead: '#e0b040' }), cw('red_gold', 'red / gold', { tunic: '#c0b090', sash: '#7a1e28', bead: '#e8c060' })],
     paint(ctx) { const { r, p, skin } = ctx; shirt(r, p.tunic); trousers(r, shade(p.tunic, 0.7)); boots(r, '#3a2a1a'); hands(r, skin); for (let y = 0; y < 20; y++) on(r, F, 2 + (y * 10 / 20 | 0), y, 4, 1, p.sash); for (let y = 1; y < 20; y += 3) px(r, F, 3 + (y * 10 / 20 | 0), y, p.bead); band(r, 'arm', 16, 2, p.bead); belt(r, p.sash, p.bead, 19, 2); ctx.geometry.push(skirtGeo(p.tunic, 6, { part: 'tunic_skirt', sides: false })); },
   },
   {
-    id: 'senator_mon_cala', name: 'Mon Cala admiral-cut', faction: 'senate', role: 'senator', headgear: 'none', wear: CL, species: ['mon_calamari'],
+    id: 'senator_mon_cala', name: 'Mon Cala admiral-cut', faction: 'senate', role: 'senator', headgear: 'none', wear: CW, species: ['mon_calamari'],
     describe: 'Mon Cala senator: white admiral-cut uniform with a high collar, rank cylinders and a dark blue half-cape',
     colourways: [cw('white_blue', 'white / blue', { uni: '#e6e8ea', cape: '#1f3a6a', trim: '#8aa0c8' }), cw('cream_navy', 'cream / navy', { uni: '#ece6d6', cape: '#1a2a4a', trim: '#b0a890' }), cw('white_teal', 'white / teal', { uni: '#e8ecee', cape: '#1e5a60', trim: '#7ab0b8' })],
     paint(ctx) { const { r, p, skin } = ctx; shirt(r, p.uni); trousers(r, p.uni); boots(r, '#e0e0e4', 18, '#909098'); hands(r, skin); collar(r, p.trim, 8, 2); on(r, F, 2, 3, 3, 1, p.trim); on(r, F, 2, 5, 3, 1, p.trim); belt(r, p.cape, p.trim, 19, 2); on(r, F, 11, 3, 1, 3, '#c0c0c8'); on(r, F, 13, 3, 1, 3, '#c0c0c8'); ctx.geometry.push(capeGeo(p.cape, 14)); },
   },
   // ================================================================= Republic administration
   {
-    id: 'senate_aide', name: 'Senate aide tunic', faction: 'senate', role: 'aide', headgear: 'none', wear: CL,
+    id: 'senate_aide', name: 'Senate aide tunic', faction: 'senate', role: 'aide', headgear: 'none', wear: CW,
     describe: 'Senate aide: grey knee-length tunic with a Republic cog, datapad in hand',
     colourways: [cw('slate', 'slate', { tunic: '#6a6e78', trous: '#3a3c44', trim: '#a0a4b0' }), cw('warm_grey', 'warm grey', { tunic: '#7a7470', trous: '#3e3a38', trim: '#b0a8a0' }), cw('charcoal', 'charcoal', { tunic: '#4a4c52', trous: '#2a2c30', trim: '#8a8c94' }), cw('blue_grey', 'blue-grey', { tunic: '#5c6a80', trous: '#303846', trim: '#98a4b8' })],
     paint(ctx) { const { r, p, skin } = ctx; shirt(r, p.tunic); trousers(r, p.trous); boots(r, '#1e1e22', 20); hands(r, skin); collar(r, p.trim, 4, 1); belt(r, shade(p.tunic, 0.75), null, 18, 1); hem(r, p.tunic, 4); cog(r, F, 10, 4, '#b82830', '#e8c060'); ctx.geometry.push(datapadGeo()); },
   },
   {
-    id: 'chancellor_staff', name: "Chancellor's staff robes", faction: 'senate', role: 'aide', headgear: 'none', wear: CL,
+    id: 'chancellor_staff', name: "Chancellor's staff robes", faction: 'senate', role: 'aide', headgear: 'none', wear: CW,
     describe: "Chancellor's office staff: dark red robes with black trim and a gold pin",
     colourways: [cw('crimson', 'crimson', { robe: '#5a1e22', trim: '#1a1214', pin: '#e0b040' }), cw('oxblood', 'oxblood', { robe: '#4a1a1e', trim: '#221618', pin: '#d8b050' }), cw('maroon_gold', 'maroon / gold', { robe: '#6a2430', trim: '#2a1a1c', pin: '#f0d060' })],
     paint(ctx) { const { r, p, skin } = ctx; fillPart(r, 'body', p.robe); fillPart(r, 'arm', p.robe); fillPart(r, 'leg', p.robe); hands(r, skin); collar(r, p.trim, 8, 2); on(r, F, 7, 2, 2, 17, p.trim); boots(r, p.trim, 20); badge(r, F, 10, 4, p.pin); band(r, 'arm', 16, 2, p.trim); ctx.geometry.push(skirtGeo(p.robe, 9, { part: 'robe_skirt' })); },
@@ -344,7 +346,7 @@ export const OUTFITS = [
     paint(ctx) { const { r, p, skin } = ctx; jacket(r, p.jacket, p.shirt, 4); trousers(r, p.trous); boots(r, '#1a1a1e'); hands(r, skin); armStripe(r, p.press, 6, 2); band(r, 'arm', 6, 2, '#c02030', ['front']); on(r, F, 2, 14, 4, 3, shade(p.jacket, 0.8)); on(r, F, 10, 14, 4, 3, shade(p.jacket, 0.8)); ctx.geometry.push(holocamGeo()); },
   },
   {
-    id: 'medic', name: 'Medic', faction: 'medical', role: 'medic', headgear: 'none', wear: CL,
+    id: 'medic', name: 'Medic', faction: 'medical', role: 'medic', headgear: 'none', wear: CW,
     describe: 'clinic medic: white tunic and trousers, red medical armband with a white cross, red chest symbol',
     colourways: [cw('white', 'white', { tunic: '#eef0f0', trous: '#dcdee0', band: '#c02030' }), cw('pale_green', 'scrubs green', { tunic: '#8fc0a8', trous: '#7aa890', band: '#c02030' }), cw('white_blue', 'white / blue', { tunic: '#eef0f4', trous: '#4a6a9a', band: '#c02030' })],
     paint(ctx) { const { r, p, skin } = ctx; uniformBase(r, skin, p.tunic, p.trous, '#e8e8ec'); armStripe(r, p.band, 5, 3); band(r, 'arm', 6, 1, '#ffffff', ['front']); px(r, REG.armFront, 3, 5, '#ffffff'); px(r, REG.armFront, 3, 7, '#ffffff'); cross(r, F, 10, 4, p.band); collar(r, shade(p.tunic, 0.9), 6, 1); pockets(r, shade(p.tunic, 0.92), 14); },
@@ -393,7 +395,7 @@ export const OUTFITS = [
   },
   // ================================================================= civilians
   {
-    id: 'office_worker', name: 'Office worker', faction: 'business', role: 'office_worker', headgear: 'none', wear: CL,
+    id: 'office_worker', name: 'Office worker', faction: 'business', role: 'office_worker', headgear: 'none', wear: CW,
     describe: 'office worker: fitted tunic over trousers with a white inner collar',
     colourways: [cw('slate_blue', 'slate blue', { tunic: '#4a5a7a', trous: '#3a3c44', inner: '#f0f0f0' }), cw('charcoal', 'charcoal', { tunic: '#3a3c42', trous: '#2a2a30', inner: '#e8e8e8' }), cw('taupe', 'taupe', { tunic: '#8a7a6a', trous: '#3e3830', inner: '#f0ece0' }), cw('teal', 'teal', { tunic: '#2e6a6a', trous: '#2a3438', inner: '#e8f0f0' })],
     paint(ctx) { const { r, p, skin } = ctx; shirt(r, p.tunic); trousers(r, p.trous); boots(r, '#1e1e22', 21); hands(r, skin); collar(r, p.inner, 4, 2); on(r, F, 7, 2, 2, 15, shade(p.tunic, 0.88)); belt(r, shade(p.tunic, 0.7), null, 18, 1); px(r, F, 11, 4, '#7ad0ff'); },
@@ -435,7 +437,7 @@ export const OUTFITS = [
     paint(ctx) { const { r, p, skin } = ctx; shirt(r, p.top); band(r, 'arm', 8, 16, skin); trousers(r, p.legs); boots(r, p.shoes, 21); band(r, 'body', 4, 1, p.stripe); band(r, 'body', 7, 1, p.stripe); legStripe(r, p.stripe, 3, 1); },
   },
   {
-    id: 'tourist', name: 'Tourist', faction: 'residents', role: 'tourist', headgear: 'cap', wear: CL,
+    id: 'tourist', name: 'Tourist', faction: 'residents', role: 'tourist', headgear: 'cap', wear: CW,
     describe: 'off-world tourist: loud patterned shirt, shorts, bucket hat and a camera on a strap',
     colourways: [cw('floral_pink', 'floral pink', { a: '#e06090', b: '#f0e8a0', shorts: '#d8d0b8', hat: '#f0e8a0' }), cw('checker_green', 'checker green', { a: '#30a060', b: '#f0f0f0', shorts: '#3a3a44', hat: '#f0f0f0', check: true }), cw('starburst_yellow', 'starburst yellow', { a: '#e8c030', b: '#3060c0', shorts: '#e8e0d0', hat: '#3060c0' })],
     paint(ctx) { const { r, p, skin, rng } = ctx; fillPart(r, 'body', p.a); fillPart(r, 'arm', p.a); if (p.check) { checker(r, F, p.a, p.b, 2); checker(r, B, p.a, p.b, 2); } else { dots(r, 'body', p.b, rng, 22); dots(r, 'arm', p.b, rng, 8); } band(r, 'arm', 8, 16, skin); band(r, 'leg', 0, 10, p.shorts); band(r, 'leg', 10, 12, skin); boots(r, '#8a6a4a', 22); ctx.geometry.push(bucketHatGeo(p.hat), cameraGeo()); },
@@ -447,7 +449,7 @@ export const OUTFITS = [
     paint(ctx) { const { r, p, skin } = ctx; shirt(r, p.jacket); trousers(r, p.trous); boots(r, '#1e1a16'); hands(r, skin); for (let y = 0; y < 19; y++) px(r, F, 12 - (y * 9 / 19 | 0), y, p.strap); band(r, 'body', 3, 1, p.strap, ['back']); kneePads(r, shade(p.trous, 0.7)); band(r, 'arm', 15, 1, p.strap); ctx.geometry.push(capGeo(p.cap), satchelGeo(p.strap === '#f0f0f0' ? '#4a3a2a' : '#4a3a2a')); },
   },
   {
-    id: 'undercity_jacket', name: 'Undercity jacket', faction: 'residents', role: 'resident', headgear: 'hood', wear: ['patched'],
+    id: 'undercity_jacket', name: 'Undercity jacket', faction: 'residents', role: 'resident', headgear: 'hood', wear: WP,
     describe: 'patched undercity jacket with a hood, layered scarves and worn boots',
     colourways: [cw('grey', 'grey', { jacket: '#4a4a4e', inner: '#2a2a30', trous: '#2e2a28', patch: '#6a5a4a' }), cw('brown', 'brown', { jacket: '#4a3a2c', inner: '#2a2420', trous: '#2a2a2e', patch: '#6a6a50' }), cw('oil_green', 'oil green', { jacket: '#3a4a3a', inner: '#22281f', trous: '#2a2a2a', patch: '#5a4a5a' }), cw('dark_red', 'dark red', { jacket: '#4a2a2a', inner: '#241a1a', trous: '#2a2a2a', patch: '#4a5a6a' })],
     paint(ctx) { const { r, p, skin, rng } = ctx; jacket(r, p.jacket, p.inner, 4); trousers(r, p.trous); boots(r, '#1a1612'); hands(r, skin); band(r, 'body', 0, 2, p.inner); if (rng.chance(0.5)) ctx.overlays.push(hoodUpOverlay(p.jacket)); else ctx.geometry.push(hoodDownGeo(p.jacket)); ctx.patchColours = [p.patch, shade(p.jacket, 1.4), '#5a5a5a']; },
@@ -460,7 +462,7 @@ export const OUTFITS = [
   },
   // ================================================================= undercity, crime, hunters, performers
   {
-    id: 'black_sun_manager', name: 'Black Sun front manager', faction: 'black_sun', role: 'manager', headgear: 'none', wear: CL,
+    id: 'black_sun_manager', name: 'Black Sun front manager', faction: 'black_sun', role: 'manager', headgear: 'none', wear: CW,
     describe: 'freight-brokerage front manager: sharp dark suit, white shirt, thin tie and a gold pin',
     colourways: [cw('black_gold', 'black / gold', { suit: '#1a1a1e', shirt: '#f0f0f0', tie: '#3a3a44', pin: '#e0b040' }), cw('charcoal_gold', 'charcoal / gold', { suit: '#2e2e34', shirt: '#e8e8ec', tie: '#5a1e2a', pin: '#e0b040' }), cw('midnight_gold', 'midnight / gold', { suit: '#1a1e30', shirt: '#eaeaf0', tie: '#101018', pin: '#e8c860' })],
     paint(ctx) { const { r, p, skin } = ctx; jacket(r, p.suit, p.shirt, 4); trousers(r, p.suit); boots(r, '#0e0e10', 21); hands(r, skin); on(r, F, 7, 1, 2, 12, p.tie); badge(r, F, 3, 4, p.pin); band(r, 'arm', 17, 1, p.shirt); },
@@ -478,13 +480,13 @@ export const OUTFITS = [
     paint(ctx) { const { r, p } = ctx; fillPart(r, 'body', p.under); fillPart(r, 'arm', p.under); fillPart(r, 'leg', p.under); plate(r, F, 2, 3, 12, 10, p.plates); plate(r, B, 2, 3, 12, 10, p.plates); band(r, 'arm', 12, 6, '#7a7a80'); gloves(r, '#2a2a2a'); band(r, 'leg', 2, 6, p.plates, ['front', 'left', 'right']); kneePads(r, '#7a7a80'); boots(r, '#1a1a1e'); belt(r, '#3a2a1a', '#c0c0c0', 18, 3); on(r, F, 1, 18, 3, 3, '#5a4a3a'); on(r, F, 12, 18, 3, 3, '#5a4a3a'); helmetBase(r, p.helmet); wideVisor(r, '#0e1014', '#4a6a8a', 6, 2, 2, 12); on(r, HF, 3, 10, 2, 3, shade(p.helmet, 0.7)); on(r, HF, 11, 10, 2, 3, shade(p.helmet, 0.7)); ctx.geometry.push(pauldronGeo(p.pauldron), jetpackGeo(p.pack), rangefinderGeo()); ctx.helmet = true; ctx.armour = true; },
   },
   {
-    id: 'performer', name: 'Opera performer', faction: 'culture', role: 'performer', headgear: 'none', wear: CL,
+    id: 'performer', name: 'Opera performer', faction: 'culture', role: 'performer', headgear: 'none', wear: CW,
     describe: 'Galaxies Opera performer: sequinned stage costume with a fanned collar and stage make-up',
     colourways: [cw('gold_red', 'gold / red', { base: '#8a1a2a', sequin: '#f0d060', collar: '#e8c050' }), cw('silver_blue', 'silver / blue', { base: '#1e3a7a', sequin: '#e0e8f0', collar: '#c8d0e0' }), cw('emerald_violet', 'emerald / violet', { base: '#1e6a4a', sequin: '#c060e0', collar: '#8a40c0' })],
     paint(ctx) { const { r, p, skin, rng } = ctx; fillPart(r, 'body', p.base); fillPart(r, 'arm', p.base); fillPart(r, 'leg', p.base); dots(r, 'body', p.sequin, rng, 30); dots(r, 'arm', p.sequin, rng, 10); dots(r, 'leg', p.sequin, rng, 10); hands(r, skin); boots(r, p.sequin, 21); collar(r, p.sequin, 8, 1); ctx.geometry.push(collarFanGeo(p.collar)); },
   },
   {
-    id: 'opera_patron', name: 'Opera patron', faction: 'culture', role: 'resident', headgear: 'none', wear: CL,
+    id: 'opera_patron', name: 'Opera patron', faction: 'culture', role: 'resident', headgear: 'none', wear: CW,
     describe: 'evening wear for the opera: long dark coat with a silver clasp and gloves',
     colourways: [cw('black_silver', 'black / silver', { coat: '#16161a', inner: '#e8e8ec', clasp: '#c8c8d0' }), cw('wine', 'wine', { coat: '#4a1a2a', inner: '#e8e0d0', clasp: '#e0c060' }), cw('midnight_gold', 'midnight / gold', { coat: '#141a30', inner: '#e8e8ec', clasp: '#e0c060' })],
     paint(ctx) { const { r, p } = ctx; jacket(r, p.coat, p.inner, 2); trousers(r, p.coat); boots(r, '#0e0e10', 21); gloves(r, p.coat, 16); on(r, F, 7, 6, 2, 1, p.clasp); band(r, 'arm', 21, 1, p.clasp); ctx.geometry.push(skirtGeo(p.coat, 10, { part: 'coat_tails' })); },
@@ -539,6 +541,9 @@ function paintCoruscantGuard(ctx, officer) {
   band(r, 'arm', 1, 2, R); band(r, 'arm', 4, 1, shade(W, 0.85));
   if (p.extraRed) { band(r, 'leg', 12, 2, R); band(r, 'arm', 13, 1, R); }
   band(r, 'leg', 8, 2, D); on(r, REG.legFront, 2, 10, 4, 3, shade(W, 0.9));
+  // personal unit code: up to four dark tally dots on the upper arm plates (clones mark their own armour)
+  const unit = ctx.rng.int(1, 15);
+  for (let k = 0; k < 4; k++) if (unit & (1 << k)) px(r, REG.armBack, 1 + k * 2, 6, shade(W, 0.55));
   // helmet: white with the scarlet dome fin stripe, brow band, black T-visor, grey filters (Phase II) / plain (Phase I)
   helmetBase(r, W);
   on(r, HT, 7, 0, 2, 16, R); on(r, HF, 7, 0, 2, 3, R); on(r, HB, 7, 0, 2, 4, R);
@@ -596,11 +601,18 @@ function paintDroidHumanoid(ctx, body, dark) {
 
 // Non-humanoid droids: the whole canvas is a free atlas and the model is a plain box list for model.js buildBoxModel
 function paintAstromech(ctx) {
-  const { r, p, allocAll, parts } = ctx;
+  const { r, p, allocAll, parts, rng } = ctx;
   const body = p.body, panel = p.panel, dark = p.dark;
+  const layout = rng.int(0, 2), serial = rng.int(0, 7); // per-unit panel layout + a serial mark on the back
   const add = (name, x, y, z, w, h, d, paint) => { const uv = allocAll(w, h, d, ['front']); const rects = Object.values(uv); for (const rect of new Set(rects)) r.rect(rect[0], rect[1], rect[2], rect[3], body); if (paint) paint(uv); parts.push({ name, x, y, z, w, h, d, uv }); };
-  add('body', 0, 9, 0, 7, 10, 7, (uv) => { PAINT.on(r, uv.front, 1, 1, 2, 2, panel); PAINT.on(r, uv.front, 4, 1, 2, 3, panel); PAINT.on(r, uv.front, 1, 5, 5, 1, dark); PAINT.on(r, uv.front, 1, 7, 2, 2, panel); PAINT.on(r, uv.front, 4, 7, 2, 1, dark); PAINT.on(r, uv.left, 1, 2, uv.left[2] - 2, 3, panel); });
-  add('dome', 0, 15.2, 0, 7, 2.4, 7, (uv) => { PAINT.on(r, uv.front, 2, 0, 2, 2, dark); r.px(uv.front[0] + 2, uv.front[1], '#6ad0ff'); PAINT.on(r, uv.front, 5, 1, 1, 1, panel); PAINT.on(r, uv.left, 1, 0, 2, 1, panel); });
+  add('body', 0, 9, 0, 7, 10, 7, (uv) => {
+    if (layout === 0) { PAINT.on(r, uv.front, 1, 1, 2, 2, panel); PAINT.on(r, uv.front, 4, 1, 2, 3, panel); PAINT.on(r, uv.front, 1, 5, 5, 1, dark); PAINT.on(r, uv.front, 1, 7, 2, 2, panel); PAINT.on(r, uv.front, 4, 7, 2, 1, dark); }
+    else if (layout === 1) { PAINT.on(r, uv.front, 1, 1, 5, 2, panel); PAINT.on(r, uv.front, 1, 4, 2, 4, dark); PAINT.on(r, uv.front, 4, 4, 2, 2, panel); PAINT.on(r, uv.front, 4, 7, 2, 1, panel); }
+    else { PAINT.on(r, uv.front, 1, 1, 2, 6, panel); PAINT.on(r, uv.front, 4, 1, 2, 1, dark); PAINT.on(r, uv.front, 4, 3, 2, 3, panel); PAINT.on(r, uv.front, 1, 8, 5, 1, dark); }
+    PAINT.on(r, uv.left, 1, 2, uv.left[2] - 2, layout === 2 ? 5 : 3, panel);
+    for (let k = 0; k < 3; k++) if (serial & (1 << k)) r.px(uv.left[0] + 1 + k * 2, uv.left[1] + 8, dark);
+  });
+  add('dome', 0, 15.2, 0, 7, 2.4, 7, (uv) => { PAINT.on(r, uv.front, layout === 1 ? 3 : 2, 0, 2, 2, dark); r.px(uv.front[0] + (layout === 1 ? 3 : 2), uv.front[1], '#6ad0ff'); PAINT.on(r, uv.front, layout === 2 ? 0 : 5, 1, 1, 1, panel); PAINT.on(r, uv.left, 1 + (serial & 1), 0, 2, 1, panel); });
   add('cap', 0, 17.1, 0, 5, 1.4, 5, (uv) => { PAINT.on(r, uv.top, 1, 1, 3, 3, panel); r.px(uv.top[0] + 2, uv.top[1] + 2, '#e04040'); });
   add('leg_l', -4.7, 6.5, 0, 2.4, 11, 3, (uv) => { PAINT.on(r, uv.front, 0, 2, uv.front[2], 1, panel); PAINT.on(r, uv.front, 0, 6, uv.front[2], 1, dark); });
   add('leg_r', 4.7, 6.5, 0, 2.4, 11, 3, (uv) => { PAINT.on(r, uv.front, 0, 2, uv.front[2], 1, panel); PAINT.on(r, uv.front, 0, 6, uv.front[2], 1, dark); });
@@ -610,10 +622,15 @@ function paintAstromech(ctx) {
   ctx.helmet = true; ctx.modelKind = 'astromech'; ctx.height = 18.5;
 }
 function paintSweeper(ctx) {
-  const { r, p, allocAll, parts } = ctx;
+  const { r, p, allocAll, parts, rng } = ctx;
   const body = p.body, dark = p.dark, acc = p.accent;
+  const fleet = rng.int(0, 15), stripeY = rng.int(1, 3); // fleet number on the flank, stripe height per unit
   const add = (name, x, y, z, w, h, d, paint, fill = body) => { const uv = allocAll(w, h, d, ['front', 'top']); for (const rect of new Set(Object.values(uv))) r.rect(rect[0], rect[1], rect[2], rect[3], fill); if (paint) paint(uv); parts.push({ name, x, y, z, w, h, d, uv }); };
-  add('chassis', 0, 3.6, 0, 10, 5, 12, (uv) => { PAINT.on(r, uv.front, 1, 1, uv.front[2] - 2, 1, acc); PAINT.on(r, uv.top, 1, 1, uv.top[2] - 2, 1, dark); PAINT.on(r, uv.top, 2, 4, uv.top[2] - 4, 4, dark); PAINT.on(r, uv.left, 0, 3, uv.left[2], 1, acc); });
+  add('chassis', 0, 3.6, 0, 10, 5, 12, (uv) => {
+    PAINT.on(r, uv.front, 1, 1, uv.front[2] - 2, 1, acc); PAINT.on(r, uv.top, 1, 1, uv.top[2] - 2, 1, dark); PAINT.on(r, uv.top, 2, 4, uv.top[2] - 4, 4, dark); PAINT.on(r, uv.left, 0, stripeY, uv.left[2], 1, acc);
+    for (let k = 0; k < 4; k++) if (fleet & (1 << k)) r.px(uv.left[0] + 2 + k * 2, uv.left[1] + 3, dark); // 4-bit fleet number as a dot code
+    r.noise(uv.left[0], uv.left[1], uv.left[2], uv.left[3], 0.06, rng, 0.4);
+  });
   add('dome', 0, 6.9, 3.2, 3, 1.6, 3, (uv) => { r.px(uv.front[0] + 1, uv.front[1], '#ff4040'); }, dark);
   add('bin', 0, 6.6, -4, 8, 1.2, 3.4, null, shade(body, 0.85));
   const brush = (uv) => { for (let x = 0; x < uv.front[2]; x += 2) r.vline(uv.front[0] + x, uv.front[1], uv.front[1] + uv.front[3] - 1, '#3a3a3a'); };
