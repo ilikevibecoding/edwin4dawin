@@ -27,7 +27,7 @@ export function buildTiered(bp, spec) {
   const lim = insetLimits(frame, layout);
   const lot = bp.lot, roomsAt = bp.meta.rooms.length;
   const strips = spec.strips === false ? null : stripPlan(lot, spec.family);
-  if (strips) style.lit = Math.min(style.lit, 0.22);     // the strips carry the night look; fewer random dots
+  if (strips) style.lit = Math.min(style.lit, 0.12);     // the strips carry the night look; few random dots
   // the tallest towers hand their top floors to the crown (crownEat): the family's tiers stop `eat` floors lower
   // and the crown tiers, furnished from the same room library, take their place under a full-size cap
   const crowned = hooks.crown !== false && CROWN_OPTIONS.enabled && lot && lot.kind === 'tower' && (lot.height ?? 0) >= CROWN_MIN_HEIGHT && spec.family !== 'spine';
