@@ -901,8 +901,8 @@ const CROWN_FRAG = /* glsl */ `
     // the sunlit leaf is a pale warm yellow-green, the leaf in the shade of its own crown a deep neutral
     // green (not blue: the sky bounce already cools it): the albedo itself carries the split (the direct
     // light model only decides how much sun each side gets)
-    vec3 sunlit = diffuseColor.rgb * vec3(1.45, 1.36, 1.2);
-    vec3 shade = diffuseColor.rgb * vec3(0.44, 0.48, 0.42);
+    vec3 sunlit = diffuseColor.rgb * vec3(1.52, 1.36, 1.26);
+    vec3 shade = diffuseColor.rgb * vec3(0.5, 0.49, 0.42);
     diffuseColor.rgb = mix(shade, sunlit, cap);
     // sky light: the cap sees the whole sky, the underside a little ground bounce; a plant standing among
     // taller neighbours sees their leaves instead of the sky (its cap too: they overtop it)
@@ -1280,7 +1280,10 @@ const CARD_FRAG = /* glsl */ `
   // [124, 133, 119], saturation 0.1), the shaded leaf a dark neutral green ([46, 53, 47], saturation 0.12 —
   // not the cyan the sky light alone would leave): the lit side is pushed toward that pale yellow-green,
   // the shade side deep and warmer than the leaf so the blue sky bounce does not tint it
-  foliage *= mix(mix(vec3(0.3, 0.32, 0.25), vec3(2.0, 1.9, 1.75), lit), vec3(mix(0.42, 2.0, lit)), vFar);
+  // (measured r12 against the reference over the island canopy: shade [46, 56, 53] hue 158° vs [53, 60, 54]
+  // hue 125° — still cyan, so its red comes up; lit [131, 139, 107] vs [148, 147, 130] — too green, so its
+  // red and blue come up)
+  foliage *= mix(mix(vec3(0.35, 0.33, 0.25), vec3(2.15, 1.9, 1.85), lit), vec3(mix(0.42, 2.0, lit)), vFar);
   // a crown overtopped by its neighbours stands in their shadow (the occlusion packed in aVar.x): the
   // whole card darkens, its base most, so the inside of a dense stand goes dark and the emergent crowns
   // stand out lit
@@ -1398,7 +1401,7 @@ enum Family { CROWN = 0, PALM = 1, UNDER = 2 }
  *  over its own crown (a spatial hash of the canopy plants; a plant with two or three taller neighbours
  *  overlapping its crown saturates). The crown and card shaders darken the lower crown and its sky light
  *  by it, so the inside of a dense stand goes dark while a lone tree stays lit all round. */
-function occludePlants(plants: Plant[]): void {
+function occludePlants(plants: Plant[], receivers: Plant[] = plants): void {
   const CELL_M = 24;
   const grid = new Map<number, number[]>();
   const key = (x: number, z: number) => Math.floor((x + 10000) / CELL_M) * 4096 + Math.floor((z + 10000) / CELL_M);
@@ -1412,7 +1415,7 @@ function occludePlants(plants: Plant[]): void {
     if (!list) { list = []; grid.set(k, list); }
     list.push(i);
   }
-  for (const p of plants) {
+  for (const p of receivers) {
     const ri = radius(p), ti = top(p), hi = ti - p.y;
     const cx = Math.floor((p.x + 10000) / CELL_M), cz = Math.floor((p.z + 10000) / CELL_M);
     let sum = 0;
@@ -2224,8 +2227,11 @@ export class Vegetation {
     }
     this.counts.shrubs += underPlants.length;
     occludePlants(plants);
-    // the understory stands under the canopy by construction
-    for (const p of underPlants) p.occ = 0.6;
+    // the understory stands under the canopy by construction, but how much of it differs: a shrub under a
+    // closed hardwood stand is buried (0.8-0.9), one under a few palms sees most of the sky (0.3-0.5) — the
+    // flat 0.6 left every shrub under palms a near-black card
+    occludePlants(plants, underPlants);
+    for (const p of underPlants) p.occ = Math.min(p.occ, 0.88);
 
     // tiles: one near (3D) + one far (card) instanced mesh per family per tile; buffers are shared
     const byTile = new Map<string, { crown: Plant[]; palm: Plant[]; under: Plant[]; tx: number; tz: number }>();
