@@ -69,7 +69,8 @@ export class SpeechOutput {
   // Speak (or record) one line. opts: { voice (allowed by the local budget), lineId, subtitle, duration, important }
   say(pp, text, opts = {}) {
     const dur = opts.duration || Math.min(9, Math.max(2.4, text.length / 14));
-    if (this.settings.subtitles && opts.subtitle !== false) this.showSubtitle(pp.name, text, dur, pp);
+    let cur = null;   // this line's subtitle, when shown
+    if (this.settings.subtitles && opts.subtitle !== false) { this.showSubtitle(pp.name, text, dur, pp); cur = this.current; }
     const wantVoice = this.settings.voice && opts.voice !== false && this.settings.volume > 0;
     if (!wantVoice) return { voiced: false, duration: dur, reason: opts.voice === false ? 'budget' : 'disabled' };
     if (!this.available) { this.recordUnvoiced(pp, text, opts.lineId, this.synth ? 'no-voices' : 'no-speech-api'); return { voiced: false, duration: dur, reason: 'unvoiced' }; }
@@ -80,6 +81,12 @@ export class SpeechOutput {
       if (v) u.voice = v;
       u.pitch = params.pitch; u.rate = params.rate; u.volume = this.settings.volume;
       if (opts.important) this.synth.cancel();
+      // the subtitle stays while the engine speaks (a slow voice outlives the text estimate), capped in case no event comes
+      if (cur) {
+        cur.until = nowS() + Math.min(30, dur * 2 + 4);
+        const done = () => { if (this.current === cur) cur.until = Math.min(cur.until, nowS() + 0.4); };
+        u.onend = done; u.onerror = done;
+      }
       this.synth.speak(u);
       this.spoken++;
       return { voiced: true, duration: dur, params };

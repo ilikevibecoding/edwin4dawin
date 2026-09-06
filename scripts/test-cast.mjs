@@ -434,12 +434,18 @@ test('B10 local audio budget: one voice within 24 blocks; an open talk box silen
   const s4 = a.say(p2, a.lineFor(p2, { ambient: true }), { npc: n2, important: true });
   assert.equal(s4.voiced, true, 'a talk-box line is always voiced');
   a.update(60);
-  assert.equal(a.say(p2, a.lineFor(p2, { ambient: true }), { npc: n2, ambient: true }).voiced, true, 'budget frees when the first line ends');
+  const s6 = a.say(p2, a.lineFor(p2, { ambient: true }), { npc: n2, ambient: true });
+  assert.equal(s6.voiced, true, 'budget frees when the first line ends');
   assert.equal(a.speech.spoken, 4); assert.equal(a.unvoiced.length, 0);
   assert.equal(utterances.length, 4, 'four utterances reached the engine');
   const u0 = utterances[0], vp = a.speech.voiceParams(p1);
   assert.ok(u0.text === s1.text && u0.pitch === vp.pitch && u0.rate === vp.rate && u0.volume === a.settings.volume && u0.voice.name === 'Test Voice', JSON.stringify({ u0, vp }));
   assert.ok(utterances[2].pitch !== u0.pitch || utterances[2].rate !== u0.rate, 'two speakers, two voices');
+  // the subtitle of a voiced line outlives the text estimate until the engine says the utterance ended
+  const last = utterances[3], cur = a.speech.current, nowS = () => performance.now() / 1000;
+  assert.ok(cur && cur.text === last.text && cur.until > nowS() + s6.duration + 3, `subtitle waits for the engine: ${JSON.stringify(cur)}`);
+  assert.equal(typeof last.onend, 'function'); last.onend();
+  assert.ok(cur.until <= nowS() + 0.41 && cur.until > nowS(), 'the subtitle winds down 0.4 s after the utterance ends');
   pop.talkBox.npc = n1;
   assert.equal(a.allowChatter(n2), false, 'talk box 10 blocks away silences chatter');
   assert.equal(a.allowChatter(n3), true, 'talk box 100 blocks away does not');
@@ -565,7 +571,9 @@ if (base) {
     async click(button) { window.__t.play(); await window.__t.frame(); game.input.mouseClicked[button] = true; game.input.mouseDown[button] = true; await window.__t.frame(); game.input.mouseDown[button] = false; await window.__t.frame(); },
     aimAt(x, y, z) { const p = game.player, eye = p.eyePos(1, new (game.camera.position.constructor)()); const dx = x - eye.x, dy = y - eye.y, dz = z - eye.z; p.yaw = Math.atan2(-dx, -dz); p.pitch = Math.atan2(dy, Math.hypot(dx, dz)); },
     key(code, key) { document.dispatchEvent(new KeyboardEvent('keydown', { code, key, bubbles: true })); },
-    sub() { const el = document.getElementById('npc-subtitles'); return el ? { shown: el.style.display !== 'none', name: el.querySelector('#npc-subtitles-name').textContent, text: el.querySelector('#npc-subtitles-text').textContent, mode: el.querySelector('#npc-subtitles-mode').textContent } : null; },
+    sub() { const el = document.getElementById('npc-subtitles'); return el ? { shown: el.style.display !== 'none', name: el.querySelector('#npc-subtitles-name').textContent, text: el.querySelector('#npc-subtitles-text').textContent, mode: el.querySelector('#npc-subtitles-mode').textContent, bottom: el.style.bottom, top: Math.round(el.getBoundingClientRect().top), boxTop: (() => { const b = document.getElementById('npc-talk'); return b && !b.hidden ? Math.round(b.getBoundingClientRect().top) : null; })() } : null; },
+    // a software-rendered frame takes seconds here: keep the current subtitle up so the screenshots show it
+    pin() { const c = game.dialog.speech.current; if (c) c.until += 120; },
     talk() { const r = document.getElementById('npc-talk'); return r ? { hidden: r.hidden, name: r.querySelector('.nt-name').textContent, role: r.querySelector('.nt-role').textContent, line: r.querySelector('.nt-line').textContent, opts: [...r.querySelectorAll('button')].map((b) => b.textContent.slice(1)) } : null; },
     // stand next to a live citizen with a clear line to their chest and aim at them
     approach(castId) {
@@ -618,18 +626,20 @@ if (base) {
       await ev('window.__t.frames(3)');
       await page.screenshot(`${shots}/cast_seli_approach.png`);
       await ev('window.__t.click(2)');
-      await ev('window.__t.frames(2)');
       const t1 = await evj('window.__t.talk()'), s1 = await evj('window.__t.sub()');
+      await ev('window.__t.pin()'); await ev('window.__t.frames(2)');
       assert.equal(t1.hidden, false, 'talk box open'); assert.equal(t1.name, 'Seli Noor'); assert.ok(/diner owner/i.test(t1.role), t1.role);
       assert.ok(t1.line.length > 20 && t1.opts.length === 3, JSON.stringify(t1));
       assert.ok(s1.shown && s1.name === 'Seli Noor:' && s1.text === t1.line, `subtitle ${JSON.stringify(s1)}`);
       assert.ok(/text only/.test(s1.mode), 'headless: the overlay says text only');
+      assert.ok(s1.boxTop != null && s1.top < s1.boxTop && s1.bottom.startsWith('calc(18%'), `the subtitle sits above the talk box: ${JSON.stringify(s1)}`);
       const ev1 = await evj(`game.events.recent('npc:talk', 3).map((e) => e.args[0])`);
       assert.ok(ev1.length >= 1 && ev1[ev1.length - 1].lineId.startsWith('cast:seli_noor#greet') && ev1[ev1.length - 1].voiced === false, JSON.stringify(ev1));
       first = t1.line;
       await page.screenshot(`${shots}/cast_seli_talk.png`);
-      await ev(`window.__t.key('Digit1', '1')`); await ev('window.__t.frames(2)');
+      await ev(`window.__t.key('Digit1', '1')`);
       const t2 = await evj('window.__t.talk()'), s2 = await evj('window.__t.sub()');
+      await ev('window.__t.pin()'); await ev('window.__t.frames(2)');
       assert.ok(!t2.hidden && t2.line !== t1.line && t2.line.length > 20, JSON.stringify(t2));
       assert.equal(s2.text, t2.line, 'subtitle follows the reply');
       const ev2 = await evj(`game.events.recent('npc:talk', 3).map((e) => e.args[0].lineId)`);
@@ -638,9 +648,10 @@ if (base) {
       await ev(`window.__t.key('Digit2', '2')`); await ev('window.__t.frames(2)');
       const ev3 = await evj(`game.events.recent('npc:talk', 4).map((e) => e.args[0].lineId)`);
       assert.ok(/#(task|personal|event)/.test(ev3[ev3.length - 1]), `reply 2 is another category: ${ev3}`);
-      await ev(`window.__t.key('Escape', 'Escape')`); await ev('window.__t.frames(2)');
+      await ev(`window.__t.key('Escape', 'Escape')`);
       const t4 = await evj('window.__t.talk()'), s4 = await evj('window.__t.sub()');
       assert.equal(t4.hidden, true, 'closed');
+      assert.equal(s4.bottom, '17%', 'no talk box: the subtitle is back at its usual height');
       const ev4 = await evj(`game.events.recent('npc:talk', 5).map((e) => e.args[0].lineId)`);
       assert.ok(ev4[ev4.length - 1].includes('#farewell'), `a farewell on leaving: ${ev4}`);
       assert.ok(s4.shown && s4.text.length > 5, 'the farewell is subtitled');
