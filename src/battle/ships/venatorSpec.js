@@ -9,9 +9,10 @@
 //    at 0.56 L (its side walls carry window rows), the turret shelves continue its slope aft;
 //  - the block: a 43 m plated ramp at 48 degrees from the sill to a roof 105 m over the wings, with
 //    steep light "legs" under the shafts flanking it and dark sides; the two shafts 12.4 m wide with a
-//    33 m gap, 43 m tall; the heads 28 m wide, 24 m tall, 136 m long with light fronts overhanging the
-//    shafts by 46 m and a round pod under each; a low sensor body, drum and mast on top (262 m keel to
-//    mast).
+//    33 m gap, 43 m tall; the heads are light hammerheads 28 m wide (2.3 shaft widths), 24 m tall and
+//    140 m long, overhanging the shafts on every side and by 46 m to the front, with a dark window
+//    band under the top slab and a chin tapering back into the shaft; a dark sensor block, light drum
+//    and mast on top over the rear half (262 m keel to mast).
 // Everything is in metres; `zr` is the distance aft of the bow tip, ship forward is -Z, up +Y, origin at
 // the hull centre. These functions are the single source of truth for the plan, the vertical profile,
 // the deck markings and the placement of the big masses; the geometry modules read them so the
@@ -236,22 +237,19 @@ export const TOWER = {
   y1: up(148), // shaft top = head underside
   headX: 28, // head centres at +-x
   headHx: 14.2, // 28.4 m wide: a 27.6 m gap between the heads
-  headY0: up(148),
-  headY1: up(172),
-  frontZ0: 746, // light front section from here (46 m ahead of the shaft) ...
-  frontZ1: 780, // ... to here; the dark panelled rear runs on to headZ1
-  headZ1: 886,
-  visorY0: up(160), // the wide upper slab of the front section starts here ...
-  jawW: 20, // ... below it only the outboard jaw is light (this wide), the pod hangs inboard
-  chin: 3, // dark underside band below the jaw
-  podR: 5,
-  podX: 19.5, // pod centre (inboard, under the slab's overhang)
-  podY: 188.5,
-  podZ0: 752,
-  podLen: 24,
-  sensor: { hx: 12, z0: 780, z1: 830, y1: up(180) }, // low sensor body on the head
-  drumR: 5, // light drum on the sensor body
-  drumY1: up(184),
+  headY0: up(148), // head underside at the shaft top
+  headY1: up(172), // top of the slab
+  frontZ0: 746, // the head's front face, 46 m ahead of the shaft
+  headZ1: 886, // its rear, 4 m behind the shaft
+  visorY0: up(160), // the bevelled top slab runs from here up to headY1 ...
+  band: 4, // ... over a dark recessed window band this tall along the front and around the corners
+  bandDepth: 36, // how far the band wraps back along the sides
+  chinHx: 7.5, // below the band a light chin, full width for chinLip, tapers to this half-width ...
+  chinLip: 5, // ... on the shaft (the reference's jaw: square shoulders, then the rounded underside)
+  chinDrop: 8, // at the front the chin hangs this far below the shaft top, sloping up to it
+  sensor: { hx: 10, z0: 806, z1: 852, y1: up(177) }, // dark sensor block over the rear half
+  drumR: 7, // light shallow drum on the sensor block
+  drumZ: 826,
   mastY1: up(187), // overall height 262 m from the keel (-30)
 };
 
