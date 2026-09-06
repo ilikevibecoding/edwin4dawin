@@ -1,17 +1,20 @@
-// Acclamator-class assault ship (Republic), 752 m. Original procedural geometry after the film's design:
-// a clean arrowhead wedge (460 m across the stern, no deck doors) with a comparatively thick flat-sided
-// hull. The flanks step down once: a light deck lip, a tall plain upper wall, then the dark greebled and
-// lit machinery trench at mid-height (recessed under a ledge, wrapping around the stern), a proud lower
-// wall and a long ventral chamfer to the belly. A broad shallow maroon dorsal spine (0.3 of the deck
-// width) runs from the bow to a single superstructure at ~60–93 % of the length: a long shallow front ramp
-// up to a first tier, a second tier, a broad slightly forward-leaning conning neck and a wide flat bridge
-// head that reads as a T from above (long rounded stem with a blue viewport band, athwartships crossbar
-// over the neck). The broad flat stern carries a bank of four nozzle bells (two large in belly pods that
-// hang below the hull flanking the ventral keel's end, two medium in the stern wall outboard of them), a
-// ventral keel with boarding-ramp doors runs to the stern, and heavy quad turbolaser turrets sit on the
-// shoulders and hang from belly barbettes, with light emplacements along the deck edges. Light grey
-// plating with dark panel lines, red wing stripes parallel to the leading edges and two roundels ahead of
-// the superstructure. Three complete LODs; geometry is built once and instanced.
+// Acclamator-class assault ship (Republic), 752 m. Original procedural geometry after the film model
+// (MF49 profile) and the Clone Wars renders: a clean arrowhead wedge (460 m across the stern, no deck
+// doors) with a comparatively thick (85 m at the stern) flat-sided hull. The flanks step down once: a
+// light deck lip, a thin upper wall, then the dark greebled and lit machinery trench (~18 m the whole
+// length, recessed under a ledge and wrapping around the stern), a proud ledge and the tall lower slab
+// (about half the flank, leaning in ~30 degrees) down to the broad flat belly. A shallow maroon dorsal
+// spine (~40 m across at its end) runs from the bow to a single stepped superstructure at 44–86 % of the
+// length: a long shallow front ramp up to tier 1 (28 m above the deck, 27 % of the stern width), a tier-2
+// pedestal, a thin forward-leaning conning neck at 75 % of the length and a flat 112 m bridge head that
+// reads as a T from above (long rounded stem with a blue viewport band, athwartships crossbar over the
+// neck, sensor dome and mast aft). A flat aft deck follows the block to the broad stern, which carries a
+// wide bank of four nozzle bells (two large in cylindrical pods set low in the stern wall flanking the
+// ventral keel's end, two medium higher and outboard under the machinery band); a ventral keel with
+// boarding-ramp doors runs to the stern. Heavy quad turbolaser turrets sit on the aft deck outboard of
+// the block and hang from belly barbettes, light emplacements line the deck edges. Light grey plating with
+// dark panel lines, five red stripes on each aft wing parallel to the leading edges and two roundels
+// flanking the ramp. Three complete LODs; geometry is built once and instanced.
 import * as THREE from "three";
 import { assemble, boxMM, cylY, part } from "./shipKit.js";
 import {
@@ -966,14 +969,15 @@ function buildLod(lod) {
           const d = 5 + rand() * 6;
           const h = 2 + rand() * 3;
           const x = s * (T2.hx0 + 3 + rand() * (T1.hx1 - T2.hx0 - 8));
+          const darkBox = rand() < 0.4;
           add(
             boxMM(
               [x - w / 2, T1.y1 - 0.3, Z(zr) - d / 2],
               [x + w / 2, T1.y1 + h, Z(zr) + d / 2],
             ),
-            rand() < 0.6 ? "dark" : "hull",
+            darkBox ? "dark" : "hull",
             {
-              color: rand() < 0.6 ? DARK : mulColor(BLOCK, 0.9),
+              color: darkBox ? DARK : mulColor(BLOCK, 0.9),
               texel: 1 / 4,
             },
           );
