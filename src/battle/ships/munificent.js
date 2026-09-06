@@ -95,13 +95,13 @@ export function buildMunificent(mats) {
     for (const z of [50, 125, 200, 268])
       mount(
         "light",
-        [side * (HW.lower + 1.2), -21.5, z],
+        [side * (HW.lower + 1.2), -23.5, z],
         [side, 0, 0],
         [0, 0, -1],
         [side * 0.85, 0.05, -0.5],
         "light",
         7000,
-        5,
+        4.5,
       );
     for (const z of [-352, -302]) {
       const a = (side > 0 ? 16 : 164) * D2R;

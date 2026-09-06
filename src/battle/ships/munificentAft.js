@@ -18,6 +18,7 @@ import {
   CORE,
   D2R,
   DOME_ARC,
+  GRIME,
   HULL,
   HULL_DK,
   HW,
@@ -39,6 +40,7 @@ import {
   domeTop,
   plankTone,
   shellFrontZ,
+  streak,
 } from "./munificentSpec.js";
 
 const TEX = 1 / 30;
@@ -56,14 +58,26 @@ export const domeTint = (side) => (x, y, z, o) => {
   const a = Math.atan2(y - s.yE, side * x - s.cx) / D2R;
   o.copy(HULL).multiplyScalar(plankTone(a));
   o.multiplyScalar(1 - 0.16 * (1 - smoothstep(-2, 22, a)));
+  o.lerp(GRIME, 0.45 * (1 - smoothstep(-14, -2, a)));
+  o.lerp(GRIME, streak(z) * (0.12 + 0.3 * (1 - smoothstep(0, 70, a))));
   o.lerp(SOOT, 0.3 * smoothstep(300, 380, z) * (1 - smoothstep(20, 60, a)));
   o.lerp(SOOT, 0.06 * smoothstep(60, 120, z) * (1 - smoothstep(0, 90, z - 60)));
 };
 
 // ring of the starboard/port shell between arch angles a0..a1 (m points); the point order is chosen
 // so that lofting along +z gives outward normals (reverse = inner face)
+// skirt: the shells run on below the eave as a slightly flared apron (TCW: the shell edges hang well
+// below the barrel's equator and hide most of the lower hull); k in (0, 1], 1 = the bottom edge
+const SKIRT_D = 12;
+const SKIRT_FLARE = 2.5;
+function skirtPoint(z, k, side, lift = 0) {
+  const s = domeSection(z);
+  return [side * (s.cx + s.hw + SKIRT_FLARE * k + lift), s.yE - SKIRT_D * k, z];
+}
+const SKIRT_K = [1, 0.5];
 function shellRing(z, side, m, lift = 0, reverse = false, a0 = 0, a1 = A_RIM) {
   const out = [];
+  if (a0 === 0) for (const k of SKIRT_K) out.push(skirtPoint(z, k, side, lift));
   for (let j = 0; j < m; j++) out.push(domePoint(z, a0 + ((a1 - a0) * j) / (m - 1), side, lift));
   if (side < 0 !== reverse) out.reverse();
   return out;
@@ -72,6 +86,8 @@ function shellRing(z, side, m, lift = 0, reverse = false, a0 = 0, a1 = A_RIM) {
 // t = 1 the first full station at Z.domeFull
 function frontRing(t, side, m, lift = 0, reverse = false, a0 = 0, a1 = A_RIM) {
   const out = [];
+  const zE = shellFrontZ(0);
+  if (a0 === 0) for (const k of SKIRT_K) out.push(skirtPoint(zE + (Z.domeFull - zE) * t, k, side, lift));
   for (let j = 0; j < m; j++) {
     const a = a0 + ((a1 - a0) * j) / (m - 1);
     const z0 = shellFrontZ(a);
@@ -366,29 +382,35 @@ export function buildAft(add, rand, engines) {
       const eaveZ = [Z.neckEnd, ...zs];
       add(
         loftStrips(
-          eaveZ.map((z) => [domePoint(z, 0, side, 0), domePoint(z, 0, side, -SHELL_TH)]),
+          eaveZ.map((z) => [skirtPoint(z, 1, side, 0), skirtPoint(z, 1, side, -SHELL_TH)]),
           { texel: 1 / 6, orient: [0, 300, 200] },
         ),
         "dark",
         { uv: "keep", lod, color: MACH_DK },
       );
-      // eave soffit: closes the overhang between the shell's inner eave edge and the lower hull
+      // soffit: closes the overhang between the skirt's inner bottom edge and the lower hull
       const sofZ = eaveZ.filter((z) => z <= Z.eng);
       add(
         loftStrips(
           sofZ.map((z) => {
             const sec = domeSection(z);
-            const ex = sec.cx + sec.hw - SHELL_TH;
+            const ex = sec.cx + sec.hw + SKIRT_FLARE - SHELL_TH;
             const ix = Math.max(0.5, Math.min(ex, HW.lower));
             return [
-              [side * ix, Y.eave, z],
-              [side * Math.max(0.5, ex), sec.yE, z],
+              [side * ix, sec.yE - SKIRT_D, z],
+              [side * Math.max(0.5, ex), sec.yE - SKIRT_D, z],
             ];
           }),
           { texel: 1 / 8, orient: [0, 300, 150] },
         ),
         "dark",
         { uv: "keep", lod, color: MACH_DK },
+      );
+      // front cap of the skirt cavity between the lower hull and the skirt
+      add(
+        quadAt([side * (HW.lower + (HW.dome + SKIRT_FLARE - SHELL_TH - HW.lower) / 2), Y.eave - SKIRT_D / 2, Z.neckEnd + 0.2], [0, 0, -1], [1, 0, 0], HW.dome + SKIRT_FLARE - SHELL_TH - HW.lower, SKIRT_D),
+        "dark",
+        { texel: 1 / 6, lod, color: MACH_DK },
       );
     }
     // raked bulkhead across the opening behind the shell edge: an inclined dark band from the inner
@@ -517,11 +539,11 @@ export function buildAft(add, rand, engines) {
           }
       // lower hull: pipes, tanks, boxes
       for (const side of [-1, 1]) {
-        for (const y of [-9, -14.5, -28.5])
-          add(tubeZ(2, 2, 270, 8, side * (HW.lower + 1.5), y, 155, false), "dark", {
+        for (const y of [-18.5, -28.2])
+          add(tubeZ(1.8, 1.8, 270, 8, side * (HW.lower + 1.5), y, 155, false), "dark", {
             texel: 1 / 4,
             lod,
-            color: y === -14.5 ? MACH_LT : MACH,
+            color: y === -18.5 ? MACH_LT : MACH,
           });
         for (const z of [120, 215])
           add(tubeZ(6, 6, 54, lod === 0 ? 14 : 8, side * 46, Y.lowerBot + 2, z, false), "dark", {

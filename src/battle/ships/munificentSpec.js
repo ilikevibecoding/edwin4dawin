@@ -12,7 +12,7 @@
 //     back from the eave to the top over the reactor sphere, the dark spine trench along its top to the
 //     tiered bridge tower at 78-86 %, and the two armour shells thinning past the tower into the long
 //     inward-curving stern blades either side of the thruster block (86.4 %).
-import { col } from "./munificentGeo.js";
+import { col, smoothstep } from "./munificentGeo.js";
 import { smoothTable } from "./munificentHull.js";
 
 export const MUNIFICENT = { length: 825, width: 426, height: 243 };
@@ -60,7 +60,7 @@ export const HOOD_P = 2.0; // the hood cowl is an elliptical arch
 
 // palette: vertex tints over the shared plating (mean albedo ~0.62 before tint). Pale grey-white with
 // a cool cast (the TCW frigate), a clear step above the Recusant's gunmetal and cooler than the Venator.
-export const HULL = col(0xdcdde2);
+export const HULL = col(0xd3d5db);
 export const HULL_LT = HULL.clone().multiplyScalar(1.06);
 export const HULL_DK = HULL.clone().multiplyScalar(0.84);
 export const SOOT = col(0x2a2a2e);
@@ -85,6 +85,11 @@ export function plankTone(k0) {
   const k = Math.floor((k0 + 10) / 6.2);
   const h = Math.sin(k * 12.9898) * 43758.5453;
   return 1 + (h - Math.floor(h) - 0.5) * 0.18;
+}
+// blue-grey weathering streaks running down the arches (TCW): a smooth noise of the station z, 0..1
+export function streak(z) {
+  const n = 0.5 + 0.5 * Math.sin(z * 0.37 + 1.3 * Math.sin(z * 0.11) + 0.7 * Math.sin(z * 0.053));
+  return smoothstep(0.55, 0.95, n);
 }
 
 // ---------------------------------------------------------------------------

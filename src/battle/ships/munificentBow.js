@@ -9,6 +9,7 @@ import { antennaCluster, slotRow } from "./munificentDetail.js";
 import {
   BLUE,
   D2R,
+  GRIME,
   HOOD_ARC,
   HULL,
   HULL_DK,
@@ -29,6 +30,7 @@ import {
   hoodSection,
   noseShift,
   plankTone,
+  streak,
 } from "./munificentSpec.js";
 
 const TEX = 1 / 30;
@@ -63,6 +65,7 @@ export const hoodTint = (x, y, z, o) => {
   const eave = Math.min(a, 180 - a);
   o.multiplyScalar(1 - 0.14 * (1 - smoothstep(4, 26, eave)));
   o.lerp(HULL_LT, 0.25 * smoothstep(-330, Z.nose, z));
+  o.lerp(GRIME, streak(z) * (0.1 + 0.28 * (1 - smoothstep(0, 70, eave))));
   o.lerp(SOOT, 0.08 * smoothstep(-170, Z.hoodEnd, z));
 };
 
