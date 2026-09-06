@@ -63,3 +63,22 @@ water's sun-driven body scattering halved with the CSM irradiance (reference wat
 | 1.1 | 0.1/0.2 fixed at noon: the airframe shows curvature and panel shading, shade reads as shade; sunlit white 223 (target 220-235), shade p15 85 (target 90-107). | above |
 | 1.2 | New: under a 70 % deck the white wing top is now 156-174 (lin 0.26-0.33) against a sky band of 194 (lin 0.45); under overcast a white horizontal sits at ~0.85 x the sky's radiance (the whole deck is the source), i.e. ~182. The 1.5x overcast lift was tuned against `amb` 1.0. Fix in round 2: the overcast IBL becomes an absolute level (`lerp(k.amb, 1.2, grey)`) instead of a multiple of the clear-sky key. | cloudy 15:30 chase: paint p85/p95 156/174, sky band (191,195,196) |
 | 1.3 | Sunrise 06:45 palette intact (pink-mauve water, warm haze); white paint no longer flat. | planeClose 06:45 L p50 110 -> 95 |
+
+## Round 2 — horizon seam, sun disc and glare, overcast level (defects 0.3, 0.4, 0.7, 1.2)
+
+Changes: `post.ts` aerial pass lifts MSAA-resolved horizon pixels whose neighbour holds geometry past the dissolve
+start to the sky radiance; `common.glsl.ts` disc colour follows the elevation (clipped white above ~9 deg,
+yellow-orange at 3-4 deg, orange-red on the horizon) instead of a 9x red limb below 23 deg, circumsolar glare
+(1.5 deg core + 5 deg veil, in `skyRadiance` so dome, probe and water mirror agree), `kLow` 3.5 -> 5;
+`atmosphere.ts` overcast IBL `lerp(amb, 1.2, grey)`.
+
+| # | result | measurement |
+|---|---|---|
+| 2.1 | 0.3 fixed where the horizon is the far plane: the one-pixel grey line along the 06:45 horizon is gone (crop 100-400 x 120-200, 4x). | chaseTo 06:45 row 156: r0 med 18 below its neighbours, r2 no row stands out (detector moves to the airframe edge) |
+| 2.2 | 0.3 not fixed at 30 m: the last sky row still holds mixed pixels (p10 181 against 202), because the horizon water there is 24 km away (0.07 deg below level), short of the 33 km dissolve start the test required. The step itself (sky 202 -> water 178 over rows 360/361) is the real sea horizon: the reference photo has a 25-level step (175 -> 150). Fix in round 3: haze the seam pixel by its farthest geometry neighbour, which is exact when the dome equals `skyRadiance`. | horizon30 12:00 rows 354-367 |
+| 2.3 | 0.4 fixed: 17:45 disc (237,220,201) white with a soft halo (r0 (241,206,165) flat yellow), cockpit view shows a disc with glare instead of an orange dot; 18:20 (1.7 deg) disc (244,196,119) lemon-yellow — too yellow for 1.7 deg, ramp retuned to (2.3,0.7,0.15) for round 3. | chaseTo 17:45 (610-670, 20-60); 18:20 (630-650, 140-155) |
+| 2.4 | 0.5 barely moved: frame top 17:45 toward the sun (176,137,153), r0 (181,141,151); 13 deg up is still 28 % horizon colour plus the mie and sunset-band terms. A mauve belt over the salmon horizon is plausible (Belt-of-Venus tones); kept, no further change to `kLow`. | chaseTo 17:45 rows 2-12 |
+| 2.5 | 1.2 fixed: cloudy 15:30 white wing top p85/p95 171/184 (lin 0.32/0.39) under a 194 (0.45) sky band = 0.85x; storm 09:00 176/191 under a 174 band (the deck above is brighter than the horizon band under a storm). Scene p50 storm 85 -> 71, clear noon ~125: overcast now reads darker than clear (0.7). | paint histograms |
+| 2.6 | 0.6 open: golden-hour city still one peach wash; towers show some lit/shade but lit faces are mauve-grey not orange. Cause is in the probe: the neutral fill is 65 % of the probe at the horizon and 40 % at 60 deg up at every azimuth and every sun elevation, so at 17:45 shade and horizontal ground are lit by salmon haze. Fix in round 3: fill weight x0.35 below ~8 deg sun (sky.ts probe shader, cloud code untouched). | highSkyline 17:45 ruler crop 480-780 x 290-440 |
+| 2.7 | Glitter path 06:45 toward the sun: core 247 -> 239, edge 151 -> 133, blown 1.49 % -> 0.07 %. Still bright with bloom, but the water's specular halved with the CSM irradiance; a glitter toward a 14 deg sun clips hard in life. Request to the water agent (x1.5-2 on the glitter BRDF scale). | chaseTo 06:45 (620-680, 200-260) |
+| 2.8 | Night 22:00 unchanged (moon scale untouched): city glow, lit windows with soft bloom, red nav light halo, legible white wing. Kept. | nightChase blown 0.06 %, crushed 0 % |
