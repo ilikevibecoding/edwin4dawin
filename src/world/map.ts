@@ -461,8 +461,11 @@ export function createDistricts(): District[] {
   const add = (d: District) => D.push(d);
   // dense core
   add({ id: 'downtown', zone: Zone.DOWNTOWN, cx: -2650, cz: -3900, hw: 750, hh: 620, rot: 0.02, gridX: 130, gridZ: 110, density: 0.92, hMin: 40, hMax: 260 });
-  add({ id: 'brickell', zone: Zone.RES_MID, cx: -2900, cz: -2350, hw: 550, hh: 420, rot: 0.02, gridX: 120, gridZ: 120, density: 0.85, hMin: 25, hMax: 120 });
-  add({ id: 'midtown', zone: Zone.RES_MID, cx: -3500, cz: -5300, hw: 900, hh: 700, rot: 0.0, gridX: 120, gridZ: 140, density: 0.8, hMin: 12, hMax: 60 });
+  // brickell is the second high-rise cluster of the CBD (hMax >= 150 puts a mid-rise district on the downtown
+  // fill: tower recipes, log-normal heights climbing toward its bayfront, its own landmarks), so the skyline seen
+  // from the bay is a 3 km wall of towers either side of the river instead of one clump on the peninsula
+  add({ id: 'brickell', zone: Zone.RES_MID, cx: -2900, cz: -2350, hw: 550, hh: 420, rot: 0.02, gridX: 120, gridZ: 120, density: 0.88, hMin: 30, hMax: 235 });
+  add({ id: 'midtown', zone: Zone.RES_MID, cx: -3500, cz: -5300, hw: 900, hh: 700, rot: 0.0, gridX: 120, gridZ: 140, density: 0.8, hMin: 12, hMax: 95 });
   // special-use districts take priority over the residential fabric around them
   add({ id: 'construction-dt', zone: Zone.CONSTRUCTION, cx: -2250, cz: -4250, hw: 70, hh: 60, rot: 0.02, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });
   add({ id: 'construction-dt2', zone: Zone.CONSTRUCTION, cx: -3150, cz: -3550, hw: 65, hh: 55, rot: 0.02, gridX: 0, gridZ: 0, density: 0, hMin: 0, hMax: 0 });

@@ -440,6 +440,12 @@ const FAM: Record<'glassBlue' | 'glassGreen' | 'punched' | 'balcony' | 'deco' | 
   house: { style: S.HOUSE, floorH: 3.0, tints: HOUSE_WALLS, lit: [0.2, 0.6], warm: [0.8, 1.0] },
 };
 
+/** Standard normal deviate (Box-Muller) from two uniform draws. */
+function gauss(rng: Rng): number {
+  const u1 = Math.max(1e-6, rng.next()), u2 = rng.next();
+  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
 function pickWeighted<T>(rng: Rng, items: readonly (readonly [T, number])[]): T {
   let total = 0;
   for (const [, w] of items) total += w;
@@ -846,15 +852,17 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
 
   // ------------------------------------------------------------- landmark towers (downtown skyline hierarchy)
   const dt = map.districts.find((x) => x.id === 'downtown')!;
-  const landmark = (name: string, lx: number, lz: number, build: (x: number, z: number, g: number) => number) => {
-    const c = Math.cos(dt.rot), s = Math.sin(dt.rot);
-    const x = dt.cx + lx * c - lz * s, z = dt.cz + lx * s + lz * c;
+  const bk = map.districts.find((x) => x.id === 'brickell')!;
+  const landmarkIn = (dd: District, name: string, lx: number, lz: number, build: (x: number, z: number, g: number) => number) => {
+    const c = Math.cos(dd.rot), s = Math.sin(dd.rot);
+    const x = dd.cx + lx * c - lz * s, z = dd.cz + lx * s + lz * c;
     const g = map.heightAt(x, z);
     if (g < 1) return;
     const h = build(x, z, g);
     landmarkPositions.push({ x, z, h, name });
     markOccupied(x, z, 46);
   };
+  const landmark = (name: string, lx: number, lz: number, build: (x: number, z: number, g: number) => number) => landmarkIn(dt, name, lx, lz, build);
   // Crowns are sized to survive 3-5 km: spires start 8-10 m wide at the base, lanterns are 12-18 m glass boxes.
   landmark('Meridian Tower', 120, -80, (x, z, g) => {
     const o = { lit: 0.5, warm: 0.3, variant: 0.2 };
@@ -873,7 +881,9 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('frustum', x, z, 4, 38, 4, 0.05, '#cfd8dc', S.CONCRETE, 3, { yBase: g + 297, margin: -1 });
     return 335;
   });
-  landmark('Faro Bahía', -180, 40, (x, z, g) => {
+  // the three tallest are spaced (Meridian centre-east, Bahía One centre, Faro west-centre) instead of standing
+  // within 300 m of one another, so the skyline has three peaks with the fill's tail between them
+  landmark('Faro Bahía', -430, -120, (x, z, g) => {
     place('cyl', x, z, 40, 240, 40, 0, '#e8ebe4', S.GLASS_GREEN, 3.8, { lit: 0.45, warm: 0.4, variant: 0.6 });
     // lighthouse brim, glass lantern, conical roof and mast
     place('cyl', x, z, 50, 10, 50, 0, '#e8eef2', S.CONCRETE, 3, { yBase: g + 232, margin: -1 });
@@ -1003,6 +1013,41 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('box', x + 24, z, 30, 7, 40, 0.02, '#b9bfc3', S.GRID, 3.5, { yBase: g + 168, lit: 0, variant: 0.3, margin: -1 });
     return 175;
   });
+  // ------------------------------------------------------------- brickell landmarks (the second cluster, south of the river)
+  landmarkIn(bk, 'Brickell Flatiron', 380, -140, (x, z, g) => {
+    // slender green-glass point tower with a glazed tapering crown and a mast: the peak of the southern cluster
+    const o = { lit: 0.5, warm: 0.4, variant: 0.35 };
+    place('box', x, z, 30, 205, 30, bk.rot, '#dfe6e0', S.GLASS_GREEN, 3.8, o);
+    place('frustum', x, z, 30, 34, 30, bk.rot, '#dfe6e0', S.GLASS_GREEN, 3.8, { ...o, lit: 0.9, yBase: g + 205, margin: -1 });
+    place('frustum', x, z, 3, 26, 3, bk.rot, '#e8eef2', S.CONCRETE, 3, { yBase: g + 239, margin: -1 });
+    return 265;
+  });
+  landmarkIn(bk, 'River Twins', 120, -300, (x, z, g) => {
+    // two blue-glass towers of unequal height on a shared punched podium beside the river
+    const o = { lit: 0.5, warm: 0.3, variant: 0.55 };
+    place('box', x, z, 96, 12, 56, bk.rot, '#efe4cf', S.PUNCHED, 3.4, { lit: 0.25, warm: 0.7, variant: 0.5 });
+    place('box', x - 28, z, 30, 172, 40, bk.rot, '#a7bccb', S.GLASS_BLUE, 3.9, o);
+    place('box', x + 28, z, 30, 190, 40, bk.rot, '#a7bccb', S.GLASS_BLUE, 3.9, o);
+    place('box', x + 28, z, 14, 8, 14, bk.rot, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 190, lit: 0.9, warm: 0.3, variant: 0.5, margin: -1 });
+    return 198;
+  });
+  landmarkIn(bk, 'Palmetto', 440, 180, (x, z, g) => {
+    // pastel hotel slab along the bay closed by a full-height drum, a pool deck on the roof
+    const o = { lit: 0.35, warm: 0.85, variant: 0.5 };
+    place('box', x, z, 26, 150, 70, bk.rot, '#f2c9a8', S.HOTEL, 3.2, o);
+    place('cyl', x, z - 35, 26, 150, 26, bk.rot, '#f2c9a8', S.HOTEL, 3.2, o);
+    place('house', x, z + 6, 8, 0.4, 20, bk.rot, '#3fc4de', S.POOL, 3, { yBase: g + 150, form: 2, margin: -1 });
+    return 150;
+  });
+  landmarkIn(bk, 'Obsidian', -80, 40, (x, z, g) => {
+    // dark stone office in three tiers with a lit lantern: the mass at the centre of brickell
+    const o = { lit: 0.55, warm: 0.4, variant: 0.5 };
+    place('box', x, z, 46, 150, 46, bk.rot, '#3f3b38', S.STONE, 3.8, o);
+    place('box', x, z, 36, 195, 36, bk.rot, '#3f3b38', S.STONE, 3.8, o);
+    place('box', x, z, 26, 225, 26, bk.rot, '#3f3b38', S.STONE, 3.8, o);
+    place('box', x, z, 16, 10, 16, bk.rot, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 225, lit: 0.9, warm: 0.5, variant: 0.5, margin: -1 });
+    return 235;
+  });
 
   // ------------------------------------------------------------- district fills
   // the urban gradient of the suburbs: blocks near the mid-rise districts and along the arterial corridors
@@ -1032,6 +1077,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       switch (d.zone) {
         case Zone.DOWNTOWN: fillDowntown(); break;
         case Zone.RES_MID: {
+          // a mid-rise district rated for towers (brickell) fills like downtown: its own core / bayfront gradient
+          if (d.hMax >= 150) { fillDowntown(); break; }
           // the mid-rise districts fray at their edges: outer blocks turn to walk-ups and houses where the
           // shared urban gradient drops, so the boundary with the suburbs is ragged rather than ruled
           const { urban, corridor } = urbanGradient(map.districts, map.roads, cxw, czw);
@@ -1060,21 +1107,22 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       function fillDowntown(): void {
         const core = 1 - smoothstep(0.2, 1.0, distToCentre);
         // the bayfront (district +x) carries the tall wall the skyline views read: towers climb toward the water
-        const east = smoothstep(0.15, 0.75, ((cxw - dt.cx) * Math.cos(dt.rot) + (czw - dt.cz) * Math.sin(dt.rot)) / dt.hw);
+        const east = smoothstep(0.15, 0.75, ((cxw - d.cx) * c + (czw - d.cz) * s) / d.hw);
+        const prominence = Math.max(core, 0.9 * east);
+        const main = d.id === 'downtown';
         const nTowers = bw > 80 && bd > 70 ? 2 : 1;
         for (let t = 0; t < nTowers; t++) {
-          // height hierarchy: many 40-100 m, a cluster of 120-230 m near the core and along the bay (landmarks own 250-360 m)
-          const u = drng.next();
-          let h: number;
-          if (u < 0.1 + 0.24 * core + 0.2 * east) h = drng.range(120, 205 + 35 * east);
-          else if (u < 0.45 + 0.2 * core + 0.1 * east) h = drng.range(75, 130);
-          else h = drng.range(36, 72);
-          h *= lerp(0.7, 1.0, Math.max(core, 0.7 * east));
-          h = Math.max(28, h);
+          // Height hierarchy: log-normal, the way real CBDs are distributed. The median climbs from ~45 m at the
+          // district edge to ~118 m in the core and along the bay (brickell 40 -> 102) and the spread widens with
+          // it, so the edge is 30-90 m walk-ups and plates while the core and the waterfront carry the 150-270 m
+          // tail with a few near-supertalls; the landmarks own 285-361 m.
+          const median = lerp(main ? 46 : 40, main ? 118 : 102, prominence);
+          const sigma = lerp(0.4, 0.5, prominence);
+          let h = clamp(median * Math.exp(sigma * gauss(drng)), 26, main ? 272 : 235);
           // footprint classes so the skyline mixes widths: slender point towers, standard plates, wide slabs
           const wr = drng.next();
           let fw: number, fd: number;
-          if (wr < (h > 110 ? 0.34 : 0.22)) { fw = drng.range(16, 24); fd = drng.range(18, 30); }
+          if (wr < (h > 110 ? 0.34 : 0.22)) { const slim = h > 180 ? 6 : 0; fw = drng.range(16 + slim, 24 + slim); fd = drng.range(18 + slim, 30 + slim); }
           else if (wr < 0.82) { fw = drng.range(24, Math.min(46, bw * 0.55)); fd = drng.range(22, Math.min(46, bd * 0.6)); }
           else { fw = drng.range(Math.min(44, bw * 0.5), Math.min(74, bw * 0.75)); fd = drng.range(18, Math.min(30, bd * 0.4)); if (h > 150) h *= 0.7; }
           const lx = nTowers === 1 ? (bx0 + bx1) / 2 + drng.range(-bw * 0.1, bw * 0.1) : lerp(bx0 + fw / 2 + 4, bx1 - fw / 2 - 4, t);
@@ -1141,6 +1189,9 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           placed++;
           let h = lerp(d.hMin, d.hMax, Math.pow(drng.next(), 2.0)) * lerp(0.75, 1.15, prox);
           h = clamp(h, d.hMin * 0.8, d.hMax);
+          // the blocks nearest downtown carry the odd 90-140 m tower: the CBD tapers into the mid-rise ring
+          // instead of stopping at the district line
+          if (prox > 0.55 && d.hMax >= 80 && drng.next() < 0.14 * prox) h = drng.range(90, 140);
           const fam = h > 50
             ? pickWeighted(drng, clusterWeights([[FAM.balcony, 0.3], [FAM.punched, 0.2], [FAM.grid, 0.15], [FAM.deco, 0.1], [FAM.glassGreen, 0.15], [FAM.glassBlue, 0.1]] as const, nb.glass))
             : pickWeighted(drng, clusterWeights([[FAM.brick, 0.28], [FAM.punched, 0.24], [FAM.deco, 0.16], [FAM.balcony, 0.16], [FAM.grid, 0.1], [FAM.concrete, 0.06]] as const, nb.glass));
