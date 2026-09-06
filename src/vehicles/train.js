@@ -284,8 +284,10 @@ class HoloDisplay {
     const station = (S) => {
       const wait = HoloDisplay.untilDock(st, S);
       const dest = S === F ? C : F;
-      if (wait === 0) return [`TO ${dest.name.toUpperCase()}`, `BOARDING  ·  DEPARTS ${HoloDisplay.clock(SCHEDULE.dwell - st.phaseT)}`];
-      return [`TO ${dest.name.toUpperCase()}`, `NEXT TRAIN IN ${HoloDisplay.clock(wait)}`];
+      // westbound trains call at the terminus before the frontier; eastbound is the express
+      const via = S === C && ROUTE.terminus ? ` VIA ${ROUTE.terminus.name.split(' ')[0].toUpperCase()}` : '';
+      if (wait === 0) return [`TO ${dest.name.toUpperCase()}${via}`, `BOARDING  ·  DEPARTS ${HoloDisplay.clock(SCHEDULE.dwell - st.phaseT)}`];
+      return [`TO ${dest.name.toUpperCase()}${via}`, `NEXT TRAIN IN ${HoloDisplay.clock(wait)}`];
     };
     const fs = station(F), cs = station(C);
     const key = [st.dest.name, trainLine, frac.toFixed(2), fs.join(), cs.join()].join('|');

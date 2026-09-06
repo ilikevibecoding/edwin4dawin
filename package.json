@@ -14,7 +14,8 @@
     "material-table": "node scripts/material-table.mjs",
     "mp-test": "node scripts/mp-test.mjs",
     "gameplay-test": "node scripts/test-gameplay.mjs --url http://localhost:5173",
-    "train-test": "node scripts/test-train.mjs --url http://localhost:5173"
+    "train-test": "node scripts/test-train.mjs --url http://localhost:5173",
+    "terminus-test": "node scripts/test-terminus.mjs --url http://localhost:5173"
   },
   "dependencies": {
     "three": "^0.185.1",
