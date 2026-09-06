@@ -5,222 +5,54 @@ import type { WorldMap, Vec2 } from './map';
 import type { RoadSegment } from './roads';
 import type { BridgeRoute } from './bridges';
 import { CONTRAIL_MATERIAL, WakeTrail, type WakeBatch } from '../render/wakes';
-import { PbrSoup, cellKey, createBatchedPbrMaterial } from './batching';
-import { layerMask, maskCasts, setCasterClass, type ViewCull } from './culling';
+import { cellKey } from './batching';
+import { LAYER_MIRROR, layerMask, maskCasts, setCasterClass, type ViewCull } from './culling';
+import { BoatMotion, bakeGroupLocal, buildBoatModel, createBoatMaterial, drawVariant, hullTintColor, lodDistances, type BoatModel, type BoatSpec, type HullKind, type MooredBoat } from './boats';
+import { WaveField } from './waves';
 
 // ------------------------------------------------------------------ boats
 
-export type HullKind = 'speed' | 'yacht' | 'sail' | 'console' | 'cargo' | 'ferry' | 'cruise';
+export type { HullKind, MooredBoat } from './boats';
 
-/** A vessel tied up somewhere (marina slips, the cruise berth): position, heading, the length the berth was laid
- *  out for and, for the special berths, the kind of vessel. */
-export interface MooredBoat { x: number; z: number; rot: number; len: number; kind?: HullKind; }
-
-function hullGeometry(len: number, beam: number, height: number): THREE.BufferGeometry {
-  // pointed bow, flat transom; simple 8-vertex hull with a deck
-  const l = len / 2, b = beam / 2;
-  const v = [
-    // keel line
-    [-l, -height * 0.55, 0], [l * 0.55, -height * 0.55, 0],
-    // chine
-    [-l, -height * 0.1, -b * 0.95], [-l, -height * 0.1, b * 0.95], [l * 0.35, -height * 0.15, -b], [l * 0.35, -height * 0.15, b], [l, 0.05, 0],
-    // deck
-    [-l, height * 0.45, -b], [-l, height * 0.45, b], [l * 0.4, height * 0.45, -b * 0.95], [l * 0.4, height * 0.45, b * 0.95], [l, height * 0.55, 0],
-  ];
-  const f = [
-    // bottom
-    [0, 2, 4], [0, 4, 1], [0, 1, 5], [0, 5, 3], [1, 4, 6], [1, 6, 5],
-    // sides
-    [2, 7, 9], [2, 9, 4], [4, 9, 11], [4, 11, 6], [3, 5, 10], [3, 10, 8], [5, 6, 11], [5, 11, 10],
-    // transom
-    [0, 3, 8], [0, 8, 7], [0, 7, 2],
-    // deck
-    [7, 8, 10], [7, 10, 9], [9, 10, 11],
-  ];
-  const pos: number[] = [];
-  for (const tri of f) for (const i of tri) pos.push(v[i][0], v[i][1], v[i][2]);
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.computeVertexNormals();
-  return g;
-}
-
-export class BoatFactory {
-  readonly mats = {
-    white: new THREE.MeshStandardMaterial({ color: 0xf4f4f0, roughness: 0.35, metalness: 0.05 }),
-    hullDark: new THREE.MeshStandardMaterial({ color: 0x1f2a38, roughness: 0.5 }),
-    hullRed: new THREE.MeshStandardMaterial({ color: 0x9a2f2a, roughness: 0.55 }),
-    hullBlue: new THREE.MeshStandardMaterial({ color: 0x1f4f8a, roughness: 0.5 }),
-    hullGreen: new THREE.MeshStandardMaterial({ color: 0x2f5a3c, roughness: 0.55 }),
-    hullCream: new THREE.MeshStandardMaterial({ color: 0xe6dcc4, roughness: 0.4 }),
-    hullGrey: new THREE.MeshStandardMaterial({ color: 0x6d7378, roughness: 0.5 }),
-    teak: new THREE.MeshStandardMaterial({ color: 0xb08a5a, roughness: 0.8 }),
-    glass: new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.1, metalness: 0.9 }),
-    sail: new THREE.MeshStandardMaterial({ color: 0xf8f6ee, roughness: 0.9, side: THREE.DoubleSide }),
-    cover: new THREE.MeshStandardMaterial({ color: 0x2a4a78, roughness: 0.85 }),
-    steel: new THREE.MeshStandardMaterial({ color: 0x8c949c, roughness: 0.5, metalness: 0.6 }),
-    orange: new THREE.MeshStandardMaterial({ color: 0xe0762a, roughness: 0.6 }),
-    containerWhite: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 }),
-  };
-  get materials(): THREE.Material[] { return Object.values(this.mats); }
-
-  /** `moored`: sails down (boom cover, bare mast) and a wider spread of hull colours than the boats under way. */
-  build(kind: HullKind, rng: Rng, moored = false): { group: THREE.Group; len: number; beam: number; draft: number; wakeWidth: number } {
-    const g = new THREE.Group();
-    const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0) => {
-      const m = new THREE.Mesh(geo, mat);
-      m.position.set(x, y, z); m.rotation.set(rx, ry, rz);
-      m.castShadow = true; m.receiveShadow = true;
-      g.add(m);
-      return m;
-    };
-    const hullMat = moored
-      ? rng.pick([this.mats.white, this.mats.white, this.mats.hullDark, this.mats.hullBlue, this.mats.hullRed, this.mats.hullGreen, this.mats.hullCream, this.mats.hullGrey])
-      : rng.pick([this.mats.white, this.mats.white, this.mats.hullDark, this.mats.hullBlue, this.mats.hullRed]);
-    switch (kind) {
-      case 'speed': {
-        const len = rng.range(7, 10), beam = len * 0.3;
-        add(hullGeometry(len, beam, 1.4), hullMat, 0, 0.3, 0);
-        add(new THREE.BoxGeometry(len * 0.25, 0.5, beam * 0.8), this.mats.glass, len * 0.05, 1.05, 0, 0, 0, -0.35);
-        add(new THREE.BoxGeometry(len * 0.35, 0.35, beam * 0.75), this.mats.teak, -len * 0.2, 0.8, 0);
-        add(new THREE.BoxGeometry(0.6, 0.6, 0.8), this.mats.steel, -len * 0.45, 0.6, 0);
-        return { group: g, len, beam, draft: 0.5, wakeWidth: beam * 1.4 };
-      }
-      case 'console': {
-        const len = rng.range(6, 8), beam = len * 0.32;
-        add(hullGeometry(len, beam, 1.3), this.mats.white, 0, 0.3, 0);
-        add(new THREE.BoxGeometry(1.2, 1.4, 1.0), this.mats.white, 0, 1.2, 0);
-        add(new THREE.BoxGeometry(1.6, 0.15, 1.6), this.mats.hullDark, 0, 2.3, 0);
-        for (const s of [-1, 1]) add(new THREE.CylinderGeometry(0.04, 0.04, 1.6, 6), this.mats.steel, 0.6 * s, 1.5, 0.7 * s);
-        add(new THREE.BoxGeometry(0.5, 0.7, 0.5), this.mats.hullDark, -len * 0.45, 0.7, 0);
-        return { group: g, len, beam, draft: 0.45, wakeWidth: beam * 1.3 };
-      }
-      case 'yacht': {
-        const len = rng.range(18, 32), beam = len * 0.25;
-        add(hullGeometry(len, beam, len * 0.16), this.mats.white, 0, len * 0.04, 0);
-        add(new THREE.BoxGeometry(len * 0.5, len * 0.09, beam * 0.8), this.mats.white, -len * 0.05, len * 0.13, 0);
-        add(new THREE.BoxGeometry(len * 0.48, len * 0.04, beam * 0.82), this.mats.glass, -len * 0.05, len * 0.135, 0);
-        add(new THREE.BoxGeometry(len * 0.28, len * 0.07, beam * 0.6), this.mats.white, -len * 0.12, len * 0.21, 0);
-        add(new THREE.BoxGeometry(len * 0.26, len * 0.03, beam * 0.62), this.mats.glass, -len * 0.12, len * 0.215, 0);
-        add(new THREE.BoxGeometry(len * 0.06, len * 0.09, beam * 0.5), this.mats.white, -len * 0.2, len * 0.29, 0, 0, 0, 0.3); // radar arch
-        add(new THREE.CylinderGeometry(0.15, 0.15, 1.2, 8), this.mats.steel, -len * 0.2, len * 0.34, 0);
-        return { group: g, len, beam, draft: len * 0.06, wakeWidth: beam * 1.5 };
-      }
-      case 'sail': {
-        const len = moored ? rng.range(8, 15) : rng.range(9, 14), beam = len * 0.31;
-        add(hullGeometry(len, beam, len * 0.14), hullMat, 0, len * 0.03, 0);
-        // cabin trunk, cockpit coaming
-        add(new THREE.BoxGeometry(len * 0.3, 0.7, beam * 0.6), rng.chance(0.75) ? this.mats.white : this.mats.hullCream, -len * 0.05, len * 0.09 + 0.3, 0);
-        const mastH = len * 1.25;
-        add(new THREE.CylinderGeometry(0.06, 0.09, mastH, 6), this.mats.steel, len * 0.05, mastH / 2 + len * 0.08, 0);
-        if (moored) {
-          // sails down: boom with its cover along the centreline, spreaders, a furled headsail on the forestay
-          add(new THREE.BoxGeometry(len * 0.42, 0.42, 0.34), rng.pick([this.mats.cover, this.mats.cover, this.mats.hullRed, this.mats.hullGreen, this.mats.hullCream]), -len * 0.16, len * 0.13 + 0.55, 0);
-          add(new THREE.BoxGeometry(0.08, 0.08, beam * 0.7), this.mats.steel, len * 0.05, mastH * 0.5 + len * 0.08, 0);
-          const stay = new THREE.CylinderGeometry(0.07, 0.11, mastH * 0.86, 5);
-          add(stay, this.mats.sail, len * 0.05 + len * 0.22, len * 0.12 + mastH * 0.43, 0, 0, 0, Math.atan2(len * 0.44, mastH * 0.86));
-          add(new THREE.BoxGeometry(0.25, 1.0, 0.25), this.mats.white, len * 0.05, mastH + len * 0.08 - 0.5, 0); // masthead
-          if (rng.chance(0.5)) add(new THREE.BoxGeometry(0.8, 0.9, 0.8), this.mats.hullDark, -len * 0.4, len * 0.1 + 0.2, 0); // outboard / lazarette
-        } else {
-          // main sail (triangle) + jib
-          const sail = new THREE.BufferGeometry();
-          sail.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, mastH * 0.9, 0, -len * 0.42, 0, 0], 3));
-          sail.computeVertexNormals();
-          add(sail, this.mats.sail, len * 0.05, len * 0.13, 0, 0, 0, 0);
-          const jib = new THREE.BufferGeometry();
-          jib.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, mastH * 0.75, 0, len * 0.4, 0, 0], 3));
-          jib.computeVertexNormals();
-          add(jib, this.mats.sail, len * 0.05, len * 0.13, 0.05, 0, 0, 0);
-          g.rotation.z = 0.12;
-        }
-        return { group: g, len, beam, draft: 1.5, wakeWidth: beam * 0.9 };
-      }
-      case 'cruise': {
-        // cruise liner: dark boot top under a white hull with a raked bow, three superstructure tiers with window
-        // bands, forward wheelhouse with bridge wings, lifeboats hung along the promenade deck, raked funnel, mast
-        const len = 290, beam = 36, hullH = 16;
-        add(hullGeometry(len, beam, hullH), this.mats.hullDark, 0, hullH * 0.15, 0);
-        add(hullGeometry(len * 0.99, beam * 1.02, hullH * 0.6), this.mats.white, 0, hullH * 0.15 + hullH * 0.3, 0);
-        const deckY = hullH * 0.15 + hullH * 0.55; // top of the hull
-        const tier = (x: number, y: number, l: number, h: number, b: number, bands: number) => {
-          add(new THREE.BoxGeometry(l, h, b), this.mats.white, x, y + h / 2, 0);
-          for (let i = 0; i < bands; i++) add(new THREE.BoxGeometry(l * 0.98, 1.0, b + 0.3), this.mats.glass, x, y + 1.6 + i * (h / bands), 0);
-        };
-        tier(-len * 0.03, deckY, len * 0.8, 9.0, beam * 0.9, 3);
-        tier(-len * 0.06, deckY + 9.0, len * 0.66, 8.0, beam * 0.82, 3);
-        tier(-len * 0.1, deckY + 17.0, len * 0.42, 5.0, beam * 0.62, 2);
-        // wheelhouse at the forward end of the second tier, wings past the beam
-        add(new THREE.BoxGeometry(len * 0.05, 3.6, beam * 1.06), this.mats.white, len * 0.29, deckY + 9.0 + 1.8, 0);
-        add(new THREE.BoxGeometry(len * 0.05 + 0.3, 1.2, beam * 1.08), this.mats.glass, len * 0.29, deckY + 9.0 + 2.5, 0);
-        // lifeboats on davits along the promenade deck, both sides
-        for (let i = 0; i < 9; i++) for (const s of [-1, 1]) {
-          add(new THREE.BoxGeometry(8.5, 2.6, 3.4), i % 3 === 1 ? this.mats.white : this.mats.orange, -len * 0.22 + i * len * 0.055, deckY + 5.2, s * (beam * 0.45 + 1.6));
-        }
-        // funnel (raked), mast, some deck furniture on the top tier
-        add(new THREE.CylinderGeometry(3.0, 3.6, 10, 12), this.mats.hullDark, -len * 0.2, deckY + 22.0 + 4.5, 0, 0, 0, 0.28);
-        add(new THREE.CylinderGeometry(2.2, 2.2, 2.0, 10), this.mats.orange, -len * 0.2 - 1.6, deckY + 32.0, 0, 0, 0, 0.28);
-        add(new THREE.CylinderGeometry(0.35, 0.5, 12, 6), this.mats.steel, len * 0.2, deckY + 17.0 + 6, 0);
-        add(new THREE.BoxGeometry(len * 0.12, 2.6, beam * 0.3), this.mats.white, len * 0.02, deckY + 22.0, 0);
-        add(new THREE.BoxGeometry(len * 0.08, 0.6, beam * 0.24), this.mats.glass, -len * 0.04, deckY + 22.0, 0); // pool
-        return { group: g, len, beam, draft: hullH * 0.4, wakeWidth: beam * 1.4 };
-      }
-      case 'ferry': {
-        const len = 42, beam = 12;
-        add(hullGeometry(len, beam, 5), this.mats.hullBlue, 0, 1.5, 0);
-        add(new THREE.BoxGeometry(len * 0.8, 3.2, beam * 0.9), this.mats.white, -1, 4.9, 0);
-        add(new THREE.BoxGeometry(len * 0.78, 1.2, beam * 0.92), this.mats.glass, -1, 5.2, 0);
-        add(new THREE.BoxGeometry(len * 0.4, 2.8, beam * 0.6), this.mats.white, -4, 7.8, 0);
-        add(new THREE.CylinderGeometry(0.6, 0.7, 3, 10), this.mats.hullDark, -12, 10.5, 0);
-        return { group: g, len, beam, draft: 2.2, wakeWidth: beam * 1.3 };
-      }
-      case 'cargo': {
-        const len = rng.range(120, 180), beam = len * 0.16, hullH = len * 0.075;
-        add(hullGeometry(len, beam, hullH), this.mats.hullDark, 0, hullH * 0.15, 0);
-        add(new THREE.BoxGeometry(len * 0.9, 0.8, beam * 0.98), this.mats.hullRed, 0, hullH * 0.6, 0);
-        // stern bridge
-        add(new THREE.BoxGeometry(len * 0.09, hullH * 1.6, beam * 0.9), this.mats.white, -len * 0.38, hullH * 0.6 + hullH * 0.8, 0);
-        add(new THREE.BoxGeometry(len * 0.1, 2, beam * 0.95), this.mats.glass, -len * 0.38, hullH * 0.6 + hullH * 1.55, 0);
-        add(new THREE.CylinderGeometry(1.2, 1.5, hullH * 0.9, 10), this.mats.hullDark, -len * 0.44, hullH * 0.6 + hullH * 1.9, 0);
-        // container stacks as one instanced mesh per ship
-        const rows = Math.floor(len * 0.6 / 6.4), cols = Math.max(3, Math.floor(beam / 2.6));
-        const boxes: { x: number; y: number; z: number; c: number }[] = [];
-        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-          const stack = rng.int(1, 4);
-          for (let k = 0; k < stack; k++) boxes.push({ x: len * 0.3 - r * 6.4, y: hullH * 0.6 + 0.8 + 1.3 + k * 2.6, z: (c - (cols - 1) / 2) * 2.5, c: rng.int(0, 5) });
-        }
-        const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(6.1, 2.6, 2.44), this.mats.containerWhite, boxes.length);
-        const m = new THREE.Matrix4();
-        const palette = [0xc0392b, 0x2e86c1, 0x27ae60, 0xd68910, 0x7d8b93, 0xecf0f1].map((c) => new THREE.Color(c));
-        boxes.forEach((b, i) => { inst.setMatrixAt(i, m.makeTranslation(b.x, b.y, b.z)); inst.setColorAt(i, palette[b.c]); });
-        inst.castShadow = true; inst.receiveShadow = true;
-        g.add(inst);
-        return { group: g, len, beam, draft: hullH * 0.5, wakeWidth: beam * 1.4 };
-      }
-    }
-  }
-}
-
-interface MovingBoat {
-  /** instance in the movers batch */
+/** A hull in the batch: its instance, LOD geometries and switch distances, world pose and floating state. */
+interface BoatInstance {
   id: number;
+  geoms: number[];
+  /** mirrored geometry set (sails set on the other side), used while the wind is over the starboard side */
+  geomsMirror: number[] | null;
+  lodDist: [number, number, number];
+  lod: number;
+  mirror: boolean;
+  x: number; z: number; hx: number; hz: number;
+  scale: number;
+  spec: BoatSpec;
+  motion: BoatMotion;
+  phase: number;
+  kind: HullKind;
+  /** moored boats sit at a fixed berth and only ride the water */
+  moored: boolean;
+}
+
+interface MovingBoat extends BoatInstance {
   route: Vec2[];
   routeLen: number;
   s: number;
   dir: 1 | -1;
+  /** current speed and the speed the boat returns to after a turn */
   speed: number;
-  len: number;
-  draft: number;
+  cruise: number;
   wake: WakeTrail;
-  phase: number;
   /** U-turn at a route end: the boat swings round a semicircle instead of reversing on the spot (which left
    *  its wake running ahead of the bow); afterwards `lateral` (its offset from the route) decays as it steers back */
-  turn: { cx: number; cz: number; r: number; a0: number; sweep: number; t: number; dur: number } | null;
+  turn: { cx: number; cz: number; r: number; a: number; a0: number; sign: number } | null;
   lateral: number;
-  /** last world position / heading, for the heading of the wake and hull while turning */
+  /** last world position, for the travel direction */
   px: number;
   pz: number;
-  hx: number;
-  hz: number;
+  /** smoothed compass heading (rad, 0 = -z, clockwise) and its rate: the hull swings round at a finite yaw rate */
+  hdg: number;
+  yawRate: number;
+  sailing: boolean;
 }
 
 function routeLength(pts: Vec2[]): number {
@@ -242,34 +74,62 @@ function routePoint(pts: Vec2[], s: number, out: { x: number; z: number; dx: num
   }
 }
 
-/**
- * Bake the meshes of a vehicle group into one vertex-coloured geometry in the group's local frame,
- * with each part's roughness / metalness carried per vertex (see createBatchedPbrMaterial). Instanced
- * children (container stacks) are expanded with their instance colours. The source geometries are freed.
- */
-function bakeLocal(g: THREE.Group): THREE.BufferGeometry {
-  g.updateMatrixWorld(true);
-  const inv = g.matrixWorld.clone().invert();
-  const soup = new PbrSoup();
-  const local = new THREE.Matrix4(), inst = new THREE.Matrix4(), col = new THREE.Color();
-  g.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
-    local.multiplyMatrices(inv, m.matrixWorld);
-    const mat = m.material as THREE.MeshStandardMaterial;
-    const im = o as THREE.InstancedMesh;
-    if (im.isInstancedMesh) {
-      for (let i = 0; i < im.count; i++) {
-        im.getMatrixAt(i, inst);
-        if (im.instanceColor) im.getColorAt(i, col);
-        soup.add(m.geometry, inst.premultiply(local), mat, im.instanceColor ? col : undefined);
-      }
-    } else {
-      soup.add(m.geometry, local, mat);
+/** Round the corners of a polyline with arcs of radius up to `r` so hulls swing through them at a finite yaw rate. */
+function smoothRoute(pts: Vec2[], r: number): Vec2[] {
+  if (pts.length < 3) return pts;
+  const out: Vec2[] = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const p = pts[i], a = pts[i - 1], b = pts[i + 1];
+    const l0 = Math.hypot(p[0] - a[0], p[1] - a[1]), l1 = Math.hypot(b[0] - p[0], b[1] - p[1]);
+    const d0x = (p[0] - a[0]) / l0, d0z = (p[1] - a[1]) / l0, d1x = (b[0] - p[0]) / l1, d1z = (b[1] - p[1]) / l1;
+    const cosT = clamp(d0x * d1x + d0z * d1z, -1, 1);
+    const theta = Math.acos(cosT);
+    if (theta < 0.02) { out.push(p); continue; }
+    let tl = r * Math.tan(theta / 2);
+    const maxTl = Math.min(l0, l1) * 0.45;
+    if (tl > maxTl) tl = maxTl;
+    const start: Vec2 = [p[0] - d0x * tl, p[1] - d0z * tl], endP: Vec2 = [p[0] + d1x * tl, p[1] + d1z * tl];
+    // quadratic Bezier through the corner approximates the arc closely enough for a boat
+    const n = Math.max(3, Math.ceil(theta / 0.12));
+    for (let k = 0; k <= n; k++) {
+      const t = k / n, u = 1 - t;
+      out.push([u * u * start[0] + 2 * u * t * p[0] + t * t * endP[0], u * u * start[1] + 2 * u * t * p[1] + t * t * endP[1]]);
     }
-    m.geometry.dispose();
-  });
-  return soup.build();
+  }
+  out.push(pts[pts.length - 1]);
+  return out;
+}
+
+/** Depth-first choice among a pool of built variants: the deepest hull that floats in `depth` metres, or null. */
+function pickFloating(pool: BoatModel[], rng: Rng, depth: number): BoatModel | null {
+  const ok = pool.filter((m) => m.spec.draft <= depth - 0.15);
+  if (!ok.length) return null;
+  return rng.pick(ok);
+}
+
+/** The vehicle batch with per-camera level of detail: the main camera picks a level by distance, the shadow and
+ *  mirror passes draw every hull at its mid level (their texels cannot resolve rails and cleats). */
+class MoverBatch extends THREE.BatchedMesh {
+  boats: BoatInstance[] = [];
+  /** the main camera's position on its last pass */
+  readonly camPos = new THREE.Vector3(0, 1e9, 0);
+  camSeen = false;
+
+  onBeforeRender(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, geometry: THREE.BufferGeometry, material: THREE.Material, group: THREE.Group): void {
+    const reduced = scene === null || camera.layers.isEnabled(LAYER_MIRROR);
+    const cp = camera.position;
+    if (!reduced) { this.camPos.copy(cp); this.camSeen = true; }
+    for (const b of this.boats) {
+      let lod: number;
+      if (reduced) lod = 2;
+      else {
+        const d = Math.hypot(cp.x - b.x, cp.z - b.z, cp.y) ;
+        lod = d < b.lodDist[0] ? 0 : d < b.lodDist[1] ? 1 : d < b.lodDist[2] ? 2 : 3;
+      }
+      if (lod !== b.lod) { b.lod = lod; this.setGeometryIdAt(b.id, (b.mirror && b.geomsMirror ? b.geomsMirror : b.geoms)[lod]); }
+    }
+    super.onBeforeRender(renderer, scene, camera, geometry, material, group);
+  }
 }
 
 // ------------------------------------------------------------------ cars
