@@ -46,7 +46,14 @@ export interface FloatState { bow: number; step: number; stern: number; vy: numb
  * velocity, its sink rate into the surface and an energy 0..1 (mass share x entry speed: a 1 m/s touch of a
  * float ~0.1, a 3 m/s slap ~0.6, a wing or the nose catching the water at flying speed 1).
  */
-export interface ContactImpact { x: number; y: number; z: number; vx: number; vz: number; sink: number; speed: number; part: ImpactPart; side: -1 | 0 | 1; energy: number; }
+export interface ContactImpact {
+  x: number; y: number; z: number; vx: number; vz: number; sink: number; speed: number; part: ImpactPart; side: -1 | 0 | 1; energy: number;
+  /** the wetted extent of the part, when it is a line rather than a point: the surface between `from` and `to`
+   *  metres from (x, z) along the horizontal unit direction (dx, dz) takes the water together (a level wing
+   *  slapping down along its whole span, an inverted fuselage along its length); absent for a float, a wheel,
+   *  the nose, or a wing tip dipping in steeply */
+  extent?: { dx: number; dz: number; from: number; to: number };
+}
 
 /**
  * Wreck on the water: the floats (or the struts holding them) failed, so they flood over a few seconds and the
@@ -382,7 +389,10 @@ export class FlightModel {
       let fy: number, fh: number;
       if (isStructure) {
         // airframe on the surface: stiff, heavily damped, high friction; a wing/prop/tail touching at speed is a wreck
-        if (vh > 12) { if (isWater) { if (!wreckCause) { wreckCause = st.part; wreckSide = Math.sign(cp.z); wreckSpeed = vh; } } else this.crash(); }
+        // (the flooding scales with the airframe's speed, not the part's: the second wing of a slewing wreck
+        // meets the water at 24 m/s of tip speed on 150 deg/s of yaw while the airframe is down to 17 m/s, and
+        // it is the airframe's momentum wrenching the struts that stoves in a hull)
+        if (vh > 12) { if (isWater) { if (!wreckCause) { wreckCause = st.part; wreckSide = Math.sign(cp.z); wreckSpeed = Math.hypot(this.velocity.x, this.velocity.z); } } else this.crash(); }
         if (isWater) {
           onWater = true;
           // the part ploughs water: drag by its frontal area (a wing tip or the nose cowl, ~0.4 m^2 at Cd 1) plus
@@ -664,7 +674,28 @@ export class FlightModel {
     const structural = st.kind === 'structure';
     // energy: a float's 1 m/s touch ~0.1, a 3 m/s slap ~0.6; a wing or the nose taking the water at flying speed 1
     const e = structural ? clamp(0.25 * sink + 0.03 * vh, 0, 1) : clamp(0.22 * (sink - 0.6) + 0.004 * vh, 0, 1);
-    this.impacts.push({ x: cpWorld.x, y: surface, z: cpWorld.z, vx: vPoint.x, vz: vPoint.z, sink, speed: vh, part: st.part, side, energy: e });
+    const imp: ContactImpact = { x: cpWorld.x, y: surface, z: cpWorld.z, vx: vPoint.x, vz: vPoint.z, sink, speed: vh, part: st.part, side, energy: e };
+    if (st.part === 'wing') {
+      // the wing station is the tip; how much of the wing takes the water with it depends on the bank: a level
+      // wing (a belly-flat ditching, the inverted airframe falling back after a nose-over) slaps down along its
+      // whole span, a tip dipping in at 30 degrees of bank wets less than a metre of it
+      const root = this.tmpV.set(st.p.x, st.p.y, 0).applyQuaternion(this.quaternion).add(this.position);
+      const dx = root.x - cpWorld.x, dy = root.y - cpWorld.y, dz = root.z - cpWorld.z;
+      const span = Math.hypot(dx, dy, dz), horiz = Math.hypot(dx, dz);
+      if (span > 1 && horiz > 0.5) {
+        // the part of the wing within `wet` metres of the surface enters within the first tenths of a second
+        const wet = Math.max(0.35, 0.3 * sink);
+        const frac = dy > wet ? wet / dy : 1;
+        const to = frac * horiz;
+        if (to > 0.8) imp.extent = { dx: dx / horiz, dz: dz / horiz, from: 0, to };
+      }
+    } else if (st.part === 'roof') {
+      // the inverted fuselage takes the water along the cabin's length
+      const ax = this.tmpV.set(1, 0, 0).applyQuaternion(this.quaternion);
+      const h = Math.hypot(ax.x, ax.z);
+      if (h > 0.5) imp.extent = { dx: ax.x / h, dz: ax.z / h, from: -2.5, to: 2.5 };
+    }
+    this.impacts.push(imp);
   }
 
   /** yaw angle about +Y that makes body +X point along compass heading `h` (0 = north = -Z, 90 = east = +X) */
