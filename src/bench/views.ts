@@ -126,10 +126,10 @@ export const BENCH_VIEWS: BenchView[] = [
     presim: 30, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
   },
   {
-    id: 'city-close', name: 'Downtown core at facade range', description: 'Fixed camera 120 m up over the west side of downtown looking east into the core: the Faro Bahía drum at 330 m, the glass slabs and Meridian Tower at 400-600 m, a stone tower and a deco tower at 150-200 m, roofs below; the sun (16:48, el 21 deg) stands behind the camera, so the west-facing glass mirrors it toward the lens.',
-    time: 16.8, weather: 'clear',
-    camera: { mode: 'fixed', pos: [-3150, 120, -3930], headingDeg: 82, pitchDeg: 4, fov: 50, follow: true },
-    plane: { fromCamera: { screenX: 0.5, screenY: 0.86, distance: 120 }, headingDeg: 82, pitchDeg: 0, bankDeg: 0, speed: 50, throttle: 0.6 },
+    id: 'city-close', name: 'Downtown core at facade range', description: 'Fixed camera 120 m up over the west side of downtown looking east into the core: a wide glass slab at 300 m in the centre, two glass drums with lantern crowns at 350-450 m on the left, the taller core behind, pastel mid-rises at 150-250 m below. The sun (17:18, el 13.7 deg, az 275) stands behind the camera: a vertical west-facing pane mirrors it at camera height + d tan(el), i.e. 190 m up the central slab, so the glint field and the sky mirrored by height are both in frame.',
+    time: 17.3, weather: 'clear',
+    camera: { mode: 'fixed', pos: [-3330, 120, -3670], headingDeg: 90, pitchDeg: 8, fov: 50, follow: true },
+    plane: { fromCamera: { screenX: 0.8, screenY: 0.82, distance: 110 }, headingDeg: 90, pitchDeg: 0, bankDeg: 0, speed: 50, throttle: 0.6 },
     presim: 30, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
   },
 ];
