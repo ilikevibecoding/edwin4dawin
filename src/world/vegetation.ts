@@ -1477,8 +1477,11 @@ const PALM_HI_DISTANCE = 150;
 /** crown cells (150 m) closer than these to the camera draw the level-1 / level-2 tessellations (both carry
  *  the leaf-cluster fringe, which fades out over FRINGE_FADE_NEAR..FAR) */
 const HI_DISTANCE = 420;
-const ULTRA_DISTANCE = 170;
-/** level-2 crowns (664 triangles each) drawn per frame at most, nearest cells first; the rest of the cells
+/** at 130 m a 10 m crown is ~50 px tall (1080p), where level 1's 268 triangles and 36 fringe cards hold the
+ *  silhouette; the 130 m aerial poses see the level-2 band (548 triangles a crown) at the bottom of the frame
+ *  only, 25 px tall, and pose C spent 133 k triangles on 242 of them there (at 170 m) */
+const ULTRA_DISTANCE = 130;
+/** level-2 crowns (548 triangles each) drawn per frame at most, nearest cells first; the rest of the cells
  *  inside ULTRA_DISTANCE fall back to level 1 (a dense park clump at 170 m held 1500 of them: 1 M triangles) */
 const ULTRA_BUDGET = 420;
 /** level-1 crowns (268 triangles) drawn per frame at most, nearest cells first; the rest of the cells inside
