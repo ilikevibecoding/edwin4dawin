@@ -48,6 +48,13 @@ function deskRows(r, kind, from = 2, step = 3) {
   }
   return n;
 }
+// the first free, empty cell of the candidates takes the prop; returns the cell used (a prop the interaction needs
+// must land somewhere even when the door zones eat the row the template wanted)
+function propSomewhere(r, id, cands) {
+  for (const [u, v] of cands) if (r.free(u, v) && r.empty(u, 0, v) && r.empty(u, 1, v) && r.put(u, 0, v, id)) return [u, v];
+  for (let v = r.back; v >= 2; v--) for (let u = 0; u < r.w; u++) if (r.free(u, v) && r.empty(u, 0, v) && r.empty(u, 1, v) && r.put(u, 0, v, id)) return [u, v];
+  return null;
+}
 // a stove wherever the room allows (kitchens with a door in the back wall lose the stove row)
 function stoveSomewhere(r) {
   for (let u = 0; u < r.w; u++) for (let v = 0; v < r.d; v++) if (r.get(u, 0, v) === B.FURNACE) return true;
@@ -528,7 +535,9 @@ defProgramRoom('stock_room', { minW: 3, minD: 3, tags: ['service'] }, (r, rng, c
 });
 defProgramRoom('private_booth', { minW: 3, minD: 3, tags: ['public', 'private'] }, (r, rng, ctx) => {
   const P = pal(ctx), c = r.cu, v = Math.max(2, r.back - 1);
-  r.table(c, v); r.seat(c - 1 >= 0 ? c - 1 : 0, v, P.accentSlab); if (c + 1 < r.w) r.seat(c + 1, v, P.accentSlab); r.seat(c, r.back, P.accentSlab);
+  // the table goes wherever the door zone leaves room (a three-deep booth with a centred door has no free centre row)
+  const t = propSomewhere(r, B.TABLE, [[c, v], [c, r.back], [c - 1, r.back], [c + 1, r.back], [0, r.back], [r.w - 1, r.back]]) || [c, v];
+  for (const [du, dv] of [[-1, 0], [1, 0], [0, 1], [0, -1], [-1, 1], [1, 1]]) if (r.free(t[0] + du, t[1] + dv) && r.empty(t[0] + du, 0, t[1] + dv)) r.seat(t[0] + du, t[1] + dv, P.accentSlab);
   r.lantern(c, v);
   r.put(0, 1, r.back, P.counter); r.put(r.w - 1, 1, r.back, P.counter);
   r.putRaw(c, r.h, v, B.LANTERN);
@@ -542,7 +551,9 @@ defProgramRoom('staff_break', { minW: 3, minD: 3, tags: ['service'] }, (r, rng, 
 });
 defProgramRoom('back_office', { minW: 3, minD: 3, tags: ['office', 'private'] }, (r, rng, ctx) => {
   const P = pal(ctx);
-  r.put(r.cu, 0, r.back - 1, B.TABLE); r.put(r.cu, 1, r.back - 1, B.CONSOLE); r.seat(r.cu, r.back, P.seatSlab); r.work(r.cu, r.back, 'executive');
+  const t = propSomewhere(r, B.TABLE, [[r.cu, r.back - 1], [r.cu, r.back], [r.cu - 1, r.back], [r.cu + 1, r.back], [1, r.back], [r.w - 2, r.back]]) || [r.cu, r.back - 1];
+  r.put(t[0], 1, t[1], B.CONSOLE);
+  for (const [du, dv] of [[0, 1], [0, -1], [-1, 0], [1, 0]]) if (r.free(t[0] + du, t[1] + dv) && r.empty(t[0] + du, 0, t[1] + dv)) { r.seat(t[0] + du, t[1] + dv, P.seatSlab); r.work(t[0] + du, t[1] + dv, 'executive'); break; }
   r.put(0, 0, r.back, B.IRON_BLOCK); r.put(0, 1, r.back, B.IRON_BLOCK);                               // the safe
   r.put(r.w - 1, 0, r.back, B.BOOKSHELF); r.put(r.w - 1, 1, r.back, B.CHEST);                        // ledgers
   r.lantern(r.cu, 2);
@@ -1023,3 +1034,133 @@ defProgramRoom('quiet_meditation', { minW: 3, minD: 3, tags: ['civic', 'green'] 
   r.put(0, 1, r.back, B.WHITE_WOOL); r.put(r.w - 1, 1, r.back, B.WHITE_WOOL);                           // the white hangings
   r.put(c, 1, r.back, B.HOLO_SIGN);
 });
+
+// ------------------------------------------------------------------------------------------- adaptations
+// Spec 6: "Standardized apartments can share a shell while showing genuinely different households and adaptations."
+// Every tower gets one or two of these (seeded from the lot, programs/apply.js), skipping any whose function the
+// building already has (`avoid` is that kind pattern): a different amenity, a different member of staff and a
+// different thing to do, so two same-kind buildings never offer the same set of activities. Kind names infer the
+// right W4 staffing base (roomFunction keywords): garden -> garden_terrace, shrine -> meditation_chamber, studio ->
+// studio, library -> library, droid -> droid_bay, bar -> cantina, aid -> medbay, dejarik -> arcade, records ->
+// archive, gym -> gym, workshop -> workshop, observation -> observation_deck, bath -> restroom, kitchen -> kitchen.
+export const ADAPTATIONS = [
+  { kind: 'hydroponics_garden', avoid: /garden|greenhouse|terrace|farm|hydroponic/, verbs: ['tend the garden'], staff: 'gardener' },
+  { kind: 'residents_shrine', avoid: /shrine|meditat|temple|sanctum|chapel/, verbs: ['meditate'], staff: 'attendant' },
+  { kind: 'music_studio', avoid: /music|studio|band|stage/, verbs: ['play the piano', 'listen to the band'], staff: 'musician' },
+  { kind: 'holo_library', avoid: /library|archive|reading|study/, verbs: ['read'], staff: 'librarian' },
+  { kind: 'droid_pool', avoid: /droid/, verbs: ['charge a droid'], staff: 'droid tech' },
+  { kind: 'caf_bar', avoid: /bar|cantina|club|lounge_bar|tavern/, verbs: ['order drink'], staff: 'bartender' },
+  { kind: 'first_aid_post', avoid: /medbay|medic|clinic|aid|ward|infirmary|treatment/, verbs: ['receive treatment', 'rest in a bed'], staff: 'medic' },
+  { kind: 'dejarik_lounge', avoid: /arcade|dejarik|game|gambling|casino/, verbs: ['take a private meeting', 'sit'], staff: 'attendant' },
+  { kind: 'records_vault', avoid: /records|archive|vault|registry/, verbs: ['inspect evidence', 'read'], staff: 'archivist' },
+  { kind: 'sparring_gym', avoid: /gym|dojo|sparring|training/, verbs: ['watch the work'], staff: 'teacher' },
+  { kind: 'hobby_workshop', avoid: /workshop|repair|garage|machine/, verbs: ['watch the work', 'browse stock'], staff: 'mechanic' },
+  { kind: 'observation_lounge', avoid: /observation|view|overlook|terrace/, verbs: ['enjoy the view', 'sit'], staff: 'attendant' },
+  { kind: 'bath_house', avoid: /bath|restroom|washroom|refresher|shower/, verbs: ['wash'], staff: 'attendant' },
+  { kind: 'tea_kitchen', avoid: /kitchen|galley|canteen|cafeteria/, verbs: ['cook a meal'], staff: 'cook' },
+];
+export const ADAPTATION_BY_KIND = Object.fromEntries(ADAPTATIONS.map((a) => [a.kind, a]));
+
+defProgramRoom('hydroponics_garden', { minW: 4, minD: 4, tags: ['green'] }, (r, rng, ctx) => {
+  // trays of wheat under grow lamps along both side walls, a grass strip down the middle, the gardener at the tap
+  for (let v = 2; v <= r.back; v++) for (const u of [0, r.w - 1]) if (r.free(u, v) && r.put(u, 0, v, B.FARMLAND)) { r.put(u, 1, v, v % 2 ? B.WHEAT : B.TALL_GRASS); r.putRaw(u, r.h - 1, v, B.GLOW_PANEL); }
+  for (let v = 2; v <= r.back; v++) if (r.free(r.cu, v) && v % 2 === 0) r.putRaw(r.cu, -1, v, B.GRASS);
+  r.put(r.cu, 0, r.back, B.TROUGH); r.work(r.cu, r.back - 1, 'gardener');
+  r.planter(1 < r.w - 1 ? 1 : 0, r.back, B.OAK_LEAVES); r.planter(r.w - 2 > 0 ? r.w - 2 : 0, r.back, B.BIRCH_LEAVES);
+  lights(r, 4, B.GLOW_PANEL);
+});
+defProgramRoom('residents_shrine', { minW: 3, minD: 3, tags: ['civic'] }, (r, rng, ctx) => {
+  const c = r.cu, v = Math.max(2, r.back - 1);
+  r.put(c, 0, v, B.SMOOTH_STONE); r.put(c, 1, v, B.LANTERN);                                            // the flame
+  for (const [du, dv] of [[-1, 1], [0, 1], [1, 1], [-2, 0], [2, 0]]) if (r.free(c + du, v + dv)) r.seat(c + du, v + dv, B.STONE_BRICK_SLAB);
+  for (let u = 0; u < r.w; u++) if (u !== c) r.put(u, 1, r.back, u % 2 ? B.WHITE_WOOL : B.GOLD_BLOCK);    // hangings and offerings
+  r.put(0, 0, 2, B.CHEST); r.work(r.w - 1, 2, 'attendant');
+  r.lantern(0, r.back - 1); r.lantern(r.w - 1, r.back - 1);
+});
+defProgramRoom('music_studio', { minW: 4, minD: 4, tags: ['culture'] }, (r, rng, ctx) => {
+  const P = pal(ctx);
+  r.put(r.cu, 0, r.back, B.PIANO); r.seat(r.cu, r.back - 1, P.seatSlab); r.work(r.cu, r.back - 1, 'musician');
+  for (let u = 0; u < r.w; u += 2) if (u !== r.cu) { r.put(u, 1, r.back, B.RED_WOOL); }                 // sound baffles
+  for (let v = 2; v < r.back - 1; v += 2) { if (r.free(0, v)) r.seat(0, v, P.seatSlab); if (r.free(r.w - 1, v)) r.seat(r.w - 1, v, P.seatSlab); }
+  r.put(0, 0, r.back, B.OAK_FENCE); r.put(0, 1, r.back, B.HOLO_SIGN);                                     // the stand and tonight's set list
+  r.put(r.w - 1, 0, r.back, B.CHEST);
+  lights(r, 3, B.GLOW_PANEL);
+});
+defProgramRoom('holo_library', { minW: 4, minD: 4, tags: ['culture'] }, (r, rng, ctx) => {
+  const P = pal(ctx);
+  for (let u = 0; u < r.w; u++) { r.put(u, 0, r.back, B.BOOKSHELF); r.put(u, 1, r.back, B.BOOKSHELF); }
+  for (let v = 2; v < r.back; v += 2) { r.put(0, 0, v, B.BOOKSHELF); r.put(0, 1, v, B.BOOKSHELF); }
+  const tv = Math.max(2, Math.floor(r.back / 2));
+  if (r.w >= 5) { r.table(r.cu, tv); r.put(r.cu, 1, tv, B.HOLO_SIGN); r.seat(r.cu - 1, tv, P.seatSlab); r.seat(r.cu + 1, tv, P.seatSlab); }
+  r.put(r.w - 1, 0, 2, B.CONSOLE); r.work(r.w - 2 >= 0 ? r.w - 2 : 0, 2, 'librarian');
+  lights(r, 4, B.GLOW_PANEL);
+});
+defProgramRoom('droid_pool', { minW: 4, minD: 4, tags: ['tech'] }, (r, rng, ctx) => {
+  for (let u = 0; u < r.w; u++) { const on = u % 3 !== 1; r.putRaw(u, -1, r.back, on ? B.GLOW_PANEL_BLUE : B.PANEL_BLACK); droid(r, u, r.back, on); }
+  r.put(0, 0, 2, B.CONSOLE); r.work(1, 2, 'droid tech');
+  r.put(r.w - 1, 0, 2, B.CRATE); r.put(r.w - 1, 1, 2, B.IRON_BARS);
+  lights(r, 4, B.GLOW_PANEL_BLUE);
+});
+defProgramRoom('caf_bar', { minW: 4, minD: 4, tags: ['entertainment'] }, (r, rng, ctx) => {
+  const P = pal(ctx);
+  r.counter(0, r.w - 1, r.back - 1, P.counter, B.STONE_BRICK_SLAB);
+  for (let u = 0; u < r.w; u++) { r.put(u, 0, r.back, B.SHELF); r.put(u, 1, r.back, u % 2 ? B.GLASS : B.SHELF); }   // the bottle wall
+  r.work(r.cu, r.back, 'bartender');
+  for (let u = 0; u < r.w; u += 2) if (r.free(u, r.back - 2)) r.seat(u, r.back - 2, P.seatSlab);
+  r.lantern(0, 2); r.lantern(r.w - 1, 2);
+  lights(r, 5, P.light);
+});
+defProgramRoom('first_aid_post', { minW: 4, minD: 4, tags: ['medical'] }, (r, rng, ctx) => {
+  bedSomewhere(r, [[r.w - 1, r.back]]);
+  r.put(0, 0, r.back, B.CHEST); r.put(0, 1, r.back, B.WHITE_WOOL); r.put(1 < r.w ? 1 : 0, 1, r.back, B.PANEL_RED);
+  r.put(0, 0, 2, B.CONSOLE); r.work(1 < r.w ? 1 : 0, 2, 'medic');
+  r.put(r.w - 1, 1, 2, B.HOLO_SIGN);
+  lights(r, 3, B.GLOW_PANEL);
+});
+defProgramRoom('dejarik_lounge', { minW: 4, minD: 4, tags: ['entertainment'] }, (r, rng, ctx) => {
+  const P = pal(ctx);
+  for (let v = 3; v <= r.back - 1; v += 3) for (let u = 1; u < r.w - 1; u += 3) {
+    if (!r.free(u, v)) continue;
+    r.table(u, v); r.put(u, 1, v, B.HOLO_SIGN);                                                          // the holochess board
+    if (r.free(u - 1, v)) r.seat(u - 1, v, P.seatSlab); if (r.free(u + 1, v)) r.seat(u + 1, v, P.seatSlab);
+  }
+  r.put(r.w - 1, 0, r.back, B.SHELF); r.put(r.w - 1, 1, r.back, B.GLASS); r.work(r.w - 2 >= 0 ? r.w - 2 : 0, r.back, 'attendant');
+  r.lantern(r.cu, 2);
+  lights(r, 4, B.GLOW_PANEL_BLUE);
+});
+defProgramRoom('records_vault', { minW: 3, minD: 3, tags: ['office'] }, (r, rng, ctx) => {
+  for (let u = 0; u < r.w; u++) { r.put(u, 0, r.back, B.CHEST); r.put(u, 1, r.back, B.SHELF); r.put(u, 2, r.back, B.SHELF); }
+  for (let v = 2; v < r.back; v++) { r.put(0, 0, v, B.IRON_BARS); r.put(0, 1, v, B.IRON_BARS); }          // the cage
+  r.put(r.w - 1, 0, 2, B.CONSOLE); r.work(r.w - 1, 3 <= r.back ? 3 : 2, 'archivist');
+  r.put(r.w - 1, 1, 2, B.HOLO_SIGN);
+  lights(r, 3, B.GLOW_PANEL);
+});
+defProgramRoom('sparring_gym', { minW: 4, minD: 4, tags: ['public'] }, (r, rng, ctx) => {
+  for (let u = 0; u < r.w; u++) for (let v = 1; v <= r.back; v++) if (r.free(u, v) && (u + v) % 2 === 0) r.putRaw(u, -1, v, B.RED_WOOL);   // the mat
+  for (let u = 1; u < r.w; u += 2) { r.put(u, 0, r.back, B.SHELF); r.put(u, 1, r.back, B.IRON_BARS); }   // weapon and weight racks
+  for (let v = 2; v < r.back; v += 2) if (r.free(0, v)) r.seat(0, v, B.STONE_BRICK_SLAB);
+  r.put(r.w - 1, 0, 2, B.CONSOLE); r.work(r.w - 2 >= 0 ? r.w - 2 : 0, 2, 'teacher');
+  lights(r, 4, B.GLOW_PANEL);
+});
+defProgramRoom('hobby_workshop', { minW: 4, minD: 4, tags: ['industry'] }, (r, rng, ctx) => {
+  for (let u = 0; u < r.w; u++) { r.put(u, 0, r.back, B.TABLE); r.put(u, 1, r.back, u % 2 ? B.IRON_BARS : B.SHELF); }   // the bench and tool rail
+  r.work(r.cu, r.back - 1, 'mechanic');
+  r.put(0, 0, 2, B.CRATE); r.put(0, 1, 2, B.CRATE); r.put(r.w - 1, 0, 2, B.BARREL);
+  if (r.w >= 5) r.put(r.w - 1, 0, r.back - 1, B.IRON_BLOCK);                                             // the half-stripped unit
+  lights(r, 3, B.GLOW_PANEL);
+});
+defProgramRoom('observation_lounge', { minW: 4, minD: 4, tags: ['public', 'glass'] }, (r, rng, ctx) => {
+  const P = pal(ctx);
+  for (let u = 0; u < r.w; u++) { r.put(u, 1, r.back, B.GLASS); r.put(u, 2, r.back, B.GLASS); }        // the window wall
+  for (let u = 0; u < r.w; u += 2) if (r.free(u, r.back - 1)) r.seat(u, r.back - 1, P.seatSlab);
+  r.put(r.cu, 1, 2, B.HOLO_SIGN);                                                                        // the skyline key
+  r.put(0, 0, 2, B.SHELF); r.put(0, 1, 2, B.GLASS); r.work(1 < r.w ? 1 : 0, 2, 'attendant');
+  r.lantern(0, r.back - 1); r.lantern(r.w - 1, r.back - 1);
+});
+defProgramRoom('bath_house', { minW: 3, minD: 3, tags: ['service'] }, (r, rng, ctx) => {
+  for (let u = 0; u < r.w; u++) { r.put(u, 0, r.back, B.TROUGH); r.put(u, 1, r.back, u % 2 ? B.WHITE_WOOL : B.GLASS); }
+  for (let v = 2; v < r.back; v += 2) { r.put(0, 0, v, B.WHITE_WOOL); r.put(0, 1, v, B.WHITE_WOOL); }    // towel stacks
+  r.put(r.w - 1, 0, 2, B.SHELF); r.work(r.w - 1, 3 <= r.back - 1 ? 3 : 2, 'attendant');
+  lights(r, 3, B.GLOW_PANEL);
+});
+defProgramRoom('tea_kitchen', { minW: 4, minD: 4, tags: ['service'] }, (r, rng, ctx) => { ROOMS.kitchen.fn(r, rng, ctx); stoveSomewhere(r); });

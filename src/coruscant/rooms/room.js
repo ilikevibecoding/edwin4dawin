@@ -22,6 +22,7 @@ export class Room {
     this.backDoorU = rect.backDoorU ?? -100;   // optional second door in the back wall (deep strips)
     this.backDoorTight = !!rect.backDoorTight; // back-door zone is just the door columns (a program's service door): the back wall keeps its furniture
     this.extraDoors = rect.extraDoors || null; // further door columns in the door wall (rooms merged by a program)
+    this.extraBackDoors = rect.extraBackDoors || null; // further door columns in the back wall (inner rooms opening into a merged bay)
     this.mask = rect.mask || null;             // optional footprint mask (x, z) -> bool for non-rectangular tiers
     this.cu = Math.floor((this.w - 1) / 2);   // centre column (left-centre for even widths)
     this.back = this.d - 1;                    // row against the back wall
@@ -49,6 +50,7 @@ export class Room {
     if (v <= 1 && u >= this.doorU - 1 && u <= this.doorU + this.doorW) return true;
     if (v >= this.d - 2 && (this.backDoorTight ? (u >= this.backDoorU && u < this.backDoorU + this.doorW) : (u >= this.backDoorU - 1 && u <= this.backDoorU + this.doorW))) return true;
     if (this.extraDoors && v <= 1) for (const du of this.extraDoors) if (u >= du - 1 && u <= du + this.doorW) return true;
+    if (this.extraBackDoors && v >= this.d - 2) for (const du of this.extraBackDoors) if (u >= du - 1 && u <= du + this.doorW) return true;
     return false;
   }
   free(u, v) { return this.inside(u, v) && !this.inDoorZone(u, v); }

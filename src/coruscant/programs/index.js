@@ -45,8 +45,12 @@ export function programFor(lot, purpose = null, layout = null) {
   const prog = PROGRAM_BY_ID[id];
   const mats = materialsFor(prog, lot.district);
   const owner = ownerOf(lot, prog);
+  const variant = variantOf(lot);
+  // programs with several households / featured rooms: the variant chooses which one is the signature room
+  const featured = prog.featured ? prog.featured[variant % prog.featured.length] : null;
+  const rooms = featured ? prog.rooms.map((r) => ({ ...r, signature: r.kind === featured })) : prog.rooms;
   const interactions = {};
-  for (const r of prog.rooms) interactions[r.kind] = r.interactions.slice();
+  for (const r of rooms) interactions[r.kind] = r.interactions.slice();
   return {
     id, name: prog.name, special: !!prog.special,
     address: addressOf(lot), owner,
@@ -55,12 +59,12 @@ export function programFor(lot, purpose = null, layout = null) {
     customers: prog.customers,
     circulation: prog.circulation,
     roomGraph: prog.graph.map(([a, b]) => [a, b]),
-    rooms: prog.rooms,
+    rooms, featured,
     materials: mats.names, materialIds: mats.ids,
     interactions,
     inputs: prog.inputs.slice(), outputs: prog.outputs.slice(), wants: prog.wants.slice(),
     story: prog.story, schedule: prog.schedule || null,
-    variant: variantOf(lot),
+    variant,
   };
 }
 

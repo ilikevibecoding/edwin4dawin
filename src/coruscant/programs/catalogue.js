@@ -45,7 +45,7 @@ export const INTERACTIONS = {
   'read': { blocks: ['BOOKSHELF'] },
   'play the piano': { blocks: ['PIANO'] },
   'admire the art': { blocks: ['GOLD_BLOCK', 'HOLO_SIGN', 'RED_WOOL', 'CHROME'] },
-  'enjoy the view': { spots: ['seat', 'stand', 'wait'] },
+  'enjoy the view': { spots: ['seat', 'stand', 'wait'], blocks: ['GLASS', 'STEEL_GLASS', 'IRON_BARS', 'WINDOW_LIT', 'WINDOW_DARK'] },
   'report a crime': { works: ['guard', 'desk'], blocks: ['HOLO_SIGN', 'CONSOLE'] },
   'read the case board': { blocks: ['HOLO_SIGN'] },
   'inspect evidence': { blocks: ['CHEST', 'IRON_BARS'] },
@@ -72,7 +72,7 @@ export const INTERACTIONS = {
   'check out equipment': { works: ['quartermaster', 'stock', 'guard', 'warden'], blocks: ['IRON_BLOCK', 'IRON_BARS', 'CHEST', 'CRATE'] },
   'sort scrap': { works: ['stock', 'mechanic', 'worker'], blocks: ['GRAVEL', 'IRON_BLOCK', 'IRON_BARS', 'CRATE'] },
   'take a private meeting': { spots: ['seat'], blocks: ['TABLE'] },
-  'dance': { blocks: ['GLOW_PANEL', 'GLOW_PANEL_BLUE', 'NEON_PINK', 'NEON_GREEN'] },
+  'dance': { blocks: ['NEON_PINK', 'NEON_GREEN'] },
 };
 
 const R = (kind, fn, o = {}) => ({ kind, function: fn, core: o.core !== false, where: o.where || 'any', signature: !!o.signature, service: !!o.service, serviceEntry: !!o.serviceEntry, merge: !!o.merge, accept: o.accept || null, interactions: o.interactions || ['talk to staff'], served: o.served !== false });
@@ -319,6 +319,9 @@ export const PROGRAMS = [
     hosts: { kinds: ['apartments'], families: [] },
     palette: { accent: 'GREEN_WOOL', seat: 'STONE_BRICK_SLAB', counter: 'PANEL_BLACK', light: 'GLOW_PANEL', trim: 'DURASTEEL' },
     districtPalette: { financial: { accent: 'BLUE_WOOL' }, market: { accent: 'RED_WOOL' } },
+    // the featured household (the signature room the visitor is walked to, the biggest flat, the story) rotates
+    // with the lot variant: a night-shift bedsit, a mechanic's flat, a musician's flat with a practice room
+    featured: ['nightshift_flat', 'mechanic_flat', 'musician_flat'],
     rooms: [
       R('nightshift_flat', 'a night-shift worker\'s flat: blackout panels over the window wall', { where: 'upper', signature: true, accept: /flat|apartment|studio|home/, interactions: ['sleep'] }),
       R('mechanic_flat', 'a mechanic\'s flat: the half-repaired appliance on the table', { where: 'upper', accept: /flat|apartment|studio|home/, interactions: ['sleep'] }),
