@@ -525,11 +525,25 @@ function cabinBox(): THREE.BufferGeometry {
   g.computeVertexNormals();
   return g;
 }
+/** a unit square in the y-z plane drawn from both sides (4 triangles): a signal backplate, a sign face */
+function sheet(): THREE.BufferGeometry {
+  const pos: number[] = [], nrm: number[] = [];
+  for (const side of [1, -1]) {
+    const g = new THREE.PlaneGeometry(1, 1).rotateY(side * Math.PI / 2).toNonIndexed();
+    pos.push(...Array.from(g.getAttribute('position').array));
+    nrm.push(...Array.from(g.getAttribute('normal').array));
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  return out;
+}
 const UNIT = {
   box: new THREE.BoxGeometry(1, 1, 1).toNonIndexed(),
   boxOpen: openBox(),
   carBody: beltedBox(),
   cabin: cabinBox(),
+  sheet: sheet(),
   /** square plate of diameter 1 in the y-z plane facing +x: a lens seen from 300 m on */
   plate4: new THREE.CircleGeometry(0.5, 4).rotateY(Math.PI / 2).toNonIndexed(),
   cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 8).toNonIndexed(),
@@ -561,6 +575,9 @@ const C = {
   galv: new THREE.Color(0x8d949a),
   dark: new THREE.Color(0x2a2c2e),
   signal: new THREE.Color(0x1f2a1f),
+  /** FDOT signal housings and visors are highway yellow, on black backplates: from 200 m a head is a yellow point on
+   *  a dark plate at the arm's end, where a dark housing merged with the asphalt (the h03 critic's signal heads) */
+  signalHousing: new THREE.Color(0xe0a81c),
   black: new THREE.Color(0x141416),
   lensOff: new THREE.Color(0x202020),
   green: new THREE.Color(0x1f6b3a),
@@ -1098,13 +1115,18 @@ export class Streets {
     part(soup, UNIT.box, f, 0, armH, armLen / 2, 0.16, 0.16, armLen, C.galv, 0.45, 0.7, EM_NONE, 0, 0, 2);
     part(far, UNIT.box, f, 0, armH, armLen / 2, 0.16, 0.16, armLen, C.galv, 0.45, 0.7, EM_NONE, 0, 0, 2);
     part(soup, UNIT.box, f, 0, armH - 0.3, 0.35, 0.14, 0.7, 0.7, C.galv, 0.45, 0.7); // arm bracket
+    // a head: yellow housing on a 0.66 x 1.42 m black backplate (the FDOT pattern), both thin members in the near and
+    // the far shape — face-on from the air the plate is a 2 x 5 px dark tab at the arm's end with the housing a yellow
+    // line down its middle; edge-on the housing alone reads, held to a pixel across
     const head = (hz: number, hy: number) => {
-      part(soup, UNIT.box, f, 0, hy, hz, 0.3, 1.05, 0.36, C.signal, 0.6, 0.3, EM_NONE, 0, 0, 1);
-      part(far, UNIT.box, f, 0, hy, hz, 0.3, 1.05, 0.36, C.signal, 0.6, 0.3, EM_NONE, 0, 0, 1);
+      for (const s of [soup, far]) {
+        part(s, UNIT.box, f, 0, hy, hz, 0.3, 1.05, 0.36, C.signalHousing, 0.55, 0.2, EM_NONE, 0, 0, 1);
+        part(s, UNIT.sheet, f, -0.17, hy, hz, 1, 1.42, 0.66, C.black, 0.7, 0.1, EM_NONE, 0, 0, 1);
+      }
       const lens = (dy: number, em: number) => {
         part(soup, UNIT.plate, f, 0.16, hy + dy, hz, 1, 0.26, 0.26, C.lensOff, 0.3, 0.1, em, phase, 0, 3);
         part(far, UNIT.plate4, f, 0.16, hy + dy, hz, 1, 0.26, 0.26, C.lensOff, 0.3, 0.1, em, phase, 0, 3);
-        part(fine, UNIT.box, f, 0.2, hy + dy + 0.15, hz, 0.24, 0.03, 0.3, C.signal, 0.6, 0.3); // visor
+        part(fine, UNIT.box, f, 0.2, hy + dy + 0.15, hz, 0.24, 0.03, 0.3, C.signalHousing, 0.55, 0.2); // visor
       };
       lens(0.34, EM_RED); lens(0, EM_AMBER); lens(-0.34, EM_GREEN);
     };
