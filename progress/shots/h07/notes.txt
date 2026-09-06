@@ -1,0 +1,14 @@
+base: 7ec36aaa (cursor/vice-city-aerial-8213)
+skip acsplit: nothing new
+skip waterrender: nothing new
+merged waterphys: 026d2f88 Defect log r10.3: the ribbon folding over on the inside of every turn (numbers per hull an
+skip boats: no remote branch
+skip clouds4: nothing new
+skip light3: nothing new
+skip street: merge conflict in src/world/streets.ts 
+skip highway: nothing new
+skip facade3: nothing new
+skip veg5: nothing new
+skip terrain5: nothing new
+skip acgeo: nothing new
+build: 61706b38 from /home/ubuntu/wt-integration

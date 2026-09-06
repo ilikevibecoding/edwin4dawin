@@ -14,3 +14,4 @@ skip acgeo: nothing new
 build: c499eeeb from /home/ubuntu/wt-integration
 shot failed: cockpit
 shot failed: glass
+cdn: pinned data.json serves h06
