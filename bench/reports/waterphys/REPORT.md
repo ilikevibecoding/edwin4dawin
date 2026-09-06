@@ -39,6 +39,17 @@ Frame numbers are 10 fps clip frames (frame n = n/10 s). Change size vs the r1 b
   splits both bows (flood ≥ 0.6) and the roll back onto the floats comes over the lower wing, whose float is
   dragged through the water and its strut wrenched (≥ 0.85): the righted wreck sits 50 cm low with a 17° list
   instead of level and 17 cm low as if merely wetted.
+- **The fast flat entry skips, and the water now shows each touch as its own mark.** Numerically
+  (`/tmp/waterphys/skipnode.mjs`, power off, floats level): at 48 m/s the floats touch for 0.33 s at 1.3 m/s of
+  sink, the planing lift pitches the hull up 4–6° and throws it clear to 1.2 m, and it comes down 100 m on at
+  1.7–2 m/s — six touches with shortening hops (2.3 → 1.0 s) before a steady planing decel from 39 m/s; at 40 m/s
+  two hops, at 34 m/s and at the firm 28 m/s touchdown one 0.6–0.7 s hop (the bounce the r2 frames showed). Each
+  touch raises its own float impact pair (energy 0.34–0.50), so each throws its own curtain and splat. But the
+  **lane bridged every hop shorter than 1.5 s of track**: a float clear of the water for 0.6–1 s over 25–50 m laid
+  continuous foam across water it never touched (only the 2 s hops of the 48 m/s entry broke it). The ribbon now
+  breaks when its emitter was off the surface for more than 0.5 s as well as on distance: a 10–20 m patch of lane
+  under each splat, then clean water to the next (ribbon driven by the flight model in Node: 34 m/s, no break → one
+  of 31 m; 40 m/s, one → two; 48 m/s, four → five).
 - **A deeply flooded hull met the water cleanly**, as if set down in it. The wake ribbon head now carries each
   float's immersion (from the wreck's flood level): the hull outline widens 35 % to the section that cuts the
   surface and the meniscus becomes a patchy collar of foam and bubbles a few decimetres wide.
@@ -96,6 +107,8 @@ Frame numbers are 10 fps clip frames (frame n = n/10 s). Change size vs the r1 b
 
 - Ditching matrix run as eight numeric cases and as five dev clips (wheels, wing tip, nose, flat-fast, taxi
   stop) at 0.3 s steps; the pictures match the numbers (touchdown → slew/nose-over → inverted → righted → wreck).
+  The skipping entry (48 / 40 / 34 m/s, power off) as contact intervals, hop apexes and impact events, and the
+  float's wake ribbon driven by the same flight model to count the breaks in its lane before and after r10.
 - Float displacement and the near/far handover checked in the chase view at 3.5 m/s taxi and on swell: the
   handover is invisible (water tone and ripple continuous; no patch square) and the displacement is correctly
   slight at idle taxi.
