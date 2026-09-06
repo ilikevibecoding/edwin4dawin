@@ -50,8 +50,17 @@ difference image is black everywhere except that text (`diff_mask_plane-rear-qua
 `BUILD_ID=6130eae71052-2026-09-06T0640` (the base's stamp), served on port 4503 and captured again
 (`bench/out/acsplit-pinned`). With the tag text identical the diff against the very same base stills is:
 
-_(capture queued behind the machine-wide Chrome gate — two slots shared by ten builders — at the time of this commit;
-the table is appended in the follow-up commit.)_
+| view | max abs channel diff | pixels with any channel diff | draw calls (base / pinned split) | triangles (base / pinned split) | other renderer counters | `still.png` md5 (base = pinned split) |
+|---|---|---|---|---|---|---|
+| plane-rear-quarter | 0 | 0 | 228 / 228 | 1 010 035 / 1 010 035 | equal | `49bcf5a48f45` |
+| plane-front-quarter | 0 | 0 | 298 / 298 | 872 547 / 872 547 | equal | `7096d3371d05` |
+| glass-sun | 0 | 0 | 258 / 258 | 1 146 827 / 1 146 827 | equal | `f259c89ef379` |
+| cockpit-city | 0 | 0 | 269 / 269 | 1 115 380 / 1 115 380 | equal | `8898346fcf3d` |
+| night | 0 | 0 | 252 / 252 | 1 284 346 / 1 284 346 | equal | `adb29a698e4a` |
+
+The five PNG files are byte-identical to the base captures (same md5), `console.txt` is empty for all five, and the
+bundle size is the same as the split's own build (1,129.88 kB; only the stamp string differs). So the whole non-zero
+result above is the 28-character build stamp, and the rendered frame — aircraft, water, city, HUD — is pixel-identical.
 
 ## `metrics.json`
 
