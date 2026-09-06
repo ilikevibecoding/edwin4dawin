@@ -234,6 +234,8 @@ export interface FuselageLayout {
   /** side window cut-outs [front x, aft x, top height] and their common sill height (the glazing seals follow them) */
   windows: [number, number, number][];
   windowSill: number;
+  /** wraparound windshield cut-out [front x at the cowl, aft x at the roof line, base height on the sides] */
+  windshield: [number, number, number];
 }
 
 /**

@@ -76,7 +76,17 @@ export function buildTail(ctx: BuildContext): TailBuild {
   root.add(rudder);
   const rudGeo = wingPanel(finSpec, { z0: 0.08, z1: 1.43, segments: 3, part: 'rear', hingeX: rudHinge, gap: 0.015, capStart: 'rear', capEnd: 'rear', n: TN, vOf: finV });
   rudGeo.translate(-rudHinge, 0, 0);
-  mesh(new Batch().add(rudGeo, at(undefined, [-Math.PI / 2, 0, 0])).build(), wingPaint, { parent: rudder });
+  // ground-adjustable rudder trim tab: the last 13 cm of chord over 40 cm of the rudder's height as its own airfoil
+  // segment, hinged at its front edge and bent 3 degrees to port, skins a hair proud of the rudder's so the tab
+  // reads as a separate plate with a slot at its hinge (the tail band shares its rows with the stabiliser tips, so
+  // this tab cannot be painted the way the elevator tabs are)
+  const tabHinge = wingXTE(finSpec, 0.7) + 0.13;
+  const tabGeo = wingPanel(finSpec, { z0: 0.50, z1: 0.90, segments: 1, part: 'rear', hingeX: tabHinge, gap: 0.006, capStart: 'rear', capEnd: 'rear', n: TN, vOf: finV });
+  tabGeo.translate(-tabHinge, 0, 0);
+  tabGeo.scale(1, 1.12, 1);
+  tabGeo.rotateZ(0.052);
+  tabGeo.translate(tabHinge - rudHinge, 0, 0);
+  mesh(new Batch().add(rudGeo, at(undefined, [-Math.PI / 2, 0, 0])).add(tabGeo, at(undefined, [-Math.PI / 2, 0, 0])).build(), wingPaint, { parent: rudder });
   // hinge fittings bridging the gaps (three per surface: the dark slot is interrupted by the brackets it hangs on)
   for (const z of [0.45, 1.2, 1.95]) for (const side of [-1, 1]) fittings.add(new THREE.BoxGeometry(0.07, 0.028, 0.035), at([HSTAB.x + elevHinge, HSTAB.y, side * z]), SURF.darkMetal);
   for (const z of [0.3, 0.8, 1.3]) fittings.add(new THREE.BoxGeometry(0.07, 0.035, 0.028), at([FIN.x + rudHinge, FIN.y + z, 0]), SURF.darkMetal);

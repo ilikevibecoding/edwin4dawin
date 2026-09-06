@@ -128,6 +128,19 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
       actx.strokeStyle = 'rgba(20,20,25,0.35)'; actx.lineWidth = 1.5; actx.beginPath(); actx.moveTo(ringU, y); actx.lineTo(cowlAftU, y); actx.stroke();
       for (let x = ringU + 26; x < cowlAftU - 8; x += 30) dzus(x, y + (vv < 0.2 ? 6 : -6) * side);
     }
+    // accessory-section cooling louvres: a bank of pressed slots on the aft side panel, each a dark opening under a
+    // lip that stands proud of the skin (lit edge in the albedo, a ridge over a groove in the height map)
+    const lu0 = lay.uOf(3.56) * w, lu1 = lay.uOf(3.30) * w, cols = 3, rows = 4;
+    for (let r = 0; r < rows; r++) {
+      const y = (side > 0 ? 0.20 + 0.026 * r : 1 - (0.20 + 0.026 * r)) * h, lip = -3 * side;
+      for (let c = 0; c < cols; c++) {
+        const x = lu0 + (lu1 - lu0) * (c + 0.5) / cols, len = 15;
+        hctx.fillStyle = '#a4a4a4'; hctx.fillRect(x - len / 2, y + lip - 2, len, 3);
+        hctx.fillStyle = '#404040'; hctx.fillRect(x - len / 2, y - 1.5, len, 3);
+        actx.fillStyle = 'rgba(12,12,16,0.78)'; actx.fillRect(x - len / 2, y - 1.5, len, 3);
+        actx.fillStyle = 'rgba(255,255,255,0.28)'; actx.fillRect(x - len / 2, y + lip - 1, len, 1.5);
+      }
+    }
   }
   // registration on the white rear fuselage above the cheat line (clear of the float struts from the quarter views)
   // and the operator script under the cabin windows (both sides, readable)
@@ -180,6 +193,14 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
         for (let k = 6; k >= 0; k--) { const x = xf + (xa - xf) * (k / 6); ctx.lineTo(lay.uOf(x) * w, V(vLow(x, lay.windowSill))); }
         ctx.closePath(); ctx.stroke();
       }
+      // windshield frame: along the base line on this side from the cowl to the roof line, then up the aft edge
+      // over the crown (the ring seam: the canvas edge on each side), and the front edge up from the base line
+      const [xf, xa, base] = lay.windshield, edge = side > 0 ? 0 : h;
+      ctx.beginPath();
+      for (let k = 0; k <= 6; k++) { const x = xf + (xa - xf) * (k / 6); ctx[k ? 'lineTo' : 'moveTo'](lay.uOf(x) * w, V(vLow(x, base))); }
+      ctx.lineTo(lay.uOf(xa) * w, edge);
+      ctx.moveTo(lay.uOf(xf) * w, V(vLow(xf, base))); ctx.lineTo(lay.uOf(xf) * w, edge);
+      ctx.stroke();
     }
   };
   windowOutline(hctx, '#6c6c6c', 6);

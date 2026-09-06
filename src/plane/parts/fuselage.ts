@@ -145,6 +145,7 @@ export function buildFuselageFrame(): FuselageFrame {
     sillY,
     windows: sideWindows,
     windowSill: SILL,
+    windshield: [CABIN_FRONT, 1.85, WS_BASE],
   };
   return { sections, innerSections, ring, outer, inner, R, jA, jB, jC, si, sideWindows, blocks, windshield, isWindow, iFront, iRear, innerHalfAt, layout };
 }
