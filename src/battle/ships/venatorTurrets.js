@@ -1,38 +1,19 @@
-// Tracking turret geometry for the Venator: heavy dual turbolaser (dorsal shoulders) and light single
-// emplacements (wing edges, lower flanks, block ledges). Geometry is in turret space — up +Y, rest aim
-// -Z, body base at y = 0; the barrel group's elevation pivot is at its origin — and is instanced by the
-// Fleet per type (one body mesh + one barrel mesh per type per class), yawing and pitching toward the
-// ship's target. Hardpoints referencing a turret fire from pivot + aim x barrelLen.
+// Tracking turret geometry for the Venator: the heavy dual turbolaser (DBY-827 style: a boxy armoured
+// housing with a sloped front, cheek plates and two long barrels) on the dorsal shoulders, and the twin
+// point-defence emplacements along the deck edges, lower flanks and terraces. Geometry is in turret
+// space — up +Y, rest aim -Z, body base at y = 0; the barrel group's elevation pivot is at its origin —
+// and is instanced by the Fleet per type, yawing and pitching toward the ship's target. Hardpoints
+// referencing a turret fire from pivot + aim x barrelLen.
 import * as THREE from "three";
 import { mergeParts } from "../fleet.js";
-import { cylZ, loftProfile } from "./venatorKit.js";
-
-const oct = (hx, hz, c) => [
-  [-hx + c, -hz],
-  [hx - c, -hz],
-  [hx, -hz + c],
-  [hx, hz - c],
-  [hx - c, hz],
-  [-hx + c, hz],
-  [-hx, hz - c],
-  [-hx, -hz + c],
-];
-
-// loft along +y from [{ y, pts: [[x, z], ...] }]
-function yLoft(secs) {
-  const out = loftProfile(
-    secs.map(({ y, pts }) => ({ z: y, pts: pts.map(([x, z]) => [x, -z]) })),
-  );
-  for (const g of Object.values(out)) g.rotateX(-Math.PI / 2);
-  return out.hull;
-}
+import { cylZ, yLoft } from "./venatorKit.js";
 
 const box = (sx, sy, sz, x, y, z) =>
   new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
 
 export const HEAVY = {
   pivotY: 12.5,
-  barrelLen: 47,
+  barrelLen: 48,
   yawLimit: 2.6,
   pitchMin: -0.05,
   pitchMax: 1.2,
@@ -40,8 +21,8 @@ export const HEAVY = {
 };
 
 export const LIGHT = {
-  pivotY: 3.7,
-  barrelLen: 12.5,
+  pivotY: 3.6,
+  barrelLen: 10,
   yawLimit: 2.4,
   pitchMin: -0.1,
   pitchMax: 1.3,
@@ -49,43 +30,79 @@ export const LIGHT = {
 };
 
 /**
- * Heavy dual turbolaser: 16 m base ring, tapering octagonal armoured body with a sensor box and a rear
- * hatch; barrel group = armoured mantlet, two 40 m barrels with recoil sleeves and muzzle collars.
+ * Heavy dual turbolaser: 16 m base ring, armoured box housing whose front slopes back over the barrel
+ * root, cheek plates either side of the mantlet slot, a rear hatch block and sensor mast; barrel group =
+ * mantlet, two 42 m barrels with recoil sleeves and muzzle collars, a recoil cylinder between them.
  */
 export function heavyTurret() {
   const body = [];
-  body.push(new THREE.CylinderGeometry(16, 17, 3, 12).translate(0, 1.5, 0));
   body.push(
-    yLoft([
-      { y: 3, pts: oct(14, 13, 4) },
-      { y: 9, pts: oct(13, 12.5, 3.5) },
-      { y: 14, pts: oct(10.5, 10.5, 3) },
-    ]),
+    new THREE.CylinderGeometry(15.5, 16.5, 2.5, 12).translate(0, 1.25, 0),
   );
-  // cheek armour either side of the mantlet slot, sensor box and rear hatch
-  for (const s of [-1, 1]) body.push(box(3, 5, 10, s * 8.5, 14.5, -1));
-  body.push(box(5, 2.4, 5, 0, 15.2, 5));
-  body.push(box(4, 0.5, 3, 5, 14.2, 7));
-  body.push(box(1.2, 4, 1.2, -5, 16, 7));
-  const barrels = [];
-  barrels.push(box(17, 7, 8, 0, 0, -3));
-  for (const bx of [-4.6, 4.6]) {
-    barrels.push(cylZ(1.3, 1.9, 40, 8).translate(bx, 0.5, -27));
-    barrels.push(cylZ(2.5, 2.5, 9, 8).translate(bx, 0.5, -11.5));
-    barrels.push(cylZ(2.2, 2.2, 3, 8).translate(bx, 0.5, -45.5));
+  // housing: plan rectangles (x, z) lofted up; the front (−z) leans back, the sides draw in a little
+  const housing = yLoft([
+    {
+      y: 2.4,
+      pts: [
+        [-15, -14],
+        [15, -14],
+        [15, 13],
+        [-15, 13],
+      ],
+    },
+    {
+      y: 9,
+      pts: [
+        [-14.5, -10],
+        [14.5, -10],
+        [14.5, 13],
+        [-14.5, 13],
+      ],
+    },
+    {
+      y: 16.5,
+      pts: [
+        [-12.5, -5],
+        [12.5, -5],
+        [12.5, 12],
+        [-12.5, 12],
+      ],
+    },
+  ]);
+  body.push(housing.hull);
+  // cheek plates flanking the mantlet slot, rear hatch block, sensor mast and a small dish
+  for (const s of [-1, 1]) {
+    body.push(box(4, 7, 12, s * 10.5, 11.5, -6));
+    body.push(box(2.2, 1.2, 6, s * 13.6, 6, 4));
   }
-  // recoil cylinder between the barrels
-  barrels.push(cylZ(1.1, 1.1, 14, 6).translate(0, 2.2, -13));
+  body.push(box(12, 3, 6, 0, 18, 8));
+  body.push(box(4.5, 0.8, 3.5, 6, 16.9, 4));
+  body.push(box(1, 5, 1, -7, 19, 9));
+  body.push(box(3, 0.5, 3, -7, 21.5, 9));
+  const barrels = [];
+  // mantlet: a wide armoured block around the barrel roots
+  barrels.push(box(16, 8, 7, 0, 0.5, -2.5));
+  for (const bx of [-4.8, 4.8]) {
+    barrels.push(cylZ(1.5, 1.05, 42, 10).translate(bx, 0.5, -27));
+    barrels.push(cylZ(2.7, 2.7, 10, 10).translate(bx, 0.5, -11));
+    barrels.push(cylZ(2.2, 2.2, 3, 8).translate(bx, 0.5, -46.5));
+    barrels.push(cylZ(1.7, 1.7, 2, 8).translate(bx, 0.5, -37));
+  }
+  barrels.push(cylZ(1.2, 1.2, 14, 6).translate(0, 2.6, -12));
   return { body: mergeParts(body), barrels: mergeParts(barrels) };
 }
 
-/** Light single-barrel emplacement: round base, boxy housing, one 9 m barrel with a mantlet block. */
+/** Twin point-defence laser: round pedestal, boxy housing, two 8 m barrels from a mantlet block. */
 export function lightTurret() {
   const body = [];
-  body.push(new THREE.CylinderGeometry(3.2, 3.6, 1.6, 8).translate(0, 0.8, 0));
-  body.push(box(5, 3.4, 6, 0, 3.2, 0.5));
+  body.push(new THREE.CylinderGeometry(2.6, 3, 1.4, 8).translate(0, 0.7, 0));
+  body.push(box(5.2, 3.4, 5.6, 0, 3.1, 0.6));
+  body.push(box(1.2, 1.6, 1.2, 1.6, 5.6, 1.6));
   const barrels = [];
-  barrels.push(box(2.6, 2.2, 3, 0, 0, -1));
-  barrels.push(cylZ(0.45, 0.62, 9.5, 6).translate(0, 0, -7.5));
+  barrels.push(box(3.4, 2, 2.6, 0, 0, -1));
+  for (const bx of [-1.1, 1.1]) {
+    barrels.push(cylZ(0.42, 0.34, 8, 6).translate(bx, 0, -6));
+    barrels.push(cylZ(0.62, 0.62, 2, 6).translate(bx, 0, -3.2));
+  }
   return { body: mergeParts(body), barrels: mergeParts(barrels) };
 }

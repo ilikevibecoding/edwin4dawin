@@ -784,3 +784,107 @@ export function mixColor(a, b, t) {
   const cb = new THREE.Color(b);
   return ca.lerp(cb, clamp(t, 0, 1));
 }
+
+/**
+ * Loft along +y: `secs` = [{ y, pts: [[x, z], ...] }] (plan-view polygons, same point count, sorted by
+ * y). Built with loftProfile along z then rotated, so `tags` per edge and `uv` work the same way (the
+ * along-strip mapping keeps plating unstretched on sloped faces). Returns { tag: geometry }.
+ */
+export function yLoft(secs, opts = {}) {
+  const out = loftProfile(
+    secs.map(({ y, pts }) => ({ z: y, pts: pts.map(([x, z]) => [x, -z]) })),
+    opts,
+  );
+  for (const g of Object.values(out)) g.rotateX(-Math.PI / 2);
+  return out;
+}
+
+/**
+ * Flat strip lying on a (possibly sloping) deck: quads between consecutive samples of `zrs`, spanning
+ * x from xa(zr) to xb(zr) at height y(zr) (+lift), depth z = zOf(zr). Faces +y. Skips samples where the
+ * strip would be narrower than `minW`.
+ */
+export function deckStrip(zrs, xa, xb, y, zOf, { lift = 0.15, minW = 2 } = {}) {
+  const pos = [];
+  for (let i = 0; i + 1 < zrs.length; i++) {
+    const z0 = zrs[i];
+    const z1 = zrs[i + 1];
+    let a0 = xa(z0);
+    let b0 = xb(z0);
+    let a1 = xa(z1);
+    let b1 = xb(z1);
+    if (a0 > b0) [a0, b0] = [b0, a0];
+    if (a1 > b1) [a1, b1] = [b1, a1];
+    if (b0 - a0 < minW && b1 - a1 < minW) continue;
+    const y0 = y(z0) + lift;
+    const y1 = y(z1) + lift;
+    const P00 = [a0, y0, zOf(z0)];
+    const P10 = [b0, y0, zOf(z0)];
+    const P01 = [a1, y1, zOf(z1)];
+    const P11 = [b1, y1, zOf(z1)];
+    pos.push(...P00, ...P11, ...P10, ...P00, ...P01, ...P11);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+// Flat polygon in the xz plane at height y (plan points [[x, z]], any winding), facing +y.
+export function flatPoly(points, y) {
+  const contour = points.map(([x, z]) => new THREE.Vector2(x, z));
+  const tris = THREE.ShapeUtils.triangulateShape(contour, []);
+  const pos = [];
+  for (const [a, b, c] of tris) {
+    const pa = points[a];
+    const pb = points[b];
+    const pc = points[c];
+    // orient so the normal is +y: in the xz plane with y up, (b-a) x (c-a) has y = -(dxb*dzc - dxc*dzb)
+    const cr =
+      (pb[0] - pa[0]) * (pc[1] - pa[1]) - (pc[0] - pa[0]) * (pb[1] - pa[1]);
+    const order = cr < 0 ? [pa, pb, pc] : [pa, pc, pb];
+    for (const p of order) pos.push(p[0], y, p[1]);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * Prism from a plan polygon: bottom at y0 (polygon `pts`, [[x, z]]), top at y1 (polygon `top`, same
+ * point count, defaults to the bottom shrunk by `inset` toward its centroid). Side strips are tagged
+ * per edge with `tags` (default "hull"), the top cap with `capTag`; no bottom cap (it sits on a deck).
+ */
+export function prismPoly(
+  pts,
+  y0,
+  y1,
+  { top = null, inset = 0, tags = null, capTag = "hull", uv = null } = {},
+) {
+  let tp = top;
+  if (!tp) {
+    let cx = 0;
+    let cz = 0;
+    for (const p of pts) {
+      cx += p[0];
+      cz += p[1];
+    }
+    cx /= pts.length;
+    cz /= pts.length;
+    tp = pts.map(([x, z]) => {
+      const dx = x - cx;
+      const dz = z - cz;
+      const d = Math.hypot(dx, dz) || 1;
+      const k = Math.max(0, 1 - inset / d);
+      return [cx + dx * k, cz + dz * k];
+    });
+  }
+  return yLoft(
+    [
+      { y: y0, pts },
+      { y: y1, pts: tp },
+    ],
+    { tags, capStart: false, capEnd: true, capTag, uv },
+  );
+}
