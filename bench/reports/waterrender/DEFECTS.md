@@ -199,3 +199,28 @@ the reflection is a soft column fading out at ±1.5 rms with no silhouette; a hu
 its edges because its own taps have a 0.6-texel σ.
 Cost: 2 reads (gate) + 13 × (share + colour) in the reach of a reflected object; the reflection pass renders one
 more 640 × 360 resolve and 6 small pyramid levels (+7 draw calls).
+Checked offline before the capture (1-D replica of the kernel and the pyramid, `/tmp/waterrender/kernel_sim.py`:
+a 60-texel object over sky): share 0 → extent 149–211 (its own), share 0.05 → ±6 texels soft, share 0.3 → a
+smooth column 111–255 with a largest texel-to-texel step of 0.03 of the peak, energy 59.1/60. The same replica
+found that the single top-level read cut the streak of a share-0.8 object at a quarter of its peak (a 0.1 step:
+the top texel's footprint is shorter than that streak), so the gate reads the top level at the pixel and one
+longest-streak up and down (9c5f6e34): share 0.8 → 55–313, largest step 0.005; share 1 → 86 % of the energy
+(the ±1.5 rms truncation).
+
+## Round 9 — cumulus mirrored in the sky term
+
+Observed (iter09 technical critic on `aerial-a`, and every partly cloudy still here): "clouds at E1–F2 leave no
+reflection under them on the water": the sky term is the analytic dome (round 1) and the environment probe
+before it was "analytic sky only", so no version of the water has ever mirrored a cumulus; only a closed deck
+was represented, as a uniform grey band.
+Change (`skyReflection`): the lobe's centre ray is carried to the cloud base plane and the shared 2D cloud
+field (`cloudFieldRaw`/`cloudThreshold`, the field the dome's raymarch and the ground shadows use, with the same
+wind offset) says whether a cloud hangs there; the sky is blended toward the grey of a lit base (horizon
+luminance × 1.15, the deck's colour at low coverage) by that coverage × the haze extinction of the path up to
+the base; the field's edge ramp is widened by the lobe's footprint on the base plane (chop blurs the mirrored
+cloud). One field evaluation per pixel, skipped where the sky term weighs under 6 % of the pixel (steep views:
+Fresnel), where the ray is within 2.3° of the horizon (haze band anyway), and in clear presets (uniform gate).
+The overcast band stays as the floor (`max`), so the cloudy preset's look is unchanged.
+Why: a cumulus over water is mirrored as a bright patch under itself on every real sea; it is the most visible
+sky feature the water can carry after the sun path, and the field is exactly the one the visible cloud has, so
+the patch sits under its cloud and drifts with it.
