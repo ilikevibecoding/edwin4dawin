@@ -626,11 +626,12 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     if (marked > 0.5) {
       // crosswalk: two transverse lines 3 m apart, ladder bars between them where signalised
       float cw1 = aaLine(a - 0.65, 0.15, fwA), cw2 = aaLine(a - 3.65, 0.15, fwA);
-      float span = aaStep(0.5, abs(xm), fwX) * aaStep(abs(xm), hw - 0.35, fwX);
+      float span = aaStep(abs(xm), hw - 0.35, fwX);
       float bars = aaLine((fract((xm + hw) / 1.2) - 0.5) * 1.2, 0.3, fwX) * aaLine(a - 2.15, 1.35, fwA);
       bars = mix(bars, 0.5 * aaLine(a - 2.15, 1.35, fwA), smoothstep(0.4, 1.0, fwX));
-      float xwalk = (fLadder + fLines) * max(cw1, cw2) * span * aaStep(0.2, abs(xm) , fwX);
-      xwalk = max(xwalk, fLadder * bars * aaStep(0.3, abs(xm), fwX) * aaStep(abs(xm), hw - 0.3, fwX));
+      // continuous across the centreline (the centre lines stop 5 m short of the box, so nothing overlaps)
+      float xwalk = (fLadder + fLines) * max(cw1, cw2) * span;
+      xwalk = max(xwalk, fLadder * bars * aaStep(abs(xm), hw - 0.3, fwX));
       // stop bar across the approach half, 4.5 m out (behind the crosswalk)
       float stopBar = fStop * appr * aaLine(a - 4.5, 0.3, fwA) * aaStep(0.35, abs(xm), fwX) * aaStep(abs(xm), hw - 0.35, fwX);
       float junction = max(xwalk, stopBar);
