@@ -637,10 +637,10 @@ export function buildAft(add, rand, engines) {
   // ---------------------------------------------------------------------------
   const deck0 = domeTop(Z.towerBase) + RIDGE_H;
   const tiers = [
-    { w: 26, h: 9, len: 56, y: deck0 + 22.5, z: Z.towerBase + 14 },
-    { w: 32, h: 9, len: 68, y: deck0 + 31.5, z: Z.towerBase + 20 },
-    { w: 24, h: 8, len: 50, y: deck0 + 40, z: Z.towerBase + 18 },
-    { w: 14, h: 5, len: 28, y: deck0 + 46.5, z: Z.towerBase + 14 },
+    { w: 26, h: 9, len: 56, y: deck0 + 16.5, z: Z.towerBase + 14 },
+    { w: 32, h: 9, len: 68, y: deck0 + 25.5, z: Z.towerBase + 20 },
+    { w: 24, h: 8, len: 50, y: deck0 + 34, z: Z.towerBase + 18 },
+    { w: 14, h: 5, len: 28, y: deck0 + 40.5, z: Z.towerBase + 14 },
   ];
   const pill = (add, t, lod, mat, opts) => {
     const seg = lod === 0 ? 16 : 8;
@@ -657,7 +657,7 @@ export function buildAft(add, rand, engines) {
       lod,
       color: MACH_DK,
     });
-    add(new THREE.BoxGeometry(18, 20, 24).translate(0, deck0 + 9, Z.towerBase + 6), "hull", {
+    add(new THREE.BoxGeometry(18, 14, 24).translate(0, deck0 + 6, Z.towerBase + 6), "hull", {
       texel: 1 / 6,
       lod,
       color: HULL_DK,
