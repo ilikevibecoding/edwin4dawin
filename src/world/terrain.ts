@@ -83,6 +83,8 @@ function bakeDetail(map: WorldMap): Uint8Array {
   const n = MAP_N;
   const out = new Uint8Array(n * n * 4);
   const cell = WORLD_SIZE / n;
+  // texel i is the map sample at x = -HALF + i * cell (the heightAt() convention the shaders read with their
+  // half-cell offset), so every band is evaluated there and lands on the road meshes it stands for
   // urbanity and corridor distance on a coarse lattice (40 m), bilinearly upsampled: both are smooth fields
   const cn = 512, cs = WORLD_SIZE / cn;
   const cUrban = new Float32Array((cn + 1) * (cn + 1)), cStrip = new Float32Array((cn + 1) * (cn + 1));
@@ -100,13 +102,13 @@ function bakeDetail(map: WorldMap): Uint8Array {
   };
   const urbanZone = (zn: number) => zn === Zone.RES_LOW || zn === Zone.RES_MID || zn === Zone.DOWNTOWN || zn === Zone.HOTEL || zn === Zone.INDUSTRIAL || zn === Zone.PARK || zn === Zone.LOT || zn === Zone.WETLAND_FLAT;
   for (let j = 0; j < n; j++) {
-    const z = -HALF + (j + 0.5) * cell;
+    const z = -HALF + j * cell;
     for (let i = 0; i < n; i++) {
       const idx = j * n + i;
       const zn = map.zone[idx];
       out[idx * 4 + 1] = 128;
       if (!urbanZone(zn)) continue;
-      const x = -HALF + (i + 0.5) * cell;
+      const x = -HALF + i * cell;
       out[idx * 4 + 2] = Math.round(255 * coarse(cUrban, x, z));
       out[idx * 4 + 3] = Math.round(255 * coarse(cStrip, x, z));
     }
@@ -134,11 +136,11 @@ function bakeDetail(map: WorldMap): Uint8Array {
     const j0 = Math.max(0, Math.floor((d.cz - r + HALF) / cell)), j1 = Math.min(n - 1, Math.ceil((d.cz + r + HALF) / cell));
     const hw = streetHalf(d.zone);
     for (let j = j0; j <= j1; j++) {
-      const z = -HALF + (j + 0.5) * cell;
+      const z = -HALF + j * cell;
       for (let i = i0; i <= i1; i++) {
         const idx = j * n + i;
         if (map.zone[idx] !== d.zone || out[idx * 4 + 1] !== 128) continue;
-        const x = -HALF + (i + 0.5) * cell;
+        const x = -HALF + i * cell;
         const dx = x - d.cx, dz = z - d.cz;
         const lx = dx * c + dz * s, lz = -dx * s + dz * c;
         if (Math.abs(lx) > d.hw || Math.abs(lz) > d.hh) continue;
@@ -165,9 +167,9 @@ function bakeDetail(map: WorldMap): Uint8Array {
       const j0 = Math.max(0, Math.floor((Math.min(az, bz) - pad + HALF) / cell)), j1 = Math.min(n - 1, Math.ceil((Math.max(az, bz) + pad + HALF) / cell));
       const abx = bx - ax, abz = bz - az, len2 = abx * abx + abz * abz || 1;
       for (let j = j0; j <= j1; j++) {
-        const z = -HALF + (j + 0.5) * cell;
+        const z = -HALF + j * cell;
         for (let i = i0; i <= i1; i++) {
-          const x = -HALF + (i + 0.5) * cell;
+          const x = -HALF + i * cell;
           const t = Math.max(0, Math.min(1, ((x - ax) * abx + (z - az) * abz) / len2));
           const dd = Math.hypot(x - ax - abx * t, z - az - abz * t);
           const v = Math.round(255 * Math.max(0, Math.min(1, 1 - (dd - hw) / 12)));
@@ -188,11 +190,11 @@ function bakeDetail(map: WorldMap): Uint8Array {
   }
   const hotels = map.districts.filter((d) => d.zone === Zone.HOTEL);
   for (let j = 0; j < n; j++) {
-    const z = -HALF + (j + 0.5) * cell;
+    const z = -HALF + j * cell;
     for (let i = 0; i < n; i++) {
       const idx = j * n + i;
       if (map.zone[idx] !== Zone.BEACH) continue;
-      const x = -HALF + (i + 0.5) * cell;
+      const x = -HALF + i * cell;
       let t = 0;
       for (const s of spots) {
         const dx = x - s.x, dz = z - s.z;
