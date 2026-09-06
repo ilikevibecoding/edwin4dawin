@@ -119,8 +119,10 @@ void main() {
   c = c * uGain + uLift * (1.0 - smoothstep(0.0, 0.6, c));
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = mix(vec3(l), c, uSaturation);
-  // gentle contrast around mid grey
-  c = mix(c, c * c * (3.0 - 2.0 * min(c, vec3(1.0))), 0.18);
+  // The former 18 % smoothstep "contrast around mid grey" pivoted at linear 0.5 (sRGB 188): everything below it
+  // was pulled down (0.18 -> 0.163, 0.10 -> 0.087, shadows -13 %) and the highlights barely moved, a shadow
+  // crush on top of the ACES toe (shaded water and undersides read black once the key was on a physical
+  // scale). ACES carries the S-curve on its own.
   c = aces(c);
   vec2 q = vUv - 0.5;
   float vig = 1.0 - uVignette * smoothstep(0.35, 0.95, length(q) * 1.35);
