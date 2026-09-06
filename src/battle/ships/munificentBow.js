@@ -3,7 +3,7 @@
 // the sensor cross (dorsal and ventral blades, the 426 m lateral wing on its dark spar) and the hood
 // livery.
 import * as THREE from "three";
-import { bar, slabProfile, smoothstep, sweep, tubeZ, wingProfile } from "./munificentGeo.js";
+import { bar, loftZ, roundedRect, slabProfile, smoothstep, sweep, tubeZ, wingProfile } from "./munificentGeo.js";
 import { loftStrips, ribbon } from "./munificentHull.js";
 import { antennaCluster, slotRow } from "./munificentDetail.js";
 import {
@@ -163,15 +163,23 @@ export function buildBow(add, rand) {
   // ---------------------------------------------------------------------------
   for (const lod of [0, 1, 2]) {
     const deckHW = 50;
-    add(
-      new THREE.BoxGeometry(deckHW * 2, Y.hoodFloor - Y.deckBot, Z.hoodEnd + 322).translate(
-        0,
-        (Y.hoodFloor + Y.deckBot) / 2,
-        (Z.hoodEnd - 322) / 2,
-      ),
-      "dark",
-      { texel: 1 / 8, lod, color: MACH_DK },
-    );
+    {
+      const yc = (Y.hoodFloor + Y.deckBot) / 2;
+      const hh = (Y.hoodFloor - Y.deckBot) / 2;
+      add(
+        loftZ(
+          roundedRect(1, 0.1, 0.1),
+          [
+            { z: -345, sx: 26, sy: 4, y: Y.hoodFloor - 6 },
+            { z: -318, sx: deckHW, sy: hh, y: yc },
+            { z: Z.hoodEnd, sx: deckHW, sy: hh, y: yc },
+          ],
+          { capStart: true, capEnd: true, flat: true, texel: 1 / 8 },
+        ),
+        "dark",
+        { uv: "keep", lod, color: MACH_DK },
+      );
+    }
     if (lod === 2) continue;
     // drums lying fore-aft on the deck, seen through the open aft rim
     const seg = lod === 0 ? 18 : 10;
@@ -404,7 +412,7 @@ export function buildBow(add, rand) {
         add(fanPoly(pts, [0, 1, 0]), "paint", { texel: 1 / 4, lod, color: WHITE });
       }
       // wing root fairing where the plank leaves the cowl, greebles and leading-edge lights outboard
-      add(new THREE.BoxGeometry(12, 11, 46).translate(side * 70, Y.wing + 0.5, Z.fin), "hull", {
+      add(new THREE.BoxGeometry(12, 10, 36).translate(side * 70, Y.wing + 0.5, Z.fin), "hull", {
         texel: 1 / 5,
         lod,
         color: HULL_DK,

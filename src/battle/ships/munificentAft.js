@@ -24,6 +24,7 @@ import {
   MACH,
   MACH_DK,
   MACH_LT,
+  RIDGE_H,
   SHELL,
   SHELL_DK,
   SHELL_TH,
@@ -163,22 +164,36 @@ export function buildAft(add, rand, engines) {
       "dark",
       { uv: "keep", lod, tint: neckTint },
     );
-    // reactor sphere in the dome's raked opening
+    // reactor sphere standing in the dome's raked opening (ICS: a big sphere with an orange collar
+    // round its forward face)
     {
-      const sph = new THREE.SphereGeometry(24, lod === 0 ? 28 : lod === 1 ? 16 : 8, lod === 0 ? 18 : 9);
-      sph.translate(0, 24, 42);
+      const sph = new THREE.SphereGeometry(30, lod === 0 ? 32 : lod === 1 ? 16 : 8, lod === 0 ? 20 : 9);
+      sph.translate(0, 30, 34);
       add(sph, "dark", {
         texel: 1 / 8,
         lod,
-        tint: (x, y, z, o) => o.set(MACH_LT).multiplyScalar(0.7 + 0.3 * smoothstep(0, 40, y)),
+        tint: (x, y, z, o) => o.set(MACH_LT).multiplyScalar(0.7 + 0.3 * smoothstep(0, 50, y)),
       });
       if (lod < 2) {
-        const ring = new THREE.TorusGeometry(25, 2.2, 8, lod === 0 ? 32 : 16);
-        ring.rotateX(Math.PI / 2);
-        ring.rotateZ(Math.PI / 2);
-        ring.translate(0, 24, 42);
+        const ring = new THREE.TorusGeometry(27.5, 2.4, 8, lod === 0 ? 36 : 16);
+        ring.translate(0, 30, 22);
         add(ring, "paint", { texel: 1 / 6, lod, color: 0xb0603a });
       }
+    }
+    // deck ledges: the wing plane runs aft along both flanks of the neck as a flat shelf
+    for (const side of [-1, 1]) {
+      add(new THREE.BoxGeometry(11, 2.4, 160).translate(side * (HW.neck + 4.5), Y.wing - 0.4, -66), "hull", {
+        texel: 1 / 6,
+        lod,
+        color: HULL_DK,
+      });
+      if (lod < 2)
+        for (let k = 0; k < 7; k++)
+          add(new THREE.BoxGeometry(2, 5, 2).translate(side * (HW.neck + 9), Y.wing - 4, -140 + k * 24), "dark", {
+            texel: 1 / 3,
+            lod,
+            color: MACH_DK,
+          });
     }
     // antenna deck ridge along the top
     add(new THREE.BoxGeometry(34, 10, 140).translate(0, Y.neckTop + 5, -68), "hull", {
@@ -364,7 +379,7 @@ export function buildAft(add, rand, engines) {
         const p = domePoint(shellFrontZ(a), a, 1, -SHELL_TH);
         edge.push(p);
         const cy = Y.eave + 0.42 * (Y.domeTop - Y.eave);
-        inner.push([p[0] * 0.62, cy + (p[1] - cy) * 0.62, p[2] - 11]);
+        inner.push([p[0] * 0.72, cy + (p[1] - cy) * 0.72, p[2] - 9]);
       }
       add(loftStrips([edge, inner], { texel: 1 / 8, orient: [0, 20, 150] }), "dark", {
         uv: "keep",
@@ -373,33 +388,35 @@ export function buildAft(add, rand, engines) {
       });
       add(fanPoly(inner, [0, 0, -1]), "dark", { texel: 1 / 8, lod, color: CORE });
     }
-    // trench: floor and walls follow the sloping dome top (10 m deep)
+    // spine ridge between the shell rims: a dark raised deck that follows the sloping dome top (TCW
+    // aft view / ICS: the shells are separate and the machinery spine stands proud between them)
     {
       const tz = lod === 0 ? [Z.domeFull, 100, 140, 180, 215, Z.split] : [Z.domeFull, 150, Z.split];
+      const top = (z) => domeTop(z) + RIDGE_H;
       add(
         loftStrips(
           tz.map((z) => [
-            [-HW.trench, domeTop(z) - 10, z],
-            [HW.trench, domeTop(z) - 10, z],
+            [-HW.trench + 0.6, top(z), z],
+            [HW.trench - 0.6, top(z), z],
           ]),
           { texel: 1 / 6, orient: [0, -200, 150] },
         ),
         "dark",
-        { uv: "keep", lod, color: CORE },
+        { uv: "keep", lod, color: MACH_DK },
       );
       for (const side of [-1, 1])
         add(
           loftStrips(
             tz.map((z) => [
-              [side * (HW.trench - 0.2), domeTop(z) - 10.2, z],
-              [side * (HW.trench - 0.2), domeTop(z) - 0.4, z],
+              [side * (HW.trench - 0.6), domeTop(z) - 12, z],
+              [side * (HW.trench - 0.6), top(z), z],
             ]),
             { texel: 1 / 6, orient: [side * 200, 30, 150] },
           ),
           "dark",
-          { uv: "keep", lod, color: MACH_DK },
+          { uv: "keep", lod, color: CORE },
         );
-      add(quadAt([0, domeTop(Z.domeFull) - 5, Z.domeFull + 0.2], [0, 0, 1], [1, 0, 0], HW.trench * 2, 10), "dark", {
+      add(quadAt([0, domeTop(Z.domeFull) - 3, Z.domeFull - 0.2], [0, 0, -1], [1, 0, 0], HW.trench * 2 - 1.2, RIDGE_H * 2 + 6), "dark", {
         texel: 1 / 6,
         lod,
         color: MACH_DK,
@@ -421,30 +438,53 @@ export function buildAft(add, rand, engines) {
       lod,
       color: MACH_DK,
     });
+    // ventral tail: the keel runs on past the thrusters as a pointed blade (TCW stern view)
+    add(
+      loftZ(
+        roundedRect(1, 0.15, 0.15),
+        [
+          { z: 206, sx: 16, sy: 6, y: Y.lowerBot - 4 },
+          { z: 300, sx: 12, sy: 7, y: Y.lowerBot - 2 },
+          { z: 360, sx: 6, sy: 5, y: Y.lowerBot + 2 },
+          { z: 404, sx: 1.2, sy: 1.5, y: Y.lowerBot + 8 },
+        ],
+        { capStart: true, capEnd: true, flat: true, texel: 1 / 8 },
+      ),
+      "dark",
+      { uv: "keep", lod, color: MACH_DK },
+    );
     if (lod < 2) {
-      // trench greebles and yellow window rows along its walls
-      for (let k = 0; k < (lod === 0 ? 12 : 6); k++) {
-        const z = 70 + k * (lod === 0 ? 14.5 : 29) + rand() * 4;
+      // ridge greebles (boxes, tanks, masts) and yellow window rows along its walls
+      for (let k = 0; k < (lod === 0 ? 14 : 7); k++) {
+        const z = 72 + k * (lod === 0 ? 11 : 22) + rand() * 4;
         const w = 5 + rand() * 9;
-        const h = 2.5 + rand() * 5;
-        add(new THREE.BoxGeometry(w, h, 6 + rand() * 12).translate((rand() - 0.5) * 20, domeTop(z) - 10 + h / 2, z), "dark", {
+        const h = 2.5 + rand() * 6;
+        add(new THREE.BoxGeometry(w, h, 5 + rand() * 9).translate((rand() - 0.5) * 22, domeTop(z) + RIDGE_H + h / 2, z), "dark", {
           texel: 1 / 4,
           lod,
           color: rand() < 0.5 ? MACH : MACH_LT,
         });
       }
-      for (const x of [-13.5, 13.5])
+      for (const x of [-12.5, 12.5])
         for (const [z0, z1] of [
           [Z.domeFull + 4, 150],
           [150, Z.split - 6],
         ])
           add(
-            bar([x, domeTop(z0) - 8.4, z0], [x, domeTop(z1) - 8.4, z1], 2.8, 2.8),
+            bar([x, domeTop(z0) + RIDGE_H + 1.4, z0], [x, domeTop(z1) + RIDGE_H + 1.4, z1], 2.8, 2.8),
             "dark",
             { texel: 1 / 4, lod, color: MACH_LT },
           );
+      if (lod === 0)
+        for (let k = 0; k < 9; k++) {
+          const z = 80 + k * 16 + rand() * 6;
+          const x = (rand() - 0.5) * 24;
+          const h = 5 + rand() * 12;
+          const y0 = domeTop(z) + RIDGE_H;
+          add(bar([x, y0, z], [x, y0 + h, z], 0.6, 0.6), "dark", { texel: 1 / 3, lod, color: MACH_DK });
+        }
       for (const side of [-1, 1])
-        for (const dy of [-6.6, -3.2])
+        for (const dy of [1.6, 4.2])
           for (let k = 0; k < 14; k++) {
             const z = Z.domeFull + 8 + k * 11.5;
             add(new THREE.BoxGeometry(0.3, 1.1, 7).translate(side * (HW.trench - 0.45), domeTop(z) + dy, z), "windows", {
@@ -550,7 +590,7 @@ export function buildAft(add, rand, engines) {
   // of which the second is the widest and overhangs aft, window strips along every deck, the green
   // glass band round the front of the main deck, masts on the cap
   // ---------------------------------------------------------------------------
-  const deck0 = domeTop(Z.towerBase);
+  const deck0 = domeTop(Z.towerBase) + RIDGE_H;
   const tiers = [
     { w: 26, h: 9, len: 56, y: deck0 + 22.5, z: Z.towerBase + 14 },
     { w: 32, h: 9, len: 68, y: deck0 + 31.5, z: Z.towerBase + 20 },
@@ -665,16 +705,16 @@ export function buildAft(add, rand, engines) {
       });
       add(loftStrips(rings, { texel: 1 / 8 }), "paint", { uv: "keep", lod, color: BLUE });
       // Banking Clan hexagon with the Confederacy emblem, mid-flank
-      const zC = 140;
-      const sC = 54;
-      patch(add, hexagon(30), zC, sC, side, 0.5, lod === 0 ? 3 : 2, "paint", { lod, color: WHITE });
-      patch(add, hexagon(7), zC, sC, side, 1.1, 1, "paint", { lod, color: BLUE_DK });
+      const zC = 156;
+      const sC = 50;
+      patch(add, hexagon(30), zC, sC, side, 0.95, lod === 0 ? 3 : 2, "paint", { lod, color: WHITE });
+      patch(add, hexagon(7), zC, sC, side, 1.5, 1, "paint", { lod, color: BLUE_DK });
       if (lod === 0)
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2;
           const p0 = [Math.cos(a) * 6.5, Math.sin(a) * 6.5];
           const p1 = [Math.cos(a) * 27, Math.sin(a) * 27];
-          patch(add, bar2D(p0, p1, 3.8), zC, sC, side, 1.1, 2, "paint", { lod, color: BLUE_DK });
+          patch(add, bar2D(p0, p1, 3.8), zC, sC, side, 1.5, 2, "paint", { lod, color: BLUE_DK });
         }
     }
   }

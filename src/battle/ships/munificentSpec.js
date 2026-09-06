@@ -29,19 +29,20 @@ export const Z = {
   tip: 412.5,
 };
 export const Y = {
-  domeTop: 61, // peak of the dome; its top slopes down toward the stern (see domeH)
+  domeTop: 64, // peak of the dome; its top slopes down toward the stern (see domeH)
   eave: -5,
   lowerBot: -30,
   keelBot: -40,
   neckTop: 24,
   neckBot: -40,
-  hoodPeak: 42,
-  hoodFloor: -4,
-  deckBot: -30,
+  hoodPeak: 46,
+  hoodFloor: -6,
+  deckBot: -40,
   wing: 4,
   finTop: 132,
   lowFinBot: -108,
 };
+export const RIDGE_H = 6; // the spine ridge between the shells stands this far above their rims
 export const HW = {
   dome: 82,
   hood: 66,
@@ -52,7 +53,7 @@ export const HW = {
   keel: 34,
   stern: 34,
 };
-export const SHELL_P = 2.1; // superellipse exponent of the dome arch (a slightly squared barrel)
+export const SHELL_P = 2.0; // superellipse exponent of the dome arch (an elliptical barrel)
 export const SHELL_TH = 4.5; // armour shell thickness
 export const HOOD_P = 2.0; // the hood cowl is an elliptical arch
 
@@ -219,18 +220,18 @@ const hoodHW = smoothTable([
 ]);
 const hoodTop = smoothTable([
   [Z.nose, 12],
-  [-388, 18],
-  [-338, 30],
-  [-297, 37],
-  [-256, 40.5],
+  [-388, 19],
+  [-338, 32],
+  [-297, 40],
+  [-256, 44],
   [-206, Y.hoodPeak],
-  [-170, 40.5],
-  [Z.hoodEnd, 38],
+  [-170, 44.5],
+  [Z.hoodEnd, 42],
 ]);
 const hoodFloor = smoothTable([
   [Z.nose, 10],
-  [-388, 4],
-  [-338, -1],
+  [-388, 3],
+  [-338, -3],
   [-300, Y.hoodFloor],
   [Z.hoodEnd, Y.hoodFloor],
 ]);
