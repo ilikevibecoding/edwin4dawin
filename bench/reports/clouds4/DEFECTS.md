@@ -173,3 +173,26 @@ darker; the hollows and high cells brighter) instead of r6's horizon-openness he
   relief warp, which is gone (D7/D8). Hence r7a/r7b `under`: smooth 260–520 m pouches with no finer structure
   even where the 12 m surface steps resolve the detail channel.
   Fix for r7c: a longer ramp where the noise can bite (edges longer than cores) with a stronger base erosion term.
+
+### Round 7c–7e results (stills `/tmp/clouds4/r7c`, `r7d`, `r7e`; crops `crops/r7c_*`)
+- **r7c** (ramp scaled by the column's own height: 130 m under a core, 200–260 m under the low edge of a cell,
+  base erosion 0.9 → 1.1): `aerial-a` bases are lobed and ragged with shaded undersides and none of r6's
+  hatching (crop `r7c_aerial_base_r6_r7c`: baseline slab / r6 hatched / r7c); `baselevel2` (camera at base
+  level in a gap between cells, replacing `baselevel`, whose camera stood inside a cell and saw fog) shows dark,
+  level bases that are defined without being a cut plane. `under`: 260–520 m pouches with the ramp's rags, still
+  no texture under 150 m: **D9 persists** at close range — the noise the march can afford (fine step 36 m,
+  surface step 12 m) integrates the 56–112 m channels to their mean over the 100–200 m the ray spends in the base.
+- **r7d** (one per-pixel fetch of a 640 m perlin tile at the first dense sample, modulating the ambient within
+  2 km): mottle visible but **stippled** — the per-pixel step jitter moves the first dense sample by up to a
+  surface step, so neighbouring pixels sample the 40 m period at different phases.
+- **r7e** (900 m tile, surface pass to T = 0.25–0.35, light march 3 noised + 3 smooth steps): stipple gone, but
+  the mottle is nearly invisible: the ambient it modulates is a minor share of a base's radiance (the
+  multiple-scattering floor of the sun term, 0.1 × 2.9 × sun at od 6–9, is most of it). `under2`: a real
+  overhead base (grey, lobed, ragged fringe) with well-formed cumulus beyond. Fix for r8: modulate the shadowed
+  sun term too, add a 300 m octave within 700 m, sample on the smooth base surface when looking up through it.
+- **Cost** (interleaved, same Chrome; the machine was shared with other builders, so absolute times drift and
+  only pairs count): `under` r7c 1324/1492/2215 vs base 857/772/792 ms, r7e 2034 vs 1429 (+42 %); `aerial-a`
+  r7c 6459/7729 vs base 9082/9208, r7e 13542 vs 16446 (cheaper: the far band stops at the envelope test and
+  the fade removes noise fetches at long steps). `under` is the stress case (the whole frame within 300–2000 m
+  of a base, three-quarters of the opacity integrated at the 12 m surface step); the bench views are at or
+  under parity. r8 lifts the surface pass to T = 0.3–0.4 since the per-pixel texture now carries the fine scale.
