@@ -189,11 +189,15 @@ The previous vegetation agent's loop-5 commits were lost with the VM; rounds 1�
   on a face turned to the camera: `back` ≈ 1, `ndl` ≈ −1 → 0.8 × sun through metres of leaves). → R11.
 - **Pine tufts** (`r14-park`): the needle-tuft tile reads as flat starbursts (5 bunches of 26 two-pixel spokes).
   → R11.
-- **Black box** (`r8-park`, `s1` sweep 3 of 100 stations, `bb-*` bisection pending): a solid black rectangle
-  with 8-px stepped edges, always rows 139–313 of 540 (26–58 % of the frame height) whatever the station or
-  heading, ~190 px wide, at headings 0 and 270 (sun ahead / to the side) never 90 / 180; the vegetation instance
-  data has no non-finite values (in-page probe over 829 tiles). The fixed screen band and the coarse steps say
-  a NaN in a screen-space pass (a bloom mip, or the reflection blur) rather than a world object.
+- **Black box — not vegetation** (`r8-park`; `s1` sweep: 6 of 100 park stations; `bb-*` bisection): a solid
+  black rectangle with 8-px stepped edges, always rows 131/139–313 of 540 whatever the station or heading,
+  190–250 px wide (`s1-g-5100_1700_270.png`: `dev&cam=-5100,7.75,1700&hdg=270&pch=-5&fov=50&time=15` at
+  960×540, box [172, 139, 363, 313]; also `-4950,8.44,1700` h0, `-4800,8.55,1850` h270, `-4650,8.62,1550` h90
+  and h270). It **persists** with `dbg=noveg`, with every vegetation family's material hidden one at a time
+  (grass, cards, crowns, palms), with `dbg=noshadow` and `dbg=norefl`, and is **gone with `dbg=nocity`**: a
+  city batch object near the horizon (the box's centre row sits on it) writes NaN or black that the
+  post-process (a bloom mip, from the 8-px steps) smears into a box. The vegetation instance data has no
+  non-finite values (in-page probe over 829 tiles). Handed to the lead / city builder with the stations above.
 - **Palm fins** (`r14-palm`, `r14-beach`): the finned fronds resolve as leaflet combs at 10–30 m; the camera
   finder put the palm station inside an understory shrub (a near-black card fills the frame: shade
   ×[0.3, 0.32, 0.25] under a 0.6 occlusion — a shrub in deep shade is dark, not black; noted for R12).
