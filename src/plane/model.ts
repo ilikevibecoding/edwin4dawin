@@ -6,7 +6,7 @@ import {
   type FloatStation, type QuadBlock, type Section, type Surf, type WingSpec,
 } from './geometry';
 import {
-  cabinMaps, CHEAT_LINE, DIAL, floatMaps, fuselageMaps, GAUGES, glassDirtTexture, GPS_SCREEN, GpsScreen, INSTRUMENT_ATLAS, instrumentAtlas, LIVERY, OVERHEAD, PANEL, PANEL_UV, panelTexture, propDiscTexture, tailV, wingMaps, wingV,
+  cabinMaps, CHEAT_LINE, DIAL, floatMaps, fuselageMaps, GAUGES, glassDirtTexture, GPS_SCREEN, GpsScreen, INSTRUMENT_ATLAS, instrumentAtlas, LIVERY, OVERHEAD, PANEL, PANEL_UV, panelTexture, propDiscTexture, SURF, tailV, wingMaps, wingV,
   type FuselageLayout, type GaugeDef, type UvRect,
 } from './textures';
 import type { FlightTelemetry, FloatState } from './physics';
@@ -30,53 +30,6 @@ const CH = { fixed: 0, asi: 1, adi: 2, alt100: 3, alt1000: 4, tc: 5, tcBall: 6, 
 const N_CHANNELS = 17;
 /** instrument canvases (GPS screen) are redrawn at most this often (simulated seconds) */
 const CANVAS_PERIOD = 1 / 15;
-
-/** Finishes of the untextured parts; all of them share one `partsMaterial` (colour/roughness/metalness per vertex). */
-const SURF = {
-  /** bare aluminium fittings (cleats, rails, hubs): satin, not chrome */
-  metal: { color: 0x9a9ea3, roughness: 0.52, metalness: 0.85 },
-  /** struts, spreader bars and jury struts: steel tube painted the livery grey-white, semi-gloss enamel */
-  strut: { color: 0xd9d8d2, roughness: 0.42, metalness: 0.0 },
-  /** bracing wires: dull galvanised steel */
-  wire: { color: 0x6a6d70, roughness: 0.6, metalness: 0.7 },
-  darkMetal: { color: 0x2c2f33, roughness: 0.5, metalness: 0.6 },
-  /** polished spinner: picks up a tight sun highlight */
-  spinner: { color: 0xc4c8ce, roughness: 0.16, metalness: 0.95 },
-  exhaust: { color: 0x5a4a3c, roughness: 0.6, metalness: 0.9 },
-  rubber: { color: 0x111214, roughness: 0.92, metalness: 0.0 },
-  /** cabin trim: window-band / reveal vinyl, headliner bows, bulkheads (the lining itself is textured, see cabinMaps) */
-  bow: { color: 0x9a958c, roughness: 0.6, metalness: 0.0 },
-  trim: { color: 0x2e3136, roughness: 0.62, metalness: 0.04 },
-  sill: { color: 0x5c6066, roughness: 0.5, metalness: 0.1 },
-  bulkhead: { color: 0x6f6a62, roughness: 0.9, metalness: 0.0 },
-  visorArm: { color: 0x9a9ea4, roughness: 0.35, metalness: 0.9 },
-  plastic: { color: 0x3a3d42, roughness: 0.7, metalness: 0.0 },
-  lightPlastic: { color: 0xbfbcb4, roughness: 0.6, metalness: 0.0 },
-  leather: { color: 0x7a5535, roughness: 0.55, metalness: 0.0 },
-  carpet: { color: 0x35302b, roughness: 0.95, metalness: 0.0 },
-  belt: { color: 0x3c3f44, roughness: 0.9, metalness: 0.0 },
-  prop: { color: 0x1e1f22, roughness: 0.5, metalness: 0.6 },
-  propTip: { color: 0xf2c230, roughness: 0.5, metalness: 0.0 },
-  shirt: { color: 0x2f4f6f, roughness: 0.85, metalness: 0.0 },
-  /** open collar and cuffs of the pilot's shirt (a lighter trim) */
-  collar: { color: 0x9fb3c6, roughness: 0.85, metalness: 0.0 },
-  cap: { color: 0x22283a, roughness: 0.9, metalness: 0.0 },
-  skin: { color: 0xc8956c, roughness: 0.7, metalness: 0.0 },
-  headset: { color: 0x1a1a1c, roughness: 0.5, metalness: 0.0 },
-  /** folded sectional chart on the copilot seat */
-  paper: { color: 0xe9e4d6, roughness: 0.92, metalness: 0.0 },
-  chartInk: { color: 0xb6cbd2, roughness: 0.92, metalness: 0.0 },
-  /** baggage in the aft bay: canvas duffels, a cooler and a hard case */
-  duffelRed: { color: 0x8c2f2a, roughness: 0.9, metalness: 0.0 },
-  duffelOlive: { color: 0x5d6640, roughness: 0.9, metalness: 0.0 },
-  cooler: { color: 0xd8dde0, roughness: 0.5, metalness: 0.0 },
-  hardCase: { color: 0x1f2226, roughness: 0.55, metalness: 0.1 },
-  throttle: { color: 0x151618, roughness: 0.5, metalness: 0.0 },
-  propKnob: { color: 0x2a5fb0, roughness: 0.5, metalness: 0.0 },
-  mixture: { color: 0xc0392b, roughness: 0.6, metalness: 0.0 },
-  flapKnob: { color: 0xe8e6e0, roughness: 0.5, metalness: 0.0 },
-  extinguisher: { color: 0xc0392b, roughness: 0.4, metalness: 0.3 },
-} satisfies Record<string, Surf>;
 
 /** channels of the navigation-light mesh (index into `lightPower`) */
 const LIGHT = { red: 0, green: 1, tail: 2, beacon: 3, strobe: 4, landing: 5 } as const;
