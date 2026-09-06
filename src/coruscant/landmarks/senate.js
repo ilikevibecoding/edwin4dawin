@@ -339,7 +339,7 @@ class Sector {
   constructor(bp, P, y, ra, rb, a0, a1, kind, floor = PLATE, wallId = null) {
     this.bp = bp; this.P = P; this.y = y; this.ra = ra; this.rb = rb; this.a0 = a0; this.a1 = a1; this.kind = kind;
     this.mid = (a0 + a1) / 2; this.half = (a1 - a0) / 2; this.rm = (ra + rb + 1) / 2;
-    this.x0 = Infinity; this.x1 = -Infinity; this.z0 = Infinity; this.z1 = -Infinity; this.cells = 0;
+    this.x0 = Infinity; this.x1 = -Infinity; this.z0 = Infinity; this.z1 = -Infinity; this.cells = 0; this.list = [];
     eachSector(bp, P, ra, rb, a0, a1, (x, z) => {
       // lift pylons (PANEL_BLACK) placed before the rooms survive the carve; decorated ceilings (a gallery floor, a
       // pod platform) are left alone — only plain drum stone becomes the room's ceiling
@@ -347,7 +347,7 @@ class Sector {
       if (!isPylon(bp, x, y - 1, z)) bp.set(x, y - 1, z, floor);
       for (let yy = y; yy <= y + 3; yy++) if (!isPylon(bp, x, yy, z)) bp.set(x, yy, z, AIR);
       const c = bp.get(x, y + 4, z); if (c === STONE || c === STONE2 || c === 0) bp.set(x, y + 4, z, STONE);
-      if (x < this.x0) this.x0 = x; if (x > this.x1) this.x1 = x; if (z < this.z0) this.z0 = z; if (z > this.z1) this.z1 = z; this.cells++;
+      if (x < this.x0) this.x0 = x; if (x > this.x1) this.x1 = x; if (z < this.z0) this.z0 = z; if (z > this.z1) this.z1 = z; this.cells++; this.list.push([x, z]);
     });
     // wall dressing: the ring cells just outside the interior (bins ra-1 and rb+1) inside the angular range
     if (wallId != null) for (const b of [ra - 1, rb + 1]) eachSector(bp, P, b, b, a0, a1, (x, z) => { for (let yy = y; yy <= y + 3; yy++) if (!isFree(bp, x, yy, z)) bp.set(x, yy, z, wallId); });
@@ -364,15 +364,19 @@ class Sector {
   desk(r, a, kind = 'desk', dir = -1) { if (this.put(r, a, 0, B.CONSOLE)) return this.work(r + dir, a, kind); return null; }
   // ceiling lights along the mid radius and the back row; n = count along the arc
   lights(n = 2, id = GLOW) {
-    const put = (r, a) => { const [x, z] = cellOf(r, a); if (!isPylon(this.bp, x, this.y + 4, z)) this.bp.set(x, this.y + 4, z, id); };
+    let placed = 0;
+    const put = (r, a) => { const [x, z] = cellOf(r, a); if (!isPylon(this.bp, x, this.y + 4, z) && this.inside(r, a)) { this.bp.set(x, this.y + 4, z, id); placed++; } };
     for (let k = 0; k < n; k++) { const a = this.a0 + (this.a1 - this.a0) * (k + 0.5) / n; put(this.rm, a); if (this.rb - this.ra >= 6) { put(this.ra + 1, a); put(this.rb, a); } }
+    // a lift pylon may cover the mid row of a small room: fall back to the first carved cell whose ceiling is free
+    if (!placed) for (const [x, z] of this.list) if (!isPylon(this.bp, x, this.y + 4, z)) { this.bp.set(x, this.y + 4, z, id); break; }
   }
   // iterate arc positions along radius r: fn(a, k) for k arc blocks inset from both ends by `inset` blocks
   arc(r, inset, fn) { const s = 1 / r, n = Math.floor(((this.a1 - this.a0) * r - 2 * inset) / 1); for (let k = 0; k <= n; k++) fn(this.a0 + (inset + k) * s, k, n); }
   // shelves / planters / lamps along the outer (back) wall row rb
   backRow(fn) { this.arc(this.rb, 1.2, (a, k) => fn(this.rb, a, k)); }
-  // registers the room; returns its record (world coords, the same fields pruneMeta keeps)
-  register() { if (!this.cells) return null; this.bp.room(this.kind, this.x0, this.y, this.z0, this.x1, this.z1); return this.bp.meta.rooms[this.bp.meta.rooms.length - 1]; }
+  // registers the room (bounding box plus the one-cell wall ring, the convention the rectangular rooms follow);
+  // returns its record (world coords, the same fields pruneMeta keeps)
+  register() { if (!this.cells) return null; this.bp.room(this.kind, this.x0 - 1, this.y, this.z0 - 1, this.x1 + 1, this.z1 + 1); return this.bp.meta.rooms[this.bp.meta.rooms.length - 1]; }
   get center() { return cellOf(this.rm, this.mid); }
   get range() { return [this.a0, this.a1]; }
 }
@@ -650,13 +654,27 @@ function bands(bp, P, rng, meta) {
   tiers.forEach((list, t) => {
     const y = G.TIERS[t];
     for (let q = 0; q < 3; q++) {
-      const [qa, qb] = quad(q), A = list[q * 2], Bd = list[q * 2 + 1];
+      const [qa, qb] = quad(q);
+      // tier 2 takes each quadrant in the opposite order so the two tiers' receptions (and lift pylons) stagger
+      const A = list[q * 2 + t], Bd = list[q * 2 + 1 - t];
       const wA = SIZE_ARC[A.size] / 59, wB = SIZE_ARC[Bd.size] / 59;
       plans.push({ deleg: A, y, t, plan: suitePlan(A, qa, qa + wA), spare: (qb - qa) - wA - wB, spareAt: [qa + wA, qb - wB] });
       plans.push({ deleg: Bd, y, t, plan: suitePlan(Bd, qb - wB, qb) });
     }
   });
-  for (const p of plans) p.lift = polarLift(bp, 60.5, p.plan.liftA, 1, p.y, [[1, 1], [p.y, -1]]);
+  // a lift pylon is 4 x 4; two shafts closer than 5 blocks would merge, so each suite tries the reception's far end,
+  // then its near end, then every block of its own arc until it clears the shafts already placed
+  const placed = [];
+  const shaftXZ = (a) => cellOf(60.5, a);
+  for (const p of plans) {
+    const rec = p.plan.ranges.find((R) => R.role === 'reception');
+    const candidates = [p.plan.liftA, rec.mid * 2 - p.plan.liftA];
+    for (let k = 3; k * (1 / 60) < (p.plan.a1 - p.plan.a0) - 3 / 60; k++) candidates.push(p.plan.a0 + k / 60);
+    let chosen = candidates[0];
+    for (const a of candidates) { const [x, z] = shaftXZ(a); if (placed.every(([px, pz]) => Math.max(Math.abs(px - x), Math.abs(pz - z)) >= 5)) { chosen = a; break; } }
+    p.plan.liftA = chosen; placed.push(shaftXZ(chosen));
+    p.lift = polarLift(bp, 60.5, chosen, 1, p.y, [[1, 1], [p.y, -1]]);
+  }
   meta.publicLifts = [];
   for (let k = 0; k < 4; k++) {
     const a = Math.PI / 4 + k * Math.PI / 2;
