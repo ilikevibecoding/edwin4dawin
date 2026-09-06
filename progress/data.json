@@ -32,132 +32,132 @@
  "snapshots": [
   {
    "tag": "h00",
-   "build": "a6a15f19",
-   "time": "2026-09-06T08:43Z",
+   "build": "4f5d63e0",
+   "time": "2026-09-06T09:52Z",
    "views": [
     {
      "label": "aircraft_rear",
      "title": "Aircraft, rear three-quarter (taxiing)",
      "item": "aircraft",
-     "ok": false
+     "ok": true
     },
     {
      "label": "aircraft_front",
      "title": "Aircraft, front three-quarter (cowl, propeller, floats)",
      "item": "aircraft",
-     "ok": false
+     "ok": true
     },
     {
      "label": "cockpit",
      "title": "Cockpit approaching downtown",
      "item": "aircraft",
-     "ok": false
+     "ok": true
     },
     {
      "label": "glass",
      "title": "Cockpit glass in direct sun",
      "item": "aircraft",
-     "ok": false
+     "ok": true
     },
     {
      "label": "water_landing",
      "title": "Firm water landing (float displacement, spray)",
      "item": "water",
-     "ok": false
+     "ok": true
     },
     {
      "label": "harbor",
      "title": "Harbour: boats, wakes, marina",
      "item": "water",
-     "ok": false
+     "ok": true
     },
     {
      "label": "island_pass",
      "title": "Low pass over the keys (shore, water colour)",
      "item": "water",
-     "ok": false
+     "ok": true
     },
     {
      "label": "skyline_high",
      "title": "Skyline from 1.2 km",
      "item": "city",
-     "ok": false
+     "ok": true
     },
     {
      "label": "city_500m",
      "title": "Downtown from 500 m",
      "item": "city",
-     "ok": false
+     "ok": true
     },
     {
      "label": "city_200m",
      "title": "Downtown from 200 m",
      "item": "city",
-     "ok": false
+     "ok": true
     },
     {
      "label": "street_2m",
      "title": "Street level, downtown avenue",
      "item": "city",
-     "ok": false
+     "ok": true
     },
     {
      "label": "night",
      "title": "Downtown at night",
      "item": "city",
-     "ok": false
+     "ok": true
     },
     {
      "label": "sunset",
      "title": "Sunset over the bay",
      "item": "sky",
-     "ok": false
+     "ok": true
     },
     {
      "label": "cloudy",
      "title": "Overcast deck",
      "item": "sky",
-     "ok": false
+     "ok": true
     },
     {
      "label": "highway_bridge",
      "title": "Causeway flyover at 45 m",
      "item": "highway",
-     "ok": false
+     "ok": true
     },
     {
      "label": "highway_aerial",
      "title": "Reference aerial: approach highway across Garza",
      "item": "highway",
-     "ok": false
+     "ok": true
     },
     {
      "label": "highway_200m",
      "title": "Coastal highway from 200 m",
      "item": "highway",
-     "ok": false
+     "ok": true
     },
     {
      "label": "foliage_suburb",
      "title": "Suburb canopy from 130 m",
      "item": "foliage",
-     "ok": false
+     "ok": true
     },
     {
      "label": "foliage_park",
      "title": "Park canopy from 130 m",
      "item": "foliage",
-     "ok": false
+     "ok": true
     },
     {
      "label": "shore_beach",
      "title": "Garza beach from 60 m",
      "item": "shore",
-     "ok": false
+     "ok": true
     }
    ],
-   "notes": "source: lead a6a15f19\nbuild: a6a15f19 from /workspace\nshot failed: aircraft_rear\nshot failed: aircraft_front\nshot failed: cockpit\nshot failed: glass\nshot failed: water_landing\nshot failed: harbor\nshot failed: island_pass\nshot failed: skyline_high\nshot failed: city_500m\nshot failed: city_200m\nshot failed: street_2m\nshot failed: night\nshot failed: sunset\nshot failed: cloudy\nshot failed: highway_bridge\nshot failed: highway_aerial\nshot failed: highway_200m\nshot failed: foliage_suburb\nshot failed: foliage_park\nshot failed: shore_beach\n"
+   "notes": "source: lead 4f5d63e0\nbuild: 4f5d63e0 from /workspace\n"
   }
  ],
- "updated": "2026-09-06T08:43Z"
+ "updated": "2026-09-06T09:52Z"
 }
