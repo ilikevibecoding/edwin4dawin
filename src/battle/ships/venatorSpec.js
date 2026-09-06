@@ -233,15 +233,15 @@ export const BLOCK = {
 export const AFT = {
   sections: [
     [896, 19.5, up(105)],
-    [930, 22.5, up(80)],
-    [948, 24, up(80)],
-    [982, 28, up(56)],
-    [1000, 30, up(56)],
-    [1034, 34, up(32)],
-    [1085, 36, up(32)],
+    [930, 23, up(80)],
+    [948, 25, up(80)],
+    [982, 30, up(56)],
+    [1000, 32, up(56)],
+    [1034, 37, up(32)],
+    [1085, 40, up(32)],
   ],
-  batter: 0.25, // the side walls lean out toward the deck this much per metre of height (sloped shoulders)
-  hangar: { hx: 25, y0: up(1.5), y1: up(25), depth: 30 },
+  batter: 0.3, // the side walls lean out toward the deck this much per metre of height (sloped shoulders)
+  hangar: { hx: 28, y0: up(1.5), y1: up(25), depth: 30 },
 };
 export const TOWER = {
   x: 22.5, // shaft centres at +-x

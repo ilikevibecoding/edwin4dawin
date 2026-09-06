@@ -449,9 +449,11 @@ export function buildDetail(ctx, secs) {
         const roundel =
           Math.abs(zr - ROUNDEL_ZR) < 26 &&
           Math.abs(x - roundelX(ROUNDEL_ZR)) < 26;
-        // the shelves stand on the wings here
+        // the shelves (and their tails sloping down aft) stand on the wings here
         const shelf =
-          zr > PLATFORM.z0 - 6 && zr < PLATFORM.z1 + 6 && x < PLATFORM.xOut + 6;
+          zr > PLATFORM.z0 - 6 &&
+          zr < PLATFORM.z1 + PLATFORM.tail + 6 &&
+          x < PLATFORM.xOut + 6;
         // keep the plates off the painted shoulder stripes
         const shoulder =
           zr > SHOULDER.z0 - 6 &&
