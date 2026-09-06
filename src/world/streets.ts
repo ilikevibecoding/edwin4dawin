@@ -373,11 +373,18 @@ class KitSoup {
   /** `thin`: the part is a thin member held to a pixel across in the vertex shader — 1: its axis is the unit's local
    *  y (poles, heads), 2: local z (arms laid along z), 3: local x (the lens plates, which face +x); aThin is then
    *  the world-space offset of each vertex from that axis */
-  add(unit: THREE.BufferGeometry, m: THREE.Matrix4, color: THREE.Color, rough: number, metal: number, em = EM_NONE, phase = 0, thin = 0): void {
+  /** `shade`: faces of the unit lying wholly below y = -0.15 take `low`, faces wholly above y = 0.35 take `high`
+   *  (a car body's dark sill band, a cabin's roof in the paint over its glass sides) */
+  add(unit: THREE.BufferGeometry, m: THREE.Matrix4, color: THREE.Color, rough: number, metal: number, em = EM_NONE, phase = 0, thin = 0, shade?: { low?: THREE.Color; high?: THREE.Color }): void {
     const p = unit.getAttribute('position'), n = unit.getAttribute('normal');
     _nm.getNormalMatrix(m);
     _t.setFromMatrixPosition(m);
+    let c = color;
     for (let i = 0; i < p.count; i++) {
+      if (shade && i % 3 === 0) {
+        const yMin = Math.min(p.getY(i), p.getY(i + 1), p.getY(i + 2)), yMax = Math.max(p.getY(i), p.getY(i + 1), p.getY(i + 2));
+        c = shade.low && yMax < -0.15 ? shade.low : shade.high && yMin > 0.35 ? shade.high : color;
+      }
       _v.set(p.getX(i), p.getY(i), p.getZ(i)).applyMatrix4(m);
       this.pos.push(_v.x, _v.y, _v.z);
       this.box.expandByPoint(_v);
@@ -388,7 +395,7 @@ class KitSoup {
       } else this.thin.push(0, 0, 0);
       _v.set(n.getX(i), n.getY(i), n.getZ(i)).applyMatrix3(_nm).normalize();
       this.nrm.push(_v.x, _v.y, _v.z);
-      this.col.push(color.r, color.g, color.b);
+      this.col.push(c.r, c.g, c.b);
       this.par.push(rough, metal);
       this.em.push(em);
       this.ph.push(phase);
@@ -482,9 +489,44 @@ function openBox(): THREE.BufferGeometry {
   out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
   return out;
 }
+/** an open box whose side faces are split at y = -0.186 (the sill line of a car body, 0.22 m up a 0.7 m side): the
+ *  band below takes the soup's `low` shade (18 triangles) */
+function beltedBox(belt = -0.186): THREE.BufferGeometry {
+  const pos: number[] = [], nrm: number[] = [];
+  const a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  // a quad from its four corners, wound to face `n` (checked, not assumed)
+  const quad = (q: number[][], n: number[]) => {
+    a.fromArray(q[0]); b.fromArray(q[1]).sub(a); c.fromArray(q[2]).sub(a);
+    const flip = b.cross(c).dot(a.fromArray(n)) < 0;
+    const order = flip ? [0, 2, 1, 0, 3, 2] : [0, 1, 2, 0, 2, 3];
+    for (const k of order) { pos.push(q[k][0], q[k][1], q[k][2]); nrm.push(n[0], n[1], n[2]); }
+  };
+  // side faces: normal and the two horizontal corner positions (x, z); each side is a lower and an upper band
+  const sides: [number[], number[], number[]][] = [[[1, 0, 0], [0.5, 0.5], [0.5, -0.5]], [[-1, 0, 0], [-0.5, -0.5], [-0.5, 0.5]], [[0, 0, 1], [-0.5, 0.5], [0.5, 0.5]], [[0, 0, -1], [0.5, -0.5], [-0.5, -0.5]]];
+  for (const [n, l, r] of sides) {
+    for (const [y0, y1] of [[-0.5, belt], [belt, 0.5]]) quad([[l[0], y0, l[1]], [r[0], y0, r[1]], [r[0], y1, r[1]], [l[0], y1, l[1]]], n);
+  }
+  quad([[-0.5, 0.5, -0.5], [-0.5, 0.5, 0.5], [0.5, 0.5, 0.5], [0.5, 0.5, -0.5]], [0, 1, 0]);
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  return out;
+}
+/** an open box whose top face is drawn in to 55 % of the length and 94 % of the width: a car cabin with a raked
+ *  windscreen and rear window (10 triangles) */
+function cabinBox(): THREE.BufferGeometry {
+  const g = openBox();
+  const p = g.getAttribute('position');
+  for (let i = 0; i < p.count; i++) if (p.getY(i) > 0) p.setXYZ(i, p.getX(i) * 0.55, p.getY(i), p.getZ(i) * 0.94);
+  p.needsUpdate = true;
+  g.computeVertexNormals();
+  return g;
+}
 const UNIT = {
   box: new THREE.BoxGeometry(1, 1, 1).toNonIndexed(),
   boxOpen: openBox(),
+  carBody: beltedBox(),
+  cabin: cabinBox(),
   /** square plate of diameter 1 in the y-z plane facing +x: a lens seen from 300 m on */
   plate4: new THREE.CircleGeometry(0.5, 4).rotateY(Math.PI / 2).toNonIndexed(),
   cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 8).toNonIndexed(),
@@ -502,13 +544,13 @@ function frame(x: number, y: number, z: number, yaw: number): THREE.Matrix4 {
 }
 
 /** Place `unit` scaled to (w, h, d) with its centre at local (cx, cy, cz) of `f`. */
-function part(soup: KitSoup, unit: THREE.BufferGeometry, f: THREE.Matrix4, cx: number, cy: number, cz: number, w: number, h: number, d: number, color: THREE.Color, rough: number, metal: number, em = EM_NONE, phase = 0, rotZ = 0, thin = 0): void {
+function part(soup: KitSoup, unit: THREE.BufferGeometry, f: THREE.Matrix4, cx: number, cy: number, cz: number, w: number, h: number, d: number, color: THREE.Color, rough: number, metal: number, em = EM_NONE, phase = 0, rotZ = 0, thin = 0, shade?: { low?: THREE.Color; high?: THREE.Color }): void {
   _p.set(cx, cy, cz);
   _q.setFromEuler(_e.set(0, 0, rotZ));
   _s.set(w, h, d);
   _m2.compose(_p, _q, _s);
   _m.multiplyMatrices(f, _m2);
-  soup.add(unit, _m, color, rough, metal, em, phase, thin);
+  soup.add(unit, _m, color, rough, metal, em, phase, thin, shade);
 }
 const _e = new THREE.Euler();
 
@@ -530,21 +572,26 @@ const C = {
   stone: new THREE.Color(0xa9a49a),
   shrub: new THREE.Color(0x2f5a22),
   glassDark: new THREE.Color(0x1c2026),
+  /** a car's sill band: tyres, wheel arches and the shadowed underside in one dark tone */
+  sill: new THREE.Color(0x1e1f21),
 };
 /** parked-car paints, weighted toward the whites, silvers and greys of a real lot */
 const CAR_PAINT = [0xe8e8e4, 0xdcdcd8, 0xb9bcc0, 0x9a9da2, 0x5a5d62, 0x2b2d31, 0x1a1a1d, 0xa8241c, 0x27406e, 0x2f5b3a, 0xc9b58a, 0x7a3b2a].map((c) => new THREE.Color(c));
+const SILL = { low: C.sill };
 
-/** A parked car — body and cabin as two open boxes (20 triangles), or a van as one taller box with a dark glass band
- *  (22) — in `soup`, with its far shape (one open box in the paint, 10) in `far`; the frame's +x is the length,
- *  `cabinX` sets the cabin toward the nose (< 0) or the tail. */
+/** A parked car — a belted body (the 0.22 m sill band dark: tyres and underside) and a raked cabin whose sides are
+ *  glass and whose roof is the paint (28 triangles), or a van as one belted box with a dark glass band (28) — in
+ *  `soup`, with its far shape (one open box in the paint, 10) in `far`; the frame's +x is the length, `cabinX` sets the
+ *  cabin toward the nose (< 0) or the tail. At eye level (round 7) the two plain boxes read as freight containers
+ *  at the kerb: no wheels, no glass line, a dark slab for a cabin. */
 function parkedCar(soup: KitSoup, far: KitSoup, f: THREE.Matrix4, paint: THREE.Color, van: boolean, cabinX: number): void {
   if (van) {
-    part(soup, UNIT.boxOpen, f, 0, 1.0, 0, 5.0, 1.6, 1.95, paint, 0.4, 0.5);
-    part(soup, UNIT.box, f, cabinX * 5, 1.2, 0, 1.2, 0.55, 1.97, C.glassDark, 0.3, 0.5);
+    part(soup, UNIT.carBody, f, 0, 1.0, 0, 5.0, 1.6, 1.95, paint, 0.4, 0.5, EM_NONE, 0, 0, 0, SILL);
+    part(soup, UNIT.boxOpen, f, cabinX * 5, 1.2, 0, 1.2, 0.55, 1.97, C.glassDark, 0.3, 0.5);
     part(far, UNIT.boxOpen, f, 0, 1.0, 0, 5.0, 1.6, 1.95, paint, 0.4, 0.5);
   } else {
-    part(soup, UNIT.boxOpen, f, 0, 0.55, 0, 4.4, 0.7, 1.8, paint, 0.35, 0.6);
-    part(soup, UNIT.boxOpen, f, cabinX, 1.22, 0, 2.5, 0.62, 1.62, C.glassDark, 0.3, 0.5);
+    part(soup, UNIT.carBody, f, 0, 0.55, 0, 4.4, 0.7, 1.8, paint, 0.35, 0.6, EM_NONE, 0, 0, 0, SILL);
+    part(soup, UNIT.cabin, f, cabinX, 1.22, 0, 2.5, 0.62, 1.62, C.glassDark, 0.3, 0.5, EM_NONE, 0, 0, 0, { high: paint });
     part(far, UNIT.boxOpen, f, 0, 0.7, 0, 4.4, 1.3, 1.8, paint, 0.4, 0.5);
   }
 }
