@@ -1,0 +1,14 @@
+base: 7f95c5ea (cursor/vice-city-aerial-8213)
+skip acsplit: nothing new
+skip waterrender: nothing new
+skip waterphys: nothing new
+skip boats: no remote branch
+merged clouds4: 4142901d clouds4: report draft (diagnosis, changes; evidence sections pending GPU rounds)
+merged light3: 72b5ad65 light3 report: method and kept-palette sections
+skip street: nothing new
+merged highway: 1e89ad93 Highway defect log: round 6 (spit terrain through the pavement, lane tone at noon, barrier
+merged facade3: c4e85411 Facades: the probe's sun aureole stood in the mirrored sky at the wrong height. The height
+merged veg5: 25446639 Vegetation loop 6 WIP (round 14, runtime verification pending): the understory draws its s
+merged terrain5: f4c324f8 terrain5 report: round 3 defect entry
+build: 637747df from /home/ubuntu/wt-integration
+cdn: pinned data.json serves h04
