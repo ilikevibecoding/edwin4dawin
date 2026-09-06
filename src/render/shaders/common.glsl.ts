@@ -180,7 +180,9 @@ vec3 skyRadiance(vec3 dir) {
  *  17:45 sun (7.7 deg) was a flat yellow disc dimmer than the sunlit clouds, with no glare. */
 vec3 sunDiscColor() {
   float el = uSunDir.y;
-  vec3 lowCol = mix(vec3(1.6, 0.28, 0.04), vec3(4.0, 1.9, 0.5), smoothstep(0.0, 0.07, el));
+  // 1.7 deg (18:20) sits a third of the way up this ramp: (2.3, 0.7, 0.15) tonemaps to an orange disc over the
+  // (215,128,71) horizon band; the earlier 0..4 deg ramp already had it lemon yellow there
+  vec3 lowCol = mix(vec3(1.6, 0.24, 0.03), vec3(4.0, 1.7, 0.4), smoothstep(0.0, 0.09, el));
   float t = smoothstep(0.0, 0.16, el);
   return mix(lowCol, uSunColor * 40.0, t * t);
 }

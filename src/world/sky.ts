@@ -441,7 +441,12 @@ void main() {
   // neutral haze/ground mix (strongest low in the sky, absent at the zenith). Keeps white surfaces white
   // and shadows cool rather than blue without touching the visible sky.
   vec3 fill = mix(uHazeColor, uGroundColor, 0.25);
-  col = mix(col, fill, 0.65 * pow(1.0 - up, 0.3));
+  // At a low sun that whitening is what turned every shaded and horizontal surface the colour of the sunset
+  // haze (golden hour read as dust, lit and shaded tower faces within 1.3 : 1): the aerosol scatter is then
+  // warm only toward the sun and the dome keeps its blue-violet away from it, so the fill fades to a third of
+  // its weight below ~8 deg and the probe keeps the dome's azimuthal structure (skyRadiance's horAway term).
+  float fillW = 0.65 * pow(1.0 - up, 0.3) * mix(0.35, 1.0, smoothstep(0.05, 0.35, uSunDir.y));
+  col = mix(col, fill, fillW);
   // clouds as a soft neutral brightening band so reflections and the IBL pick up overcast (grey, not blue)
   // light; a closed deck is most of the sky, so the diffuse light under it is its grey underside, which is
   // brighter than the dimmed horizon under it (the whole sheet scatters the sun down) and covers the dome

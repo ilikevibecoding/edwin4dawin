@@ -23,24 +23,24 @@ uniform float uLogDepthFC;
 uniform float uCloudShadowStrength;
 uniform vec2 uTexel;
 varying vec2 vUv;
-vec3 viewDir(vec2 uv) {
-  vec4 vdir4 = uInvProj * vec4(uv * 2.0 - 1.0, 1.0, 1.0);
-  vec3 vdir = vdir4.xyz / vdir4.w;
-  return normalize((uInvView * vec4(vdir, 0.0)).xyz);
-}
+float geomDepth(vec2 uv) { float d = texture2D(tDepth, uv).r; return d < 0.99999 ? d : 0.0; }
 void main() {
   vec4 c = texture2D(tColor, vUv);
   float depth = texture2D(tDepth, vUv).r;
+  bool seam = false;
   if (depth >= 0.99999) {
     // The horizon row: MSAA resolves those pixels to a mix of the dome and the *unhazed* far water (the haze is
     // applied here from the resolved depth, which took the dome's sample), leaving a one-pixel dark seam along
-    // the whole horizon at any altitude. Where a neighbour holds geometry beyond the dissolve start (all haze
-    // once hazed), the dark share can only be that water: lift the pixel to the sky it should have dissolved into.
-    float dn = min(min(texture2D(tDepth, vUv + vec2(uTexel.x, 0.0)).r, texture2D(tDepth, vUv - vec2(uTexel.x, 0.0)).r),
-                   min(texture2D(tDepth, vUv + vec2(0.0, uTexel.y)).r, texture2D(tDepth, vUv - vec2(0.0, uTexel.y)).r));
-    if (dn < 0.99999 && exp2(dn * 2.0 / uLogDepthFC) - 1.0 > uFarDissolve.x) c.rgb = max(c.rgb, skyRadiance(viewDir(vUv)));
-    gl_FragColor = c;
-    return;
+    // the whole horizon at any altitude (sky 202, seam 161-190, water 178 at 30 m). Haze the pixel by its
+    // farthest geometry neighbour instead: the dome is skyRadiance in this direction, and hazing a mix of the
+    // dome and the water by the water's distance gives exactly the mix of the dome and the hazed water (the
+    // in-scatter is that same skyRadiance), so the row lands between the sky and the water it straddles.
+    // Sky pixels next to near geometry (airframe, towers) pick up a haze of well under 1 % from this.
+    float dn = max(max(geomDepth(vUv + vec2(uTexel.x, 0.0)), geomDepth(vUv - vec2(uTexel.x, 0.0))),
+                   max(geomDepth(vUv + vec2(0.0, uTexel.y)), geomDepth(vUv - vec2(0.0, uTexel.y))));
+    if (dn == 0.0) { gl_FragColor = c; return; }
+    depth = dn;
+    seam = true;
   }
   vec2 ndc = vUv * 2.0 - 1.0;
   vec4 vdir4 = uInvProj * vec4(ndc, 1.0, 1.0);
@@ -50,10 +50,12 @@ void main() {
   vec3 vpos = vdir * w;
   vec3 wp = (uInvView * vec4(vpos, 1.0)).xyz;
   vec3 col = c.rgb;
-  // clouds shade the ground: only the direct-sun share of the light is removed
-  float cs = cloudShadow(wp);
-  float sunShare = 0.62 * smoothstep(-0.05, 0.2, uSunDir.y);
-  col *= 1.0 - (1.0 - cs) * sunShare * uCloudShadowStrength;
+  if (!seam) {
+    // clouds shade the ground: only the direct-sun share of the light is removed
+    float cs = cloudShadow(wp);
+    float sunShare = 0.62 * smoothstep(-0.05, 0.2, uSunDir.y);
+    col *= 1.0 - (1.0 - cs) * sunShare * uCloudShadowStrength;
+  }
   col = applyAerial(col, uCamPos, wp);
   gl_FragColor = vec4(col, 1.0);
 }
