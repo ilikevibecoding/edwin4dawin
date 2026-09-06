@@ -379,7 +379,7 @@ vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist, vec2 dx, vec
   // a near reflection (the aircraft, a hull) shatters at its edges the way a mirror image does in a chop.
   // Evaluated only where the coarse mip shows anything reflected within reach, which is where it can matter.
   float mssU = mss;
-  if (textureLod(uReflTex, uv0, min(uReflParams.w, 6.0)).a > 0.002) {
+  if (textureLod(uReflTex, uv0, min(uReflParams.w, 5.0)).a > 0.002) {
     float resolved;
     vec2 s = sparkleSlope(P.xz, dx, dy, t, mss, resolved);
     N = normalize(vec3(N.x / N.y - s.x, 1.0, N.z / N.y - s.y));
@@ -414,21 +414,29 @@ vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist, vec2 dx, vec
   // the image of a point at share L / D of the mirror distance is smeared into a vertical streak (the glitter-
   // path ellipse): rms 2 sigma share in elevation and that times |V.y| across. uReflTune.x scales the streak.
   float share = clamp(1.0 - wp / max(wq, wp), 0.0, 1.0);
-  float streak = uReflTune.x * sqrt(mssU) * share * uReflParams.z; // texels along the image's vertical
+  float streak = uReflTune.x * sqrt(mssU) * share * uReflParams.z; // rms texels along the image's vertical
   float across = streak * clamp(abs(V.y), 0.1, 1.0);
-  // the cross-streak blur comes from the mip chain, the streak from seven taps half a streak apart along it;
-  // the mip level is chosen so the tap spacing is one texel of that level (wider spacing printed each tap as
-  // its own copy: the stair-stepped tower and skyline reflections), which caps the cross blur at half the streak
-  float lod = clamp(log2(max(max(across, 0.5 * streak), 1.0)), 0.0, uReflParams.w);
+  // The cross-streak blur comes from the mip chain (tap footprint = the rms across-spread, never wider: the
+  // cross blur used to grow to half the streak, which turned every tower light into a soft blob); along the
+  // streak the taps sit one footprint apart, as many as it takes to cover +-1.5 rms (up to 13), so a long
+  // streak is drawn as a smooth column and never prints its taps as copies.
+  float lod = clamp(log2(max(across, 1.0)), 0.0, uReflParams.w);
+  float stepT = exp2(lod);
+  float nT = clamp(ceil(1.5 * streak / stepT), 1.0, 6.0);
   // a streak longer than a good part of the image carries no more information than the environment map
   float clarity = 1.0 - smoothstep(uReflTune.z, uReflTune.w, streak * uReflTexel.y);
   float edge = smoothstep(0.0, 0.015, uv.x) * smoothstep(0.0, 0.015, 1.0 - uv.x) * smoothstep(0.0, 0.015, uv.y) * smoothstep(0.0, 0.015, 1.0 - uv.y);
-  vec2 dv = vec2(0.0, 0.5 * streak * uReflTexel.y);
-  vec4 c = textureLod(uReflTex, uv, lod) * 0.216
-         + (textureLod(uReflTex, uv + dv, lod) + textureLod(uReflTex, uv - dv, lod)) * 0.191
-         + (textureLod(uReflTex, uv + 2.0 * dv, lod) + textureLod(uReflTex, uv - 2.0 * dv, lod)) * 0.131
-         + (textureLod(uReflTex, uv + 3.0 * dv, lod) + textureLod(uReflTex, uv - 3.0 * dv, lod)) * 0.070;
-  return c * (clarity * edge);
+  vec2 dv = vec2(0.0, stepT * uReflTexel.y);
+  float g = -0.5 * (stepT * stepT) / max(streak * streak, 1e-4);
+  vec4 c = textureLod(uReflTex, uv, lod);
+  float wsum = 1.0;
+  for (float i = 1.0; i <= 6.0; i += 1.0) {
+    if (i > nT) break;
+    float wi = exp(g * i * i);
+    c += (textureLod(uReflTex, uv + i * dv, lod) + textureLod(uReflTex, uv - i * dv, lod)) * wi;
+    wsum += 2.0 * wi;
+  }
+  return c * (clarity * edge / wsum);
 }
 `;
 
@@ -891,7 +899,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v12-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v13-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 

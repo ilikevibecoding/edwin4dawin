@@ -31,9 +31,11 @@ export interface ReflectionUniforms {
   /** x: pass active (0/1), y: log-depth constant of the mirror pass, z: focal length in reflection texels, w: top mip level */
   uReflParams: THREE.IUniform<THREE.Vector4>;
   uReflTexel: THREE.IUniform<THREE.Vector2>;
-  /** x: streak length per unit of unresolved rms slope (the Cox-Munk value is 2 sqrt(1/2) = 1.41; a shorter streak
-   *  keeps the image legible), y: wave-perturbation scale (1 = the resolved slopes displace the image exactly),
-   *  z, w: streak length (fraction of the image height) where the mirror image starts / has finished fading to the environment sky */
+  /** x: streak length per unit of unresolved rms slope (the Cox-Munk value is 2 sqrt(1/2) = 1.41; slightly under it
+   *  because the measured slope distribution is peaked: its core is narrower than the Gaussian of the same variance),
+   *  y: wave-perturbation scale (1 = the resolved slopes displace the image exactly),
+   *  z, w: streak length (fraction of the image height) where the mirror image starts / has finished fading to the
+   *  environment sky (a city's lights at night streak a third of the image and must stay) */
   uReflTune: THREE.IUniform<THREE.Vector4>;
 }
 
@@ -44,7 +46,7 @@ export function createReflectionUniforms(): ReflectionUniforms {
     uReflVP: { value: new THREE.Matrix4() },
     uReflParams: { value: new THREE.Vector4(0, 1, 1, 0) },
     uReflTexel: { value: new THREE.Vector2(1, 1) },
-    uReflTune: { value: new THREE.Vector4(0.38, 0.6, 0.12, 0.3) },
+    uReflTune: { value: new THREE.Vector4(1.2, 0.6, 0.35, 0.8) },
   };
 }
 
