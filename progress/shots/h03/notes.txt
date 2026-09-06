@@ -1,0 +1,14 @@
+base: 6b120b36 (cursor/vice-city-aerial-8213)
+skip acsplit: nothing new
+merged waterrender: 7ab21f54 Water rendering report: the mirrored base's colour follows the dome
+merged waterphys (recorded resolution): 62a49aa4 Defect log round 4: the ditching matrix run numerically (belly, firm, wheels down, wing ti
+skip boats: no remote branch
+merged clouds4: 4142901d clouds4: report draft (diagnosis, changes; evidence sections pending GPU rounds)
+merged light3: 72b5ad65 light3 report: method and kept-palette sections
+merged street (recorded resolution): f919366d Crosswalk bars and lines run continuous across the centreline
+skip highway: merge conflict in 
+merged facade3: 024cd5ce Facades: the lobby's ceiling band no longer shadows the GLSL built-in ceil()
+merged veg5: 8694c03b Vegetation defect log: the black box bisected to the city's house kind
+merged terrain5: 16fe638b Terrain: park paths kept as pixel-wide fading lines to 5 m/px instead of breaking up past 
+fixup not needed: streets-highway-lamps.patch
+build: 7fe5d685 from /home/ubuntu/wt-integration
