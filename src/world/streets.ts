@@ -1123,23 +1123,25 @@ export class Streets {
       if (!list?.length) continue;
       const c = Math.cos(d.rot), s = Math.sin(d.rot);
       const toWorld = (lx: number, lz: number): Vec2 => [d.cx + lx * c - lz * s, d.cz + lx * s + lz * c];
-      type Rect = { x0: number; x1: number; z0: number; z1: number; streetWidth: number; margin: boolean };
-      const rects: Rect[] = list.map((b) => ({ ...b, margin: false }));
+      // a rect's four insets, x0 x1 z0 z1: a block is bounded by street centrelines on every side, a margin strip only
+      // on the side it shares with the last block row; its other sides are open ground, with a 6 m planted gap
+      // between neighbouring lots and 3 m to the district edge
+      type Rect = { x0: number; x1: number; z0: number; z1: number; streetWidth: number; margin: boolean; ins: [number, number, number, number] };
+      const walkBack = CURB_TOP + walkWidth(d.zone) + 0.6; // the sidewalk profile ends 0.6 m of apron behind the slab
+      const street = (sw: number) => sw / 2 + walkBack + 0.1;
+      const rects: Rect[] = list.map((b) => { const i = street(b.streetWidth); return { ...b, margin: false, ins: [i, i, i, i] }; });
       if (d.zone === Zone.DOWNTOWN) {
         const zMax = Math.max(...list.map((b) => b.z1)), zMin = Math.min(...list.map((b) => b.z0));
         const xMax = Math.max(...list.map((b) => b.x1)), xMin = Math.min(...list.map((b) => b.x0));
         const cols = [...new Map(list.map((b) => [b.x0, b] as const)).values()], rows = [...new Map(list.map((b) => [b.z0, b] as const)).values()];
-        const sw = list[0].streetWidth;
-        if (d.hh - zMax > 45) for (const b of cols) rects.push({ x0: b.x0, x1: b.x1, z0: zMax, z1: d.hh - 6, streetWidth: sw, margin: true });
-        if (zMin + d.hh > 45) for (const b of cols) rects.push({ x0: b.x0, x1: b.x1, z0: -d.hh + 6, z1: zMin, streetWidth: sw, margin: true });
-        if (d.hw - xMax > 45) for (const b of rows) rects.push({ x0: xMax, x1: d.hw - 6, z0: b.z0, z1: b.z1, streetWidth: sw, margin: true });
-        if (xMin + d.hw > 45) for (const b of rows) rects.push({ x0: -d.hw + 6, x1: xMin, z0: b.z0, z1: b.z1, streetWidth: sw, margin: true });
+        const sw = list[0].streetWidth, si = street(sw);
+        if (d.hh - zMax > 45) for (const b of cols) rects.push({ x0: b.x0, x1: b.x1, z0: zMax, z1: d.hh - 6, streetWidth: sw, margin: true, ins: [6, 6, si, 3] });
+        if (zMin + d.hh > 45) for (const b of cols) rects.push({ x0: b.x0, x1: b.x1, z0: -d.hh + 6, z1: zMin, streetWidth: sw, margin: true, ins: [6, 6, 3, si] });
+        if (d.hw - xMax > 45) for (const b of rows) rects.push({ x0: xMax, x1: d.hw - 6, z0: b.z0, z1: b.z1, streetWidth: sw, margin: true, ins: [si, 3, 6, 6] });
+        if (xMin + d.hw > 45) for (const b of rows) rects.push({ x0: -d.hw + 6, x1: xMin, z0: b.z0, z1: b.z1, streetWidth: sw, margin: true, ins: [3, si, 6, 6] });
       }
-      const walkBack = CURB_TOP + walkWidth(d.zone) + 0.6; // the sidewalk profile ends 0.6 m of apron behind the slab
       for (const r of rects) {
-        // interior of the rect: streets run along its edges (centrelines), the margin strips have one open side
-        const inset = r.streetWidth / 2 + walkBack + 0.1;
-        const u0 = r.x0 + inset, u1 = r.x1 - inset, v0 = r.z0 + inset, v1 = r.z1 - inset;
+        const u0 = r.x0 + r.ins[0], u1 = r.x1 - r.ins[1], v0 = r.z0 + r.ins[2], v1 = r.z1 - r.ins[3];
         if (u1 - u0 < 14 || v1 - v0 < 14) continue;
         const h = hash2(Math.round(r.x0 + d.cx), Math.round(r.z0 + d.cz), 17);
         // free-ground sampling on a 5 m grid (land only): the ratio decides what the block is
@@ -1160,7 +1162,7 @@ export class Streets {
         if (land < 0.5 * nu * nv) continue;
         const ratio = nFree / land;
         let kind: 'lot' | 'plaza' | null = null;
-        if (r.margin) kind = h < 0.65 ? 'lot' : null;
+        if (r.margin) kind = h < 0.75 ? 'lot' : null;
         else if (ratio > 0.85) kind = d.zone === Zone.DOWNTOWN || h < 0.5 ? 'lot' : null;
         else if (d.zone === Zone.DOWNTOWN && ratio > 0.12) kind = 'plaza';
         if (!kind) continue;
