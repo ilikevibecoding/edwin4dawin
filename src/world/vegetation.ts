@@ -1867,6 +1867,9 @@ export class Vegetation {
   readonly uWind = { value: 0.5 };
   /** the impostor atlas (exposed for inspection: `game.vegetation.atlas.image` is the canvas) */
   readonly atlas: THREE.CanvasTexture;
+  /** the leaf-cluster tiles of the near crowns' fringe cards, and the palm frond strip (for inspection too) */
+  readonly leaf: THREE.CanvasTexture;
+  readonly frond: THREE.CanvasTexture;
   counts = { palms: 0, trees: 0, mangroves: 0, shrubs: 0 };
   /** planted crown heights (metres) per archetype, for the scale checks */
   readonly heightStats: HeightStats[] = Array.from({ length: 8 }, () => ({ n: 0, sum: 0, min: Infinity, max: 0, hist: new Uint32Array(160) }));
@@ -1901,6 +1904,8 @@ export class Vegetation {
     const atlas = cardAtlas(rng.fork('atlas'));
     this.atlas = atlas;
     const leafTex = leafClusterTexture(rng.fork('leaves'));
+    this.leaf = leafTex;
+    this.frond = frondTex;
     const crownMat = crownMaterial(leafTex, this.uTime, this.uWind);
     const palmMat = palmMaterial(frondTex, this.uTime, this.uWind);
     const canopyMean = new THREE.Vector3();
