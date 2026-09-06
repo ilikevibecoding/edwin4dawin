@@ -18,9 +18,9 @@ const BRIDGE_EVERY = 6;
 export function spine(bp, lot, ctx) {
   const { nF, rng, midDoorF, spec } = ctx;
   const style = ctx.style;
-  style.wall = rng.pick([B.PANEL_BLACK, B.DURASTEEL_DARK]);     // dark slabs: the blue spine is the light
+  // dark slabs (the fin_black / fin_steel palettes): the blue spine is the light
   style.corner = B.CHROME; style.mullion = B.CHROME; style.roof = B.DURASTEEL_DARK;
-  style.rhythm = rng.pick(['curtain', 'slit']); style.period = 3;
+  style.period = 3;
   style.railing = B.IRON_BARS;
   const front = spec.front;
   const alongX = front === 'N' || front === 'S';      // shafts side by side along x, arcade runs along z
@@ -41,6 +41,13 @@ export function spine(bp, lot, ctx) {
   const nFA = nF, nFB = nF >= 14 ? nF - 2 : nF;       // the slabs stop at different heights, the spine rises past both
   const baseEnd = Math.max(midDoorF, 2, Math.min(4, nF - 4));
   const shaft = (rect, frontS, door, nFs) => {
+    // the envelope plan of the shaft: chamfered (octagon / blade) shells receding along the arcade, the arcade face
+    // straight for the skybridges, the back face receded DECK_DEPTH for the landing decks every DECK_EVERY floors
+    // (buildTiered paints them); lots without a plan keep the legacy straight shaft with its own decks
+    if (ctx.envelope) {
+      const env = ctx.envelope({ ext: rect, front: frontS, door, nF: nFs, deck: backSide, deckEvery: DECK_EVERY, noInset: ['f'] });
+      return buildTiered(bp, { ...spec, ext: rect, front: frontS, door, tiers: env.tiers, mask: env.mask, env, family: 'spine', nF: nFs });
+    }
     const frame = new PlanFrame(rect, frontS);
     const lim = insetLimits(frame, computeLayout(frame.Iu, frame.Iv));
     const room = lim[backSide];

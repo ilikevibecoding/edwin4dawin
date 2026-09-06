@@ -30,8 +30,15 @@ export function twin(bp, lot, ctx) {
     if (baseEnd < nF - 1) t.push({ f0: baseEnd + 1, f1: nF - 1, inset: { l: 1, r: 1, f: 1, b: 1 } });
     return t;
   };
-  const resA = buildTiered(bp, { ...spec, ext: rectA, front: frontA, door: doorA, tiers: tiersOf(), family: 'twin' });
-  const resB = buildTiered(bp, { ...spec, ext: rectB, front: frontB, door: doorB, tiers: tiersOf(), family: 'twin', hooks: { crownKind: spec.style.crown === 'antenna' ? 'fins' : 'antenna' } });
+  // each shaft takes the lot's envelope plan (octagon / rounded shells receding along the arcade and at the back;
+  // the arcade face stays straight so the skybridges land on a wall); lots without a plan keep the legacy shafts
+  const shaftSpec = (rect, frontS, door) => {
+    if (!ctx.envelope) return { tiers: tiersOf() };
+    const env = ctx.envelope({ ext: rect, front: frontS, door, deck: false, noInset: ['f'] });
+    return { tiers: env.tiers, mask: env.mask, env };
+  };
+  const resA = buildTiered(bp, { ...spec, ext: rectA, front: frontA, door: doorA, ...shaftSpec(rectA, frontA, doorA), family: 'twin' });
+  const resB = buildTiered(bp, { ...spec, ext: rectB, front: frontB, door: doorB, ...shaftSpec(rectB, frontB, doorB), family: 'twin', hooks: { crownKind: spec.style.crown === 'antenna' ? 'fins' : 'antenna' } });
 
   // helpers addressing arcade cells: a = across (g0..g1), t = along (0..T-1)
   const P = (a, y, t, id) => { if (alongX) bp.set(a, y, t, id); else bp.set(t, y, a, id); };
