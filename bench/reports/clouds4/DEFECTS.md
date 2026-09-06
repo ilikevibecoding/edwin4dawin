@@ -196,3 +196,37 @@ darker; the hollows and high cells brighter) instead of r6's horizon-openness he
   the fade removes noise fetches at long steps). `under` is the stress case (the whole frame within 300–2000 m
   of a base, three-quarters of the opacity integrated at the 12 m surface step); the bench views are at or
   under parity. r8 lifts the surface pass to T = 0.3–0.4 since the per-pixel texture now carries the fine scale.
+
+## Round 8 — cirrus bands, base texture on the sun term (build 2bd6387c, stills `/tmp/clouds4/r8`)
+
+Changes: cirrus rewritten (D13); the per-pixel surface texture modulates the shadowed sun term as well as the
+ambient, gets a 300 m octave within 700 m, and is sampled on the smooth base surface when the ray comes up
+through it; surface pass to T = 0.3–0.4. (First build failed to compile: `patch` is a reserved word in GLSL ES
+3.00 — the session's error capture caught it; the bundler cannot.)
+
+- **D13 fixed** (`crops/r8_skyup_cirrus_r7_vs_r8.jpg`): bands of gently curved fibres with clear sky between,
+  denser cores and single strands at the fringe, a faint cirrostratus haze around the bands. Prototyped offline
+  on the real noise texture (`/tmp/clouds4/cirrus.py`, the same camera as the `skyup` view) before the GPU
+  build: a ridged-noise strand (thin bright filaments) read as marbled contour lines; a per-region rotation of
+  the fibre frame sheared the pattern by kilometres (a rotation about the world origin); a bend field with
+  cross-wind features shorter than the streaks made them wiggle, one with 2–5 km along-wind features made them
+  zigzag — the bend has to be a 200 km field (arcs of tens of km). The perlin-worley channel as a mask put the
+  bands on its 4-cell lattice; two incommensurate perlin tiles (48×16 and 17×6 km) do not repeat within 100 km.
+- **D9 (near-base texture) resolved to the extent the budget allows** (`crops/r8_under_r7e_vs_r8.jpg`,
+  `r8_under.jpg`): the base 300–2000 m overhead shows dark cells and lighter thin spots at 50–200 m, sagging
+  pouches and a ragged fringe opening to the sky; still soft (a real base 300 m away is), no stipple (high-pass
+  std 0.54 vs r7e 0.55 at 1:1 — the base-surface sampling removed the jitter decorrelation).
+- **Edges** (`crops/r7e_edges_1to1.jpg`): lobed silhouettes without halo against the sky, bases fading into the
+  haze over the sea without a cut or banding.
+- **Night** (`crops/r8_nightcity.jpg`, `r8_nightunder2_base_vs_r8.jpg`): city-glow undersides of the closed deck
+  over downtown are lobed and warm with a star gap; `under2` at 22:00 shows a lobed dark underside where the
+  baseline shows the flat slab with a straight edge. No regression in the `night` bench view (hardly any cloud
+  in frame in either build).
+- **Sunset** (`crops/r8_sunset_top.jpg`): dark bellies, warm rims toward the sun, faint pink cirrus bands.
+- **Cloudy deck** (`crops/r7e_cloudy_deck_base_vs_r7e.jpg`): hanging cells with shaded lobes, the horizon band
+  hazed rather than a grey wall (baseline: a flat plane with flat-bottomed shapes).
+- **Cost, measured properly**: `/tmp/clouds4/abcost.mjs` attaches to the session's Chrome, keeps both builds'
+  pages open at the same view and profiles them alternately, min of per-frame minimums (the machine ran at load
+  10–12 all afternoon; single profiled frames varied 4×). `under`: base 681 / r8 1209 ms (**1.78×**, median
+  1.79×); `aerial-a`: 3731 / 3914 (**1.05×**, median 1.02×). The stress view is over budget: the light march
+  (7 fetches every 2–4 samples) and the surface pass dominate there. → r9.
