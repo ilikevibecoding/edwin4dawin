@@ -186,13 +186,25 @@ const CONCRETE_FRAG = /* glsl */ `
     float dashPulse = mix(aaLine((fract(along / 9.0) - 0.17) * 9.0, 1.53, fwA), 0.34, smoothstep(2.0, 6.0, fwA));
     float white = (aaLine(xm - ${PAVE_LANE_LINE.toFixed(2)}, 0.06, fwX) * dashPulse + aaLine(xm - ${PAVE_EDGE_LINE.toFixed(2)}, 0.075, fwX) * (edgeOn + fan * dashPulse)) * (1.0 - gap);
     float yellow = aaLine(xm - mix(0.62, 0.15, gap), 0.06, fwX);
-    float paintWear = (0.7 + 0.3 * smoothstep(0.3, 0.7, fbm3(vec2(along * 0.7, xm * 3.0)))) * (1.0 - noPaint);
+    float wearN = 0.7 + 0.3 * smoothstep(0.3, 0.7, fbm3(vec2(along * 0.7, xm * 3.0)));
+    float paintWear = wearN * (1.0 - noPaint);
     white *= paintWear;
     yellow *= paintWear;
     vec3 col = mix(asphalt, vec3(0.80, 0.80, 0.78), white);
     col = mix(col, vec3(0.85, 0.66, 0.16), yellow);
     float rumble = step(6.5, xm) * (1.0 - step(6.85, xm)) * edgeOn * mix(aaLine((fract(along / 0.3) - 0.5) * 0.3, 0.05, fwA), 0.33, smoothstep(0.1, 0.3, fwA));
     col *= 1.0 - 0.28 * rumble;
+    // the signalised junction this carriageway stops at (vColor.b: the station of its 24 m box, 0 elsewhere): a stop
+    // bar across the lanes 60 cm before the box, zebra crossings 3 m wide inside both edges of the box. Traffic on
+    // the +a carriageway runs toward +s (traffic.ts), so its approach is the side where the box lies ahead.
+    float jS = vColor.b;
+    float hasJ = step(0.5, jS);
+    float toBox = sign(vInfoH.z) * (jS - along) - 12.0;
+    float dBox = abs(along - jS);
+    float stopBar = hasJ * aaLine(toBox - 0.85, 0.25, fwA) * step(0.62, xm) * (1.0 - step(6.35, xm));
+    float zebraBand = hasJ * step(8.5, dBox) * (1.0 - step(11.5, dBox));
+    float zebra = zebraBand * mix(aaLine((fract(xm + 0.5) - 0.5), 0.25, fwX), 0.5, smoothstep(0.3, 1.0, fwX));
+    col = mix(col, vec3(0.80, 0.80, 0.78), max(stopBar, zebra) * wearN);
     float dNose = dPlaza - 17.5;
     float noseT = step(0.5, vColor.g) * step(0.0, dNose) * clamp(1.0 - dNose / 12.0, 0.0, 1.0);
     float nose = step(0.001, noseT) * min(1.0, step(xm, 1.05 * noseT) + step(abs(xm - 3.1), 0.7 * noseT) + step(abs(xm - 6.35), 0.7 * noseT));
@@ -1270,13 +1282,24 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       /** one strip of the course between stations sa and sb, a0..a1 across; the vertex colour carries the wear tone
        *  (r) and the toll plaza's station where the strip lies within its approach paint (g), aInfo the station of
        *  the nearest lighting pole for the shader */
-      const quad = (sa: number, sb: number, a0: number, a1: number, kind: number, tA: number, tB: number, up: (s: number) => number) => {
+      /** the station of the nearest signalised junction box among `list` within 60 m of s (0 if none): the strips carry
+       *  it so the shader can paint the stop bar and the zebra crossings of that box */
+      const stopAt = (s: number, list: PaintBox[]): number => {
+        let best = 0, bd = 60;
+        for (const b of list) {
+          if (b.flag !== 2 || (toll && Math.abs((b.s0 + b.s1) / 2 - toll.s) < 1)) continue;
+          const d = Math.abs(s - (b.s0 + b.s1) / 2);
+          if (d < bd) { bd = d; best = (b.s0 + b.s1) / 2; }
+        }
+        return best;
+      };
+      const quad = (sa: number, sb: number, a0: number, a1: number, kind: number, tA: number, tB: number, up: (s: number) => number, stop: number) => {
         const soup = P((sa + sb) / 2).pave;
         const fa = frameAt(c, sa), fb = frameAt(c, sb);
         const base = soup.vertexCount;
         const pole = poleFor((sa + sb) / 2);
         const plaza = toll && Math.abs((sa + sb) / 2 - toll.s) < 130 ? toll.s : 0;
-        const v = (f: Frame, s: number, a: number, t: number) => soup.vertex(f.x + f.rx * a, surfaceAt(c, s, a) + PAVE_UP + up(s), f.z + f.rz * a, 0, 1, 0, [t, plaza, 1], [kind, s, a, pole]);
+        const v = (f: Frame, s: number, a: number, t: number) => soup.vertex(f.x + f.rx * a, surfaceAt(c, s, a) + PAVE_UP + up(s), f.z + f.rz * a, 0, 1, 0, [t, plaza, stop], [kind, s, a, pole]);
         v(fa, sa, a0, tA); v(fb, sb, a0, tB); v(fb, sb, a1, tB); v(fa, sa, a1, tA);
         _a.set(fb.x - fa.x, 0, fb.z - fa.z).cross(_b.set(fb.x + fb.rx * a1 - fa.x - fa.rx * a0, 0, fb.z + fb.rz * a1 - fa.z - fa.rz * a0));
         if (_a.y >= 0) soup.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
@@ -1300,8 +1323,9 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
           for (const b of mine) if (sm > b.s0 && sm < b.s1) flag = Math.max(flag, b.flag);
           // two quads across, split at the mid-carriageway lift knot (the lift field is bilinear between the knots,
           // so a single quad from the barrier foot to the edge could dip under a crown in the middle of the road)
-          quad(sa, sb, side * PAVE_IN, side * hw * 0.5, 4 + flag * 0.1, tone(sa, side), tone(sb, side), up);
-          quad(sa, sb, side * hw * 0.5, side * (hw - PAVE_EDGE_INSET), 4 + flag * 0.1, tone(sa, side), tone(sb, side), up);
+          const stop = stopAt(sm, mine);
+          quad(sa, sb, side * PAVE_IN, side * hw * 0.5, 4 + flag * 0.1, tone(sa, side), tone(sb, side), up, stop);
+          quad(sa, sb, side * hw * 0.5, side * (hw - PAVE_EDGE_INSET), 4 + flag * 0.1, tone(sa, side), tone(sb, side), up, stop);
         }
         counts.paveM += c.total;
       }
@@ -1317,7 +1341,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
           if (sb - sa < 0.05) continue;
           const sm = (sa + sb) / 2;
           const inBox = plain.some((b) => sm > b.s0 && sm < b.s1);
-          quad(sa, sb, -PAVE_IN, PAVE_IN, inBox ? 4.2 : 4.3, 1, 1, upMid);
+          quad(sa, sb, -PAVE_IN, PAVE_IN, inBox ? 4.2 : 4.3, 1, 1, upMid, stopAt(sm, plain));
         }
       }
     }
