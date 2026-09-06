@@ -169,7 +169,11 @@ function bakeDetail(map: WorldMap): Uint8Array {
 
 const RING_CELLS = 96; // cells across each ring (must be a multiple of 4)
 const BASE_CELL = 8; // metres, finest ring
-const RINGS = 7; // 8m .. 512m cells; outermost ring spans ±(96*512/2) = ±24.5km
+// 8m .. 2048m cells; the outermost ring spans ±(96*2048/2) = ±98km, past the 60 km far plane. With the
+// ground stopping at ±24.5 km the water plane showed between the terrain edge and the horizon as an arc of
+// blue dashes above the far land (skyline-high F3-H3): the plane draws wherever the clamped edge height is
+// under sea level and the aerial perspective only reaches full extinction at ~57 km.
+const RINGS = 9;
 
 /** The sectors of one clipmap ring: SECTORS x SECTORS blocks of cells (the hollow middle left out), each an
  *  index range over the ring's shared vertex buffer with the box of its own vertices, so the ring is
