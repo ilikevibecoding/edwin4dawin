@@ -130,49 +130,9 @@ done
 echo "]}" >> "$META"
 
 # data.json: items + ordered snapshot tags
-python3 - "$ROOT/progress" <<'EOF'
-import json, os, sys, glob
-root = sys.argv[1]
-tags = sorted(d for d in os.listdir(os.path.join(root, 'shots')) if os.path.isfile(os.path.join(root, 'shots', d, 'meta.json')))
-items = [
-  {"id": "aircraft", "name": "Aircraft (crop duster / floatplane)"},
-  {"id": "water", "name": "Water: surface, wakes, landing, boats"},
-  {"id": "city", "name": "City: skyline, facades, streets"},
-  {"id": "highway", "name": "Highway and causeways"},
-  {"id": "foliage", "name": "Foliage and ground"},
-  {"id": "shore", "name": "Shoreline and beach"},
-  {"id": "sky", "name": "Sky, clouds, lighting"},
-]
-snaps = []
-for t in tags:
-  m = json.load(open(os.path.join(root, 'shots', t, 'meta.json')))
-  notes = open(os.path.join(root, 'shots', t, 'notes.txt')).read() if os.path.exists(os.path.join(root, 'shots', t, 'notes.txt')) else ''
-  snaps.append({"tag": t, "build": m["build"], "time": m["time"], "views": m["views"], "notes": notes})
-json.dump({"items": items, "snapshots": snaps, "updated": snaps[-1]["time"] if snaps else None}, open(os.path.join(root, 'data.json'), 'w'), indent=1)
-print(f"data.json: {len(snaps)} snapshots")
-EOF
+python3 "$ROOT/tools/progress-data.py" "$ROOT/progress"
 
 if [ $PUBLISH = 1 ]; then
-  WORK=/tmp/gh-pages-progress
-  rm -rf "$WORK"; git worktree prune
-  git fetch -q origin gh-pages
-  git worktree add -q "$WORK" origin/gh-pages --detach
-  mkdir -p "$WORK/progress"
-  cp -r "$ROOT/progress/." "$WORK/progress/"
-  GITC=(git -c "user.name=$(git -C "$ROOT" config user.name)" -c "user.email=$(git -C "$ROOT" config user.email)")
-  # commit 1: data + frames (+ the page template). The page loads data.json and the frames from jsDelivr pinned
-  # to this commit (branch URLs stayed stale for hours despite purges); commit 2 writes that pin into the page.
-  if ( cd "$WORK" && git add -A progress && "${GITC[@]}" commit -q -m "Progress page: snapshot $TAG (build $BUILD_SHA)" ); then
-    PIN="$(cd "$WORK" && git rev-parse HEAD)"
-    sed -i "s|const PIN = '__PIN__';|const PIN = '$PIN';|" "$WORK/progress/index.html"
-    ( cd "$WORK" && git add progress/index.html && "${GITC[@]}" commit -q -m "Progress page: pin data to ${PIN:0:12}" && git push -q origin HEAD:gh-pages ) || echo "publish: push failed" >> "$NOTES"
-    sleep 5
-    if curl -s "https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@$PIN/progress/data.json" | grep -q "\"tag\": \"$TAG\""; then echo "cdn: pinned data.json serves $TAG" >> "$NOTES"; else echo "cdn: pinned data.json not yet served (GitHub lag?)" >> "$NOTES"; fi
-    curl -s -o /dev/null "https://purge.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@gh-pages/progress/index.html" || true
-  else
-    echo "publish: nothing to commit" >> "$NOTES"
-  fi
-  git worktree remove --force "$WORK" 2>/dev/null || true
-  echo "published: https://raw.githack.com/ilikevibecoding/edwin4dawin/gh-pages/progress/index.html"
+  bash "$ROOT/tools/progress-publish.sh" "$TAG" "$BUILD_SHA" "$NOTES"
 fi
 cat "$NOTES"
