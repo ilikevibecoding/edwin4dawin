@@ -541,6 +541,9 @@ export class PlaneEffects {
       // this float is in the water when its step or bow keel is under the surface
       const fs = floats[i];
       const wet = fs.step > 0 || fs.bow > 0;
+      // a flooding hull sits deep: the ribbon head widens its outline to the section that cuts the surface and
+      // draws a collar of foam around it (the only hull that ever sits below its waterline is a wreck's)
+      trail.immersion = flight.wreck ? Math.min(flight.wreck.flood[i] * 1.25, 1) : 0;
       trail.update(p.x, p.z, fdx, fdz, time, wet, speed);
     }
     // parts that entered the water this frame (float touchdowns and skips, wheels, a wing tip, the nose): the

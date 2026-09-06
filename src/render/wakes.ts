@@ -153,7 +153,7 @@ const WAKE_VERTEX = /* glsl */ `
   attribute vec4 aGeom;   // distance behind the transom (m), ribbon half-width (m), travel direction xz
   attribute vec4 aExt;    // path curvature (1/m, + turning toward +right), age (s), stern-wave advance (m), odometer (m along the track)
   attribute vec4 aTrail;  // strength, hull half-beam (m), transom-to-bow length (m), lane length (m)
-  attribute vec4 aTrail2; // prop wash (0..1), planing speed (m/s), churn (foam persistence), reserved
+  attribute vec4 aTrail2; // prop wash (0..1), planing speed (m/s), churn (foam persistence), immersion (0 at the hull's waterline .. 1 decks awash)
   varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; flat varying vec4 vTrail; flat varying vec4 vTrail2;
   void main() { vA = aA; vGeom = aGeom; vExt = aExt; vTrail = aTrail; vTrail2 = aTrail2; vWp = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
 `;
@@ -326,16 +326,21 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         //      going astern (speed < 0), only the meniscus stays
         float hs = max(speed, 0.0);
         float hspd = smoothstep(0.6, 5.0, hs);
+        float immersion = vTrail2.w;
         float ax = lead + d;
-        float hb = hullHalfBeam(ax, w0, lead);
+        // a hull sitting deep (a flooded wreck) cuts the surface at a wider section than its design waterline
+        float hb = hullHalfBeam(ax, w0, lead) * (1.0 + 0.35 * immersion);
         float insideX = step(0.0, ax) * step(ax, lead);
         float outside = ax < 0.0 ? length(vec2(ax * 1.4, ay)) : (ax > lead ? length(vec2(ax - lead, max(ay - hb, 0.0))) : max(ay - hb, 0.0));
         float inside = insideX * max(hb - ay, 0.0);
-        // meniscus: a soft bright line hugging the waterline, fed by the bow wave and thinning aft
+        // meniscus: a soft bright line hugging the waterline, fed by the bow wave and thinning aft; around a
+        // flooded hull a collar of foam and bubbles a few decimetres wide, patchy (r8: a wreck's hull met clear
+        // water cleanly, as if it had been set down in it)
         float bowT = 1.0 - smoothstep(0.0, lead * 0.6, ax);
-        float lw0 = (0.06 + 0.08 * hspd) * (0.5 + 0.5 * bowT) + 0.02 * w0;
+        float lw0 = ((0.06 + 0.08 * hspd) * (0.5 + 0.5 * bowT) + 0.02 * w0) * (1.0 + 3.0 * immersion);
         float lw = max(lw0, 0.6 * uTexel);
-        float meniscus = exp(-outside * outside / (lw * lw)) * (0.45 + 0.45 * bowT) * (0.5 + 0.7 * n3) * (0.3 + 0.7 * hspd) * (lw0 / lw);
+        float collar = 1.2 * immersion * (0.3 + 0.7 * smoothstep(0.35, 0.7, n3r * 0.6 + n2 * 0.4));
+        float meniscus = exp(-outside * outside / (lw * lw)) * (0.45 + 0.45 * bowT) * (0.5 + 0.7 * n3) * (0.3 + 0.7 * hspd + collar) * (lw0 / lw);
         // bow wave: a crest line wrapping the stem and diverging aft along the forward hull at ~20 deg plus the
         // hull's flare; it stops growing at hull speed and the whole hull zone dies away as a planing hull lifts
         // its bow clear
@@ -805,7 +810,7 @@ export class WakeBatch {
       ext.set(t.ext.subarray(0, verts * 4), v * 4);
       for (let i = v; i < v + verts; i++) {
         trail[i * 4] = t.strength; trail[i * 4 + 1] = t.halfWidth; trail[i * 4 + 2] = t.lead; trail[i * 4 + 3] = t.laneLen;
-        trail2[i * 4] = t.propWash; trail2[i * 4 + 1] = t.planingSpeed; trail2[i * 4 + 2] = t.churn; trail2[i * 4 + 3] = 0;
+        trail2[i * 4] = t.propWash; trail2[i * 4 + 1] = t.planingSpeed; trail2[i * 4 + 2] = t.churn; trail2[i * 4 + 3] = t.immersion;
       }
       for (let i = 0; i < pts - 1; i++) {
         const q = v + i * 2, b = q + 1, c = q + 2, e = q + 3;
@@ -877,6 +882,9 @@ export class WakeTrail {
   planingSpeed: number;
   /** turbulence / foam persistence of the hull's wake (a dinghy 0.6 .. a ship 1.4) */
   churn: number;
+  /** how deep the hull sits below its design waterline, 0 (afloat as built) .. 1 (a flooded hull, decks awash):
+   *  the ribbon head draws its outline at the wider section that cuts the surface, with a collar of foam */
+  immersion = 0;
   readonly positions: Float32Array;
   readonly a: Float32Array;
   readonly geom: Float32Array;
