@@ -516,13 +516,12 @@ export class Lion {
     const walk = out.anim.walkAmt;
     const ph = this.feet.phase * Math.PI * 2;
     // Gait layers. The trunk rises twice a cycle, highest as each diagonal
-    // pair passes under the body; the head nods in counter-phase to it (down as
-    // the shoulders come up); the shoulders roll toward the planted foreleg;
-    // hips and shoulders yaw against one another.
+    // pair passes under the body; hips and shoulders yaw against one another
+    // (`sway`). The head's nod and the shoulder roll are the poser's own now
+    // (pose.js reads breath, blink, earFlick, tailSway, tailPhase, tailSide,
+    // sway, walkAmt and nothing else), so they are no longer written here.
     const bob = Math.sin(ph * 2);
     out.anim.sway = Math.sin(ph) * walk;
-    out.anim.roll = Math.sin(ph + 0.6) * 0.04 * walk;
-    out.anim.headBob = -bob * 0.07 * walk;
     // body fit: the trunk comes down to whatever its planted feet can reach,
     // quickly, and eases back up once the legs are under it again
     const fit = this.fit;
