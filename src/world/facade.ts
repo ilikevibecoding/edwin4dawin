@@ -884,15 +884,15 @@ if (facadeGlass > 0.0) {
         // the interior seen through the glazing: a lit ceiling with a row of downlights along the head, the round
         // columns of the structural grid, a stone back wall in panel bays and a polished floor; a plain gradient
         // here read as fog behind the glass at 35 m. Faded to its mean as the glazing goes sub-pixel.
-        float ceil = fstep(0.8, lv, wv / lobbyH);
+        float ceilBand = fstep(0.8, lv, wv / lobbyH);
         float lamp = fpulse(u / 2.4, 0.38, 0.62, wu / 2.4) * fpulse(lv, 0.86, 0.94, wv / lobbyH);
         float colm = fpulse((u + 2.7) / 8.4, 0.0, 0.075, wu / 8.4);
         float lobbyFloor = 1.0 - fstep(0.14, lv, wv / lobbyH);
         float bay = hash12(vec2(floor(u / 1.2), seed + 9.0));
         vec3 lobbyIn = mix(vec3(0.30, 0.27, 0.23), vec3(0.24, 0.23, 0.22), step(0.5, hash11(seed * 2.9 + 0.4))) * (0.85 + 0.3 * bay);
         lobbyIn = mix(lobbyIn, vec3(0.34, 0.33, 0.31), lobbyFloor);
-        lobbyIn = mix(lobbyIn, vec3(0.62, 0.58, 0.50), ceil);
-        lobbyIn = mix(lobbyIn, vec3(0.06, 0.06, 0.065), colm * (1.0 - 0.5 * ceil));
+        lobbyIn = mix(lobbyIn, vec3(0.62, 0.58, 0.50), ceilBand);
+        lobbyIn = mix(lobbyIn, vec3(0.06, 0.06, 0.065), colm * (1.0 - 0.5 * ceilBand));
         lobbyIn += vec3(0.9, 0.8, 0.6) * lamp;
         lobbyIn = mix(vec3(0.16, 0.15, 0.14), lobbyIn, vis);
         float g = (1.0 - mull) * (1.0 - plinth) * (1.0 - head);
