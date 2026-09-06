@@ -56,6 +56,11 @@ Scene radiance scale (pre-exposure; composite exposure 0.92, ACES): sunlit Lambe
   `SUN_IRRADIANCE` (noon body (65,189,209) L172 -> (37,151,182) L129; reference water L150 -> +0.3 EV on the
   body would restore it; glitter core 247 -> 239, edge 151 -> 133 — a glitter toward a 14 deg sun clips hard in
   life, so x1.5-2 on the glitter BRDF scale). Hue untouched.
+- Water Rendering Agent, `src/render/reflection.ts` (mirror pass, `float sunShare = 0.62 * smoothstep(-0.05, 0.2,
+  uSunDir.y);`): use the shared `uSunShare` uniform instead (declared with the atmosphere uniforms in
+  `common.glsl.ts`, driven by `atmosphere.ts`), as `post.ts` does since round 4: the mirrored shore under a cloud
+  is otherwise a stop lighter than the shore itself at noon (0.62 vs 0.86 of the light removed) and darker than
+  it at 17:45 (0.62 vs ~0.2).
 - Aircraft agent: a cheap contact/AO term under the wing root and between the floats (the shade there is now
   correctly dark, which makes the missing occlusion gradient visible).
 - Cockpit glass: veiling glare when the disc is in frame (the disc now clips white with a halo, the glass adds
