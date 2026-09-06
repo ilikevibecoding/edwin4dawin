@@ -27,6 +27,7 @@ import {
   hoodNormal,
   hoodPoint,
   hoodSection,
+  noseShift,
   plankTone,
 } from "./munificentSpec.js";
 
@@ -152,9 +153,7 @@ export function buildBow(add, rand) {
         const out = [];
         for (let j = 0; j < m; j++) {
           const x = -s.hw + (2 * s.hw * j) / (m - 1);
-          out.push(hoodPoint(z, Math.acos(Math.sign(x) * Math.abs(x / s.hw) ** (2.3 / 2)), 0).map(
-            (v, k) => (k === 1 ? s.yF : v),
-          ));
+          out.push([x, s.yF, z + noseShift(x, z)]);
         }
         return out;
       });

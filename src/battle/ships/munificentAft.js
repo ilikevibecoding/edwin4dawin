@@ -34,6 +34,7 @@ import {
   domeNormal,
   domePoint,
   domeSection,
+  domeTop,
   plankTone,
 } from "./munificentSpec.js";
 
@@ -187,14 +188,14 @@ export function buildAft(add, rand, engines) {
       // tall lit window band low on the flank
       for (let k = 0; k < 6; k++)
         slotWindow(add, {
-          c: [side * HW.neck, -42, -124 + 23 * k],
+          c: [side * HW.neck, -47, -124 + 23 * k],
           n: [side, 0, 0],
           along: [0, 0, 1],
-          len: 14,
-          h: 15,
+          len: 9,
+          h: 7,
           lod,
           panes: 3,
-          glow: 0xd8f2e6,
+          glow: 0x9fc4b0,
           rim: MACH_DK,
         });
       // conduits and panel insets
@@ -251,11 +252,11 @@ export function buildAft(add, rand, engines) {
   // ---------------------------------------------------------------------------
   const shellZ = {
     0: [
-      Z.domeFull, 75, 95, 120, 150, 180, 210, 235, Z.split, 262, 276, 290, 305, 320, 335, 350, 365,
-      380, 393, 404, Z.tip,
+      Z.domeFull, 85, 100, 120, 145, 170, 195, 215, Z.split, 250, 265, 280, 295, 310, 325, 340, 355,
+      370, 385, 398, 406, Z.tip,
     ],
-    1: [Z.domeFull, 100, 150, 200, Z.split, 280, 310, 340, 370, 395, Z.tip],
-    2: [Z.domeFull, 150, Z.split, 300, 350, Z.tip],
+    1: [Z.domeFull, 100, 140, 180, 215, Z.split, 265, 295, 325, 355, 385, Z.tip],
+    2: [Z.domeFull, 150, Z.split, 290, 350, Z.tip],
   };
   for (const lod of [0, 1, 2]) {
     const m = lod === 0 ? 21 : lod === 1 ? 11 : 6;
@@ -267,7 +268,7 @@ export function buildAft(add, rand, engines) {
         tint: domeTint(side),
       });
       // inner faces of the blades and the trench-side rim / eave edge strips
-      const zIn = zs.filter((z) => z >= 235);
+      const zIn = zs.filter((z) => z >= 215);
       if (lod < 2)
         add(loftStrips(zIn.map((z) => shellRing(z, side, m, -SHELL_TH, true)), { texel: 1 / 8 }), "dark", {
           uv: "keep",
@@ -314,7 +315,7 @@ export function buildAft(add, rand, engines) {
     // nose: quarter-ellipsoid over the full arch
     {
       const n = lod === 0 ? 41 : lod === 1 ? 21 : 11;
-      const nz = lod === 0 ? [13.2, 15, 18, 23, 29, 36, 44, 51, Z.domeFull] : lod === 1 ? [13.2, 17, 25, 36, 48, Z.domeFull] : [13.2, 22, 40, Z.domeFull];
+      const nz = lod === 0 ? [13.2, 15, 18, 23, 29, 36, 44, 52, 61, Z.domeFull] : lod === 1 ? [13.2, 17, 26, 38, 54, Z.domeFull] : [13.2, 24, 46, Z.domeFull];
       const rings = nz.map((z) => {
         const k = noseScale(z);
         const out = [];
@@ -334,23 +335,38 @@ export function buildAft(add, rand, engines) {
         },
       });
     }
-    // trench: floor slab, walls, front wall
-    add(new THREE.BoxGeometry(HW.trench * 2, 5.5, Z.split - Z.domeFull).translate(0, 42.8, (Z.split + Z.domeFull) / 2), "dark", {
-      texel: 1 / 6,
-      lod,
-      color: CORE,
-    });
-    for (const side of [-1, 1])
+    // trench: floor and walls follow the sloping dome top (10 m deep)
+    {
+      const tz = lod === 0 ? [Z.domeFull, 100, 140, 180, 215, Z.split] : [Z.domeFull, 150, Z.split];
       add(
-        quadAt([side * (HW.trench - 0.2), 50, (Z.split + Z.domeFull) / 2], [-side, 0, 0], [0, 0, 1], Z.split - Z.domeFull, 9.4),
+        loftStrips(
+          tz.map((z) => [
+            [-HW.trench, domeTop(z) - 10, z],
+            [HW.trench, domeTop(z) - 10, z],
+          ]),
+          { texel: 1 / 6, orient: [0, -200, 150] },
+        ),
         "dark",
-        { texel: 1 / 6, lod, color: MACH_DK },
+        { uv: "keep", lod, color: CORE },
       );
-    add(quadAt([0, 50, Z.domeFull + 0.2], [0, 0, 1], [1, 0, 0], HW.trench * 2, 9.4), "dark", {
-      texel: 1 / 6,
-      lod,
-      color: MACH_DK,
-    });
+      for (const side of [-1, 1])
+        add(
+          loftStrips(
+            tz.map((z) => [
+              [side * (HW.trench - 0.2), domeTop(z) - 10.2, z],
+              [side * (HW.trench - 0.2), domeTop(z) - 0.4, z],
+            ]),
+            { texel: 1 / 6, orient: [side * 200, 30, 150] },
+          ),
+          "dark",
+          { uv: "keep", lod, color: MACH_DK },
+        );
+      add(quadAt([0, domeTop(Z.domeFull) - 5, Z.domeFull + 0.2], [0, 0, 1], [1, 0, 0], HW.trench * 2, 10), "dark", {
+        texel: 1 / 6,
+        lod,
+        color: MACH_DK,
+      });
+    }
     // lower hull, keel, stern block
     add(new THREE.BoxGeometry(HW.lower * 2, Y.eave - Y.lowerBot, Z.eng - 12).translate(0, (Y.eave + Y.lowerBot) / 2, (Z.eng + 12) / 2), "dark", {
       texel: 1 / 8,
@@ -362,7 +378,7 @@ export function buildAft(add, rand, engines) {
       lod,
       color: MACH_DK,
     });
-    add(new THREE.BoxGeometry(HW.stern * 2, 66, Z.eng - 238).translate(0, -3, (Z.eng + 238) / 2), "dark", {
+    add(new THREE.BoxGeometry(HW.stern * 2, 58, Z.eng - 228).translate(0, -7, (Z.eng + 228) / 2), "dark", {
       texel: 1 / 8,
       lod,
       color: MACH_DK,
@@ -373,21 +389,31 @@ export function buildAft(add, rand, engines) {
         const z = 70 + k * (lod === 0 ? 14.5 : 29) + rand() * 4;
         const w = 5 + rand() * 9;
         const h = 2.5 + rand() * 5;
-        add(new THREE.BoxGeometry(w, h, 6 + rand() * 12).translate((rand() - 0.5) * 20, 45.5 + h / 2, z), "dark", {
+        add(new THREE.BoxGeometry(w, h, 6 + rand() * 12).translate((rand() - 0.5) * 20, domeTop(z) - 10 + h / 2, z), "dark", {
           texel: 1 / 4,
           lod,
           color: rand() < 0.5 ? MACH : MACH_LT,
         });
       }
       for (const x of [-13.5, 13.5])
-        add(tubeZ(1.4, 1.4, 180, 8, x, 47, 155, false), "dark", { texel: 1 / 4, lod, color: MACH_LT });
+        for (const [z0, z1] of [
+          [Z.domeFull + 4, 150],
+          [150, Z.split - 6],
+        ])
+          add(
+            bar([x, domeTop(z0) - 8.4, z0], [x, domeTop(z1) - 8.4, z1], 2.8, 2.8),
+            "dark",
+            { texel: 1 / 4, lod, color: MACH_LT },
+          );
       for (const side of [-1, 1])
-        for (const y of [48.2, 51.6])
-          for (let k = 0; k < 15; k++)
-            add(new THREE.BoxGeometry(0.3, 1.1, 7).translate(side * (HW.trench - 0.45), y, 72 + k * 11.5), "windows", {
+        for (const dy of [-6.6, -3.2])
+          for (let k = 0; k < 14; k++) {
+            const z = Z.domeFull + 8 + k * 11.5;
+            add(new THREE.BoxGeometry(0.3, 1.1, 7).translate(side * (HW.trench - 0.45), domeTop(z) + dy, z), "windows", {
               lod,
               color: WINDOW,
             });
+          }
       // lower hull: pipes, tanks, boxes
       for (const side of [-1, 1]) {
         for (const y of [-11, -19, -28])
@@ -485,25 +511,31 @@ export function buildAft(add, rand, engines) {
   // bridge tower at the trench end: plinth, stem, long bridge module with the green glass front
   // ---------------------------------------------------------------------------
   for (const lod of [0, 1, 2]) {
-    add(new THREE.BoxGeometry(HW.trench * 2 + 2, 14, 32).translate(0, 51, 251), "dark", {
+    const deck = domeTop(Z.split);
+    add(new THREE.BoxGeometry(HW.trench * 2 + 2, 15, 34).translate(0, deck - 4, Z.split + 1), "dark", {
       texel: 1 / 6,
       lod,
       color: MACH_DK,
     });
-    add(new THREE.BoxGeometry(18, 27, 24).translate(0, 71, 258), "hull", {
+    add(new THREE.BoxGeometry(18, 84 - deck, 24).translate(0, (84 + deck) / 2, 254), "hull", {
       texel: 1 / 6,
       lod,
       color: HULL_DK,
     });
-    add(new THREE.BoxGeometry(26, 16, 62).translate(0, 92, 259), "hull", {
+    add(new THREE.BoxGeometry(26, 10, 30).translate(0, deck + 8, 254), "dark", {
+      texel: 1 / 6,
+      lod,
+      color: MACH,
+    });
+    add(new THREE.BoxGeometry(26, 13, 66).translate(0, 91.5, 257), "hull", {
       texel: 1 / 6,
       lod,
       color: HULL,
     });
-    const nose = new THREE.CylinderGeometry(13, 13, 16, lod === 0 ? 16 : 8);
-    nose.translate(0, 92, 228);
+    const nose = new THREE.CylinderGeometry(13, 13, 13, lod === 0 ? 16 : 8);
+    nose.translate(0, 91.5, 224);
     add(nose, "hull", { texel: 1 / 6, lod, color: HULL });
-    add(new THREE.BoxGeometry(20, 6, 46).translate(0, 103, 263), "hull", {
+    add(new THREE.BoxGeometry(20, 6, 46).translate(0, 101, 263), "hull", {
       texel: 1 / 6,
       lod,
       color: HULL_DK,
@@ -511,14 +543,14 @@ export function buildAft(add, rand, engines) {
     if (lod === 2) continue;
     // green glass: wraps the front half of the module nose and runs down both flanks
     const glass = new THREE.CylinderGeometry(13.4, 13.4, 5.5, 16, 1, true, Math.PI / 2, Math.PI);
-    glass.translate(0, 90.5, 228);
+    glass.translate(0, 90, 224);
     add(glass, "windows", { lod, color: BRIDGE });
     for (const side of [-1, 1]) {
-      add(new THREE.BoxGeometry(0.3, 3.2, 40).translate(side * 13.2, 90.5, 250), "windows", {
+      add(new THREE.BoxGeometry(0.3, 3.2, 44).translate(side * 13.2, 90, 250), "windows", {
         lod,
         color: BRIDGE,
       });
-      add(new THREE.BoxGeometry(0.3, 1.2, 30).translate(side * 10.2, 103, 262), "windows", {
+      add(new THREE.BoxGeometry(0.3, 1.2, 30).translate(side * 10.2, 101, 262), "windows", {
         lod,
         color: WINDOW,
       });
@@ -527,23 +559,23 @@ export function buildAft(add, rand, engines) {
     if (lod === 0)
       for (let k = 0; k <= 8; k++) {
         const a = Math.PI / 2 + (Math.PI * k) / 8;
-        add(bar([Math.sin(a) * 13.6, 87.5, 228 + Math.cos(a) * 13.6], [Math.sin(a) * 13.6, 93.5, 228 + Math.cos(a) * 13.6], 0.6, 0.6), "dark", {
+        add(bar([Math.sin(a) * 13.6, 87, 224 + Math.cos(a) * 13.6], [Math.sin(a) * 13.6, 93, 224 + Math.cos(a) * 13.6], 0.6, 0.6), "dark", {
           texel: 1 / 3,
           lod,
           color: MACH_DK,
         });
       }
-    add(new THREE.BoxGeometry(14, 8, 22).translate(0, 110, 276), "dark", {
+    add(new THREE.BoxGeometry(14, 8, 22).translate(0, 108, 276), "dark", {
       texel: 1 / 6,
       lod,
       color: MACH,
     });
-    add(bar([0, 114, 280], [0, 132, 280], 1, 1), "dark", { texel: 1 / 3, lod, color: MACH_DK });
-    add(bar([0, 106, 248], [0, 124, 248], 0.8, 0.8), "dark", { texel: 1 / 3, lod, color: MACH_DK });
+    add(bar([0, 112, 280], [0, 132, 280], 1, 1), "dark", { texel: 1 / 3, lod, color: MACH_DK });
+    add(bar([0, 104, 248], [0, 124, 248], 0.8, 0.8), "dark", { texel: 1 / 3, lod, color: MACH_DK });
     if (lod === 0) {
       add(bar([-5, 126, 280], [5, 126, 280], 0.4, 0.4), "dark", { texel: 1 / 3, lod, color: MACH_DK });
       antennaCluster(add, {
-        base: [0, 106, 270],
+        base: [0, 104, 270],
         up: [0, 1, 0],
         scale: 0.7,
         lod,
@@ -559,19 +591,25 @@ export function buildAft(add, rand, engines) {
   const S_RIM = DOME_ARC.sOfA(A_RIM);
   for (const lod of [0, 1]) {
     for (const side of [-1, 1]) {
-      const zl = lod === 0 ? [62, 90, 120, 150, 180, 210, 246] : [62, 150, 246];
+      const zl = lod === 0 ? [74, 100, 130, 160, 190, 215, 232] : [74, 150, 232];
       band(add, zl, () => S_RIM - 10, () => S_RIM - 2.5, side, 2, "paint", { lod, color: BLUE });
-      const zb = lod === 0 ? [92, 112, 132, 152, 172, 192, 212, 236] : [92, 164, 236];
-      const sc = (z) => S_RIM - 16 - ((S_RIM - 40) * (z - 92)) / 144;
+      const zb = lod === 0 ? [96, 114, 132, 150, 168, 186, 204, 222] : [96, 160, 222];
+      const sc = (z) => S_RIM - 16 - ((S_RIM - 40) * (z - 96)) / 126;
       band(add, zb, (z) => sc(z) - 20, (z) => sc(z) + 20, side, lod === 0 ? 6 : 4, "paint", {
         lod,
         color: BLUE,
       });
-      const zf = lod === 0 ? [62, 74, 86, 98, 110] : [62, 86, 110];
-      const sf = (z) => S_RIM - 18 - ((S_RIM - 60) * (z - 62)) / 48;
+      const zf = lod === 0 ? [74, 84, 94, 104, 114] : [74, 94, 114];
+      const sf = (z) => S_RIM - 18 - ((S_RIM - 60) * (z - 74)) / 40;
       band(add, zf, (z) => sf(z) - 10, (z) => sf(z) + 10, side, 4, "paint", { lod, color: BLUE });
-      const zlo = lod === 0 ? [36, 50, 62, 100, 150, 200, 244] : [36, 62, 150, 244];
-      band(add, zlo, () => 15, () => 24, side, 2, "paint", { lod, color: BLUE });
+      const za = lod === 0 ? [196, 214, 232, 250, 268, 286, 302] : [196, 250, 302];
+      const sa = (z) => S_RIM - 12 - ((S_RIM - 22) * (z - 196)) / 106;
+      band(add, za, (z) => sa(z) - 15, (z) => sa(z) + 15, side, lod === 0 ? 5 : 3, "paint", {
+        lod,
+        color: BLUE,
+      });
+      const zlo = lod === 0 ? [40, 55, 72, 100, 150, 200, 232] : [40, 72, 150, 232];
+      band(add, zlo, () => 15, () => 23, side, 2, "paint", { lod, color: BLUE });
       // nose band around the front
       const zn = lod === 0 ? [21, 25, 29, 33] : [21, 33];
       band(
@@ -586,15 +624,15 @@ export function buildAft(add, rand, engines) {
         0.6,
       );
       // Banking Clan hexagon with the Confederacy emblem
-      const zC = 135;
-      const sC = 64;
-      patch(add, hexagon(26), zC, sC, side, 0.5, lod === 0 ? 3 : 2, "paint", { lod, color: WHITE });
+      const zC = 138;
+      const sC = 46;
+      patch(add, hexagon(27), zC, sC, side, 0.5, lod === 0 ? 3 : 2, "paint", { lod, color: WHITE });
       patch(add, hexagon(6.5), zC, sC, side, 1.1, 1, "paint", { lod, color: BLUE_DK });
       if (lod === 0)
         for (let i = 0; i < 6; i++) {
           const a = (i / 6) * Math.PI * 2;
           const p0 = [Math.cos(a) * 6, Math.sin(a) * 6];
-          const p1 = [Math.cos(a) * 23.5, Math.sin(a) * 23.5];
+          const p1 = [Math.cos(a) * 24.5, Math.sin(a) * 24.5];
           patch(add, bar2D(p0, p1, 3.6), zC, sC, side, 1.1, 2, "paint", { lod, color: BLUE_DK });
         }
     }
@@ -603,8 +641,8 @@ export function buildAft(add, rand, engines) {
   for (const side of [-1, 1])
     for (const a of [16, 32, 48, 64]) {
       const zs = [];
-      for (let z = 64; z < 246; z += 26) zs.push(z);
-      zs.push(246);
+      for (let z = 76; z < 232; z += 26) zs.push(z);
+      zs.push(232);
       const pts = zs.map((z) => domePoint(z, a * D2R, side, 0));
       const nrm = zs.map((z) => domeNormal(z, a * D2R, side));
       const acr = nrm.map((n) => [n[1], -n[0], 0]);

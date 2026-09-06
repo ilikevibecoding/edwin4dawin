@@ -23,19 +23,19 @@ export const Z = {
   hoodEnd: -136, // hood aft rim; the neck begins
   fin: -200, // fin / wing station (26 % from the bow)
   neckEnd: 12, // neck meets the dome nose
-  domeFull: 58, // dome at its full section; the trench begins
-  split: 250, // trench ends; the shells start narrowing into the stern blades
+  domeFull: 70, // dome at its full section; the trench begins
+  split: 228, // trench ends; the shells start narrowing into the stern blades
   eng: 300, // stern face with the thrusters
   tip: 412.5,
 };
 export const Y = {
-  domeTop: 55,
+  domeTop: 59, // peak of the dome; its top slopes down toward the stern (see domeH)
   eave: -5,
   lowerBot: -36,
   keelBot: -63,
   neckTop: 27,
   neckBot: -58,
-  hoodPeak: 40,
+  hoodPeak: 44,
   hoodFloor: -13,
   deckBot: -27,
   wing: 2,
@@ -52,8 +52,9 @@ export const HW = {
   keel: 40,
   stern: 36,
 };
-export const SHELL_P = 2.5; // superellipse exponent of the arches (flat-topped)
+export const SHELL_P = 2.3; // superellipse exponent of the arches (flat-topped)
 export const SHELL_TH = 4.5; // armour shell thickness
+export const HOOD_P = 2.0; // the hood cowl is a rounder arch than the dome
 
 // palette: vertex tints over the shared plating (mean albedo ~0.62 before tint). Pale grey-white with
 // a cool cast (the TCW frigate), a clear step above the Recusant's gunmetal and cooler than the Venator.
@@ -131,25 +132,45 @@ function arcTable(hw, h, p = SHELL_P, n = 400) {
 // ---- dome / stern blades ----
 const prongT = smoothTable([
   [Z.split, 0],
-  [272, 0.04],
-  [300, 0.16],
-  [335, 0.4],
-  [365, 0.66],
-  [392, 0.88],
+  [255, 0.03],
+  [280, 0.12],
+  [310, 0.3],
+  [340, 0.52],
+  [370, 0.74],
+  [395, 0.9],
   [Z.tip, 1],
+]);
+// arch height above the eave: the dome peaks at 58-62 % and its top slopes down all the way to the
+// thin tail (WSMI side view: 28 m lower at the tower, a sliver at the tip)
+const domeH = smoothTable([
+  [Z.neckEnd, Y.domeTop - Y.eave],
+  [120, Y.domeTop - Y.eave],
+  [170, 60],
+  [215, 54],
+  [250, 45],
+  [290, 34],
+  [330, 22],
+  [370, 12],
+  [395, 6],
+  [Z.tip, 1.5],
 ]);
 /** Dome section at z: half-width, arch height, shell centre x offset (starboard) and eave height. */
 export function domeSection(z) {
-  if (z <= Z.split)
-    return { hw: HW.dome, h: Y.domeTop - Y.eave, cx: 0, yE: Y.eave };
+  const h = domeH(z);
+  if (z <= Z.split) return { hw: HW.dome, h, cx: 0, yE: Y.eave };
   const t = prongT(z);
+  const k = t ** 0.75;
   const tip = t > 0.985 ? (t - 0.985) / 0.015 : 0;
   return {
-    hw: (HW.dome - 73 * t) * (1 - 0.9 * tip),
-    h: (60 - 44 * t) * (1 - 0.9 * tip),
-    cx: 46 * t,
-    yE: Y.eave - 24 * t,
+    hw: (HW.dome - 74 * k) * (1 - 0.9 * tip),
+    h,
+    cx: 46 * k,
+    yE: Y.eave - 20 * t,
   };
+}
+/** Height of the dome top (trench rim level) at z. */
+export function domeTop(z) {
+  return Y.eave + domeH(z);
 }
 // angle of the trench rim on the full dome section
 export const A_RIM = Math.acos((HW.trench / HW.dome) ** (SHELL_P / 2));
@@ -158,7 +179,7 @@ export const DOME_ARC = arcTable(HW.dome, Y.domeTop - Y.eave);
 /** Point on the (starboard, side = 1) dome shell at station z and arch angle a, lifted radially. */
 export function domePoint(z, a, side = 1, lift = 0) {
   const s = domeSection(z);
-  const [px, py] = archPt(a, s.hw + lift, s.h + lift);
+  const [px, py] = archPt(a, Math.max(0.3, s.hw + lift), Math.max(0.3, s.h + lift));
   return [side * (s.cx + px), s.yE + py, z];
 }
 /** Outward normal of the dome shell at (z, a) on `side` (finite differences on the section). */
@@ -180,11 +201,12 @@ export function domeSurf(z, s, side = 1, lift = 0) {
 
 // ---- hood ----
 const hoodHW = smoothTable([
-  [Z.nose, 58],
-  [-407, 71],
-  [-399, 78.5],
-  [-388, 82.5],
-  [-365, HW.hood],
+  [Z.nose, 42],
+  [-407, 58],
+  [-399, 67],
+  [-388, 74],
+  [-365, 80.5],
+  [-330, HW.hood],
   [-300, HW.hood],
   [-200, HW.hood],
   [-165, 82.5],
@@ -195,12 +217,12 @@ const hoodTop = smoothTable([
   [Z.nose, 9],
   [-388, 15],
   [-338, 29],
-  [-297, 35.5],
-  [-256, 39],
+  [-297, 37],
+  [-256, 41],
   [-206, Y.hoodPeak],
-  [-165, 39],
-  [-148, 36],
-  [Z.hoodEnd, 33],
+  [-165, 41],
+  [-148, 38],
+  [Z.hoodEnd, 34],
 ]);
 const hoodFloor = smoothTable([
   [Z.nose, 7],
@@ -222,20 +244,20 @@ export function noseShift(x, z) {
 /** Point on the hood arch at station z and angle a (0 = starboard eave, PI = port eave). */
 export function hoodPoint(z, a, lift = 0) {
   const s = hoodSection(z);
-  const [px, py] = archPt(a, s.hw + lift, s.h + lift, 2.3);
+  const [px, py] = archPt(a, s.hw + lift, s.h + lift, HOOD_P);
   return [px, s.yF + py, z + noseShift(px, z)];
 }
 export function hoodNormal(z, a) {
   const s = hoodSection(z);
   const d = 0.002;
-  const p0 = archPt(Math.max(0, a - d), s.hw, s.h, 2.3);
-  const p1 = archPt(Math.min(Math.PI, a + d), s.hw, s.h, 2.3);
+  const p0 = archPt(Math.max(0, a - d), s.hw, s.h, HOOD_P);
+  const p1 = archPt(Math.min(Math.PI, a + d), s.hw, s.h, HOOD_P);
   const tx = p1[0] - p0[0];
   const ty = p1[1] - p0[1];
   const len = Math.hypot(tx, ty) || 1;
   return [ty / len, -tx / len, 0];
 }
-export const HOOD_ARC = arcTable(HW.hood, Y.hoodPeak - Y.hoodFloor, 2.3);
+export const HOOD_ARC = arcTable(HW.hood, Y.hoodPeak - Y.hoodFloor, HOOD_P);
 /** Hood surface point by arc length s (metres from the starboard eave) at station z. */
 export function hoodSurf(z, s, lift = 0) {
   return hoodPoint(z, HOOD_ARC.aOfS(s), lift);
