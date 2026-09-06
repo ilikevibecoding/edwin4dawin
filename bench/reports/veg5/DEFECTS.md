@@ -197,7 +197,12 @@ The previous vegetation agent's loop-5 commits were lost with the VM; rounds 1�
   (grass, cards, crowns, palms), with `dbg=noshadow` and `dbg=norefl`, and is **gone with `dbg=nocity`**: a
   city batch object near the horizon (the box's centre row sits on it) writes NaN or black that the
   post-process (a bloom mip, from the 8-px steps) smears into a box. The vegetation instance data has no
-  non-finite values (in-page probe over 829 tiles). Handed to the lead / city builder with the stations above.
+  non-finite values (in-page probe over 829 tiles). Second bisection by building kind (`cb-*`: the kind's
+  camera and mirror batch meshes held invisible): box, cyl, oct, frustum, shear and trim hidden — the box
+  stays; **`city-house` hidden — the box is gone** (13 k triangles of houses at the horizon in that view). So
+  a `house`-kind instance (`unitHouse` geometry under the facade material) writes NaN or black there. Handed
+  to the lead / city builder with the stations above; at 1920×1080 the smear is far larger (`r16-lawn`: two
+  bands 390 and 400 px wide across the horizon).
 - **Palm fins** (`r14-palm`, `r14-beach`): the finned fronds resolve as leaflet combs at 10–30 m; the camera
   finder put the palm station inside an understory shrub (a near-black card fills the frame: shade
   ×[0.3, 0.32, 0.25] under a 0.6 occlusion — a shrub in deep shade is dark, not black; noted for R12).
