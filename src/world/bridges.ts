@@ -256,7 +256,7 @@ function createConcreteMaterial(concrete: THREE.Material): THREE.MeshStandardMat
 /** Box-filtered coverage of a line of half-width `h` at signed distance `d`, for a pixel footprint `fw` (same
  *  units): exact area of the pixel's interval inside the line, so a line thinner than a pixel dims instead of
  *  breaking into dots. */
-const GLSL_AA_LINE = /* glsl */ `
+export const GLSL_AA_LINE = /* glsl */ `
 float aaLine(float d, float h, float fw) { return clamp((min(h, d + 0.5 * fw) - max(-h, d - 0.5 * fw)) / fw, 0.0, 1.0); }
 `;
 
@@ -266,9 +266,11 @@ float aaLine(float d, float h, float fw) { return clamp((min(h, d + 0.5 * fw) - 
  *  the alpha instead: a 22 cm cable at 2 km is a continuous faint line, not a chain of dots (with or without
  *  MSAA — the clips are captured without). The width the geometry projects to is ~1.7 x the vertex radius
  *  (six-sided prisms, boxes seen across their diagonal). */
-const STEEL_MIN_PX = 1.75;
-const STEEL_VERT = /* glsl */ `
-vGlow = aGlow; vCover = 1.0;
+export const STEEL_MIN_PX = 1.75;
+/** The inflation alone (needs `attribute vec4 aAxis`, `uniform float uPixelScale`, `varying float vCover`); shared
+ *  with the highway furniture, whose barriers and posts use it under their own materials. */
+export const MIN_WIDTH_VERT = /* glsl */ `
+vCover = 1.0;
 if (aAxis.w > 0.5) {
   vec3 offR = transformed - aAxis.xyz;
   float rr = length(offR);
@@ -279,6 +281,17 @@ if (aAxis.w > 0.5) {
     vCover = widthPx / ${STEEL_MIN_PX.toFixed(2)};
   }
 }
+`;
+const STEEL_VERT = /* glsl */ `
+vGlow = aGlow;
+${MIN_WIDTH_VERT}
+`;
+/** A lit lamp head keeps at least this much opacity however far it is (its inflated 2 px dot stays a lit dot to
+ *  the head cut-off distance instead of fading with its sub-pixel coverage: a street light at 4 km is far brighter
+ *  than anything its pixel averages with). Applied through `emissive`, so only while the lamps are on. */
+export const LIT_DOT_ALPHA = 0.55;
+export const STEEL_ALPHA_FRAG = /* glsl */ `
+diffuseColor.a *= max(vCover, vGlow * ${LIT_DOT_ALPHA.toFixed(2)} * smoothstep(0.3, 1.5, length(emissive)));
 `;
 
 /** Bridge steel (railings, cables, lamp posts, arches): vertex-coloured, with a per-vertex `aGlow` mask that turns the
@@ -300,26 +313,32 @@ function createSteelMaterial(steel: THREE.Material): { mat: THREE.MeshStandardMa
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${STEEL_VERT}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vGlow; varying float vCover;')
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.a *= vCover;')
+      .replace('#include <color_fragment>', `#include <color_fragment>\n${STEEL_ALPHA_FRAG}`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vGlow;');
   };
-  mat.customProgramCacheKey = () => 'bridge-steel-v2';
+  mat.customProgramCacheKey = () => 'bridge-steel-v3';
   return { mat, pixelScale };
+}
+
+/** Lamp glow 0..1 for the key light: on through dusk (sun under ~10 deg) and whenever the key light is the moon. */
+export function lampGlowFor(sunDir: THREE.Vector3, keyIntensity: number): number {
+  const elevation = (Math.asin(clamp(sunDir.y, -1, 1)) * 180) / Math.PI;
+  return Math.max(1 - smoothstep(2, 10, elevation), 1 - smoothstep(0.15, 0.6, keyIntensity));
 }
 
 // ------------------------------------------------------------------ geometry accumulation
 
 /** A centreline sample: position of the deck top, unit `right` (across) and forward direction. */
-interface Frame { x: number; y: number; z: number; rx: number; rz: number; dx: number; dz: number; s: number; }
+export interface Frame { x: number; y: number; z: number; rx: number; rz: number; dx: number; dz: number; s: number; }
 
-type Rgb = readonly [number, number, number];
+export type Rgb = readonly [number, number, number];
 const WHITE: Rgb = [1, 1, 1];
 
 /** World-space indexed triangle soup with flat normals, a vertex colour and `extraSize` extra floats per vertex
  *  (aRoadUv + aRoadInfo for the concrete, aGlow for the steel). Steel soups (`hasAxis`) also carry `aAxis`: the
  *  point of the member's axis nearest to the vertex and a flag marking members thin enough for the screen-space
  *  minimum width (see STEEL_VERT). Baked once; one mesh per chunk. */
-class Soup {
+export class Soup {
   readonly pos: number[] = [];
   readonly nrm: number[] = [];
   readonly col: number[] = [];
@@ -369,12 +388,13 @@ class Soup {
 
   /** Box: x across, z along, y from `yBottom` up `h`, yawed about Y (then pitched about its own X). `sidesOnly`
    *  drops the top and bottom faces (posts, rails and cables never show them). `thin` members (rails, posts, lamp
-   *  arms) record the box's long axis for the screen-space minimum width. */
-  box(x: number, yBottom: number, z: number, w: number, h: number, d: number, yaw: number, pitch: number, c: Rgb, sidesOnly = false, extra?: readonly number[], thin = false): void {
+   *  arms) record the box's long axis for the screen-space minimum width; `'point'` members (lamp heads,
+   *  reflectors) record their centre, so they inflate to a dot in every direction. */
+  box(x: number, yBottom: number, z: number, w: number, h: number, d: number, yaw: number, pitch: number, c: Rgb, sidesOnly = false, extra?: readonly number[], thin: boolean | 'point' = false): void {
     if (h <= 0.005) return;
     _q.setFromEuler(_e.set(pitch, yaw, 0, 'YXZ'));
     _m.compose(_p.set(x, yBottom + h / 2, z), _q, _s.set(w, h, d));
-    const longAxis = w >= h && w >= d ? 0 : h >= d ? 1 : 2;
+    const longAxis = thin === 'point' ? -1 : w >= h && w >= d ? 0 : h >= d ? 1 : 2;
     for (const f of BOX_FACES) {
       if (sidesOnly && f.n[1] !== 0) continue;
       _n.set(f.n[0], f.n[1], f.n[2]).applyQuaternion(_q);
@@ -596,10 +616,7 @@ class BridgeCuller {
       if (this.sunDir.lengthSq() > 1e-6) this.sunDir.normalize(); else this.sunDir.set(0, 1, 0);
       keyIntensity = this.sun.intensity;
     }
-    // lamps: on through dusk (sun under ~10 deg) and whenever the key light is the moon
-    const elevation = (Math.asin(clamp(this.sunDir.y, -1, 1)) * 180) / Math.PI;
-    const glow = Math.max(1 - smoothstep(2, 10, elevation), 1 - smoothstep(0.15, 0.6, keyIntensity));
-    this.steel.emissiveIntensity = LAMP_GLOW * glow;
+    this.steel.emissiveIntensity = LAMP_GLOW * lampGlowFor(this.sunDir, keyIntensity);
 
     if (this.seen.size) { this.cameras = [...this.seen]; this.seen.clear(); }
     if (!this.cameras.length) return; // until a chunk has been drawn the renderer's frustum test alone applies
@@ -815,7 +832,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         const ax = f.x + f.rx * (hw + 0.33 - 1.25) * side, az = f.z + f.rz * (hw + 0.33 - 1.25) * side;
         P.steel.box(ax, f.y + ph + 8.85, az, 2.5, 0.16, 0.16, yaw, 0, S_PLAIN, true, undefined, true);
         const hx = f.x + f.rx * (hw + 0.33 - 2.35) * side, hz = f.z + f.rz * (hw + 0.33 - 2.35) * side;
-        P.heads.box(hx, f.y + ph + 8.62, hz, 0.8, 0.26, 0.5, yaw, 0, S_HEAD, false, [1]);
+        P.heads.box(hx, f.y + ph + 8.62, hz, 0.8, 0.26, 0.5, yaw, 0, S_HEAD, false, [1], 'point');
       }
     }
 
