@@ -73,6 +73,20 @@ pushed by builders (the integrator merges).
 | P6 | Crowd appearance from `composeAppearance` (2x atlas cells, species with head geometry, emissive droid lights), cast models | 11 | P6 (after W4 merge) | `src/npc/coruscant/crowd.js`, `src/npc/skins-sw.js`, `src/npc/appearance/**` |
 | — | Gauntlet + acceptance runs (§18, §19): three world assessments, held-out 25%, failure log | 18, 19 | independent verifiers after P1-P6 | `docs/overhaul/gauntlet.md`, `docs/overhaul/failure_log.md`, `docs/overhaul/acceptance/**` |
 
+### User feedback of 6 Sep (top priority for the next slots)
+
+"All the buildings still look like New York, not Star Wars"; "every building is just random shit placed", "I want each
+room to have a purpose that you look at"; the Senate pods "look nothing like they do in real life — bigger, individual
+circles, and back rooms behind them (see Andor)"; "a random ship stuck to the side of the Senate" (block-built pad
+shuttles, removed); "make your own blocks that make them more angular for spaceships".
+
+| # | Workstream | Rubric | Owner | Files (exclusive unless noted) |
+| --- | --- | --- | --- | --- |
+| W10 | Architecture v2: rounded/tapered/stacked massing, Star Wars facade language, palette, ledges/decks, impostors follow | 18 | first free slot | `src/coruscant/towers/**`, `src/coruscant/facade.js`, `src/coruscant/crowns.js`, `src/coruscant/skyline.js`, `src/blocks.js` + `src/textures.js` (new panel/strip blocks only, additive), `src/terrain.js` mesher only if a wedge block is added, `scripts/test-coruscant-towers.mjs`, `docs/rubrics/18_architecture_v2.md` |
+| S3 | Ships v3: sloped voxels, re-sculpted hulls, building-collision audit | 19 | after W10 starts | `src/ships/**`, `src/vehicles/voxelMesh.js`, `scripts/test-ships.mjs`, `docs/rubrics/19_ships_v3.md` |
+| P4 fix round | Chamber per the user: individual round repulsorpods in tiers, a bigger volume, back corridors and delegation rooms directly behind the pods (Andor), no block ships | 17 | P4 after its report | `senate.js`, `src/senate/**` |
+| P3 fix round | Room legibility: what a room is for must be readable in two seconds (signature furniture, name plate at the door, lighting), no filler rooms | 16 | P3 after its report | `rooms/**`, `programs/**` |
+
 ### Pass-2 shared contracts (integrator, on the branch before the builders start)
 
 - **Event bus** — `game.events` (`src/events.js`): `on(name, fn) -> off`, `once`, `emit(name, ...args)`, `recent(prefix)`.
