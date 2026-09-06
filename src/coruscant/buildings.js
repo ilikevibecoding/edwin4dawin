@@ -22,6 +22,8 @@ import * as ROOMS from './rooms/index.js';
 import { list as roomList } from './rooms/index.js';
 import { B } from '../blocks.js';
 import { landmarkFor } from './landmarks/index.js';
+import { applyProgram } from './programs/apply.js';
+import './rooms/programs.js';   // registers the program room templates (own registry, see rooms/programs.js)
 
 export { FAMILIES, LANDMARKS, roomList };
 export { stampBlueprint } from './blueprint.js';
@@ -82,6 +84,8 @@ export function buildBlueprint(lot, layout) {
   const ctx = { nF, height, rng, style, pools, midDoorF, spec };
   const res = buildFamily(fam, bp, lot, ctx) || { nF: 0, extra: 0 };
   if (lot.kind === 'tower' && layout) bridgeStubs(bp, lot, layout, res, style);
+  // the building program (src/coruscant/programs): signature rooms refurnished in place before the meta is finished
+  if (lot.kind === 'tower') applyProgram(bp, lot, layout, { style, front });
   finishMeta(bp, lot, fam, res, ground, front, ldoor, midDoorF);
   return bp.export();
 }
@@ -99,6 +103,8 @@ export function buildSignature(lm, lot, layout) {
   lm.build(bp, lot, { rng, layout, levels, rooms: ROOMS, B, seed: layout ? layout.seed : (lot.seed ?? 0) });
   const m = bp.meta, walk = ground + 1;
   const front = lot.front || (lot.door && lot.door.side) || 'S';
+  // the landmark's program: its own rooms satisfy the spec by kind pattern, generic rooms are refurnished for the rest
+  applyProgram(bp, lot, layout, { front, landmark: true, noBuild: lot.family === 'senate' });
   m.id = lot.id;
   m.kind = 'landmark';
   m.family = lot.family;
@@ -136,6 +142,7 @@ function finishMeta(bp, lot, fam, res, ground, front, ldoor, midDoorF) {
   m.doors = [{ x: lot.x0 + ldoor.x, y: walk, z: lot.z0 + ldoor.z, side: front }];
   if (res.doors) for (const dd of res.doors) m.doors.push({ x: lot.x0 + dd.x, y: walk, z: lot.z0 + dd.z, side: 'arcade' });
   if (res.houseDoor) m.doors.push({ x: lot.x0 + res.houseDoor.x, y: walk, z: lot.z0 + res.houseDoor.z, side: 'plaza' });
+  if (m.program && m.program.serviceDoor) { const s = m.program.serviceDoor; m.doors.push({ x: s.x, y: s.y, z: s.z, side: 'service' }); }
   if (!m.lobby) m.lobby = { x: inn.x, y: walk, z: inn.z };
   m.floors = [];
   for (let f = 0; f < (res.nF || 0); f++) m.floors.push(ground + 5 * f + 1);
