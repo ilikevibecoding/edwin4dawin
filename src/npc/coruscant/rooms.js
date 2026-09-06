@@ -24,8 +24,8 @@ export const ROOM_FUNCTIONS = {
   comms_room: { jobs: [{ job: 'comms', count: 1 }, { job: 'technician', count: 1 }], prop: ['CONSOLE'], idle: IDLE.TYPING },
   control_room: { jobs: [{ job: 'operator', count: 2 }, { job: 'foreman', count: 1 }, { job: 'officer', count: 1 }], prop: ['CONSOLE'], idle: IDLE.TYPING },
   corridor: { jobs: [{ job: 'maintenance droid', count: 1 }, { job: 'porter', count: 1 }], prop: [], idle: IDLE.SWEEPING, visitors: IDLE.STANDING },
-  council_chamber: { jobs: [{ job: 'speaker', count: 1 }, { job: 'senator', count: 1 }, { job: 'aide', count: 2 }], prop: ['GOLD_BLOCK', 'CHROME'], idle: IDLE.SPEAKING, visitors: IDLE.SITTING },
-  courtroom: { jobs: [{ job: 'judge', count: 1 }, { job: 'witness', count: 1 }, { job: 'advocate', count: 2 }], prop: ['PANEL_BLACK', 'STONE_BRICK_SLAB'], idle: IDLE.SPEAKING, visitors: IDLE.SITTING },
+  council_chamber: { jobs: [{ job: 'senator', count: 3 }, { job: 'aide', count: 2 }, { job: 'speaker', count: 1 }], prop: ['CONSOLE', 'GOLD_BLOCK', 'CHROME'], idle: IDLE.SPEAKING, visitors: IDLE.SITTING, fill: 'senator' },
+  courtroom: { jobs: [{ job: 'advocate', count: 2 }, { job: 'judge', count: 1 }, { job: 'witness', count: 1 }], prop: ['PANEL_BLACK', 'STONE_BRICK_SLAB'], idle: IDLE.SPEAKING, visitors: IDLE.SITTING, fill: 'visitor' },
   detention_cell: { jobs: [{ job: 'warden', count: 1 }, { job: 'guard', count: 1 }], prop: ['CONSOLE', 'IRON_BARS'], idle: IDLE.GUARDING, visitors: IDLE.SITTING, beds: true },
   dressing_room: { jobs: [{ job: 'musician', count: 1 }, { job: 'tailor', count: 1 }], prop: ['CHEST', 'SHELF'], idle: IDLE.STANDING },
   droid_bay: { jobs: [{ job: 'droid tech', count: 1 }, { job: 'technician', count: 1 }, { job: 'astromech', count: 1 }], prop: ['CONSOLE', 'ANVIL'], idle: IDLE.WELDING },
@@ -75,7 +75,7 @@ export const ROOM_KINDS = Object.keys(ROOM_FUNCTIONS);
 const KEYWORDS = [
   [['stair', 'ramp'], 'stairwell'], [['lift', 'turbolift'], 'lift_landing'], [['corridor', 'hall_way', 'passage', 'walkway', 'gangway', 'concourse', 'bridge'], 'corridor'],
   [['lobby', 'atrium', 'foyer', 'vestibule', 'entrance', 'reception', 'arrivals', 'departures', 'terminal', 'platform'], 'lobby_atrium'],
-  [['chamber', 'rotunda', 'senate', 'council', 'assembly', 'pod'], 'council_chamber'], [['court', 'tribunal'], 'courtroom'],
+  [['chamber', 'rotunda', 'senate', 'council', 'assembly', 'pod', 'podium'], 'council_chamber'], [['court', 'tribunal'], 'courtroom'],
   [['cell', 'detention', 'brig', 'holding'], 'detention_cell'], [['armory', 'armoury', 'weapons'], 'armory'], [['barrack', 'dorm', 'bunk', 'quarters'], 'barracks'],
   [['ward', 'recovery', 'bacta', 'surgery', 'triage', 'ambulance'], 'clinic_ward'], [['medbay', 'clinic', 'infirmary', 'pharmacy'], 'medbay'],
   [['kitchen', 'galley'], 'kitchen'], [['cantina', 'bar', 'club', 'tavern'], 'cantina'], [['restaurant', 'diner', 'caf', 'canteen', 'mess'], 'restaurant'],
@@ -112,6 +112,23 @@ export function roomsForJob(job) {
 
 // The block kinds a worker of `job` in a room of `kind` faces (names into blocks.js B).
 export function propsFor(kind) { return roomFunction(kind).prop; }
+
+// Occupants of one concrete room (rubric row 3: "each room is used for something specific"): the jobs to seat there,
+// given the number of seat spots the room has. Small rooms take up to STAFF_CAP of the function's jobs (one of each,
+// in table order); rooms with many seats (the Senate chamber, auditoria, canteens) fill up with `fill` (or the
+// visitors' job) so a session, a show or a lunch crowd is actually there. Deterministic and pure.
+export const STAFF_CAP = 3, BIG_ROOM_SEATS = 12, BIG_ROOM_MAX = 40;
+const VISITOR_FILL = { restaurant: 'patron', cafeteria: 'patron', cantina: 'patron', lounge: 'patron', night_club: 'patron', holo_theatre: 'patron', school_room: 'child', observation_deck: 'tourist', museum_hall: 'visitor', gallery: 'visitor', library: 'visitor', arcade: 'patron', market_stalls: 'shopper', shop: 'shopper', medbay: 'patient', clinic_ward: 'patient' };
+export function roomStaff(kind, seats = 0) {
+  const f = roomFunction(kind);
+  const out = [];
+  for (const j of f.jobs) { if (out.length >= STAFF_CAP) break; out.push(j.job); }
+  if (seats >= BIG_ROOM_SEATS) {
+    const fill = f.fill || VISITOR_FILL[f.base] || (f.jobs[0] ? f.jobs[0].job : null);
+    if (fill) { const n = Math.min(seats >= 400 ? BIG_ROOM_MAX + 20 : BIG_ROOM_MAX, Math.ceil(seats / 4)); while (out.length < n) out.push(fill); }
+  }
+  return out;
+}
 
 // The 22 skin families (rubric row 5). Jobs map onto them below; `scale` shrinks children.
 export const ARCHETYPES = ['office worker', 'resident', 'senator', 'senate aide', 'senate guard', 'security officer', 'pilot', 'mechanic', 'dock worker', 'vendor', 'cook', 'bartender', 'medic', 'patient', 'tourist', 'courier', 'protocol droid', 'astromech', 'sweeper droid', 'jedi', 'bounty hunter', 'journalist'];

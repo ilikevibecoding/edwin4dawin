@@ -23,6 +23,8 @@ const TICK = 0.05;
 const _dir = new THREE.Vector3();
 export const SPAWN_R = 96, DESPAWN_R = 128, MAX_LIVE = 150;
 const SPAWN_PER_CYCLE = 10, CYCLE_TICKS = 10;
+const INDOOR_PENALTY = 40, INDOOR_MARGIN = 24, INDOOR_MAX = 90, OWN_LOT_MAX = 110;   // see spawnCycle
+const SKIP_TICKS = 200;                                            // 10 s before retrying someone who could not be placed
 const RUN_SPEED = 4.2;
 const LEG_NODES = { street: 1600, lot: 4000, door: 900, spot: 3000 };
 const CIVIC = new Set(['senate', 'financial']);
@@ -43,9 +45,11 @@ export class CoruscantPopulation {
     this.live = [];
     this.liveByPerson = new Map();
     this.occupied = new Map();     // port spot keys -> citizen id (lot spots are tracked by LotInfo)
+    this.skip = new Map();         // person id -> tick before which spawning is not retried
+    this.view = { x: 0, z: 1 };    // camera forward (xz) at the last spawn cycle: big halls seat their crowd in view
     this.rng = new RNG(0xc0c0);
     this.hour = 12; this.tickCount = 0; this.time = 0; this.enabled = true;
-    this.stats = { spawned: 0, despawned: 0, trips: 0, tripsFailed: 0, legs: 0, legsFailed: 0, retargets: 0, stuck: 0, lifts: 0, bubbles: 0, talks: 0, unloadedWaits: 0, unplaceable: 0, errands: 0, arrivals: 0 };
+    this.stats = { spawned: 0, despawned: 0, trips: 0, tripsFailed: 0, legs: 0, legsFailed: 0, legsFailedBy: {}, retargets: 0, stuck: 0, lifts: 0, bubbles: 0, talks: 0, unloadedWaits: 0, unplaceable: 0, errands: 0, arrivals: 0 };
     this.disaster = null; this.watching = false;
     this.lastBubbleAt = -10; this.lastChatAt = -10;
     this.playerCtx = { vandalT: 0, bumpT: 0 };
@@ -71,7 +75,7 @@ export class CoruscantPopulation {
     mgr.raycast = (origin, dir, maxDist) => { const a = o.raycast(origin, dir, maxDist); const b = this.raycast(origin, dir, a ? a.dist : maxDist); return b && (!a || b.dist < a.dist) ? b : a; };
     mgr.talk = (npc, game) => (npc && npc.city ? this.talk(npc) : o.talk(npc, game));
     mgr.poke = (npc, game) => (npc && npc.city ? this.poke(npc) : o.poke(npc, game));
-    mgr.collectBoxes = (out, x, z) => { o.collectBoxes(out, x, z); this.collectBoxes(out, x, z); };
+    mgr.collectBoxes = (out, x, z) => { o.collectBoxes(out, x, z); this.npcBoxes(out, x, z); };
     mgr.onWorldChanged = (x, y, z) => { o.onWorldChanged(x, y, z); this.onWorldChanged(x, y, z); };
     mgr.alert = (info) => { o.alert(info); this.alert(info); };
     mgr.watch = (point, opts) => { o.watch(point, opts); this.watching = true; };
@@ -91,8 +95,14 @@ export class CoruscantPopulation {
     return Math.hypot(dx, dz);
   }
 
+  // lot the player stands in (null on the streets / plazas / port)
+  playerLot(p) {
+    for (const l of this.layout.lots) if (l.kind !== 'plaza' && p.x >= l.x0 && p.x < l.x1 && p.z >= l.z0 && p.z < l.z1) return l.id;
+    return null;
+  }
   spawnCycle() {
     const p = this.player.pos;
+    if (this.game.camera && this.game.camera.getWorldDirection) { const v = this.game.camera.getWorldDirection(_dir); this.view.x = v.x; this.view.z = v.z; }
     // despawn: far away, stuck for too long, or the player left the city
     const leave = !this.nearPlateau(p);
     for (let i = this.live.length - 1; i >= 0; i--) {
@@ -101,19 +111,53 @@ export class CoruscantPopulation {
       if (leave || d > DESPAWN_R || n.stuckT > 45 || n.waitT > 25) { if (n.stuckT > 45) this.stats.stuck++; this.despawn(n); }
     }
     if (leave || this.live.length >= MAX_LIVE || !this.enabled) return;
+    // Candidates by distance to where they are right now. People inside buildings other than the player's own are
+    // pushed back (INDOOR_PENALTY) and capped, so the live budget goes to the streets and plazas the player can see
+    // (rubric row 4: >= 120 visible) while the building the player enters still fills with its staff.
+    const lotAt = this.playerLot(p);
+    if (lotAt != null) { const li = this.lots.get(lotAt); if (li) this.staffFloor(li, p.y); }
+    // on a landmark's own street (the undercity strip's main street, a forecourt) the player is outdoors
+    const inLot = lotAt != null && !this.nav.walkable(this.nav.levelAt(p.x, p.y, p.z), p.x, p.z) ? lotAt : null;
     const cands = [];
+    let indoorLive = 0, ownLive = 0;
+    for (const n of this.live) { if (n.lot == null) continue; if (n.lot === inLot) ownLive++; else indoorLive++; }
     for (const person of this.people) {
       if (this.liveByPerson.has(person.id)) continue;
+      const skip = this.skip.get(person.id);
+      if (skip !== undefined) { if (skip > this.tickCount) continue; this.skip.delete(person.id); }
       const a = activityAt(person, this.hour);
       const d = this.placeDist(a, p);
-      if (d <= SPAWN_R) cands.push([d, person, a]);
+      if (d > SPAWN_R) continue;
+      const own = inLot != null && a.lot === inLot && this.isIndoor(person, a);
+      const indoor = !own && this.isIndoor(person, a);
+      if (indoor && d > SPAWN_R - INDOOR_MARGIN) continue;
+      cands.push([indoor ? d + INDOOR_PENALTY : d, person, a, indoor, own]);
     }
     cands.sort((a, b) => a[0] - b[0]);
+    const indoorMax = inLot != null ? INDOOR_MAX / 3 : INDOOR_MAX;
     let n = 0;
-    for (const [, person, a] of cands) {
+    for (const [, person, a, indoor, own] of cands) {
       if (n >= SPAWN_PER_CYCLE || this.live.length >= MAX_LIVE) break;
-      if (this.spawn(person, a)) n++;
+      if (indoor && indoorLive >= indoorMax) continue;
+      if (own && ownLive >= OWN_LOT_MAX) continue;
+      if (this.spawn(person, a)) { n++; if (indoor) indoorLive++; if (own) ownLive++; }
     }
+  }
+  // The rooms on the floor the player stands on get their own occupants (census.staffRoom, rubric row 3) the first
+  // time the player is there; they join the pool for good and spawn like everyone else.
+  staffFloor(li, y) {
+    for (const [i, room] of li.roomsAtHeight(y)) {
+      if (this.pool.staffed.has(li.id + ':' + i)) continue;
+      const added = this.pool.staffRoom(li.lot, room, i, li.roomSeats(room).length);
+      this.stats.roomStaff = (this.stats.roomStaff || 0) + added.length;
+    }
+  }
+  // does activity `a` of `person` happen inside a building (as opposed to a street, plaza or spaceport spot)?
+  isIndoor(person, a) {
+    if (a.lot == null || a.lot === PORT) return false;
+    if (person.street && a.act === 'work') return false;
+    const l = this.layout.lots[a.lot];
+    return !!l && l.kind !== 'plaza';
   }
 
   spawn(person, a) {
@@ -121,18 +165,28 @@ export class CoruscantPopulation {
     npc.pop = this;
     npc.act = a.act; npc.actLot = a.lot;
     const rng = () => this.rng.next();
-    const spot = this.planner.resolveSpot(npc, a.act, a.lot, rng);
-    if (!spot) return false;
+    const p = this.player.pos;
+    const spot = this.planner.resolveSpot(npc, a.act, a.lot, rng, { x: p.x, y: p.y, z: p.z, r: SPAWN_R - 4, fx: this.view.x, fz: this.view.z });
+    if (!spot) { this.skip.set(person.id, this.tickCount + SKIP_TICKS); return false; }
+    // street spots are picked around the post, which may itself be near the edge of the ring: never spawn someone
+    // who would be despawned by the next cycle
+    if (Math.hypot(spot.x - p.x, spot.z - p.z) > SPAWN_R + 8) { this.skip.set(person.id, this.tickCount + SKIP_TICKS); return false; }
     // people whose activity changed a moment ago are still on their way: put them at the previous place and let them
     // walk, so the streets carry real commuter traffic (only when that place is loaded and not too far)
     let from = null;
     const prev = activityAt(person, this.hour - 0.7);
-    if ((prev.act !== a.act || prev.lot !== a.lot) && this.placeDist(prev, this.player.pos) < 110) {
-      const ps = this.planner.resolveSpot(npc, prev.act, prev.lot, rng);
-      if (ps && this.world.isLoaded(ps.x, ps.z)) from = ps;
+    if ((prev.act !== a.act || prev.lot !== a.lot) && this.placeDist(prev, p) < 110) {
+      const ps = this.planner.resolveSpot(npc, prev.act, prev.lot, rng, { x: p.x, y: p.y, z: p.z, r: DESPAWN_R - 16, fx: this.view.x, fz: this.view.z });
+      if (ps && this.world.isLoaded(ps.x, ps.z) && Math.hypot(ps.x - p.x, ps.z - p.z) < DESPAWN_R - 16) from = ps;
     }
-    const place = this.placeable(from || spot);
-    if (!place) { if (!this.world.isLoaded(spot.x, spot.z)) return false; this.stats.unplaceable++; return false; }
+    const start = from || spot;
+    const place = this.placeable(start);
+    if (!place) {
+      // a loaded cell nobody can stand in: block the spot so the next person picks another one
+      if (this.world.isLoaded(start.x, start.z)) { this.stats.unplaceable++; this.blockSpot(start); this.skip.set(person.id, this.tickCount + 20); }
+      else this.skip.set(person.id, this.tickCount + 40);
+      return false;
+    }
     const slot = this.crowd.alloc(this.crowd.bodyFor(person.archetype));
     if (!slot) return false;
     npc.slot = slot;
@@ -146,7 +200,9 @@ export class CoruscantPopulation {
     const startAt = from || spot;
     npc.lot = startAt.lot ?? null;
     npc.level = startAt.level && startAt.level !== 'lot' ? startAt.level : this.nav.levelAt(npc.pos.x, npc.pos.y, npc.pos.z);
-    if (from) { npc.spot = spot; this.occupy(spot, npc); this.beginTrip(npc, spot); }
+    npc.spot = spot;
+    this.occupy(spot, npc);
+    if (from) this.beginTrip(npc, spot);
     else this.arrive(npc, spot);
     return true;
   }
@@ -170,6 +226,7 @@ export class CoruscantPopulation {
     this.stats.despawned++;
   }
   occupy(spot, npc) { if (!spot) return; if (spot.lot != null) { const li = this.lots.peek(spot.lot); if (li) li.occupy(spot, npc.id); } else if (spot.key) this.occupied.set(spot.key, npc.id); }
+  blockSpot(spot) { if (!spot || !spot.key) return; if (spot.lot != null) { const li = this.lots.peek(spot.lot); if (li) li.block(spot); } else this.occupied.set(spot.key, -2); }
   vacate(spot, npc) { if (!spot) return; if (spot.lot != null) { const li = this.lots.peek(spot.lot); if (li) li.vacate(spot, npc.id); } else if (spot.key && this.occupied.get(spot.key) === npc.id) this.occupied.delete(spot.key); }
   idleCount(x, z, r) { let n = 0; const r2 = r * r; for (const c of this.live) if (c.state === 'at' && (c.pos.x - x) ** 2 + (c.pos.z - z) ** 2 <= r2) n++; return n; }
 
@@ -181,11 +238,12 @@ export class CoruscantPopulation {
   // Choose a spot for the current activity (an alternative after `attempt` failures) and start the trip there.
   retarget(npc, attempt) {
     const rng = () => this.rng.next();
+    const p = this.player.pos, within = { x: p.x, y: p.y, z: p.z, r: DESPAWN_R - 16, fx: this.view.x, fz: this.view.z };
     this.vacate(npc.spot, npc);
-    let spot = attempt === 0 ? this.planner.resolveSpot(npc, npc.act, npc.actLot, rng) : null;
+    let spot = attempt === 0 ? this.planner.resolveSpot(npc, npc.act, npc.actLot, rng, within) : null;
     if (!spot) {
       // fall back to the street outside (or the plaza) so nobody stands frozen
-      spot = this.planner.resolveSpot(npc, 'leisure', npc.person.plaza ?? null, rng) || this.planner.streetSpot(npc, npc.act, rng);
+      spot = this.planner.resolveSpot(npc, 'leisure', npc.person.plaza ?? null, rng, within) || this.planner.streetSpot(npc, npc.act, rng, null, within);
       if (attempt > 0) this.stats.retargets++;
     }
     if (!spot) { npc.spot = null; this.settle(npc, 12); return; }
@@ -229,6 +287,7 @@ export class CoruscantPopulation {
       if (npc.dead) return;
       if (path) { npc.path = path; npc.pathIdx = 0; npc.state = 'walk'; npc.pathFails = 0; npc.stuckT = 0; npc.lastProgress = { x: npc.pos.x, z: npc.pos.z, t: this.tickCount }; this.applyWalkMode(npc); return; }
       this.stats.legsFailed++;
+      this.stats.legsFailedBy[leg.tag] = (this.stats.legsFailedBy[leg.tag] || 0) + 1;
       npc.pathFails++;
       if (npc.pathFails >= 3) { npc.pathFails = 0; npc.tripFails = (npc.tripFails || 0) + 1; this.retarget(npc, npc.tripFails); }
       else { npc.state = 'wait'; npc.timer = 0.8 + this.rng.next(); }
@@ -466,7 +525,8 @@ export class CoruscantPopulation {
     }
     return best;
   }
-  collectBoxes(out, x, z) { for (const n of this.live) if (!n.hidden && Math.abs(n.pos.x - x) < 3 && Math.abs(n.pos.z - z) < 3) out.push(n.box); }
+  // (named npcBoxes, not collectBoxes: VehicleManager calls `collectBoxes(region, out)` on every registered system)
+  npcBoxes(out, x, z) { for (const n of this.live) if (!n.hidden && Math.abs(n.pos.x - x) < 3 && Math.abs(n.pos.z - z) < 3) out.push(n.box); }
 
   talk(npc) {
     if (npc.talkCooldown > 0 && this.talkBox.npc === npc) return;
@@ -597,23 +657,28 @@ export class CoruscantPopulation {
 
   // ---------------------------------------------------------------------------------------- census (row 4 / scripts)
   census(camera = this.game.camera) {
-    const p = this.player.pos, states = {}, acts = {}, modes = {};
-    let visible = 0, onStreet = 0, inLots = 0, walking = 0;
+    const p = this.player.pos, states = {}, acts = {}, modes = {}, jobs = {};
+    let visible = 0, visibleOutdoors = 0, onStreet = 0, inLots = 0, walking = 0, within96 = 0, outdoors96 = 0, outdoors40 = 0, onPlaza = 0, droids = 0, stuckNow = 0;
     let fwd = null;
     if (camera && camera.getWorldDirection) { const v = camera.getWorldDirection(_dir); fwd = { x: v.x, z: v.z }; }
     for (const n of this.live) {
       states[n.state] = (states[n.state] || 0) + 1;
       acts[n.act] = (acts[n.act] || 0) + 1;
       modes[n.mode] = (modes[n.mode] || 0) + 1;
+      jobs[n.person.job] = (jobs[n.person.job] || 0) + 1;
       if (n.lot != null) inLots++; else onStreet++;
       if (n.state === 'walk') walking++;
+      if (n.person.droid) droids++;
+      if (n.stuckT >= 6) stuckNow++;
       const dx = n.pos.x - p.x, dz = n.pos.z - p.z, d = Math.hypot(dx, dz);
-      if (!n.hidden && d < 64 && (!fwd || d < 6 || (dx * fwd.x + dz * fwd.z) / d > -0.2)) visible++;
+      if (!n.hidden && d <= 96) { within96++; if (n.lot == null) { outdoors96++; if (d <= 40) outdoors40++; } }
+      if (!n.hidden && d < 64 && (!fwd || d < 6 || (dx * fwd.x + dz * fwd.z) / d > -0.2)) { visible++; if (n.lot == null) visibleOutdoors++; }
+      if (n.lot == null && n.spot && n.spot.kind === 'plaza') onPlaza++;
     }
     const s = this.stats;
     return {
-      hour: +this.hour.toFixed(2), pool: this.people.length, live: this.live.length, visible, onStreet, inLots, walking, states, acts, modes,
-      stuck: s.stuck, trips: s.trips, tripsFailed: s.tripsFailed, legs: s.legs, legsFailed: s.legsFailed, retargets: s.retargets, lifts: s.lifts, errands: s.errands,
+      hour: +this.hour.toFixed(2), pool: this.people.length, live: this.live.length, visible, visibleOutdoors, within96, outdoors96, outdoors40, onPlaza, onStreet, inLots, walking, droids, stuckNow, states, acts, modes, jobs,
+      stuck: s.stuck, trips: s.trips, tripsFailed: s.tripsFailed, legs: s.legs, legsFailed: s.legsFailed, legsFailedBy: s.legsFailedBy, retargets: s.retargets, lifts: s.lifts, errands: s.errands,
       failRate: s.trips ? +((s.tripsFailed + s.retargets) / s.trips).toFixed(4) : 0, legFailRate: s.legs ? +(s.legsFailed / s.legs).toFixed(4) : 0,
       spawned: s.spawned, despawned: s.despawned, bubbles: s.bubbles, talks: s.talks, unloadedWaits: s.unloadedWaits, unplaceable: s.unplaceable,
       paths: { ...this.paths.stats, ms: +this.paths.stats.ms.toFixed(1), pending: this.paths.pending }, coarse: { ...this.nav.stats }, drawCalls: this.crowd.drawCalls,

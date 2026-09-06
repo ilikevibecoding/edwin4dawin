@@ -19,21 +19,22 @@ export class Planner {
 
   // ------------------------------------------------------------------------------------------ spots
   // Where `act` happens for this person at lot `lotId`: a spot { x, y, z, lot, level, kind, yaw?, room?, mode? } or null.
-  resolveSpot(npc, act, lotId, rng) {
+  // `within` ({ x, z, r }, optional) keeps street/plaza picks inside the player's spawn ring.
+  resolveSpot(npc, act, lotId, rng, within = null) {
     const p = npc.person;
     if (lotId === PORT) {
       const cands = portSpots(p.job, act, p.visitor);
       return this.pickFree(cands, npc, act, (s) => ({ ...s, lot: null, level: 'port', port: true }));
     }
     const lot = lotId != null ? this.layout.lots[lotId] : null;
-    if (lot && lot.kind === 'plaza') return this.plazaSpot(npc, lot, act, rng);
-    if (!lot) return this.streetSpot(npc, act, rng);
+    if (lot && lot.kind === 'plaza') return this.plazaSpot(npc, lot, act, rng, within);
+    if (!lot) return this.streetSpot(npc, act, rng, null, within);
     const li = this.lots.get(lotId);
-    if (!li) return this.streetSpot(npc, act, rng);
+    if (!li) return this.streetSpot(npc, act, rng, null, within);
     // street people do not enter their post: they haunt the street outside it
-    if (p.street && act === 'work') return this.streetSpot(npc, act, rng, li);
-    const s = li.pick(p, act, npc.id);
-    if (!s) return this.streetSpot(npc, act, rng, li);
+    if (p.street && act === 'work') return this.streetSpot(npc, act, rng, li, within);
+    const s = li.pick(p, act, npc.id, within ? { x: within.x, y: within.y ?? npc.pos.y, z: within.z, fx: within.fx, fz: within.fz } : null);
+    if (!s) return this.streetSpot(npc, act, rng, li, within);
     const yaw = li.faceOf(s.x, s.y, s.z);
     return { ...s, lot: lotId, level: 'lot', yaw };
   }
@@ -50,31 +51,50 @@ export class Planner {
     return { ...decorate(s), key: 'p' + s.x + ',' + s.y + ',' + s.z };
   }
   // A cell on a plaza deck, spread out (rubric row 10: no idle cluster > 8 within 4 blocks)
-  plazaSpot(npc, plaza, act, rng) {
-    for (let t = 0; t < 8; t++) {
+  plazaSpot(npc, plaza, act, rng, within = null) {
+    const cx = plaza.x0 + plaza.w / 2, cz = plaza.z0 + plaza.d / 2;
+    // at night the plaza empties into the undercity streets below it, and the nightlife districts' crowd drifts to
+    // the Uscru strip (rubric row 10)
+    if (this.isNight() && !npc.person.droid && rng() < 0.7) {
+      const strip = this.strip();
+      const toStrip = strip && (npc.person.district === 'entertainment' || npc.person.district === 'market') && rng() < 0.6;
+      const ax = toStrip ? strip.x0 + strip.w / 2 : cx, az = toStrip ? strip.z0 + strip.d / 2 : cz;
+      for (let t = 0; t < 6; t++) {
+        const c = this.nav.randomPoint('ground', ax, az, (toStrip ? 60 : 34) + t * 6, { next: rng });
+        if (c && (!within || t === 5 || Math.hypot(c.x - within.x, c.z - within.z) <= within.r)) return { ...c, lot: null, kind: 'street', yaw: rng() * Math.PI * 2 };
+      }
+    }
+    for (let t = 0; t < 10; t++) {
       const x = plaza.x0 + 5 + Math.floor(rng() * (plaza.w - 10)), z = plaza.z0 + 5 + Math.floor(rng() * (plaza.d - 10));
-      const cx = plaza.x0 + plaza.w / 2, cz = plaza.z0 + plaza.d / 2;
       if (Math.hypot(x + 0.5 - cx, z + 0.5 - cz) < 5) continue;           // the fountain
+      if (within && t < 8 && Math.hypot(x - within.x, z - within.z) > within.r) continue;
       if (this.pop.idleCount(x, z, 4) > 6) continue;
       return { x, y: this.nav.yOf('deck'), z, lot: null, level: 'deck', kind: 'plaza', plaza: plaza.id, yaw: rng() * Math.PI * 2 };
     }
     return { x: plaza.x0 + 6, y: this.nav.yOf('deck'), z: plaza.z0 + 6, lot: null, level: 'deck', kind: 'plaza', plaza: plaza.id };
   }
   // A street point for wandering: around the post lot's door (guards stay close, couriers and tourists roam)
-  streetSpot(npc, act, rng, li = null) {
+  streetSpot(npc, act, rng, li = null, within = null) {
     const p = npc.person, job = p.job;
-    const radius = job === 'sweeper droid' ? 60 : job === 'courier' || job === 'tourist' || job === 'journalist' ? 70 : job === 'child' ? 30 : 22;
-    let level = 'deck', anchor;
-    if (li) {
+    let level = 'deck', anchor, radius = job === 'sweeper droid' ? 60 : job === 'courier' || job === 'tourist' || job === 'journalist' ? 70 : job === 'child' ? 30 : 22;
+    if (li && li.lot.family === 'underworld') {
+      // the undercity strip has streets of its own (nav samples them from the blueprint): roam them at ground level
+      anchor = { x: li.lot.x0 + li.lot.w / 2, z: li.lot.z0 + li.lot.d / 2 }; level = 'ground'; radius = Math.max(radius, 60);
+    } else if (li) {
       const e = li.entrance('deck') || li.entrance('ground');
       if (e) { anchor = e.out; level = e.level; } else anchor = { x: li.lot.x0 + li.lot.w / 2, z: li.lot.z0 + li.lot.d / 2 };
     } else anchor = { x: npc.pos.x, z: npc.pos.z };
-    // night draws the street crowd down into the undercity (row 10)
-    const night = this.pop.hour < 5.5 || this.pop.hour > 21.5;
-    if (night && rng() < 0.55 && level === 'deck' && !p.droid) level = 'ground';
+    // night draws the street crowd down into the undercity (row 10), most of all in the entertainment and market districts
+    const night = this.isNight();
+    const nightlife = p.district === 'entertainment' || p.district === 'market';
+    if (night && rng() < (nightlife ? 0.8 : 0.55) && level === 'deck' && !p.droid) level = 'ground';
     if (npc.level === 'ground' && npc.lot == null && rng() < 0.6) level = 'ground';
     if (npc.level === 'port' || (li && li.lot.district === 'spaceport')) level = 'port';
-    const pt = this.nav.randomPoint(level, anchor.x, anchor.z, radius, { next: rng });
+    let pt = null;
+    for (let t = 0; t < 6 && !pt; t++) {
+      const c = this.nav.randomPoint(level, anchor.x, anchor.z, radius, { next: rng });
+      if (c && (!within || t === 5 || Math.hypot(c.x - within.x, c.z - within.z) <= within.r)) pt = c;
+    }
     if (!pt) return null;
     return { ...pt, lot: null, kind: 'street', yaw: rng() * Math.PI * 2 };
   }
@@ -161,6 +181,8 @@ export class Planner {
     return es.find((e) => e.level === curLevel) || es.find((e) => e.level === 'deck') || es[0];
   }
   daytimeDeck() { return this.pop.hour >= 6 && this.pop.hour <= 21; }
+  isNight() { return this.pop.hour < 5.5 || this.pop.hour > 21.5; }
+  strip() { if (this._strip === undefined) this._strip = this.layout.lots.find((l) => l.family === 'underworld') || null; return this._strip; }
 }
 
 export { PORT, PORT_Y };

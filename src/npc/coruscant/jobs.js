@@ -31,6 +31,7 @@ export const PLAZA_IDLES = ['waiting', 'talking', 'watching', 'browsing', 'talki
 const WELDERS = new Set(['mechanic', 'droid tech', 'smelter', 'astromech']);
 const SERVERS = new Set(['server', 'waitress droid', 'barista', 'bartender']);
 const CARRIERS = new Set(['dock worker', 'cargo droid', 'porter', 'stock', 'quartermaster']);
+const SPEAKERS = new Set(['speaker', 'judge', 'teacher', 'curator', 'guide', 'musician', 'dj', 'projectionist']);
 export const GUARDS = new Set(['guard', 'senate guard', 'officer', 'bouncer', 'customs officer', 'vault guard', 'warden', 'security officer', 'conductor']);
 
 // Pose for a citizen who has arrived at `spot` for `act`: { mode, sitting, lying }.
@@ -48,6 +49,7 @@ export function poseAt(npc, act, spot, li, hour) {
     if (spot && spot.mode) idle = spot.mode;
     else if (outdoors) idle = job === 'sweeper droid' ? 'sweeping' : GUARDS.has(job) ? 'guarding' : job === 'vendor' ? 'serving' : job === 'tourist' ? 'watching' : job === 'courier' ? 'waiting' : job === 'child' ? 'dancing' : job === 'jedi' || job === 'acolyte' ? 'waiting' : PLAZA_IDLES[(p.key >> 3) % PLAZA_IDLES.length];
     else if (p.visitor) idle = room && room.visitors ? room.visitors : 'browsing';
+    else if (seat && !SPEAKERS.has(job) && !SERVERS.has(job) && !GUARDS.has(job)) idle = 'sitting';   // delegates in pods, witnesses, aides in a session
     else idle = JOB_IDLE[job] || (room ? room.idle : 'standing');
     // welding on an empty pad makes no sense: check the console instead
     if (idle === 'welding' && spot && spot.pad !== undefined && npc.pop && !shipOnPad(npc.pop.game.shipTraffic, spot.pad)) idle = 'tending';

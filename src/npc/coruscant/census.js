@@ -6,7 +6,7 @@
 import { RNG, hash2 } from '../../rng.js';
 import { purposeFor } from '../../coruscant/purposes.js';
 import { DISTRICT_PROFILE } from '../../coruscant/layout.js';
-import { archetypeOf, DROID_ARCHETYPES, VISITOR_JOBS } from './rooms.js';
+import { archetypeOf, DROID_ARCHETYPES, VISITOR_JOBS, roomStaff, roomFunction } from './rooms.js';
 import { personName, droidName } from './names.js';
 import { PORT } from './port.js';
 
@@ -16,7 +16,8 @@ const FOOD = new Set(['food', 'hospitality']);
 const LEISURE_KINDS = new Set(['holo_arcade', 'cantina', 'archive', 'gym', 'general_store', 'pawn', 'tailor', 'droid_shop', 'temple_annex']);
 
 // Street archetypes per district: [job, weight]. Counts scale with DISTRICT_PROFILE.density (STREET_BASE per unit).
-const STREET_BASE = 34;
+const STREET_BASE = 56;
+const PLAZA_REGULARS = { senate: 130, default: 60 };   // extra street people anchored on each district's plaza
 const STREET_MIX = {
   senate: [['senate guard', 4], ['protocol droid', 3], ['aide', 3], ['journalist', 3], ['tourist', 4], ['courier', 2], ['jedi', 1], ['security officer', 2]],
   financial: [['clerk', 5], ['executive', 2], ['courier', 5], ['security officer', 2], ['protocol droid', 1], ['sweeper droid', 2], ['tourist', 1], ['journalist', 1]],
@@ -150,9 +151,11 @@ export function buildPool(layout, opts = {}) {
     }
     // every plaza draws its own regulars on top of the district's density; the Senate plaza is the busiest
     const anchor = plazaOf(d.kind) || usable.find((l) => l.district === d.kind) || null;
-    const n = Math.max(8, Math.round(STREET_BASE * prof.density)) + (anchor && anchor.kind === 'plaza' ? (d.kind === 'senate' ? 56 : 28) : 0);
+    const n = Math.max(8, Math.round(STREET_BASE * prof.density)) + (anchor && anchor.kind === 'plaza' ? (PLAZA_REGULARS[d.kind] || PLAZA_REGULARS.default) : 0);
     const anchorLot = anchor;
     const cands = purposed.filter((p) => p.lot.district === d.kind);
+    // the undercity strip (Uscru) is the nightlife hub: most of its district's street people hang around its streets
+    const strip = usable.find((l) => l.family === 'underworld' && l.district === d.kind) || null;
     for (let i = 0; i < n; i++) {
       const rng = new RNG(mix(seed + 202, d.id, i));
       const job = pickWeighted(mixList, rng);
@@ -161,17 +164,50 @@ export function buildPool(layout, opts = {}) {
       if ((job === 'senate guard' || job === 'security officer' || job === 'bouncer') && cands.length) {
         const civic = cands.filter((c) => c.purpose.category === 'government' || c.purpose.category === 'security' || c.lot.kind === 'landmark');
         post = (civic.length ? civic : cands)[Math.floor(rng.next() * (civic.length ? civic.length : cands.length))].lot;
-      } else if (cands.length && rng.next() < 0.4) post = cands[Math.floor(rng.next() * cands.length)].lot;
+      } else if (strip && rng.next() < 0.6) post = strip;
+      else if (cands.length && rng.next() < 0.4) post = cands[Math.floor(rng.next() * cands.length)].lot;
       const p = makePerson(rng, job, d.kind, post, null, i);
       p.street = true;
-      p.shift = job === 'bounty hunter' || job === 'patron' || job === 'musician' || job === 'bouncer' ? 'evening' : (i % 4 === 3 ? 'night' : 'day');
+      // the entertainment and market districts run on nightlife: half their street people work the night shift
+      const nightlife = d.kind === 'entertainment' || d.kind === 'market';
+      p.shift = job === 'bounty hunter' || job === 'patron' || job === 'musician' || job === 'bouncer' ? 'evening' : ((nightlife ? i % 2 === 1 : i % 4 === 3) ? 'night' : 'day');
+      // street people mostly eat outdoors too (vendor stalls, plaza benches): the lunch crowd stays on the plaza
+      if (!p.droid && p.plaza != null && rng.next() < 0.7) p.meal = p.plaza;
       add(p);
     }
   }
 
-  const stats = { people: people.length, lots: purposed.length, housing: housing.length, food: food.length, leisure: leisure.length, plazas: plazas.length, street: people.filter((p) => p.street).length, droids: people.filter((p) => p.droid).length, byArchetype: {}, byDistrict: {} };
+  const stats = { people: people.length, lots: purposed.length, housing: housing.length, food: food.length, leisure: leisure.length, plazas: plazas.length, street: people.filter((p) => p.street).length, droids: people.filter((p) => p.droid).length, byArchetype: {}, byDistrict: {}, roomStaff: 0 };
   for (const p of people) { stats.byArchetype[p.archetype] = (stats.byArchetype[p.archetype] || 0) + 1; stats.byDistrict[p.district] = (stats.byDistrict[p.district] || 0) + 1; }
-  return { people, byLot, byDistrict, purposed, housing, food, leisure, plazas, stats };
+
+  // 3. room occupants (rubric row 3): every room of a building has its own deterministic people - the clerks of
+  // this office, the senators of these pods, the family of that apartment - created the first time the player is on
+  // the room's floor (the runtime asks per room; the offline scripts call it directly). Seeded from (layout seed,
+  // lot id, room index, k), so the same room always has the same occupants. Returns the new people ([] when done).
+  const staffed = new Set();
+  const staffRoom = (lot, room, roomIndex, seats = 0) => {
+    const key = lot.id + ':' + roomIndex;
+    if (staffed.has(key)) return [];
+    staffed.add(key);
+    const jobs = roomStaff(room.kind, seats);
+    const purpose = purposeFor(lot, layout);
+    const out = [];
+    for (let k = 0; k < jobs.length; k++) {
+      const rng = new RNG(mix(seed + 303, lot.id * 4096 + roomIndex, k));
+      const p = makePerson(rng, jobs[k], lot.district || 'residential', lot, purpose, 1000 + roomIndex * 64 + k);
+      p.workRooms = [room.kind];
+      p.room = { index: roomIndex, kind: room.kind, x: room.x, y: room.y, z: room.z, w: room.w, d: room.d };
+      p.roomStaff = true;
+      // residents, guests and patients of a bedroom live in it: home is this lot, the bed is picked inside the room
+      if (VISITOR_JOBS.has(p.job) && roomFunction(room.kind).beds) p.home = lot.id;
+      add(p);
+      out.push(p);
+    }
+    stats.roomStaff += out.length;
+    stats.people = people.length;
+    return out;
+  };
+  return { people, byLot, byDistrict, purposed, housing, food, leisure, plazas, stats, staffRoom, staffed };
 }
 
 // ---------------------------------------------------------------------------------------------- schedules (row 6)

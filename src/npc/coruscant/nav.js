@@ -8,6 +8,7 @@
 import { findPath, findStand } from '../pathfinding.js';
 import { DECK_HALF, MARGIN } from '../../coruscant/layout.js';
 import { portRects, inPort, PORT_Y } from './port.js';
+import { LotInfo } from './lots.js';
 
 export const RES = 2;
 export const GROUND_Y = 61, DECK_Y = 96;
@@ -77,12 +78,42 @@ export class CityNav {
     }
     for (const st of L.stairs) { this.markRect(this.ground, st.x0, st.z0, st.x0 + 4, st.z0 + 4, 0); this.markRect(this.deck, st.x0, st.z0, st.x0 + 4, st.z0 + 4, 0); }
     this.markRect(this.ground, S.x0, S.z0, S.x1, S.z1, 0);
+    // landmarks with streets of their own (the Uscru undercity strip's main street and alleys, forecourts, roof decks
+    // that continue the boulevard): their blueprint says where one can walk in the open at either street level
+    this.landmarkCells = 0;
+    for (const lot of L.lots) {
+      if (lot.kind !== 'landmark') continue;
+      let li = null;
+      try { li = new LotInfo(lot, L); } catch (e) { continue; }
+      this.landmarkCells += this.sampleLot(li, this.ground, GROUND_Y) + this.sampleLot(li, this.deck, DECK_Y);
+    }
     // the spaceport deck (feet 97): its own level, walkable around the terminal, hangar, fuel farm and tower
     this.port = new Uint8Array(this.w * this.d);
     const pr = portRects();
     for (const r of pr.walk) this.markRect(this.port, r.x0, r.z0, r.x1, r.z1, 1);
     for (const r of pr.block) this.markRect(this.port, r.x0, r.z0, r.x1, r.z1, 0);
     for (const r of pr.open) this.markRect(this.port, r.x0, r.z0, r.x1, r.z1, 1);
+  }
+
+  // Mark the coarse cells of a landmark lot where one can stand at feet height `y` in the open (six blocks of headroom:
+  // streets, courtyards and decks, not rooms) on `map`. Returns the number of cells marked.
+  sampleLot(li, map, y) {
+    const lot = li.lot;
+    if (y < li.bp.y0 || y >= li.bp.y0 + li.bp.h) return 0;
+    let n = 0;
+    const open = (x, z) => {
+      if (!li.standable(x, y, z)) return false;
+      for (let k = 2; k <= 6; k++) { const id = li.blockAt(x, y + k, z); if (id !== 0 && id !== 255 && id !== -1) return false; }
+      return true;
+    };
+    const [a, b] = this.cellOf(lot.x0, lot.z0), [c, e] = this.cellOf(lot.x1 - 1, lot.z1 - 1);
+    for (let cx = Math.max(0, a); cx <= Math.min(this.w - 1, c); cx++) for (let cz = Math.max(0, b); cz <= Math.min(this.d - 1, e); cz++) {
+      const x = this.x0 + cx * RES, z = this.z0 + cz * RES;
+      let k = 0;
+      for (let dx = 0; dx < RES; dx++) for (let dz = 0; dz < RES; dz++) if (open(x + dx, z + dz)) k++;
+      if (k >= 2) { map[this.idx(cx, cz)] = 1; n++; }
+    }
+    return n;
   }
 
   map(level) { return level === 'deck' ? this.deck : level === 'port' ? this.port : this.ground; }
