@@ -299,6 +299,8 @@ const UNIT = {
   box: new THREE.BoxGeometry(1, 1, 1).toNonIndexed(),
   cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 8).toNonIndexed(),
   cyl6: new THREE.CylinderGeometry(0.5, 0.5, 1, 6).toNonIndexed(),
+  /** open-ended 8-gon tube: poles, whose ends are capped by something else or out of sight */
+  tube: new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1, true).toNonIndexed(),
   /** octagonal plate of diameter 1 in the y-z plane facing +x */
   plate: new THREE.CircleGeometry(0.5, 8).rotateY(Math.PI / 2).toNonIndexed(),
   sphere: new THREE.SphereGeometry(0.5, 8, 6).toNonIndexed(),
@@ -719,15 +721,18 @@ export class Streets {
     const pz = node.z - R.dir[1] * (reachFar + 1.6) + rz * (hw + 0.9);
     if (this.map.heightAt(px, pz) < 0.8) return;
     poles.push([px, pz]);
-    const soup = this.soupsAt(px, pz).large;
+    // the pole, arm, heads and lenses read to 1.5 km; visors, pedestrian heads, buttons and blades are small-kit
+    const soups = this.soupsAt(px, pz);
+    const soup = soups.large, fine = soups.small;
     const y = roadEdgeY(c, R.s, R.sign > 0 ? -1 : 1) + CURB_H;
     // frame: +x toward the approaching traffic (R.dir); +z is then -right, i.e. from the pole toward the roadway
     const f = frame(px, y, pz, Math.atan2(-R.dir[1], R.dir[0]));
     const phase = offset + parity * 100;
     const pedPhase = offset + (1 - parity) * 100;
     const armH = 6.0;
-    part(soup, UNIT.cyl, f, 0, armH / 2 + 0.15, 0, 0.3, armH + 0.3, 0.3, C.galv, 0.45, 0.7);
-    part(soup, UNIT.cyl, f, 0, 0.12, 0, 0.5, 0.24, 0.5, C.concrete, 0.9, 0);
+    part(soup, UNIT.tube, f, 0, armH / 2 + 0.15, 0, 0.3, armH + 0.3, 0.3, C.galv, 0.45, 0.7);
+    part(soup, UNIT.box, f, 0, armH + 0.32, 0, 0.34, 0.06, 0.34, C.galv, 0.45, 0.7); // pole cap
+    part(soup, UNIT.cyl6, f, 0, 0.12, 0, 0.5, 0.24, 0.5, C.concrete, 0.9, 0);
     const lanes = c.lanes >= 4 ? [1.5, 4.7] : [1.8];
     // arm over the roadway, long enough to reach the innermost approach lane
     const armLen = hw + 0.9 - lanes[0] + 0.6;
@@ -737,20 +742,20 @@ export class Streets {
       part(soup, UNIT.box, f, 0, hy, hz, 0.3, 1.05, 0.36, C.signal, 0.6, 0.3);
       const lens = (dy: number, em: number) => {
         part(soup, UNIT.plate, f, 0.16, hy + dy, hz, 1, 0.26, 0.26, C.lensOff, 0.3, 0.1, em, phase);
-        part(soup, UNIT.box, f, 0.2, hy + dy + 0.15, hz, 0.24, 0.03, 0.3, C.signal, 0.6, 0.3); // visor
+        part(fine, UNIT.box, f, 0.2, hy + dy + 0.15, hz, 0.24, 0.03, 0.3, C.signal, 0.6, 0.3); // visor
       };
       lens(0.34, EM_RED); lens(0, EM_AMBER); lens(-0.34, EM_GREEN);
     };
     for (const l of lanes) head(hw + 0.9 - l, armH - 0.62);
     if (lanes.length === 1) head(0.5, 4.3); // pole-side head on two-lane approaches
     // pedestrian head facing along the crosswalk (toward the far curb), hand / walk lenses
-    part(soup, UNIT.box, f, 0, 2.7, 0.28, 0.3, 0.4, 0.26, C.signal, 0.6, 0.3);
-    part(soup, UNIT.box, f, 0, 2.7, 0.42, 0.2, 0.2, 0.02, C.lensOff, 0.3, 0.1, EM_HAND, pedPhase);
-    part(soup, UNIT.box, f, 0, 2.7, 0.42, 0.2, 0.2, 0.02, C.lensOff, 0.3, 0.1, EM_WALK, pedPhase);
+    part(fine, UNIT.box, f, 0, 2.7, 0.28, 0.3, 0.4, 0.26, C.signal, 0.6, 0.3);
+    part(fine, UNIT.box, f, 0, 2.7, 0.42, 0.2, 0.2, 0.02, C.lensOff, 0.3, 0.1, EM_HAND, pedPhase);
+    part(fine, UNIT.box, f, 0, 2.7, 0.42, 0.2, 0.2, 0.02, C.lensOff, 0.3, 0.1, EM_WALK, pedPhase);
     // push-button plate and street-name blade
-    part(soup, UNIT.box, f, 0.17, 1.1, 0, 0.04, 0.12, 0.08, C.dark, 0.5, 0.5);
-    part(soup, UNIT.box, f, 0, 3.6, 0.7, 0.03, 0.22, 0.9, C.signGreen, 0.5, 0.2);
-    part(soup, UNIT.box, f, 0.02, 3.6, 0.7, 0.01, 0.06, 0.6, C.white, 0.5, 0.1);
+    part(fine, UNIT.box, f, 0.17, 1.1, 0, 0.04, 0.12, 0.08, C.dark, 0.5, 0.5);
+    part(fine, UNIT.box, f, 0, 3.6, 0.7, 0.03, 0.22, 0.9, C.signGreen, 0.5, 0.2);
+    part(fine, UNIT.box, f, 0.02, 3.6, 0.7, 0.01, 0.06, 0.6, C.white, 0.5, 0.1);
   }
 
   /** Stop signs on the near-right corner of each stop-controlled approach (plus a street-name blade). */
@@ -767,12 +772,12 @@ export class Streets {
       if (this.map.heightAt(px, pz) < 0.8) continue;
       const zone = this.map.districtAt(px, pz)?.zone ?? null;
       if (walkWidth(zone) < 0) continue;
-      const soup = this.soupsAt(px, pz).large;
+      // a 0.76 m plate is under a pixel long before the small-kit distance: the sign lives in the small soup
+      const soup = this.soupsAt(px, pz).small;
       const y = roadEdgeY(c, R.s, R.sign > 0 ? -1 : 1) + CURB_H;
       const f = frame(px, y, pz, Math.atan2(-R.dir[1], R.dir[0]));
       part(soup, UNIT.box, f, 0, 1.2, 0, 0.06, 2.4, 0.06, C.galv, 0.5, 0.6);
       part(soup, UNIT.plate, f, 0.04, 2.1, 0, 1, 0.76, 0.76, C.red, 0.5, 0.1);
-      part(soup, UNIT.plate, f, 0.045, 2.1, 0, 1, 0.5, 0.5, C.red, 0.5, 0.1);
       part(soup, UNIT.box, f, 0.05, 2.1, 0, 0.005, 0.11, 0.52, C.white, 0.5, 0.1);
       part(soup, UNIT.box, f, 0, 2.62, 0.3, 0.02, 0.2, 0.7, C.signGreen, 0.5, 0.2);
       this.counts.stops++;
