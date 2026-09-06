@@ -89,8 +89,9 @@ export function applyWear(r, level, rng, { armour = false, parts = ['body', 'arm
     const n = Math.round(reg[2] * reg[3] * (armour ? 0.05 : 0.04));
     for (let k = 0; k < n; k++) r.mul(reg[0] + rng.int(0, reg[2] - 1), reg[1] + rng.int(0, reg[3] - 1), rng.chance(0.5) ? 0.88 : 1.1);
     if (armour) {
-      for (let k = 0; k < 3; k++) { const x = reg[0] + rng.int(0, reg[2] - 1), y = reg[1] + rng.int(0, reg[3] - 3); r.px(x, y, GREY); r.px(x, y + 1, GREY); }
-      for (let k = 0; k < 2; k++) r.px(reg[0] + rng.int(0, reg[2] - 1), reg[1] + rng.int(0, reg[3] - 1), DGREY);
+      // grey scuff streaks (blended, so they darken white plates and lighten dark ones) and small dark chips
+      for (let k = 0; k < 3; k++) { const x = reg[0] + rng.int(0, reg[2] - 1), y = reg[1] + rng.int(0, reg[3] - 3); r.blend(x, y, GREY, 0.5); r.blend(x, y + 1, GREY, 0.5); }
+      for (let k = 0; k < 2; k++) r.blend(reg[0] + rng.int(0, reg[2] - 1), reg[1] + rng.int(0, reg[3] - 1), DGREY, 0.6);
     }
   }
   // hem dirt and knee / elbow rubbing
@@ -102,20 +103,21 @@ export function applyWear(r, level, rng, { armour = false, parts = ['body', 'arm
     for (let k = 0; k < 2; k++) r.mul(A[0] + rng.int(1, 6), A[1] + rng.int(8, 11), 1.08);
   }
   if (level !== 'patched') return;
-  // patches with stitch corners, a tear and a stain
+  // cloth: patches with stitch corners, a tear and a stain. armour: mismatched replacement plates, a crack and scoring
   const targets = [[PART.body.front, 3, 8, 10, 16], [PART.body.back, 2, 6, 11, 18], [PART.leg.front, 1, 6, 5, 16], [PART.arm.front, 1, 4, 5, 14], [PART.leg.back, 1, 8, 5, 16]];
+  const pcs = armour ? ['#9a9a9e', '#6c6c72', '#b4b4b8'] : patchColours;
   const nPatches = rng.int(2, 3);
   for (let k = 0; k < nPatches; k++) {
     const [reg, x0, y0, x1, y1] = rng.pick(targets);
     const w = rng.int(3, 4), h = rng.int(3, 4), x = reg[0] + rng.int(x0, x1 - w), y = reg[1] + rng.int(y0, y1 - h);
     const base = r.get(x, y);
-    const pc = mix(base[3] ? base : '#666666', rng.pick(patchColours), 0.6);
+    const pc = mix(base[3] ? base : '#666666', rng.pick(pcs), armour ? 0.5 : 0.6);
     r.rect(x, y, w, h, pc);
-    const st = shade(pc, 0.65);
+    const st = shade(pc, armour ? 0.8 : 0.65);
     r.px(x, y, st); r.px(x + w - 1, y, st); r.px(x, y + h - 1, st); r.px(x + w - 1, y + h - 1, st);
   }
   { const reg = rng.pick([PART.body.front, PART.leg.front, PART.arm.back]); const x = reg[0] + rng.int(1, reg[2] - 2), y = reg[1] + rng.int(4, reg[3] - 5); for (let j = 0; j < 3; j++) r.mul(x + (j === 1 ? 1 : 0), y + j, 0.55); }
-  { const reg = rng.pick([PART.body.front, PART.body.back]); const x = reg[0] + rng.int(2, reg[2] - 5), y = reg[1] + rng.int(6, reg[3] - 6); for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) if (rng.chance(0.7)) r.blend(x + i, y + j, DIRT, 0.3); }
+  { const reg = rng.pick([PART.body.front, PART.body.back]); const x = reg[0] + rng.int(2, reg[2] - 5), y = reg[1] + rng.int(6, reg[3] - 6); for (let j = 0; j < 3; j++) for (let i = 0; i < 3; i++) if (rng.chance(0.7)) r.blend(x + i, y + j, armour ? '#26262a' : DIRT, 0.3); }
 }
 export const WEAR_LEVELS = ['clean', 'worn', 'patched'];
 export { rgb, shade, mix };

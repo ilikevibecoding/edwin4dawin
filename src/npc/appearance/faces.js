@@ -316,7 +316,11 @@ function paintHair(r, face, hair, skin, rng) {
     case 'long': top(); sides(16); back(16); front(3); fill(F, hair, 0, 3, 2, 9); fill(F, hair, 14, 3, 2, 9); fill(F, skin, 6, 2, 4, 1); for (let x = 2; x < 14; x += 4) fill(Bk, dark, x, 4, 1, 12); break;
     case 'curly': top(); sides(9); back(13); front(3); for (let x = 0; x < 16; x += 2) r.px(F[0] + x, F[1] + 3, hair); for (const reg of [T, Bk, Rt, Lf]) r.noise(reg[0], reg[1], 16, reg === T ? 16 : 9, 0.22, rng, 0.8); r.noise(F[0], F[1], 16, 3, 0.22, rng, 0.8); break;
     case 'afro': top(); sides(11); back(16); front(3); for (let x = 1; x < 16; x += 2) r.px(F[0] + x, F[1] + 3, hair); for (const reg of [T, Bk, Rt, Lf, F]) r.noise(reg[0], reg[1], 16, reg === F ? 4 : 16, 0.2, rng, 0.9); break;
-    case 'braids': top(); sides(16); back(16); front(2); for (let x = 0; x < 16; x += 2) { fill(Rt, dark, x, 0, 1, 16); fill(Lf, dark, x + 1, 0, 1, 16); fill(Bk, dark, x, 0, 1, 16); fill(T, dark, x, 0, 1, 16); } for (let y = 0; y < 16; y += 3) { fill(Rt, light, 0, y, 16, 1); fill(Lf, light, 0, y, 16, 1); fill(Bk, light, 0, y, 16, 1); } break;
+    case 'braids': // vertical strands (dark seams between them) with staggered bead highlights, not a grid
+      top(); sides(16); back(16); front(2);
+      for (let x = 0; x < 16; x += 2) { fill(Rt, dark, x, 0, 1, 16); fill(Lf, dark, x + 1, 0, 1, 16); fill(Bk, dark, x, 0, 1, 16); fill(T, dark, x, 0, 1, 16); }
+      for (let x = 1; x < 16; x += 2) for (let y = (x >> 1) % 4; y < 16; y += 4) { r.px(Bk[0] + x, Bk[1] + y, light); r.px(Rt[0] + x, Rt[1] + y, light); r.px(Lf[0] + x - 1, Lf[1] + y, light); }
+      break;
     case 'bun': top(); sides(6); back(9); front(2); fill(F, skin, 7, 1, 2, 1); for (let x = 3; x < 16; x += 5) fill(T, dark, x, 0, 1, 16); break;
     case 'ponytail': top(); sides(7); back(10); front(2); fill(F, hair, 0, 2, 1, 2); fill(F, hair, 15, 2, 1, 2); for (let x = 2; x < 16; x += 5) fill(T, dark, x, 0, 1, 16); break;
     case 'mohawk': fill(T, shaved); fill(Bk, shaved, 0, 0, 16, 8); fill(Rt, shaved, 0, 0, 16, 5); fill(Lf, shaved, 0, 0, 16, 5); fill(T, hair, 6, 0, 4, 16); fill(F, hair, 6, 0, 4, 1); fill(Bk, hair, 6, 0, 4, 6); break;

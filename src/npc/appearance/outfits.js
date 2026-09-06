@@ -452,7 +452,7 @@ export const OUTFITS = [
     id: 'undercity_jacket', name: 'Undercity jacket', faction: 'residents', role: 'resident', headgear: 'hood', wear: WP,
     describe: 'patched undercity jacket with a hood, layered scarves and worn boots',
     colourways: [cw('grey', 'grey', { jacket: '#4a4a4e', inner: '#2a2a30', trous: '#2e2a28', patch: '#6a5a4a' }), cw('brown', 'brown', { jacket: '#4a3a2c', inner: '#2a2420', trous: '#2a2a2e', patch: '#6a6a50' }), cw('oil_green', 'oil green', { jacket: '#3a4a3a', inner: '#22281f', trous: '#2a2a2a', patch: '#5a4a5a' }), cw('dark_red', 'dark red', { jacket: '#4a2a2a', inner: '#241a1a', trous: '#2a2a2a', patch: '#4a5a6a' })],
-    paint(ctx) { const { r, p, skin, rng } = ctx; jacket(r, p.jacket, p.inner, 4); trousers(r, p.trous); boots(r, '#1a1612'); hands(r, skin); band(r, 'body', 0, 2, p.inner); if (rng.chance(0.5)) ctx.overlays.push(hoodUpOverlay(p.jacket)); else ctx.geometry.push(hoodDownGeo(p.jacket)); ctx.patchColours = [p.patch, shade(p.jacket, 1.4), '#5a5a5a']; },
+    paint(ctx) { const { r, p, skin, rng } = ctx; jacket(r, p.jacket, p.inner, 4); trousers(r, p.trous); boots(r, '#1a1612'); hands(r, skin); band(r, 'body', 0, 2, p.inner); if (!ctx.sp.geometry && rng.chance(0.5)) ctx.overlays.push(hoodUpOverlay(p.jacket)); else ctx.geometry.push(hoodDownGeo(p.jacket)); ctx.patchColours = [p.patch, shade(p.jacket, 1.4), '#5a5a5a']; },
   },
   {
     id: 'child_school', name: 'School tunic', faction: 'residents', role: 'child', headgear: 'none', wear: CW, child: true,
@@ -581,7 +581,7 @@ function paintJedi(ctx, { padawan = false, master = false }) {
     fillPart(r, 'arm', p.cloak, ['front', 'back', 'left', 'right', 'top']); band(r, 'arm', 16, 2, p.tunic); hands(r, skin);
     fillPart(r, 'body', p.cloak, ['back', 'left', 'right', 'top']); on(r, F, 0, 0, 2, 24, p.cloak); on(r, F, 14, 0, 2, 24, p.cloak);
     ctx.geometry.push(capeGeo(p.cloak, 20));
-    if (ctx.rng.chance(0.35)) ctx.overlays.push(hoodUpOverlay(p.cloak)); else ctx.geometry.push(hoodDownGeo(p.cloak));
+    if (!ctx.sp.geometry && ctx.rng.chance(0.35)) ctx.overlays.push(hoodUpOverlay(p.cloak)); else ctx.geometry.push(hoodDownGeo(p.cloak));
   } else ctx.geometry.push(skirtGeo(p.tunic, 7, { part: 'tunic_skirt', sides: false }));
   void face;
 }
