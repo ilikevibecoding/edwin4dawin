@@ -605,7 +605,10 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     c = mix(c, vec3(0.10, 0.085, 0.068), film * 0.75);
     // heavy-mineral streak the wash leaves at its limit, and the wrack lines: weed and debris at the swash
     // limit, an older fainter line higher up; the debris grain is filtered out with the footprint
-    float streak = 1.0 - smoothstep(0.0, 0.6, abs(sd - swashW * 0.95));
+    // (the lines are widened to the pixel and paled in proportion once thinner than one, so from the air they stay
+    // the thin dark lines along the beach that they are instead of breaking into dashes)
+    float lwS = max(0.6, 0.9 * foot);
+    float streak = (1.0 - smoothstep(0.0, lwS, abs(sd - swashW * 0.95))) * (0.6 / lwS);
     if (streak > 0.0) c *= 1.0 - 0.10 * streak * smoothstep(0.25, 0.6, vnoise(wp * 0.4 + 3.0));
     // .. and the dark magnetite lag the wind strings out along itself over the dry sand: streaks 4-10 m long
     // and half a metre wide, in patches of the beach, the sand's own stripes from the air
@@ -617,8 +620,9 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     }
     float wrackD = swashW * 1.3 + 1.0;
     float oldLine = wrackD * 1.8 + 2.0 - 1.5 * wander2;
-    float tide1 = 1.0 - smoothstep(0.0, 0.7, abs(sd - wrackD));
-    float tide2 = 1.0 - smoothstep(0.0, 0.5, abs(sd - oldLine));
+    float lw1 = max(0.7, 0.9 * foot), lw2 = max(0.5, 0.9 * foot);
+    float tide1 = (1.0 - smoothstep(0.0, lw1, abs(sd - wrackD))) * (0.7 / lw1);
+    float tide2 = (1.0 - smoothstep(0.0, lw2, abs(sd - oldLine))) * (0.5 / lw2);
     if (tide1 + tide2 > 0.0) {
       float grainVis = 1.0 - smoothstep(0.3, 1.0, foot);
       float debris = mix(0.3, smoothstep(0.55, 0.75, vnoise(wp * 1.3 + 9.0)) * step(0.35, vnoise(wp * 0.09)), grainVis);
