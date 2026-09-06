@@ -89,9 +89,17 @@ const float NOISE_SCALE = 1.0 / 2600.0;
 const float BASE_WARP = 380.0;
 // the base can sit this far below uCloudBase (cell-to-cell variation + the ~1 km undulation + the warp), so the
 // march and the light march start there instead of planing those cells off at uCloudBase
+// half-ranges (m) of the cell-to-cell base variation and of the ~1 km undulation: fractions of the slab, capped so
+// a deep storm slab (2.5 km) does not hang its cells on the water
+vec2 baseSpread() {
+  float deck = smoothstep(0.45, 0.7, uCloudCoverage);
+  float thick = uCloudTop - uCloudBase;
+  return vec2(min(mix(0.11, 0.17, deck) * thick, 200.0), min(mix(0.04, 0.08, deck) * thick, 90.0));
+}
 float slabBottom() {
   float deck = smoothstep(0.45, 0.7, uCloudCoverage);
-  return uCloudBase - mix(0.15, 0.25, deck) * (uCloudTop - uCloudBase) - BASE_WARP * 0.4 * mix(1.0, 0.5, deck);
+  vec2 s = baseSpread();
+  return uCloudBase - s.x - s.y - BASE_WARP * 0.4 * mix(1.0, 0.5, deck);
 }
 
 // interleaved gradient noise: a pure function of the pixel position, so frames are reproducible
@@ -108,9 +116,8 @@ vec4 macroField(vec2 wp) {
  *  no base is a ruler line and neighbouring cumulus do not share one plane; a closed deck hangs its cells lower
  *  still (stratocumulus: the underside is a field of sagging lumps, not a ceiling plane). */
 float baseAltitude(vec4 f) {
-  float thick = uCloudTop - uCloudBase;
-  float deck = smoothstep(0.45, 0.7, uCloudCoverage);
-  return uCloudBase + (f.z - 0.5) * mix(0.22, 0.34, deck) * thick + (f.w - 0.5) * mix(0.08, 0.16, deck) * thick;
+  vec2 s = baseSpread();
+  return uCloudBase + (f.z - 0.5) * 2.0 * s.x + (f.w - 0.5) * 2.0 * s.y;
 }
 
 vec3 noiseCoord(vec3 p, vec4 f) {
