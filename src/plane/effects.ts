@@ -256,10 +256,16 @@ class SprayCloud {
           float streak = mix(1.0, mix(0.85, strand, 0.5 + 0.5 * ageK), sheetK);
           sprayA *= win.x * win.y * erode * streak;
           if (sprayA < 0.008) discard;
-          diffuseColor.a *= sprayA;
-        `);
+          // a fresh sheet is a film of clear water: translucent, tinted by the sea it was torn from and glinting
+          // (roughness below); it whitens as it breaks into drops over its first tenths of a second, so a single
+          // sheet reads glassy while the stacked roots of many at the chine read white
+          float film = sheetK * (1.0 - smoothstep(0.1, 0.45, ageK));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.86, 0.92), 0.55 * film);
+          diffuseColor.a *= sprayA * (1.0 - 0.45 * film);
+        `)
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.3, film);');
     };
-    mat.customProgramCacheKey = () => 'plane-spray-v4';
+    mat.customProgramCacheKey = () => 'plane-spray-v5';
     this.material = mat;
     this.mesh = new THREE.InstancedMesh(geo, mat, capacity);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
