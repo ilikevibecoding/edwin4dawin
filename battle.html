@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <title>Battle of Coruscant</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+
+    <div id="hud">
+      <div id="crosshair" style="display: none"></div>
+      <div id="prompt" class="hidden"></div>
+      <div id="status">
+        <span id="status-tag">CORUSCANT</span>
+        <span id="status-text">Open Circle Fleet engaging.</span>
+      </div>
+      <div id="location"></div>
+      <div id="modehint"></div>
+      <div id="stats" class="hidden"></div>
+    </div>
+
+    <div id="fade">
+      <div id="fade-text"></div>
+    </div>
+
+    <div id="start" class="hidden">
+      <div class="card">
+        <h1>CORUSCANT</h1>
+        <p class="sub">orbital battle · space view</p>
+        <p class="hint">Click to begin</p>
+        <p class="keys">
+          drag orbit · wheel zoom · WASD fly · C cinematic camera · F3 stats
+        </p>
+        <a class="scene-link" href="./index.html">← ISD Vigilant walkthrough</a>
+      </div>
+    </div>
+
+    <script type="module" src="/src/battle/main.js"></script>
+  </body>
+</html>
