@@ -1,5 +1,5 @@
 import { Rng } from '../../core/seed';
-import { canvas, CHEAT_LINE, grime, heightToNormal, LIVERY, orangePeelNormal, packRGB, panels, panelVariation, toTexture, wear, type FuselageLayout, type PbrMaps } from './common';
+import { canvas, CHEAT_LINE, chips, grime, heightToNormal, LIVERY, orangePeelNormal, packRGB, panels, panelVariation, toTexture, wear, type FuselageLayout, type PbrMaps } from './common';
 
 /**
  * Text painted on both sides of the body so it reads left-to-right from outside. The loft's u runs nose -> tail,
@@ -237,22 +237,43 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     const x = rng.range(0, w), y = rng.range(0, h);
     rctx.beginPath(); rctx.moveTo(x, y); rctx.lineTo(x + rng.range(-40, 40), y + rng.range(-6, 6)); rctx.stroke();
   }
-  // clearcoat roughness (green channel): the engine cowl is polished a little glossier than the cabin/tail paint,
-  // the matte anti-glare panel has no gloss to speak of and the soot streak dulls the coat
+  // Chipped paint down to the metal where the aircraft is handled and hit: the cowl's bowl joint (spray and
+  // stones), the boarding steps and door sills, the cowl fastener rows, the stern post. Metalness 1 / no coat in
+  // the packed map, so the flakes glint where the paint around them shows the coat's soft sheen.
+  chips(actx, mctx, kctx, rng, ringU + 6, h * 0.5, 4, h * 0.5, 140, 1.6);
+  for (const side of [1, -1]) {
+    const V = (v: number) => (side > 0 ? v : 1 - v) * h;
+    chips(actx, mctx, kctx, rng, lay.uOf(1.3) * w, V(vLow(1.3, -0.44)), 60, 22, 40, 1.8);      // boarding step
+    chips(actx, mctx, kctx, rng, lay.uOf(1.35) * w, V(vLow(1.35, 0.38)), 90, 8, 30, 1.5);      // door sill
+    chips(actx, mctx, kctx, rng, lay.uOf(0.98) * w, V(vLow(0.98, 0.05)), 30, 20, 14, 1.6);     // door handle
+    for (const vv of [0.125, 0.36]) chips(actx, mctx, kctx, rng, (ringU + cowlAftU) / 2, V(vv), (cowlAftU - ringU) / 2, 6, 40, 1.3); // cowl panel joints
+  }
+  // clearcoat roughness (green channel): what the eye reads as the finish. Regions first: the roof and the top of
+  // the tail cone are chalked by the sun (0.30), the white sides are waxed (0.11), the yellow belly band chalks
+  // faster and takes the spray (0.22); then every skin panel differs by up to +-0.055 (repainted / polished at
+  // different times), the seams and worn zones are duller, the anti-glare panel is flat, the bowl is bare metal
   const [cc, cctx] = canvas(w / 4, h / 4);
   cctx.scale(0.25, 0.25);
-  cctx.fillStyle = 'rgb(0,36,0)'; cctx.fillRect(0, 0, w, h);
-  // the gloss is what the eye reads: panels differ by up to +-0.035 in clear-coat roughness (0.10 .. 0.18), the
-  // seams and the worn zones are duller, the belly is matted by spray and the roof by the sun
-  panelVariation(cctx, w, h, stations, stringers, rng, 9, 'g', { seam: 8, seamAmp: 16 });
+  const ccFill = (g: number, x0: number, y0: number, x1: number, y1: number) => { cctx.fillStyle = `rgb(0,${g},0)`; cctx.fillRect(x0, y0, x1 - x0, y1 - y0); };
+  ccFill(28, 0, 0, w, h);
+  const sillV = vLow(0.0, lay.sillY(0.0) - CHEAT_LINE.pin);
+  ccFill(56, 0, sillV * h, w, (1 - sillV) * h);
+  ccFill(76, 0, 0, w, h * 0.075); ccFill(76, 0, h * 0.925, w, h);
+  // the roof chalk fades down the shoulder: a soft band under the hard one
+  for (const [a, b] of [[0.075, 0.11], [0.89, 0.925]]) {
+    const gr = cctx.createLinearGradient(0, a * h, 0, b * h);
+    const top = a < 0.5;
+    gr.addColorStop(0, top ? 'rgba(0,255,0,0.19)' : 'rgba(0,255,0,0)'); gr.addColorStop(1, top ? 'rgba(0,255,0,0)' : 'rgba(0,255,0,0.19)');
+    cctx.fillStyle = gr; cctx.fillRect(0, a * h, w, (b - a) * h);
+  }
+  panelVariation(cctx, w, h, stations, stringers, rng, 14, 'g', { seam: 8, seamAmp: 18 });
   for (const side of [1, -1]) {
     const V = (v: number) => (side > 0 ? v : 1 - v) * h;
     wear(cctx, lay.uOf(1.0) * w, V(vLow(1.0, 0.05)), 70, 45, 30, 'g');
     wear(cctx, lay.uOf(1.3) * w, V(vLow(1.3, -0.45)), 90, 40, 36, 'g');
     wear(cctx, lay.uOf(1.35) * w, V(vLow(1.35, 0.30)), 130, 30, 14, 'g');
   }
-  cctx.fillStyle = 'rgba(0,255,0,0.05)'; cctx.fillRect(0, h * 0.44, w, h * 0.12);
-  cctx.fillStyle = 'rgba(0,255,0,0.04)'; cctx.fillRect(0, 0, w, h * 0.08); cctx.fillRect(0, h * 0.92, w, h * 0.08);
+  cctx.fillStyle = 'rgba(0,255,0,0.06)'; cctx.fillRect(0, h * 0.44, w, h * 0.12);
   cctx.fillStyle = 'rgb(0,16,0)'; cctx.fillRect(0, 0, lay.uOf(3.15) * w, h);
   cctx.fillStyle = 'rgb(0,120,0)';
   for (const side of [1, -1]) {

@@ -167,13 +167,22 @@ function skinBottomY(sections: Section[], x: number, z: number): number {
   const s = sectionAt(sections, x), n = s.nBot ?? s.n ?? 2.2;
   return s.yc - s.bot * Math.pow(Math.max(1 - Math.pow(Math.min(Math.abs(z) / s.w, 1), n), 0), 1 / n);
 }
-/** scoop hood: a rounded-rectangular hump from the mouth station back to where it fades into the skin */
-function scoopStations(sc: { x0: number; x1: number; w: number; h: number }): { x: number; w: number; h: number }[] {
+/**
+ * Scoop hood stations: the hood's ridge (or keel) is a straight line from the mouth's outer edge back to where it
+ * meets the skin at x1, so the mouth is the proudest part and the hood tapers into the skin like a real intake
+ * fairing; measured against the local skin (which curves 14 cm on the bowl) the height would have peaked well behind
+ * the mouth. `skinY(x)` is the skin height on the centreline, `sign` +1 for a hood on top, -1 for one underneath.
+ */
+function scoopStations(sc: { x0: number; x1: number; w: number; h: number }, skinY: (x: number) => number, sign: 1 | -1): { x: number; w: number; h: number }[] {
   const out: { x: number; w: number; h: number }[] = [];
+  const yMouth = skinY(sc.x0) + sign * sc.h, yEnd = skinY(sc.x1);
   const fs = [0, 0.06, 0.16, 0.3, 0.46, 0.62, 0.78, 0.9, 1];
   for (const f of fs) {
-    const fade = f < 0.3 ? 1 : 1 - THREE.MathUtils.smoothstep(f, 0.3, 1);
-    out.push({ x: sc.x0 + (sc.x1 - sc.x0) * f, w: sc.w * (0.35 + 0.65 * fade), h: sc.h * fade });
+    const x = sc.x0 + (sc.x1 - sc.x0) * f;
+    // the line eases into the skin at the end instead of meeting it at an angle
+    const line = yMouth + (yEnd - yMouth) * (1 - Math.pow(1 - f, 1.6));
+    const h = Math.max(sign * (line - skinY(x)), 0);
+    out.push({ x, w: sc.w * (0.4 + 0.6 * Math.min(h / sc.h, 1)), h });
   }
   return out;
 }
@@ -196,7 +205,7 @@ function cowlSkinParts(ctx: BuildContext): THREE.BufferGeometry[] {
   ], 56, { cy: COWL_AXIS_Y, uOf: () => 0.0 }));
   // chin scoop: built as a hump on the mirrored belly (y down) and flipped back
   const chinTop = (x: number, z: number, w: number, h: number) => -skinBottomY(sections, x, z) + hood(z, w, h);
-  const chinSt = scoopStations(CHIN);
+  const chinSt = scoopStations(CHIN, (x) => skinBottomY(sections, x, 0), -1);
   const chin = humpGeometry(chinSt.map((s) => ({ x: s.x, w: s.w })),
     (x, z) => { const s = chinSt.find((c) => Math.abs(c.x - x) < 1e-6)!; return chinTop(x, z, s.w, s.h); },
     (x, z) => -skinBottomY(sections, x, z) - 0.03, 16, 4);
@@ -206,7 +215,7 @@ function cowlSkinParts(ctx: BuildContext): THREE.BufferGeometry[] {
   chin.computeVertexNormals();
   out.push(flatUv(chin, layout.uOf(-2.0), 0.40));
   // top scoop on the anti-glare panel
-  const topSt = scoopStations(TOP);
+  const topSt = scoopStations(TOP, (x) => skinTopY(sections, x, 0), 1);
   const top = humpGeometry(topSt.map((s) => ({ x: s.x, w: s.w })),
     (x, z) => { const s = topSt.find((c) => Math.abs(c.x - x) < 1e-6)!; return skinTopY(sections, x, z) + hood(z, s.w, s.h); },
     (x, z) => skinTopY(sections, x, z) - 0.03, 16, 4);

@@ -1,7 +1,8 @@
 // Screenshots + aircraft geometry budget from ONE Chrome instance (one machine-wide Chrome slot per batch):
 //   node bench/reports/acgeo/tools/acshots.mjs <spec.txt> <stats.json> [width] [height]
-// spec.txt has one view per line: <out.png>\t<url> (see views.py). The first page that reports __ready is also
-// asked for the PlaneModel's triangle / mesh counts (per mesh, exterior vs interior), written to <stats.json>.
+// spec.txt has one view per line: <out.png>\t<url> (see views.py). The first page that reports __ready on each
+// preview port is also asked for the PlaneModel's triangle / mesh counts (per mesh, exterior vs interior), written
+// to <stats.json> with any `%p` in the name replaced by the port (so one batch can cover a baseline and a working build).
 import puppeteer from 'puppeteer-core';
 import fs from 'node:fs';
 
@@ -19,8 +20,11 @@ const browser = await puppeteer.launch({
   args: ['--no-sandbox', '--disable-gpu-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', `--window-size=${w},${h}`, '--hide-scrollbars'],
   defaultViewport: { width: Number(w), height: Number(h), deviceScaleFactor: 1 },
 });
-let failures = 0, statsDone = fs.existsSync(statsPath);
+let failures = 0;
+const statsDone = new Set();
 for (const { out, url } of specs) {
+  const port = new URL(url).port || '80', statsFile = statsPath.replace('%p', port);
+  if (fs.existsSync(statsFile)) statsDone.add(port);
   const page = await browser.newPage();
   const logs = [];
   page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
@@ -42,7 +46,7 @@ for (const { out, url } of specs) {
     fs.writeFileSync(`${out}.log.json`, JSON.stringify({ url, ready, ms: Date.now() - t0, info, logs: logs.slice(0, 40) }, null, 2));
     console.log(`${ready ? 'ok  ' : 'WARN'} ${out} ${Date.now() - t0} ms`);
     if (!ready) failures++;
-    if (ready && !statsDone) {
+    if (ready && !statsDone.has(port)) {
       const stats = await page.evaluate(() => {
         const model = window.__game.aircraft.model;
         const rows = [];
@@ -62,10 +66,10 @@ for (const { out, url } of specs) {
           trisAll: sum(() => true), trisVisible: sum((r) => r.visible), trisExterior: sum((r) => r.exterior), trisInterior: sum((r) => !r.exterior), rows,
         };
       });
-      fs.writeFileSync(statsPath, JSON.stringify(stats, null, 2));
+      fs.writeFileSync(statsFile, JSON.stringify(stats, null, 2));
       const { rows, ...summary } = stats;
-      console.log('aircraft:', JSON.stringify(summary));
-      statsDone = true;
+      console.log(`aircraft @${port}:`, JSON.stringify(summary));
+      statsDone.add(port);
     }
   } catch (e) {
     failures++;

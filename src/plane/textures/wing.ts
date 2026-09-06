@@ -1,5 +1,5 @@
 import { Rng } from '../../core/seed';
-import { canvas, grime, heightToNormal, LIVERY, orangePeelNormal, panels, panelVariation, toTexture, wear, type PbrMaps } from './common';
+import { canvas, chips, grime, heightToNormal, LIVERY, orangePeelNormal, packRGB, panels, panelVariation, toTexture, wear, type PbrMaps } from './common';
 
 /**
  * Layout of the shared wing / tail paint: the wing occupies texture rows v 0 .. WING_V1 (root .. tip), the tail
@@ -95,11 +95,17 @@ export function wingMaps(): PbrMaps {
   const tailRibs: number[] = [];
   for (let m = 0.12; m < pinM - 0.1; m += 0.55) tailRibs.push(ty(m) / h);
   panels(hctx, actx, w, h, [0.3, 0.7], tailRibs, 36, { y0: T0 * h, strength: 0.5 });
-  // leading-edge chipping and general grime
-  for (let i = 0; i < 90; i++) {
-    actx.fillStyle = `rgba(90,90,95,${rng.range(0.3, 0.7)})`;
-    actx.fillRect(w * 0.5 + rng.range(-8, 8), rng.range(0, h), rng.range(1, 3), rng.range(1, 4));
-  }
+  // packed clear coat (R) / roughness (G) / metalness (B) companions of the roughness canvas: chips down to the metal
+  // along the leading edges (stones, spray, ice) and around the strut fittings and the fuel cap; the walkway grit has
+  // no clear coat and the stripe decals keep theirs
+  const [mc, mctx] = canvas(w, h);
+  const [kc, kctx] = canvas(w, h);
+  mctx.fillStyle = '#000000'; mctx.fillRect(0, 0, w, h);
+  kctx.fillStyle = '#ffffff'; kctx.fillRect(0, 0, w, h);
+  chips(actx, mctx, kctx, rng, w * 0.5, wy(0.5), 7, wy(0.5), 260, 1.4);
+  chips(actx, mctx, kctx, rng, w * 0.5, (T0 + 0.5 * (1 - T0)) * h, 5, 0.5 * (1 - T0) * h, 60, 1.2);
+  for (const f of [0.30, 0.66]) chips(actx, mctx, kctx, rng, w * (0.5 + 0.5 * f), wy(2.9 / 7.3), 26, 18, 18, 1.5);
+  chips(actx, mctx, kctx, rng, w * 0.40, wy(0.27), 16, 16, 10, 1.4);
   grime(actx, rng, w, h, 80, 0.06);
   // base coat: ~0.38 varying per skin panel (spar / rib bays), rougher along the rivet seams, chipped and rubbed
   // along the leading edge, the walkway is anti-slip grit, the underside a touch duller than the top coat
@@ -114,14 +120,20 @@ export function wingMaps(): PbrMaps {
   for (const f of [0.30, 0.66]) wear(rctx, w * (0.5 + 0.5 * f), wy(2.9 / 7.3), 40, 30, 30);
   wear(rctx, w * 0.40, wy(0.27), 30, 30, 26);
   grime(rctx, rng, w, h, 90, 0.2, '150,150,150');
-  // clear-coat roughness (green): 0.14 nominal, +-0.03 per panel, matte walkway, dull chipped leading edge
+  kctx.fillStyle = '#000000'; kctx.fillRect(w * 0.30, wy(0.12), w * 0.11, wy(0.20) - wy(0.12));
+  // clear-coat roughness (green): the upper surfaces (u < 0.5) face the sun all day and chalk to 0.24, the
+  // undersides stay a waxed 0.11, the tail (both faces in the same band) sits between at 0.16; +-0.05 per skin
+  // panel, dull seams, matte walkway, the chipped leading edge duller still
   const [cc, cctx] = canvas(w / 4, h / 4);
   cctx.scale(0.25, 0.25);
-  cctx.fillStyle = 'rgb(0,36,0)'; cctx.fillRect(0, 0, w, h);
-  panelVariation(cctx, w, h, spars, ribs, rng, 8, 'g', { y1: wy(1), seam: 8, seamAmp: 14 });
-  panelVariation(cctx, w, h, [0.3, 0.7], tailRibs, rng, 7, 'g', { y0: T0 * h, seam: 8, seamAmp: 12 });
-  cctx.fillStyle = 'rgba(0,255,0,0.10)'; cctx.fillRect(w * 0.47, 0, w * 0.06, h);
+  cctx.fillStyle = 'rgb(0,61,0)'; cctx.fillRect(0, 0, w * 0.5, wy(1));
+  cctx.fillStyle = 'rgb(0,28,0)'; cctx.fillRect(w * 0.5, 0, w * 0.5, wy(1));
+  cctx.fillStyle = 'rgb(0,41,0)'; cctx.fillRect(0, T0 * h, w, h - T0 * h);
+  panelVariation(cctx, w, h, spars, ribs, rng, 13, 'g', { y1: wy(1), seam: 8, seamAmp: 16 });
+  panelVariation(cctx, w, h, [0.3, 0.7], tailRibs, rng, 10, 'g', { y0: T0 * h, seam: 8, seamAmp: 12 });
+  cctx.fillStyle = 'rgba(0,255,0,0.12)'; cctx.fillRect(w * 0.47, 0, w * 0.06, h);
   cctx.fillStyle = 'rgb(0,150,0)'; cctx.fillRect(w * 0.30, wy(0.12), w * 0.11, wy(0.20) - wy(0.12));
   for (const f of [0.30, 0.66]) wear(cctx, w * (0.5 + 0.5 * f), wy(2.9 / 7.3), 40, 30, 26, 'g');
-  return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.0), false), clearcoatRoughnessMap: toTexture(cc, false), clearcoatNormalMap: orangePeelNormal(rng, 24, 48) };
+  const packed = toTexture(packRGB(kc, rc, mc), false);
+  return { map: toTexture(ac, true), roughnessMap: packed, metalnessMap: packed, clearcoatMap: packed, normalMap: toTexture(heightToNormal(hc, 2.0), false), clearcoatRoughnessMap: toTexture(cc, false), clearcoatNormalMap: orangePeelNormal(rng, 24, 48) };
 }

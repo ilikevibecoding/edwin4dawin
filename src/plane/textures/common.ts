@@ -168,6 +168,28 @@ export function wear(ctx: CanvasRenderingContext2D, x: number, y: number, rx: nu
   ctx.restore();
 }
 
+/**
+ * Paint chips: small irregular flakes knocked off down to the bare aluminium, scattered inside an ellipse (rx, ry)
+ * around (x, y). Drawn as light metal in the albedo, white in the metalness canvas and black in the clear-coat canvas
+ * (a chip has no coat), with a dark rim of exposed primer in the albedo so the flake reads as a hole in the paint.
+ */
+export function chips(actx: CanvasRenderingContext2D, mctx: CanvasRenderingContext2D | null, kctx: CanvasRenderingContext2D | null, rng: Rng, x: number, y: number, rx: number, ry: number, count: number, size = 2.2): void {
+  for (let i = 0; i < count; i++) {
+    // denser toward the centre of the patch
+    const a = rng.range(0, Math.PI * 2), d = Math.sqrt(rng.next());
+    const cx = x + Math.cos(a) * d * rx, cy = y + Math.sin(a) * d * ry;
+    const r = size * rng.range(0.5, 1.4), sx = rng.range(0.7, 1.5), sy = rng.range(0.7, 1.5);
+    const flake = (ctx: CanvasRenderingContext2D, style: string, grow: number) => {
+      ctx.fillStyle = style;
+      ctx.beginPath(); ctx.ellipse(cx, cy, r * sx + grow, r * sy + grow, a, 0, Math.PI * 2); ctx.fill();
+    };
+    flake(actx, 'rgba(70,60,45,0.7)', 0.8);
+    flake(actx, '#bcc0c4', 0);
+    if (mctx) flake(mctx, '#ffffff', 0);
+    if (kctx) flake(kctx, '#000000', 0.4);
+  }
+}
+
 export const LIVERY = {
   upper: '#f3f1ea',
   /** wing / stabiliser undersides */
