@@ -44,10 +44,54 @@ every distance. Three rounds rebuilt it as a physical pane:
 
 | # | Category | Base | Now | Why not higher |
 | --- | --- | --- | --- | --- |
-| 17 | City skyline (hero) | 4 | 8 | SCORE17 |
-| 18 | Building geometry (hero) | 4 | 8 | SCORE18 |
-| 19 | Building materials | 3 | 7 | SCORE19 |
-| 20 | Rooftop density | 2 | 8 | SCORE20 |
+| 17 | City skyline (hero) | 4 | 7 | From 3.5-6 km the mid-rise ring still reads as a field of similar warm boxes around the peaks; no supertall past 272 m; the peninsula's outline (kept) decides the composition more than the massing does; the two clusters read as one at 6 km. |
+| 18 | Building geometry (hero) | 4 | 7 | Plans are boxes, drums and their unions (L, cross, slot, twins); no faceted or curved slabs, no sky bridges, podiums rarely wrap a whole block; window frames, reveals and balconies are shader relief beyond 600 m and geometry only inside it, so a punched facade at 100 m is flat except in the parallax panes. |
+| 19 | Building materials | 3 | 7 | Glass is the strong family (coating, grain, disc, band, mirrored sky by height); masonry weathering is procedural bands (grime, sill streaks, rain runs) without per-facade history; brick and stone have no relief; stucco and precast vary by noise only; the pale-cap / pale-spandrel curtain wall still runs hot under a head-on low sun (the scene's 6.0 irradiance through ACES puts every 0.55 albedo at 235). |
+| 20 | Rooftop density | 2 | 8 | Ducts are straight runs and elbows only (no cable trays, ladders, hatches, gantries); glass towers have rails but no parapet upstand; rooftop pools and gardens exist on one landmark only; helipads are rare by design; the small kit stops at 700 m so a 1-2 km roof shows RTU blocks, penthouses and masts but not its vents. |
+
+## What remains weak (self-critique)
+
+- The sun-facing curtain wall at 300 m at 17:18 is bright: the blinds at the glass plane are sunlit diffuse (0.6
+  albedo, 235 after ACES), so a face with most blinds down reads cream rather than dark glass. Real blinds behind
+  low-e glass take the coating's transmission (here 1 - 1.4·F0 ≈ 0.6): the value is right, the perception is set by
+  the exposure. A per-building blind albedo (grey, charcoal) would widen the range.
+- The mirrored sky is one probe: two towers 500 m apart mirror the same sky, and a pane never mirrors the tower
+  across the street (only a darkening, `facadeOccl`). Planar reflection per landmark is the next step and not cheap.
+- Night: lit fraction and colour vary per building and per floor / window, but without the hour uniform the offices
+  cannot empty after 21:00 (see requests).
+- Landmarks: fourteen recipes plus sixteen named landmarks; the eye still finds two near-identical setback towers
+  within one view now and then (same recipe, same family, adjacent lots).
+- Street level is the Street agent's, but the buildings meet the ground as a 0.4 m buried plinth: no stoops, area
+  railings, basement lights or planters, so the base of a mid-rise at 30 m is a line.
+
+## Highest-value next attack
+
+A second sun term for the *blinds and spandrels behind glass* (transmission squared, the coating's colour) and a
+per-building blind palette would take the sunlit curtain wall from cream to the dark, warm-flecked glass the
+reference photographs show; after that, planar reflection on the two or three landmark slabs in `city-close`.
+
+## Failed / reverted candidates
+
+- GGX sun lobe on glass at any roughness (R8): 0.07 clipped ±3° white; 0.3-0.45 in the far field made every glass
+  tower at 2 km the same pale matte grey. Replaced by the analytic disc / band.
+- Tilt tail `0.004 + 0.06·h⁴` (R8): 16 % of panes beyond 1.9°, the 300 m glint field spanned ten storeys as two
+  blobs. Now `0.003 + 0.02·h⁸`.
+- Probe sun mask widened to 12° at 0.92 (R10 WIP): no measurable change at 300 m (3548 → 3509 clipped pixels in
+  the slab region); back to 4° at 0.85. The remaining soft glow is the mirrored sunset aureole.
+- Membrane albedos 0.8 / 0.6 / 0.5 (R4): all folded to white on the tone curve; now 0.64 / 0.44 / 0.35 / 0.12.
+- Roof kit rng drawn from the district rng (R4): every kit tweak reshuffled the lots after it; forked from one
+  draw in R7 (one reshuffle, then stable).
+- Street poses at `y = 2` (R5, R9, R10): the dev camera's y is absolute and downtown's ground is 3.6-6 m, so four
+  street frames were shot from under the terrain (a plane at eye level, buildings' undersides through it, a
+  black stepped block that is a setback's soffits). Redone at ground + 1.8 m.
+
+## Shared-file hunks (for the lead)
+
+- `src/bench/views.ts`, `VIEWS` array: one new entry `city-close` (fixed camera `[-3330, 120, -3670]`, heading 90,
+  pitch 8, fov 50, time 17.3, clear; aircraft placed from the camera). No other view touched.
+- `src/world/map.ts`, `createDistricts`: the `brickell` district's extent / density / height range (the
+  high-rise ring across the river); geography untouched.
+- Everything else is in `src/world/city.ts` and `src/world/facade.ts` (owned).
 
 ## Budgets (1920x1080 stills, seed 20260904; gate 400 calls / 1.5 M tris)
 
