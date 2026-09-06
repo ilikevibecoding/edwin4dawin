@@ -100,6 +100,30 @@ float facadeOccl = 0.0;
 // roughness of the mirrored sky: the pane tilt spread, not the sun-lobe roughness (which widens with distance so
 // the sun lights a far tower coherently); the sky gradient a facade mirrors stays crisp at every distance
 float facadeSkyRough = 0.1;
+// The sun in a pane is the mirror image of the solar disc (0.53 deg across): a compact spot in the few panes whose
+// tilt aims it at the eye, a faint halo in their neighbours. The GGX lobe cannot draw that: with a delta light
+// its 1000x peak and 1 / theta^4 tail keep every pane within ~3 deg of the specular direction clipped white, so a
+// tower at 300 m carried a solid ten-storey band and at 1 km its whole sun-facing side washed out. While a pane
+// spans pixels (facadeGlintW = glass x vis) its GGX sun term is scaled out (facadeLobeScale) and this disc is
+// added in the light loop instead, per light, so it carries the cascade's shadow; as panes go sub-pixel the
+// disc widens over the vanishing tilt spread and hands over to the widened lobe (the coherent far-field sun).
+vec3 facadeGlintN = vec3(0.0, 0.0, 1.0);   // the pane's tilted normal (view space)
+vec3 facadeGlintF0 = vec3(0.0);
+float facadeGlintW = 0.0;
+float facadeGlintR = 0.0046;               // radius of the disc's core (rad)
+float facadeLobeScale = 1.0;
+vec3 facadeGlint(vec3 lightDir, vec3 viewDir) {
+  if (facadeGlintW <= 0.0) return vec3(0.0);
+  vec3 R = reflect(-viewDir, facadeGlintN);
+  float ang = acos(clamp(dot(R, lightDir), -1.0, 1.0));
+  // the disc itself, and the glow of the pane's bow and haze around it (bright enough to clip on reflective
+  // curtain wall, graded on the thin coating of ordinary windows)
+  float core = 1.0 - smoothstep(facadeGlintR * 0.6, facadeGlintR * 1.4, ang);
+  float halo = exp(-ang * ang / (0.012 * 0.012));
+  float ndv = clamp(dot(facadeGlintN, viewDir), 0.0, 1.0);
+  vec3 F = facadeGlintF0 + (1.0 - facadeGlintF0) * pow(1.0 - ndv, 5.0);
+  return F * (core * 12.0 + halo * 3.0) * facadeGlintW;
+}
 // integral from 0 to x of a unit-period pulse train that is 1 on [a, b) of every period
 float pulseInt(float x, float a, float b) { float f = floor(x); return f * (b - a) + clamp(x - f - a, 0.0, b - a); }
 // box-filtered pulse train: the fraction of the pixel footprint [x - w/2, x + w/2] covered by the pulse. Once the
@@ -150,6 +174,16 @@ vec3 fasciaPalette(float k) {
 `)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
 normal = normalize(normal + facadeTilt);`)
+      // the light loop (the CSM's cascade version of the chunk by the time this compiles): around each direct
+      // light's contribution, the pane's GGX sun term is scaled out and the solar disc added with that light's
+      // shadowed colour, so the CSM's cascade blend applies to the disc as well
+      .replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(
+        /RE_Direct\( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight \);/g,
+        `{
+  vec3 facadePreSpec = reflectedLight.directSpecular;
+  RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+  reflectedLight.directSpecular = facadePreSpec + (reflectedLight.directSpecular - facadePreSpec) * facadeLobeScale + directLight.color * facadeGlint(directLight.direction, geometryViewDir);
+}`))
       .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
 #if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
 if (facadeGlass > 0.0) {
@@ -370,7 +404,7 @@ if (facadeGlass > 0.0) {
         facadeRoom = vec3(0.08, 0.10, 0.12);
         facadeHf = 1.0;
         col = facadeRoom;
-        rough = 0.1;
+        rough = 0.3;   // the sky it mirrors uses facadeSkyRough; this only keeps the GGX sun tail from clipping
       } else {
         col = wall * 0.8;
         rough = 0.5;
@@ -488,22 +522,27 @@ if (facadeGlass > 0.0) {
     // the odd replaced pane in a different batch of glass
     float replaced = step(0.985, fract(paneH * 31.7)) * vis;
     float reveal = 1.0 - (0.32 * smoothstep(0.72, 1.0, py) + 0.14 * smoothstep(0.86, 1.0, px)) * vis;
-    // per-pane micro tilt so each pane catches the sky and the sun a little differently
+    // per-pane tilt so each pane catches the sky and the sun a little differently: installed glass sits within
+    // a tenth of a degree or so of its neighbours, with the odd unit bowed or racked a degree, so most panes
+    // near the sun's specular point mirror the disc together while a scatter of others flash away from it;
+    // the tilt goes with vis squared so sub-pixel panes do not shimmer
     {
       vec3 rnd = vec3(hash22(vec2(colIdx + 3.1, floorIdx + facadeSeed)), fract(paneH * 13.7)) - 0.5;
       vec3 nv = normalize(vNormal);
-      facadeTilt = (rnd - nv * dot(rnd, nv)) * 0.06 * glass * vis;
+      float tiltMag = 0.004 + 0.06 * pow(hash11(paneH * 5.1 + seed * 0.7), 4.0);
+      facadeTilt = (rnd - nv * dot(rnd, nv)) * tiltMag * glass * vis * vis;
     }
     // The pane itself: a coated dielectric. F0 is the coating (family colour times the building's variant, a
     // per-pane batch / film / dirt grain that damps to a fine grain as panes go sub-pixel, a silvery replaced
-    // pane now and then); the diffuse colour is the room seen through it, shadowed by the reveal. The sun lobe
-    // roughness stays near-mirror while a pane spans pixels (each tilted pane glints on its own) and widens as
-    // the panes go sub-pixel: the tilts then average into the face's normal distribution and the sun lights the
-    // whole sun-facing side coherently at 1-5 km instead of flashing only when exactly aligned.
+    // pane now and then); the diffuse colour is the room seen through it, shadowed by the reveal. While a pane
+    // spans pixels the sun in it is the solar disc (facadeGlint) and its GGX sun term is scaled out; the GGX
+    // roughness here is the lobe that fades back in as the panes go sub-pixel, wide from the start (a 0.07 lobe's
+    // tail still clipped a whole tower at a tenth of its weight) so the sun lights a far tower's sun-facing side
+    // coherently at 1-5 km. The mirrored sky keeps its own, sharper roughness (facadeSkyRough).
     float grain = 1.0 + (fract(paneH * 7.9) - 0.5) * 0.44 * (0.4 + 0.6 * vis);
     vec3 coat = glassCoat(gfam) * paneRefl * (0.85 + 0.3 * variant) * grain;
     coat = mix(coat, vec3(0.30, 0.32, 0.33), replaced);
-    float paneRough = mix(0.07, 0.42, 1.0 - vis);
+    float paneRough = mix(0.3, 0.45, 1.0 - vis);
     // what the pane transmits (a reflective coating passes less): the blinds at the glass plane take the sun
     // (paneDiff), the room behind them takes daylight only (paneRoom, see facadeRoom)
     float transmit = 1.0 - 1.4 * max(coat.g, coat.b);
@@ -743,6 +782,13 @@ if (facadeGlass > 0.0) {
     }
     facadeGlass = glass;
     facadeHf = clamp(v / H, 0.0, 1.0);
+    // the sun's image in the panes (facadeGlint): the pane's tilted normal and coating, the resolved-pane weight;
+    // the disc's core widens over the collapsing tilt spread as the panes go sub-pixel
+    facadeGlintN = normalize(normalize(vNormal) + facadeTilt);
+    facadeGlintF0 = coat;
+    facadeGlintW = mast ? 0.0 : glass * vis;
+    facadeGlintR = 0.0046 + 0.03 * (1.0 - vis);
+    facadeLobeScale = mast ? 1.0 : mix(1.0, 1.0 - vis, glass);
     // through a lit room the pane glows unevenly: bright where the ceiling panels are, dimmer on the walls
     emis *= mix(1.0, 0.55 + 1.1 * roomPanel, par * glass);
     if (!mast) {
@@ -806,6 +852,7 @@ if (facadeGlass > 0.0) {
         metal = 0.0;
         // shopfront glass: clear, mirroring the street opposite (its sunlit pavement and the blocks across it)
         facadeGlass = shopGlass;
+        facadeGlintW = 0.0; facadeLobeScale = 1.0;
         facadeF0 = glassCoat(0.9);
         facadeDiff = vec3(0.0);
         facadeRoom = shopIn * 2.4;   // shop interiors are lit by their own fittings, brighter than a room
@@ -838,6 +885,7 @@ if (facadeGlass > 0.0) {
         rough = mix(0.6, 0.08, g);
         metal = 0.0;
         facadeGlass = g * (1.0 - canopy) * (1.0 - sign);
+        facadeGlintW = 0.0; facadeLobeScale = 1.0;
         facadeF0 = glassCoat(0.9);
         facadeDiff = vec3(0.0);
         facadeRoom = lobbyIn * 2.2;
@@ -896,6 +944,6 @@ if (facadeGlass > 0.0) {
   totalEmissiveRadiance += emis;
 }`);
   };
-  mat.customProgramCacheKey = () => 'facade-v8';
+  mat.customProgramCacheKey = () => 'facade-v9';
   return mat;
 }
