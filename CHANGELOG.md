@@ -60,6 +60,12 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 - Progress snapshot typechecks after each builder merge and drops the branch that breaks the build (the `boats`
   worktree has been mid-refactor and uncommitted since 07:32; its files are backed up on
   `cursor/boats-wip-backup-8213`).
+- Wave 7b merged into the lead (deployed as bc348b0db7c9-20260906T152637Z): every builder branch tip as of 15:15
+  (highway rounds to junction paint and stop bars; street repaving bands; water rendering rounds 1-7; water physics
+  sheltered-slope split, merged with the group modulation of the unresolved roughness; clouds4 r9d; light3 rounds
+  1-3; facade3 round 10; veg5 round 14; terrain5 round 4; acgeo rounds 3-7). Flight harness 23/23, deterministic;
+  six sanity stills clean. Subagents stopped at 15:10 on an account billing block (unpaid invoice); uncommitted
+  worktree changes were rescued to `cursor/<name>-wip-backup-8213` branches (acgeo, facade3, veg5, boats).
 
 ## iter09 — wave 5 builders (deployed as aa8b21f9f839-20260905T121546Z)
 - Iteration 08 scored (bench/results/iter08/scores.md): no category regressed; aircraft geometry +1.5,
@@ -256,3 +262,4 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 | 6130eae71052-20260906T063811Z | 8b15377fe0b3dd927af87dd6b1e093011e560523 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/8b15377fe0b3dd927af87dd6b1e093011e560523/play.html | verified: build id matched, loaded in 35 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 146 draw calls / 0.22 M tris at the spawn |
 | b366a423870c-20260906T120411Z | 460ace25e1e376c940320201c66b42346dff6111 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/460ace25e1e376c940320201c66b42346dff6111/play.html | verified: build id matched, loaded in 34 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 146 draw calls / 0.22 M tris at the spawn. Lead + aircraft module split (pixel-identical); the wave-7 builder branches are only in the hourly progress integration so far |
 | 7f95c5ea8c9b-20260906T132622Z | 225d58bf12ed3eeea98682847ac98b63d2a2c869 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/225d58bf12ed3eeea98682847ac98b63d2a2c869/play.html | verified: build id matched, loaded in 30.7 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 153 draw calls / 0.23 M tris at the spawn. Lead + wave 7a (streets, highway, water rendering, water physics) |
+| bc348b0db7c9-20260906T152637Z | d3382d59e665cb537c25c38b5d716d6974ed0dd0 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/d3382d59e665cb537c25c38b5d716d6974ed0dd0/play.html | verified: build id matched, loaded in 29.6 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 153 draw calls / 0.25 M tris at the spawn. Lead + wave 7b (all builder branch tips) |
