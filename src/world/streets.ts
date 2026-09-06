@@ -5,7 +5,7 @@ import { clamp } from '../core/noise';
 import { Zone, type Vec2, type WorldMap } from './map';
 import { GLSL_LIGHT_POOLS, chainCross, chainFrame, frameAt, roadEdgeY, rowPositions, type RoadChain, type RoadCorner, type RoadGraph, type RoadLightUniforms, type RoadNode, type RoadRay } from './roads';
 import { balanceGroundIbl } from './terrain';
-import { cellKey } from './batching';
+import { THIN_VERTEX_MAIN, THIN_VERTEX_PARS, cellKey } from './batching';
 import { LAYER_CAMERA, layerMask, maskCasts, type ViewCull } from './culling';
 
 /**
@@ -17,7 +17,8 @@ import { LAYER_CAMERA, layerMask, maskCasts, type ViewCull } from './culling';
  * of those lamps the road and sidewalk materials read at night.
  */
 
-export type LampKind = 'arterial' | 'street' | 'ped' | 'highway';
+/** `mast`: a 30 m high-mast tower with a crown of luminaires (port yards, interchanges) */
+export type LampKind = 'arterial' | 'street' | 'ped' | 'highway' | 'mast';
 /** one planned lamp: footing (on the curb line), arm yaw (the +x of the unit lamp points along (cos yaw, 0, -sin yaw)) */
 export interface LampPlan { x: number; y: number; z: number; yaw: number; kind: LampKind }
 
@@ -96,6 +97,9 @@ const SW_MAIN = /* glsl */ `
     float curbTop = (1.0 - step(${CURB_TOP.toFixed(2)}, across)) * (face ? 0.0 : 1.0);
     col = mix(col, conc * 1.08, curbTop * 0.7);
     col *= 1.0 - 0.12 * curbTop * (1.0 - smoothstep(0.0, 0.08, across)) * fade;
+    // the curb is laid in 1 m kerb stones: their joints (top and face) are out of step with the 1.5 m slab joints
+    float kerbJ = swLine((fract(along + 0.3) - 0.5), 0.014, fwL) * fade;
+    joint = mix(joint, max(kerbJ, swLine(across - ${CURB_TOP.toFixed(2)}, 0.012, fwA) * fade), curbTop);
     // tree wells (1.5 m squares of soil) on the wide walks, every 12 m; utility covers every ~23 m
     if (slabW >= 2.3) {
       float wc = floor((along + 4.0) / 12.0);
@@ -115,7 +119,7 @@ const SW_MAIN = /* glsl */ `
     if (face) {
       // curb face: shaded, with the gutter grime along its foot (across runs -0.05 at the foot to 0 at the nose)
       col = conc * 0.82 * (0.78 + 0.22 * smoothstep(-0.05, 0.0, across));
-      joint = 0.0;
+      joint = kerbJ;
     }
   }
   col *= 1.0 - 0.4 * joint;
@@ -164,14 +168,15 @@ const EM_NONE = 0, EM_RED = 2, EM_AMBER = 3, EM_GREEN = 4, EM_HAND = 5, EM_WALK 
 /** Vertex-coloured PBR material for the furniture soups: `aMatParams` roughness / metalness, `aEmissive` codes the
  *  signal aspect a vertex belongs to and `aPhase` its node's cycle offset (+100 for the cross direction); the
  *  fragment shader lights the aspect that is on at `uSignalTime`. */
-function createKitMaterial(uniforms: { uSignalTime: THREE.IUniform<number>; uNight: THREE.IUniform<number> }): THREE.MeshStandardMaterial {
+function createKitMaterial(uniforms: { uSignalTime: THREE.IUniform<number>; uNight: THREE.IUniform<number>; uFocalPx: THREE.IUniform<number> }): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 1, vertexColors: true, emissive: 0xffffff, emissiveIntensity: 1 });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uSignalTime = uniforms.uSignalTime;
     shader.uniforms.uNight = uniforms.uNight;
+    shader.uniforms.uFocalPx = uniforms.uFocalPx;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 aMatParams; attribute float aEmissive; attribute float aPhase; varying vec2 vMatParams; varying vec2 vSig;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvMatParams = aMatParams; vSig = vec2(aEmissive, aPhase);');
+      .replace('#include <common>', `#include <common>\nattribute vec2 aMatParams; attribute float aEmissive; attribute float aPhase; varying vec2 vMatParams; varying vec2 vSig;\n${THIN_VERTEX_PARS}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvMatParams = aMatParams; vSig = vec2(aEmissive, aPhase);${THIN_VERTEX_MAIN}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying vec2 vMatParams; varying vec2 vSig; uniform float uSignalTime; uniform float uNight;')
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = vMatParams.x;')
@@ -198,7 +203,7 @@ function createKitMaterial(uniforms: { uSignalTime: THREE.IUniform<number>; uNig
         }`);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'street-kit-v1';
+  mat.customProgramCacheKey = () => 'street-kit-v2';
   return mat;
 }
 
@@ -272,15 +277,25 @@ class KitSoup {
   readonly par: number[] = [];
   readonly em: number[] = [];
   readonly ph: number[] = [];
+  readonly thin: number[] = [];
   readonly box = new THREE.Box3();
 
-  add(unit: THREE.BufferGeometry, m: THREE.Matrix4, color: THREE.Color, rough: number, metal: number, em = EM_NONE, phase = 0): void {
+  /** `thin`: the part is a thin member held to a pixel across in the vertex shader — 1: its axis is the unit's local
+   *  y (poles, heads), 2: local z (arms laid along z), 3: local x (the lens plates, which face +x); aThin is then
+   *  the world-space offset of each vertex from that axis */
+  add(unit: THREE.BufferGeometry, m: THREE.Matrix4, color: THREE.Color, rough: number, metal: number, em = EM_NONE, phase = 0, thin = 0): void {
     const p = unit.getAttribute('position'), n = unit.getAttribute('normal');
     _nm.getNormalMatrix(m);
+    _t.setFromMatrixPosition(m);
     for (let i = 0; i < p.count; i++) {
       _v.set(p.getX(i), p.getY(i), p.getZ(i)).applyMatrix4(m);
       this.pos.push(_v.x, _v.y, _v.z);
       this.box.expandByPoint(_v);
+      if (thin) {
+        if (thin === 1) _v.set(p.getX(i), 0, p.getZ(i)); else if (thin === 2) _v.set(p.getX(i), p.getY(i), 0); else _v.set(0, p.getY(i), p.getZ(i));
+        _v.applyMatrix4(m).sub(_t);
+        this.thin.push(_v.x, _v.y, _v.z);
+      } else this.thin.push(0, 0, 0);
       _v.set(n.getX(i), n.getY(i), n.getZ(i)).applyMatrix3(_nm).normalize();
       this.nrm.push(_v.x, _v.y, _v.z);
       this.col.push(color.r, color.g, color.b);
@@ -301,6 +316,7 @@ class KitSoup {
     g.setAttribute('aMatParams', new THREE.Float32BufferAttribute(this.par, 2));
     g.setAttribute('aEmissive', new THREE.Float32BufferAttribute(this.em, 1));
     g.setAttribute('aPhase', new THREE.Float32BufferAttribute(this.ph, 1));
+    g.setAttribute('aThin', new THREE.Float32BufferAttribute(this.thin, 3));
     g.boundingBox = this.box.clone();
     g.boundingSphere = this.box.getBoundingSphere(new THREE.Sphere());
     return g;
@@ -308,6 +324,7 @@ class KitSoup {
 }
 
 const _v = new THREE.Vector3();
+const _t = new THREE.Vector3();
 const _nm = new THREE.Matrix3();
 const _m = new THREE.Matrix4();
 const _m2 = new THREE.Matrix4();
@@ -378,13 +395,13 @@ function frame(x: number, y: number, z: number, yaw: number): THREE.Matrix4 {
 }
 
 /** Place `unit` scaled to (w, h, d) with its centre at local (cx, cy, cz) of `f`. */
-function part(soup: KitSoup, unit: THREE.BufferGeometry, f: THREE.Matrix4, cx: number, cy: number, cz: number, w: number, h: number, d: number, color: THREE.Color, rough: number, metal: number, em = EM_NONE, phase = 0, rotZ = 0): void {
+function part(soup: KitSoup, unit: THREE.BufferGeometry, f: THREE.Matrix4, cx: number, cy: number, cz: number, w: number, h: number, d: number, color: THREE.Color, rough: number, metal: number, em = EM_NONE, phase = 0, rotZ = 0, thin = 0): void {
   _p.set(cx, cy, cz);
   _q.setFromEuler(_e.set(0, 0, rotZ));
   _s.set(w, h, d);
   _m2.compose(_p, _q, _s);
   _m.multiplyMatrices(f, _m2);
-  soup.add(unit, _m, color, rough, metal, em, phase);
+  soup.add(unit, _m, color, rough, metal, em, phase, thin);
 }
 const _e = new THREE.Euler();
 
@@ -449,7 +466,7 @@ export class Streets {
   readonly lamps: LampPlan[] = [];
   readonly walkMaterial: THREE.MeshStandardMaterial;
   readonly kitMaterial: THREE.MeshStandardMaterial;
-  readonly uniforms = { uSignalTime: { value: 0 } as THREE.IUniform<number>, uNight: { value: 0 } as THREE.IUniform<number> };
+  readonly uniforms = { uSignalTime: { value: 0 } as THREE.IUniform<number>, uNight: { value: 0 } as THREE.IUniform<number>, uFocalPx: { value: 1000 } as THREE.IUniform<number> };
   private readonly cells: StreetCell[] = [];
   private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; small: KitSoup }>();
   counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0 };
@@ -468,15 +485,18 @@ export class Streets {
     this.roads = new RoadIndex(graph.chains);
     const signalPoles = this.signalPoles;
     for (const chain of graph.chains) {
-      if (chain.cls === 'highway' || chain.cls === 'causeway') { this.planHighwayLamps(chain); continue; }
+      if (chain.cls === 'highway' || chain.cls === 'causeway') { this.planHighwayLamps(chain); this.planHighwayEndMasts(chain); continue; }
       if (chain.cls !== 'arterial' && chain.cls !== 'street') continue;
       if (chain.s1 - chain.s0 < 2) continue;
-      for (const side of [-1, 1] as const) for (const run of this.sideRuns(chain, side)) this.buildRun(run);
+      const covered: [[number, number][], [number, number][]] = [[], []];
+      for (const side of [-1, 1] as const) for (const run of this.sideRuns(chain, side)) { this.buildRun(run); covered[side > 0 ? 1 : 0].push([run.sa, run.sb]); }
+      if (chain.cls === 'arterial') this.planVergeLamps(chain, covered);
     }
     for (const node of graph.nodes) {
       if (node.signal) this.buildSignals(node, signalPoles);
       else this.buildStopSigns(node);
       for (const k of node.corners) this.buildCorner(k, signalPoles.get(node) ?? []);
+      this.planInterchangeMasts(node);
     }
     this.buildPromenade();
     this.flush();
@@ -826,18 +846,20 @@ export class Streets {
     const phase = offset + parity * 100;
     const pedPhase = offset + (1 - parity) * 100;
     const armH = 6.0;
-    part(soup, UNIT.tube, f, 0, armH / 2 + 0.15, 0, 0.3, armH + 0.3, 0.3, C.galv, 0.45, 0.7);
+    // pole, arm, heads and lenses are thin members: held to a pixel across, so the signals stand out of the aerial
+    // views to 1.5 km and the lit lenses stay coloured points at night
+    part(soup, UNIT.tube, f, 0, armH / 2 + 0.15, 0, 0.3, armH + 0.3, 0.3, C.galv, 0.45, 0.7, EM_NONE, 0, 0, 1);
     part(soup, UNIT.box, f, 0, armH + 0.32, 0, 0.34, 0.06, 0.34, C.galv, 0.45, 0.7); // pole cap
     part(soup, UNIT.cyl6, f, 0, 0.12, 0, 0.5, 0.24, 0.5, C.concrete, 0.9, 0);
     const lanes = c.lanes >= 4 ? [1.5, 4.7] : [1.8];
     // arm over the roadway, long enough to reach the innermost approach lane
     const armLen = hw + 0.9 - lanes[0] + 0.6;
-    part(soup, UNIT.box, f, 0, armH, armLen / 2, 0.16, 0.16, armLen, C.galv, 0.45, 0.7);
+    part(soup, UNIT.box, f, 0, armH, armLen / 2, 0.16, 0.16, armLen, C.galv, 0.45, 0.7, EM_NONE, 0, 0, 2);
     part(soup, UNIT.box, f, 0, armH - 0.3, 0.35, 0.14, 0.7, 0.7, C.galv, 0.45, 0.7); // arm bracket
     const head = (hz: number, hy: number) => {
-      part(soup, UNIT.box, f, 0, hy, hz, 0.3, 1.05, 0.36, C.signal, 0.6, 0.3);
+      part(soup, UNIT.box, f, 0, hy, hz, 0.3, 1.05, 0.36, C.signal, 0.6, 0.3, EM_NONE, 0, 0, 1);
       const lens = (dy: number, em: number) => {
-        part(soup, UNIT.plate, f, 0.16, hy + dy, hz, 1, 0.26, 0.26, C.lensOff, 0.3, 0.1, em, phase);
+        part(soup, UNIT.plate, f, 0.16, hy + dy, hz, 1, 0.26, 0.26, C.lensOff, 0.3, 0.1, em, phase, 0, 3);
         part(fine, UNIT.box, f, 0.2, hy + dy + 0.15, hz, 0.24, 0.03, 0.3, C.signal, 0.6, 0.3); // visor
       };
       lens(0.34, EM_RED); lens(0, EM_AMBER); lens(-0.34, EM_GREEN);
@@ -974,6 +996,26 @@ export class Streets {
 
   // ---------------------------------------------------------------- highway lamps (kept from the props plan)
 
+  /** Arterial stretches outside the districts (the causeway approaches over the keys, the roads through the parks
+   *  and mangroves) have no sidewalk run and so no run lamps: they get a pole on the verge every 40 m, both sides,
+   *  wherever the ground is land — the lamp line that leads to every causeway. */
+  private planVergeLamps(chain: RoadChain, covered: [[number, number][], [number, number][]]): void {
+    const cross = this.crossOf(chain);
+    for (const side of [-1, 1] as const) {
+      const runs = covered[side > 0 ? 1 : 0];
+      for (let s = chain.s0 + 20; s < chain.s1 - 12; s += 40) {
+        if (runs.some(([a, b]) => s > a - 8 && s < b + 8)) continue;
+        const f = frameAt(chain, cross, s);
+        const x = f.x + f.cx * side * (chain.hw + 1.0), z = f.z + f.cz * side * (chain.hw + 1.0);
+        const g = this.map.heightAt(x, z);
+        if (g < 0.8) continue;
+        this.lamp(x, g, z, Math.atan2(f.cz * side, -f.cx * side), 'arterial');
+      }
+    }
+  }
+
+  /** Highway and causeway approaches on land: a pole every 40 m, sides alternating (the water spans carry the
+   *  bridges' own lamps), the arm turned across the road — a line of light along every approach at night. */
   private planHighwayLamps(chain: RoadChain): void {
     let k = 0;
     for (const seg of chain.segs) {
@@ -981,14 +1023,50 @@ export class Streets {
       const len = Math.hypot(dx, dz);
       if (len < 1) continue;
       const ux = dx / len, uz = dz / len;
-      for (let s = 20; s < len; s += 45, k++) {
+      const yaw = Math.atan2(-uz, ux);
+      for (let s = 20; s < len; s += 40, k++) {
         const side = k % 2 === 0 ? -1 : 1;
         const x = seg.a[0] + ux * s + -uz * (seg.width / 2 + 1) * side;
         const z = seg.a[1] + uz * s + ux * (seg.width / 2 + 1) * side;
         const g = this.map.heightAt(x, z);
-        if (g < 0.8) continue;
-        this.lamp(x, g, z, 0, 'highway');
+        if (g < 0.8 || !this.roads.clear(x, z, 0.3)) continue;
+        this.lamp(x, g, z, yaw, 'highway');
       }
+    }
+  }
+
+  /** The highways are grade-separated from the graph (no shared nodes): their ends on land, where the ramps meet
+   *  the surface network, get a pair of 30 m masts on the verges. */
+  private planHighwayEndMasts(chain: RoadChain): void {
+    const cross = this.crossOf(chain);
+    for (const s of [chain.s0 + 12, chain.s1 - 12]) {
+      const f = frameAt(chain, cross, s);
+      for (const side of [-1, 1] as const) {
+        const x = f.x + f.cx * side * (chain.hw + 5), z = f.z + f.cz * side * (chain.hw + 5);
+        const g = this.map.heightAt(x, z);
+        if (g < 0.8 || !this.roads.clear(x, z, 2.5)) continue;
+        this.lamp(x, g, z, 0, 'mast');
+        this.markOccupied(x, z, 2);
+      }
+    }
+  }
+
+  /** High masts at the interchanges: where a highway or causeway meets roads of another class, a 30 m mast stands in
+   *  up to two of the corner quadrants (the curb-return centres, pushed 6 m further into the corner). */
+  private planInterchangeMasts(node: RoadNode): void {
+    const fast = node.rays.some((r) => r.chain.cls === 'highway' || r.chain.cls === 'causeway');
+    const other = node.rays.some((r) => r.chain.cls !== 'highway' && r.chain.cls !== 'causeway' && r.chain.cls !== 'runway');
+    if (!fast || !other || node.corners.length < 2) return;
+    let placed = 0;
+    for (let i = 0; i < node.corners.length && placed < 2; i += 2) {
+      const k = node.corners[i];
+      const dx = k.o[0] - node.x, dz = k.o[1] - node.z, d = Math.hypot(dx, dz) || 1;
+      const x = k.o[0] + (dx / d) * 6, z = k.o[1] + (dz / d) * 6;
+      const g = this.map.heightAt(x, z);
+      if (g < 0.8 || !this.roads.clear(x, z, 2.5)) continue;
+      this.lamp(x, g, z, 0, 'mast');
+      this.markOccupied(x, z, 2);
+      placed++;
     }
   }
 
@@ -1010,7 +1088,7 @@ export class Streets {
     const texel = Math.max(LAMP_TEXEL, (x1 - x0) / LAMP_MAP_MAX, (z1 - z0) / LAMP_MAP_MAX);
     const w = Math.min(LAMP_MAP_MAX, Math.ceil((x1 - x0) / texel)), h = Math.min(LAMP_MAP_MAX, Math.ceil((z1 - z0) / texel));
     const acc = new Float32Array(w * h);
-    const POOL: Record<LampKind, [number, number, number]> = { arterial: [13, 1.0, 3.3], street: [10.5, 0.85, 2.0], ped: [5, 0.45, 0], highway: [12, 1.0, 0] };
+    const POOL: Record<LampKind, [number, number, number]> = { arterial: [13, 1.0, 3.3], street: [10.5, 0.85, 2.0], ped: [5, 0.45, 0], highway: [12, 1.0, 0], mast: [40, 1.2, 0] };
     for (const l of this.lamps) {
       const [radius, peak, arm] = POOL[l.kind];
       // the luminaire hangs at the arm's end: the pool centres there
@@ -1095,7 +1173,9 @@ export class Streets {
 
   /** Per-frame culling: cells in view within FAR (small kits within SMALL_FAR); the large kits cast into the fine
    *  cascades within SHADOW_FAR, the small kits and the sidewalks never cast. */
-  updateLod(camX: number, camZ: number, cull: ViewCull, camPos: THREE.Vector3): void {
+  /** `pxPerMetre`: focal length of the main frame in pixels (the thin members of the kits are held to a pixel across) */
+  updateLod(camX: number, camZ: number, cull: ViewCull, camPos: THREE.Vector3, pxPerMetre = 1000): void {
+    this.uniforms.uFocalPx.value = pxPerMetre;
     for (const c of this.cells) {
       const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
       const inView = d < FAR && cull.boxInView(c.box);

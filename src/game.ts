@@ -409,7 +409,7 @@ export class Game {
     const pxPerMetre = 0.5 * this.renderer.getDrawingBufferSize(_size).y * cam.projectionMatrix.elements[5];
     this.city.batches.updateLod(cx, cz, this.cull, cam.position, this.reflection.range, pxPerMetre);
     this.props.updateLod(cx, cz, this.cull, cam.position, this.reflection.range, pxPerMetre);
-    this.streets.updateLod(cx, cz, this.cull, cam.position);
+    this.streets.updateLod(cx, cz, this.cull, cam.position, pxPerMetre);
     this.traffic.updateCulling(this.cull);
     // the airframe casts only into the cascades its shadow can reach: swept down to the ground under it, so
     // from altitude that is the cascade holding its ground shadow, not all three
