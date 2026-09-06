@@ -91,6 +91,10 @@ float facadeHf = 0.5;
 // where the mirrored sky is dark, shows its interior head-on and turns into a mirror toward grazing (Fresnel).
 vec3 facadeF0 = vec3(0.04);
 vec3 facadeDiff = vec3(0.0);
+// what stands behind the pane and is lit by daylight only (the room, a shop or lobby interior): it never sees the
+// sun as a wall would, so it is added from the sky irradiance in lights_fragment_maps, not from the direct lights.
+// facadeDiff keeps what sits at the glass plane in the sun: blinds, spandrel backing, a balustrade's wall.
+vec3 facadeRoom = vec3(0.0);
 // the lower floors mirror the neighbouring blocks (soft vertical bands) instead of open sky
 float facadeOccl = 0.0;
 // roughness of the mirrored sky: the pane tilt spread, not the sun-lobe roughness (which widens with distance so
@@ -169,7 +173,12 @@ if (facadeGlass > 0.0) {
   sky = mix(sky, sky * vec3(0.55, 0.5, 0.45), facadeOccl);
   radiance = mix(radiance, sky, facadeGlass);
 }
-#endif`)
+#endif
+if (facadeGlass > 0.0) {
+  // the room behind the pane is lit by the daylight the window admits (the sky and ground irradiance at the
+  // facade), never by the sun as a wall is: a sunlit face's windows stay dark holes with blinds glowing in them
+  reflectedLight.indirectDiffuse += (irradiance + iblIrradiance) * RECIPROCAL_PI * facadeRoom * facadeGlass;
+}`)
       .replace('#include <lights_physical_fragment>', `#include <lights_physical_fragment>
 if (facadeGlass > 0.0) {
   material.diffuseColor = mix(material.diffuseColor, facadeDiff, facadeGlass);
@@ -206,7 +215,89 @@ if (facadeGlass > 0.0) {
   vec3 emis = vec3(0.0);
   float grime = 0.62 * vnoise(vWorldPosF.xz * 0.11 + vWorldPosF.y * 0.07) + 0.38 * vnoise(vWorldPosF.xz * 0.27 - vWorldPosF.y * 0.15);
   float nightOn = smoothstep(0.03, 0.4, uNight);
-  if (isTop) {
+  if (style > 14.5) {
+    // ---------------------------------------------------------------- rooftop kit (city.ts addRoofDetail)
+    // Small metal / glass items: patterns are box-filtered like the facades' and fall back to the body tone
+    // where they go sub-pixel. ku runs along the face (around the drum of a stack or dish), v up it.
+    float ku = u;
+    float wku = fwidth(ku), wkv = fwidth(v);
+    if (style == 15.0) {
+      // plant (RTUs, condensers, cooling towers, dishes): painted or galvanised casing with panel seams, a louvre
+      // band low on the sides, fan rings in the top, a rust weep at the base
+      col = wall * (0.94 + 0.12 * hash11(seed));
+      float seam = max(fpulse(ku / 1.1, 0.0, 0.03, wku / 1.1), fpulse(v / 0.9, 0.0, 0.03, wkv / 0.9));
+      col *= 1.0 - 0.28 * seam;
+      if (isTop) {
+        vec2 c = meters.xz - vDims.xz * 0.5;
+        float longSide = max(vDims.x, vDims.z), shortSide = min(vDims.x, vDims.z);
+        float along = vDims.x >= vDims.z ? c.x : c.y, across = vDims.x >= vDims.z ? c.y : c.x;
+        float nf = max(1.0, floor(longSide / 2.2));
+        float pitch = longSide / nf;
+        float fu = fract(along / pitch + 0.5) - 0.5;
+        float rf = length(vec2(fu * pitch, across)) / (min(pitch, shortSide) * 0.42);
+        float wr = fwidth(rf);
+        float fan = (1.0 - fstep(1.0, rf, wr)) * step(1.5, longSide);   // the small condensers keep a plain grille top
+        float ring = fan * fstep(0.82, rf, wr);
+        col = mix(col, vec3(0.16, 0.17, 0.18), fan * 0.75);
+        col = mix(col, vec3(0.72), ring * 0.6);
+        col *= 1.0 - 0.2 * fpulse(across / 0.12, 0.0, 0.5, fwidth(across) / 0.12) * (1.0 - fan) * (1.0 - smoothstep(0.3, 0.9, fwidth(across) / 0.12));
+      } else {
+        float louv = fpulse(v / 0.09, 0.0, 0.5, wkv / 0.09) * step(v, H * 0.55) * (1.0 - smoothstep(0.3, 0.9, wkv / 0.09));
+        col *= 1.0 - 0.25 * louv;
+        col = mix(col, vec3(0.45, 0.28, 0.16), 0.3 * smoothstep(0.55, 0.9, grime) * (1.0 - smoothstep(0.0, 0.5, v)));
+      }
+      rough = 0.5; metal = 0.35;
+    } else if (style == 16.0) {
+      // guard rail: posts every 1.5 m, a top and a mid rail, nothing in between (discarded), so it reads as a
+      // see-through railing up close and thins away as its members go sub-pixel
+      float post = fpulse(ku / 1.5, 0.0, 0.04, wku / 1.5);
+      float rail = fpulse(v / H, 0.93, 1.0, wkv / H) + fpulse(v / H, 0.47, 0.53, wkv / H);
+      float cover = isTop ? 1.0 : max(post, rail);
+      if (cover < 0.5) discard;
+      col = wall;
+      rough = 0.45; metal = 0.5;
+    } else if (style == 17.0) {
+      // solar row: the top is dark glazed cells in an aluminium grid, the sides the array's frame and rack
+      if (isTop) {
+        float grid = max(fpulse(meters.x / 1.0, 0.0, 0.03, fwidth(meters.x)), fpulse(meters.z / 1.65, 0.0, 0.03, fwidth(meters.z) / 1.65));
+        float cells = 1.0 - grid;
+        vec3 cell = wall * (0.9 + 0.2 * hash12(floor(vec2(meters.x, meters.z / 1.65))));
+        col = mix(vec3(0.75, 0.76, 0.77), cell, cells);
+        facadeGlass = cells;
+        facadeF0 = vec3(0.05);
+        facadeDiff = cell;
+        facadeHf = 0.5;
+        facadeSkyRough = 0.06;
+        rough = mix(0.4, 0.06, cells); metal = 0.0;
+      } else {
+        col = vec3(0.62, 0.63, 0.64) * (1.0 - 0.35 * fpulse(v / H, 0.0, 0.55, wkv / H));   // rack shadow under the frame
+        rough = 0.5; metal = 0.5;
+      }
+    } else if (style == 18.0) {
+      // skylight: glazing in a pale frame on every face, a dim space below
+      float frame = isTop
+        ? max(fpulse(meters.x / 1.2, 0.0, 0.06, fwidth(meters.x) / 1.2), fpulse(meters.z / 1.2, 0.0, 0.06, fwidth(meters.z) / 1.2))
+        : max(fpulse(ku / 1.2, 0.0, 0.06, wku / 1.2), 1.0 - fstep(0.12, v, wkv) + fstep(H - 0.12, v, wkv));
+      frame = clamp(frame, 0.0, 1.0);
+      vec3 inner = vec3(0.05, 0.06, 0.07);
+      col = mix(inner, vec3(0.86, 0.87, 0.86), frame);
+      facadeGlass = 1.0 - frame;
+      facadeF0 = glassCoat(0.9) * 0.8;
+      facadeDiff = vec3(0.0);
+      facadeRoom = inner * 2.0;
+      facadeHf = 1.0;
+      rough = mix(0.08, 0.5, frame); metal = 0.0;
+    } else {
+      // ducts, pipes, vents, stacks, masts, tank legs: galvanised sheet with joints, darker underneath
+      col = wall * (0.92 + 0.16 * hash11(seed));
+      bool horiz = !round && max(vDims.x, vDims.z) > H;   // a duct or pipe run: joints across it
+      float joint = fpulse((horiz ? ku : v) / 1.2, 0.0, 0.05, (horiz ? wku : wkv) / 1.2);
+      col *= 1.0 - 0.3 * joint;
+      if (vLocalN.y < -0.5) col *= 0.55;
+      col = mix(col, vec3(0.45, 0.28, 0.16), 0.25 * smoothstep(0.6, 0.9, grime) * step(H, 3.5) * (1.0 - smoothstep(0.0, 0.3, v)));
+      rough = 0.42; metal = 0.55;
+    }
+  } else if (isTop) {
     if (style == 5.0) {
       col = roofPalette(vStyle.w) * (0.9 + 0.2 * vnoise(vWorldPosF.xz * 1.5));
       rough = 0.85;
@@ -230,22 +321,32 @@ if (facadeGlass > 0.0) {
       col = mix(col, vec3(0.75, 0.8, 0.85), sky * 0.7);
       rough = 0.7;
     } else {
-      // tower roofs: dark membrane on glass / stone / brick, pale on concrete and stucco
-      vec3 base = glassy ? vec3(0.26, 0.27, 0.28) : style == 10.0 ? vec3(0.30, 0.29, 0.28) : style == 6.0 ? vec3(0.52, 0.52, 0.53) : style == 3.0 ? mix(vec3(0.66, 0.64, 0.60), wall, 0.35) : vec3(0.64, 0.64, 0.62);
-      col = base * (0.85 + 0.3 * vnoise(vWorldPosF.xz * 0.6));
-      // gravel / membrane grain while it spans pixels, ponding stains at the low spots
+      // tower roofs: the membrane per building: white TPO, pale grey, gravel ballast or dark EPDM (glass and
+      // stone towers lean dark, stucco and concrete pale), with ballast grain while it spans pixels and ponding
+      // stains at the low spots
+      float mk = hash11(seed * 4.7 + 1.9) + (glassy || style == 9.0 ? 0.35 : style == 10.0 ? 0.2 : style == 3.0 || style == 6.0 ? -0.1 : 0.0);
+      vec3 base = mk < 0.3 ? vec3(0.80, 0.80, 0.78) : mk < 0.6 ? vec3(0.62, 0.62, 0.60) : mk < 0.85 ? vec3(0.50, 0.49, 0.47) : vec3(0.27, 0.28, 0.29);
+      if (style == 3.0 && mk < 0.6) base = mix(base, wall, 0.3);
+      bool gravel = mk >= 0.6 && mk < 0.85;
+      col = base * (0.88 + 0.24 * vnoise(vWorldPosF.xz * 0.6));
       float roofPx = fwidth(vWorldPosF.x) + fwidth(vWorldPosF.z);
-      float grain = vnoise(vWorldPosF.xz * 3.0);
-      col *= 1.0 + (0.12 * grain - 0.06) * (1.0 - smoothstep(0.15, 0.6, roofPx));
+      float grain = vnoise(vWorldPosF.xz * (gravel ? 6.0 : 3.0));
+      col *= 1.0 + ((gravel ? 0.22 : 0.1) * grain - (gravel ? 0.11 : 0.05)) * (1.0 - smoothstep(0.15, 0.6, roofPx));
       col *= 1.0 - 0.18 * smoothstep(0.62, 0.8, vnoise(vWorldPosF.xz * 0.25 + seed));
-      // parapet coping around the edge, a shadow inside it, mechanical pads and rain staining
+      // membrane seams every 2 m on the sheet roofs, a drainage stain fanning from a low corner
+      if (!gravel) col *= 1.0 - 0.08 * fpulse(meters.x / 2.0, 0.0, 0.03, fwidth(meters.x) / 2.0) * (1.0 - smoothstep(0.1, 0.4, roofPx));
+      vec2 drain = vec2(hash11(seed * 3.1) < 0.5 ? 1.5 : vDims.x - 1.5, hash11(seed * 5.9) < 0.5 ? 1.5 : vDims.z - 1.5);
+      col *= 1.0 - 0.14 * (1.0 - smoothstep(2.0, 9.0, length(meters.xz - drain))) * step(0.4, hash11(seed * 2.6));
+      // parapet coping around the edge, a shadow inside it, rain staining; the shader's mechanical pads stand in
+      // for the rooftop kit only beyond its draw distance (city.ts ROOF_BIG_FAR)
       float edgeD = min(min(meters.x, vDims.x - meters.x), min(meters.z, vDims.z - meters.z));
       float wm = fwidth(edgeD);
       col = mix(col * 0.62, col, fstep(1.2, edgeD, wm) * 0.6 + 0.4 * smoothstep(0.6, 3.0, edgeD));
       col = mix(col, vec3(0.80, 0.80, 0.78), (1.0 - fstep(0.45, edgeD, wm)) * (style == 5.0 ? 0.0 : 0.8));
-      col = mix(col, col * 0.55, step(0.62, hash12(floor(vWorldPosF.xz / 6.0) + seed)) * 0.3);
+      float kitFar = smoothstep(1500.0, 2200.0, length(vWorldPosF - cameraPosition));
+      col = mix(col, col * 0.55, step(0.62, hash12(floor(vWorldPosF.xz / 6.0) + seed)) * 0.3 * kitFar);
       col *= 0.9 + 0.2 * grime;
-      rough = 0.9;
+      rough = gravel ? 0.95 : 0.8;
       // aviation beacon on the tallest roofs
       if (vDims.y > 140.0 && !isTrim) {
         float dc = length(meters.xz - vDims.xz * 0.5);
@@ -264,9 +365,10 @@ if (facadeGlass > 0.0) {
         float gf = hash11(seed * 2.1 + 0.7);
         facadeGlass = 1.0;
         facadeF0 = glassCoat(gf) * (style == 8.0 ? 0.9 : 1.0);
-        facadeDiff = vec3(0.04, 0.05, 0.06);
+        facadeDiff = vec3(0.0);
+        facadeRoom = vec3(0.08, 0.10, 0.12);
         facadeHf = 1.0;
-        col = facadeDiff;
+        col = facadeRoom;
         rough = 0.1;
       } else {
         col = wall * 0.8;
@@ -340,7 +442,9 @@ if (facadeGlass > 0.0) {
     float blindThr = clamp(0.62 + 0.5 * (fHash - 0.5) + 0.2 * (hash11(seed * 6.3 + 0.4) - 0.5), 0.15, 0.97);
     float blind = step(blindThr, paneH) * step(1.0 - blindLen, py) * vis;
     vec3 blindCol = mix(mix(vec3(0.58, 0.57, 0.53), vec3(0.62, 0.50, 0.40), step(0.8, fract(paneH * 5.3))), vec3(0.42, 0.40, 0.38), step(0.7, hash11(seed * 9.2 + 1.7)) * step(0.5, fract(paneH * 3.7)));
-    vec3 interior = vec3(0.045, 0.055, 0.065) + vec3(0.14, 0.13, 0.11) * smoothstep(0.78, 0.98, py) * vis;
+    // the room seen through the pane: lit by daylight only (facadeRoom), so these are room albedos, not the tones of a
+    // sunlit wall; a dim space with the ceiling and its light fittings along the top of the pane
+    vec3 interior = vec3(0.13, 0.14, 0.15) + vec3(0.36, 0.33, 0.28) * smoothstep(0.78, 0.98, py) * vis;
     // Parallax rooms behind the large panes (over ~12 px, main pass only: the mirror pass renders from the camera
     // reflected under the water): one ray-box trace in facade space finds the back wall, a side wall, the ceiling
     // or the floor of the room, so a near office or hotel window shows depth that moves with the viewer.
@@ -376,11 +480,10 @@ if (facadeGlass > 0.0) {
       else if (t == tV) hit = vec3(0.26, 0.24, 0.22) * (0.9 + 0.2 * step(0.5, fract(hu / 0.6)));            // carpet / tile floor
       else hit = wallCol * 0.8;                                                                          // party wall
       // daylight falls off into the room from the window; the lit room's ceiling panels glow at night
-      float fall = 0.05 + 0.32 * exp(-hd * 0.45);
+      float fall = 0.18 + 0.75 * exp(-hd * 0.4);
       vec3 room = hit * fall * (1.0 - 0.3 * step(0.86, rHash));
       interior = mix(interior, room, par);
     }
-    vec3 seen = mix(interior, blindCol, blind);
     // the odd replaced pane in a different batch of glass
     float replaced = step(0.985, fract(paneH * 31.7)) * vis;
     float reveal = 1.0 - (0.32 * smoothstep(0.72, 1.0, py) + 0.14 * smoothstep(0.86, 1.0, px)) * vis;
@@ -400,7 +503,11 @@ if (facadeGlass > 0.0) {
     vec3 coat = glassCoat(gfam) * paneRefl * (0.85 + 0.3 * variant) * grain;
     coat = mix(coat, vec3(0.30, 0.32, 0.33), replaced);
     float paneRough = mix(0.07, 0.42, 1.0 - vis);
-    vec3 paneDiff = seen * reveal * (1.0 - 1.4 * max(coat.g, coat.b));
+    // what the pane transmits (a reflective coating passes less): the blinds at the glass plane take the sun
+    // (paneDiff), the room behind them takes daylight only (paneRoom, see facadeRoom)
+    float transmit = 1.0 - 1.4 * max(coat.g, coat.b);
+    vec3 paneDiff = blindCol * blind * reveal * transmit;
+    vec3 paneRoom = interior * (1.0 - blind) * reveal * transmit;
     facadeSkyRough = mix(0.08, 0.2, 1.0 - vis);
     // the sill's shadow and streaks of dirt washed down from it
     float sillY = y0 - 0.05, sillD = y0 - 0.3;
@@ -434,6 +541,7 @@ if (facadeGlass > 0.0) {
       float sg = spandrel * spandrelGlass * (1.0 - transom);
       glass = max(glass, sg);
       paneDiff = mix(paneDiff, backing, sg * (1.0 - gy));
+      paneRoom *= 1.0 - sg * (1.0 - gy);
       col = mix(col, paneDiff, glass);
       emis = litCol * lit * gx * gy * rowOn * mix(1.3, 2.0, clear) * (1.0 - 0.6 * blind);
       // some towers wear LED accent light at night: the corner mullions and a band under the crown
@@ -555,7 +663,8 @@ if (facadeGlass > 0.0) {
       vec3 bronze = vec3(0.13, 0.10, 0.075);
       glass = strip * (1.0 - spandrel);
       coat = glassCoat(0.5) * paneRefl * (0.85 + 0.3 * variant) * grain;   // bronze glass in the strips
-      paneDiff = seen * reveal * 0.6;
+      paneDiff = blindCol * blind * reveal * 0.6;
+      paneRoom = interior * (1.0 - blind) * reveal * 0.6;
       col = mix(stone, bronze, strip);
       col = mix(col, paneDiff, glass);
       rough = mix(0.55, paneRough, glass);
@@ -583,6 +692,7 @@ if (facadeGlass > 0.0) {
       // white egg-crate frame with deeply recessed glass: the frame's shadow falls across the head and one jamb
       float recess = 0.45 * smoothstep(0.55, 0.95, py) + 0.18 * smoothstep(0.7, 0.95, px);
       paneDiff *= 1.0 - recess * vis;
+      paneRoom *= 1.0 - recess * vis;
       coat *= 1.0 - 0.5 * recess * vis;
       col = mix(wall * (0.97 + 0.06 * vnoise(vWorldPosF.xz * 2.0 + v)), paneDiff, glass);
       rough = mix(0.8, paneRough, glass);
@@ -598,6 +708,7 @@ if (facadeGlass > 0.0) {
       glass = 1.0 - post;
       coat = glassCoat(0.9) * 1.1;
       paneDiff = mix(wall, vec3(0.5, 0.62, 0.7), 0.5) * 0.55;
+      paneRoom = vec3(0.0);
       col = mix(paneDiff, vec3(0.75), post);
       rough = mix(0.08, 0.4, post);
     } else {
@@ -612,16 +723,43 @@ if (facadeGlass > 0.0) {
       facadeOccl = 0.75 * nb * (1.0 - smoothstep(8.0, 70.0, v));
       facadeF0 = coat;
       facadeDiff = paneDiff;
+      facadeRoom = paneRoom;
+    }
+    // a louvred mechanical floor two thirds of the way up about half of the tall office towers: a dark slatted
+    // band instead of windows, which breaks the window stack from a kilometre away
+    if (H > 80.0 && !isTrim && (glassy || style == 11.0) && hash11(seed * 3.6 + 0.8) < 0.45) {
+      float mechFloor = floor(nFloors * (0.55 + 0.3 * hash11(seed * 4.1 + 2.2)));
+      float mech = step(abs(floorIdx - mechFloor), 0.5) * fpulse(fl, 0.04, 0.96, pwv);
+      if (mech > 0.0) {
+        float slat = fpulse(v / 0.15, 0.0, 0.5, wv / 0.15) * (1.0 - smoothstep(0.3, 0.9, wv / 0.15));
+        vec3 louvre = mix(wall, vec3(0.32, 0.34, 0.36), 0.7) * (0.75 + 0.25 * slat);
+        col = mix(col, louvre, mech);
+        glass *= 1.0 - mech;
+        emis *= 1.0 - mech;
+        rough = mix(rough, 0.6, mech);
+        metal = mix(metal, 0.3, mech);
+      }
     }
     facadeGlass = glass;
     facadeHf = clamp(v / H, 0.0, 1.0);
     // through a lit room the pane glows unevenly: bright where the ceiling panels are, dimmer on the walls
     emis *= mix(1.0, 0.55 + 1.1 * roomPanel, par * glass);
     if (!mast) {
-      // street level: shopfront glazing between piers with a fascia sign band on the walk-up families, a darker
-      // plinth elsewhere; lit at night regardless of the floors above
-      bool street = (style == 1.0 || style == 2.0 || style == 3.0 || style == 7.0 || style == 10.0 || style == 11.0) && H > 7.0 && hash11(seed * 4.4 + 0.9) < 0.7;
-      if (street && floorIdx < 0.5) {
+      // Street level. Each building has a front face (entrance, lobby, shopfronts) and a back face (loading dock,
+      // service door) picked per building, so a block read from the street shows entrances on the avenue and
+      // docks in the service lane rather than the same ground floor all round.
+      bool walkup = (style == 1.0 || style == 2.0 || style == 3.0 || style == 7.0 || style == 10.0 || style == 11.0) && H > 7.0 && !isTrim;
+      bool tower = (style < 0.5 || style == 8.0 || style == 9.0 || (style == 11.0 && H > 40.0)) && H > 24.0 && faceW > 10.0 && !isTrim;
+      // faces 0 / 1 are -z / +z, 2 / 3 are -x / +x: the back face is the front's pair
+      float faceId = floor(sideX + 0.5) * 2.0 + step(0.0, vLocalN.x + vLocalN.z);
+      float frontId = floor(hash11(seed * 5.1 + 0.2) * 3.999);
+      float backId = frontId + (mod(frontId, 2.0) < 0.5 ? 1.0 : -1.0);
+      bool front = round || abs(faceId - frontId) < 0.5;
+      bool back = !round && abs(faceId - backId) < 0.5;
+      bool street = walkup && hash11(seed * 4.4 + 0.9) < 0.7;
+      float lobbyN = H > 60.0 ? 2.0 : 1.0;
+      if (street && floorIdx < 0.5 && !back) {
+        // shopfront glazing between piers with a fascia sign band, lettered, lit at night regardless of the floors above
         float sx = fpulse(bu, 0.07, 0.93, pwu);
         float shop = sx * fpulse(fl, 0.05, 0.74, pwv);
         float fascia = sx * fpulse(fl, 0.77, 0.94, pwv);
@@ -631,6 +769,13 @@ if (facadeGlass > 0.0) {
         awning *= 0.6 + 0.4 * fpulse(bu * 6.0, 0.0, 0.5, pwu * 6.0);   // striped valance
         col = mix(wall * 0.9, shopIn, shop);
         col = mix(col, fasciaCol, fascia);
+        // lettering: a run of blocky glyphs in the sign's contrast colour across the middle of each fascia, faded
+        // out as the glyphs go sub-pixel so a far fascia is a plain colour band
+        float lu = u / 0.55;
+        float glyph = step(0.35, hash12(vec2(floor(lu), seed + 3.0))) * fpulse(lu, 0.15, 0.85, wu / 0.55);
+        float text = glyph * fascia * fpulse(fl, 0.81, 0.9, pwv) * fpulse(bu * 0.5, 0.08, 0.92, pwu * 0.5) * (1.0 - smoothstep(0.3, 0.8, wu / 0.55));
+        vec3 textCol = mix(vec3(0.95), vec3(0.12), step(0.55, dot(fasciaCol, vec3(0.33))));
+        col = mix(col, textCol, text);
         col = mix(col, mix(fasciaCol, vec3(0.9), 0.35) * 0.8, awning);
         shop *= 1.0 - awning;
         rough = mix(0.8, 0.1, shop);
@@ -638,9 +783,66 @@ if (facadeGlass > 0.0) {
         // shopfront glass: clear, mirroring the street opposite rather than the sky
         facadeGlass = shop;
         facadeF0 = glassCoat(0.9);
-        facadeDiff = shopIn;
+        facadeDiff = vec3(0.0);
+        facadeRoom = shopIn * 2.4;   // shop interiors are lit by their own fittings, brighter than a room
         facadeOccl = 0.8;
-        emis = vec3(1.0, 0.88, 0.7) * shop * 1.5 * nightOn + fasciaCol * fascia * 1.2 * nightOn;
+        emis = vec3(1.0, 0.88, 0.7) * shop * 1.5 * nightOn + fasciaCol * fascia * 1.2 * nightOn + textCol * text * 1.5 * nightOn;
+      } else if (tower && floorIdx < lobbyN) {
+        // lobby: full-height clear glazing between slim mullions over a dark plinth, a slab edge at its head; on
+        // the front face the entrance holds the centre third: a canopy band with the doors in its shadow and a
+        // lit sign over them
+        float lobbyH = lobbyN * floorH;
+        float lv = v / lobbyH;
+        float mull = fpulse(u / 2.4, 0.0, 0.035, wu / 2.4);
+        float plinth = 1.0 - fstep(0.6, v, wv);
+        float head = fstep(lobbyH - 0.5, v, wv);
+        vec3 lobbyIn = vec3(0.10, 0.10, 0.11) + vec3(0.36, 0.33, 0.28) * smoothstep(0.55, 0.95, lv) * vis;
+        float g = (1.0 - mull) * (1.0 - plinth) * (1.0 - head);
+        col = mix(vec3(0.16, 0.17, 0.18), lobbyIn, g);
+        col = mix(col, vec3(0.22, 0.22, 0.23), plinth);
+        col = mix(col, wall * 0.9, head);
+        float ent = front ? fpulse(u / faceW, 0.36, 0.64, wu / faceW) : 0.0;
+        float canopy = ent * fpulse(lv, 0.55, 0.62, wv / lobbyH);
+        float doors = ent * (1.0 - fstep(0.55 * lobbyH, v, wv)) * (1.0 - plinth);
+        col = mix(col, vec3(0.12, 0.12, 0.13), canopy);
+        col *= 1.0 - 0.35 * doors * smoothstep(0.35, 0.55, lv);
+        float doorFrame = doors * fpulse(u / 1.1, 0.0, 0.06, wu / 1.1);
+        col = mix(col, vec3(0.7), doorFrame);
+        float sign = ent * fpulse(lv, 0.66, 0.8, wv / lobbyH) * fpulse(u / faceW, 0.42, 0.58, wu / faceW);
+        vec3 signCol = fasciaPalette(hash11(seed * 3.3));
+        col = mix(col, signCol, sign * 0.85);
+        rough = mix(0.6, 0.08, g);
+        metal = 0.0;
+        facadeGlass = g * (1.0 - canopy) * (1.0 - sign);
+        facadeF0 = glassCoat(0.9);
+        facadeDiff = vec3(0.0);
+        facadeRoom = lobbyIn * 2.2;
+        facadeOccl = 0.8;
+        emis = lobbyIn * 2.2 * g * nightOn + signCol * sign * 2.5 * nightOn;
+      } else if (back && floorIdx < 0.5 && (walkup || tower || style == 6.0 || style == 4.0) && faceW > 14.0 && !isTrim) {
+        // service side: a ribbed roll-up loading door and a steel personnel door, a soiled plinth
+        float u0 = faceW * (0.15 + 0.5 * hash11(seed * 8.1));
+        float dock = fpulse((u - u0) / faceW, 0.0, 3.6 / faceW, wu / faceW) * (1.0 - fstep(3.6, v, wv));
+        float door = fpulse((u - u0 - 5.0) / faceW, 0.0, 1.0 / faceW, wu / faceW) * (1.0 - fstep(2.3, v, wv));
+        float ribs = fpulse(v / 0.3, 0.0, 0.5, wv / 0.3) * (1.0 - smoothstep(0.3, 0.8, wv / 0.3));
+        col = mix(col, vec3(0.50, 0.51, 0.52) * (0.86 + 0.14 * ribs), dock);
+        col = mix(col, vec3(0.28, 0.30, 0.32), door);
+        col *= 1.0 - 0.25 * (1.0 - fstep(0.8, v, wv));
+        col *= 1.0 - 0.2 * dock * smoothstep(3.0, 3.6, v) * (1.0 - fstep(4.4, v, wv));
+        facadeGlass *= 1.0 - max(dock, door);
+        emis *= 1.0 - max(dock, door);
+      } else if (front && !round && floorIdx < 0.5 && walkup) {
+        // entrance: a panelled door in a pale surround, a lamp over it at night, a darker plinth
+        float u0 = faceW * 0.5 + (hash11(seed * 6.6) - 0.5) * faceW * 0.5;
+        float door = fpulse((u - u0) / faceW, 0.0, 1.3 / faceW, wu / faceW) * (1.0 - fstep(2.5, v, wv));
+        float surround = clamp(fpulse((u - u0 + 0.2) / faceW, 0.0, 1.7 / faceW, wu / faceW) * (1.0 - fstep(2.9, v, wv)) - door, 0.0, 1.0);
+        vec3 doorCol = hash11(seed * 7.2) < 0.5 ? vec3(0.20, 0.16, 0.12) : vec3(0.12, 0.2, 0.26);
+        col = mix(col, doorCol, door);
+        col = mix(col, vec3(0.92, 0.91, 0.88), surround);
+        col = mix(col, col * 0.8, (1.0 - fstep(0.8, v, wv)) * (1.0 - door));
+        float lamp = surround * fstep(2.55, v, wv);
+        emis = emis * (1.0 - door) + vec3(1.0, 0.85, 0.6) * lamp * 2.0 * nightOn;
+        facadeGlass *= 1.0 - max(door, surround);
       } else if (!isTrim) {
         col = mix(col, col * 0.8, 1.0 - fstep(0.8, v, wv));
       }
@@ -670,6 +872,6 @@ if (facadeGlass > 0.0) {
   totalEmissiveRadiance += emis;
 }`);
   };
-  mat.customProgramCacheKey = () => 'facade-v5';
+  mat.customProgramCacheKey = () => 'facade-v7';
   return mat;
 }

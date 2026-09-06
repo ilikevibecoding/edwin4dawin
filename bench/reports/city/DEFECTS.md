@@ -74,3 +74,41 @@ What is visibly wrong (OBSERVE / CRITIQUE):
 - Why: a CBD's height distribution is heavy-tailed and its high-rise extends over several km along the
   waterfront; the skyline needs three peaks with a tail between them rather than a clump.
 - To verify: `skyline-high`, `aerial-a`, `sunset` silhouettes; brickell landmarks on land; budgets.
+
+## Round 4 — rooftop kit (city.ts addRoofDetail / addSmallRoofKit, facade.ts kit styles)
+
+- Changed: three near-detail instance kinds (`roof`, `roofcyl` within 700 m; `roofbig` within 1.6 km; never in
+  the shadow passes or proxies, culled per 250 m cell like the trims) fed by a per-roof packer (axis-aligned
+  rectangles in the roof frame, so nothing overlaps the penthouse, tank, helipad or one another). Offices: RTUs
+  (1-8 by area) with duct runs to the penthouse wall where they stand in line with it (else an elbow into a
+  curb), vents and stacks with rain caps, a tall flue now and then, antenna mast in a corner and a dish on a
+  post, pipe runs, a see-through guard rail along the parapet where the facade has no coping (posts every
+  1.5 m, top and mid rail, the rest discarded so it thins away when sub-pixel). Residential: condenser rows,
+  water tank on legs (older masonry), fewer RTUs. Roofs below 150 m: solar rows on a fifth (2-6 rows, glazed
+  cells in an aluminium grid); roofs below 70 m: skylights or a ridge light. Cooling towers become louvred
+  plant with fan tops. Walk-ups, street-wall infill and strip malls get the small kit (condensers, vents, TV
+  mast, a skylight). Shader styles 15-19: plant casing with panel seams, louvre band, fan rings and rust weep;
+  rail; solar; skylight; galvanised duct / pipe with joints.
+- Why: every roof the player flies over must read as laid out, at three scales (dots at 1.5 km, RTU blocks
+  at 500 m, ducts / rails / vents at 100-200 m), for a few instanced draws.
+- Evidence: pending (browser slots).
+
+## Round 5 — street level: fronts and backs (facade.ts)
+
+- Changed: each building picks a front face and its opposite back face. Office towers: a one- or two-storey
+  lobby (clear glazing between slim mullions over a plinth, slab edge at its head, lit ceiling), the front's
+  centre third an entrance: canopy band, doors in its shadow with frames, a lit sign over them at night.
+  Walk-ups: shopfronts stay off the back; the front carries a panelled door in a pale surround with a lamp at
+  night where there is no shopfront. Backs (walk-ups, towers, podiums, sheds wider than 14 m): a ribbed roll-up
+  loading door and a steel personnel door in a soiled plinth. Shop fascias carry lettering (blocky glyph runs
+  in the sign's contrast colour, faded out as they go sub-pixel; lit at night).
+- Why: 100-200 m facades ended at a uniform dark plinth; entrances, docks and signs are the layer that
+  distance reveals.
+- Evidence: pending (browser slots).
+
+## Round 6 — mechanical floors
+
+- Changed: about half the office towers over 80 m carry a louvred mechanical floor 55-85 % of the way up (a
+  dark slatted band instead of windows; slats box-filtered, faded when sub-pixel).
+- Why: skyline rhythm at 1 km — the unbroken window stack was the last "rectangle" cue.
+- Evidence: pending.

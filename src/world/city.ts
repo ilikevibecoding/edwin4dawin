@@ -92,8 +92,12 @@ function mergeSimple(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
 }
 
 /** `trim` is the near-detail layer (balcony slabs and balustrades, floor ledges, parapet coping, corner columns):
- *  unit boxes drawn only from cells within TRIM_FAR of the camera, never in the shadow passes */
-export type Kind = 'box' | 'cyl' | 'oct' | 'frustum' | 'shear' | 'house' | 'trim';
+ *  unit boxes drawn only from cells within TRIM_FAR of the camera, never in the shadow passes. `roof` / `roofcyl`
+ *  (unit box / 10-sided prism) are the rooftop kit's small items (vents, stacks, ducts, pipes, antennas, dishes,
+ *  rails, condensers, tank legs) drawn within ROOF_FAR, `roofbig` its large items (RTUs, solar rows, skylights,
+ *  screen walls) drawn within ROOF_BIG_FAR; beyond those the coarse rooftop masses (penthouses, tanks, cooling
+ *  towers, masts, helipads: ordinary `box` / `cyl` instances) and the roof shader's pads stand in. */
+export type Kind = 'box' | 'cyl' | 'oct' | 'frustum' | 'shear' | 'house' | 'trim' | 'roof' | 'roofcyl' | 'roofbig';
 
 interface Instance {
   x: number; y: number; z: number; w: number; h: number; d: number; rot: number; color: THREE.Color;
@@ -126,6 +130,16 @@ export const MIRROR_HOUSE_FAR = 2500;
  *  mirrored within MIRROR_TRIM_FAR; further out the facade shader's shaded version of the same details stands in */
 export const TRIM_FAR = 600;
 export const MIRROR_TRIM_FAR = 300;
+/** the rooftop kit's small items are drawn from cells within ROOF_FAR of the camera, its large items (RTUs,
+ *  solar rows, skylights, screen walls: 2-20 m, still a few pixels at 1.5 km from the aerial views) within
+ *  ROOF_BIG_FAR */
+export const ROOF_FAR = 700;
+export const ROOF_BIG_FAR = 1600;
+/** near-detail kinds: their draw distance; they never join the shadow proxies. Trims never cast (under a shadow
+ *  texel everywhere they are drawn); the rooftop kit casts into the two near cascades while within its draw
+ *  distance, since an RTU without its shadow on a sunlit roof reads as a paint patch. */
+const NEAR_FAR: Partial<Record<Kind, number>> = { trim: TRIM_FAR, roof: ROOF_FAR, roofcyl: ROOF_FAR, roofbig: ROOF_BIG_FAR };
+const NEAR_CAST_MASK = 0b0011;
 const _bp = new THREE.Vector3();
 /** grow `box` by building `i` of `t` the way the tile box was built (footprint half-diagonal x 0.6, height) */
 function boundBuilding(t: BatchSource, i: number, box: THREE.Box3): void {
@@ -178,7 +192,7 @@ export class BuildingBatches {
 
   constructor(nightUniform: THREE.IUniform<number>) {
     this.material = createFacadeMaterial(nightUniform);
-    this.geos = { box: unitBox(), cyl: unitPrism(16, 0), oct: unitPrism(8, Math.PI / 8), frustum: unitFrustum(0.3), shear: unitShear(), house: unitHouse(), trim: unitBox() };
+    this.geos = { box: unitBox(), cyl: unitPrism(16, 0), oct: unitPrism(8, Math.PI / 8), frustum: unitFrustum(0.3), shear: unitShear(), house: unitHouse(), trim: unitBox(), roof: unitBox(), roofcyl: unitPrism(10, 0), roofbig: unitBox() };
   }
 
   add(kind: Kind, inst: Instance): void {
@@ -264,7 +278,7 @@ export class BuildingBatches {
     const byKind = new Map<Kind, Instance[]>();
     for (const [key, list] of this.lists) {
       const kind = key.split('|')[0] as Kind;
-      if (kind === 'trim') continue;
+      if (kind in NEAR_FAR) continue;
       let all = byKind.get(kind);
       if (!all) { all = []; byKind.set(kind, all); }
       for (const inst of list) if (inst.h >= PROXY_MIN_HEIGHT) all.push(inst);
@@ -330,7 +344,9 @@ export class BuildingBatches {
     perCascade.fill(0);
     for (const t of this.tiles) {
       const d = Math.max(0, Math.hypot(t.center.x - camX, t.center.z - camZ) - t.lodR);
-      t.bits = d < this.shadowDistance && t.kind !== 'trim' ? cull.casterCascades(t.center, t.r, t.height) : 0;
+      const near = NEAR_FAR[t.kind];
+      const casts = near === undefined ? d < this.shadowDistance : t.kind !== 'trim' && d < near;
+      t.bits = casts ? cull.casterCascades(t.center, t.r, t.height) & (near === undefined ? ~0 : NEAR_CAST_MASK) : 0;
       for (let i = 0; i < MAX_CASCADES; i++) if (t.bits & (1 << i)) perCascade[i]++;
     }
     // cascades where the per-tile meshes would cost more draws than the proxies take the proxies instead
@@ -347,14 +363,15 @@ export class BuildingBatches {
     const houseFar = (10 * pxPerMetre) / HOUSE_MIN_PX;
     const mirrorFar = mirrorRange;
     for (const t of this.tiles) {
-      const trim = t.kind === 'trim';
-      const inView = cull.boxInView(t.box) && (!trim || t.box.distanceToPoint(camPos) <= TRIM_FAR);
+      const near = NEAR_FAR[t.kind];
+      const inView = cull.boxInView(t.box) && (near === undefined || t.box.distanceToPoint(camPos) <= near);
       const house = t.kind === 'house';
       // the camera draws the tile from its kind's batch, cell by cell (the cells in view; house cells beyond
-      // HOUSE_FAR are left to the baked suburb ground, trim cells beyond TRIM_FAR to the facade shader); the
-      // tile's own mesh is left to the shadow passes (and to the camera only when the batch is full)
+      // HOUSE_FAR are left to the baked suburb ground, near-detail cells beyond their kind's distance to the
+      // facade shader / the coarse roof masses); the tile's own mesh is left to the shadow passes (and to the
+      // camera only when the batch is full)
       const batch = this.cameraBatches.get(t.kind)!;
-      const nearFar = house ? houseFar : trim ? TRIM_FAR : Infinity;
+      const nearFar = house ? houseFar : near ?? Infinity;
       let batched = true;
       if (inView) {
         const cells = BuildingBatches.cellsOf(t);
@@ -381,7 +398,7 @@ export class BuildingBatches {
       const mirrored = inView && Math.max(0, t.center.distanceTo(camPos) - t.r) <= mirrorFar;
       const mirror = this.mirrorBatches.get(t.kind)!;
       if (mirrored) {
-        const far = house ? Math.min(mirrorFar, MIRROR_HOUSE_FAR) : trim ? Math.min(mirrorFar, MIRROR_TRIM_FAR) : mirrorFar;
+        const far = house ? Math.min(mirrorFar, MIRROR_HOUSE_FAR) : near !== undefined ? Math.min(mirrorFar, MIRROR_TRIM_FAR) : mirrorFar;
         let ok = true;
         for (const c of t.cells!) {
           let count = cull.boxInMirror(c.box) ? c.count : 0;
@@ -407,7 +424,13 @@ export class BuildingBatches {
 // ------------------------------------------------------------------ facade families
 
 /** Shader style ids (see facade.ts). */
-const S = { GLASS_BLUE: 0, PUNCHED: 1, BALCONY: 2, DECO: 3, INDUSTRIAL: 4, HOUSE: 5, CONCRETE: 6, HOTEL: 7, GLASS_GREEN: 8, STONE: 9, BRICK: 10, GRID: 11, POOL: 12, HELIPAD: 13, BALUSTRADE: 14 } as const;
+const S = { GLASS_BLUE: 0, PUNCHED: 1, BALCONY: 2, DECO: 3, INDUSTRIAL: 4, HOUSE: 5, CONCRETE: 6, HOTEL: 7, GLASS_GREEN: 8, STONE: 9, BRICK: 10, GRID: 11, POOL: 12, HELIPAD: 13, BALUSTRADE: 14,
+  /** rooftop kit styles (facade.ts kit path): louvred plant with fan tops, see-through railing, solar panel, glazed skylight, galvanised duct / pipe */
+  PLANT: 15, RAIL: 16, SOLAR: 17, SKYLIGHT: 18, DUCT: 19 } as const;
+/** rooftop kit palettes: galvanised / painted plant, ducting, railing metal */
+const PLANT_COLS = ['#8a8f93', '#9aa0a3', '#6f7478', '#b1ada0', '#5d6166', '#4f5a60', '#7e8a80', '#a39d8c'];
+const DUCT_COLS = ['#aeb3b6', '#9da2a5', '#c0c3c4', '#7f8487'];
+const RAIL_COLS = ['#3a3d40', '#8f9497', '#d9d9d4', '#2f3a44'];
 
 interface Family { style: number; floorH: number; tints: readonly string[]; lit: [number, number]; warm: [number, number]; }
 
@@ -627,63 +650,244 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     return { tint, lit, warm: r.range(fam.warm[0], fam.warm[1]), variant: r.next() };
   };
 
-  // rooftop equipment: penthouses, tanks, helipads, masts and spires
+  /** Rooftop kit item: a near-detail instance (see Kind) at world (x, z), base `y`, yaw `rot`. */
+  const kit = (kind: Kind, x: number, y: number, z: number, w: number, h: number, d: number, rot: number, col: THREE.Color, style: number) =>
+    batches.add(kind, { x, y, z, w, h, d, rot, color: col, style, floorH: 3, seed: rng.range(0, 1000), roof: -1, lit: 0, warm: 0.5, variant: 0.5, form: 0 });
+
+  /** One roof's layout: axis-aligned rectangles in the roof's local frame (metres from its centre), so the kit's
+   *  items stand clear of one another and of the coarse masses placed first; `hw` / `hd` are the usable half extents. */
+  class RoofPacker {
+    private readonly rects: number[] = [];
+    constructor(readonly hw: number, readonly hd: number) {}
+    block(lx: number, lz: number, w: number, d: number): void { this.rects.push(lx - w / 2, lz - d / 2, lx + w / 2, lz + d / 2); }
+    free(lx: number, lz: number, w: number, d: number): boolean {
+      const x0 = lx - w / 2, z0 = lz - d / 2, x1 = lx + w / 2, z1 = lz + d / 2;
+      if (x0 < -this.hw || z0 < -this.hd || x1 > this.hw || z1 > this.hd) return false;
+      const q = this.rects;
+      for (let i = 0; i < q.length; i += 4) if (x0 < q[i + 2] && x1 > q[i] && z0 < q[i + 3] && z1 > q[i + 1]) return false;
+      return true;
+    }
+    /** A spot for a w x d item with `gap` clearance, inside `zone` (local rect) when given; null when none found. */
+    find(r: Rng, w: number, d: number, gap: number, tries: number, zone?: readonly [number, number, number, number]): [number, number] | null {
+      const hw = this.hw - w / 2, hd = this.hd - d / 2;
+      if (hw < 0 || hd < 0) return null;
+      const x0 = zone ? Math.max(-hw, zone[0]) : -hw, x1 = zone ? Math.min(hw, zone[2]) : hw;
+      const z0 = zone ? Math.max(-hd, zone[1]) : -hd, z1 = zone ? Math.min(hd, zone[3]) : hd;
+      if (x0 > x1 || z0 > z1) return null;
+      for (let t = 0; t < tries; t++) {
+        const lx = r.range(x0, x1), lz = r.range(z0, z1);
+        if (this.free(lx, lz, w + gap * 2, d + gap * 2)) { this.block(lx, lz, w, d); return [lx, lz]; }
+      }
+      return null;
+    }
+  }
+
+  /** Rooftop kit of a flat roof of `tw` x `td` m at height `top` (centre x, z; yaw rot) on a building `h` tall of
+   *  family `fam`. The coarse masses are ordinary instances seen from any distance (mechanical penthouse, water
+   *  tank, cooling-tower row, screen wall, helipad, masts, spire); the kit around them is the near-detail layer:
+   *  RTUs with their ducts run to the penthouse, vents and exhaust stacks with rain caps, condenser rows on the
+   *  flats, antenna masts and dishes, solar rows, skylights, pipe runs, a railing along the parapet where the
+   *  facade has no coping. Offices carry the heavy plant, residential roofs the condensers and tanks; counts
+   *  scale with the roof area and every item is packed clear of the others. */
+  const PLANT_C = PLANT_COLS.map((c) => new THREE.Color(c)), DUCT_C = DUCT_COLS.map((c) => new THREE.Color(c)), RAIL_C = RAIL_COLS.map((c) => new THREE.Color(c));
+  const SOLAR_C = new THREE.Color('#1c2a44'), DISH_C = new THREE.Color('#e4e6e3'), SKY_C = new THREE.Color('#9fb6c8'), TANK_LEG_C = new THREE.Color('#4a4d50');
   const addRoofDetail = (r: Rng, x: number, z: number, tw: number, td: number, top: number, rot: number, h: number, fam: Family) => {
     const cr = Math.cos(rot), sr = Math.sin(rot);
     const at = (ox: number, oz: number): [number, number] => [x + ox * cr - oz * sr, z + ox * sr + oz * cr];
     const glassy = fam.style === S.GLASS_BLUE || fam.style === S.GLASS_GREEN || fam.style === S.STONE;
+    const office = glassy || fam.style === S.GRID || fam.style === S.CONCRETE || (fam.style === S.DECO && h > 60);
+    const resi = fam.style === S.BALCONY || fam.style === S.HOTEL || fam.style === S.PUNCHED || fam.style === S.BRICK;
     const grey = r.pick(GREYS);
-    if (r.chance(0.7)) {
-      // mechanical penthouse
+    const area = tw * td;
+    const pk = new RoofPacker(tw / 2 - 1.2, td / 2 - 1.2);
+    const y = top - 0.05;
+    const item = (kind: Kind, lx: number, lz: number, w: number, hh: number, d: number, col: THREE.Color, style: number, yaw = rot, yb = y) => {
+      const [px, pz] = at(lx, lz);
+      kit(kind, px, yb, pz, w, hh, d, yaw, col, style);
+    };
+    const plantCol = r.pick(PLANT_C), plantCol2 = r.pick(PLANT_C), ductCol = r.pick(DUCT_C), railCol = r.pick(RAIL_C);
+
+    // ---- coarse masses (seen from any distance)
+    let pent: [number, number, number, number] | null = null;   // lx, lz, w, d
+    if (r.chance(0.7) && tw > 9 && td > 9) {
+      // mechanical penthouse / stair and lift bulkhead
       const pw = tw * r.range(0.25, 0.45), pd = td * r.range(0.3, 0.5);
-      const [px, pz] = at(r.range(-tw * 0.22, tw * 0.22), r.range(-td * 0.2, td * 0.2));
+      const lx = r.range(-tw * 0.22, tw * 0.22), lz = r.range(-td * 0.2, td * 0.2);
+      const [px, pz] = at(lx, lz);
       place('box', px, pz, pw, r.range(3, 6), pd, rot, glassy ? '#8d9296' : grey, S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+      pk.block(lx, lz, pw, pd);
+      pent = [lx, lz, pw, pd];
     }
-    const n = r.int(0, 3);
-    for (let i = 0; i < n; i++) {
-      const [px, pz] = at(r.range(-tw * 0.35, tw * 0.35), r.range(-td * 0.35, td * 0.35));
-      place('box', px, pz, r.range(2, 4.5), r.range(1.5, 3), r.range(2, 4), rot, grey, S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+    if (h > 40 && r.chance(0.35) && tw > 12) {
+      // a second, smaller bulkhead (lift overrun) toward a corner
+      const lx = tw * r.range(0.15, 0.32), lz = -td * r.range(0.1, 0.3);
+      if (pk.free(lx, lz, 4, 4)) { const [px, pz] = at(lx, lz); place('box', px, pz, 3.2, 3.5, 3.2, rot, grey, S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 }); pk.block(lx, lz, 3.2, 3.2); }
     }
-    if (h > 40 && r.chance(0.35)) {
-      const [px, pz] = at(tw * r.range(0.15, 0.32), -td * r.range(0.1, 0.3));
-      place('cyl', px, pz, 3, 3.5, 3, rot, '#c9c9c4', S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
-    }
-    // water tanks on the older masonry blocks, cooling towers in a row on the offices, a screen wall hiding
-    // the plant on some, antennas on many: every item at its own jittered spot and yaw
-    if (!glassy && h > 18 && r.chance(0.3)) {
-      const [px, pz] = at(-tw * r.range(0.1, 0.34), td * r.range(-0.3, 0.3));
+    if (!glassy && h > 18 && r.chance(0.3) && tw > 9) {
+      // water tank on the older masonry blocks: a drum on four legs
       const dia = r.range(2.6, 4.4);
-      place('cyl', px, pz, dia, r.range(2.8, 4.6), dia, rot + r.range(-0.5, 0.5), r.pick(['#d9d6cc', '#c9c4b8', '#8f8a80']), S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
-    }
-    if (glassy && tw > 16 && r.chance(0.35)) {
-      const nct = r.int(2, 4), yaw = rot + (r.chance(0.5) ? 0 : Math.PI / 2) + r.range(-0.08, 0.08);
-      const [ox, oz] = [r.range(-tw * 0.25, tw * 0.25), r.range(-td * 0.25, td * 0.25)];
-      for (let i = 0; i < nct; i++) {
-        const [px, pz] = at(ox + (i - (nct - 1) / 2) * 3.4 * Math.cos(yaw - rot), oz + (i - (nct - 1) / 2) * 3.4 * Math.sin(yaw - rot));
-        place('oct', px, pz, 2.6, r.range(2.2, 3.2), 2.6, yaw, '#9da3a7', S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+      const p = pk.find(r, dia, dia, 0.6, 8, [-tw * 0.34, -td * 0.3, -tw * 0.1, td * 0.3]);
+      if (p) {
+        const [px, pz] = at(p[0], p[1]);
+        const legH = 1.6;
+        place('cyl', px, pz, dia, r.range(2.8, 4.6), dia, rot + r.range(-0.5, 0.5), r.pick(['#d9d6cc', '#c9c4b8', '#8f8a80']), S.CONCRETE, 3, { yBase: top - 0.2 + legH, margin: -1 });
+        const lr = dia * 0.34;
+        for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) item('roof', p[0] + sx * lr, p[1] + sz * lr, 0.2, legH, 0.2, TANK_LEG_C, S.DUCT);
       }
     }
-    if (h > 50 && r.chance(0.28)) {
+    if (glassy && tw > 16 && r.chance(0.35)) {
+      // cooling towers in a row (louvred boxes with fan tops)
+      const nct = r.int(2, 4), alongX = r.chance(0.5), yaw = rot + (alongX ? 0 : Math.PI / 2) + r.range(-0.08, 0.08);
+      const rowW = alongX ? nct * 3.4 : 2.6, rowD = alongX ? 2.6 : nct * 3.4;
+      const p = pk.find(r, rowW, rowD, 0.8, 8);
+      if (p) for (let i = 0; i < nct; i++) {
+        const o = (i - (nct - 1) / 2) * 3.4;
+        const [px, pz] = at(p[0] + (alongX ? o : 0), p[1] + (alongX ? 0 : o));
+        place('oct', px, pz, 2.6, r.range(2.2, 3.2), 2.6, yaw, r.pick(PLANT_COLS), S.PLANT, 3, { yBase: top - 0.2, margin: -1, roof: -1 });
+      }
+    }
+    if (h > 50 && r.chance(0.28) && td > 12) {
+      // louvred screen wall hiding the plant along one side
       const side = r.chance(0.5) ? 1 : -1;
-      const [px, pz] = at(side * tw * 0.36, r.range(-td * 0.15, td * 0.15));
-      place('box', px, pz, 0.6, r.range(3, 4.5), td * r.range(0.45, 0.7), rot, '#b9bfc3', S.GRID, 3.5, { yBase: top - 0.2, margin: -1, lit: 0, variant: 0.3 });
+      const lx = side * tw * 0.36, lz = r.range(-td * 0.15, td * 0.15), sd = td * r.range(0.45, 0.7);
+      if (pk.free(lx, lz, 0.6, sd)) { const [px, pz] = at(lx, lz); place('box', px, pz, 0.6, r.range(3, 4.5), sd, rot, '#b9bfc3', S.GRID, 3.5, { yBase: top - 0.2, margin: -1, lit: 0, variant: 0.3 }); pk.block(lx, lz, 0.6, sd); }
     }
-    const nAnt = r.chance(0.45) ? r.int(1, 3) : 0;
-    for (let i = 0; i < nAnt; i++) {
-      const [px, pz] = at(r.range(-tw * 0.4, tw * 0.4), r.range(-td * 0.4, td * 0.4));
-      place('frustum', px, pz, 0.7, r.range(5, 12), 0.7, rot + r.range(0, 1), '#d7dcdf', S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
-    }
-    if (h > 100 && r.chance(0.22)) {
+    if (h > 100 && r.chance(0.22) && Math.min(tw, td) > 14) {
+      // helipad, kept clear on all sides
       const dia = Math.min(18, Math.min(tw, td) * 0.5);
-      const [px, pz] = at(-tw * r.range(0.1, 0.24), td * r.range(-0.2, 0.2));
-      place('cyl', px, pz, dia, 0.5, dia, rot, '#444444', S.HELIPAD, 3, { yBase: top, margin: -1 });
+      const p = pk.find(r, dia, dia, 1.5, 6, [-tw * 0.24, -td * 0.2, -tw * 0.1, td * 0.2]) ?? pk.find(r, dia, dia, 1.0, 6);
+      if (p) { const [px, pz] = at(p[0], p[1]); place('cyl', px, pz, dia, 0.5, dia, rot, '#444444', S.HELIPAD, 3, { yBase: top, margin: -1 }); }
     }
     if (h > 120 && r.chance(0.35)) {
-      const [px, pz] = at(tw * r.range(0.2, 0.34), td * r.range(-0.34, 0.34));
-      place('frustum', px, pz, 1.6, r.range(14, 32), 1.6, rot, '#cfd8dc', S.CONCRETE, 3, { yBase: top, margin: -1 });
+      const p = pk.find(r, 1.6, 1.6, 0.6, 8, [tw * 0.2, -td * 0.34, tw * 0.34, td * 0.34]);
+      if (p) { const [px, pz] = at(p[0], p[1]); place('frustum', px, pz, 1.6, r.range(14, 32), 1.6, rot, '#cfd8dc', S.CONCRETE, 3, { yBase: top, margin: -1 }); }
     }
-    if (h > 150 && r.chance(0.3)) {
+    if (h > 150 && r.chance(0.3) && pk.free(0, 0, 4, 4)) {
       place('frustum', x, z, 4, r.range(25, 50), 4, rot, '#e3e8ec', S.CONCRETE, 3, { yBase: top, margin: -1 });
+      pk.block(0, 0, 4, 4);
+    }
+
+    // ---- the kit (near-detail layer)
+    // rooftop units: the offices' heavy plant, one or two on the flats; each with a duct run to the penthouse
+    // when it stands in line with one (a straight run to its wall), else a short duct into a roof curb
+    const nRtu = office ? clamp(Math.round(area / 200 + r.range(0, 2)), 1, 9) : resi ? clamp(Math.round(area / 450), 1, 3) : clamp(Math.round(area / 320), 1, 5);
+    for (let i = 0; i < nRtu; i++) {
+      const w = r.range(2.2, 5.0), d = r.range(1.8, 3.2), hh = r.range(1.3, 2.4);
+      const p = pk.find(r, w, d, 0.8, 10);
+      if (!p) break;
+      item('roofbig', p[0], p[1], w, hh, d, r.chance(0.75) ? plantCol : plantCol2, S.PLANT);
+      if (!pent || !r.chance(0.75)) continue;
+      const dx = pent[0] - p[0], dz = pent[1] - p[1];
+      const inZ = Math.abs(dz) <= pent[3] / 2 - 0.4, inX = Math.abs(dx) <= pent[2] / 2 - 0.4;
+      if (inZ && Math.abs(dx) > w / 2 + pent[2] / 2 + 0.8) {
+        const from = p[0] + Math.sign(dx) * w / 2, to = pent[0] - Math.sign(dx) * pent[2] / 2;
+        const len = Math.abs(to - from), mx = (from + to) / 2;
+        if (pk.free(mx, p[1], len, 0.55)) { item('roof', mx, p[1], len, 0.55, 0.55, ductCol, S.DUCT, rot, y + 0.3); pk.block(mx, p[1], len, 0.55); }
+      } else if (inX && Math.abs(dz) > d / 2 + pent[3] / 2 + 0.8) {
+        const from = p[1] + Math.sign(dz) * d / 2, to = pent[1] - Math.sign(dz) * pent[3] / 2;
+        const len = Math.abs(to - from), mz = (from + to) / 2;
+        if (pk.free(p[0], mz, 0.55, len)) { item('roof', p[0], mz, 0.55, 0.55, len, ductCol, S.DUCT, rot, y + 0.3); pk.block(p[0], mz, 0.55, len); }
+      } else if (r.chance(0.5)) {
+        // duct elbow into a curb beside the unit
+        const sx = Math.sign(dx) || 1;
+        const lx = p[0] + sx * (w / 2 + 0.9);
+        if (pk.free(lx, p[1], 1.4, 0.55)) { item('roof', lx, p[1], 1.5, 0.55, 0.55, ductCol, S.DUCT, rot, y + 0.3); item('roof', lx + sx * 0.45, p[1], 0.6, 0.8, 0.6, ductCol, S.DUCT); pk.block(lx, p[1], 1.4, 0.55); }
+      }
+    }
+    // condenser rows on the flats: small units side by side
+    if (resi && area > 120 && r.chance(0.7)) {
+      const n = clamp(Math.round(area / 90), 2, 10), alongX = tw >= td;
+      const rowW = alongX ? n * 1.15 : 0.9, rowD = alongX ? 0.9 : n * 1.15;
+      const p = pk.find(r, rowW, rowD, 0.5, 8);
+      if (p) for (let i = 0; i < n; i++) {
+        if (r.chance(0.15)) continue;   // a missing unit or two
+        const o = (i - (n - 1) / 2) * 1.15;
+        item('roof', p[0] + (alongX ? o : 0), p[1] + (alongX ? 0 : o), 0.85, r.range(0.6, 0.9), 0.4, plantCol, S.PLANT);
+      }
+    }
+    // vents and exhaust stacks, a rain cap on some, an odd tall flue on the offices
+    const nVent = clamp(Math.round(area / 130 + r.range(0, 3)), 2, 12);
+    for (let i = 0; i < nVent; i++) {
+      const dia = r.range(0.4, 1.0), hh = r.range(0.9, 3.2) * (office && r.chance(0.15) ? 2.5 : 1);
+      const p = pk.find(r, dia, dia, 0.4, 8);
+      if (!p) break;
+      item('roofcyl', p[0], p[1], dia, hh, dia, ductCol, S.DUCT);
+      if (r.chance(0.45)) item('roofcyl', p[0], p[1], dia * 1.7, 0.22, dia * 1.7, ductCol, S.DUCT, rot, y + hh - 0.02);
+    }
+    // antenna masts (a corner spot) and a dish on a post
+    if (r.chance(office ? 0.75 : 0.45)) {
+      const cx = r.chance(0.5) ? 1 : -1, cz = r.chance(0.5) ? 1 : -1;
+      const p = pk.find(r, 0.6, 0.6, 0.5, 8, [Math.min(cx * tw * 0.2, cx * tw * 0.42), Math.min(cz * td * 0.2, cz * td * 0.42), Math.max(cx * tw * 0.2, cx * tw * 0.42), Math.max(cz * td * 0.2, cz * td * 0.42)]);
+      if (p) {
+        item('roof', p[0], p[1], 0.14, r.range(4, 9) * (h > 120 ? 1.4 : 1), 0.14, railCol, S.DUCT);
+        if (r.chance(0.6)) {
+          const q = pk.find(r, 2.0, 2.0, 0.4, 6);
+          if (q) { item('roof', q[0], q[1], 0.12, 1.3, 0.12, railCol, S.DUCT); item('roofcyl', q[0], q[1], r.range(1.4, 2.4), 0.3, r.range(1.4, 2.4), DISH_C, S.PLANT, rot + r.range(0, 3), y + 1.3); }
+        }
+      }
+    }
+    // solar rows on a fifth of the roofs below 150 m (the very tall roofs carry plant, not panels)
+    if (h < 150 && area > 320 && r.chance(0.22)) {
+      const alongX = tw >= td;
+      const rows = clamp(Math.floor(Math.min(tw, td) / 3.4), 2, 6), len = clamp(Math.max(tw, td) * r.range(0.4, 0.7), 6, 24);
+      const blockW = alongX ? len : rows * 2.6, blockD = alongX ? rows * 2.6 : len;
+      const p = pk.find(r, blockW, blockD, 0.8, 8);
+      if (p) for (let i = 0; i < rows; i++) {
+        const o = (i - (rows - 1) / 2) * 2.6;
+        item('roofbig', p[0] + (alongX ? 0 : o), p[1] + (alongX ? o : 0), alongX ? len : 1.9, 0.42, alongX ? 1.9 : len, SOLAR_C, S.SOLAR);
+      }
+    }
+    // skylights on the lower roofs: a few glazed boxes, a long ridge light on the big ones
+    if (!glassy && h < 70 && r.chance(0.45)) {
+      if (area > 800 && r.chance(0.5)) {
+        const alongX = tw >= td, len = clamp(Math.max(tw, td) * r.range(0.3, 0.55), 8, 16);
+        const p = pk.find(r, alongX ? len : 1.7, alongX ? 1.7 : len, 0.8, 8);
+        if (p) item('roofbig', p[0], p[1], alongX ? len : 1.7, 0.9, alongX ? 1.7 : len, SKY_C, S.SKYLIGHT);
+      } else {
+        const n = r.int(1, 3);
+        for (let i = 0; i < n; i++) { const s = r.range(1.8, 3.4); const p = pk.find(r, s, s, 0.6, 6); if (p) item('roofbig', p[0], p[1], s, 0.7, s, SKY_C, S.SKYLIGHT); }
+      }
+    }
+    // pipe runs along an edge
+    const nPipe = r.int(0, office ? 3 : 2);
+    for (let i = 0; i < nPipe; i++) {
+      const alongX = r.chance(0.5), len = r.range(4, Math.max(5, (alongX ? tw : td) * 0.6));
+      const p = pk.find(r, alongX ? len : 0.22, alongX ? 0.22 : len, 0.3, 6);
+      if (p) item('roof', p[0], p[1], alongX ? len : 0.2, 0.2, alongX ? 0.2 : len, r.chance(0.5) ? ductCol : TANK_LEG_C, S.DUCT, rot, y + 0.15);
+    }
+    // railing along the parapet where the facade has no coping (the masonry families' coping is a trim)
+    const coping = !glassy && fam.style !== S.INDUSTRIAL && fam.style !== S.CONCRETE;
+    if (!coping && r.chance(0.65) && tw > 8 && td > 8) {
+      const inset = 0.25;
+      item('roof', 0, -td / 2 + inset, tw - inset * 2, 1.1, 0.06, railCol, S.RAIL);
+      item('roof', 0, td / 2 - inset, tw - inset * 2, 1.1, 0.06, railCol, S.RAIL);
+      item('roof', -tw / 2 + inset, 0, 0.06, 1.1, td - inset * 2, railCol, S.RAIL);
+      item('roof', tw / 2 - inset, 0, 0.06, 1.1, td - inset * 2, railCol, S.RAIL);
+    }
+  };
+
+  /** The small kit of a walk-up or commercial roof: condensers, vents, a TV mast, the odd skylight. */
+  const addSmallRoofKit = (r: Rng, x: number, z: number, tw: number, td: number, top: number, rot: number) => {
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    const at = (ox: number, oz: number): [number, number] => [x + ox * cr - oz * sr, z + ox * sr + oz * cr];
+    const pk = new RoofPacker(tw / 2 - 1.0, td / 2 - 1.0);
+    const y = top - 0.05;
+    const item = (kind: Kind, lx: number, lz: number, w: number, hh: number, d: number, col: THREE.Color, style: number, yb = y) => {
+      const [px, pz] = at(lx, lz);
+      kit(kind, px, yb, pz, w, hh, d, rot, col, style);
+    };
+    const plantCol = r.pick(PLANT_C), ductCol = r.pick(DUCT_C);
+    const area = tw * td;
+    const nAc = clamp(Math.round(area / 110 + r.range(-1, 1)), 0, 6);
+    for (let i = 0; i < nAc; i++) { const p = pk.find(r, 0.9, 0.5, 0.4, 6); if (p) item('roof', p[0], p[1], 0.9, r.range(0.6, 0.9), 0.45, plantCol, S.PLANT); }
+    const nVent = clamp(Math.round(area / 220 + r.range(0, 2)), 1, 4);
+    for (let i = 0; i < nVent; i++) { const dia = r.range(0.3, 0.6); const p = pk.find(r, dia, dia, 0.3, 6); if (p) item('roofcyl', p[0], p[1], dia, r.range(0.7, 1.8), dia, ductCol, S.DUCT); }
+    if (r.chance(0.45)) { const p = pk.find(r, 0.4, 0.4, 0.3, 6); if (p) item('roof', p[0], p[1], 0.1, r.range(2.5, 5), 0.1, ductCol, S.DUCT); }
+    if (area > 300 && r.chance(0.3)) { const s = r.range(1.5, 2.6); const p = pk.find(r, s, s, 0.5, 6); if (p) item('roofbig', p[0], p[1], s, 0.6, s, SKY_C, S.SKYLIGHT); }
+    if (area > 260 && r.chance(0.25)) {
+      const w = r.range(1.8, 3.0), d = r.range(1.4, 2.2);
+      const p = pk.find(r, w, d, 0.6, 6);
+      if (p) item('roofbig', p[0], p[1], w, r.range(1.0, 1.5), d, plantCol, S.PLANT);
     }
   };
 
@@ -1170,7 +1374,9 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
             const lk = look(fam, drng);
             const hh = drng.range(12, 40) * lerp(0.7, 1.1, core);
             const top = place('box', x, z, w, hh, dd, d.rot, lk.tint, fam.style, fam.floorH, { lit: lk.lit, warm: lk.warm, variant: lk.variant });
-            if (top !== null && hh > 20 && drng.chance(0.4)) place('box', x, z, w * 0.4, drng.range(2.5, 4), dd * 0.45, d.rot, drng.pick(GREYS), S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+            if (top === null) continue;
+            if (hh > 20 && drng.chance(0.4)) place('box', x, z, w * 0.4, drng.range(2.5, 4), dd * 0.45, d.rot, drng.pick(GREYS), S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+            addSmallRoofKit(drng, x, z, w, dd, top, d.rot);
           }
         };
         fillEdge('x', bz0, bx0, bx1);
@@ -1330,8 +1536,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
             const h = fam.floorH * floors + 0.8;
             const top = place('box', x, z, w, h, dd, rot, lk.tint, fam.style, fam.floorH, { lit: lk.lit, warm: lk.warm, variant: lk.variant, margin: 1.5 });
             if (top === null) continue;
-            if (drng.chance(0.5)) place('box', x + drng.range(-w * 0.2, w * 0.2), z + drng.range(-dd * 0.2, dd * 0.2), drng.range(2.5, 5), drng.range(1.5, 3), drng.range(2.5, 4), rot, drng.pick(GREYS), S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
             if (floors >= 4 && drng.chance(0.3)) place('box', x, z, w * 0.5, 2.8, dd * 0.45, rot, drng.pick(GREYS), S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
+            addSmallRoofKit(drng, x, z, w, dd, top, rot);
             if (face === 0 && drng.chance(0.2)) {
               // pool in the court behind (the first row faces outward, so its court lies toward +local)
               const [qx, qz] = along === 'x' ? toWorld(mid, fixed + depth / 2 + 6) : toWorld(fixed + depth / 2 + 6, mid);
@@ -1366,7 +1572,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         // pale roof membrane with a few RTUs
         place('box', x, z, fw + 0.4, 0.4, fd + 0.4, rot, drng.pick(['#e9e7e0', '#dfdcd3', '#d6d2c8', '#c9c7c0']), S.CONCRETE, 3, { yBase: top - 0.1, margin: -1 });
         const nRtu = drng.int(1, big ? 6 : 3);
-        for (let i = 0; i < nRtu; i++) place('box', x + drng.range(-fw * 0.4, fw * 0.4), z + drng.range(-fd * 0.35, fd * 0.35), drng.range(1.8, 3.2), drng.range(1.0, 1.8), drng.range(1.8, 2.8), rot + drng.range(-0.1, 0.1), '#a9adb0', S.CONCRETE, 3, { yBase: top + 0.2, margin: -1 });
+        for (let i = 0; i < nRtu; i++) place('box', x + drng.range(-fw * 0.4, fw * 0.4), z + drng.range(-fd * 0.35, fd * 0.35), drng.range(1.8, 3.2), drng.range(1.0, 1.8), drng.range(1.8, 2.8), rot + drng.range(-0.1, 0.1), drng.pick(PLANT_COLS), S.PLANT, 3, { yBase: top + 0.2, margin: -1, roof: -1 });
+        addSmallRoofKit(drng, x, z, fw, fd, top + 0.3, rot);
         if (!big && drng.chance(0.5)) place('box', x, z, fw * drng.range(0.2, 0.4), 2.2, 1.0, rot, lk.tint, S.CONCRETE, 3, { yBase: top - 0.1, margin: -1 }); // parapet sign band
         // outparcel at one end: petrol canopy (flat slab on posts) or a drive-through box
         const endSide = drng.chance(0.5) ? 1 : -1;
