@@ -1,0 +1,17 @@
+base: c499eeeb (cursor/vice-city-aerial-8213)
+skip acsplit: nothing new
+skip waterrender: nothing new
+skip waterphys: nothing new
+skip boats: no remote branch
+skip clouds4: nothing new
+skip light3: nothing new
+skip street: nothing new
+skip highway: nothing new
+skip facade3: nothing new
+skip veg5: nothing new
+skip terrain5: nothing new
+skip acgeo: nothing new
+build: c499eeeb from /home/ubuntu/wt-integration
+shot failed: cockpit
+shot failed: glass
+cdn: pinned data.json serves h06
