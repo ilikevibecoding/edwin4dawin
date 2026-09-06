@@ -259,6 +259,9 @@ function leafClusterTexture(rng: Rng): THREE.CanvasTexture {
     }
   }
   const tex = new THREE.CanvasTexture(c);
+  // canvas row 0 is texture row 0: tile k is at v = (k / 2) / LEAF_ROWS (three flips a canvas by default, which
+  // put the fringe cards on the wrong row — the hardwoods wore the sea grape's leaves and the pine's tufts)
+  tex.flipY = false;
   tex.colorSpace = THREE.NoColorSpace;
   tex.minFilter = THREE.LinearMipmapLinearFilter;
   tex.magFilter = THREE.LinearFilter;
