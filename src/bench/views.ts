@@ -125,6 +125,13 @@ export const BENCH_VIEWS: BenchView[] = [
     plane: { pos: [-400, 320, -900], headingDeg: 318, pitchDeg: 0, bankDeg: 0, speed: 55, throttle: 0.7 },
     presim: 30, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
   },
+  {
+    id: 'city-close', name: 'Downtown core at facade range', description: 'Fixed camera 120 m up over the west side of downtown looking east into the core: the Faro Bahía drum at 330 m, the glass slabs and Meridian Tower at 400-600 m, a stone tower and a deco tower at 150-200 m, roofs below; the sun (16:48, el 21 deg) stands behind the camera, so the west-facing glass mirrors it toward the lens.',
+    time: 16.8, weather: 'clear',
+    camera: { mode: 'fixed', pos: [-3150, 120, -3930], headingDeg: 82, pitchDeg: 4, fov: 50, follow: true },
+    plane: { fromCamera: { screenX: 0.5, screenY: 0.86, distance: 120 }, headingDeg: 82, pitchDeg: 0, bankDeg: 0, speed: 50, throttle: 0.6 },
+    presim: 30, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
+  },
 ];
 
 /** Aircraft inspection views (used by the aircraft / glass / cockpit gauntlet loops). The aircraft taxis at 3.5 m/s
