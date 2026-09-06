@@ -30,6 +30,7 @@ import {
   doorEdge,
   ROUNDEL_ZR,
   roundelX,
+  SHOULDER,
   DOOR_Z0,
   DOOR_Z1,
   PLATFORM,
@@ -430,7 +431,12 @@ export function buildDetail(ctx, secs) {
         // the shelves stand on the wings here
         const shelf =
           zr > PLATFORM.z0 - 6 && zr < PLATFORM.z1 + 6 && x < PLATFORM.xOut + 6;
-        return roundel || shelf;
+        // keep the plates off the painted shoulder stripes
+        const shoulder =
+          zr > SHOULDER.z0 - 6 &&
+          zr < SHOULDER.z1 + 6 &&
+          x > halfW(zr) - SHOULDER.inset - SHOULDER.n * SHOULDER.pitch - 4;
+        return roundel || shelf || shoulder;
       },
     );
     // door halves: raised red plates that read a shade lighter than the doors, as in the reference (no
