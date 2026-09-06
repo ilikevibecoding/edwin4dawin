@@ -176,8 +176,15 @@ const CONCRETE_FRAG = /* glsl */ `
     float noPaint = step(1.5, flag) * (1.0 - step(2.5, flag));
     float gap = step(2.5, flag);
     float edgeOn = 1.0 - step(0.5, flag);
+    // the toll plaza (vColor.g: its station, 0 elsewhere): over the 110 m before the island noses the shoulder opens
+    // as the third gate lane - the solid edge line becomes a dashed lane line (the diverge; the same on the way out,
+    // where the lane ends and the traffic merges back) - and a hatched nose is painted on the pavement in front of
+    // every island's attenuator, 12 m long, tapering to a point
+    float dPlaza = abs(along - vColor.g);
+    float fan = step(0.5, vColor.g) * step(dPlaza, 110.0);
+    edgeOn *= 1.0 - fan;
     float dashPulse = mix(aaLine((fract(along / 9.0) - 0.17) * 9.0, 1.53, fwA), 0.34, smoothstep(2.0, 6.0, fwA));
-    float white = (aaLine(xm - ${PAVE_LANE_LINE.toFixed(2)}, 0.06, fwX) * dashPulse + aaLine(xm - ${PAVE_EDGE_LINE.toFixed(2)}, 0.075, fwX) * edgeOn) * (1.0 - gap);
+    float white = (aaLine(xm - ${PAVE_LANE_LINE.toFixed(2)}, 0.06, fwX) * dashPulse + aaLine(xm - ${PAVE_EDGE_LINE.toFixed(2)}, 0.075, fwX) * (edgeOn + fan * dashPulse)) * (1.0 - gap);
     float yellow = aaLine(xm - mix(0.62, 0.15, gap), 0.06, fwX);
     float paintWear = (0.7 + 0.3 * smoothstep(0.3, 0.7, fbm3(vec2(along * 0.7, xm * 3.0)))) * (1.0 - noPaint);
     white *= paintWear;
@@ -186,6 +193,12 @@ const CONCRETE_FRAG = /* glsl */ `
     col = mix(col, vec3(0.85, 0.66, 0.16), yellow);
     float rumble = step(6.5, xm) * (1.0 - step(6.85, xm)) * edgeOn * mix(aaLine((fract(along / 0.3) - 0.5) * 0.3, 0.05, fwA), 0.33, smoothstep(0.1, 0.3, fwA));
     col *= 1.0 - 0.28 * rumble;
+    float dNose = dPlaza - 17.5;
+    float noseT = step(0.5, vColor.g) * step(0.0, dNose) * clamp(1.0 - dNose / 12.0, 0.0, 1.0);
+    float nose = step(0.001, noseT) * min(1.0, step(xm, 1.05 * noseT) + step(abs(xm - 3.1), 0.7 * noseT) + step(abs(xm - 6.35), 0.7 * noseT));
+    float fwD = max(fwA, fwX);
+    float stripes = mix(aaLine((fract((along + xm) / 0.9) - 0.5) * 0.9, 0.18, fwD), 0.42, smoothstep(0.3, 1.2, fwD));
+    col = mix(col, vec3(0.80, 0.80, 0.78), nose * stripes * (0.75 + 0.25 * smoothstep(0.3, 0.7, fbm3(vec2(along * 0.9, xm * 2.0)))));
     diffuseColor.rgb = col * vColor.r;
     roughnessFactor = 0.84 - 0.05 * wheel;
     // the lamp pool of the nearest lighting pole (vInfoH.w: its station): twin cobra heads 2.9 m either side of the
@@ -1231,7 +1244,9 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       interface PaintBox { s0: number; s1: number; side: -1 | 0 | 1; flag: number; }
       // where the paint stops: the mouths of the side streets (1: no edge line), the junction boxes and the plaza (2)
       const boxes: PaintBox[] = junctions.map((j) => ({ s0: j.s - (j.major ? 12 : 8), s1: j.s + (j.major ? 12 : 8), side: j.side, flag: j.major ? 2 : 1 }));
-      if (toll) boxes.push({ s0: toll.s - 40, s1: toll.s + 40, side: 0, flag: 2 });
+      // the plaza: no paint along the islands and their attenuators; the shader paints the diverge / merge and the
+      // island noses over the 110 m either side from the station carried in the vertex colour
+      if (toll) boxes.push({ s0: toll.s - 17.5, s1: toll.s + 17.5, side: 0, flag: 2 });
       // braking rubber darkens a carriageway over the last 90 m before its junction boxes and the plaza
       const brakes: { s: number; r: number }[] = majors.map((j) => ({ s: j.s, r: 14 }));
       if (toll) brakes.push({ s: toll.s, r: 42 });
@@ -1252,14 +1267,16 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       };
       // strips are cut halfway between poles so every strip lies in one pool
       const midpoints = poleStations.slice(1).map((s, i) => (s + poleStations[i]) / 2);
-      /** one strip of the course between stations sa and sb, a0..a1 across; the vertex colour carries the wear tone,
-       *  aInfo the station of the nearest lighting pole for the shader */
+      /** one strip of the course between stations sa and sb, a0..a1 across; the vertex colour carries the wear tone
+       *  (r) and the toll plaza's station where the strip lies within its approach paint (g), aInfo the station of
+       *  the nearest lighting pole for the shader */
       const quad = (sa: number, sb: number, a0: number, a1: number, kind: number, tA: number, tB: number, up: (s: number) => number) => {
         const soup = P((sa + sb) / 2).pave;
         const fa = frameAt(c, sa), fb = frameAt(c, sb);
         const base = soup.vertexCount;
         const pole = poleFor((sa + sb) / 2);
-        const v = (f: Frame, s: number, a: number, t: number) => soup.vertex(f.x + f.rx * a, surfaceAt(c, s, a) + PAVE_UP + up(s), f.z + f.rz * a, 0, 1, 0, [t, 1, 1], [kind, s, a, pole]);
+        const plaza = toll && Math.abs((sa + sb) / 2 - toll.s) < 130 ? toll.s : 0;
+        const v = (f: Frame, s: number, a: number, t: number) => soup.vertex(f.x + f.rx * a, surfaceAt(c, s, a) + PAVE_UP + up(s), f.z + f.rz * a, 0, 1, 0, [t, plaza, 1], [kind, s, a, pole]);
         v(fa, sa, a0, tA); v(fb, sb, a0, tB); v(fb, sb, a1, tB); v(fa, sa, a1, tA);
         _a.set(fb.x - fa.x, 0, fb.z - fa.z).cross(_b.set(fb.x + fb.rx * a1 - fa.x - fa.rx * a0, 0, fb.z + fb.rz * a1 - fa.z - fa.rz * a0));
         if (_a.y >= 0) soup.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
