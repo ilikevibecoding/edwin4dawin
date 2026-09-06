@@ -1,8 +1,8 @@
 // Geometry kit for the Providence-class model: a ring loft with crease control (smooth curved hull,
-// hard ridge/lip edges), the analytic hull profile (rounded-triangular cross section with the flank hangar
-// slot built into the profile), blade rings for the fins, ellipsoid rings for the pods, and a surface
-// frame so turrets, plates and hatches sit flush on the curved hull. Everything is object space,
-// forward -Z, up +Y.
+// hard ridge/lip edges), the reference-measured hull profile (tall narrow egg section with a flat ridge,
+// a vertical flank belt carrying the recessed hangar trough, and the deep forward chin), blade rings
+// for the fins, ellipsoid rings for the pods, and a surface frame so turrets, plates and hatches sit
+// flush on the curved hull. Everything is object space, forward -Z, up +Y.
 import * as THREE from "three";
 
 const _a = new THREE.Vector3();
@@ -259,68 +259,231 @@ export function ringCap(
 }
 
 // ---------------------------------------------------------------------------
-// Hull profile
+// Hull profile — measured from the reference side / top / front views. `r` is metres aft of the bow
+// tip (0 .. 1088); ship z = r - 544. The hull is a long slender dagger with a tall, narrow section: a
+// flat dorsal ridge, egg-shaped shoulders, a near-vertical flank belt at the widest point (the hangar
+// trough is recessed into it aft), and a full lower body that hangs down into the forward "chin"
+// (deepest at r = 250) and rises to the small blunt stern face at r = 1046 (the engine bells reach
+// r = 1088). Stations are monotone cubic splines through the measured key points.
 // ---------------------------------------------------------------------------
-// Analytic station parameters along the hull (t = 0 bow tip .. 1 stern). The hull is a long dagger:
-// beam grows nearly linearly to the aft third, then eases in to a blunt stern face.
 export const HULL = {
   length: 1088,
   zBow: -544,
+  zFace: 502, // stern face (r = 1046): the bells stand aft of it to z = 544
   zStern: 544,
-  beam: 118, // half beam at the widest station
-  top: 62, // ridge height at the widest station
-  bottom: -92, // keel depth at the widest station
-  tPeak: 0.72,
 };
+export const toRef = (z) => z - HULL.zBow;
+export const fromRef = (r) => HULL.zBow + r;
+
+// monotone cubic (Fritsch–Carlson) through [x, y] key points, clamped outside the range
+export function spline(pts) {
+  const n = pts.length;
+  const xs = pts.map((p) => p[0]);
+  const ys = pts.map((p) => p[1]);
+  const d = [];
+  for (let i = 0; i < n - 1; i++)
+    d.push((ys[i + 1] - ys[i]) / (xs[i + 1] - xs[i]));
+  const m = new Array(n);
+  m[0] = d[0];
+  m[n - 1] = d[n - 2];
+  for (let i = 1; i < n - 1; i++) {
+    if (d[i - 1] * d[i] <= 0) m[i] = 0;
+    else {
+      const w1 = 2 * (xs[i + 1] - xs[i]) + (xs[i] - xs[i - 1]);
+      const w2 = xs[i + 1] - xs[i] + 2 * (xs[i] - xs[i - 1]);
+      m[i] = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i]);
+    }
+  }
+  return (x) => {
+    if (x <= xs[0]) return ys[0];
+    if (x >= xs[n - 1]) return ys[n - 1];
+    let i = 0;
+    while (i < n - 2 && x > xs[i + 1]) i++;
+    const h = xs[i + 1] - xs[i];
+    const t = (x - xs[i]) / h;
+    const t2 = t * t;
+    const t3 = t2 * t;
+    return (
+      (2 * t3 - 3 * t2 + 1) * ys[i] +
+      (t3 - 2 * t2 + t) * h * m[i] +
+      (-2 * t3 + 3 * t2) * ys[i + 1] +
+      (t3 - t2) * h * m[i + 1]
+    );
+  };
+}
+
+// half beam: fine point, 33 m half-width at r = 150, widest (59) at r = 700, 35 at the stern face
+const W = spline([
+  [0, 2.4],
+  [20, 6.5],
+  [50, 13.5],
+  [100, 23.5],
+  [150, 32.5],
+  [200, 40.5],
+  [250, 47],
+  [300, 51],
+  [350, 53.5],
+  [400, 55.5],
+  [500, 57.5],
+  [600, 58.5],
+  [700, 59],
+  [800, 58],
+  [850, 56.5],
+  [900, 53.5],
+  [950, 49],
+  [1000, 43],
+  [1046, 35],
+]);
+// dorsal ridge height (the spine and citadel stand on it): the beak climbs steeply between r 75 and
+// 150 to the +48 ridge, which rises gently aft and drops to the stern face
+const Y_TOP = spline([
+  [0, 4],
+  [25, 9],
+  [50, 11],
+  [75, 20],
+  [100, 30],
+  [125, 40],
+  [150, 46],
+  [200, 48],
+  [300, 48],
+  [500, 48],
+  [600, 49],
+  [700, 50],
+  [850, 52],
+  [950, 54],
+  [1000, 54],
+  [1024, 51],
+  [1046, 46],
+]);
+// keel (side-view reference, aft keel -52): the beak underside runs at -40, the chin drops to -72 at
+// r 225-300, the mid-body waist rises to -42 around r 450-525, the aft body sits at -52..-56 and the
+// stern sweeps up to the -29 face bottom
+const Y_BOT = spline([
+  [0, -5],
+  [25, -17],
+  [50, -27],
+  [75, -33],
+  [100, -39],
+  [125, -40],
+  [150, -42],
+  [175, -55],
+  [200, -65],
+  [225, -71],
+  [250, -72],
+  [300, -71],
+  [350, -65],
+  [375, -58],
+  [400, -56],
+  [425, -52],
+  [450, -44],
+  [475, -43],
+  [500, -45],
+  [525, -44],
+  [550, -47],
+  [575, -49],
+  [600, -52],
+  [700, -53],
+  [800, -54],
+  [860, -56],
+  [900, -54],
+  [1000, -50],
+  [1012, -40],
+  [1024, -31],
+  [1046, -29],
+]);
+// height of the widest point (centre of the flank belt)
+const Y_WIDE = spline([
+  [0, -1],
+  [100, -3],
+  [200, -7],
+  [300, -7],
+  [400, -3],
+  [550, 4],
+  [600, 5],
+  [880, 5],
+  [1046, 1],
+]);
+// flat ridge half-width: the ROTS still shows a broad flat dorsal deck along the spine (about 40 % of
+// the beam) that widens further under the citadel
+const W_TOP = spline([
+  [0, 0.6],
+  [50, 3],
+  [100, 7],
+  [200, 13],
+  [350, 17],
+  [500, 19],
+  [560, 21],
+  [620, 26],
+  [950, 26],
+  [1000, 18],
+  [1046, 10],
+]);
+// hangar trough recessed into the flank belt (ref metres) and the belt height
+export const TROUGH = { r0: 605, r1: 870, depth: 6, lip: 1.5 };
+export const BELT_H = 18;
 
 export function stationAt(z) {
-  const t = clamp01((z - HULL.zBow) / HULL.length);
-  const k = HULL.tPeak;
-  const shape = (pow, fall) =>
-    t <= k ? Math.pow(t / k, pow) : 1 - fall * Math.pow((t - k) / (1 - k), 1.5);
-  const w = Math.max(0.6, HULL.beam * shape(0.9, 0.26));
-  const yTop = HULL.top * shape(0.82, 0.16) + 0.2;
-  const yBot = HULL.bottom * shape(0.86, 0.22) - 0.2;
-  const yWide = yBot + 0.45 * (yTop - yBot);
+  const r = Math.min(1046, Math.max(0, toRef(z)));
+  const w = W(r);
+  const yTop = Y_TOP(r);
+  const yBot = Y_BOT(r);
+  const yWide = Y_WIDE(r);
+  const wTop = Math.min(W_TOP(r), w * 0.6);
+  const beltH = Math.min(BELT_H, (yTop - yBot) * 0.32);
+  const d = r >= TROUGH.r0 && r <= TROUGH.r1 ? TROUGH.depth : 0;
   return {
     z,
+    r,
     w,
     yTop,
     yBot,
     yWide,
-    wTop: Math.max(0.3, w * 0.24),
-    wKeel: Math.max(0.2, w * 0.14),
+    wTop,
+    yB0: yWide + beltH / 2,
+    yB1: yWide - beltH / 2,
+    d,
   };
 }
 
-// Half profile (starboard, x >= 0) from the ridge centre (index 0) to the keel centre (index 12).
-// Points 5..6 bound the flank band: a near-vertical face at max beam (up to 22 m tall) that the hangar
-// bays are cut into; 4 and 7 are the lips above and below it.
-export const PROFILE_N = 13;
-export const SHARP_POINTS = new Set([1, 4, 5, 6, 7]);
-export const BAND_SEG = 5; // ring segment index of the flank band (starboard)
+// Half profile (starboard, x >= 0) from the ridge centre (0) to the keel centre (15): ridge edge (1),
+// four shoulder points (2-5), belt top (6), trough lips and back wall (7-10), belt bottom (11), three
+// lower-body points (12-14). Segment 8 (points 8 -> 9) is the trough back wall the bays are cut into.
+export const PROFILE_N = 16;
+export const SHARP_POINTS = new Set([1, 6, 8, 9, 11]);
+export const WALL_SEG = 8;
+export const BELT_TOP_SEG = 5; // shoulder segment just above the belt
+export const BELLY_SEG = 12;
 export function halfProfile(st) {
-  const { w, yTop, yBot, yWide, wTop } = st;
-  const hu = yTop - yWide;
-  const hl = yWide - yBot;
-  const bu = Math.min(hu * 0.24, 12);
-  const bl = Math.min(hl * 0.3, 10.5);
-  const lipU = Math.min(hu * 0.03, 2.2);
-  const lipL = Math.min(hl * 0.03, 2.2);
+  const { w, yTop, yBot, wTop, yB0, yB1, d } = st;
+  const r = st.r ?? toRef(st.z);
   const pts = [];
+  const y1 = yTop - Math.min(0.6, (yTop - yB0) * 0.05);
   pts.push([0, yTop]); // 0 ridge centre
-  pts.push([wTop, yTop - hu * 0.02]); // 1 ridge edge (crease)
-  pts.push([wTop + (w - wTop) * 0.4, yTop - hu * 0.36]); // 2 upper flank
-  pts.push([wTop + (w - wTop) * 0.8, yTop - hu * 0.72]); // 3 upper flank, lower
-  pts.push([w * 0.982, yWide + bu + lipU]); // 4 upper lip
-  pts.push([w, yWide + bu]); // 5 band top
-  pts.push([w, yWide - bl]); // 6 band bottom
-  pts.push([w * 0.982, yWide - bl - lipL]); // 7 lower lip
-  pts.push([w * 0.93, yWide - hl * 0.4]); // 8 belly a
-  pts.push([w * 0.79, yWide - hl * 0.6]); // 9 belly b
-  pts.push([w * 0.57, yWide - hl * 0.79]); // 10 belly c
-  pts.push([w * 0.3, yWide - hl * 0.93]); // 11 belly d
-  pts.push([0, yBot]); // 12 keel centre
+  pts.push([wTop, y1]); // 1 ridge edge (crease)
+  for (let k = 1; k <= 4; k++) {
+    const th = ((k / 5) * Math.PI) / 2;
+    pts.push([
+      wTop + (w - wTop) * Math.sin(th),
+      yB0 + (y1 - yB0) * Math.cos(th),
+    ]); // 2-5 shoulder
+  }
+  const lip = Math.min(TROUGH.lip, (yB0 - yB1) * 0.1);
+  pts.push([w, yB0]); // 6 belt top
+  pts.push([w, yB0 - lip]); // 7
+  pts.push([w - d, yB0 - lip]); // 8 trough top inner
+  pts.push([w - d, yB1 + lip]); // 9 trough bottom inner
+  pts.push([w, yB1 + lip]); // 10
+  pts.push([w, yB1]); // 11 belt bottom
+  // the forward chin is a full rounded mass (the 3/4 reference), the aft lower body a slimmer egg
+  const bellyPow = lerp(0.5, 0.75, smoothstep(300, 520, r));
+  for (let k = 1; k <= 3; k++) {
+    const ph = ((k / 4) * Math.PI) / 2;
+    pts.push([
+      w * Math.pow(Math.cos(ph), bellyPow),
+      yB1 + (yBot - yB1) * Math.sin(ph),
+    ]); // 12-14 lower body
+  }
+  pts.push([0, yBot]); // 15 keel centre
   return pts;
 }
 // profile point m (starboard) at longitudinal z as [x, y, z], mirrored for side -1
@@ -329,7 +492,7 @@ export function profilePoint(z, m, side = 1) {
   return [side * p[0], p[1], z];
 }
 
-// Full ring (24 points): starboard 0..12 then port mirrors of 11..1.
+// Full ring (30 points): starboard 0..15 then port mirrors of 14..1.
 export const RING_N = PROFILE_N * 2 - 2;
 export function ringFromStation(st) {
   const half = halfProfile(st);
@@ -346,7 +509,7 @@ export const RING_SHARP = (() => {
   }
   return s;
 })();
-// starboard segment index (0..11) for any ring segment j (0..23), and the side (+1 starboard) of segment j
+// starboard segment index (0..14) for any ring segment j (0..29), and the side (+1 starboard) of segment j
 export const segMirror = (j) => (j < PROFILE_N - 1 ? j : RING_N - 1 - j);
 export const segSide = (j) => (j < PROFILE_N - 1 ? 1 : -1);
 
@@ -378,7 +541,7 @@ export function hullFrame(z, m, t, side = 1) {
   const n = new THREE.Vector3().crossVectors(tz, tang).normalize();
   if (side < 0) n.negate();
   // ridge top / keel: tangent may be tiny; fall back to ±y
-  if (!isFinite(n.x) || n.lengthSq() < 0.5) n.set(0, m < 6 ? 1 : -1, 0);
+  if (!isFinite(n.x) || n.lengthSq() < 0.5) n.set(0, m < 8 ? 1 : -1, 0);
   return { p, n, tz };
 }
 
