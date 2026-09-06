@@ -13,10 +13,17 @@ import {
   tubeZ,
   wingProfile,
 } from "./munificentGeo.js";
-import { loftStrips, ribbon } from "./munificentHull.js";
+import {
+  bar2D,
+  hexagon,
+  loftStrips,
+  ribbon,
+  surfacePatch,
+} from "./munificentHull.js";
 import { antennaCluster, slotRow } from "./munificentDetail.js";
 import {
   BLUE,
+  BLUE_DK,
   D2R,
   GRIME,
   HOOD_ARC,
@@ -37,6 +44,7 @@ import {
   hoodNormal,
   hoodPoint,
   hoodSection,
+  hoodSurf,
   noseShift,
   plankTone,
   streak,
@@ -716,6 +724,36 @@ export function buildBow(add, rand) {
       }
     }
   }
+  // small Banking Clan hexagon with the emblem on each flank of the hood, on the diagonal band (TCW)
+  for (const lod of [0, 1])
+    for (const side of [-1, 1]) {
+      const zC = -322;
+      const aC = (side > 0 ? 42 : 138) * D2R;
+      const sC = HOOD_ARC.sOfA(aC);
+      const n = hoodNormal(zC, aC);
+      const P = (lift) => (u, v) => hoodSurf(zC + u, sC + v, lift);
+      add(surfacePatch(hexagon(11), P(0.9), n, lod === 0 ? 2 : 1), "paint", {
+        texel: 1 / 8,
+        lod,
+        color: WHITE,
+      });
+      add(surfacePatch(hexagon(2.6), P(1.3), n, 1), "paint", {
+        texel: 1 / 8,
+        lod,
+        color: BLUE_DK,
+      });
+      if (lod === 0)
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2;
+          const p0 = [Math.cos(a) * 2.4, Math.sin(a) * 2.4];
+          const p1 = [Math.cos(a) * 9.8, Math.sin(a) * 9.8];
+          add(surfacePatch(bar2D(p0, p1, 1.4), P(1.3), n, 1), "paint", {
+            texel: 1 / 8,
+            lod,
+            color: BLUE_DK,
+          });
+        }
+    }
   // dark plank seams along the hood (LOD 0)
   for (const a of [12, 46, 90, 134, 168]) {
     const zs = [];

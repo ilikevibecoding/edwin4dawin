@@ -181,6 +181,47 @@ export function bar2D(p0, p1, w) {
   ];
 }
 
+/**
+ * Convex polygon ([u, v] pairs) laid onto a curved surface through the map P(u, v) -> [x, y, z]: a fan
+ * from the centroid with every triangle subdivided k × k so the patch follows the curvature. Faces
+ * are wound so the normal at the centroid follows `nrm` (the surface's outward normal there).
+ */
+export function surfacePatch(poly, P, nrm, k = 2) {
+  let cu = 0;
+  let cv = 0;
+  for (const [u, v] of poly) {
+    cu += u / poly.length;
+    cv += v / poly.length;
+  }
+  const pos = [];
+  const tri = (a, b, c) => pos.push(...P(...a), ...P(...b), ...P(...c));
+  const sub = (A, B, C) => {
+    for (let i = 0; i < k; i++)
+      for (let j = 0; j < k - i; j++) {
+        const p = (ia, ib) => {
+          const wa = ia / k;
+          const wb = ib / k;
+          const wc = 1 - wa - wb;
+          return [
+            A[0] * wa + B[0] * wb + C[0] * wc,
+            A[1] * wa + B[1] * wb + C[1] * wc,
+          ];
+        };
+        tri(p(i, j), p(i + 1, j), p(i, j + 1));
+        if (j < k - i - 1) tri(p(i + 1, j), p(i + 1, j + 1), p(i, j + 1));
+      }
+  };
+  for (let i = 0; i < poly.length; i++)
+    sub([cu, cv], poly[i], poly[(i + 1) % poly.length]);
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  const n0 = g.attributes.normal;
+  return n0.getX(0) * nrm[0] + n0.getY(0) * nrm[1] + n0.getZ(0) * nrm[2] < 0
+    ? flipFaces(g)
+    : g;
+}
+
 /** Box aligned to a local frame: centre c, axes (a, b, n) with half sizes (ha, hb, hn). */
 export function framedBox(c, a, b, n, ha, hb, hn) {
   const g = new THREE.BoxGeometry(ha * 2, hn * 2, hb * 2);

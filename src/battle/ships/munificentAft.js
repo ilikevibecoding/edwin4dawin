@@ -13,7 +13,13 @@ import {
   smoothstep,
   tubeZ,
 } from "./munificentGeo.js";
-import { bar2D, hexagon, loftStrips, ribbon } from "./munificentHull.js";
+import {
+  bar2D,
+  hexagon,
+  loftStrips,
+  ribbon,
+  surfacePatch,
+} from "./munificentHull.js";
 import {
   antennaCluster,
   dishMast,
@@ -60,6 +66,8 @@ const TEX = 1 / 30;
 const NECK_Z0 = Z.hoodEnd - 10; // the neck core starts just inside the hood's aft rim
 const NECK_Z1 = Z.domeFull + 14; // and runs on under the raked shell edge
 const NECK_LEN = Z.neckEnd - Z.hoodEnd; // the exposed run between the hood rim and the dome eave
+const POD_Y = -20; // centre height of the ventral engine pod
+const POD_AFT = 24; // how far its stern face stands aft of the main stern face
 // evenly spaced stations along the exposed neck, inset from both ends
 const neckZ = (n, inset = 8) =>
   Array.from(
@@ -124,49 +132,12 @@ const FRONT_T = { 0: [0, 0.2, 0.42, 0.66], 1: [0, 0.35, 0.7], 2: [0, 0.5] };
 // polygon (u along +z, v along the arc) laid onto the shell around (zC, sC): fan from the centroid,
 // each triangle subdivided k x k so the patch follows the curvature
 function patch(add, poly, zC, sC, side, lift, k, mat, opts) {
-  let cu = 0;
-  let cv = 0;
-  for (const [u, v] of poly) {
-    cu += u / poly.length;
-    cv += v / poly.length;
-  }
-  const P = (u, v) => surf(zC + u, sC + v, side, lift);
-  const pos = [];
-  const tri = (a, b, c) => pos.push(...P(...a), ...P(...b), ...P(...c));
-  const sub = (A, B, C) => {
-    for (let i = 0; i < k; i++)
-      for (let j = 0; j < k - i; j++) {
-        const p = (ia, ib) => {
-          const wa = ia / k;
-          const wb = ib / k;
-          const wc = 1 - wa - wb;
-          return [
-            A[0] * wa + B[0] * wb + C[0] * wc,
-            A[1] * wa + B[1] * wb + C[1] * wc,
-          ];
-        };
-        tri(p(i, j), p(i + 1, j), p(i, j + 1));
-        if (j < k - i - 1) tri(p(i + 1, j), p(i + 1, j + 1), p(i, j + 1));
-      }
-  };
-  for (let i = 0; i < poly.length; i++)
-    sub([cu, cv], poly[i], poly[(i + 1) % poly.length]);
-  const g = new THREE.BufferGeometry();
-  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
-  g.computeVertexNormals();
-  const n = domeNormal(zC, DOME_ARC.aOfS(sC), side);
-  const g0 = g.attributes.normal;
-  if (g0.getX(0) * n[0] + g0.getY(0) * n[1] + g0.getZ(0) * n[2] < 0) {
-    const p = g.attributes.position;
-    for (let t = 0; t < p.count; t += 3) {
-      const x = p.getX(t + 1);
-      const y = p.getY(t + 1);
-      const z = p.getZ(t + 1);
-      p.setXYZ(t + 1, p.getX(t + 2), p.getY(t + 2), p.getZ(t + 2));
-      p.setXYZ(t + 2, x, y, z);
-    }
-    g.computeVertexNormals();
-  }
+  const g = surfacePatch(
+    poly,
+    (u, v) => surf(zC + u, sC + v, side, lift),
+    domeNormal(zC, DOME_ARC.aOfS(sC), side),
+    k,
+  );
   add(g, mat, { texel: 1 / 8, ...opts });
 }
 
@@ -696,15 +667,34 @@ export function buildAft(add, rand, engines) {
         color: MACH_DK,
       },
     );
-    // ventral tail: the keel runs on past the thrusters as a pointed blade (TCW stern view)
+    // ventral engine pod: the lower pair of thrusters sits in its own housing that protrudes aft
+    // below the stern face (TCW stern view), the keel running on under it as a pointed tail blade
+    add(
+      loftZ(
+        roundedRect(lod === 0 ? 2 : 1, 0.3, 0.3),
+        [
+          { z: Z.eng - 34, sx: 20, sy: 9, y: POD_Y },
+          { z: Z.eng - 6, sx: 23, sy: 12.5, y: POD_Y },
+          { z: Z.eng + POD_AFT, sx: 23, sy: 12.5, y: POD_Y },
+        ],
+        { capStart: true, capEnd: true, flat: true, texel: 1 / 8 },
+      ),
+      "dark",
+      {
+        uv: "keep",
+        lod,
+        tint: (x, y, z, o) =>
+          o.set(MACH_DK).multiplyScalar(0.9 + 0.25 * smoothstep(-30, -12, y)),
+      },
+    );
     add(
       loftZ(
         roundedRect(1, 0.15, 0.15),
         [
           { z: 206, sx: 16, sy: 6, y: Y.lowerBot - 4 },
-          { z: 300, sx: 12, sy: 7, y: Y.lowerBot - 2 },
-          { z: 360, sx: 6, sy: 5, y: Y.lowerBot + 2 },
-          { z: 404, sx: 1.2, sy: 1.5, y: Y.lowerBot + 8 },
+          { z: 290, sx: 12, sy: 8, y: Y.lowerBot - 10 },
+          { z: 360, sx: 6, sy: 5, y: Y.lowerBot - 6 },
+          { z: 404, sx: 1.2, sy: 1.5, y: Y.lowerBot + 2 },
         ],
         { capStart: true, capEnd: true, flat: true, texel: 1 / 8 },
       ),
@@ -892,21 +882,22 @@ export function buildAft(add, rand, engines) {
   }
 
   // ---------------------------------------------------------------------------
-  // thrusters: three in the upper row, two below, on the stern face between the blades
+  // thrusters: three in the upper row on the stern face between the blades, two below on the ventral
+  // pod's face
   // ---------------------------------------------------------------------------
   const nozzles = [
-    [-24, 8, 11],
-    [0, 10, 11],
-    [24, 8, 11],
-    [-13, -20, 8.5],
-    [13, -20, 8.5],
+    [-24, 8, 11, 0],
+    [0, 10, 11, 0],
+    [24, 8, 11, 0],
+    [-12, POD_Y, 8.5, POD_AFT],
+    [12, POD_Y, 8.5, POD_AFT],
   ];
   for (const lod of [0, 1, 2])
-    for (const [x, y, r] of nozzles) {
+    for (const [x, y, r, dz] of nozzles) {
       const e = nozzleBell(add, {
         x,
         y,
-        zMouth: Z.eng + 8,
+        zMouth: Z.eng + dz + 8,
         r,
         depth: 24,
         protrude: 8,
@@ -919,7 +910,7 @@ export function buildAft(add, rand, engines) {
         sternSpill(add, {
           x,
           y,
-          zPlate: Z.eng,
+          zPlate: Z.eng + dz,
           r: r * 1.9,
           plate: SHELL_DK,
           lod,
