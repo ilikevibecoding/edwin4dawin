@@ -268,8 +268,8 @@ export class Game {
     const base = this.map.pois.find((p) => p.kind === 'seaplane')!;
     this.aircraft.place(base.x + 120, 1.6, base.z + 60, 0, 0, 0, 0, 0); // facing north: 3 km of open water ahead
 
-    this.post = new PostPipeline(this.renderer, this.atmos, { samples: q.samples, bloom: q.bloom });
     const dbg = this.params.dbg;
+    this.post = new PostPipeline(this.renderer, this.atmos, { samples: q.samples, bloom: q.bloom && !dbg.has('nobloom') });
     if (dbg.has('noterrain')) this.terrain.group.visible = false;
     if (dbg.has('noshadow')) this.renderer.shadowMap.enabled = false;
     if (dbg.has('noveg')) this.vegetation.group.visible = false;
