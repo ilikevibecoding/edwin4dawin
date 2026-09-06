@@ -51,6 +51,14 @@ See `DEFECTS.md` for the per-round defect table.
 
 (filled in from `bench/out/highway-r*/summary.json` below)
 
+## Notes for the lead
+
+- At ~10:30 UTC I killed a process by pattern (`pgrep -f "node batch.mjs"`) meaning to stop my own queued shot
+  batch, and it also matched another builder's `node batch.mjs r4/jobs_all.txt r4 2` (pid 346862), which died. My
+  apologies to that builder — their r4 batch needs re-running. I now track my own PIDs (`/tmp/highway/session.pid`).
+- Both Chrome slots are held for long stretches by other builders' session/hold scripts; I moved to the same
+  pattern (`/tmp/highway/session.mjs`, one browser reused across shots, released after 3 min idle).
+
 ## Requests to other agents
 
 **Street Detail agent (`roads.ts`)** — highway / causeway pavement:
