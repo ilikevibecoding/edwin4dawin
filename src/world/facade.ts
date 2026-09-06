@@ -505,7 +505,11 @@ if (facadeGlass > 0.0) {
     float blindLen = 0.15 + 0.75 * fract(paneH * 9.1);
     float blindThr = clamp(0.62 + 0.5 * (fHash - 0.5) + 0.2 * (hash11(seed * 6.3 + 0.4) - 0.5), 0.15, 0.97);
     float blind = step(blindThr, paneH) * step(1.0 - blindLen, py) * vis;
-    vec3 blindCol = mix(mix(vec3(0.58, 0.57, 0.53), vec3(0.62, 0.50, 0.40), step(0.8, fract(paneH * 5.3))), vec3(0.42, 0.40, 0.38), step(0.7, hash11(seed * 9.2 + 1.7)) * step(0.5, fract(paneH * 3.7)));
+    // the building's blind palette (a landlord's fit-out: off-white, grey, charcoal or a warm fabric), with a fifth
+    // of the tenants' own; a whole tower with one blind colour read as a single cream tone once the sun was on it
+    float bPal = hash11(seed * 9.2 + 1.7);
+    vec3 blindBase = bPal < 0.3 ? vec3(0.66, 0.65, 0.62) : bPal < 0.55 ? vec3(0.50, 0.49, 0.47) : bPal < 0.75 ? vec3(0.28, 0.27, 0.27) : vec3(0.60, 0.50, 0.40);
+    vec3 blindCol = mix(blindBase, mix(vec3(0.58, 0.57, 0.53), vec3(0.62, 0.50, 0.40), step(0.5, fract(paneH * 5.3))), step(0.8, fract(paneH * 3.7)));
     // the room seen through the pane: lit by daylight only (facadeRoom), so these are room albedos, not the tones of a
     // sunlit wall; a dim space with the ceiling and its light fittings along the top of the pane
     vec3 interior = vec3(0.13, 0.14, 0.15) + vec3(0.36, 0.33, 0.28) * smoothstep(0.78, 0.98, py) * vis;
@@ -573,10 +577,15 @@ if (facadeGlass > 0.0) {
     coat = mix(coat, vec3(0.30, 0.32, 0.33), replaced);
     float paneRough = 0.15;
     // what the pane transmits (a reflective coating passes less): the blinds at the glass plane take the sun
-    // (paneDiff), the room behind them takes daylight only (paneRoom, see facadeRoom)
+    // (paneDiff), the room behind them takes daylight only (paneRoom, see facadeRoom). The light goes through the
+    // coating on the way in and again on the way out, and the glass body passes green a little more than red, so
+    // a blind's apparent albedo is its own times the transmission squared: 0.6 behind a T 0.6 low-e unit is 0.22
+    // (mid-grey under the mirrored sky), where one pass gave 0.36, which ACES put at 235 under the sun and made
+    // every sun-facing curtain wall with its blinds down read as a cream slab at 300 m
     float transmit = 1.0 - 1.4 * max(coat.g, coat.b);
-    vec3 paneDiff = blindCol * blind * reveal * transmit;
-    vec3 paneRoom = interior * (1.0 - blind) * reveal * transmit;
+    vec3 pass2 = transmit * transmit * vec3(0.90, 1.0, 0.96);
+    vec3 paneDiff = blindCol * blind * reveal * pass2;
+    vec3 paneRoom = interior * (1.0 - blind) * reveal * pass2;
     facadeSkyRough = mix(0.08, 0.2, 1.0 - vis);
     // the sill's shadow and streaks of dirt washed down from it
     float sillY = y0 - 0.05, sillD = y0 - 0.3;
@@ -595,8 +604,10 @@ if (facadeGlass > 0.0) {
       // panel. Mullion caps are dark anodised or pale aluminium per building.
       float mull = 1.0 - fpulse(bu, 0.025, 0.975, pwu);
       float spandrelGlass = step(0.5, hash11(seed * 5.3));
-      vec3 backing = mix(wall * 0.35, vec3(0.05, 0.07, 0.09), 0.5 * step(0.5, hash11(seed * 7.7 + 0.3)));
-      vec3 spandrelCol = mix(wall * 0.45, vec3(0.86, 0.87, 0.88), step(0.8, hash11(seed * 6.1)));
+      // the backing sits behind the spandrel glass, so it is seen through the coating twice like a blind (pass2)
+      vec3 backing = mix(wall * 0.35, vec3(0.05, 0.07, 0.09), 0.5 * step(0.5, hash11(seed * 7.7 + 0.3))) * pass2;
+      // pale metal panel: weathered painted aluminium (~0.6), not the 0.86 that ran to white in the sun
+      vec3 spandrelCol = mix(wall * 0.45, vec3(0.60, 0.61, 0.62), step(0.8, hash11(seed * 6.1)));
       float spandrel = fpulse(fl, 0.0, y0, pwv) * (1.0 - mull) * rowOn;
       float mullCol = 0.2 + 0.35 * step(0.6, hash11(seed * 8.8));
       vec3 frame = vec3(mullCol) * (0.95 + 0.1 * spandrelGlass);
@@ -824,6 +835,9 @@ if (facadeGlass > 0.0) {
     facadeLobeScale = mast ? 1.0 : 1.0 - glass;
     // through a lit room the pane glows unevenly: bright where the ceiling panels are, dimmer on the walls
     emis *= mix(1.0, 0.55 + 1.1 * roomPanel, par * glass);
+    // by day most office floors have their lights on: through a resolved pane the ceiling fittings show as pale
+    // bars in the dark room (passed by the coating once on the way out), the cue that says "office" at 100-200 m
+    emis += vec3(0.95, 0.93, 0.86) * roomPanel * par * glass * office * step(0.35, fHash) * transmit * 0.45 * (1.0 - nightOn);
     if (!mast) {
       // Street level. Each building has a front face (entrance, lobby, shopfronts) and a back face (loading dock,
       // service door) picked per building, so a block read from the street shows entrances on the avenue and
@@ -1000,6 +1014,6 @@ if (facadeGlass > 0.0) {
   totalEmissiveRadiance += emis;
 }`);
   };
-  mat.customProgramCacheKey = () => 'facade-v13';
+  mat.customProgramCacheKey = () => 'facade-v14';
   return mat;
 }
