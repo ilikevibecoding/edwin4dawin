@@ -607,6 +607,14 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     // limit, an older fainter line higher up; the debris grain is filtered out with the footprint
     float streak = 1.0 - smoothstep(0.0, 0.6, abs(sd - swashW * 0.95));
     if (streak > 0.0) c *= 1.0 - 0.10 * streak * smoothstep(0.25, 0.6, vnoise(wp * 0.4 + 3.0));
+    // .. and the dark magnetite lag the wind strings out along itself over the dry sand: streaks 4-10 m long
+    // and half a metre wide, in patches of the beach, the sand's own stripes from the air
+    float lagVis = (1.0 - damp) * (1.0 - smoothstep(1.5, 3.0, foot)) * smoothstep(0.45, 0.7, n3 + 0.3 * (n4 - 0.5));
+    if (lagVis > 0.02) {
+      vec2 wf = WIND_FRAME * wp;
+      float sn = vnoise(vec2(wf.x * 0.12, wf.y * 1.1) + 7.0);
+      c *= 1.0 - 0.22 * smoothstep(0.64, 0.8, sn) * lagVis;
+    }
     float wrackD = swashW * 1.3 + 1.0;
     float oldLine = wrackD * 1.8 + 2.0 - 1.5 * wander2;
     float tide1 = 1.0 - smoothstep(0.0, 0.7, abs(sd - wrackD));
@@ -702,10 +710,14 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     float dryness = zone == 10 ? 0.5 : 0.25;
     c = openGround(n2, n3, n4, dryness, gd);
     if (zone == 4) {
-      float pathVis = 1.0 - smoothstep(0.6, 1.4, foot);
+      float pathVis = 1.0 - smoothstep(2.5, 5.0, foot);
       if (pathVis > 0.0) {
-        float pn = vnoise(wp * 0.023 + 0.35 * vec2(n2, -n2) + 8.0);
-        float path = (1.0 - smoothstep(0.0, 0.028, abs(pn - 0.5))) * pathVis * (1.0 - smoothstep(0.65, 0.85, canopy));
+        float pn = vnoise(wp * 0.023 + 0.5 * vec2(n4 - 0.5, 0.5 - n4) + 8.0);
+        // about 2 m wide (0.028 of the noise's range at its ~0.012/m gradient); once thinner than a pixel the
+        // line widens to the pixel and pales in proportion, so from 500 m up it stays a faint line instead of
+        // breaking into dashes and vanishing
+        float hw = max(0.028, 0.012 * foot);
+        float path = (1.0 - smoothstep(hw * 0.5, hw, abs(pn - 0.5))) * pathVis * (0.028 / hw) * (1.0 - smoothstep(0.65, 0.85, canopy));
         c = mix(c, vec3(0.21, 0.16, 0.10) * (0.8 + 0.4 * gd.soil), path * 0.85);
       }
     }
