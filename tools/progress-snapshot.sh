@@ -14,7 +14,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TAG="${1:?tag}"; shift || true
 SOURCE=integration; PUBLISH=0
 while [ $# -gt 0 ]; do case "$1" in --source) SOURCE="$2"; shift 2;; --publish) PUBLISH=1; shift;; *) echo "unknown $1"; exit 2;; esac; done
-BUILDERS=(acsplit waterrender waterphys boats clouds4 light3 street highway facade3 veg5 terrain5)
+BUILDERS=(acsplit waterrender waterphys boats clouds4 light3 street highway facade3 veg5 terrain5 acgeo wphys2)
 LEAD_BRANCH=cursor/vice-city-aerial-8213
 INTEG=/home/ubuntu/wt-integration
 PORT=4398
@@ -110,7 +110,8 @@ PROGRESS_VIEWS=(
   "cloudy|Overcast deck|sky|cloudy"
   "highway_bridge|Causeway flyover at 45 m|highway|bridge-low"
   "highway_aerial|Reference aerial: approach highway across Garza|highway|aerial-a"
-  "highway_200m|Coastal highway from 200 m|highway|dev&cam=-3400,220,2950&hdg=-75&pch=-22&fov=50&time=15&weather=clear&plane=-2500,300,3300,270,0,0,55,0.7"
+  "highway_200m|Approach highway over Garza and the causeway to downtown, 120 m|highway|dev&cam=-1300,120,2750&hdg=60&pch=-16&fov=55&time=15&weather=clear&plane=-600,300,2500,60,0,0,55,0.7"
+  "highway_along|Along the coastal highway through the suburbs, 180 m|highway|dev&cam=-4400,180,2700&hdg=90&pch=-14&fov=55&time=15&weather=clear&plane=-3300,300,2600,90,0,0,55,0.7"
   "foliage_suburb|Suburb canopy from 130 m|foliage|dev&cam=-6000,130,-2300&hdg=0&pch=-25&fov=50&time=15&weather=clear&plane=-6000,120,-2400,0,0,0,50,0.7"
   "foliage_park|Park canopy from 130 m|foliage|dev&cam=-4950,130,2000&hdg=0&pch=-25&fov=50&time=15&weather=clear&plane=-4950,120,1900,0,0,0,50,0.7"
   "shore_beach|Garza beach from 60 m|shore|dev&cam=200,60,3300&hdg=-30&pch=-20&fov=50&time=15&weather=clear&plane=600,80,3400,200,0,0,50,0.7"

@@ -2,13 +2,20 @@ import * as THREE from 'three';
 
 /** Tileable 3D noise texture used to shape the volumetric clouds.
  *  R: perlin-worley base shape (lattice periods 4/8/16 cells),
- *  G: low-frequency worley fbm (periods 4/8) used as the edge-erosion detail — deliberately smooth so the
- *     raymarch step size (60–200 m) does not undersample it,
+ *  G: worley fbm (periods 4/8/16) used as the edge-erosion detail,
  *  B: mid-frequency perlin fbm (periods 8/16) for wispy tops,
- *  A: perlin fbm (periods 4/8/16). */
+ *  A: perlin fbm (periods 4/8/16).
+ *  Every channel is normalised to mean 0.5 and a fixed standard deviation (R/G/A 0.16, B 0.10) before the 8-bit
+ *  quantisation: the raw fbm values used a fifth of the range (perlin std 0.063, perlin-worley 0.068), which both
+ *  terraced the density into ~50 levels and left the shape term too weak to rag the cloud bases.
+ *  No mip chain: the raymarch fades each channel toward its mean as its step grows past the periods it can
+ *  resolve (sky.ts stepFade). A mipmapped textureLod fetch did the same thing exactly, but a trilinear mip fetch
+ *  costs twice a plain one on a software rasteriser and the bench runs on one. */
+const CHANNEL_STD = [0.16, 0.16, 0.10, 0.16];
+
 export function createCloudNoiseTexture(size = 64): THREE.Data3DTexture {
   const N = size;
-  const data = new Uint8Array(N * N * N * 4);
+  const raw = new Float32Array(N * N * N * 4);
 
   const hash = (x: number, y: number, z: number, s: number): number => {
     let h = (x * 374761393 + y * 668265263 + z * 2147483647 + s * 1013904223) | 0;
@@ -71,16 +78,32 @@ export function createCloudNoiseTexture(size = 64): THREE.Data3DTexture {
     const w3 = worley(u * 16, v * 16, w * 16, 16, 51);
     const wf = w1 * 0.625 + w2 * 0.25 + w3 * 0.125;
     const pw = remap(p, 0, 1, wf, 1); // perlin-worley
-    // smooth erosion detail: two worley octaves only (different seeds so it does not track the shape)
+    // erosion detail: three worley octaves (different seeds so it does not track the shape); the finest one is
+    // 4 texels per cell and only the short surface steps near the camera resolve it (the march fades it out
+    // where they do not)
     const e1 = worley(u * 4, v * 4, w * 4, 4, 61);
     const e2 = worley(u * 8, v * 8, w * 8, 8, 71);
-    const detail = e1 * 0.65 + e2 * 0.35;
+    const e3 = worley(u * 16, v * 16, w * 16, 16, 101);
+    const detail = e1 * 0.55 + e2 * 0.3 + e3 * 0.15;
     // mid-frequency perlin (periods 8/16) for wispy tops
     const pm = (perlin(u * 8, v * 8, w * 8, 8, 81) * 0.65 + perlin(u * 16, v * 16, w * 16, 16, 91) * 0.35) * 0.5 + 0.5;
-    data[i++] = Math.round(clamp01(pw) * 255);
-    data[i++] = Math.round(clamp01(detail) * 255);
-    data[i++] = Math.round(clamp01(pm) * 255);
-    data[i++] = Math.round(clamp01(p) * 255);
+    raw[i++] = pw;
+    raw[i++] = detail;
+    raw[i++] = pm;
+    raw[i++] = p;
+  }
+
+  // normalise each channel (mean 0.5, fixed std) so the 8-bit range is used and the shader's erosion terms see a
+  // known contrast whatever the fbm's raw amplitude
+  const data = new Uint8Array(N * N * N * 4);
+  const count = N * N * N;
+  for (let c = 0; c < 4; c++) {
+    let sum = 0, sq = 0;
+    for (let k = c; k < raw.length; k += 4) { sum += raw[k]; sq += raw[k] * raw[k]; }
+    const mean = sum / count;
+    const std = Math.sqrt(Math.max(sq / count - mean * mean, 1e-8));
+    const gain = CHANNEL_STD[c] / std;
+    for (let k = c; k < raw.length; k += 4) data[k] = Math.round(clamp01(0.5 + (raw[k] - mean) * gain) * 255);
   }
 
   const tex = new THREE.Data3DTexture(data, N, N, N);

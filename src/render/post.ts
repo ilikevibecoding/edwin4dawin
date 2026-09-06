@@ -21,11 +21,27 @@ uniform mat4 uInvView;
 uniform vec3 uCamPos;
 uniform float uLogDepthFC;
 uniform float uCloudShadowStrength;
+uniform vec2 uTexel;
 varying vec2 vUv;
+float geomDepth(vec2 uv) { float d = texture2D(tDepth, uv).r; return d < 0.99999 ? d : 0.0; }
 void main() {
   vec4 c = texture2D(tColor, vUv);
   float depth = texture2D(tDepth, vUv).r;
-  if (depth >= 0.99999) { gl_FragColor = c; return; }
+  bool seam = false;
+  if (depth >= 0.99999) {
+    // The horizon row: MSAA resolves those pixels to a mix of the dome and the *unhazed* far water (the haze is
+    // applied here from the resolved depth, which took the dome's sample), leaving a one-pixel dark seam along
+    // the whole horizon at any altitude (sky 202, seam 161-190, water 178 at 30 m). Haze the pixel by its
+    // farthest geometry neighbour instead: the dome is skyRadiance in this direction, and hazing a mix of the
+    // dome and the water by the water's distance gives exactly the mix of the dome and the hazed water (the
+    // in-scatter is that same skyRadiance), so the row lands between the sky and the water it straddles.
+    // Sky pixels next to near geometry (airframe, towers) pick up a haze of well under 1 % from this.
+    float dn = max(max(geomDepth(vUv + vec2(uTexel.x, 0.0)), geomDepth(vUv - vec2(uTexel.x, 0.0))),
+                   max(geomDepth(vUv + vec2(0.0, uTexel.y)), geomDepth(vUv - vec2(0.0, uTexel.y))));
+    if (dn == 0.0) { gl_FragColor = c; return; }
+    depth = dn;
+    seam = true;
+  }
   vec2 ndc = vUv * 2.0 - 1.0;
   vec4 vdir4 = uInvProj * vec4(ndc, 1.0, 1.0);
   vec3 vdir = vdir4.xyz / vdir4.w;
@@ -34,10 +50,11 @@ void main() {
   vec3 vpos = vdir * w;
   vec3 wp = (uInvView * vec4(vpos, 1.0)).xyz;
   vec3 col = c.rgb;
-  // clouds shade the ground: only the direct-sun share of the light is removed
-  float cs = cloudShadow(wp);
-  float sunShare = 0.62 * smoothstep(-0.05, 0.2, uSunDir.y);
-  col *= 1.0 - (1.0 - cs) * sunShare * uCloudShadowStrength;
+  if (!seam) {
+    // clouds shade the ground: only the direct-sun share of the light is removed (uSunShare, atmosphere.ts)
+    float cs = cloudShadow(wp);
+    col *= 1.0 - (1.0 - cs) * uSunShare * uCloudShadowStrength;
+  }
   col = applyAerial(col, uCamPos, wp);
   gl_FragColor = vec4(col, 1.0);
 }
@@ -152,6 +169,7 @@ export class PostPipeline {
         uCamPos: { value: new THREE.Vector3() },
         uLogDepthFC: { value: 1 },
         uCloudShadowStrength: { value: 1 },
+        uTexel: { value: new THREE.Vector2(1 / 1280, 1 / 720) },
       },
       depthTest: false,
       depthWrite: false,
@@ -186,6 +204,7 @@ export class PostPipeline {
       this.bloomTmp[i].setSize(Math.max(1, Math.round(w / s)), Math.max(1, Math.round(h / s)));
     }
     this.compositeMat.uniforms.uResolution.value.set(w, h);
+    this.aerialMat.uniforms.uTexel.value.set(1 / w, 1 / h);
   }
 
   get target(): THREE.WebGLRenderTarget { return this.sceneRT; }

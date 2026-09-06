@@ -364,8 +364,11 @@ export class PlaneEffects {
   constructor(wakes: WakeBatch, scene: THREE.Scene) {
     // float hull: 5.7 m from stern to stem, 0.37 m half-beam at the chine (see model.ts floatSections); a float
     // has no propeller behind it (no prop wash lane) and planes at ~15 m/s
-    this.wakeL = new WakeTrail(80, 0.37, 16, 1.1, wakes, 5.7, 1.5);
-    this.wakeR = new WakeTrail(80, 0.37, 16, 1.1, wakes, 5.7, 1.5);
+    // (r8: 30 s of lane, not 16: the slick road a taxiing float leaves outlasts its froth, and at 3.8 m/s the
+    // 16 s ribbon ended 60 m astern, right where the chase camera's foreground is; 80 points at 1.5 m spacing
+    // hold 120 m, so at planing speed the capacity, not the lifetime, still bounds the ribbon)
+    this.wakeL = new WakeTrail(80, 0.37, 30, 1.1, wakes, 5.7, 1.5);
+    this.wakeR = new WakeTrail(80, 0.37, 30, 1.1, wakes, 5.7, 1.5);
     for (const w of [this.wakeL, this.wakeR]) { w.propWash = 0; w.planingSpeed = 15; w.churn = 0.85; }
     this.splats = wakes.splats;
     const tex = spriteTexture();
@@ -538,6 +541,9 @@ export class PlaneEffects {
       // this float is in the water when its step or bow keel is under the surface
       const fs = floats[i];
       const wet = fs.step > 0 || fs.bow > 0;
+      // a flooding hull sits deep: the ribbon head widens its outline to the section that cuts the surface and
+      // draws a collar of foam around it (the only hull that ever sits below its waterline is a wreck's)
+      trail.immersion = flight.wreck ? Math.min(flight.wreck.flood[i] * 1.25, 1) : 0;
       trail.update(p.x, p.z, fdx, fdz, time, wet, speed);
     }
     // parts that entered the water this frame (float touchdowns and skips, wheels, a wing tip, the nose): the

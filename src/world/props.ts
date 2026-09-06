@@ -75,8 +75,9 @@ const allOf = (c: PropCell): number => c.count;
 const LAMP_KINDS: LampKind[] = ['arterial', 'street', 'ped', 'highway'];
 /** luminaire position in the unit lamp's frame (x along the arm, y height) per kind: where the night dot sits */
 const LAMP_HEAD: Record<LampKind, [number, number]> = { arterial: [3.3, 10.9], street: [2.0, 8.4], ped: [0, 4.25], highway: [0, 9.05] };
-/** lamp dots fade in where the luminaire geometry falls under a pixel and out toward DOT_FAR */
-const DOT_NEAR = 70, DOT_FULL = 140, DOT_FAR = 4000;
+/** lamp dots fade in where the luminaire geometry falls under a pixel, hold to DOT_FULL_FAR (the night bench view
+ *  looks at downtown from 3.7 km) and fade out toward DOT_FAR */
+const DOT_NEAR = 70, DOT_FULL = 140, DOT_FULL_FAR = 4000, DOT_FAR = 5000;
 /** lamp geometry leaves the main pass here (a pole is 0.2 px wide, the luminaire under a pixel; the dots carry the
  *  night): 38 k lamps drawn to SMALL_DISTANCE cost 300 k triangles in the high views for nothing visible */
 const LAMP_FAR = 600;
@@ -106,7 +107,7 @@ function createLampDotMaterial(): THREE.ShaderMaterial {
       void main() {
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         float d = length(mv.xyz);
-        vFade = smoothstep(${DOT_NEAR.toFixed(1)}, ${DOT_FULL.toFixed(1)}, d) * (1.0 - smoothstep(${(DOT_FAR * 0.75).toFixed(1)}, ${DOT_FAR.toFixed(1)}, d));
+        vFade = smoothstep(${DOT_NEAR.toFixed(1)}, ${DOT_FULL.toFixed(1)}, d) * (1.0 - smoothstep(${DOT_FULL_FAR.toFixed(1)}, ${DOT_FAR.toFixed(1)}, d));
         gl_PointSize = clamp(1.2 * uFocal / max(d, 1.0), 1.5, 4.5);
         gl_Position = projectionMatrix * mv;
       }`,

@@ -1,0 +1,15 @@
+base: 7ec36aaa (cursor/vice-city-aerial-8213)
+skip acsplit: nothing new
+skip waterrender: nothing new
+merged waterphys: 4617ca0e Report: the turning ribbon's fold (r10.3) under boat wakes; weakest points updated
+skip boats: no remote branch
+skip clouds4: nothing new
+skip light3: nothing new
+merged street: edf280b5 Street report: rounds 3 and 4 (surfaces, thin members, masts, lamp lines, plazas and lots)
+skip highway: nothing new
+skip facade3: nothing new
+skip veg5: nothing new
+skip terrain5: nothing new
+skip acgeo: nothing new
+build: 9a64e1fb from /home/ubuntu/wt-integration
+cdn: pinned data.json serves h08
