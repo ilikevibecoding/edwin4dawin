@@ -7,14 +7,36 @@ import { balanceGroundIbl } from './terrain';
  * `aMatParams` attribute (per vertex or per instance) and its colour from vertex / instance colours,
  * plus a geometry accumulator that bakes meshes into one vertex-coloured triangle soup.
  */
-export function createBatchedPbrMaterial(cacheKey: string, vertexColors: boolean, emissive?: number): THREE.MeshStandardMaterial {
+/** Vertex-shader support for thin members (poles, arms, signal heads) that carry an `aThin` attribute: the offset
+ *  of the vertex from the member's axis. The member is inflated to at least THIN_PX pixels across at its depth, so
+ *  a 15 cm pole that would fall between the samples from 200 m on stays a line to the distance its batch is drawn.
+ *  Nothing changes while the member is wider than that (a pole 2 m away keeps its true radius). */
+export const THIN_PX = 1.2;
+export const THIN_VERTEX_PARS = /* glsl */ `attribute vec3 aThin; uniform float uFocalPx;`;
+export const THIN_VERTEX_MAIN = /* glsl */ `
+{
+  float thinR = length(aThin);
+  if (thinR > 1e-4) {
+    #ifdef USE_INSTANCING
+      float thinDepth = -(modelViewMatrix * instanceMatrix * vec4(transformed, 1.0)).z;
+    #else
+      float thinDepth = -(modelViewMatrix * vec4(transformed, 1.0)).z;
+    #endif
+    float thinMin = ${(THIN_PX / 2).toFixed(2)} * max(thinDepth, 0.0) / max(uFocalPx, 1.0);
+    transformed += aThin * (max(thinMin, thinR) / thinR - 1.0);
+  }
+}`;
+
+export function createBatchedPbrMaterial(cacheKey: string, vertexColors: boolean, emissive?: number, focalPx?: THREE.IUniform<number>): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, metalness: 1, vertexColors, emissive: emissive ?? 0x000000 });
-  // with an emissive colour, the per-vertex `aEmissive` mask selects the glowing vertices
-  const em = emissive !== undefined;
+  // with an emissive colour, the per-vertex `aEmissive` mask selects the glowing vertices; with a focal-length
+  // uniform (pixels per metre at 1 m) the geometry's thin members are held to THIN_PX pixels across
+  const em = emissive !== undefined, thin = focalPx !== undefined;
   mat.onBeforeCompile = (shader) => {
+    if (thin) shader.uniforms.uFocalPx = focalPx;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', `#include <common>\nattribute vec2 aMatParams;\nvarying vec2 vMatParams;${em ? '\nattribute float aEmissive;\nvarying float vEmissive;' : ''}`)
-      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvMatParams = aMatParams;${em ? '\nvEmissive = aEmissive;' : ''}`);
+      .replace('#include <common>', `#include <common>\nattribute vec2 aMatParams;\nvarying vec2 vMatParams;${em ? '\nattribute float aEmissive;\nvarying float vEmissive;' : ''}${thin ? `\n${THIN_VERTEX_PARS}` : ''}`)
+      .replace('#include <begin_vertex>', `#include <begin_vertex>\nvMatParams = aMatParams;${em ? '\nvEmissive = aEmissive;' : ''}${thin ? THIN_VERTEX_MAIN : ''}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\nvarying vec2 vMatParams;${em ? '\nvarying float vEmissive;' : ''}`)
       .replace('#include <roughnessmap_fragment>', 'float roughnessFactor = vMatParams.x;')

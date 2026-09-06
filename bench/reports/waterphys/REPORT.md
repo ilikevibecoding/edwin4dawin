@@ -89,6 +89,17 @@ Frame numbers are 10 fps clip frames (frame n = n/10 s). Change size vs the r1 b
   the lane's coverage, so the lane lies as a smooth road mirroring the sky in the rippled sea, behind a taxiing
   float and behind every boat. The coverage outlasts the froth (2.2 lane lengths for a float, 4 for a ship, toward
   a kilometre at 11 kt) and float lanes live 30 s (a 16 s ribbon ended in the chase camera's foreground).
+- **The ribbon folded over itself on the inside of every turn.** The quads must span the Kelvin envelope (19.5°
+  a side: 23 m half-width 50 m astern of a float, 67 m at 100 m behind a runabout in a turn), and both sides took
+  the outer width, so the inner edge of a turning ribbon ran past the turn's centre and every quad there folded
+  over its neighbour — drawn twice (double-sided), lane and arm lines mirrored over the inner region, the additive
+  height pass doubled. Ribbon driven round circles in Node: 44 of 80 quads folded behind a float in a 15 m taxi
+  turn (from 19 m astern), 64 of 121 behind a runabout in a 40 m turn, 54 of 112 behind a yacht in 60 m — the
+  inside of every route turn and every taxi turn. Now each side takes its own width (mirroring the shader's inner
+  arm closing on the track / outer arm spreading), the inner edge is clamped inside the local turn radius, the
+  vertex carries its signed across-position (side × half-width interpolates quadratically once the sides differ)
+  and the curvature is measured every frame from the relaxed track (once-at-relaxation read a third low). Zero
+  folded quads in all five cases; a straight track is unchanged.
 - **The lane's froth never died behind a hull that stopped.** Every time-like decay of the foam pass was written
   in ribbon distance, which is speed × time only while the hull keeps going; the points just astern of a stopped
   hull kept `d ≈ 0`, so the churn held its transom density for the ribbon's whole life and the slick never let go.
@@ -121,6 +132,24 @@ Frame numbers are 10 fps clip frames (frame n = n/10 s). Change size vs the r1 b
   percent on the contact tests (the gust field is noise of the model's own clock, which the page advances before
   the suite). The page harness remains the authority for `allPass`.
 
+## Verification state (what was seen, what was measured, what is still queued)
+
+- Seen in frames (r1–r7 on dist1–dist6): splats drawing and the spray rebuilt (`crops/r2_wlf_f6_spray_before_after`),
+  the zoned boat lanes at boat level / 100 m and the ship's lane (`crops/r3_wake100…`, `crops/r3_wakeship100…`),
+  the wheels-down nose-over and the wing-tip strike sequences (`crops/r4_*_sequence`), the seam dashes gone, the
+  handover invisible at taxi and on swell, the taxi wake absent (r6, the diagnosis that led to r8).
+- Measured, not yet seen (r8–r10 on dist7–dist9): the slick lane, half-float height map and arm crests (r8); the
+  righted wreck's list and the time-based lane decay (r9, `ditchnode`, `stopnode`); the skip sequence, the lane gaps
+  over the hops and the turning ribbon's folds (r10, `skipnode`, `skipwake`, `turnwake`) — every one of these has a
+  Node probe that drives the real code (flight model, wave field, WakeTrail) and reports the numbers quoted above.
+- Still queued on the machine's Chrome gate (`/tmp/waterphys/queue`, served by `session2.mjs` holding one slot for
+  the whole queue once it gets one): the page flight harness on the final build (`flight_r10.json`; the Node port
+  passes 19 / 19 on this tree), the height-map probes at taxi and hump speed, the r8 taxi / swell chase frames, the
+  r3c boat views (with `turn100`), the r4c ditching frames, the r9 stopping float, the r10 skipping entry and taxi
+  circle (overhead and chase), the r5 sheet frames, the seam views and the mid-map perf A/B. The two builder slots
+  were held for the whole afternoon by other builders' idle servers (one with no idle exit since 12:37), so from
+  13:56 on this branch could only be verified numerically.
+
 ## Perf
 
 Draw calls / triangles (SwiftShader, shared 4-core VM under load 5–12): water-landing 219 / 472 k,
@@ -129,7 +158,11 @@ map adds one 1024² render-target pass of the wake batch per frame and one textu
 it stays within budget. A clean interleaved A/B ratio for that pass is the one perf measurement still owed (see
 next attack).
 
-## Rubric self-scores (honest; a score rises only where a named defect was reduced)
+## Rubric self-scores (honest; a score rises only where a named defect was reduced *and seen reduced*)
+
+The "now" column is the frame-verified state (through r7). The r8–r10 fixes (taxi wake / slick lane, stopping
+lane, skip gaps, turning fold) are measured in Node but not yet seen in frames; if the queued frames confirm them
+as the numbers say, 14 goes to 8.5 (the inside of every turn and every taxi lane were wrong until r10) and 11 to 8.0.
 
 | cat | | r1 | r2 | r3 | now | why |
 |---|---|---|---|---|---|---|
@@ -144,8 +177,9 @@ next attack).
    hull's paint shows no waterline stain or sheen where it cuts the surface. This needs a hull-waterline decal
    from `model.ts` (see hooks). Highest value for 11/12.
 2. **The interleaved A/B perf ratio for the mid-map pass** is not yet measured; do it on two preview ports.
-3. Wake **turning / shore interaction** and **1 km persistence** are only spot-checked (the `turn100` and ship
-   views); stopping is handled (r9) but its frames are still to be reviewed.
+3. Wake **shore interaction** and **1 km persistence** are only spot-checked (the ship views); turning is fixed
+   numerically (r10, no folds) and stopping (r9) and skipping (r10) are handled, but their frames are still to be
+   reviewed.
 4. Reflections/glitter over the churned lane (cat 26) are only lightly touched.
 
 ## Failed / reverted candidates
