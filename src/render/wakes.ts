@@ -516,7 +516,8 @@ const SPLAT_VERTEX = /* glsl */ `
     vPos = iPos; vDir = iDir;
     float tau = max(uTime - iPos.z, 0.0);
     float E = iPos.w;
-    float r0 = 0.6 + 1.3 * E;
+    // an airframe part (kind 1: a wing tip, the nose) drives a wider cavity than a float's V-bottom
+    float r0 = (0.6 + 1.3 * E) * (1.0 + 0.6 * iDir.w);
     float lam = 1.6 * r0;
     float c = 1.25 * sqrt(lam);   // deep-water phase speed sqrt(g lam / 2 pi)
     // the quad follows the ring outward while the ring lives, else it holds the whitewater patch
@@ -551,11 +552,11 @@ export const SPLAT_MATERIAL = new THREE.ShaderMaterial({
       float tau = max(uTime - vPos.z, 0.0);
       float E = vPos.w;
       float r = length(vLocal);
-      float r0 = 0.6 + 1.3 * E;
+      float r0 = (0.6 + 1.3 * E) * (1.0 + 0.6 * vDir.w);
       float lam = 1.6 * r0;
       float c = 1.25 * sqrt(lam);
       float rc = r0 + c * tau;
-      float fl = 0.35 / uTexel;
+      float fl = 0.2 / uTexel;
       float fine = 1.0 - smoothstep(0.25, 1.2, uTexel);
       float n1 = vn(vWp * min(1.1, fl) + 5.0), n2 = vn(vWp * min(3.3, fl) + 13.0), n3 = vn(vWp * 0.4 + 2.0);
       // whitewater patch: grows over the first second, dissolves over a few seconds (longer the harder the hit);
@@ -605,13 +606,13 @@ export const SPLAT_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
       float tau = max(uTime - vPos.z, 0.0);
       float E = vPos.w;
       float r = length(vLocal);
-      float r0 = 0.6 + 1.3 * E;
+      float r0 = (0.6 + 1.3 * E) * (1.0 + 0.6 * vDir.w);
       float lam = 1.6 * r0;
       float c = 1.25 * sqrt(lam);
       float rc = r0 + c * tau;
       // the cavity the body drove: deepest at the impact, collapsing within half a second and rebounding into
       // a central hump that the ring then carries away
-      float D = 0.12 + 0.3 * E;
+      float D = (0.12 + 0.3 * E) * (1.0 + 0.4 * vDir.w);
       float cav = exp(-r * r / (r0 * r0));
       float dep = -D * cav * exp(-tau / 0.35) + 0.45 * D * cav * sin(min(tau / 0.9, 1.0) * 3.1416) * exp(-tau / 0.8);
       // ring wave packet: wavelength ~ the body's size, leaving at the group speed, amplitude falling with the
