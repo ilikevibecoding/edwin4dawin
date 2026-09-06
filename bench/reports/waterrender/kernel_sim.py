@@ -1,4 +1,5 @@
-# 1D simulation of the r8 scatter kernel along the image vertical: a tower (share s_t, colour 1) over sky.
+# 1-D replica of the water's mirror-reflection kernel (water.ts sceneReflection, rounds 8+) along the image vertical:
+# a 60-texel object of share s_t and colour 1 over sky; prints the energy, extent, peak and largest step of the result.
 import numpy as np
 H = 360
 def pyramid(a, levels=7):
@@ -23,9 +24,12 @@ def run(share_t, tower=(150,210), unit=65.0, vy=0.35, tune=1.0):
     top=len(pc)-1
     out=np.zeros(H)
     for y in range(H):
-        topA=sample(pa,y,top)
+        # gate and share of the reach: the top level at the pixel and one longest streak up and down (9c5f6e34)
+        r=min(1.5*unit, 0.3*H)
+        a1,a2,a3=sample(pa,y,top),sample(pa,y+r,top),sample(pa,y-r,top)
+        topA=max(a1,a2,a3)
         if topA<=0.0005: continue
-        shareL=min(1.5*sample(ps,y,top)/topA,1.0)
+        shareL=min(1.5*(sample(ps,y,top)+sample(ps,y+r,top)+sample(ps,y-r,top))/(a1+a2+a3),1.0)
         sigL=unit*shareL; stepT=max(0.25*sigL,1.0); nT=min(max(np.ceil(1.5*sigL/stepT),1),6)
         lodS=max(0,min(np.log2(stepT),top))
         c=0
