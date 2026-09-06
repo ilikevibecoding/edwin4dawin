@@ -142,7 +142,7 @@ uniform float uWindSpeed;
 uniform vec2 uWindDir;
 uniform vec3 uSunDirW;
 uniform sampler2D uReflTex;   // premultiplied mirror image of the scene (alpha 0 where only sky would be seen)
-uniform sampler2D uReflDepth; // its logarithmic depth
+uniform sampler2D uReflShare; // share of each texel's mirror distance beyond the surface, premultiplied (same pyramid)
 uniform mat4 uReflVP;
 uniform vec4 uReflParams;     // x: active, y: log-depth constant, z: focal length (texels), w: top mip level
 uniform vec2 uReflTexel;
@@ -354,89 +354,78 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, f
 // Mirror image of the scene along the reflected ray (render/reflection.ts). P: surface point, V: view
 // vector, N: wave normal, mss: unresolved slope variance, dist: camera distance. Returns premultiplied
 // colour and coverage; coverage 0 where the reflected ray only sees sky (the caller keeps its sky there).
-// Depth of the mirrored object under 'uv' (linear, mirror-camera units); the texel is treated as sky beyond
-// 'skyW'. Bilinear over the four nearest depth texels: the displacement built from it then ramps across an
-// object's edge instead of jumping texel by texel (that jump was the stair-stepped reflection under the floats).
-float reflObjectDepth(vec2 uv, float skyW) {
-  vec2 lim = uReflTexel * 0.5;
-  vec2 tc = clamp(uv, lim, 1.0 - lim) / uReflTexel - 0.5;
-  vec2 f = fract(tc);
-  vec2 b = (floor(tc) + 0.5) * uReflTexel;
-  vec4 d = vec4(texture2D(uReflDepth, b).r, texture2D(uReflDepth, b + vec2(uReflTexel.x, 0.0)).r,
-                texture2D(uReflDepth, b + vec2(0.0, uReflTexel.y)).r, texture2D(uReflDepth, b + uReflTexel).r);
-  vec4 w = exp2(d * (2.0 / uReflParams.y)) - 1.0;
-  w = mix(w, vec4(skyW), step(0.99999, d));
-  return mix(mix(w.x, w.y, f.x), mix(w.z, w.w, f.x), f.y);
-}
+//
+// The unresolved facets tilt the reflected rays by twice their slope (rms sqrt(mss / 2) per axis). A tilt in
+// the view plane changes the ray's elevation fully, a sideways tilt turns it by only sin(grazing angle), so the
+// image of a point whose mirror distance has the share s beyond the surface is smeared into a vertical streak
+// of rms 2 sigma s f texels (f: focal length) and that times |V.y| across: a hull on the water (s = 0) stays
+// sharp, the aircraft in a chase view (s ~ 0.5) breaks up, a tower's top far above the camera (s -> 1) streaks
+// the most. The streak belongs to the mirrored object, not to the water pixel: a window's light spreads over
+// the water below and above its mirror image. So the kernel gathers over the reach of the longest streak
+// around, and each tap is weighted by the streak of what that tap sees (the share pyramid: the mean share of
+// the objects in the tap's footprint), never by what the pixel's own mirror ray hits. (A kernel set from the
+// pixel's own hit cut every streak off at the object's silhouette: a city's reflection was a row of hard-edged
+// grey teeth filled with blur.) A tap's colour is read at the level of its own across-spread, so a streak keeps
+// its width, floored at half the tap spacing so the taps tile the streak without gaps.
 vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist, vec2 dx, vec2 dy, float t) {
   vec4 rc = uReflVP * vec4(P, 1.0);
   if (rc.w <= 0.0) return vec4(0.0);
   float wp = rc.w; // depth of P for the mirror camera (equals its depth for the real camera)
   vec2 uv0 = rc.xy / wp * 0.5 + 0.5;
+  // anything mirrored within reach? (the top level's footprint is a good part of the image)
+  float topA = textureLod(uReflTex, uv0, uReflParams.w).a;
+  if (topA <= 0.0005) return vec4(0.0);
+  // the kernel's extent: the streak of what is in reach, biased up so the taller objects of a mixed footprint
+  // keep most of their tails (a pure region of one share is then sampled a little finer than it needs)
+  float shareL = min(1.5 * textureLod(uReflShare, uv0, uReflParams.w).r / topA, 1.0);
   // The sparkle facets (the same field the glitter rides on) tilt the mirror too: the light of a distant
-  // window lands on the cells whose facet happens to point at it, so a lit tower or a shore light reflects
-  // as a column of glints scattered along the wave slopes over its mirror image, not as one soft blob, and
-  // a near reflection (the aircraft, a hull) shatters at its edges the way a mirror image does in a chop.
-  // Evaluated only where the coarse mip shows anything reflected within reach, which is where it can matter.
-  float mssU = mss;
-  if (textureLod(uReflTex, uv0, min(uReflParams.w, 5.0)).a > 0.002) {
-    float resolved;
-    vec2 s = sparkleSlope(P.xz, dx, dy, t, mss, resolved);
-    N = normalize(vec3(N.x / N.y - s.x, 1.0, N.z / N.y - s.y));
-    mssU = mss * (1.0 - resolved);
-  }
-  // The flat mirror sees an object along this ray at depth wq. The real reflected ray leaves P tilted by
-  // the wave slope and travels about the same path length L, so its hit point is displaced by (R - R0) L:
-  // that is the mirror image displaced by the same vector (clip-space displacement per metre: dclip).
+  // window lands on the cells whose facet happens to point at it, so a reflection breaks up along the wave
+  // slopes and a near one (the aircraft, a hull) shatters at its edges the way a mirror image does in a chop.
+  float resolved;
+  vec2 s = sparkleSlope(P.xz, dx, dy, t, mss, resolved);
+  N = normalize(vec3(N.x / N.y - s.x, 1.0, N.z / N.y - s.y));
+  float mssU = mss * (1.0 - resolved);
+  // The flat mirror sees the objects in reach at the depth wq the share stands for. The real reflected ray
+  // leaves P tilted by the wave slope and travels about the same path length L, so its hit point is displaced
+  // by (R - R0) L: that is the mirror image displaced by the same vector (clip-space displacement per metre:
+  // dclip). The share of the reach, not of the pixel's own hit, so the field is continuous across silhouettes.
   vec3 R = reflect(-V, N);
   R.y = max(R.y, 0.02);
   vec3 R0 = vec3(-V.x, V.y, -V.z);
   vec4 dclip = uReflVP * vec4((R - R0) * uReflTune.y, 0.0);
-  float k = dist / wp; // metres along the ray per unit of depth
-  // where the flat mirror sees sky, the tilted ray can still meet something near by: search a bounded way
-  // along it (a distant-object assumption sent the lookup metres away from the edge of every near object)
-  float skyW = wp + clamp(wp * 0.5, 3.0, 25.0);
-  float wq = reflObjectDepth(uv0, skyW);
-  float L = max(wq - wp, 0.0) * k;
+  float wq = wp / max(1.0 - shareL, 0.05);
+  float L = (wq - wp) * dist / wp; // metres along the ray beyond the surface
   vec4 rc1 = rc * (wq / wp) + dclip * L;
-  vec2 uv1 = rc1.xy / max(rc1.w, 1e-3) * 0.5 + 0.5;
-  // re-project once with the depth found at the displaced lookup, so a ray that hits a nearer object (or
-  // misses the one the flat mirror saw) uses that path length instead
-  wq = reflObjectDepth(uv1, skyW);
-  L = max(wq - wp, 0.0) * k;
-  rc1 = rc * (wq / wp) + dclip * L;
   vec2 uv = rc1.xy / max(rc1.w, 1e-3) * 0.5 + 0.5;
   // (a distant light's glints reach a good part of the image up and down the mirror image: the bound only
   // keeps a wild tilt from sampling across the whole texture)
   uv = uv0 + clamp(uv - uv0, vec2(-0.25), vec2(0.25));
-  // The unresolved facets tilt the reflected rays by twice their slope (rms sqrt(mss / 2) per axis). A tilt in
-  // the view plane changes the ray's elevation fully, a sideways tilt turns it by only sin(grazing angle), so
-  // the image of a point at share L / D of the mirror distance is smeared into a vertical streak (the glitter-
-  // path ellipse): rms 2 sigma share in elevation and that times |V.y| across. uReflTune.x scales the streak.
-  float share = clamp(1.0 - wp / max(wq, wp), 0.0, 1.0);
-  float streak = uReflTune.x * sqrt(mssU) * share * uReflParams.z; // rms texels along the image's vertical
-  float across = streak * clamp(abs(V.y), 0.1, 1.0);
-  // The cross-streak blur comes from the mip chain (tap footprint = the rms across-spread, never wider: the
-  // cross blur used to grow to half the streak, which turned every tower light into a soft blob); along the
-  // streak the taps sit one footprint apart, as many as it takes to cover +-1.5 rms (up to 13), so a long
-  // streak is drawn as a smooth column and never prints its taps as copies.
-  float lod = clamp(log2(max(across, 1.0)), 0.0, uReflParams.w);
-  float stepT = exp2(lod);
-  float nT = clamp(ceil(1.5 * streak / stepT), 1.0, 6.0);
+  float unit = uReflTune.x * sqrt(mssU) * uReflParams.z; // rms texels of streak per unit of share
+  float sigL = unit * shareL;
+  // taps one quarter of the reach's rms apart, six a side (+-1.5 rms); a short reach needs fewer
+  float stepT = max(0.25 * sigL, 1.0);
+  float nT = clamp(ceil(1.5 * sigL / stepT), 1.0, 6.0);
+  float lodS = clamp(log2(stepT), 0.0, uReflParams.w); // the share of a tap's cell
+  float vy = clamp(abs(V.y), 0.1, 1.0);
   // a streak longer than a good part of the image carries no more information than the environment map
-  float clarity = 1.0 - smoothstep(uReflTune.z, uReflTune.w, streak * uReflTexel.y);
+  float clarity = 1.0 - smoothstep(uReflTune.z, uReflTune.w, sigL * uReflTexel.y);
   float edge = smoothstep(0.0, 0.015, uv.x) * smoothstep(0.0, 0.015, 1.0 - uv.x) * smoothstep(0.0, 0.015, uv.y) * smoothstep(0.0, 0.015, 1.0 - uv.y);
   vec2 dv = vec2(0.0, stepT * uReflTexel.y);
-  float g = -0.5 * (stepT * stepT) / max(streak * streak, 1e-4);
-  vec4 c = textureLod(uReflTex, uv, lod);
-  float wsum = 1.0;
-  for (float i = 1.0; i <= 6.0; i += 1.0) {
-    if (i > nT) break;
-    float wi = exp(g * i * i);
-    c += (textureLod(uReflTex, uv + i * dv, lod) + textureLod(uReflTex, uv - i * dv, lod)) * wi;
-    wsum += 2.0 * wi;
+  vec4 c = vec4(0.0);
+  for (float i = -6.0; i <= 6.0; i += 1.0) {
+    if (abs(i) > nT) continue;
+    vec2 uvi = uv + i * dv;
+    vec4 sa = textureLod(uReflShare, uvi, lodS);
+    if (sa.a < 1e-4) continue; // nothing mirrored in this cell
+    // the streak of what the cell holds: a tap's Gaussian spreads its light over its own rms, normalised per
+    // tap (the light of a source is conserved, whatever its streak), floored so a coarse tap cannot spike
+    float sig = max(unit * sa.r / sa.a, max(0.6 * stepT, 0.5));
+    float y = i * stepT / sig;
+    float w = 0.3989 * stepT / sig * exp(-0.5 * y * y);
+    float lod = clamp(log2(max(sig * vy, 0.5 * stepT)), 0.0, uReflParams.w);
+    c += textureLod(uReflTex, uvi, lod) * w;
   }
-  return c * (clarity * edge / wsum);
+  return c * (clarity * edge);
 }
 `;
 
@@ -899,7 +888,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v13-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v14-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 

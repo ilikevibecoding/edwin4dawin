@@ -25,6 +25,10 @@ import { GLSL_AERIAL, GLSL_ATMOS_UNIFORMS, GLSL_CLOUD_FIELD, GLSL_NOISE, GLSL_SK
 
 export interface ReflectionUniforms {
   uReflTex: THREE.IUniform<THREE.Texture | null>;
+  /** per texel, premultiplied by the coverage: the share 1 - wp / wq of the mirror distance that lies beyond the
+   *  surface (0 for hulls and shores, ~0.5 for the aircraft in a chase view, ~1 for a tower far above the camera);
+   *  the same Gaussian pyramid as uReflTex, so a coarse tap gives the mean share of the objects in its footprint */
+  uReflShare: THREE.IUniform<THREE.Texture | null>;
   uReflDepth: THREE.IUniform<THREE.Texture | null>;
   /** view-projection of the mirror camera (oblique near plane included; x, y, w are unaffected by it) */
   uReflVP: THREE.IUniform<THREE.Matrix4>;
@@ -42,6 +46,7 @@ export interface ReflectionUniforms {
 export function createReflectionUniforms(): ReflectionUniforms {
   return {
     uReflTex: { value: null },
+    uReflShare: { value: null },
     uReflDepth: { value: null },
     uReflVP: { value: new THREE.Matrix4() },
     uReflParams: { value: new THREE.Vector4(0, 1, 1, 0) },
@@ -69,11 +74,12 @@ uniform mat4 uInvView;
 uniform vec3 uCamPos;  // mirror camera, below the surface
 uniform float uLogDepthFC;
 uniform float uCloudShadowStrength;
+uniform float uOutShare; // 1: write the premultiplied share of the mirror distance beyond the surface instead of the colour
 varying vec2 vUv;
 void main() {
   vec4 c = texture2D(tColor, vUv);
   float depth = texture2D(tDepth, vUv).r;
-  if (c.a <= 0.0 || depth >= 0.99999) { gl_FragColor = c; return; }
+  if (c.a <= 0.0 || depth >= 0.99999) { gl_FragColor = uOutShare > 0.5 ? vec4(0.0) : c; return; }
   vec2 ndc = vUv * 2.0 - 1.0;
   vec4 vdir4 = uInvProj * vec4(ndc, 1.0, 1.0);
   vec3 vdir = vdir4.xyz / vdir4.w;
@@ -83,6 +89,10 @@ void main() {
   // the mirror ray crosses the surface where the reflected ray leaves the water
   vec3 d = q - uCamPos;
   float t = clamp(-uCamPos.y / max(d.y, 1e-4), 0.0, 1.0);
+  // the water at the crossing reflects this texel: the leg beyond it, as a share of the mirror distance, sets how
+  // far the wave slopes streak the texel's light over the water (an object on the water has none, a tower's top
+  // far above the camera nearly all of it)
+  if (uOutShare > 0.5) { gl_FragColor = vec4(vec3((1.0 - t) * c.a), c.a); return; }
   vec3 p = uCamPos + d * t;
   vec3 col = c.rgb;
   float cs = cloudShadow(q);
@@ -176,9 +186,12 @@ export class PlanarReflection {
   readonly stats: ReflectionStats = { calls: 0, triangles: 0, shadowCalls: 0, shadowTriangles: 0, width: 1, height: 1, hidden: 0 };
   private readonly sceneRT: THREE.WebGLRenderTarget;
   private readonly outRT: THREE.WebGLRenderTarget;
+  /** the share of the mirror distance beyond the surface, premultiplied (see ReflectionUniforms.uReflShare) */
+  private readonly shareRT: THREE.WebGLRenderTarget;
   /** one per pyramid level >= 1: the downsample is rendered here, then copied into that mip level of outRT
    *  (a texture cannot be sampled while one of its levels is the draw target) */
   private readonly levelRTs: THREE.WebGLRenderTarget[] = [];
+  private readonly shareLevelRTs: THREE.WebGLRenderTarget[] = [];
   /** pyramid levels filled each frame (level 0 included); the water clamps its lod to levels - 1 */
   private levels = 1;
   private readonly resolveMat: THREE.ShaderMaterial;
@@ -210,7 +223,10 @@ export class PlanarReflection {
     // the mip levels are allocated by three.js from the length of texture.mipmaps (set in setSize) and rendered
     // one by one with setRenderTarget(outRT, 0, level)
     this.outRT = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, generateMipmaps: false, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });
+    // same format as the image (copyTexSubImage2D needs the level targets and the destination to match)
+    this.shareRT = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, generateMipmaps: false, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter });
     this.uniforms.uReflTex.value = this.outRT.texture;
+    this.uniforms.uReflShare.value = this.shareRT.texture;
     this.uniforms.uReflDepth.value = depthTexture;
     this.resolveMat = new THREE.ShaderMaterial({
       vertexShader: FULLSCREEN_VERT,
@@ -224,11 +240,12 @@ export class PlanarReflection {
         uCamPos: { value: this.camera.position },
         uLogDepthFC: { value: 1 },
         uCloudShadowStrength: { value: 1 },
+        uOutShare: { value: 0 },
       },
       depthTest: false,
       depthWrite: false,
     });
-    this.downMat = new THREE.ShaderMaterial({ vertexShader: FULLSCREEN_VERT, fragmentShader: DOWN_FRAG, uniforms: { tSrc: { value: this.outRT.texture }, uLod: { value: 0 }, uTexel: { value: new THREE.Vector2() } }, depthTest: false, depthWrite: false });
+    this.downMat = new THREE.ShaderMaterial({ vertexShader: FULLSCREEN_VERT, fragmentShader: DOWN_FRAG, uniforms: { tSrc: { value: null }, uLod: { value: 0 }, uTexel: { value: new THREE.Vector2() } }, depthTest: false, depthWrite: false });
     this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.resolveMat);
     this.quad.frustumCulled = false;
     this.quadScene.add(this.quad);
@@ -264,14 +281,18 @@ export class PlanarReflection {
     this.width = w; this.height = h;
     this.sceneRT.setSize(w, h);
     this.outRT.setSize(w, h);
+    this.shareRT.setSize(w, h);
     // a mipmapped texture is only complete with every level down to 1x1 allocated; the pyramid stops at 4 px
     const total = Math.floor(Math.log2(Math.max(w, h))) + 1;
     this.outRT.texture.mipmaps = Array.from({ length: total }, () => ({})) as unknown as THREE.CompressedTextureMipmap[]; // only the length is read
+    this.shareRT.texture.mipmaps = Array.from({ length: total }, () => ({})) as unknown as THREE.CompressedTextureMipmap[];
     this.levels = 1;
     while (this.levels < total && Math.min(w >> this.levels, h >> this.levels) >= 4) this.levels++;
     for (let i = 1; i < this.levels; i++) {
-      const rt = this.levelRTs[i] ??= new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
-      rt.setSize(w >> i, h >> i);
+      for (const list of [this.levelRTs, this.shareLevelRTs]) {
+        const rt = list[i] ??= new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+        rt.setSize(w >> i, h >> i);
+      }
     }
     this.uniforms.uReflTexel.value.set(1 / w, 1 / h);
     this.stats.width = w; this.stats.height = h;
@@ -347,25 +368,33 @@ export class PlanarReflection {
     const u = this.resolveMat.uniforms;
     u.uLogDepthFC.value = logFC;
     u.uCloudShadowStrength.value = this.cloudShadowStrength;
-    this.quad.material = this.resolveMat;
-    this.outRT.viewport.set(0, 0, this.width, this.height);
-    r.setRenderTarget(this.outRT);
-    r.render(this.quadScene, this.quadCam);
-    // Gaussian pyramid into the mip levels: each level is rendered into its own target (a texture cannot be
-    // sampled while one of its levels is the draw target) and blitted from there into the mip level with
-    // copyTexSubImage2D (no draw call; the formats match, so the copy is exact)
-    this.quad.material = this.downMat;
-    for (let i = 1; i < this.levels; i++) {
-      this.downMat.uniforms.uLod.value = i - 1;
-      this.downMat.uniforms.uTexel.value.set(1 / (this.width >> (i - 1)), 1 / (this.height >> (i - 1)));
-      r.setRenderTarget(this.levelRTs[i]);
-      r.render(this.quadScene, this.quadCam);
-      r.copyFramebufferToTexture(this.outRT.texture, null, i);
-    }
-    this.quad.material = this.resolveMat;
+    this.resolvePyramid(this.outRT, this.levelRTs, 0);
+    this.resolvePyramid(this.shareRT, this.shareLevelRTs, 1);
     r.setRenderTarget(prevTarget);
     this.stats.calls = info.calls - c0 - this.stats.shadowCalls;
     this.stats.triangles = info.triangles - t0 - this.stats.shadowTriangles;
+  }
+
+  /** Resolve pass into level 0 of `out`, then the Gaussian pyramid into its mip levels: each level is rendered into
+   *  its own target (a texture cannot be sampled while one of its levels is the draw target) and blitted from there
+   *  into the mip level with copyTexSubImage2D (no draw call; the formats match, so the copy is exact). */
+  private resolvePyramid(out: THREE.WebGLRenderTarget, levelRTs: THREE.WebGLRenderTarget[], outShare: number): void {
+    const r = this.renderer;
+    this.resolveMat.uniforms.uOutShare.value = outShare;
+    this.quad.material = this.resolveMat;
+    out.viewport.set(0, 0, this.width, this.height);
+    r.setRenderTarget(out);
+    r.render(this.quadScene, this.quadCam);
+    this.quad.material = this.downMat;
+    this.downMat.uniforms.tSrc.value = out.texture;
+    for (let i = 1; i < this.levels; i++) {
+      this.downMat.uniforms.uLod.value = i - 1;
+      this.downMat.uniforms.uTexel.value.set(1 / (this.width >> (i - 1)), 1 / (this.height >> (i - 1)));
+      r.setRenderTarget(levelRTs[i]);
+      r.render(this.quadScene, this.quadCam);
+      r.copyFramebufferToTexture(out.texture, null, i);
+    }
+    this.quad.material = this.resolveMat;
   }
 
   /** Draw the resolved mirror image over the canvas (debug switch `reflview`). */
