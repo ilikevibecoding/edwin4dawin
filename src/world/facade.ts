@@ -21,7 +21,11 @@ import { GLSL_NOISE } from '../render/shaders/common.glsl';
  *    3 art-deco pastel banding      4 industrial metal              5 house stucco
  *    6 plain concrete / utility     7 hotel slab                    8 green ribbon glass
  *    9 dark stone strip windows    10 beige brick mid-rise         11 white egg-crate frame
- *   12 pool water                  13 helipad
+ *   12 pool water                  13 helipad                      14 glass balustrade (trim layer)
+ *  Behind panes over ~12 px a ray-box trace in facade space draws the room (back wall, party wall, ceiling with
+ *  lit panels, floor) in the main pass only (the mirror pass renders from the camera reflected under the water).
+ *  Glass widens its specular lobe as its panes go sub-pixel (the pane tilts average into the face's normal
+ *  distribution), so the sun lights a tower's sun-facing side coherently at 1-5 km.
  */
 export function createFacadeMaterial(nightUniform: THREE.IUniform<number>): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, metalness: 0.0 });
@@ -39,7 +43,8 @@ flat varying vec3 vDims;
 flat varying vec4 vStyle;
 flat varying vec4 vStyle2;
 varying vec3 vWorldPosF;
-flat varying float vRound;`)
+flat varying float vRound;
+flat varying vec3 vCamLocal;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 {
   float form = aStyle2.w;
@@ -59,7 +64,10 @@ vDims = aDims;
 vStyle = aStyle;
 vStyle2 = aStyle2;
 vRound = aPart < -0.5 ? 1.0 : 0.0;
-vWorldPosF = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;`);
+vWorldPosF = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
+// camera in the instance's unit-box space (the parallax rooms trace rays in it); the mirror pass renders from
+// the camera reflected under the water, so a negative camera height marks that pass in the fragment shader
+vCamLocal = (inverse(modelMatrix * instanceMatrix) * vec4(cameraPosition, 1.0)).xyz;`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform float uNight;
@@ -70,11 +78,14 @@ flat varying vec4 vStyle;
 flat varying vec4 vStyle2;
 varying vec3 vWorldPosF;
 flat varying float vRound;
+flat varying vec3 vCamLocal;
 ${GLSL_NOISE}
 // per-pane tilt of the glazing (view space), applied to the shading normal after it is computed
 vec3 facadeTilt = vec3(0.0);
-// how much of this fragment is glazing (drives the horizon-haze reflection fix below)
+// how much of this fragment is glazing and how high up the facade it sits (0 grade .. 1 roof): the sky a pane
+// mirrors is picked from the probe by height below
 float facadeGlass = 0.0;
+float facadeHf = 0.5;
 // integral from 0 to x of a unit-period pulse train that is 1 on [a, b) of every period
 float pulseInt(float x, float a, float b) { float f = floor(x); return f * (b - a) + clamp(x - f - a, 0.0, b - a); }
 // box-filtered pulse train: the fraction of the pixel footprint [x - w/2, x + w/2] covered by the pulse. Once the
@@ -119,13 +130,18 @@ normal = normalize(normal + facadeTilt);`)
       .replace('#include <lights_fragment_maps>', `#include <lights_fragment_maps>
 #if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
 if (facadeGlass > 0.0) {
-  // Seen from above, a pane's reflected ray dips below the horizon, where the probe stores the flat ground
+  // The probe has no parallax, so every pane of a tower would mirror the same strip of sky. Up a real tower the
+  // top floors mirror the deep zenith blue and the lower floors the pale haze band and the neighbours: bend the
+  // lookup by height. Seen from above a ray dips below the horizon, where the probe stores the flat ground
   // colour; the real ray crosses kilometres of air and shows the haze band instead, which is why distant
-  // towers read pale and sky-coloured rather than grey. Blend the below-horizon radiance toward the haze.
+  // towers read pale and sky-coloured rather than grey: below-horizon radiance blends toward the haze.
   vec3 rv = inverseTransformDirection(reflect(-geometryViewDir, geometryNormal), viewMatrix);
-  float below = smoothstep(0.0, -0.2, rv.y) * facadeGlass;
+  vec3 rb = normalize(vec3(rv.x, rv.y + 0.4 * (facadeHf - 0.4), rv.z));
+  vec3 sky = textureCubeUV(envMap, envMapRotation * rb, material.roughness).rgb * envMapIntensity;
+  radiance = mix(radiance, sky, facadeGlass);
+  float below = smoothstep(0.0, -0.2, rb.y) * facadeGlass;
   if (below > 0.0) {
-    vec3 hz = textureCubeUV(envMap, envMapRotation * normalize(vec3(rv.x, 0.05, rv.z)), max(material.roughness, 0.3)).rgb * envMapIntensity;
+    vec3 hz = textureCubeUV(envMap, envMapRotation * normalize(vec3(rb.x, 0.05, rb.z)), max(material.roughness, 0.3)).rgb * envMapIntensity;
     radiance = mix(radiance, hz, 0.75 * below);
   }
 }
@@ -152,7 +168,8 @@ if (facadeGlass > 0.0) {
   float facadeSeed = seed + floor(sideX + 0.5) * 3.7 + step(0.0, vLocalN.x + vLocalN.z) * 11.1;
   bool glassy = style < 0.5 || style == 8.0 || style == 9.0;
   // thin, tall concrete frusta are the spires / masts on the crowns
-  bool mast = style == 6.0 && vDims.x < 10.0 && vDims.y > 12.0 && vDims.y > vDims.x * 3.0;
+  bool isTrim = vStyle.w < -0.5;   // trim layer: slabs, rails, ledges, coping, corner columns (city.ts)
+  bool mast = style == 6.0 && !isTrim && vDims.x < 10.0 && vDims.y > 12.0 && vDims.y > vDims.x * 3.0;
   vec3 glassDark = vec3(0.07, 0.10, 0.13);
   vec3 col = wall;
   float rough = 0.75;
@@ -201,7 +218,7 @@ if (facadeGlass > 0.0) {
       col *= 0.9 + 0.2 * grime;
       rough = 0.9;
       // aviation beacon on the tallest roofs
-      if (vDims.y > 140.0) {
+      if (vDims.y > 140.0 && !isTrim) {
         float dc = length(meters.xz - vDims.xz * 0.5);
         emis += vec3(1.0, 0.08, 0.04) * step(dc, 1.0) * 5.0 * uNight;
       }
@@ -270,7 +287,6 @@ if (facadeGlass > 0.0) {
     else if (style == 4.0 || style == 6.0 || style == 9.0 || style > 11.5) useWin = 0.0;
     float gx = fpulse(bu, x0, x1, pwu), gy = fpulse(fl, y0, y1, pwv);
     float glass = gx * gy * rowOn * useWin;
-    facadeGlass = glass;
     // position inside the pane and what is seen through it: a dark room with a lighter ceiling band along
     // the top, blinds or curtains drawn on some panes, the reveal's shadow along the head and one jamb
     float px = clamp((fx - x0) / max(x1 - x0, 0.01), 0.0, 1.0), py = clamp((fy - y0) / max(y1 - y0, 0.01), 0.0, 1.0);
@@ -278,6 +294,37 @@ if (facadeGlass > 0.0) {
     float blind = step(0.62, paneH) * step(1.0 - blindLen, py) * vis;
     vec3 blindCol = mix(vec3(0.58, 0.57, 0.53), vec3(0.62, 0.50, 0.40), step(0.8, fract(paneH * 5.3)));
     vec3 interior = vec3(0.045, 0.055, 0.065) + vec3(0.14, 0.13, 0.11) * smoothstep(0.78, 0.98, py) * vis;
+    // Parallax rooms behind the large panes (over ~12 px, main pass only: the mirror pass renders from the camera
+    // reflected under the water): one ray-box trace in facade space finds the back wall, a side wall, the ceiling
+    // or the floor of the room, so a near office or hotel window shows depth that moves with the viewer.
+    float par = (1.0 - smoothstep(0.05, 0.09, max(pwu, pwv))) * useWin * step(0.0, cameraPosition.y) * (1.0 - vRound);
+    float roomPanel = 0.0;   // lit ceiling panel seen through the pane (modulates the night glow)
+    if (par > 0.0) {
+      vec3 camM = vec3((vCamLocal.x + 0.5) * vDims.x, vCamLocal.y * vDims.y, (vCamLocal.z + 0.5) * vDims.z);
+      vec3 d = normalize(meters - camM);
+      float dn = max(dot(d, -vLocalN), 0.02);
+      float du = sideX > 0.5 ? d.z : d.x, dv = d.y;
+      float roomW = max(bay, 4.5), depth = min(6.0, 0.4 * (sideX > 0.5 ? vDims.x : vDims.z));
+      float roomIdx = floor(u / roomW);
+      float rHash = hash12(vec2(roomIdx * 0.71 + facadeSeed, floorIdx * 1.13 + seed));
+      float tU = du > 0.0 ? ((roomIdx + 1.0) * roomW - u) / du : du < 0.0 ? (roomIdx * roomW - u) / du : 1e9;
+      float tV = dv > 0.0 ? ((floorIdx + 1.0) * floorH - 0.35 - v) / dv : dv < 0.0 ? (floorIdx * floorH + 0.1 - v) / dv : 1e9;
+      float tB = depth / dn;
+      float t = min(tB, min(tU, tV));
+      float hd = t * dn;                         // depth of the hit into the room
+      float hu = u + t * du, hv = v + t * dv;
+      // room finish per room: white / warm / grey offices, a few dark unlet floors
+      vec3 wallCol = rHash < 0.35 ? vec3(0.62, 0.60, 0.56) : rHash < 0.7 ? vec3(0.58, 0.56, 0.58) : vec3(0.66, 0.58, 0.48);
+      vec3 hit;
+      if (t == tB) hit = wallCol * (0.85 + 0.3 * step(0.5, fract(hu / roomW * 2.0 + rHash)));             // back wall, a cupboard / picture band
+      else if (t == tV && dv > 0.0) { hit = vec3(0.78, 0.78, 0.76); roomPanel = step(0.55, fract(hd / 1.4)) * step(0.3, fract(hu / 1.6 + rHash)); }
+      else if (t == tV) hit = vec3(0.26, 0.24, 0.22) * (0.9 + 0.2 * step(0.5, fract(hu / 0.6)));            // carpet / tile floor
+      else hit = wallCol * 0.8;                                                                          // party wall
+      // daylight falls off into the room from the window; the lit room's ceiling panels glow at night
+      float fall = 0.05 + 0.32 * exp(-hd * 0.45);
+      vec3 room = hit * fall * (1.0 - 0.3 * step(0.86, rHash));
+      interior = mix(interior, room, par);
+    }
     vec3 seen = mix(interior, blindCol, blind);
     // the odd replaced pane in a different batch of glass
     float replaced = step(0.985, fract(paneH * 31.7)) * vis;
@@ -310,14 +357,14 @@ if (facadeGlass > 0.0) {
       float spandrel = fpulse(fl, 0.0, y0, pwv) * (1.0 - mull);
       float mullCol = 0.2 + 0.35 * step(0.6, hash11(seed * 8.8));
       vec3 frame = vec3(mullCol) * (0.95 + 0.1 * spandrelGlass);
-      vec3 pane = mix(tint, mix(seen * 0.7, tint, 0.5), clear);
+      vec3 pane = mix(mix(tint, seen * 0.7, 0.3 * par), mix(seen * 0.7, tint, 0.5), clear);
       pane = mix(pane, pane * vec3(0.85, 1.05, 0.95) + 0.08, replaced);
       col = mix(frame, spandrelCol, spandrel);
       col = mix(col, pane * reveal, glass);
       // horizontal transom line at the head of the spandrel
       col = mix(col, frame, fpulse(fl, y0 - 0.02, y0 + 0.01, pwv) * (1.0 - mull));
       rough = mix(mix(0.45, 0.2, spandrelGlass), 0.1, glass);
-      metal = glass * mix(0.92, 0.6, clear) + spandrel * spandrelGlass * 0.75;
+      metal = glass * mix(mix(0.92, 0.78, par), 0.6, clear) + spandrel * spandrelGlass * 0.75;
       emis = litCol * lit * glass * mix(1.3, 2.0, clear) * (1.0 - 0.6 * blind);
       // some towers wear LED accent light at night: the corner mullions and a band under the crown
       float accent = step(0.82, hash11(seed * 3.3 + 2.2)) * step(60.0, H);
@@ -332,7 +379,7 @@ if (facadeGlass > 0.0) {
       float grain = 0.96 + 0.08 * vnoise(vWorldPosF.xz * 3.0 + v * 2.0);
       vec3 stucco = wall * grain;
       float frame = (fpulse(bu, x0 - 0.035, x1 + 0.035, pwu) * fpulse(fl, y0 - 0.03, y1 + 0.03, pwv) - gx * gy) * rowOn;
-      vec3 pane = mix(gtint * 0.7, seen, 0.3 + 0.35 * clear);
+      vec3 pane = mix(gtint * 0.7, seen, 0.3 + 0.35 * clear + 0.3 * par);
       col = mix(stucco, vec3(0.9, 0.9, 0.88), clamp(frame, 0.0, 1.0) * (style == 7.0 ? 0.35 : 0.7));
       col = mix(col, pane * reveal, glass);
       col *= 1.0 - 0.28 * sill;
@@ -358,7 +405,7 @@ if (facadeGlass > 0.0) {
       float railBand = fpulse(fl, 0.14, 0.42, pwv) * gx;
       float posts = fpulse(bu * 8.0, 0.0, 0.1, pwu * 8.0);
       float topRail = fpulse(fl, 0.39, 0.42, pwv) * gx;
-      vec3 pane = mix(gtint * 0.65, seen, 0.4);
+      vec3 pane = mix(gtint * 0.65, seen, 0.4 + 0.35 * par);
       col = mix(wall * 0.92, vec3(0.94, 0.93, 0.9), slab);
       col = mix(col, pane * reveal * 0.8, glass);
       col = mix(col, glassDark * 1.6, railBand * 0.55);
@@ -374,7 +421,7 @@ if (facadeGlass > 0.0) {
       float fin = fpulse(bu, 0.0, 0.08, pwu);
       float band = fpulse(fl, 0.0, 0.09, pwv);
       vec3 bandCol = mix(vec3(0.96, 0.95, 0.9), wall * 0.78, step(0.5, variant));
-      vec3 pane = mix(gtint * 0.65, seen, 0.4);
+      vec3 pane = mix(gtint * 0.65, seen, 0.4 + 0.35 * par);
       col = wall * (0.97 + 0.06 * vnoise(vWorldPosF.xz * 2.5 + v * 2.0));
       col = mix(col, wall * 1.1, fin);
       col = mix(col, pane * reveal, glass);
@@ -458,7 +505,7 @@ if (facadeGlass > 0.0) {
       vec3 bcol = wall * (0.86 + 0.28 * mix(0.5, brick, brickVis));
       bcol = mix(bcol, wall * 1.05, mortar * 0.5);
       float lintel = gx * fpulse(fl, y1, y1 + 0.08, pwv) * rowOn;
-      vec3 pane = mix(gtint * 0.6, seen, 0.45);
+      vec3 pane = mix(gtint * 0.6, seen, 0.45 + 0.3 * par);
       col = mix(bcol, pane * reveal, glass);
       col = mix(col, vec3(0.8, 0.78, 0.72), max(lintel, sill));
       col *= 1.0 - 0.18 * streak;
@@ -470,7 +517,7 @@ if (facadeGlass > 0.0) {
       emis = litCol * lit * glass * 1.5 * (1.0 - 0.6 * blind);
     } else if (style == 11.0) {
       // white egg-crate frame with deeply recessed glass
-      vec3 g = mix(gtint * 0.6, seen, 0.45);
+      vec3 g = mix(gtint * 0.6, seen, 0.45 + 0.3 * par);
       float recess = 0.45 * smoothstep(0.55, 0.95, py) + 0.18 * smoothstep(0.7, 0.95, px);
       col = mix(wall * (0.97 + 0.06 * vnoise(vWorldPosF.xz * 2.0 + v)), g * (1.0 - recess * vis), glass);
       rough = mix(0.8, 0.2, glass);
@@ -480,6 +527,11 @@ if (facadeGlass > 0.0) {
       // pool sides: pale tile
       col = vec3(0.85, 0.9, 0.9);
       rough = 0.4;
+    } else if (style == 14.0) {
+      // glass balustrade panels between slim posts (the trim layer's balcony rails)
+      float post = fpulse(u / 1.5, 0.0, 0.05, wu / 1.5);
+      col = mix(mix(wall, vec3(0.5, 0.62, 0.7), 0.5), vec3(0.75), post);
+      rough = 0.15; metal = 0.7 * (1.0 - post);
     } else {
       col = wall;
       rough = 0.8;
@@ -493,6 +545,20 @@ if (facadeGlass > 0.0) {
       metal *= 1.0 - occl;
       col *= 1.0 - 0.5 * occl;
     }
+    if (!mast && glass > 0.0 && metal > 0.3 * glass) {
+      // Glass seen from afar: once the panes no longer resolve, their tilts no longer show as separate glints but
+      // as the spread of the face's normal distribution, i.e. a wider specular lobe (the box filter of the pane
+      // normals). Widening the roughness with distance makes the sun light the whole sun-facing side of a tower
+      // coherently at 1-5 km (bright enough to bloom) instead of the face flashing only when it is aligned
+      // exactly. Pane-to-pane reflectance varies (glass batches, films, dirt): the sparkle of a glazed facade,
+      // damped as the panes go sub-pixel so it reads as grain, not noise.
+      rough = mix(rough, max(rough, 0.45), glass * (1.0 - vis));
+      col *= 1.0 + (fract(paneH * 7.9) - 0.5) * 0.44 * (0.4 + 0.6 * vis) * glass;
+    }
+    facadeGlass = glass * step(0.3 * glass, metal);   // glazing at 30 %+ reflectance, whatever its pixel coverage
+    facadeHf = clamp(v / H, 0.0, 1.0);
+    // through a lit room the pane glows unevenly: bright where the ceiling panels are, dimmer on the walls
+    emis *= mix(1.0, 0.55 + 1.1 * roomPanel, par * glass);
     if (!mast) {
       // street level: shopfront glazing between piers with a fascia sign band on the walk-up families, a darker
       // plinth elsewhere; lit at night regardless of the floors above
@@ -512,22 +578,24 @@ if (facadeGlass > 0.0) {
         rough = mix(0.8, 0.12, shop);
         metal = shop * 0.5;
         emis = vec3(1.0, 0.88, 0.7) * shop * 1.5 * nightOn + fasciaCol * fascia * 1.2 * nightOn;
-      } else {
+      } else if (!isTrim) {
         col = mix(col, col * 0.8, 1.0 - fstep(0.8, v, wv));
       }
       // weathering: grime near the ground, rain staining under the parapet
-      col *= 1.0 - 0.18 * smoothstep(0.55, 0.85, grime) * (1.0 - smoothstep(2.0, 12.0, v));
-      col *= 1.0 - 0.12 * smoothstep(0.45, 0.8, grime) * smoothstep(H - 3.0, H - 0.5, v) * step(12.0, H);
+      if (!isTrim) {
+        col *= 1.0 - 0.18 * smoothstep(0.55, 0.85, grime) * (1.0 - smoothstep(2.0, 12.0, v));
+        col *= 1.0 - 0.12 * smoothstep(0.45, 0.8, grime) * smoothstep(H - 3.0, H - 0.5, v) * step(12.0, H);
+      }
       // crown lighting on about two thirds of the tall towers at night: a lit band just below the roof line, warm,
       // cool or (rarely) magenta, brighter than the windows so the skyline keeps its hierarchy after dark
-      if (H > 110.0 && hash11(seed * 1.9 + 3.1) < 0.66) {
+      if (H > 110.0 && !isTrim && hash11(seed * 1.9 + 3.1) < 0.66) {
         float crown = smoothstep(H - 7.0, H - 5.0, v) * (1.0 - smoothstep(H - 1.0, H, v));
         float pick = hash11(seed * 2.7);
         vec3 crownCol = pick < 0.5 ? vec3(1.0, 0.85, 0.6) : pick < 0.88 ? vec3(0.4, 0.8, 1.0) : vec3(1.0, 0.35, 0.7);
         emis += crownCol * crown * 8.0 * uNight;
       }
       // red obstruction lights at the top corners of the tallest towers
-      if (H > 140.0) {
+      if (H > 140.0 && !isTrim) {
         float dc = min(length(vec2(u - 0.6, v - (H - 0.9))), length(vec2(u - (faceW - 0.6), v - (H - 0.9))));
         emis += vec3(1.0, 0.08, 0.04) * (1.0 - fstep(0.45, dc, wu)) * 6.0 * uNight;
       }

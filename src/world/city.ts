@@ -91,7 +91,9 @@ function mergeSimple(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
   return g;
 }
 
-export type Kind = 'box' | 'cyl' | 'oct' | 'frustum' | 'shear' | 'house';
+/** `trim` is the near-detail layer (balcony slabs and balustrades, floor ledges, parapet coping, corner columns):
+ *  unit boxes drawn only from cells within TRIM_FAR of the camera, never in the shadow passes */
+export type Kind = 'box' | 'cyl' | 'oct' | 'frustum' | 'shear' | 'house' | 'trim';
 
 interface Instance {
   x: number; y: number; z: number; w: number; h: number; d: number; rot: number; color: THREE.Color;
@@ -120,6 +122,10 @@ export const HOUSE_MIN_PX = 1.5;
 /** the mirror image leaves out houses beyond this (a reflected house is under a mirror texel tall there); towers
  *  stay to the reflection range: a lit skyline reflects across the whole bay at night */
 export const MIRROR_HOUSE_FAR = 2500;
+/** the trim layer (slabs, rails, ledges, coping) is drawn from cells within this distance of the camera and
+ *  mirrored within MIRROR_TRIM_FAR; further out the facade shader's shaded version of the same details stands in */
+export const TRIM_FAR = 600;
+export const MIRROR_TRIM_FAR = 300;
 const _bp = new THREE.Vector3();
 /** grow `box` by building `i` of `t` the way the tile box was built (footprint half-diagonal x 0.6, height) */
 function boundBuilding(t: BatchSource, i: number, box: THREE.Box3): void {
@@ -162,7 +168,7 @@ export class BuildingBatches {
 
   constructor(nightUniform: THREE.IUniform<number>) {
     this.material = createFacadeMaterial(nightUniform);
-    this.geos = { box: unitBox(), cyl: unitPrism(16, 0), oct: unitPrism(8, Math.PI / 8), frustum: unitFrustum(0.3), shear: unitShear(), house: unitHouse() };
+    this.geos = { box: unitBox(), cyl: unitPrism(16, 0), oct: unitPrism(8, Math.PI / 8), frustum: unitFrustum(0.3), shear: unitShear(), house: unitHouse(), trim: unitBox() };
   }
 
   add(kind: Kind, inst: Instance): void {
@@ -206,7 +212,7 @@ export class BuildingBatches {
       // the mesh (identity transform), which is what the frustum test reads for instanced meshes
       const sphere = box.getBoundingSphere(new THREE.Sphere());
       mesh.boundingSphere = sphere;
-      mesh.castShadow = true;
+      mesh.castShadow = kind !== 'trim';
       mesh.receiveShadow = true;
       mesh.instanceMatrix.needsUpdate = true;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
@@ -230,6 +236,7 @@ export class BuildingBatches {
       this.mirrorBatches.set(kind, mir);
       this.mirrorMeshes.add(mir.mesh);
       this.group.add(cam.mesh, mir.mesh);
+      if (kind === 'trim') continue;   // trims never cast: under a shadow texel everywhere they are drawn
       // shadow batches (the depth pass reads the instance matrices only: no colours or facade attributes)
       const shadow: InstanceBatch<CityCell>[] = [];
       for (let i = 0; i < MAX_CASCADES; i++) {
@@ -247,6 +254,7 @@ export class BuildingBatches {
     const byKind = new Map<Kind, Instance[]>();
     for (const [key, list] of this.lists) {
       const kind = key.split('|')[0] as Kind;
+      if (kind === 'trim') continue;
       let all = byKind.get(kind);
       if (!all) { all = []; byKind.set(kind, all); }
       for (const inst of list) if (inst.h >= PROXY_MIN_HEIGHT) all.push(inst);
@@ -287,7 +295,9 @@ export class BuildingBatches {
    *  when the batch is full (the caller then lets the mesh cast on its own). */
   private placeShadow(src: CityTile | CityProxy, kind: Kind, i: number, on: boolean, cull: ViewCull): boolean {
     const bit = 1 << i;
-    const batch = this.shadowBatches.get(kind)![i];
+    const batches = this.shadowBatches.get(kind);
+    if (!batches) return true;
+    const batch = batches[i];
     if (!on) {
       if (src.shadowIn & bit) { for (const c of src.cells!) batch.set(c, 0); src.shadowIn &= ~bit; }
       return true;
@@ -310,7 +320,7 @@ export class BuildingBatches {
     perCascade.fill(0);
     for (const t of this.tiles) {
       const d = Math.max(0, Math.hypot(t.center.x - camX, t.center.z - camZ) - t.lodR);
-      t.bits = d < this.shadowDistance ? cull.casterCascades(t.center, t.r, t.height) : 0;
+      t.bits = d < this.shadowDistance && t.kind !== 'trim' ? cull.casterCascades(t.center, t.r, t.height) : 0;
       for (let i = 0; i < MAX_CASCADES; i++) if (t.bits & (1 << i)) perCascade[i]++;
     }
     // cascades where the per-tile meshes would cost more draws than the proxies take the proxies instead
@@ -327,18 +337,20 @@ export class BuildingBatches {
     const houseFar = (10 * pxPerMetre) / HOUSE_MIN_PX;
     const mirrorFar = mirrorRange;
     for (const t of this.tiles) {
-      const inView = cull.boxInView(t.box);
+      const trim = t.kind === 'trim';
+      const inView = cull.boxInView(t.box) && (!trim || t.box.distanceToPoint(camPos) <= TRIM_FAR);
       const house = t.kind === 'house';
       // the camera draws the tile from its kind's batch, cell by cell (the cells in view; house cells beyond
-      // HOUSE_FAR are left to the baked suburb ground); the tile's own mesh is left to the shadow passes (and
-      // to the camera only when the batch is full)
+      // HOUSE_FAR are left to the baked suburb ground, trim cells beyond TRIM_FAR to the facade shader); the
+      // tile's own mesh is left to the shadow passes (and to the camera only when the batch is full)
       const batch = this.cameraBatches.get(t.kind)!;
+      const nearFar = house ? houseFar : trim ? TRIM_FAR : Infinity;
       let batched = true;
       if (inView) {
         const cells = BuildingBatches.cellsOf(t);
         for (const c of cells) {
           let count = cull.boxInView(c.box) ? c.count : 0;
-          if (count && house && c.box.distanceToPoint(camPos) > houseFar) count = 0;
+          if (count && c.box.distanceToPoint(camPos) > nearFar) count = 0;
           if (!batch.set(c, count)) batched = false;
         }
         if (!batched) for (const c of cells) batch.set(c, 0);
@@ -359,7 +371,7 @@ export class BuildingBatches {
       const mirrored = inView && Math.max(0, t.center.distanceTo(camPos) - t.r) <= mirrorFar;
       const mirror = this.mirrorBatches.get(t.kind)!;
       if (mirrored) {
-        const far = house ? Math.min(mirrorFar, MIRROR_HOUSE_FAR) : mirrorFar;
+        const far = house ? Math.min(mirrorFar, MIRROR_HOUSE_FAR) : trim ? Math.min(mirrorFar, MIRROR_TRIM_FAR) : mirrorFar;
         let ok = true;
         for (const c of t.cells!) {
           let count = cull.boxInMirror(c.box) ? c.count : 0;
@@ -385,7 +397,7 @@ export class BuildingBatches {
 // ------------------------------------------------------------------ facade families
 
 /** Shader style ids (see facade.ts). */
-const S = { GLASS_BLUE: 0, PUNCHED: 1, BALCONY: 2, DECO: 3, INDUSTRIAL: 4, HOUSE: 5, CONCRETE: 6, HOTEL: 7, GLASS_GREEN: 8, STONE: 9, BRICK: 10, GRID: 11, POOL: 12, HELIPAD: 13 } as const;
+const S = { GLASS_BLUE: 0, PUNCHED: 1, BALCONY: 2, DECO: 3, INDUSTRIAL: 4, HOUSE: 5, CONCRETE: 6, HOTEL: 7, GLASS_GREEN: 8, STONE: 9, BRICK: 10, GRID: 11, POOL: 12, HELIPAD: 13, BALUSTRADE: 14 } as const;
 
 interface Family { style: number; floorH: number; tints: readonly string[]; lit: [number, number]; warm: [number, number]; }
 
@@ -517,7 +529,61 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     });
     const margin = o.margin ?? 3;
     if (margin >= 0) markFootprint(x, z, w, d, rot, margin);
+    if (kind === 'box' && margin >= 0 && h >= 10) addTrims(x, y - 0.4, z, w, h + 0.4, d, rot, style, floorH, col);
     return y + h;
+  };
+
+  /** Near-detail geometry for a building body (drawn within TRIM_FAR, see BuildingBatches): balcony slabs with
+   *  glass balustrades on the two long faces of balcony and hotel slabs, a ledge per floor on the deco and
+   *  egg-crate frames, parapet coping on the masonry families, corner columns on the glass towers. Every item
+   *  is a unit box; `y` and `h` are the body's batch values (base buried 0.4 m), so floors match the shader's.
+   *  Trims carry roof = -1 (aStyle.w) so the shader skips its mast, crown, beacon and ground-grime paths on them. */
+  const TRIM_LIGHT = new THREE.Color('#e9e7e1'), TRIM_DARK = new THREE.Color('#3c3f43'), TRIM_GLASS = new THREE.Color('#9fb6c8');
+  const addTrims = (x: number, y: number, z: number, w: number, h: number, d: number, rot: number, style: number, floorH: number, wall: THREE.Color) => {
+    // offsets rotate the way the instance matrix does (Matrix4.makeRotationY: x' = x c + z s, z' = -x s + z c)
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    const trim = (ox: number, oy: number, oz: number, tw: number, th: number, td: number, col: THREE.Color, st: number) =>
+      batches.add('trim', { x: x + ox * cr + oz * sr, y: y + oy, z: z - ox * sr + oz * cr, w: tw, h: th, d: td, rot, color: col, style: st, floorH: 3, seed: 0, roof: -1, lit: 0, warm: 0.5, variant: 0.5, form: 0 });
+    const glassy = style === S.GLASS_BLUE || style === S.GLASS_GREEN || style === S.STONE;
+    if (style === S.BALCONY || style === S.HOTEL) {
+      // the slab rings the two long faces; the balustrade stands at its edge (shader: slab 0-14 %, rail to 42 %)
+      const nFloors = Math.floor((h - 1.0) / floorH);
+      const longX = w >= d;          // long faces are the +-z faces when the box is wider than deep
+      const span = (longX ? w : d) + 3.0, off = (longX ? d : w) * 0.5;
+      const slabCol = style === S.HOTEL ? TRIM_LIGHT : wall.clone().lerp(TRIM_LIGHT, 0.6);
+      for (let k = 1; k < nFloors; k++) {
+        const fy = k * floorH;
+        for (const s of [-1, 1]) {
+          const [ox, oz] = longX ? [0, s * (off + 0.75)] : [s * (off + 0.75), 0];
+          trim(ox, fy, oz, longX ? span : 1.5, 0.18, longX ? 1.5 : span, slabCol, S.CONCRETE);
+          const [bx, bz] = longX ? [0, s * (off + 1.46)] : [s * (off + 1.46), 0];
+          trim(bx, fy + 0.18, bz, longX ? span : 0.08, 1.05, longX ? 0.08 : span, TRIM_GLASS, S.BALUSTRADE);
+        }
+      }
+    } else if (style === S.DECO || style === S.GRID) {
+      // a string course / frame ledge at every floor line on the long faces
+      const nFloors = Math.floor((h - 1.0) / floorH);
+      const longX = w >= d;
+      const span = (longX ? w : d) + 0.6, off = (longX ? d : w) * 0.5;
+      const col = style === S.GRID ? wall : wall.clone().lerp(TRIM_LIGHT, 0.5);
+      for (let k = 1; k < nFloors; k++) {
+        for (const s of [-1, 1]) {
+          const [ox, oz] = longX ? [0, s * (off + 0.15)] : [s * (off + 0.15), 0];
+          trim(ox, k * floorH, oz, longX ? span : 0.3, 0.3, longX ? 0.3 : span, col, S.CONCRETE);
+        }
+      }
+    }
+    if (!glassy && style !== S.INDUSTRIAL && style !== S.CONCRETE) {
+      // parapet coping: a pale cap around the roof edge
+      const cap = style === S.BRICK || style === S.PUNCHED ? TRIM_LIGHT : wall.clone().lerp(TRIM_LIGHT, 0.7);
+      trim(0, h - 0.3, -d * 0.5, w + 0.5, 0.5, 0.5, cap, S.CONCRETE);
+      trim(0, h - 0.3, d * 0.5, w + 0.5, 0.5, 0.5, cap, S.CONCRETE);
+      trim(-w * 0.5, h - 0.3, 0, 0.5, 0.5, d, cap, S.CONCRETE);
+      trim(w * 0.5, h - 0.3, 0, 0.5, 0.5, d, cap, S.CONCRETE);
+    } else if (glassy && h > 30) {
+      // corner columns: the curtain wall's dark corner mullions stand proud of the glass
+      for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) trim(sx * w * 0.5, 0, sz * d * 0.5, 0.45, h, 0.45, TRIM_DARK, S.CONCRETE);
+    }
   };
 
   const landOK = (x: number, z: number, w: number, d: number, rot: number) => {
@@ -730,6 +796,34 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         tw = s1; td = fd;
         break;
       }
+      case 15: {
+        // tiara crown: the tower carries on as four corner fins around a recessed lit lantern
+        top = place('box', x, z, fw, h * 0.9, fd, rot, lk.tint, fam.style, fam.floorH, o);
+        if (top !== null) {
+          const finH = h * 0.1 + 6;
+          for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+            const [px, pz] = at(sx * (fw * 0.5 - 1.6), sz * (fd * 0.5 - 1.6));
+            place('box', px, pz, 3.2, finH, 3.2, rot, lk.tint, fam.style, fam.floorH, { ...o, yBase: top - 0.1, margin: -1 });
+          }
+          const g = look(FAM.glassBlue, r);
+          top = place('box', x, z, fw * 0.55, finH * 0.7, fd * 0.55, rot, g.tint, S.GLASS_BLUE, 3.9, { lit: 0.9, warm: 0.3, variant: g.variant, yBase: top - 0.1, margin: -1 });
+          detail = false;
+        }
+        break;
+      }
+      case 16: {
+        // slab with a slot: two slabs a bay apart, tied by a bridge storey at the top and a sky lobby half way
+        const slot = 6, sw = Math.max(10, (fw - slot) * 0.5);
+        const a = at(-(sw + slot) * 0.5, 0), b = at((sw + slot) * 0.5, 0);
+        top = place('box', a[0], a[1], sw, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
+        place('box', b[0], b[1], sw, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
+        if (top !== null) {
+          place('box', x, z, slot + 2, fam.floorH * 2, fd * 0.9, rot, '#dfe4e8', S.GRID, fam.floorH, { lit: 0.8, warm: 0.4, variant: 0.5, yBase: top - fam.floorH * 2, margin: -1 });
+          place('box', x, z, slot + 2, fam.floorH, fd * 0.8, rot, '#dfe4e8', S.CONCRETE, 3, { yBase: top - h * 0.5, margin: -1 });
+        }
+        x = a[0]; z = a[1]; tw = sw; td = fd;
+        break;
+      }
       default:
         top = place('box', x, z, fw, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
     }
@@ -829,6 +923,76 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('frustum', x, z, 24, 250, 24, 0.0, '#c2d0da', S.GLASS_BLUE, 3.9, o);
     return 250;
   });
+  // the bayfront wall (local +x faces the bay): the silhouettes the skyline views read first
+  landmark('Bayside Slot', 470, -40, (x, z, g) => {
+    // slab with a slot: two glass slabs 8 m apart, bridged by a lit sky lobby half way and two floors at the top
+    const o = { lit: 0.5, warm: 0.3, variant: 0.6 };
+    place('box', x - 17, z, 26, 196, 58, 0.03, '#a9bccb', S.GLASS_BLUE, 3.9, o);
+    place('box', x + 17, z, 26, 196, 58, 0.03, '#a9bccb', S.GLASS_BLUE, 3.9, o);
+    place('box', x, z, 10, 9, 54, 0.03, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 187, lit: 0.9, warm: 0.3, variant: 0.5, margin: -1 });
+    place('box', x, z, 10, 5, 50, 0.03, '#dfe4e8', S.CONCRETE, 3, { yBase: g + 96, margin: -1 });
+    return 196;
+  });
+  landmark('Ziggurat', 400, 170, (x, z, g) => {
+    // stepped pastel setbacks, every tier's roof a terrace, a lit lantern on the last
+    for (const [w, h] of [[64, 48], [52, 94], [42, 132], [32, 162], [22, 184]]) place('box', x, z, w, h, w * 0.85, 0.02, '#f2d9c4', S.DECO, 3.4, { lit: 0.35, warm: 0.8, variant: 0.7 });
+    place('box', x, z, 12, 6, 10, 0.02, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 184, lit: 0.9, warm: 0.6, variant: 0.5, margin: -1 });
+    return 190;
+  });
+  landmark('Twin Sails', 520, -250, (x, z, g) => {
+    // twin glass towers with tapered tops on a shared podium, one five floors taller
+    const o = { lit: 0.5, warm: 0.25, variant: 0.4 };
+    place('box', x, z, 92, 14, 60, 0.05, '#c9c4b8', S.PUNCHED, 3.5, { lit: 0.2, warm: 0.6, variant: 0.5 });
+    place('box', x - 25, z, 30, 198, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, o);
+    place('frustum', x - 25, z, 30, 24, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, { ...o, yBase: g + 198, margin: -1 });
+    place('box', x + 25, z, 30, 176, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, o);
+    place('frustum', x + 25, z, 30, 24, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, { ...o, yBase: g + 176, margin: -1 });
+    return 222;
+  });
+  landmark('Coral Crown', 380, 340, (x, z, g) => {
+    // residential point tower on a retail podium, four fins and a lantern for a crown
+    place('box', x, z, 70, 12, 56, 0.0, '#efc0c6', S.PUNCHED, 3.3, { lit: 0.25, warm: 0.8, variant: 0.5 });
+    place('box', x, z, 34, 172, 34, 0.0, '#f3cfd4', S.BALCONY, 3.3, { lit: 0.35, warm: 0.85, variant: 0.5 });
+    for (let i = 0; i < 4; i++) {
+      const a = (i * Math.PI) / 2;
+      place('box', x + Math.cos(a) * 15, z + Math.sin(a) * 15, 2.5, 24, 12, a, '#f7f5f0', S.CONCRETE, 3, { yBase: g + 170, margin: -1 });
+    }
+    place('box', x, z, 14, 8, 14, 0.0, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 172, lit: 0.9, warm: 0.6, variant: 0.5, margin: -1 });
+    return 194;
+  });
+  landmark('Monolith', 540, 70, (x, z, g) => {
+    // a tall thin dark slab, its crown sheared off to one side
+    const o = { lit: 0.5, warm: 0.35, variant: 0.6 };
+    place('box', x, z, 22, 236, 64, 0.03, '#3f3b38', S.STONE, 3.8, o);
+    place('shear', x, z, 22, 26, 64, 0.03, '#3f3b38', S.STONE, 3.8, { ...o, yBase: g + 235.9, margin: -1 });
+    return 262;
+  });
+  landmark('Harbor Steps', 300, -440, (x, z, g) => {
+    // cream punched-window office with three setbacks and a white lantern
+    const o = { lit: 0.45, warm: 0.7, variant: 0.5 };
+    place('box', x, z, 72, 60, 58, 0.02, '#efe4cf', S.PUNCHED, 3.5, o);
+    place('box', x, z, 56, 120, 44, 0.02, '#efe4cf', S.PUNCHED, 3.5, o);
+    place('box', x, z, 40, 176, 32, 0.02, '#f1e6cf', S.PUNCHED, 3.5, o);
+    place('box', x, z, 22, 206, 18, 0.02, '#f3ead6', S.GRID, 3.5, { lit: 0.6, warm: 0.6, variant: 0.4 });
+    place('frustum', x, z, 5, 34, 5, 0.02, '#e8eef2', S.CONCRETE, 3, { yBase: g + 206, margin: -1 });
+    return 240;
+  });
+  landmark('Marina Point', 450, 500, (x, z, g) => {
+    // round glass condominium tower at the south end of the wall, a brim and a lit crown ring
+    const o = { lit: 0.45, warm: 0.5, variant: 0.5 };
+    place('cyl', x, z, 38, 158, 38, 0, '#a9c4cf', S.GLASS_GREEN, 3.4, o);
+    place('cyl', x, z, 46, 5, 46, 0, '#e8eef2', S.CONCRETE, 3, { yBase: g + 150, margin: -1 });
+    place('cyl', x, z, 30, 8, 30, 0, '#cfe0ec', S.GLASS_BLUE, 3.9, { yBase: g + 158, lit: 0.9, warm: 0.4, variant: 0.4, margin: -1 });
+    return 166;
+  });
+  landmark('North Quay', 380, -560, (x, z, g) => {
+    // two stepped white slabs at the north end, the taller one crowned by a plant screen
+    const o = { lit: 0.4, warm: 0.6, variant: 0.4 };
+    place('box', x - 22, z, 36, 128, 48, 0.02, '#f4f1ea', S.GRID, 3.5, o);
+    place('box', x + 24, z, 36, 168, 48, 0.02, '#f4f1ea', S.GRID, 3.5, o);
+    place('box', x + 24, z, 30, 7, 40, 0.02, '#b9bfc3', S.GRID, 3.5, { yBase: g + 168, lit: 0, variant: 0.3, margin: -1 });
+    return 175;
+  });
 
   // ------------------------------------------------------------- district fills
   // the urban gradient of the suburbs: blocks near the mid-rise districts and along the arterial corridors
@@ -885,15 +1049,17 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
 
       function fillDowntown(): void {
         const core = 1 - smoothstep(0.2, 1.0, distToCentre);
+        // the bayfront (district +x) carries the tall wall the skyline views read: towers climb toward the water
+        const east = smoothstep(0.15, 0.75, ((cxw - dt.cx) * Math.cos(dt.rot) + (czw - dt.cz) * Math.sin(dt.rot)) / dt.hw);
         const nTowers = bw > 80 && bd > 70 ? 2 : 1;
         for (let t = 0; t < nTowers; t++) {
-          // height hierarchy: many 40-100 m, a cluster of 120-200 m near the core (landmarks own 250-360 m)
+          // height hierarchy: many 40-100 m, a cluster of 120-230 m near the core and along the bay (landmarks own 250-360 m)
           const u = drng.next();
           let h: number;
-          if (u < 0.07 + 0.22 * core) h = drng.range(120, 205);
-          else if (u < 0.45 + 0.2 * core) h = drng.range(70, 120);
+          if (u < 0.1 + 0.24 * core + 0.2 * east) h = drng.range(120, 205 + 35 * east);
+          else if (u < 0.45 + 0.2 * core + 0.1 * east) h = drng.range(75, 130);
           else h = drng.range(36, 72);
-          h *= lerp(0.6, 1.0, core);
+          h *= lerp(0.7, 1.0, Math.max(core, 0.7 * east));
           h = Math.max(28, h);
           // footprint classes so the skyline mixes widths: slender point towers, standard plates, wide slabs
           const wr = drng.next();
@@ -920,7 +1086,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           let recipe: number;
           const rr = drng.next();
           if (fam.style === S.DECO && h > 60) recipe = rr < 0.5 ? 6 : rr < 0.75 ? 1 : rr < 0.88 ? 10 : 0;
-          else if (h > 110) recipe = rr < 0.22 ? 1 : rr < 0.32 ? 7 : rr < 0.42 ? 5 : rr < 0.5 ? 8 : rr < 0.58 ? 4 : rr < 0.64 ? 2 : rr < 0.72 ? 11 : rr < 0.79 ? 12 : rr < 0.86 ? 13 : rr < 0.92 ? 14 : 0;
+          else if (h > 110) recipe = rr < 0.2 ? 1 : rr < 0.29 ? 7 : rr < 0.38 ? 5 : rr < 0.45 ? 8 : rr < 0.52 ? 4 : rr < 0.57 ? 2 : rr < 0.64 ? 11 : rr < 0.7 ? 12 : rr < 0.76 ? 13 : rr < 0.81 ? 14 : rr < 0.88 ? 15 : rr < 0.94 ? 16 : 0;
           else if (h > 60) recipe = rr < 0.15 ? 1 : rr < 0.25 ? 7 : rr < 0.35 ? 3 : rr < 0.42 ? 2 : rr < 0.49 ? 8 : rr < 0.6 ? 9 : rr < 0.68 ? 10 : rr < 0.75 ? 13 : rr < 0.8 ? 12 : 0;
           else recipe = rr < 0.2 ? 3 : rr < 0.3 ? 2 : rr < 0.42 ? 9 : rr < 0.5 ? 13 : rr < 0.56 ? 10 : 0;
           buildTower(drng, x, z, d.rot, fw, fd, h, fam, recipe, true, nb.pastel);
