@@ -901,21 +901,27 @@ const CROWN_FRAG = /* glsl */ `
       float facing = abs(dot(cn, toCam / max(camDist, 1e-3)));
       float clusters = vnoise(vWP.xz * 1.1 + vWP.y * 0.9) * 0.65 + 0.35 * vnoise(vWP.xz * 3.3 - vWP.y * 2.6);
       float close = 1.0 - smoothstep(40.0, 150.0, camDist);
-      vec3 an = abs(cn);
-      vec2 puv = (an.y > max(an.x, an.z) ? vWP.xz : an.x > an.z ? vWP.zy : vWP.xy) * 0.7 + vSeed;
-      float carpet = vArche > 6.5 ? 5.0 : 4.0;
-      vec2 tuv = (fract(puv) + vec2(mod(carpet, 2.0), floor(carpet / 2.0))) * vec2(${(1 / LEAF_COLS).toFixed(4)}, ${(1 / LEAF_ROWS).toFixed(4)});
-      vec4 lt = textureGrad(uLeaf, tuv, dFdx(puv) * ${(1 / LEAF_COLS).toFixed(4)}, dFdy(puv) * ${(1 / LEAF_ROWS).toFixed(4)});
+      // triplanar: the carpet sampled on the three world planes and blended by the puff normal (a hard
+      // pick of one plane drew straight seams across the puff where its 20 facets change plane, and
+      // stretched the leaves into streaks on the oblique ones)
+      vec3 tw = pow(abs(cn), vec3(4.0));
+      tw /= tw.x + tw.y + tw.z;
+      vec2 tileO = vec2(vArche > 6.5 ? 1.0 : 0.0, 2.0);
+      vec2 tsc = vec2(${(1 / LEAF_COLS).toFixed(4)}, ${(1 / LEAF_ROWS).toFixed(4)});
+      vec2 p0 = vWP.zy * 0.7 + vSeed, p1 = vWP.xz * 0.7 + vSeed * 1.7, p2 = vWP.xy * 0.7 + vSeed * 2.3;
+      vec2 lt = textureGrad(uLeaf, (fract(p0) + tileO) * tsc, dFdx(p0) * tsc, dFdy(p0) * tsc).ra * tw.x
+              + textureGrad(uLeaf, (fract(p1) + tileO) * tsc, dFdx(p1) * tsc, dFdy(p1) * tsc).ra * tw.y
+              + textureGrad(uLeaf, (fract(p2) + tileO) * tsc, dFdx(p2) * tsc, dFdy(p2) * tsc).ra * tw.z;
       // positive where the surface goes: the rim band, and the carpet's gaps (its coverage against a
       // threshold that rises in the cluster hollows and falls to nothing beyond 150 m)
-      float gapThr = mix(-0.2, 0.55 + 0.3 * (0.5 - clusters), close);
-      float cut = max(0.6 * clusters * vegNear - facing, (gapThr - lt.a) * 0.3);
+      float gapThr = mix(-0.2, 0.45 + 0.3 * (0.5 - clusters), close);
+      float cut = max(0.6 * clusters * vegNear - facing, (gapThr - lt.y) * 0.3);
       float a = 1.0 - smoothstep(-0.03, 0.03, cut);
       if (a < 0.1) discard;
       diffuseColor.a = a;
       // the leaves' own shade, and the inside of the shell seen through the gaps: the shaded hollow of the crown
-      diffuseColor.rgb *= mix(1.0, 0.7 + 0.6 * lt.r, close);
-      if (!gl_FrontFacing) diffuseColor.rgb *= 0.45;
+      diffuseColor.rgb *= mix(1.0, 0.55 + 0.6 * lt.x, close);
+      if (!gl_FrontFacing) diffuseColor.rgb *= 0.5;
     }
     // per-plant hue and value jitter on top of the palette tint: neighbours differ in warmth and depth
     float yellow = hash11(vSeed * 41.7 + 3.0);
@@ -1364,7 +1370,7 @@ function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: 
       .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-crown-v15';
+  mat.customProgramCacheKey = () => 'veg-crown-v16';
   return mat;
 }
 
