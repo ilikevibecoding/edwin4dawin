@@ -33,6 +33,28 @@ export class VehicleManager {
   // entity is riding (feet resting on a vehicle cell) and displace it by their own delta since the previous tick.
   carry(entity) { for (const v of this.list) if (v.carry) v.carry(entity); }
 
+  // Nearest vehicle whose world AABB the ray (origin, unit dir) enters within maxDist: { vehicle, dist, point } or
+  // null. Vehicles that want right-click interaction implement `onUse(player, game, hit)` (ships: boarding).
+  raycast(origin, dir, maxDist = 6) {
+    let best = null;
+    for (const v of this.list) {
+      if (!v.onUse) continue;
+      const b = v.bounds;
+      if (!b) continue;
+      let t0 = 0, t1 = maxDist;
+      for (const [o, d, lo, hi] of [[origin.x, dir.x, b.x0, b.x1], [origin.y, dir.y, b.y0, b.y1], [origin.z, dir.z, b.z0, b.z1]]) {
+        if (Math.abs(d) < 1e-9) { if (o < lo || o > hi) { t0 = Infinity; break; } continue; }
+        let ta = (lo - o) / d, tb = (hi - o) / d;
+        if (ta > tb) { const t = ta; ta = tb; tb = t; }
+        t0 = Math.max(t0, ta); t1 = Math.min(t1, tb);
+        if (t0 > t1) { t0 = Infinity; break; }
+      }
+      if (t0 === Infinity || t0 > maxDist) continue;
+      if (!best || t0 < best.dist) best = { vehicle: v, dist: t0, point: { x: origin.x + dir.x * t0, y: origin.y + dir.y * t0, z: origin.z + dir.z * t0 } };
+    }
+    return best;
+  }
+
   tick() { this.tickCount++; for (const v of this.list) if (v.tick) v.tick(this.tickCount); }
   update(dt, alpha, camera) { for (const v of this.list) if (v.update) v.update(dt, alpha, camera); }
 

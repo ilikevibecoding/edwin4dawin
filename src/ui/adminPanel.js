@@ -187,6 +187,7 @@ export class AdminPanel {
     this._refreshPermission();
     this._refreshQuality();
     this._refreshViewDistance();
+    this._refreshMode();
     this.lastStatusAt = 0;
     this.lastPerfAt = 0;
     this._refreshStatus();
@@ -271,11 +272,22 @@ export class AdminPanel {
       this.viewGroup.append(b);
     }
     this.viewHelp = h('p', { class: 'ap-help ap-one-line', id: 'ap-view-help', text: VIEW_DISTANCE_HELP, title: VIEW_DISTANCE_HELP });
+    // game mode: creative (flight, no hunger, infinite blocks) / survival (the Minecraft rules)
+    this.modeBtns = {};
+    this.modeGroup = h('div', { class: 'ap-seg ap-seg-2', id: 'ap-mode', role: 'radiogroup', 'aria-labelledby': 'ap-mode-title' });
+    for (const [m, label, title] of [['creative', 'Creative', 'Flight, frozen hunger, no damage, infinite blocks, instant break'], ['survival', 'Survival', 'Hunger, damage, finite items; no flight unless granted']]) {
+      const b = h('button', { class: 'ap-seg-btn', id: 'ap-mode-' + m, type: 'button', role: 'radio', 'aria-checked': 'false', text: label, title, onclick: () => this._setMode(m) });
+      this.modeBtns[m] = b;
+      this.modeGroup.append(b);
+    }
+    this.modeHelp = h('p', { class: 'ap-help ap-one-line', id: 'ap-mode-help', text: 'Creative: fly (double-tap Space), never hungry, blocks are free. Survival: eat, take damage, keep your feet on the ground.' });
     const qualitySection = h('section', { class: 'ap-section', id: 'ap-quality-section', 'aria-labelledby': 'ap-quality-title' },
       h('div', { class: 'ap-section-head' }, h('h3', { id: 'ap-quality-title', text: 'Quality' }), qualityGroup),
       this.qualityDesc,
       h('div', { class: 'ap-section-head ap-subhead' }, h('span', { class: 'ap-sub-title', id: 'ap-view-title', text: 'View distance' }), this.viewGroup),
-      this.viewHelp);
+      this.viewHelp,
+      h('div', { class: 'ap-section-head ap-subhead' }, h('span', { class: 'ap-sub-title', id: 'ap-mode-title', text: 'Game mode' }), this.modeGroup),
+      this.modeHelp);
 
     // travel: teleport to the world's regions (flight for aerial vantage points)
     this.travelBtns = {};
@@ -735,6 +747,18 @@ export class AdminPanel {
     this._note(actual === n ? `View distance set to ${n} chunks.` : `View distance set to ${actual} chunks (this build caps it at ${actual}).`);
   }
   // Highlights the option nearest to the live value (the pause menu and quality presets change it too).
+  _setMode(m) {
+    const g = this.game;
+    if (!g || !g.setMode) return;
+    g.setMode(m);
+    this._refreshMode();
+    this._note(m === 'creative' ? 'Creative mode.' : 'Survival mode.');
+  }
+  _refreshMode() {
+    if (!this.modeBtns) return;
+    const cur = this.game && this.game.mode ? this.game.mode : 'creative';
+    for (const [m, b] of Object.entries(this.modeBtns)) { const on = m === cur; setAttr(b, 'aria-checked', String(on)); setAttr(b, 'tabindex', on ? '0' : '-1'); }
+  }
   _refreshViewDistance() {
     const cur = this.game.terrain ? Number(this.game.terrain.renderDistance) : NaN;
     const nearest = Number.isFinite(cur) ? VIEW_DISTANCES.reduce((a, b) => (Math.abs(b - cur) < Math.abs(a - cur) ? b : a)) : null;

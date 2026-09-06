@@ -10,7 +10,7 @@ const ticksFor = (type) => Math.max(ticksArg, MIN_TICKS[type] || 0);
 let failed = 0;
 const check = (name, ok, detail = '') => { console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? '  (' + detail + ')' : ''}`); if (!ok) failed++; };
 
-const page = await launchPage(`${base}/?x=-8&z=2&yaw=-70&time=0.5`);
+const page = await launchPage(`${base}/?x=-8&z=2&yaw=-70&time=0.5&mode=survival`);
 await page.waitForGame();
 await page.evaluate('game.input.locked = true; game.input.onLockChange = null; "ok"');
 const types = (args.types ? args.types.split(',') : await page.evaluate('game.disasters.types()'));

@@ -83,7 +83,7 @@ true`;
 const I = { APPLE: 1000, BREAD: 1001, WHEAT: 1002, SEEDS: 1003, BEEF_RAW: 1004, BEEF_COOKED: 1005 };
 const B = { AIR: 0, OAK_DOOR: 42, CHEST: 60, FURNACE: 58, WHEAT: 65, FARMLAND: 66, SPRUCE_DOOR: 77, OAK_DOOR_TOP: 100, OAK_DOOR_OPEN: 101, SPRUCE_DOOR_TOP: 102, SPRUCE_DOOR_OPEN: 103, WHEAT_0: 104, WHEAT_1: 105 };
 
-const startUrl = `${base}/?x=-8&z=2&yaw=-70&time=0.45&fresh=1`;
+const startUrl = `${base}/?x=-8&z=2&yaw=-70&time=0.45&fresh=1&mode=survival`;
 log(`launching ${startUrl}`);
 let page = await launchPage(startUrl, { profile });
 const ev = (js) => page.evaluate(js);
@@ -438,7 +438,7 @@ try {
   const before = JSON.parse(await ev(`(() => { const p = game.player; p.flying = false; p.health = 17; p.food = 13; p.saturation = 2.5; p.teleport(-6.5, ${wh ? wh.y : 60}, 3.5); game.persistNow(); return JSON.stringify({ snap: __t.snap(), inv: __t.inv(), key: game.save.key, raw: localStorage.getItem(game.save.key).length }); })()`));
   check('save written to localStorage (v2 with player, inventory, entities)', before.raw > 100 && before.key.includes(':v2:'), `${before.raw} bytes at ${before.key}`);
   // reload in the same tab (a plain navigation, like a player pressing F5) without the position / fresh URL params
-  await ev(`(() => { window.__old = true; location.href = ${JSON.stringify(`${base}/?time=0.45`)}; })()`);
+  await ev(`(() => { window.__old = true; location.href = ${JSON.stringify(`${base}/?time=0.45&mode=survival`)}; })()`);
   for (let i = 0; i < 100; i++) { await page.sleep(200); const gone = await ev('!window.__old').catch(() => false); if (gone) break; }
   await page.waitForGame(180000);
   await ev(HELPERS);

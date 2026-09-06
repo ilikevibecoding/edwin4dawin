@@ -177,7 +177,10 @@ export class Game {
       this.player.food = Math.max(0, Math.min(20, savedPlayer.food | 0));
       this.player.saturation = Math.max(0, Math.min(this.player.food, +savedPlayer.saturation || 0));
     }
-    if (params.get('fly') === '1') this.player.flying = true; // start airborne (observer / demo vantage)
+    // game mode: URL ?mode= wins, then the save, then creative (the mode the world has always played in)
+    const modeParam = params.get('mode');
+    this.setMode(modeParam === 'survival' || modeParam === 'creative' ? modeParam : (savedPlayer && savedPlayer.mode === 'survival' ? 'survival' : 'creative'), { persist: false, announce: false });
+    if (params.get('fly') === '1') { this.player.allowFlight = true; this.player.flying = true; } // start airborne (observer / demo vantage)
     // respawn point: the world spawn when resuming a saved game, otherwise where this session started
     this.spawnPoint = savedPlayer ? { x: SPAWN.x, y: sy, z: SPAWN.z } : { x: sx, y: sy, z: sz };
 
@@ -323,6 +326,20 @@ export class Game {
     const dS = Math.max(Math.abs(x - sp.cx), Math.abs(z - sp.cz)) - sp.half;        // <0 inside the void box
     const dC = Math.max(Math.abs(x - co.cx), Math.abs(z - co.cz)) - co.half;
     return { space: Math.max(0, Math.min(1, (200 - dS) / 400)), coruscant: Math.max(0, Math.min(1, (160 - dC) / 320)) };
+  }
+  // 'creative' | 'survival' (docs/ROUND6_PLAN.md): creative = flight, frozen hunger, no damage, infinite stacks,
+  // instant break; survival = the Minecraft rules. Flight granted by ?fly=1 or the admin panel survives a switch.
+  get mode() { return this.player ? this.player.mode : 'creative'; }
+  setMode(mode, { persist = true, announce = true } = {}) {
+    const p = this.player;
+    if (!p || (mode !== 'creative' && mode !== 'survival')) return false;
+    const was = p.mode;
+    p.mode = mode;
+    this.inventory.infinite = mode === 'creative';
+    if (mode === 'survival' && p.flying && !p.allowFlight) { p.flying = false; p.fallDistance = 0; }
+    if (announce && was !== mode && this.hud && this.hud.addMessage) this.hud.addMessage(mode === 'creative' ? 'Creative mode: flight, no hunger, infinite blocks.' : `Survival mode: hunger and damage are on${p.allowFlight ? '' : ', flight is off'}.`);
+    if (persist && this.save) this.persistState();
+    return true;
   }
   cycleRenderDistance() {
     const opts = [4, 6, 8, 10, 12, 16, 24];
@@ -719,7 +736,7 @@ export class Game {
     if (!this.save || !this.player || this.player.dead) return;
     const p = this.player;
     // the vehicle tick goes with the player so a reload puts the space train where it was (a rider is not stranded)
-    this.save.setPlayer({ x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, food: p.food, saturation: p.saturation, vehicleTick: this.vehicles ? this.vehicles.tickCount : 0 });
+    this.save.setPlayer({ x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, food: p.food, saturation: p.saturation, mode: p.mode, vehicleTick: this.vehicles ? this.vehicles.tickCount : 0 });
     this.save.setInventory(this.inventory.serialize());
   }
   persistNow() {
@@ -777,7 +794,7 @@ export class Game {
         }
         this.hand.startSwing();
         if (this.breakCooldown <= 0 && def.hardness !== Infinity) {
-          this.breakProgress += dt / def.hardness;
+          this.breakProgress += p.creative ? 1 : dt / def.hardness;   // creative breaks instantly (with the normal cooldown)
           this.hitSoundTimer -= dt;
           if (this.hitSoundTimer <= 0) { this.hitSoundTimer = 0.25; this.audio.hit(def.sound, hit.point); this.particles.blockHit(hit, hit.id); }
           if (this.breakProgress >= 1) this.breakBlock(hit);
@@ -798,7 +815,10 @@ export class Game {
     // placing / interacting (doors, chests, furnace and planting are "use" actions that come before placement)
     const useClick = this.input.mouseClicked[2];
     if (playing && !p.dead && (useClick || (this.input.mouseDown[2] && this.placeCooldown <= 0))) {
-      if (entityHit && !hit) { this.npcs.talk(entityHit.npc, this); this.hand.startSwing(); this.placeCooldown = 0.5; }
+      // vehicles (ships) take the click when they are the nearest thing under the crosshair
+      const vhit = useClick && this.vehicles ? this.vehicles.raycast(eye, dir, REACH) : null;
+      if (vhit && (!hit || vhit.dist < hit.dist)) { if (vhit.vehicle.onUse(p, this, vhit)) { this.hand.startSwing(); this.placeCooldown = 0.5; } }
+      else if (entityHit && !hit) { this.npcs.talk(entityHit.npc, this); this.hand.startSwing(); this.placeCooldown = 0.5; }
       else if (hit && this.useBlock(hit, useClick)) { this.hand.startSwing(); }
       else if (hit && !p.eating) this.placeBlock(hit);
       this.placeCooldown = useClick ? 0.25 : 0.2;

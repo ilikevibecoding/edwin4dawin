@@ -137,6 +137,10 @@ export class Player {
     this.force = new THREE.Vector3(); // external acceleration (blocks/s^2) applied at the next tick
     this.lastImpact = 0;
     this.swept = 0; // seconds of being tossed by a wave: buoyant and helpless
+    // game mode: 'creative' (flight, no hunger, no damage, infinite blocks, instant break) or 'survival'; flight is
+    // also allowed in survival when the session granted it (?fly=1, admin "watch") - see game.setMode
+    this.mode = 'creative';
+    this.allowFlight = false;
     // creative flight (double-tap jump toggles it, like Minecraft)
     this.flying = false;
     this.jumpWasDown = false;
@@ -206,7 +210,7 @@ export class Player {
     // double-tap jump within 7 ticks toggles flight; while flying, jump/sneak mean rise/descend
     const jumpDown = !!ctrl.jump;
     if (jumpDown && !this.jumpWasDown) {
-      if (this.tickCount - this.lastJumpTap <= 6 && !this.inWater && (!this.onGround || this.flying)) {
+      if (this.tickCount - this.lastJumpTap <= 6 && !this.inWater && (!this.onGround || this.flying) && (this.canFly() || this.flying)) {
         this.flying = !this.flying; this.vel.y = 0; this.fallDistance = 0; this.lastJumpTap = -100;
         this.events.push({ type: 'fly', flying: this.flying });
       } else this.lastJumpTap = this.tickCount;
@@ -341,7 +345,8 @@ export class Player {
     // hunger / regen (Minecraft rules): every 4 exhaustion drains one saturation point first, then one food point;
     // natural regen needs food >= 18 (1 HP / 4 s, or 1 HP / 0.5 s while food is full and saturation remains) and
     // costs 6 exhaustion per heart healed; starvation stops at 1 HP.
-    this.exhaustion += hd * (this.sprinting ? 0.1 : 0.01);
+    if (this.mode === 'creative') { this.exhaustion = 0; }   // creative: the hunger bar is frozen (Minecraft)
+    else this.exhaustion += hd * (this.sprinting ? 0.1 : 0.01);
     if (this.exhaustion > 4) { this.exhaustion -= 4; if (this.saturation > 0) this.saturation = Math.max(0, this.saturation - 1); else if (this.food > 0) this.food--; }
     if (this.food >= 18 && this.health < 20) {
       this.foodTimer++;
@@ -382,8 +387,13 @@ export class Player {
     this.fallDistance = 0;
   }
 
-  damage(amount) {
+  // flight is a creative-mode ability; survival gets it only when the session granted it (?fly=1 / admin watch)
+  canFly() { return this.mode === 'creative' || this.allowFlight; }
+  get creative() { return this.mode === 'creative'; }
+
+  damage(amount, force = false) {
     if (this.dead) return;
+    if (this.mode === 'creative' && !force) return;
     this.health -= amount;
     this.hurtTime = 10;
     this.events.push({ type: 'hurt' });

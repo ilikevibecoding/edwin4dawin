@@ -75,6 +75,7 @@ export class Inventory {
   consume(slot, n = 1) {
     const s = this.slots[slot];
     if (!s) return false;
+    if (this.infinite) return true;          // creative mode: stacks never shrink
     s.count -= n;
     if (s.count <= 0) this.slots[slot] = null;
     return true;
