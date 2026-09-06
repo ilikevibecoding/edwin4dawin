@@ -20,6 +20,13 @@ export function quadGeometry(w: number, h: number, uv: { u0: number; v0: number;
   return g;
 }
 
+/** The same texel for every vertex: a part merged into a textured skin mesh that should read as one plain paint spot. */
+export function flatUv<T extends THREE.BufferGeometry>(geo: T, u: number, v: number): T {
+  const a = geo.getAttribute('uv') as THREE.BufferAttribute;
+  for (let i = 0; i < a.count; i++) a.setXY(i, u, v);
+  return geo;
+}
+
 /** Matrix placing a +Y cylinder of the right length between two points. */
 function betweenMatrix(a: THREE.Vector3, b: THREE.Vector3): THREE.Matrix4 {
   const q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize());

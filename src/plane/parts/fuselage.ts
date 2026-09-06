@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import {
-  arcFraction, deckGeometry, gridGeometry, halfWidthAt, inBlock, insetSections, keyedRing, loftGrid, paneGeometry, revealGeometry, sectionAt, sectionPerimeter, smoothStations, tOfHeight, withStations,
+  arcFraction, deckGeometry, flatUv, gridGeometry, halfWidthAt, humpGeometry, inBlock, insetSections, keyedRing, loftGrid, paneGeometry, revealGeometry, revolveGeometry, sectionAt, sectionPerimeter, sectionPoint, smoothStations, strutGeometry, tOfHeight, withStations,
   type LoftGrid, type QuadBlock, type Section,
 } from '../geometry';
 import { CHEAT_LINE, SURF, type FuselageLayout } from '../textures';
@@ -48,10 +48,16 @@ export function buildFuselageFrame(): FuselageFrame {
   // Upper exponent rises through the cabin so the roof is flat enough to carry the wing (the squarer cabin
   // shoulder under the wing, n 6.5, keeps the roof above the window tops out to z 0.70 where the wing root
   // fairing rolls down onto it); the windshield runs from the cowl (x 2.30, y 0.81) up to the roof line (x 1.85, y 1.17).
+  // Nose: a radial-engine cowl is a near-cylinder (the R-985 class engine is 1.17 m across) that rounds forward
+  // into a nose bowl with a large annular inlet around the spinner; the loft stops at the bowl's front (x 4.50,
+  // r 0.55) and the lip that rolls into the inlet duct is a revolved strip added in buildFuselageShell. The old
+  // loft closed to a 30 cm point capped flat behind the spinner, which the critics read as a black flat-ended
+  // cylinder with a chrome cone and no openings.
   const base: Section[] = [
-    { x: 4.55, yc: 0.02, w: 0.30, top: 0.30, bot: 0.30, n: 2.0 },
-    { x: 4.35, yc: 0.02, w: 0.55, top: 0.55, bot: 0.55, n: 2.0 },
-    { x: 3.90, yc: 0.02, w: 0.72, top: 0.70, bot: 0.70, n: 2.1 },
+    { x: 4.50, yc: 0.02, w: 0.550, top: 0.550, bot: 0.550, n: 2.0 },
+    { x: 4.36, yc: 0.02, w: 0.635, top: 0.635, bot: 0.635, n: 2.0 },
+    { x: 4.10, yc: 0.02, w: 0.690, top: 0.690, bot: 0.690, n: 2.0 },
+    { x: 3.90, yc: 0.02, w: 0.710, top: 0.705, bot: 0.705, n: 2.05 },
     { x: 3.20, yc: 0.03, w: 0.75, top: 0.72, bot: 0.70, n: 2.3 },
     { x: 2.60, yc: 0.04, w: 0.77, top: 0.74, bot: 0.70, n: 3.0, nBot: 2.4 },
     { x: 2.30, yc: 0.05, w: 0.78, top: 0.76, bot: 0.70, n: 6.0, nBot: 2.4 },
@@ -141,13 +147,125 @@ export function buildFuselageFrame(): FuselageFrame {
   return { sections, innerSections, ring, outer, inner, R, jA, jB, jC, si, sideWindows, blocks, windshield, isWindow, iFront, iRear, innerHalfAt, layout };
 }
 
+// ------------------------------------------------------------ cowl geometry shared by the shell and the fittings
+/** engine axis height and the nose bowl's inlet radius (the propeller hub barrel is r 0.29 inside it) */
+export const COWL_AXIS_Y = 0.02, INLET_R = 0.4225;
+/** station of the engine face (baffle plate) seen through the inlet, and of the cowl's trailing edge (firewall seam) */
+const ENGINE_FACE_X = 4.21, COWL_TE_X = 3.20;
+/** chin (carburettor) scoop under the bowl and the top (oil cooler) scoop behind it: mouth stations and mouth half sizes */
+const CHIN = { x0: 4.48, x1: 3.75, w: 0.19, h: 0.12 }, TOP = { x0: 4.02, x1: 3.36, w: 0.16, h: 0.095 };
+/** cowl flaps: hinge station, trailing edge station, angular position about the axis (rad from straight down), half width */
+const COWL_FLAPS = { hingeX: 3.46, teX: 3.22, angles: [-0.48, 0.48], halfW: 0.13, lift: 0.045 };
+
+/** outer skin radius of the (round) cowl at station x, and the skin height at (x, z) on top / underneath */
+function cowlR(sections: Section[], x: number): number { return sectionAt(sections, x).w; }
+function skinTopY(sections: Section[], x: number, z: number): number {
+  const s = sectionAt(sections, x), n = s.n ?? 2.2;
+  return s.yc + s.top * Math.pow(Math.max(1 - Math.pow(Math.min(Math.abs(z) / s.w, 1), n), 0), 1 / n);
+}
+function skinBottomY(sections: Section[], x: number, z: number): number {
+  const s = sectionAt(sections, x), n = s.nBot ?? s.n ?? 2.2;
+  return s.yc - s.bot * Math.pow(Math.max(1 - Math.pow(Math.min(Math.abs(z) / s.w, 1), n), 0), 1 / n);
+}
+/** scoop hood: a rounded-rectangular hump from the mouth station back to where it fades into the skin */
+function scoopStations(sc: { x0: number; x1: number; w: number; h: number }): { x: number; w: number; h: number }[] {
+  const out: { x: number; w: number; h: number }[] = [];
+  const fs = [0, 0.06, 0.16, 0.3, 0.46, 0.62, 0.78, 0.9, 1];
+  for (const f of fs) {
+    const fade = f < 0.3 ? 1 : 1 - THREE.MathUtils.smoothstep(f, 0.3, 1);
+    out.push({ x: sc.x0 + (sc.x1 - sc.x0) * f, w: sc.w * (0.35 + 0.65 * fade), h: sc.h * fade });
+  }
+  return out;
+}
+const hood = (z: number, w: number, h: number) => h * Math.pow(Math.max(1 - Math.pow(Math.min(Math.abs(z) / w, 1), 2.6), 0), 1 / 2.6);
+
+/**
+ * Cowl parts that carry the fuselage paint and merge into the skin mesh: the nose-bowl lip rolling into the inlet
+ * (its UVs sit on the texture's u = 0 column, the bare-metal bowl band), the two scoop hoods and the cowl flaps
+ * (plain paint spots of the livery: the top of the cowl is the matte anti-glare panel, the belly is yellow).
+ */
+function cowlSkinParts(ctx: BuildContext): THREE.BufferGeometry[] {
+  const { sections, layout } = ctx.fuselage;
+  const out: THREE.BufferGeometry[] = [];
+  // lip: traced from the duct interior forward, around the rolled edge and back along the outside into the loft
+  // (the last point sits 2 cm inside the loft's skin so the two surfaces cross instead of leaving a hairline)
+  const rFront = cowlR(sections, 4.50);
+  out.push(revolveGeometry([
+    [4.530, INLET_R + 0.0015], [4.550, INLET_R + 0.006], [4.568, INLET_R + 0.020], [4.580, INLET_R + 0.045], [4.578, INLET_R + 0.075],
+    [4.562, rFront - 0.022], [4.532, rFront - 0.004], [4.500, rFront + 0.002], [4.470, rFront - 0.006],
+  ], 56, { cy: COWL_AXIS_Y, uOf: () => 0.0 }));
+  // chin scoop: built as a hump on the mirrored belly (y down) and flipped back
+  const chinTop = (x: number, z: number, w: number, h: number) => -skinBottomY(sections, x, z) + hood(z, w, h);
+  const chinSt = scoopStations(CHIN);
+  const chin = humpGeometry(chinSt.map((s) => ({ x: s.x, w: s.w })),
+    (x, z) => { const s = chinSt.find((c) => Math.abs(c.x - x) < 1e-6)!; return chinTop(x, z, s.w, s.h); },
+    (x, z) => -skinBottomY(sections, x, z) - 0.03, 16, 4);
+  chin.scale(1, -1, 1);
+  // mirroring flips the winding: turn it back so the hood faces out
+  { const idx = chin.index!; for (let i = 0; i < idx.count; i += 3) { const b = idx.getX(i + 1); idx.setX(i + 1, idx.getX(i + 2)); idx.setX(i + 2, b); } }
+  chin.computeVertexNormals();
+  out.push(flatUv(chin, layout.uOf(-2.0), 0.40));
+  // top scoop on the anti-glare panel
+  const topSt = scoopStations(TOP);
+  const top = humpGeometry(topSt.map((s) => ({ x: s.x, w: s.w })),
+    (x, z) => { const s = topSt.find((c) => Math.abs(c.x - x) < 1e-6)!; return skinTopY(sections, x, z) + hood(z, s.w, s.h); },
+    (x, z) => skinTopY(sections, x, z) - 0.03, 16, 4);
+  out.push(flatUv(top, layout.uOf(3.0), layout.topV(3.0, 0.12)));
+  // cowl flaps: thin plates hinged at the front, trailing edges lifted off the skin (open a few degrees on the water)
+  for (const a of COWL_FLAPS.angles) {
+    const len = COWL_FLAPS.hingeX - COWL_FLAPS.teX;
+    const plate = new THREE.BoxGeometry(len, 0.008, COWL_FLAPS.halfW * 2);
+    plate.applyMatrix4(cowlFlapFrame(sections, a, 0.004));
+    out.push(flatUv(plate, layout.uOf(-2.0), 0.40));
+  }
+  return out;
+}
+
+/**
+ * Distance from the engine axis to the skin at station x in the direction `a` radians from straight down (positive
+ * toward port, the sense a `makeRotationX(a)` turns the straight-down direction), found on the section's actual
+ * (superelliptic) outline; `cowlR` is only right for the round bowl.
+ */
+function skinRadial(sections: Section[], x: number, a: number): number {
+  const s = sectionAt(sections, x);
+  const p: [number, number] = [0, 0];
+  // ring parameter 0.25 (starboard) .. 0.5 (belly) .. 0.75 (port) maps monotonically onto angles -pi/2 .. 0 .. pi/2
+  const angleAt = (t: number) => { sectionPoint(s, t, p); return Math.atan2(-p[1], -(p[0] - COWL_AXIS_Y)); };
+  let lo = 0.25, hi = 0.75;
+  for (let k = 0; k < 40; k++) {
+    const mid = (lo + hi) / 2;
+    if (angleAt(mid) < a) lo = mid; else hi = mid;
+  }
+  sectionPoint(s, (lo + hi) / 2, p);
+  return Math.hypot(p[0] - COWL_AXIS_Y, p[1]);
+}
+
+/**
+ * Frame of a cowl flap plate at angle `a` about the engine axis (0 = straight down): the plate's +X runs from its
+ * trailing edge (lifted `lift` off the skin) up to the hinge on the skin; `out` is the offset of the plate's centre
+ * plane outward from the skin (half the plate thickness puts its inner face flush with the skin).
+ */
+function cowlFlapFrame(sections: Section[], a: number, out: number, lift = COWL_FLAPS.lift): THREE.Matrix4 {
+  const rTe = skinRadial(sections, COWL_FLAPS.teX, a), rH = skinRadial(sections, COWL_FLAPS.hingeX, a), len = COWL_FLAPS.hingeX - COWL_FLAPS.teX;
+  // in the straight-down frame (relative to the axis, -y is outward): hinge end on the skin, trailing end `lift` proud of it
+  const yA = -rH - out, yB = -rTe - lift - out;
+  const theta = Math.atan2(yA - yB, len);
+  return new THREE.Matrix4().makeTranslation(0, COWL_AXIS_Y, 0)
+    .multiply(new THREE.Matrix4().makeRotationX(a))
+    .multiply(new THREE.Matrix4().makeTranslation((COWL_FLAPS.hingeX + COWL_FLAPS.teX) / 2, (yA + yB) / 2, 0))
+    .multiply(new THREE.Matrix4().makeRotationZ(theta));
+}
+
 /** Fuselage skin, the lined cabin shell with its bulkheads, reveals and floor, the glass panes, windshield post and window sills. */
 export function buildFuselageShell(ctx: BuildContext): void {
   const { mesh, cabinFixed, cabinShell, cabinKit } = ctx;
   const { paint, glass } = ctx.mat;
   const { outer, inner, innerSections, blocks, windshield, isWindow, iFront, iRear, sideWindows, innerHalfAt } = ctx.fuselage;
   // ------------------------------------------------------------ fuselage shell, cabin, glass
-  mesh(gridGeometry(outer, { quad: (i, j) => !isWindow(i, j), capStart: true, capEnd: true }), paint);
+  // the nose is open into the inlet duct (the engine face closes it, see buildFittings); the stern post is capped
+  const skin = mergeGeometries([gridGeometry(outer, { quad: (i, j) => !isWindow(i, j), capStart: false, capEnd: true }), ...cowlSkinParts(ctx)]);
+  if (!skin) throw new Error('fuselage: skin parts have incompatible attributes');
+  mesh(skin, paint);
   cabinShell.add(gridGeometry(inner, { i0: iFront, i1: iRear, quad: (i, j) => !isWindow(i, j), flip: true }));
   cabinFixed.add(gridGeometry(inner, { i0: iFront, i1: iRear, quad: () => false, flip: true, capStart: true, capEnd: true }), undefined, SURF.bulkhead);
   for (const b of blocks) cabinFixed.add(revealGeometry(outer, inner, b), undefined, SURF.trim);
@@ -180,22 +298,78 @@ export function buildFuselageShell(ctx: BuildContext): void {
   }
 }
 
-/** Exterior fittings on the fuselage: door steps, exhaust stubs (`fittings`), the intake scoop and cowl flaps (`white`). */
+/**
+ * Exterior fittings on the fuselage (all into `fittings`, one merged mesh): the engine seen through the inlet with
+ * the duct behind the nose bowl, the scoop mouths, the openings under the cowl flaps, the exhaust tailpipe with its
+ * heat shield, and the door steps.
+ */
 export function buildFittings(ctx: BuildContext): void {
-  const { fittings, white } = ctx;
+  const { fittings } = ctx;
   const { sections } = ctx.fuselage;
-  // ------------------------------------------------------------ exterior fittings (one merged mesh)
-  // door steps under the door's bottom line: the tread stands clear of the skin on two brackets. It used to sit at a
-  // fixed z inside the boxy cabin's skin, so only a corner poked through the paint as a flat grey rectangle
-  // (read as a stray decal / a glass ghost by the iter08 critics).
+  const AX = COWL_AXIS_Y;
+  // ------------------------------------------------------------ engine and inlet duct
+  // One revolved profile: the reduction-gear nose case (r 0.21, stepping down to the shaft housing that runs into
+  // the propeller hub barrel at x 4.44), the baffle plate closing the duct at the engine face, and the duct interior
+  // running forward to the lip (which starts at x 4.53, r INLET_R: a 4 mm step hides the seam in shadow). Traced
+  // -X along the case, +r across the baffle and +X along the duct so every part faces the viewer looking in.
+  fittings.add(revolveGeometry([
+    [4.45, 0.10], [4.40, 0.10], [4.40, 0.10], [4.40, 0.165], [4.385, 0.21], [4.385, 0.21], [4.21, 0.21], [4.21, 0.21],
+    [4.21, 0.475], [4.21, 0.475], [4.30, 0.462], [4.42, 0.440], [4.525, 0.4265],
+  ], 40, { cy: AX }), undefined, (x, y, z) => (Math.hypot(y - AX, z) < 0.212 ? SURF.engineCase : x < 4.215 ? SURF.baffle : SURF.duct));
+  // nine cylinders (R-985 class: #1 upright) with their heads: the barrels from r 0.20 to beyond the inlet radius, so
+  // the lip hides their outer ends the way a real cowl does; two pushrod tubes per cylinder from the nose case to the
+  // head, and the ignition harness ring around the case
+  for (let i = 0; i < 9; i++) {
+    const a = (i / 9) * Math.PI * 2;
+    const spin = new THREE.Matrix4().makeTranslation(0, AX, 0).multiply(new THREE.Matrix4().makeRotationX(a));
+    fittings.add(new THREE.BoxGeometry(0.125, 0.30, 0.11), spin.clone().multiply(new THREE.Matrix4().makeTranslation(4.275, 0.36, 0)), SURF.cylinder);
+    fittings.add(new THREE.BoxGeometry(0.07, 0.12, 0.10), spin.clone().multiply(new THREE.Matrix4().makeTranslation(4.34, 0.30, 0)), SURF.cylinder);
+    for (const dz of [-0.035, 0.035]) {
+      const a0 = new THREE.Vector3(4.375, AX + 0.20, dz), b0 = new THREE.Vector3(4.31, AX + 0.36, dz * 1.4);
+      fittings.add(strutGeometry(a0, b0, 0.011, 6), spin.clone().multiply(new THREE.Matrix4().makeTranslation(0, -AX, 0)), SURF.engineCase);
+    }
+  }
+  fittings.add(new THREE.TorusGeometry(0.265, 0.013, 6, 36), at([4.37, AX, 0], [0, Math.PI / 2, 0]), SURF.rubber);
+  // ------------------------------------------------------------ scoop mouths and cowl-flap openings
+  // dark plates a hair ahead of the scoop hoods' front caps: the intakes read as openings, not yellow bumps
+  fittings.add(new THREE.BoxGeometry(0.006, CHIN.h * 0.58, CHIN.w * 1.36), at([CHIN.x0 + 0.002, skinBottomY(sections, CHIN.x0, 0) - CHIN.h * 0.5, 0]), SURF.duct);
+  fittings.add(new THREE.BoxGeometry(0.006, TOP.h * 0.58, TOP.w * 1.36), at([TOP.x0 + 0.002, skinTopY(sections, TOP.x0, 0) + TOP.h * 0.5, 0]), SURF.duct);
+  // the opening a lifted cowl flap uncovers: a dark plate lying on the skin under each flap
+  for (const a of COWL_FLAPS.angles) {
+    const len = COWL_FLAPS.hingeX - COWL_FLAPS.teX;
+    fittings.add(new THREE.BoxGeometry(len - 0.01, 0.004, COWL_FLAPS.halfW * 2 - 0.01), cowlFlapFrame(sections, a, 0.003, 0), SURF.duct);
+  }
+  // ------------------------------------------------------------ exhaust
+  // The collector's tailpipe leaves the lower starboard cowl just ahead of the firewall seam and runs aft, down and
+  // outboard to a flared mouth near the exhaust hardpoint (model.ts exhaustPos 2.6, -0.55, 0.66, where the smoke
+  // starts); a stainless heat shield stands off the skin above it. The old two stubs were closed cylinders poking
+  // out of the belly at an angle, with nothing joining them to the engine.
+  const exitA = -0.78;
+  const rExit = skinRadial(sections, 3.12, exitA);
+  const pExit = new THREE.Vector3(3.12, AX - rExit * Math.cos(exitA) + 0.01, -rExit * Math.sin(exitA) - 0.01);
+  const pElbow = new THREE.Vector3(2.98, -0.585, 0.585), pMouth = new THREE.Vector3(2.64, -0.60, 0.655);
+  fittings.add(strutGeometry(pExit, pElbow, 0.042, 12), undefined, SURF.exhaust);
+  fittings.add(new THREE.SphereGeometry(0.042, 12, 8), at(pElbow), SURF.exhaust);
+  fittings.add(strutGeometry(pElbow, pMouth, 0.042, 12), undefined, SURF.exhaust);
+  const mouthDir = pMouth.clone().sub(pElbow).normalize();
+  const flareQ = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), mouthDir);
+  fittings.add(new THREE.CylinderGeometry(0.052, 0.043, 0.07, 12, 1, true), new THREE.Matrix4().compose(pMouth.clone().addScaledVector(mouthDir, -0.035), flareQ, new THREE.Vector3(1, 1, 1)), SURF.exhaust);
+  fittings.add(new THREE.CircleGeometry(0.05, 12), new THREE.Matrix4().compose(pMouth.clone().addScaledVector(mouthDir, -0.02), new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 0, 1), mouthDir), new THREE.Vector3(1, 1, 1)), SURF.soot);
+  // heat shield: a stainless plate between the tailpipe and the skin, 3 cm off the paint, following the skin's slope
+  {
+    const aS = exitA - 0.10, x0 = 2.99, x1 = 2.66, off = 0.03;
+    const r0 = skinRadial(sections, x0, aS) + off, r1 = skinRadial(sections, x1, aS) + off, rm = (r0 + r1) / 2;
+    const c = new THREE.Vector3((x0 + x1) / 2, AX - rm * Math.cos(aS), -rm * Math.sin(aS));
+    // the skin's radial grows toward the tail here: tilt the plate in the straight-down frame before turning it to aS
+    fittings.add(new THREE.BoxGeometry(x0 - x1, 0.004, 0.17), at(c, [aS, 0, -Math.atan2(r0 - r1, x0 - x1)]), SURF.metal);
+  }
+  // ------------------------------------------------------------ door steps
+  // under the door's bottom line: the tread stands clear of the skin on two brackets. It used to sit at a fixed z
+  // inside the boxy cabin's skin, so only a corner poked through the paint as a flat grey rectangle (read as a stray
+  // decal / a glass ghost by the iter08 critics).
   for (const side of [-1, 1]) {
     const skinZ = halfWidthAt(sectionAt(sections, 1.3), -0.45);
     fittings.add(new THREE.BoxGeometry(0.3, 0.03, 0.2), at([1.3, -0.45, side * (skinZ + 0.11)]), SURF.darkMetal);
     for (const dx of [-0.11, 0.11]) fittings.add(new THREE.BoxGeometry(0.03, 0.1, 0.18), at([1.3 + dx, -0.40, side * (skinZ + 0.085)], [0, 0, 0]), SURF.darkMetal);
   }
-  // engine exhaust stubs
-  for (let i = 0; i < 2; i++) fittings.add(new THREE.CylinderGeometry(0.05, 0.06, 0.28, 10), at([2.75 - i * 0.22, -0.5, 0.62 + i * 0.03], [0.6, 0, 1.2]), SURF.exhaust);
-  // intake scoop on the cowl top, cowl flaps (white paint batch)
-  white.add(new THREE.BoxGeometry(0.5, 0.12, 0.28), at([3.7, 0.70, 0]));
-  for (let i = 0; i < 2; i++) white.add(new THREE.BoxGeometry(0.28, 0.04, 0.22), at([3.0, -0.62, (i === 0 ? -1 : 1) * 0.35], [(i === 0 ? -1 : 1) * 0.35, 0, 0]));
 }

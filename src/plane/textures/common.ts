@@ -230,7 +230,17 @@ export const SURF = {
   darkMetal: { color: 0x2c2f33, roughness: 0.5, metalness: 0.6 },
   /** polished spinner: picks up a tight sun highlight */
   spinner: { color: 0xc4c8ce, roughness: 0.16, metalness: 0.95 },
+  /** exhaust tailpipe: heat-blued stainless, matte from scale */
   exhaust: { color: 0x5a4a3c, roughness: 0.6, metalness: 0.9 },
+  /** soot-black bore of the exhaust mouth */
+  soot: { color: 0x0a0a0a, roughness: 0.95, metalness: 0.0 },
+  /** engine seen through the inlet: grey-enamelled crankcase / nose case, black finned cylinders */
+  engineCase: { color: 0x5c6064, roughness: 0.55, metalness: 0.75 },
+  cylinder: { color: 0x1e2022, roughness: 0.65, metalness: 0.55 },
+  /** baffle plate behind the cylinders (sheet aluminium in shadow) */
+  baffle: { color: 0x2a2c2e, roughness: 0.7, metalness: 0.4 },
+  /** cowl and scoop interiors: zinc-chromate primed sheet, dull */
+  duct: { color: 0x2f352c, roughness: 0.8, metalness: 0.1 },
   rubber: { color: 0x111214, roughness: 0.92, metalness: 0.0 },
   /** cabin trim: window-band / reveal vinyl, headliner bows, bulkheads (the lining itself is textured, see cabinMaps) */
   bow: { color: 0x9a958c, roughness: 0.6, metalness: 0.0 },

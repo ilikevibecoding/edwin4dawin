@@ -19,12 +19,16 @@ export function buildWing(ctx: BuildContext): WingBuild {
   const { wingPaint } = ctx.mat;
   const { sections } = ctx.fuselage;
   // ------------------------------------------------------------ wing
-  // straight trailing edge (sweep chosen so xTE is constant), gentle taper, thin 11% airfoil with washout
-  const wingSpec: WingSpec = { span: 7.3, rootChord: 1.95, tipChord: 1.55, sweep: -0.28, dihedral: 0.02, thickness: 0.11, twist: -0.03, camber: 0.02 };
+  // straight trailing edge (sweep chosen so xTE is constant), gentle taper, washout. A bush-plane wing carries a
+  // thick section (the DHC-2 flies a 16 % 64A-series root): the old 11 % read as a plank from every chase camera
+  // (h03 critics: "wing slab too thin", "plank-thin wing and stabiliser"). 15 % with 2.5 % camber gives the root a
+  // 29 cm depth and a visibly rounded leading edge at 30 m, and the trailing edge closes to 8 mm (skin + rivet
+  // flange) instead of the 14 mm the default `te` left at the root.
+  const wingSpec: WingSpec = { span: 7.3, rootChord: 1.95, tipChord: 1.55, sweep: -0.28, dihedral: 0.02, thickness: 0.15, twist: -0.03, camber: 0.025, te: 0.002 };
   const xte = wingXTE(wingSpec, 0);
   const flapHinge = xte + 0.52, ailHinge = xte + 0.46;
   const wingVOf = (z: number) => wingV(z, wingSpec.span);
-  const WN = 16;
+  const WN = 18;
   // panels share their surface vertices along the chord grid: welded, the wing shades as one smooth skin
   const wingGeo = weldSmooth(mergeGeometries([
     wingPanel(wingSpec, { z0: 0, z1: 0.85, segments: 2, part: 'full', hingeX: flapHinge, capEnd: 'rear', n: WN, vOf: wingVOf }),

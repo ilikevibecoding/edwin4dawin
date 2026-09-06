@@ -1,5 +1,5 @@
 import { Rng } from '../../core/seed';
-import { canvas, CHEAT_LINE, grime, heightToNormal, LIVERY, orangePeelNormal, panels, panelVariation, toTexture, wear, type FuselageLayout, type PbrMaps } from './common';
+import { canvas, CHEAT_LINE, grime, heightToNormal, LIVERY, orangePeelNormal, packRGB, panels, panelVariation, toTexture, wear, type FuselageLayout, type PbrMaps } from './common';
 
 /**
  * Text painted on both sides of the body so it reads left-to-right from outside. The loft's u runs nose -> tail,
@@ -98,12 +98,37 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     actx.closePath();
     actx.fill();
   }
-  // engine cowl ring: dark charcoal nose with a polished lip
+  // nose bowl (u 0 .. the bowl / cowl joint at x 4.22): bare polished aluminium (metalness from the packed map), with
+  // faint circumferential brush marks; the joint itself is a raised lap edge with a ring of Dzus fasteners behind it
   const ringU = lay.uOf(4.22) * w;
-  actx.fillStyle = '#2e3136'; actx.fillRect(0, 0, ringU, h);
-  actx.fillStyle = '#9aa0a6'; actx.fillRect(ringU - 6, 0, 6, h);
-  actx.fillStyle = '#1b1d20';
-  for (let i = 0; i < 12; i++) actx.fillRect(ringU * 0.45, (i / 12) * h + 6, ringU * 0.15, h / 12 - 12);
+  actx.fillStyle = '#c4c8cc'; actx.fillRect(0, 0, ringU, h);
+  for (let i = 0; i < 60; i++) {
+    const y = rng.range(0, h), a = rng.range(0.05, 0.16), light = rng.next() < 0.5;
+    actx.fillStyle = light ? `rgba(255,255,255,${a})` : `rgba(60,64,70,${a})`;
+    actx.fillRect(0, y, ringU, rng.range(1, 3));
+  }
+  hctx.fillStyle = '#5c5c5c'; hctx.fillRect(ringU - 3, 0, 3, h);
+  actx.fillStyle = 'rgba(20,20,25,0.45)'; actx.fillRect(ringU - 2, 0, 2, h);
+  /** Dzus fastener: a 12 mm dished button with a slot, drawn as a dark ring in the albedo and a dimple in the height map */
+  const dzus = (x: number, y: number) => {
+    hctx.fillStyle = '#6a6a6a'; hctx.beginPath(); hctx.arc(x, y, 2.6, 0, 7); hctx.fill();
+    hctx.fillStyle = '#9a9a9a'; hctx.beginPath(); hctx.arc(x, y, 1.2, 0, 7); hctx.fill();
+    actx.fillStyle = 'rgba(25,25,30,0.55)'; actx.beginPath(); actx.arc(x, y, 2.6, 0, 7); actx.fill();
+    actx.fillStyle = 'rgba(200,200,205,0.55)'; actx.beginPath(); actx.arc(x, y, 1.5, 0, 7); actx.fill();
+    actx.fillStyle = 'rgba(25,25,30,0.7)'; actx.fillRect(x - 1.6, y - 0.5, 3.2, 1);
+  };
+  for (let y = 12; y < h; y += 34) dzus(ringU + 9, y);
+  // cowl side panels: the joint lines of the upper and lower panels along each side of the cowl (x 4.22 .. 3.20)
+  // with their fastener rows, so the cowl reads as removable sheet-metal panels and not as one lofted shell
+  const cowlAftU = lay.uOf(3.20) * w;
+  for (const side of [1, -1]) {
+    for (const vv of [0.125, 0.36]) {
+      const y = (side > 0 ? vv : 1 - vv) * h;
+      hctx.strokeStyle = '#5a5a5a'; hctx.lineWidth = 2; hctx.beginPath(); hctx.moveTo(ringU, y); hctx.lineTo(cowlAftU, y); hctx.stroke();
+      actx.strokeStyle = 'rgba(20,20,25,0.35)'; actx.lineWidth = 1.5; actx.beginPath(); actx.moveTo(ringU, y); actx.lineTo(cowlAftU, y); actx.stroke();
+      for (let x = ringU + 26; x < cowlAftU - 8; x += 30) dzus(x, y + (vv < 0.2 ? 6 : -6) * side);
+    }
+  }
   // registration on the white rear fuselage above the cheat line (clear of the float struts from the quarter views)
   // and the operator script under the cabin windows (both sides, readable)
   bodyText(actx, lay, w, h, LIVERY.registration, -3.05, 0.45, 0.15, 'bold', '"Helvetica Neue", Arial, sans-serif', LIVERY.cheat);
@@ -178,8 +203,33 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   }
   rctx.fillStyle = 'rgba(255,255,255,0.10)'; rctx.fillRect(0, h * 0.44, w, h * 0.12);   // spray-dulled belly
   rctx.fillStyle = 'rgba(255,255,255,0.05)'; rctx.fillRect(0, 0, w, h * 0.08); rctx.fillRect(0, h * 0.92, w, h * 0.08); // sun-chalked roof
-  rctx.fillStyle = '#7a7a7a'; rctx.fillRect(0, 0, ringU, h);
+  // polished bowl: roughness ~0.30 with the brush marks as streaks of 0.22 .. 0.40 (a hand-polished bowl is never
+  // a mirror; the streaks stretch the sun's highlight around it)
+  rctx.fillStyle = '#4d4d4d'; rctx.fillRect(0, 0, ringU, h);
+  for (let i = 0; i < 90; i++) {
+    const y = rng.range(0, h), a = rng.range(0.10, 0.30), light = rng.next() < 0.5;
+    rctx.fillStyle = light ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a})`;
+    rctx.fillRect(0, y, ringU, rng.range(1, 4));
+  }
   sootStreak(rctx, '170,170,170', 0.7);
+  // packed clear coat (R) / roughness (G) / metalness (B): the bowl is bare metal with no clear coat, the anti-glare
+  // panel is a flat lacquer with a third of the coat's gloss, everything else is the clear-coated livery
+  const [mc, mctx] = canvas(w, h);
+  const [kc, kctx] = canvas(w, h);
+  mctx.fillStyle = '#000000'; mctx.fillRect(0, 0, w, h);
+  mctx.fillStyle = '#ffffff'; mctx.fillRect(0, 0, ringU - 3, h);
+  kctx.fillStyle = '#ffffff'; kctx.fillRect(0, 0, w, h);
+  kctx.fillStyle = '#000000'; kctx.fillRect(0, 0, ringU - 3, h);
+  kctx.fillStyle = '#555555';
+  for (const side of [1, -1]) {
+    const edge = side > 0 ? 0 : h;
+    kctx.beginPath();
+    kctx.moveTo(glare[0][0], edge);
+    for (const [px, py] of glare) kctx.lineTo(px, side > 0 ? py : h - py);
+    kctx.lineTo(glare[glare.length - 1][0], edge);
+    kctx.closePath();
+    kctx.fill();
+  }
   grime(rctx, rng, w, h, 160, 0.25, '150,150,150');
   for (let i = 0; i < 400; i++) {
     rctx.strokeStyle = `rgba(120,120,120,${rng.range(0.2, 0.5)})`;
@@ -215,5 +265,6 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     cctx.fill();
   }
   sootStreak(cctx, '0,110,0', 0.8);
-  return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.4), false), clearcoatRoughnessMap: toTexture(cc, false), clearcoatNormalMap: orangePeelNormal(rng, 64, 32) };
+  const packed = toTexture(packRGB(kc, rc, mc), false);
+  return { map: toTexture(ac, true), roughnessMap: packed, metalnessMap: packed, clearcoatMap: packed, normalMap: toTexture(heightToNormal(hc, 2.4), false), clearcoatRoughnessMap: toTexture(cc, false), clearcoatNormalMap: orangePeelNormal(rng, 64, 32) };
 }

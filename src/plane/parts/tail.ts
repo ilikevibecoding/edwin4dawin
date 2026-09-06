@@ -20,8 +20,11 @@ export function buildTail(ctx: BuildContext): TailBuild {
   // ------------------------------------------------------------ tail
   // 12 % symmetric sections with a 4 mm/m open trailing edge and a dense chord grid: at 25 m the stabiliser's
   // rounded leading edge and blunt TE still catch light instead of vanishing into a sheet
-  const TN = 14, TAIL_TE = 0.004;
-  const hstabSpec: WingSpec = { span: 2.45, rootChord: 1.05, tipChord: 0.80, sweep: -0.175, dihedral: 0, thickness: 0.12, twist: 0, camber: 0, te: TAIL_TE };
+  const TN = 14, TAIL_TE = 0.003;
+  // 13 % section: the stabiliser was named plank-thin from the rear quarter (h03 aircraft_rear B5-C5) at 12 % of a
+  // 1.05 m chord; one more percent of depth and a rounder nose read as a structure at 15 m without making the
+  // tailplane look inflated against the fin
+  const hstabSpec: WingSpec = { span: 2.45, rootChord: 1.05, tipChord: 0.80, sweep: -0.175, dihedral: 0, thickness: 0.13, twist: 0, camber: 0, te: TAIL_TE };
   const hsV = (z: number) => tailV(z, hstabSpec.span);
   const elevHinge = wingXTE(hstabSpec, 0) + 0.34;
   const hsGeo = weldSmooth(mergeGeometries([

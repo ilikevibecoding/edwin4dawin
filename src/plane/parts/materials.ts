@@ -67,10 +67,12 @@ export const withWaterBounce = <T extends THREE.Material>(mat: T): T => {
 export function buildMaterials(layout: FuselageLayout, u: MaterialUniforms, materials: THREE.Material[]): Materials {
   // ------------------------------------------------------------ materials
   const fus = fuselageMaps(layout), wing = wingMaps(), flt = floatMaps();
-  // clearcoat roughness comes from the texture: the cowl is a little glossier than the body, the glare panel is dull
+  // clearcoat roughness comes from the texture: the cowl is a little glossier than the body, the glare panel is dull.
+  // Clear-coat amount, base roughness and metalness come packed in one map (R / G / B): the nose bowl is bare
+  // polished aluminium (metal, no coat), the anti-glare panel a flat lacquer, the rest clear-coated livery paint.
   const paint = new THREE.MeshPhysicalMaterial({
-    map: fus.map, roughnessMap: fus.roughnessMap, normalMap: fus.normalMap, normalScale: new THREE.Vector2(0.55, 0.55),
-    color: 0xffffff, roughness: 1.0, metalness: 0.0, clearcoat: 0.7, clearcoatRoughness: 1.0, clearcoatRoughnessMap: fus.clearcoatRoughnessMap, envMapIntensity: 1.0,
+    map: fus.map, roughnessMap: fus.roughnessMap, metalnessMap: fus.metalnessMap, clearcoatMap: fus.clearcoatMap, normalMap: fus.normalMap, normalScale: new THREE.Vector2(0.55, 0.55),
+    color: 0xffffff, roughness: 1.0, metalness: 1.0, clearcoat: 0.7, clearcoatRoughness: 1.0, clearcoatRoughnessMap: fus.clearcoatRoughnessMap, envMapIntensity: 1.0,
     // orange peel: the sharp clear-coat lobe wobbles over a tiled dimple normal while the base coat stays smooth
     clearcoatNormalMap: fus.clearcoatNormalMap, clearcoatNormalScale: new THREE.Vector2(0.45, 0.45),
   });
