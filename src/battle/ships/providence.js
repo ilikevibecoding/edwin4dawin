@@ -150,9 +150,9 @@ function plateColor(i, j, c, n, st) {
   // of it (a ~0.2 linear tint after gamma); the light plating starts abruptly at r ~280-310 on the
   // upper hull, later (r ~330-400) on the belt and the chin
   const beakEnd = m >= 11 ? [330, 400] : m >= 6 ? [275, 310] : [265, 300];
-  // (the lower hull already sits in the belly shadow, so its beak tint stops at 0.4)
+  // (the lower hull already sits in the belly shadow, so its beak tint stops at 0.35)
   tone *= lerp(
-    m >= 11 ? 0.4 : 0.2,
+    m >= 11 ? 0.35 : 0.16,
     1,
     smoothstep(beakEnd[0], beakEnd[1], st.r),
   );
