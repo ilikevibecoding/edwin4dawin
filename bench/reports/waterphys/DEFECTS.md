@@ -240,3 +240,55 @@ churn should keep bubbling up around a flooding hull for a while).
    0.3 while it is a film), so a single sheet reads glassy and the stacked roots of many at the chine read white
    (`effects.ts`, SprayCloud shader v5). Verification frames: `/tmp/waterphys/r5/sheets_f00[5-9]` (a dollying
    camera 16 m abeam of the firm touchdown) and `water-landing` f25/30/35.
+
+## Round 6 — float displacement and the near/far handover (`/tmp/waterphys/r4b`, dist3, chase 1280x720)
+
+Views: taxi at 3.5-3.8 m/s (`taxi_f000/015/030`), the planing run at 22-24 m/s (`wl_f030/045`), the front quarter
+at rest (`pfq_f000`), and 8 s of drifting on swell (`swell_f000..080`).
+
+1. **Handover**: no patch square, no tone or ripple step at the near region's rim in any of the four views; the
+   ring-wave rim fade and the 1 m overlap band (r4b) hold. Verified by eye on the frames and by a 3x contrast stretch
+   of the water around the rim (`taxi_f030_crop_enh`, `swell_f040_crop_enh`).
+2. **Planing displacement** (`wl_f045`): two whitewater rails off the steps with broken, wandering edges, the spray
+   blisters off the chines, the lane variable in density toward the camera. Reads as water. Left.
+3. **Displacement at rest / idle taxi** (`pfq_f000`): the floats sit at their waterline with a faint bow ripple ahead
+   of the near hull; correct for 3.5 m/s. Left.
+4. **The taxi wake did not read at all** (`taxi_f030`, `swell_f040`): behind two floats running at 3.8 m/s the water
+   was glass, with two soft white smudges ~10 m astern. A high-pass of the frame (`taxi_f030_hp`) shows the wake is
+   there — undulations right behind the sterns, two froth lanes — at 1-2 % contrast. Diagnosis (shader arithmetic
+   and the frame): (a) the near patch's normal is the finite difference of the height map, an 8-bit target with a
+   metre of range: the 5 cm transverse train (wavelength 9.25 m at 3.8 m/s) changes 8 mm between the two texels of
+   the difference, two quanta, so its slope decoded to a 0.9 deg staircase or nothing, and the 2.7 cm arm crests to
+   nothing; (b) from a chase camera 15 deg down the Fresnel weight of the sky is ~0.1 over a bright shallow body
+   colour, so even a clean 2 deg slope moves a pixel by 1-2 %: the slope alone can never carry a taxi wake here;
+   (c) the one cue that does carry it in reality, the slick road where the hull's turbulence has wiped the short
+   ripples off the surface, was not there: the water shader accumulated all its ripple slopes before reading the
+   wake maps and only cut the roughness term by a third inside the lane, so the lane kept its full ripple texture.
+   Fixed in round 8.
+
+## Round 7 — swell following
+
+Numeric parity probe (`/tmp/waterphys/swellnode.mjs`: the FlightModel at rest over deep open water on the CPU wave
+field, 30 s at 30 Hz): surface span 0.49 m, hull span 0.47 m, follow ratio 0.97, mean hull height 13 mm above the
+rest datum on the local surface. The field is the shader's mirror by construction (same sets and phase-warp /
+group / shelter terms). The swell chase frames show the floats on the crests and in the troughs with the hull
+pitching 2 deg and rolling 5 deg over 8 s. No harness tolerance was touched (rest datum 1.91-2.01 m kept).
+
+## Round 8 — the churned lane, the taxi wake, wake persistence
+
+1. **Slick lane** (`water.ts`, compositing hunk): the short ripple sets (the 1.7 / 3.4 / 2.15 / 1.3 / 0.5 m sets
+   and half of the 5 m chop) accumulate apart from the long wind sea and the swell and are added after the wake
+   maps are read, scaled by `1 - 0.8 smoothstep(0.3, 0.85, coverage)`; their unresolved roughness and the caustic
+   crest net scale the same way. The lane now lies as a smooth road in the rippled sea (mirroring the sky where the
+   water around scatters it) behind a taxiing float and behind every boat; the swell and the 7-12 m wind sea run
+   through it unchanged, as they do. 0.8 rather than 1: a fully glassy lane from a low camera mirrored the horizon
+   haze as a bright band (r1 reverted candidate).
+2. **Coverage outlasts the froth** (`wakes.ts`): the coverage channel's lane term fades over 2.2 lane lengths, not
+   one, so the slick runs on past the end of the foam (a taxiing float's for the ribbon's life, a ship's toward a
+   kilometre: the one part of a wake that shows from altitude far astern).
+3. **Height map half float** (`wakes.ts`): no quantisation of the transverse train and the arm crests; the arm
+   crests at displacement speed 4-5 cm (from 2.7).
+4. **Float lanes live 30 s** (from 16; `effects.ts`): at 3.8 m/s the 16 s ribbon ended 60 m astern, in the chase
+   camera's foreground.
+Verification queued on dist7 (`/tmp/waterphys/r8`: height-map probe at taxi and hump speed, taxi and swell chase
+frames for A/B against r4b, the r3c wake views for the boat lanes).
