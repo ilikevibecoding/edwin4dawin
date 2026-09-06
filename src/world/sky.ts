@@ -425,8 +425,8 @@ void main() {
       empty = 0;
       // the surface steps resolve the silhouette while the ray is still mostly transparent; a cloud within a few
       // hundred metres of the camera is seen at a scale where the fine step's texture is a blur, so its surface
-      // pass runs somewhat deeper (three quarters of what the pixel shows is then integrated at the short step)
-      float surfT = mix(0.25, 0.35, smoothstep(400.0, 2500.0, t));
+      // pass runs somewhat deeper (the per-pixel surface texture below carries the finer scales)
+      float surfT = mix(0.3, 0.4, smoothstep(400.0, 2500.0, t));
       if (level == 1 && T > surfT) {
         // first density after a fine step: back up and resolve the surface with the small step
         level = 2;
@@ -436,9 +436,20 @@ void main() {
       if (!surfDone) {
         surfDone = true;
         float nearS = 1.0 - smoothstep(700.0, 2200.0, t);
-        // perlin fbm at a 900 m tile: periods 225/112/56 m; this first surface-step sample is jittered by half a
-        // surface step (4-6 m), a tenth of the finest period
-        if (nearS > 0.0) surfMod = 1.0 + (texture(uNoise3D, (p + vec3(uCloudWind.x, 0.0, uCloudWind.y)) * (1.0 / 900.0) + 0.37).a - 0.5) * 1.6 * nearS;
+        if (nearS > 0.0) {
+          // sampled on the smooth base surface when the ray comes up through it (the per-pixel step jitter moved
+          // the first dense sample by up to a fine step, which decorrelated neighbouring pixels into a stipple);
+          // elsewhere the first dense sample itself
+          vec3 ps = p;
+          if (dir.y > 0.15 && uCamPos.y < baseAlt) ps = uCamPos + dir * ((baseAlt - uCamPos.y) / dir.y);
+          ps += vec3(uCloudWind.x, 0.0, uCloudWind.y);
+          // perlin fbm at a 900 m tile (periods 225/112/56 m) plus a 300 m tile (75/37/19 m) within 700 m: the
+          // light through the base's thickness variations, which is what a near base shows as texture
+          float sm = (texture(uNoise3D, ps * (1.0 / 900.0) + 0.37).a - 0.5) * 1.6;
+          float near2 = 1.0 - smoothstep(300.0, 700.0, t);
+          if (near2 > 0.0) sm += (texture(uNoise3D, ps * (1.0 / 300.0) + 0.61).a - 0.5) * 0.9 * near2;
+          surfMod = 1.0 + sm * nearS;
+        }
       }
       // the light march varies slowly along the ray: reuse it for the next 1-2 samples (3-4 once the ray is
       // deep inside, where the samples weigh little)
@@ -468,7 +479,10 @@ void main() {
       vec3 gnd = gndAmb;
       if (cityK > 0.0) gnd += CITY_GLOW_COLOR * (cityK * cityGlowAt(p.xz));
       vec3 amb = (skyAmb * aoSky + gnd * aoGnd) * (mix(mottRange.x, mottRange.y, mott) * surfMod);
-      vec3 S = lightCol * sunTerm + amb;
+      // the surface texture also modulates the light that reaches a shadowed base through the cloud (multiple
+      // scattering through a varying thickness; that floor, not the ambient, is most of a base's radiance);
+      // lit rims and crowns keep their shading
+      vec3 S = lightCol * (sunTerm * mix(1.0, surfMod, smoothstep(0.3, 0.1, lt))) + amb;
       float a = 1.0 - exp(-dens * SIGMA * dt);
       col += T * a * S;
       meanDist += T * a * t;
@@ -497,24 +511,43 @@ void main() {
   }
 
   // ---- thin high veil (cirrus) behind the cumulus: a 2D layer at 9 km in the fair-weather presets so the sky
-  // above the cumulus is not an empty gradient. Fibres run along the wind (anisotropic domain, ~8:1), patches
-  // of ~40 km come from a low-frequency mask, and the layer drifts faster than the cumulus (jet-level wind).
+  // above the cumulus is not an empty gradient. Cirrus fibratus in bands: patches 20-50 km long along the wind
+  // with clear sky between them (the mask is two incommensurate perlin tiles, 48x16 and 17x6 km, thresholded so
+  // about 40 % of the layer is fibrous), the fibres are stretched mid-perlin streaks (24x2.8 km and 9x1 km tiles)
+  // whose cross-wind coordinate is bent by a 200 km field (arcs of tens of km, no wiggle: a bend field with
+  // features shorter than the streaks made them zigzag), a faint cirrostratus haze around the bands, and the
+  // layer drifts faster than the cumulus (jet-level wind). Round 7's version put an even comb of straight
+  // fibres over the whole upper sky (the mask summed into the fibre threshold and hardly varied within a frame).
   float cirrusAmount = 1.0 - smoothstep(0.35, 0.55, uCloudCoverage);
   if (cirrusAmount > 0.0 && dir.y > 0.015 && uCamPos.y < 8500.0 && alpha < 0.999) {
     float tc = (9000.0 - uCamPos.y) / dir.y;
     vec2 cp = uCamPos.xz + dir.xz * tc + uCloudWind * 2.5;
     const vec2 wd = vec2(0.9439, 0.3303);                 // Atmosphere.windDir
     vec2 fc = vec2(dot(cp, wd), dot(cp, vec2(-wd.y, wd.x)));
-    // the fibre octaves fade with distance (at 50 km a 2.6 km fibre is a few pixels wide and would shimmer)
-    float lod = smoothstep(20000.0, 60000.0, tc);
-    float mask = texture(uNoise3D, vec3(fc.x / 60000.0, 0.13, fc.y / 22000.0)).a;
-    float fib = texture(uNoise3D, vec3(fc.x / 24000.0 + 0.5, 0.67, fc.y / 2600.0)).b;
-    float fib2 = texture(uNoise3D, vec3(fc.x / 9000.0 + 0.2, 0.41, fc.y / 900.0)).b;
-    float veil = smoothstep(0.42, 0.85, mask + (fib - 0.5) * 0.9 * (1.0 - 0.5 * lod) + (fib2 - 0.5) * 0.5 * (1.0 - lod));
+    float ma = texture(uNoise3D, vec3(fc.x / 48000.0, 0.13, fc.y / 16000.0)).a;
+    float mb = texture(uNoise3D, vec3(fc.x / 17000.0 + 0.37, 0.71, fc.y / 6000.0)).a;
+    float m = ma + (mb - 0.5) * 0.6;
+    float patch = smoothstep(0.44, 0.66, m);
+    float haze = 0.12 * smoothstep(0.32, 0.66, m) * (1.0 - 0.5 * patch);
+    float veil = haze;
+    if (patch > 0.002) {
+      // the fibre octaves fade with distance: the fine one is a few pixels wide beyond 25 km, the coarse one
+      // beyond 60 km (the band is then a haze streak)
+      float lod1 = smoothstep(20000.0, 60000.0, tc);
+      float lod2 = smoothstep(8000.0, 25000.0, tc);
+      float bend = texture(uNoise3D, vec3(fc.x / 200000.0 + 0.3, 0.55, fc.y / 200000.0)).b;
+      float fy = fc.y + (bend - 0.5) * 10000.0;
+      float b1 = texture(uNoise3D, vec3(fc.x / 24000.0 + 0.5, 0.67, fy / 2800.0)).b;
+      float b2 = texture(uNoise3D, vec3(fc.x / 9000.0 + 0.2, 0.41, fy / 1000.0)).b;
+      float streak = smoothstep(0.44, 0.70, b1 + (b2 - 0.5) * 0.7 * (1.0 - lod2));
+      streak = mix(streak, 0.45, lod1);
+      // the band core is denser (heads), its fringe thins to single strands
+      veil += patch * streak * (0.5 + 0.5 * patch);
+    }
     // optically thin (od ~0.1-0.4): ice crystals scatter strongly forward (bright near the sun) plus a diffuse
     // share. Hazed with the physical optical depth to 9 km only: applyAerial's far-plane dissolve (33-57 km,
     // there to hide the terrain far plane) would erase a veil that sits at 30-90 km for any elevation under 17 deg
-    float ac = veil * 0.34 * cirrusAmount * smoothstep(0.015, 0.1, dir.y);
+    float ac = veil * 0.32 * cirrusAmount * smoothstep(0.015, 0.1, dir.y);
     if (ac > 0.001) {
       float cosSun = dot(dir, L);
       vec3 skyAmbC = mix(uZenithColor, uHazeColor, 0.5);
