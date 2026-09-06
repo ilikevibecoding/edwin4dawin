@@ -14,6 +14,7 @@ import { CascadeFitter, installCascadeDebug } from './render/shadows';
 import { buildRoadMeshes, buildRoadNetwork, createRoadLightUniforms, createRoadMaterial, type RoadSegment } from './world/roads';
 import { SW_DEBUG, Streets } from './world/streets';
 import { buildBridges, type BridgeBuild } from './world/bridges';
+import { buildHighway, type HighwayBuild } from './world/highway';
 import { buildCity, type CityBuild } from './world/city';
 import { MIRROR_DISTANCE, Vegetation } from './world/vegetation';
 import { Props } from './world/props';
@@ -67,6 +68,7 @@ export class Game {
   roads!: RoadSegment[];
   streets!: Streets;
   bridges!: BridgeBuild;
+  highway!: HighwayBuild;
   city!: CityBuild;
   vegetation!: Vegetation;
   props!: Props;
@@ -206,6 +208,12 @@ export class Game {
     // the instanced steelwork that is too fine to cast a shadow (railings, hangers, cable stays: ~130 k
     // triangles) is far below a texel of the mirror image as well
     this.reflection.excludeChildrenWhen(this.bridges.group, (m) => (m as THREE.InstancedMesh).isInstancedMesh === true && !m.castShadow);
+    // highway furniture (barriers, guardrail, lighting, gantries and signs along the highway / causeway classes);
+    // its thin steel (userData.noMirror) is far below a texel of the mirror image
+    this.highway = buildHighway(this.map, this.roads, (m) => this.registerLit(m));
+    this.highway.group.name = 'highway';
+    this.scene.add(this.highway.group);
+    this.reflection.excludeChildrenWhen(this.highway.group, (m) => m.userData.noMirror === true);
 
     await this.tick(progress, 'Building the city', 0.52);
     this.city = buildCity(this.map, network.blocksByDistrict, this.atmos.uniforms.uNight);
@@ -235,6 +243,7 @@ export class Game {
     this.reflection.excludeChildrenWhen(this.streets.group, () => true);
 
     await this.tick(progress, 'Dressing harbours and airports', 0.66);
+    // the highway / causeway lighting is part of the highway furniture (highway.ts); the streets plan lights the city roads
     this.props = new Props(this.map, this.bridges.lampPositions, this.city.markOccupied, this.streets.lamps);
     for (const m of this.props.materials) this.registerLit(m);
     this.props.group.name = 'props';
@@ -290,6 +299,7 @@ export class Game {
     if (dbg.has('nostreets')) this.streets.group.visible = false;
     if (dbg.has('swdebug')) SW_DEBUG.value = 1;
     if (dbg.has('nopools')) this.streets.poolsEnabled = false;
+    if (dbg.has('nohighway')) this.highway.group.visible = false;
     if (dbg.has('notraffic')) this.traffic.group.visible = false;
     if (dbg.has('nocloudshadow')) { this.post.cloudShadowStrength = 0; this.reflection.cloudShadowStrength = 0; }
     if (dbg.has('norefl')) this.reflection.enabled = false;
