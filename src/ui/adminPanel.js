@@ -192,6 +192,7 @@ export class AdminPanel {
     this._refreshQuality();
     this._refreshViewDistance();
     this._refreshMode();
+    this._refreshDialogue();
     this.lastStatusAt = 0;
     this.lastPerfAt = 0;
     this._refreshStatus();
@@ -215,7 +216,7 @@ export class AdminPanel {
     if (!this.isOpen) return;
     const now = performance.now();
     if (now - this.lastStatusAt >= STATUS_REFRESH_MS) { this.lastStatusAt = now; this._refreshStatus(); }
-    if (now - this.lastPerfAt >= PERF_REFRESH_MS) { this.lastPerfAt = now; this._refreshPerf(); }
+    if (now - this.lastPerfAt >= PERF_REFRESH_MS) { this.lastPerfAt = now; this._refreshPerf(); this._refreshDialogue(); }
   }
 
   // ---------------------------------------------------------------- construction
@@ -306,6 +307,30 @@ export class AdminPanel {
       h('p', { class: 'ap-help ap-one-line', text: 'Jump to a region; aerial spots start you flying (double-tap Space to land).' }),
       travelGrid);
 
+    // dialogue (src/npc/dialog/voice.js): subtitles on/off, voice on/off, dialogue volume. The settings belong to
+    // game.dialog (localStorage 'frontier-craft:dialogue'); the status line reads its audio report (voices available,
+    // text only, lines spoken / subtitled / unvoiced) and the cast counts.
+    this.dlgBtns = { subtitles: {}, voice: {} };
+    const dlgSeg = (key, labelId) => {
+      const g = h('div', { class: 'ap-seg ap-seg-2', id: 'ap-dlg-' + key, role: 'radiogroup', 'aria-labelledby': labelId });
+      for (const [v, text, title] of [[true, 'On', `${key === 'voice' ? 'Speak lines through the browser voices' : 'Show speaker name and line under the crosshair'}`], [false, 'Off', key === 'voice' ? 'Text only: subtitles and bubbles, no speech' : 'No subtitle overlay (bubbles stay)']]) {
+        const b = h('button', { class: 'ap-seg-btn', id: `ap-dlg-${key}-${v ? 'on' : 'off'}`, type: 'button', role: 'radio', 'aria-checked': 'false', text, title, onclick: () => this._setDialogue(key, v) });
+        this.dlgBtns[key][v ? 'on' : 'off'] = b;
+        g.append(b);
+      }
+      return g;
+    };
+    this.dlgVolume = h('input', { type: 'range', id: 'ap-dlg-volume', min: '0', max: '1', step: '0.05', value: '0.8', 'aria-label': 'Dialogue volume' });
+    this.dlgVolumeVal = h('output', { class: 'ap-val', id: 'ap-dlg-volume-value', for: 'ap-dlg-volume', text: '80%' });
+    this.dlgVolume.addEventListener('input', () => this._setDialogue('volume', Number(this.dlgVolume.value)));
+    this.dlgStatus = h('p', { class: 'ap-help', id: 'ap-dlg-status', text: 'Dialogue: n/a' });
+    const dialogueSection = h('section', { class: 'ap-section', id: 'ap-dialogue', 'aria-labelledby': 'ap-dialogue-title' },
+      h('div', { class: 'ap-section-head' }, h('h3', { id: 'ap-dialogue-title', text: 'Dialogue' })),
+      h('div', { class: 'ap-section-head ap-subhead' }, h('span', { class: 'ap-sub-title', id: 'ap-dlg-subtitles-title', text: 'Subtitles' }), dlgSeg('subtitles', 'ap-dlg-subtitles-title')),
+      h('div', { class: 'ap-section-head ap-subhead' }, h('span', { class: 'ap-sub-title', id: 'ap-dlg-voice-title', text: 'Voice' }), dlgSeg('voice', 'ap-dlg-voice-title')),
+      h('div', { class: 'ap-live', id: 'ap-dlg-volume-row' }, h('label', { for: 'ap-dlg-volume', text: 'Dialogue volume' }), this.dlgVolume, this.dlgVolumeVal),
+      this.dlgStatus);
+
     // developer footer: console command, save, counters, perf
     this.perfEl = h('span', { class: 'ap-summary-aside', id: 'ap-perf', text: 'perf: n/a' });
     this.copiedEl = h('span', { class: 'ap-copied', id: 'ap-copied', 'aria-live': 'polite' });
@@ -342,7 +367,7 @@ export class AdminPanel {
       pixelIcon('lock', 48),
       h('h3', { text: 'Administrator permission required' }),
       h('p', { text: 'Single player: remove ?admin=0 from the URL. Multiplayer: join with the admin token (?admin=<token>).' }));
-    this.main = h('div', { class: 'ap-main', id: 'ap-main' }, disasterSection, paramsSection, qualitySection, travelSection, this.developer);
+    this.main = h('div', { class: 'ap-main', id: 'ap-main' }, disasterSection, paramsSection, qualitySection, travelSection, dialogueSection, this.developer);
     this.body = h('div', { class: 'ap-body' }, this.denied, this.main);
 
     // dock: status strip + actions (always visible, never scrolls away)
@@ -765,6 +790,30 @@ export class AdminPanel {
     g.setMode(m);
     this._refreshMode();
     this._note(m === 'creative' ? 'Creative mode.' : 'Survival mode.');
+  }
+
+  // ---------------------------------------------------------------- dialogue (subtitles, voice, volume)
+  _setDialogue(key, value) {
+    const d = this.game.dialog;
+    if (!d || !d.speech) { this._note('Dialogue is not running yet (the city population starts after the world loads).'); return; }
+    d.speech.setSetting(key, value);
+    this._refreshDialogue();
+    if (key !== 'volume') this._note(`Dialogue ${key} ${value ? 'on' : 'off'}.`);
+  }
+  _refreshDialogue() {
+    if (!this.dlgStatus) return;
+    const d = this.game.dialog;
+    const s = d ? d.settings : null;
+    for (const key of ['subtitles', 'voice']) {
+      for (const [k, b] of Object.entries(this.dlgBtns[key])) { const on = !!s && s[key] === (k === 'on'); setAttr(b, 'aria-checked', String(on)); setAttr(b, 'tabindex', on ? '0' : '-1'); b.disabled = !s; }
+    }
+    this.dlgVolume.disabled = !s;
+    if (s && document.activeElement !== this.dlgVolume) this.dlgVolume.value = String(s.volume);
+    setText(this.dlgVolumeVal, s ? Math.round(s.volume * 100) + '%' : '\u2014');
+    if (!d) { setText(this.dlgStatus, 'Dialogue: n/a (the city population is not running)'); return; }
+    const r = d.audioReport();
+    const cast = this.game.cast && this.game.cast.stats ? this.game.cast.stats : null;
+    setText(this.dlgStatus, `${r.status} \u00b7 spoken ${r.spoken} \u00b7 subtitles ${r.subtitlesShown} \u00b7 unvoiced ${r.unvoiced}${r.suppressedByBudget ? ` \u00b7 budgeted ${r.suppressedByBudget}` : ''}${cast ? ` \u00b7 cast: ${cast.anchors} anchors, ${cast.staff} persistent staff` : ''}`);
   }
   _refreshMode() {
     if (!this.modeBtns) return;

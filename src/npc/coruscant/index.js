@@ -15,6 +15,7 @@ import { poseAt, jobErrand, sparks, isWelder, isGuard } from './jobs.js';
 import { Bubbles, lineOfSight } from './bubbles.js';
 import { TalkBox } from './talk.js';
 import { ambientLine, greetLine, directionsLine, priceLine, workLine, jobLine } from '../dialog/dialog.js';
+import { installCast } from '../cast/runtime.js';
 import { RNG } from '../../rng.js';
 import { purposeFor } from '../../coruscant/purposes.js';
 import { standHeight, isPassable } from '../pathfinding.js';
@@ -67,6 +68,9 @@ export class CoruscantPopulation {
     this.frame = 0; this.sparkT = 0;
     this.installHooks();
     console.log(`[coruscant] population: ${this.people.length} citizens in ${this.pool.stats.lots} lots (${this.pool.stats.street} street, ${this.pool.stats.droids} droids)`);
+    // the cast (cast/runtime.js): the thirteen anchors + persistent lot staff, their dialog banks and full models;
+    // null with ?cast=0 (the bench baseline) - every hook below is guarded
+    this.cast = installCast(this);
   }
 
   on(ev, fn) { (this.listeners[ev] = this.listeners[ev] || []).push(fn); }
@@ -139,15 +143,18 @@ export class CoruscantPopulation {
         this.despawn(n);
       }
     }
-    if (leave || this.live.length >= MAX_LIVE || !this.enabled) return;
-    // Candidates by distance to where they are right now. People inside buildings other than the player's own are
-    // pushed back (INDOOR_PENALTY) and capped, so the live budget goes to the streets and plazas the player can see
-    // (rubric row 4: >= 120 visible) while the building the player enters still fills with its staff.
+    if (leave || !this.enabled) return;
     const lotAt = this.playerLot(p);
-    if (lotAt != null) { const li = this.lots.get(lotAt); if (li) this.staffFloor(li, p.y); }
     // on a landmark's own street (the undercity strip's main street, a forecourt) the player is outdoors
     const playerLevel = this.nav.levelAt(p.x, p.y, p.z);
     const inLot = lotAt != null && !this.nav.walkable(playerLevel, p.x, p.z) ? lotAt : null;
+    // the cast anchors in range come first and outside the crowd budget (their own models, not crowd slots)
+    if (this.cast) this.cast.spawnCycle(p, inLot);
+    if (this.live.length >= MAX_LIVE) return;
+    // Candidates by distance to where they are right now. People inside buildings other than the player's own are
+    // pushed back (INDOOR_PENALTY) and capped, so the live budget goes to the streets and plazas the player can see
+    // (rubric row 4: >= 120 visible) while the building the player enters still fills with its staff.
+    if (lotAt != null) { const li = this.lots.get(lotAt); if (li) this.staffFloor(li, p.y); }
     const cands = [];
     let indoorLive = 0, ownLive = 0;
     for (const n of this.live) { if (n.lot == null) continue; if (n.lot === inLot) ownLive++; else indoorLive++; }
@@ -158,7 +165,7 @@ export class CoruscantPopulation {
     // a few per cycle); the schedule puts them back the next time the player comes near. Nobody vanishes in view.
     if (this.live.length >= MAX_LIVE - SPAWN_PER_CYCLE && indoorLive > indoorMax) {
       const unseen = [];
-      for (const n of this.live) if (n.lot != null && n.lot !== inLot && n.state === 'at' && this.tickCount - n.spawnedAt > RECYCLE_AGE) unseen.push(n);
+      for (const n of this.live) if (n.lot != null && n.lot !== inLot && n.state === 'at' && this.tickCount - n.spawnedAt > RECYCLE_AGE && !n.person.cast) unseen.push(n);   // the cast is never recycled
       unseen.sort((a, b) => (b.pos.x - p.x) ** 2 + (b.pos.z - p.z) ** 2 - (a.pos.x - p.x) ** 2 - (a.pos.z - p.z) ** 2);
       for (let i = 0; i < unseen.length && i < RECYCLE_PER_CYCLE && indoorLive > indoorMax; i++) { this.despawn(unseen[i]); indoorLive--; this.stats.recycled++; }
     }
@@ -234,8 +241,10 @@ export class CoruscantPopulation {
       else this.skip.set(person.id, this.tickCount + 40);
       return false;
     }
-    const slot = this.crowd.alloc(this.crowd.bodyFor(person.archetype));
-    if (!slot) return false;
+    // a cast anchor is a full model of their own (cast/actors.js), never a crowd instance
+    const actor = this.cast ? this.cast.spawnActor(npc) : null;
+    const slot = actor ? null : this.crowd.alloc(this.crowd.bodyFor(person.archetype));
+    if (!slot && !actor) return false;
     npc.slot = slot;
     npc.skin = this.crowd.skinIndex(person.archetype, person.variant, person.female);
     npc.setPos(place.x + 0.5, place.h, place.z + 0.5);
@@ -276,6 +285,7 @@ export class CoruscantPopulation {
     this.paths.cancel(npc);
     this.vacate(npc.spot, npc);
     if (npc.slot) this.crowd.release(npc.slot);
+    if (npc.actor && this.cast) this.cast.despawnActor(npc);
     const i = this.live.indexOf(npc);
     if (i >= 0) this.live.splice(i, 1);
     this.liveByPerson.delete(npc.person.id);
@@ -649,6 +659,8 @@ export class CoruscantPopulation {
     if (!best) return;
     const vendor = VENDOR_JOBS.has(best.person.job) && best.act === 'work';
     best.chatterT = (vendor ? 9 : 16) + this.rng.next() * (vendor ? 10 : 24);
+    // persistent people (the cast, lot owners and key staff) speak from their own banks; a talk box nearby silences all
+    if (this.cast && this.cast.chatter(best, bd)) return;
     const ctx = { hour: this.hour, district: best.person.district, disaster: this.disaster ? this.disaster.kind : (this.watching ? 'sky' : null), player: this.playerCtx.vandalT > 0 && this.rng.next() < 0.5 ? 'vandal' : (this.player.flying && !this.player.onGround && this.rng.next() < 0.4 ? 'flying' : null), vendor, working: best.act === 'work' };
     let line = null;
     // vendor call-outs quote the stall's own prices (purposeFor().sells) part of the time
@@ -688,6 +700,7 @@ export class CoruscantPopulation {
   talk(npc) {
     if (npc.talkCooldown > 0 && this.talkBox.npc === npc) return;
     npc.talkCooldown = 2;
+    if (this.cast && this.cast.talk(npc)) return;   // a persistent person: their own bank, history, speech + subtitles
     this.stats.talks++;
     const p = this.player.pos;
     npc.face(p.x, p.z);
@@ -734,7 +747,7 @@ export class CoruscantPopulation {
   }
   onTalkEnd(npc) { npc.lookAt = null; npc.talkingT = 0; if (npc.spot && npc.spot.yaw != null && npc.state === 'at') npc.targetYaw = npc.spot.yaw; }
   poke(npc) {
-    if (npc.talkCooldown <= 0) { npc.talkCooldown = 1.5; this.speak(npc, ambientLine(npc.voice, { player: 'poke' }), true); }
+    if (npc.talkCooldown <= 0) { npc.talkCooldown = 1.5; if (!(this.cast && this.cast.poke(npc))) this.speak(npc, ambientLine(npc.voice, { player: 'poke' }), true); }
     const p = this.player.pos;
     const dx = npc.pos.x - p.x, dz = npc.pos.z - p.z, d = Math.hypot(dx, dz) || 1;
     const nx = npc.pos.x + (dx / d) * 0.4, nz = npc.pos.z + (dz / d) * 0.4;
@@ -793,7 +806,7 @@ export class CoruscantPopulation {
       const px = n.prev.x + (n.pos.x - n.prev.x) * alpha, py = n.prev.y + (n.pos.y - n.prev.y) * alpha, pz = n.prev.z + (n.pos.z - n.prev.z) * alpha;
       n.rx = px; n.ry = py; n.rz = pz;
       const dx = px - cp.x, dz = pz - cp.z, d2 = dx * dx + dz * dz;
-      if (n.hidden || d2 > 140 * 140) { this.crowd.set(n.slot, { hidden: true }); continue; }
+      if (n.hidden || d2 > 140 * 140) { if (n.slot) this.crowd.set(n.slot, { hidden: true }); else if (n.actor) this.cast.hideActor(n); continue; }
       // turning
       let dy = n.targetYaw - n.yaw;
       while (dy > Math.PI) dy -= Math.PI * 2; while (dy < -Math.PI) dy += Math.PI * 2;
@@ -819,12 +832,14 @@ export class CoruscantPopulation {
       if (n.lying) { pitch = -Math.PI / 2; y = py + 0.55; x = px + Math.sin(n.yaw) * 0.9; z = pz + Math.cos(n.yaw) * 0.9; }
       else if (n.sitting) y = py - 0.42 * n.scale;
       const walking = n.state === 'walk';
-      this.crowd.set(n.slot, { x, y, z, yaw: n.yaw, pitch, scale: n.scale, skin: n.skin, mode: n.talkingT > 0 && !walking && !n.sitting && !n.lying ? MODE.TALKING : n.mode, phase: n.phase, speed: walking ? n.speed * 1.45 : n.animSpeed, amp: n.amp, headYaw: n.headYaw, headPitch: n.headPitch, sky: n.sky, blk: n.blk, blink: n.blink });
+      const v = { x, y, z, yaw: n.yaw, pitch, scale: n.scale, skin: n.skin, mode: n.talkingT > 0 && !walking && !n.sitting && !n.lying ? MODE.TALKING : n.mode, phase: n.phase, speed: walking ? n.speed * 1.45 : n.animSpeed, amp: n.amp, headYaw: n.headYaw, headPitch: n.headPitch, sky: n.sky, blk: n.blk, blink: n.blink };
+      if (n.slot) this.crowd.set(n.slot, v); else if (n.actor) this.cast.setActor(n, v, d2);
       // welding sparks near the player
       if (doSparks && n.mode === MODE.WELDING && n.state === 'at' && d2 < 48 * 48 && isWelder(n.person.job)) sparks(this.game.particles, n, () => this.rng.next());
     }
     this.bubbles.update(this.time, camera);
     this.crowd.update(this.time);
+    if (this.cast) this.cast.update(dt, this.time);
     this.stats.updateMs = this.stats.updateMs * 0.95 + (performance.now() - t0) * 0.05;
   }
 
@@ -867,12 +882,14 @@ export class CoruscantPopulation {
       spawned: s.spawned, despawned: s.despawned, recycled: s.recycled, stays: s.stays, teleports: s.teleports, stranded: s.stranded || 0, bubbles: s.bubbles, talks: s.talks, unloadedWaits: s.unloadedWaits, unplaceable: s.unplaceable,
       paths: { ...this.paths.stats, ms: +this.paths.stats.ms.toFixed(1), pending: this.paths.pending }, coarse: { ...this.nav.stats }, drawCalls: this.crowd.drawCalls,
       cpu: { tickMs: +s.tickMs.toFixed(3), updateMs: +s.updateMs.toFixed(3) },
+      cast: this.cast ? this.cast.census() : null,
     };
   }
 
   dispose() {
     for (const n of [...this.live]) this.despawn(n);
     this.crowd.dispose(); this.bubbles.dispose();
+    if (this.cast) this.cast.dispose();
   }
 }
 
