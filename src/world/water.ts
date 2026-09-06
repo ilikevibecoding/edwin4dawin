@@ -166,7 +166,7 @@ ${GLSL_SKY}
 // is not part of this term: the glitter is its reflection.
 // Clouds: the reflected lobe's centre ray meets the cloud base plane where the 2D cloud field (the very field the
 // dome's raymarch and the ground shadows use) says whether a cloud hangs there, so a cumulus is mirrored under
-// itself as the grey of a lit base, hazed by the path up to it; the field's edge ramp is widened by the lobe's
+// itself in the colour the dome lights a base with, hazed by the path up to it; the field's edge ramp is widened by the lobe's
 // footprint on the base plane (the reflection of a cloud in a chop is soft). One field evaluation per pixel,
 // skipped where the sky term weighs little (steep view, Fresnel 'fw' small) or the ray is nearly horizontal
 // (the haze band the analytic sky already carries). 'fw' is the Fresnel weight of the sky term.
@@ -183,9 +183,18 @@ vec3 skyReflection(vec3 R, float mss, vec3 P, float fw) {
   // mirrored as the same soft band the environment probe carries for the IBL, brightest under a closed ceiling
   float deck = smoothstep(0.45, 0.75, uCloudCoverage);
   float cov = (smoothstep(0.2, 0.95, uCloudCoverage) * 0.7 + deck * 0.25) * smoothstep(0.0, 0.3, e0);
-  // a lone cumulus base is a mid grey, a little darker than the horizon haze it hangs over (0.8 of its luminance);
-  // a closed deck's underside is lit through the whole sheet and brighter (1.9)
-  vec3 cloudCol = vec3(dot(uHorizonColor, vec3(0.2126, 0.7152, 0.0722))) * mix(0.8, 1.9, deck);
+  // The dome lights a base with the sky's ambient occluded by the column above it, the bounce off the sunlit world
+  // and the sun that leaks through (sky.ts: skyAmb * aoSky + gndAmb + lightCol * lt); the same terms at the mean
+  // values of a lone cumulus base (aoSky 0.4; lt 0.13 under a high sun, 0.5 at a low one, when the sun reaches the
+  // bases from below) give the mirrored base the colour the dome gives it: a light neutral grey by day (brighter
+  // than the horizon sky, as the visible bases are), salmon at sunset, not a grey cut-out. A closed deck's underside
+  // is lit through the whole sheet: the horizon luminance x 1.9, the band the environment probe carried for it.
+  float nightMix = smoothstep(0.02, -0.08, uSunDir.y);
+  float lowSun = (1.0 - smoothstep(0.04, 0.3, uSunDir.y)) * (1.0 - nightMix);
+  vec3 lightCol = mix(uSunColor * 2.9, vec3(0.7, 0.78, 0.95) * 0.028, nightMix);
+  vec3 baseCol = lightCol * mix(0.13, 0.5, lowSun)
+               + (mix(uZenithColor, uHazeColor, 0.5) * ((0.95 - 0.25 * lowSun) * 0.4) + uSunHazeColor * (0.32 * lowSun)) * 0.95;
+  vec3 cloudCol = mix(baseCol, vec3(dot(uHorizonColor, vec3(0.2126, 0.7152, 0.0722))) * 1.9, deck);
   if (uCloudCoverage > 0.03 && e0 > 0.04 && fw > 0.06) {
     float dc = (uCloudBase - P.y) / sin(e0); // metres along the reflected ray to the cloud base
     vec2 cs = P.xz + az * (cos(e0) * dc) + uCloudWind;
@@ -910,7 +919,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v15-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v16-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 
