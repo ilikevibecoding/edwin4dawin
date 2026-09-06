@@ -54,9 +54,11 @@ export function pickCrownStyle(lot, family, budget) {
   const table = WEIGHTS[family] || WEIGHTS.slab;
   const seed = (lot.seed ?? 1) >>> 0;
   const tall = (lot.height ?? 0) >= 90;
+  // a landing deck needs the core plus a >= 9-cell landing beside it on the top floor: narrow lots never manage it
+  const deckOk = Math.min(lot.w ?? 99, lot.d ?? 99) >= 17;
   let total = 0;
   const cands = [];
-  for (const k in table) { const w = table[k] * (k === 'deck' && tall ? 1.7 : 1); cands.push([k, w]); total += w; }
+  for (const k in table) { if (k === 'deck' && !deckOk) continue; const w = table[k] * (k === 'deck' && tall ? 1.7 : 1); cands.push([k, w]); total += w; }
   let r = hash2(seed, 0x51, 0xC0DE) * total;
   let style = cands[cands.length - 1][0];
   for (const [k, w] of cands) { r -= w; if (r <= 0) { style = k; break; } }
@@ -72,15 +74,16 @@ export function crownProfile(lot, family, ground = GROUND) {
   const style = pickCrownStyle(lot, family, H);
   const small = Math.min(lot.w, lot.d);
   let height = 5, taper = 0;
+  // (the constants mirror buildCrown / paintCap: shell tiers are 5 high, then the cap's own layers)
   switch (style) {
-    case 'tiered': { const K = Math.min(3, Math.floor((H - 6) / 5)); height = 5 * K + 6; taper = 0.35; break; }
-    case 'dome': height = 5 + Math.min(H - 9, Math.max(3, Math.round(small * 0.22))) + 4; taper = 0.3; break;
-    case 'antenna': height = 5 + Math.min(H - 6, 16); taper = 0; break;
-    case 'halo': height = 5; break;
-    case 'blade': height = 5 + Math.min(H - 5, 18); taper = 0.45; break;
-    case 'deck': height = 13; break;
+    case 'tiered': { const K = Math.min(3, Math.floor((H - 6) / 5)); height = 5 * K + 8; taper = 0.35; break; }
+    case 'dome': height = 5 + Math.min(H - 9, Math.max(3, Math.round(small * 0.28))) + 4; taper = 0.3; break;
+    case 'antenna': height = 7 + Math.min(H - 1, 16); taper = 0.8; break;     // masts: a thin silhouette
+    case 'halo': height = 5 + Math.min(H - 5, 9); break;
+    case 'blade': height = 6 + Math.min(H - 1, 18); taper = 0.6; break;
+    case 'deck': height = 18; break;
     case 'ziggurat': height = 5 + 2 * Math.min(4, Math.floor((H - 8) / 2)) + 3; taper = 0.4; break;
-    case 'spire': height = Math.min(H, 10 + Math.max(3, Math.round(small * 0.18)) + 4); taper = 0.45; break;
+    case 'spire': height = Math.min(H, 13 + Math.max(3, Math.round(small * 0.18)) + 4); taper = 0.45; break;
     case 'needle': height = Math.min(H, 25); taper = 0.75; break;
     case 'spinecap': height = Math.min(H - 1, 15); taper = 0.9; break;   // the 3x3 spine column above the slabs
     default: height = 5;

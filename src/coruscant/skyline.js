@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { SHARED } from '../entityMaterial.js';
 import { LEVELS, PLATEAU } from './layout.js';
 import { blueprintFor } from './buildings.js';
+import { lotCrown } from './towers/index.js';
 
 const INSET = 0.35;
 
@@ -110,14 +111,23 @@ export function buildSkyline(layout) {
   const lots = layout.lots.filter((l) => l.kind === 'tower');
   const g0 = LEVELS.ground + 1;
   const boxes = lots.map((l) => ({ x0: l.x0 + INSET, x1: l.x1 - INSET, z0: l.z0 + INSET, z1: l.z1 - INSET, y1: g0 + l.height - 0.5, id: l.id }));
+  // rubric 11 crowns (towers/index.js lotCrown = the registry's crown profile, no blueprint needed): a frustum on
+  // top of the box, its base inset by half the taper and its top by the full taper, so spires and needles read as
+  // tapering silhouettes from afar while halos and decks stay boxy
+  for (const l of lots) {
+    const c = lotCrown(l, LEVELS.ground);
+    if (c.height > 0) boxes.push({ x0: l.x0 + INSET, x1: l.x1 - INSET, z0: l.z0 + INSET, z1: l.z1 - INSET, y0: g0 + l.height - 0.5, y1: g0 + l.height + c.height - 0.5, id: l.id, taper: c.taper });
+  }
   for (const b of landmarkBoxes(layout)) boxes.push(b);
   const n = boxes.length;
   const pos = new Float32Array(n * 24 * 3), seed = new Float32Array(n * 24), ctr = new Float32Array(n * 24 * 2), tnt = new Float32Array(n * 24 * 3), idx = new Uint32Array(n * 36);
   let pi = 0, si = 0, ci = 0, ti = 0, ii = 0, vbase = 0;
   for (const l of boxes) {
-    const x0 = l.x0, x1 = l.x1, z0 = l.z0, z1 = l.z1, y0 = g0, y1 = l.y1;
+    const x0 = l.x0, x1 = l.x1, z0 = l.z0, z1 = l.z1, y0 = l.y0 ?? g0, y1 = l.y1;
     const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
-    const c = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
+    // crown frusta: base corners inset by taper / 2, top corners by taper (fractions of the half extents)
+    const tp = l.taper || 0, bx = (x1 - x0) / 2 * tp * 0.5, bz = (z1 - z0) / 2 * tp * 0.5, ux = (x1 - x0) / 2 * tp, uz = (z1 - z0) / 2 * tp;
+    const c = [[x0 + bx, y0, z0 + bz], [x1 - bx, y0, z0 + bz], [x1 - ux, y1, z0 + uz], [x0 + ux, y1, z0 + uz], [x0 + bx, y0, z1 - bz], [x1 - bx, y0, z1 - bz], [x1 - ux, y1, z1 - uz], [x0 + ux, y1, z1 - uz]];
     // 6 faces x 4 verts (separate verts so derivatives give flat normals)
     const faces = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]];
     for (const f of faces) {
