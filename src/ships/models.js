@@ -1,136 +1,42 @@
-// Voxel ship designs (Minecraft-style, original, genre-inspired) and their instanced rendering.
+// Voxel ship models (original, Clone Wars idiom) and their instanced rendering.
 //
-// Every model is a VoxelGrid: width along x, height along y, length along z with the NOSE at z = 0, so a ship's
-// forward vector is -z in model space (the three.js / player convention: yaw 0 looks down -z). Grid y = 0 is the
-// landing-gear contact height; the geometry is translated so the mesh origin sits at the centre of the footprint on
-// the gear line: setting an instance matrix to (padCentre, padTop, yaw) parks the ship on the pad.
+// Every model comes out of the ShipBuilder (see builder.js): width along x, height along y, length along z with the
+// NOSE at z = 0, so a ship's forward vector is -z in model space (yaw 0 looks down -z). Grid y = 0 is the landing-gear
+// contact plane; the geometry is translated so the mesh origin sits at the centre of the footprint on the gear line:
+// an instance matrix of (padCentre, padTop, yaw) parks the ship on the pad.
 //
 // Rendering: one geometry + one InstancedMesh per model type (one draw call per type for any number of ships).
-// Per-instance light (sky, block, thrust) rides in an instanced vec3 attribute, and faces of emissive blocks
-// (blue glow panels = engines, glow panels = cabin lights) carry a per-vertex flag so they glow at night and
-// pulse with thrust.
+// Per-vertex: shade, emit code (lamp / nav strobe / engine / landing light), the model's own lamp light and sky
+// exposure (flood-filled once, so cabins are lit by their lamps and dark hulls stay dark inside), and the part index
+// of animated parts (wings, S-foils, ramps, doors, gear). Per-instance: (sky, block, thrust, phase) and the animation
+// state (gear, class, door, lights); the vertex shader poses every part from the state, so far ships fold their wings
+// and lower their ramps inside the single instanced draw call.
 import * as THREE from 'three';
 import { SHADING_PARS, bindShading } from '../render/shading.js';
-import { B, BLOCKS } from '../blocks.js';
+import { BLOCKS, SHAPE } from '../blocks.js';
 import { tileUV } from '../textures.js';
 import { SHARED } from '../entityMaterial.js';
-import { VoxelGrid } from '../vehicles/voxelMesh.js';
+import { EMIT, emitCodeOf } from './builder.js';
+import { lightFreighter, shuttle, bulkFreighter, cruiser, airBus } from './designs_transport.js';
+import { gunship, starfighter, taxi, policeSpeeder } from './designs_small.js';
 
-const D = B.DURASTEEL, DD = B.DURASTEEL_DARK, CH = B.CHROME, RED = B.PANEL_RED, GL = B.STEEL_GLASS, ENG = B.GLOW_PANEL_BLUE;
-const BLK = B.PANEL_BLACK, HP = B.HULL_PLATE, VENT = B.VENT, LAMP = B.GLOW_PANEL;
-
-// ------------------------------------------------------------------------------------------------ designs
-// A boxy light freighter: slab hull, offset-forward cockpit, two cargo pods slung on the flanks, triple nozzles.
-function freighter() {
-  const g = new VoxelGrid(11, 8, 22);
-  g.fill(3, 1, 3, 7, 1, 18, DD);                      // keel (narrower bottom)
-  g.fill(2, 2, 3, 8, 3, 18, D);                       // main hull, bevelled: wide middle rows
-  g.fill(2, 2, 3, 2, 2, 18, DD); g.fill(8, 2, 3, 8, 2, 18, DD);                 // dark cheat line along both flanks
-  for (const z of [5, 6, 15, 16]) { g.set(2, 2, z, RED); g.set(8, 2, z, RED); }  // red flank markings
-  g.fill(3, 4, 4, 7, 4, 17, D);                       // upper hull (narrower)
-  g.fill(4, 5, 6, 6, 5, 16, HP);                      // raised spine plating
-  for (const z of [8, 13]) { g.set(4, 5, z, VENT); g.set(6, 5, z, VENT); }
-  g.fill(3, 2, 1, 7, 3, 2, D); g.fill(4, 2, 0, 6, 3, 0, DD); g.set(5, 3, 0, GL); // tapered nose with sensor
-  g.fill(3, 1, 2, 7, 1, 2, DD);
-  g.fill(4, 4, 1, 6, 6, 3, DD);                       // raised cockpit
-  g.fill(4, 5, 1, 6, 6, 1, GL); g.set(4, 5, 2, GL); g.set(6, 5, 2, GL); g.set(4, 6, 2, GL); g.set(6, 6, 2, GL);
-  g.fill(4, 7, 1, 6, 7, 3, D);                        // cockpit roof
-  for (const x of [1, 9]) {                           // cargo pods: rounded cross-section (3-high core, 1-high outer rib)
-    const out = x === 1 ? 0 : 10;
-    g.fill(x, 1, 6, x, 3, 16, DD);
-    g.set(x, 1, 6, CH); g.set(x, 2, 6, CH); g.set(x, 3, 6, CH); g.set(x, 1, 16, CH); g.set(x, 2, 16, CH); g.set(x, 3, 16, CH);
-    g.fill(out, 2, 7, out, 2, 15, CH); g.set(out, 2, 10, RED); g.set(out, 2, 11, RED);
-    g.set(x, 4, 9, DD); g.set(x, 4, 13, DD);                                       // pod mounts
-  }
-  g.set(5, 6, 12, CH); g.set(5, 7, 12, LAMP);         // dorsal mast + beacon
-  g.fill(3, 1, 19, 7, 4, 20, DD); g.fill(4, 5, 18, 6, 5, 20, DD);      // engine block
-  g.fill(3, 1, 21, 7, 4, 21, CH);
-  for (const [x, y] of [[3, 2], [3, 3], [4, 2], [4, 3], [6, 2], [6, 3], [7, 2], [7, 3]]) g.set(x, y, 21, ENG);
-  g.set(5, 5, 21, ENG);
-  for (const [x, z] of [[3, 5], [7, 5], [3, 16], [7, 16]]) g.set(x, 0, z, DD); // landing legs
-  return { name: 'freighter', grid: g, speed: 22, engineHz: 52, gain: 1.0 };
-}
-
-// A passenger shuttle: tall narrow fuselage with a wrap-around canopy, a swept dorsal fin and wings folded up for
-// landing (three plates per side stepping up and outward, tapering to a chrome tip).
-function shuttle() {
-  const g = new VoxelGrid(9, 12, 18);
-  g.fill(3, 2, 2, 5, 5, 14, D);                       // fuselage
-  g.fill(4, 6, 4, 4, 6, 13, DD);                      // dorsal ridge
-  g.fill(3, 3, 1, 5, 4, 1, DD); g.set(4, 3, 0, DD);   // nose
-  g.fill(3, 5, 2, 5, 5, 3, GL); g.set(4, 6, 3, GL); g.set(4, 4, 1, GL);   // wrap-around canopy
-  for (const z of [5, 7, 9, 11]) { g.set(3, 4, z, GL); g.set(5, 4, z, GL); } // cabin windows
-  g.fill(4, 1, 3, 4, 1, 13, DD);                      // keel
-  for (const side of [0, 1]) {                        // folded wings
-    const xs = side ? [6, 7, 8] : [2, 1, 0];
-    g.fill(xs[0], 1, 4, xs[0], 3, 14, D); g.fill(xs[0], 1, 4, xs[0], 2, 4, DD); g.set(xs[0], 3, 14, DD);
-    g.fill(xs[1], 3, 5, xs[1], 6, 13, D); g.fill(xs[1], 4, 5, xs[1], 5, 5, DD); g.set(xs[1], 4, 9, RED); g.set(xs[1], 5, 9, RED);
-    g.fill(xs[2], 6, 6, xs[2], 9, 12, D); g.fill(xs[2], 7, 6, xs[2], 8, 6, DD); g.set(xs[2], 9, 12, DD);
-    g.fill(xs[2], 10, 7, xs[2], 10, 11, CH);          // wing tip
-  }
-  g.fill(4, 7, 8, 4, 8, 13, D); g.fill(4, 9, 10, 4, 10, 13, D); g.set(4, 11, 12, D); // swept dorsal fin
-  g.set(4, 7, 8, CH); g.set(4, 9, 10, CH); g.set(4, 11, 13, LAMP);
-  g.fill(3, 2, 15, 5, 4, 16, DD);                     // engines
-  g.fill(3, 2, 17, 5, 4, 17, CH); g.set(3, 3, 17, ENG); g.set(4, 3, 17, ENG); g.set(5, 3, 17, ENG);
-  g.set(4, 0, 3, DD); g.set(3, 0, 12, DD); g.set(5, 0, 12, DD); // tripod gear
-  return { name: 'shuttle', grid: g, speed: 30, engineHz: 88, gain: 0.8 };
-}
-
-// A small open-cockpit airspeeder: red body, two side repulsor pods, two seats behind a windscreen.
-function airspeeder() {
-  const g = new VoxelGrid(5, 4, 10);
-  g.fill(1, 1, 1, 3, 2, 8, RED);                      // body
-  g.set(2, 1, 0, RED); g.fill(1, 2, 0, 3, 2, 0, CH);  // nose + chrome grille
-  g.fill(1, 2, 3, 3, 2, 5, 0);                        // cockpit well (open)
-  g.fill(1, 1, 3, 3, 1, 5, BLK);                      // cockpit floor
-  g.set(1, 2, 5, BLK); g.set(3, 2, 5, BLK);           // two seats
-  g.set(1, 3, 6, BLK); g.set(3, 3, 6, BLK);           // headrests
-  g.fill(1, 3, 2, 3, 3, 2, GL);                       // windscreen
-  g.fill(1, 2, 6, 3, 2, 8, DD); g.set(2, 2, 7, VENT); // engine cowl
-  for (const x of [0, 4]) {                           // side pods
-    g.fill(x, 1, 5, x, 2, 8, CH); g.set(x, 1, 4, DD); g.set(x, 2, 4, DD);
-    g.set(x, 1, 9, ENG); g.set(x, 2, 9, ENG);
-  }
-  g.set(2, 0, 2, DD); g.set(2, 0, 7, DD);             // repulsor pads
-  return { name: 'airspeeder', grid: g, speed: 40, engineHz: 170, gain: 0.5 };
-}
-
-// A gunship-like troop transport: hollow bay with open side doors, stub wing with tip pods, twin tail booms.
-function gunship() {
-  const g = new VoxelGrid(9, 7, 17);
-  g.fill(1, 1, 4, 7, 4, 12, D);                       // troop bay
-  g.fill(2, 2, 5, 6, 3, 11, 0);                       // hollow interior
-  g.fill(4, 2, 6, 4, 2, 10, BLK);                     // central bench
-  g.set(4, 4, 8, LAMP);                               // bay light
-  g.fill(1, 2, 6, 1, 3, 10, 0); g.fill(7, 2, 6, 7, 3, 10, 0);   // open side doors
-  g.fill(1, 5, 6, 1, 5, 10, DD); g.fill(7, 5, 6, 7, 5, 10, DD); // door panels slid up
-  g.fill(1, 4, 5, 7, 4, 5, RED); g.fill(1, 4, 11, 7, 4, 11, RED); // roof stripes
-  g.fill(3, 2, 1, 5, 4, 3, DD); g.fill(3, 1, 1, 5, 1, 3, DD);  // cockpit
-  g.fill(3, 3, 0, 5, 4, 1, GL); g.set(4, 2, 0, DD); g.fill(3, 2, 0, 5, 2, 0, DD); // canopy + nose
-  g.fill(0, 5, 7, 8, 5, 9, D);                        // stub wing
-  for (const x of [0, 8]) { g.fill(x, 5, 6, x, 6, 10, DD); g.set(x, 5, 5, CH); g.set(x, 6, 6, RED); g.set(x, 5, 11, ENG); }
-  g.set(2, 5, 11, GL); g.set(6, 5, 11, GL);           // turret bubbles
-  g.fill(2, 2, 13, 3, 3, 15, DD); g.fill(5, 2, 13, 6, 3, 15, DD); // tail booms
-  g.fill(2, 4, 13, 2, 5, 15, D); g.fill(6, 4, 13, 6, 5, 15, D);   // tail fins
-  g.fill(3, 4, 14, 5, 4, 14, D);                                  // tailplane
-  for (const [x, y] of [[2, 2], [2, 3], [3, 2], [3, 3], [5, 2], [5, 3], [6, 2], [6, 3]]) g.set(x, y, 16, ENG);
-  for (const [x, z] of [[2, 5], [6, 5], [2, 11], [6, 11]]) g.set(x, 0, z, DD); // gear
-  return { name: 'gunship', grid: g, speed: 34, engineHz: 66, gain: 0.9 };
-}
+export const MAX_PARTS = 16;
 
 let MODELS = null;
-// Model list (order = type index used by the traffic system). Built once, lazily.
+// Model list (order = type index used by the traffic system and by the spaceport's parked-ship stamps: 0 must fit
+// the maintenance hangar, 2 is the small speeder on the workshop lift). Built once, lazily.
 export function shipModels() {
   if (!MODELS) {
-    MODELS = [freighter(), shuttle(), airspeeder(), gunship()];
-    for (const m of MODELS) { m.w = m.grid.w; m.h = m.grid.h; m.d = m.grid.d; m.length = m.grid.d; }
+    MODELS = [lightFreighter(), shuttle(), taxi(), gunship(), bulkFreighter(), cruiser(), starfighter(), policeSpeeder(), airBus()];
+    MODELS.forEach((m, i) => { m.index = i; });
   }
   return MODELS;
 }
+export function shipModelByName(name) { return shipModels().find((m) => m.name === name) || null; }
 
-// Writes a model's blocks into the world through `set(x, y, z, id)` with the footprint centre on (cx, cz), gear on
-// y = cy, rotated by `quarterTurns` (0 = nose toward -z, 1 = nose toward -x, 2 = +z, 3 = +x). Used to park a
-// ship as blocks (maintenance hangar). Deterministic.
+// Writes a model's blocks (landed pose, doors open) into the world through `set(x, y, z, id)` with the footprint
+// centre on (cx, cz), gear on y = cy, rotated by `quarterTurns` (0 = nose toward -z, 1 = nose toward -x, 2 = +z,
+// 3 = +x). Used to park a ship as blocks (maintenance hangar). Deterministic.
 export function stampShip(model, set, cx, cy, cz, quarterTurns = 0) {
   const g = model.grid, hx = g.w >> 1, hz = g.d >> 1;
   for (let x = 0; x < g.w; x++) for (let y = 0; y < g.h; y++) for (let z = 0; z < g.d; z++) {
@@ -142,66 +48,215 @@ export function stampShip(model, set, cx, cy, cz, quarterTurns = 0) {
   }
 }
 
+// ------------------------------------------------------------------------------------------------ lighting
+// Block light from the model's own emissive cells and sky exposure from the grid boundary, both flood-filled through
+// non-opaque cells with -1 per step (Minecraft rule). Returns { block: Uint8Array, sky: Uint8Array } over the grid.
+export function modelLight(model) {
+  const g = model.grid, { w, h, d } = g, n = w * h * d;
+  const block = new Uint8Array(n), sky = new Uint8Array(n);
+  const idx = (x, y, z) => (x * d + z) * h + y;
+  const passable = (x, y, z) => { const id = g.get(x, y, z); return id === 0 || !BLOCKS[id].opaque; };
+  const flood = (arr, seeds) => {
+    let q = seeds;
+    while (q.length) {
+      const next = [];
+      for (const [x, y, z] of q) {
+        const l = arr[idx(x, y, z)] - 1;
+        if (l <= 0) continue;
+        for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+          const nx = x + dx, ny = y + dy, nz = z + dz;
+          if (nx < 0 || ny < 0 || nz < 0 || nx >= w || ny >= h || nz >= d || !passable(nx, ny, nz)) continue;
+          const i = idx(nx, ny, nz);
+          if (arr[i] >= l) continue;
+          arr[i] = l; next.push([nx, ny, nz]);
+        }
+      }
+      q = next;
+    }
+  };
+  const seeds = [];
+  for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) for (let z = 0; z < d; z++) {
+    const id = g.get(x, y, z);
+    if (!id) continue;
+    const code = emitCodeOf(model, x, y, z, id);
+    let e = BLOCKS[id].emit;
+    if (code === EMIT.ENGINE) e = Math.max(e, 12); else if (code === EMIT.NAV || code === EMIT.LANDING) e = Math.min(e, 4);
+    if (e > 0) {
+      const i = idx(x, y, z);
+      // the emitter lights its neighbours: seed them at e (the source cell itself is opaque for the fill)
+      block[i] = Math.max(block[i], e);
+      for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+        const nx = x + dx, ny = y + dy, nz = z + dz;
+        if (nx < 0 || ny < 0 || nz < 0 || nx >= w || ny >= h || nz >= d || !passable(nx, ny, nz)) continue;
+        const j = idx(nx, ny, nz);
+        if (block[j] < e) { block[j] = e; seeds.push([nx, ny, nz]); }
+      }
+    }
+  }
+  flood(block, seeds);
+  const skySeeds = [];
+  for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) for (let z = 0; z < d; z++) {
+    if ((x === 0 || y === 0 || z === 0 || x === w - 1 || y === h - 1 || z === d - 1) && passable(x, y, z)) { sky[idx(x, y, z)] = 15; skySeeds.push([x, y, z]); }
+  }
+  // outside air keeps full sky: propagate at 15 through the outside first (no falloff), then fall off inside
+  {
+    let q = skySeeds;
+    const seen = new Uint8Array(n);
+    for (const [x, y, z] of q) seen[idx(x, y, z)] = 1;
+    while (q.length) {
+      const next = [];
+      for (const [x, y, z] of q) for (const [dx, dy, dz] of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+        const nx = x + dx, ny = y + dy, nz = z + dz;
+        if (nx < 0 || ny < 0 || nz < 0 || nx >= w || ny >= h || nz >= d) continue;
+        const i = idx(nx, ny, nz);
+        if (seen[i] || g.get(nx, ny, nz) !== 0) continue;          // only true air counts as "outside"
+        seen[i] = 1; sky[i] = 15; next.push([nx, ny, nz]);
+      }
+      q = next;
+    }
+    // then through glass and into cabins with falloff
+    const inner = [];
+    for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) for (let z = 0; z < d; z++) if (sky[idx(x, y, z)] === 15) inner.push([x, y, z]);
+    flood(sky, inner);
+  }
+  return { block, sky, idx };
+}
+
 // ------------------------------------------------------------------------------------------------ geometry
-// face order matches BLOCKS[id].tex: [+x, -x, +y, -y, +z, -z]
+// face order matches BLOCKS[id].tex: [+x, -x, +y, -y, +z, -z]; c = unit-cube corner flags (CCW seen from outside)
 const FACES = [
   { n: [1, 0, 0], c: [[1, 0, 1], [1, 0, 0], [1, 1, 0], [1, 1, 1]], shade: 0.8 },
   { n: [-1, 0, 0], c: [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]], shade: 0.8 },
   { n: [0, 1, 0], c: [[0, 1, 1], [1, 1, 1], [1, 1, 0], [0, 1, 0]], shade: 1.0 },
-  { n: [0, -1, 0], c: [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]], shade: 0.5 },
+  { n: [0, -1, 0], c: [[1, 0, 1], [0, 0, 1], [0, 0, 0], [1, 0, 0]], shade: 0.5 },
   { n: [0, 0, 1], c: [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], shade: 0.65 },
   { n: [0, 0, -1], c: [[1, 0, 0], [0, 0, 0], [0, 1, 0], [1, 1, 0]], shade: 0.65 },
 ];
-
-// Culled-face geometry of a model grid with per-vertex shade and emissive flag; origin at the footprint centre on the
-// gear line (see the header). Returns { geometry, faces }.
-export function buildShipGeometry(model) {
-  const g = model.grid;
-  const pos = [], uv = [], shade = [], emit = [], idx = [];
-  const at = (x, y, z) => g.get(x, y, z);
-  const opaqueAt = (x, y, z) => { const id = at(x, y, z); return id !== 0 && BLOCKS[id].opaque; };
-  let faces = 0;
-  for (let x = 0; x < g.w; x++) for (let y = 0; y < g.h; y++) for (let z = 0; z < g.d; z++) {
-    const id = at(x, y, z);
-    if (id === 0) continue;
-    const def = BLOCKS[id];
-    const e = def.emit > 0 ? 1 : 0;
-    for (let f = 0; f < 6; f++) {
-      const F = FACES[f];
-      const nid = at(x + F.n[0], y + F.n[1], z + F.n[2]);
-      if (nid !== 0 && (opaqueAt(x + F.n[0], y + F.n[1], z + F.n[2]) || nid === id)) continue;
-      const [tu, tv, ts] = tileUV(def.tex[f]);
-      const base = pos.length / 3;
-      for (let k = 0; k < 4; k++) { const c = F.c[k]; pos.push(x + c[0], y + c[1], z + c[2]); shade.push(F.shade); emit.push(e); }
-      uv.push(tu, tv + ts, tu + ts, tv + ts, tu + ts, tv, tu, tv);
-      idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
-      faces++;
-    }
+const INSET = 0.0006, UV_SCALE = 1 - 2 * INSET;
+function faceUV(dir, x, y, z, out) {
+  switch (dir) {
+    case 0: out[0] = 1 - z; out[1] = 1 - y; break;
+    case 1: out[0] = z; out[1] = 1 - y; break;
+    case 2: out[0] = x; out[1] = z; break;
+    case 3: out[0] = 1 - x; out[1] = z; break;
+    case 4: out[0] = x; out[1] = 1 - y; break;
+    default: out[0] = 1 - x; out[1] = 1 - y; break;
   }
+  return out;
+}
+
+class Geo {
+  constructor() { this.pos = []; this.uv = []; this.surf = []; this.part = []; this.idx = []; this.faces = 0; this.t = [0, 0]; }
+  face(d, bx, by, bz, x0, y0, z0, x1, y1, z1, tile, emit, light, sky, part) {
+    const F = FACES[d], [tu, tv, ts] = tileUV(tile), base = this.pos.length / 3;
+    for (let k = 0; k < 4; k++) {
+      const c = F.c[k], px = c[0] ? x1 : x0, py = c[1] ? y1 : y0, pz = c[2] ? z1 : z0;
+      faceUV(d, px, py, pz, this.t);
+      this.pos.push(bx + px, by + py, bz + pz);
+      this.uv.push(tu + (this.t[0] * UV_SCALE + INSET) * ts, tv + (this.t[1] * UV_SCALE + INSET) * ts);
+      this.surf.push(F.shade, emit, light, sky);
+      this.part.push(part);
+    }
+    this.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    this.faces++;
+  }
+}
+
+// Culled-face geometry of a model: hull cells culled against hull neighbours, part cells culled against their own
+// part only (they move). Origin at the footprint centre on the gear line. Returns { geometry, faces }.
+export function buildShipGeometry(model) {
+  const g = model.grid, { w, h, d } = g;
+  const light = modelLight(model);
+  const buf = new Geo();
+  const hull = model.hull;
+  const lightAt = (x, y, z, fallback) => {
+    if (x < 0 || y < 0 || z < 0 || x >= w || y >= h || z >= d) return fallback;
+    const i = light.idx(x, y, z);
+    return [light.block[i] / 15, light.sky[i] / 15];
+  };
+  const emitCells = (cells, at, part) => {
+    for (const [x, y, z, id, emitCode] of cells) {
+      const def = BLOCKS[id];
+      const opaqueN = (nx, ny, nz) => { const nid = at(nx, ny, nz); return nid !== 0 && (BLOCKS[nid].opaque || nid === id); };
+      let boxes = null;
+      if (def.shape === SHAPE.CUBE || def.shape === SHAPE.LIQUID) boxes = [[0, 0, 0, 1, 1, 1]];
+      else if (def.boxes && def.boxes.length) boxes = def.boxes;
+      else if (def.shape === SHAPE.PANE) boxes = [[0.4375, 0, 0, 0.5625, 1, 1]];
+      else continue;
+      for (const bx of boxes) for (let f = 0; f < 6; f++) {
+        const F = FACES[f];
+        const flush = (f === 0 && bx[3] >= 1) || (f === 1 && bx[0] <= 0) || (f === 2 && bx[4] >= 1) || (f === 3 && bx[1] <= 0) || (f === 4 && bx[5] >= 1) || (f === 5 && bx[2] <= 0);
+        if (flush && opaqueN(x + F.n[0], y + F.n[1], z + F.n[2])) continue;
+        // the face looks into its neighbour cell: light it from there (own cell for inset faces)
+        const l = flush ? lightAt(x + F.n[0], y + F.n[1], z + F.n[2], [0, 1]) : lightAt(x, y, z, [0, 1]);
+        buf.face(f, x, y, z, bx[0], bx[1], bx[2], bx[3], bx[4], bx[5], def.tex[f], emitCode, Math.max(l[0], def.emit > 0 ? 1 : 0), l[1], part);
+      }
+    }
+  };
+  // hull
+  const hullCells = [];
+  for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) for (let z = 0; z < d; z++) {
+    const id = hull.get(x, y, z);
+    if (id) hullCells.push([x, y, z, id, emitCodeOf(model, x, y, z, id)]);
+  }
+  emitCells(hullCells, (x, y, z) => hull.get(x, y, z), 0);
+  // parts (index 1..)
+  model.parts.forEach((p, pi) => {
+    const own = new Map();
+    for (const c of p.cells) own.set((c[0] * 256 + c[1]) * 256 + c[2], c[3]);
+    emitCells(p.cells.map((c) => [c[0], c[1], c[2], c[3], c[4] || (BLOCKS[c[3]].emit > 0 ? EMIT.LAMP : 0)]), (x, y, z) => own.get((x * 256 + y) * 256 + z) || 0, pi + 1);
+  });
   const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
-  geometry.setAttribute('aShade', new THREE.Float32BufferAttribute(shade, 1));
-  geometry.setAttribute('aEmit', new THREE.Float32BufferAttribute(emit, 1));
-  geometry.setIndex(idx);
-  geometry.translate(-g.w / 2, 0, -g.d / 2);
+  geometry.setAttribute('position', new THREE.Float32BufferAttribute(buf.pos, 3));
+  geometry.setAttribute('uv', new THREE.Float32BufferAttribute(buf.uv, 2));
+  geometry.setAttribute('aSurf', new THREE.Float32BufferAttribute(buf.surf, 4));
+  geometry.setAttribute('aPart', new THREE.Float32BufferAttribute(buf.part, 1));
+  geometry.setIndex(buf.idx);
+  geometry.translate(-w / 2, 0, -d / 2);
+  // generous bounds: parts swing outside the landed footprint
   geometry.computeBoundingSphere();
-  return { geometry, faces };
+  geometry.boundingSphere.radius += Math.max(w, h) * 0.6;
+  return { geometry, faces: buf.faces };
+}
+
+// Part transform table for the shader (pivot translated with the geometry origin).
+export function partUniforms(model) {
+  const A = new Float32Array(MAX_PARTS * 4), Bv = new Float32Array(MAX_PARTS * 4), C = new Float32Array(MAX_PARTS * 4);
+  model.parts.forEach((p, i) => {
+    const k = i + 1;
+    if (k >= MAX_PARTS) return;
+    A[k * 4] = p.pivot[0] - model.w / 2; A[k * 4 + 1] = p.pivot[1]; A[k * 4 + 2] = p.pivot[2] - model.d / 2; A[k * 4 + 3] = p.channel;
+    const al = Math.hypot(p.axis[0], p.axis[1], p.axis[2]) || 1;
+    Bv[k * 4] = p.axis[0] / al; Bv[k * 4 + 1] = p.axis[1] / al; Bv[k * 4 + 2] = p.axis[2] / al; Bv[k * 4 + 3] = p.angle;
+    C[k * 4] = p.slide[0]; C[k * 4 + 1] = p.slide[1]; C[k * 4 + 2] = p.slide[2]; C[k * 4 + 3] = 0;
+  });
+  return { A, B: Bv, C };
 }
 
 // ------------------------------------------------------------------------------------------------ material
 const VERT = /* glsl */ `
-attribute float aShade; attribute float aEmit; attribute vec3 aInst;
-varying vec2 vUv; varying float vShade; varying float vDist; varying float vEmit; varying vec3 vInst;
+attribute vec4 aSurf; attribute float aPart; attribute vec4 aInst; attribute vec4 aState;
+uniform vec4 uPartA[${MAX_PARTS}]; uniform vec4 uPartB[${MAX_PARTS}]; uniform vec4 uPartC[${MAX_PARTS}];
+varying vec2 vUv; varying vec4 vSurf; varying float vDist; varying vec4 vInst; varying vec4 vState;
 #if FANCY
 varying vec3 vWorldPos;
 #endif
+vec3 rotateAxis(vec3 p, vec3 ax, float ang) { float c = cos(ang), s = sin(ang); return p * c + cross(ax, p) * s + ax * dot(ax, p) * (1.0 - c); }
 void main() {
-  vUv = uv; vShade = aShade; vEmit = aEmit; vInst = aInst;
+  vUv = uv; vSurf = aSurf; vInst = aInst; vState = aState;
+  vec3 pos = position;
+  int pi = int(aPart + 0.5);
+  if (pi > 0) {
+    vec4 A = uPartA[pi]; vec4 Bp = uPartB[pi]; vec4 C = uPartC[pi];
+    int ch = int(A.w + 0.5);
+    float st = ch == 0 ? aState.x : (ch == 1 ? aState.y : (ch == 2 ? aState.z : aState.w));
+    float k = 1.0 - clamp(st, 0.0, 1.0);
+    pos = rotateAxis(pos - A.xyz, Bp.xyz, Bp.w * k) + A.xyz + C.xyz * k;
+  }
 #ifdef USE_INSTANCING
-  vec4 wp = modelMatrix * instanceMatrix * vec4(position, 1.0);
+  vec4 wp = modelMatrix * instanceMatrix * vec4(pos, 1.0);
 #else
-  vec4 wp = modelMatrix * vec4(position, 1.0);
+  vec4 wp = modelMatrix * vec4(pos, 1.0);
 #endif
 #if FANCY
   vWorldPos = wp.xyz;
@@ -213,7 +268,7 @@ void main() {
 const FRAG = /* glsl */ `
 uniform sampler2D map; uniform float uTime;
 uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar; uniform float uFlash;
-varying vec2 vUv; varying float vShade; varying float vDist; varying float vEmit; varying vec3 vInst;
+varying vec2 vUv; varying vec4 vSurf; varying float vDist; varying vec4 vInst; varying vec4 vState;
 #if FANCY
 varying vec3 vWorldPos;
 #endif
@@ -223,41 +278,52 @@ float blockCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.6)
 void main() {
   vec4 tex = texture2D(map, vUv);
   if (tex.a < 0.5) discard;
-  float sky = lightCurve(vInst.x) * uSkyLight;
-  float blk = blockCurve(vInst.y);
+  float shade = vSurf.x, code = vSurf.y, ownLight = vSurf.z, skyExp = vSurf.w;
+  float sky = lightCurve(vInst.x * skyExp) * uSkyLight;
+  float blk = blockCurve(max(vInst.y, ownLight));
 #if FANCY
   vec3 N = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
   vec3 V = normalize(uCamPos - vWorldPos);
-  vec3 light = shadingLight(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72), vWorldPos, N, lightCurve(vInst.x), vDist);
+  vec3 light = shadingLight(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72), vWorldPos, N, lightCurve(vInst.x * skyExp), vDist);
   vec3 fogC = fogColorDir(uFogColor, -V);
 #else
   vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
   vec3 fogC = uFogColor;
 #endif
   light = max(light, vec3(0.05)) + vec3(uFlash);
-  vec3 col = tex.rgb * light * vShade;
+  vec3 col = tex.rgb * light * shade;
 #if FANCY
-  col += sunSpecular(vWorldPos, N, N, V, 0.3, 0.85, tex.rgb, lightCurve(vInst.x), vDist) * vShade;   // hull metal
+  col += sunSpecular(vWorldPos, N, N, V, 0.3, 0.85, tex.rgb, lightCurve(vInst.x * skyExp), vDist) * shade;   // hull metal
 #endif
-  // emissive faces (engines, cabin lights): self-lit, brighter and pulsing while thrusting
-  float thrust = vInst.z;
-  float glow = vEmit * (0.45 + 0.55 * thrust) * (0.92 + 0.08 * sin(uTime * 11.0 + vDist * 0.3));
-  vec3 hot = tex.rgb * (1.0 + 0.7 * thrust) + vec3(0.15, 0.25, 0.4) * thrust * vEmit;
+  // emissive faces: 1 steady lamp, 2 nav strobe, 3 engine core (thrust), 4 landing light (approach only)
+  float thrust = vInst.z, phase = vInst.w;
+  float glow = 0.0; vec3 hot = tex.rgb;
+  if (code > 2.5 && code < 3.5) {
+    glow = (0.4 + 0.6 * thrust) * (0.92 + 0.08 * sin(uTime * 11.0 + vDist * 0.3));
+    hot = tex.rgb * (1.0 + 0.8 * thrust) + vec3(0.15, 0.25, 0.45) * thrust;
+  } else if (code > 0.5 && code < 1.5) {
+    glow = 0.85; hot = tex.rgb * 1.15;
+  } else if (code > 1.5 && code < 2.5) {
+    float t = fract(uTime * 0.9 + phase);
+    glow = smoothstep(0.78, 0.82, t) * (1.0 - smoothstep(0.9, 0.94, t));
+    hot = tex.rgb * 1.6 + vec3(0.2);
+  } else if (code > 3.5) {
+    glow = clamp(vState.w, 0.0, 1.0) * (0.9 + 0.1 * sin(uTime * 6.0));
+    hot = tex.rgb * 1.3 + vec3(0.25, 0.22, 0.15);
+  }
   glow = clamp(glow, 0.0, 1.0);
   col = mix(col, hot, glow);
   // lights punch through the haze: distant ships fade to their engine glow before vanishing
-#if FANCY
   col = mix(col, fogC, smoothstep(uFogNear, uFogFar, vDist) * (1.0 - 0.7 * glow));
-#else
-  col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, vDist) * (1.0 - 0.7 * glow));
-#endif
   gl_FragColor = vec4(col, 1.0);
 }`;
 
-export function shipMaterial(atlas) {
+export function shipMaterial(atlas, model) {
+  const parts = partUniforms(model);
   const m = new THREE.ShaderMaterial({
     uniforms: {
       map: { value: atlas }, uTime: { value: 0 },
+      uPartA: { value: parts.A }, uPartB: { value: parts.B }, uPartC: { value: parts.C },
       uSkyLight: SHARED.uSkyLight, uSkyTint: SHARED.uSkyTint, uFogColor: SHARED.uFogColor, uFogNear: SHARED.uFogNear, uFogFar: SHARED.uFogFar, uFlash: SHARED.uFlash,
     },
     vertexShader: VERT, fragmentShader: FRAG, side: THREE.FrontSide,
@@ -268,20 +334,23 @@ export function shipMaterial(atlas) {
   return m;
 }
 
-// One InstancedMesh per model: `capacity` instances, dynamic matrices, per-instance (sky, block, thrust) attribute.
-// The mesh sits at the world origin with instance matrices in world space, so three's per-mesh frustum test is off.
-export function makeShipInstances(model, material, capacity) {
+// One InstancedMesh per model: `capacity` instances, dynamic matrices, per-instance (sky, block, thrust, phase) and
+// animation state (gear, class, door, lights) attributes. The mesh sits at the world origin with instance matrices in
+// world space, so three's per-mesh frustum test is off.
+export function makeShipInstances(model, atlas, capacity) {
   const { geometry, faces } = buildShipGeometry(model);
-  const inst = new Float32Array(capacity * 3);
-  for (let i = 0; i < capacity; i++) { inst[i * 3] = 1; inst[i * 3 + 2] = 1; }
-  const attr = new THREE.InstancedBufferAttribute(inst, 3);
-  attr.setUsage(THREE.DynamicDrawUsage);
+  const inst = new Float32Array(capacity * 4), state = new Float32Array(capacity * 4);
+  for (let i = 0; i < capacity; i++) { inst[i * 4] = 1; inst[i * 4 + 2] = 1; inst[i * 4 + 3] = (i * 0.37) % 1; }
+  const attr = new THREE.InstancedBufferAttribute(inst, 4); attr.setUsage(THREE.DynamicDrawUsage);
+  const stateAttr = new THREE.InstancedBufferAttribute(state, 4); stateAttr.setUsage(THREE.DynamicDrawUsage);
   geometry.setAttribute('aInst', attr);
+  geometry.setAttribute('aState', stateAttr);
+  const material = shipMaterial(atlas, model);
   const mesh = new THREE.InstancedMesh(geometry, material, capacity);
   mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.frustumCulled = false;
   mesh.count = 0;
   mesh.userData.faces = faces;
   mesh.userData.model = model.name;
-  return { mesh, attr };
+  return { mesh, attr, state: stateAttr, material, faces };
 }

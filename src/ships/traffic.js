@@ -13,7 +13,7 @@
 import * as THREE from 'three';
 import { hash2 } from '../rng.js';
 import { TICK_RATE } from '../constants.js';
-import { shipModels, shipMaterial, makeShipInstances } from './models.js';
+import { shipModels, makeShipInstances } from './models.js';
 import { getLayout } from '../coruscant/layout.js';
 
 export const HIDE_DIST = 300;          // ships beyond this are not drawn
@@ -329,10 +329,9 @@ export class ShipTraffic {
     this.tickCount = 0;
     this.group = new THREE.Group();
     this.group.name = 'ship-traffic';
-    this.material = shipMaterial(game.atlas);
     this.types = this.models.map((m, ti) => {
       const capacity = Math.max(1, this.ships.filter((s) => s.type === ti).length);
-      const inst = makeShipInstances(m, this.material, capacity);
+      const inst = makeShipInstances(m, game.atlas, capacity);
       this.group.add(inst.mesh);
       return { ...inst, capacity, count: 0 };
     });
@@ -354,7 +353,7 @@ export class ShipTraffic {
 
   update(dt, alpha, camera) {
     const t = this.timeAt(alpha);
-    this.material.uniforms.uTime.value = t % 1000;
+    for (const ty of this.types) ty.material.uniforms.uTime.value = t % 1000;
     const cam = camera.position, world = this.game.world;
     for (const ty of this.types) ty.count = 0;
     let visible = 0;
