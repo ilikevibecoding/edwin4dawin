@@ -378,6 +378,7 @@ void main() {
     // hundred metres of that point). Faded out beyond 2 km where the per-sample mottle takes over.
     float surfMod = 1.0;
     bool surfDone = false;
+    float upLook = smoothstep(0.1, 0.45, dir.y);
     const vec3 ONE3 = vec3(1.0);
     for (int i = 0; i < 200; i++) {
       if (float(i) >= budget || t > t1 || T < 0.01) break;
@@ -487,9 +488,9 @@ void main() {
       if (cityK > 0.0) gnd += CITY_GLOW_COLOR * (cityK * cityGlowAt(p.xz));
       vec3 amb = (skyAmb * aoSky + gnd * aoGnd) * (mix(mottRange.x, mottRange.y, mott) * surfMod);
       // the surface texture also modulates the light that reaches a shadowed base through the cloud (multiple
-      // scattering through a varying thickness; that floor, not the ambient, is most of a base's radiance);
-      // lit rims and crowns keep their shading
-      vec3 S = lightCol * (sunTerm * mix(1.0, surfMod, smoothstep(0.3, 0.1, lt))) + amb;
+      // scattering through a varying thickness; that floor, not the ambient, is most of a base's radiance) when
+      // the ray looks up through the base; a wall seen from the side keeps its shading, as do lit rims and crowns
+      vec3 S = lightCol * (sunTerm * mix(1.0, surfMod, smoothstep(0.3, 0.1, lt) * upLook)) + amb;
       float a = 1.0 - exp(-dens * SIGMA * dt);
       col += T * a * S;
       meanDist += T * a * t;
