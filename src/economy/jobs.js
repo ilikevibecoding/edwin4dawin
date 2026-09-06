@@ -220,7 +220,10 @@ export class JobBoard {
     if (!a) return;
     this.active = null;
     this.syncMarkers();
-    this.eco.earn(a.job.reward, `Job complete: ${a.job.title}`);
+    // the posting terminal pays through the ledger, keyed by the job id so a payout can never happen twice; a
+    // finished ship repair also uses a machine part at the nearest workshop (rubric 15 #4b, #7)
+    if (a.job.kind === 'ship_repair' && a.job.pad && this.eco.onRepairDone) this.eco.onRepairDone(a.job.pad);
+    this.eco.earn(a.job.reward, `Job complete: ${a.job.title}`, a.terminal ? a.terminal.lotId : null, `job:${a.job.id}`);
     this.eco.stats.jobsDone = (this.eco.stats.jobsDone || 0) + 1;
     this.eco.stats.jobEarnings = (this.eco.stats.jobEarnings || 0) + a.job.reward;
     if (this.onChange) this.onChange();

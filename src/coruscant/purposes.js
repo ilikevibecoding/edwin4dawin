@@ -163,13 +163,13 @@ const TRADE = {
   cantina: { role: 'leisure', service: 'leisure', capacity: 160 },
   night_club: { role: 'leisure', service: 'leisure', capacity: 100, consumes: [['components', 1]] },
   casino: { role: 'leisure', service: 'leisure', capacity: 100, consumes: [['components', 1]] },
-  bathhouse: { role: 'service', service: 'treatment', capacity: 80, consumes: [['water', 30], ['fuel', 2]] },
+  bathhouse: { role: 'service', service: 'treatment', income: 16, capacity: 80, consumes: [['water', 30], ['fuel', 2]] },
   general_store: { role: 'retail', service: 'domestic', capacity: 400 },
   market_stall: { role: 'food', service: 'meals', capacity: 300 },
   hardware_store: { role: 'retail', service: 'domestic', capacity: 400 },
   furniture_store: { role: 'retail', service: 'domestic', capacity: 200 },
   electronics: { role: 'retail', service: 'domestic', capacity: 160 },
-  droid_shop: { role: 'workshop', service: 'repair', capacity: 200, consumes: [['parts', 4], ['components', 2]], produces: [{ good: 'parts', from: 'salvage', ratio: 0.25, perDay: 16 }] },
+  droid_shop: { role: 'workshop', service: 'repair', income: 22, capacity: 200, consumes: [['parts', 3], ['components', 1]], produces: [{ good: 'parts', from: 'salvage', ratio: 0.25, perDay: 16 }] },
   tailor: { role: 'retail', service: 'domestic', capacity: 200 },
   armorer: { role: 'retail', service: 'domestic', capacity: 160 },
   jeweler: { role: 'retail', service: 'domestic', capacity: 60 },
@@ -177,10 +177,10 @@ const TRADE = {
   garden_shop: { role: 'retail', service: 'domestic', capacity: 300, consumes: [['water', 10]] },
   speeder_dealer: { role: 'transit', service: 'transit', capacity: 120, consumes: [['fuel', 6], ['parts', 1]] },
   pawn: { role: 'retail', service: 'domestic', capacity: 120 },
-  pharmacy: { role: 'medical', service: 'treatment', capacity: 200, consumes: [['medical', 6]] },
-  clinic: { role: 'medical', service: 'treatment', capacity: 300, consumes: [['medical', 10], ['water', 10]] },
-  bacta_ward: { role: 'medical', service: 'treatment', capacity: 300, consumes: [['medical', 12], ['water', 20]] },
-  cybernetics_clinic: { role: 'medical', service: 'treatment', capacity: 200, consumes: [['medical', 6], ['components', 2], ['parts', 1]] },
+  pharmacy: { role: 'medical', service: 'treatment', capacity: 200, consumes: [['medical', 1]] },
+  clinic: { role: 'medical', service: 'treatment', capacity: 300, consumes: [['medical', 2], ['water', 10]] },
+  bacta_ward: { role: 'medical', service: 'treatment', capacity: 300, consumes: [['medical', 3], ['water', 20]] },
+  cybernetics_clinic: { role: 'medical', service: 'treatment', income: 20, capacity: 200, consumes: [['medical', 2], ['components', 1], ['parts', 1]] },
   holonet_office: { role: 'office', income: 26, capacity: 80, consumes: [['components', 3]] },
   holo_studio: { role: 'office', income: 22, capacity: 80, consumes: [['components', 2]] },
   advertising_agency: { role: 'office', income: 24, capacity: 60, consumes: [['components', 1]] },
@@ -188,15 +188,15 @@ const TRADE = {
   warehouse: { role: 'wholesale', supplies: ALL_BULK, capacity: 4000, consumes: [['fuel', 3]] },
   foundry: { role: 'producer', supplies: ['parts'], capacity: 1200, consumes: [['fuel', 12]], produces: [{ good: 'parts', from: 'salvage', ratio: 0.2, perDay: 60 }] },
   refinery: { role: 'wholesale', supplies: ['fuel'], capacity: 2000, consumes: [['parts', 1]] },
-  power_plant: { role: 'utility', service: 'utility', supplies: ['water'], capacity: 3000, consumes: [['fuel', 40], ['parts', 2]], produces: [{ good: 'water', perDay: 1500 }] },
+  power_plant: { role: 'utility', service: 'utility', supplies: ['water'], capacity: 6000, consumes: [['fuel', 40], ['parts', 2]], produces: [{ good: 'water', perDay: 3000 }] },
   recycling_plant: { role: 'producer', supplies: ['salvage'], capacity: 1500, consumes: [['fuel', 4]], produces: [{ good: 'salvage', from: 'waste', ratio: 0.5, perDay: 200 }] },
   droid_factory: { role: 'producer', supplies: ['parts'], capacity: 800, consumes: [['fuel', 8], ['components', 6]], produces: [{ good: 'parts', from: 'salvage', ratio: 0.25, perDay: 40 }] },
-  repair_shop: { role: 'workshop', service: 'repair', capacity: 300, consumes: [['parts', 6], ['fuel', 2]] },
+  repair_shop: { role: 'workshop', service: 'repair', income: 30, capacity: 300, consumes: [['parts', 4], ['fuel', 2]] },
   customs: { role: 'terminal', supplies: ALL_BULK, capacity: 12000, consumes: [['fuel', 10], ['components', 1]] },
   ship_dealer: { role: 'retail', capacity: 60, consumes: [['fuel', 2], ['parts', 1]] },
-  transit_station: { role: 'transit', service: 'transit', capacity: 200, consumes: [['fuel', 16], ['parts', 1]] },
-  taxi_stand: { role: 'transit', service: 'transit', capacity: 120, consumes: [['fuel', 10], ['parts', 0.5]] },
-  hangar: { role: 'workshop', service: 'repair', capacity: 300, consumes: [['fuel', 12], ['parts', 3]] },
+  transit_station: { role: 'transit', service: 'transit', capacity: 200, consumes: [['fuel', 8], ['parts', 1]] },
+  taxi_stand: { role: 'transit', service: 'transit', capacity: 120, consumes: [['fuel', 5], ['parts', 0.5]] },
+  hangar: { role: 'workshop', service: 'repair', income: 32, capacity: 300, consumes: [['fuel', 6], ['parts', 3]] },
   parking_garage: { role: 'transit', service: 'transit', capacity: 120, consumes: [['fuel', 4]] },
 };
 // Roles that visit rather than work: they are not staff (no wage) - the rest of a kind's roles are its payroll.
@@ -298,7 +298,10 @@ const lotNumber = (lot) => 100 + (((lot.seed ?? 0) >>> 0) % 900);
 
 function makePurpose(lot, kind, name, district) {
   const def = CATALOGUE[kind];
-  return { id: lot.id, kind, category: def.category, name, roles: def.roles, sells: def.sells || [], buys: def.buys || [], hours: def.hours, greeting: def.greeting, district };
+  const t = tradeFor(kind);
+  // the v2 trade profile rides along on the purpose (role, supplies, consumes, produces, capacity, service, income,
+  // households, staff) so the economy needs nothing but purposeFor(); every pass-1 field keeps its name and shape
+  return { id: lot.id, kind, category: def.category, name, roles: def.roles, sells: def.sells || [], buys: def.buys || [], hours: def.hours, greeting: def.greeting, district, ...t };
 }
 
 // Standalone roll (no layout: synthetic lots such as undercity buildings or spaceport halls; also the seed of the

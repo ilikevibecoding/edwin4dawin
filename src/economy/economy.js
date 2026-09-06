@@ -12,6 +12,13 @@
 //   game.economy.repairTargets()                 ships builder: [{ x, y, z }] damaged parts of the active repair job
 //   game.ships.repairSpots(padIndex, n)          (optional, provided by the ships builder) real part positions on the
 //                                                docked ship; the economy falls back to points around the pad
+//
+// Pass 2 (rubric 15, docs/overhaul/economy.md) adds the city simulation behind the vendors - `game.economy.v2` is an
+// EconomySim (src/economy/sim.js): businesses with inventories, households, shipments, the price rule and the ledger.
+// Read API for other builders (all return plain data; null / [] when the sim is off with ?economy=0):
+//   business(lotId) quote(lotId, good) shipments() ledger transfer(t) detain(id, reason) release(id)
+//   menuFor(lotId) waitingFor(lotId) holdFor(shipIndex) noticeFor(district) repairBerths() serviceLevel(lotId)
+// Events on game.events: economy:transfer, economy:shipment, economy:stock, economy:notice.
 import * as THREE from 'three';
 import { B, BLOCKS, SHAPE } from '../blocks.js';
 import { displayName } from '../items.js';
@@ -19,10 +26,14 @@ import { LEVELS } from '../coruscant/layout.js';
 import { purposeFor, allPurposes, isOpen } from '../coruscant/purposes.js';
 import { SPACEPORT, DECK_Y } from '../coruscant/spaceport.js';
 import { blueprintFor } from '../coruscant/buildings.js';
-import { GOODS, SHIP_CLASSES, buyPrice, vendorSellPrice } from './prices.js';
+import { GOODS, SHIP_CLASSES, buyPrice, vendorSellPrice, goodsKey } from './prices.js';
 import { JobBoard, TERMINAL_KINDS, goodLabel } from './jobs.js';
 import { StockLedger } from './stock.js';
 import { ShopUI } from '../ui/shop.js';
+import { EconomySim, TUNING } from './sim.js';
+import { gameArrivals } from './arrivals.js';
+import { CrateLayer } from './crates.js';
+import { TICK_RATE } from '../constants.js';
 
 export const START_CREDITS = 250;
 export const PLAYER_PAD = 4;          // spaceport pad the player's ship is parked on (first pad south of the terminal)
@@ -57,7 +68,30 @@ export class Economy {
     this._all = null;
     this.onTrade = (npc, purpose) => this.openShop(purpose, npc);
     if (game.player.credits == null) game.player.credits = START_CREDITS;
+    // the v2 simulation (off with ?economy=0: pass-1 wallet and daily stock only)
+    const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : null;
+    this.v2Enabled = !!this.layout && !(params && params.get('economy') === '0');
+    this.v2 = null; this.crates = null; this._v2DirtyAt = 0; this._lastToastAt = -1e9;
+    if (this.v2Enabled) this.buildSim();
     this.restore(game.save ? game.save.economy : null);
+    if (this.v2 && game.vehicles && game.scene && game.atlas) this.crates = game.vehicles.add(new CrateLayer(game, this));
+    if (this.v2 && game.events) game.events.on('economy:notice', (n) => this.onNotice(n));
+  }
+  // Builds a fresh EconomySim over the city layout. The player's wallet is lent to the sim as an account so every
+  // credit the player earns or spends is a journal entry; game.events receives the sim's events.
+  buildSim() {
+    const eco = this, game = this.game;
+    const player = { get credits() { return game.player.credits | 0; }, set credits(v) { game.player.credits = Math.max(0, Math.round(v)) | 0; eco.markDirty(); } };
+    this.v2 = new EconomySim({ layout: this.layout, purposes: this.allLots(), pads: SPACEPORT.pads, deckY: DECK_Y, arrivals: gameArrivals(game), player, batch: TUNING.batch, onEvent: (name, payload) => { if (game.events) game.events.emit(name, payload); } });
+    return this.v2;
+  }
+  // district notices the player should hear about (held freighters, detained cargo, outages), at most one per 30 s
+  onNotice(n) {
+    if (!n || !(n.kind === 'held' || n.kind === 'detained' || n.kind === 'outage')) return;
+    const now = this.game.time || 0;
+    if (now - this._lastToastAt < 30) return;
+    this._lastToastAt = now;
+    this.toast(n.text, n.kind === 'outage' ? '#ff9a6a' : '#ffd866');
   }
 
   // ------------------------------------------------------------------------------------------------ wallet
@@ -66,24 +100,38 @@ export class Economy {
   // creative mode shows prices but never charges (rubric 08 #8)
   get free() { return this.game.mode === 'creative'; }
   canAfford(n) { return this.free || this.credits >= n; }
-  charge(n, why = '') {
+  // Charges the player `n` credits for a service bought at lot `to` (the business receives them: an internal transfer
+  // of the ledger; without a lot the fee goes offworld as `fees`). Creative mode charges nothing.
+  charge(n, why = '', to = null) {
     if (n <= 0) return true;
     if (!this.canAfford(n)) { this.flash(`Not enough credits: ${n} needed, you have ${this.credits}.`); return false; }
-    if (!this.free) { this.credits -= n; this.stats.spent += n; }
+    if (!this.free) {
+      if (this.v2) { const r = this.v2.pay('player', to != null && this.v2.business(to) ? to : 'offworld', n, why ? `service:${why}` : 'service'); if (r !== true) { this.flash(`Payment failed (${r}).`); return false; } }
+      else this.credits -= n;
+      this.stats.spent += n;
+    }
     if (why) this.flash(`${this.free ? 'Creative: no charge for' : `Paid ${n} cr for`} ${why}.`);
     return true;
   }
-  earn(n, why = '') {
+  // Pays the player `n` credits: from business `from` when it can afford it, else from the shipping guild offworld
+  // (`jobs` source). `key` makes the payout idempotent (a job can never pay twice).
+  earn(n, why = '', from = null, key = null) {
     if (n <= 0) return;
-    this.credits += n;
+    if (this.v2) {
+      if (key != null && this.v2.journal.has(key)) return;
+      let r = from != null && this.v2.business(from) ? this.v2.pay(from, 'player', n, 'job', key) : 'no-funds';
+      if (r !== true) r = this.v2.pay('offworld', 'player', n, 'job', key);
+      if (r !== true) return;
+    } else this.credits += n;
     this.stats.earned += n;
     this.toast(`+${n} cr${why ? ' - ' + why : ''}`, '#ffd866');
     if (this.game.audio) this.game.audio.pop();
   }
-  grant(n) { this.credits += n; this.say(`${n} credits added to your wallet.`); this.toast(`+${n} cr - administrator grant`, '#ffd866'); }
+  grant(n) { if (this.v2) this.v2.pay('admin', 'player', n, 'grant'); else this.credits += n; this.say(`${n} credits added to your wallet.`); this.toast(`+${n} cr - administrator grant`, '#ffd866'); }
   // Admin "Reset economy": wallet, stock, ownership, housing, jobs and stats back to a fresh world.
   reset() {
-    this.credits = START_CREDITS;
+    this.game.player.credits = START_CREDITS;
+    if (this.v2Enabled) this.buildSim();   // a fresh city: the journal restarts from the new endowment
     this.stock.clear(this.day());
     const hadApt = this.apartment;
     this.ownedShips = []; this.apartment = null;
@@ -132,9 +180,13 @@ export class Economy {
 
   // ------------------------------------------------------------------------------------------------ stock
   rollDay() { if (this.stock.roll(this.day())) this.markDirty(); }
-  stockOf(lotId, entry) { this.rollDay(); return this.stock.stockOf(lotId, entry); }
+  // a vendor with a Business record (a layout lot) reads the sim's shelf; synthetic vendors keep the pass-1 daily stock
+  bizOf(lotId) { return this.v2 ? this.v2.business(lotId) : null; }
+  stockOf(lotId, entry) { const b = this.bizOf(lotId); if (b) return b.available(entry.item); this.rollDay(); return this.stock.stockOf(lotId, entry); }
   takeStock(lotId, entry, n) { this.rollDay(); const k = this.stock.take(lotId, entry, n); if (k) this.markDirty(); return k; }
-  priceOf(purpose, entry) { return buyPrice(entry.item, purpose.district, entry.price); }
+  // the price rule (rubric 15 #8) where a Business exists, the pass-1 book price elsewhere
+  priceOf(purpose, entry) { const b = this.bizOf(purpose.id); if (b) { const q = this.v2.quote(b, entry.item); if (q && q.buy != null) return q.buy; } return buyPrice(entry.item, purpose.district, entry.price); }
+  quote(lotId, good) { return this.v2 ? this.v2.quote(lotId, good) : null; }
 
   // ------------------------------------------------------------------------------------------------ screens
   // Opens the vendor screen of `purpose` (NPC builder: pass the vendor NPC; world consoles pass null).
@@ -170,6 +222,7 @@ export class Economy {
     if (!g) return 0;
     const unit = this.priceOf(purpose, entry);
     if (g.service) return this.buyService(purpose, entry, g, unit) ? 1 : 0;
+    if (this.bizOf(purpose.id)) return this.buyV2(purpose, entry, g, n);
     const stock = this.stockOf(purpose.id, entry);
     if (stock <= 0) { this.flash('Sold out - the shelves refill tomorrow.'); return 0; }
     n = Math.min(n, stock);
@@ -190,12 +243,43 @@ export class Economy {
     if (this.ui.isOpen) this.ui.refresh();
     return fit;
   }
-  // What the vendor pays for one unit of item `id`, or null when it does not trade the category.
-  offerFor(purpose, id) { return vendorSellPrice(purpose, id); }
+  // v2 purchase: unit by unit through atomic transfers (the ask rises as the shelf empties), items added to the
+  // inventory only for the units the journal recorded. Creative takes are free but journaled as the `creative` sink.
+  buyV2(purpose, entry, g, n) {
+    const lotId = purpose.id, b = this.v2.business(lotId);
+    const avail = b.available(entry.item);
+    if (avail <= 0) { const w = this.v2.waitingFor(lotId); this.flash(w && w.good ? `Sold out - ${w.text}.` : 'Sold out - waiting on the next shipment.'); return 0; }
+    n = Math.min(n, avail);
+    const inv = this.game.inventory;
+    let fit = n;
+    while (fit > 0 && !inv.canAdd(g.id, fit)) fit--;
+    if (fit <= 0) { this.flash('Your inventory is full.'); return 0; }
+    let bought = 0, total = 0, last = null;
+    for (let i = 0; i < fit; i++) {
+      const q = this.v2.quote(b, entry.item), unit = q ? q.buy : null;
+      if (unit == null) break;
+      if (!this.free && unit > this.credits) { last = 'no-funds'; break; }
+      const r = this.v2.transfer({ from: lotId, to: 'player', good: entry.item, qty: 1, credits: this.free ? 0 : unit, reason: this.free ? 'creative' : 'player buy' });
+      if (r !== true) { last = r; break; }
+      bought++; total += this.free ? 0 : unit;
+    }
+    if (bought <= 0) { this.flash(last === 'no-funds' ? `Not enough credits: ${this.priceOf(purpose, entry)} needed, you have ${this.credits}.` : `Could not buy (${last || 'no-stock'}).`); return 0; }
+    inv.addStack(g.id, bought);
+    this.stats.bought += bought; this.stats.spent += total;
+    this.markDirty();
+    if (this.game.audio) this.game.audio.pop();
+    this.flash(`Bought ${bought} x ${displayName(g.id)} for ${this.free ? 'free (creative)' : total + ' cr'}.`);
+    if (this.ui.isOpen) this.ui.refresh();
+    return bought;
+  }
+  // What the vendor pays for one unit of item `id`, or null when it does not trade the category (or, in v2, cannot
+  // afford or store it right now).
+  offerFor(purpose, id) { const b = this.bizOf(purpose.id); if (b) { const key = goodsKey(id); if (!key) return null; const q = this.v2.quote(b, key); return q ? q.sell : null; } return vendorSellPrice(purpose, id); }
   // Sells up to n of the player's items to the vendor. Returns the credits received.
   sell(purpose, id, n = 1) {
     const unit = this.offerFor(purpose, id);
     if (unit == null) { this.flash(`${purpose.name} does not buy ${displayName(id)}.`); return 0; }
+    if (this.bizOf(purpose.id)) return this.sellV2(purpose, id, n);
     const inv = this.game.inventory;
     const have = inv.count(id);
     n = Math.min(n, have);
@@ -209,6 +293,28 @@ export class Economy {
     if (this.ui.isOpen) this.ui.refresh();
     return total;
   }
+  // v2 sale: unit by unit (the bid falls as the vendor's shelf fills); an item leaves the inventory only when its
+  // transfer went through.
+  sellV2(purpose, id, n) {
+    const lotId = purpose.id, key = goodsKey(id), inv = this.game.inventory;
+    n = Math.min(n, inv.count(id));
+    let sold = 0, total = 0;
+    for (let i = 0; i < n; i++) {
+      const q = this.v2.quote(lotId, key);
+      if (!q || q.sell == null) break;
+      inv.remove(id, 1);
+      const r = this.v2.transfer({ from: 'player', to: lotId, good: key, qty: 1, credits: q.sell, reason: 'player sale' });
+      if (r !== true) { inv.addStack(id, 1); break; }
+      sold++; total += q.sell;
+    }
+    if (sold <= 0) { this.flash(`${purpose.name} cannot take ${displayName(id)} right now.`); return 0; }
+    this.stats.earned += total; this.stats.sold += sold;
+    this.markDirty();
+    if (this.game.audio) this.game.audio.pop();
+    this.flash(`Sold ${sold} x ${displayName(id)} for ${total} cr.`);
+    if (this.ui.isOpen) this.ui.refresh();
+    return total;
+  }
 
   // ------------------------------------------------------------------------------------------------ services
   buyService(purpose, entry, g, unit) {
@@ -217,7 +323,11 @@ export class Economy {
       case 'heal': {
         const p = this.game.player;
         if (p.health >= 20 && p.food >= 20) { this.flash('You are in perfect health already.'); return false; }
-        if (!this.charge(unit, 'a bacta shot')) return false;
+        // a bacta shot needs a medical kit on the shelf (rubric 15 #4c): no stock, no treatment
+        const b = this.bizOf(purpose.id);
+        if (b && b.available('medical') <= 0) { const w = this.v2.waitingFor(purpose.id); this.flash(`No bacta in stock${w && w.shipment ? ` - ${w.text}` : ' - the clinic is waiting on a shipment'}.`); return false; }
+        if (!this.charge(unit, 'a bacta shot', purpose.id)) return false;
+        if (b) this.v2.transfer({ from: purpose.id, to: 'void', good: 'medical', qty: 1, reason: 'treatment' });
         p.health = 20; p.food = Math.min(20, p.food + 6); p.saturation = Math.min(p.food, p.saturation + 6);
         if (this.game.audio) this.game.audio.burp();
         return true;
@@ -245,7 +355,7 @@ export class Economy {
       const d = lot.door ? lot.door.out : { x: lot.x0 + (lot.w >> 1), z: lot.z1 };
       x = d.x + 0.5; z = d.z + 0.5;
     }
-    if (!this.charge(unit, `the ride to ${dest.name}`)) return false;
+    if (!this.charge(unit, `the ride to ${dest.name}`, purpose.id)) return false;
     this.game.closeScreen();
     this.game.player.teleport(x, y, z);
     this.toast(`Air taxi: ${dest.job ? dest.name.replace(/^Your job: /, '') : dest.name}`, '#9ad8ff');
@@ -263,7 +373,7 @@ export class Economy {
     if (!room) { this.flash('No rooms are free here tonight. Try another tower.'); return false; }
     const day = this.day();
     const same = this.apartment && this.apartment.lotId === lot.id;
-    if (!this.charge(unit, same ? 'another night' : `a room at ${purpose.name}`)) return false;
+    if (!this.charge(unit, same ? 'another night' : `a room at ${purpose.name}`, purpose.id)) return false;
     const paidUntilDay = Math.max(same ? this.apartment.paidUntilDay : day, day) + 1;
     const old = this.apartment && !same ? this.apartment.lotId : null;
     this.apartment = { lotId: lot.id, name: purpose.name, bed: room.bed, room: room.rect, floor: room.floor, paidUntilDay, rentedAtDay: day };
@@ -310,7 +420,7 @@ export class Economy {
       const lot = this.lotById(a.lotId), purpose = lot ? this.purposeOfLot(lot) : null;
       const entry = purpose ? (purpose.sells || []).find((s) => s.item === 'room_night') : null;
       const unit = purpose ? buyPrice('room_night', purpose.district, entry ? entry.price : def.base) : def.base;
-      if (!this.charge(unit, 'tonight\u2019s rent')) { this.say('Tonight\u2019s rent is due and you cannot pay. Earn some credits first.'); return true; }
+      if (!this.charge(unit, 'tonight\u2019s rent', a.lotId)) { this.say('Tonight\u2019s rent is due and you cannot pay. Earn some credits first.'); return true; }
       a.paidUntilDay = day + 1; this.stats.nights += 1;
     }
     const sky = this.game.sky;
@@ -337,7 +447,7 @@ export class Economy {
     if (owned && owned.cls === cls) { this.flash(`You already own a ${g.label.toLowerCase()} - it is parked on pad ${owned.padIndex + 1}.`); return false; }
     const tradeIn = owned ? Math.round(owned.price * TRADE_IN_RATIO) : 0;
     const due = Math.max(0, price - tradeIn);
-    if (!this.charge(due, `the ${g.label.toLowerCase()}${tradeIn ? ` (trade-in ${tradeIn} cr)` : ''}`)) return false;
+    if (!this.charge(due, `the ${g.label.toLowerCase()}${tradeIn ? ` (trade-in ${tradeIn} cr)` : ''}`, purpose ? purpose.id : null)) return false;
     this.ownedShips = [{ cls, padIndex: PLAYER_PAD, boughtAtDay: this.day(), price }];
     this.stats.bought += 1;
     this.markDirty(); this.persist(true);
@@ -404,6 +514,15 @@ export class Economy {
   tick() {
     this.rollDay();
     this.jobs.tick();
+    if (this.v2) {
+      const tc = this.game.tickCount | 0;
+      // the city advances once a second in batches (rubric 15 #18): never per frame, never every tick
+      if (tc % TICK_RATE === 0) {
+        this.v2.advance(this.dayTime(), this.game.vehicles ? this.game.vehicles.tickCount / TICK_RATE : 0);
+        if ((this.game.time || 0) - this._v2DirtyAt > 10) { this._v2DirtyAt = this.game.time || 0; this.markDirty(); }
+      }
+      if (!this.crates && this.game.vehicles && this.game.scene && this.game.atlas) this.crates = this.game.vehicles.add(new CrateLayer(this.game, this));
+    }
     if (this.markerGroup.children.length) {
       const s = 1 + 0.18 * Math.sin(this.game.time * 6);
       for (const m of this.markerGroup.children) { m.scale.setScalar(s); m.rotation.y = this.game.time * 1.5; }
@@ -419,7 +538,7 @@ export class Economy {
   serialize() {
     return {
       credits: this.credits, day: this.day(), stock: this.stock.serialize(), ownedShips: this.ownedShips, apartment: this.apartment,
-      job: this.jobs.serialize(), stats: this.stats,
+      job: this.jobs.serialize(), stats: this.stats, v2: this.v2 ? this.v2.serialize() : undefined,
     };
   }
   restore(data) {
@@ -433,7 +552,36 @@ export class Economy {
     this.apartment = data.apartment && typeof data.apartment.lotId === 'number' ? data.apartment : null;
     if (data.stats && typeof data.stats === 'object') this.stats = { ...this.stats, ...data.stats };
     this.jobs.restore(data.job);
+    if (this.v2 && data.v2) this.v2.restore(data.v2);
   }
+
+  // ------------------------------------------------------------------------------------------------ v2 read API
+  business(lotId) { const b = this.v2 ? this.v2.business(lotId) : null; return b ? b.toJSON() : null; }
+  shipments(includeRecent = false) { return this.v2 ? this.v2.list(includeRecent) : []; }
+  get ledger() {
+    const v = this.v2; if (!v) return null;
+    const T = v.journal.totals;
+    return { sources: { ...T.sources }, sinks: { ...T.sinks }, sourceSum: T.sourceSum, sinkSum: T.sinkSum, net: v.journal.net(), count: T.entries, internal: T.internal, entries: (n = 50, filter = null) => v.journal.recent(n, filter), day: (d = v.day()) => v.journal.daySummary(d), wealth: () => v.wealth(), has: (key) => v.journal.has(key) };
+  }
+  transfer(t) { return this.v2 ? this.v2.transfer(t) : 'disabled'; }
+  detain(id, reason) { return this.v2 ? this.v2.detain(id, reason) : false; }
+  release(id) { return this.v2 ? this.v2.release(id) : false; }
+  menuFor(lotId) { return this.v2 ? this.v2.menuFor(lotId) : null; }
+  waitingFor(lotId) { return this.v2 ? this.v2.waitingFor(lotId) : null; }
+  holdFor(shipIndex) { return this.v2 ? this.v2.holdFor(shipIndex) : null; }
+  noticeFor(district) { return this.v2 ? this.v2.noticeFor(district) : { district, items: [], text: '' }; }
+  repairBerths() { return this.v2 ? this.v2.repairBerths() : { total: 0, available: 0, waiting: [] }; }
+  serviceLevel(lotId) { return this.v2 ? this.v2.serviceLevel(lotId) : null; }
+  // a finished ship-repair job uses one machine part at the nearest workshop that has one (maintenance sink)
+  onRepairDone(pad) {
+    const v = this.v2; if (!v) return null;
+    const shops = v.businesses.filter((b) => b.role === 'workshop' && b.available('parts') > 0).sort((a, c) => Math.hypot(a.pos.x - pad.x, a.pos.z - pad.z) - Math.hypot(c.pos.x - pad.x, c.pos.z - pad.z));
+    if (!shops.length) return null;
+    v.transfer({ from: shops[0].id, to: 'void', good: 'parts', qty: 1, reason: 'repair' });
+    return shops[0].id;
+  }
+  // one object for the admin panel's Economy section
+  cityReport() { const v = this.v2; if (!v) return null; const s = v.summary(); return { ...s, crates: this.crates ? { ...this.crates.stats } : null, notices: [...v.notices.keys()].map((d) => v.noticeFor(d)), uptime: v.uptime(), days: v.stats.days.slice(-7), today: { meals: v.stats.meals, unmetMeals: v.stats.unmetMeals, treatments: v.stats.treatments, delivered: v.stats.delivered, created: v.stats.created, imports: v.stats.imports, unloads: v.stats.unloads } }; }
 
   // Summary for the wallet line of the shop screen and for tests.
   summary() {
