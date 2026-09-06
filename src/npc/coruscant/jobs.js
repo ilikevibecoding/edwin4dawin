@@ -29,6 +29,8 @@ export const JOB_IDLE = {
 };
 export const PLAZA_IDLES = ['waiting', 'talking', 'watching', 'browsing', 'talking', 'speaking'];
 const WELDERS = new Set(['mechanic', 'droid tech', 'smelter', 'astromech']);
+// jobs done on one's feet keep standing at a seat-type spot (a stallholder at the stall bench, a medic by the bed)
+const STANDING_IDLES = new Set(['serving', 'tending', 'welding', 'sweeping', 'carry', 'guarding']);
 const SERVERS = new Set(['server', 'waitress droid', 'barista', 'bartender']);
 const CARRIERS = new Set(['dock worker', 'cargo droid', 'porter', 'stock', 'quartermaster']);
 const SPEAKERS = new Set(['speaker', 'judge', 'teacher', 'curator', 'guide', 'musician', 'dj', 'projectionist']);
@@ -49,7 +51,7 @@ export function poseAt(npc, act, spot, li, hour) {
     if (spot && spot.mode) idle = spot.mode;
     else if (outdoors) idle = job === 'sweeper droid' ? 'sweeping' : GUARDS.has(job) ? 'guarding' : job === 'vendor' ? 'serving' : job === 'tourist' ? 'watching' : job === 'courier' ? 'waiting' : job === 'child' ? 'dancing' : job === 'jedi' || job === 'acolyte' ? 'waiting' : PLAZA_IDLES[(p.key >> 3) % PLAZA_IDLES.length];
     else if (p.visitor) idle = room && room.visitors ? room.visitors : 'browsing';
-    else if (seat && !SPEAKERS.has(job) && !SERVERS.has(job) && !GUARDS.has(job)) idle = 'sitting';   // delegates in pods, witnesses, aides in a session
+    else if (seat && !SPEAKERS.has(job) && !SERVERS.has(job) && !GUARDS.has(job) && !STANDING_IDLES.has(JOB_IDLE[job])) idle = 'sitting';   // delegates in pods, witnesses, aides in a session
     else idle = JOB_IDLE[job] || (room ? room.idle : 'standing');
     // welding on an empty pad makes no sense: check the console instead
     if (idle === 'welding' && spot && spot.pad !== undefined && npc.pop && !shipOnPad(npc.pop.game.shipTraffic, spot.pad)) idle = 'tending';

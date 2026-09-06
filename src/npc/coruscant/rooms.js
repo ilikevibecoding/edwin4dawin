@@ -158,8 +158,17 @@ const VISITOR_FILL = { restaurant: 'patron', cafeteria: 'patron', cantina: 'patr
 export function roomStaff(kind, seats = 0, beds = 0, works = 0) {
   const f = roomFunction(kind);
   const out = [];
-  const cap = works > 0 ? Math.min(STAFF_MAX, Math.max(STAFF_CAP, works)) : STAFF_CAP;
+  const hall = works >= 24;   // a hall of stalls, a hangar of bays, a floor of desks
+  const cap = works > 0 ? Math.min(hall ? STAFF_MAX * 2 : STAFF_MAX, Math.max(STAFF_CAP, works)) : STAFF_CAP;
   for (const j of f.jobs) for (let k = 0; k < j.count && out.length < cap; k++) out.push(j.job);
+  // more work records take more of the table's first job: one worker per six records, per three in a hall (a market
+  // hall with 76 stalls gets 24 stallholders, an office with 20 desks keeps the table's ten)
+  if (works > out.length && f.jobs.length) { const want = Math.min(cap, Math.ceil(works / (hall ? 3 : 6))); while (out.length < want) out.push(f.jobs[0].job); }
+  // a hall that takes visitors draws customers too (one per five stalls, browsing), seats or not
+  if (hall && f.visitors && !f.beds) {
+    const fill = f.fill || VISITOR_FILL[f.base] || null;
+    if (fill) { const n = out.length + Math.min(BIG_ROOM_MAX / 2, Math.ceil(works / 5)); while (out.length < n) out.push(fill); }
+  }
   if (seats >= BIG_ROOM_SEATS) {
     const fill = f.fill || VISITOR_FILL[f.base] || null;
     if (fill) {

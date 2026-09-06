@@ -12,7 +12,7 @@ import { CrowdRenderer, MODE } from './crowd.js';
 import { Citizen, WALK_SPEED } from './citizen.js';
 import { Planner, LIFT_WAIT, PORT } from './planner.js';
 import { poseAt, jobErrand, sparks, isWelder, isGuard } from './jobs.js';
-import { Bubbles } from './bubbles.js';
+import { Bubbles, lineOfSight } from './bubbles.js';
 import { TalkBox } from './talk.js';
 import { ambientLine, greetLine, directionsLine, priceLine, workLine, jobLine } from '../dialog/dialog.js';
 import { RNG } from '../../rng.js';
@@ -43,7 +43,7 @@ export class CoruscantPopulation {
     this.nav = new CityNav(layout);
     this.paths = new PathQueue(game.world, 1.5);
     this.crowd = new CrowdRenderer(game.scene, { humanoids: MAX_LIVE + 10, astromechs: 24, sweepers: 24 });
-    this.bubbles = new Bubbles(game.scene);
+    this.bubbles = new Bubbles(game.scene, game.world);
     // upload the skin atlas and the bubble textures now (rubric row 11: no first-bubble / first-crowd hitch mid-game)
     if (game.renderer && game.renderer.initTexture) { try { game.renderer.initTexture(this.crowd.texture); this.bubbles.warm(game.renderer); } catch (e) { /* headless contexts without a GL backend */ } }
     this.planner = new Planner(this);
@@ -93,11 +93,17 @@ export class CoruscantPopulation {
   // ---------------------------------------------------------------------------------------- spawning
   get player() { return this.game.player; }
   nearPlateau(p) { const P = this.layout.plateau; return p.x > P.x0 - 160 && p.x < P.x1 + 160 && p.z > P.z0 - 160 && p.z < P.z1 + 160; }
-  // distance from p to the place where the person is doing `a`
-  placeDist(a, p) {
+  // distance from p to the place where the person is doing `a`; a room's own staff at work measure to their room (and
+  // floor), so inside a big landmark the hall the player stands in fills before the far end and the other levels
+  placeDist(a, p, person = null) {
     if (a.lot === PORT) { const dx = Math.max(2576 - p.x, 0, p.x - 2716), dz = Math.max(-176 - p.z, 0, p.z - 176); return Math.hypot(dx, dz); }
     const r = a.lot != null ? this.lotCentres[a.lot] : null;
     if (!r) return Infinity;
+    const rm = person && person.roomStaff && a.act === 'work' && a.lot === person.work ? person.room : null;
+    if (rm && rm.w) {
+      const dx = Math.max(rm.x - p.x, 0, p.x - rm.x - rm.w), dz = Math.max(rm.z - p.z, 0, p.z - rm.z - rm.d);
+      return Math.hypot(dx, dz) + Math.abs(rm.y - p.y) * 1.5;
+    }
     const dx = Math.max(r.x0 - p.x, 0, p.x - r.x1), dz = Math.max(r.z0 - p.z, 0, p.z - r.z1);
     return Math.hypot(dx, dz);
   }
@@ -160,7 +166,7 @@ export class CoruscantPopulation {
       const skip = this.skip.get(person.id);
       if (skip !== undefined) { if (skip > this.tickCount) continue; this.skip.delete(person.id); }
       const a = activityAt(person, this.hour);
-      const d = this.placeDist(a, p);
+      const d = this.placeDist(a, p, person);
       if (d > SPAWN_R) continue;
       const own = inLot != null && a.lot === inLot && this.isIndoor(person, a);
       const indoor = !own && this.isIndoor(person, a);
@@ -508,6 +514,8 @@ export class CoruscantPopulation {
       npc.wanderT -= 1;
       if (npc.wanderT <= 0) { this.retarget(npc, 0); return; }
     }
+    // pad crews follow the ship: the torch lights when one settles on the pad and goes out when it lifts
+    if (npc.act === 'work' && npc.spot && npc.spot.pad !== undefined && npc.state === 'at') this.applyPose(npc, npc.spot);
     if (npc.act === 'work' && npc.spot && !npc.person.street && !npc.person.visitor) {
       const err = jobErrand(npc, (kind) => this.errandCell(npc, kind), () => this.rng.next());
       if (err) {
@@ -623,6 +631,7 @@ export class CoruscantPopulation {
   chatter(p) {
     const now = this.tickCount * TICK;
     if (now - this.lastBubbleAt < 1) return;
+    const cam = this.game.camera ? this.game.camera.position : null;
     let best = null, bd = Infinity;
     for (const n of this.live) {
       if (n.hidden || n.lying) continue;
@@ -630,7 +639,11 @@ export class CoruscantPopulation {
       if (d2 > 24 * 24) continue;
       n.chatterT -= CYCLE_TICKS * TICK;
       if (n.chatterT > 0) continue;
-      if (d2 < bd) { bd = d2; best = n; }
+      if (d2 >= bd) continue;
+      // speakers the player can see: in front of the camera (beyond arm's length) and not behind a wall
+      if (d2 > 16 && ((n.pos.x - p.x) * this.view.x + (n.pos.z - p.z) * this.view.z) / Math.sqrt(d2) < -0.2) continue;
+      if (cam && !lineOfSight(this.world, cam.x, cam.y, cam.z, n.pos.x, n.pos.y + 1.5 * n.scale, n.pos.z)) continue;
+      bd = d2; best = n;
     }
     if (!best) return;
     const vendor = VENDOR_JOBS.has(best.person.job) && best.act === 'work';
