@@ -1241,3 +1241,111 @@ boxes moved onto the ridge rows and the note about the khaki lawn. Fleet r4 is
 running. Round 6 briefs come from the consensus; the standing hand-offs are the
 bar cover's specular, the hemisphere for the shade pockets, `BEAM.dusk`, the
 into-sun crest floor, and the lion's day rim.
+
+## Gauntlet round 5 — verdict, and round 6 so far
+
+**Pass on all ten families** (`gauntlet/round5/`, 34 evidence frames under
+`frames/`). Three blind critics on 111 frames of `0dc79bb` against round 4;
+the round's categories — lighting, shadows, reflections — up in five, two and
+four families and down nowhere. The only drops are single points, and the one
+on a gate-adjacent category (Car glass Temporal 6 → 5 for A and B) was run
+down to the tool: `moving.flick` rose because the pane is clearer and the
+metric measures the world through it (0.89 of the background's own flicker),
+so it is held at 6 and the tool is told to report `flick / flickBg`. Means
+6.24 → 6.47, 6.26 → 6.52, 5.88 → 6.09; all 126 cells 6.17 → 6.40. Lions
+5.36 → 5.93 is the largest move and still the lowest row.
+
+### The frames were wrong before the critics were
+
+The truck sets were shot twice. The first set had the truck 6 m back along
+the spur with verge grass across it (the collision builder's curvature speed
+cap, fixed by pinning the pre-roll speed) and then, pinned, nose-down 5.7°
+(the driver reading its pin as a brake held to the floor, fixed by a cruise
+mode that balances throttle against drag). Critic C had already passed the
+pitched set; A and B were mid-review. The truck, glass and native-resolution
+sets were re-shot level and all three re-judged Hero car and Car glass on
+them: Cleanliness 7 → 8 / 5 → 7 / 5 → 6, glass Reflections up for A and C,
+and four findings withdrawn that had been the pitch — a dusk bar blob of
+885 px, the grille over the sky, a bonnet band, a beam-pool slab. The
+`mirror` frame in the pitched set had no mirror in it and was scored anyway;
+the tool fails under 3 % pane cover now. Capture placement must not depend on
+driver dynamics, and a tool must say when its subject is not in the frame:
+both are process rules from this round.
+
+### Investigated rather than averaged
+
+Seventeen splits settled by measurement (`CONSENSUS.md` §1–17). The ones that
+changed a brief: the water hole is the colour the terrain builder says *and*
+B's number is right (a dome sample that the shore's mud ring pulls down); the
+pride turf is khaki because it is turf, not straw — the species, not the
+count; the hills are in band on every frame including the one A read at 1.02
+(sky against sky) while B's "plate" — crest darker than body by 11 % — is
+real and new; the lion's planted feet hold to 0.1 px on the probe and the
+decal is invisible only because the strip's camera was 9° off the ground; the
+night sky is the intended lighting trade overshot by half a stop, not a
+regression; the campfire pool is C's slab and B's "holds" was a flame number;
+the hero's bar meets its target at linear 0.5 and C's 598 px is the same
+pixels counted at sRGB 0.5; the door mirror is a legible pane and a painted
+plate, both true.
+
+Not settled: hero car r6 (`5dc56cd`) is in no scored frame — its pod claims
+and its `BEAM.dusk` cut wait on round-6 frames, and the consensus found the
+dusk trail pool on the level truck was already in band (0.145 vs 0.150 in
+round 4), so the cut was made against the pitched pool and r7 must re-measure
+before keeping it; a 1 px stipple on the door glass at 1280 that a frame
+cannot attribute (pane SSR or dithered alpha — an `?ssrpane=off` A/B is the
+hand-off); the lion's head-to-body ratio C put at 0.42 (measured since by lion
+form r7 on the mesh: 0.233 lioness, 0.244 male — C's figure is a width ratio
+in a foreshortened pose, and nothing was scaled).
+
+### Round 6 so far
+
+Landed and live in order: hero car r6 `5dc56cd`, lion gait r5 `b8f1636`,
+lighting r6 `cd33826`, campground r5 `0a52cc9`, lion form r7 `522cbdc`, then
+the capture and tool fixes (`CHANGELOG.md`, "Round 6 landed"). Two of the
+consensus's diagnoses were overturned by ablation on the way, which is now the
+rule for every brief: the bar's residual was the pod cores over the bloom
+threshold, not the cover's specular; the dusk sand over the sky was the lamp
+pool, not SSR. Lion form r7's own finding is of the same kind — the "pale
+sclera" a classifier still counts (78 → 69 px re-centred) is lit cheek skin
+50–62 mm from the eye, not sclera, after five colour-coded ablation builds.
+
+The new `moon` view found something no critic could: every star is a vertical
+dash — the field is drawn in octahedral map space, whose scale differs along
+azimuth and elevation, so an isotropic blob there is stretched on screen, and
+in a sky-dominated frame the field reads as falling snow. Lighting r7.
+
+### Measured (`fast`, software raster)
+
+| | round 4 (`80cb5e6`) | round 5 (`0dc79bb`) | now (`e244efd`) |
+|---|---|---|---|
+| programs at fast / high / ultra | 176 / — / — | 175 / 176 / 178 | 175 / 176 / 178 |
+| max samplers in any program | 21 | 13 | 13 |
+| interaction checks | 30 | 57 | 57 |
+| campfire pool median Y / sat (night) | 0.148 / 0.75 | 0.355 / 0.33 | 0.17 / 0.51 |
+| hero bar over linear 0.5, critics' box (night) | — | 218 px | verify on round-6 frames |
+| lion dusk rim median over the flank | — | +0.55 st | +0.86 st |
+| lion tris, lioness tier 0 | 23 151 | 25 397 | 26 685 |
+| body pitch at the truck shot | 0.2° | 5.7° (re-shot 0.2°) | 0.2° |
+
+### Process
+
+A machine overload — two builders, a native-resolution capture and a
+consensus writer at once, load 54–63 on four cores — killed five builders'
+sessions with their edits intact in the tree. Every builder now runs one
+capture at a time and checks the load before it; at most two builders and one
+capture run together. A builder that dies is resumed, not restarted, and told
+which of its hunks are in the tree. Landing order follows tool dependency:
+a check lands with the feature it tests, never before.
+
+### Next
+
+Vegetation r6 (straw lawn, dusk crown cap, sun split, forks) and terrain r6
+(into-sun ridge rows, kopje reflection, trodden pride ground, skirt band) are
+running; lighting r7 (star footprint, night ground hue, penumbra, camp band,
+paint over sky) and hero car r7 (pods at 1280, windscreen graze from outside,
+glare profile, near-field spill, clearcoat, `BEAM.dusk` re-measure) follow,
+then the live mirror pane from the seat and lion form r8 (the brow, the
+muzzle head-on, the coat's flow field). Then `shots/round6/` from the landed
+tree — with `moon`, the 2.2 m walk strip and a fleet set that finally carries
+fleet r4 — and three critics against round 5.
