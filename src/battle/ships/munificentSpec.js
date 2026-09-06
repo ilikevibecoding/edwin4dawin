@@ -1,12 +1,13 @@
 // Layout, palette and section generators shared by the Munificent-class frigate builders. Everything is
 // measured against the reference stills and the two ICS cutaways; fractions are of the 825 m length,
 // counted from the bow (forward is -z, up +y, origin at the hull centre):
-//   - 0-32.4 %: the hood — a round-topped cowl (132 m beam, 46 m tall) that thins to a wedge lip at the
-//     nose (a shallow crescent notch seen from above) and stays open aft over the transceiver drums;
+//   - 0-32.4 %: the hood — a near-semicircular cowl (112 m beam, 50 m tall; TCW: about two thirds of
+//     the dome's width) that thins to a wedge lip at the nose (a shallow crescent notch seen from
+//     above) and stays open aft over the transceiver drums on the dark machinery deck;
 //   - 26 %: the sensor cross — the 46 m chord dorsal blade to +132 m, the ventral blade to -108 m
 //     (240 m tip to tip) and the 426 m lateral wing on a dark spar;
-//   - 32.4-51.5 %: the dark machinery neck (96 m wide, 64 m tall) with the row of round reactor ports,
-//     the tall lit bays low on its flanks and the antenna deck on top;
+//   - 32.4-51.5 %: the dark machinery neck (84 m wide, 70 m tall) with the row of round reactor ports,
+//     the tall lit bays low on its flanks, deck ledges at wing level and the antenna deck on top;
 //   - 51.5-100 %: the dome — a 164 m arch 66 m tall over a shallow dark lower hull, its shell edge raked
 //     back from the eave to the top over the reactor sphere, the dark spine trench along its top to the
 //     tiered bridge tower at 78-86 %, and the two armour shells thinning past the tower into the long
@@ -33,10 +34,10 @@ export const Y = {
   eave: -5,
   lowerBot: -30,
   keelBot: -40,
-  neckTop: 24,
+  neckTop: 30,
   neckBot: -40,
   hoodPeak: 46,
-  hoodFloor: -6,
+  hoodFloor: -4,
   deckBot: -40,
   wing: 4,
   finTop: 132,
@@ -45,8 +46,8 @@ export const Y = {
 export const RIDGE_H = 6; // the spine ridge between the shells stands this far above their rims
 export const HW = {
   dome: 82,
-  hood: 66,
-  neck: 48,
+  hood: 56,
+  neck: 42,
   lower: 58,
   trench: 17,
   wing: 213,
@@ -207,31 +208,31 @@ export function domeSurf(z, s, side = 1, lift = 0) {
 
 // ---- hood ----
 const hoodHW = smoothTable([
-  [Z.nose, 34],
-  [-407, 46],
-  [-399, 53],
-  [-388, 58.5],
-  [-365, 63.5],
+  [Z.nose, 29],
+  [-407, 39],
+  [-399, 45],
+  [-388, 49.5],
+  [-365, 54],
   [-330, HW.hood],
   [-300, HW.hood],
   [-200, HW.hood],
-  [-170, 65],
-  [Z.hoodEnd, 62],
+  [-170, 55],
+  [Z.hoodEnd, 53],
 ]);
 const hoodTop = smoothTable([
   [Z.nose, 12],
-  [-388, 19],
-  [-338, 32],
-  [-297, 40],
-  [-256, 44],
+  [-388, 20],
+  [-338, 33],
+  [-297, 41],
+  [-256, 44.5],
   [-206, Y.hoodPeak],
-  [-170, 44.5],
-  [Z.hoodEnd, 42],
+  [-170, 45],
+  [Z.hoodEnd, 43],
 ]);
 const hoodFloor = smoothTable([
   [Z.nose, 10],
-  [-388, 3],
-  [-338, -3],
+  [-388, 4],
+  [-338, -1.5],
   [-300, Y.hoodFloor],
   [Z.hoodEnd, Y.hoodFloor],
 ]);
@@ -242,7 +243,7 @@ export function hoodSection(z) {
 // the nose lip is a shallow crescent: the centre sits 20 m aft of the corners
 export function noseShift(x, z) {
   const k = 1 - Math.min(1, (z - Z.nose) / 70);
-  const c = Math.max(0, 1 - (Math.abs(x) / 52) ** 2);
+  const c = Math.max(0, 1 - (Math.abs(x) / 44) ** 2);
   return 20 * c * k * k;
 }
 /** Point on the hood arch at station z and angle a (0 = starboard eave, PI = port eave). */

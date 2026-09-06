@@ -257,6 +257,29 @@ export function buildAft(add, rand, engines) {
           color: MACH_DK,
         });
     }
+    // tanks and housings on the antenna deck
+    for (const [z, r] of [
+      [-134, 3.6],
+      [-104, 4.2],
+      [-58, 3.6],
+      [-34, 4.2],
+    ]) {
+      const t = new THREE.CylinderGeometry(r, r, 26, lod === 0 ? 12 : 8);
+      t.rotateZ(Math.PI / 2);
+      t.translate(0, Y.neckTop + 10 + r * 0.8, z);
+      add(t, "dark", { texel: 1 / 5, lod, color: MACH_LT });
+    }
+    for (const [x, z, w, h, l] of [
+      [-9, -88, 10, 6, 14],
+      [8, -120, 8, 4, 10],
+      [10, -46, 9, 5, 12],
+      [-7, -14, 12, 7, 10],
+    ])
+      add(new THREE.BoxGeometry(w, h, l).translate(x, Y.neckTop + 10 + h / 2, z), "dark", {
+        texel: 1 / 5,
+        lod,
+        color: MACH,
+      });
     // antenna forest on the ridge
     for (const z of [-124, -74, -24])
       antennaCluster(add, {

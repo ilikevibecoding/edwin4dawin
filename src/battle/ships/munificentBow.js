@@ -162,7 +162,7 @@ export function buildBow(add, rand) {
   // machinery deck under the cowl, transceiver drums, conduits
   // ---------------------------------------------------------------------------
   for (const lod of [0, 1, 2]) {
-    const deckHW = 50;
+    const deckHW = 42;
     {
       const yc = (Y.hoodFloor + Y.deckBot) / 2;
       const hh = (Y.hoodFloor - Y.deckBot) / 2;
@@ -170,21 +170,21 @@ export function buildBow(add, rand) {
         loftZ(
           roundedRect(1, 0.1, 0.1),
           [
-            { z: -345, sx: 26, sy: 4, y: Y.hoodFloor - 6 },
+            { z: -345, sx: 22, sy: 4, y: Y.hoodFloor - 6 },
             { z: -318, sx: deckHW, sy: hh, y: yc },
             { z: Z.hoodEnd, sx: deckHW, sy: hh, y: yc },
           ],
           { capStart: true, capEnd: true, flat: true, texel: 1 / 8 },
         ),
         "dark",
-        { uv: "keep", lod, color: MACH_DK },
+        { uv: "keep", lod, tint: (x, y, z, o) => o.set(MACH).multiplyScalar(0.75 + 0.25 * smoothstep(Y.deckBot, Y.hoodFloor, y)) },
       );
     }
     if (lod === 2) continue;
     // drums lying fore-aft on the deck, seen through the open aft rim
     const seg = lod === 0 ? 18 : 10;
-    for (const x of [-40, -14, 14, 40]) {
-      const r = 11;
+    for (const x of [-33, -11, 11, 33]) {
+      const r = 9.5;
       add(tubeZ(r, r, 90, seg, x, Y.hoodFloor + r - 1, -200, false), "dark", {
         texel: 1 / 6,
         lod,
@@ -200,8 +200,8 @@ export function buildBow(add, rand) {
           });
     }
     // conduits between the drums and along the deck flanks
-    for (const x of [-27, 0, 27])
-      add(tubeZ(2.2, 2.2, 100, 8, x, Y.hoodFloor + 1.5, -200, false), "dark", {
+    for (const x of [-22, 0, 22])
+      add(tubeZ(2, 2, 100, 8, x, Y.hoodFloor + 1.5, -200, false), "dark", {
         texel: 1 / 4,
         lod,
         color: MACH,
@@ -345,12 +345,12 @@ export function buildBow(add, rand) {
       { uv: "keep", lod, tint: wingTint },
     );
     // spar: a dark beam through the hood carrying the wing and both blades
-    add(new THREE.BoxGeometry(130, 16, 40).translate(0, Y.wing, Z.fin), "dark", {
+    add(new THREE.BoxGeometry(110, 16, 40).translate(0, Y.wing, Z.fin), "dark", {
       texel: 1 / 6,
       lod,
       color: MACH_DK,
     });
-    add(new THREE.BoxGeometry(40, 18, 30).translate(0, 22, Z.fin), "dark", {
+    add(new THREE.BoxGeometry(36, 18, 30).translate(0, 22, Z.fin), "dark", {
       texel: 1 / 6,
       lod,
       color: MACH,
@@ -369,7 +369,7 @@ export function buildBow(add, rand) {
         color: MACH_DK,
       });
       // ochre edge stripes and the dark spar seam on the upper surface
-      const xs2 = lod === 0 ? [74, 92, 112, 134, 156, 178, 196, 206] : [74, 140, 206];
+      const xs2 = lod === 0 ? [64, 82, 102, 124, 146, 168, 188, 206] : [64, 136, 206];
       for (const [u0, u1] of [
         [0.8, 0.58],
         [-0.58, -0.8],
@@ -412,14 +412,14 @@ export function buildBow(add, rand) {
         add(fanPoly(pts, [0, 1, 0]), "paint", { texel: 1 / 4, lod, color: WHITE });
       }
       // wing root fairing where the plank leaves the cowl, greebles and leading-edge lights outboard
-      add(new THREE.BoxGeometry(12, 10, 36).translate(side * 70, Y.wing + 0.5, Z.fin), "hull", {
+      add(new THREE.BoxGeometry(12, 10, 36).translate(side * 60, Y.wing + 0.5, Z.fin), "hull", {
         texel: 1 / 5,
         lod,
         color: HULL_DK,
       });
       if (lod === 0) {
         for (let k = 0; k < 6; k++) {
-          const x = side * (78 + k * 5.2);
+          const x = side * (68 + k * 5.2);
           add(
             new THREE.BoxGeometry(3.2, 1.6 + rand() * 2, 5 + rand() * 8).translate(x, Y.wing + thickAt(x) / 2 + 1, Z.fin - 6 + rand() * 12),
             "dark",
@@ -439,7 +439,7 @@ export function buildBow(add, rand) {
       // lit strips along the leading and trailing edges (TCW: yellow-lit wing edges)
       if (lod < 2)
         for (const s of [-1, 1]) {
-          const xs3 = lod === 0 ? [80, 110, 140, 170, 204] : [80, 204];
+          const xs3 = lod === 0 ? [68, 100, 134, 170, 204] : [68, 204];
           add(
             loftStrips(
               xs3.map((x) => {

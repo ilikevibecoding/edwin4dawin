@@ -116,8 +116,8 @@ export function buildMunificent(mats) {
         5,
       );
     }
-    mount("light", [side * 70, 10.2, Z.fin], [0, 1, 0], [0, 0, -1], [side * 0.4, 0.6, -0.7], "light", 7000, 5);
-    mount("light", [side * 42, Y.neckTop + 0.2, -96], [0, 1, 0], [0, 0, -1], [side * 0.4, 0.6, -0.7], "light", 7000, 5);
+    mount("light", [side * 60, 10.2, Z.fin], [0, 1, 0], [0, 0, -1], [side * 0.4, 0.6, -0.7], "light", 7000, 5);
+    mount("light", [side * 27, Y.neckTop + 6.2, -36], [0, 1, 0], [0, 0, -1], [side * 0.4, 0.6, -0.7], "light", 7000, 5);
     {
       const a = 72 * D2R;
       mount(
