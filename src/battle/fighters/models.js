@@ -1001,13 +1001,13 @@ function hmp() {
   P.push(disc(0, 1.06, 1.4, 1.9, DROID_MID, { seg: 8, axis: "y" }));
   // sensor head: blocky face under the shell's nose with a raised spine and two red light bars, chin
   // cannon below
-  P.push(box(0, -0.15, -5.3, 1.9, 1.1, 1.8, DROID_DARK));
-  P.push(box(0, 0.42, -5.2, 0.5, 0.5, 1.6, DROID_MID));
+  P.push(box(0, -0.2, -5.3, 2.4, 1.4, 2.0, DROID_DARK));
+  P.push(box(0, 0.5, -5.2, 0.5, 0.5, 1.7, DROID_MID));
   for (const s of [-1, 1])
     P.push(
-      box(s * 0.6, 0.05, -6.22, 0.6, 0.08, 0.06, RED_EYE, { emis: 0.9, rz: s * 0.25 }),
+      box(s * 0.75, 0.1, -6.32, 0.8, 0.08, 0.06, RED_EYE, { emis: 0.9, rz: s * 0.25 }),
     );
-  P.push(box(0, -0.85, -5.6, 0.16, 0.16, 2.6, GUN));
+  P.push(box(0, -1.0, -5.6, 0.16, 0.16, 2.6, GUN));
   for (const s of [-1, 1]) {
     // swept wing arm: a thick flat wing whose 5 m root chord spans the shell's side, leading edge swept
     // 37° and trailing edge 63° forward to the 2 m tip chord at the turret pod
