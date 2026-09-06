@@ -33,8 +33,8 @@ export const TUNING = {
   portFee: 120,             // credits a landed freighter pays the terminal per unloading
   mealsPerResident: 1,      // meal batches per resident per day
   treatmentsPerResident: 0.1,
-  domesticPerResident: 0.15,
-  leisurePerResident: 0.3,
+  domesticPerResident: 0.35,
+  leisurePerResident: 0.4,
   ridesPerResident: 0.4,
   rentPerResident: 3,       // credits a day to the residential lot's business
   utilityPerResident: 0.5,  // credits a day to the utility, plus one water unit
@@ -45,6 +45,8 @@ export const TUNING = {
   treasuryStart: 60000,     // Republic budget available for allocations (outside the boundary)
   levy: 0.1,                // share of office income levied for the treasury (a logged sink)
   allocationCap: 600,       // credits of public allocation per essential business per day
+  exportPrice: 0.6,         // producers sell surplus output offworld at 60% of book (export sink / export_sale source)
+  exportAbove: 0.8,         // ... once stock passes 80% of target, down to 50%
   bondCap: 4000,            // credits of import bonds per day (essential cargo the terminal cannot pay for)
   wasteCollected: 200,      // units of waste a recycling plant collects from the households per day
   wasteSplit: 0.5,          // salvage per unit of waste
@@ -138,12 +140,16 @@ export class EconomySim {
     this.shipments = new Map(); this.recentShipments = []; this.recentImports = []; this.nextShipmentId = 1;
     this.outside = { households: { funds: 0 }, treasury: { funds: TUNING.treasuryStart, allocatedToday: new Map(), bondToday: 0, day: -1 } };
     this.notices = new Map();   // district -> [{ day, t, kind, text, lotId }]
+    this.modifiers = { waste: 1 };   // scripted disruptions (sim-economy.mjs): waste collection multiplier
     this.holds = new Map();     // ship index -> { shipmentId, bill, reason }
     this.stats = { day: -1, meals: 0, unmetMeals: 0, treatments: 0, delivered: 0, created: 0, imports: 0, unloads: 0, importsDelivered: 0, negativeStock: 0, wagesPaid: 0, transfers: 0, days: [] };
     this._buildBusinesses(opts.purposes);
     this._linkChains();
     this._endow();
+    // W - net is a constant (the wallet credits that predate the journal); any drift is an unjournaled change
+    this.baseline = this.wealth() - this.journal.net();
   }
+  drift() { return this.wealth() - this.journal.net() - this.baseline; }
 
   // ---------------------------------------------------------------------------------------------- construction
   _buildBusinesses(list) {
@@ -187,6 +193,7 @@ export class EconomySim {
     };
     const nearest = (from, list) => { let best = null, bd = Infinity; for (const c of list) { if (c.id === from.id) continue; const d = dist2(from.pos, c.pos); if (d < bd) { bd = d; best = c; } } return best; };
     const supplierLists = {}; for (const g of BULK_GOODS) supplierLists[g] = suppliersOf(g);
+    this.supplierLists = supplierLists;
     const link = (b, good, s) => { b.supplierOf.set(good, s === 'offworld' ? 'offworld' : s.id); if (s !== 'offworld') { if (!b.suppliers.includes(s.id)) b.suppliers.push(s.id); if (!s.customers.includes(b.id)) s.customers.push(b.id); } };
     for (const b of B) {
       const p = b.purpose;
@@ -210,7 +217,14 @@ export class EconomySim {
       for (const g of b.needs) {
         if (b.purpose.produces.some((pr) => pr.good === g)) continue;   // made on site (water, parts from salvage, salvage from waste)
         if (b.role === 'wholesale' || b.role === 'producer') {
-          if (b.purpose.supplies.includes(g)) { if (this.terminal) link(b, g, this.terminal); continue; }
+          // wholesale nodes restock from the terminal, except parts, which the depots pull from the nearest foundry /
+          // droid factory (salvage -> parts -> depot -> workshop) when the city has one
+          if (b.purpose.supplies.includes(g)) {
+            const makers = g === 'parts' && b.role === 'wholesale' ? supplierLists.parts.filter((s) => s.role === 'producer') : [];
+            const m = makers.length ? nearest(b, makers) : null;
+            if (m) link(b, g, m); else if (this.terminal) link(b, g, this.terminal);
+            continue;
+          }
         }
         const cands = supplierLists[g] ? supplierLists[g].filter((s) => s !== b) : [];
         let s = cands.length ? nearest(b, cands) : null;
@@ -239,10 +253,11 @@ export class EconomySim {
     // households -> nearest services
     const foods = B.filter((b) => b.role === 'food'), clinics = B.filter((b) => b.role === 'medical'), utils = B.filter((b) => b.role === 'utility'), doms = B.filter((b) => b.service === 'domestic'), leis = B.filter((b) => b.role === 'leisure'), trans = B.filter((b) => b.role === 'transit');
     for (const h of this.households) {
-      h.food = foods.map((b) => [dist2(h.pos, b.pos), b.id]).sort((a, c) => a[0] - c[0]).slice(0, 3).map((e) => e[1]);
+      const nearestN = (list, n) => list.map((b) => [dist2(h.pos, b.pos), b.id]).sort((a, c) => a[0] - c[0]).slice(0, n).map((e) => e[1]);
+      h.food = nearestN(foods, 4); h.domestics = nearestN(doms, 3); h.leisures = nearestN(leis, 3);
       const pick = (list) => { const n = nearest(h, list); return n ? n.id : null; };
-      h.clinic = pick(clinics); h.utility = pick(utils); h.domestic = pick(doms); h.leisure = pick(leis); h.transit = pick(trans);
-      for (const id of [...h.food, h.clinic, h.utility, h.domestic, h.leisure, h.transit]) { const b = id != null ? this.byId.get(id) : null; if (b && !b.customers.includes(`household:${h.lotId}`)) b.customers.push(`household:${h.lotId}`); }
+      h.clinic = pick(clinics); h.utility = pick(utils); h.domestic = h.domestics[0] ?? null; h.leisure = h.leisures[0] ?? null; h.transit = pick(trans);
+      for (const id of [...h.food, ...h.domestics, ...h.leisures, h.clinic, h.utility, h.transit]) { const b = id != null ? this.byId.get(id) : null; if (b && !b.customers.includes(`household:${h.lotId}`)) b.customers.push(`household:${h.lotId}`); }
     }
     // service capability
     for (const b of B) {
@@ -406,6 +421,7 @@ export class EconomySim {
   // visited in batches when their two-hour interval is up; shipments and freighter arrivals every call.
   advance(dayTime, portTime = this.portTime) {
     if (this.dayTime === null) { this.dayTime = dayTime; this.fullPassDue = true; }
+    if (this.stats.day < 0) this.stats.day = Math.floor(dayTime);
     if (dayTime < this.dayTime) dayTime = this.dayTime;   // the clock never runs backwards inside the sim
     const dayChanged = Math.floor(dayTime) > Math.floor(this.dayTime);
     this.dayTime = dayTime; this.portTime = portTime;
@@ -455,9 +471,9 @@ export class EconomySim {
       const openFrac = b.hours ? Math.min(1, ((b.hours[1] - b.hours[0] + 24) % 24 || 24) / 24) : 1;
       for (const [g, perDay] of p.consumes) this._consume(b, g, perDay * elapsed * Math.max(openFrac, 0.5), g === 'parts' || g === 'fuel' ? 'maintenance' : 'consumption');
       if (b.needs.has('water') && b.role !== 'housing' && b.staff > 0) this._consume(b, 'water', b.staff * elapsed, 'consumption');
-      // on-site production (salvage -> parts, waste -> salvage, water reclaimed)
-      for (const pr of p.produces) this._produce(b, pr, elapsed);
-      if (b.kind === 'recycling_plant') { b.acc.waste = (b.acc.waste || 0) + TUNING.wasteCollected * elapsed; const w = Math.floor(b.acc.waste); if (w > 0 && b.room() >= w) { b.acc.waste -= w; this.transfer({ from: 'households', to: b.id, good: 'waste', qty: w, reason: 'waste' }); } }
+      // on-site production (salvage -> parts, waste -> salvage, water reclaimed), surplus exported offworld
+      for (const pr of p.produces) { this._produce(b, pr, elapsed); if (b.role === 'producer') this._export(b, pr.good); }
+      if (b.kind === 'recycling_plant') { b.acc.waste = (b.acc.waste || 0) + TUNING.wasteCollected * this.modifiers.waste * elapsed; const w = Math.floor(b.acc.waste); if (w > 0 && b.room() >= w) { b.acc.waste -= w; if (this.transfer({ from: 'households', to: b.id, good: 'waste', qty: w, reason: 'waste' }) === true) b.acc.wasteTotal = (b.acc.wasteTotal || 0) + w; } }
     }
     // wages once a day at 06:00 or later
     if (day > b.lastWageDay && hour >= 6 && b.staff > 0) {
@@ -500,6 +516,14 @@ export class EconomySim {
     b.acc[key] -= out;
     this.transfer({ from: 'void', to: b.id, good: pr.good, qty: out, reason: 'production' });
   }
+  // a producer sells output above 80% of its target offworld, down to 50% (export sink, export_sale source)
+  _export(b, good) {
+    const target = b.target.get(good) || 0;
+    if (target <= 0 || b.available(good) <= target * TUNING.exportAbove) return;
+    const qty = Math.floor(b.available(good) - target * 0.5);
+    const unit = Math.max(1, Math.round((GOODS[good].base || 1) * TUNING.exportPrice));
+    if (qty > 0) this.transfer({ from: b.id, to: 'offworld', good, qty, credits: unit * qty, reason: 'export' });
+  }
   _restockShelves(b, day) {
     const daily = day > b.lastRestockDay;
     for (const e of b.sells) {
@@ -527,10 +551,16 @@ export class EconomySim {
       if (b.openOrders.has(g)) { const sh = this.shipments.get(b.openOrders.get(g)); if (sh && sh.state !== 'delivered' && sh.state !== 'cancelled') continue; b.openOrders.delete(g); }
       const want = target - have;
       if (rule.from === 'offworld') { this._orderImport(b, g, want, now); continue; }
-      const S = this.byId.get(rule.from);
+      let S = this.byId.get(rule.from);
       if (!S) continue;
+      if (S.available(g) < 1) {
+        // the usual supplier is empty: the next-nearest one that has the good takes the order (the terminal last)
+        const alts = (this.supplierLists[g] || []).filter((x) => x !== b && x !== S && x.available(g) >= 1).sort((x, y) => dist2(b.pos, x.pos) - dist2(b.pos, y.pos));
+        const alt = alts[0] || (this.terminal && this.terminal !== b && this.terminal !== S && this.terminal.available(g) >= 1 ? this.terminal : null);
+        if (!alt) { b.flags.waiting = g; b.flags.overdue = Math.min(3, b.flags.overdue + 1); this._notice(b.district, 'shortage', `${S.name} is out of ${GOODS[g].label || g}; ${b.name} is waiting`, b.id); continue; }
+        S = alt;
+      }
       const avail = S.available(g);
-      if (avail < 1) { b.flags.waiting = g; b.flags.overdue = Math.min(3, b.flags.overdue + 1); this._notice(b.district, 'shortage', `${S.name} is out of ${GOODS[g].label || g}; ${b.name} is waiting`, b.id); continue; }
       let qty = Math.min(want, avail, Math.max(0, b.room() - this._inboundTotal(b)));
       if (qty < 1) continue;
       const unit = this.quote(S, g).buy || GOODS[g].base;
@@ -570,6 +600,9 @@ export class EconomySim {
     const elapsed = h.lastVisit === null ? 0 : Math.min(1, now - h.lastVisit);
     h.lastVisit = now;
     if (elapsed <= 0) return;
+    h.visits = (h.visits || 0) + 1;
+    // the household rotates through its nearest shops so every one of them sees custom
+    const rot = (list) => (list.length ? list.slice(h.visits % list.length).concat(list.slice(0, h.visits % list.length)) : list);
     const day = Math.floor(now), hour = (now - day) * 24;
     const mood = 0.8 + 0.4 * hash2(h.seed, day, 77);   // daily variation of demand, deterministic per lot and day
     const pool = this.outside.households;
@@ -593,7 +626,7 @@ export class EconomySim {
     let meals = Math.floor(h.acc.meals);
     if (meals > 0) {
       let bought = 0;
-      for (const fid of h.food) {
+      for (const fid of rot(h.food)) {
         const f = this.byId.get(fid); if (!f || !f.isOpen(hour)) continue;
         bought += this._buyMeals(f, meals - bought, h);
         if (bought >= meals) break;
@@ -618,14 +651,14 @@ export class EconomySim {
       }
     }
     // domestic goods every few days, from the nearest general store / tailor / ...
-    const dom = h.domestic != null ? this.byId.get(h.domestic) : null;
+    const dom = h.domestics && h.domestics.length ? this.byId.get(rot(h.domestics)[0]) : null;
     if (dom) {
       h.acc.dom += TUNING.domesticPerResident * h.size * elapsed * mood;
       const n = Math.floor(h.acc.dom);
       if (n > 0 && dom.isOpen(hour)) { const got = this._buyRetail(dom, n, (e) => !FOOD_CATS.has(GOODS[e.item].cat)); h.acc.dom -= n; if (got > 0) h.stats.spent += got; }
     }
     // leisure and rides: paid services (credits only)
-    const leis = h.leisure != null ? this.byId.get(h.leisure) : null;
+    const leis = h.leisures && h.leisures.length ? this.byId.get(rot(h.leisures).find((id) => { const x = this.byId.get(id); return x && x.isOpen(hour); }) ?? rot(h.leisures)[0]) : null;
     if (leis) { h.acc.leis += TUNING.leisurePerResident * h.size * elapsed * mood; const n = Math.floor(h.acc.leis); if (n > 0 && leis.isOpen(hour)) { const fee = TUNING.leisureFee * n; if (pool.funds >= fee) { h.acc.leis -= n; this.pay('households', leis.id, fee, 'leisure'); } else h.acc.leis -= n; } }
     const tr = h.transit != null ? this.byId.get(h.transit) : null;
     if (tr) { h.acc.ride += TUNING.ridesPerResident * h.size * elapsed; const n = Math.floor(h.acc.ride); if (n > 0) { const fee = Math.round(TUNING.ridePrice * n * tr.serviceCapability.level); h.acc.ride -= n; if (fee > 0 && pool.funds >= fee) this.pay('households', tr.id, fee, 'transit'); } }
@@ -678,7 +711,9 @@ export class EconomySim {
     this.emit('economy:shipment', this._shipmentEvent(sh));
     return sh;
   }
-  _shipmentEvent(sh) { return { id: sh.id, state: sh.state, from: sh.from, to: sh.to, goods: (sh.loadedAt != null ? sh.goods : sh.order).map((g) => ({ ...g })), carrier: { ...sh.carrier }, held: sh.held, detained: sh.detained }; }
+  // goods of a shipment as the world sees them: the manifest once loaded (kept after delivery), the order before
+  _goodsOf(sh) { return (sh.manifest && sh.manifest.length ? sh.manifest : (sh.loadedAt != null ? sh.goods : sh.order)).map((g) => ({ ...g })); }
+  _shipmentEvent(sh) { return { id: sh.id, state: sh.state, from: sh.from, to: sh.to, goods: this._goodsOf(sh), carrier: { ...sh.carrier }, held: sh.held, detained: sh.detained }; }
   _setState(sh, state, now) {
     if (sh.state === state) return;
     sh.state = state;
@@ -704,7 +739,7 @@ export class EconomySim {
         const e = sh.order[0];
         const r = this.transfer({ from: S.id, to: `shipment:${sh.id}`, good: e.good, qty: e.qty, credits: sh.cost, payer: T.id, payee: S.id, reason: 'wholesale', useReserved: true });
         if (r !== true) { this._cancel(sh, now); continue; }
-        sh.loadedAt = now;
+        sh.loadedAt = now; sh.manifest = sh.goods.map((g) => ({ ...g }));
         const d = dist2(S.bay, T.bay) + Math.abs(S.bay.y - T.bay.y);
         sh.eta = now + Math.max(1 / 96, d / TUNING.courierSpeed);
         this._setState(sh, 'loaded', now);
@@ -755,7 +790,7 @@ export class EconomySim {
         sh.carrier = { kind: 'ship', id: C.index, name: C.name, pad: C.pad };
         let bill = 0;
         for (const e of sh.order) { if (this.transfer({ from: 'offworld', to: `shipment:${sh.id}`, good: e.good, qty: e.qty, reason: 'import' }) === true) bill += Math.round(valueOf(e.good, e.qty) * TUNING.importCost); }
-        sh.bill = bill; sh.loadedAt = now; sh.eta = now + (C.nextPhase('touchdown', t) - t) / DAY_LENGTH_SECONDS;
+        sh.bill = bill; sh.loadedAt = now; sh.manifest = sh.goods.map((g) => ({ ...g })); sh.eta = now + (C.nextPhase('touchdown', t) - t) / DAY_LENGTH_SECONDS;
         this._setState(sh, 'loaded', now);
         this._setState(sh, 'in_transit', now);
         boundTo.set(C.index, sh);
@@ -836,7 +871,7 @@ export class EconomySim {
   }
   // live shipment records (plus the last few delivered ones when `includeRecent`)
   list(includeRecent = false) { const out = [...this.shipments.values()].map((s) => this._publicShipment(s)); if (includeRecent) for (const s of this.recentShipments.slice(-10)) out.push(this._publicShipment(s)); return out; }
-  _publicShipment(s) { return { id: s.id, goods: (s.loadedAt != null ? s.goods : s.order).map((g) => ({ ...g })), order: s.order.map((g) => ({ ...g })), cargo: s.goods.map((g) => ({ ...g })), qty: s.qty, from: s.from, to: s.to, state: s.state, carrier: { ...s.carrier }, position: { ...s.position }, eta: s.eta, orderedAt: s.orderedAt, loadedAt: s.loadedAt, bill: s.bill, paid: s.paid, held: s.held, detained: s.detained, history: s.history.slice() }; }
+  _publicShipment(s) { return { id: s.id, goods: this._goodsOf(s), order: s.order.map((g) => ({ ...g })), cargo: s.goods.map((g) => ({ ...g })), qty: s.qty, from: s.from, to: s.to, state: s.state, carrier: { ...s.carrier }, position: { ...s.position }, eta: s.eta, orderedAt: s.orderedAt, loadedAt: s.loadedAt, bill: s.bill, paid: s.paid, held: s.held, detained: s.detained, history: s.history.slice() }; }
 
   // ---------------------------------------------------------------------------------------------- visible state
   _notice(district, kind, text, lotId) {
@@ -906,7 +941,7 @@ export class EconomySim {
   // ---------------------------------------------------------------------------------------------- save
   serialize() {
     return {
-      v: 2, dayTime: this.dayTime, portTime: this.portTime, nextShipmentId: this.nextShipmentId, residents: this.residents,
+      v: 2, dayTime: this.dayTime, portTime: this.portTime, nextShipmentId: this.nextShipmentId, residents: this.residents, baseline: this.baseline,
       businesses: this.businesses.map((b) => [b.id, b.funds, pairs(b.stock), b.lastVisit, b.lastWageDay, b.lastRestockDay, b.acc, b.flags, [+b.uptime.up.toFixed(4), +b.uptime.total.toFixed(4)], b.serviceCapability.level, [...b.openOrders.entries()]]),
       households: { funds: this.outside.households.funds, lots: this.households.map((h) => [h.lotId, h.acc, h.lastVisit, h.stats]) },
       treasury: { funds: this.outside.treasury.funds, bondToday: this.outside.treasury.bondToday, day: this.outside.treasury.day, allocatedToday: [...this.outside.treasury.allocatedToday.entries()] },
@@ -951,6 +986,7 @@ export class EconomySim {
     for (const sh of this.shipments.values()) if (sh.state === 'ordered' && typeof sh.from === 'number') { const S = this.byId.get(sh.from); for (const e of sh.order) S.reserved.set(e.good, S.reservedOf(e.good) + e.qty); }
     for (const b of this.businesses) for (const [g, id] of [...b.openOrders]) if (!this.shipments.has(id)) b.openOrders.delete(g);
     this.fullPassDue = false;
+    this.baseline = typeof data.baseline === 'number' ? data.baseline : this.wealth() - this.journal.net();
     return true;
   }
 }
