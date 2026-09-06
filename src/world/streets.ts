@@ -1401,10 +1401,16 @@ export class Streets {
       if (!free[j * nu + i]) continue;
       const frontage = !at(i - 1, j) || !at(i + 1, j) || !at(i, j - 1) || !at(i, j + 1);
       const k = hash2(i, j, Math.round(h * 1000));
-      if (k > (frontage ? 0.33 : 0.08)) continue;
+      if (k > (frontage ? 0.33 : 0.18)) continue;
       const [x, z] = toWorld(u0 + (i + 0.5) * 5, v0 + (j + 0.5) * 5);
       if (!this.roads.clear(x, z, 2.2)) continue;
       const y = this.map.heightAt(x, z) + PAVE_CLEAR + 0.01;
+      if (!frontage && k > 0.08) {
+        // pedestrian lanterns over the open cells (one in ten): at night a plaza is a lit space with its own dots
+        // and 5 m pools instead of a dark hole between the street lamps
+        this.lamp(x, y, z, 0, 'ped');
+        continue;
+      }
       const f = frame(x, y, z, -rot + (k > 0.15 ? Math.PI / 2 : 0));
       part(soup, UNIT.boxOpen, f, 0, 0.28, 0, 1.6, 0.56, 1.6, C.concrete, 0.9, 0);
       part(soup, UNIT.boxOpen, f, 0, 0.78, 0, 1.4, 0.46, 1.4, C.shrub, 0.95, 0);
