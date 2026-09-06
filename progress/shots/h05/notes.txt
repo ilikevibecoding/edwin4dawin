@@ -1,0 +1,14 @@
+base: 9e8704db (cursor/vice-city-aerial-8213)
+skip acsplit: nothing new
+merged waterrender: 529cd551 Water rendering report: final-state stills of rounds 1-7 (sun path by time of day, altitud
+skip waterphys: merge conflict in bench/scripts/flighttest.mjs src/world/water.ts 
+skip boats: no remote branch
+merged clouds4: 18f48393 Clouds r7c-e (work in progress): base ramp scaled by column height (130 m under a core, 20
+merged light3: 4a0ed1f4 light3 report: request to the water agent to drive the mirror pass's cloud-shadow share fr
+merged street: 5a857b5d Lamp dots hold full strength to 4 km and fade out over 4-5 km (they were at 22 % by 3.7 km
+merged highway: b2a733ab Highway report: landingSurface and the pinned end rows
+merged facade3: d596a103 City report: self-scores 17-20 with reasons, self-critique, next attack, failed / reverted
+merged veg5: 25446639 Vegetation loop 6 WIP (round 14, runtime verification pending): the understory draws its s
+merged terrain5: f561ffd0 terrain5 report: round 4 (pass budget) defect entry
+skip acgeo: nothing new
+build: a41b535e from /home/ubuntu/wt-integration
