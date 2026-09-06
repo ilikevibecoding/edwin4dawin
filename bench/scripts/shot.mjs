@@ -10,6 +10,8 @@ const browser = await puppeteer.launch({
   headless: true,
   args: ['--no-sandbox', '--disable-gpu-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', `--window-size=${w},${h}`, '--hide-scrollbars'],
   defaultViewport: { width: Number(w), height: Number(h), deviceScaleFactor: 1 },
+  // the machine-wide Chrome gate (/usr/local/bin/google-chrome) blocks the launch until a slot is free
+  timeout: 0,
 });
 const page = await browser.newPage();
 const logs = [];

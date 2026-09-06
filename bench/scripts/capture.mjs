@@ -40,6 +40,8 @@ const browser = await puppeteer.launch({
   args: ['--no-sandbox', '--disable-gpu-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1920,1080', '--hide-scrollbars', '--enable-precise-memory-info'],
   defaultViewport: { width: 1920, height: 1080, deviceScaleFactor: 1 },
   protocolTimeout: 1800000,
+  // the machine-wide Chrome gate (/usr/local/bin/google-chrome) blocks the launch until a slot is free
+  timeout: 0,
 });
 
 async function openView(view, w, h, quality) {

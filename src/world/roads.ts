@@ -571,7 +571,7 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     vec2 pf = fract(vec2(along / 5.0, (xm + hw) / 3.0));
     float ph = hash12(pc + cls * 13.0);
     float pin = aaStep(0.08, pf.x, fwA / 5.0) * aaStep(pf.x, 0.92, fwA / 5.0) * aaStep(0.1, pf.y, fwX / 3.0) * aaStep(pf.y, 0.9, fwX / 3.0);
-    float patch = step(0.955, ph) * pin * (1.0 - smoothstep(0.4, 1.5, fp)) * (1.0 - inBox);
+    float repair = step(0.955, ph) * pin * (1.0 - smoothstep(0.4, 1.5, fp)) * (1.0 - inBox);
     float patchTone = ph > 0.98 ? 1.18 : 0.78;
     // longitudinal paving seam at the lane edge and transverse seams every ~27 m
     float seam = mix(aaLine(min(lp, laneW - lp), 0.03, fwX), 0.0, smoothstep(0.3, 1.0, fwX)) * 0.5;
@@ -583,7 +583,7 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     // damp gutter stain along the kerbs
     float gutter = smoothstep(hw - 0.7, hw - 0.1, abs(xm)) * (1.0 - inBox);
     vec3 surf = asphalt * wear;
-    surf = mix(surf, asphalt * patchTone, patch * 0.85);
+    surf = mix(surf, asphalt * patchTone, repair * 0.85);
     surf *= 1.0 - (0.18 * max(seam, tseam) + 0.35 * crack) * (1.0 - inBox) - 0.12 * gutter;
     surf *= 1.0 - 0.12 * smoothstep(0.6, 0.75, fbm3(wp * 0.04 + 8.0)) * (1.0 - inBox);
     // ---- markings, each box-filtered over the pixel footprint and faded out where they stop at junctions
@@ -659,7 +659,7 @@ const ROAD_FRAG_MAIN = /* glsl */ `
       roughnessFactor = mix(0.78, 0.5, max(manhole, grate));
     } else roughnessFactor = 0.78;
     // wet-looking fresh patches and paint are a little smoother than the aggregate
-    roughnessFactor = mix(roughnessFactor, 0.62, max(whiteC, yellowC) * 0.6 + patch * 0.4);
+    roughnessFactor = mix(roughnessFactor, 0.62, max(whiteC, yellowC) * 0.6 + repair * 0.4);
     roughnessFactor += 0.08 * n2 - 0.04;
   }
 }
