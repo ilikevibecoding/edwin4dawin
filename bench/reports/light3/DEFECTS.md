@@ -42,8 +42,9 @@ Baseline budgets: all views 129-306 calls, 0.2-1.28 M triangles, console empty.
 
 Change (`src/world/atmosphere.ts`): `SUN_IRRADIANCE` 6.0 -> 3.0 so a sunlit Lambertian white (E/pi ~ 1.0 with its
 share of sky) lands on the scale the cloud raymarch already uses for sunlit cloud tops (~0.8-1.0), and the IBL
-multiplier per key: el 4 0.85 -> 0.8, el 14 1.0 -> 0.7, el 30/90 1.0 -> 0.5 (the probe's neutral fill averages
-2-3x the visible sky's mean radiance; halving it at high sun puts the shaded white where the sky alone would put it).
+multiplier per key: el 4 0.85 -> 0.5, el 14 1.0 -> 0.55, el 30/90 1.0 -> 0.5 (the probe's neutral fill averages
+2-3x the visible sky's mean radiance; halving it at high sun puts the shaded white where the sky alone would put it;
+the low-sun keys were held near 0.5 because with 0.8 the shaded tower faces at 17:45 matched the sunlit ones).
 
 A/B (same seed/pose, port 4550 vs 4551), neutral-paint histogram over the aircraft (pixels with chroma < 0.45):
 
@@ -82,3 +83,18 @@ yellow-orange at 3-4 deg, orange-red on the horizon) instead of a 9x red limb be
 | 2.6 | 0.6 open: golden-hour city still one peach wash; towers show some lit/shade but lit faces are mauve-grey not orange. Cause is in the probe: the neutral fill is 65 % of the probe at the horizon and 40 % at 60 deg up at every azimuth and every sun elevation, so at 17:45 shade and horizontal ground are lit by salmon haze. Fix in round 3: fill weight x0.35 below ~8 deg sun (sky.ts probe shader, cloud code untouched). | highSkyline 17:45 ruler crop 480-780 x 290-440 |
 | 2.7 | Glitter path 06:45 toward the sun: core 247 -> 239, edge 151 -> 133, blown 1.49 % -> 0.07 %. Still bright with bloom, but the water's specular halved with the CSM irradiance; a glitter toward a 14 deg sun clips hard in life. Request to the water agent (x1.5-2 on the glitter BRDF scale). | chaseTo 06:45 (620-680, 200-260) |
 | 2.8 | Night 22:00 unchanged (moon scale untouched): city glow, lit windows with soft bloom, red nav light halo, legible white wing. Kept. | nightChase blown 0.06 %, crushed 0 % |
+
+## Round 3 — seam at 30 m, low-sun probe, dusk sweep, shadows (defects 0.3, 0.6, 0.11, items 4/5)
+
+Changes: `post.ts` seam pixels hazed by their farthest geometry neighbour (cloud shadow skipped for them);
+`sky.ts` probe fill x0.35 below ~8 deg sun (probe shader only); disc ramp retuned.
+
+| # | result | measurement |
+|---|---|---|
+| 3.1 | 0.3 closed at 30 m: the remaining dark pixels of the last sky row are ships and islands on the horizon (x 135, 350, 907-999), not mixed pixels; the 5x crop shows a clean sky/water boundary. The step 202 -> 178 -> 157 (24 km -> 3.5 km) is the sea horizon. | horizon30 12:00 rows 357-364 |
+| 3.2 | 0.6 improved: shade and streets of the golden-hour city take the away-side violet of the dome, lit faces stay pink-orange (colour separation instead of one peach wash). Side effect: the water's mirror of the away-side sky goes deep violet at 17:45 (near water L 59 -> 44, planeClose) and a white wing top on the side away from the sun falls to sRGB 54 (r0 87), darker than the water mirroring the same sky. Round 4: fill factor 0.5 instead of 0.35 and low-sun `amb` 0.5/0.55 -> 0.7. | highSkyline / planeClose / lowBridge 17:45 |
+| 3.3 | 2.3 disc at 1.7 deg (248,210,1): still lemon with the linear 0-5 deg ramp; squared ramp for round 4 (target sRGB ~(250,170,60)). | chaseTo 18:20 (640-650, 114-124) |
+| 3.4 | Dusk sweep 17:30 -> 19:30 (6 frames, scattered): scene p50 85/58/41/34/22/17, sky top L 172/141/117/96/45/28, wing top 86/65/43/33/32/32 — monotonic, no pops; the largest sky step (96 -> 45, 18:42 -> 19:06) spans civil to nautical twilight (sun -4.9 -> -10.2 deg), where the real sky loses far more. Nav lights come on between 18:18 and 18:42 (aircraft agent's night switch); the night exposure boost holds the airframe at 32-33 from 18:42 on. | r3/dusk*.png contact strip |
+| 3.5 | Shadows 09:00 / 15:30 close-up: wing shadow on the water beside the floats, fuselage top shaded by the wing, strut lines on the float tops, dark water under the floats; no acne on the floats or the fuselage. Bridge 15:30: pole and car shadows crisp on the deck, the deck's shadow on the water, no acne on the deck, pylons shaded on one side. Bridge 17:45 (sun 7.7 deg behind): no acne, no visible peter-panning of the cars (they sit on their shadows). | s0900/s1530/s1745 planeClose, lowBridge |
+| 3.6 | Cascade coverage (dbg=cascades, chase 300 m): cascade 1 (green) holds the ground out to ~2x the nearest ground distance, cascade 2 (blue) the rest of the range including the 3-5 km city; tree shadows on the near island's sand, building shadows in the core. Vegetation casters stop at 1.8 km (shadows are ~1 texel there). No change needed. | s1530_chaseGround_cascades |
+| 3.7 | 0.11 cockpit with the sun 50 deg off the nose at 38 deg elevation: no sunlit patch inside — the high wing and roof shade the door windows at that elevation (a real high-wing cabin is shaded at midday); a 17:45 side sun would put a patch on the panel. Not a defect; a low-sun side view is the remaining test. | s1530_cockpitSide |
