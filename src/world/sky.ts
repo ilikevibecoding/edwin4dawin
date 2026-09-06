@@ -91,7 +91,7 @@ const float BASE_WARP = 380.0;
 // march and the light march start there instead of planing those cells off at uCloudBase
 float slabBottom() {
   float deck = smoothstep(0.45, 0.7, uCloudCoverage);
-  return uCloudBase - mix(0.15, 0.25, deck) * (uCloudTop - uCloudBase) - BASE_WARP * 0.8;
+  return uCloudBase - mix(0.15, 0.25, deck) * (uCloudTop - uCloudBase) - BASE_WARP * 0.4 * mix(1.0, 0.5, deck);
 }
 
 // interleaved gradient noise: a pure function of the pixel position, so frames are reproducible
@@ -126,7 +126,9 @@ vec3 noiseCoord(vec3 p, vec4 f) {
  *  extra fetch), faded out above a third of the slab so the crown keeps its own shape.
  *  hf0 = height fraction over the smooth base. */
 float baseWarp(vec4 n, float hf0) {
-  return (n.b - 0.5) * (BASE_WARP * 1.6) * (1.0 - smoothstep(0.2, 0.35, hf0));
+  float deck = smoothstep(0.45, 0.7, uCloudCoverage);
+  // clipped at 2.5 sigma (150 m); a closed deck undulates by half as much (stratocumulus, not cumulus pouches)
+  return clamp(n.b - 0.5, -0.25, 0.25) * (BASE_WARP * 1.6) * mix(1.0, 0.5, deck) * (1.0 - smoothstep(0.2, 0.35, hf0));
 }
 
 /** Vertical envelope of the layer (before noise): a base whose footprint is exactly cloudCoverage2D
@@ -185,7 +187,7 @@ float meanDensity(float e, float hn) { return clamp(e * 1.2 - 0.5 * mix(0.9, 1.3
 float densityBase(vec3 p, vec4 f) {
   float thick = uCloudTop - uCloudBase;
   float hf0 = (p.y - baseAltitude(f)) / thick;
-  if (hf0 > 1.0 || hf0 < -BASE_WARP * 0.8 / thick) return 0.0;
+  if (hf0 > 1.0 || hf0 < -BASE_WARP * 0.4 / thick) return 0.0;
   vec4 n = texture(uNoise3D, noiseCoord(p, f));
   float hf, hn, H;
   float e = envelope(p, f, baseWarp(n, hf0), hf, hn, H);
@@ -359,7 +361,7 @@ void main() {
       float e = 0.0;
       vec3 q = vec3(0.0);
       vec4 n = vec4(0.5);
-      if (covTest > 0.0 && hf0 < 1.0 && hf0 > -BASE_WARP * 0.8 / thick) {
+      if (covTest > 0.0 && hf0 < 1.0 && hf0 > -BASE_WARP * 0.4 / thick) {
         q = noiseCoord(p, f);
         n = texture(uNoise3D, q);
         e = envelope(p, f, baseWarp(n, hf0), hf, hn, H);
