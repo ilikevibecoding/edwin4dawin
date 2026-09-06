@@ -86,13 +86,22 @@ PROGRESS_VIEWS=(
 )
 META="$OUT/meta.json"
 echo "{\"tag\":\"$TAG\",\"build\":\"$BUILD_SHA\",\"time\":\"$(date -u +%Y-%m-%dT%H:%MZ)\",\"views\":[" > "$META"
+# One Chrome for the whole batch. CHROME_SLOTS=3 lets this launch take a third slot the builders (SLOTS=2) never
+# use, so the hourly page is not queued behind their captures; one extra browser for a few minutes an hour is
+# within the machine's budget.
+SPEC="/tmp/progress-$TAG.spec"; : > "$SPEC"
+for spec in "${PROGRESS_VIEWS[@]}"; do
+  IFS='|' read -r label title item query <<< "$spec"
+  printf '%s\t%s\n' "/tmp/progress-$TAG-$label.png" "http://127.0.0.1:$PORT/?bench=$query&freeze=1&seed=20260904&nohud=1" >> "$SPEC"
+done
+CHROME_SLOTS=3 node "$ROOT/bench/scripts/shots.mjs" "$SPEC" 1280 720 3 > "/tmp/progress-$TAG-shots.log" 2>&1 || true
 first=1
 for spec in "${PROGRESS_VIEWS[@]}"; do
   IFS='|' read -r label title item query <<< "$spec"
   png="/tmp/progress-$TAG-$label.png"
-  if node "$ROOT/bench/scripts/shot.mjs" "http://127.0.0.1:$PORT/?bench=$query&freeze=1&seed=20260904&nohud=1" "$png" 1280 720 3 > "/tmp/progress-$TAG-$label.log" 2>&1; then
-    python3 -c "from PIL import Image; im=Image.open('$png').convert('RGB'); im.save('$OUT/$label.jpg', quality=85)"
+  if [ -s "$png" ] && python3 -c "from PIL import Image; im=Image.open('$png').convert('RGB'); im.save('$OUT/$label.jpg', quality=85)"; then
     ok=true
+    python3 -c "import json,sys; d=json.load(open('$png.log.json')); sys.exit(0 if d.get('ready') else 1)" 2>/dev/null || echo "not ready (shot anyway): $label" >> "$NOTES"
   else
     ok=false; echo "shot failed: $label" >> "$NOTES"
   fi
