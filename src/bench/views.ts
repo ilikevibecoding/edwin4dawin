@@ -159,5 +159,37 @@ BENCH_VIEWS.push(
 );
 
 export function findView(id: string): BenchView | undefined {
+  if (id === 'dev') return devView(new URLSearchParams(window.location.search));
   return BENCH_VIEWS.find((v) => v.id === id);
+}
+
+/** Ad-hoc view from URL parameters (`?bench=dev&...`) so builders can pose cameras without editing this file:
+ *  `cam=x,y,z` + `hdg` + `pch` (fixed camera; omit `cam` for `mode=chase|cockpit`), `fov`, `follow=1`,
+ *  `plane=x,y,z,headingDeg,pitchDeg,bankDeg,speed,throttle`, `flaps`, `time` (hours), `weather`, `presim` (s),
+ *  `inputs=pitch,roll,yaw` held during a clip. Missing values fall back to a taxiing aircraft off the marina. */
+export function devView(q: URLSearchParams): BenchView {
+  const nums = (k: string): number[] => (q.get(k) ?? '').split(',').map(Number).filter((n) => Number.isFinite(n));
+  const num = (k: string, d: number): number => { const n = Number(q.get(k)); return q.has(k) && Number.isFinite(n) ? n : d; };
+  const cam = nums('cam');
+  const p = nums('plane');
+  const inputs = nums('inputs');
+  const modeParam = q.get('mode');
+  const mode: CamMode = cam.length === 3 ? 'fixed' : modeParam === 'cockpit' ? 'cockpit' : 'chase';
+  const weather = (q.get('weather') ?? 'clear') as Weather;
+  return {
+    id: 'dev', name: 'Dev view', description: 'URL-parameterised camera and aircraft pose.',
+    time: num('time', 14), weather,
+    camera: {
+      mode,
+      pos: cam.length === 3 ? [cam[0], cam[1], cam[2]] : undefined,
+      headingDeg: num('hdg', 0), pitchDeg: num('pch', -10), fov: num('fov', 50), follow: q.get('follow') === '1',
+    },
+    plane: {
+      pos: [p[0] ?? 420, p[1] ?? 1.96, p[2] ?? 1905],
+      headingDeg: p[3] ?? 240, pitchDeg: p[4] ?? 0, bankDeg: p[5] ?? 0, speed: p[6] ?? 3.5, throttle: p[7] ?? 0.12,
+      flaps: num('flaps', 0),
+    },
+    presim: num('presim', 10),
+    clipInputs: { pitch: inputs[0] ?? 0, roll: inputs[1] ?? 0, yaw: inputs[2] ?? 0 },
+  };
 }
