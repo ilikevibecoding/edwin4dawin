@@ -12,7 +12,6 @@ import { SCENARIOS, SCENARIO_BY_ID, vote, positionOf } from './scenarios.js';
 import { DELEGATIONS, DELEGATION_BY_ID } from './delegations.js';
 import { streetRoute } from './route.js';
 import { blueprintFor } from '../coruscant/buildings.js';
-import { SenateUI } from '../ui/senate.js';
 
 const SAMPLE_MS = 250;
 const LOCAL_KEY = 'frontier-craft:senate';   // fallback persistence until save.js carries the `senate` key
@@ -28,7 +27,9 @@ export class Senate {
     this._dirty = false;
     this.speakerLine = null;   // { line, until } for the subtitle strip
     this.restore(this._loadSaved());
-    this.ui = typeof document !== 'undefined' ? new SenateUI(this) : null;
+    // the DOM overlays (board, plaques, subtitle) load only in a browser: the module stays importable under Node
+    this.ui = null;
+    if (typeof document !== 'undefined') import('../ui/senate.js').then((m) => { this.ui = new m.SenateUI(this); }).catch((e) => console.warn('senate: UI unavailable', e));
   }
 
   // ---------------------------------------------------------------- geometry (from the blueprint's meta.senate)

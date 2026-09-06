@@ -22,9 +22,9 @@ import { DELEGATIONS, SIZE_ARC } from '../../senate/delegations.js';
 const AIR = FORCE_AIR;
 const TAU = Math.PI * 2;
 export const G = {
-  CX: 83, CZ: 79, R_DRUM: 68, DRUM_TOP: 26, R_HALL: 53, PIT_R: 29,
-  BOWL: [[30, 35, 3], [36, 41, 6]],          // [inner bin, outer bin, walk y]
-  INNER_WALL: 42, INNER_ROOM: [43, 52],       // inner band rooms (levels 1 and 6)
+  CX: 83, CZ: 79, R_DRUM: 68, DRUM_TOP: 26, R_HALL: 53, PIT_R: 30,   // pit floor: bins 0..30 = 61 blocks across
+  BOWL: [[31, 36, 3], [37, 42, 6]],          // [inner bin, outer bin, walk y]
+  INNER_WALL: 43, INNER_ROOM: [44, 52],       // inner band rooms (levels 1 and 6)
   POD_R: [40, 45], GALLERY_R: [46, 52],      // wall tiers: pods cantilevered in front of the gallery ring
   TIERS: [11, 16, 21], GALLERY_Y: 26, LEVELS: [1, 6, 11, 16, 21],
   SERVICE_R: [54, 55], SVC_WALL: 56, ROOM_R: [57, 61], OUT_WALL: 62, CORR_R: [63, 66], SKIN_R: [67, 68],
@@ -184,10 +184,10 @@ function drumAndDome(bp, P) {
 
 // walk height of the bowl surface at radius r (for the radial stairs): pit 1, ring 1 at 3, ring 2 at 6
 function bowlY(r) {
-  if (r <= 26) return 1;
-  if (r <= 30) return 1 + Math.round((r - 26) * 0.5 * 2) / 2;
-  if (r <= 33) return 3;
-  if (r <= 39) return 3 + Math.round((r - 33) * 0.5 * 2) / 2;
+  if (r <= 27) return 1;
+  if (r <= 31) return 1 + Math.round((r - 27) * 0.5 * 2) / 2;
+  if (r <= 34) return 3;
+  if (r <= 40) return 3 + Math.round((r - 34) * 0.5 * 2) / 2;
   return 6;
 }
 
@@ -249,7 +249,7 @@ function chamber(bp, P, meta) {
   // radial stairs at the eight half-diagonals from the pit to ring 2
   for (let k = 0; k < 8; k++) {
     const a = k * Math.PI / 4 + Math.PI / 8, ux = Math.cos(a), uz = Math.sin(a);
-    for (let r = 25; r <= 41.5; r += 0.5) {
+    for (let r = 26; r <= 42.5; r += 0.5) {
       const s = bowlY(r), cell = Number.isInteger(s) ? s - 1 : Math.floor(s);
       for (const off of [-0.7, 0.7]) {
         const x = Math.round(CX + ux * r - uz * off), z = Math.round(CZ + uz * r + ux * off);
@@ -262,18 +262,22 @@ function chamber(bp, P, meta) {
   // wall tiers: gallery ring floor (bins 46..52) at y-1, rail at bin 46 between pods, 30 hanging pods per tier
   meta.tierPods = [];
   G.TIERS.forEach((y, t) => {
-    const n = G.PODS_PER_TIER, podHalf = 2.7 / (pr0 + 0.5);
+    // the middle tier is staggered by half a slot so its pods hang over the gaps of the tier below (and the top
+    // tier over the middle tier's gaps): every pod front has air beneath it, and the cardinal passages of the
+    // middle tier look straight into the chamber between two pods
+    const n = G.PODS_PER_TIER, podHalf = 2.7 / (pr0 + 0.5), off = t === 1 ? TAU / (2 * n) : 0;
     eachSector(bp, P, gr0, gr1, 0, TAU, (x, z, b, a) => {
       bp.set(x, y - 1, z, (b === gr0 || b === gr1) ? B.PANEL_BLACK : ((x + z) % 7 === 0 ? GLOW : PLATE));
       bp.fill(x, y, z, x, y + 3, z, AIR);
-      const k = Math.round(a / (TAU / n)) % n, da = angDiff(a, k * TAU / n);
+      const k = Math.round((a - off) / (TAU / n)) % n, da = angDiff(a, k * TAU / n + off);
       if (b === gr0 && Math.abs(da) > podHalf + 0.6 / gr0) bp.set(x, y, z, B.IRON_BARS);
     });
     // east seam: eachSector skips angle 0 exactly; fill the seam cells of the gallery floor
     for (let b = gr0; b <= gr1; b++) { bp.set(CX + b, y - 1, CZ, PLATE); bp.fill(CX + b, y, CZ, CX + b, y + 3, CZ, AIR); }
+    if (off) bp.set(CX + gr0, y, CZ, B.IRON_BARS);   // no pod at the seam on the staggered tier: close the rail
     const tierPods = [];
     for (let k = 0; k < n; k++) {
-      const a = norm(k * TAU / n);
+      const a = norm(k * TAU / n + off);
       const p = pod(bp, a, pr0, pr1, y - 1, podHalf, 4, true);
       tierPods.push({ tier: t, k, a, ...p });
     }
@@ -314,9 +318,11 @@ function chamber(bp, P, meta) {
     if (r > G.PODIUM_R - 0.5) bp.set(x, dy, z, B.IRON_BARS);
   }
   for (let y = 3; y <= dy - 2; y += 3) for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; bp.set(Math.round(CX + Math.cos(a) * (G.PODIUM_R + 0.2)), y, Math.round(CZ + Math.sin(a) * (G.PODIUM_R + 0.2)), BLUE); }
-  bp.set(CX + 2, dy, CZ, B.CONSOLE); bp.set(CX + 2, dy, CZ + 1, B.HOLO_SIGN); bp.set(CX + 2, dy + 1, CZ, B.HOLO_SIGN);
-  for (const [ox, oz] of [[-2, -1], [-2, 1], [0, -3], [0, 2]]) { bp.set(CX + ox, dy, CZ + oz, SEAT); bp.spot(CX + ox, dy, CZ + oz, 'seat'); }
-  bp.work(CX + 1, dy, CZ, 'chancellor');
+  // the lift shaft fills x CX-2..CX+1, z CZ-2..CZ+1 up to the dais; the Chancellor stands east of it facing the
+  // chamber over the console, aides' seats at the dais corners, the lift door opens south onto free cells
+  bp.set(CX + 3, dy, CZ, B.CONSOLE); bp.set(CX + 3, dy, CZ + 1, B.HOLO_SIGN); bp.set(CX + 3, dy, CZ - 1, B.HOLO_SIGN); bp.set(CX + 3, dy + 1, CZ, B.HOLO_SIGN);
+  for (const [ox, oz] of [[2, -3], [2, 3], [-3, -3], [-3, 3]]) { bp.set(CX + ox, dy, CZ + oz, SEAT); bp.spot(CX + ox, dy, CZ + oz, 'seat'); }
+  bp.work(CX + 2, dy, CZ, 'chancellor');
   liftShaft(bp, CX - 1, CZ - 1, 1, dy);
   liftDoor(bp, CX - 1, CZ - 1, 1, 'S'); liftDoor(bp, CX - 1, CZ - 1, dy, 'S');
   bp.fill(CX - 1, 1, CZ + 1, CX, 3, CZ + G.PODIUM_R + 1, AIR); bp.fill(CX - 1, 0, CZ + 1, CX, 0, CZ + G.PODIUM_R + 1, PLATE);
@@ -327,8 +333,11 @@ function chamber(bp, P, meta) {
   meta.dais = { x: CX + 1, y: dy, z: CZ };
   // four tunnels at ground level from the drum's outer wall to the pit (3 wide, 4 high, lit lintels every third cell)
   for (const c of CARDINALS) eachSlot(bp, P, G.PIT_R - 1, G.SKIN_R[1], c, 1.5, (x, z, along) => {
-    bp.fill(x, 1, z, x, 4, z, AIR); bp.set(x, 0, z, STONE); bp.set(x, 5, z, Math.floor(along) % 3 ? BAND : GLOW);
+    bp.fill(x, 1, z, x, 4, z, AIR); bp.set(x, 0, z, STONE);
+    if (!isFree(bp, x, 5, z)) bp.set(x, 5, z, Math.floor(along) % 3 ? BAND : GLOW);   // lintels only under massing, not over the open bowl
   });
+  // ring 1 is two blocks high, so each tunnel cuts a trench through it: a slab bridge carries the ring walk across
+  for (const c of CARDINALS) eachSlot(bp, P, G.BOWL[0][0], G.BOWL[0][1], c, 1.5, (x, z) => bp.set(x, 4, z, SEAT));
 }
 
 // ------------------------------------------------------------------------------------------------ sectors (rooms)
@@ -498,7 +507,7 @@ function furnish(sec, role, rng, pal = null) {
     case 'chancellor': { // red carpet, gold, a great desk, statues, seats for visitors
       sec.arc(back, 1, (a, k) => { sec.put(back, a, 0, k % 3 ? RED : GOLD); if (k % 3 === 1) sec.put(back, a, 1, B.HOLO_SIGN); });
       sec.put(sec.rm + 1, sec.mid, 0, B.PANEL_BLACK); sec.put(sec.rm + 1, sec.mid + 1 / sec.rm, 0, B.PANEL_BLACK); sec.put(sec.rm + 1, sec.mid, 1, B.CONSOLE); sec.put(sec.rm + 1, sec.mid + 1 / sec.rm, 1, B.HOLO_SIGN);
-      sec.put(sec.rm + 2, sec.mid, 0, SEAT); sec.work(sec.rm + 2, sec.mid, 'chancellor');
+      sec.work(sec.rm + 2, sec.mid, 'chancellor'); sec.put(sec.rm + 2, sec.mid, 0, SEAT);
       for (const da of [-2.5 / sec.rm, 2.5 / sec.rm]) sec.seat(sec.rm - 1, sec.mid + da);
       for (const da of [-sec.half * 0.7, sec.half * 0.7]) { const [x, z] = sec.cell(sec.rm, sec.mid + da); if (isFree(sec.bp, x, sec.y, z)) { sec.bp.fill(x, sec.y, z, x, sec.y + 1, z, GOLD); sec.bp.set(x, sec.y + 2, z, GLOW); } }
       break;
@@ -574,7 +583,7 @@ function suite(bp, P, meta, deleg, y, plan, tier, podAngles, lift) {
       case 'reception': furnish(s, 'reception', null, pal); artifact(s, deleg.artifact, pal); break;
       case 'office': {
         s.put(rb, s.mid, 0, B.PANEL_BLACK); s.put(rb, s.mid + 1 / rb, 0, B.PANEL_BLACK); s.put(rb, s.mid, 1, B.CONSOLE); s.put(rb, s.mid + 1 / rb, 1, B.HOLO_SIGN);
-        s.put(rb - 1, s.mid, 0, SEAT); s.work(rb - 1, s.mid, 'executive'); s.work(rb - 1, s.mid + 1 / rb, 'desk');
+        s.work(rb - 1, s.mid, 'executive'); s.put(rb - 1, s.mid, 0, SEAT); s.work(rb - 1, s.mid + 1 / rb, 'desk');   // the senator sits at the desk
         for (const da of [-2.5 / rm, 2.5 / rm]) s.seat(rm - 1, s.mid + da);
         s.arc(ra, 1.2, (aa, k) => { if (k % 2 === 0) { s.put(ra, aa, 0, B.BOOKSHELF); s.put(ra, aa, 1, k % 4 ? B.BOOKSHELF : B.HOLO_SIGN); } });
         s.put(rb, s.a0 + 1.5 / rb, 0, B.DURASTEEL_DARK); s.put(rb, s.a0 + 1.5 / rb, 1, B.OAK_LEAVES);
@@ -644,7 +653,12 @@ function bands(bp, P, rng, meta) {
         if (Math.abs(perp - off) > 1.5) return;
         bp.set(x, y - 1, z, Math.floor(along) % 2 ? STONE : GOLD); bp.fill(x, y, z, x, y + 3, z, AIR); bp.set(x, y + 4, z, Math.floor(along) % 3 ? STONE : GLOW);
       });
-      if (y > 1) { const [gx, gz] = [Math.round(CX + Math.cos(c) * 60 - Math.sin(c) * (off + 2.5)), Math.round(CZ + Math.sin(c) * 60 + Math.cos(c) * (off + 2.5))]; if (isFree(bp, gx, y, gz)) guardPost(bp, gx, y, gz, Math.round(-Math.sin(c)) || 0, Math.round(Math.cos(c)) || 0); }
+      // guard post at the passage mouth (bin 60): the console in a niche of the passage wall, the guard on the edge cell
+      if (y > 1) {
+        const cellAt = (along, perp) => [Math.round(CX + Math.cos(c) * along - Math.sin(c) * perp), Math.round(CZ + Math.sin(c) * along + Math.cos(c) * perp)];
+        const [gx, gz] = cellAt(60, off - 1), [kx, kz] = cellAt(60, off - 2);
+        if (isFree(bp, gx, y, gz) && !isPylon(bp, kx, y, kz)) guardPost(bp, kx, y, kz, gx - kx, gz - kz);
+      }
     }
   }
   // ---- lifts first (their pylons must survive the room carves): twelve delegation lifts from the lobby to the
@@ -879,8 +893,9 @@ function approaches(bp, P, lot, meta) {
   // colonnades: chrome columns with lit capitals every four blocks, a chrome beam over them; statue plinths outside
   for (let z = zArch + 2; z <= bp.d - 4; z += 4) for (const sx of [dx - 8, dx + 8]) { bp.fill(sx, 1, z, sx, 6, z, TRIM); bp.set(sx, 7, z, GLOW); }
   for (const sx of [dx - 8, dx + 8]) bp.fill(sx, 8, zArch + 2, sx, 8, bp.d - 4, DARK);
-  for (let z = zArch + 4; z <= bp.d - 6; z += 8) for (const sx of [dx - 12, dx + 12]) { bp.fill(sx - 1, 1, z - 1, sx + 1, 1, z + 1, STONE); statue(bp, sx, 2, z); }
-  for (let z = zArch + 8; z <= bp.d - 6; z += 8) for (const sx of [dx - 12, dx + 12]) lamp(bp, sx, 1, z, 3, B.CITY_LAMP);
+  // statues flank the arch mouth and repeat every eight blocks; the rhythm stops short of the gate deck's lift shaft
+  for (let z = zArch; z <= bp.d - 10; z += 8) for (const sx of [dx - 12, dx + 12]) { bp.fill(sx - 1, 1, z - 1, sx + 1, 1, z + 1, STONE); statue(bp, sx, 2, z); }
+  for (let z = zArch + 4; z <= bp.d - 6; z += 8) for (const sx of [dx - 12, dx + 12]) if (isFree(bp, sx, 1, z) && isFree(bp, sx, 4, z)) lamp(bp, sx, 1, z, 3, B.CITY_LAMP);
   // Senate Guard posts: kiosks at the arch and at the gate
   guardPost(bp, dx - 5, 1, zArch + 1, 1, 0); guardPost(bp, dx + 5, 1, zArch + 1, -1, 0);
   guardPost(bp, dx - 4, 1, bp.d - 4, 1, 0); guardPost(bp, dx + 4, 1, bp.d - 4, -1, 0);
