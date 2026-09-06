@@ -567,10 +567,15 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
     g += gw * grp;
   }
   mss += chopF * windG * (setVar(11.6, 0.046) * (1.0 - fW0 * fW0) + setVar(7.1, 0.058) * (1.0 - fW1 * fW1) + setVar(4.7, 0.038) * (1.0 - fW2 * fW2)) * 1.1;
+  // the short sets from here down (5 m chop in part, everything under 2 m wholly) are kept apart: a hull's churned
+  // lane has wiped them off the surface, so they are added after the wake maps are read, scaled by the lane
+  vec2 gS = vec2(0.0);
+  float mssS = 0.0;
   float w1 = 1.0 - smoothstep(1.0, 2.2, foot);
   float a1 = 0.12 * windG * mix(chopF, rippleF, 0.4);
-  if (w1 > 0.001) g += chopSlope(wp, rot2(wd, -0.2), 5.0, 1.8, 2.7, t, 3.7, a1, val1, dval1) * w1;
-  mss += a1 * a1 * (1.0 - w1 * w1);
+  if (w1 > 0.001) { vec2 g1 = chopSlope(wp, rot2(wd, -0.2), 5.0, 1.8, 2.7, t, 3.7, a1, val1, dval1) * w1; g += 0.5 * g1; gS += 0.5 * g1; }
+  mss += a1 * a1 * (1.0 - w1 * w1) * 0.5;
+  mssS += a1 * a1 * (1.0 - w1 * w1) * 0.5;
   // wind streaks: the short waves are bunched into lanes a dozen metres long along the wind and a couple across
   float streakF = 1.0 - smoothstep(1.5, 4.0, foot);
   float lanes = streakF > 0.001 ? mix(0.5, vnoise(vec2(dot(wp, wd) * 0.07 + 0.6 * t, dot(wp, wc) * 0.55) + 5.5), streakF) : 0.5;
@@ -583,28 +588,29 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
         fC2 = setFade(1.3, footAlong(rot2(wd, 0.05), dxw, dyw));
   float crestNet = 0.0; // caustic filaments: the crests of the short sets focus the sun on the bed (zero mean)
   if (w2 > 0.001 || fC0 > 0.001) {
-    g += chopSlope(wp, rot2(wd, 0.3), 1.7, 1.4, 1.6, t, 7.1, a2, val2, dvalT) * w2;
+    gS += chopSlope(wp, rot2(wd, 0.3), 1.7, 1.4, 1.6, t, 7.1, a2, val2, dvalT) * w2;
     float grp2 = (0.45 + 1.1 * val1) * rippleF * windG * laneA;
     // the crests meander by a good part of a wavelength (two crossing sets with straight crests drew a diamond lattice)
     float wv = (val1 - 0.5) * 5.0 + (val2 - 0.5) * 1.5;
     vec2 dwv = dval1 * 5.0 + dvalT * 1.5;
     float s0, s1, s2;
-    g += (swellSlopeC(wp, rot2(wd, -0.35), 3.4, 0.030, t, 2.7, wv, dwv, s0) * fC0
-        + swellSlopeC(wp, rot2(wd, 0.25), 2.15, 0.020, t, 8.1, wv * 0.7, dwv * 0.7, s1) * fC1
-        + swellSlopeC(wp, rot2(wd, 0.05), 1.3, 0.011, t, 12.3, wv * 0.5, dwv * 0.5, s2) * fC2) * grp2;
+    gS += (swellSlopeC(wp, rot2(wd, -0.35), 3.4, 0.030, t, 2.7, wv, dwv, s0) * fC0
+         + swellSlopeC(wp, rot2(wd, 0.25), 2.15, 0.020, t, 8.1, wv * 0.7, dwv * 0.7, s1) * fC1
+         + swellSlopeC(wp, rot2(wd, 0.05), 1.3, 0.011, t, 12.3, wv * 0.5, dwv * 0.5, s2) * fC2) * grp2;
     // sin^6 lines (mean 0.156) of each resolved set, weighted by the group height and broken into segments by
     // the 1.7 m noise (a continuous network read as a grid)
     float seg = 0.35 + 0.65 * smoothstep(0.3, 0.7, val2);
     crestNet = ((pow(max(s0, 0.0), 6.0) - 0.156) * fC0 + (pow(max(s1, 0.0), 6.0) - 0.156) * (0.8 * fC1) + (pow(max(s2, 0.0), 6.0) - 0.156) * (0.5 * fC2)) * min(grp2, 1.5) * seg;
   }
-  mss += a2 * a2 * (1.0 - w2 * w2) + rippleF * windG * laneA * (setVar(3.4, 0.030) * (1.0 - fC0 * fC0) + setVar(2.15, 0.020) * (1.0 - fC1 * fC1) + setVar(1.3, 0.011) * (1.0 - fC2 * fC2)) * 1.2;
+  mssS += a2 * a2 * (1.0 - w2 * w2) + rippleF * windG * laneA * (setVar(3.4, 0.030) * (1.0 - fC0 * fC0) + setVar(2.15, 0.020) * (1.0 - fC1 * fC1) + setVar(1.3, 0.011) * (1.0 - fC2 * fC2)) * 1.2;
   // capillary-scale ripples: resolved only within a hundred metres or so; laid in wind lanes
   float w3 = 1.0 - smoothstep(0.1, 0.22, foot);
   float a3 = 0.12 * windG * rippleF * laneA;
-  if (w3 > 0.001) g += chopSlope(wp, rot2(wd, -0.05), 0.5, 1.6, 0.9, t, 11.3, a3, val3, dvalT) * w3;
-  mss += a3 * a3 * (1.0 - w3 * w3);
-  // capillary ripples are never resolved
-  mss += 0.002 + 0.003 * windG * mix(0.3, 1.0, open);
+  if (w3 > 0.001) gS += chopSlope(wp, rot2(wd, -0.05), 0.5, 1.6, 0.9, t, 11.3, a3, val3, dvalT) * w3;
+  mssS += a3 * a3 * (1.0 - w3 * w3);
+  // capillary ripples are never resolved (a floor of micro-roughness stays even on a slick)
+  mss += 0.002;
+  mssS += 0.003 * windG * mix(0.3, 1.0, open);
   // The short waves that make up the unresolved variance are bunched by the wave groups: rougher on the crests
   // and front faces of the groups, glassier in the troughs and between them (hydrodynamic modulation, the same
   // patchiness a slick shows). Cells a few wavelengths long along the wind and a couple across, travelling at
@@ -616,6 +622,7 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   if (grpF > 0.001) {
     float grpR = vnoise(vec2((dot(wp, wd) + 1.5 * t) / 40.0, dot(wp, wc) / 16.0) + 6.1);
     mss *= mix(1.0, 0.55 + 0.9 * grpR, grpF);
+    mssS *= mix(1.0, 0.55 + 0.9 * grpR, grpF);
   }
 
   // ---- wakes: r = foam, gb = normal perturbation, a = coverage
@@ -661,11 +668,16 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
     vec2 hz = texture2D(uWakeHeightTex, nuv - e.yx).rg - texture2D(uWakeHeightTex, nuv + e.yx).rg;
     g += vec2(hx.r - hx.g, hz.r - hz.g) * (${WAKE_HEIGHT_SCALE.toFixed(2)} / (2.0 * uWakeHeightTexel)) * nearW;
   }
-  // the churned lane is slick: turbulence has wiped the capillary ripples off it, so it glitters less and
-  // reads as the smooth dark road behind a hull rather than as foam alone
-  // (kept moderate: from a low camera a fully glassy lane mirrored the horizon sky as a bright haze band that
-  // swallowed the foam)
-  mss *= 1.0 - 0.35 * smoothstep(0.35, 0.9, wake.a);
+  // the churned lane is slick: the turbulence a hull leaves has wiped the short ripples (the sets under ~2 m, half
+  // of the 5 m chop) off it, so it lies as a smooth road in the rippled sea, mirroring the sky where the water
+  // around scatters it: the smooth dark lane behind a taxiing float or a boat, and the one part of a wake that
+  // still shows kilometres astern from altitude. The longer wind sea and the swell run through it unchanged.
+  // (r1 damped only the roughness term, by a third, so the lane kept its full ripple texture and read as foam
+  // alone; a fully glassy lane from a low camera mirrored the horizon haze as a bright band, hence 0.8 not 1)
+  float slick = 0.8 * smoothstep(0.3, 0.85, wake.a);
+  g += gS * (1.0 - slick);
+  mss += mssS * (1.0 - slick);
+  crestNet *= 1.0 - slick;
   vec3 N = normalize(vec3(-g.x, 1.0, -g.y));
 
   // ---- body colour: two-flow shallow-water reflectance, the bed seen through the column plus the

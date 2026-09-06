@@ -538,9 +538,18 @@ export class FlightModel {
         // kinematically (a continuous roll onto its floats instead of the instant reset)
         if (this.wreckedTimer > 1.5 && upY < -0.2) {
           this.righting = 1e-3;
-          // a nose-over has split both bows: once righted the wreck sits deep and nearly level (the flood of
-          // the slam alone left it within a few centimetres of its waterline)
-          if (this.wreck) { this.wreck.floodTarget[0] = Math.max(this.wreck.floodTarget[0], 0.6); this.wreck.floodTarget[1] = Math.max(this.wreck.floodTarget[1], 0.6); }
+          // a nose-over has split both bows, and the roll back onto the floats comes over the lower wing: that
+          // side's float is dragged through the water and its strut wrenched, so it floods to the deck while the
+          // other stays half full. The righted wreck sits deep and lists toward the wing it came back over
+          // (r9: the flood of the slam alone left it within a few centimetres of its waterline, and the 0.6 /
+          // 0.6 floor that followed had a wheels-down or nose-first ditching come up level, 17 cm low, as if
+          // only wetted, while the wing-strike wreck listed 12 deg; a wreck reads as one by sitting askew)
+          if (this.wreck) {
+            const rightY = this.tmpV.set(0, 0, 1).applyQuaternion(this.quaternion).y;
+            const lowSide = Math.abs(rightY) > 0.05 ? (rightY > 0 ? -1 : 1) : this.wreck.flood[1] > this.wreck.flood[0] ? 1 : -1;
+            this.wreck.floodTarget[0] = Math.max(this.wreck.floodTarget[0], lowSide < 0 ? 0.85 : 0.6);
+            this.wreck.floodTarget[1] = Math.max(this.wreck.floodTarget[1], lowSide > 0 ? 0.85 : 0.6);
+          }
         }
         else this.rightOnWater(upY, dt);
       }

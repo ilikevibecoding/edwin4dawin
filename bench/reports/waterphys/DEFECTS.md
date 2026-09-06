@@ -240,3 +240,128 @@ churn should keep bubbling up around a flooding hull for a while).
    0.3 while it is a film), so a single sheet reads glassy and the stacked roots of many at the chine read white
    (`effects.ts`, SprayCloud shader v5). Verification frames: `/tmp/waterphys/r5/sheets_f00[5-9]` (a dollying
    camera 16 m abeam of the firm touchdown) and `water-landing` f25/30/35.
+
+## Round 6 — float displacement and the near/far handover (`/tmp/waterphys/r4b`, dist3, chase 1280x720)
+
+Views: taxi at 3.5-3.8 m/s (`taxi_f000/015/030`), the planing run at 22-24 m/s (`wl_f030/045`), the front quarter
+at rest (`pfq_f000`), and 8 s of drifting on swell (`swell_f000..080`).
+
+1. **Handover**: no patch square, no tone or ripple step at the near region's rim in any of the four views; the
+   ring-wave rim fade and the 1 m overlap band (r4b) hold. Verified by eye on the frames and by a 3x contrast stretch
+   of the water around the rim (`taxi_f030_crop_enh`, `swell_f040_crop_enh`).
+2. **Planing displacement** (`wl_f045`): two whitewater rails off the steps with broken, wandering edges, the spray
+   blisters off the chines, the lane variable in density toward the camera. Reads as water. Left.
+3. **Displacement at rest / idle taxi** (`pfq_f000`): the floats sit at their waterline with a faint bow ripple ahead
+   of the near hull; correct for 3.5 m/s. Left.
+4. **The taxi wake did not read at all** (`taxi_f030`, `swell_f040`): behind two floats running at 3.8 m/s the water
+   was glass, with two soft white smudges ~10 m astern. A high-pass of the frame (`taxi_f030_hp`) shows the wake is
+   there — undulations right behind the sterns, two froth lanes — at 1-2 % contrast. Diagnosis (shader arithmetic
+   and the frame): (a) the near patch's normal is the finite difference of the height map, an 8-bit target with a
+   metre of range: the 5 cm transverse train (wavelength 9.25 m at 3.8 m/s) changes 8 mm between the two texels of
+   the difference, two quanta, so its slope decoded to a 0.9 deg staircase or nothing, and the 2.7 cm arm crests to
+   nothing; (b) from a chase camera 15 deg down the Fresnel weight of the sky is ~0.1 over a bright shallow body
+   colour, so even a clean 2 deg slope moves a pixel by 1-2 %: the slope alone can never carry a taxi wake here;
+   (c) the one cue that does carry it in reality, the slick road where the hull's turbulence has wiped the short
+   ripples off the surface, was not there: the water shader accumulated all its ripple slopes before reading the
+   wake maps and only cut the roughness term by a third inside the lane, so the lane kept its full ripple texture.
+   Fixed in round 8.
+
+## Round 7 — swell following
+
+Numeric parity probe (`/tmp/waterphys/swellnode.mjs`: the FlightModel at rest over deep open water on the CPU wave
+field, 30 s at 30 Hz): surface span 0.49 m, hull span 0.47 m, follow ratio 0.97, mean hull height 13 mm above the
+rest datum on the local surface. The field is the shader's mirror by construction (same sets and phase-warp /
+group / shelter terms). The swell chase frames show the floats on the crests and in the troughs with the hull
+pitching 2 deg and rolling 5 deg over 8 s. No harness tolerance was touched (rest datum 1.91-2.01 m kept).
+
+## Round 8 — the churned lane, the taxi wake, wake persistence
+
+1. **Slick lane** (`water.ts`, compositing hunk): the short ripple sets (the 1.7 / 3.4 / 2.15 / 1.3 / 0.5 m sets
+   and half of the 5 m chop) accumulate apart from the long wind sea and the swell and are added after the wake
+   maps are read, scaled by `1 - 0.8 smoothstep(0.3, 0.85, coverage)`; their unresolved roughness and the caustic
+   crest net scale the same way. The lane now lies as a smooth road in the rippled sea (mirroring the sky where the
+   water around scatters it) behind a taxiing float and behind every boat; the swell and the 7-12 m wind sea run
+   through it unchanged, as they do. 0.8 rather than 1: a fully glassy lane from a low camera mirrored the horizon
+   haze as a bright band (r1 reverted candidate).
+2. **Coverage outlasts the froth** (`wakes.ts`): the coverage channel's lane term fades over 2.2 lane lengths, not
+   one, so the slick runs on past the end of the foam (a taxiing float's for the ribbon's life, a ship's toward a
+   kilometre: the one part of a wake that shows from altitude far astern).
+3. **Height map half float** (`wakes.ts`): no quantisation of the transverse train and the arm crests; the arm
+   crests at displacement speed 4-5 cm (from 2.7).
+4. **Float lanes live 30 s** (from 16; `effects.ts`): at 3.8 m/s the 16 s ribbon ended 60 m astern, in the chase
+   camera's foreground.
+Verification queued on dist7 (`/tmp/waterphys/r8`: height-map probe at taxi and hump speed, taxi and swell chase
+frames for A/B against r4b, the r3c wake views for the boat lanes).
+
+## Round 9 — the harness without a browser; a wreck that sits askew; froth that dies in time
+
+The machine's two Chrome slots were held for over an hour by other builders' sessions (one with no idle timeout)
+with seven sessions queued, so this round is the work that needs no browser: physics run in Node, and shader
+defects found by reading the wake shader against what a stopping hull does.
+
+1. **The flight harness ported to Node** (`/tmp/waterphys/flightnode.mjs`, `sim.bundle.mjs` = esbuild of
+   `physics.ts` + `waves.ts` + `map.ts` + the weather table): the real `WorldMap` heightfield (24 s to generate),
+   the CPU wave field the floats ride, the `water-landing` setup as the flight model sees it (clear weather: 3.5
+   m/s wind from the atmosphere's fixed direction, turbulence 0.2, the bench clock at 30 s + 1/30) and the page
+   suite line for line minus the chase-camera centroid test (renderer camera). 19 / 19 physics checks pass,
+   deterministic, 2 s of compute against ~10 min of SwiftShader. Parity with the last page run (`flight_r2.json`):
+   every test flown in still air (roll 50.8 deg/s, elevator 18.7 deg/s peak / 1 overshoot / 0.75 s, turn -4.2 %,
+   stall 5.2 s / 21.5 m, phugoid 0.116) matches to the last digit; the contact tests differ by a few percent
+   (touchdown sink 1.41 vs 1.34 m/s, takeoff into wind 19.97 vs 20.12 s, rest pitch 0.03 vs 0.01 deg) because the
+   gust field is Perlin noise of the model's own clock, which the page had advanced before the suite began. The
+   page harness stays the authority (queued as job 021 on dist8); this is the regression alarm for `physics.ts`.
+2. **A righted nose-over came up level** (ditching matrix, `wheels` and any straight nose-first entry): the
+   kinematic roll-back marked both bows split at 0.6 / 0.6, so the wreck sat 17 cm low and level, as if merely
+   wetted, while the wing-strike wreck listed 12 deg. The roll back onto the floats comes over the lower wing (the
+   shortest rotation to level), and that side's float is dragged through the water with its strut wrenched: it
+   now floods to the deck (0.85) while the other stays half full (0.6). The `wheels` case ends 50 cm low with a
+   17.6 deg list (was 17 cm, level); `nose` (0.92 / 0.60, 21 deg) and `slam` (0.92 / 0.68, 21 deg) keep the
+   asymmetry their own impacts gave them. Node harness after: 19 / 19, unchanged metrics (`physics.ts`).
+3. **The lane's froth was written in track distance, so it never died behind a hull that stopped.** Every
+   time-like decay of the foam pass (fresh churn, prop wash, lane fade, slick fade, arm-crest steepness) is a
+   function of `d`, the ribbon distance from the point to the hull, which equals speed x time only while the hull
+   keeps going. When a hull slows or stops, the points just astern keep `d ~ 0`: the churn at the transom held its
+   full density for the ribbon's whole life (30 s for a float, longer for a boat), decaying only with the ribbon
+   age term `life^2`, and the slick never let go of the hull. Numbers from the ribbon driven in Node
+   (`/tmp/waterphys/stopnode.mjs`: the float's WakeTrail from 12 m/s at -0.85 m/s^2, stopped at 14.1 s, the
+   foam pass's centreline density evaluated per ribbon point as the shader writes it): 6 s after the stop the
+   point laid at 5.6 m/s, 12.5 s earlier, lies 18 m astern with lane density 0.115 x life^2 (lane fade 0.75) and
+   the slick at 0.94; a hull that had kept going would have it 70 m astern, at 0.041 with the fade gone, the
+   remnant patches at full weight and the slick at 0.40. 11 s after the stop the old formula still holds a
+   full-strength slick (0.84-1.0) over the 50 m behind the hull. Under way the two agree within 10 %. Fixed: the
+   vertex already carries the point's age (`vExt.y`, unused until now); the foam pass reads its decays at
+   `dEq = max(d, speed * ageS)`, and the stern-slope envelope runs with the train (`d + shift`) as the height pass
+   had it all along. A hull under way is unchanged (`d = speed * ageS` on a steady track, and an accelerating
+   hull's old points have `speed * ageS < d`); a stopping hull's lane now dissolves in place into sparse patches
+   over 10-15 s and its slick lets go over ~20 s (`wakes.ts`). Verification frames queued (`/tmp/waterphys/r9`:
+   a float decelerating to a stop from the chase view at 0 / 4 / 10 / 20 s and from abeam at 10 / 20 s).
+
+## Round 10 — the skipping entry: what the floats do, what the water shows
+
+Still no browser (the two slots held by other builders' servers since 12:37 and 14:59, mine queued since 13:56 on
+blocking locks), so the round is the last case of the ditching matrix run numerically and the ribbon it drives.
+
+1. **The fast flat entry skips, and the physics has it right** (`/tmp/waterphys/skipnode.mjs`: the FlightModel
+   over flat deep water, power off, floats level). At 48 m/s the floats touch for 0.33 s at 1.3 m/s of sink,
+   the planing lift pitches the hull up 4-6 deg and throws it clear: a 2.3 s hop to 1.2 m over the rest datum,
+   re-contact at 1.7-2.0 m/s of sink 100 m on, six contacts (0.5 / 3.1 / 5.6 / 8.0 / 10.0 / 11.5 s) with the hops
+   shortening (2.3, 2.2, 2.0, 1.7, 1.0 s) as the speed bleeds 48 -> 39 m/s, then a steady planing decel of ~1
+   m/s^2 from 11.5 s. At 40 m/s two hops (1.4 s to 0.7 m, 0.6 s to 0.4 m); at 34 m/s and at the firm 28 m/s
+   touchdown one hop of 0.6-0.7 s to 0.4 m (the `water-landing-firm` bounce the r2 frames showed). Every contact
+   raises an impact pair (float L / R within a frame of each other, energy 0.34-0.50 at 48 m/s, 0.11-0.15 on the
+   last settling touch), so each touch throws its own curtain and splat; the spray then stops with the floats
+   clear, as it should (bow spray and the plough are gated on the wet flag). No physics change.
+2. **The lane bridged the shorter hops.** A ribbon broke (invisible gap markers) only when the emitter's jump
+   between samples exceeded `gapDist = max(12, 1.5 speed)` m, 1.5 s of track: the 2 s hops of the 48 m/s entry
+   broke it, but a float clear of the water for 0.6-1 s over 25-50 m laid a continuous foam lane across water it
+   never touched. The ribbon driven by the flight model (`/tmp/waterphys/skipwake.mjs`, the left float's
+   WakeTrail fed the stern point and the float's wet flag at 60 Hz): 40 m/s, hops of 1.37 s / 60 m and 0.68 s /
+   33 m -> before, one break (60 m), the 33 m hop bridged; 48 m/s, hops 2.27 / 2.20 / 2.05 / 1.72 / 1.05 s ->
+   four breaks, the 49 m hop bridged; 34 m/s, one hop of 0.70 s / 31 m -> no break at all. Fixed: the trail
+   remembers when its emitter left the surface, measures the dry spell when it comes back, and the next point
+   laid (and the live head's bridge test) breaks the lane when the spell exceeded 0.5 s, as well as on distance;
+   a wet flag flickering for a frame over chop is under that. After: 40 m/s two breaks (60, 33 m), 48 m/s five
+   (111, 103, 93, 74, 49 m), 34 m/s one (31 m). Each touch is now its own mark: a 10-20 m patch of lane under
+   the splat, then clean water to the next (`wakes.ts`, WakeTrail). Boats are untouched (their emitters never
+   leave the water). Type-check clean; verification frames to queue on the next build (chase view of the 40
+   m/s power-off entry at the second and third touch).
