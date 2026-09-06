@@ -91,13 +91,18 @@ export const WEATHER: Record<Weather, WeatherPreset> = {
   // threshold, most cells stay well below it); fair-weather cumulus here reach ~2 km of vertical development
   // hazeDensity: humid subtropical air, ~30-40 km visibility (the reference frame lifts a skyline 9 km away
   // most of the way to the sky colour); the last stretch before the far plane dissolves completely (applyAerial)
-  // sunDim: the direct beam that reaches the ground through the deck; the dome, disc and cloud march see the
-  // undimmed sun (it shines on the top of the clouds regardless)
+  // sunDim: the direct beam that reaches the ground *between* the clouds; what the clouds themselves take away is
+  // the cloud shadow (cloudShadow x uSunShare in post.ts / reflection.ts), local to each cloud's footprint. The
+  // dome, disc and cloud march see the undimmed sun (it shines on the top of the clouds regardless). The cloudy
+  // preset used to dim the whole scene to 0.3 and fade the cast shadows to 0.35 on top of the cloud shadow
+  // (three global attenuations, none of them local): a 65 % cumulus deck then cast no visible shadow pattern
+  // and its gaps were as dull as its shade. A gap in a cumulus deck is full sun with crisp shadows.
   clear: { coverage: 0.27, hazeDensity: 4.0e-5, hazeHeight: 1400, windSpeed: 3.5, turbulence: 0.2, cloudBase: 1500, cloudTop: 3500, rain: 0, sunDim: 1 },
-  scattered: { coverage: 0.37, hazeDensity: 4.6e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 3500, rain: 0, sunDim: 0.97 },
+  scattered: { coverage: 0.37, hazeDensity: 4.6e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 3500, rain: 0, sunDim: 1 },
   // overcast: humid air under the deck (denser, taller haze) so the far end of the ceiling sinks into the horizon
-  // haze; under a 65 % stratocumulus deck the direct sun is mostly scattered (soft, faint shadows in the gaps)
-  cloudy: { coverage: 0.70, hazeDensity: 6.0e-5, hazeHeight: 1300, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2000, rain: 0, sunDim: 0.3 },
+  // haze; the 65 % deck shades 65 % of the ground through the cloud shadow, the gaps keep the sun
+  cloudy: { coverage: 0.70, hazeDensity: 6.0e-5, hazeHeight: 1300, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2000, rain: 0, sunDim: 1 },
+  // storm: a near-closed nimbostratus with rain under it; the few thin spots pass a veiled beam, so the dim stays
   storm: { coverage: 0.92, hazeDensity: 7.0e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 3200, rain: 1, sunDim: 0.18 },
 };
 

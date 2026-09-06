@@ -51,9 +51,14 @@ void main() {
   vec3 wp = (uInvView * vec4(vpos, 1.0)).xyz;
   vec3 col = c.rgb;
   if (!seam) {
-    // clouds shade the ground: only the direct-sun share of the light is removed (uSunShare, atmosphere.ts)
-    float cs = cloudShadow(wp);
-    col *= 1.0 - (1.0 - cs) * uSunShare * uCloudShadowStrength;
+    // Clouds shade the ground: under the cloud's footprint the direct beam is gone (a cumulus is optically thick)
+    // and only the direct-sun share of the light is removed (uSunShare, atmosphere.ts); the sky's share stays.
+    // cloudShadow() returns 1 - 0.72 * footprint (its own cap from when it was the whole shadow factor), so the
+    // footprint is read back out of it here: with the cap left in, a cloud at noon removed 0.72 * 0.86 = 62 % of
+    // the light while the building next to it removed 86 %, and under the cloudy preset (sun already dimmed to
+    // 0.3 by the preset, shadow share 0.38) a cloud took 27 %: no shadow pattern at all under a deck.
+    float cov = clamp((1.0 - cloudShadow(wp)) / 0.72, 0.0, 1.0);
+    col *= 1.0 - cov * uSunShare * uCloudShadowStrength;
   }
   col = applyAerial(col, uCamPos, wp);
   gl_FragColor = vec4(col, 1.0);
