@@ -214,7 +214,9 @@ if (facadeGlass > 0.0) {
   vec3 sunW = inverseTransformDirection(directionalLights[0].direction, viewMatrix);
   bendW = 1.0 - smoothstep(0.85, 0.985, dot(rv, sunW));
   rb = normalize(vec3(rv.x, rv.y + 0.4 * (facadeHf - 0.4) * bendW, rv.z));
-  sunMask = 1.0 - 0.85 * smoothstep(0.994, 0.9995, dot(rb, sunW));
+  // the probe's aureole is tens of times the sky within a few degrees of the disc: mirrored at F0 0.3 it clipped
+  // panes and mullions alike over +-3 deg, so it is graded down within 12 deg (the disc itself is facadeGlint's)
+  sunMask = 1.0 - 0.92 * smoothstep(0.978, 0.9986, dot(rb, sunW));
 #else
   rb = normalize(vec3(rv.x, rv.y + 0.4 * (facadeHf - 0.4), rv.z));
 #endif
