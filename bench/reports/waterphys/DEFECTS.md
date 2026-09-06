@@ -335,3 +335,33 @@ defects found by reading the wake shader against what a stopping hull does.
    hull's old points have `speed * ageS < d`); a stopping hull's lane now dissolves in place into sparse patches
    over 10-15 s and its slick lets go over ~20 s (`wakes.ts`). Verification frames queued (`/tmp/waterphys/r9`:
    a float decelerating to a stop from the chase view at 0 / 4 / 10 / 20 s and from abeam at 10 / 20 s).
+
+## Round 10 — the skipping entry: what the floats do, what the water shows
+
+Still no browser (the two slots held by other builders' servers since 12:37 and 14:59, mine queued since 13:56 on
+blocking locks), so the round is the last case of the ditching matrix run numerically and the ribbon it drives.
+
+1. **The fast flat entry skips, and the physics has it right** (`/tmp/waterphys/skipnode.mjs`: the FlightModel
+   over flat deep water, power off, floats level). At 48 m/s the floats touch for 0.33 s at 1.3 m/s of sink,
+   the planing lift pitches the hull up 4-6 deg and throws it clear: a 2.3 s hop to 1.2 m over the rest datum,
+   re-contact at 1.7-2.0 m/s of sink 100 m on, six contacts (0.5 / 3.1 / 5.6 / 8.0 / 10.0 / 11.5 s) with the hops
+   shortening (2.3, 2.2, 2.0, 1.7, 1.0 s) as the speed bleeds 48 -> 39 m/s, then a steady planing decel of ~1
+   m/s^2 from 11.5 s. At 40 m/s two hops (1.4 s to 0.7 m, 0.6 s to 0.4 m); at 34 m/s and at the firm 28 m/s
+   touchdown one hop of 0.6-0.7 s to 0.4 m (the `water-landing-firm` bounce the r2 frames showed). Every contact
+   raises an impact pair (float L / R within a frame of each other, energy 0.34-0.50 at 48 m/s, 0.11-0.15 on the
+   last settling touch), so each touch throws its own curtain and splat; the spray then stops with the floats
+   clear, as it should (bow spray and the plough are gated on the wet flag). No physics change.
+2. **The lane bridged the shorter hops.** A ribbon broke (invisible gap markers) only when the emitter's jump
+   between samples exceeded `gapDist = max(12, 1.5 speed)` m, 1.5 s of track: the 2 s hops of the 48 m/s entry
+   broke it, but a float clear of the water for 0.6-1 s over 25-50 m laid a continuous foam lane across water it
+   never touched. The ribbon driven by the flight model (`/tmp/waterphys/skipwake.mjs`, the left float's
+   WakeTrail fed the stern point and the float's wet flag at 60 Hz): 40 m/s, hops of 1.37 s / 60 m and 0.68 s /
+   33 m -> before, one break (60 m), the 33 m hop bridged; 48 m/s, hops 2.27 / 2.20 / 2.05 / 1.72 / 1.05 s ->
+   four breaks, the 49 m hop bridged; 34 m/s, one hop of 0.70 s / 31 m -> no break at all. Fixed: the trail
+   remembers when its emitter left the surface, measures the dry spell when it comes back, and the next point
+   laid (and the live head's bridge test) breaks the lane when the spell exceeded 0.5 s, as well as on distance;
+   a wet flag flickering for a frame over chop is under that. After: 40 m/s two breaks (60, 33 m), 48 m/s five
+   (111, 103, 93, 74, 49 m), 34 m/s one (31 m). Each touch is now its own mark: a 10-20 m patch of lane under
+   the splat, then clean water to the next (`wakes.ts`, WakeTrail). Boats are untouched (their emitters never
+   leave the water). Type-check clean; verification frames to queue on the next build (chase view of the 40
+   m/s power-off entry at the second and third touch).
