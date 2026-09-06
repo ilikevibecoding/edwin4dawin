@@ -116,47 +116,106 @@ export function handGeometry(gripR: number, wrist: THREE.Vector3, watch = false)
   return b.build();
 }
 
+/** the pilot's clothes and kit (finishes for the shared parts material) */
+const HAIR: Surf = { color: 0x2a1d13, roughness: 0.75, metalness: 0.0 };
+const LENS: Surf = { color: 0x0b0d12, roughness: 0.12, metalness: 0.55 };
+const TROUSERS: Surf = { color: 0x4d4a3f, roughness: 0.92, metalness: 0.0 };
+const BOOT: Surf = { color: 0x2c2018, roughness: 0.55, metalness: 0.0 };
+const CUP_BACK: Surf = { color: 0x35373b, roughness: 0.45, metalness: 0.2 };
+
 /**
- * The pilot in the left seat: torso, head with cap and headset, arms down to the cuffs (the hands travel with the
- * yoke, see cockpitControls) and legs to the pedals (all into `cabinKit`). `cockpitEye` is the model's eye point.
+ * The pilot in the left seat (all into `cabinKit`): a head built from a cranium and a jaw with a nose, sunglasses,
+ * hair under a ball cap and the headset (band, cups, boom mic, cable down to the sidewall jack); a torso in a
+ * shirt with collar, placket buttons and a chest pocket, leaning a little forward off the seat back; arms with
+ * elbows down to the cuffs (the hands travel with the yoke, see cockpitControls); legs to boots on the pedals.
+ * `cockpitEye` is the model's eye point: the eyes sit at the front of the head, and with the cockpit camera's
+ * 5 cm near plane everything of the head must stay behind the eye or out of the 62 deg frame, or it fills the
+ * view from inside.
  */
 export function buildPilot(ctx: BuildContext, cockpitEye: THREE.Vector3): void {
   const { cabinKit } = ctx;
-  // pilot: torso, head with headset, arms from the shoulders to the yoke grips. The eyes (cockpitEye) sit at the
-  // front of the head: with the cockpit camera's 5 cm near plane the head, headband and earcups must all be
-  // behind the eye or they fill the frame from inside
-  const headY = cockpitEye.y - 0.03, headX = cockpitEye.x - 0.10, PZ = -0.34;
-  const shoulderY = SEAT_Y + 0.06 + 0.52;
-  // torso in a navy shirt with rounded shoulders, an open collar showing the neck, the head a slightly tall
-  // ovoid under a ball cap (crown + peak) with the headset band over the cap, ear cups and a boom mic to the mouth
-  cabinKit.add(new THREE.BoxGeometry(0.26, 0.52, 0.40), at([headX - 0.02, SEAT_Y + 0.06 + 0.26, PZ]), SURF.shirt);
-  for (const side of [-1, 1]) cabinKit.add(new THREE.SphereGeometry(0.065, 10, 8), at([headX - 0.02, shoulderY, PZ + side * 0.17]), SURF.shirt);
-  cabinKit.add(new THREE.CylinderGeometry(0.048, 0.052, 0.10, 12), at([headX - 0.005, shoulderY + 0.03, PZ]), SKIN);
-  for (const side of [-1, 1]) cabinKit.add(new THREE.BoxGeometry(0.09, 0.022, 0.07), at([headX + 0.02, shoulderY + 0.035, PZ + side * 0.06], [side * 0.55, 0, -0.35]), SURF.collar);
-  const head = new THREE.SphereGeometry(0.105, 14, 12); head.scale(0.95, 1.12, 0.92);
-  cabinKit.add(head, at([headX, headY, PZ]), SKIN);
-  cabinKit.add(new THREE.SphereGeometry(0.108, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.44), at([headX + 0.005, headY + 0.012, PZ], [0, 0, -0.10]), SURF.cap);
-  cabinKit.add(new THREE.BoxGeometry(0.075, 0.008, 0.11), at([headX + 0.115, headY + 0.055, PZ], [0, 0, -0.18]), SURF.cap);
-  cabinKit.add(new THREE.TorusGeometry(0.118, 0.016, 6, 16, Math.PI), at([headX, headY + 0.035, PZ], [0, Math.PI / 2, 0]), SURF.headset);
-  for (const side of [-1, 1]) cabinKit.add(new THREE.CylinderGeometry(0.045, 0.045, 0.03, 10), at([headX, headY - 0.01, PZ + side * 0.115], [Math.PI / 2, 0, 0]), SURF.headset);
-  { const micA = V3(headX + 0.01, headY - 0.03, PZ - 0.125), micB = V3(headX + 0.10, headY - 0.075, PZ - 0.05);
-    cabinKit.add(strutGeometry(micA, micB, 0.004, 6), undefined, SURF.headset);
-    cabinKit.add(new THREE.SphereGeometry(0.013, 8, 6), at(micB), SURF.headset); }
-  // arms: upper arm from the shoulder down to an elbow by the hip, forearm in the sleeve forward to a cuff just
-  // behind the hand (the wrists and hands travel with the yoke)
+  const XF = cockpitEye.x, YE = cockpitEye.y, PZ = -0.34;
+  // ------------------------------------------------------------ head
+  // cranium (an ellipsoid whose front is the brow, 1 cm ahead of the eye) over a narrower jaw ending in the chin
+  const C = V3(XF - 0.085, YE + 0.02, PZ);
+  const ball = (x: number, y: number, z: number, sx: number, sy: number, sz: number, surf: Surf, rot?: [number, number, number], segs = 16) =>
+    cabinKit.add(new THREE.SphereGeometry(1, segs, Math.round(segs * 0.75)), at([x, y, z], rot, [sx, sy, sz]), surf);
+  ball(C.x, C.y, C.z, 0.095, 0.095, 0.078, SKIN, undefined, 18);
+  ball(XF - 0.090, YE - 0.050, PZ, 0.082, 0.070, 0.066, SKIN, undefined, 16);
+  // nose: a short cone off the face below the eye line, drooping a little
+  cabinKit.add(new THREE.ConeGeometry(0.012, 0.034, 8), at([XF + 0.004, YE - 0.036, PZ], [0, 0, -Math.PI / 2 - 0.35]), SKIN);
+  // neck up into the jaw
+  cabinKit.add(new THREE.CylinderGeometry(0.050, 0.056, 0.16, 12), at([XF - 0.095, 0.73, PZ]), SKIN);
+  // hair: the back and sides of the head below the cap's edge, down to the nape
+  cabinKit.add(new THREE.SphereGeometry(1, 16, 8, -Math.PI / 2, Math.PI, Math.PI * 0.40, Math.PI * 0.24), at(C, undefined, [0.097, 0.097, 0.080]), HAIR);
+  // ball cap: the crown fitted over the cranium, its edge just above the brow, a short peak dipping forward (kept
+  // short and high so its tip stays outside the cockpit camera's frame)
+  cabinKit.add(new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, Math.PI * 0.42), at([C.x + 0.003, C.y + 0.003, C.z], undefined, [0.099, 0.099, 0.082]), SURF.cap);
+  cabinKit.add(new THREE.BoxGeometry(0.045, 0.006, 0.105), at([XF + 0.036, YE + 0.048, PZ], [0, 0, -0.30]), SURF.cap);
+  cabinKit.add(new THREE.SphereGeometry(0.007, 8, 6), at([C.x + 0.003, C.y + 0.101, C.z]), SURF.cap);
+  // sunglasses: two dark wrapped lenses on the eye line, a bridge, thin arms back to the cups
   for (const side of [-1, 1]) {
-    const shoulder = V3(headX - 0.02, shoulderY, PZ + side * 0.19), elbow = V3(1.15, 0.50, PZ + side * 0.24);
-    const wrist = HAND_WRIST(side).add(YOKE_HUB).add(V3(0, 0, PZ));
-    const cuff = wrist.clone().lerp(elbow, 0.10);
-    cabinKit.add(strutGeometry(shoulder, elbow, 0.045, 8), undefined, SURF.shirt);
-    cabinKit.add(new THREE.SphereGeometry(0.046, 8, 6), at(elbow), SURF.shirt);
-    cabinKit.add(strutGeometry(elbow, cuff, 0.040, 8), undefined, SURF.shirt);
-    const cDir = wrist.clone().sub(elbow).normalize();
-    cabinKit.add(new THREE.CylinderGeometry(0.043, 0.041, 0.025, 10), at(cuff, [0, 0, -Math.atan2(cDir.x, cDir.y)]), SURF.collar);
+    cabinKit.add(new THREE.BoxGeometry(0.004, 0.026, 0.034), at([XF + 0.006, YE - 0.002, PZ + side * 0.030], [0, -side * 0.30, 0]), LENS);
+    cabinKit.add(strutGeometry(V3(XF - 0.004, YE + 0.006, PZ + side * 0.050), V3(XF - 0.085, YE + 0.012, PZ + side * 0.080), 0.0025, 6), undefined, SURF.darkMetal);
   }
-  // legs to the pedals
+  cabinKit.add(new THREE.BoxGeometry(0.004, 0.006, 0.014), at([XF + 0.006, YE + 0.002, PZ]), SURF.darkMetal);
+  // headset: the band over the cap, cups over the ears with a domed back, the boom mic from the left cup to the
+  // corner of the mouth (a foam windscreen on the end) and the cable from the left cup down past the shoulder to
+  // the jack in the sidewall
+  cabinKit.add(new THREE.TorusGeometry(0.110, 0.009, 6, 18, Math.PI), at([C.x, C.y, C.z], [0, Math.PI / 2, 0]), SURF.headset);
   for (const side of [-1, 1]) {
-    cabinKit.add(strutGeometry(V3(1.05, SEAT_Y + 0.10, -0.34 + side * 0.11), V3(1.45, SEAT_Y + 0.12, -0.34 + side * 0.12), 0.07, 8), undefined, SURF.plastic);
-    cabinKit.add(strutGeometry(V3(1.45, SEAT_Y + 0.12, -0.34 + side * 0.12), V3(1.90, FLOOR + 0.06, -0.34 + side * 0.12), 0.055, 8), undefined, SURF.plastic);
+    const cup = V3(XF - 0.085, YE - 0.005, PZ + side * 0.099);
+    cabinKit.add(new THREE.CylinderGeometry(0.042, 0.042, 0.030, 14), at(cup, [Math.PI / 2, 0, 0]), SURF.headset);
+    cabinKit.add(new THREE.CylinderGeometry(0.030, 0.034, 0.008, 14), at(cup.clone().add(V3(0, 0, side * 0.018)), [Math.PI / 2, 0, 0]), CUP_BACK);
+    cabinKit.add(new THREE.BoxGeometry(0.014, 0.05, 0.010), at(cup.clone().add(V3(0, 0.035, side * 0.008))), SURF.headset);
+  }
+  const boom = [V3(XF - 0.062, YE - 0.018, PZ - 0.108), V3(XF - 0.030, YE - 0.052, PZ - 0.098), V3(XF - 0.005, YE - 0.074, PZ - 0.070), V3(XF + 0.008, YE - 0.080, PZ - 0.046)];
+  cabinKit.add(tubeAlong(boom, [0.0035, 0.0035, 0.0032, 0.0032], undefined, 6), undefined, SURF.headset);
+  cabinKit.add(new THREE.SphereGeometry(0.013, 10, 7), at(boom[3], undefined, [1.15, 1, 1]), SURF.headset);
+  const cable = new THREE.CatmullRomCurve3([V3(XF - 0.085, YE - 0.046, PZ - 0.104), V3(XF - 0.105, YE - 0.16, PZ - 0.14), V3(XF - 0.10, 0.50, PZ - 0.215), V3(XF - 0.03, 0.33, PZ - 0.225), V3(XF + 0.22, 0.30, PZ - 0.23), V3(1.36, 0.31, -0.56)]).getPoints(14);
+  cabinKit.add(tubeAlong(cable, cable.map(() => 0.0035), undefined, 6), undefined, SURF.headset);
+  // ------------------------------------------------------------ torso
+  // a shirt torso lofted from the hips to the shoulder line, deepest at the chest and leaning a little forward
+  // off the seat back toward the yoke; round shoulders, an open collar, buttons down the placket, a chest pocket
+  const spine: [number, number, number, number][] = [[0.93, 0.15, 0.120, 0.170], [0.945, 0.32, 0.120, 0.165], [0.95, 0.50, 0.115, 0.185], [0.94, 0.645, 0.105, 0.200]];
+  cabinKit.add(tubeAlong(spine.map(([x, y]) => V3(x, y, PZ)), spine.map((p) => p[2]), spine.map((p) => p[3]), 18, V3(1, 0, 0)), undefined, SURF.shirt);
+  const frontAt = (y: number): [number, number, number] => {
+    for (let i = 0; i < spine.length - 1; i++) {
+      const [x0, y0, a0, b0] = spine[i], [x1, y1, a1, b1] = spine[i + 1];
+      if (y <= y1 || i === spine.length - 2) { const t = THREE.MathUtils.clamp((y - y0) / (y1 - y0), 0, 1); return [x0 + (x1 - x0) * t, a0 + (a1 - a0) * t, b0 + (b1 - b0) * t]; }
+    }
+    return [spine[0][0], spine[0][2], spine[0][3]];
+  };
+  const SHOULDER_Y = 0.655;
+  for (const side of [-1, 1]) cabinKit.add(new THREE.SphereGeometry(0.066, 12, 9), at([0.94, SHOULDER_Y, PZ + side * 0.175]), SURF.shirt);
+  for (const side of [-1, 1]) cabinKit.add(new THREE.BoxGeometry(0.085, 0.020, 0.075), at([0.965, 0.69, PZ + side * 0.062], [side * 0.55, 0, -0.35]), SURF.collar);
+  for (const y of [0.26, 0.35, 0.44, 0.53, 0.61]) { const [x, a] = frontAt(y); cabinKit.add(new THREE.SphereGeometry(0.0055, 8, 6), at([x + a - 0.002, y, PZ]), SURF.lightPlastic); }
+  { const [x, a, bz] = frontAt(0.52), dz = -0.095, t = Math.asin(dz / bz);
+    const px = x + a * Math.cos(t), pz = PZ + dz, yaw = Math.atan2(-a * Math.sin(t) / bz, Math.cos(t));
+    cabinKit.add(new THREE.BoxGeometry(0.006, 0.115, 0.105), at([px + 0.002, 0.52, pz], [0, yaw, 0]), SURF.shirt);
+    cabinKit.add(new THREE.BoxGeometry(0.007, 0.030, 0.108), at([px + 0.004, 0.575, pz], [0, yaw, 0]), SURF.shirt);
+    cabinKit.add(new THREE.SphereGeometry(0.005, 8, 6), at([px + 0.008, 0.562, pz]), SURF.lightPlastic); }
+  // ------------------------------------------------------------ arms
+  // upper arm from the shoulder forward and down to the elbow, forearm in the sleeve on to a cuff just behind
+  // the hand (the wrists and hands travel with the yoke); the elbows show as joints
+  for (const side of [-1, 1]) {
+    const shoulder = V3(0.94, SHOULDER_Y, PZ + side * 0.19), elbow = V3(1.22, 0.53, PZ + side * 0.245);
+    const wrist = HAND_WRIST(side).add(YOKE_HUB).add(V3(0, 0, PZ));
+    const cuff = wrist.clone().lerp(elbow, 0.11);
+    cabinKit.add(tubeAlong([shoulder, shoulder.clone().lerp(elbow, 0.5), elbow], [0.050, 0.047, 0.043], undefined, 10), undefined, SURF.shirt);
+    cabinKit.add(new THREE.SphereGeometry(0.046, 10, 7), at(elbow), SURF.shirt);
+    cabinKit.add(tubeAlong([elbow, elbow.clone().lerp(cuff, 0.5), cuff], [0.043, 0.040, 0.037], undefined, 10), undefined, SURF.shirt);
+    const cDir = wrist.clone().sub(elbow).normalize();
+    cabinKit.add(new THREE.CylinderGeometry(0.040, 0.038, 0.026, 12), at(cuff, [0, 0, -Math.atan2(cDir.x, cDir.y)]), SURF.collar);
+  }
+  // ------------------------------------------------------------ legs
+  // thighs along the cushion to the knees, shins down to boots whose toes rest on the pedals, heels on the floor
+  for (const side of [-1, 1]) {
+    const z = PZ + side * 0.115;
+    const hip = V3(1.0, SEAT_Y + 0.13, z - side * 0.01), knee = V3(1.43, SEAT_Y + 0.15, z), ankle = V3(1.77, FLOOR + 0.085, z);
+    cabinKit.add(tubeAlong([hip, hip.clone().lerp(knee, 0.5), knee], [0.080, 0.074, 0.062], [0.072, 0.070, 0.060], 10, UP), undefined, TROUSERS);
+    cabinKit.add(new THREE.SphereGeometry(0.064, 10, 7), at(knee), TROUSERS);
+    cabinKit.add(tubeAlong([knee, knee.clone().lerp(ankle, 0.5), ankle], [0.058, 0.052, 0.044], undefined, 10, UP), undefined, TROUSERS);
+    cabinKit.add(new THREE.BoxGeometry(0.27, 0.085, 0.10), at([1.845, FLOOR + 0.095, z], [0, 0, 0.55]), BOOT);
   }
 }
