@@ -144,12 +144,6 @@
      "ok": true
     },
     {
-     "label": "highway_200m",
-     "title": "Coastal highway from 200 m",
-     "item": "highway",
-     "ok": true
-    },
-    {
      "label": "foliage_suburb",
      "title": "Suburb canopy from 130 m",
      "item": "foliage",
@@ -165,6 +159,18 @@
      "label": "shore_beach",
      "title": "Garza beach from 60 m",
      "item": "shore",
+     "ok": true
+    },
+    {
+     "label": "highway_200m",
+     "title": "Approach highway over Garza and the causeway to downtown, 120 m",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_along",
+     "title": "Along the coastal highway through the suburbs, 180 m",
+     "item": "highway",
      "ok": true
     }
    ],
@@ -285,7 +291,7 @@
     },
     {
      "label": "highway_200m",
-     "title": "Coastal highway from 200 m",
+     "title": "Coastal highway from 200 m (old camera; recomposed from h04)",
      "item": "highway",
      "ok": true
     },
@@ -425,7 +431,7 @@
     },
     {
      "label": "highway_200m",
-     "title": "Coastal highway from 200 m",
+     "title": "Coastal highway from 200 m (old camera; recomposed from h04)",
      "item": "highway",
      "ok": true
     },
@@ -565,7 +571,7 @@
     },
     {
      "label": "highway_200m",
-     "title": "Coastal highway from 200 m",
+     "title": "Coastal highway from 200 m (old camera; recomposed from h04)",
      "item": "highway",
      "ok": true
     },
@@ -704,12 +710,6 @@
      "ok": true
     },
     {
-     "label": "highway_200m",
-     "title": "Coastal highway from 200 m",
-     "item": "highway",
-     "ok": true
-    },
-    {
      "label": "foliage_suburb",
      "title": "Suburb canopy from 130 m",
      "item": "foliage",
@@ -726,9 +726,21 @@
      "title": "Garza beach from 60 m",
      "item": "shore",
      "ok": true
+    },
+    {
+     "label": "highway_200m",
+     "title": "Approach highway over Garza and the causeway to downtown, 120 m",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_along",
+     "title": "Along the coastal highway through the suburbs, 180 m",
+     "item": "highway",
+     "ok": true
     }
    ],
-   "notes": "base: 7f95c5ea (cursor/vice-city-aerial-8213)\nskip acsplit: nothing new\nskip waterrender: nothing new\nskip waterphys: nothing new\nskip boats: no remote branch\nmerged clouds4: 4142901d clouds4: report draft (diagnosis, changes; evidence sections pending GPU rounds)\nmerged light3: 72b5ad65 light3 report: method and kept-palette sections\nskip street: nothing new\nmerged highway: 1e89ad93 Highway defect log: round 6 (spit terrain through the pavement, lane tone at noon, barrier\nmerged facade3: c4e85411 Facades: the probe's sun aureole stood in the mirrored sky at the wrong height. The height\nmerged veg5: 25446639 Vegetation loop 6 WIP (round 14, runtime verification pending): the understory draws its s\nmerged terrain5: f4c324f8 terrain5 report: round 3 defect entry\nbuild: 637747df from /home/ubuntu/wt-integration\n"
+   "notes": "base: 7f95c5ea (cursor/vice-city-aerial-8213)\nskip acsplit: nothing new\nskip waterrender: nothing new\nskip waterphys: nothing new\nskip boats: no remote branch\nmerged clouds4: 4142901d clouds4: report draft (diagnosis, changes; evidence sections pending GPU rounds)\nmerged light3: 72b5ad65 light3 report: method and kept-palette sections\nskip street: nothing new\nmerged highway: 1e89ad93 Highway defect log: round 6 (spit terrain through the pavement, lane tone at noon, barrier\nmerged facade3: c4e85411 Facades: the probe's sun aureole stood in the mirrored sky at the wrong height. The height\nmerged veg5: 25446639 Vegetation loop 6 WIP (round 14, runtime verification pending): the understory draws its s\nmerged terrain5: f4c324f8 terrain5 report: round 3 defect entry\nbuild: 637747df from /home/ubuntu/wt-integration\ncdn: pinned data.json serves h04\n"
   }
  ],
  "updated": "2026-09-06T13:18Z"
