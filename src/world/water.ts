@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { createReflectionUniforms, type ReflectionUniforms } from '../render/reflection';
 import { WAKE_HEIGHT_SCALE } from '../render/wakes';
+import { SWELL_DISPLACEMENT } from './waves';
 import { WORLD_SIZE } from './map';
 import type { MapTextures } from './terrain';
 
@@ -55,7 +56,8 @@ float setH(vec2 p, vec2 dir, float L, float A, float t, float phase, float warp)
 }
 // Elevation of the three wind-sea sets the fragment stage shades (same shelter, group and phase-warp terms).
 // world/waves.ts is the CPU copy of this: the flight model floats on the same field, so the hulls rise and fall
-// with the crests drawn under them. The swell sets and the noise chop layers are left out, see waves.ts.
+// with the crests drawn under them. The noise chop layers are left out, see waves.ts; the swell sets are the
+// separate swellHeight below (the patch fades them out sooner toward its edge).
 float waveHeight(vec2 wp, float t) {
   vec2 wd = uWindDir, wc = vec2(-wd.y, wd.x);
   float depth = max(-terrainHeightV(wp), 0.0);
@@ -80,6 +82,28 @@ float waveHeight(vec2 wp, float t) {
   }
   return h;
 }
+// Elevation of the four swell sets the fragment stage shades (its swellF shelter / depth gate, group and phase
+// warp), scaled by SWELL_DISPLACEMENT; world/waves.ts is the CPU copy, so a hull heaving on a swell crest has that
+// crest drawn under it by the patch.
+float swellHeight(vec2 wp, float t) {
+  vec2 wd = uWindDir, wc = vec2(-wd.y, wd.x);
+  float depth = max(-terrainHeightV(wp), 0.0);
+  float sway = vnoise(wp * 0.0019 + 4.1) - 0.5;
+  vec2 wj = normalize(wd + wc * (0.5 * sway));
+  float reach = 0.8 + 0.4 * (vnoise(wp * 0.0031 + 9.3) - 0.5);
+  float o1 = 1.0 - smoothstep(-2.5, 0.2, terrainHeightV(wp + wj * (90.0 * reach)));
+  float o2 = 1.0 - smoothstep(-2.5, 0.2, terrainHeightV(wp + wj * (240.0 * reach)));
+  float o3 = 1.0 - smoothstep(-3.0, 0.2, terrainHeightV(wp + wj * (520.0 * reach)));
+  float open = (o1 + o2 + o3) * 0.3333;
+  float s4 = 1.0 - smoothstep(-6.0, 0.5, terrainHeightV(wp + wj * (1100.0 * reach)));
+  float s5 = 1.0 - smoothstep(-6.0, 0.5, terrainHeightV(wp + wj * (2400.0 * reach)));
+  float swellF = open * s4 * (0.35 + 0.65 * s5) * smoothstep(1.5, 6.5, depth) * ${SWELL_DISPLACEMENT.toFixed(2)};
+  if (swellF <= 0.001) return 0.0;
+  float wv = (noisedVal(wp * 0.0045 + 2.3) - 0.5) * 3.2;
+  float grp = 0.35 + 1.3 * vnoise(vec2(dot(wp, wd) + 4.5 * t, dot(wp, wc)) * 0.0055 + 7.7);
+  return (setH(wp, rot2v(wd, -0.31), 83.0, 0.4, t, 0.0, wv) * grp + setH(wp, rot2v(wd, 0.07), 51.3, 0.3, t, 2.1, wv * 0.8) * grp
+        + setH(wp, rot2v(wd, 0.53), 33.7, 0.18, t, 4.4, wv * 0.6) * (1.5 - grp * 0.7) + setH(wp, rot2v(wd, 0.95), 340.0, 0.55, t, 1.3, wv * 0.5)) * swellF;
+}
 #endif
 `;
 const WATER_VERT_MAIN = /* glsl */ `
@@ -90,9 +114,12 @@ const WATER_VERT_MAIN = /* glsl */ `
   vec3 wp = vec3(pg.x * uWakeNearRegion.z + uWakeNearRegion.x, 0.0, pg.y * uWakeNearRegion.z + uWakeNearRegion.y);
   vec2 nuvV = vec2(pg.x + 0.5, 0.5 - pg.y);
   vec4 hh = texture2D(uWakeHeightTex, nuvV);
-  // the swell displacement fades out toward the patch edge, where it meets the flat main plane
-  float edgeF = 1.0 - smoothstep(0.3, 0.5, max(abs(pg.x), abs(pg.y)));
-  wp.y = (hh.r - hh.g) * ${WAKE_HEIGHT_SCALE.toFixed(2)} + waveHeight(wp.xz, uWaveTime) * edgeF;
+  // the wave displacement fades out toward the patch edge, where it meets the flat main plane; the swell's
+  // decimetres fade from nearer the centre so the patch meets the plane with a slope no steeper than the swell's own
+  float edgeR = max(abs(pg.x), abs(pg.y));
+  float edgeF = 1.0 - smoothstep(0.3, 0.5, edgeR);
+  float swellEdgeF = 1.0 - smoothstep(0.15, 0.5, edgeR);
+  wp.y = (hh.r - hh.g) * ${WAKE_HEIGHT_SCALE.toFixed(2)} + waveHeight(wp.xz, uWaveTime) * edgeF + swellHeight(wp.xz, uWaveTime) * swellEdgeF;
 #else
   vec3 wp = position + uWaterOffset;
   wp.y = 0.0;
