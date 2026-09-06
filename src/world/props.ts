@@ -74,7 +74,7 @@ const LAMP_KINDS: LampKind[] = ['arterial', 'street', 'ped', 'highway'];
 /** luminaire position in the unit lamp's frame (x along the arm, y height) per kind: where the night dot sits */
 const LAMP_HEAD: Record<LampKind, [number, number]> = { arterial: [3.3, 10.9], street: [2.0, 8.4], ped: [0, 4.25], highway: [0, 9.05] };
 /** lamp dots fade in where the luminaire geometry falls under a pixel and out toward DOT_FAR */
-const DOT_NEAR = 160, DOT_FULL = 320, DOT_FAR = 4000;
+const DOT_NEAR = 70, DOT_FULL = 140, DOT_FAR = 4000;
 
 /** A unit box without its -Y face (BoxGeometry's fourth group): the far shape of boxes, which sit on the ground
  *  or a deck and are under a pixel wide where it is used. */
@@ -246,22 +246,23 @@ export class Props {
   /** Composite lamp unit in metres, arm along +x: tapered pole (`sides`-gon), arm, luminaire housing and its
    *  emissive lens (a post-top lantern for the pedestrian lamp; the highway unit is the plain 9 m pole). */
   private lampGeometry(kind: LampKind, sides: number): THREE.BufferGeometry {
-    const parts: { geometry: THREE.BufferGeometry; material: THREE.MeshStandardMaterial; emissive?: boolean }[] = [];
+    const parts: { geometry: THREE.BufferGeometry; material: THREE.MeshStandardMaterial; emissive?: boolean | number }[] = [];
     const steel = this.mats.steel, housing = this.mats.dark, lens = this.mats.lampHead;
     if (kind === 'arterial') {
       parts.push({ geometry: new THREE.CylinderGeometry(0.09, 0.15, 11, sides).translate(0, 5.5, 0), material: steel });
       parts.push({ geometry: new THREE.BoxGeometry(3.4, 0.14, 0.14).translate(1.7, 10.85, 0), material: steel });
-      parts.push({ geometry: new THREE.BoxGeometry(0.8, 0.16, 0.34).translate(3.3, 10.92, 0), material: housing });
+      // the housing glows a little too, so the luminaire reads as a lit point from above and the side at night
+      parts.push({ geometry: new THREE.BoxGeometry(0.8, 0.16, 0.34).translate(3.3, 10.92, 0), material: housing, emissive: 0.3 });
       parts.push({ geometry: new THREE.BoxGeometry(0.56, 0.03, 0.24).translate(3.3, 10.83, 0), material: lens, emissive: true });
     } else if (kind === 'street') {
       parts.push({ geometry: new THREE.CylinderGeometry(0.08, 0.12, 8.5, sides).translate(0, 4.25, 0), material: steel });
       parts.push({ geometry: new THREE.BoxGeometry(2.1, 0.12, 0.12).translate(1.05, 8.35, 0), material: steel });
-      parts.push({ geometry: new THREE.BoxGeometry(0.6, 0.14, 0.28).translate(2.0, 8.42, 0), material: housing });
+      parts.push({ geometry: new THREE.BoxGeometry(0.6, 0.14, 0.28).translate(2.0, 8.42, 0), material: housing, emissive: 0.3 });
       parts.push({ geometry: new THREE.BoxGeometry(0.42, 0.03, 0.2).translate(2.0, 8.34, 0), material: lens, emissive: true });
     } else if (kind === 'ped') {
       parts.push({ geometry: new THREE.CylinderGeometry(0.06, 0.08, 4.0, sides).translate(0, 2.0, 0), material: steel });
       parts.push({ geometry: new THREE.SphereGeometry(0.17, sides, 5).translate(0, 4.25, 0), material: lens, emissive: true });
-      parts.push({ geometry: new THREE.CylinderGeometry(0.2, 0.12, 0.08, sides).translate(0, 4.46, 0), material: housing });
+      parts.push({ geometry: new THREE.CylinderGeometry(0.2, 0.12, 0.08, sides).translate(0, 4.46, 0), material: housing, emissive: 0.25 });
     } else {
       parts.push({ geometry: new THREE.CylinderGeometry(0.12, 0.12, 9, sides).translate(0, 4.5, 0), material: steel });
       parts.push({ geometry: new THREE.BoxGeometry(0.2, 0.2, 2.4).translate(0, 9.1, 0), material: steel });

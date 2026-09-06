@@ -65,7 +65,7 @@ const SW_MAIN = /* glsl */ `
   float fwA = max(fwidth(across), 1e-4), fwL = max(fwidth(along), 1e-4);
   float n = fbm3(wp * 0.21);
   float grain = mix(vnoise(wp * 3.1), 0.5, smoothstep(0.1, 0.4, fp));
-  vec3 conc = mix(vec3(0.40, 0.39, 0.37), vec3(0.50, 0.49, 0.46), n) * (0.94 + 0.12 * grain);
+  vec3 conc = mix(vec3(0.36, 0.35, 0.33), vec3(0.46, 0.45, 0.42), n) * (0.94 + 0.12 * grain);
   bool face = vSwNrm.y < 0.5;
   float fade = 1.0 - smoothstep(0.15, 0.5, fp); // fine detail vanishes from altitude
   float slabFade = 1.0 - smoothstep(0.3, 1.0, fp); // per-slab tones (1.5 m) average out before they can sparkle
@@ -1005,7 +1005,7 @@ export class Streets {
     const texel = Math.max(LAMP_TEXEL, (x1 - x0) / LAMP_MAP_MAX, (z1 - z0) / LAMP_MAP_MAX);
     const w = Math.min(LAMP_MAP_MAX, Math.ceil((x1 - x0) / texel)), h = Math.min(LAMP_MAP_MAX, Math.ceil((z1 - z0) / texel));
     const acc = new Float32Array(w * h);
-    const POOL: Record<LampKind, [number, number, number]> = { arterial: [11, 1.0, 3.3], street: [8.5, 0.85, 2.0], ped: [4.5, 0.45, 0], highway: [10, 1.0, 0] };
+    const POOL: Record<LampKind, [number, number, number]> = { arterial: [13, 1.0, 3.3], street: [10.5, 0.85, 2.0], ped: [5, 0.45, 0], highway: [12, 1.0, 0] };
     for (const l of this.lamps) {
       const [radius, peak, arm] = POOL[l.kind];
       // the luminaire hangs at the arm's end: the pool centres there
@@ -1018,8 +1018,8 @@ export class Streets {
           const px = x0 + (i + 0.5) * texel;
           const d = Math.hypot(px - cx, pz - cz) / radius;
           if (d >= 1) continue;
-          // cosine-weighted inverse-square foot with a soft cut at the pool radius
-          const v = peak * (1 - d * d) * (1 - d * d) * (1 - smooth(0.7, 1.0, d));
+          // a broad foot (the luminaire hangs 8-11 m up) with a soft cut at the pool radius
+          const v = peak * Math.pow(1 - d * d, 1.5) * (1 - smooth(0.6, 1.0, d));
           acc[j * w + i] += v;
         }
       }
@@ -1077,7 +1077,7 @@ export class Streets {
     this.uniforms.uSignalTime.value = time;
     this.uniforms.uNight.value = night;
     // warm high-pressure sodium / warm-white LED mix; the pools scale with the night factor like the lamp heads
-    this.lights.uLampColor.value.set(1.0, 0.78, 0.5).multiplyScalar(1.7 * night * (this.poolsEnabled ? 1 : 0));
+    this.lights.uLampColor.value.set(1.0, 0.78, 0.5).multiplyScalar(0.7 * night * (this.poolsEnabled ? 1 : 0));
   }
 
   /** Per-frame culling: cells in view within FAR (small kits within SMALL_FAR); kits cast into the fine cascades

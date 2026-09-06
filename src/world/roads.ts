@@ -587,7 +587,7 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     float gutter = smoothstep(hw - 0.7, hw - 0.1, abs(xm)) * (1.0 - inBox);
     vec3 surf = asphalt * wear;
     surf = mix(surf, asphalt * patchTone, repair * 0.85);
-    surf *= 1.0 - (0.18 * max(seam, tseam) + 0.35 * crack) * (1.0 - inBox) - 0.12 * gutter;
+    surf *= 1.0 - (0.18 * max(seam, tseam) + 0.35 * crack) * (1.0 - inBox) - 0.18 * gutter;
     surf *= 1.0 - 0.12 * smoothstep(0.6, 0.75, fbm3(wp * 0.04 + 8.0)) * (1.0 - inBox);
     // ---- markings, each box-filtered over the pixel footprint and faded out where they stop at junctions
     float wearM = 0.6 + 0.4 * smoothstep(0.3, 0.7, fbm3(wp * 0.35 + 11.0));
