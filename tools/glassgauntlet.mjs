@@ -34,6 +34,19 @@ import { Buffer } from 'node:buffer';
 //   flick   mean abs difference of the glass region between two renders with a
 //           2 mm camera shift (or two sim steps for the moving shot). Sorting
 //           swaps and z-fights show up here as a number instead of a maybe
+//   flickBg the same measure over the same pixels with every pane hidden: the
+//           world's own change behind the glass. On the moving view the world
+//           goes by behind the pane, so `flick` there is mostly the scene and
+//           rises when the pane gets clearer (round 5: 0.099 -> 0.156 with
+//           `see` 0.76 -> 0.89, and the world alone at 0.175). The ratio
+//           `flick / flickBg` is the pane's own contribution: <= 1 means the
+//           pane transmits the motion behind it and adds none. Static views
+//           are judged on `flick` itself (<= 0.03), where the world is still.
+//   bar     `mirror` only: pixels of the cabin's cage and welts lying inside
+//           the pane's own footprint (the footprint taken with them hidden).
+//           Round 5's frame had a stitched bar across the pane's sky corner;
+//           this must be 0. `gear` is the same count for the exterior cage,
+//           reported but not failed (a body item).
 //
 // Every frame is also tiled into one contact sheet so a round is one image.
 // ---------------------------------------------------------------------------
@@ -75,7 +88,31 @@ const SHOTS = [
   // run when it holds under 3 % of the frame: the round-5 set shot this view
   // with the camera off the cab (a pre-roll pitch), every critic scored a
   // frame with no mirror in it, and nothing in the tool said so.
-  { name: 'mirror', pos: [0.3, 1.6, -0.16], target: [1.13, 1.657, 0.805], fov: 18, glass: '_mirrorGlass(_|$)', minCover: 3 },
+  //
+  // Round 7: the eye 140 mm lower, 20 mm inboard and 140 mm forward of the
+  // round-5 eye, aimed 40 mm over the pane's centre so the pane sits inside
+  // the frame. The round-5 frame had a padded, stitched bar across the pane's
+  // sky corner, (430-500, 45-90) in `glass/mirror.png`; raycast, it is the
+  // headlining welt (`cabin_stitch`) 0.59 m from the eye, not the cage. It is
+  // nearer than the pane (1.17 m), so only parallax moves it off: yawing the
+  // aim moved both together, 40 mm lower alone left 3445 px of it over the
+  // pane, swinging the eye 4 deg outboard put the pillar over the whole pane
+  // (cover 0); 140 mm down and forward clears it (0 px, pane 10.8 % of the
+  // frame). `bar` fails the run if any of the cabin's cage or welt lies over
+  // the pane. The exterior cage's padding (`gear_rubber`, 0.91 m out, beside
+  // the housing) still crosses the pane's outer top corner from every seat
+  // eye probed (43-420 px); it is a body item, so `gear` is reported, not
+  // failed.
+  {
+    name: 'mirror',
+    pos: [0.32, 1.46, -0.02],
+    target: [1.13, 1.7, 0.805],
+    fov: 18,
+    glass: '_mirrorGlass(_|$)',
+    minCover: 3,
+    bar: '^cabin_(trim|rubber|trimGloss|stitch)$',
+    gear: '^gear_(trim|rubber|steel)$',
+  },
   { name: 'dusk_ws', time: 'dusk', pos: [2.7, 1.75, 5.6], target: [0.0, 1.6, 0.6], fov: 22 },
   { name: 'night_int', time: 'night', lights: true, pos: [0.3, 1.6, -0.16], target: [0.2, 1.24, 9.0], fov: 62 },
   { name: 'night_ext', time: 'night', lights: true, pos: [3.6, 1.7, 4.2], target: [0.1, 1.45, 0.5], fov: 30 },
@@ -189,9 +226,73 @@ async function main() {
         };
         const luma = (d, i) => (0.2126 * d[i * 4] + 0.7152 * d[i * 4 + 1] + 0.0722 * d[i * 4 + 2]) / 255;
 
+        const setVisible = (rx, on) => {
+          const list = [];
+          scene.traverse((o) => {
+            if (o.isMesh && o.visible !== on && rx.test(o.name)) {
+              o.visible = on;
+              list.push(o);
+            }
+          });
+          return list;
+        };
+        const barRe = s.bar ? new RegExp(s.bar) : null;
+
         place();
         const A = grab();
+        // draw calls of the lit frame, mirror pass included (the pass folds its
+        // count into the frame's)
+        const calls = api.stats().calls;
         const dataUrl = renderer.domElement.toDataURL('image/png');
+        // the world behind the glass in the same state as A, for flickBg
+        let hiddenA = setVisible(re, false);
+        const GA = grab();
+        for (const o of hiddenA) o.visible = true;
+        // the pane's full footprint and the trim over it, for the mirror view:
+        // the footprint is the hide-and-diff of the glass with the cabin trim
+        // hidden, so the corner a bar covers still counts as pane; the bar is
+        // the hide-and-diff of the trim with the glass shown. The trim is half
+        // the cabin, and hiding it moves the bloom and the AO a few units over
+        // the whole frame, so the bar's threshold is a tube against sky (48 of
+        // 765) rather than the glass mask's 9.
+        // The footprint is eroded by one pixel so the pane's own edge, which
+        // moves by a pixel when what is next to it changes, does not count.
+        const overPane = (rx) => {
+          const off = setVisible(rx, false);
+          const C = grab();
+          const hid = setVisible(re, false);
+          const CG = grab();
+          for (const o of hid) o.visible = true;
+          for (const o of off) o.visible = true;
+          const n = A.w * A.h;
+          const mask = new Uint8Array(n);
+          for (let i = 0; i < n; i++) {
+            const dp =
+              Math.abs(C.data[i * 4] - CG.data[i * 4]) +
+              Math.abs(C.data[i * 4 + 1] - CG.data[i * 4 + 1]) +
+              Math.abs(C.data[i * 4 + 2] - CG.data[i * 4 + 2]);
+            if (dp >= 9) mask[i] = 1;
+          }
+          let full = 0;
+          let px = 0;
+          for (let y = 1; y < A.h - 1; y++) {
+            for (let x = 1; x < A.w - 1; x++) {
+              const i = y * A.w + x;
+              if (!mask[i] || !mask[i - 1] || !mask[i + 1] || !mask[i - A.w] || !mask[i + A.w]) continue;
+              full++;
+              const db =
+                Math.abs(A.data[i * 4] - C.data[i * 4]) +
+                Math.abs(A.data[i * 4 + 1] - C.data[i * 4 + 1]) +
+                Math.abs(A.data[i * 4 + 2] - C.data[i * 4 + 2]);
+              if (db >= 48) px++;
+            }
+          }
+          return { px, full, hidden: off.length };
+        };
+        const bar = barRe ? overPane(barRe) : { px: 0, full: 0 };
+        const gear = s.gear ? overPane(new RegExp(s.gear)) : { px: 0, full: 0 };
+        const barPx = bar.px;
+        const paneFull = bar.full;
         // tile into the sheet
         {
           const S = window.__sheet;
@@ -207,7 +308,8 @@ async function main() {
           S.i++;
         }
 
-        // second render: a camera nudge, or a few sim steps for the moving shot
+        // second render: a camera nudge, or a few sim steps for the moving shot,
+        // each followed by the same state with the glass hidden
         let B;
         if (s.moving) {
           // A longer pre-roll moves the truck on by a few frames; the camera is
@@ -221,21 +323,16 @@ async function main() {
           place(0.002);
           B = grab();
         }
+        const hidden = setVisible(re, false);
+        const GB = grab();
+        for (const o of hidden) o.visible = true;
         place();
 
-        // hide the glass and render the background. For the moving shot the
-        // world has moved on between A and B, so the hide-and-diff is taken
-        // against B, which is the state the scene is still in.
-        const hidden = [];
-        scene.traverse((o) => {
-          if (o.isMesh && o.visible && re.test(o.name)) {
-            o.visible = false;
-            hidden.push(o);
-          }
-        });
-        const G = grab();
-        for (const o of hidden) o.visible = true;
+        // The hide-and-diff that finds the glass. For the moving shot the world
+        // has moved on between A and B, so it is taken against B, which is the
+        // state the scene is still in; the static views use A.
         const W = s.moving ? B : A;
+        const G = s.moving ? GB : GA;
 
         const n = A.w * A.h;
         let frameSum = 0;
@@ -246,6 +343,7 @@ async function main() {
         let bgSum = 0;
         let hot = 0;
         let flick = 0;
+        let flickBg = 0;
         const withL = [];
         const bgL = [];
         for (let i = 0; i < n; i++) {
@@ -266,6 +364,7 @@ async function main() {
           bgL.push(lg);
           if (la > 0.94) hot++;
           flick += Math.abs(luma(A.data, i) - luma(B.data, i));
+          flickBg += Math.abs(luma(GA.data, i) - luma(GB.data, i));
         }
         let see = 0;
         let spread = 0;
@@ -299,6 +398,14 @@ async function main() {
           spread,
           hot: cover ? hot / cover : 0,
           flick: cover ? flick / cover : 0,
+          flickBg: cover ? flickBg / cover : 0,
+          flickRatio: flickBg > 1e-9 ? flick / flickBg : 0,
+          barPx,
+          barPct: paneFull ? (barPx / paneFull) * 100 : 0,
+          paneFullPct: (paneFull / n) * 100,
+          gearPx: gear.px,
+          gearPct: gear.full ? (gear.px / gear.full) * 100 : 0,
+          calls,
           hiddenCount: hidden.length,
         };
       },
@@ -309,14 +416,28 @@ async function main() {
     delete row.dataUrl;
     rows.push(row);
     log(
-      `${s.name.padEnd(11)} panes ${String(res.hiddenCount).padStart(2)} cover ${res.cover.toFixed(1).padStart(5)}%  glass ${res.withLuma.toFixed(3)} bg ${res.bgLuma
-        .toFixed(3)}  veil ${(res.veil >= 0 ? '+' : '') + res.veil.toFixed(3)}  see ${res.see.toFixed(2)}  spread ${res.spread
-        .toFixed(3)}  hot ${(res.hot * 100).toFixed(1)}%  flick ${res.flick.toFixed(3)}  | frame ${res.mean.toFixed(3)} clip ${res.clipPct
-        .toFixed(2)}%  (${((Date.now() - ts) / 1000).toFixed(0)}s)`,
+      `${s.name.padEnd(11)} panes ${String(res.hiddenCount).padStart(2)} cover ${res.cover.toFixed(1).padStart(5)}%  glass ${res.withLuma.toFixed(3)} bg ${res.bgLuma.toFixed(
+        3,
+      )}  veil ${(res.veil >= 0 ? '+' : '') + res.veil.toFixed(3)}  see ${res.see.toFixed(2)}  spread ${res.spread.toFixed(
+        3,
+      )}  hot ${(res.hot * 100).toFixed(1)}%  flick ${res.flick.toFixed(3)} bg ${res.flickBg.toFixed(3)} ratio ${res.flickRatio.toFixed(2)}${
+        s.bar ? `  bar∩pane ${res.barPx}px` : ''
+      }${s.gear ? ` gear∩pane ${res.gearPx}px` : ''}  | frame ${res.mean.toFixed(3)} clip ${res.clipPct.toFixed(2)}% calls ${res.calls}  (${((Date.now() - ts) / 1000).toFixed(0)}s)`,
     );
     if (s.minCover && res.cover < s.minCover) {
       coverFail = true;
       log(`FAIL ${s.name}: the pane covers ${res.cover.toFixed(1)}% of the frame (needs ${s.minCover}%) — the camera is not on it`);
+    }
+    if (s.bar && res.barPx > 0) {
+      coverFail = true;
+      log(
+        `FAIL ${s.name}: ${res.barPx} px of the cabin's cage or welt (${res.barPct.toFixed(1)}% of the pane's footprint) lie over the pane — a bar crosses the mirror`,
+      );
+    }
+    if (s.gear && res.gearPx > 0) {
+      log(
+        `note ${s.name}: ${res.gearPx} px of the exterior cage (${res.gearPct.toFixed(1)}% of the pane's footprint) lie over the pane — a body item, not failed`,
+      );
     }
   }
 

@@ -183,10 +183,17 @@ const REFLECTORS = {
   // the mesh was dished with, so only the wet ruts reflect.
   terrain: { f0: 0.03, roughness: 0.3, wet: 1 },
 
+  // The windscreen marches; the door glass, the rear glass and the cabin's own
+  // panes do not (round 7). From the seat a door pane's reflected ray runs
+  // back across the cab at a graze and finds the door card and the dash
+  // edge-on, where the jittered march hits on one pixel and steps through on
+  // the next: a 1 px checkerboard over the sky through the driver's door,
+  // 3.6 % of the pane at 1280 (consensus §14, "pane SSR or dithered alpha").
+  // Ablated on the ultra `interior` frame: pane depth off 0.70 %, these panes
+  // off the layer 0.16 %, the pass off 0.15 %, the rays pass off 3.61 % — it
+  // is this march and nothing else. The screen keeps it: from outside it
+  // reflects the bonnet, a solid hit, and its own sky read 0.19 % either way.
   glass: { f0: 0.055, roughness: 0.05 },
-  glassDark: { f0: 0.055, roughness: 0.1 },
-  glassSide: { f0: 0.055, roughness: 0.05 },
-  cabinGlass: { f0: 0.05, roughness: 0.05 },
   lensClear: { f0: 0.05, roughness: 0.04 },
 
   // clearcoat over paint. The base coat is rough and the coat is not, so the

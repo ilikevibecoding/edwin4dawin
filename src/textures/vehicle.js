@@ -760,6 +760,13 @@ export function applyMirrorHorizon(
     uMhSky: { value: sky },
     uMhPaint: { value: new THREE.Color(paint) },
     uMhDust: { value: new THREE.Color(dust) },
+    // The flank test below runs in the truck's object space. When the panes
+    // are split into one mesh each for sorting (`emitPieces`, every tier with
+    // live mirrors), each piece is recentred on its own origin and `position`
+    // is no longer truck space; the kit hands each piece's offset to any
+    // `uClOff` it finds on the material before the draw, and this is where
+    // the plate takes it. Zero for a merged pane.
+    uClOff: { value: new THREE.Vector3() },
   };
   material.userData.mh = u;
   const f = flank && {
@@ -787,6 +794,7 @@ export function applyMirrorHorizon(
         .replace(
           '#include <common>',
           `#include <common>
+        uniform vec3 uClOff;
         varying vec3 vMhP;
         varying vec3 vMhN;
         varying vec3 vMhCam;
@@ -795,9 +803,9 @@ export function applyMirrorHorizon(
         .replace(
           '#include <worldpos_vertex>',
           `#include <worldpos_vertex>
-        vMhP = position;
+        vMhP = position + uClOff;
         vMhN = normal;
-        vMhCam = ( inverse( modelMatrix ) * vec4( cameraPosition, 1.0 ) ).xyz;
+        vMhCam = ( inverse( modelMatrix ) * vec4( cameraPosition, 1.0 ) ).xyz + uClOff;
         vMhFlankN = normalMatrix * vec3( position.x < 0.0 ? -1.0 : 1.0, 0.0, 0.0 );`,
         );
     }
@@ -851,9 +859,15 @@ export function applyMirrorHorizon(
           // the way to grey for the dust haze over the plain, tinted, darkened
           // towards straight down where the ray lands in the truck's own
           // shadow, and broken by the scrub band at the skyline.
+          //
+          // The darkening starts 17 degrees under the horizon (round 7; was
+          // 4.6). From the eye height of a door mirror that is ground about
+          // 5 m out, and the old ramp had begun on ground 6-9 m from the pane
+          // — the plain in the round-5 mirror frame ran 0.55 st under the
+          // trail beside it by row 152 (consensus §15).
           float mhRL = dot( radiance, vec3( 0.2126, 0.7152, 0.0722 ) );
           vec3 mhG = mix( radiance, vec3( mhRL ), 0.35 ) * uMhGround;
-          mhG *= mix( vec3( 1.0 ), uMhNear, smoothstep( -0.08, -0.7, mhUp ) );
+          mhG *= mix( vec3( 1.0 ), uMhNear, smoothstep( -0.3, -0.9, mhUp ) );
           mhG = mix( mhG, mhG * uMhScrub, mhBand * 0.85 );
           float mhBelow = 1.0 - smoothstep( -0.012, 0.004, mhUp );
           radiance = mix( radiance * uMhSky, mhG, mhBelow );
