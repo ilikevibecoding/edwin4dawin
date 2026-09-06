@@ -1076,8 +1076,10 @@ export class Streets {
   update(time: number, night: number): void {
     this.uniforms.uSignalTime.value = time;
     this.uniforms.uNight.value = night;
-    // warm high-pressure sodium / warm-white LED mix; the pools scale with the night factor like the lamp heads
-    this.lights.uLampColor.value.set(1.0, 0.78, 0.5).multiplyScalar(0.7 * night * (this.poolsEnabled ? 1 : 0));
+    // warm high-pressure sodium / warm-white LED mix; the pools scale with the night factor like the lamp heads.
+    // 0.35: under the x3.5 night exposure a 0.7 gain clipped the pool centres to one flat tan on asphalt and
+    // concrete alike (sRGB ~185 on both); at 0.35 the centre of a pool on asphalt sits near sRGB 120 and grades out
+    this.lights.uLampColor.value.set(1.0, 0.78, 0.5).multiplyScalar(0.35 * night * (this.poolsEnabled ? 1 : 0));
   }
 
   /** Per-frame culling: cells in view within FAR (small kits within SMALL_FAR); kits cast into the fine cascades
