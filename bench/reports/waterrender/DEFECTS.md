@@ -271,3 +271,76 @@ around the camera in cloud space; `water.ts`: `uCloudFieldTex/Center/Extent`, on
 field evaluation; `game.ts` one line: `attachCloudField`). The bake is what the visible cloud's base footprint
 is thresholded from, so the mirror now follows the visible footprint exactly (the analytic field and the bake
 differ only by the bake's 74 m filtering). Look unchanged otherwise: r10 vs r11 `low30` is the check.
+
+## Results of the round-11 captures (landed after the cut-off; `/tmp/waterrender/r11`, `perf/`)
+
+Ten r11 stills, 0 console errors each. Interleaved A/B (base 4510 = r0 vs r11, 6 rounds ABBA, 12 frames a side):
+`night` median ratio 1.004 (min-frame 1.052), `sun1730` 0.989 (1.056), `waterlanding` **1.503 (min-frame 1.173)** —
+the water-landing view was over the +10 % budget. Base clip `waterlanding` had 1 error (the r0 build's `patch`
+GLSL reserved word in wakes.ts, fixed since), the r11 clip 0. Cause of the water-landing cost, by reading the
+kernel: the first gate of `sceneReflection` reads the pyramid's top level, whose texels are a tenth of the image,
+so around the aircraft's mirror image and the shore's horizon band most of the water passed it and ran the sparkle
+field plus 13 taps × 2 texture reads (SwiftShader's filtered reads are the expensive instruction here).
+
+## Critic h03 (`bench/reports/critics/h03/visual-2.md`, build 7fe5d685 = this branch at 7ab21f54, after round 10)
+
+| # | finding | camera / cells | diagnosis (this round) |
+| --- | --- | --- | --- |
+| 1 | REGRESSION: sunset sun path truncated (h00 ran to the frame bottom) | sunset E2–F4 | see round 12: the unresolved floor was a tenth of the short-wave variance; the drawn chop at 7 m/s held 3× a whole sea's variance |
+| 2 | REGRESSION (flag): grazing water cyan → deep blue | glass G5–H8, aircraft_rear A7–D8 | the analytic sky term mirrors the dome's mid-elevation blue (the PMREM horizon band was whiter); round 13 |
+| 3 | no local reflections (aircraft, piers, towers) | aircraft_rear C6–F8, highway_bridge E6–F8, city_200m G5–H6 | at 40–45° depression F ≈ 0.022: a pier's mirror is 1 % of the frame's radiance (physical); at the low cameras F ≈ 0.2–0.3 and the aircraft should show — debug output `wdbg=3` this round |
+| 4 | glint speckle; one ripple frequency | shore_beach E4–H5 | not glitter (the half vector there needs a 1.0 rad slope): the noise chop layers were drawn only while undersampled, 1.2–3.5 px per cell, mirroring the horizon haze as a fine white speckle; round 12 |
+| 5 | water shadows black, hard, structureless | aircraft_rear A6–H8, highway_bridge A4–D7 | the shadowed body is skylight (14 % of the irradiance at clear noon: `uSunShare` 0.86) plus the 0–45 % leak; the sky term at 45° is 2 % — a clear-water shadow is dark; structure inside it is the bed; round 13 |
+
+## Round 12 — the never-resolved short waves; chop variance linear in the wind; noise layers faded before they alias; cheaper mirror gather
+
+Observed: h03 `sunset` (7 m/s, sun el 5.7°, camera 290 m): a broad bright band from the horizon to ~12°
+depression, dark blue-purple water below, no glitter in the foreground; h00 had a grainy path to the frame bottom.
+h03 `shore_beach`: fine white speckle over all the water in the lower half (the sun is 72° off the view: not
+glitter). h03 `glass`, `aircraft_rear`: the near water shows the 0.5 m and 1.7 m chop as crisp ripples, the far
+water is speckled.
+
+Diagnosis (offline, `tools/path.py`: the analytic glitter of `sunGlitter` along the sun's azimuth against the view
+depression with the round-11 and round-12 bookkeeping of the unresolved variance):
+- The unresolved variance the glitter lobe is built from is the sum of what the footprint fades take out of the
+  drawn layers plus a floor. The floor was `0.002 + 0.003 windG · shelter` ≈ 0.0055 at 7 m/s, i.e. a lobe 2.4° wide
+  (1σ per axis) where every drawn layer is resolved. Cox and Munk's clean-surface fit is 0.003 + 0.00512 U; their
+  slick-surface fit 0.008 + 0.00156 U; a slick damps just the waves under ~30 cm, so those hold 0.00356 U − 0.005:
+  0.0074 at 3.5 m/s (a third of the sea's variance), 0.020 at 7 (half). Nothing drawn is shorter than the 0.5 m
+  layer, so that variance is never resolved and must stay in the lobe at every distance. With a tenth of it, the
+  path at 22–36° depression (the sunset's foreground needs 0.14–0.27 rad of slope) fell to e^−5 of its peak.
+- The three noise chop layers had slope amplitudes ∝ windG, i.e. variance ∝ windG²: at 7 m/s a1² + a2² + a3² =
+  0.053 against 0.039 for a whole sea (Cox–Munk), 0.13 at 10 m/s. The far field of the sunset was a lobe of
+  σ ≈ 0.26–0.38 rad (gusts and groups on top): the broad diffuse band. Slope variance grows linearly with U.
+- The layers faded on the pixel diagonal `foot` between 5 and 2.3 px per L, but their cells are L/stretch along the
+  wind (7 / 2.8 / 1.2 / 0.31 m for the 14 / 5 / 1.7 / 0.5 m layers), so each was drawn only through 1.2–3.5 px per
+  cell: undersampled slopes, i.e. a per-pixel random normal that mirrors the bright horizon haze in a fine white
+  speckle wherever the sky term is large (the shore_beach lower half at 0.1–0.25 m/px is exactly the 0.5 m layer's
+  fade range). Their variance was booked as resolved while what they drew was noise.
+
+Change (`water.ts`):
+- `mssS += max(0.02136 windG − 0.005, 0.0015) · mix(0.4, 1, 0.6 o1 + 0.4 open) · smoothstep(0, 0.5, depth)` in
+  place of `0.003 windG mix(0.3, 1, open)`; the 0.002 slick floor stays in `mss`.
+- `windA`: the chop amplitude factor follows the slick fit above the clear preset's 3.5 m/s (`0.583 sqrt((0.008 +
+  0.00936 windG) / 0.01346)`, = windG at 0.583; below it unchanged). Far-field totals (gust 1): 3.5 m/s 0.027
+  (was 0.021; CM 0.021), 7 m/s 0.048 (was 0.065; CM 0.039), 10 m/s ~0.08 (was 0.13; CM 0.054).
+- `noiseFade(L, stretch)`: per-axis fades on the cell sizes (feature = cell / 1.5, the sets' 10 → 4.5 px rule):
+  the 5 m layer now leaves between 0.19 and 0.41 m of along-wind footprint (was 1.0–2.2 m of diagonal), the 0.5 m
+  layer between 0.021 and 0.046 m (was 0.1–0.22). The lanes (value noise, 1.8 m cells across the wind) fade on
+  2.4 m; the group roughness modulation on its 40 × 16 m cells. The 14 m and 5 m layers keep being evaluated (for
+  their value, which groups and bends the sets under them) while those sets are drawn: a set drawn with its warp
+  frozen at 0.5 would have run straight (the lattice risk of the audit above).
+- Replica (`tools/path.py`, 7 m/s, gust 1): analytic path at depression 14 / 18 / 22 / 26 / 30 / 36°: r11
+  1.6 / 0.98 / 0.58 / 0.34 / 0.20 / 0.07 → r12 2.4 / 1.36 / 0.75 / 0.41 / 0.21 / 0.07 × E (capped at 2.5). The far
+  field (σ 0.22 rad instead of 0.26) is the narrower band; the resolved wind sea and the group modulation break it
+  across the waves as before. At 3.5 m/s the path is unchanged to 18° and 2× brighter at 36°.
+- `sceneReflection`: a second gate at the gather's own place and size — after the flat-mirror lookup point and the
+  reach's streak are known, one read of the share pyramid's coverage at `lod = ceil(log2(3 σ_L))` (a cell the size
+  of the whole gather plus the sparkle tilt) exits where every tap below would find nothing; the sparkle field is
+  evaluated after it. Taps 0.375 rms apart, four a side (a Gaussian summed at that spacing is within 10⁻³ of its
+  integral; the colour read's lod floor of half the spacing still tiles the streak).
+- `WATER_DEBUG` from the URL (`wdbg=1..6`): the diagnosis outputs no longer need a rebuild.
+
+Expected: the sunset path continues to the frame bottom as an orange band broken across the wind sea, narrower at
+the horizon; the shore_beach lower half loses its speckle and shows the 3.4 / 2.15 m sets and the 1.7 m chop
+resolved (0.1–0.25 m/px is inside their range); the water-landing frame cost back within budget.
