@@ -7,6 +7,7 @@ import { GLSL_LIGHT_POOLS, chainCross, chainFrame, frameAt, roadEdgeY, rowPositi
 import { balanceGroundIbl } from './terrain';
 import { THIN_VERTEX_MAIN, THIN_VERTEX_PARS, cellKey } from './batching';
 import { LAYER_CAMERA, layerMask, maskCasts, type ViewCull } from './culling';
+import type { StreetTree } from './vegetation';
 
 /**
  * Street-level detail over the road graph: raised sidewalks with curb and gutter along every developed block
@@ -256,7 +257,7 @@ function createSidewalkMaterial(lights: RoadLightUniforms): THREE.MeshStandardMa
 }
 
 /** emissive codes carried per vertex of the furniture soup (`aEmissive`) */
-const EM_NONE = 0, EM_RED = 2, EM_AMBER = 3, EM_GREEN = 4, EM_HAND = 5, EM_WALK = 6;
+const EM_NONE = 0, EM_SIGN = 1, EM_RED = 2, EM_AMBER = 3, EM_GREEN = 4, EM_HAND = 5, EM_WALK = 6;
 
 /** Vertex-coloured PBR material for the furniture soups: `aMatParams` roughness / metalness, `aEmissive` codes the
  *  signal aspect a vertex belongs to and `aPhase` its node's cycle offset (+100 for the cross direction); the
@@ -278,6 +279,8 @@ function createKitMaterial(uniforms: { uSignalTime: THREE.IUniform<number>; uNig
         {
           float code = vSig.x;
           vec3 em = vec3(0.0);
+          // a shop's blade sign is internally lit after dark: its own colour, brightened
+          if (code > 0.5 && code < 1.5) em = diffuseColor.rgb * 2.4 * uNight;
           if (code > 1.5) {
             float parity = step(99.5, vSig.y);
             float t = mod(uSignalTime + vSig.y - parity * 100.0 + parity * ${SIGNAL_HALF.toFixed(1)}, ${(SIGNAL_HALF * 2).toFixed(1)});
@@ -296,7 +299,7 @@ function createKitMaterial(uniforms: { uSignalTime: THREE.IUniform<number>; uNig
         }`);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'street-kit-v2';
+  mat.customProgramCacheKey = () => 'street-kit-v3';
   return mat;
 }
 
@@ -571,6 +574,8 @@ function part(soup: KitSoup, unit: THREE.BufferGeometry, f: THREE.Matrix4, cx: n
 }
 const _e = new THREE.Euler();
 
+/** newspaper box liveries */
+const NEWS_COLORS = [new THREE.Color(0xb32a20), new THREE.Color(0x1f4f9a), new THREE.Color(0xe0b020), new THREE.Color(0x1a1a1c), new THREE.Color(0x2f7a3a)];
 const C = {
   galv: new THREE.Color(0x8d949a),
   dark: new THREE.Color(0x2a2c2e),
@@ -588,6 +593,8 @@ const C = {
   glass: new THREE.Color(0x9fc4d6),
   concrete: new THREE.Color(0xb3b0a8),
   hydrant: new THREE.Color(0xd23a2a),
+  mailbox: new THREE.Color(0x24457a),
+  iron: new THREE.Color(0x35373a),
   cabinet: new THREE.Color(0x8f9a92),
   stone: new THREE.Color(0xa9a49a),
   shrub: new THREE.Color(0x2f5a22),
@@ -637,6 +644,17 @@ interface StreetCell {
 
 interface Run { chain: RoadChain; side: 1 | -1; sa: number; sb: number; zone: Zone | null; w: number; light: boolean }
 
+/** a building massing standing on the ground (world/city.ts `groundBoxes`): footprint w x d about (x, z) turned by
+ *  `rot`, height h, facade style id */
+export interface Facade { x: number; y: number; z: number; w: number; h: number; d: number; rot: number; style: number }
+/** facade lookup grid (m) */
+const FACADE_G = 60;
+/** facade styles whose ground floor is a retail base (city.ts S): punched, balcony, deco, concrete, stone, brick, grid */
+const RETAIL_STYLES = new Set([1, 2, 3, 6, 9, 10, 11]);
+/** awning canvas and blade-sign liveries */
+const AWNING_COLORS = [new THREE.Color(0x2f5a3a), new THREE.Color(0x7a2430), new THREE.Color(0x243b63), new THREE.Color(0xd9c9a3), new THREE.Color(0x8a3c22), new THREE.Color(0x1e1e22)];
+const SIGN_COLORS = [new THREE.Color(0xd8352a), new THREE.Color(0xf2efe6), new THREE.Color(0x1a1a1c), new THREE.Color(0xe8b923), new THREE.Color(0x2a6fb5), new THREE.Color(0x2f8a4a)];
+
 function unitDir(a: Vec2, b: Vec2): Vec2 {
   const dx = b[0] - a[0], dz = b[1] - a[1];
   const l = Math.hypot(dx, dz) || 1;
@@ -661,12 +679,15 @@ export class Streets {
   readonly group = new THREE.Group();
   readonly materials: THREE.Material[] = [];
   readonly lamps: LampPlan[] = [];
+  /** the sidewalk trees (in their pits downtown and in the mid-rise rings), planted by the vegetation system */
+  readonly streetTrees: StreetTree[] = [];
+  private readonly facadeCells = new Map<number, Facade[]>();
   readonly walkMaterial: THREE.MeshStandardMaterial;
   readonly kitMaterial: THREE.MeshStandardMaterial;
   readonly uniforms = { uSignalTime: { value: 0 } as THREE.IUniform<number>, uNight: { value: 0 } as THREE.IUniform<number>, uFocalPx: { value: 1000 } as THREE.IUniform<number> };
   private readonly cells: StreetCell[] = [];
   private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup }>();
-  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
+  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, trees: 0, awnings: 0, signs: 0, newsboxes: 0, mailboxes: 0, racks: 0, cans: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
   private readonly roads: RoadIndex;
   /** debug: `?dbg=nopools` turns the lamp pools off */
   poolsEnabled = true;
@@ -677,11 +698,17 @@ export class Streets {
 
   /** `blocks`: the district grid blocks (centreline to centreline, district frame) and `occupied`: the city's footprint
    *  grid, for the plazas and surface lots dressed over the free ground of the dense blocks */
-  constructor(private readonly map: WorldMap, private readonly graph: RoadGraph, private readonly lights: RoadLightUniforms, private readonly markOccupied: (x: number, z: number, r: number) => void, blocks: Map<string, Block[]> = new Map(), occupied: (x: number, z: number) => boolean = () => false) {
+  constructor(private readonly map: WorldMap, private readonly graph: RoadGraph, private readonly lights: RoadLightUniforms, private readonly markOccupied: (x: number, z: number, r: number) => void, blocks: Map<string, Block[]> = new Map(), occupied: (x: number, z: number) => boolean = () => false, facades: Facade[] = []) {
     this.walkMaterial = createSidewalkMaterial(lights);
     this.kitMaterial = createKitMaterial(this.uniforms);
     this.materials.push(this.walkMaterial, this.kitMaterial);
     this.roads = new RoadIndex(graph.chains);
+    for (const f of facades) {
+      const k = cellKey(f.x, f.z, FACADE_G);
+      let l = this.facadeCells.get(k);
+      if (!l) { l = []; this.facadeCells.set(k, l); }
+      l.push(f);
+    }
     const signalPoles = this.signalPoles;
     for (const chain of graph.chains) {
       // highway and causeway lighting is built with the highway furniture (world/highway.ts): median twin-arm poles;
@@ -936,11 +963,14 @@ export class Streets {
     const yawToRoad = (nx: number, nz: number) => Math.atan2(nz, -nx); // +x of the unit toward -n (the roadway)
     // low-density suburbs light one side of the street only (the side alternates per chain)
     const lit = zone !== Zone.RES_LOW || side === (chain.id % 2 === 0 ? 1 : -1);
+    /** along-positions of this run's lamps (the tree pits and the kerb-side kit keep clear of them) */
+    const lampS: number[] = [];
     if (lit && L >= 30) {
       const n = arterial ? Math.ceil((L - 12) / pitch) : Math.floor((L - 12) / pitch);
       if (n === 0) {
         const s = (sa + sb) / 2, q = at(s, 0.65);
         this.lamp(q.x, yAt(s), q.z, yawToRoad(q.nx, q.nz), arterial ? 'arterial' : 'street');
+        lampS.push(s);
       } else {
         const p = (L - 12) / n;
         const stagger = arterial ? 0 : side > 0 ? 0 : p / 2;
@@ -949,6 +979,7 @@ export class Streets {
           if (s > sb - 6) continue;
           const q = at(s, 0.65);
           this.lamp(q.x, yAt(s), q.z, yawToRoad(q.nx, q.nz), arterial ? 'arterial' : 'street');
+          lampS.push(s);
         }
       }
     }
@@ -959,7 +990,9 @@ export class Streets {
     const runYaw = Math.atan2(-dir.dz, dir.dx);
     /** curb lengths (s, half-length) kept free of parked cars: the bus stop at a shelter, a hydrant */
     const keepClear: [number, number][] = [];
-    const put = (kind: 'bench' | 'bin' | 'hydrant' | 'shelter' | 'cabinet', s: number, across: number) => {
+    /** along-positions and half-lengths of everything placed on the walk (the tree pits keep clear of them) */
+    const taken: [number, number][] = lampS.map((s) => [s, 2.5]);
+    const put = (kind: 'bench' | 'bin' | 'hydrant' | 'shelter' | 'cabinet' | 'newsbox' | 'mailbox' | 'bikerack' | 'can', s: number, across: number, n = 1) => {
       const q = at(s, across);
       if (!this.roads.clear(q.x, q.z, kind === 'shelter' ? 1.2 : 0.4)) { this.counts.rejected++; return; }
       const y = yAt(s);
@@ -967,7 +1000,48 @@ export class Streets {
       const soup = kind === 'shelter' ? soups.large : soups.small;
       if (kind === 'shelter') keepClear.push([s, 10]);
       if (kind === 'hydrant') keepClear.push([s, 2.8]);
+      taken.push([s, kind === 'shelter' ? 4 : kind === 'bikerack' ? 1.6 : kind === 'newsbox' ? 0.5 * n + 0.6 : 1.2]);
       switch (kind) {
+        case 'newsbox': {
+          // a rank of 1-3 coin boxes along the kerb line, each its publisher's colour with a dark window
+          this.counts.newsboxes += n;
+          const f = frame(q.x, y, q.z, faceYaw);
+          for (let i = 0; i < n; i++) {
+            const cz = (i - (n - 1) * 0.5) * 0.52;
+            const col = NEWS_COLORS[Math.floor(hash2(Math.round(s * 3), chain.id, i + 60) * NEWS_COLORS.length)];
+            part(soup, UNIT.box, f, 0, 0.55, cz, 0.42, 1.06, 0.46, col, 0.55, 0.3);
+            part(soup, UNIT.box, f, 0.215, 0.8, cz, 0.02, 0.36, 0.36, C.glassDark, 0.2, 0.6);
+          }
+          break;
+        }
+        case 'mailbox': {
+          // the blue collection box: a legged body with the rounded top and the pull-down door toward the walk
+          this.counts.mailboxes++;
+          const f = frame(q.x, y, q.z, faceYaw);
+          part(soup, UNIT.box, f, 0, 0.62, 0, 0.62, 0.62, 0.52, C.mailbox, 0.5, 0.35);
+          part(soup, UNIT.cyl, f, 0, 0.93, 0, 0.52, 0.62, 0.52, C.mailbox, 0.5, 0.35, EM_NONE, 0, Math.PI / 2);
+          part(soup, UNIT.box, f, 0, 0.16, 0, 0.5, 0.32, 0.4, C.dark, 0.6, 0.5);
+          part(soup, UNIT.box, f, -0.27, 0.72, 0, 0.02, 0.3, 0.42, C.white, 0.6, 0.1);
+          break;
+        }
+        case 'bikerack': {
+          // inverted-U racks 0.9 m apart across the walk, their plane along the kerb
+          this.counts.racks += n;
+          const f = frame(q.x, y, q.z, faceYaw);
+          for (let i = 0; i < n; i++) {
+            const cz = (i - (n - 1) * 0.5) * 0.9;
+            part(soup, UNIT.box, f, -0.35, 0.4, cz, 0.05, 0.8, 0.05, C.galv, 0.4, 0.8, EM_NONE, 0, 0, 1);
+            part(soup, UNIT.box, f, 0.35, 0.4, cz, 0.05, 0.8, 0.05, C.galv, 0.4, 0.8, EM_NONE, 0, 0, 1);
+            part(soup, UNIT.box, f, 0, 0.8, cz, 0.75, 0.05, 0.05, C.galv, 0.4, 0.8, EM_NONE, 0, 0, 3);
+          }
+          break;
+        }
+        case 'can':
+          // the downtown litter can: black mesh drum with a flat lid and a ring at the top
+          this.counts.cans++;
+          part(soup, UNIT.cyl, frame(q.x, y, q.z, 0), 0, 0.5, 0, 0.62, 1.0, 0.62, C.black, 0.75, 0.4);
+          part(soup, UNIT.cyl6, frame(q.x, y, q.z, 0), 0, 1.06, 0, 0.66, 0.12, 0.66, C.dark, 0.5, 0.6);
+          break;
         case 'bench': {
           const f = frame(q.x, y, q.z, faceYaw);
           part(soup, UNIT.box, f, 0, 0.45, 0, 0.45, 0.05, 1.7, C.wood, 0.85, 0);
@@ -1015,18 +1089,127 @@ export class Streets {
     if (L < 24) return;
     const back = CURB_TOP + W - 0.55;
     if (dense) {
+      const downtown = zone === Zone.DOWNTOWN;
       if (h < 0.6) put('bench', sa + L * (0.3 + 0.2 * h), back);
       if (h > 0.45 && L > 70) put('bench', sa + L * 0.72, back);
-      if (hash2(Math.round(sa), chain.id, side + 11) < 0.7) put('bin', sa + 4.5, 0.75);
-      if (hash2(Math.round(sb), chain.id, side + 12) < 0.45) put('bin', sb - 4.5, 0.75);
+      if (hash2(Math.round(sa), chain.id, side + 11) < 0.7) put(downtown ? 'can' : 'bin', sa + 4.5, 0.75);
+      if (hash2(Math.round(sb), chain.id, side + 12) < 0.45) put(downtown ? 'can' : 'bin', sb - 4.5, 0.75);
+      if (L > 50 && hash2(Math.round(sa), chain.id, side + 16) < 0.6) put(downtown ? 'can' : 'bin', sa + L * (0.45 + 0.1 * h), 0.75);
       if (hash2(Math.round(sa), chain.id, side + 13) < 0.45) put('hydrant', sa + L * (0.55 + 0.3 * h), 0.7);
       if (L > 60 && W >= 2.3 && hash2(Math.round(sa), chain.id, side + 14) < (arterial ? 0.3 : 0.16)) put('shelter', sa + L * 0.5, back + 0.35);
       if (W >= 2.3 && hash2(Math.round(sa), chain.id, side + 15) < 0.14) put('cabinet', sa + L * 0.85, back);
+      // the kerb-side rank near the corners: newspaper boxes, the mailbox; bike racks at the back of the walk
+      const hn = hash2(Math.round(sa), chain.id, side + 17);
+      if (hn < (downtown ? 0.55 : 0.3)) put('newsbox', sa + 7.5 + 2.0 * hn, 0.62, 1 + Math.floor(hn * 5.4) % 3);
+      if (hash2(Math.round(sb), chain.id, side + 18) < (downtown ? 0.3 : 0.15)) put('newsbox', sb - 8.0, 0.62, 2);
+      if (hash2(Math.round(sa), chain.id, side + 19) < (downtown ? 0.22 : 0.12)) put('mailbox', sa + 10.5 + 3.0 * h, 0.68);
+      if (W >= 2.3 && hash2(Math.round(sa), chain.id, side + 20) < (downtown ? 0.4 : 0.22)) put('bikerack', sa + L * (0.36 + 0.12 * h), back + 0.1, 2 + Math.floor(h * 2));
+      if (W >= 2.3) this.plantTreePits(run, at, yAt, taken, soups.small);
+      this.dressRetail(run, yAt, soups.small);
       if (!arterial && chain.hw >= 5.5) this.parkCurb(run, keepClear, at);
     } else {
       if (hash2(Math.round(sa), chain.id, side + 13) < 0.3) put('hydrant', sa + L * (0.55 + 0.3 * h), 0.7);
       if (zone === Zone.PARK && h < 0.5) put('bench', sa + L * 0.5, back);
       if (zone === Zone.INDUSTRIAL && hash2(Math.round(sa), chain.id, side + 15) < 0.2) put('cabinet', sa + L * 0.8, back);
+    }
+  }
+
+  /** Awnings and blade signs on the retail bases along a dense block face. The mid-rise street wall (city.ts
+   *  fillEdge) stands with its front face 3 m behind the carriageway edge, at the back of the sidewalk, and the
+   *  tower podiums a forecourt further back; any ground box whose face looks at this run from 2.3-9 m behind the
+   *  kerb face is a frontage, cut into 5-8 m shopfronts:
+   *  a canvas awning over 55 % of them (1.3 m out at 3.05 m, an 18 deg pitch and a valance) and a blade sign at
+   *  one end of 35 % (lit at night). Glass, hotel and industrial styles keep bare bases. */
+  private dressRetail(run: Run, yAt: (s: number) => number, soup: KitSoup): void {
+    const { chain, side, sa, sb } = run;
+    const L = sb - sa;
+    if (L < 20) return;
+    const cross = this.crossOf(chain);
+    const mid = frameAt(chain, cross, (sa + sb) / 2);
+    const dir = chainFrame(chain, (sa + sb) / 2);
+    const nx = mid.cx * side, nz = mid.cz * side; // outward, road to sidewalk back
+    const reach = L * 0.5 + 60;
+    const seen = new Set<Facade>();
+    for (let wx = mid.x - reach; wx <= mid.x + reach + FACADE_G; wx += FACADE_G) for (let wz = mid.z - reach; wz <= mid.z + reach + FACADE_G; wz += FACADE_G) {
+      const list = this.facadeCells.get(cellKey(wx, wz, FACADE_G));
+      if (!list) continue;
+      for (const b of list) {
+        if (seen.has(b) || !RETAIL_STYLES.has(b.style) || b.h < 8) continue;
+        seen.add(b);
+        const c = Math.cos(b.rot), sn = Math.sin(b.rot);
+        // the four faces: outward normal, centre, length along the face
+        const faces: { fx: number; fz: number; cx: number; cz: number; len: number }[] = [
+          { fx: c, fz: sn, cx: b.x + c * b.w * 0.5, cz: b.z + sn * b.w * 0.5, len: b.d },
+          { fx: -c, fz: -sn, cx: b.x - c * b.w * 0.5, cz: b.z - sn * b.w * 0.5, len: b.d },
+          { fx: -sn, fz: c, cx: b.x - sn * b.d * 0.5, cz: b.z + c * b.d * 0.5, len: b.w },
+          { fx: sn, fz: -c, cx: b.x + sn * b.d * 0.5, cz: b.z - c * b.d * 0.5, len: b.w },
+        ];
+        for (const f of faces) {
+          if (f.fx * nx + f.fz * nz > -0.95) continue; // must look at the road
+          const sF = (sa + sb) / 2 + (f.cx - mid.x) * dir.dx + (f.cz - mid.z) * dir.dz;
+          const across = (f.cx - mid.x) * nx + (f.cz - mid.z) * nz - chain.hw; // behind the kerb face
+          if (across < 2.3 || across > 9.0) continue;
+          const s0 = Math.max(sa + 1.5, sF - f.len * 0.5 + 0.6), s1 = Math.min(sb - 1.5, sF + f.len * 0.5 - 0.6);
+          if (s1 - s0 < 4) continue;
+          // shopfronts of 5-8 m from the face's own start, so a facade shared by two runs keeps one rhythm
+          const seed = Math.round(f.cx * 3 + f.cz * 7);
+          let s = s0;
+          for (let k = 0; s < s1 - 3.5 && k < 40; k++) {
+            const front = Math.min(5 + 3 * hash2(seed, k, 71), s1 - s);
+            const sm = s + front * 0.5;
+            const yaw = Math.atan2(nz, nx) + Math.PI; // +x toward the road
+            const pt = frameAt(chain, cross, sm);
+            const px = pt.x + pt.cx * side * (chain.hw + across), pz = pt.z + pt.cz * side * (chain.hw + across);
+            const y = yAt(sm);
+            const roll = hash2(seed, k, 72);
+            if (roll < 0.55 && front >= 3.5) {
+              this.counts.awnings++;
+              const fr = frame(px, y, pz, yaw);
+              const col = AWNING_COLORS[Math.floor(hash2(seed, k, 73) * AWNING_COLORS.length)];
+              part(soup, UNIT.box, fr, 0.62, 3.25, 0, 1.3, 0.05, front - 0.8, col, 0.85, 0, EM_NONE, 0, -0.32);
+              part(soup, UNIT.box, fr, 1.23, 2.92, 0, 0.03, 0.26, front - 0.8, col, 0.85, 0);
+            }
+            if (hash2(seed, k, 74) < 0.35) {
+              this.counts.signs++;
+              const end = hash2(seed, k, 75) < 0.5 ? -1 : 1;
+              const fr = frame(px, y, pz, yaw);
+              const col = SIGN_COLORS[Math.floor(hash2(seed, k, 76) * SIGN_COLORS.length)];
+              const sz = end * (front * 0.5 - 0.6);
+              part(soup, UNIT.box, fr, 0.5, 3.95, sz, 0.8, 0.55, 0.05, col, 0.5, 0.1, EM_SIGN);
+              part(soup, UNIT.box, fr, 0.4, 4.3, sz, 0.8, 0.03, 0.03, C.dark, 0.5, 0.6, EM_NONE, 0, 0, 3);
+            }
+            s += front;
+          }
+        }
+      }
+    }
+  }
+
+  /** Street trees in their pits along a dense block face: a 1.2 m cast-iron grate 1.05 m from the kerb face every
+   *  12-16 m, clear of the lamps, shelters and the rest of the kit, on three downtown faces in four and half the
+   *  mid-rise ring's (a street of palms or a street of shade trees per chain); the trees themselves go to the
+   *  vegetation system's planting list so they share its species, crown tiers and shadows. */
+  private plantTreePits(run: Run, at: (s: number, across: number) => { x: number; z: number; nx: number; nz: number }, yAt: (s: number) => number, taken: [number, number][], soup: KitSoup): void {
+    const { chain, side, sa, sb, zone } = run;
+    const L = sb - sa;
+    if (L < 30) return;
+    const row = hash2(chain.id, side, 41);
+    if (row > (zone === Zone.DOWNTOWN ? 0.75 : 0.5)) return;
+    const palms = hash2(chain.id, 0, 42) < (zone === Zone.DOWNTOWN ? 0.35 : 0.6);
+    const pitch = 12 + 4 * hash2(chain.id, side, 43);
+    for (let s = sa + 7.5 + pitch * 0.4 * row; s <= sb - 7.5; s += pitch) {
+      if (taken.some(([ts, tr]) => Math.abs(s - ts) < tr + 1.0)) continue;
+      const q = at(s, CURB_TOP + 0.75);
+      if (!this.roads.clear(q.x, q.z, 0.7)) { this.counts.rejected++; continue; }
+      const y = yAt(s);
+      const yaw = Math.atan2(q.nz, -q.nx);
+      part(soup, UNIT.box, frame(q.x, y, q.z, yaw), 0, 0.012, 0, 1.2, 0.024, 1.2, C.iron, 0.6, 0.5);
+      const t = hash2(Math.round(s * 2), chain.id, side + 44);
+      const arche = palms ? 4 : t < 0.25 ? 6 : 0;
+      const h = arche === 4 ? 7 + 3 * t : arche === 6 ? 3.5 + 2 * t : 6 + 3 * t;
+      this.streetTrees.push({ arche, x: q.x, y, z: q.z, h });
+      this.counts.trees++;
+      taken.push([s, 1.2]);
     }
   }
 
