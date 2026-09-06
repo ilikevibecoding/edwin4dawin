@@ -1,6 +1,6 @@
 # Scope manifest (stable IDs)
 
-Generated 2026-09-06T07:54:32.960Z from layout seed 1337 by `scripts/manifest.mjs`. Denominators for every completion count in this round come from here; nothing is reclassified as scenery to improve a ratio.
+Generated 2026-09-06T08:13:59.951Z from layout seed 1337 by `scripts/manifest.mjs`. Denominators for every completion count in this round come from here; nothing is reclassified as scenery to improve a ratio.
 
 | Count | Value |
 | --- | ---: |
@@ -12,11 +12,11 @@ Generated 2026-09-06T07:54:32.960Z from layout seed 1337 by `scripts/manifest.mj
 | doors | 497 |
 | ports | 2 |
 | pads | 9 |
-| ships | 23 |
+| ships | 62 |
 | coruscantNpcs | 0 |
 | townNpcs | 16 |
 | buildFailures | 0 |
-| blueprintBuildMs | 1018 |
+| blueprintBuildMs | 822 |
 
 ## Landmarks
 
@@ -39,7 +39,7 @@ Generated 2026-09-06T07:54:32.960Z from layout seed 1337 by `scripts/manifest.mj
 
 - port:coruscant: Coruscant spaceport (Westport), 8 pads
 - port:frontier: Frontier station roof deck (mini spaceport), 1 pads
-- ships in the traffic model: 23 (boardable: 0, with interiors: 0)
+- ships in the traffic model: 62 (boardable: 0, with interiors: 0)
 
 ## Frontier town NPCs
 

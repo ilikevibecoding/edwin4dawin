@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-09-06T07:54:32.960Z",
+ "generatedAt": "2026-09-06T08:13:59.951Z",
  "seed": 1337,
  "counts": {
   "buildings": 433,
@@ -10,11 +10,11 @@
   "doors": 497,
   "ports": 2,
   "pads": 9,
-  "ships": 23,
+  "ships": 62,
   "coruscantNpcs": 0,
   "townNpcs": 16,
   "buildFailures": 0,
-  "blueprintBuildMs": 1018
+  "blueprintBuildMs": 822
  },
  "buildings": [
   {
@@ -26144,7 +26144,7 @@
  "ships": [
   {
    "id": "ship:0",
-   "type": 0,
+   "type": 5,
    "kind": null,
    "pad": 0,
    "boardable": false,
@@ -26152,7 +26152,7 @@
   },
   {
    "id": "ship:1",
-   "type": 1,
+   "type": 4,
    "kind": null,
    "pad": 1,
    "boardable": false,
@@ -26184,7 +26184,7 @@
   },
   {
    "id": "ship:5",
-   "type": 2,
+   "type": 8,
    "kind": null,
    "pad": 5,
    "boardable": false,
@@ -26192,7 +26192,7 @@
   },
   {
    "id": "ship:6",
-   "type": 3,
+   "type": 1,
    "kind": null,
    "pad": 6,
    "boardable": false,
@@ -26240,7 +26240,7 @@
   },
   {
    "id": "ship:12",
-   "type": 0,
+   "type": 4,
    "kind": null,
    "pad": null,
    "boardable": false,
@@ -26248,22 +26248,6 @@
   },
   {
    "id": "ship:13",
-   "type": 1,
-   "kind": null,
-   "pad": null,
-   "boardable": false,
-   "interior": false
-  },
-  {
-   "id": "ship:14",
-   "type": 3,
-   "kind": null,
-   "pad": null,
-   "boardable": false,
-   "interior": false
-  },
-  {
-   "id": "ship:15",
    "type": 0,
    "kind": null,
    "pad": null,
@@ -26271,8 +26255,24 @@
    "interior": false
   },
   {
+   "id": "ship:14",
+   "type": 1,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:15",
+   "type": 3,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
    "id": "ship:16",
-   "type": 2,
+   "type": 5,
    "kind": null,
    "pad": null,
    "boardable": false,
@@ -26288,7 +26288,7 @@
   },
   {
    "id": "ship:18",
-   "type": 2,
+   "type": 7,
    "kind": null,
    "pad": null,
    "boardable": false,
@@ -26312,7 +26312,7 @@
   },
   {
    "id": "ship:21",
-   "type": 0,
+   "type": 8,
    "kind": null,
    "pad": null,
    "boardable": false,
@@ -26320,6 +26320,318 @@
   },
   {
    "id": "ship:22",
+   "type": 2,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:23",
+   "type": 7,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:24",
+   "type": 0,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:25",
+   "type": 6,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:26",
+   "type": 5,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:27",
+   "type": 0,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:28",
+   "type": 4,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:29",
+   "type": 1,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:30",
+   "type": 5,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:31",
+   "type": 3,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:32",
+   "type": 6,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:33",
+   "type": 0,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:34",
+   "type": 1,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:35",
+   "type": 4,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:36",
+   "type": 5,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:37",
+   "type": 3,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:38",
+   "type": 6,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:39",
+   "type": 2,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:40",
+   "type": 7,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:41",
+   "type": 8,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:42",
+   "type": 2,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:43",
+   "type": 2,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:44",
+   "type": 7,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:45",
+   "type": 8,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:46",
+   "type": 2,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:47",
+   "type": 7,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:48",
+   "type": 2,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:49",
+   "type": 6,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:50",
+   "type": 3,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:51",
+   "type": 1,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:52",
+   "type": 5,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:53",
+   "type": 6,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:54",
+   "type": 3,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:55",
+   "type": 1,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:56",
+   "type": 5,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:57",
+   "type": 6,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:58",
+   "type": 0,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:59",
+   "type": 0,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:60",
+   "type": 7,
+   "kind": null,
+   "pad": null,
+   "boardable": false,
+   "interior": false
+  },
+  {
+   "id": "ship:61",
    "type": 1,
    "kind": null,
    "pad": null,
