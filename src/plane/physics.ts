@@ -344,7 +344,7 @@ export class FlightModel {
     keelDir.y = 0; keelDir.normalize();
     // ditching bookkeeping for this substep: a wreck decided by a contact is applied after the loop (its response
     // uses the contact velocities), the hardest float slam is what decides it
-    let wreckCause: string | null = null, wreckSide = 0, wreckSink = 0;
+    let wreckCause: string | null = null, wreckSide = 0, wreckSink = 0, wreckSpeed = 0;
     this.ploughing.length = 0;
     for (let si = 0; si < this.stations.length; si++) {
       const st = this.stations[si];
@@ -382,7 +382,7 @@ export class FlightModel {
       let fy: number, fh: number;
       if (isStructure) {
         // airframe on the surface: stiff, heavily damped, high friction; a wing/prop/tail touching at speed is a wreck
-        if (vh > 12) { if (isWater) { if (!wreckCause) { wreckCause = st.part; wreckSide = Math.sign(cp.z); } } else this.crash(); }
+        if (vh > 12) { if (isWater) { if (!wreckCause) { wreckCause = st.part; wreckSide = Math.sign(cp.z); wreckSpeed = vh; } } else this.crash(); }
         if (isWater) {
           onWater = true;
           // the part ploughs water: drag by its frontal area (a wing tip or the nose cowl, ~0.4 m^2 at Cd 1) plus
@@ -489,7 +489,7 @@ export class FlightModel {
       const sz = this.heightAt(this.position.x, this.position.z + 2) - this.heightAt(this.position.x, this.position.z - 2);
       if (Math.hypot(sx, sz) / 4 > 0.2) this.crash();
     }
-    if (wreckCause !== null && !onGround) this.wreckOnWater(wreckCause, wreckSide, wreckSink);
+    if (wreckCause !== null && !onGround) this.wreckOnWater(wreckCause, wreckSide, wreckSink, wreckSpeed);
 
     // ---- integrate translational motion
     const fWorld = fBody.applyQuaternion(this.quaternion);
@@ -526,7 +526,12 @@ export class FlightModel {
         // on its side (a wing tip in the water) the flooded floats' buoyancy rolls it back; squarely on its back it
         // floats stably on the wing, as a flipped floatplane really does, so after a moment it is rolled back
         // kinematically (a continuous roll onto its floats instead of the instant reset)
-        if (this.wreckedTimer > 1.5 && upY < -0.2) this.righting = 1e-3;
+        if (this.wreckedTimer > 1.5 && upY < -0.2) {
+          this.righting = 1e-3;
+          // a nose-over has split both bows: once righted the wreck sits deep and nearly level (the flood of
+          // the slam alone left it within a few centimetres of its waterline)
+          if (this.wreck) { this.wreck.floodTarget[0] = Math.max(this.wreck.floodTarget[0], 0.6); this.wreck.floodTarget[1] = Math.max(this.wreck.floodTarget[1], 0.6); }
+        }
         else this.rightOnWater(upY, dt);
       }
       if (this.wreckedTimer > 2.9) this.crash();
@@ -571,13 +576,16 @@ export class FlightModel {
    * side's float floods most, so the wreck settles low and lists toward it; the engine is dead; `crashed` is
    * raised for the HUD like a land crash. A second hit on a wreck only floods it further.
    */
-  private wreckOnWater(cause: string, side: number, sink: number): void {
+  private wreckOnWater(cause: string, side: number, sink: number, speed = 30): void {
     const w = this.wreck ?? { flood: [0, 0] as [number, number], floodTarget: [0, 0] as [number, number], cause, age: 0 };
     // a nose-over splits both bows (both hulls half full, the wreck sits deep and nearly level), a wing strike
     // wrenches its own strut and stoves in that hull (it goes under to the deck and beyond, the aircraft lists
-    // onto that wing tip), a slam splits the hull that hit
-    const base = cause === 'float' ? 0.4 + 0.06 * clamp(sink - FlightModel.FLOAT_FAIL_SINK, 0, 5) : cause === 'nose' ? 0.6 : cause === 'wing' ? 0.3 : 0.4;
-    const asym = side === 0 ? 0 : 0.5;
+    // onto that wing tip), a slam splits the hull that hit. A part striking at speed does the damage: the other
+    // wing dipping in at 14 m/s as the wreck slews round is a lesser blow (it used to flood the second float as
+    // much as the first and the list of every wing strike came out level)
+    const k = cause === 'float' ? 1 : smoothstep(10, 26, speed);
+    const base = (cause === 'float' ? 0.4 + 0.06 * clamp(sink - FlightModel.FLOAT_FAIL_SINK, 0, 5) : cause === 'nose' ? 0.6 : cause === 'wing' ? 0.3 : 0.4) * k;
+    const asym = (side === 0 ? 0 : 0.5) * k;
     w.floodTarget[0] = clamp(Math.max(w.floodTarget[0], base + (side < 0 ? asym : 0)), 0, 0.92);
     w.floodTarget[1] = clamp(Math.max(w.floodTarget[1], base + (side > 0 ? asym : 0)), 0, 0.92);
     if (!this.wreck) w.cause = cause;
