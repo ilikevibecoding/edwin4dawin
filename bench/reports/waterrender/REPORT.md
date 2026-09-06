@@ -83,8 +83,15 @@ dashes that get finer with distance and stop being drawn at all beyond the spect
 
 ## Evidence
 
-See `DEFECTS.md` (per round, with the glaze metric) and `crops/`. Final-state stills: `/tmp/waterrender/r7`
-copied to `crops/r7_*` and `/opt/cursor/artifacts/waterrender_*`.
+See `DEFECTS.md` (per round, with the glaze metric, the kernel replica and the repetition audit) and `crops/`.
+Final-state stills of the shader as merged: `/tmp/waterrender/r7` (rounds 1–7: sun path at eight times of day,
+30 / 300 / 1500 m, chase, night, harbor, island pass, water landing) copied to `crops/r7_*`; the round 8–11
+captures (`r11/`: night kernel, mirrored cumulus, the same views on the final build), the A/B perf quads and the
+24-frame `water-landing` clips of the base and final builds are queued on the machine-wide Chrome slot (two
+browsers for ten builders; this session waits with the others' blocking flock) and are appended to `DEFECTS.md`
+as they land. Budgets from the shot logs (`renderer.info` after three frames): 168–293 draw calls (≤ 400),
+0.25–1.22 M triangles (≤ 1.5 M) over the twenty views; console clean in every view since round 1 (the `patch`
+compile error of the merge was the only entry before).
 
 ## What remains weak (self-criticism)
 
@@ -100,9 +107,15 @@ copied to `crops/r7_*` and `/opt/cursor/artifacts/waterrender_*`.
 ## Performance
 
 Shader cost: the analytic sky term is three `skyRadiance` evaluations per water pixel in place of one PMREM
-lookup; the sparkle field is evaluated only inside the (widened) glitter lobe and under reflected objects; the
-group noise is one value-noise per pixel; the streak filter is up to 13 taps only where the mirror sees an
-object. Interleaved A/B ratio: see the perf section of `DEFECTS.md` (last round).
+lookup (~200 ALU); the mirrored clouds are one texel of the sky's own coverage bake where the sky term weighs
+more than 6 % (round 11: the analytic field evaluation of round 9 was ~550 ALU there); the sparkle field is
+evaluated only inside the (widened) glitter lobe and under reflected objects; the group noise is one value-noise
+per pixel; the mirror kernel is up to 13 × 2 reads only where the reflection pass has something mirrored, and
+open water leaves it after three top-level reads (the round 0 shader read the depth 8 × on every water pixel).
+The reflection pass renders one more 640 × 360 resolve (the share) and its six pyramid levels (+7 draw calls).
+Interleaved A/B (ABBA quads of `renderSync` frames, base build vs final, `night`, `sun1730`, `water-landing`):
+queued with the captures above; round 7's four-quad run under a load of 10 on four cores spread 0.3–2.0 per
+quad, so the final run takes six quads and reports the median and the ratio of the fastest frames.
 
 ## Self-scores
 
