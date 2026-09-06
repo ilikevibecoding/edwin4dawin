@@ -411,6 +411,7 @@ test('rubric 11: the whole tall skyline is deterministic (two builds hash-equal,
 test('rubric 11: fill time per tower blueprint with crowns + strips <= 1.15x the flat-roof build of the same layout', () => {
   // Recorded on the dev VM (layout 1337, 421 towers, best of 7 warm passes, one process): before this work
   // 0.584 ms / tower; after it 0.554 ms (crowns + strips on) - the direct one-high plate writes paid for the crowns.
+  // Re-measured at the end against the pre-work tree on the same (busier) VM: 0.654-0.662 before vs 0.590-0.606 after.
   const run = () => { const t0 = performance.now(); for (const l of TOWERS) buildBlueprint(l, CITY); return (performance.now() - t0) / TOWERS.length; };
   const pass = () => { clearBlueprintCache(); return run(); };
   const trial = (on) => { CROWN_OPTIONS.enabled = on; pass(); let best = Infinity; for (let i = 0; i < 4; i++) best = Math.min(best, pass()); return best; };
