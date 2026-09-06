@@ -3,6 +3,38 @@
 Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served in `window.__build` and in
 `BUILD_ID.txt` next to the deployed `index.html`.
 
+## iter10 — wave 6 builders, master directive (deployed as 6130eae71052-20260906T063811Z)
+- Master directive (GTA-level overhaul): rubric v2 with 30 categories (`bench/rubric.json`; v1 kept as
+  `rubric_v1.json`), hero targets 9.25 / ordinary 8.0 and the merge gate (overall >= 9.0, none < 8.0) reported by
+  `aggregate.py`; critic protocol adds the anti-cheating rule, self-play review and camera/water/aircraft/city test
+  matrices; builder and critic briefs live in `bench/` (push after every commit, reports under `bench/reports/`).
+  Bench `dev` view (`?bench=dev&cam=x,y,z&hdg=&pch=&plane=…`) and `label@query` views in `capture.mjs` so
+  builders pose cameras without editing `views.ts`.
+- Play loop: substeps cover each frame exactly (the fixed 1/60 s loop with a carried remainder alternated 1 and 2
+  physics steps per render frame and read as a buzz on the airframe); propeller blur disc on its own slow pivot so
+  its ghost sectors no longer strobe with the blade RPM; camera sway off by default (V toggles it).
+- Terrain clipmap extended two rings (to +-98 km, past the far plane) so the ground reaches the haze horizon: the
+  far water plane had shown as an arc of blue dashes above the far land in skyline-high.
+- Water interaction phase 2 (wakes loop 3 follow-on): signed hull height map and a displaced 192² near-water patch
+  (bow humps, chine hollows, stern wave, rooster tail bending reflections around the floats), CPU wave field under
+  each float station with retuned heave/planing damping (soft touchdown overshoot ~22 cm, firm 3 m/s skips once),
+  keel side force for taxiing, touchdown splash event and rooster-tail spray, live wet band on the hulls;
+  `water-landing-firm` view.
+- Facade phase 2: far-field sun lobe and per-pane reflectance grain on distant glass, height-bent sky reflection,
+  eight bayfront landmarks (tiara / slot recipes) and a taller core toward the bay, near trim geometry (balconies,
+  ledges, coping, corner columns) within 600 m, parallax rooms in near panes.
+- Wave 6 merges before those: sky/horizon/lighting (far-plane dissolve removes the horizon seam, clear-sky
+  gradient re-tuned, sun disc limb tint), water surface 3 (incommensurate irrationally rotated wave sets with phase
+  warp, capillary set, wind lanes, wave-displaced water shadow), aircraft 5 (per-panel clear coat, painted-aluminium
+  floats, yoke/hands/pilot arms, beacon/strobe/nav lights, cabin glow), wakes 3 (hull-scale bow waves, Kelvin arms,
+  lit instanced spray, near/far wake maps), vegetation 4 (species sized in metres, three crown levels, 13-frond
+  palms, canopy shimmer fix), foliage coverage (authored canopy classes: hammock belt beside the Garza approach,
+  wooded keys, shore and scrub mixes; no lots in canopy cells), facade realism (box-filtered pane grids, twelve
+  styles, wall families, weathering, night masks), bridges 3 (parabolic alignment, column bents, H pylons / tied
+  arches, dense lane-queued deck traffic, moored sailboats, cruise ship).
+- The VM was rebuilt mid-wave-7 (all worktrees and `/tmp` lost; only pushed branches survived): builders now push
+  after every commit and keep evidence in the repo.
+
 ## iter09 — wave 5 builders (deployed as aa8b21f9f839-20260905T121546Z)
 - Iteration 08 scored (bench/results/iter08/scores.md): no category regressed; aircraft geometry +1.5,
   wakes +1.5, ten categories +1.0; flat at 5.0: vegetation and repetition. Wave 5 targeted those plus
@@ -195,3 +227,4 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 | 6b3d3214497a-20260905T063622Z | d4e414a3391693e4779def304942f3d29904666d | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/d4e414a3391693e4779def304942f3d29904666d/play.html | verified: build id matched, loaded in 17.8 s, water takeoff to 86 m in 30 s, no console errors; 144 draw calls / 0.18 M tris in the water-landing view. Performance loop 2 + vegetation tint |
 | 45d3ba89fc54-20260905T040053Z | a94d74e3d96a3d8d54f274bf1dc6b9c42865909f | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/a94d74e3d96a3d8d54f274bf1dc6b9c42865909f/play.html | verified: build id matched, loaded in 16.9 s, water takeoff to 86 m in 30 s, no console errors; 171 draw calls / 0.59 M tris in the water-landing view. Wave 4 (aircraft 3, shadows, clouds 3) + planar reflections + wake foam fix. A first deploy of this round (1b11b7f0e45c) was replaced after the verifier caught a NaN propeller tip ring |
 | 4642d4630c87-20260904T235001Z | a3c7ba5670942411bf607043d4a14a60dbb8ef81 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/a3c7ba5670942411bf607043d4a14a60dbb8ef81/play.html | verified: build id matched, loaded in 15.5 s, water takeoff to 86 m in 30 s, no console errors; 164 draw calls / 0.49 M tris in the water-landing view. Includes bridges/skyline loop 2, cockpit with live instruments, vegetation loop 2, IBL-hitch and shader warm-up fixes, night exposure, play-feel changes |
+| 6130eae71052-20260906T063811Z | 8b15377fe0b3dd927af87dd6b1e093011e560523 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/8b15377fe0b3dd927af87dd6b1e093011e560523/play.html | verified: build id matched, loaded in 35 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 146 draw calls / 0.22 M tris at the spawn |
