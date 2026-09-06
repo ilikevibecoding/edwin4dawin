@@ -21,6 +21,22 @@ function test(name, fn) {
 }
 const args = process.argv.slice(2);
 const cdpUrl = args.includes('--cdp') ? args[args.indexOf('--cdp') + 1] : null;
+const dumpName = args.includes('--dump') ? args[args.indexOf('--dump') + 1] : null;   // --dump <model>: layer maps + reach
+
+// ASCII layer maps of a model's landed grid (x across, z down, nose at the top) with the standing cells the walk
+// reached from the pad marked '*' (feet layer). Handy when a door or ramp check fails.
+function dumpModel(m, reach) {
+  const g = m.grid, reached = new Set(reach.map(([x, z, h]) => `${x},${z},${feetCell(h)}`));
+  const ch = (id) => { if (!id) return '.'; if (id === SEAT || id === B.BED_HEAD) return 'S'; if (id === CONSOLE) return 'C'; if (id === B.STEEL_GLASS) return 'G'; const d = BLOCKS[id]; if (d.emit > 0) return 'L'; if (topOf(id) !== null && topOf(id) < 1) return '_'; return d.solid ? '#' : '~'; };
+  for (let y = 0; y < g.h; y++) {
+    console.log(`-- ${m.name} layer y=${y} (feet on this layer marked *)`);
+    for (let z = 0; z < g.d; z++) {
+      let row = '';
+      for (let x = 0; x < g.w; x++) row += reached.has(`${x},${z},${y}`) ? '*' : ch(g.get(x, y, z));
+      console.log(`${String(z).padStart(3)} ${row}`);
+    }
+  }
+}
 
 const solid = (id) => id > 0 && BLOCKS[id].solid;
 const topOf = (id) => { const d = BLOCKS[id]; if (!d.solid) return null; if (d.shape === SHAPE.SLAB) return 0.5; if (d.boxes && d.boxes.length === 1 && d.boxes[0][4] < 1) return d.boxes[0][4]; return 1; };
@@ -125,20 +141,23 @@ function grade(m) {
   const door = m.door;
   const outer = door && door.outer, inner = door && door.inner;
   const reach = door ? walk(g, [outer[0], outer[2], 0], step) : [];
+  if (dumpName === m.name) dumpModel(m, reach);
   const reached = new Set(reach.map(([x, z, h]) => `${x},${z},${h}`));
   const innerH = inner ? standHeights(g, inner[0], inner[2]).find((h) => Math.abs(h - inner[1]) < 1e-6) : undefined;
   const innerReached = innerH !== undefined && reached.has(`${inner[0]},${inner[2]},${innerH}`);
-  // covered standing cells = the interior; light from the model's own lamps at the feet cell
+  // interior standing cells = reached cells enclosed once the doors are sealed (not outside air of the closed grid, so
+  // cells under overhangs and in ramp bays do not count); light from the model's own lamps at the feet cell
   const light = modelLight(m);
+  const enclosed = outsideMask(m.gridClosed);
   const covered = [];
-  let minLight = 15;
+  let minLight = 15, darkest = null;
   for (const [x, z, h] of reach) {
     if (x < 0 || z < 0 || x >= m.w || z >= m.d) continue;
-    let roof = false; for (let y = feetCell(h) + 1; y < m.h; y++) if (solid(g.get(x, y, z))) { roof = true; break; }
-    if (!roof) continue;
+    const fy = Math.min(m.h - 1, feetCell(h));
+    if (enclosed.outside(x, fy, z) || solid(m.gridClosed.get(x, fy, z))) continue;
     covered.push([x, z, h]);
-    const l = light.block[light.idx(x, Math.min(m.h - 1, feetCell(h)), z)];
-    minLight = Math.min(minLight, l);
+    const l = light.block[light.idx(x, fy, z)];
+    if (l < minLight) { minLight = l; darkest = [x, fy, z]; }
   }
   const near = (cells, pred) => { let n = 0; const seen = new Set(); for (const [x, z, h] of cells) for (const [dx, dz] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) for (const dy of [-1, 0, 1]) { const cx = x + dx, cy = feetCell(h) + dy, cz = z + dz, k = `${cx},${cy},${cz}`; if (!seen.has(k) && pred(g.get(cx, cy, cz))) { seen.add(k); n++; } } return n; };
   const seats = near(covered, (id) => id === SEAT || id === B.BED_HEAD), consoles = near(covered, (id) => id === CONSOLE);
@@ -147,7 +166,7 @@ function grade(m) {
     const seatReach = near(reach.filter(([x, z]) => x >= 0 && z >= 0 && x < m.w && z < m.d), (id) => id === SEAT);
     pt(7, innerReached && seatReach >= 1 && m.seats.length >= 1, `compact seat entry: seats ${m.seats.length}, reachable seats ${seatReach}`);
   } else {
-    pt(7, covered.length >= 12 && seats >= 4 && consoles >= 1 && minLight >= 6, `interior cells ${covered.length}, seats ${seats}, consoles ${consoles}, min light ${minLight}`);
+    pt(7, covered.length >= 12 && seats >= 4 && consoles >= 1 && minLight >= 6, `interior cells ${covered.length}, seats ${seats}, consoles ${consoles}, min light ${minLight}${darkest ? ' at ' + darkest.join(',') : ''}`);
   }
   pt(8, !!door && innerReached && cockpitReached, `door reachable from the pad ${innerReached}, cockpit reached ${cockpitReached}`);
   // 9 gear, 10 class animation
@@ -173,18 +192,21 @@ function grade(m) {
     if (!planes.has(k)) planes.set(k, new Set());
     planes.get(k).add(`${u},${v}`);
   }
-  let patches = 0;
-  for (const set of planes.values()) {
+  let patches = 0, firstPatch = '';
+  const FACE_NAMES = ['+x', '-x', 'top', 'belly', '+z', 'nose'];
+  for (const [k, set] of planes) {
     if (set.size < 25) continue;
     const pts2 = [...set].map((s) => s.split(',').map(Number));
-    for (const [u, v] of pts2) { let full = true; for (let du = 0; du < 5 && full; du++) for (let dv = 0; dv < 5; dv++) if (!set.has(`${u + du},${v + dv}`)) { full = false; break; } if (full) { patches++; break; } }
+    for (const [u, v] of pts2) { let full = true; for (let du = 0; du < 5 && full; du++) for (let dv = 0; dv < 5; dv++) if (!set.has(`${u + du},${v + dv}`)) { full = false; break; } if (full) { patches++; if (!firstPatch) { const [f, coord, id] = k.split(':'); firstPatch = ` (${FACE_NAMES[+f]} face at ${coord}, ${BLOCKS[+id].name} from u${u} v${v})`; } break; } }
   }
   const greebleFrac = greeb / ext.length;
-  pt(12, greebleFrac >= 0.15 && patches === 0, `greebles ${(100 * greebleFrac).toFixed(0)}% of ${ext.length} exterior cells, flat 5x5 patches ${patches}`);
-  // 13 colour story
+  pt(12, greebleFrac >= 0.15 && patches === 0, `greebles ${(100 * greebleFrac).toFixed(0)}% of ${ext.length} exterior cells, flat 5x5 patches ${patches}${firstPatch}`);
+  // 13 colour story: hull colours = plain opaque cubes (greebles, glass, lamps, seats and slabs are detail, not
+  // palette); one primary (with its seam) carrying >= 30 %, one visible accent (2..25 %), at most 6 hull colours
+  const hullColours = [...extIds.keys()].filter((id) => !GREEBLE.has(id) && BLOCKS[id].emit === 0 && BLOCKS[id].shape === SHAPE.CUBE && BLOCKS[id].opaque);
   const primaryFrac = ((extIds.get(m.primary) || 0) + (extIds.get(m.seam) || 0)) / ext.length;
   const accentFrac = (extIds.get(m.accent) || 0) / ext.length;
-  pt(13, primaryFrac >= 0.3 && accentFrac <= 0.25 && extIds.size <= 12, `primary+seam ${(100 * primaryFrac).toFixed(0)}%, accent ${(100 * accentFrac).toFixed(0)}%, ${extIds.size} exterior types`, 'auto+critic');
+  pt(13, primaryFrac >= 0.3 && accentFrac >= 0.02 && accentFrac <= 0.25 && hullColours.length <= 6, `primary+seam ${(100 * primaryFrac).toFixed(0)}%, accent ${(100 * accentFrac).toFixed(1)}%, hull colours ${hullColours.map((id) => BLOCKS[id].name).join('/')}`, 'auto+critic');
   // 14 texture fit
   const banned = [...extIds.keys()].filter((id) => BANNED.test(BLOCKS[id].name));
   pt(14, banned.length === 0, `no wood/wool on the hull${banned.length ? ': ' + banned.map((id) => BLOCKS[id].name).join(',') : ''}`, 'auto+critic');
@@ -196,8 +218,9 @@ function grade(m) {
   pt(19, m.interiors.length >= 1 && m.interiors.every((b) => b.x0 >= 0 && b.z0 >= 0 && b.x1 <= m.w && b.z1 <= m.d && b.y1 <= m.h), `interior boxes ${m.interiors.length} (carry test below)`);
   pt(20, true, 'originality (critic)', 'critic');
   const score = pts.filter((p) => p.ok).length;
+  const mech = pts.filter((p) => p.kind !== 'critic' && p.kind !== 'fleet'), mechOk = mech.filter((p) => p.ok).length;
   const structural = pts.slice(0, 8).every((p) => p.ok);
-  return { score, pts, notes, structural, faces: nf };
+  return { score, pts, notes, structural, faces: nf, mech: `${mechOk}/${mech.length}` };
 }
 
 const models = shipModels();
@@ -206,9 +229,9 @@ console.log('\n== ship rubric scorecard ==');
 for (const m of models) {
   const r = grade(m);
   grades.set(m.name, r);
-  console.log(`${m.name}: ${r.score}/20${r.structural ? '' : '  STRUCTURAL FAIL'}${r.notes.length ? '   missing: ' + r.notes.join('; ') : ''}`);
+  console.log(`${m.name}: ${r.score}/20 (mechanical ${r.mech}, ${r.faces * 2} tris)${r.structural ? '' : '  STRUCTURAL FAIL'}${r.notes.length ? '   missing: ' + r.notes.join('; ') : ''}`);
 }
-console.log('');
+console.log('(points 2 silhouette, 15 motion, 17 shadow and 20 originality are critic-judged and counted as given here)\n');
 
 test('>= 8 models graded >= 16/20 with no structural fail, covering the six families + fighter, police, bus', () => {
   const good = models.filter((m) => grades.get(m.name).score >= 16 && grades.get(m.name).structural);

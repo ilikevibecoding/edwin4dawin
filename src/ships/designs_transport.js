@@ -26,7 +26,7 @@ function seatRow(b, xs, y, z) { for (const x of xs) b.seat(x, y, z); }
 export function lightFreighter() {
   const b = new ShipBuilder('light_freighter', 15, 9, 24, { cls: 'freighter', family: 'light freighter', label: 'Light freighter', primary: D, accent: RED, seam: DD, speed: 26, engineHz: 78, gain: 1.0, asym: true, capacity: 6 });
   // belly + floor (y 1), walls (y 2..4), roof (y 5)
-  b.fill(3, 1, 3, 11, 1, 21, DD); b.fill(4, 1, 4, 10, 1, 20, PLATE);
+  b.fill(3, 1, 3, 11, 1, 21, DD); b.deck(4, 1, 4, 10, 20, PLATE);
   b.fill(3, 2, 3, 11, 4, 21, D); b.fill(4, 2, 4, 10, 4, 20, 0);                    // cabin volume x 4..10, z 4..20
   b.fill(3, 5, 3, 11, 5, 21, HP);
   // saucer flanks: sloped pods hugging the walls (y 2..4) from z 6 to 18, chrome rims, red markings
@@ -39,7 +39,7 @@ export function lightFreighter() {
   // seams every 4 along the walls and roof
   for (const z of [6, 10, 14, 18]) { b.seamRing(z, D, DD); b.seamRing(z, HP, DD); }
   // roof greebles: cargo hump, vents, pipes, turret bubble
-  b.fill(5, 6, 8, 9, 6, 15, D); b.fill(6, 7, 10, 8, 7, 13, DD); b.set(7, 8, 11, GL); b.set(7, 8, 12, GL);
+  b.fill(5, 6, 8, 9, 6, 15, D); b.fill(5, 6, 8, 5, 6, 15, RED); b.fill(9, 6, 8, 9, 6, 15, RED); b.fill(6, 7, 10, 8, 7, 13, DD); b.set(7, 8, 11, GL); b.set(7, 8, 12, GL);
   b.fill(6, 6, 9, 6, 6, 14, HT); b.fill(8, 6, 9, 8, 6, 14, HT);
   for (const z of [5, 17, 19]) { b.sset(4, 6, z, VENT); b.sset(6, 6, z, CHR); }
   b.set(7, 6, 5, CHR); b.set(7, 7, 5, CHR); b.set(7, 8, 5, LAMP);                     // sensor mast
@@ -61,8 +61,9 @@ export function lightFreighter() {
   for (const z of [5, 8, 11, 14, 17, 20]) b.lamp(7, 5, z);
   for (const z of [7, 13, 19]) { b.lamp(4, 5, z); b.lamp(10, 5, z); }
   b.interior(4, 2, 4, 11, 4, 21); b.interior(11, 2, 3, 14, 4, 9);
-  // port door (x 3 wall, y 2..4, z 10..11) with a three-column ramp of half steps
-  b.fill(3, 2, 10, 3, 4, 11, 0);
+  // port door (x 3 wall, y 2..4, z 10..11) with a three-column ramp of half steps; the ramp bay cuts through the
+  // port flank pod (x 1..2), so the pod frames the doorway
+  b.fill(3, 2, 10, 3, 4, 11, 0); b.fill(1, 2, 10, 2, 4, 11, 0);
   b.ramp('ramp', 2, 10, [-1, 0], 2, 2, [0, 1], DD);
   b.setDoor([4, 2, 10], [0, 0, 12], [-1, 0], [[3, 2, 10], [3, 3, 10], [3, 4, 10], [3, 2, 11], [3, 3, 11], [3, 4, 11]]);
   b.set(3, 5, 10, LAMP, EMIT.LAMP); b.set(3, 5, 11, LAMP, EMIT.LAMP);
@@ -111,22 +112,22 @@ export function shuttle() {
   const wing = b.part('wingL', CH.CLASS, { pivot: [6, 5, 0], axis: [0, 0, 1], angle: -1.85 });
   for (let z = 5; z <= 20; z++) {
     const top = z < 8 ? 7 + (z - 5) : z > 17 ? 12 - (z - 17) : 12;
-    for (let y = 5; y <= top; y++) wing.set(5, y, z, y === top ? CHR : (y === 8 || y === 9) && z % 4 === 1 ? DD : D);
+    for (let y = 5; y <= top; y++) wing.set(5, y, z, y === top ? CHR : (y === 8 || y === 9) && z % 4 === 1 ? DD : (y === 6 && z >= 8 && z <= 17) ? RED : D);
   }
   wing.set(5, 9, 12, RED); wing.set(5, 9, 13, RED); wing.set(5, 12, 12, RED, EMIT.NAV);
   const wingR = b.mirrorPart(wing);
   for (const c of wingR.cells) if (c[4] === EMIT.NAV) c[3] = B.NEON_GREEN;
   // wing root fairings on the hull
   b.sfill(5, 3, 8, 5, 4, 17, DD); b.sset(5, 4, 12, VENT); b.sset(5, 3, 10, HT); b.sset(5, 3, 15, HT);
-  // engines: three nozzles aft with chrome shrouds
-  b.fill(6, 1, 22, 10, 5, 22, DD); b.fill(6, 2, 23, 10, 4, 23, CHR);
-  b.engine(6, 3, 23); b.engine(10, 3, 23); b.engine(8, 4, 23); b.set(7, 2, 23, VENT); b.set(9, 2, 23, VENT);
-  b.set(8, 5, 22, VENT);
-  // rear ramp: opening in the aft wall (x 7..9, y 2..4, z 21) -> ramp columns z 22..24 (the engine deck is above)
-  b.fill(7, 2, 21, 9, 4, 21, 0); b.fill(6, 2, 22, 10, 4, 22, 0); b.fill(6, 1, 22, 10, 1, 22, 0);
-  b.fill(6, 5, 22, 10, 5, 23, DD); b.fill(6, 2, 22, 6, 4, 22, DD); b.fill(10, 2, 22, 10, 4, 22, DD);
-  b.set(6, 3, 23, ENG, EMIT.ENGINE); b.set(10, 3, 23, ENG, EMIT.ENGINE); b.set(6, 2, 23, CHR); b.set(10, 2, 23, CHR); b.set(6, 4, 23, CHR); b.set(10, 4, 23, CHR);
-  b.set(8, 5, 23, ENG, EMIT.ENGINE); b.set(7, 5, 23, CHR); b.set(9, 5, 23, CHR);
+  // rear ramp bay + engines: the aft wall opening (x 7..9, y 2..4, z 21) leads onto a ramp of half steps running
+  // aft (z 22..24) between two side walls (x 6 / x 10) under the engine deck (y 5..7); the raised ramp stands in
+  // the bay. Nozzles: the outer pair in the wall ends, the centre pair on the deck, all facing aft.
+  b.fill(7, 2, 21, 9, 4, 21, 0);
+  b.fill(6, 1, 22, 6, 4, 23, DD); b.fill(10, 1, 22, 10, 4, 23, DD);
+  b.fill(6, 5, 22, 10, 7, 23, DD); b.fill(7, 5, 23, 9, 7, 23, CHR); b.fill(6, 8, 22, 10, 8, 22, HP);
+  b.engine(6, 3, 23); b.engine(10, 3, 23); b.engine(8, 6, 23); b.engine(8, 7, 23); b.engine(7, 6, 23); b.engine(9, 6, 23);
+  b.set(6, 2, 23, CHR); b.set(10, 2, 23, CHR); b.set(6, 4, 23, VENT); b.set(10, 4, 23, VENT); b.set(7, 5, 23, VENT); b.set(9, 5, 23, VENT);
+  b.sset(6, 6, 22, HT); b.sset(6, 7, 22, VENT); b.set(8, 8, 22, LAMP);
   b.ramp('ramp', 7, 22, [0, 1], 2, 3, [1, 0], DD);
   b.setDoor([8, 2, 20], [8, 0, 25], [0, 1], [[7, 2, 21], [8, 2, 21], [9, 2, 21], [7, 3, 21], [8, 3, 21], [9, 3, 21], [7, 4, 21], [8, 4, 21], [9, 4, 21]]);
   b.set(8, 5, 21, LAMP, EMIT.LAMP);
@@ -144,7 +145,7 @@ export function shuttle() {
 export function bulkFreighter() {
   const b = new ShipBuilder('bulk_freighter', 15, 12, 38, { cls: 'hauler', family: 'bulk freight', label: 'Bulk freighter', primary: DD, accent: STR, seam: BLK, speed: 20, engineHz: 66, gain: 1.2, capacity: 6 });
   // hull x 3..11, y 1..7, z 4..31 (belly 1, walls 2..6, roof 7); hold x 4..10, feet y 2, z 5..30
-  b.fill(3, 1, 4, 11, 1, 31, BLK); b.fill(4, 1, 5, 10, 1, 30, PLATE);
+  b.fill(3, 1, 4, 11, 1, 31, BLK); b.deck(4, 1, 5, 10, 30, PLATE, BLK);
   b.fill(3, 2, 4, 11, 6, 31, DD); b.fill(4, 2, 5, 10, 6, 30, 0);
   b.fill(3, 7, 4, 11, 7, 31, HP);
   for (let z = 8; z <= 28; z += 4) { b.seamRing(z, DD, BLK); b.seamRing(z, HP, BLK); }
@@ -203,7 +204,7 @@ export function bulkFreighter() {
 export function cruiser() {
   const b = new ShipBuilder('cruiser', 15, 11, 40, { cls: 'yacht', family: 'diplomatic transport', label: 'Republic cruiser', primary: RED, accent: D, seam: DD, speed: 32, engineHz: 84, gain: 1.0, capacity: 8 });
   // hammerhead prow x 2..12, y 1..7, z 0..8 (bridge deck feet y 2)
-  b.fill(2, 1, 1, 12, 1, 8, DD); b.fill(3, 1, 2, 11, 1, 7, PLATE);
+  b.fill(2, 1, 1, 12, 1, 8, DD); b.deck(3, 1, 2, 11, 7, PLATE);
   b.fill(2, 2, 1, 12, 6, 8, RED); b.fill(3, 2, 2, 11, 5, 7, 0); b.fill(2, 7, 1, 12, 7, 8, D);
   b.fill(3, 2, 0, 11, 6, 0, DD); b.fill(4, 3, 0, 10, 4, 0, GL); b.set(7, 5, 0, GL);
   b.fill(2, 3, 2, 2, 4, 4, GL); b.fill(12, 3, 2, 12, 4, 4, GL);
@@ -214,12 +215,14 @@ export function cruiser() {
   b.setCockpit([6, 2, 2], [6, 2, 1], [6, 3, 0]);
   for (const z of [3, 6]) { b.lamp(5, 7, z); b.lamp(9, 7, z); }
   // spine x 4..10, y 1..6, z 9..32 (belly 1, walls 2..5, roof 6); corridor/salon x 5..9, feet y 2
-  b.fill(4, 1, 9, 10, 1, 32, DD); b.fill(5, 1, 9, 9, 1, 32, PLATE);
+  b.fill(4, 1, 9, 10, 1, 32, DD); b.deck(5, 1, 9, 9, 32, PLATE);
   b.fill(4, 2, 9, 10, 5, 32, RED); b.fill(5, 2, 9, 9, 5, 32, 0); b.fill(4, 6, 9, 10, 6, 32, D);
   b.fill(3, 2, 8, 11, 5, 8, RED); b.fill(5, 2, 8, 9, 5, 8, 0);                    // prow / spine bulkhead with a wide opening
   for (let z = 12; z <= 30; z += 4) { b.seamRing(z, RED, DD); b.seamRing(z, D, DD); }
   for (let z = 10; z <= 31; z += 2) b.sset(4, 3, z, z % 4 === 0 ? WIN : (z % 8 === 2 ? VENT : RED));
   for (let z = 11; z <= 31; z += 3) b.sset(4, 5, z, HT);
+  for (let z = 9; z <= 32; z += 2) b.sset(4, 2, z, HT);                                                // lower trench line
+  for (let z = 34; z <= 37; z++) b.sset(1, z % 2 ? 4 : 5, z, VENT);                                    // engine block radiators
   for (let z = 10; z <= 31; z += 3) { b.set(7, 7, z, HT); b.sset(5, 7, z + 1, VENT); }
   b.fill(6, 7, 14, 8, 7, 26, D); b.set(7, 8, 20, CHR); b.set(7, 9, 20, RED, EMIT.NAV);                  // dorsal spine
   // salon (z 14..22): facing seats around holo tables; bunk cabin aft (z 25..31)
@@ -232,7 +235,7 @@ export function cruiser() {
   // port airlock (x 4, y 2..4, z 16..17) + ramp
   b.fill(4, 2, 16, 4, 4, 17, 0);
   b.ramp('ramp', 3, 16, [-1, 0], 2, 2, [0, 1], DD);
-  b.setDoor([5, 2, 16], [1, 0, 18], [-1, 0], [[4, 2, 16], [4, 3, 16], [4, 4, 16], [4, 2, 17], [4, 3, 17], [4, 4, 17]]);
+  b.setDoor([6, 2, 16], [1, 0, 18], [-1, 0], [[4, 2, 16], [4, 3, 16], [4, 4, 16], [4, 2, 17], [4, 3, 17], [4, 4, 17]]);
   b.set(4, 5, 16, LAMP, EMIT.LAMP); b.set(4, 5, 17, LAMP, EMIT.LAMP);
   // engine section z 33..39: wide dark housing, three chrome shrouds, blue cores, radiator fins
   b.fill(2, 1, 33, 12, 7, 38, DD); b.fill(1, 3, 34, 13, 6, 37, DD); b.fill(3, 8, 34, 11, 8, 37, D);
@@ -253,18 +256,18 @@ export function cruiser() {
 export function airBus() {
   const b = new ShipBuilder('air_bus', 11, 7, 22, { cls: 'bus', family: 'local transit', label: 'Air bus', primary: D, accent: STR, seam: DD, speed: 24, engineHz: 72, gain: 0.8, capacity: 14 });
   // body x 1..9, floor y 0 (feet y 1), walls y 1..2, roof y 3
-  b.fill(1, 0, 1, 9, 0, 20, DD); b.fill(2, 0, 1, 8, 0, 20, PLATE);
+  b.fill(1, 0, 1, 9, 0, 20, DD); b.deck(2, 0, 1, 8, 20, PLATE);
   b.fill(1, 1, 1, 9, 2, 20, D); b.fill(2, 1, 2, 8, 2, 19, 0);
   b.fill(1, 3, 1, 9, 3, 20, HP);
   for (let z = 4; z <= 20; z += 4) { b.seamRing(z, D, DD); b.seamRing(z, HP, DD); }
-  for (let z = 3; z <= 19; z++) { if (z % 4 !== 0) b.sset(1, 2, z, WIN); b.sset(1, 1, z, z % 4 === 2 ? STR : D); }
+  for (let z = 3; z <= 19; z++) { if (z % 4 !== 0) b.sset(1, 2, z, WIN); b.sset(1, 1, z, z % 4 === 0 ? DD : STR); }   // livery stripe
   // nose cab: sloped glass front, driver seat + console
   b.fill(2, 0, 0, 8, 0, 0, DD); b.fill(2, 1, 0, 8, 1, 0, DD); b.fill(3, 2, 0, 7, 2, 0, GL); b.fill(2, 3, 0, 8, 3, 0, D);
   b.fill(1, 2, 1, 9, 2, 1, GL); b.set(1, 1, 1, DD); b.set(9, 1, 1, DD);
   b.set(5, 1, 1, CONSOLE); b.seat(5, 1, 2); b.set(4, 1, 1, HOLO); b.set(6, 1, 1, HOLO);
   b.setCockpit([5, 1, 2], [5, 1, 1], [5, 2, 0]);
-  // seats in pairs along both walls with a centre aisle x 4..6, poles, ceiling lamps
-  for (let z = 5; z <= 18; z += 2) { b.seat(2, 1, z); b.seat(3, 1, z); b.seat(7, 1, z); b.seat(8, 1, z); }
+  // seats in pairs along both walls with a centre aisle x 4..6 (none beside the doors), poles, ceiling lamps
+  for (const z of [3, 8, 10, 16, 18]) { b.seat(2, 1, z); b.seat(3, 1, z); b.seat(7, 1, z); b.seat(8, 1, z); }
   b.set(2, 1, 19, CONSOLE); b.set(8, 1, 19, CONSOLE);
   for (let z = 3; z <= 19; z += 2) b.lamp(5, 3, z);
   b.interior(2, 1, 1, 9, 3, 20);
@@ -277,7 +280,7 @@ export function airBus() {
   }
   const step = b.part('steps', CH.GEAR, { slide: [1, 0, 0] });
   step.set(0, 0, 5, STEP); step.set(0, 0, 6, STEP); step.set(0, 0, 13, STEP); step.set(0, 0, 14, STEP);
-  b.setDoor([2, 1, 5], [0, 0, 5], [-1, 0], [[1, 1, 5], [1, 2, 5], [1, 1, 6], [1, 2, 6], [1, 1, 13], [1, 2, 13], [1, 1, 14], [1, 2, 14]]);
+  b.setDoor([2, 1, 5], [-1, 0, 5], [-1, 0], [[1, 1, 5], [1, 2, 5], [1, 1, 6], [1, 2, 6], [1, 1, 13], [1, 2, 13], [1, 1, 14], [1, 2, 14]]);
   // roof greebles: AC units, antenna, route sign
   for (const z of [4, 10, 16]) { b.sset(3, 4, z, VENT); b.set(5, 4, z + 1, HT); }
   b.set(5, 4, 2, HOLO); b.set(5, 5, 8, CHR); b.set(5, 6, 8, LAMP); b.sset(2, 4, 19, CHR);

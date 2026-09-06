@@ -101,6 +101,12 @@ export class ShipBuilder {
   sset(x, y, z, id, emit) { this.set(x, y, z, id, emit); this.set(this.mx(x), y, z, id, emit); return this; }
   sfill(x0, y0, z0, x1, y1, z1, id, emit) { this.fill(x0, y0, z0, x1, y1, z1, id, emit); this.fill(this.mx(x1), y0, z0, this.mx(x0), y1, z1, id, emit); return this; }
   get(x, y, z) { return this.g.get(x, y, z); }
+  // a floor slab of `id` with panel lines of `lineId` every 4 cells in x and z: the lines read as deck panels inside
+  // and break the belly (the floor's underside) into panels seen from the street
+  deck(x0, y, z0, x1, z1, id, lineId = B.DURASTEEL_DARK) {
+    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) this.set(x, y, z, ((x - x0) % 4 === 3 || (z - z0) % 4 === 3) ? lineId : id);
+    return this;
+  }
   // a hollow shell box: outer filled with `id`, inside carved to air
   shell(x0, y0, z0, x1, y1, z1, id, inner = 0) { this.fill(x0, y0, z0, x1, y1, z1, id); if (x1 - x0 >= 2 && y1 - y0 >= 2 && z1 - z0 >= 2) this.fill(x0 + 1, y0 + 1, z0 + 1, x1 - 1, y1 - 1, z1 - 1, inner); return this; }
   engine(x, y, z, id = B.GLOW_PANEL_BLUE) { return this.set(x, y, z, id, EMIT.ENGINE); }
@@ -135,8 +141,9 @@ export class ShipBuilder {
     const n = sill * 2 - 1;                       // columns
     const hingeAxis = dz === 0 ? [0, 0, 1] : [1, 0, 0];
     const sign = (dx + dz) > 0 ? 1 : -1;
-    // rotate the ramp up (away from the ground) about the sill edge; the sign depends on which side it hangs
-    const angle = hingeAxis[2] ? -sign * Math.PI / 2 : sign * Math.PI / 2;
+    // rotate the ramp up (away from the ground) about the sill edge so it stands against the doorway; the sign
+    // depends on which side it hangs (a ramp running +z swings by -90 degrees about +x, its far end rising)
+    const angle = hingeAxis[2] ? sign * Math.PI / 2 : -sign * Math.PI / 2;
     const pivot = [x + (dx > 0 ? 0 : dx < 0 ? 1 : 0.5), sill, z + (dz > 0 ? 0 : dz < 0 ? 1 : 0.5)];
     const p = this.part(name, CH.DOOR, { pivot, axis: hingeAxis, angle, flightId: id });
     for (let k = 0; k < n; k++) {

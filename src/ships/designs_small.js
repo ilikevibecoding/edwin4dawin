@@ -20,7 +20,7 @@ function gear(b, legs, h = 1, id = DD) {
 export function gunship() {
   const b = new ShipBuilder('gunship', 21, 9, 24, { cls: 'gunship', family: 'security / troop transport', label: 'Troop gunship', primary: D, accent: RED, seam: DD, speed: 34, engineHz: 62, gain: 1.1, capacity: 10 });
   // troop bay x 6..14, floor y 0 (feet y 1), walls y 1..2, ceiling y 3; bay z 6..17
-  b.fill(6, 0, 6, 14, 0, 17, DD); b.fill(7, 0, 7, 13, 0, 16, PLATE);
+  b.fill(6, 0, 6, 14, 0, 17, DD); b.deck(7, 0, 7, 13, 16, PLATE);
   b.fill(6, 1, 6, 14, 2, 17, D); b.fill(7, 1, 7, 13, 2, 16, 0);
   b.fill(6, 3, 6, 14, 3, 17, HP);
   for (const z of [9, 13, 17]) { b.seamRing(z, D, DD); b.seamRing(z, HP, DD); }
@@ -42,14 +42,15 @@ export function gunship() {
   b.fill(5, 3, 5, 5, 3, 16, DD); b.fill(15, 3, 5, 15, 3, 16, DD);
   for (const z of [8, 11, 14]) { b.lamp(8, 3, z); b.lamp(12, 3, z); }
   // central bench (seats facing both doors), weapon racks, a comm console
-  for (let z = 8; z <= 15; z++) { if (z !== 12) { b.seat(9, 1, z); b.seat(11, 1, z); } else { b.set(9, 1, z, CONSOLE); b.set(11, 1, z, HOLO); } b.set(10, 1, z, z % 2 ? BLK : DD); }
+  for (let z = 9; z <= 15; z++) { if (z !== 12) { b.seat(9, 1, z); b.seat(11, 1, z); } else { b.set(9, 1, z, CONSOLE); b.set(11, 1, z, HOLO); } b.set(10, 1, z, z % 2 ? BLK : DD); }   // z 8 = cross aisle
   b.set(7, 1, 16, CONSOLE); b.set(13, 1, 16, VENT); b.set(8, 1, 7, VENT); b.set(12, 1, 7, VENT);
   b.interior(7, 1, 7, 14, 3, 17);
   // nose / cockpit x 8..12, z 1..5: glass front and top, pilot + gunner tandem
   b.fill(8, 0, 2, 12, 0, 5, DD); b.fill(8, 1, 1, 12, 2, 5, D); b.fill(9, 1, 2, 11, 2, 5, 0);
   b.fill(9, 1, 1, 11, 2, 1, GL); b.fill(8, 3, 2, 12, 3, 5, DD); b.fill(9, 3, 2, 11, 3, 4, GL);
   b.fill(9, 1, 0, 11, 1, 0, DD); b.set(10, 2, 0, HOLO); b.set(8, 1, 0, CHR); b.set(12, 1, 0, CHR);      // chin guns
-  b.set(10, 1, 2, CONSOLE); b.seat(10, 1, 3); b.set(9, 1, 4, CONSOLE); b.set(11, 1, 4, CONSOLE); b.seat(10, 1, 5);
+  // pilot forward on the centre line, gunner offset aft to starboard; the port side stays a free aisle from the bay
+  b.fill(9, 1, 2, 11, 1, 2, CONSOLE); b.seat(10, 1, 3); b.set(11, 1, 4, CONSOLE); b.seat(11, 1, 5); b.set(10, 2, 2, HOLO);
   b.fill(9, 1, 6, 11, 2, 6, 0);                                                     // bulkhead opening into the bay
   b.setCockpit([10, 1, 3], [10, 1, 2], [10, 1, 1]);
   b.set(8, 2, 3, GL); b.set(12, 2, 3, GL); b.set(8, 3, 1, VENT); b.set(12, 3, 1, VENT);
@@ -86,19 +87,22 @@ export function starfighter() {
   // fuselage x 7..9, y 1..3 (spine behind the cockpit y 1..2)
   b.fill(7, 1, 2, 9, 3, 7, D); b.fill(7, 1, 8, 9, 2, 15, D); b.fill(8, 1, 0, 8, 2, 1, DD); b.set(8, 3, 2, GL);
   b.fill(7, 1, 2, 9, 1, 15, DD); b.set(8, 1, 0, CHR);
+  for (let z = 3; z <= 15; z += 3) b.set(8, 1, z, HT);                              // belly trench line
   for (const z of [4, 10, 13]) { b.seamRing(z, D, DD); }
-  // cockpit well (8, 2, 6) with the seat behind it, console in front, glass sides and windscreen
+  // cockpit well (8, 2, 6) with the seat behind it, console in front, instrument lamps, glass sides and windscreen
   b.set(8, 2, 6, 0); b.seat(8, 2, 7); b.set(8, 2, 5, CONSOLE); b.set(8, 3, 5, GL); b.set(8, 3, 4, GL);
+  b.lamp(7, 2, 5); b.lamp(9, 2, 5);
   b.set(7, 3, 6, GL); b.set(9, 3, 6, GL); b.set(7, 3, 7, GL); b.set(9, 3, 7, GL); b.set(8, 3, 6, 0); b.set(8, 3, 7, 0);
   b.setCockpit([8, 2, 7], [8, 2, 5], [8, 3, 5]);
+  b.interior(8, 2, 6, 9, 4, 8);                                                     // the well + seat (carry volume)
   // canopy: authored OPEN (slid back over the spine), slides forward 3 to close over the well
   const canopy = b.part('canopy', CH.DOOR, { slide: [0, 0, -3] });
   canopy.set(8, 3, 9, GL); canopy.set(8, 3, 10, GL); canopy.set(8, 4, 9, CHR);
-  b.setDoor([8, 2, 6], [3, 0, 7], [-1, 0], [[8, 3, 6], [8, 3, 7]]);
+  b.setDoor([8, 2, 6], [2, 0, 6], [-1, 0], [[8, 3, 6], [8, 3, 7]]);
   // spine greebles, sensor fin, aft antenna
   for (const z of [9, 11, 13]) b.set(8, 3, z, z === 11 ? HT : VENT); b.set(8, 3, 15, CHR); b.set(8, 4, 15, RED, EMIT.NAV);
   // engine nacelles x 5..6 / 10..11, y 1..2, z 9..14 with chrome intakes and blue exhausts
-  b.sfill(5, 1, 9, 6, 2, 14, DD); b.sset(5, 2, 9, CHR); b.sset(6, 2, 9, CHR); b.sset(5, 1, 9, VENT);
+  b.sfill(5, 1, 9, 6, 2, 14, DD); b.sset(5, 2, 9, CHR); b.sset(6, 2, 9, CHR); b.sset(5, 1, 9, VENT); b.sset(5, 1, 12, VENT);
   b.sfill(5, 1, 15, 6, 2, 15, CHR); b.sengine(5, 1, 15); b.sengine(6, 2, 15); b.sengine(6, 1, 15); b.sengine(5, 2, 15);
   b.sset(5, 3, 11, HT); b.sset(5, 3, 12, HT); b.sset(6, 3, 10, VENT);
   // S-foils: lower foil y 1 (x 1..4), upper foil y 2 (x 1..4), z 8..12, closed flat when landed
@@ -113,9 +117,11 @@ export function starfighter() {
   lower.set(1, 1, 10, RED, EMIT.NAV);
   const lowerR = b.mirrorPart(lower); b.mirrorPart(upper);
   for (const c of lowerR.cells) if (c[4] === EMIT.NAV) c[3] = GRN;
-  // boarding step on the port side (pad level) -> lower foil -> upper foil -> cockpit well
-  const step = b.part('step', CH.GEAR, { slide: [2, 1, 0] });
-  step.set(3, 0, 7, DD);
+  // boarding ladder on the port side (two steps up to the closed foils) -> along the foil top -> cockpit well; in
+  // flight it tucks into the wing root fairing / fuselage (slid half a block past the fairing skin, no shared faces)
+  b.sfill(6, 1, 6, 6, 2, 8, DD); b.sset(6, 2, 7, HT);
+  const ladder = b.part('ladder', CH.GEAR, { slide: [4.5, 1, 0] });
+  ladder.set(2, 0, 7, DD); ladder.set(3, 0, 7, DD); ladder.set(3, 1, 7, DD);
   b.slandingLight(7, 1, 1);
   gear(b, [[6, 4], [6, 12]], 1); b.parts[b.parts.length - 1].set(8, 0, 3, DD);
   b.spot(3, 0, 12); b.spot(13, 0, 12); b.spot(8, 0, 0);
@@ -136,7 +142,7 @@ export function taxi() {
   // dash + seats
   b.set(2, 1, 3, CONSOLE); b.set(4, 1, 3, HOLO); b.seat(3, 1, 3); b.fill(2, 2, 2, 4, 2, 2, GL); b.set(3, 2, 3, 0);
   b.seat(2, 1, 6); b.seat(4, 1, 6); b.seat(2, 1, 7); b.seat(4, 1, 7);
-  b.setCockpit([3, 1, 3], [2, 1, 3], [3, 2, 2]);
+  b.setCockpit([3, 1, 3], [2, 1, 3], [2, 2, 2]);
   b.interior(2, 1, 3, 5, 3, 8);
   // rear cowl with vents, roll bar with the taxi sign, a lamp under the bar lights the tub
   b.fill(1, 2, 8, 5, 2, 10, DD); b.set(3, 2, 9, VENT); b.set(2, 2, 10, HT); b.set(4, 2, 10, HT);
@@ -160,7 +166,7 @@ export function taxi() {
 // side pods with engines and a tall sensor fin. Compact: canopy open when landed, step in from the pad.
 export function policeSpeeder() {
   const b = new ShipBuilder('police', 7, 6, 14, { cls: 'police', family: 'police speeder', label: 'Police speeder', primary: D, accent: RED, seam: DD, speed: 46, engineHz: 124, gain: 0.55, compact: true, capacity: 2 });
-  b.fill(1, 0, 1, 5, 0, 12, DD); b.fill(2, 0, 3, 4, 0, 7, PLATE);
+  b.fill(1, 0, 1, 5, 0, 12, DD); b.fill(2, 0, 3, 4, 0, 7, PLATE); for (const z of [1, 2, 9, 10, 11, 12]) b.set(3, 0, z, HT);
   b.fill(1, 1, 1, 5, 1, 12, D); b.fill(2, 1, 3, 4, 1, 7, 0);
   b.fill(2, 1, 0, 4, 1, 0, DD); b.set(3, 1, 0, LAMP, EMIT.LANDING); b.fill(2, 2, 1, 4, 2, 1, D); b.set(3, 2, 2, GL);
   for (const z of [4, 8, 11]) b.seamRing(z, D, DD);
@@ -169,10 +175,10 @@ export function policeSpeeder() {
   b.set(2, 1, 3, CONSOLE); b.set(4, 1, 3, CONSOLE); b.set(3, 1, 3, HOLO); b.seat(2, 1, 5); b.seat(4, 1, 5);
   b.set(1, 2, 3, GL); b.set(5, 2, 3, GL); b.fill(1, 2, 4, 1, 2, 7, GL); b.fill(5, 2, 4, 5, 2, 7, GL); b.fill(2, 2, 2, 4, 2, 2, GL);
   b.setCockpit([2, 1, 5], [2, 1, 3], [1, 2, 3]);
-  b.sset(1, 1, 5, 0);                                                              // side door cut-outs
+  b.sset(1, 1, 5, 0); b.sset(1, 2, 5, 0);                                          // side door cut-outs (2 tall)
   const canopy = b.part('canopy', CH.DOOR, { slide: [0, 0, -5] });
   canopy.fill(2, 3, 8, 4, 3, 12, GL); canopy.set(3, 3, 8, CHR); canopy.set(3, 3, 12, CHR);
-  b.setDoor([2, 1, 4], [0, 0, 5], [-1, 0], [[1, 1, 5], [5, 1, 5]]);
+  b.setDoor([2, 1, 4], [0, 0, 6], [-1, 0], [[1, 1, 5], [1, 2, 5], [5, 1, 5], [5, 2, 5]]);
   b.interior(2, 1, 3, 5, 3, 8);
   // rear deck, light bar and sensor fin, twin pods with engines
   b.fill(1, 2, 8, 5, 2, 12, DD); b.set(3, 2, 10, VENT); b.set(2, 2, 12, HT); b.set(4, 2, 12, HT);
