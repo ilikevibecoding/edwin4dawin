@@ -994,6 +994,66 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       if (j.s > 330 && !nearGantry(j.s - 330, 60)) groundSign(j.s - 330, 1, 3.0, 1.5, atlas.guide([jd[0], '300 m'], arrowFor(1), 256, 128), S_DARK);
       if (j.s < c.total - 330 && !nearGantry(j.s + 330, 60)) groundSign(j.s + 330, -1, 3.0, 1.5, atlas.guide([jd[0], '300 m'], arrowFor(-1), 256, 128), S_DARK);
     }
+
+    // -------------------------------------------------------- traffic signals at the arterial junctions: mast arms on the far corners
+    /** a signal head (three lenses) hanging from `y` at (x, z), its lenses looking along `faceN` */
+    const signalHead = (part: (typeof parts)[number], x: number, y: number, z: number, faceN: THREE.Vector3, yaw: number) => {
+      part.signs.box(x, y - 1.05, z, 0.36, 1.05, 0.32, yaw, 0, S_DARK, false, [0, 0, 0]);
+      const lenses: Rgb[] = [[0.85, 0.08, 0.06], [0.95, 0.55, 0.05], [0.05, 0.62, 0.22]];
+      lenses.forEach((cl, i) => {
+        const ly = y - 0.2 - i * 0.33;
+        part.signs.box(x + faceN.x * 0.17, ly - 0.11, z + faceN.z * 0.17, 0.22, 0.22, 0.04, yaw, 0, cl, false, [0, 0, 0]);
+        // hood over each lens
+        part.signs.box(x + faceN.x * 0.2, ly + 0.11, z + faceN.z * 0.2, 0.28, 0.03, 0.12, yaw, 0, S_DARK, false, [0, 0, 0]);
+      });
+    };
+    /** mast arm: pole at (px, pz) on the ground `ground`, arm of `armLen` toward `armDir` (unit, horizontal), heads at the `along` distances from the pole */
+    const mastArm = (part: (typeof parts)[number], px: number, pz: number, ground: number, armDir: THREE.Vector3, armLen: number, heads: number[], faceN: THREE.Vector3) => {
+      const yaw = Math.atan2(armDir.x, armDir.z) + Math.PI / 2;   // box x along the arm
+      part.conc.box(px, ground - 0.3, pz, 0.9, 0.5, 0.9, yaw, 0, C_PEDESTAL, false, [0, 0, 0]);
+      part.signs.cylinder(px, ground + 0.2, pz, 0.36, 6.6, 8, S_GALV, true, [0, 0, 0], true);
+      const base = new THREE.Vector3(px, ground + 6.55, pz);
+      const tip = base.clone().addScaledVector(armDir, armLen).setY(ground + 6.9);
+      part.signs.strut(base, tip, 0.17, S_GALV, [0, 0, 0]);
+      part.proxy.box(px + armDir.x * armLen / 2, ground + 6.2, pz + armDir.z * armLen / 2, armLen, 0.7, 0.5, yaw, 0, S_GALV, false, []);
+      part.proxy.box(px, ground, pz, 0.5, 6.6, 0.5, yaw, 0, S_GALV, true, []);
+      const headYaw = Math.atan2(faceN.x, faceN.z);
+      for (const d of heads) {
+        const hx = px + armDir.x * d, hz = pz + armDir.z * d;
+        const ay = ground + 6.55 + 0.35 * (d / armLen);
+        part.signs.box(hx, ay - 0.35, hz, 0.06, 0.35, 0.06, yaw, 0, S_DARK, true, [0, 0, 0], true);
+        signalHead(part, hx, ay - 0.35, hz, faceN, headYaw);
+      }
+      // a small head on the pole for the near lane and the pedestrians
+      signalHead(part, px + armDir.x * 0.4, ground + 4.6, pz + armDir.z * 0.4, faceN, headYaw);
+    };
+    for (const j of majors) {
+      for (const dir of [1, -1] as const) {
+        // highway approach in `dir`: pole on its right verge just past the junction, arm back over its carriageway
+        const s = j.s + dir * 24;
+        if (s < 5 || s > c.total - 5) continue;
+        const f = frameAt(c, s);
+        const side = dir;
+        const aP = side * (hw + 1.6);
+        const px = f.x + f.rx * aP, pz = f.z + f.rz * aP;
+        const ground = Math.min(surfaceAt(c, s, side * hw) - ROAD_LIFT, map.heightAt(px, pz));
+        const armDir = new THREE.Vector3(-f.rx * side, 0, -f.rz * side);
+        const faceN = new THREE.Vector3(-f.dx * dir, 0, -f.dz * dir);
+        mastArm(P(s), px, pz, ground, armDir, hw + 1.0, [hw + 1.6 - 8.25, hw + 1.6 - 5.5, hw + 1.6 - 2.75], faceN);
+      }
+      // the cross road's approach(es): a mast arm across the highway from it, arm over the cross road's lanes
+      for (const from of j.side === 0 ? [-1, 1] : [j.side]) {
+        const f = frameAt(c, j.s);
+        const aP = -from * (hw + 1.6);
+        const sP = j.s + 9.5;
+        const fp = frameAt(c, sP);
+        const px = fp.x + fp.rx * aP, pz = fp.z + fp.rz * aP;
+        const ground = Math.min(surfaceAt(c, sP, -from * hw) - ROAD_LIFT, map.heightAt(px, pz));
+        const armDir = new THREE.Vector3(-f.dx, 0, -f.dz);
+        const faceN = new THREE.Vector3(f.rx * from, 0, f.rz * from);
+        mastArm(P(sP), px, pz, ground, armDir, 13, [6, 9.5, 13], faceN);
+      }
+    }
     for (const dir of [1, -1] as const) {
       for (let s = dir > 0 ? 140 : c.total - 140; dir > 0 ? s < c.total - 60 : s > 60; s += dir * 900) {
         if (nearGantry(s, 60) || nearJunction(s, 30)) continue;
