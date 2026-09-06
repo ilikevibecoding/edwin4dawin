@@ -2,7 +2,6 @@ import * as THREE from 'three';
 import type { BridgeSpec, RoadClass, Vec2, WorldMap } from './map';
 import type { RoadSegment } from './roads';
 import { clamp, lerp } from '../core/noise';
-import { Rng } from '../core/seed';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { GLSL_AA_LINE, MIN_WIDTH_VERT, STEEL_ALPHA_FRAG, Soup, lampGlowFor, type Frame, type Rgb } from './bridges';
 import { ALL_CASCADES, ViewCull, layerMask, maskCasts, type CasterClass } from './culling';
@@ -153,21 +152,23 @@ type Arrow = 'up' | 'left' | 'right' | null;
 /** Canvas atlas of the sign faces (guide signs, exit tabs, chevrons, speed limits), packed on demand; the
  *  bottom-left corner stays white for the plain steel. Destinations are the districts and islands of Bahía Vista. */
 class SignAtlas {
-  readonly size = 1024;
+  readonly width = 2048;
+  readonly height = 1024;
   readonly canvas: HTMLCanvasElement;
   readonly texture: THREE.CanvasTexture;
   private readonly ctx: CanvasRenderingContext2D;
   private readonly cache = new Map<string, SignFace>();
   private x = 0; private y = 0; private rowH = 0;
-  readonly texelBudgetUsed = () => (this.y + this.rowH) / this.size;
+  /** fraction of the atlas rows in use (for the build counts) */
+  get used(): number { return (this.y + this.rowH) / this.height; }
 
   constructor() {
     const c = document.createElement('canvas');
-    c.width = c.height = this.size;
+    c.width = this.width; c.height = this.height;
     this.canvas = c;
     this.ctx = c.getContext('2d')!;
     this.ctx.fillStyle = '#ffffff';
-    this.ctx.fillRect(0, 0, this.size, this.size);
+    this.ctx.fillRect(0, 0, this.width, this.height);
     this.texture = new THREE.CanvasTexture(c);
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.anisotropy = 4;
@@ -177,9 +178,9 @@ class SignAtlas {
 
   private alloc(w: number, h: number): [number, number] {
     const gutter = 6;
-    if (this.x + w + gutter > this.size) { this.x = 0; this.y += this.rowH + gutter; this.rowH = 0; }
+    if (this.x + w + gutter > this.width) { this.x = 0; this.y += this.rowH + gutter; this.rowH = 0; }
     // the last 48 rows stay white (uv 0,0 of the plain steel)
-    if (this.y + h > this.size - 48) throw new Error('sign atlas full');
+    if (this.y + h > this.height - 48) throw new Error('sign atlas full');
     const at: [number, number] = [this.x, this.y];
     this.x += w + gutter;
     this.rowH = Math.max(this.rowH, h);
@@ -187,9 +188,8 @@ class SignAtlas {
   }
 
   private face(x: number, y: number, w: number, h: number): SignFace {
-    const s = this.size;
     // inset a texel so the bilinear lookup never bleeds the neighbour
-    return { u0: (x + 1) / s, v0: 1 - (y + h - 1) / s, u1: (x + w - 1) / s, v1: 1 - (y + 1) / s };
+    return { u0: (x + 1) / this.width, v0: 1 - (y + h - 1) / this.height, u1: (x + w - 1) / this.width, v1: 1 - (y + 1) / this.height };
   }
 
   private arrow(cx: number, cy: number, size: number, dir: Exclude<Arrow, null>, color: string): void {
@@ -212,7 +212,7 @@ class SignAtlas {
   }
 
   /** Guide sign: green panel with a white border, up to two destination lines and an arrow. `w`/`h` in px. */
-  guide(lines: string[], arrow: Arrow, w = 352, h = 192, color = '#0b6b3f'): SignFace {
+  guide(lines: string[], arrow: Arrow, w = 320, h = 176, color = '#0b6b3f'): SignFace {
     const key = `g|${lines.join('|')}|${arrow}|${w}x${h}|${color}`;
     const hit = this.cache.get(key);
     if (hit) return hit;
@@ -659,7 +659,6 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     pixelScale.value = 0.5 * h * camera.projectionMatrix.elements[5];
   };
   const counts: HighwayBuild['counts'] = { chains: 0, chunks: 0, meshes: 0, poles: 0, gantries: 0, guardrailM: 0, barrierM: 0, signs: 0, triangles: 0 };
-  const rng = new Rng('highway-furniture');
   const chains = buildChains(map, segments);
   counts.chains = chains.length;
 
@@ -854,7 +853,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const w = panelsW[i], h = i === 0 ? 2.4 : 1.9;
         const ac = a + (g.dir * w) / 2;
         const centre = new THREE.Vector3(f.x + f.rx * ac, chordY[1] - 0.25 - h / 2, f.z + f.rz * ac);
-        panel(part.signs, centre, faceN, w, h, atlas.guide(pn.lines, pn.arrow, i === 0 ? 352 : 288, i === 0 ? 192 : 172), S_DARK, 0.08);
+        panel(part.signs, centre, faceN, w, h, atlas.guide(pn.lines, pn.arrow, i === 0 ? 320 : 256, i === 0 ? 176 : 152), S_DARK, 0.08);
         if (pn.tab) panel(part.signs, centre.clone().setY(chordY[1] - 0.25 + 0.34), faceN, 2.2, 0.62, atlas.tab(pn.tab), S_DARK, 0.08);
         // hangers to the chords
         for (const sgn of [-1, 1]) {
@@ -902,8 +901,8 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       counts.signs++;
     };
     if (jd) for (const j of majors) {
-      if (j.s > 330 && !nearGantry(j.s - 330, 60)) groundSign(j.s - 330, 1, 3.0, 1.5, atlas.guide([jd[0], '300 m'], 'left', 288, 144), S_DARK);
-      if (j.s < c.total - 330 && !nearGantry(j.s + 330, 60)) groundSign(j.s + 330, -1, 3.0, 1.5, atlas.guide([jd[0], '300 m'], 'right', 288, 144), S_DARK);
+      if (j.s > 330 && !nearGantry(j.s - 330, 60)) groundSign(j.s - 330, 1, 3.0, 1.5, atlas.guide([jd[0], '300 m'], 'left', 256, 128), S_DARK);
+      if (j.s < c.total - 330 && !nearGantry(j.s + 330, 60)) groundSign(j.s + 330, -1, 3.0, 1.5, atlas.guide([jd[0], '300 m'], 'right', 256, 128), S_DARK);
     }
     for (const dir of [1, -1] as const) {
       for (let s = dir > 0 ? 140 : c.total - 140; dir > 0 ? s < c.total - 60 : s > 60; s += dir * 900) {
@@ -1008,6 +1007,5 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     }
   }
   atlas.texture.needsUpdate = true;
-  void rng;
   return { group, counts };
 }
