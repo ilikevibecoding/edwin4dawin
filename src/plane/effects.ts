@@ -357,6 +357,7 @@ export class PlaneEffects {
   private tailAcc = 0;
   private exhaustAcc = 0;
   private ploughAcc = 0;
+  private boilAcc = 0;
   /** the impact splats of the wake maps (null when the batch has none) */
   private readonly splats: SplatBatch | null;
 
@@ -385,7 +386,7 @@ export class PlaneEffects {
     this.wakeL.reset(); this.wakeR.reset(); this.vortexL.reset(); this.vortexR.reset();
     this.spray.clear(); this.exhaust.clear();
     this.splats?.clear();
-    this.sprayAcc = 0; this.tailAcc = 0; this.exhaustAcc = 0; this.ploughAcc = 0;
+    this.sprayAcc = 0; this.tailAcc = 0; this.exhaustAcc = 0; this.ploughAcc = 0; this.boilAcc = 0;
     this.rng = new Rng('plane-effects');
   }
 
@@ -544,6 +545,34 @@ export class PlaneEffects {
     for (const imp of flight.impacts) this.splash(flight, imp, time);
     // parts still ploughing through the water at speed (ditching): a continuous plume behind each
     for (const pl of flight.ploughing) this.plough(pl, dt, time);
+    // a flooding hull boils: the air driven out of a split float breaks the surface around it in bursts for as
+    // long as it fills (and the churn of the ditching keeps bubbling up for a while after), so the wreck does not
+    // lie in glassy water seconds after coming to rest (r4b)
+    const w = flight.wreck;
+    if (w && t.onWater && speed < 6) {
+      this.boilAcc += dt;
+      while (this.boilAcc >= 0.3) {
+        this.boilAcc -= 0.3;
+        for (let i = 0; i < 2; i++) {
+          const filling = w.floodTarget[i] - w.flood[i];
+          const boil = Math.max(Math.min(filling * 3, 1), 0.5 * (1 - smoothstep(6, 25, w.age)));
+          if (boil < 0.05 || this.rng.next() > boil) continue;
+          const stern = i === 0 ? model.floatSternL : model.floatSternR;
+          const p = this.tmp.copy(stern).setX(-1.8 + this.rng.next() * 4.0).setZ(stern.z + (this.rng.next() - 0.5) * 0.9).applyQuaternion(q).add(flight.position);
+          const sy = floats[i].surfaceY;
+          this.splats?.add(p.x, p.z, time, 0.04 + 0.12 * boil, 1, 0, 1, 0);
+          const nb = 2 + Math.round(3 * this.rng.next() * boil);
+          for (let k = 0; k < nb; k++) {
+            this.spray.emit({
+              x: p.x + (this.rng.next() - 0.5) * 0.7, y: sy + 0.1, z: p.z + (this.rng.next() - 0.5) * 0.7,
+              vx: (this.rng.next() - 0.5) * 0.9, vy: 0.5 + this.rng.next() * 1.0 * boil, vz: (this.rng.next() - 0.5) * 0.9,
+              life: 0.35 + this.rng.next() * 0.3, age: 0, size: 1, tile: TILE_DROPS,
+              len: 0.25 + this.rng.next() * 0.3, wid: 0.2 + this.rng.next() * 0.2, alpha: 0.28 + 0.2 * this.rng.next(),
+            });
+          }
+        }
+      }
+    } else this.boilAcc = 0;
     // spray: the bow wave tears into sheets from about 5 m/s (the hump), then the chines throw the spray blister
     // sideways and aft from the forebody while planing; dies away once the floats are unloaded. Three fractions:
     // the root sheets (a dense translucent curtain hugging the chine, opening outward and leaning forward),
