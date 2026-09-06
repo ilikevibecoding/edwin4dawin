@@ -16,6 +16,7 @@ import { Bubbles, lineOfSight } from './bubbles.js';
 import { TalkBox } from './talk.js';
 import { ambientLine, greetLine, directionsLine, priceLine, workLine, jobLine } from '../dialog/dialog.js';
 import { RNG } from '../../rng.js';
+import { purposeFor } from '../../coruscant/purposes.js';
 import { standHeight, isPassable } from '../pathfinding.js';
 import * as THREE from 'three';
 
@@ -649,7 +650,14 @@ export class CoruscantPopulation {
     const vendor = VENDOR_JOBS.has(best.person.job) && best.act === 'work';
     best.chatterT = (vendor ? 9 : 16) + this.rng.next() * (vendor ? 10 : 24);
     const ctx = { hour: this.hour, district: best.person.district, disaster: this.disaster ? this.disaster.kind : (this.watching ? 'sky' : null), player: this.playerCtx.vandalT > 0 && this.rng.next() < 0.5 ? 'vandal' : (this.player.flying && !this.player.onGround && this.rng.next() < 0.4 ? 'flying' : null), vendor, working: best.act === 'work' };
-    const line = ambientLine(best.voice, ctx);
+    let line = null;
+    // vendor call-outs quote the stall's own prices (purposeFor().sells) part of the time
+    if (vendor && !ctx.disaster && !ctx.player && this.rng.next() < 0.4) {
+      const li = best.person.work != null && best.person.work !== PORT ? this.lots.peek(best.person.work) : null;
+      const pu = li ? li.purpose : this.stallPurpose(best);
+      if (pu && pu.sells && pu.sells.length) line = priceLine(best.voice, pu);
+    }
+    if (!line) line = ambientLine(best.voice, ctx);
     if (line) this.speak(best, line, bd < 12 * 12);
   }
   speak(npc, line, toChat = false) {
@@ -688,7 +696,8 @@ export class CoruscantPopulation {
     if (npc.state === 'at') npc.timer = Math.max(npc.timer, 8);
     const person = npc.person;
     const workLi = person.work != null && person.work !== PORT ? this.lots.get(person.work) : null;
-    const purpose = workLi ? workLi.purpose : null;
+    // a street vendor's stall carries the stock of the nearest shop or caf (purposeFor().sells), fixed per vendor
+    const purpose = workLi ? workLi.purpose : (VENDOR_JOBS.has(person.job) ? this.stallPurpose(npc) : null);
     const atWork = npc.act === 'work' && !person.street && !person.visitor;
     const greeting = atWork && purpose && purpose.greeting && this.rng.next() < 0.6 ? purpose.greeting : greetLine(npc.voice);
     const sells = purpose && purpose.sells && purpose.sells.length && (VENDOR_JOBS.has(person.job) || purpose.category === 'food' || purpose.category === 'retail');
@@ -701,6 +710,19 @@ export class CoruscantPopulation {
     this.speak(npc, greeting, true);
     this.talkBox.open(npc, greeting, options.slice(0, 3), role);
     if (this.game.audio && this.game.audio.npcGrunt) this.game.audio.npcGrunt(npc.pos, npc.droid ? 2.0 : npc.female ? 1.5 : 1.0);
+  }
+  stallPurpose(npc) {
+    if (npc.stall !== undefined) return npc.stall;
+    let best = null, bd = Infinity;
+    for (const lot of this.layout.lots) {
+      if (lot.kind === 'plaza') continue;
+      const cx = (lot.x0 + lot.x1) / 2, cz = (lot.z0 + lot.z1) / 2, d = (cx - npc.pos.x) ** 2 + (cz - npc.pos.z) ** 2;
+      if (d >= bd || d > 200 * 200) continue;
+      const pu = purposeFor(lot, this.layout);
+      if (pu && pu.sells && pu.sells.length && (pu.category === 'food' || pu.category === 'retail')) { bd = d; best = pu; }
+    }
+    npc.stall = best;
+    return best;
   }
   followUps(npc, purpose, sells, asked) {
     const opts = [];

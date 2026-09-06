@@ -62,6 +62,8 @@ export class TalkBox {
     if (!o || !this.npc) return;
     this.turns++;
     const res = o.act();
+    // the reply is said out loud too (bubble + chat line), not only printed in the box
+    if (res && res.line && this.pop.speak) this.pop.speak(this.npc, res.line, true);
     if (!res || this.turns >= 3) { if (res) { this.show(res.line, []); setTimeout(() => this.close(), 2600); } else this.close(); return; }
     this.show(res.line, res.options || []);
     if (!res.options || !res.options.length) setTimeout(() => { if (this.npc) this.close(); }, 2600);
