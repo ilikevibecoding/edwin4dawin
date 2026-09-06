@@ -4,9 +4,10 @@
 // crescent nose, open aft over the transceiver drums on the dark machinery deck; the sensor cross at
 // 26 % (tall dorsal blade, ventral blade, 426 m wing on a dark spar); the 110 m dark machinery neck
 // with its row of round reactor ports and tall lit bays; the 164 m dome from 46 % with the dark spine
-// ridge along its top, its shell edge raked back over the reactor sphere, shallow dark lower hull and keel; the tiered
-// bridge tower at the trench end; and the two armour shells thinning past the tower into the long
-// inward-curving stern blades either side of the thruster block (three thrusters up, two below).
+// ridge along its top, its shell edge raked back over the reactor sphere, shallow dark lower hull and
+// keel; the flat bridge module at the ridge end with its green glass bay facing aft (TCW); and the two
+// armour shells thinning past the bridge into the long inward-curving stern blades either side of the
+// thruster block (three thrusters up, two in the ventral pod below).
 // Banking Clan livery: pale grey-white plating with dark plank seams, blue bands and the white hexagon
 // with the Confederacy emblem on each flank, ochre wing stripes, yellow running lights and the
 // green-lit bridge glass.

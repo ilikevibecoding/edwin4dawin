@@ -11,8 +11,9 @@
 //     antenna deck on top;
 //   - 46-100 %: the dome — a 164 m arch 69 m tall over a shallow dark lower hull, its shell edge raked
 //     60 m back from the eave to the top over the reactor sphere, the dark spine ridge along its top to
-//     the tiered bridge tower at 78-86 %, and the two armour shells thinning past the tower into the
-//     long inward-curving stern blades either side of the thruster block (86.4 %).
+//     the flat bridge module at 76-87 % (green glass bay facing aft), and the two armour shells thinning
+//     past the bridge into the long inward-curving stern blades either side of the thruster block
+//     (86.4 %; the lower pair of thrusters in a ventral pod 24 m further aft).
 import { col, smoothstep } from "./munificentGeo.js";
 import { smoothTable } from "./munificentHull.js";
 

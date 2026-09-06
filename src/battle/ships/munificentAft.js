@@ -1,8 +1,9 @@
 // Neck and aft hull of the Munificent-class frigate: the dark machinery neck with its row of reactor
 // ports and lit bays, the dome (164 m arch: two armour shells either side of the dark spine trench,
 // their front edge raked back from the eave to the top over the reactor sphere, eave soffits over the
-// shallow dark lower hull and keel), the shells thinning past the bridge tower into the inward-curving
-// stern blades, the thruster block between them, the tiered bridge tower, and the Banking Clan livery
+// shallow dark lower hull and keel), the shells thinning past the bridge into the inward-curving stern
+// blades, the thruster block and ventral engine pod between them, the flat TCW bridge module with its
+// aft-facing green glass bay, and the Banking Clan livery
 // (blue bands, the white hexagon with the Confederacy emblem).
 import * as THREE from "three";
 import {
@@ -867,7 +868,7 @@ export function buildAft(add, rand, engines) {
           );
       }
     }
-    // sensor domes on the deck ahead of the tower
+    // sensor domes on the deck ahead of the bridge module
     for (const side of [-1, 1]) {
       const p = domePoint(204, 70 * D2R, side, 0);
       const d = new THREE.SphereGeometry(
