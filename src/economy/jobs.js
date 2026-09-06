@@ -110,10 +110,14 @@ export function generateBoard(seed, day, lot, ctx) {
   const mix = MIX[kind] || MIX.transit_station;
   const first = make('courier', 0);
   if (first) jobs.push(first);
+  // at most two jobs of a kind (one ship repair) so a board reads as a mix rather than three courier runs
   let guard = 0;
   while (jobs.length < n && guard++ < 24) {
-    const j = make(pickWeighted(mix, rng), jobs.length);
-    if (j && !jobs.some((o) => o.kind === j.kind && j.kind === 'ship_repair')) jobs.push(j);
+    const kind = pickWeighted(mix, rng);
+    const same = jobs.filter((o) => o.kind === kind).length;
+    if (same >= (kind === 'ship_repair' ? 1 : 2)) continue;
+    const j = make(kind, jobs.length);
+    if (j) jobs.push(j);
   }
   return jobs;
 }

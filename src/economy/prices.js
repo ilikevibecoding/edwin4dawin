@@ -112,10 +112,11 @@ export function vendorBuys(buys, id) {
   const cat = itemCategory(id);
   return !!cat && cat !== 'service' && buys.includes(cat);
 }
-// Price a vendor pays for item `id`: its own listed price when it sells the item, the book otherwise.
+// Price a vendor pays for item `id` (null when it does not trade the category): its own listed price when it sells
+// the item, the book otherwise.
 export function vendorSellPrice(purpose, id) {
+  if (!vendorBuys(purpose.buys, id)) return null;
   const key = goodsKey(id);
-  if (!key && !(purpose.buys || []).includes('any')) return null;
   const listed = key ? (purpose.sells || []).find((s) => s.item === key) : null;
   const pawn = (purpose.buys || []).includes('any');
   if (key) return sellPrice(key, purpose.district, listed ? listed.price : null, pawn);

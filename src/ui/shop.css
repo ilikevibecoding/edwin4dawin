@@ -117,9 +117,9 @@
 .sh-dest { min-height: 88px; }
 
 /* ------------------------------------------------------------------ your inventory (9 x 4 slots) */
-.sh-slots { display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); gap: 4px; }
+.sh-slots { display: grid; grid-template-columns: repeat(9, 46px); gap: 4px; justify-content: start; }
 .sh-slot {
-  position: relative; aspect-ratio: 1 / 1; min-height: 44px; padding: 0; display: flex; align-items: center; justify-content: center;
+  position: relative; width: 46px; height: 46px; padding: 0; display: flex; align-items: center; justify-content: center;
   background: #8b8b8b; border: 2px solid; border-color: #373737 #ffffff #ffffff #373737; box-shadow: 0 0 0 1px var(--sh-edge); cursor: default;
 }
 .sh-slot.sh-hotbar { background: #9a9a9a; }
@@ -182,7 +182,8 @@
 @media (max-height: 760px) {
   .sh-card { min-height: 96px; padding: 8px 6px 6px; }
   .sh-service { min-height: 112px; }
-  .sh-slot { min-height: 36px; }
+  .sh-slots { grid-template-columns: repeat(9, 40px); }
+  .sh-slot { width: 40px; height: 40px; }
 }
 @media (max-width: 640px) {
   .sh-hint { display: none; }

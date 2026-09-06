@@ -18,7 +18,8 @@ import { displayName } from '../items.js';
 import { LEVELS } from '../coruscant/layout.js';
 import { purposeFor, allPurposes, isOpen } from '../coruscant/purposes.js';
 import { SPACEPORT, DECK_Y } from '../coruscant/spaceport.js';
-import { GOODS, SHIP_CLASSES, buyPrice, vendorBuys, vendorSellPrice } from './prices.js';
+import { blueprintFor } from '../coruscant/buildings.js';
+import { GOODS, SHIP_CLASSES, buyPrice, vendorSellPrice } from './prices.js';
 import { JobBoard, TERMINAL_KINDS, goodLabel } from './jobs.js';
 import { StockLedger } from './stock.js';
 import { ShopUI } from '../ui/shop.js';
@@ -113,7 +114,16 @@ export class Economy {
     }
     return null;
   }
-  metaOf(lotId) { const cm = this.game.coruscant && this.game.coruscant.cityMeta ? this.game.coruscant.cityMeta() : []; return cm.find((m) => m.id === lotId) || null; }
+  // Blueprint metadata of a lot (rooms, beds, doors): the city's record once its chunk has generated, otherwise the
+  // cached blueprint is built on demand (renting through a lobby NPC always happens with the chunk loaded anyway).
+  metaOf(lotId) {
+    const cm = this.game.coruscant && this.game.coruscant.cityMeta ? this.game.coruscant.cityMeta() : [];
+    const m = cm.find((x) => x.id === lotId);
+    if (m) return m;
+    const lot = this.lotById(lotId);
+    if (!lot || !isBuilding(lot)) return null;
+    try { const bp = blueprintFor(lot, this.layout); return bp && bp.meta ? bp.meta : null; } catch (e) { return null; }
+  }
   pads() { return SPACEPORT.pads.map((p) => ({ x: p.x, z: p.z })); }
   deckY() { return DECK_Y; }
   padOf(index) { const p = SPACEPORT.pads[index] || SPACEPORT.pads[0]; return { index, x: p.x, y: DECK_Y, z: p.z }; }
@@ -181,7 +191,7 @@ export class Economy {
     return fit;
   }
   // What the vendor pays for one unit of item `id`, or null when it does not trade the category.
-  offerFor(purpose, id) { return vendorBuys(purpose.buys, id) ? vendorSellPrice(purpose, id) : null; }
+  offerFor(purpose, id) { return vendorSellPrice(purpose, id); }
   // Sells up to n of the player's items to the vendor. Returns the credits received.
   sell(purpose, id, n = 1) {
     const unit = this.offerFor(purpose, id);
@@ -395,13 +405,16 @@ export class Economy {
   }
   serialize() {
     return {
-      credits: this.credits, stock: this.stock.serialize(), ownedShips: this.ownedShips, apartment: this.apartment,
+      credits: this.credits, day: this.day(), stock: this.stock.serialize(), ownedShips: this.ownedShips, apartment: this.apartment,
       job: this.jobs.serialize(), stats: this.stats,
     };
   }
   restore(data) {
     if (!data || typeof data !== 'object') return;
     if (typeof data.credits === 'number') this.game.player.credits = Math.max(0, data.credits | 0);
+    // the world's day counter lives in the sky and is not saved elsewhere: restore it so rent, job expiry and the
+    // daily restock continue from the day the player left (the clock's time of day still comes from the URL / dawn)
+    if (typeof data.day === 'number' && this.game.sky && this.game.sky.day < data.day) this.game.sky.day = data.day | 0;
     this.stock.restore(data.stock);
     this.ownedShips = Array.isArray(data.ownedShips) ? data.ownedShips.filter((s) => s && SHIP_CLASSES.includes(s.cls)).map((s) => ({ cls: s.cls, padIndex: s.padIndex | 0, boughtAtDay: s.boughtAtDay | 0, price: s.price || GOODS['ship_' + s.cls].base })) : [];
     this.apartment = data.apartment && typeof data.apartment.lotId === 'number' ? data.apartment : null;

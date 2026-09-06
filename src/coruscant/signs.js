@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { LEVELS } from './layout.js';
 import { purposeFor } from './purposes.js';
 
-export const SIGN_W = 2.4, SIGN_H = 0.6;      // 4:1 like the 256x64 texture
+export const SIGN_W = 2.6, SIGN_H = 0.65;     // 4:1 like the 256x64 texture; a shade over two blocks, like a Minecraft sign
 export const VIEW_DIST = 48;
 export const MAX_VISIBLE = 40;
 const LINTEL_CLEAR = 1.4;                       // sign centre above the door lintel (doors are 2 tall: lintel = y + 2)
@@ -37,19 +37,24 @@ export function drawSignCanvas(name, category, { yours = false } = {}) {
   ctx.strokeStyle = accent; ctx.lineWidth = 3; ctx.strokeRect(3.5, 3.5, 249, 57);
   ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1; ctx.strokeRect(6.5, 6.5, 243, 51);
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  // line 1: the name, bold, shrunk until it fits the 236 px inner width
-  let size = 26;
-  ctx.font = `bold ${size}px "Segoe UI", "DejaVu Sans", Arial, sans-serif`;
-  while (size > 13 && ctx.measureText(name).width > 236) { size -= 1; ctx.font = `bold ${size}px "Segoe UI", "DejaVu Sans", Arial, sans-serif`; }
-  ctx.shadowColor = accent; ctx.shadowBlur = 10;
-  ctx.fillStyle = '#f2fbff';
-  ctx.fillText(name, 128, 25);
+  const font = (px) => `bold ${px}px "Segoe UI", "DejaVu Sans", Arial, sans-serif`;
+  // line 1: the name, bold, shrunk until it fits the 238 px inner width; a soft glow plus a hard dark outline keeps
+  // it readable when the board is a few dozen pixels wide
+  let size = 30;
+  ctx.font = font(size);
+  while (size > 14 && ctx.measureText(name).width > 238) { size -= 1; ctx.font = font(size); }
+  ctx.shadowColor = accent; ctx.shadowBlur = 12;
+  ctx.lineJoin = 'round'; ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0, 8, 20, 0.95)';
+  ctx.strokeText(name, 128, 24);
+  ctx.fillStyle = '#f6fcff';
+  ctx.fillText(name, 128, 24);
   ctx.shadowBlur = 0;
   // line 2: the category, small caps, letter-spaced
-  ctx.font = 'bold 13px "Segoe UI", "DejaVu Sans", Arial, sans-serif';
+  ctx.font = font(14);
   ctx.fillStyle = yours ? '#ffe9a8' : '#8ad4ff';
   const label = (CATEGORY_LABEL[category] || category || '').toUpperCase().split('').join('\u200a');
-  ctx.fillText(label, 128, 48);
+  ctx.lineWidth = 3; ctx.strokeText(label, 128, 49);
+  ctx.fillText(label, 128, 49);
   return c;
 }
 
@@ -194,10 +199,13 @@ export class Signs {
     const id = lot ? lot.id : null;
     if (id === this.inside) return;
     const t = this.game.time;
+    // debounced per lot and direction: walking in and straight out shows both notices, dithering in a doorway
+    // repeats neither within 5 s
     const fire = (lotId, text) => {
-      const last = this.lastToast.get(lotId);
+      const k = `${lotId}:${text.charAt(0)}`;
+      const last = this.lastToast.get(k);
       if (last != null && t - last < TOAST_DEBOUNCE) return;
-      this.lastToast.set(lotId, t);
+      this.lastToast.set(k, t);
       this.stats.toasts++;
       this.log.push({ t, text }); if (this.log.length > 40) this.log.shift();
       if (this.game.hud && this.game.hud.toast) this.game.hud.toast(hudText(text), '#9ad8ff'); else if (this.game.hud) this.game.hud.addMessage(hudText(text));
@@ -219,5 +227,6 @@ export class Signs {
   // Helpers for tests / tooling
   count() { return this.signs.length; }
   visibleCount() { return this.stats.visible; }
-  nearest(n = 10) { const p = this.game.player.pos; return this.signs.map((s) => ({ lotId: s.lotId, x: +s.x.toFixed(2), y: s.y, z: +s.z.toFixed(2), mid: s.mid, d: +Math.hypot(s.x - p.x, s.z - p.z).toFixed(1), key: s.key, visible: !!(s.mesh && s.mesh.visible) })).sort((a, b) => a.d - b.d).slice(0, n); }
+  // the n nearest signs by the same eye distance the visibility ring uses (3D: a mid-level board 35 blocks up counts)
+  nearest(n = 10) { const p = this.game.player.pos; return this.signs.map((s) => ({ lotId: s.lotId, x: +s.x.toFixed(2), y: s.y, z: +s.z.toFixed(2), mid: s.mid, d: +Math.hypot(s.x - p.x, s.y - (p.y + 1.6), s.z - p.z).toFixed(1), key: s.key, visible: !!(s.mesh && s.mesh.visible) })).sort((a, b) => a.d - b.d).slice(0, n); }
 }

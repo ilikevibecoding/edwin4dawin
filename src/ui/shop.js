@@ -13,7 +13,7 @@ import { goodLabel } from '../economy/jobs.js';
 
 const KIND_LABEL = (kind) => kind.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 const CATEGORY_LABEL = { housing: 'Housing', office: 'Offices', government: 'Government', hospitality: 'Hospitality', retail: 'Retail', food: 'Food & drink', industry: 'Industry', transport: 'Transport', security: 'Security', culture: 'Culture', medical: 'Medical', media: 'Media', religion: 'Religion' };
-const fmtHours = ([a, b]) => `${String(a % 24).padStart(2, '0')}:00\u2013${String(b % 24).padStart(2, '0')}:00${b >= 24 && a > 0 ? ' (next day)' : ''}`;
+const fmtHours = ([a, b]) => (a === 0 && b >= 24 ? 'open all day' : `${String(a % 24).padStart(2, '0')}:00\u2013${String(b % 24).padStart(2, '0')}:00${b >= 24 && a > 0 ? ' (next day)' : ''}`);
 const fmt = (n) => String(n | 0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 
 function h(tag, attrs, ...children) {
