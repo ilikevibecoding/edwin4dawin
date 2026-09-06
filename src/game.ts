@@ -278,6 +278,8 @@ export class Game {
     if (dbg.has('notraffic')) this.traffic.group.visible = false;
     if (dbg.has('nocloudshadow')) { this.post.cloudShadowStrength = 0; this.reflection.cloudShadowStrength = 0; }
     if (dbg.has('norefl')) this.reflection.enabled = false;
+    // ditching bench: wheels forced down over water (the wheels-first case of the ditching matrix)
+    if (dbg.has('geardown')) this.aircraft.flight.gearOverride = true;
     this.atmos.update(0);
     this.refreshEnvironment();
     await this.tick(progress, 'Compiling shaders', 0.97);
