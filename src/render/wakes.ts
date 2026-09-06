@@ -208,7 +208,9 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
       float froth = smoothstep(2.0, 8.0, aspd);
       float planing = smoothstep(planeV * 0.75, planeV * 1.25, aspd);
       float fine = 1.0 - smoothstep(0.25, 1.2, uTexel);   // 1 in the centimetre map, 0 in the metre map
-      float fl = 0.35 / uTexel;                    // finest useful noise frequency: ~3 texels of this map
+      // finest useful noise frequency: a period of 5 texels of this map (thresholded at 3 texels the froth
+      // patches magnified into texel-aligned blocks, r3 100 m view)
+      float fl = 0.2 / uTexel;
       float hullScale = 0.6 + 0.4 * min(w0, 2.0);
       // world-anchored breakup so foam reads as churned patches, never a chalk line
       float n1 = vn(vWp * 0.35), n2 = vn(vWp * min(1.3, fl) + 4.0), n3 = vn(vWp * min(3.1, fl) + 11.0);
@@ -241,10 +243,11 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         // density falls from the centre to the edges and downstream; the prop wash keeps a bubbly core alive
         // for a couple of hull lengths on the centreline of a powered hull
         float across = 1.0 - 0.55 * smoothstep(0.3, 1.0, ay / laneHalfR);
-        float wash = propWash * exp(-ay * ay / (0.3 * w0 * w0 + 0.02)) * exp(-d / (2.5 * lead + 4.0)) * smoothstep(0.3, 2.5, aspd);
+        // (the froth of the wash dissolves in 20-30 s: a ship's core is ~120 m long, not 2.5 ship lengths)
+        float wash = propWash * exp(-ay * ay / (0.3 * w0 * w0 + 0.02)) * exp(-d / min(2.5 * lead + 4.0, 20.0 * aspd + 10.0)) * smoothstep(0.3, 2.5, aspd);
         // streaks along the track (the lane is combed by the flow) in track coordinates, plus world grain
-        float nl = vn(vec2(odo * min(ls * 0.3, fl), y * min(ls * 1.4, fl)) + 3.0);
-        float pn = 0.45 * nl + 0.25 * n3r + 0.15 * n2 + 0.15 * n4;
+        float nl = vn(vec2(odo * min(ls * 0.25, fl), y * min(ls * 1.6, fl)) + 3.0);
+        float pn = 0.55 * nl + 0.2 * n3r + 0.1 * n2 + 0.15 * n4;
         // a planing hull's chines and step beat air into the water: its rails of whitewater stay dense longer
         // (r3) a displacement hull's lane is pale turbulence with the prop wash as its only white core: the froth
         // gate is squared and the churn factor no longer scales the density (it scales the persistence below)
@@ -261,7 +264,7 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         // noise so the froth covers most of the lane at the transom and only a fraction downstream (the summed
         // noise sits around 0.5 with a spread of ~0.15)
         float thr = 0.5 + (0.5 - dens) * 0.5;
-        float grainFine = smoothstep(thr - 0.13, thr + 0.13, pn) * (0.7 + 0.3 * n3r) * (0.75 + 0.5 * n4) * gate;
+        float grainFine = smoothstep(thr - 0.2, thr + 0.2, pn) * (0.7 + 0.3 * n3r) * (0.75 + 0.5 * n4) * gate;
         // from altitude a texel averages the froth, so the density itself is drawn, broken by lane-sized cells
         float bc = vn(vec2(odo * min(0.25 * ls, fl), y * min(ls, fl)) + 7.0);
         // dark windows: beam-sized holes of slick water inside the froth, more of them downstream
@@ -289,7 +292,12 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         // (r3) the crest only breaks within a couple of hull lengths of the transom, and only when the hull pushes
         // hard; further out the arm is a glassy crest carried by the slope alone (the r3 ship view drew the arms
         // as broad white smears 300 m long)
-        float steep = smoothstep(2.5, 8.5, aspd) * inversesqrt(1.0 + d / (2.0 * lead + 2.0)) * exp(-d / (2.5 * lead + 15.0));
+        // a crest only breaks near and above hull speed (Froude number > 0.35: a runabout, a planing float, a
+        // yacht pushed hard; never a ship at 11 kt, whose arms are glassy everywhere). From altitude the far map's
+        // texel averages the glitter of an unbroken crest into a pale line, so the coarse map carries the arm
+        // foam further out as a proxy for it
+        float fn = aspd * inversesqrt(9.81 * (lead + 1.0));
+        float steep = smoothstep(2.5, 8.5, aspd) * smoothstep(0.25, 0.5, fn) * inversesqrt(1.0 + d / (2.0 * lead + 2.0)) * exp(-d / mix(8.0 * lead + 40.0, 2.5 * lead + 15.0, fine));
         float an = vn(vec2(odo * min(0.45, fl), s * 3.0 + dy * min(2.0, fl)) + 7.0);
         float breakM = smoothstep(0.84 - 0.3 * steep, 0.98 - 0.3 * steep, an);
         float arm = armBump * armEnv * breakM * steep * (0.5 + 0.5 * n2) * smoothstep(-lead * 0.5, lead * 0.5, d) * (armW0 / armW);

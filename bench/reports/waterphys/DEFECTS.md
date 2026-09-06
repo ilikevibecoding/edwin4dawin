@@ -87,3 +87,55 @@ planing spray blister still to be checked at 3 s / 4.5 s (round 3); no ring wave
 (splat rings are 5-13 cm and the near map's slope only shows in the reflection); boat wake zones unjudged.
 
 Self-scores after r2: 11: 7.0, 12: 6.5, 13: 7.0, 14: 7.0 (unjudged).
+
+## Round 3 — boat wakes at boat level / 100 m / 1 km, and a ship
+
+Views (all `dev`, time 13, aircraft parked at 300 m so only boats mark the water; tags `waterphys-r3-wakes`
+before, `waterphys-r3b-wakes` / `r3c` after): `wake-fast-low` (camera 3 m up, 30 m abeam of a 7 m runabout at
+14.5 m/s), `wake-fast-100` (60 m up, 100 m behind the same boat), `wake-ship-100` (90 m up, 200 m astern of a 137 m
+cargo ship at 5.6 m/s), `wake-1km` (450 m up, the Garza channel with 6 wakes). Boat positions came from a state
+probe of the frozen frame (`/tmp/waterphys/boats.mjs`), not from guessing.
+
+Defects seen before:
+
+1. **Runabout at boat level and from 100 m: the lane was a soft, straight, uniform white stripe** (D5-H5 in
+   `wake-fast-low`, the whole diagonal in `wake-fast-100`). Cause: the far map has 1.56 m texels and a runabout's
+   lane is 2-3 m wide, so from anywhere near the water it is two bilinearly magnified texels: no froth patches,
+   no windows, no edges; the near map only exists around the aircraft.
+2. **Ship from 100 m: a solid white band a full beam (22 m) wide for 200 m** behind the transom, and the Kelvin
+   arms as broad white smears 300 m long. A container ship at 11 kt leaves pale turbulence with the prop wash as
+   its only white core, and glassy (unbroken) arms. Causes: the lane density multiplied by the ship's churn (1.4)
+   and a linear froth gate (0.6 at 5.6 m/s); "fresh churn" decayed over 1.5 hull lengths (260 m) instead of over
+   the ~15 s the froth lasts; the arm break-up threshold admitted ~40 % of the arm length at any speed.
+3. No Kelvin V readable near a planing runabout from 100 m; the transverse stern waves not readable anywhere.
+4. Hulls looked pasted on the surface at boat level (no bow wave, no spray): the bow zone's curl and sheet exist
+   in the ribbon but were two texels wide in the far map.
+
+Changed (`wakes.ts`, `water.ts` one sampling hunk, `game.ts` two lines):
+
+- **A mid wake map**: 400 m at 0.39 m/texel, centred 120 m ahead of the camera along its horizontal view
+  direction, rendered by the same batch (one more pass, +2 draw calls) and sampled by the water shader inside its
+  region with a 40 m soft edge, between the far and the near maps. The froth patches, dark windows, wandering
+  edges, bow curl and arm crests of every boat within ~200 m of the camera now exist at sub-metre scale.
+- Lane density: displacement hulls pale (froth gate squared: 0.36 at 5.6 m/s), churn scales persistence
+  (remnants) not density, fresh churn limited to `min(1.5 lead + 6 w0, 12 v + 20)` m (ship 87 m, runabout 17 m),
+  prop-wash core limited to `min(2.5 lead + 4, 20 v + 10)` m; beam-sized dark windows carved into the coarse
+  lane; lane grain streakier along the track.
+- Arms: break only when the Froude number `v / sqrt(g L)` exceeds 0.35 (never the ship), within ~2.5 hull
+  lengths in the mid/near maps (glassy crest, slope only, beyond) and further out in the far map where the texel
+  averages a crest's glitter into a pale line (that pale V near a runabout was the one thing the 1 km view lost
+  when the gating first went in — restored this way).
+- Thresholded froth noise capped at a 5-texel period with a wider transition (`fl = 0.2 / texel`, +-0.2): at a
+  3-texel period the mid map's froth patches magnified into texel-aligned blocks (r3b `wake-fast-100`).
+
+After (r3b/r3c): runabout at boat level = froth patches over dark water with ragged edges, a bow curl at the
+stem; from 100 m = a dense rail off the transom breaking into elongated patches with windows; ship = a white
+prop-wash core inside pale turbulence, arms glassy; 1 km = continuous pale lanes with the V near the fast boats.
+Perf: `wake-fast-100` 112 calls / 241 k tris (was 111 / 234 k), `wake-ship-100` unchanged within noise; console
+clean in all four.
+
+Remains: no spray from boats (traffic.ts, not mine); stern-wave undulation still not readable at 100 m (slope
+only; the sky is too uniform for a 4 deg tilt to show — a foam-free brightness cue would need the water shader);
+boat hulls without a height patch still sit on a flat waterline at boat level.
+
+Self-scores after r3: 11: 7.0, 12: 6.5, 13: 7.5, 14: 7.5.
