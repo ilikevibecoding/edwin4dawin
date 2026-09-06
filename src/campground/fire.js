@@ -174,7 +174,10 @@ const flameFragment = /* glsl */ `
     // one yellow mass with tongues only at the top). A tongue's cool edge is
     // thin and its hot centre near-opaque, so the tongues behind show through
     // the edges of the ones in front and the body has tongues inside it.
-    float alpha = s.a * vFade * (0.5 + 0.5 * smoothstep(0.05, 0.45, heat));
+    // Round 5: the floor was 0.5, which made the cool half of every sprite as
+    // present as its core and stacked the quads into a slab; 0.3 with a
+    // steeper ramp leaves the edges to the tongue in front.
+    float alpha = s.a * vFade * (0.3 + 0.7 * pow(smoothstep(0.05, 0.45, heat), 1.6));
     gl_FragColor = vec4(c * uGain * alpha, alpha);
   }
 `;
@@ -354,9 +357,10 @@ export function createFire({ radius = 0.5, height = 1.3, quality = 'high', wind 
   const glowGeo = new THREE.CircleGeometry(glowR, 28);
   glowGeo.rotateX(-Math.PI / 2);
   const glowMat = new THREE.ShaderMaterial({
-    // a paler amber than the round-3 (1.0, 0.5, 0.16): the disc is additive,
-    // so its own saturation lands on the ground as it is
-    uniforms: { uGlow: { value: 0 }, uTime: { value: 0 }, uR: { value: glowR }, uTint: { value: new THREE.Color(1.0, 0.68, 0.4) } },
+    // The disc is additive, so its own saturation lands on the ground as it
+    // is. Round 4's (1.0, 0.68, 0.4) was pale enough that on the light's pool
+    // it read as tan; back toward the round-3 amber (1.0, 0.5, 0.16) by half.
+    uniforms: { uGlow: { value: 0 }, uTime: { value: 0 }, uR: { value: glowR }, uTint: { value: new THREE.Color(1.0, 0.58, 0.26) } },
     vertexShader: glowVertex,
     fragmentShader: glowFragment,
     transparent: true,
@@ -382,10 +386,12 @@ export function createFire({ radius = 0.5, height = 1.3, quality = 'high', wind 
     // the ring sat at sat 0.72 over a laterite that is already 0.6. So the
     // reach across the frame is carried by the glow disc and the embers, and
     // the light itself is shorter (14 m), steeper (decay 1.6) and a paler
-    // amber (1.0, 0.72, 0.45) — firelight on red earth is warm enough without
-    // the light being orange too. The peak is raised (update) so the chairs at
-    // 2.7 m hold the round-3 value.
-    pointLight = new THREE.PointLight(new THREE.Color(1.0, 0.72, 0.45), 0, 14, 1.6);
+    // amber — firelight on red earth is warm enough without the light being
+    // orange too. Round 4's (1.0, 0.72, 0.45) at a ×1.4 peak went too far the
+    // other way: the pool at 2–4 m was a tan slab, Y 0.36 at saturation 0.33
+    // over a laterite of 0.6 (round 5, §6). (1.0, 0.56, 0.26) is hue 24°, and
+    // the peak is back under round 3's (update).
+    pointLight = new THREE.PointLight(new THREE.Color(1.0, 0.56, 0.26), 0, 14, 1.6);
     pointLight.position.set(0, 1.15, 0);
     pointLight.name = 'fireLight';
     pointLight.castShadow = false;
@@ -409,12 +415,16 @@ export function createFire({ radius = 0.5, height = 1.3, quality = 'high', wind 
       flicker = flickerAt(phase, phaseSeed);
       for (const m of mats) m.uniforms.uTime.value = phase;
       glowMat.uniforms.uTime.value = phase;
-      glowMat.uniforms.uGlow.value = (0.1 + 0.48 * night) * flicker;
+      glowMat.uniforms.uGlow.value = (0.1 + 0.3 * night) * flicker;
       if (pointLight) {
-        // ×1.4 on round 3's (6 + 20·night): what decay 1.6 and the paler
-        // colour take off the ground at 8 m, so the reach across camp_fire_night
-        // holds while the ring itself goes paler rather than brighter
-        pointLight.intensity = (8.4 + 28 * night) * flicker * radius * 2;
+        // Round 4 put ×1.4 on round 3's (6 + 20·night) to hold the ground at
+        // 8 m under the steeper decay, and the pool at 2–4 m paid for it
+        // (Ymed 0.15 → 0.36, round 5). Measured knob by knob on the
+        // camp_fire_night pool box: the peak is the lever (×0.71 alone took
+        // −0.47 st, the colour −0.16, the glow tint and level under 0.02), so
+        // it goes under round 3's rather than back to it; the 8 m box gives up
+        // about a third of a stop.
+        pointLight.intensity = (5 + 16 * night) * flicker * radius * 2;
         pointLight.position.x = Math.sin(phase * 3.1) * 0.06;
         pointLight.position.z = Math.cos(phase * 2.3) * 0.06;
       }
@@ -422,8 +432,10 @@ export function createFire({ radius = 0.5, height = 1.3, quality = 'high', wind 
     setNight(night) {
       // flames read against daylight only if they are hot; at night they are
       // the brightest thing there is. The core blends over rather than adding,
-      // so the gain is the tongue's own brightness, not a stack's
-      flames.material.uniforms.uGain.value = 1.0 - night * 0.15;
+      // so the gain is the tongue's own brightness, not a stack's. 0.7 at
+      // night (was 0.85): the flame box's pixels over Y 0.5 were 529, and the
+      // tongues alone account for about 90 of them.
+      flames.material.uniforms.uGain.value = 1.0 - night * 0.3;
       embers.material.uniforms.uGain.value = 2.4 + night * 1.4;
       // the column is lit amber at its root and, after dark, a grey a little
       // paler than the sky it stands against so it reads as a column at all

@@ -96,11 +96,17 @@ export function buildPlan() {
   // none did). The arm and the lamp hang out toward the vehicles (+v).
   // Round 4: a pole between the two jeeps and one between the third jeep and
   // the utility — over the dark vehicles, off every slot's ruts — rather than
-  // at the row's centre; the supply truck, camper and trailer at the ends are
-  // past both and stay dark.
+  // at the row's centre; the camper and trailer at the east end are past
+  // both and stay dark.
+  // Round 5: a third pole at the west end, between the expedition truck's
+  // tail and the supply truck's nose (the supply truck's body was 0.48 of the
+  // sky at night, 0.63 with it), on the first pole's line so it stays clear
+  // of the lane; 1.2 m west of the expedition slot's ruts, 1.6 m south of the
+  // supply truck's.
   const rowLamps = [
     { u: -8.6, v: -14.5, height: 3.0, facing: [0, 1] },
     { u: 10.0, v: -13.5, height: 3.0, facing: [0.3, 1] },
+    { u: -17.5, v: -14.5, height: 3.0, facing: [0.2, 1] },
   ];
 
   // Ground wear, as polylines the overlay paints. Tyre tracks run from the

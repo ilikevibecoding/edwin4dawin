@@ -59,7 +59,10 @@ export function createCampLights(mats, lamps, anchors, { quality = 'high' } = {}
   // camp light is a shadowless point light in the one forward loop, so the
   // cost is per fragment across the scene, not per object: six at fast is the
   // same program count, one more loop iteration.
-  const cap = quality === 'fast' ? 6 : 8;
+  // Round 5: one more at every tier for the third pole over the supply end of
+  // the row (seven at fast, nine above), so the kitchen and the third tent's
+  // lamp keep their slots.
+  const cap = quality === 'fast' ? 7 : 9;
   const chosen = anchors.slice().sort((a, b) => (b.priority || 0) - (a.priority || 0)).slice(0, cap);
   for (const a of chosen) {
     const l = new THREE.PointLight(a.color ?? 0xffb35c, 0, a.distance ?? 12, a.decay ?? 1.9);
@@ -91,7 +94,10 @@ export function createCampLights(mats, lamps, anchors, { quality = 'high' } = {}
   let checkT = 0;
 
   function apply(lvl) {
-    mats.lampGlass.emissiveIntensity = 5.0 * lvl;
+    // The night bloom threshold is 2.0 (post.js): a glass at 5.0 was 2.5×
+    // over it and bloomed to a 28-px ball around every lantern head (round 5,
+    // fleet night frames); at 2.4 only its core passes the threshold.
+    mats.lampGlass.emissiveIntensity = 2.4 * lvl;
     mats.lampGlass.opacity = 0.85 + 0.15 * lvl;
     mats.bulb.emissiveIntensity = 3.6 * lvl;
     for (const l of lights) {

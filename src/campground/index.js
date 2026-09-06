@@ -201,10 +201,22 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
   // those frames (see setTimeOfDay below). With them on, 12 / 14 m put the
   // dark jeeps at 0.016–0.018 from 5 m: 26 / 20 m, and the poles moved over
   // the vehicles (layout.js) rather than the row's centre.
+  // Round 5: 26 from 2.5 m over a bonnet is a floodlight — its reflection in
+  // the jeep's clearcoat was a 637-px disc over Y 0.5 on safari-jeep_0_night,
+  // the brightest thing in the frame. 16 / 24 m takes 27 % off the disc and
+  // holds jeep_0 at 0.87 of the sky (the disc's peak is the paint's lobe, not
+  // the lamp: it stays at 0.75 until the fleet's clearcoat roughens). The
+  // third pole (layout.js) lights the supply end; 7 − i·0.4 keeps all three
+  // above the kitchen (6) and the gate (5), and the cap in lights.js is one
+  // wider so the kitchen stays lit at the fast tier.
+  // The third pole draws on its own stream: everything placed after the poles
+  // (the kopje, the scatter, the fence posts' lean) is dealt from `rnd`, and a
+  // pole on it would have re-rolled the whole camp behind it.
+  const poleRnd = rng(0xc4a9 ^ 0x51).next;
   plan.rowLamps.forEach((l, i) => {
     // the pole with the tyre round its foot; the stay wire and its peg are not colliders
-    put(poleLantern(rnd, l.height), { u: l.u, v: l.v, facing: l.facing, conform: 0.2, half: 0.3, collide: { tag: 'structure', r: 0.5 }, name: 'rowLamp' });
-    lightAt(l.u + l.facing[0] * 0.62, l.v + l.facing[1] * 0.62, l.height - 0.52, { name: 'rowLamp' + i, intensity: 26, distance: 20, priority: 7 - i * 0.5, color: 0xffb35c, decay: 1.6 });
+    put(poleLantern(i < 2 ? rnd : poleRnd, l.height), { u: l.u, v: l.v, facing: l.facing, conform: 0.2, half: 0.3, collide: { tag: 'structure', r: 0.5 }, name: 'rowLamp' });
+    lightAt(l.u + l.facing[0] * 0.62, l.v + l.facing[1] * 0.62, l.height - 0.52, { name: 'rowLamp' + i, intensity: 16, distance: 24, priority: 7 - i * 0.4, color: 0xffb35c, decay: 1.6 });
   });
   put(signPost('signSpeed', 0.9, 0.5, 1.5), { u: plan.gate.u - 6, v: plan.gate.v - 2.5, facing: [-0.6, -1], collide: 'sign', name: 'speedSign' });
   // The fence and the boma are one object each, spanning the camp: their
@@ -246,11 +258,16 @@ export function createCampground({ terrain, env = null, quality = 'high' } = {})
     color: 0xffb860,
     // Measured on camp_mess at 640 (HEAD, fast): pockets under the tables
     // 2.9 → 1.5 st, under the chairs 3.9 → 2.0, the open floor at the left
-    // eave 3.0 → 1.5, the sunlit pad beside the eave +2.9 %. Lower than the
-    // lamp (1.9 m) so the falloff across the floor is flatter for the same
-    // spill past the eaves; near-neutral so the shade does not go redder than
-    // the sunlit laterite (the light multiplies the albedo's own saturation).
-    day: { intensity: 12, distance: 6.0, decay: 1.2, color: 0xeadfcf, dy: -0.7 },
+    // eave 3.0 → 1.5, the sunlit pad beside the eave +2.9 %. Near-neutral so
+    // the shade does not go redder than the sunlit laterite (the light
+    // multiplies the albedo's own saturation).
+    // Round 5: the deepest pockets are at the east eave, 4–5 m out, where
+    // decay 1.2 left the lamp at a tenth of the floor's light (hiding the wear
+    // decal moved them by nothing; the lamp's reach was the only knob that
+    // did). Decay 1.0 with the cutoff held at 6.5 m puts the light at the
+    // eaves without reaching the sunlit pad past them (distance 9 lifted the
+    // pad 2.8 %, this 0.7 %); 35 cm higher for the eave floor's angle.
+    day: { intensity: 13, distance: 6.5, decay: 1.0, color: 0xeadfcf, dy: -0.35 },
   });
   put(kitchenShelter(rnd, plan.kitchen, P), { u: plan.kitchen.u, v: plan.kitchen.v, facing: plan.kitchen.facing, conform: 0.3, half: 2.5, collide: 'tent', name: 'kitchen' });
   lightAt(plan.kitchen.u + 1.5, plan.kitchen.v, 2.0, { name: 'kitchenLamp', intensity: 12, distance: 9, priority: 6 });
