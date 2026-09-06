@@ -1,15 +1,18 @@
-// Detail pass for the Providence-class model: the stern engine cluster (nozzle bells with a lit interior
+// Detail pass for the Providence-class model: the stern engine array (seven bells with a lit liner
 // gradient baked into vertex colours; plumes and glow discs come from the shared engine-plume system),
-// the plating framework at the large scale (raised transverse seams framing 40-60 m plates, longitudinal
-// rails, raised plate groups on the dorsal ridge), greebles (hatch rows, plates, bay doors, domes, masts,
-// dishes, window rows) and weathering (scorch rings, soot streak decals). Everything sits on the analytic
-// hull surface via hullFrame().
+// the plating framework at the large scale (raised transverse seams, longitudinal rails), the painted
+// markings (dark slate rectangles, yellow hazard patches), greebles (hatch rows, plates, secondary bay
+// doors, domes, masts, dishes, the bow sensor tip), window rows and weathering (scorch rings, soot
+// streaks). Everything sits on the hull surface via hullFrame() / surfaceAtY().
 import * as THREE from "three";
 import { box, cylY, cylZ } from "./shipKit.js";
 import {
   HULL,
+  fromRef,
+  halfProfile,
   hash,
   hullFrame,
+  lerp,
   loftRings,
   placeOn,
   rgb,
@@ -17,10 +20,20 @@ import {
   ringFromStation,
   ringSlab,
   rng,
+  smoothstep,
   stationAt,
+  toRef,
   tubeRings,
 } from "./providenceGeo.js";
-import { PAL, RIDGE_SLABS, SEAMS, barAlong } from "./providenceSpec.js";
+import {
+  CHIN_GRILLE,
+  ENGINES,
+  HAZARD_MARKS,
+  PAL,
+  SEAMS,
+  SLATE_MARKS,
+  barAlong,
+} from "./providenceSpec.js";
 import { inCut } from "./providenceBays.js";
 
 const FWD = new THREE.Vector3(0, 0, -1);
@@ -28,14 +41,94 @@ const FWD = new THREE.Vector3(0, 0, -1);
 export function addDetails(ctx) {
   const engines = addEngines(ctx);
   addPlating(ctx);
+  addMarkings(ctx);
   addGreebles(ctx);
   addWindows(ctx);
   addWeathering(ctx);
   return engines;
 }
 
-// thin strip conforming to the hull along z on segment m at fraction t (side ±1): rings are rectangles in
-// the local surface frame, `lift` above the surface, `h` thick, `w` wide across the surface
+// outer surface point (x >= 0) and its outward normal (xy-plane) at height y on the station at z; the
+// belt is treated as the vertical line x = w so decals never fall into the trough
+export function surfaceAtY(z, yIn, side = 1) {
+  const st = stationAt(z);
+  const h = halfProfile(st);
+  // clamp into the section so a mark that overruns the ridge or keel at a fine station never extrapolates
+  const y = Math.min(st.yTop - 0.05, Math.max(st.yBot + 0.05, yIn));
+  const outer = [
+    h[0],
+    h[1],
+    h[2],
+    h[3],
+    h[4],
+    h[5],
+    h[6],
+    h[11],
+    h[12],
+    h[13],
+    h[14],
+    h[15],
+  ];
+  let a = outer[0];
+  let b = outer[1];
+  for (let k = 0; k + 1 < outer.length; k++) {
+    a = outer[k];
+    b = outer[k + 1];
+    if (y <= a[1] && y >= b[1]) break;
+  }
+  const t = a[1] === b[1] ? 0.5 : (a[1] - y) / (a[1] - b[1]);
+  const x = lerp(a[0], b[0], t);
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  // outward normal of the profile segment (rotate the ridge->keel tangent by -90°)
+  const n = new THREE.Vector3(-dy, dx, 0).normalize();
+  if (n.x < 0) n.negate();
+  if (dx === 0 && dy === 0) n.set(1, 0, 0);
+  n.x *= side;
+  return { p: new THREE.Vector3(side * x, y, z), n };
+}
+
+// conforming decal strip: a thin slab following the hull between heights y0..y1 over r0..r1
+function decal(
+  add,
+  side,
+  r0,
+  r1,
+  y0,
+  y1,
+  color,
+  mat,
+  lod,
+  lift = 0.12,
+  thick = 0.28,
+) {
+  const n = Math.max(2, Math.round((r1 - r0) / 8) + 1);
+  const rings = [];
+  for (let k = 0; k < n; k++) {
+    const z = fromRef(lerp(r0, r1, k / (n - 1)));
+    const a = surfaceAtY(z, y1, side);
+    const b = surfaceAtY(z, y0, side);
+    const a0 = a.p.clone().addScaledVector(a.n, lift);
+    const b0 = b.p.clone().addScaledVector(b.n, lift);
+    rings.push([
+      a0.toArray(),
+      b0.toArray(),
+      b0.clone().addScaledVector(b.n, thick).toArray(),
+      a0.clone().addScaledVector(a.n, thick).toArray(),
+    ]);
+  }
+  add(
+    loftRings(rings, {
+      sharp: new Set([0, 1, 2, 3]),
+      faceColor: () => color,
+      texel: 1 / 8,
+    }),
+    mat,
+    { lod, keepColor: true },
+  );
+}
+
+// thin strip conforming to the hull along z on segment m at fraction t (side ±1)
 function surfaceStrip(
   m,
   t,
@@ -69,35 +162,20 @@ function surfaceStrip(
 // ---------------------------------------------------------------------------
 function addEngines({ add }) {
   const engines = [];
-  const zS = HULL.zStern;
-  const layout = [
-    [-46, -12, 19, 0],
-    [0, -12, 19, 0],
-    [46, -12, 19, 0],
-    [-24, 26, 11, 1],
-    [24, 26, 11, 1],
-    [-30, -46, 11, 1],
-    [30, -46, 11, 1],
-    [-74, 0, 7.5, 2],
-    [74, 0, 7.5, 2],
-  ];
-  // liner gradient rim -> throat: dark blue-grey at the lip, dim blue, brighter blue, white throat
+  const zF = HULL.zFace;
   const LINER = [
     rgb(0x3a4a60, 0.9),
     rgb(PAL.engineGlow, 0.3),
     rgb(PAL.engineGlow, 0.7),
     rgb(0xc8e4ff, 1.05),
   ];
-  for (const [ex, ey, r, tier] of layout) {
-    // bells stand 1.8 r proud of the stern wall and flare at the mouth; the liner recedes from the lip to
-    // a throat at the wall, so the bell has real depth around the (smaller) shared glow disc
-    const len = r * 1.8;
-    const z0 = zS - 3;
+  ENGINES.forEach(([ex, ey, r, len], idx) => {
+    const big = idx === 0;
+    const z0 = zF - 3;
     const mouth = z0 + len;
     for (const lod of [0, 1, 2]) {
-      if (lod === 2 && tier === 2) continue;
-      const seg = lod === 0 ? 20 : lod === 1 ? 12 : 8;
-      // outer shroud: slight waist, flared lip
+      if (lod === 2 && r < 7) continue;
+      const seg = lod === 0 ? (big ? 28 : 18) : lod === 1 ? (big ? 16 : 10) : 8;
       add(
         loftRings(
           tubeRings(
@@ -105,15 +183,15 @@ function addEngines({ add }) {
             ey,
             lod < 2
               ? [
-                  [z0 - 1, r * 0.94],
-                  [z0 + len * 0.3, r * 0.96],
+                  [z0 - 1, r * 0.9],
+                  [z0 + len * 0.3, r * 0.94],
                   [z0 + len * 0.62, r * 1.0],
                   [mouth - r * 0.25, r * 1.08],
                   [mouth, r * 1.15],
                   [mouth, r * 1.0],
                 ]
               : [
-                  [z0 - 1, r * 0.94],
+                  [z0 - 1, r * 0.9],
                   [mouth, r * 1.12],
                 ],
             seg,
@@ -128,9 +206,9 @@ function addEngines({ add }) {
         { lod, keepColor: true },
       );
       if (lod === 0)
-        for (const f of [0.2, 0.5]) {
+        for (const f of [0.22, 0.52]) {
           const za = z0 + len * f;
-          const rr = r * (0.95 + 0.06 * f);
+          const rr = r * (0.93 + 0.07 * f);
           add(
             loftRings(
               tubeRings(
@@ -154,8 +232,7 @@ function addEngines({ add }) {
             { lod, keepColor: true },
           );
         }
-      // lit liner (faces inward): from the lip down to the throat at the stern wall (a plain cone at
-      // LOD 2, where the tri budget is tight)
+      // lit liner (faces inward): from the lip down to the throat at the stern wall
       add(
         loftRings(
           tubeRings(
@@ -182,7 +259,6 @@ function addEngines({ add }) {
         "engineGlow",
         { lod, keepColor: true },
       );
-      // stiffening ledge inside the liner (LOD 0)
       if (lod === 0) {
         const zl = mouth - len * 0.36;
         const rl = r * 0.82;
@@ -217,79 +293,18 @@ function addEngines({ add }) {
         { lod, keepColor: true },
       );
     }
-    // glow disc / plume radius: the shared disc reads out to ~0.8 x this and the plume flares to 1.3 x,
-    // so 0.7 x the mouth keeps the glow inside the liner with the dark rim and lip visible around it
+    // glow disc / plume radius: 0.7 x the mouth keeps the shared glow inside the liner with the dark rim
     engines.push({
       pos: [ex, ey, +mouth.toFixed(1)],
       r: +(r * 0.7).toFixed(1),
     });
-  }
-  // stern wall furniture: vent grilles and hatches between the bells (LOD 0), two tall louvred vents
-  // beside the outer bells (LOD 0/1)
-  const vent = (x, y, w, h, lod = 0) => {
-    add(box(x, y, zS + 0.4, w + 1.2, h + 1.2, 0.8), "hull", {
-      color: new THREE.Color(PAL.dorsal).multiplyScalar(0.8),
-      texel: 1 / 8,
-      lod,
-    });
-    add(box(x, y, zS + 0.9, w, h, 0.5), "dark", {
-      color: 0x22262c,
-      texel: 1 / 4,
-      lod,
-    });
-    if (lod === 0)
-      for (let yy = y - h / 2 + 1.2; yy < y + h / 2 - 0.6; yy += 1.8)
-        add(box(x, yy, zS + 1.25, w - 0.6, 0.5, 0.3), "dark", {
-          color: PAL.darkLit,
-          texel: 1 / 3,
-          lod,
-        });
-  };
-  for (const lod of [0, 1]) {
-    vent(-66, -20, 8, 16, lod);
-    vent(66, -20, 8, 16, lod);
-  }
-  vent(0, 42, 20, 6);
-  for (const [x, y] of [
-    [-64, -34],
-    [64, -34],
-    [-10, -62],
-    [10, -62],
-    [-46, 14],
-    [46, 14],
-  ])
-    add(box(x, y, zS + 0.6, 3.2, 3.2, 1.2), "dark", {
-      color: 0x2e3238,
-      texel: 1 / 2,
-      lod: 0,
-    });
-  // stern machinery between the nozzles: pump housings, manifolds, vertical fuel pipes, a raised rim
-  for (const [x, y, w, h, d] of [
-    [-23, -14, 7, 10, 9],
-    [23, -14, 7, 10, 9],
-    [0, 10, 26, 5, 7],
-    [0, -36, 22, 5, 6],
-    [-56, 12, 9, 7, 6],
-    [56, 12, 9, 7, 6],
-    [-50, -38, 8, 6, 6],
-    [50, -38, 8, 6, 6],
-  ])
-    add(box(x, y, zS + d / 2 - 1, w, h, d), "dark", {
-      color: PAL.darkLit,
-      texel: 1 / 3,
-      lod: 0,
-    });
-  for (const x of [-23, 23])
-    add(cylY(1.2, 1.2, 30, 6).translate(x, -12, zS + 4), "dark", {
-      color: 0x2e3238,
-      texel: 1 / 2,
-      lod: 0,
-    });
+  });
+  // stern face furniture: a raised rim around the face, vent grilles and manifolds between the bells
   const rim = (dz, k) => {
-    const s = stationAt(zS + dz);
+    const s = stationAt(zF - 0.5);
     return ringFromStation({
       ...s,
-      z: zS + dz,
+      z: zF + dz,
       w: s.w + k,
       yTop: s.yTop + k,
       yBot: s.yBot - k,
@@ -305,17 +320,53 @@ function addEngines({ add }) {
       "hull",
       { lod, keepColor: true },
     );
+  const vent = (x, y, w, h) => {
+    add(box(x, y, zF + 0.4, w + 1.2, h + 1.2, 0.8), "hull", {
+      color: new THREE.Color(PAL.dorsal).multiplyScalar(0.8),
+      texel: 1 / 8,
+      lod: 0,
+    });
+    add(box(x, y, zF + 0.9, w, h, 0.5), "dark", {
+      color: 0x22262c,
+      texel: 1 / 4,
+      lod: 0,
+    });
+    for (let yy = y - h / 2 + 1.2; yy < y + h / 2 - 0.6; yy += 1.8)
+      add(box(x, yy, zF + 1.25, w - 0.6, 0.5, 0.3), "dark", {
+        color: PAL.darkLit,
+        texel: 1 / 3,
+        lod: 0,
+      });
+  };
+  // the gaps in the nozzle ring sit at ±30° / ±90° / ±150° around the centre drum (0, 6.5)
+  vent(-15, 36, 4, 5);
+  vent(15, 36, 4, 5);
+  vent(-16, -23, 4, 4);
+  vent(16, -23, 4, 4);
+  for (const [x, y, w, h, d] of [
+    [-32, 6.5, 4, 9, 6],
+    [32, 6.5, 4, 9, 6],
+  ])
+    add(box(x, y, zF + d / 2 - 1, w, h, d), "dark", {
+      color: PAL.darkLit,
+      texel: 1 / 3,
+      lod: 0,
+    });
+  for (const x of [-32, 32])
+    add(cylY(0.9, 0.9, 13, 6).translate(x, 6.5, zF + 3), "dark", {
+      color: 0x2e3238,
+      texel: 1 / 2,
+      lod: 0,
+    });
   return engines;
 }
 
 // ---------------------------------------------------------------------------
-// plating at the large scale: raised transverse seams (40-60 m plates), longitudinal rails on the big
-// faces, raised plate groups straddling the dorsal ridge
+// plating at the large scale: raised transverse seams and longitudinal rails on the big faces
 // ---------------------------------------------------------------------------
 function addPlating({ add }) {
-  const st = (z) => stationAt(z);
   const ring = (zz, k) => {
-    const s = st(zz);
+    const s = stationAt(zz);
     return ringFromStation({
       ...s,
       w: s.w + k,
@@ -323,8 +374,12 @@ function addPlating({ add }) {
       yBot: s.yBot - k,
     });
   };
-  const SEAM = rgb(PAL.dorsal, 0.78);
   for (const z of SEAMS) {
+    // seams on the charcoal beak darken with it (the hull's beak tint is 0.3 forward of r ~285)
+    const SEAM = rgb(
+      PAL.dorsal,
+      0.78 * lerp(0.25, 1, smoothstep(275, 310, toRef(z))),
+    );
     add(
       loftRings(
         [
@@ -351,61 +406,66 @@ function addPlating({ add }) {
       { lod: 1, keepColor: true },
     );
   }
-  // longitudinal rails on the upper flanks and the belly (LOD 0)
+  // longitudinal rails on the shoulders and the belly (LOD 0)
   const RAIL = rgb(PAL.dorsal, 0.85);
   for (const side of [-1, 1])
-    for (const [m, t, z0, z1] of [
-      [2, 0.25, -470, 520],
-      [3, 0.75, -420, 530],
-      [10, 0.5, -400, 500],
-      [8, 0.2, -300, 510],
+    for (const [m, t, r0, r1] of [
+      [2, 0.5, 300, 1000],
+      [4, 0.3, 300, 1010],
+      [13, 0.5, 340, 1000],
+      [12, 0.7, 420, 1010],
     ])
       add(
-        loftRings(surfaceStrip(m, t, side, z0, z1, 1.6, 0.5), {
-          sharp: new Set([0, 1, 2, 3]),
-          faceColor: () => RAIL,
-          texel: 1 / 6,
-        }),
+        loftRings(
+          surfaceStrip(m, t, side, fromRef(r0), fromRef(r1), 1.6, 0.5),
+          {
+            sharp: new Set([0, 1, 2, 3]),
+            faceColor: () => RAIL,
+            texel: 1 / 6,
+          },
+        ),
         "hull",
         { lod: 0, keepColor: true },
       );
-  // raised plate groups straddling the dorsal ridge: low chamfered slabs with a darker top
-  for (const [zc, len] of RIDGE_SLABS) {
-    const s = st(zc);
-    const w = s.wTop * 1.7;
-    const y = s.yTop;
-    const slab = (dz, dw, dy) => [
-      [-w / 2 + dw, y + dy, zc - len / 2 + dz],
-      [w / 2 - dw, y + dy, zc - len / 2 + dz],
-      [w / 2 - dw, y + dy, zc + len / 2 - dz],
-      [-w / 2 + dw, y + dy, zc + len / 2 - dz],
-    ];
+}
+
+// ---------------------------------------------------------------------------
+// painted markings: dark slate rectangles on both flanks, yellow hazard patches near the bow, a dark
+// slate band around the nose
+// ---------------------------------------------------------------------------
+function addMarkings({ add }) {
+  const SLATE = rgb(PAL.slate, 1.1);
+  const HAZ = rgb(PAL.hazard);
+  for (const side of [-1, 1]) {
     for (const lod of [0, 1]) {
-      add(
-        loftRings([slab(0, 0, -0.6), slab(1.6, 1.6, 1.3)], {
-          sharp: new Set([0, 1, 2, 3]),
-          faceColor: () => rgb(PAL.dorsal, 0.9),
-          texel: 1 / 8,
-        }),
-        "hull",
-        { lod, keepColor: true },
-      );
-      add(
-        ringCap(slab(1.6, 1.6, 1.3), [0, 1, 0], {
-          color: rgb(PAL.dorsal, 0.82),
-          texel: 1 / 10,
-        }),
-        "hull",
-        { lod, keepColor: true },
-      );
+      for (const [r0, r1, y0, y1] of SLATE_MARKS)
+        decal(add, side, r0, r1, y0, y1, SLATE, "paint", lod);
+      for (const [r0, r1, y0, y1] of HAZARD_MARKS) {
+        if (lod === 1) {
+          // one patch at the ladder's mean brightness (four bars cover ~55 % of the mark)
+          decal(add, side, r0, r1, y0, y1, rgb(PAL.hazard, 0.55), "paint", lod);
+          continue;
+        }
+        // the reference paints each hazard mark as a ladder of four thin vertical bars
+        const pitch = (r1 - r0) / 4;
+        for (let k = 0; k < 4; k++) {
+          const a = r0 + k * pitch;
+          decal(add, side, a, a + pitch * 0.55, y0, y1, HAZ, "paint", lod);
+        }
+      }
     }
-    if (len > 30)
-      for (const x of [-w * 0.3, w * 0.3])
-        add(box(x, y + 1.9, zc, 3, 1.2, len * 0.5), "dark", {
-          color: PAL.darkLit,
-          texel: 1 / 3,
-          lod: 0,
-        });
+    // hazard sill under the chin grille
+    decal(
+      add,
+      side,
+      CHIN_GRILLE.r0 - 4,
+      CHIN_GRILLE.r1 + 4,
+      CHIN_GRILLE.y0 - 3.5,
+      CHIN_GRILLE.y0 - 1,
+      HAZ,
+      "paint",
+      0,
+    );
   }
 }
 
@@ -415,69 +475,29 @@ function addPlating({ add }) {
 function addGreebles({ add, cuts }) {
   const rand = rng(4021);
   const st = (z) => stationAt(z);
-  // dark-blue painted bands near the bow (colour accents, LOD 0/1)
-  for (const [z, w] of [
-    [-486, 7],
-    [-402, 9],
-    [-236, 5],
-  ]) {
-    const mk = (zz) => {
-      const s = st(zz);
-      return ringFromStation({
-        ...s,
-        w: s.w + 0.25,
-        yTop: s.yTop + 0.25,
-        yBot: s.yBot - 0.25,
-      });
-    };
-    for (const lod of [0, 1])
-      add(
-        loftRings([mk(z - w / 2), mk(z + w / 2)], {
-          faceColor: () => rgb(PAL.insignia, 1.1),
-        }),
-        "paint",
-        { lod, keepColor: true },
-      );
-  }
-  // ridge-edge rails
-  for (const side of [-1, 1]) {
-    const zs = [];
-    for (let z = -430; z <= 520; z += 34) zs.push(z);
-    add(
-      barAlong(
-        zs,
-        (z) => [
-          side * (st(z).wTop - 0.4),
-          st(z).yTop - (st(z).yTop - st(z).yWide) * 0.02 + 0.3,
-        ],
-        1.3,
-        0.7,
-        { color: rgb(0x33373e), texel: 1 / 5 },
-      ),
-      "dark",
-      { lod: 0, keepColor: true },
-    );
-  }
-  // raised plates: upper flanks (darker), belly (paler); aligned to the local surface, clear of the cuts
-  const plate = (z, m, t, side, lz, lw, colorHex, tone) => {
+  // raised plates on the shoulders (darker) and the belly (paler), aligned to the surface, clear of the bays
+  const plate = (r, m, t, side, lz, lw, colorHex, tone) => {
+    const z = fromRef(r);
     if (inCut(cuts, z, m, side, lz / 2 + 3)) return;
     const f = hullFrame(z, m, t, side);
     const g = box(0, 0.45, 0, lw, 0.9, lz);
     placeOn(g, f.p, f.n, FWD);
+    // plates on the charcoal beak darken with it
+    const beak = lerp(0.25, 1, smoothstep(275, 310, r));
     add(g, "hull", {
-      color: new THREE.Color(colorHex).multiplyScalar(tone),
+      color: new THREE.Color(colorHex).multiplyScalar(tone * beak),
       texel: 1 / 12,
       lod: 0,
     });
   };
   for (let i = 0; i < 26; i++) {
-    const z = -470 + rand() * 990;
+    const r = 170 + rand() * 850;
     const side = rand() < 0.5 ? -1 : 1;
     const m = rand() < 0.5 ? 2 : 3;
     plate(
-      z,
+      r,
       m,
-      m === 2 ? 0.35 + rand() * 0.25 : 0.1 + rand() * 0.25,
+      0.2 + rand() * 0.6,
       side,
       14 + rand() * 24,
       5 + rand() * 6,
@@ -486,12 +506,12 @@ function addGreebles({ add, cuts }) {
     );
   }
   for (let i = 0; i < 14; i++) {
-    const z = -380 + rand() * 900;
-    const m = rand() < 0.5 ? 9 : 10;
+    const r = 200 + rand() * 820;
+    const m = rand() < 0.5 ? 12 : 13;
     plate(
-      z,
+      r,
       m,
-      m === 9 ? 0.1 + rand() * 0.3 : 0.2 + rand() * 0.6,
+      0.15 + rand() * 0.7,
       rand() < 0.5 ? -1 : 1,
       12 + rand() * 24,
       4 + rand() * 5,
@@ -499,59 +519,44 @@ function addGreebles({ add, cuts }) {
       0.85 + rand() * 0.3,
     );
   }
-  // hatch rows: short rows of small dark hatches on the ridge shoulders and the flanks
-  const hatchRow = (z, m, t, side, n, pitch) => {
+  // hatch rows: short rows of small dark hatches on the shoulders, the belt and the belly
+  const hatchRow = (r, m, t, side, n, pitch) => {
     for (let k = 0; k < n; k++) {
-      const zz = z + k * pitch;
-      if (inCut(cuts, zz, m, side, 3)) continue;
-      const f = hullFrame(zz, m, t, side);
+      const z = fromRef(r + k * pitch);
+      if (inCut(cuts, z, m, side, 3)) continue;
+      const f = hullFrame(z, m, t, side);
       const g = box(0, 0.3, 0, 2.2, 0.6, 2.2);
       placeOn(g, f.p, f.n, FWD);
       add(g, "dark", { color: 0x2e3238, texel: 1 / 2, lod: 0 });
     }
   };
-  for (let i = 0; i < 10; i++) {
-    const z = -440 + rand() * 480;
+  for (let i = 0; i < 12; i++)
     hatchRow(
-      z,
-      1,
-      0.3 + rand() * 0.4,
-      rand() < 0.5 ? -1 : 1,
-      4 + Math.floor(rand() * 4),
-      4.2,
-    );
-  }
-  for (let i = 0; i < 16; i++) {
-    const z = -400 + rand() * 900;
-    hatchRow(
-      z,
+      120 + rand() * 880,
       rand() < 0.5 ? 2 : 3,
       0.15 + rand() * 0.6,
       rand() < 0.5 ? -1 : 1,
       3 + Math.floor(rand() * 5),
       4.4,
     );
-  }
-  for (let i = 0; i < 10; i++) {
-    const z = -300 + rand() * 780;
+  for (let i = 0; i < 8; i++)
     hatchRow(
-      z,
-      10,
+      180 + rand() * 800,
+      13,
       0.2 + rand() * 0.5,
       rand() < 0.5 ? -1 : 1,
       3 + Math.floor(rand() * 4),
       4.4,
     );
-  }
-  // closed secondary bay doors along the lower flank with a lit sliver
+  // closed secondary bay doors along the belt forward of the trough, with a lit sliver
   for (const side of [-1, 1])
-    for (let i = 0; i < 6; i++) {
-      const z = -110 + i * 62;
-      const f = hullFrame(z, 8, 0.55, side);
-      const g = box(0, 0.35, 0, 7, 0.7, 13);
+    for (let i = 0; i < 5; i++) {
+      const z = fromRef(380 + i * 44);
+      const f = hullFrame(z, 8, 0.5, side);
+      const g = box(0, 0.35, 0, 9, 0.7, 12);
       placeOn(g, f.p, f.n, FWD);
       add(g, "dark", { color: PAL.darkLit, texel: 1 / 4, lod: 0 });
-      const w = box(0, 0.8, 0, 6.2, 0.2, 0.4);
+      const w = box(0, 0.8, -4.2, 8, 0.2, 0.4);
       placeOn(w, f.p, f.n, FWD);
       add(w, "windows", { color: 0xffb070, lod: 0, uv: "keep" });
     }
@@ -566,113 +571,157 @@ function addGreebles({ add, cuts }) {
           p.z,
         ),
         mat,
-        { color: colorHex, texel: 1 / 4, lod },
+        {
+          color: colorHex,
+          texel: 1 / 4,
+          lod,
+        },
       );
     }
   };
-  dome(new THREE.Vector3(0, st(-470).yTop + 1.0, -470), 3.2, "hull", PAL.belly);
-  dome(new THREE.Vector3(0, st(-72).yTop + 2.2, -72), 4.5, "dark", PAL.darkLit);
-  for (const side of [-1, 1])
-    dome(
-      new THREE.Vector3(side * 17, st(478).yTop - 2, 478),
-      4,
-      "hull",
-      PAL.belly,
-    );
   dome(
-    new THREE.Vector3(0, st(500).yTop + 0.8, 500),
-    6.5,
+    new THREE.Vector3(0, st(fromRef(126)).yTop + 0.5, fromRef(126)),
+    2.6,
+    "hull",
+    PAL.belly,
+  );
+  for (const side of [-1, 1]) {
+    const f = hullFrame(fromRef(1015), 2, 0.5, side);
+    dome(f.p.clone().addScaledVector(f.n, -1), 3.5, "hull", PAL.belly);
+  }
+  dome(
+    new THREE.Vector3(0, st(fromRef(1025)).yTop + 0.5, fromRef(1025)),
+    4.5,
     "hull",
     PAL.belly,
     [0, 1],
   );
-  // antennas and masts
+  // small masts on the forward ridge and the aft deck
   const mast = (x, y, z, h, r = 0.45, lod = 0) =>
     add(cylY(r * 0.7, r, h, 5).translate(x, y + h / 2, z), "dark", {
       color: 0x3a3e46,
       texel: 1 / 2,
       lod,
     });
-  mast(0, st(-500).yTop, -500, 26, 0.5);
-  mast(6, st(-60).yTop, -60, 18, 0.4);
-  mast(-9, st(-200).yTop, -200, 14, 0.4);
-  for (const side of [-1, 1]) mast(side * 7, st(486).yTop, 486, 20, 0.45);
-  // dishes: thin discs on short stalks, tilted forward-up
-  const dish = (p, r, tilt, lod = 0) => {
+  mast(0, st(fromRef(140)).yTop, fromRef(140), 16, 0.45);
+  mast(-6, st(fromRef(112)).yTop - 1, fromRef(112), 10, 0.4);
+  for (const side of [-1, 1])
+    mast(side * 9, st(fromRef(1018)).yTop - 1, fromRef(1018), 14, 0.45);
+  // dishes: thin discs on short stalks
+  const dish = (p, r, tilt) => {
     const g = cylY(r, r * 0.35, 1.2, 12);
     g.rotateX(-tilt);
     g.translate(p.x, p.y, p.z);
-    add(g, "dark", { color: 0x50555e, texel: 1 / 3, lod });
+    add(g, "dark", { color: 0x50555e, texel: 1 / 3, lod: 0 });
     add(cylY(0.5, 0.7, 5, 5).translate(p.x, p.y - 2.5, p.z), "dark", {
       color: 0x3a3e46,
       texel: 1 / 2,
-      lod,
+      lod: 0,
     });
   };
-  const fA = hullFrame(-250, 1, 0.5, -1);
-  dish(fA.p.clone().addScaledVector(fA.n, 5), 4, 0.8);
-  dish(new THREE.Vector3(12, st(30).yTop + 5, 30), 4, 0.9);
-  dish(new THREE.Vector3(0, st(516).yTop + 5, 516), 6, -1.1);
-  // bow sensor tip (dark cone)
+  dish(
+    new THREE.Vector3(0, st(fromRef(1035)).yTop + 4.5, fromRef(1035)),
+    4.5,
+    -1.1,
+  );
+  const fA = hullFrame(fromRef(180), 1, 0.5, -1);
+  dish(fA.p.clone().addScaledVector(fA.n, 4), 3, 0.8);
+  // bow sensor tip: dark cone with a dished end
   for (const lod of [0, 1])
-    add(cylZ(0.5, 3.3, 34, 8).translate(0, 0, HULL.zBow + 18), "dark", {
+    add(cylZ(0.5, 2.6, 26, 8).translate(0, -0.6, HULL.zBow + 12), "dark", {
       color: 0x3a3e46,
       texel: 1 / 4,
       lod,
     });
 }
 
-// window rows on the upper flanks (warm) — scale cues; LOD 0 only
-function addWindows({ add }) {
+// window rows along the flanks (scale cues); LOD 0 only, with LOD-1 bars for the long aft rows
+function addWindows({ add, cuts }) {
+  const win = (f, color, w = 1.5, len = 1.0) => {
+    const g = box(0, 0.25, 0, w, 0.5, len);
+    placeOn(g, f.p, f.n, FWD);
+    add(g, "windows", { color, lod: 0, uv: "keep" });
+  };
   for (const side of [-1, 1]) {
-    for (let z = -330; z <= 520; z += 14) {
-      if (hash(Math.round(z), side + 3, 51) < 0.28) continue;
-      const f = hullFrame(z, 2, 0.14, side);
-      const g = box(0, 0.25, 0, 1.6, 0.5, 1.0);
-      placeOn(g, f.p, f.n, FWD);
-      add(g, "windows", { color: PAL.windowWarm, lod: 0, uv: "keep" });
+    // upper row just under the ridge edge, aft half
+    for (let r = 600; r <= 1000; r += 6) {
+      if (hash(r, side + 3, 51) < 0.28) continue;
+      win(hullFrame(fromRef(r), 1, 0.55, side), PAL.windowWarm);
     }
-    for (let z = -240; z <= 480; z += 22) {
-      if (hash(Math.round(z), side + 9, 53) < 0.4) continue;
-      const f = hullFrame(z, 3, 0.62, side);
-      const g = box(0, 0.25, 0, 1.4, 0.5, 0.9);
-      placeOn(g, f.p, f.n, FWD);
-      add(g, "windows", { color: PAL.windowCool, lod: 0, uv: "keep" });
+    // shoulder row at ~+20 above the trough
+    for (let r = 600; r <= 880; r += 7) {
+      if (hash(r, side + 5, 52) < 0.35) continue;
+      win(hullFrame(fromRef(r), 5, 0.45, side), PAL.windowWarm);
+    }
+    // belt row (mid flank) along the forward body: the ROTS still shows it as a bright string of
+    // lights from the beak to the trough
+    for (let r = 150; r <= 596; r += 4.5) {
+      const z = fromRef(r);
+      if (hash(r, side + 7, 53) < 0.22 || inCut(cuts, z, 8, side, 6)) continue;
+      win(hullFrame(z, 8, 0.3, side), PAL.windowWarm, 1.4, 2.2);
+    }
+    // lower row near the bottom of the aft half of the forward body
+    for (let r = 430; r <= 600; r += 8) {
+      if (hash(r, side + 9, 54) < 0.3) continue;
+      win(hullFrame(fromRef(r), 13, 0.56, side), PAL.windowCool, 1.2);
+    }
+    // LOD 1 bars for the two long rows
+    for (const [m, t, r0, r1, color] of [
+      [1, 0.55, 600, 1000, PAL.windowWarm],
+      [8, 0.25, 200, 596, PAL.windowWarm],
+    ]) {
+      const zs = [];
+      for (let r = r0; r <= r1; r += 60) zs.push(fromRef(r));
+      add(
+        barAlong(
+          zs,
+          (z) => {
+            const f = hullFrame(z, m, t, side);
+            return [f.p.x + f.n.x * 0.2, f.p.y + f.n.y * 0.2];
+          },
+          0.4,
+          0.4,
+          { color: rgb(color, 0.8) },
+        ),
+        "windows",
+        { lod: 1, keepColor: true },
+      );
     }
   }
 }
 
 // ---------------------------------------------------------------------------
 // weathering decals: scorch rings around a few fixed points (dark ring + ash core) and long soot
-// streaks running forward from the stern vents
+// streaks running forward from the stern
 // ---------------------------------------------------------------------------
 function addWeathering({ add, cuts }) {
   const SCORCH = [
-    [-210, 2, 0.5, 1, 7],
-    [60, 3, 0.3, -1, 9],
-    [300, 9, 0.5, 1, 6],
-    [-60, 0, 0.6, -1, 5.5],
-    [470, 3, 0.6, -1, 8],
+    [330, 2, 0.5, 1, 7],
+    [560, 3, 0.3, -1, 9],
+    [820, 13, 0.5, 1, 6],
+    [480, 12, 0.6, -1, 5.5],
+    [960, 3, 0.6, -1, 8],
   ];
-  for (const [z, m, t, side, r] of SCORCH) {
-    const f = hullFrame(z, m, t, side);
-    const ring = ringSlab(r, r * 0.55, 18, 0.2, 0, { color: rgb(0x1a1614) });
+  for (const [r, m, t, side, rad] of SCORCH) {
+    const f = hullFrame(fromRef(r), m, t, side);
+    const ring = ringSlab(rad, rad * 0.55, 18, 0.2, 0, {
+      color: rgb(0x1a1614),
+    });
     placeOn(ring, f.p.clone().addScaledVector(f.n, 0.04), f.n, FWD);
     add(ring, "paint", { lod: 0, keepColor: true });
-    const ash = ringSlab(r * 0.55, r * 0.15, 12, 0.2, 0, {
+    const ash = ringSlab(rad * 0.55, rad * 0.15, 12, 0.2, 0, {
       color: rgb(0x55514c),
     });
     placeOn(ash, f.p.clone().addScaledVector(f.n, 0.04), f.n, FWD);
     add(ash, "paint", { lod: 0, keepColor: true });
   }
-  // soot streaks: dark warm strips 60-150 m long trailing forward of the stern, on the flanks and belly
   const rand = rng(913);
   const SOOT = rgb(PAL.soot);
   for (const side of [-1, 1]) {
     for (let i = 0; i < 9; i++) {
-      const m = i < 5 ? 2 : i < 7 ? 3 : 9;
+      const m = i < 5 ? 2 : i < 7 ? 3 : 13;
       const t = 0.1 + rand() * 0.8;
-      const z1 = 500 + rand() * 30;
+      const z1 = fromRef(1000 + rand() * 30);
       const z0 = z1 - 60 - rand() * 90;
       if (inCut(cuts, (z0 + z1) / 2, m, side, (z1 - z0) / 2)) continue;
       add(
