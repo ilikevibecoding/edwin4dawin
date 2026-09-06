@@ -272,6 +272,45 @@ float slopePdfPeaked(vec2 sh, vec2 va, float st, float mss) {
 const float SPARK_SHARE = 0.5;
 const float GLITTER_CAP = 2.5;
 const float CREST = 2.5;
+// Slope offset (in the shader's slope convention: the facet normal is N.xz / N.y minus the result) of the
+// sparkle facets under the pixel, and the share 'resolved' of the variance 'mss' they carry.
+vec2 sparkleSlope(vec2 wp, vec2 dx, vec2 dy, float t, float mss, out float resolved) {
+  vec2 wd = uWindDir, wc = vec2(-wd.y, wd.x);
+  // pixel footprint along the wind / along the crests, in the metric of the cells
+  float footEff = max(abs(dot(dx, wd)) + abs(dot(dy, wd)), (abs(dot(dx, wc)) + abs(dot(dy, wc))) / CREST);
+  vec2 s = vec2(0.0);
+  resolved = 0.0;
+  // the field rides downwind with the short waves (they travel toward -wd)
+  vec2 gp = wp + wd * (0.9 * t);
+  vec2 gq = vec2(dot(gp, wd), dot(gp, wc) / CREST);
+  // octaves of 0.7 m * 2^o (o <= 8): the finest whose cell spans more than 2 px fades in until it spans
+  // 4 px ('u') and carries most of the share (grain, not blobs), the next less, the third fades out as the
+  // first fades in
+  float oF = log2(max(footEff / 0.7, 1e-4)) + 1.0;
+  int o0 = int(floor(oF)) + 1;
+  float u = float(o0) - oF;
+  if (o0 < 0) { o0 = 0; u = 1.0; }
+  float w0 = smoothstep(0.0, 1.0, u);
+  for (int i = 0; i < 3; i++) {
+    int o = o0 + i;
+    if (o > 8) break;
+    float fo = float(o);
+    float cell = 0.7 * exp2(fo);
+    float f = SPARK_SHARE * 0.5;
+    float w = i == 0 ? w0 : (i == 2 ? 0.45 * (1.0 - w0) : 0.75);
+    if (w < 0.003) continue;
+    vec2 q = gq / cell;
+    // two independent value-noise vectors (0.214 rms per component) rotated by a slow phase: a unit-variance
+    // Gaussian-like process whose rate follows the wave period of the cell size
+    float ph = 1.6 * t * inversesqrt(cell) + 0.7 * fo;
+    vec2 n1 = vec2(vnoise(q + 3.1 + 17.0 * fo), vnoise(q * 1.07 + 9.7 + 17.0 * fo)) - 0.5;
+    vec2 n2 = vec2(vnoise(q * 0.93 + 5.3 + 17.0 * fo), vnoise(q * 1.11 + 12.9 + 17.0 * fo)) - 0.5;
+    vec2 n = (n1 * cos(ph) + n2 * sin(ph)) * 4.67;
+    s += (sqrt(0.5 * mss * f) * w) * n;
+    resolved += f * w * w;
+  }
+  return s;
+}
 float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, float t) {
   float NdotL = dot(N, L);
   float NdotV = dot(N, V);
@@ -287,40 +326,8 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, f
   float P;
   // the field is only evaluated where the highlight (widened to catch the field's tails) is visible
   if (slopePdf(sh, va, st, mss * 3.0) * mss > 1e-4) {
-    vec2 wd = uWindDir, wc = vec2(-wd.y, wd.x);
-    // pixel footprint along the wind / along the crests, in the metric of the cells
-    float footEff = max(abs(dot(dx, wd)) + abs(dot(dy, wd)), (abs(dot(dx, wc)) + abs(dot(dy, wc))) / CREST);
-    vec2 s = vec2(0.0);   // slope offset of the resolved facets
-    float resolved = 0.0; // fraction of the variance they carry
-    // the field rides downwind with the short waves (they travel toward -wd)
-    vec2 gp = wp + wd * (0.9 * t);
-    vec2 gq = vec2(dot(gp, wd), dot(gp, wc) / CREST);
-    // octaves of 0.7 m * 2^o (o <= 8): the finest whose cell spans more than 2 px fades in until it spans
-    // 4 px ('u') and carries most of the share (grain, not blobs), the next less, the third fades out as the
-    // first fades in
-    float oF = log2(max(footEff / 0.7, 1e-4)) + 1.0;
-    int o0 = int(floor(oF)) + 1;
-    float u = float(o0) - oF;
-    if (o0 < 0) { o0 = 0; u = 1.0; }
-    float w0 = smoothstep(0.0, 1.0, u);
-    for (int i = 0; i < 3; i++) {
-      int o = o0 + i;
-      if (o > 8) break;
-      float fo = float(o);
-      float cell = 0.7 * exp2(fo);
-      float f = SPARK_SHARE * 0.5;
-      float w = i == 0 ? w0 : (i == 2 ? 0.45 * (1.0 - w0) : 0.75);
-      if (w < 0.003) continue;
-      vec2 q = gq / cell;
-      // two independent value-noise vectors (0.214 rms per component) rotated by a slow phase: a unit-variance
-      // Gaussian-like process whose rate follows the wave period of the cell size
-      float ph = 1.6 * t * inversesqrt(cell) + 0.7 * fo;
-      vec2 n1 = vec2(vnoise(q + 3.1 + 17.0 * fo), vnoise(q * 1.07 + 9.7 + 17.0 * fo)) - 0.5;
-      vec2 n2 = vec2(vnoise(q * 0.93 + 5.3 + 17.0 * fo), vnoise(q * 1.11 + 12.9 + 17.0 * fo)) - 0.5;
-      vec2 n = (n1 * cos(ph) + n2 * sin(ph)) * 4.67;
-      s += (sqrt(0.5 * mss * f) * w) * n;
-      resolved += f * w * w;
-    }
+    float resolved;
+    vec2 s = sparkleSlope(wp, dx, dy, t, mss, resolved);
     // the facets share the anisotropy of the analytic distribution
     s = va * (dot(s, va) * sqrt(st)) + vc * (dot(s, vc) * inversesqrt(st));
     P = slopePdfPeaked(sh - s, va, st, mss * (1.0 - resolved));
@@ -351,11 +358,23 @@ float reflObjectDepth(vec2 uv, float skyW) {
   w = mix(w, vec4(skyW), step(0.99999, d));
   return mix(mix(w.x, w.y, f.x), mix(w.z, w.w, f.x), f.y);
 }
-vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist) {
+vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist, vec2 dx, vec2 dy, float t) {
   vec4 rc = uReflVP * vec4(P, 1.0);
   if (rc.w <= 0.0) return vec4(0.0);
   float wp = rc.w; // depth of P for the mirror camera (equals its depth for the real camera)
   vec2 uv0 = rc.xy / wp * 0.5 + 0.5;
+  // The sparkle facets (the same field the glitter rides on) tilt the mirror too: the light of a distant
+  // window lands on the cells whose facet happens to point at it, so a lit tower or a shore light reflects
+  // as a column of glints scattered along the wave slopes over its mirror image, not as one soft blob, and
+  // a near reflection (the aircraft, a hull) shatters at its edges the way a mirror image does in a chop.
+  // Evaluated only where the coarse mip shows anything reflected within reach, which is where it can matter.
+  float mssU = mss;
+  if (textureLod(uReflTex, uv0, min(uReflParams.w, 6.0)).a > 0.002) {
+    float resolved;
+    vec2 s = sparkleSlope(P.xz, dx, dy, t, mss, resolved);
+    N = normalize(vec3(N.x / N.y - s.x, 1.0, N.z / N.y - s.y));
+    mssU = mss * (1.0 - resolved);
+  }
   // The flat mirror sees an object along this ray at depth wq. The real reflected ray leaves P tilted by
   // the wave slope and travels about the same path length L, so its hit point is displaced by (R - R0) L:
   // that is the mirror image displaced by the same vector (clip-space displacement per metre: dclip).
@@ -377,13 +396,15 @@ vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist) {
   L = max(wq - wp, 0.0) * k;
   rc1 = rc * (wq / wp) + dclip * L;
   vec2 uv = rc1.xy / max(rc1.w, 1e-3) * 0.5 + 0.5;
-  uv = uv0 + clamp(uv - uv0, vec2(-0.08), vec2(0.08));
+  // (a distant light's glints reach a good part of the image up and down the mirror image: the bound only
+  // keeps a wild tilt from sampling across the whole texture)
+  uv = uv0 + clamp(uv - uv0, vec2(-0.25), vec2(0.25));
   // The unresolved facets tilt the reflected rays by twice their slope (rms sqrt(mss / 2) per axis). A tilt in
   // the view plane changes the ray's elevation fully, a sideways tilt turns it by only sin(grazing angle), so
   // the image of a point at share L / D of the mirror distance is smeared into a vertical streak (the glitter-
   // path ellipse): rms 2 sigma share in elevation and that times |V.y| across. uReflTune.x scales the streak.
   float share = clamp(1.0 - wp / max(wq, wp), 0.0, 1.0);
-  float streak = uReflTune.x * sqrt(mss) * share * uReflParams.z; // texels along the image's vertical
+  float streak = uReflTune.x * sqrt(mssU) * share * uReflParams.z; // texels along the image's vertical
   float across = streak * clamp(abs(V.y), 0.1, 1.0);
   // the cross-streak blur comes from the mip chain, the streak from seven taps half a streak apart along it;
   // the mip level is chosen so the tap spacing is one texel of that level (wider spacing printed each tap as
@@ -727,7 +748,7 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   vec3 sky = skyReflection(Rdir, wMss);
   // the mirrored scene (aircraft, shore, piers, city) replaces the sky where the reflected ray meets an object
   if (uReflParams.x > 0.5) {
-    vec4 refl = sceneReflection(vWorldPos, wV, wN, wMss, wDist);
+    vec4 refl = sceneReflection(vWorldPos, wV, wN, wMss, wDist, wDx, wDy, uWaveTime);
     sky = sky * (1.0 - refl.a) + refl.rgb;
   }
   float cosV = clamp(dot(wN, wV), 0.0, 1.0);
@@ -845,7 +866,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v9-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v10-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 
