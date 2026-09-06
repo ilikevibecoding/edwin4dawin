@@ -923,6 +923,9 @@ export class Streets {
     const cross = this.crossOf(chain);
     const L = sb - sa;
     const arterial = chain.cls === 'arterial';
+    // arterials: poles 6 m in from the run ends and at most 40 m apart on both sides (29-40 m over the block lengths,
+    // the critic's 30-40 m; with the floor rule a 100 m block had them 44 m apart); streets 45 m staggered (22.5 m
+    // alternating), low suburbs 55 m one side
     const pitch = arterial ? 40 : zone === Zone.RES_LOW ? 55 : 45;
     const h = hash2(Math.round(chain.id * 7 + sa), side, 3);
     const yAt = (s: number) => roadEdgeY(chain, s, side) + CURB_H;
@@ -934,7 +937,7 @@ export class Streets {
     // low-density suburbs light one side of the street only (the side alternates per chain)
     const lit = zone !== Zone.RES_LOW || side === (chain.id % 2 === 0 ? 1 : -1);
     if (lit && L >= 30) {
-      const n = Math.floor((L - 12) / pitch);
+      const n = arterial ? Math.ceil((L - 12) / pitch) : Math.floor((L - 12) / pitch);
       if (n === 0) {
         const s = (sa + sb) / 2, q = at(s, 0.65);
         this.lamp(q.x, yAt(s), q.z, yawToRoad(q.nx, q.nz), arterial ? 'arterial' : 'street');
@@ -1263,13 +1266,13 @@ export class Streets {
   // ---------------------------------------------------------------- highway lamps (kept from the props plan)
 
   /** Arterial stretches outside the districts (the causeway approaches over the keys, the roads through the parks
-   *  and mangroves) have no sidewalk run and so no run lamps: they get a pole on the verge every 40 m, both sides,
+   *  and mangroves) have no sidewalk run and so no run lamps: they get a pole on the verge every 35 m, both sides,
    *  wherever the ground is land — the lamp line that leads to every causeway. */
   private planVergeLamps(chain: RoadChain, covered: [[number, number][], [number, number][]]): void {
     const cross = this.crossOf(chain);
     for (const side of [-1, 1] as const) {
       const runs = covered[side > 0 ? 1 : 0];
-      for (let s = chain.s0 + 20; s < chain.s1 - 12; s += 40) {
+      for (let s = chain.s0 + 20; s < chain.s1 - 12; s += 35) {
         if (runs.some(([a, b]) => s > a - 8 && s < b + 8)) continue;
         const f = frameAt(chain, cross, s);
         const x = f.x + f.cx * side * (chain.hw + 1.0), z = f.z + f.cz * side * (chain.hw + 1.0);
