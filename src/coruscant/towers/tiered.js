@@ -100,7 +100,11 @@ export function buildTiered(bp, spec) {
   for (const t of tiers) {
     for (let f = t.f0; f <= t.f1; f++) {
       const y = 5 * f;
-      if (t.inside) { const fl = style.floor; for (const base of t.cellsIn) blocks[base + y] = fl; }
+      if (t.inside) {
+        const fl = style.floor; for (const base of t.cellsIn) blocks[base + y] = fl;
+        // a chamfered / rounded podium stands on the full lot: its cut corners are paved like the city's lot tiles
+        if (f === 0 && t.index === 0) for (const base of t.cellsOut) if (!blocks[base]) blocks[base] = B.DURASTEEL_DARK;
+      }
       else { slab(bp, t.ext.x0, t.ext.z0, t.ext.x1, t.ext.z1, y, style.floor); paintRing(bp, t.ring, f, style, seed, floorOpts(f, t)); }
     }
     const yRoof = 5 * (t.f1 + 1);

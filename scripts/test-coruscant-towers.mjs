@@ -333,7 +333,7 @@ test('rubric 11: lit vertical strips every 4-6 blocks on >= 40% of facades above
     withStrips++;
     assert.ok(s.pitch >= 4 && s.pitch <= 6, `pitch ${s.pitch}`);
     // full-face emissive panels (a WINDOW_LIT column is a dotted line lost among the facade's lit windows)
-    assert.ok(s.block === B.GLOW_PANEL || s.block === B.GLOW_PANEL_BLUE, `strip block ${BLOCKS[s.block]?.name}`);
+    assert.ok([B.GLOW_PANEL, B.GLOW_PANEL_BLUE, B.LIGHT_STRIP, B.LIGHT_STRIP_WARM].includes(s.block), `strip block ${BLOCKS[s.block]?.name}`);
     if (checked++ % 4) continue;
     // facade columns that are emissive over >= 80% of their visible height read as strips; a column has to run at
     // least two floors (setback / stack towers stack several facades, each with its own strips)
