@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { Batch, wingLowerY, wingUpperY, wingXLE, type WingSpec } from '../geometry';
+import { SURF } from '../textures';
 import { at, LIGHT, N_LIGHTS, V3, WING_POS, type BuildContext } from './context';
 
 export interface LightsBuild {
@@ -45,9 +46,15 @@ export function buildLights(ctx: BuildContext, wingSpec: WingSpec, lightPower: {
   const lightKit = new Batch();
   const glows: { p: THREE.Vector3; tint: number; channel: number; size: number }[] = [];
   for (const [tip, tint, channel] of [[wingTipL, 0xd81c1c, LIGHT.red], [wingTipR, 0x18c848, LIGHT.green]] as const) {
-    const sgn = Math.sign(tip.z), zOut = sgn * 7.55;
-    lightKit.add(lens(0.06, tint, channel), at([tip.x, tip.y, zOut]));
-    lightKit.add(lens(0.035, 0xf2f4ff, LIGHT.strobe), at([tip.x - 0.12, tip.y, zOut - sgn * 0.02]));
+    const sgn = Math.sign(tip.z);
+    // nav-light fairing: a polished teardrop housing straddling the tip's outer edge, the position lens at its
+    // nose and the strobe lens at its tail (the lenses used to be bare spheres floating off the tip)
+    const housing = new THREE.SphereGeometry(1, 12, 8);
+    housing.scale(0.13, 0.042, 0.048);
+    ctx.fittings.add(housing, at([tip.x + 0.02, tip.y, sgn * 7.49]), SURF.spinner);
+    const zOut = sgn * 7.515;
+    lightKit.add(lens(0.045, tint, channel), at([tip.x + 0.125, tip.y, zOut]));
+    lightKit.add(lens(0.03, 0xf2f4ff, LIGHT.strobe), at([tip.x - 0.09, tip.y, zOut]));
     // the lit patches lie on the tip's upper and lower skin (the airfoil is thick: a fixed offset from the chord
     // line buried them inside the wing)
     const xw = tip.x - 0.05 - WING_POS.x, zw = 7.28;
@@ -57,12 +64,13 @@ export function buildLights(ctx: BuildContext, wingSpec: WingSpec, lightPower: {
       patch.scale(1.6, 1, 1);
       lightKit.add(lit(patch, tint, channel, 0.22), at([tip.x - 0.05, y, sgn * 7.28], [-Math.PI / 2 + flipY, 0, 0]));
     }
-    glows.push({ p: V3(tip.x, tip.y, zOut), tint, channel, size: 0.7 }, { p: V3(tip.x - 0.12, tip.y, zOut), tint: 0xf2f4ff, channel: LIGHT.strobe, size: 0.6 });
+    glows.push({ p: V3(tip.x + 0.125, tip.y, zOut), tint, channel, size: 0.7 }, { p: V3(tip.x - 0.09, tip.y, zOut), tint: 0xf2f4ff, channel: LIGHT.strobe, size: 0.6 });
   }
   lightKit.add(lens(0.04, 0xf2f4ff, LIGHT.tail), at([-5.51, 0.33, 0]));
   glows.push({ p: V3(-5.51, 0.33, 0), tint: 0xf2f4ff, channel: LIGHT.tail, size: 0.55 });
   // rotating beacon on the fin tip, and the landing light in the port wing's leading edge inboard of the strut
   lightKit.add(lens(0.05, 0xd81c1c, LIGHT.beacon), at([-4.80, 2.07, 0]));
+  ctx.fittings.add(new THREE.CylinderGeometry(0.048, 0.058, 0.045, 10), at([-4.80, 2.015, 0]), SURF.darkMetal);
   glows.push({ p: V3(-4.80, 2.07, 0), tint: 0xd81c1c, channel: LIGHT.beacon, size: 0.95 });
   const landing = V3(WING_POS.x + wingXLE(wingSpec, 2.3) - 0.01, WING_POS.y + 0.02, -2.3);
   lightKit.add(lit(new THREE.CylinderGeometry(0.06, 0.06, 0.03, 12), 0xfff2d8, LIGHT.landing), at(landing, [0, 0, Math.PI / 2]));
