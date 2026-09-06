@@ -323,10 +323,11 @@ if (facadeGlass > 0.0) {
     } else {
       // tower roofs: the membrane per building: white TPO, pale grey, gravel ballast or dark EPDM (glass and
       // stone towers lean dark, stucco and concrete pale), with ballast grain while it spans pixels and ponding
-      // stains at the low spots
+      // stains at the low spots. Albedos are the weathered ones (TPO greys to ~0.6 in a few years, ballast is
+      // ~0.35, EPDM ~0.12): at 0.8 / 0.6 / 0.5 the tone curve's shoulder folded all four into one white plate.
       float mk = hash11(seed * 4.7 + 1.9) + (glassy || style == 9.0 ? 0.35 : style == 10.0 ? 0.2 : style == 3.0 || style == 6.0 ? -0.1 : 0.0);
-      vec3 base = mk < 0.3 ? vec3(0.80, 0.80, 0.78) : mk < 0.6 ? vec3(0.62, 0.62, 0.60) : mk < 0.85 ? vec3(0.50, 0.49, 0.47) : vec3(0.27, 0.28, 0.29);
-      if (style == 3.0 && mk < 0.6) base = mix(base, wall, 0.3);
+      vec3 base = mk < 0.3 ? vec3(0.64, 0.64, 0.62) : mk < 0.6 ? vec3(0.44, 0.44, 0.43) : mk < 0.85 ? vec3(0.35, 0.34, 0.32) : vec3(0.12, 0.125, 0.135);
+      if (style == 3.0 && mk < 0.6) base = mix(base, wall * 0.8, 0.3);
       bool gravel = mk >= 0.6 && mk < 0.85;
       col = base * (0.88 + 0.24 * vnoise(vWorldPosF.xz * 0.6));
       float roofPx = fwidth(vWorldPosF.x) + fwidth(vWorldPosF.z);
@@ -759,34 +760,57 @@ if (facadeGlass > 0.0) {
       bool street = walkup && hash11(seed * 4.4 + 0.9) < 0.7;
       float lobbyN = H > 60.0 ? 2.0 : 1.0;
       if (street && floorIdx < 0.5 && !back) {
-        // shopfront glazing between piers with a fascia sign band, lettered, lit at night regardless of the floors above
+        // shopfront glazing between piers over a stone stall riser, a fascia sign band over it, lit at night
+        // regardless of the floors above; one sign spans two bays, and each shop has a door at one end of a bay
+        float signId = floor(colIdx * 0.5);
         float sx = fpulse(bu, 0.07, 0.93, pwu);
-        float shop = sx * fpulse(fl, 0.05, 0.74, pwv);
+        float riser = sx * fpulse(fl, 0.03, 0.19, pwv);
+        float shop = sx * fpulse(fl, 0.19, 0.74, pwv);
         float fascia = sx * fpulse(fl, 0.77, 0.94, pwv);
-        vec3 fasciaCol = fasciaPalette(hash12(vec2(floor(colIdx * 0.5), seed)));
+        vec3 fasciaCol = fasciaPalette(hash12(vec2(signId, seed)));
         vec3 shopIn = vec3(0.10, 0.09, 0.08) + vec3(0.3, 0.27, 0.22) * smoothstep(0.5, 0.74, fy) * vis;
-        float awning = sx * fpulse(fl, 0.66, 0.76, pwv) * step(0.5, hash12(vec2(floor(colIdx * 0.5), seed + 1.0)));
+        float awning = sx * fpulse(fl, 0.66, 0.76, pwv) * step(0.5, hash12(vec2(signId, seed + 1.0)));
         awning *= 0.6 + 0.4 * fpulse(bu * 6.0, 0.0, 0.5, pwu * 6.0);   // striped valance
         col = mix(wall * 0.9, shopIn, shop);
+        col = mix(col, mix(vec3(0.26, 0.25, 0.24), wall * 0.6, step(0.5, hash11(seed * 4.2 + 0.6))), riser);
+        // the door: a framed leaf at the near end of the odd bays, its glass a shade darker than the window
+        float doorSide = step(0.5, hash12(vec2(colIdx, seed + 7.0)));
+        float doorX = mix(0.09, 0.91 - 0.24, doorSide);
+        float door = fpulse(bu, doorX, doorX + 0.24, pwu) * fpulse(fl, 0.03, 0.7, pwv) * step(0.55, hash12(vec2(colIdx, seed + 8.0))) * vis;
+        float doorFrame = door * max(fpulse(bu, doorX, doorX + 0.03, pwu) + fpulse(bu, doorX + 0.21, doorX + 0.24, pwu), fpulse(fl, 0.66, 0.7, pwv) + fpulse(fl, 0.03, 0.08, pwv));
+        col = mix(col, shopIn * 0.7, door);
+        col = mix(col, vec3(0.32, 0.33, 0.34), clamp(doorFrame, 0.0, 1.0));
         col = mix(col, fasciaCol, fascia);
-        // lettering: a run of blocky glyphs in the sign's contrast colour across the middle of each fascia, faded
-        // out as the glyphs go sub-pixel so a far fascia is a plain colour band
-        float lu = u / 0.55;
-        float glyph = step(0.35, hash12(vec2(floor(lu), seed + 3.0))) * fpulse(lu, 0.15, 0.85, wu / 0.55);
-        float text = glyph * fascia * fpulse(fl, 0.81, 0.9, pwv) * fpulse(bu * 0.5, 0.08, 0.92, pwu * 0.5) * (1.0 - smoothstep(0.3, 0.8, wu / 0.55));
+        // lettering: a run of glyphs of varying width and height in the sign's contrast colour, centred on each
+        // fascia over 35-85 % of its length with word gaps, a logo block leading it on some signs; faded out as
+        // the glyphs go sub-pixel so a far fascia is a plain colour band
+        float sHash = hash12(vec2(signId, seed + 2.0));
+        float span = 0.35 + 0.5 * sHash;
+        float lu = u / 0.5;
+        float gi = floor(lu);
+        float gh = hash12(vec2(gi, seed + 3.0));
+        float gw = 0.35 + 0.45 * hash12(vec2(gi, seed + 4.0));
+        float glyph = step(0.18, gh) * fpulse(lu, 0.5 - gw * 0.5, 0.5 + gw * 0.5, wu / 0.5);
+        float tall = step(0.7, gh);
+        float run = fpulse(bu * 0.5, 0.5 - span * 0.5, 0.5 + span * 0.5, pwu * 0.5);
+        float text = glyph * fascia * fpulse(fl, 0.81 - 0.03 * tall, 0.9, pwv) * run * (1.0 - smoothstep(0.3, 0.8, wu / 0.5));
+        float logo = fascia * fpulse(bu * 0.5, 0.5 - span * 0.5 - 0.075, 0.5 - span * 0.5 - 0.02, pwu * 0.5) * fpulse(fl, 0.795, 0.915, pwv) * step(0.6, hash12(vec2(signId, seed + 5.0))) * (1.0 - smoothstep(0.3, 0.8, wu / 0.5));
         vec3 textCol = mix(vec3(0.95), vec3(0.12), step(0.55, dot(fasciaCol, vec3(0.33))));
+        vec3 logoCol = mix(textCol, fasciaPalette(fract(sHash + 0.37)), 0.6);
         col = mix(col, textCol, text);
+        col = mix(col, logoCol, logo);
         col = mix(col, mix(fasciaCol, vec3(0.9), 0.35) * 0.8, awning);
         shop *= 1.0 - awning;
-        rough = mix(0.8, 0.1, shop);
+        float shopGlass = max(shop * (1.0 - doorFrame), door * (1.0 - doorFrame));
+        rough = mix(0.8, 0.1, shopGlass);
         metal = 0.0;
-        // shopfront glass: clear, mirroring the street opposite rather than the sky
-        facadeGlass = shop;
+        // shopfront glass: clear, mirroring the street opposite (its sunlit pavement and the blocks across it)
+        facadeGlass = shopGlass;
         facadeF0 = glassCoat(0.9);
         facadeDiff = vec3(0.0);
         facadeRoom = shopIn * 2.4;   // shop interiors are lit by their own fittings, brighter than a room
-        facadeOccl = 0.8;
-        emis = vec3(1.0, 0.88, 0.7) * shop * 1.5 * nightOn + fasciaCol * fascia * 1.2 * nightOn + textCol * text * 1.5 * nightOn;
+        facadeOccl = 0.55;
+        emis = vec3(1.0, 0.88, 0.7) * shopGlass * 1.5 * nightOn + fasciaCol * fascia * 1.2 * nightOn + (textCol * text + logoCol * logo) * 1.5 * nightOn;
       } else if (tower && floorIdx < lobbyN) {
         // lobby: full-height clear glazing between slim mullions over a dark plinth, a slab edge at its head; on
         // the front face the entrance holds the centre third: a canopy band with the doors in its shadow and a
@@ -872,6 +896,6 @@ if (facadeGlass > 0.0) {
   totalEmissiveRadiance += emis;
 }`);
   };
-  mat.customProgramCacheKey = () => 'facade-v7';
+  mat.customProgramCacheKey = () => 'facade-v8';
   return mat;
 }

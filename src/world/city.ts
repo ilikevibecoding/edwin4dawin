@@ -658,11 +658,16 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
    *  items stand clear of one another and of the coarse masses placed first; `hw` / `hd` are the usable half extents. */
   class RoofPacker {
     private readonly rects: number[] = [];
-    constructor(readonly hw: number, readonly hd: number) {}
+    /** `round`: the roof is a drum, so an item's corners must also lie within the inscribed circle */
+    constructor(readonly hw: number, readonly hd: number, readonly round = false) {}
     block(lx: number, lz: number, w: number, d: number): void { this.rects.push(lx - w / 2, lz - d / 2, lx + w / 2, lz + d / 2); }
     free(lx: number, lz: number, w: number, d: number): boolean {
       const x0 = lx - w / 2, z0 = lz - d / 2, x1 = lx + w / 2, z1 = lz + d / 2;
       if (x0 < -this.hw || z0 < -this.hd || x1 > this.hw || z1 > this.hd) return false;
+      if (this.round) {
+        const rr = Math.min(this.hw, this.hd) ** 2;
+        if (x0 * x0 + z0 * z0 > rr || x1 * x1 + z0 * z0 > rr || x0 * x0 + z1 * z1 > rr || x1 * x1 + z1 * z1 > rr) return false;
+      }
       const q = this.rects;
       for (let i = 0; i < q.length; i += 4) if (x0 < q[i + 2] && x1 > q[i] && z0 < q[i + 3] && z1 > q[i + 1]) return false;
       return true;
@@ -691,15 +696,25 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
    *  scale with the roof area and every item is packed clear of the others. */
   const PLANT_C = PLANT_COLS.map((c) => new THREE.Color(c)), DUCT_C = DUCT_COLS.map((c) => new THREE.Color(c)), RAIL_C = RAIL_COLS.map((c) => new THREE.Color(c));
   const SOLAR_C = new THREE.Color('#1c2a44'), DISH_C = new THREE.Color('#e4e6e3'), SKY_C = new THREE.Color('#9fb6c8'), TANK_LEG_C = new THREE.Color('#4a4d50');
-  const addRoofDetail = (r: Rng, x: number, z: number, tw: number, td: number, top: number, rot: number, h: number, fam: Family) => {
+  /** A secondary roof surface: `terrace` is a setback tier or the ring around a crown (vents, a few small units,
+   *  rails, solar), `podium` a base that carries the building's heavy plant (cooling towers, RTUs, a screen wall)
+   *  and skylights over the retail below. `block` lists what already stands on it (the upper tier, a lantern, fins)
+   *  as (lx, lz, w, d) in the roof frame. Neither gets a penthouse, tank, helipad or spire of its own. */
+  type RoofOpts = { tier?: 'terrace' | 'podium'; block?: readonly (readonly [number, number, number, number])[]; round?: boolean };
+  const addRoofDetail = (r0: Rng, x: number, z: number, tw: number, td: number, top: number, rot: number, h: number, fam: Family, opts: RoofOpts = {}) => {
+    // one draw of the caller's rng seeds the roof's own, so the kit's item count never reshuffles the lots after it
+    const r = new Rng(Math.floor(r0.next() * 4294967296));
     const cr = Math.cos(rot), sr = Math.sin(rot);
     const at = (ox: number, oz: number): [number, number] => [x + ox * cr - oz * sr, z + ox * sr + oz * cr];
     const glassy = fam.style === S.GLASS_BLUE || fam.style === S.GLASS_GREEN || fam.style === S.STONE;
     const office = glassy || fam.style === S.GRID || fam.style === S.CONCRETE || (fam.style === S.DECO && h > 60);
     const resi = fam.style === S.BALCONY || fam.style === S.HOTEL || fam.style === S.PUNCHED || fam.style === S.BRICK;
+    const terrace = opts.tier === 'terrace', podium = opts.tier === 'podium', main = !opts.tier;
     const grey = r.pick(GREYS);
     const area = tw * td;
-    const pk = new RoofPacker(tw / 2 - 1.2, td / 2 - 1.2);
+    const round = opts.round === true;
+    const pk = new RoofPacker(tw / 2 - 1.2, td / 2 - 1.2, round);
+    if (opts.block) for (const [bx, bz, bw, bd] of opts.block) pk.block(bx, bz, bw + 1.2, bd + 1.2);
     const y = top - 0.05;
     const item = (kind: Kind, lx: number, lz: number, w: number, hh: number, d: number, col: THREE.Color, style: number, yaw = rot, yb = y) => {
       const [px, pz] = at(lx, lz);
@@ -709,21 +724,21 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
 
     // ---- coarse masses (seen from any distance)
     let pent: [number, number, number, number] | null = null;   // lx, lz, w, d
-    if (r.chance(0.7) && tw > 9 && td > 9) {
-      // mechanical penthouse / stair and lift bulkhead
-      const pw = tw * r.range(0.25, 0.45), pd = td * r.range(0.3, 0.5);
-      const lx = r.range(-tw * 0.22, tw * 0.22), lz = r.range(-td * 0.2, td * 0.2);
+    if (main && r.chance(0.7) && tw > 9 && td > 9) {
+      // mechanical penthouse / stair and lift bulkhead (centred on a drum so its corners stay inside the roof)
+      const pw = tw * r.range(0.25, round ? 0.4 : 0.45), pd = td * r.range(0.3, round ? 0.4 : 0.5);
+      const lx = round ? 0 : r.range(-tw * 0.22, tw * 0.22), lz = round ? 0 : r.range(-td * 0.2, td * 0.2);
       const [px, pz] = at(lx, lz);
       place('box', px, pz, pw, r.range(3, 6), pd, rot, glassy ? '#8d9296' : grey, S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
       pk.block(lx, lz, pw, pd);
       pent = [lx, lz, pw, pd];
     }
-    if (h > 40 && r.chance(0.35) && tw > 12) {
+    if (main && h > 40 && r.chance(0.35) && tw > 12) {
       // a second, smaller bulkhead (lift overrun) toward a corner
       const lx = tw * r.range(0.15, 0.32), lz = -td * r.range(0.1, 0.3);
       if (pk.free(lx, lz, 4, 4)) { const [px, pz] = at(lx, lz); place('box', px, pz, 3.2, 3.5, 3.2, rot, grey, S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 }); pk.block(lx, lz, 3.2, 3.2); }
     }
-    if (!glassy && h > 18 && r.chance(0.3) && tw > 9) {
+    if (main && !glassy && h > 18 && r.chance(0.3) && tw > 9) {
       // water tank on the older masonry blocks: a drum on four legs
       const dia = r.range(2.6, 4.4);
       const p = pk.find(r, dia, dia, 0.6, 8, [-tw * 0.34, -td * 0.3, -tw * 0.1, td * 0.3]);
@@ -735,8 +750,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) item('roof', p[0] + sx * lr, p[1] + sz * lr, 0.2, legH, 0.2, TANK_LEG_C, S.DUCT);
       }
     }
-    if (glassy && tw > 16 && r.chance(0.35)) {
-      // cooling towers in a row (louvred boxes with fan tops)
+    if (!terrace && (glassy || podium) && tw > 16 && r.chance(podium ? 0.55 : 0.35)) {
+      // cooling towers in a row (louvred boxes with fan tops); the podium roof is where a tower's plant usually goes
       const nct = r.int(2, 4), alongX = r.chance(0.5), yaw = rot + (alongX ? 0 : Math.PI / 2) + r.range(-0.08, 0.08);
       const rowW = alongX ? nct * 3.4 : 2.6, rowD = alongX ? 2.6 : nct * 3.4;
       const p = pk.find(r, rowW, rowD, 0.8, 8);
@@ -746,50 +761,51 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         place('oct', px, pz, 2.6, r.range(2.2, 3.2), 2.6, yaw, r.pick(PLANT_COLS), S.PLANT, 3, { yBase: top - 0.2, margin: -1, roof: -1 });
       }
     }
-    if (h > 50 && r.chance(0.28) && td > 12) {
+    if (!terrace && !round && h > 50 && r.chance(podium ? 0.4 : 0.28) && td > 12) {
       // louvred screen wall hiding the plant along one side
       const side = r.chance(0.5) ? 1 : -1;
       const lx = side * tw * 0.36, lz = r.range(-td * 0.15, td * 0.15), sd = td * r.range(0.45, 0.7);
       if (pk.free(lx, lz, 0.6, sd)) { const [px, pz] = at(lx, lz); place('box', px, pz, 0.6, r.range(3, 4.5), sd, rot, '#b9bfc3', S.GRID, 3.5, { yBase: top - 0.2, margin: -1, lit: 0, variant: 0.3 }); pk.block(lx, lz, 0.6, sd); }
     }
-    if (h > 100 && r.chance(0.22) && Math.min(tw, td) > 14) {
+    if (main && h > 100 && r.chance(0.22) && Math.min(tw, td) > 14) {
       // helipad, kept clear on all sides
       const dia = Math.min(18, Math.min(tw, td) * 0.5);
       const p = pk.find(r, dia, dia, 1.5, 6, [-tw * 0.24, -td * 0.2, -tw * 0.1, td * 0.2]) ?? pk.find(r, dia, dia, 1.0, 6);
       if (p) { const [px, pz] = at(p[0], p[1]); place('cyl', px, pz, dia, 0.5, dia, rot, '#444444', S.HELIPAD, 3, { yBase: top, margin: -1 }); }
     }
-    if (h > 120 && r.chance(0.35)) {
+    if (main && h > 120 && r.chance(0.35)) {
       const p = pk.find(r, 1.6, 1.6, 0.6, 8, [tw * 0.2, -td * 0.34, tw * 0.34, td * 0.34]);
       if (p) { const [px, pz] = at(p[0], p[1]); place('frustum', px, pz, 1.6, r.range(14, 32), 1.6, rot, '#cfd8dc', S.CONCRETE, 3, { yBase: top, margin: -1 }); }
     }
-    if (h > 150 && r.chance(0.3) && pk.free(0, 0, 4, 4)) {
+    if (main && h > 150 && r.chance(0.3) && pk.free(0, 0, 4, 4)) {
       place('frustum', x, z, 4, r.range(25, 50), 4, rot, '#e3e8ec', S.CONCRETE, 3, { yBase: top, margin: -1 });
       pk.block(0, 0, 4, 4);
     }
 
     // ---- the kit (near-detail layer)
-    // rooftop units: the offices' heavy plant, one or two on the flats; each with a duct run to the penthouse
-    // when it stands in line with one (a straight run to its wall), else a short duct into a roof curb
-    const nRtu = office ? clamp(Math.round(area / 200 + r.range(0, 2)), 1, 9) : resi ? clamp(Math.round(area / 450), 1, 3) : clamp(Math.round(area / 320), 1, 5);
+    // rooftop units: the offices' heavy plant, one or two on the flats (a podium carries the tower's share, a
+    // terrace a small unit or two); each with a duct run to the penthouse when it stands in line with one (a
+    // straight run to its wall), else a short duct into a roof curb
+    const nRtu = terrace ? clamp(Math.round(area / 600 + r.range(0, 1.4)), 0, 3)
+      : office || podium ? clamp(Math.round(area / 200 + r.range(0, 2)), 1, 9) : resi ? clamp(Math.round(area / 450), 1, 3) : clamp(Math.round(area / 320), 1, 5);
     for (let i = 0; i < nRtu; i++) {
-      const w = r.range(2.2, 5.0), d = r.range(1.8, 3.2), hh = r.range(1.3, 2.4);
+      const w = r.range(2.2, 5.0) * (terrace ? 0.7 : 1), d = r.range(1.8, 3.2) * (terrace ? 0.7 : 1), hh = r.range(1.3, 2.4) * (terrace ? 0.8 : 1);
       const p = pk.find(r, w, d, 0.8, 10);
       if (!p) break;
       item('roofbig', p[0], p[1], w, hh, d, r.chance(0.75) ? plantCol : plantCol2, S.PLANT);
-      if (!pent || !r.chance(0.75)) continue;
-      const dx = pent[0] - p[0], dz = pent[1] - p[1];
-      const inZ = Math.abs(dz) <= pent[3] / 2 - 0.4, inX = Math.abs(dx) <= pent[2] / 2 - 0.4;
-      if (inZ && Math.abs(dx) > w / 2 + pent[2] / 2 + 0.8) {
+      const dx = pent ? pent[0] - p[0] : 0, dz = pent ? pent[1] - p[1] : 0;
+      const inZ = pent !== null && Math.abs(dz) <= pent[3] / 2 - 0.4, inX = pent !== null && Math.abs(dx) <= pent[2] / 2 - 0.4;
+      if (pent && r.chance(0.75) && inZ && Math.abs(dx) > w / 2 + pent[2] / 2 + 0.8) {
         const from = p[0] + Math.sign(dx) * w / 2, to = pent[0] - Math.sign(dx) * pent[2] / 2;
         const len = Math.abs(to - from), mx = (from + to) / 2;
         if (pk.free(mx, p[1], len, 0.55)) { item('roof', mx, p[1], len, 0.55, 0.55, ductCol, S.DUCT, rot, y + 0.3); pk.block(mx, p[1], len, 0.55); }
-      } else if (inX && Math.abs(dz) > d / 2 + pent[3] / 2 + 0.8) {
+      } else if (pent && r.chance(0.75) && inX && Math.abs(dz) > d / 2 + pent[3] / 2 + 0.8) {
         const from = p[1] + Math.sign(dz) * d / 2, to = pent[1] - Math.sign(dz) * pent[3] / 2;
         const len = Math.abs(to - from), mz = (from + to) / 2;
         if (pk.free(p[0], mz, 0.55, len)) { item('roof', p[0], mz, 0.55, 0.55, len, ductCol, S.DUCT, rot, y + 0.3); pk.block(p[0], mz, 0.55, len); }
-      } else if (r.chance(0.5)) {
+      } else if (r.chance(0.45)) {
         // duct elbow into a curb beside the unit
-        const sx = Math.sign(dx) || 1;
+        const sx = Math.sign(dx) || (r.chance(0.5) ? 1 : -1);
         const lx = p[0] + sx * (w / 2 + 0.9);
         if (pk.free(lx, p[1], 1.4, 0.55)) { item('roof', lx, p[1], 1.5, 0.55, 0.55, ductCol, S.DUCT, rot, y + 0.3); item('roof', lx + sx * 0.45, p[1], 0.6, 0.8, 0.6, ductCol, S.DUCT); pk.block(lx, p[1], 1.4, 0.55); }
       }
@@ -806,16 +822,16 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       }
     }
     // vents and exhaust stacks, a rain cap on some, an odd tall flue on the offices
-    const nVent = clamp(Math.round(area / 130 + r.range(0, 3)), 2, 12);
+    const nVent = clamp(Math.round(area / (terrace ? 260 : 130) + r.range(0, 3)), terrace ? 1 : 2, 12);
     for (let i = 0; i < nVent; i++) {
-      const dia = r.range(0.4, 1.0), hh = r.range(0.9, 3.2) * (office && r.chance(0.15) ? 2.5 : 1);
+      const dia = r.range(0.4, 1.0), hh = r.range(0.9, 3.2) * (office && !terrace && r.chance(0.15) ? 2.5 : 1);
       const p = pk.find(r, dia, dia, 0.4, 8);
       if (!p) break;
       item('roofcyl', p[0], p[1], dia, hh, dia, ductCol, S.DUCT);
       if (r.chance(0.45)) item('roofcyl', p[0], p[1], dia * 1.7, 0.22, dia * 1.7, ductCol, S.DUCT, rot, y + hh - 0.02);
     }
     // antenna masts (a corner spot) and a dish on a post
-    if (r.chance(office ? 0.75 : 0.45)) {
+    if (r.chance(terrace ? 0.25 : office ? 0.75 : 0.45)) {
       const cx = r.chance(0.5) ? 1 : -1, cz = r.chance(0.5) ? 1 : -1;
       const p = pk.find(r, 0.6, 0.6, 0.5, 8, [Math.min(cx * tw * 0.2, cx * tw * 0.42), Math.min(cz * td * 0.2, cz * td * 0.42), Math.max(cx * tw * 0.2, cx * tw * 0.42), Math.max(cz * td * 0.2, cz * td * 0.42)]);
       if (p) {
@@ -826,19 +842,22 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         }
       }
     }
-    // solar rows on a fifth of the roofs below 150 m (the very tall roofs carry plant, not panels)
-    if (h < 150 && area > 320 && r.chance(0.22)) {
+    // solar rows on a fifth of the roofs below 150 m (the very tall roofs carry plant, not panels); on a terrace
+    // the rows run along the free side of the upper tier
+    if ((h < 150 || opts.tier) && area > 320 && r.chance(terrace ? 0.3 : 0.22)) {
       const alongX = tw >= td;
       const rows = clamp(Math.floor(Math.min(tw, td) / 3.4), 2, 6), len = clamp(Math.max(tw, td) * r.range(0.4, 0.7), 6, 24);
       const blockW = alongX ? len : rows * 2.6, blockD = alongX ? rows * 2.6 : len;
-      const p = pk.find(r, blockW, blockD, 0.8, 8);
-      if (p) for (let i = 0; i < rows; i++) {
-        const o = (i - (rows - 1) / 2) * 2.6;
-        item('roofbig', p[0] + (alongX ? 0 : o), p[1] + (alongX ? o : 0), alongX ? len : 1.9, 0.42, alongX ? 1.9 : len, SOLAR_C, S.SOLAR);
+      let p = pk.find(r, blockW, blockD, 0.8, 8);
+      let n = rows;
+      if (!p && terrace) { n = 1; p = pk.find(r, alongX ? len * 0.6 : 1.9, alongX ? 1.9 : len * 0.6, 0.6, 8); }
+      if (p) for (let i = 0; i < n; i++) {
+        const o = (i - (n - 1) / 2) * 2.6, l = n === 1 ? len * 0.6 : len;
+        item('roofbig', p[0] + (alongX ? 0 : o), p[1] + (alongX ? o : 0), alongX ? l : 1.9, 0.42, alongX ? 1.9 : l, SOLAR_C, S.SOLAR);
       }
     }
-    // skylights on the lower roofs: a few glazed boxes, a long ridge light on the big ones
-    if (!glassy && h < 70 && r.chance(0.45)) {
+    // skylights on the lower roofs and over the retail of a podium: a few glazed boxes, a long ridge light on the big ones
+    if (((!glassy && h < 70) || podium) && r.chance(podium ? 0.6 : 0.45)) {
       if (area > 800 && r.chance(0.5)) {
         const alongX = tw >= td, len = clamp(Math.max(tw, td) * r.range(0.3, 0.55), 8, 16);
         const p = pk.find(r, alongX ? len : 1.7, alongX ? 1.7 : len, 0.8, 8);
@@ -849,16 +868,17 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       }
     }
     // pipe runs along an edge
-    const nPipe = r.int(0, office ? 3 : 2);
+    const nPipe = r.int(0, office && !terrace ? 3 : 2);
     for (let i = 0; i < nPipe; i++) {
-      const alongX = r.chance(0.5), len = r.range(4, Math.max(5, (alongX ? tw : td) * 0.6));
+      const alongX = r.chance(0.5), len = r.range(4, Math.max(5, (alongX ? tw : td) * (terrace ? 0.4 : 0.6)));
       const p = pk.find(r, alongX ? len : 0.22, alongX ? 0.22 : len, 0.3, 6);
       if (p) item('roof', p[0], p[1], alongX ? len : 0.2, 0.2, alongX ? 0.2 : len, r.chance(0.5) ? ductCol : TANK_LEG_C, S.DUCT, rot, y + 0.15);
     }
-    // railing along the parapet where the facade has no coping (the masonry families' coping is a trim)
+    // railing along the parapet where the facade has no coping (the masonry families' coping is a trim); a
+    // terrace or podium roof is walked on and railed more often than not
     const coping = !glassy && fam.style !== S.INDUSTRIAL && fam.style !== S.CONCRETE;
-    if (!coping && r.chance(0.65) && tw > 8 && td > 8) {
-      const inset = 0.25;
+    if (!round && (!coping || opts.tier) && r.chance(opts.tier ? 0.8 : 0.65) && tw > 8 && td > 8) {
+      const inset = coping ? 0.7 : 0.25;   // inside the coping trim where there is one
       item('roof', 0, -td / 2 + inset, tw - inset * 2, 1.1, 0.06, railCol, S.RAIL);
       item('roof', 0, td / 2 - inset, tw - inset * 2, 1.1, 0.06, railCol, S.RAIL);
       item('roof', -tw / 2 + inset, 0, 0.06, 1.1, td - inset * 2, railCol, S.RAIL);
@@ -899,13 +919,20 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     const at = (ox: number, oz: number): [number, number] => [x + ox * cr - oz * sr, z + ox * sr + oz * cr];
     let top: number | null = null;
     let tw = fw, td = fd;
+    // every roof surface of a massing gets its kit: the tiers of a setback, a podium, the lower bar of a pair, the
+    // ring around a crown; `block` is what stands on that surface, in its own frame
+    const ring = (rx: number, rz: number, w: number, d: number, rtop: number | null, block: RoofOpts['block'], tier: RoofOpts['tier'], hh = h) => {
+      if (rtop !== null) addRoofDetail(r, rx, rz, w, d, rtop, rot, hh, fam, { tier, block });
+    };
     switch (recipe) {
       case 1: {
-        // setbacks: three tiers
+        // setbacks: three tiers, the two lower ones terraces around the tier above
         const t2 = r.range(0.72, 0.85), t3 = r.range(0.5, 0.65);
-        place('box', x, z, fw, h * r.range(0.5, 0.62), fd, rot, lk.tint, fam.style, fam.floorH, o);
-        place('box', x, z, fw * t2, h * r.range(0.78, 0.88), fd * t2, rot, lk.tint, fam.style, fam.floorH, o);
+        const top1 = place('box', x, z, fw, h * r.range(0.5, 0.62), fd, rot, lk.tint, fam.style, fam.floorH, o);
+        const top2 = place('box', x, z, fw * t2, h * r.range(0.78, 0.88), fd * t2, rot, lk.tint, fam.style, fam.floorH, o);
         top = place('box', x, z, fw * t3, h, fd * t3, rot, lk.tint, fam.style, fam.floorH, o);
+        ring(x, z, fw, fd, top1, [[0, 0, fw * t2, fd * t2]], 'terrace');
+        ring(x, z, fw * t2, fd * t2, top2, [[0, 0, fw * t3, fd * t3]], 'terrace');
         tw = fw * t3; td = fd * t3;
         break;
       }
@@ -916,20 +943,24 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         break;
       }
       case 3: {
-        // L-shape: two overlapping bars
+        // L-shape: two overlapping bars; the taller bar's roof is the main one (the kit used to be laid at the
+        // lower bar's height under the taller bar's centre, i.e. inside it), the lower bar's free end a terrace
         const a = at(-fw * 0.2, 0), b = at(fw * 0.15, -fd * 0.22);
-        place('box', a[0], a[1], fw * 0.6, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
-        top = place('box', b[0], b[1], fw * 0.7, h * r.range(0.6, 1.0), fd * 0.56, rot, lk.tint, fam.style, fam.floorH, o);
+        top = place('box', a[0], a[1], fw * 0.6, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
+        const hb = h * r.range(0.6, 1.0);
+        const topB = place('box', b[0], b[1], fw * 0.7, hb, fd * 0.56, rot, lk.tint, fam.style, fam.floorH, o);
+        if (topB !== null && h - hb > 1.5) ring(b[0], b[1], fw * 0.7, fd * 0.56, topB, [[-fw * 0.35, fd * 0.22, fw * 0.6, fd]], 'terrace', hb);
         tw = fw * 0.6; td = fd;
         break;
       }
       case 4: {
-        // twin towers on a shared base, joined by a sky bridge
+        // twin towers on a shared base, joined by a sky bridge; both roofs carry a full kit
         const gap = fw * 0.18, tw1 = fw * 0.41;
         const a = at(-(tw1 + gap) / 2, 0), b = at((tw1 + gap) / 2, 0);
-        place('box', a[0], a[1], tw1, h, fd * 0.8, rot, lk.tint, fam.style, fam.floorH, o);
+        const topA = place('box', a[0], a[1], tw1, h, fd * 0.8, rot, lk.tint, fam.style, fam.floorH, o);
         top = place('box', b[0], b[1], tw1, h * r.range(0.85, 1.0), fd * 0.8, rot, lk.tint, fam.style, fam.floorH, o);
         place('box', x, z, gap + 2, 4, fd * 0.4, rot, '#dfe4e8', S.CONCRETE, 3, { yBase: (top ?? 0) - h * 0.45, margin: -1 });
+        ring(a[0], a[1], tw1, fd * 0.8, topA, undefined, undefined);
         tw = tw1; td = fd * 0.8;
         break;
       }
@@ -942,9 +973,13 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         break;
       }
       case 6: {
-        // stepped art-deco crown with a spire
+        // stepped art-deco crown with a spire; the wider steps are terraces
         const tiers = [[1.0, 0.55], [0.86, 0.72], [0.7, 0.88], [0.5, 1.0]];
-        for (const [sc, hh] of tiers) top = place('box', x, z, fw * sc, h * hh, fd * sc, rot, lk.tint, fam.style, fam.floorH, o);
+        for (let i = 0; i < tiers.length; i++) {
+          const [sc, hh] = tiers[i];
+          top = place('box', x, z, fw * sc, h * hh, fd * sc, rot, lk.tint, fam.style, fam.floorH, o);
+          if (i < tiers.length - 1 && (sc - tiers[i + 1][0]) * Math.min(fw, fd) * 0.5 >= 3) ring(x, z, fw * sc, fd * sc, top, [[0, 0, fw * tiers[i + 1][0], fd * tiers[i + 1][0]]], 'terrace');
+        }
         if (top !== null) place('frustum', x, z, 3.5, h * 0.18, 3.5, rot, '#e8e4dc', S.CONCRETE, 3, { yBase: top, margin: -1 });
         tw = fw * 0.5; td = fd * 0.5;
         break;
@@ -966,10 +1001,13 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         // podium + tower: a 3-5 storey base filling the lot with the tower standing off-centre on it
         const pw = fw * r.range(1.25, 1.5), pd = fd * r.range(1.2, 1.45), ph = fam.floorH * r.int(3, 5) + 1;
         const pk = fam.style === S.STONE || GLASSY_STYLES.has(fam.style) ? look(FAM.punched, r, pastel) : lk;
-        place('box', x, z, pw, ph, pd, rot, pk.tint, fam.style === S.STONE || GLASSY_STYLES.has(fam.style) ? S.PUNCHED : fam.style, fam.floorH, { lit: pk.lit, warm: pk.warm, variant: pk.variant });
+        const podTop = place('box', x, z, pw, ph, pd, rot, pk.tint, fam.style === S.STONE || GLASSY_STYLES.has(fam.style) ? S.PUNCHED : fam.style, fam.floorH, { lit: pk.lit, warm: pk.warm, variant: pk.variant });
         tw = fw * 0.72; td = fd * 0.72;
-        const [tx, tz] = at((pw - tw) * 0.5 * r.range(-0.8, 0.8), (pd - td) * 0.5 * r.range(-0.8, 0.8));
+        const ox = (pw - tw) * 0.5 * r.range(-0.8, 0.8), oz = (pd - td) * 0.5 * r.range(-0.8, 0.8);
+        const [tx, tz] = at(ox, oz);
         top = place('box', tx, tz, tw, h, td, rot, lk.tint, fam.style, fam.floorH, o);
+        // the podium roof carries the tower's plant and the skylights of the retail below, around the tower's foot
+        ring(x, z, pw, pd, podTop, [[ox, oz, tw, td]], 'podium');
         x = tx; z = tz;
         break;
       }
@@ -983,10 +1021,12 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         break;
       }
       case 11: {
-        // glass lantern crown with a spire: the office box stops a few floors short and a small lit glass box tops it
+        // glass lantern crown with a spire: the office box stops a few floors short and a small lit glass box tops
+        // it; the roof around the lantern is a terrace of plant
         top = place('box', x, z, fw, h * 0.93, fd, rot, lk.tint, fam.style, fam.floorH, o);
         if (top !== null) {
           const g = look(FAM.glassBlue, r);
+          ring(x, z, fw, fd, top, [[0, 0, fw * 0.5, fd * 0.5]], 'terrace');
           top = place('box', x, z, fw * 0.5, h * 0.07 + 5, fd * 0.5, rot, g.tint, S.GLASS_BLUE, 3.9, { lit: 0.85, warm: 0.3, variant: g.variant, yBase: top - 0.1, margin: -1 });
           place('frustum', x, z, 2.4, r.range(10, 22), 2.4, rot, '#dfe4e8', S.CONCRETE, 3, { yBase: top ?? 0, margin: -1 });
           detail = false;
@@ -1000,19 +1040,23 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         break;
       }
       case 13: {
-        // asymmetric pair: two bars sharing a party wall, one carrying on higher than the other
+        // asymmetric pair: two bars sharing a party wall, one carrying on higher than the other; each roof its own
         const a = at(-fw * 0.25, 0), b = at(fw * 0.25, 0);
         const lo = h * r.range(0.55, 0.78);
         top = place('box', a[0], a[1], fw * 0.5, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
-        place('box', b[0], b[1], fw * 0.5, lo, fd * r.range(0.8, 1.0), rot, lk.tint, fam.style, fam.floorH, o);
+        const fdb = fd * r.range(0.8, 1.0);
+        const topB = place('box', b[0], b[1], fw * 0.5, lo, fdb, rot, lk.tint, fam.style, fam.floorH, o);
+        ring(b[0], b[1], fw * 0.5, fdb, topB, undefined, undefined, lo);
         x = a[0]; z = a[1]; tw = fw * 0.5; td = fd;
         break;
       }
       case 14: {
-        // cross plan: two thin slabs through each other, the shorter one a storey or two lower
+        // cross plan: two thin slabs through each other, the shorter one a storey or two lower; its two ends are
+        // terraces either side of the taller slab
         const s1 = Math.min(fw, fd) * 0.45;
         top = place('box', x, z, s1, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
-        place('box', x, z, fw, h * r.range(0.86, 0.96), s1, rot, lk.tint, fam.style, fam.floorH, o);
+        const topLow = place('box', x, z, fw, h * r.range(0.86, 0.96), s1, rot, lk.tint, fam.style, fam.floorH, o);
+        ring(x, z, fw, s1, topLow, [[0, 0, s1, fd]], 'terrace');
         tw = s1; td = fd;
         break;
       }
@@ -1021,22 +1065,27 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         top = place('box', x, z, fw, h * 0.9, fd, rot, lk.tint, fam.style, fam.floorH, o);
         if (top !== null) {
           const finH = h * 0.1 + 6;
+          const fins: [number, number, number, number][] = [];
           for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
             const [px, pz] = at(sx * (fw * 0.5 - 1.6), sz * (fd * 0.5 - 1.6));
             place('box', px, pz, 3.2, finH, 3.2, rot, lk.tint, fam.style, fam.floorH, { ...o, yBase: top - 0.1, margin: -1 });
+            fins.push([sx * (fw * 0.5 - 1.6), sz * (fd * 0.5 - 1.6), 3.2, 3.2]);
           }
           const g = look(FAM.glassBlue, r);
+          ring(x, z, fw, fd, top, [[0, 0, fw * 0.55, fd * 0.55], ...fins], 'terrace');
           top = place('box', x, z, fw * 0.55, finH * 0.7, fd * 0.55, rot, g.tint, S.GLASS_BLUE, 3.9, { lit: 0.9, warm: 0.3, variant: g.variant, yBase: top - 0.1, margin: -1 });
           detail = false;
         }
         break;
       }
       case 16: {
-        // slab with a slot: two slabs a bay apart, tied by a bridge storey at the top and a sky lobby half way
+        // slab with a slot: two slabs a bay apart, tied by a bridge storey at the top and a sky lobby half way;
+        // both slab roofs carry a kit
         const slot = 6, sw = Math.max(10, (fw - slot) * 0.5);
         const a = at(-(sw + slot) * 0.5, 0), b = at((sw + slot) * 0.5, 0);
         top = place('box', a[0], a[1], sw, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
-        place('box', b[0], b[1], sw, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
+        const topB = place('box', b[0], b[1], sw, h, fd, rot, lk.tint, fam.style, fam.floorH, o);
+        ring(b[0], b[1], sw, fd, topB, undefined, undefined);
         if (top !== null) {
           place('box', x, z, slot + 2, fam.floorH * 2, fd * 0.9, rot, '#dfe4e8', S.GRID, fam.floorH, { lit: 0.8, warm: 0.4, variant: 0.5, yBase: top - fam.floorH * 2, margin: -1 });
           place('box', x, z, slot + 2, fam.floorH, fd * 0.8, rot, '#dfe4e8', S.CONCRETE, 3, { yBase: top - h * 0.5, margin: -1 });
@@ -1049,7 +1098,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     }
     if (top !== null && detail) {
       const [dx, dz] = recipe === 3 ? at(-fw * 0.2, 0) : recipe === 4 ? at((fw * 0.41 + fw * 0.18) / 2, 0) : [x, z];
-      addRoofDetail(r, dx, dz, tw, td, top, rot, h, fam);
+      addRoofDetail(r, dx, dz, tw, td, top, rot, h, fam, { round: recipe === 7 });
     }
     return top;
   };
@@ -1067,6 +1116,9 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     markOccupied(x, z, 46);
   };
   const landmark = (name: string, lx: number, lz: number, build: (x: number, z: number, g: number) => number) => landmarkIn(dt, name, lx, lz, build);
+  /** A landmark's roof surface (a terrace of its setbacks, its podium, a flat crown): the kit from its own seeded rng. */
+  const lmRoof = (name: string, x: number, z: number, w: number, d: number, top: number, rot: number, h: number, fam: Family, opts: RoofOpts = {}) =>
+    addRoofDetail(new Rng(`roof:${name}:${top.toFixed(0)}`), x, z, w, d, top, rot, h, fam, opts);
   // Crowns are sized to survive 3-5 km: spires start 8-10 m wide at the base, lanterns are 12-18 m glass boxes.
   landmark('Meridian Tower', 120, -80, (x, z, g) => {
     const o = { lit: 0.5, warm: 0.3, variant: 0.2 };
@@ -1075,6 +1127,9 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('box', x, z, 28, 285, 28, 0.1, '#b0c4d2', S.GLASS_BLUE, 3.9, o);
     place('box', x, z, 18, 12, 18, 0.1, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 285, lit: 0.9, warm: 0.2, variant: 0.5, margin: -1 });
     place('frustum', x, z, 9, 64, 9, 0.1, '#e8eef2', S.CONCRETE, 3, { yBase: g + 297, margin: -1 });
+    lmRoof('Meridian', x, z, 46, 46, g + 150, 0.1, 361, FAM.glassBlue, { tier: 'terrace', block: [[0, 0, 38, 38]] });
+    lmRoof('Meridian', x, z, 38, 38, g + 230, 0.1, 361, FAM.glassBlue, { tier: 'terrace', block: [[0, 0, 28, 28]] });
+    lmRoof('Meridian', x, z, 28, 28, g + 285, 0.1, 361, FAM.glassBlue, { tier: 'terrace', block: [[0, 0, 18, 18]] });
     return 361;
   });
   landmark('Bahía One', -40, 70, (x, z, g) => {
@@ -1096,10 +1151,15 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('frustum', x, z, 3, 30, 3, 0, '#cfd8dc', S.CONCRETE, 3, { yBase: g + 275, margin: -1 });
     return 305;
   });
-  landmark('Twin Palms A', 40, 210, (x, z) => { place('box', x, z, 30, 182, 56, 0.05, '#efe4cf', S.BALCONY, 3.3, { lit: 0.3, warm: 0.85, variant: 0.4 }); return 182; });
+  landmark('Twin Palms A', 40, 210, (x, z, g) => {
+    place('box', x, z, 30, 182, 56, 0.05, '#efe4cf', S.BALCONY, 3.3, { lit: 0.3, warm: 0.85, variant: 0.4 });
+    lmRoof('Twin Palms A', x, z, 30, 56, g + 182, 0.05, 182, FAM.balcony);
+    return 182;
+  });
   landmark('Twin Palms B', 110, 210, (x, z, g) => {
     place('box', x, z, 30, 182, 56, 0.05, '#efe4cf', S.BALCONY, 3.3, { lit: 0.35, warm: 0.85, variant: 0.4 });
     place('box', x - 35, z, 44, 6, 12, 0.05, '#dfe4e8', S.CONCRETE, 3.3, { yBase: g + 118, margin: -1 });
+    lmRoof('Twin Palms B', x, z, 30, 56, g + 182, 0.05, 182, FAM.balcony);
     return 182;
   });
   landmark('The Sail', -60, -250, (x, z, g) => {
@@ -1108,8 +1168,14 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('box', x, z, 3.5, 42, 24, 0.9, '#e8eef2', S.CONCRETE, 3, { yBase: g + 204, margin: -1 });
     return 247;
   });
-  landmark('Terraces', 260, 120, (x, z) => {
-    for (let i = 0; i < 5; i++) place('box', x + i * 6, z - i * 4, 60 - i * 8, 45 + i * 28, 40, 0.0, '#f7f5f0', S.GRID, 3.5, { lit: 0.35, warm: 0.5, variant: 0.3 });
+  landmark('Terraces', 260, 120, (x, z, g) => {
+    // five stepped office bars; each step's roof is a terrace beside the next bar, the last a full roof
+    for (let i = 0; i < 5; i++) {
+      const w = 60 - i * 8, hh = 45 + i * 28;
+      place('box', x + i * 6, z - i * 4, w, hh, 40, 0.0, '#f7f5f0', S.GRID, 3.5, { lit: 0.35, warm: 0.5, variant: 0.3 });
+      if (i < 4) lmRoof('Terraces', x + i * 6, z - i * 4, w, 40, g + hh, 0.0, 160, FAM.grid, { tier: 'terrace', block: [[6, -4, w - 8, 40]] });
+      else lmRoof('Terraces', x + i * 6, z - i * 4, w, 40, g + hh, 0.0, 160, FAM.grid);
+    }
     return 160;
   });
   landmark('Crown Plaza', -300, -180, (x, z, g) => {
@@ -1119,6 +1185,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       const a = 0.2 + (i * Math.PI) / 2;
       place('box', x + Math.cos(a) * 14, z + Math.sin(a) * 14, 3, 44, 14, a, '#e8eef2', S.CONCRETE, 3, { yBase: g + 198, margin: -1 });
     }
+    // the roof between the lantern and the four fins (the fins stand at local (14, 0), (0, 14), ... of the yawed box)
+    lmRoof('Crown Plaza', x, z, 42, 42, g + 200, 0.2, 244, FAM.stone, { tier: 'terrace', block: [[0, 0, 20, 20], [14, 0, 3, 14], [0, 14, 14, 3], [-14, 0, 3, 14], [0, -14, 14, 3]] });
     return 244;
   });
   landmark('The Needle', 210, -380, (x, z, g) => {
@@ -1134,17 +1202,22 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('box', x - 26, z, 22, 156, 44, 0.02, '#f2efe6', S.PUNCHED, 3.3, o);
     place('box', x + 26, z, 22, 156, 44, 0.02, '#f2efe6', S.PUNCHED, 3.3, o);
     place('box', x, z, 76, 14, 40, 0.02, '#e9e6df', S.GRID, 3.5, { yBase: g + 156, lit: 0.6, warm: 0.5, variant: 0.6, margin: -1 });
+    lmRoof('Gateway', x, z, 76, 40, g + 170, 0.02, 170, FAM.grid);
     return 170;
   });
   landmark('Helix', 330, -240, (x, z, g) => {
     for (let i = 0; i < 12; i++) place('box', x, z, 34, 16.5, 34, i * 0.1, '#e6e2d6', S.GLASS_GREEN, 3.9, { yBase: g + i * 16, lit: 0.5, warm: 0.3, variant: 0.2 });
+    lmRoof('Helix', x, z, 34, 34, g + 11 * 16 + 16.5, 1.1, 198, FAM.glassGreen);
     return 198;
   });
-  landmark('Aquamarine', -380, 230, (x, z) => {
+  landmark('Aquamarine', -380, 230, (x, z, g) => {
     const o = { lit: 0.55, warm: 0.2, variant: 0.6 };
     place('box', x, z, 18, 228, 62, 0.0, '#8fa9bd', S.GLASS_BLUE, 3.9, o);
     place('box', x, z, 62, 228, 18, 0.0, '#8fa9bd', S.GLASS_BLUE, 3.9, o);
     place('frustum', x, z, 24, 250, 24, 0.0, '#c2d0da', S.GLASS_BLUE, 3.9, o);
+    // the four arms of the cross around the tapering core
+    lmRoof('Aquamarine N', x, z, 18, 62, g + 228, 0.0, 250, FAM.glassBlue, { tier: 'terrace', block: [[0, 0, 24, 24]] });
+    lmRoof('Aquamarine E', x, z, 62, 18, g + 228, 0.0, 250, FAM.glassBlue, { tier: 'terrace', block: [[0, 0, 24, 24]] });
     return 250;
   });
   // the bayfront wall (local +x faces the bay): the silhouettes the skyline views read first
@@ -1155,11 +1228,19 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('box', x + 17, z, 26, 196, 58, 0.03, '#a9bccb', S.GLASS_BLUE, 3.9, o);
     place('box', x, z, 10, 9, 54, 0.03, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 187, lit: 0.9, warm: 0.3, variant: 0.5, margin: -1 });
     place('box', x, z, 10, 5, 50, 0.03, '#dfe4e8', S.CONCRETE, 3, { yBase: g + 96, margin: -1 });
+    lmRoof('Bayside Slot W', x - 17, z, 26, 58, g + 196, 0.03, 196, FAM.glassBlue);
+    lmRoof('Bayside Slot E', x + 17, z, 26, 58, g + 196, 0.03, 196, FAM.glassBlue);
     return 196;
   });
   landmark('Ziggurat', 400, 170, (x, z, g) => {
     // stepped pastel setbacks, every tier's roof a terrace, a lit lantern on the last
-    for (const [w, h] of [[64, 48], [52, 94], [42, 132], [32, 162], [22, 184]]) place('box', x, z, w, h, w * 0.85, 0.02, '#f2d9c4', S.DECO, 3.4, { lit: 0.35, warm: 0.8, variant: 0.7 });
+    const tiers = [[64, 48], [52, 94], [42, 132], [32, 162], [22, 184]];
+    for (let i = 0; i < tiers.length; i++) {
+      const [w, h] = tiers[i];
+      place('box', x, z, w, h, w * 0.85, 0.02, '#f2d9c4', S.DECO, 3.4, { lit: 0.35, warm: 0.8, variant: 0.7 });
+      const nw = i < tiers.length - 1 ? tiers[i + 1][0] : 12;
+      lmRoof('Ziggurat', x, z, w, w * 0.85, g + h, 0.02, 190, FAM.deco, { tier: 'terrace', block: [[0, 0, nw, i < tiers.length - 1 ? nw * 0.85 : 10]] });
+    }
     place('box', x, z, 12, 6, 10, 0.02, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 184, lit: 0.9, warm: 0.6, variant: 0.5, margin: -1 });
     return 190;
   });
@@ -1171,6 +1252,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('frustum', x - 25, z, 30, 24, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, { ...o, yBase: g + 198, margin: -1 });
     place('box', x + 25, z, 30, 176, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, o);
     place('frustum', x + 25, z, 30, 24, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, { ...o, yBase: g + 176, margin: -1 });
+    lmRoof('Twin Sails', x, z, 92, 60, g + 14, 0.05, 222, FAM.glassBlue, { tier: 'podium', block: [[-25, 0, 30, 40], [25, 0, 30, 40]] });
     return 222;
   });
   landmark('Coral Crown', 380, 340, (x, z, g) => {
@@ -1182,6 +1264,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       place('box', x + Math.cos(a) * 15, z + Math.sin(a) * 15, 2.5, 24, 12, a, '#f7f5f0', S.CONCRETE, 3, { yBase: g + 170, margin: -1 });
     }
     place('box', x, z, 14, 8, 14, 0.0, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 172, lit: 0.9, warm: 0.6, variant: 0.5, margin: -1 });
+    lmRoof('Coral Crown podium', x, z, 70, 56, g + 12, 0.0, 194, FAM.balcony, { tier: 'podium', block: [[0, 0, 34, 34]] });
+    lmRoof('Coral Crown', x, z, 34, 34, g + 172, 0.0, 194, FAM.balcony, { tier: 'terrace', block: [[0, 0, 14, 14], [15, 0, 2.5, 12], [0, 15, 12, 2.5], [-15, 0, 2.5, 12], [0, -15, 12, 2.5]] });
     return 194;
   });
   landmark('Monolith', 540, 70, (x, z, g) => {
@@ -1199,6 +1283,10 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('box', x, z, 40, 176, 32, 0.02, '#f1e6cf', S.PUNCHED, 3.5, o);
     place('box', x, z, 22, 206, 18, 0.02, '#f3ead6', S.GRID, 3.5, { lit: 0.6, warm: 0.6, variant: 0.4 });
     place('frustum', x, z, 5, 34, 5, 0.02, '#e8eef2', S.CONCRETE, 3, { yBase: g + 206, margin: -1 });
+    lmRoof('Harbor Steps', x, z, 72, 58, g + 60, 0.02, 240, FAM.punched, { tier: 'terrace', block: [[0, 0, 56, 44]] });
+    lmRoof('Harbor Steps', x, z, 56, 44, g + 120, 0.02, 240, FAM.punched, { tier: 'terrace', block: [[0, 0, 40, 32]] });
+    lmRoof('Harbor Steps', x, z, 40, 32, g + 176, 0.02, 240, FAM.punched, { tier: 'terrace', block: [[0, 0, 22, 18]] });
+    lmRoof('Harbor Steps', x, z, 22, 18, g + 206, 0.02, 240, FAM.grid, { tier: 'terrace', block: [[0, 0, 5, 5]] });
     return 240;
   });
   landmark('Marina Point', 450, 500, (x, z, g) => {
@@ -1215,6 +1303,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('box', x - 22, z, 36, 128, 48, 0.02, '#f4f1ea', S.GRID, 3.5, o);
     place('box', x + 24, z, 36, 168, 48, 0.02, '#f4f1ea', S.GRID, 3.5, o);
     place('box', x + 24, z, 30, 7, 40, 0.02, '#b9bfc3', S.GRID, 3.5, { yBase: g + 168, lit: 0, variant: 0.3, margin: -1 });
+    lmRoof('North Quay', x - 22, z, 36, 48, g + 128, 0.02, 128, FAM.grid);
     return 175;
   });
   // ------------------------------------------------------------- brickell landmarks (the second cluster, south of the river)
@@ -1233,6 +1322,9 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('box', x - 28, z, 30, 172, 40, bk.rot, '#a7bccb', S.GLASS_BLUE, 3.9, o);
     place('box', x + 28, z, 30, 190, 40, bk.rot, '#a7bccb', S.GLASS_BLUE, 3.9, o);
     place('box', x + 28, z, 14, 8, 14, bk.rot, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 190, lit: 0.9, warm: 0.3, variant: 0.5, margin: -1 });
+    lmRoof('River Twins podium', x, z, 96, 56, g + 12, bk.rot, 198, FAM.glassBlue, { tier: 'podium', block: [[-28, 0, 30, 40], [28, 0, 30, 40]] });
+    lmRoof('River Twins W', x - 28, z, 30, 40, g + 172, bk.rot, 172, FAM.glassBlue);
+    lmRoof('River Twins E', x + 28, z, 30, 40, g + 190, bk.rot, 198, FAM.glassBlue, { tier: 'terrace', block: [[0, 0, 14, 14]] });
     return 198;
   });
   landmarkIn(bk, 'Palmetto', 440, 180, (x, z, g) => {
@@ -1241,6 +1333,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('box', x, z, 26, 150, 70, bk.rot, '#f2c9a8', S.HOTEL, 3.2, o);
     place('cyl', x, z - 35, 26, 150, 26, bk.rot, '#f2c9a8', S.HOTEL, 3.2, o);
     place('house', x, z + 6, 8, 0.4, 20, bk.rot, '#3fc4de', S.POOL, 3, { yBase: g + 150, form: 2, margin: -1 });
+    lmRoof('Palmetto', x, z, 26, 70, g + 150, bk.rot, 150, FAM.hotel, { block: [[0, 6, 8, 20], [0, -35, 26, 26]] });
+    lmRoof('Palmetto drum', x, z - 35, 26, 26, g + 150, bk.rot, 150, FAM.hotel, { tier: 'terrace', round: true });
     return 150;
   });
   landmarkIn(bk, 'Obsidian', -80, 40, (x, z, g) => {
@@ -1250,6 +1344,9 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('box', x, z, 36, 195, 36, bk.rot, '#3f3b38', S.STONE, 3.8, o);
     place('box', x, z, 26, 225, 26, bk.rot, '#3f3b38', S.STONE, 3.8, o);
     place('box', x, z, 16, 10, 16, bk.rot, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 225, lit: 0.9, warm: 0.5, variant: 0.5, margin: -1 });
+    lmRoof('Obsidian', x, z, 46, 46, g + 150, bk.rot, 235, FAM.stone, { tier: 'terrace', block: [[0, 0, 36, 36]] });
+    lmRoof('Obsidian', x, z, 36, 36, g + 195, bk.rot, 235, FAM.stone, { tier: 'terrace', block: [[0, 0, 26, 26]] });
+    lmRoof('Obsidian', x, z, 26, 26, g + 225, bk.rot, 235, FAM.stone, { tier: 'terrace', block: [[0, 0, 16, 16]] });
     return 235;
   });
 
