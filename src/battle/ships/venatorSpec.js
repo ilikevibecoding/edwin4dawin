@@ -219,8 +219,9 @@ export const BLOCK = {
     zFoot: 835,
     z1: 940,
   },
-  // dark box joining the shafts behind their fronts, seen through the gap between them
-  bridge: { z0: 812, z1: 850, y1: up(127), hx: 15.5 },
+  // low light bridge deck joining the shafts behind their fronts, seen through the gap between them,
+  // with a dark hood on top (the sky shows through the rest of the gap)
+  bridge: { z0: 812, z1: 850, y1: up(118), hx: 15.5, hoodH: 7 },
   // steps behind the block, down toward the stern
   steps: [
     { z0: 940, z1: 985, y1: up(78), hx: 24 },

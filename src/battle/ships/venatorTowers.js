@@ -406,8 +406,8 @@ export function buildTowers(ctx) {
     }
   }
 
-  // ---- bridge box joining the shafts behind their fronts (seen through the gap): a light deck with a
-  // dark recessed window band across its front in the reference
+  // ---- bridge deck joining the shafts behind their fronts (seen through the gap): a low light block
+  // with a dark hood on top and a lit window row across its front, as in the reference
   const br = BLOCK.bridge;
   add(boxMM([-br.hx, b.y1 - 0.2, Z(br.z0)], [br.hx, br.y1, Z(br.z1)]), "hull", {
     color: GREY_RAMP,
@@ -415,27 +415,19 @@ export function buildTowers(ctx) {
   });
   add(
     boxMM(
-      [-br.hx + 0.5, br.y1 - 0.1, Z(br.z0)],
-      [br.hx - 0.5, br.y1 + 0.8, Z(br.z1)],
+      [-br.hx + 1.5, br.y1 - 0.1, Z(br.z0) + 3],
+      [br.hx - 1.5, br.y1 + br.hoodH, Z(br.z1) - 4],
     ),
     "hull",
-    { color: GREY_HULL, texel: 1 / 8 },
+    { color: GREY_RECESS, texel: hullTexel },
   );
   if (mid) {
     add(
-      boxMM(
-        [-br.hx + 1.5, b.y1 + 8, Z(br.z0) - 0.5],
-        [br.hx - 1.5, br.y1 - 6, Z(br.z0) + 0.4],
-      ),
-      "hull",
-      { color: GREY_RECESS, texel: 1 / 6 },
-    );
-    add(
       quadFacing(
-        [0, (b.y1 + br.y1) / 2, Z(br.z0) - 0.7],
+        [0, (b.y1 + br.y1) / 2, Z(br.z0) - 0.3],
         [0, 0, -1],
         [0, 1, 0],
-        br.hx * 1.4,
+        br.hx * 1.5,
         1.3,
       ),
       "windows",
