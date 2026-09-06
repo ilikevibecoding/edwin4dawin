@@ -8,7 +8,7 @@
 // are quads on one canvas texture redrawn once a second. Motion follows route.js's timetable exactly at the phase
 // boundaries and is eased (jerk-limited) inside the acceleration / braking phases. Sound lives in trainAudio.js.
 import * as THREE from 'three';
-import { B } from '../blocks.js';
+import { B, BLOCKS } from '../blocks.js';
 import { CHUNK_SIZE as CS } from '../constants.js';
 import { Vehicle } from './vehicle.js';
 import { VoxelGrid, buildVoxelMesh, buildExtrasMesh, voxelMaterial, LIGHT_SAMPLES } from './voxelMesh.js';
@@ -361,6 +361,7 @@ export class SpaceTrain extends Vehicle {
     this.listeners = []; // (event, train) => void   events: 'doors', 'arrive', 'depart'
     this.preloadStats = { chunks: 0, ms: 0 };
     this.clockOffset = null; // schedule tick - local tick, once synced to a server clock
+    this.scratch = { x: 0, y: 0, z: 0 };   // per-frame light sampling without allocations
     this.setDoors(!this.state.doorsOpen);
     this.doorAnim = this.doorsClosed ? 0 : 1;
   }
@@ -546,12 +547,14 @@ export class SpaceTrain extends Vehicle {
   sampleLightAlong() {
     const world = this.game && this.game.world;
     if (!world || !this.cur) return;
-    const g = this.grid, along = this.material.uniforms.uLightAlong.value;
+    const g = this.grid, along = this.material.uniforms.uLightAlong.value, w = this.scratch;
     for (let k = 0; k < LIGHT_SAMPLES; k++) {
-      const gx = 0.5 + (g.w - 1) * k / (LIGHT_SAMPLES - 1);
-      const w = this.toWorld(gx, 3.5, g.d / 2, this.cur, { x: 0, y: 0, z: 0 });
-      const l = world.sampleLight(w.x, w.y, w.z);
-      along[k].set(l[0], l[1]);
+      this.toWorld(0.5 + (g.w - 1) * k / (LIGHT_SAMPLES - 1), 3.5, g.d / 2, this.cur, w);
+      // world.sampleLight without its per-call array: inside an opaque block sample the cell above
+      const bx = Math.floor(w.x), bz = Math.floor(w.z);
+      let by = Math.floor(w.y);
+      if (BLOCKS[world.getBlock(bx, by, bz)].opaque) by++;
+      along[k].set(world.getSky(bx, by, bz) / 15, world.getLight(bx, by, bz) / 15);
     }
   }
 
