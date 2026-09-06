@@ -242,14 +242,14 @@ export const TOWER = {
   frontZ0: 746, // the head's front face, 46 m ahead of the shaft
   headZ1: 886, // its rear, 4 m behind the shaft
   visorY0: up(160), // the bevelled top slab runs from here up to headY1 ...
-  band: 4, // ... over a dark recessed window band this tall along the front and around the corners
+  band: 3.4, // ... over a dark recessed window band this tall along the front and around the corners
   bandDepth: 36, // how far the band wraps back along the sides
-  chinHx: 7.5, // below the band a light chin, full width for chinLip, tapers to this half-width ...
+  chinHx: 9.5, // below the band a light chin, full width for chinLip, tapers to this half-width ...
   chinLip: 5, // ... on the shaft (the reference's jaw: square shoulders, then the rounded underside)
   chinDrop: 8, // at the front the chin hangs this far below the shaft top, sloping up to it
-  sensor: { hx: 10, z0: 806, z1: 852, y1: up(177) }, // dark sensor block over the rear half
+  sensor: { hx: 11.5, z0: 790, z1: 856, y1: up(178) }, // dark sensor block over the rear half
   drumR: 7, // light shallow drum on the sensor block
-  drumZ: 826,
+  drumZ: 812,
   mastY1: up(187), // overall height 262 m from the keel (-30)
 };
 

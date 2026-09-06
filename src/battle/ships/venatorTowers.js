@@ -37,6 +37,7 @@ import {
 } from "./venatorSpec.js";
 
 const GREY_HEAD_TOP = lin(0.62, 0.6, 0.53); // head slab tops: lighter than the deck, short of bloom
+const GREY_ROW = lin(0.2, 0.2, 0.19); // the ramp's grille rows: softer than a recess
 
 const rect = (hx, z0, z1) => [
   [-hx, Z(z0)],
@@ -180,10 +181,11 @@ export function buildTowers(ctx) {
   });
   const faceLen = Math.hypot(H, b.zTop0 - b.zFoot);
   if (mid) {
-    // ramp face relief, as in the reference (raised plates 0.8-1.6 m proud and dark recessed rows, so
+    // ramp face relief, as in the reference (raised plates 0.7-1.7 m proud and dark recessed rows, so
     // the shading breaks the plate up): a band of full-width grille rows directly under the shafts —
-    // dark rows between raised light bars — a large raised plate low in the centre inside a thin dark
-    // border, short raised strips either side of it, thin seams between, and low steps at the foot
+    // dark rows between raised light bars — with a slotted box over them on the port third, a tall
+    // raised panel along the starboard third, a large raised plate low in the centre inside a thin dark
+    // border, short raised strips outboard of it, thin seams between, and low steps at the foot
     const fy = (f) => b.yFoot + H * f;
     const fullW = (f) => hxAt(fy(f)) * 2 - 4;
     const seam = (f, x, w, h = 0.6) =>
@@ -201,43 +203,66 @@ export function buildTowers(ctx) {
         color: GREY_RECESS,
         texel: 1 / 6,
       });
-    // grille band under the shafts
-    const g0 = 0.7;
+    const row = (f, x, w, h) =>
+      add(faceBox(rampFrame(fy(f), x), w, h, 0.3, 0.05), "hull", {
+        color: GREY_ROW,
+        texel: 1 / 6,
+      });
+    // grille band under the shafts: dark rows between raised light bars, full width
+    const g0 = 0.71;
     const g1 = 0.96;
     const rows = fine ? 5 : 3;
     const pitch = (g1 - g0) / rows;
     for (let i = 0; i < rows; i++) {
       const fa = g0 + pitch * i;
-      const fs = fa + pitch * 0.24;
-      const fb = fa + pitch * 0.72;
-      slot(fs, 0, fullW(fs), faceLen * pitch * 0.42);
-      plate(fb, 0, fullW(fb), faceLen * pitch * 0.5, 1.0);
+      const fs = fa + pitch * 0.2;
+      const fb = fa + pitch * 0.66;
+      row(fs, 0, fullW(fs), faceLen * pitch * 0.3);
+      plate(fb, 0, fullW(fb), faceLen * pitch * 0.56, 1.0);
     }
-    // the big central plate inside its dark border
+    // the raised slotted box on the upper port third (over the band), as in the reference
+    plate(0.83, -9.5, 17, 9, 1.7);
+    if (fine)
+      for (const k of [-2, -1, 0, 1, 2])
+        slot(0.83, -9.5 + k * 2.8, 1.6, 5.2, 1.75);
+    // the tall raised panel along the starboard third
     {
-      const f0 = 0.13;
-      const f1 = 0.52;
+      const f0 = 0.06;
+      const f1 = 0.68;
       const fm = (f0 + f1) / 2;
-      const w = hxAt(fy(fm)) * 2 * 0.58;
+      const xa = 7;
+      const xb = hxAt(fy(fm)) - 2.5;
+      plate(fm, (xa + xb) / 2, xb - xa, faceLen * (f1 - f0), 0.7);
+      seam(fm, xa - 0.5, 0.5, faceLen * (f1 - f0));
+      if (fine)
+        for (const f of [0.17, 0.26]) {
+          slot(f, (xa + xb) / 2, 4.5, 4.5, 0.75);
+          plate(f, (xa + xb) / 2, 3.3, 3.3, 0.8, 0.8);
+        }
+    }
+    // the big raised plate low in the centre (a little to port) inside its dark border
+    {
+      const f0 = 0.14;
+      const f1 = 0.5;
+      const fm = (f0 + f1) / 2;
+      const w = hxAt(fy(fm)) * 2 * 0.48;
       const h = faceLen * (f1 - f0);
-      slot(fm, 0, w, h);
-      plate(fm, 0, w - 2.0, h - 2.0, 1.3, 0.3);
+      slot(fm, -4, w, h);
+      plate(fm, -4, w - 2.0, h - 2.0, 1.3, 0.3);
       if (fine) {
-        seam(fm, 0, 0.5, h - 4);
-        seam(fm, 0, w - 4, 0.5);
+        seam(fm, -4, 0.5, h - 4);
+        seam(fm, -4, w - 4, 0.5);
       }
     }
-    // short raised strips either side of it, and a few small dark hatches between them
-    for (const sg of [-1, 1])
-      for (const [i, f] of (fine
-        ? [0.19, 0.29, 0.39, 0.49]
-        : [0.24, 0.44]
-      ).entries()) {
-        const hx = hxAt(fy(f));
-        const w = hx * 0.42 - 3.5;
-        plate(f, sg * (hx * 0.58 + hx * 0.42 * 0.5), w, 2.4, 0.9);
-        if (fine && i % 2 === 0) slot(f + 0.05, sg * (hx * 0.79), 3, 2.2);
-      }
+    // short raised strips outboard of it on the port side, small dark hatches between
+    for (const [i, f] of (fine
+      ? [0.19, 0.28, 0.37, 0.46]
+      : [0.24, 0.42]
+    ).entries()) {
+      const hx = hxAt(fy(f));
+      plate(f, -(hx * 0.8), hx * 0.3 - 1, 2.4, 0.9);
+      if (fine && i % 2 === 1) slot(f + 0.045, -(hx * 0.8), 2.6, 2.0);
+    }
     // seams between the elements
     for (const f of [0.58, 0.65]) seam(f, 0, fullW(f) - 1);
     if (fine) {
@@ -692,7 +717,7 @@ export function buildTowers(ctx) {
         { color: GREY_RECESS, texel: 1 / 6 },
       );
     }
-    // dark sensor block over the rear half with a light top plate, the light shallow drum on it, the
+    // dark sensor block over the rear half (its lid a shade lighter), the light shallow drum on it, the
     // mast with its light, two small dark boxes behind
     const seg = fine ? 16 : mid ? 10 : 8;
     const se = T.sensor;
@@ -711,7 +736,7 @@ export function buildTowers(ctx) {
         [scx + se.hx + 0.4, se.y1 + 0.6, Z(se.z1) + 0.4],
       ),
       "hull",
-      { color: GREY_HEAD_TOP, texel: 1 / 8 },
+      { color: GREY_BLOCK, texel: 1 / 8 },
     );
     const dz = Z(T.drumZ);
     add(
