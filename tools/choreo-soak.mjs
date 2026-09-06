@@ -6,6 +6,7 @@
 // Usage: node tools/choreo-soak.mjs [--base http://127.0.0.1:5307/battle.html] [--out /tmp/soak]
 //        [--step 60] [--total 180] [--views wide,lines] [--shots 0,6,7]  (cinematic shot indices to grab)
 //        [--shot-t 5] [--shots-at 60,120]   e.g. a 20-minute run: --total 1200 --step 120 --views ""
+//        [--size 960x540]  screenshot size (software GL renders a 1280x720 frame in about twice the time)
 import { chromium } from "playwright-core";
 import { mkdirSync, existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -26,6 +27,7 @@ const views = opt("--views", "wide").split(",").filter(Boolean);
 const shots = opt("--shots", "").split(",").filter(Boolean).map(Number);
 const shotT = +opt("--shot-t", 5);
 const shotsAt = opt("--shots-at", "").split(",").filter(Boolean).map(Number); // checkpoints that grab shots (default all)
+const [width, height] = opt("--size", "960x540").split("x").map(Number);
 mkdirSync(outDir, { recursive: true });
 
 const executablePath = [
@@ -50,7 +52,7 @@ const browser = await chromium.launch({
   ],
 });
 const page = await browser.newPage({
-  viewport: { width: 1280, height: 720 },
+  viewport: { width: width || 960, height: height || 540 },
   deviceScaleFactor: 1,
 });
 page.setDefaultTimeout(240000);
@@ -211,6 +213,24 @@ for (const cp of checkpoints) {
     console.log(
       `   hull overlaps (oriented boxes touching): ${overlaps.length}${overlaps.length ? " " + JSON.stringify(overlaps) : ""}`,
     );
+  // per-class roster: alive (dying) + wrecks still drawn, with the roles the class is flying
+  const classes = await page.evaluate(() =>
+    window.debugAPI.battle.classCounts
+      ? window.debugAPI.battle.classCounts()
+      : null,
+  );
+  if (classes) {
+    const line = Object.entries(classes)
+      .map(([cls, c]) => {
+        const roles = Object.entries(c.roles)
+          .map(([r, n]) => `${r} ${n}`)
+          .join(", ");
+        return `${cls} ${c.alive}${c.dying ? `+${c.dying} dying` : ""}${c.dead ? `+${c.dead} wreck` : ""} [${roles}]`;
+      })
+      .join("  ");
+    console.log(`   classes: ${line}`);
+    results[results.length - 1].classes = classes;
+  }
   const minSep = await page.evaluate(() => {
     const ships = window.debugAPI.fleet.ships.filter((s) => s.alive);
     let best = null;
@@ -271,6 +291,22 @@ const deathLog = await page.evaluate(() => {
   const d = window.debugAPI.battle.director;
   return d && d.deathLog ? d.deathLog : [];
 });
+// roster summary: ships per class at the start and the end (alive, incl. dying), deaths per class
+const roster = results[0].classes;
+if (roster) {
+  const end = results[results.length - 1].classes || {};
+  console.log(
+    "roster (class: alive at start -> at end, deaths): " +
+      Object.keys(roster)
+        .map((cls) => {
+          const a = roster[cls];
+          const b = end[cls] || { alive: 0, dying: 0 };
+          const deaths = deathLog.filter((e) => e.cls === cls).length;
+          return `${cls} ${a.alive + a.dying}->${b.alive + b.dying}${deaths ? ` (-${deaths})` : ""}`;
+        })
+        .join("  "),
+  );
+}
 if (deathLog.length) {
   console.log(
     `deaths (${deathLog.length} over ${total} s): ` +

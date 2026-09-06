@@ -1,10 +1,13 @@
-// Fire exchange: target selection (nearest, with a taste for already-damaged and doomed enemies, one
-// target per side of the hull so both broadsides work), heavy turrets firing in staggered salvos with a
-// long recharge, light guns in rapid sporadic bursts, leads on the target's drift, a share of misses that
-// fly past the hull and burst as flak, and a density controller that holds the number of capital-ship
-// bolts in flight inside a band whatever the fleet size.
+// Fire exchange: target selection (nearest, with a taste for already-damaged and doomed enemies and for
+// hulls of the shooter's own size, one target per side of the hull so both broadsides work, the light
+// guns preferring the escorts and couriers within their reach, a share of the heavy-gun ships drawn onto
+// the Lucrehulks), heavy turrets firing in staggered salvos with a long recharge, light guns in rapid
+// sporadic bursts, leads on the target's drift, a share of misses that fly past the hull and burst as
+// flak, and a density controller that holds the number of capital-ship bolts in flight inside a band
+// whatever the fleet size.
 import * as THREE from "three";
 import { BOLT_COLORS } from "./weapons.js";
+import { classInfo } from "./choreoLayout.js";
 
 const _from = new THREE.Vector3();
 const _dir = new THREE.Vector3();
@@ -82,68 +85,157 @@ const MAX_RANGE = 16000;
 // heavy turbolaser bolts are in flight and drops when there are too many. The heavy salvos are what
 // reads on camera at a few kilometres; the light guns ride along on the same factor.
 export class Heat {
-  constructor(lo = 80, hi = 140) {
+  constructor(lo = 80, hi = 140, initial = 1) {
     this.lo = lo;
     this.hi = hi;
-    this.value = 1;
+    this.value = initial;
+    this.smooth = -1; // smoothed in-flight count (salvos arrive in bursts)
   }
   update(inFlight, dt) {
-    // slow proportional slew outside the band: the guns answer a change of heat only after their
-    // current recharge (several seconds), so a fast integrator would hunt
+    // the count is smoothed over ~6 s and the divisor slews slowly outside the band: the guns answer
+    // a change of heat only after their current recharge (up to 20 s at low heat, plus the bolts'
+    // flight), so a fast integrator hunts between the band's ends
+    if (this.smooth < 0) this.smooth = inFlight;
+    this.smooth += (inFlight - this.smooth) * Math.min(1, dt / 6);
     const mid = 0.5 * (this.lo + this.hi);
     let err = 0;
-    if (inFlight < this.lo) err = (this.lo - inFlight) / mid;
-    else if (inFlight > this.hi) err = (this.hi - inFlight) / mid;
-    this.value = THREE.MathUtils.clamp(this.value + err * 0.15 * dt, 0.4, 3.0);
+    if (this.smooth < this.lo) err = (this.lo - this.smooth) / mid;
+    else if (this.smooth > this.hi) err = (this.hi - this.smooth) / mid;
+    this.value = THREE.MathUtils.clamp(this.value + err * 0.06 * dt, 0.25, 3.0);
   }
+}
+
+// Starting heat for a fleet with `heavyGuns` heavy hardpoints and a band centred on `mid`: at heat 1 a
+// heavy gun keeps roughly half a bolt in the air on average (2.5 bolts a salvo over 4-5 s of flight
+// every ~14 s, a third of the guns masked or out of range), so the exchange opens near its steady state
+// instead of flooding the band and waiting a minute for the controller
+export function initialHeat(heavyGuns, mid) {
+  return THREE.MathUtils.clamp(mid / (0.5 * Math.max(1, heavyGuns)), 0.3, 1.5);
 }
 
 // nominal heavy recharge between salvos (divided by heat); the initial cooldowns are spread over it so
 // the exchange starts at its steady rhythm instead of every gun firing in the first seconds
 export const HEAVY_RECHARGE = [9, 19];
 
+// hulls shorter than this (escorts, couriers) are the light guns' business
+export const SMALL_HULL = 500;
+
+// gun mix of a ship's class: how many heavy and light hardpoints and how far they reach (cached)
+export function gunInfo(st) {
+  let gi = st.gunInfo;
+  if (!gi) {
+    gi = { heavy: 0, light: 0, heavyRange: 0, lightRange: 0 };
+    for (const h of st.ship.model.hardpoints) {
+      if (h.kind === "heavy") {
+        gi.heavy++;
+        gi.heavyRange = Math.max(gi.heavyRange, h.range || 0);
+      } else {
+        gi.light++;
+        gi.lightRange = Math.max(gi.lightRange, h.range || 0);
+      }
+    }
+    st.gunInfo = gi;
+  }
+  return gi;
+}
+
 // Pick the primary target (best score) and a secondary one on the opposite side of the hull. Every ship
 // counts how many enemies have it as primary target (`targetedBy`) so fire spreads over the line
-// instead of everyone hammering the nearest hull.
+// instead of everyone hammering the nearest hull. Hulls of a size like the shooter's score better (a
+// Venator's turbolasers want Providences and frigates, not couriers); a share of the heavy-gun ships
+// swing onto a fire-drawing class (the Lucrehulks) whenever one is in range. The light guns get their
+// own picks: the nearest small enemy in reach and the nearest enemy of any size.
 export function chooseTargets(st, states, rand) {
   const s = st.ship;
+  const gi = gunInfo(st);
+  const Ls = s.model.length;
   _side.set(1, 0, 0).applyQuaternion(s.quaternion);
   let best = null;
   let bestScore = Infinity;
   let bestSide = 0;
-  for (const o of states) {
-    if (o.side === st.side || o.dead || o.dying) continue;
-    const d = o.ship.position.distanceTo(s.position);
-    if (d > MAX_RANGE) continue;
-    // nearer is better; hurt or doomed ships draw fire; crowded targets repel it; noise on top
-    let score = d * (1 - 0.2 * (1 - o.hpFrac())) * (o.doomed ? 0.45 : 1);
-    score *= 1 + 0.18 * (o.targetedBy - (st.target === o ? 1 : 0));
-    score *= 0.7 + 0.6 * rand();
-    if (score < bestScore) {
-      bestScore = score;
-      best = o;
-      _to.subVectors(o.ship.position, s.position);
+  if (gi.heavy) {
+    const roll = rand();
+    let pd = Infinity;
+    for (const o of states) {
+      if (o.side === st.side || o.dead || o.dying) continue;
+      const pr = classInfo(o.cls).priority || 0;
+      if (!pr || roll >= pr) continue;
+      const d = o.ship.position.distanceTo(s.position);
+      if (d > Math.min(MAX_RANGE, gi.heavyRange * 0.97)) continue;
+      const sc = d * (1 + 0.04 * o.targetedBy);
+      if (sc < pd) {
+        pd = sc;
+        best = o;
+      }
+    }
+    if (best) {
+      bestScore = 0;
+      _to.subVectors(best.ship.position, s.position);
       bestSide = Math.sign(_to.dot(_side)) || 1;
     }
   }
+  // the reach of the ship's main guns: targets beyond it score badly (the artillery far behind the
+  // lines picks what it can actually hit)
+  const reach = gi.heavy ? gi.heavyRange : gi.lightRange || MAX_RANGE;
+  if (!best)
+    for (const o of states) {
+      if (o.side === st.side || o.dead || o.dying) continue;
+      const d = o.ship.position.distanceTo(s.position);
+      if (d > MAX_RANGE) continue;
+      // nearer is better; hurt or doomed ships draw fire; crowded targets repel it; hulls of another
+      // size class repel it too (half again per octave of length ratio); noise on top
+      let score = d * (1 - 0.2 * (1 - o.hpFrac())) * (o.doomed ? 0.45 : 1);
+      score *= 1 + 0.18 * (o.targetedBy - (st.target === o ? 1 : 0));
+      score *= 1 + 0.5 * Math.abs(Math.log2(o.ship.model.length / Ls));
+      score *= classInfo(o.cls).drawFire || 1;
+      if (d > reach) score *= 3;
+      score *= 0.7 + 0.6 * rand();
+      if (score < bestScore) {
+        bestScore = score;
+        best = o;
+        _to.subVectors(o.ship.position, s.position);
+        bestSide = Math.sign(_to.dot(_side)) || 1;
+      }
+    }
   setTarget(st, best);
   st.target2 = null;
+  st.targetSmall = null;
+  st.targetNear = null;
   if (!best) return;
   let best2 = null;
   let best2Score = Infinity;
+  let small = null;
+  let smallD = Infinity;
+  let near = null;
+  let nearD = Infinity;
   for (const o of states) {
-    if (o === best || o.side === st.side || o.dead || o.dying) continue;
+    if (o.side === st.side || o.dead || o.dying) continue;
     _to.subVectors(o.ship.position, s.position);
-    if (Math.sign(_to.dot(_side)) === bestSide) continue;
     const d = _to.length();
+    if (gi.light && d <= gi.lightRange) {
+      if (d < nearD) {
+        nearD = d;
+        near = o;
+      }
+      if (o.ship.model.length < SMALL_HULL && d < smallD) {
+        smallD = d;
+        small = o;
+      }
+    }
+    if (o === best || Math.sign(_to.dot(_side)) === bestSide) continue;
     if (d > MAX_RANGE * 0.7) continue;
-    const score = d * (1 - 0.3 * (1 - o.hpFrac()));
+    const score =
+      d *
+      (1 - 0.3 * (1 - o.hpFrac())) *
+      (1 + 0.5 * Math.abs(Math.log2(o.ship.model.length / Ls)));
     if (score < best2Score) {
       best2Score = score;
       best2 = o;
     }
   }
   st.target2 = best2;
+  st.targetSmall = small;
+  st.targetNear = near;
 }
 
 // Change a ship's primary target, keeping the targets' `targetedBy` counts current.
@@ -178,7 +270,10 @@ function fireAt(st, i, tgt, ctx) {
   const spec = BOLT_SPECS[hp.kind === "heavy" ? "heavy" : "light"][st.side];
   const flight = dist / spec.speed;
   _aim.addScaledVector(t.velocity, flight);
-  const scatter = hp.kind === "heavy" ? 35 : 60;
+  // scatter shrinks with the target so shots at a courier still land on its hull
+  const scatter =
+    (hp.kind === "heavy" ? 35 : 60) *
+    THREE.MathUtils.clamp(t.model.bounds.radius / 600, 0.25, 1);
   _aim.x += rand.range(-scatter, scatter);
   _aim.y += rand.range(-scatter, scatter);
   _aim.z += rand.range(-scatter, scatter);
@@ -212,6 +307,8 @@ function fireAt(st, i, tgt, ctx) {
   return true;
 }
 
+const live = (tgt) => tgt && !tgt.dead && !tgt.dying && tgt.ship.alive;
+
 // Per-frame gun loop for one ship: cooldowns, salvo sequencing, target choice per hardpoint.
 export function updateGuns(st, dt, ctx) {
   const s = st.ship;
@@ -230,10 +327,21 @@ export function updateGuns(st, dt, ctx) {
     }
     const hp = hps[i];
     const heavy = hp.kind === "heavy";
-    // which target can this gun see? try the primary, then the one on the other side
+    // which target can this gun see? heavy guns: the primary, then the one on the other side; light
+    // guns: the small ship in reach first, then the same two, then whatever enemy is nearest
     let fired = false;
-    if (st.target && fireAt(st, i, st.target, ctx)) fired = true;
+    if (!heavy && live(st.targetSmall) && fireAt(st, i, st.targetSmall, ctx))
+      fired = true;
+    else if (st.target && fireAt(st, i, st.target, ctx)) fired = true;
     else if (st.target2 && fireAt(st, i, st.target2, ctx)) fired = true;
+    else if (
+      !heavy &&
+      live(st.targetNear) &&
+      st.targetNear !== st.target &&
+      st.targetNear !== st.target2 &&
+      fireAt(st, i, st.targetNear, ctx)
+    )
+      fired = true;
     if (!fired) {
       st.salvoLeft[i] = 0;
       cd[i] = 0.6 + rand() * 0.9; // masked by the hull: try again shortly

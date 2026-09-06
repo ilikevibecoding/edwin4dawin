@@ -4,10 +4,14 @@
 // fighter chase (the fighter held in the lower third; the shot cuts if it leaves the frame), a Separatist
 // ship silhouetted over the city, a wide across the battle over a foreground hull, a track along a
 // Venator's flank, the melee from below with Coruscant filling the bottom of the frame, the ship dying
-// right now, a pass under a Providence's ventral fin and a wide from over the Republic line; the inserts
-// are an impact close-up on the most-targeted hull, a fighter crossing the frame and flak bursting around
-// a hull under fire. The camera never enters a hull: a small sphere test plus the ships' oriented boxes
-// (inflated 12 %). C toggles it, any drag hands control back to the orbit camera.
+// right now, a pass under a Providence's ventral fin, a wide from over the Republic line, a pass along a
+// Lucrehulk's ring with the core sphere beyond the deck, an escort crossing under a Venator's keel, an
+// Acclamator behind the line with the Venators and the battle beyond its bow, and a Consular courier
+// flashing past the camera along a Venator's flank; the inserts are an impact close-up on the
+// most-targeted hull, a fighter crossing the frame and flak bursting around a hull under fire. Shots
+// built on a class that is not in this build fall back to a neighbouring shot. The camera never enters a
+// hull: a small sphere test plus the ships' oriented boxes (inflated 12 %, `Ship.containsPoint`). C
+// toggles it, any drag hands control back to the orbit camera.
 import * as THREE from "three";
 import { BATTLE_SUN_DIR } from "./battleShader.js";
 
@@ -26,10 +30,12 @@ const OBB_MARGIN = 1.2; // hull boxes inflated by this for the camera clearance
 const glide = (t) => t * (1.35 - 0.35 * t);
 const clamp01 = (t) => Math.min(1, Math.max(0, t));
 
-// shot indices 0-10 are the hero shots (main.js views address them by index), 11-13 the inserts; the
-// cycle plays them in this order
-const SHOTS = 14;
-const ORDER = [0, 11, 1, 2, 12, 3, 4, 13, 5, 6, 11, 7, 8, 12, 9, 10, 13];
+// shot indices 0-10 and 14-17 are the hero shots (main.js views address them by index), 11-13 the
+// inserts; the cycle plays them in this order (5-8 s hero shots with a 2.5 s insert every two or three)
+const SHOTS = 18;
+const ORDER = [
+  0, 11, 1, 2, 12, 3, 14, 4, 13, 5, 6, 15, 11, 7, 8, 12, 16, 9, 10, 13, 17,
+];
 
 export class Cinematic {
   constructor(camera, battle, fighters) {
@@ -324,10 +330,13 @@ export class Cinematic {
     let s = this._any();
     if (seps.length) {
       // the lowest few ships that are part of the lines or the melee (the stragglers far below near
-      // the planet make a lonely frame), cycled
+      // the planet make a lonely frame), cycled; not the Lucrehulks (the offsets below suit a 1 km hull)
       let list = seps.filter((x) => {
         const st = this._state(x);
-        return !st || st.role === "line" || st.role === "melee";
+        return (
+          x.model.id !== "lucrehulk" &&
+          (!st || st.role === "line" || st.role === "melee")
+        );
       });
       if (!list.length) list = seps;
       const sorted = list.slice().sort((p, q) => p.position.y - q.position.y);
@@ -640,6 +649,172 @@ export class Cinematic {
     };
   }
 
+  // 14: pass along a Lucrehulk's ring, the deck sweeping by below and the core sphere beyond it
+  _ringPass(i) {
+    const list = this._ships("separatist", "lucrehulk");
+    if (!list.length) return this._finPass(i);
+    const s = list[i % list.length];
+    const R = s.model.length * 0.5; // outer ring radius (the model's length is its diameter)
+    const side = this._sunSide(s);
+    // ring angles run from the bow (-Z) toward starboard (+X): from abeam the stern quarter of the
+    // sunlit arm toward the bow gap, 380 m outboard of the rim and 300 m over the deck (outside the
+    // ring, so the ring-aware clearance leaves the camera alone), looking in across the deck at the core
+    const th0 = side * 2.0;
+    const th1 = side * 1.05;
+    const r = R + 380;
+    const y = (s.model.bounds.centre ? s.model.bounds.centre[1] : 0) + 300; // ~300 m over the deck
+    return {
+      name: "ring pass " + s.id,
+      duration: 8,
+      roll: -0.03 * side,
+      at: (t, p, l) => {
+        const e = glide(t);
+        const th = th0 + (th1 - th0) * e;
+        p.set(r * Math.sin(th), y, -r * Math.cos(th)).applyMatrix4(s.matrix);
+        // the look point sits between the core and the inner rim a little ahead, so the arm's deck
+        // fills the lower frame and the sphere hangs over it
+        const ta = th - side * 0.45;
+        const ri = R * 0.28;
+        l.set(ri * Math.sin(ta), 60, -ri * Math.cos(ta)).applyMatrix4(s.matrix);
+      },
+    };
+  }
+  // 15: an escort (Arquitens or Carrack) crossing under a Venator's keel, trailed from below and behind
+  // so the escort sits in the lower third and the belly of the big hull fills the top of the frame
+  _escortsUnder(i) {
+    const states = (this.battle.states || []).filter(
+      (st) =>
+        st.role === "escort" &&
+        !st.dead &&
+        !st.dying &&
+        st.ship.alive &&
+        st.ward &&
+        !st.ward.dead &&
+        st.ward.ship.alive,
+    );
+    if (!states.length) return this._flankTrack(i);
+    // the escort nearest its ward's centre line (under the keel, or about to be)
+    let best = null;
+    let bestD = Infinity;
+    for (const st of states) {
+      const w = st.ward.ship;
+      _d.subVectors(st.ship.position, w.position);
+      _a.set(1, 0, 0).applyQuaternion(w.quaternion);
+      const lateral =
+        Math.abs(_d.dot(_a)) + (st.ship.position.y > w.position.y ? 3000 : 0);
+      if (lateral < bestD) {
+        bestD = lateral;
+        best = st;
+      }
+    }
+    const e = best.ship;
+    const w = best.ward.ship;
+    return {
+      name: `${e.model.id} under ${w.model.id} ${w.id}`,
+      duration: 7,
+      smoothK: 12,
+      roll: 0.03,
+      subject: (out) => (e.alive && !best.dead ? out.copy(e.position) : null),
+      at: (t, p, l) => {
+        if (!e.alive || best.dead) return false;
+        // 500 m behind and 300 m below the escort, a little to one side, looking 46 degrees up over
+        // it: the escort rides 15 degrees under the frame centre, the keel above it 15 degrees over
+        _a.copy(e.velocity);
+        if (_a.lengthSq() < 1) _a.set(0, 0, -1).applyQuaternion(e.quaternion);
+        else _a.normalize();
+        _s.crossVectors(_a, UP).normalize();
+        p.copy(e.position)
+          .addScaledVector(_a, -(500 + 30 * t))
+          .addScaledVector(_s, 130)
+          .addScaledVector(UP, -300);
+        l.copy(e.position).addScaledVector(UP, 205);
+        // lean the look toward the ward's keel so the big hull stays in the top of the frame
+        _c.copy(w.position);
+        _c.y -= 160;
+        l.lerp(_c, 0.2);
+        return true;
+      },
+    };
+  }
+  // 16: an Acclamator behind the line: along its flank from the stern quarter to abeam the tower, the
+  // wedge in the lower frame, the Venator line and the battle beyond its bow
+  _acclamatorLine(i) {
+    const list = this._ships("republic", "acclamator");
+    if (!list.length) return this._wideFleet(i);
+    const s = list[i % list.length];
+    const L = s.model.length;
+    const half = s.model.bounds.half || [L * 0.3, L * 0.14, L * 0.5];
+    const side = this._sunSide(s);
+    const c = this._meleeCentre(new THREE.Vector3());
+    return {
+      name: "acclamator behind the line " + s.id,
+      duration: 8,
+      roll: -0.03 * side,
+      at: (t, p, l) => {
+        const e = glide(t);
+        _a.set(side * (half[0] + 260), half[1] + 220, L * 0.75).applyMatrix4(
+          s.matrix,
+        );
+        _b.set(side * (half[0] + 120), half[1] + 140, L * 0.15).applyMatrix4(
+          s.matrix,
+        );
+        p.lerpVectors(_a, _b, e);
+        l.set(-side * 60, 40, -L * 0.6).applyMatrix4(s.matrix);
+        l.lerp(c, 0.25);
+      },
+    };
+  }
+  // 17: a Consular courier flashing past: the camera parks on the courier's run along a line ship's
+  // flank, 420 m ahead of it and a little outboard, and pans late so the courier fills the frame as
+  // it passes and leaves it (the subject test then cuts the shot)
+  _courierDart(i) {
+    const all = (this.battle.states || []).filter(
+      (st) =>
+        st.role === "courier" &&
+        !st.dead &&
+        !st.dying &&
+        st.ship.alive &&
+        st.path &&
+        st.path.ward &&
+        st.path.ward.ship.alive &&
+        st.ship.velocity.lengthSq() > 400,
+    );
+    // couriers on the first half of a run first (they pass along the flank); a courier still flying
+    // to the start of its run will do
+    let states = all.filter((st) => !st.path.hold && st.path.u < 0.6);
+    if (!states.length) states = all;
+    if (!states.length) return this._impactInsert(i);
+    const st = states[i % states.length];
+    const cs = st.ship;
+    const w = st.path.ward.ship;
+    _a.copy(cs.velocity);
+    if (_a.lengthSq() < 1) _a.set(0, 0, -1).applyQuaternion(cs.quaternion);
+    else _a.normalize();
+    _s.subVectors(cs.position, w.position); // outboard: away from the ward
+    _s.y = 0;
+    if (_s.lengthSq() < 1) _s.crossVectors(_a, UP);
+    _s.normalize();
+    const cam = cs.position
+      .clone()
+      .addScaledVector(_a, 420)
+      .addScaledVector(_s, 140)
+      .addScaledVector(UP, 60);
+    const look0 = cs.position.clone().addScaledVector(_a, 150);
+    return {
+      name: `courier past ${w.model.id} ${w.id}`,
+      duration: 6,
+      smoothK: 4,
+      roll: 0.02,
+      subject: (out) => (cs.alive && !st.dead ? out.copy(cs.position) : null),
+      at: (t, p, l) => {
+        if (!cs.alive || st.dead) return false;
+        p.copy(cam);
+        l.copy(cs.position).lerp(look0, 0.35);
+        return true;
+      },
+    };
+  }
+
   _build(index) {
     const seq = [
       () => this._heroPass(this.take),
@@ -656,6 +831,10 @@ export class Cinematic {
       () => this._impactInsert(this.take),
       () => this._fighterCross(this.take),
       () => this._flakInsert(this.take),
+      () => this._ringPass(this.take),
+      () => this._escortsUnder(this.take),
+      () => this._acclamatorLine(this.take),
+      () => this._courierDart(this.take),
     ];
     return seq[index % seq.length]();
   }
@@ -693,7 +872,8 @@ export class Cinematic {
   }
 
   // keep the camera outside every hull: a small sphere around each ship centre, then the ship's
-  // oriented bounding box inflated 12 % (pushed out through the nearest face)
+  // oriented bounding box inflated 12 % (pushed out through the nearest face); a Lucrehulk's box is a
+  // 3 km cube of mostly empty space, so its ring is tested as a ring (the sphere test covers the core)
   _clear(p) {
     for (const s of this.battle.fleet.ships) {
       if (!s.alive) continue;
@@ -708,6 +888,10 @@ export class Cinematic {
         else _d.divideScalar(d);
         p.addScaledVector(_d, rMin - d);
         this.pushes++;
+      }
+      if (s.model.id === "lucrehulk" && b.half) {
+        this._clearRing(s, p);
+        continue;
       }
       if (!b.half || !s.containsPoint(p, OBB_MARGIN)) continue;
       _m.copy(s.matrix).invert();
@@ -728,6 +912,24 @@ export class Cinematic {
       p.copy(_l).applyMatrix4(s.matrix);
       this.pushes++;
     }
+  }
+
+  // ring hull: inside when the point lies over the arms (radial distance between the inner wall and the
+  // outer rim, inflated) within the hull's vertical extent (the box's, which includes the stern block);
+  // pushed out through the deck above or below, whichever is nearer
+  _clearRing(s, p) {
+    const b = s.model.bounds;
+    const R = s.model.length * 0.5;
+    _m.copy(s.matrix).invert();
+    _l.copy(p).applyMatrix4(_m);
+    const radial = Math.hypot(_l.x, _l.z);
+    if (radial < R * 0.5 || radial > R * 1.04) return;
+    const cy = b.centre[1];
+    const hy = b.half[1] * OBB_MARGIN;
+    if (Math.abs(_l.y - cy) >= hy) return;
+    _l.y = cy + (_l.y >= cy ? 1 : -1) * (hy + 2);
+    p.copy(_l).applyMatrix4(s.matrix);
+    this.pushes++;
   }
 
   update(dt) {

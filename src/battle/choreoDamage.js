@@ -30,7 +30,8 @@ const DOOM_FORCE = 18; // s: a doomed ship that outlives the focus fire this lon
 const HULK_RETIRE = [180, 300]; // s after death before a wreck is retired
 const MAX_FIRES = 12; // persistent fire records per ship
 const FIRE_LIFE = [100, 240]; // s a fire burns on a ship that is still fighting (wrecks burn until retired)
-const MIN_DEATH_GAP = 30; // s between deaths the director did not schedule (the marked ones set the beat)
+const MIN_DEATH_GAP = 45; // s between deaths the director did not schedule (the marked ones set the beat)
+const DOOMED_DEATH_GAP = 12; // s a marked ship at zero hit points waits after another death
 
 // Budget test on one particle layer ("add" for everything that glows, "smoke" for the smoke puffs).
 // Falls back to the summed count for an Explosions without the per-layer test.
@@ -186,12 +187,13 @@ export class Director {
     }
     _inv.copy(s.matrix).invert();
     _local.copy(b.to).applyMatrix4(_inv);
-    const size = b.kind === "light" ? 30 : 58;
+    const st = this.ctx.stateOf(s);
+    const fx = st ? st.fxScale : 1; // effect sizes follow the hull size
+    const size = (b.kind === "light" ? 30 : 58) * (0.5 + 0.5 * fx);
     // when the additive layer runs hot, light hits become a single flash instead of the full impact
     if (b.kind !== "turbo" && !roomFor(explosions, "add", 0.9))
       explosions.flak(b.to, size * 0.8);
     else explosions.hit(b.to, size, s, _local);
-    const st = this.ctx.stateOf(s);
     // shields still up on lightly hurt ships: a hex ripple spreads over the hull around the hit
     if (
       st &&
@@ -215,16 +217,26 @@ export class Director {
     st.hits += b.damage * (st.doomed ? 4 : 0.2);
     s.damage = 12 * Math.min(1, st.hits / st.hp); // the fleet's scorch tint runs 0..12
     if (st.hits >= st.nextFire) {
-      st.nextFire += st.hp / 7;
-      const size = 45 + rand() * 50;
+      st.nextFire += st.fireStep || st.hp / 7;
+      const size = (45 + rand() * 50) * fx;
       const life = rand.range(FIRE_LIFE[0], FIRE_LIFE[1]);
       if (s.fires.length < 6) this.ignite(st, _local, size, life);
     }
     if (st.hits >= st.hp) {
-      // marked ships go now; an unscheduled loss needs a free slot in the window and a little
-      // distance from the last death, so two ships never blow within seconds of each other
-      const spaced = this.ctx.time() - this.lastDeathAt() > MIN_DEATH_GAP;
-      if (st.doomed || (spaced && this.canDie())) this.beginDeath(st);
+      // a class the director never kills (the Lucrehulks) only burns: it stays just short of dying
+      if (classInfo(st.cls).deathWeight <= 0) {
+        st.hits = st.hp * 0.92;
+        return;
+      }
+      // marked ships go now (a few seconds after the last death at least); an unscheduled loss needs
+      // a free slot in the window and more distance from the last death, so two ships never blow
+      // within seconds of each other
+      const gap = this.ctx.time() - this.lastDeathAt();
+      if (
+        (st.doomed && gap > DOOMED_DEATH_GAP) ||
+        (gap > MIN_DEATH_GAP && this.canDie())
+      )
+        this.beginDeath(st);
       else {
         // the window's deaths are spent (or the fleet is at its floor): critical, burning, holding
         // together until the director's next pick, which strongly prefers ships in this state
@@ -247,17 +259,22 @@ export class Director {
     const s = st.ship;
     const L = s.model.length;
     const half = s.model.bounds.half || [L * 0.1, L * 0.05, L * 0.5];
-    // two or three sub-blasts walk the spine before the final detonation, in random order
-    const nSub = 2 + (rand() < 0.5 ? 1 : 0);
-    const zs = nSub === 3 ? [-0.3, 0.02, 0.32] : [-0.25, 0.25];
+    // the sequence scales with the hull: a courier goes in a couple of seconds with one sub-blast,
+    // a Venator takes 3.5-5 s with two or three sub-blasts walking the spine before the detonation
+    const k = THREE.MathUtils.clamp(L / 1100, 0.12, 1);
+    const nSub = L < 300 ? 1 : 2 + (rand() < 0.5 ? 1 : 0);
+    const zs =
+      nSub === 3 ? [-0.3, 0.02, 0.32] : nSub === 2 ? [-0.25, 0.25] : [0.05];
     for (let i = zs.length - 1; i > 0; i--) {
       const j = rand.int(i + 1);
       const t = zs[i];
       zs[i] = zs[j];
       zs[j] = t;
     }
+    const cues =
+      nSub === 3 ? [0.42, 0.66, 0.86] : nSub === 2 ? [0.5, 0.8] : [0.6];
     const subs = zs.map((z, i) => ({
-      u: nSub === 3 ? [0.42, 0.66, 0.86][i] : [0.5, 0.8][i],
+      u: cues[i],
       local: new THREE.Vector3(
         rand.range(-0.25, 0.25) * half[0],
         rand.range(0.1, 0.5) * half[1],
@@ -267,10 +284,11 @@ export class Director {
     }));
     st.dying = {
       t: 0,
-      dur: rand.range(3.5, 5),
+      dur: rand.range(3.5, 5) * (0.4 + 0.6 * k),
       next: rand.range(0.05, 0.2),
       subs,
       subIdx: 0,
+      k,
     };
     s.engineLevel = 1;
     setTarget(st, null);
@@ -290,12 +308,12 @@ export class Director {
       velocity: s.velocity,
       ship: s, // debris takes the hull colour
     });
-    // the wreck burns from many wounds
-    const nFires = 5 + rand.int(3);
+    // the wreck burns from many wounds (a small hull from a couple)
+    const nFires = s.model.length < 300 ? 2 : 5 + rand.int(3);
     for (let i = 0; i < nFires && s.fires.length < MAX_FIRES; i++) {
       s.randomSurfacePoint(_w, rand);
       _inv.copy(s.matrix).invert();
-      this.ignite(st, _w.applyMatrix4(_inv), rand.range(80, 150));
+      this.ignite(st, _w.applyMatrix4(_inv), rand.range(80, 150) * st.fxScale);
     }
     s.engineLevel = 0; // engines dark (the plume system also darkens dead ships on its own)
     s.health = 0; // the fleet tints it as a wreck
@@ -310,6 +328,8 @@ export class Director {
     }
     const slot = st.slot ? st.slot.clone() : null;
     const group = st.group;
+    const role = st.role;
+    const ward = st.ward || null;
     makeHulk(st, rand);
     this.deaths++;
     stats.deaths = this.deaths;
@@ -332,6 +352,8 @@ export class Director {
         cls: s.model.id,
         group,
         slot,
+        role, // escorts and couriers come back as escorts and couriers
+        ward,
       });
   }
 
@@ -374,12 +396,18 @@ export class Director {
         st.doomed = true;
         st.doomedAt = this.ctx.time();
         this.lastDoomAt = st.doomedAt;
-        // the enemy notices: nearby guns swing onto it
+        // the enemy notices: nearby guns swing onto it (a small hull only draws the nearby ones)
+        const reach = THREE.MathUtils.clamp(
+          st.ship.model.length * 9,
+          3500,
+          12000,
+        );
+        const share = st.ship.model.length < 500 ? 0.45 : 0.6;
         for (const o of states) {
           if (o.side === st.side || o.dead || o.dying) continue;
           if (
-            o.ship.position.distanceTo(st.ship.position) < 12000 &&
-            rand() < 0.6
+            o.ship.position.distanceTo(st.ship.position) < reach &&
+            rand() < share
           ) {
             setTarget(o, st);
             o.retargetT = rand.range(6, 12);
@@ -433,14 +461,16 @@ export class Director {
         const u = Math.min(1, d.t / d.dur);
         s.engineLevel =
           (1 - u) * (1 - u) * (0.7 + 0.3 * Math.sin(d.t * 19 + s.id));
+        const fx = st.fxScale;
         while (d.next <= d.t && d.t < d.dur) {
           d.next += rand.range(0.1, 0.32) * (1 - 0.65 * u);
           s.randomSurfacePoint(_w, rand);
           _inv.copy(s.matrix).invert();
           _local.copy(_w).applyMatrix4(_inv);
-          const size = rand.range(55, 130) * (1 + 1.3 * u); // 55-130 m -> 125-300 m
+          // 55-130 m -> 125-300 m on a Venator; a third of that on a courier
+          const size = rand.range(55, 130) * (1 + 1.3 * u) * fx;
           const catches = rand() < 0.5;
-          const fireSize = rand.range(60, 130);
+          const fireSize = rand.range(60, 130) * fx;
           this.secondary(s, _local, _w, size);
           if (catches && s.fires.length < MAX_FIRES)
             this.ignite(st, _local, fireSize);
@@ -457,8 +487,13 @@ export class Director {
         if (d.t >= d.dur) this.finishDeath(st);
         continue;
       }
-      // a doomed ship that somehow survives the focus fire goes anyway
-      if (st.doomed && now - st.doomedAt > DOOM_FORCE) {
+      // a doomed ship that somehow survives the focus fire goes anyway (keeping its distance from the
+      // last death, like every other death)
+      if (
+        st.doomed &&
+        now - st.doomedAt > DOOM_FORCE &&
+        now - this.lastDeathAt() > DOOMED_DEATH_GAP
+      ) {
         this.beginDeath(st);
         continue;
       }
@@ -469,12 +504,13 @@ export class Director {
           st.ventT = rand.range(1.5, 4) * (st.critical ? 0.5 : 1);
           // the random draws happen whether or not the particle budget allows the effect
           const f = s.fires[rand.int(s.fires.length)];
-          const smokeSize = rand.range(55, 115);
+          const fx = st.fxScale;
+          const smokeSize = rand.range(55, 115) * fx;
           const smokeLife = rand.range(3, 5);
           const r = rand();
-          const fireSize = rand.range(35, 70);
+          const fireSize = rand.range(35, 70) * fx;
           const fireLife = rand.range(0.5, 0.9);
-          const hitSize = rand.range(28, 50);
+          const hitSize = rand.range(28, 50) * fx;
           _w.copy(f.local).applyMatrix4(s.matrix);
           if (roomFor(explosions, "smoke", 0.8))
             explosions.spawn(_w, {
