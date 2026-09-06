@@ -26,6 +26,8 @@ const CELL = 500;
 const FAR = 1500;
 /** benches, bins, hydrants, bollards, cabinets: under a pixel beyond this */
 const SMALL_FAR = 450;
+/** sidewalks switch to their four-triangle-a-row far index beyond this (a curb face is under a pixel there) */
+const WALK_NEAR = 500;
 /** furniture casts shadows (into the fine cascades only) within this range */
 const SHADOW_FAR = 700;
 const CURB_H = 0.15;
@@ -206,6 +208,8 @@ class WalkSoup {
   readonly nrm: number[] = [];
   readonly sw: number[] = [];
   readonly idx: number[] = [];
+  /** coarse index over the same vertices: the far LOD (curb foot to curb top to slab back, four triangles a row) */
+  readonly idxFar: number[] = [];
   readonly box = new THREE.Box3();
   private count = 0;
 
@@ -217,15 +221,17 @@ class WalkSoup {
     return this.count++;
   }
 
-  /** quad a-b-c-d (a, b on the previous row; d, c above them on the next row), wound to face along `n` */
-  quad(a: number, b: number, c: number, d: number, nx: number, ny: number, nz: number): void {
+  /** quad a-b-c-d (a, b on the previous row; d, c above them on the next row), wound to face along `n`; `lod` picks
+   *  the fine index (0), the far index (1) or both (2) */
+  quad(a: number, b: number, c: number, d: number, nx: number, ny: number, nz: number, lod = 0): void {
     const p = this.pos;
     const ax = p[a * 3], ay = p[a * 3 + 1], az = p[a * 3 + 2];
     const bx = p[b * 3] - ax, by = p[b * 3 + 1] - ay, bz = p[b * 3 + 2] - az;
     const cx = p[c * 3] - ax, cy = p[c * 3 + 1] - ay, cz = p[c * 3 + 2] - az;
     const kx = by * cz - bz * cy, ky = bz * cx - bx * cz, kz = bx * cy - by * cx;
-    if (kx * nx + ky * ny + kz * nz >= 0) this.idx.push(a, b, c, a, c, d);
-    else this.idx.push(a, c, b, a, d, c);
+    const flip = kx * nx + ky * ny + kz * nz < 0;
+    if (lod !== 1) { if (flip) this.idx.push(a, c, b, a, d, c); else this.idx.push(a, b, c, a, c, d); }
+    if (lod !== 0) { if (flip) this.idxFar.push(a, c, b, a, d, c); else this.idxFar.push(a, b, c, a, c, d); }
   }
 
   get triangles(): number { return this.idx.length / 3; }
@@ -239,6 +245,17 @@ class WalkSoup {
     g.setIndex(this.idx);
     g.boundingBox = this.box.clone();
     g.boundingSphere = this.box.getBoundingSphere(new THREE.Sphere());
+    return g;
+  }
+
+  /** the far LOD over the fine geometry's vertex buffers */
+  buildFar(fine: THREE.BufferGeometry): THREE.BufferGeometry | null {
+    if (!this.idxFar.length) return null;
+    const g = new THREE.BufferGeometry();
+    for (const name of ['position', 'normal', 'aSw']) g.setAttribute(name, fine.getAttribute(name));
+    g.setIndex(this.idxFar);
+    g.boundingBox = fine.boundingBox;
+    g.boundingSphere = fine.boundingSphere;
     return g;
   }
 }
@@ -392,6 +409,8 @@ interface StreetCell {
   box: THREE.Box3;
   center: THREE.Vector3;
   r: number;
+  /** coarse sidewalk index over the same vertices, drawn beyond WALK_NEAR */
+  walkFar: THREE.Mesh | null;
   walk: THREE.Mesh | null;
   large: THREE.Mesh | null;
   small: THREE.Mesh | null;
@@ -557,6 +576,10 @@ export class Streets {
   private link(soup: WalkSoup, a: number[], b: number[]): void {
     soup.quad(a[0], a[1], b[1], b[0], soup.nrm[a[0] * 3], 0, soup.nrm[a[0] * 3 + 2]);
     for (let i = 2; i < a.length - 1; i++) soup.quad(a[i], a[i + 1], b[i + 1], b[i], 0, 1, 0);
+    // far LOD: curb foot to curb top (a slanted face) and one slab quad to the back of the walk (no apron)
+    const back = a.length >= 7 ? 5 : a.length - 1;
+    soup.quad(a[0], a[3], b[3], b[0], soup.nrm[a[0] * 3], 1, soup.nrm[a[0] * 3 + 2], 1);
+    soup.quad(a[3], a[back], b[back], b[3], 0, 1, 0, 1);
   }
 
   private buildRun(run: Run): void {
@@ -913,11 +936,11 @@ export class Streets {
       v(0.0, y + 0.55, K_PARAPET, false);
       v(0.0, g - 0.3, K_PARAPET, false);
       if (prev) {
-        soup.quad(prev[0], prev[1], row[1], row[0], 0, 1, 0);
+        soup.quad(prev[0], prev[1], row[1], row[0], 0, 1, 0, 2);
         soup.quad(prev[2], prev[3], row[3], row[2], -ux, 0, -uz);
-        soup.quad(prev[4], prev[5], row[5], row[4], 0, 1, 0);
+        soup.quad(prev[4], prev[5], row[5], row[4], 0, 1, 0, 2);
         soup.quad(prev[5], prev[6], row[6], row[5], 0, 1, 0);
-        soup.quad(prev[7], prev[8], row[8], row[7], ux, 0, uz);
+        soup.quad(prev[7], prev[8], row[8], row[7], ux, 0, uz, 2);
       }
       prev = row;
       this.markOccupied(p.x - ux * 2.5, p.z - uz * 2.5, 5);
@@ -1009,7 +1032,7 @@ export class Streets {
 
   private flush(): void {
     for (const [key, b] of this.builds) {
-      const cell: StreetCell = { key, box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, walk: null, large: null, small: null, height: 0 };
+      const cell: StreetCell = { key, box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, walk: null, walkFar: null, large: null, small: null, height: 0 };
       const mk = (g: THREE.BufferGeometry | null, mat: THREE.Material, name: string, casts: boolean): THREE.Mesh | null => {
         if (!g) return null;
         const m = new THREE.Mesh(g, mat);
@@ -1025,6 +1048,7 @@ export class Streets {
         return m;
       };
       cell.walk = mk(b.walk.build(), this.walkMaterial, 'sidewalks', false);
+      cell.walkFar = cell.walk ? mk(b.walk.buildFar(cell.walk.geometry), this.walkMaterial, 'sidewalks-far', false) : null;
       cell.large = mk(b.large.build(), this.kitMaterial, 'street-kits', true);
       cell.small = mk(b.small.build(), this.kitMaterial, 'street-kits-small', true);
       this.counts.walkTriangles += b.walk.triangles;
@@ -1053,7 +1077,8 @@ export class Streets {
     for (const c of this.cells) {
       const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
       const inView = d < FAR && cull.boxInView(c.box);
-      if (c.walk) c.walk.visible = inView;
+      if (c.walk) c.walk.visible = inView && (d < WALK_NEAR || !c.walkFar);
+      if (c.walkFar) c.walkFar.visible = inView && d >= WALK_NEAR;
       const castBits = d < SHADOW_FAR ? cull.boxCasterCascades(c.box, c.height) : 0;
       const set = (m: THREE.Mesh | null, visible: boolean) => {
         if (!m) return;
