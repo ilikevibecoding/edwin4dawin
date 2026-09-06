@@ -265,12 +265,13 @@ export class Sky {
     this.cloudMat.opacity = 0.85;
   }
 
-  // Region look (call right after update, before disaster overrides). mix: { space: 0..1, coruscant: 0..1 }.
+  // Region look (call right after update, before disaster overrides). mix: { space: 0..1, coruscant: 0..1, lower: 0..1 }.
   // Space: black sky, full stars, no clouds, no haze. Coruscant: no low clouds, a warm smoggy horizon, longer fog,
-  // and at night a warm city-glow band on the horizon.
+  // and at night a warm city-glow band on the horizon. Lower city (the terraced basin round the plateau): a slightly
+  // denser, cooler haze and no clouds; `mix.lower` is added to game.regionMix by coruscant/lowercity.js (lowerMix).
   applyRegion(mix) {
     if (!mix) return;
-    const sp = mix.space || 0, co = mix.coruscant || 0;
+    const sp = mix.space || 0, co = mix.coruscant || 0, lo = mix.lower || 0;
     const u = this.domeMat.uniforms;
     if (sp > 0.001) {
       const black = new THREE.Color(0.005, 0.005, 0.01);
@@ -305,6 +306,13 @@ export class Sky {
       this.fogNear = lerp(this.fogNear, far0 * 0.85, co);
       this.fogFar = lerp(this.fogFar, far0 * 1.7, co);
       this.cloudMat.opacity *= 1 - co;      // the city sits above its cloud deck; towers punch through nothing
+    }
+    if (lo > 0.001) {
+      const cool = new THREE.Color(0.30, 0.36, 0.46);
+      this.fogColor.lerp(cool, lo * 0.35);
+      this.fogNear *= 1 - 0.3 * lo; this.fogFar *= 1 - 0.25 * lo;
+      u.uSkyHorizon.value.lerp(cool, lo * 0.2);
+      this.cloudMat.opacity *= 1 - lo;
     }
   }
 

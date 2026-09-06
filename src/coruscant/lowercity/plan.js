@@ -11,7 +11,7 @@
 // terrace steps) and service corridors at v = 42 + 84k (4 wide, slab stairs down every terrace, a stair tower to the
 // rim at the plateau face). Roofs stay under envelope(d), which falls from 59 at the face to 20 at the sea wall.
 import { hash2 } from '../../rng.js';
-import { LOWER, lowerBand } from '../../worldgen.js';
+import { LOWER, lowerBand, lowerLocal } from '../../worldgen.js';
 
 export const LC = {
   faceW: 16, cell: 28, railW: 4,
@@ -118,6 +118,19 @@ export function stepSurface(band, r, upperFloor, lowerFloor, upperBand) {
   return upperFloor + 1 - 0.5 * (q + 1);
 }
 export function frameOf(d) { const { band, r } = lowerBand(d); return { band, r }; }
+
+// Walking floor (top block layer) of a lower-city column before the objects are painted: the trench floor inside a
+// freight trench, the terrace elsewhere, the wall top on the sea wall; null outside the ring. Used by the hyperlane
+// for its bridge pylons (they stand on the trench floor under the track) and by the tests.
+export function lowerFloorAt(x, z) {
+  const loc = lowerLocal(x, z);
+  if (!loc) return null;
+  const { band } = lowerBand(loc.d);
+  if (band >= LOWER.levels.length) return LOWER.wallTop;
+  const tv = trenchOf(loc.v);
+  if (tv !== null && tv >= -LC.trenchHalf && tv < LC.trenchHalf) return trenchFloor(band) ?? groundOf(band);
+  return groundOf(band);
+}
 
 // ------------------------------------------------------------------------------------------------ routes
 // Stair towers to the rim stand at every corridor of every side (the corridor's v is their centre); the public

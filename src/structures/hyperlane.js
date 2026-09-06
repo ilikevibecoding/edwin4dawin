@@ -9,6 +9,10 @@ import { CHUNK_SIZE as CS, CHUNK_HEIGHT as CH } from '../constants.js';
 import { ROUTE } from '../vehicles/route.js';
 import { SpaceTrain } from '../vehicles/train.js';
 import { registerStations, stationLayout } from './stations.js';
+import { lowerLocal, lowerGround } from '../worldgen.js';
+import { lowerFloorAt } from '../coruscant/lowercity/plan.js';
+
+export const LOWER_PYLON_EVERY = 24;   // bridge pylon spacing over the lower city (spec section 4)
 
 // World-coordinate block setter bounded to one chunk (returns false outside it).
 export function chunkSetter(chunk) {
@@ -49,17 +53,22 @@ function fillHyperlane(chunk, gen) {
     set(x, RAIL, -2, B.RAIL); set(x, RAIL, 1, B.RAIL);
     // lamps every 32 blocks on brackets off the north lip (z = -5, outside the train corridor)
     if (x % 32 === 16) { set(x, DECK, DECK_Z0 - 1, B.DURASTEEL); for (let y = RAIL; y <= RAIL + 2; y++) set(x, y, DECK_Z0 - 1, B.DURASTEEL_DARK); set(x, RAIL + 3, DECK_Z0 - 1, B.CITY_LAMP); }
-    // supports every 32 blocks: a 2 x 4 shaft with a wide capital under the deck, down to terrain / sea floor
-    if (x % ROUTE.supportEvery === 0 || x % ROUTE.supportEvery === 1) {
+    // supports every 32 blocks: a 2 x 4 shaft with a wide capital under the deck, down to terrain / sea floor. Over
+    // the lower city (west of the plateau) they are bridge pylons every 24 blocks down to the lowest deck: the
+    // track runs above the west freight trench, so they stand on its floor, with a lit collar at the deck level.
+    const lower = lowerLocal(x, 0);
+    const every = lower ? LOWER_PYLON_EVERY : ROUTE.supportEvery;
+    if (x % every === 0 || x % every === 1) {
       for (let z = DECK_Z0; z <= DECK_Z1; z++) set(x, DECK - 2, z, B.DURASTEEL_DARK);
       for (let z = -3; z <= 2; z++) set(x, DECK - 3, z, B.DURASTEEL_DARK);
       for (let z = -2; z <= 1; z++) {
-        const ground = gen.surfaceHeight(x, z);
+        const ground = lower ? lowerFloorAt(x, z) : gen.surfaceHeight(x, z);
         for (let y = DECK - 4; y > ground; y--) {
           const band = (y & 7) === 0;
           set(x, y, z, band ? B.PANEL_STRIPE : (z === -2 || z === 1 ? B.DURASTEEL : B.DURASTEEL_DARK));
         }
         for (let y = ground; y >= ground - 2 && y > 0; y--) set(x, y, z, B.DURASTEEL_DARK); // footing
+        if (lower && lowerGround(lower.d) > ground) set(x, lowerGround(lower.d) + 1, z, z === -2 || z === 1 ? B.GLOW_PANEL_BLUE : B.DURASTEEL);
       }
     }
     // walkway: two courses (support + floor) over the south lip, railing with glow studs, lamps every 32
@@ -74,8 +83,13 @@ function fillHyperlane(chunk, gen) {
   }
 }
 
-export async function register(gen, game) {
+// The track alone (deck, rails, supports, walkway): what the node tests register without the train and stations.
+export function registerTrack(gen) {
   gen.addStructure({ name: 'hyperlane', x0: ROUTE.x0, z0: DECK_Z0 - 1, x1: ROUTE.x1 + 1, z1: WALK_Z1 + 2, fill: fillHyperlane });
+}
+
+export async function register(gen, game) {
+  registerTrack(gen);
   const train = new SpaceTrain();
   registerStations(gen, game, train);
   game.spaceTrain = train;
