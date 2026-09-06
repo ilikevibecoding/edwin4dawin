@@ -512,7 +512,7 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
   float w = smoothstep(0.35, 0.65, n2); // the anti-tiling blend weight of every detail tap
   // the seabed lies under the water plane: it is shaded (the water draws over it) but never seen, so it
   // takes the channel means instead of the taps
-  gd = (zone == 0 || zone == 1) ? groundMeans() : groundDetail(wp, w, foot);
+  if (zone == 0 || zone == 1) gd = groundMeans(); else gd = groundDetail(wp, w, foot);
   rough = 0.9;
   vec3 c;
   // sandy fringe where the land ramps up from a sandy shore (sheltered lake and canal banks stay grassy); the
@@ -567,7 +567,9 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     c = dry * (0.92 + 0.16 * n2) * grainMod;
     c = mix(c, dampC * (0.94 + 0.12 * n2) * (1.0 + 0.2 * (sdt.alb - 0.5)), damp);
     c = mix(c, wetC * (0.94 + 0.12 * n2) * (1.0 + 0.12 * (sdt.alb - 0.5)), wet);
-    c = mix(c, vec3(0.25, 0.22, 0.17), film * 0.7);
+    // the film converges on the water shader's bed colour at zero depth (0.72 x its coral sand) so the two
+    // sides of the waterline meet in tone
+    c = mix(c, vec3(0.34, 0.31, 0.25), film * 0.75);
     // heavy-mineral streak the wash leaves at its limit, and the wrack lines: weed and debris at the swash
     // limit, an older fainter line higher up; the debris grain is filtered out with the footprint
     float streak = 1.0 - smoothstep(0.0, 0.6, abs(sd - swashW * 0.95));
@@ -599,6 +601,23 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
       gDetailSlope += -(gt.x * vec2(0.92, 0.39) + gt.y * vec2(-0.39, 0.92)) * 1.4;
       // the trodden hollows show the damper sand under the surface
       c *= 1.0 - 0.28 * max(0.5 - f0, 0.0) * gate * (1.0 - wet);
+    }
+    // tyre tracks of the beach patrol: a pair of ruts 1.6 m apart along the firm damp sand above the swash
+    // limit, only where the beach is trodden; the lugs of the tread dash the rut floor
+    float trackVis = (1.0 - smoothstep(0.35, 0.9, foot)) * smoothstep(0.25, 0.5, trample);
+    if (trackVis > 0.01) {
+      vec2 along = vec2(-offshore.y, offshore.x);
+      float a = dot(wp, along);
+      float centre = swashW * 1.5 + 3.0 + 2.0 * (vnoise(vec2(a * 0.02, 0.5) + 2.0) - 0.5);
+      float across = sd - centre;
+      float u = abs(abs(across) - 0.8);
+      float t = clamp((u - 0.1) * 10.0, 0.0, 1.0);
+      float rut = 1.0 - t * t * (3.0 - 2.0 * t);
+      float lug = 0.75 + 0.25 * step(0.5, fract(a * 3.0));
+      c *= 1.0 - 0.2 * rut * lug * trackVis;
+      // rut walls: 4 cm deep over 10 cm, tilting the normal toward the rut floor
+      float dh = 0.04 * (6.0 * t * (1.0 - t) * 10.0) * sign(abs(across) - 0.8) * sign(across) * trackVis;
+      gDetailSlope += offshore * dh;
     }
     // sea oats and dune grass on the upper beach: khaki tussocks in patches, denser where the shore faces the sea
     float grassN = vnoise(wp * 0.05 + 4.0);
