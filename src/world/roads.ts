@@ -546,6 +546,10 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     float edge = aaLine(abs(xm) - (hw - 0.7), 0.5, fwX);
     // skid marks near the touchdown zone
     float rubber = smoothstep(0.55, 0.8, fbm3(wp * 0.05 + 3.0)) * step(abs(xm), width * 0.28) * 0.35;
+    // 7.5 m slab grid with sealed joints, alternate slabs a shade apart, gone once a joint is under a pixel
+    float slabJ = max(aaLine((fract(along / 7.5) - 0.5) * 7.5, 0.03, fwA), aaLine((fract(xm / 7.5 + 0.5) - 0.5) * 7.5, 0.03, fwX)) * (1.0 - smoothstep(0.15, 0.5, fp));
+    float slabTone = 0.96 + 0.08 * hash12(floor(vec2(along / 7.5, xm / 7.5 + 0.5)));
+    concrete *= slabTone * (1.0 - 0.25 * slabJ);
     diffuseColor.rgb = mix(concrete * (1.0 - rubber), vec3(0.85), max(centre, edge) * 0.8);
     roughnessFactor = 0.85;
   } else {
@@ -594,9 +598,17 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     float laneW = lanes >= 3.5 ? 3.2 : 3.4;
     float lp = lanes >= 3.5 ? mod(abs(xm) + 0.1, laneW) : mod(abs(xm) - 0.1 + laneW, laneW);
     float wheel = mix(exp(-pow((abs(lp - laneW * 0.5) - 0.8) * 3.2, 2.0)), 0.2, smoothstep(0.6, 2.5, fwX));
-    wheel *= lanes >= 3.5 ? step(abs(xm), 6.4) : step(abs(xm), 3.6);
-    // the traffic polishes the binder off the aggregate: the wheel paths are the paler bands of a lane
-    float wear = 1.0 + 0.2 * wheel * (1.0 - inBox);
+    float laneMask = lanes >= 3.5 ? step(abs(xm), 6.4) : step(abs(xm), 3.6);
+    wheel *= laneMask;
+    // the traffic polishes the binder off the aggregate: the wheel paths are the paler bands of a lane, and the
+    // strip between them, where the sumps drip, is the darkest — a pale-dark-pale rhythm per lane that reads as
+    // lane structure from the air as well as at eye level
+    float drip = mix(exp(-pow((lp - laneW * 0.5) * 2.6, 2.0)), 0.25, smoothstep(0.6, 2.5, fwX)) * laneMask;
+    // at eye level (footprint under 5 cm/px) the rhythm is half again as strong and a 2 m mottle of binder bleed and
+    // spilt fuel sits on it; both are gone by the time a pixel covers 30 cm, so the aerial tone is untouched
+    float nearF = 1.0 - smoothstep(0.05, 0.3, fp);
+    float mottle = (fbm3(wp * 0.45 + 17.0) - 0.5) * 0.16 * nearF;
+    float wear = 1.0 + ((0.26 * wheel - 0.12 * drip) * (1.0 + 0.5 * nearF) + mottle) * (1.0 - inBox);
     // patch repairs: 5 x 3 m cells of the road frame, a few percent of them re-laid darker or bleached paler
     vec2 pc = floor(vec2(along / 5.0, (xm + hw) / 3.0));
     vec2 pf = fract(vec2(along / 5.0, (xm + hw) / 3.0));
@@ -636,10 +648,17 @@ const ROAD_FRAG_MAIN = /* glsl */ `
       float laneLine = aaLine(abs(xm) - 3.1, 0.06, fwX) * dashPulse * lineOK;
       float edgeLine = aaLine(abs(xm) - min(6.35, hw - 0.45), 0.06, fwX) * edgeOK;
       whiteC = max(laneLine, edgeLine);
+      // the ghost of the previous lane line where a repaving band was re-striped 45 cm over, its dashes out of step
+      float ghostPulse = mix(aaLine((fract((along + 4.0) / 12.0) - 0.125) * 12.0, 1.5, fwA), 0.25, smoothstep(2.0, 6.0, fwA));
+      float ghost = step(0.6, hash11(bk * 3.7 + 2.0 + cls)) * aaLine(abs(xm) - 3.55, 0.07, fwX) * ghostPulse * lineOK;
+      whiteC = max(whiteC, 0.22 * ghost);
     } else if (width >= 11.5) {
       // dense-district street: solid double yellow and the white line of the parking lane
       yellowC = aaLine(abs(xm) - 0.2, 0.06, fwX) * lineOK;
       whiteC = aaLine(abs(xm) - 3.6, 0.06, fwX) * edgeOK;
+      // blacked-out old parking-lane line 40 cm inboard on half the repaving bands
+      float ghost = step(0.5, hash11(bk * 3.7 + 2.0 + cls)) * aaLine(abs(xm) - 3.2, 0.07, fwX) * edgeOK;
+      whiteC = max(whiteC, 0.18 * ghost);
     } else {
       // local street: a dashed yellow centre only
       yellowC = aaLine(xm, 0.07, fwX) * dashPulse * lineOK;
@@ -675,16 +694,25 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     // ---- ironwork: manhole covers in the lanes, gully gratings along the kerbs (gone once they are a pixel)
     float ironFade = 1.0 - smoothstep(0.22, 0.6, fp);
     if (ironFade > 0.0 && cls < 2.5) {
-      float mc = floor(along / 34.0);
+      // a manhole in 70 % of 26 m cells, anywhere across the carriageway but the gutters
+      float mc = floor(along / 26.0);
       float mh = hash11(mc * 3.1 + cls * 7.0);
       vec2 mo = hash22(vec2(mc, cls * 5.0));
-      float ma = (mc + 0.2 + mo.x * 0.6) * 34.0;
+      float ma = (mc + 0.2 + mo.x * 0.6) * 26.0;
       float mx = (mo.y - 0.5) * (width - 3.0);
       float md = length(vec2(along - ma, xm - mx));
-      float manhole = step(0.35, mh) * (1.0 - smoothstep(0.32 - fp, 0.32 + fp, md)) * ironFade * (1.0 - inBox);
+      float manhole = step(0.3, mh) * (1.0 - smoothstep(0.32 - fp, 0.32 + fp, md)) * ironFade * (1.0 - inBox);
       float rim = manhole * smoothstep(0.2, 0.3, md);
       // cast iron polished by the traffic: paler and warmer than the aged asphalt around it, a brighter rim ring
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.21, 0.19, 0.17) * (0.85 + 0.45 * rim), manhole);
+      // 15 cm valve and survey covers, one per 9 m in half the cells, gone once they are a pixel
+      float vc = floor(along / 9.0 + 0.5);
+      vec2 vo = hash22(vec2(vc, 9.0 + cls));
+      float va = (vc + vo.x * 0.8 - 0.4) * 9.0, vx = (vo.y - 0.5) * (width - 2.4);
+      float vd = length(vec2(along - va, xm - vx));
+      float valve = step(0.45, hash11(vc * 1.9 + cls)) * (1.0 - smoothstep(0.15 - fp, 0.15 + fp, vd)) * (1.0 - smoothstep(0.06, 0.2, fp)) * (1.0 - inBox);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.20, 0.19, 0.17) * (0.8 + 0.5 * smoothstep(0.08, 0.14, vd)), valve);
+      manhole = max(manhole, valve);
       float gc = floor(along / 24.0);
       float ga = (gc + 0.3 + hash11(gc * 1.7 + cls) * 0.4) * 24.0;
       float gx = hw - 0.45;
