@@ -4,6 +4,7 @@
 // usage: node session.mjs <queueDir> [idleMs]
 // job file: { "type": "shots", "tag": "r13", "port": 4596, "outDir": "/tmp/veg5/shots", "w": 1920, "h": 1080,
 //             "probe": "<js>", "specs": ["label@query", "label@js:file:/path.js", ...] }
+//           { "type": "ab", "tag": "ab1", "ports": [4590, 4596], "query": "aerial-a", "outDir": "/tmp/veg5/ab", "w": 1280, "h": 720, "frames": 6, "rounds": 5 }
 //           { "type": "sweep", "tag": "s2", "port": 4596, "outDir": "/tmp/veg5/sweep", "w": 960, "h": 540,
 //             "start": "dev&cam=...", "cams": [{x,z,agl|y,hdg,pch,label,save?}], "threshold": 100, "probe": "<js>" }
 import puppeteer from 'puppeteer-core';
@@ -135,6 +136,39 @@ async function runSweep(job) {
   }
 }
 
+/** Interleaved A/B render cost: the same view loaded once per port (two tabs), then `rounds` alternations of
+ *  `frames` renders each, timed in the page with a 1x1 readPixels after every render (SwiftShader finishes on
+ *  the read); the report is the median per-frame ms per port and the ratio B/A. */
+async function runAB(job) {
+  const { tag, outDir, ports, query } = job;
+  const w = job.w ?? 1280, h = job.h ?? 720, frames = job.frames ?? 6, rounds = job.rounds ?? 5;
+  fs.mkdirSync(outDir, { recursive: true });
+  const out = (s) => { console.log(s); fs.appendFileSync(`${outDir}/${tag}.txt`, s + '\n'); };
+  const pages = [];
+  try {
+    for (const port of ports) { const logs = []; pages.push(await loadPage(port, query, w, h, logs)); }
+    const ms = ports.map(() => []);
+    for (let r = 0; r < rounds; r++) {
+      for (let i = 0; i < pages.length; i++) {
+        const t = await pages[i].evaluate((frames) => {
+          const g = window.__game; const gl = g.renderer.getContext(); const px = new Uint8Array(4);
+          g.render(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+          const t0 = performance.now();
+          for (let k = 0; k < frames; k++) { g.render(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
+          return (performance.now() - t0) / frames;
+        }, frames);
+        ms[i].push(t);
+        out(`${tag} round ${r} port ${ports[i]}: ${t.toFixed(1)} ms/frame`);
+      }
+    }
+    const med = (a) => { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+    const m = ms.map(med);
+    out(`${tag} median ms/frame ${ports.map((p, i) => `${p}: ${m[i].toFixed(1)}`).join(', ')} ratio ${(m[m.length - 1] / m[0]).toFixed(3)} (${frames} frames x ${rounds} rounds, ${w}x${h})`);
+  } finally {
+    for (const p of pages) await p.close().catch(() => {});
+  }
+}
+
 try {
   let idleSince = Date.now();
   for (;;) {
@@ -153,6 +187,7 @@ try {
     try {
       if (job.type === 'shots') await runShots(job);
       else if (job.type === 'sweep') await runSweep(job);
+      else if (job.type === 'ab') await runAB(job);
       else console.log(`${file}: unknown type ${job.type}`);
     } catch (e) {
       console.log(`JOB ${files[0].f} FAILED ${e.message}`);
