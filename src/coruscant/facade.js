@@ -86,6 +86,12 @@ const WOOLS = [B.RED_WOOL, B.BLUE_WOOL, B.GREEN_WOOL, B.WHITE_WOOL];
 export function paletteNames(family, district) {
   return FAMILY_PALETTES[family] || DISTRICT_PALETTES[district] || DISTRICT_PALETTES.financial;
 }
+// the facade modules a family may take (the variety pass in towers/index.js deals one per tower so neighbours differ)
+export function rhythmNames(family) {
+  return RHYTHM[family] || RHYTHM.slab;
+}
+// numeric code of a rhythm for the skyline impostor shader (skyline.js aStyle.x)
+export const RHYTHM_CODE = { ribbon: 0, slit: 1, curtain: 2, panel: 3, strip: 4, industrial: 5 };
 
 // Writes a named palette into a style (the variety pass re-deals palettes after makeStyle).
 export function applyPalette(style, name) {

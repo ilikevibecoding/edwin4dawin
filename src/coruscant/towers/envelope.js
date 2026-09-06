@@ -245,12 +245,31 @@ function fitCorners(e, want, p, must, front) {
 // chamfer to cut off its corners (0 = box). Rounded plans read as octagons at impostor distance.
 export function envelopeProfile(env) {
   const F = env.frame, out = [];
-  for (const t of env.tiers) {
+  env.tiers.forEach((t, i) => {
     const clip = { u0: t.inset.l, u1: F.Iu - 1 - t.inset.r, v0: t.inset.f, v1: F.Iv - 1 - t.inset.b };
     const e = F.rect(clip.u0 - 1, clip.v0 - 1, clip.u1 + 1, clip.v1 + 1);
     const small = Math.min(e.x1 - e.x0 + 1, e.z1 - e.z0 + 1);
     const chamfer = t.shape === 'rect' ? 0 : t.shape === 'ellipse' ? Math.round(small * 0.29) : t.shape === 'rounded' ? Math.round(small * 0.2) : clamp(Math.round(small * 0.22), 2, 6);
-    out.push({ f0: t.f0, f1: t.f1, ext: e, chamfer: Math.min(chamfer, Math.floor((small - 2) / 2)), shape: t.shape });
-  }
+    out.push({ f0: t.f0, f1: t.f1, ext: e, chamfer: Math.min(chamfer, Math.floor((small - 2) / 2)), shape: t.shape, disc: !!t.disc, stalk: !!t.stalk, index: i });
+  });
   return out;
 }
+
+// The two shafts of a twin / spine lot (blueprint-local rects, inclusive) either side of the five-wide arcade on the
+// lot's door column: shafts side by side along x when the front is N / S, along z otherwise; each shaft's own front
+// is the arcade face, its door at the arcade's middle. twin.js / spine.js build with these, skyline.js draws them.
+export function twinShafts(w, d, front) {
+  const alongX = front === 'N' || front === 'S';
+  const L = alongX ? w : d, T = alongX ? d : w;
+  const mid = L >> 1, g0 = mid - 2, g1 = mid + 2, dc = T >> 1;
+  const rectA = alongX ? { x0: 0, x1: g0 - 1, z0: 0, z1: d - 1 } : { x0: 0, x1: w - 1, z0: 0, z1: g0 - 1 };
+  const rectB = alongX ? { x0: g1 + 1, x1: w - 1, z0: 0, z1: d - 1 } : { x0: 0, x1: w - 1, z0: g1 + 1, z1: d - 1 };
+  const frontA = alongX ? 'E' : 'S', frontB = alongX ? 'W' : 'N';
+  const doorA = alongX ? { x: g0 - 1, z: dc } : { x: dc, z: g0 - 1 };
+  const doorB = alongX ? { x: g1 + 1, z: dc } : { x: dc, z: g1 + 1 };
+  return { alongX, L, T, mid, g0, g1, dc, rectA, rectB, frontA, frontB, doorA, doorB };
+}
+
+// Envelope options a family passes besides the defaults (pad.js forces its decks onto the front every 4 floors,
+// civic.js hangs none); skyline.js mirrors them so the impostor recedes where the tower does.
+export const FAMILY_ENVELOPE_OPTS = { pad: { deck: 'f', deckEvery: 4 }, civic: { deck: false } };

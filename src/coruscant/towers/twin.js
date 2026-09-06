@@ -4,25 +4,18 @@
 import { B } from '../../blocks.js';
 import { FORCE_AIR } from '../blueprint.js';
 import { buildTiered } from './tiered.js';
+import { twinShafts } from './envelope.js';
 
 export const TWIN_MIN = 38;   // lot width (along the front) needed for two 16-wide shafts and the arcade
 
 export function twin(bp, lot, ctx) {
   const { nF, rng, midDoorF, spec } = ctx;
   const front = spec.front;
-  const alongX = front === 'N' || front === 'S';      // shafts side by side along x, arcade runs along z
-  const w = bp.w, d = bp.d;
-  const L = alongX ? w : d, T = alongX ? d : w;        // L across the shafts, T along the arcade
-  const mid = L >> 1;
-  const g0 = mid - 2, g1 = mid + 2;                    // arcade cells across
+  // shafts side by side along x when the front is N / S (the arcade runs along z), else along z; T is the length
+  // along the arcade, g0..g1 its cells across, dc the door position along it for both shafts (envelope.js twinShafts,
+  // shared with the skyline impostors)
+  const { alongX, T, mid, g0, g1, dc, rectA, rectB, frontA, frontB, doorA, doorB } = twinShafts(bp.w, bp.d, front);
   const ta = 0, tb = T - 1;
-  // rects for the two shafts (local, inclusive)
-  const rectA = alongX ? { x0: 0, x1: g0 - 1, z0: 0, z1: d - 1 } : { x0: 0, x1: w - 1, z0: 0, z1: g0 - 1 };
-  const rectB = alongX ? { x0: g1 + 1, x1: w - 1, z0: 0, z1: d - 1 } : { x0: 0, x1: w - 1, z0: g1 + 1, z1: d - 1 };
-  const frontA = alongX ? 'E' : 'S', frontB = alongX ? 'W' : 'N';
-  const dc = T >> 1;                                   // door position along the arcade for both shafts
-  const doorA = alongX ? { x: g0 - 1, z: dc } : { x: dc, z: g0 - 1 };
-  const doorB = alongX ? { x: g1 + 1, z: dc } : { x: dc, z: g1 + 1 };
   const crownFloors = nF >= 12 ? 2 : 0;
   const tiersOf = () => {
     const baseEnd = Math.max(midDoorF, 1, nF - 1 - crownFloors);
