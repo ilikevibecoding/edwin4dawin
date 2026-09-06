@@ -312,18 +312,19 @@ export function spline(pts) {
   };
 }
 
-// half beam: fine point, 33 m half-width at r = 150, widest (59) at r = 700, 35 at the stern face
+// half beam: fine point (the ROTS still shows the beak ~2.2x taller than wide near the tip), 26 m
+// half-width at r = 150, widest (59) at r = 700, 35 at the stern face
 const W = spline([
-  [0, 2.4],
-  [20, 6.5],
-  [50, 13.5],
-  [100, 23.5],
-  [150, 32.5],
-  [200, 40.5],
-  [250, 47],
-  [300, 51],
-  [350, 53.5],
-  [400, 55.5],
+  [0, 2.0],
+  [20, 5],
+  [50, 9.5],
+  [100, 17],
+  [150, 26],
+  [200, 35],
+  [250, 43],
+  [300, 48.5],
+  [350, 52],
+  [400, 55],
   [500, 57.5],
   [600, 58.5],
   [700, 59],
@@ -460,11 +461,15 @@ export function halfProfile(st) {
   const y1 = yTop - Math.min(0.6, (yTop - yB0) * 0.05);
   pts.push([0, yTop]); // 0 ridge centre
   pts.push([wTop, y1]); // 1 ridge edge (crease)
+  // the beak is a chisel (ROTS still): flat flanks run straight from the ridge crease to the belt,
+  // blending into the egg shoulders of the main body by r ~340
+  const egg = smoothstep(120, 340, r);
   for (let k = 1; k <= 4; k++) {
     const th = ((k / 5) * Math.PI) / 2;
+    const f = k / 5;
     pts.push([
-      wTop + (w - wTop) * Math.sin(th),
-      yB0 + (y1 - yB0) * Math.cos(th),
+      lerp(wTop + (w - wTop) * f, wTop + (w - wTop) * Math.sin(th), egg),
+      lerp(y1 + (yB0 - y1) * f, yB0 + (y1 - yB0) * Math.cos(th), egg),
     ]); // 2-5 shoulder
   }
   const lip = Math.min(TROUGH.lip, (yB0 - yB1) * 0.1);
@@ -474,8 +479,13 @@ export function halfProfile(st) {
   pts.push([w - d, yB1 + lip]); // 9 trough bottom inner
   pts.push([w, yB1 + lip]); // 10
   pts.push([w, yB1]); // 11 belt bottom
-  // the forward chin is a full rounded mass (the 3/4 reference), the aft lower body a slimmer egg
-  const bellyPow = lerp(0.5, 0.75, smoothstep(300, 520, r));
+  // the beak underside is a narrow keel, the forward chin a full rounded mass (the 3/4 reference),
+  // the aft lower body a slimmer egg
+  const bellyPow = lerp(
+    1.15,
+    lerp(0.5, 0.75, smoothstep(300, 520, r)),
+    smoothstep(70, 230, r),
+  );
   for (let k = 1; k <= 3; k++) {
     const ph = ((k / 4) * Math.PI) / 2;
     pts.push([

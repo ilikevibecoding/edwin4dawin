@@ -470,12 +470,25 @@ function buildPod({ add }) {
     );
     add(spar, "dark", { color: 0x3a3e46, texel: 1 / 2, lod });
     if (lod === 0) {
-      // spar root bracket and a pair of small dishes at its tip
+      // spar root bracket, lattice cross-pieces along the spar and a pair of small dishes at its tip
       add(box(0, SPAR.y0 - 1.2, fromRef(SPAR.r0) + 2, 3, 3.2, 6), "dark", {
         color: PAL.darkLit,
         texel: 1 / 3,
         lod,
       });
+      for (const f of [0.22, 0.44, 0.66, 0.88])
+        add(
+          box(
+            0,
+            lerp(SPAR.y0, SPAR.y1, f),
+            lerp(fromRef(SPAR.r0), fromRef(SPAR.r1), f),
+            5.5 - 2.5 * f,
+            0.5,
+            0.5,
+          ),
+          "paint",
+          { color: rgb(PAL.finFace, 0.95), lod, uv: "keep" },
+        );
       const d = cylY(1.6, 0.5, 0.5, 10);
       d.rotateX(-1.2);
       d.translate(0, SPAR.y1 - 0.4, fromRef(SPAR.r1) + 2);

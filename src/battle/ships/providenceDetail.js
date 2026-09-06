@@ -442,7 +442,8 @@ function addMarkings({ add }) {
         decal(add, side, r0, r1, y0, y1, SLATE, "paint", lod);
       for (const [r0, r1, y0, y1] of HAZARD_MARKS) {
         if (lod === 1) {
-          decal(add, side, r0, r1, y0, y1, HAZ, "paint", lod);
+          // one patch at the ladder's mean brightness (four bars cover ~55 % of the mark)
+          decal(add, side, r0, r1, y0, y1, rgb(PAL.hazard, 0.55), "paint", lod);
           continue;
         }
         // the reference paints each hazard mark as a ladder of four thin vertical bars
@@ -636,8 +637,8 @@ function addGreebles({ add, cuts }) {
 
 // window rows along the flanks (scale cues); LOD 0 only, with LOD-1 bars for the long aft rows
 function addWindows({ add, cuts }) {
-  const win = (f, color, w = 1.5) => {
-    const g = box(0, 0.25, 0, w, 0.5, 1.0);
+  const win = (f, color, w = 1.5, len = 1.0) => {
+    const g = box(0, 0.25, 0, w, 0.5, len);
     placeOn(g, f.p, f.n, FWD);
     add(g, "windows", { color, lod: 0, uv: "keep" });
   };
@@ -652,11 +653,12 @@ function addWindows({ add, cuts }) {
       if (hash(r, side + 5, 52) < 0.35) continue;
       win(hullFrame(fromRef(r), 5, 0.45, side), PAL.windowWarm);
     }
-    // belt row (mid flank) along the forward half
-    for (let r = 200; r <= 596; r += 5) {
+    // belt row (mid flank) along the forward body: the ROTS still shows it as a bright string of
+    // lights from the beak to the trough
+    for (let r = 150; r <= 596; r += 4.5) {
       const z = fromRef(r);
-      if (hash(r, side + 7, 53) < 0.3 || inCut(cuts, z, 8, side, 6)) continue;
-      win(hullFrame(z, 8, 0.25, side), PAL.windowWarm, 1.2);
+      if (hash(r, side + 7, 53) < 0.22 || inCut(cuts, z, 8, side, 6)) continue;
+      win(hullFrame(z, 8, 0.3, side), PAL.windowWarm, 1.4, 2.2);
     }
     // lower row near the bottom of the aft half of the forward body
     for (let r = 430; r <= 600; r += 8) {

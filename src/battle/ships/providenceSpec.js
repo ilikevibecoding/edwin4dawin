@@ -44,11 +44,11 @@ export const PLATE_TEXEL = 1 / 36;
 // tower (half 36 on a 59 half-beam), the spine deck ~40 % of the beam over the forward body.
 // ---------------------------------------------------------------------------
 export const SPINE = {
-  r0: 135,
+  r0: 150,
   r1: 545,
   y0: 24,
   y1: 56,
-  half0: 15,
+  half0: 13,
   half1: 14,
   nose: 40,
 };
@@ -64,14 +64,14 @@ export const CITADEL_UPPER = { r0: 596, r1: 940, y0: 56, y1: 88, half: 36 };
 // masts: [x, r, yBase, yTop, radius]; the tall citadel and spine masts are heavy lattice-like spars,
 // the bridge pod carries a forward mast and the tall aft lattice mast on its roof deck (+238)
 export const MASTS = [
-  [0, 266, 60, 76, 0.9],
-  [0, 280, 60, 84, 1.1],
-  [0, 296, 60, 78, 0.9],
-  [5, 288, 60, 70, 0.6],
-  [-5, 288, 60, 70, 0.6],
-  [0, 462, 62, 76, 0.8],
-  [0, 500, 62, 80, 0.9],
-  [0, 540, 62, 74, 0.7],
+  [0, 266, 60, 84, 0.9],
+  [0, 280, 60, 96, 1.1],
+  [0, 296, 60, 88, 0.9],
+  [6, 288, 60, 74, 0.6],
+  [-6, 288, 60, 74, 0.6],
+  [0, 462, 62, 80, 0.8],
+  [0, 500, 62, 88, 0.9],
+  [0, 540, 62, 78, 0.7],
   [0, 650, 88, 116, 1.3],
   [0, 668, 88, 120, 1.4],
   [0, 690, 88, 114, 1.3],
@@ -79,11 +79,11 @@ export const MASTS = [
   [-9, 660, 88, 106, 0.9],
   [9, 682, 88, 108, 0.9],
   [-9, 682, 88, 108, 0.9],
-  [0, 976, 238, 262, 1.1],
-  [0, 986, 238, 254, 0.7],
-  [5, 962, 238, 250, 0.5],
-  [-5, 962, 238, 250, 0.5],
-  [0, 914, 238, 254, 0.6],
+  [0, 976, 238, 256, 1.1],
+  [0, 986, 238, 249, 0.7],
+  [5, 962, 238, 247, 0.5],
+  [-5, 962, 238, 247, 0.5],
+  [0, 914, 238, 251, 0.6],
 ];
 
 // ---------------------------------------------------------------------------
@@ -115,8 +115,8 @@ export function towerTrail(y) {
 export function towerHalf(y) {
   const f = clamp01(1 - (y - TOWER.yBase) / TOWER.fillet);
   return (
-    lerp(14, 9, clamp01((y - TOWER.yBase) / (TOWER.yTop - TOWER.yBase))) +
-    5 * f * f
+    lerp(11.5, 7.5, clamp01((y - TOWER.yBase) / (TOWER.yTop - TOWER.yBase))) +
+    6 * f * f
   );
 }
 // bridge pod (headRings spec in ref metres, converted where built): a flat 96 m hammerhead slab
@@ -143,8 +143,8 @@ export const SPAR = {
   y0: 236,
   r1: 858,
   y1: 258,
-  rad0: 0.8,
-  rad1: 0.3,
+  rad0: 1.3,
+  rad1: 0.45,
 };
 
 // ---------------------------------------------------------------------------
@@ -206,8 +206,8 @@ export const BAY_COUNT = 12;
 export const BAY_DEPTH = 12;
 export const bayOpen = (k, side) => (side > 0 ? k % 3 === 1 : k % 3 === 2);
 // louvred ventral hangar door on both flanks of the chin (r range, y range), just under the belt
-// (reference: r 260-313, 16-37 m above the aft keel)
-export const CHIN_GRILLE = { r0: 262, r1: 312, y0: -35, y1: -16 };
+// (reference: r 260-313, 21-40 m above the aft keel)
+export const CHIN_GRILLE = { r0: 262, r1: 312, y0: -31, y1: -12 };
 
 // ---------------------------------------------------------------------------
 // Markings: dark slate rectangles [r0, r1, y0, y1] on the hull flanks and on the citadel side walls,
@@ -262,8 +262,8 @@ export function seamCell(z) {
 
 // heavy tracking turrets: three pairs on the shoulders beside the spine (shoulder segment 2, fraction
 // 0.35 down from the ridge edge) and two pairs on the citadel top, ahead of the tower fillet (r 842)
-export const HEAVY_SHOULDER_R = [215, 345, 475];
-export const HEAVY_SHOULDER_SEG = [2, 0.35];
+export const HEAVY_SHOULDER_R = [240, 355, 475];
+export const HEAVY_SHOULDER_SEG = [2, 0.5];
 export const HEAVY_CITADEL_R = [722, 800];
 export const HEAVY_CITADEL_X = 22;
 // baked light emplacements: rows of { r: [...], m: profile segment, t: fraction, scale } on both sides
