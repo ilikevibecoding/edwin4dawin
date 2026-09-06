@@ -152,6 +152,9 @@ under this renderer's sun, as the walks were in round 1 — and was brought down
   tab with a yellow line down it at the arm's end, where a dark housing merged with the asphalt. +3.5–6.5 k a view.
 - **Arterial poles at most 40 m apart** (d7baee2b): `ceil` instead of `floor` for the run intervals (29–40 m over the
   block lengths; a 100 m block had 44 m), verge lamps 35 m; arterial lamps 3 571 → 4 109.
+- **High-mast night dots** (321eb1cf): the port's masts were one faint pixel each from the night view's 2.3 km (the
+  1.5 px floor of every lamp dot, found by differencing the h07 and h11 night frames over the terminal); mast dots now
+  hold 3 px, so the terminal carries its row of bright points at night.
 
 ## Counts (node harness over the generated world)
 
