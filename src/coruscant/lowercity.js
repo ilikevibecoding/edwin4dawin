@@ -243,7 +243,23 @@ function paintMass(set, cell, u, t, w, dd, g, d, v) {
     if (!corner && ((onT && u === cu) || (onV && t === ct))) set(g + 2, BLUE);   // service light mid-face
     return;
   }
-  const env = cell.env;
+  const env = cell.env, up = env - roof;                               // room left under the roof line
+  set(roof, cell.seed % 3 === 0 ? PLATE : DD);
+  // setback upper storey (plant room) on the larger masses, its parapet on the envelope
+  const ins = 3, sb = up >= 3 && w >= 12 && dd >= 12 && hash2(cell.seed, 5, 50) < 0.7;
+  if (sb && u >= ins && u < w - ins && t >= ins && t < dd - ins) {
+    const onV2 = u === ins || u === w - ins - 1, onT2 = t === ins || t === dd - ins - 1, edge = onV2 || onT2;
+    for (let y = roof + 1; y < roof + up; y++) {
+      let id = DD;
+      if (edge) { id = onV2 && onT2 ? D : wall; if (id === wall && y === roof + 2 && (onT2 ? u : t) % 3 === 1) id = hash3(v, y, d, cell.seed) < cell.lit ? WLIT : WDK; }
+      set(y, id);
+    }
+    if (edge) set(roof + up, D);
+    else if (u === cu && t === ct) set(roof + up, CHR);
+    return;
+  }
+  if ((u === 1 && t === 1) || (u === w - 2 && t === dd - 2)) { if (roof + 2 <= env) { set(roof + 1, BARS); set(roof + 2, LAMP); } return; }   // roof lamps
+  if (sb) return;
   if (Math.abs(u - cu) <= 1 && Math.abs(t - ct) <= 1 && roof + 2 <= env) { set(roof + 1, DD); set(roof + 2, u === cu && t === ct ? CHR : DD); }
   else if (cell.beacon && u === 2 && t === 2 && roof + 2 <= env) { set(roof + 1, BARS); set(roof + 2, NEON); }
   else if (u === w - 3 && t === 2 && roof + 1 <= env && hash2(cell.seed, 3, 49) < 0.6) set(roof + 1, VENT);
