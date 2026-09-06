@@ -7,17 +7,27 @@ import { FORCE_AIR } from '../blueprint.js';
 import { PlanFrame, computeLayout, planFloor, cutEntrance, insetLimits } from '../plan.js';
 import { buildCore } from '../core.js';
 import { rectRing, maskRing, paintRing, paintRoof, paintCrown } from '../facade.js';
+import { hash2 } from '../../rng.js';
+import { planCrown, buildCrown } from '../crowns.js';
+import { stripPlan, stripRing } from './strips.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
 // spec: { ext, front, tiers: [{ inset: {l, r, f, b}, f0, f1 }], style, pools, seed, family, door: {x, z},
-//         midDoorF, mask(x, z, tierIndex), hooks: { floorOpts(f, tier), poolFor(f, tier), afterTier(tier, yRoof), crown } }
+//         midDoorF, mask(x, z, tierIndex), crownStyle?, strips?: false,
+//         hooks: { floorOpts(f, tier), poolFor(f, tier), afterTier(tier, yRoof), crown, crownKind } }
+// Towers of 60 blocks or more (bp.lot.kind === 'tower') end in a crown from crowns.js: the stair/lift core is
+// extended through the crown tiers so they are climbable, and their facades get lit vertical strips. Landmarks and
+// low towers keep the legacy paintCrown ornaments.
 export function buildTiered(bp, spec) {
   const { ext, front, style, pools, seed } = spec;
   const hooks = spec.hooks || {};
   const frame = new PlanFrame(ext, front);
   const layout = computeLayout(frame.Iu, frame.Iv);
   const lim = insetLimits(frame, layout);
+  const lot = bp.lot;
+  const strips = spec.strips === false ? null : stripPlan(lot, spec.family);
+  if (strips) style.lit = Math.min(style.lit, 0.3);      // the strips carry the night look; fewer random dots
   const tiers = spec.tiers.map((t, i) => {
     const ins = t.inset || {};
     const l = clamp(ins.l | 0, 0, lim.l), r = clamp(ins.r | 0, 0, lim.r), fr = clamp(ins.f | 0, 0, lim.f), b = clamp(ins.b | 0, 0, lim.b);
@@ -75,14 +85,20 @@ export function buildTiered(bp, spec) {
     }
   }
 
-  // 3. core, entrance, sky-lobby door, tier hooks, crown
-  buildCore(bp, frame, layout.core, 0, nF - 1, style);
+  // 2b. lit vertical strips on the facade rings above the podium
+  if (strips) for (const t of tiers) stripRing(bp, t.ring, Math.max(t.f0, strips.f0), t.f1, strips);
+
+  // 3. crown plan (decides how many extra core floors), core, entrance, sky-lobby door, tier hooks, crown
+  const top = tiers[tiers.length - 1];
+  const crown = hooks.crown === false ? null : planCrown(bp, { frame, layout, top, nF, family: spec.family, lot, forceStyle: spec.crownStyle });
+  buildCore(bp, frame, layout.core, 0, nF - 1 + (crown ? crown.K : 0), style);
   cutEntrance(bp, frame, doorU - 2, 4, 1, 3, style.trim);
   if (spec.midDoorF >= 2 && spec.midDoorF < nF) cutEntrance(bp, frame, doorU - 1, 3, 5 * spec.midDoorF + 1, 3, style.trim);
   for (const t of tiers) if (hooks.afterTier) hooks.afterTier(t, 5 * (t.f1 + 1), frame, layout, tiers);
-  const top = tiers[tiers.length - 1];
-  const extra = hooks.crown === false ? 0 : paintCrown(bp, top.ext, 5 * nF, style, bp.rng, hooks.crownKind || style.crown);
-  return { frame, layout, tiers, nF, doorU, extra, used, lim };
+  let extra = 0;
+  if (crown) extra = buildCrown(bp, crown, { style, seed, strips, stripRing });
+  else if (hooks.crown !== false) extra = paintCrown(bp, top.ext, 5 * nF, style, bp.rng, hooks.crownKind || style.crown);
+  return { frame, layout, tiers, nF, doorU, extra, used, lim, crown: crown ? { style: crown.style, tiers: crown.K, height: extra } : null, strips: !!strips };
 }
 
 // Height (blocks above the ground slab) a tiered blueprint needs: floors + crown allowance.
@@ -91,21 +107,28 @@ export function towerHeight(nF, crownAllowance = 16) { return 5 * nF + crownAllo
 // Skybridge landings (the city builder carves a 3x2 opening 1 block into the lot at bridge.y + 1..2). Where the
 // tier at that height is inset from the lot edge we add a glazed stub out to the edge; behind the opening a small
 // vestibule is cleared so the bridge always lands on a walkable floor.
+// Where the stub runs outside the tower it gets a lit underside (blue light strip under the deck plate), and 40% of
+// the stubs (by bridge id) are full glass tubes with a lit spine instead of a dark-roofed gallery.
 export function bridgeStubs(bp, lot, cityLayout, res, style) {
   const bridges = cityLayout && cityLayout.bridges;
   if (!bridges || !lot.bridges || !lot.bridges.length) return;
   const ground = bp.y0;
+  // twin-shaft lots: use the tiers of the shaft the bridge lands on
+  const shafts = res.twinB ? [res, res.twinB] : [res];
   for (const id of lot.bridges) {
     const br = bridges[id];
     if (!br) continue;
     const y = br.y - ground;
     const f = Math.floor(y / 5);
     if (f < 0 || f >= res.nF) continue;
-    const t = res.tiers.find((tt) => f >= tt.f0 && f <= tt.f1);
-    if (!t) continue;
     let side, c;
     if (br.axis === 'x') { side = br.x0 === lot.x1 ? 'E' : 'W'; c = br.z0 + 2 - lot.z0; }
     else { side = br.z0 === lot.z1 ? 'S' : 'N'; c = br.x0 + 2 - lot.x0; }
+    // the shaft whose wall is nearest the bridge side
+    const dist = (sh) => { const e0 = sh.tiers[0].ext; return side === 'E' ? bp.w - 1 - e0.x1 : side === 'W' ? e0.x0 : side === 'S' ? bp.d - 1 - e0.z1 : e0.z0; };
+    const shaft = shafts.slice().sort((p, q) => dist(p) - dist(q))[0];
+    const t = shaft.tiers.find((tt) => f >= tt.f0 && f <= tt.f1);
+    if (!t) continue;
     const e = t.ext;
     const along = (k) => (side === 'E' || side === 'W') ? [null, c + k] : [c + k, null];
     // extent from the tier wall (exclusive) to the lot edge (inclusive)
@@ -115,13 +138,18 @@ export function bridgeStubs(bp, lot, cityLayout, res, style) {
     else if (side === 'S') { a0 = e.z1 + 1; a1 = bp.d - 1; wallAt = e.z1; dirIn = -1; }
     else { a0 = 0; a1 = e.z0 - 1; wallAt = e.z0; dirIn = 1; }
     const put = (a, yy, k, id) => { const [px, pz] = along(k); if (px === null) bp.set(a, yy, pz, id); else bp.set(px, yy, a, id); };
+    const airAt = (a, yy, k) => { const [px, pz] = along(k); return px === null ? bp.isAir(a, yy, pz) : bp.isAir(px, yy, a); };
+    const tube = hash2(br.id, lot.id, 0x7b) < 0.4;
     if (a1 >= a0) {
       for (let a = a0; a <= a1; a++) for (let k = -2; k <= 2; k++) {
         put(a, y, k, B.DECK_PLATE);
         const edge = k === -2 || k === 2, end = a === (dirIn < 0 ? a1 : a0);
         put(a, y + 1, k, edge || end ? (end ? style.wall : B.STEEL_GLASS) : FORCE_AIR);
         put(a, y + 2, k, edge || end ? (end ? style.wall : B.STEEL_GLASS) : FORCE_AIR);
-        put(a, y + 3, k, end ? style.wall : (k === 0 && a % 3 === 0 ? B.GLOW_PANEL : B.DURASTEEL_DARK));
+        if (tube) put(a, y + 3, k, end ? style.wall : (k === 0 && a % 3 === 0 ? B.GLOW_PANEL : (edge ? B.CHROME : B.STEEL_GLASS)));
+        else put(a, y + 3, k, end ? style.wall : (k === 0 && a % 3 === 0 ? B.GLOW_PANEL : B.DURASTEEL_DARK));
+        // lit underside: blue strip under the deck plate along both edges, dark plate between
+        if (airAt(a, y - 1, k)) put(a, y - 1, k, (edge && a % 2 === 0) ? B.GLOW_PANEL_BLUE : B.DURASTEEL_DARK);
       }
     }
     // opening in the tier wall + vestibule two cells deep
@@ -130,5 +158,6 @@ export function bridgeStubs(bp, lot, cityLayout, res, style) {
       for (let s = 1; s <= 2; s++) { put(wallAt + dirIn * s, y + 1, k, FORCE_AIR); put(wallAt + dirIn * s, y + 2, k, FORCE_AIR); put(wallAt + dirIn * s, y, k, B.DECK_PLATE); }
     }
     put(wallAt, y + 3, 0, B.GLOW_PANEL);
+    put(wallAt, y + 3, -1, B.GLOW_PANEL_BLUE); put(wallAt, y + 3, 1, B.GLOW_PANEL_BLUE);
   }
 }
