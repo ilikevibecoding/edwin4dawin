@@ -224,7 +224,11 @@ states: ordered -> loaded -> in_transit -> arrived -> unloaded -> delivered | de
 Crates: `CrateLayer` draws every crate in one instanced draw call - stacks at the loading bays of businesses holding
 bulk (coarse: one crate per N units, capped per bay), the cargo of an `arrived` freighter in its hold (following the
 ship's pose), courier boxes and conveyor stacks along their paths. `game.economy.crates.stats` reports
-`{ instances, stacks, holds, couriers, drawCalls }`.
+`{ instances, stacks, holds, couriers, drawCalls }`. Only crates within `DRAW_DIST` of the camera are placed; the
+layer is culled as one object (a bounding sphere over the crates placed this frame), uploads only the used slice of
+its instance buffers, is hidden entirely when it holds nothing and compiles its program at load so the first crate
+that comes into view does not stall the frame. Conveyor and courier paths keep their starting height until the last
+30 % of the route, so a stack coming down from the spaceport deck rides along the deck rather than through it.
 
 ## 9. Visible economic state
 
