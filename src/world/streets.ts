@@ -294,6 +294,51 @@ const _q = new THREE.Quaternion();
 const _s = new THREE.Vector3();
 const _p = new THREE.Vector3();
 
+/** Every carriageway of the network in a 100 m grid: footings are checked against it so that nothing planned from one
+ *  road's frame (a corner lamp, a signal pole behind a skewed crossing, a highway lamp beside a frontage street) ends
+ *  up standing in another road. */
+class RoadIndex {
+  private static readonly G = 100;
+  private readonly cells = new Map<number, { ax: number; az: number; bx: number; bz: number; hw: number }[]>();
+
+  constructor(chains: RoadChain[]) {
+    const G = RoadIndex.G;
+    for (const c of chains) {
+      for (let i = 0; i < c.pts.length - 1; i++) {
+        const seg = { ax: c.pts[i][0], az: c.pts[i][1], bx: c.pts[i + 1][0], bz: c.pts[i + 1][1], hw: c.hw };
+        const pad = c.hw + 2;
+        const x0 = Math.floor((Math.min(seg.ax, seg.bx) - pad) / G), x1 = Math.floor((Math.max(seg.ax, seg.bx) + pad) / G);
+        const z0 = Math.floor((Math.min(seg.az, seg.bz) - pad) / G), z1 = Math.floor((Math.max(seg.az, seg.bz) + pad) / G);
+        for (let gx = x0; gx <= x1; gx++) for (let gz = z0; gz <= z1; gz++) {
+          const k = gx * 65536 + gz;
+          let l = this.cells.get(k);
+          if (!l) { l = []; this.cells.set(k, l); }
+          l.push(seg);
+        }
+      }
+    }
+  }
+
+  /** Signed distance to the nearest carriageway edge: negative inside a road, positive on the verge. */
+  distance(x: number, z: number): number {
+    const G = RoadIndex.G;
+    const k = Math.floor(x / G) * 65536 + Math.floor(z / G);
+    const l = this.cells.get(k);
+    let best = Infinity;
+    if (!l) return best;
+    for (const s of l) {
+      const abx = s.bx - s.ax, abz = s.bz - s.az, apx = x - s.ax, apz = z - s.az;
+      const t = clamp((apx * abx + apz * abz) / (abx * abx + abz * abz || 1), 0, 1);
+      const d = Math.hypot(apx - abx * t, apz - abz * t) - s.hw;
+      if (d < best) best = d;
+    }
+    return best;
+  }
+
+  /** true when (x, z) stands on the verge, at least `clear` metres outside every carriageway */
+  clear(x: number, z: number, clear = 0.2): boolean { return this.distance(x, z) >= clear; }
+}
+
 /** unit shapes of the furniture (non-indexed, centred; cylinders and plates along +y, the x-plate faces +x) */
 const UNIT = {
   box: new THREE.BoxGeometry(1, 1, 1).toNonIndexed(),
@@ -384,7 +429,10 @@ export class Streets {
   readonly uniforms = { uSignalTime: { value: 0 } as THREE.IUniform<number>, uNight: { value: 0 } as THREE.IUniform<number> };
   private readonly cells: StreetCell[] = [];
   private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; small: KitSoup }>();
-  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0 };
+  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0 };
+  private readonly roads: RoadIndex;
+  /** signal pole footings per signalised node (the corner lamps keep clear of them) */
+  readonly signalPoles = new Map<RoadNode, Vec2[]>();
   /** the lamp irradiance map's texture (owned here, sampled through `lights`) */
   private lampMap: THREE.DataTexture | null = null;
 
@@ -392,7 +440,8 @@ export class Streets {
     this.walkMaterial = createSidewalkMaterial(lights);
     this.kitMaterial = createKitMaterial(this.uniforms);
     this.materials.push(this.walkMaterial, this.kitMaterial);
-    const signalPoles = new Map<RoadNode, Vec2[]>();
+    this.roads = new RoadIndex(graph.chains);
+    const signalPoles = this.signalPoles;
     for (const chain of graph.chains) {
       if (chain.cls === 'highway' || chain.cls === 'causeway') { this.planHighwayLamps(chain); continue; }
       if (chain.cls !== 'arterial' && chain.cls !== 'street') continue;
@@ -581,16 +630,24 @@ export class Streets {
     const nb = unitDir(k.tb, k.o);
     const pb = back([k.tb[0] + k.b.dir[0] * 1.5, k.tb[1] + k.b.dir[1] * 1.5], nb[0], nb[1], 0.75);
     cands.push({ ...pb, tx: pb.x - nb[0], tz: pb.z - nb[1] });
-    let best = cands[0], bestD = -1;
+    let best: typeof cands[0] | null = null, bestD = -1;
     for (const c of cands) {
+      if (!this.roads.clear(c.x, c.z, 0.3)) continue;
       let d = Infinity;
       for (const p of poles) d = Math.min(d, Math.hypot(p[0] - c.x, p[1] - c.z));
       if (d > bestD) { bestD = d; best = c; }
       if (d > 2.5) break;
     }
+    if (!best) { this.counts.rejected++; return; }
     const kind: LampKind = chain.cls === 'arterial' || k.b.chain.cls === 'arterial' ? 'arterial' : 'street';
     const y = Math.max(roadEdgeY(k.a.chain, k.sA, k.sideA), roadEdgeY(k.b.chain, k.sB, k.sideB)) + CURB_H;
     this.lamps.push({ x: best.x, y, z: best.z, yaw: Math.atan2(-(best.tz - best.z), best.tx - best.x), kind });
+  }
+
+  /** Plan a lamp unless its footing would stand in a carriageway (a crossing road the planning frame knows nothing of). */
+  private lamp(x: number, y: number, z: number, yaw: number, kind: LampKind): void {
+    if (!this.roads.clear(x, z, 0.3)) { this.counts.rejected++; return; }
+    this.lamps.push({ x, y, z, yaw, kind });
   }
 
   /** Lamps (both sides on arterials, staggered on streets) and the furniture kits along a run. */
@@ -613,7 +670,7 @@ export class Streets {
       const n = Math.floor((L - 12) / pitch);
       if (n === 0) {
         const s = (sa + sb) / 2, q = at(s, 0.65);
-        this.lamps.push({ x: q.x, y: yAt(s), z: q.z, yaw: yawToRoad(q.nx, q.nz), kind: arterial ? 'arterial' : 'street' });
+        this.lamp(q.x, yAt(s), q.z, yawToRoad(q.nx, q.nz), arterial ? 'arterial' : 'street');
       } else {
         const p = (L - 12) / n;
         const stagger = arterial ? 0 : side > 0 ? 0 : p / 2;
@@ -621,7 +678,7 @@ export class Streets {
           const s = sa + 6 + i * p + stagger;
           if (s > sb - 6) continue;
           const q = at(s, 0.65);
-          this.lamps.push({ x: q.x, y: yAt(s), z: q.z, yaw: yawToRoad(q.nx, q.nz), kind: arterial ? 'arterial' : 'street' });
+          this.lamp(q.x, yAt(s), q.z, yawToRoad(q.nx, q.nz), arterial ? 'arterial' : 'street');
         }
       }
     }
@@ -632,6 +689,7 @@ export class Streets {
     const runYaw = Math.atan2(-dir.dz, dir.dx);
     const put = (kind: 'bench' | 'bin' | 'hydrant' | 'shelter' | 'cabinet', s: number, across: number) => {
       const q = at(s, across);
+      if (!this.roads.clear(q.x, q.z, kind === 'shelter' ? 1.2 : 0.4)) { this.counts.rejected++; return; }
       const y = yAt(s);
       const faceYaw = yawToRoad(q.nx, q.nz);
       const soup = kind === 'shelter' ? soups.large : soups.small;
@@ -717,9 +775,12 @@ export class Streets {
     const rx = R.dir[1], rz = -R.dir[0];
     const reachFar = R.sign > 0 ? cn.hMinus : cn.hPlus;
     const hw = c.hw;
-    const px = node.x - R.dir[0] * (reachFar + 1.6) + rx * (hw + 0.9);
-    const pz = node.z - R.dir[1] * (reachFar + 1.6) + rz * (hw + 0.9);
-    if (this.map.heightAt(px, pz) < 0.8) return;
+    let px = node.x - R.dir[0] * (reachFar + 1.6) + rx * (hw + 0.9);
+    let pz = node.z - R.dir[1] * (reachFar + 1.6) + rz * (hw + 0.9);
+    // a skewed crossing road reaches further along the approach than the box says: back off until on the verge
+    let backed = 0;
+    while (!this.roads.clear(px, pz, 0.4) && backed < 8) { px -= R.dir[0] * 0.5; pz -= R.dir[1] * 0.5; backed += 0.5; }
+    if (backed >= 8 || this.map.heightAt(px, pz) < 0.8) { this.counts.rejected++; return; }
     poles.push([px, pz]);
     // the pole, arm, heads and lenses read to 1.5 km; visors, pedestrian heads, buttons and blades are small-kit
     const soups = this.soupsAt(px, pz);
@@ -769,7 +830,7 @@ export class Streets {
       const reachNear = R.sign > 0 ? cn.hPlus : cn.hMinus;
       const px = node.x + R.dir[0] * (reachNear + 1.2) + rx * (c.hw + 0.8);
       const pz = node.z + R.dir[1] * (reachNear + 1.2) + rz * (c.hw + 0.8);
-      if (this.map.heightAt(px, pz) < 0.8) continue;
+      if (this.map.heightAt(px, pz) < 0.8 || !this.roads.clear(px, pz, 0.3)) { this.counts.rejected++; continue; }
       const zone = this.map.districtAt(px, pz)?.zone ?? null;
       if (walkWidth(zone) < 0) continue;
       // a 0.76 m plate is under a pixel long before the small-kit distance: the sign lives in the small soup
@@ -870,7 +931,7 @@ export class Streets {
         part(soups.small, UNIT.box, fb, 0, 0.22, 0.7, 0.4, 0.44, 0.06, C.dark, 0.6, 0.6);
         part(soups.small, UNIT.box, fb, 0, 0.22, -0.7, 0.4, 0.44, 0.06, C.dark, 0.6, 0.6);
       }
-      if (i % 4 === 1) this.lamps.push({ x: p.x - ux * 4.0, y, z: p.z - uz * 4.0, yaw: Math.atan2(-uz, ux), kind: 'ped' });
+      if (i % 4 === 1) this.lamp(p.x - ux * 4.0, y, p.z - uz * 4.0, Math.atan2(-uz, ux), 'ped');
     }
   }
 
@@ -889,7 +950,7 @@ export class Streets {
         const z = seg.a[1] + uz * s + ux * (seg.width / 2 + 1) * side;
         const g = this.map.heightAt(x, z);
         if (g < 0.8) continue;
-        this.lamps.push({ x, y: g, z, yaw: 0, kind: 'highway' });
+        this.lamp(x, g, z, 0, 'highway');
       }
     }
   }
