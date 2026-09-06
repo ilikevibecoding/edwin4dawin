@@ -17,6 +17,79 @@ numbers the targets are about.
 
 ---
 
+## Round 6 landed — the car's lamps, the lion's walk and face, the night, the fire — build `e244efd` live
+
+Nine builds since fleet r4, each gated at fast, high and ultra with the
+interaction suite before it went live. The round-5 verdict (three critics, all
+pass, hero car and glass re-judged on corrected frames) is in
+`gauntlet/round5/`; these landings are the round-6 fixes for what it found.
+
+- **Hero car r6 (`5dc56cd`).** The dusk lamp pool is under the sky at last
+  (`BEAM.dusk` beam 22 → 3.5, bar 26 → 4; ground over the sky's p95 12.8 % →
+  0 %). The light bar reads as nine pods, and the round-5 diagnosis of *why*
+  it did not was wrong: the cover was innocent, the pod cores themselves sat
+  at 2.3 against a bloom threshold of 2.0. Cores 0.12 under the threshold, a
+  radial lobe mask, a `barReflector` key: hero box over 0.5 681 → 118 px, all
+  eight gaps under 0.6. Dusk reflector bowl halved (grille +0.100 → +0.091
+  st over the band), legible sidewall lettering, one wiper sweep shared by the
+  film and roughness maps with a park smear, headlamp cone 26.4 → 22°.
+- **Lion gait r5 (`b8f1636`).** The tail is carried per state (walk root
+  −14°, standing J, sway on the last third in step with the hind feet); the
+  trunk rolls and lifts onto the plane of the planted feet on a side slope
+  (hip roll 0 → 12.6° on a 12.5° flank, leg-extension asymmetry 0.07 →
+  0.005); set-off from a lie without the 24 cm dip; a lion the truck pushes
+  gets up, turns away and retreats 6–8 m across its line — the truck's heading
+  and collision circles are passed to the pride. Feet probe unchanged at
+  machine precision.
+- **Lighting r6 (`cd33826`).** Night rebalanced (horizon band 2.4 → 2.0,
+  `groundIndirect` 1.7, fill 34, an environment ground term for the boot hour:
+  mainroad sky 0.024 → 0.019, ground 0.022 → 0.028, hero paint over the sky
+  −0.37 → +0.10 st). Day hemisphere 2.5 → 3.25 with shadow 0.92 (mess shade
+  median 2.07 → 1.49 st under the sunlit pad, pockets 3.6 → 2.9). Moon disc
+  drawn after bloom (halo at r = 10 px 0.50 → 0.27, disc 0.81). The environment
+  probe gets a plain with occlusion to the nadir (nadir/horizon step 0.46 →
+  0.23, continuous), so chrome undersides no longer mirror a sunlit ground.
+  Rear beam slice cores fade with distance (peak/trough 3.36 → flat). Sun
+  azimuth verified identical across every consumer — the r5 vegetation
+  hand-off that had them 20° apart was wrong.
+- **Campground r5 (`0a52cc9`).** The campfire pool round 5 flagged as a tan
+  slab: point light peak 5 + 16 n, hue 24° — pool median Y 0.36 → 0.17,
+  saturation 0.33 → 0.51, flame box 536 → 100 px over 0.5. Mess day lamp reach
+  for the eave pockets (darkest flat pocket −2.75 → −2.49 st, sunlit pad
+  +0.2 %). Row lanterns re-aimed with 2.4× lamp glass and a third pole between
+  the expedition and supply trucks (supply body 0.48 → 0.75 of the sky; the
+  ranger's shadow-side door was the fleet r4 hand-off). Light cap 7 at fast,
+  9 at high and ultra.
+- **Lion form r7 (`522cbdc`).** Muzzle lofted on a superellipse with a nasal
+  crest, a cheek-arch row, nose leather and a lip plane with a philtrum;
+  cupped ears with a dark inner face; lids 0.55/0.68 over an eye 4 mm deeper
+  with a black upper cap and no sheen — the pale hood over the iris and the
+  crescent under it are gone (five colour-coded ablation builds showed the
+  pale pixels a classifier still counts are lit cheek skin, not sclera); a 56°
+  cornea cap; coat anisotropy 0.6 with 30:6 strands and dashed ticking; dusk
+  rim power 4 with a front-light floor (rim median +0.55 → +0.86 st, columns
+  carrying a rim 62 → 77 %); toe lobes with the pad under each tip. Head
+  ratios held (muzzle/L 0.348, zygomatic/L 0.633); +1.2 k tris per lion at
+  tier 0. Head-on at 1280 the head is still bear-like — flat brow, boxy muzzle
+  — and the flank's coat grain did not reach the 512 frame (0.82 → 0.89
+  against 1.3): both go to r8.
+- **Capture (`84c1e5e`, `45bc696`, `e244efd`).** The pinned pre-roll cruises
+  (throttle balancing drag) instead of reading its pin as a brake: body pitch
+  at the shot 5.7 → 0.2°, the glass cameras back on the cab. A `moon` view
+  from the hero position (64° lens along the hour's key light, turned so the
+  disc sits at 0.7 W / 0.19 H with the horizon in frame) — round 5's critics
+  found the moon in none of 29 night frames. The glass `mirror` shot measures
+  the mirror glass alone and fails under 3 % frame cover; the lion walk-strip
+  camera stands at 2.2 m so the paw decal shows under a planted foot.
+- **Cleanup (`024daec`).** Two dead per-frame writes in the lion driver.
+
+### Found by the moon view, not yet fixed
+
+Every star is a vertical dash. The star field is drawn in octahedral map
+space, whose scale differs along azimuth and elevation, so an isotropic blob
+there is stretched on screen; in a sky-dominated frame the field reads as
+falling snow. Lighting r7 (screen-space footprint via the map's Jacobian).
+
 ## Fleet round 4, and a capture spot that had moved — build `8611235` live
 
 - **Fleet r4 (`8611235`).** Chrome and alloy had the environment all along and
