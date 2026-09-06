@@ -12,3 +12,4 @@ merged veg5: 25446639 Vegetation loop 6 WIP (round 14, runtime verification pend
 merged terrain5: f561ffd0 terrain5 report: round 4 (pass budget) defect entry
 skip acgeo: nothing new
 build: a41b535e from /home/ubuntu/wt-integration
+cdn: pinned data.json serves h05
