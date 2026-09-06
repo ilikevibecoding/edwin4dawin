@@ -29,19 +29,31 @@ if [ "$SOURCE" = integration ]; then
   if [ ! -d "$INTEG" ]; then git worktree add -q --detach "$INTEG" HEAD; fi
   ( cd "$INTEG" && git checkout -q --detach "$(git -C "$ROOT" rev-parse HEAD)" && git reset -q --hard )
   echo "base: $(git rev-parse --short HEAD) ($LEAD_BRANCH)" >> "$NOTES"
+  ( cd "$INTEG" && [ -d node_modules ] || ln -s "$ROOT/node_modules" "$INTEG/node_modules" )
   for b in "${BUILDERS[@]}"; do
     ref="origin/cursor/$b-loop-8213"
     git rev-parse -q --verify "$ref" >/dev/null 2>&1 || { echo "skip $b: no remote branch" >> "$NOTES"; continue; }
     if [ "$(git merge-base "$ref" HEAD)" = "$(git rev-parse "$ref")" ]; then echo "skip $b: nothing new" >> "$NOTES"; continue; fi
+    before="$(cd "$INTEG" && git rev-parse HEAD)"
+    how=""
     if ( cd "$INTEG" && git merge -q --no-edit "$ref" >/dev/null 2>&1 ); then
-      echo "merged $b: $(git rev-parse --short "$ref") $(git log -1 --format=%s "$ref" | cut -c1-90)" >> "$NOTES"
+      how="merged $b"
     elif [ -z "$(cd "$INTEG" && git diff --name-only --diff-filter=U)" ] && ( cd "$INTEG" && git commit -q --no-edit >/dev/null 2>&1 ); then
       # rerere (enabled repo-wide, autoupdate) replayed a resolution the lead recorded for exactly these conflicts
-      echo "merged $b (recorded resolution): $(git rev-parse --short "$ref") $(git log -1 --format=%s "$ref" | cut -c1-90)" >> "$NOTES"
+      how="merged $b (recorded resolution)"
     else
       conflicted="$(cd "$INTEG" && git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
       ( cd "$INTEG" && git merge --abort 2>/dev/null || true )
       echo "skip $b: merge conflict in $conflicted" >> "$NOTES"
+      continue
+    fi
+    # one branch pushed mid-refactor must not sink the whole snapshot: typecheck after each merge and drop the
+    # branch that breaks the build (tsc takes a few seconds here)
+    if ( cd "$INTEG" && npx tsc --noEmit >/dev/null 2>&1 ); then
+      echo "$how: $(git rev-parse --short "$ref") $(git log -1 --format=%s "$ref" | cut -c1-90)" >> "$NOTES"
+    else
+      ( cd "$INTEG" && git reset -q --hard "$before" )
+      echo "skip $b: tsc fails with it merged ($(git rev-parse --short "$ref"))" >> "$NOTES"
     fi
   done
   # cross-branch fixups (tools/integration-fixups/*.patch): semantic reconciliation a hunk merge cannot express,
@@ -58,7 +70,6 @@ if [ "$SOURCE" = integration ]; then
       echo "fixup skipped (does not apply): $(basename "$p")" >> "$NOTES"
     fi
   done
-  ( cd "$INTEG" && [ -d node_modules ] || ln -s "$ROOT/node_modules" "$INTEG/node_modules" )
   if ! ( cd "$INTEG" && npx tsc --noEmit >/dev/null 2>&1 ); then
     echo "tsc failed on the integration of all branches; falling back to the lead build" >> "$NOTES"
     SRC="$ROOT"
