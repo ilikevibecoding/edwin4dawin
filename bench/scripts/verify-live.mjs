@@ -14,6 +14,8 @@ const [url, expected, outDir = 'bench/out/live'] = process.argv.slice(2);
 if (!url || !expected) { console.error('usage: verify-live.mjs <url> <expectedBuildId> [outDir]'); process.exit(2); }
 fs.mkdirSync(outDir, { recursive: true });
 const browser = await puppeteer.launch({
+  // the machine-wide Chrome slot gate can hold a launch for minutes; never time out on it
+  timeout: 1800000,
   executablePath: process.env.CHROME_PATH || '/usr/local/bin/google-chrome', headless: true,
   args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1280,720'],
   defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 }, protocolTimeout: 1200000,

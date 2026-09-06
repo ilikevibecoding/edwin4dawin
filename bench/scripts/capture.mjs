@@ -35,6 +35,8 @@ const outRoot = path.resolve('bench/out', tag);
 fs.mkdirSync(outRoot, { recursive: true });
 
 const browser = await puppeteer.launch({
+  // the machine-wide Chrome slot gate can hold a launch for minutes; never time out on it
+  timeout: 1800000,
   executablePath: process.env.CHROME_PATH || '/usr/local/bin/google-chrome',
   headless: true,
   args: ['--no-sandbox', '--disable-gpu-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1920,1080', '--hide-scrollbars', '--enable-precise-memory-info'],
