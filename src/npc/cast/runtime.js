@@ -83,7 +83,7 @@ export class CastRuntime {
     npc.face(p.x, p.z);
     npc.lookAt = { x: p.x, y: p.y + 1.6, z: p.z };
     npc.talkingT = 12;
-    if (npc.state === 'at') npc.timer = Math.max(npc.timer, 8);
+    this.hold(npc, 8);
     pop.stats.talks++; this.stats.talks++;
     const line = this.dialog.lineFor(pp, { trigger: 'greet', talkOpen: true });   // selected against the history before this talk
     this.registry.recordTalk(pp);
@@ -94,6 +94,17 @@ export class CastRuntime {
     this.dialog.speech.placeSubtitle();
     return true;
   }
+  // A persistent person stops for a conversation (spec §11 'conversing'): someone at their spot stays a while longer,
+  // someone walking pauses in the population's 'wait' state - startLeg() re-paths the same trip from where they stand
+  // when the timer runs out. Lift rides and kerb hops are not interrupted.
+  hold(npc, seconds) {
+    if (npc.dead || npc.panic) return;
+    if (npc.state === 'at') npc.timer = Math.max(npc.timer, seconds);
+    else if (npc.state === 'walk' && npc.legs) { npc.state = 'wait'; npc.waitingPath = false; npc.timer = seconds; npc.held = true; }
+    else if (npc.state === 'wait' && !npc.waitingPath) npc.timer = Math.max(npc.timer, seconds);
+  }
+  // the conversation is over: a paused walker moves on after the farewell
+  release(npc) { if (npc.held && npc.state === 'wait' && !npc.waitingPath) npc.timer = Math.min(npc.timer, 2); npc.held = false; }
   options(npc, pp, asked) {
     const ask = (key, label, sel) => ({ key, label, act: () => this.reply(npc, pp, key, sel) });
     const rel = pp.relationships[0];
@@ -109,6 +120,7 @@ export class CastRuntime {
   }
   reply(npc, pp, key, sel) {
     this.stats.replies++;
+    this.hold(npc, 8);
     const line = this.dialog.lineFor(pp, { ...sel, talkOpen: true });
     this.registry.recordTalk(pp, key);
     if (!line) return { line: `${pp.name} says nothing to that.`, spoken: true, options: this.options(npc, pp, key) };
@@ -118,7 +130,9 @@ export class CastRuntime {
   }
   onTalkClose(npc, turns) {
     const pp = this.forNpc(npc);
-    if (!pp || npc.dead || turns < 1) return;
+    if (!pp) return;
+    this.release(npc);
+    if (npc.dead || turns < 1) return;
     const line = this.dialog.lineFor(pp, { trigger: 'farewell' });
     if (line) { this.deliver(pp, npc, line, true); this.stats.farewells++; }
   }
