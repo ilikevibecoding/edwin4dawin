@@ -9,7 +9,7 @@ import { buildCore } from '../core.js';
 import { rectRing, paintRing, paintRoof, paintCrown } from '../facade.js';
 import { hash2 } from '../../rng.js';
 import { planCrown, buildCrown, crownEat, tableLookup, ringFromTable, slab, CROWN_OPTIONS, CROWN_MIN_HEIGHT } from '../crowns.js';
-import { stripPlan, stripRing } from './strips.js';
+import { stripPlan, stripRing, contrastStrips } from './strips.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 
@@ -26,7 +26,7 @@ export function buildTiered(bp, spec) {
   const layout = computeLayout(frame.Iu, frame.Iv);
   const lim = insetLimits(frame, layout);
   const lot = bp.lot, roomsAt = bp.meta.rooms.length;
-  const strips = spec.strips === false ? null : stripPlan(lot, spec.family);
+  const strips = spec.strips === false ? null : contrastStrips(stripPlan(lot, spec.family), style.wall);
   if (strips) style.lit = Math.min(style.lit, 0.12);     // the strips carry the night look; few random dots
   // the tallest towers hand their top floors to the crown (crownEat): the family's tiers stop `eat` floors lower
   // and the crown tiers, furnished from the same room library, take their place under a full-size cap

@@ -26,6 +26,14 @@ export function stripPlan(lot, family) {
   return { pitch, phase, faces, block: blue ? B.GLOW_PANEL_BLUE : B.GLOW_PANEL, f0: STRIP_FROM_FLOOR };
 }
 
+// a white panel column disappears on a pale plaster / stone wall at night (the night render has no bloom, so the
+// strip is only as bright as its own texel); those towers take the blue strip instead
+const LIGHT_WALLS = new Set([B.PLASTER, B.SMOOTH_STONE]);
+export function contrastStrips(plan, wall) {
+  if (plan && plan.block === B.GLOW_PANEL && LIGHT_WALLS.has(wall)) plan.block = B.GLOW_PANEL_BLUE;
+  return plan;
+}
+
 const KEEP_TBL = new Uint8Array(256);
 for (const id of KEEP) KEEP_TBL[id] = 1;
 
