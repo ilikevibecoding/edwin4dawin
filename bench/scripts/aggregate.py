@@ -71,6 +71,16 @@ def main():
             m = statistics.median(meds)
             target = rubric['targets']['critical'] if cats[cid]['critical'] else rubric['targets']['ordinary']
             result['categories'][cid] = {'name': cats[cid]['name'], 'median': m, 'min': min(meds), 'target': target, 'pass': min(meds) >= target, 'critical': cats[cid]['critical']}
+    # merge gate (rubric v2): overall mean of category medians, no category under categoryMin, hero (critical)
+    # categories at heroMin or better
+    gates = rubric.get('gates')
+    if gates and result['categories']:
+        meds = [c['median'] for c in result['categories'].values()]
+        overall = sum(meds) / len(meds)
+        below = [cid for cid, c in result['categories'].items() if c['median'] < gates['categoryMin']]
+        hero_fail = [cid for cid, c in result['categories'].items() if c['critical'] and c['median'] < gates['heroMin']]
+        result['gate'] = {'overall': overall, 'overallMin': gates['overallMin'], 'belowCategoryMin': below, 'heroBelowMin': hero_fail,
+                          'pass': overall >= gates['overallMin'] and not below and not hero_fail}
     hard = []
     for cname, c in critics.items():
         for view, fr in c.get('frames', {}).items():
@@ -95,7 +105,12 @@ def main():
             d = f"{c['median'] - prev['categories'][cid]['median']:+.1f}"
         lines.append(f"| {cid} | {c['name']}{' *' if c['critical'] else ''} | {c['median']:.1f} | {c['min']:.1f} | {c['target']} | {'yes' if c['pass'] else 'no'} | {d} |")
     lines.append('')
-    lines.append('`*` critical category (target 9.0); others 8.5.')
+    tc, to = rubric['targets']['critical'], rubric['targets']['ordinary']
+    lines.append(f'`*` hero category (target {tc}); others {to}.')
+    if result.get('gate'):
+        g = result['gate']
+        lines.append('')
+        lines.append(f"**Merge gate:** overall {g['overall']:.2f} (min {g['overallMin']}), {len(g['belowCategoryMin'])} categories under {gates['categoryMin']}, {len(g['heroBelowMin'])} hero categories under {gates['heroMin']} -> {'PASS' if g['pass'] else 'FAIL'}")
     lines.append('')
     lines.append('## Per-frame medians')
     lines.append('')
