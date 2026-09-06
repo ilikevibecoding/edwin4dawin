@@ -236,7 +236,13 @@ export class PostPipeline {
     (a.uFarDissolve.value as THREE.Vector2).set(camera.far * 0.55, 1 / (camera.far * 0.4));
     this.blit(this.aerialMat, this.fogRT);
 
+    // night exposure boost: x3.5 keeps 22:00 reading as night (x6 read as blue hour) while city lights stay bright
+    const gain = 1 + 2.5 * (this.aerialMat.uniforms.uNight.value as number);
     if (this.opts.bloom) {
+      // The threshold is a display level (above sunlit white, ~1.3 at the day exposure), so it follows the
+      // night gain: at x3.5 a lamp of radiance 0.6 is already white on screen but sat under the fixed 1.5, and
+      // the nav lights and lamps got no glare at all at 22:00 (their sprites read as flat 40 px discs).
+      this.brightMat.uniforms.uThreshold.value = 1.5 / gain;
       this.brightMat.uniforms.tColor.value = this.fogRT.texture;
       this.blit(this.brightMat, this.bloomRTs[0]);
       for (let i = 0; i < 3; i++) {
@@ -262,8 +268,7 @@ export class PostPipeline {
     c.tBloom1.value = this.bloomRTs[1].texture;
     c.tBloom2.value = this.bloomRTs[2].texture;
     c.uBloom.value = this.opts.bloom ? 0.18 : 0.0;
-    // night exposure boost: x3.5 keeps 22:00 reading as night (x6 read as blue hour) while city lights stay bright
-    c.uExposure.value = this.exposure * (1 + 2.5 * (this.aerialMat.uniforms.uNight.value as number));
+    c.uExposure.value = this.exposure * gain;
     c.uTime.value = time;
     this.blit(this.compositeMat, null);
     r.setRenderTarget(null);

@@ -103,29 +103,41 @@ export function buildLights(ctx: BuildContext, wingSpec: WingSpec, lightPower: {
         #include <logdepthbuf_pars_vertex>
         attribute vec2 aCorner; attribute vec3 color; attribute float aLight; attribute float aSize;
         uniform float uLightPower[${N_LIGHTS}];
-        varying vec2 vCorner; varying vec3 vCol; varying float vPow;
+        varying vec2 vCorner; varying vec3 vCol; varying float vPow; varying float vDim;
         void main() {
           vCorner = aCorner; vCol = color; vPow = uLightPower[int(aLight + 0.5)];
           vec4 mv = modelViewMatrix * vec4(position, 1.0);
           // no halo without power (day): collapse the quad so it costs no fill
           float s = vPow > 0.01 ? aSize : 0.0;
-          mv.xy += aCorner * s; mv.z += 0.12;
+          // Glare is the eye's / lens's point-spread, so it does not shrink below a few pixels with distance: the
+          // quad holds at least ~10 px across and dims by the area it gained, which keeps the lamp's energy
+          // (an inverse-square falloff past the crossover) where a bare world-sized quad vanished at 500 m.
+          float minS = -mv.z * 0.0036;
+          float s2 = s > 0.0 ? max(s, minS) : 0.0;
+          vDim = s2 > 0.0 ? (s * s) / (s2 * s2) : 0.0;
+          mv.xy += aCorner * s2; mv.z += 0.12;
           gl_Position = projectionMatrix * mv;
           #include <logdepthbuf_vertex>
         }`,
       fragmentShader: /* glsl */ `
         #include <common>
         #include <logdepthbuf_pars_fragment>
-        varying vec2 vCorner; varying vec3 vCol; varying float vPow;
+        varying vec2 vCorner; varying vec3 vCol; varying float vPow; varying float vDim;
         void main() {
           #include <logdepthbuf_fragment>
           float r = length(vCorner);
           if (r > 1.0) discard;
-          // a bright core with a long soft skirt: the scatter of a point source in a slightly hazy night
-          float halo = pow(1.0 - r, 3.5) * 0.30 + pow(max(1.0 - r * 3.0, 0.0), 2.0) * 0.6;
+          // Glare profile: a small bright core and a long, dim, inverse-square-like tail (the point-spread of a
+          // lamp in a slightly hazy night), rimmed to zero at the quad's edge. The former (1 - r)^3.5 skirt fell
+          // by 20:1 across the radius in linear light, which the night gain and the display gamma turned into a
+          // near-linear cone (beacon R 227 -> 129 -> 46 from 4 to 36 px): a flat 40 px disc with a soft edge.
+          // Now half the peak is gone by r = 0.1 and 97 % by r = 0.3; the bloom pass adds the soft outer skirt.
+          float rim = (1.0 - r) * (1.0 - r);
+          float t = 1.0 + r * r * 25.0;
+          float halo = rim * (0.55 * exp(-r * r * 36.0) + 0.45 / (t * t));
           // soft knee on the lamp power: the strobe's 40 must not bleach its whole sprite to a white disc
           float pw = vPow * 20.0 / (vPow + 20.0);
-          gl_FragColor = vec4(vCol * halo * pw * 0.09, 1.0);
+          gl_FragColor = vec4(vCol * halo * pw * vDim * 0.08, 1.0);
         }`,
       transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, toneMapped: true,
     });
