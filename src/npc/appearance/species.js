@@ -32,9 +32,11 @@ export const SPECIES = [
     hair: false, eyeKind: 'human', headgear: 'cap', ink: '#20304a',
     geometry: ({ skin }) => {
       const dark = shade(skin, 0.78);
-      const lek = (sx) => ({ x: sx, y: 6.4, z: -4.9, w: 2.2, h: 3.4, d: 2.4, fill: skin });
-      const tail = (sx) => ({ x: sx, y: -1.2, z: -5.1, w: 2, h: 12, d: 1.8, fill: skin, paint: (r, uv) => { bands(r, uv.front, dark, 4, 2); tipDark(r, uv.front, dark); } });
-      return [{ kind: 'lekku', attach: 'head', boxes: [lek(-2.3), lek(2.3), tail(-2.6), tail(2.6)] }];
+      // the two head-tails rise from the top-back of the skull (visible above the head from the front) and hang
+      // down the back, slightly outside the shoulders so they also read from the front
+      const lek = (sx) => ({ x: sx, y: 7.6, z: -3.4, w: 2.4, h: 3.2, d: 3.2, fill: skin, paint: (r, uv) => bands(r, uv.top, dark, 2, 1) });
+      const tail = (sx) => ({ x: sx, y: -0.6, z: -5.2, w: 2.2, h: 13, d: 2, fill: skin, paint: (r, uv) => { bands(r, uv.front, dark, 4, 2); tipDark(r, uv.front, dark); } });
+      return [{ kind: 'lekku', attach: 'head', boxes: [lek(-2.4), lek(2.4), tail(-3.5), tail(3.5)] }];
     },
   },
   {
@@ -116,7 +118,7 @@ export const SPECIES = [
       const eye = (r, uv) => { eyeOn(r, uv.front, '#e6c65c', '#fff2b0'); if (uv.front) { r.rect(uv.front[0] + 1, uv.front[1] + 1, 1, 1, EYE_DARK); } eyeOn(r, uv.left, '#e6c65c', '#fff2b0'); eyeOn(r, uv.right, '#e6c65c', '#fff2b0'); };
       return [
         { kind: 'crest', part: 'dome', attach: 'head', boxes: [{ x: 0, y: 9.2, z: -0.6, w: 7.2, h: 2.8, d: 7.6, fill: skin }, { x: 0, y: 11.4, z: -1, w: 5, h: 1.8, d: 5.4, fill: skin }] },
-        { kind: 'eyes', attach: 'head', boxes: [{ x: -4.2, y: 5.6, z: 1.6, w: 3, h: 3, d: 3, fill: skin, separate: ['front', 'left', 'right'], paint: eye }, { x: 4.2, y: 5.6, z: 1.6, w: 3, h: 3, d: 3, fill: skin, separate: ['front', 'left', 'right'], paint: eye }] },
+        { kind: 'eyes', part: 'bulging eyes', attach: 'head', boxes: [{ x: -4.1, y: 5.6, z: 2.9, w: 3, h: 3, d: 3, fill: skin, separate: ['front', 'left', 'right'], paint: eye }, { x: 4.1, y: 5.6, z: 2.9, w: 3, h: 3, d: 3, fill: skin, separate: ['front', 'left', 'right'], paint: eye }] },
       ];
     },
   },

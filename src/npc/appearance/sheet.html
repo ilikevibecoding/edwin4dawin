@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>W9 appearance sheets</title>
+    <style>
+      html, body { margin: 0; background: #101014; color: #ddd; font: 12px "DejaVu Sans Mono", monospace; }
+      #appearance-sheet canvas { image-rendering: pixelated; }
+      #bar { position: fixed; right: 8px; top: 8px; z-index: 60; background: #22222a; padding: 6px 8px; border: 1px solid #444; }
+      #bar a { color: #9cf; margin-right: 10px; }
+    </style>
+  </head>
+  <body>
+    <div id="bar">
+      <a href="?sheet=faces">faces</a><a href="?sheet=species">species</a><a href="?sheet=outfits">outfits</a><a href="?sheet=eyes">eyes</a>
+    </div>
+    <!-- Dev-only page on the Vite dev server: /src/npc/appearance/sheet.html?sheet=faces|species|outfits|eyes.
+         scripts/skin-sheet.mjs opens it through CDP and saves window.__sheet.dataURL(). -->
+    <script type="module">
+      import { mountSheetOverlay } from './sheet.js';
+      const params = new URLSearchParams(location.search);
+      const kind = params.get('sheet') || 'faces';
+      const opts = {};
+      for (const k of ['count', 'cols', 'zoom', 'S']) if (params.has(k)) opts[k] = parseFloat(params.get(k));
+      window.__sheetReady = mountSheetOverlay(kind, opts).then(() => true).catch((e) => { document.body.insertAdjacentText('beforeend', 'sheet failed: ' + (e.stack || e)); throw e; });
+    </script>
+  </body>
+</html>

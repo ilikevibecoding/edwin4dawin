@@ -195,7 +195,7 @@ export function paintAppearance(choice) {
     id: choice.id, seed, archetype: choice.archetype, species: sp.id, speciesName: sp.name, gender, age, clone: choice.clone,
     outfit: { id: outfit.id, name: outfit.name, faction: outfit.faction, role: outfit.role, colourway: colourway.id, colourwayName: colourway.name, wear, headgear: outfit.headgear || 'none' },
     face: face ? { ...face, id: faceId(face), tone: face.tone.id, eyeColour: face.eyeColour.id, hairColour: face.hairColour.id } : null,
-    skin: canvas, raster: r, overlays, geometry, model, palette, tags, eyes,
+    skin: canvas, canvas, raster: r, overlays, geometry, model, palette, tags, eyes, // .canvas: attachBlink(npc, app) reads skinInfo.canvas + .eyes + .seed
     debug: head ? { eyeRects: head.eyeRects, browRects: head.browRects, faceRect: head.faceRect, eyeKind: head.eyeKind, eyeLamps: ctx.eyeLamps } : { eyeLamps: ctx.eyeLamps },
     alloc: { allocated: alloc.allocated, failed: alloc.failed },
   };
@@ -234,9 +234,20 @@ export function describeChoice(choice, app = null) {
     if (face.marking !== 'none') bits.push(face.marking.replace('_', ' '));
     if (choice.clone) bits.push('clone template face');
   }
-  const geo = (app ? app.geometry : []).filter((g) => g.kind !== 'hair' && !['hat', 'helmet', 'skirt', 'cape', 'prop', 'plume', 'crest', 'visor', 'lamp', 'mask', 'backpack', 'satchel', 'pauldron', 'antenna', 'goggles', 'hood', 'headdress', 'collar'].includes(g.kind)).map((g) => (g.part || g.kind).replace(/_/g, ' '));
-  const speciesBits = geo.length ? ` (${[...new Set(geo)].join(', ')})` : '';
+  const geo = speciesPartNames(sp);
+  const speciesBits = geo.length ? ` (${geo.join(', ')})` : '';
   return `${who}${speciesBits}; ${bits.join(', ')}; ${outfit.describe} [${colourway.name}], ${WEAR_WORDS[wear]}`;
+}
+// The species' own voxel parts by name (lekku, montrals...) - static per species, so describeAppearance(id) and
+// app.description agree without painting anything.
+const PART_NAME_CACHE = new Map();
+export function speciesPartNames(sp) {
+  if (!sp.geometry) return [];
+  if (PART_NAME_CACHE.has(sp.id)) return PART_NAME_CACHE.get(sp.id);
+  const recs = sp.geometry({ skin: [128, 128, 128, 255], rng: new RNG(1), face: null });
+  const names = [...new Set(recs.map((g) => (g.part || (g.kind === 'eyes' ? 'bulging eyes' : g.kind)).replace(/_/g, ' ')))];
+  PART_NAME_CACHE.set(sp.id, names);
+  return names;
 }
 export function colourName(c) {
   const [r, g, b] = rgb(c).map((v) => v / 255);

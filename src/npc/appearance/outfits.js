@@ -34,7 +34,12 @@ const satchelGeo = (c) => ({ kind: 'satchel', attach: 'body', boxes: [{ x: 3.4, 
 const hoodDownGeo = (c) => ({ kind: 'hood', part: 'hood_down', attach: 'body', boxes: [{ x: 0, y: 5.6, z: -3, w: 9, h: 2.6, d: 2.4, fill: c }] });
 const datapadGeo = () => ({ kind: 'prop', part: 'datapad', attach: 'leftArm', boxes: [{ x: 0, y: -10.4, z: 2.7, w: 2.8, h: 3.6, d: 0.5, fill: '#2a2c34', separate: ['front'], paint: (r, uv) => PAINT.on(r, uv.front, 0, 0, uv.front[2], uv.front[3] - 1, '#5ac8e8') }] });
 const goggleGeo = (c = '#2a3a48') => ({ kind: 'goggles', attach: 'head', boxes: [{ x: 0, y: 6.7, z: 4.4, w: 6.6, h: 1.6, d: 1, fill: '#3a3a3a', separate: ['front'], paint: (r, uv) => { PAINT.on(r, uv.front, 0, 0, 2, uv.front[3], c); PAINT.on(r, uv.front, uv.front[2] - 2, 0, 2, uv.front[3], c); } }] });
-const plumeGeo = (c) => ({ kind: 'plume', attach: 'head', boxes: [{ x: -0.8, y: 12.4, z: -0.4, w: 0.9, h: 4.6, d: 6.4, fill: c }, { x: 0.8, y: 12.4, z: -0.4, w: 0.9, h: 4.6, d: 6.4, fill: c }, { x: 0, y: 10.4, z: -0.4, w: 2.6, h: 1.2, d: 7.2, fill: shade(c, 1.15) }] });
+// Senate Guard double plume: two upright fins on a raised crest base, running front to back over the helmet
+const plumeGeo = (c) => ({ kind: 'plume', attach: 'head', boxes: [
+  { x: -1.1, y: 13.2, z: -0.6, w: 1.3, h: 5.4, d: 6.6, fill: c, paint: (r, uv) => { PAINT.on(r, uv.front, 0, 0, uv.front[2], 1, shade(c, 1.3)); PAINT.on(r, uv.left, 0, 0, uv.left[2], 1, shade(c, 1.3)); } },
+  { x: 1.1, y: 13.2, z: -0.6, w: 1.3, h: 5.4, d: 6.6, fill: c, paint: (r, uv) => { PAINT.on(r, uv.front, 0, 0, uv.front[2], 1, shade(c, 1.3)); PAINT.on(r, uv.left, 0, 0, uv.left[2], 1, shade(c, 1.3)); } },
+  { x: 0, y: 10.6, z: -0.4, w: 3.6, h: 1.6, d: 7.6, fill: shade(c, 0.8) },
+] });
 const openHelmetGeo = (c, trim) => ({ kind: 'helmet', part: 'open_helmet', attach: 'head', boxes: [
   { x: 0, y: 9, z: 0, w: 9.4, h: 1.8, d: 9.4, fill: c, paint: (r, uv) => PAINT.on(r, uv.top, 0, 0, uv.top[2], 1, trim) },
   { x: 0, y: 4.2, z: -4.6, w: 9.4, h: 8.4, d: 1, fill: c },
@@ -78,9 +83,9 @@ export const OUTFITS = [
   {
     id: 'senate_guard', name: 'Senate Guard robes', faction: 'senate_guard', role: 'guard', headgear: 'open_helmet', wear: CW,
     describe: 'deep blue Senate Guard robes worn open over blue armour, plumed open-face helmet',
-    colourways: [cw('guard_blue', 'guard blue', { robe: '#243678', armour: '#3a58b8', trim: '#5a78d0', helmet: '#2c44a0', plume: '#1a2860', boots: '#141830' }),
-      cw('ceremonial', 'ceremonial', { robe: '#2a3f8c', armour: '#4a68c8', trim: '#d8b850', helmet: '#3450b0', plume: '#1c2a70', boots: '#141830' }),
-      cw('sergeant', 'sergeant', { robe: '#1e2e6a', armour: '#3450b0', trim: '#e8e8f0', helmet: '#2838a0', plume: '#182458', boots: '#101428' })],
+    colourways: [cw('guard_blue', 'guard blue', { robe: '#1f2f6c', armour: '#4666c8', trim: '#7a92e0', helmet: '#2c44a0', plume: '#4a6ad0', boots: '#141830' }),
+      cw('ceremonial', 'ceremonial', { robe: '#25378a', armour: '#5070d0', trim: '#d8b850', helmet: '#3450b0', plume: '#5878d8', boots: '#141830' }),
+      cw('sergeant', 'sergeant', { robe: '#1a2860', armour: '#3c58b8', trim: '#e8e8f0', helmet: '#2838a0', plume: '#4460c0', boots: '#101428' })],
     paint(ctx) {
       const { r, p, skin } = ctx;
       fillPart(r, 'body', p.robe); fillPart(r, 'arm', p.robe); fillPart(r, 'leg', p.robe);
@@ -100,8 +105,8 @@ export const OUTFITS = [
   {
     id: 'senate_guard_late', name: 'Senate Guard (late war)', faction: 'senate_guard', role: 'guard', headgear: 'helmet', wear: CW,
     describe: 'late-war Senate Guard: blue robes and armour, plume removed, dark visor',
-    colourways: [cw('guard_blue', 'guard blue', { robe: '#243678', armour: '#3a58b8', trim: '#5a78d0', helmet: '#2c44a0', boots: '#141830' }),
-      cw('night_watch', 'night watch', { robe: '#1a284f', armour: '#2c4494', trim: '#8090c0', helmet: '#22367c', boots: '#0e1224' })],
+    colourways: [cw('guard_blue', 'guard blue', { robe: '#1f2f6c', armour: '#4666c8', trim: '#7a92e0', helmet: '#2c44a0', boots: '#141830' }),
+      cw('night_watch', 'night watch', { robe: '#1a284f', armour: '#3450a8', trim: '#8090c0', helmet: '#22367c', boots: '#0e1224' })],
     paint(ctx) {
       const { r, p } = ctx;
       OUTFITS_BY_ID.senate_guard.paint({ ...ctx, p: { ...p, plume: p.helmet }, geometry: [] });
@@ -396,7 +401,7 @@ export const OUTFITS = [
   {
     id: 'casual_tunic', name: 'Casual tunic', faction: 'residents', role: 'resident', headgear: 'none', wear: ALLW,
     describe: 'loose belted tunic and plain trousers',
-    colourways: [cw('rust', 'rust', { tunic: '#9a5a3a', trous: '#4a4038', belt: '#3a2a1a' }), cw('sage', 'sage', { tunic: '#7a9a70', trous: '#3a3a3a', belt: '#3a2a1a' }), cw('sand', 'sand', { tunic: '#d0b890', trous: '#5a4a3a', belt: '#4a3020' }), cw('plum', 'plum', { tunic: '#6a3a5a', trous: '#3a3038', belt: '#2a1a20' })],
+    colourways: [cw('rust', 'rust', { tunic: '#9a5a3a', trous: '#4a4038', belt: '#3a2a1a' }), cw('sage', 'sage', { tunic: '#7a9a70', trous: '#3a3a3a', belt: '#3a2a1a' }), cw('slate', 'slate', { tunic: '#56607a', trous: '#34343e', belt: '#26262c' }), cw('plum', 'plum', { tunic: '#6a3a5a', trous: '#3a3038', belt: '#2a1a20' })],
     paint(ctx) { const { r, p, skin } = ctx; shirt(r, p.tunic); trousers(r, p.trous); boots(r, '#2a2018', 20); hands(r, skin); belt(r, p.belt, null, 17, 1); hem(r, p.tunic, 3); vNeck(r, skin, 2); },
   },
   {
