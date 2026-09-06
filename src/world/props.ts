@@ -114,8 +114,8 @@ function createLampDotMaterial(): THREE.ShaderMaterial {
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         float d = length(mv.xyz);
         vFade = aDot.y * smoothstep(${DOT_NEAR.toFixed(1)}, ${DOT_FULL.toFixed(1)}, d) * (1.0 - smoothstep(${DOT_FULL_FAR.toFixed(1)}, ${DOT_FAR.toFixed(1)}, d));
-        // a high mast (aDot.x > 2) never falls under 3 px: at 1.5 px its crown was one faint pixel over the terminal
-        // from the night view's 2.3 km, no brighter than a street lamp (h11)
+        // a high mast (aDot.x > 2) never falls under 3 px: a 30 m crown of eight luminaires is the brightest point on a
+        // port at night, and at the 1.5 px floor it was no larger than a street lamp's dot
         float mast = step(2.0, aDot.x);
         gl_PointSize = clamp(aDot.x * uFocal / max(d, 1.0), 1.5 + 1.5 * mast, 4.5 + 2.5 * mast);
         gl_Position = projectionMatrix * mv;
@@ -126,11 +126,15 @@ function createLampDotMaterial(): THREE.ShaderMaterial {
       void main() {
         float r = length(gl_PointCoord - 0.5) * 2.0;
         float a = (1.0 - smoothstep(0.35, 1.0, r)) * vFade * uNight;
-        if (a <= 0.002) discard;
+        if (a <= 0.02) discard;
         gl_FragColor = vec4(vec3(1.0, 0.82, 0.55) * 5.0 * a, 1.0);
       }`,
     transparent: true,
-    depthWrite: false,
+    // the dots write depth: the aerial-perspective pass (post.ts) hazes every pixel by the depth buffer's distance,
+    // so a dot that left the background's depth in place was hazed as the background — the port's masts, standing
+    // against the bay and the far shore from the night view's 2.3 km, went out entirely (h11, h12) while the city's
+    // dots survived in front of their own buildings. With its own depth a dot is hazed by its own distance.
+    depthWrite: true,
     depthTest: true,
     blending: THREE.AdditiveBlending,
   });
