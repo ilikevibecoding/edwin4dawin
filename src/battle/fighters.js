@@ -1,13 +1,15 @@
-// Starfighter swarms. Seven original low-poly types (Republic heavy starfighter, wing fighter, Jedi
-// interceptors in two colour schemes, gunship; Separatist droid fighter and tri-arm droid) rendered as ONE
+// Starfighter swarms: the Battle of Coruscant roster (Republic ARC-170, V-19 Torrent, Eta-2 Actis in
+// yellow and red; Separatist Vulture droid, Tri-fighter, Hyena bomber, HMP droid gunship) rendered as ONE
 // THREE.BatchedMesh (all types share a lit vertex-colour material; multi-draw makes it one draw call, with
 // a per-instance squadron colour) plus one instanced additive engine-glow layer: two draw calls total.
 //
 // Motion (see fighters/flight.js): fighters fly in flights of 2–4 (wingmen hold slots on a leader), keep
 // clear of capital hulls and run strafing passes along them, make attack runs at hull points and break
-// away rolling, pick fights with enemy fighters (lead pursuit, evasive weaving), fly combat air patrol over
-// their home ship, and gunships shuttle between friendly ships. Turn rate and acceleration are limited and
-// the bank follows the yaw rate. Deterministic given the fixed-step time and per-fighter seeds.
+// away rolling, pick fights with enemy fighters (lead pursuit, evasive weaving) and fly combat air patrol
+// over their home ship. Roles per type: ARC-170s strafe, V-19s and Vultures dogfight, Eta-2s hunt at long
+// range, Hyenas make bombing passes along capital hulls and break away, HMP gunships shuttle slowly
+// between friendly ships as escorts and fire turrets at whatever comes near. Turn rate and acceleration
+// are limited and the bank follows the yaw rate. Deterministic given the fixed-step time and seeds.
 //
 // Integration hooks: `update(dt, t, fire)` calls `fire(f)` for capital-ship runs and `fire(f, target)`
 // for fighter-vs-fighter shots; `damage(f, amount)` feeds a health counter, destroyed fighters call
@@ -91,10 +93,11 @@ function makeFighter(type, def, index, seed) {
     goal: new THREE.Vector3(),
     aimLocal: new THREE.Vector3(), // attack-run aim point in the anchor's local frame
     breakDir: new THREE.Vector3(),
-    dest: null, // gunship transit destination ship
+    dest: null, // escort transit destination ship
     destOff: new THREE.Vector3(),
     quarry: null, // enemy fighter being pursued
     threat: null, // enemy fighter pursuing this one
+    turretTarget: null, // escorts: enemy fighter the turrets track
     hunters: 0,
     noFightUntil: rng() * 20, // dogfight cooldown
     fireTimer: rng() * 3,
@@ -124,8 +127,15 @@ export class Fighters {
     const geos = buildFighterGeometries();
 
     let total = 0;
-    for (const def of Object.values(FIGHTER_DEFS))
-      total += Math.max(1, Math.round(def.count * scale));
+    let glows = 0;
+    for (const def of Object.values(FIGHTER_DEFS)) {
+      const n = Math.max(1, Math.round(def.count * scale));
+      total += n;
+      // one glow sprite per engine nozzle; `pos` may be one anchor or a list of them
+      const en = def.engine;
+      if (!en.list) en.list = Array.isArray(en.pos[0]) ? en.pos : [en.pos];
+      glows += n * en.list.length;
+    }
     let vertexCount = 0;
     for (const g of Object.values(geos))
       vertexCount += g.attributes.position.count;
@@ -163,7 +173,7 @@ export class Fighters {
       this.types[id] = { list, def, geoId };
     }
     this.flights = this._buildFlights();
-    this.glow = new EngineGlow(this.group, total);
+    this.glow = new EngineGlow(this.group, glows);
 
     this.ships = null;
     this.hulls = null;
@@ -197,11 +207,20 @@ export class Fighters {
   _buildFlights() {
     const flights = [];
     const make = (members, def) => {
+      const roles = def.role || {};
+      const base = roles.escort
+        ? "escort"
+        : roles.bomber
+          ? "bomber"
+          : roles.hunter
+            ? "hunter"
+            : "strike";
       const fl = {
         id: flights.length,
         side: def.side,
         members,
-        role: "strike",
+        base, // the type's mission; `role` flips between strike/cap for strike flights
+        role: base,
         anchor: null,
         home: null,
         mirror: (flights.length & 1) === 1,
@@ -264,14 +283,17 @@ export class Fighters {
     return best;
   }
 
-  _nearestEnemyFighter(f, radius) {
+  // nearest living enemy fighter within `radius`; pursuers skip quarries that already have two hunters,
+  // turrets (`any`) take whatever is closest
+  _nearestEnemyFighter(f, radius, any = false) {
     const list =
       this.bySide[f.side === "republic" ? "separatist" : "republic"] || [];
     let best = null;
     let bestD = radius * radius;
     for (let i = 0; i < list.length; i++) {
       const q = list[i];
-      if (!q.alive || q.hunters >= 2 || q.mode === MODE.LAUNCH) continue;
+      if (!q.alive || q.mode === MODE.LAUNCH) continue;
+      if (!any && q.hunters >= 2) continue;
       const d = q.pos.distanceToSquared(f.pos);
       if (d < bestD) {
         bestD = d;
@@ -281,7 +303,7 @@ export class Fighters {
     return best;
   }
 
-  // gunships: next friendly ship to shuttle to, with an offset beside/above it
+  // escorts: next friendly ship to shuttle to, with an offset beside/above it
   _pickDest(f) {
     let n = 0;
     for (const s of this.ships)
@@ -342,21 +364,21 @@ export class Fighters {
       const anchor = pick(enemies, anchorLoad, fl.home, rng);
       fl.anchor = anchor;
       const roles = def.role || {};
-      fl.role = roles.transit
-        ? "transit"
-        : rng() < (roles.cap || 0)
-          ? "cap"
-          : "strike";
-      if (!anchor && fl.role === "strike") fl.role = "cap";
+      fl.role =
+        fl.base === "strike" && rng() < (roles.cap || 0) ? "cap" : fl.base;
+      if (!anchor && (fl.role === "strike" || fl.role === "bomber"))
+        fl.role = "cap";
       this._applyFlightShips(fl);
 
-      // spawn point
+      // spawn point: strike flights mostly near their anchor, bombers and hunters on the way there
       const hp = fl.home ? fl.home.position : ORIGIN;
       const ap = anchor ? anchor.position : hp;
       const R = fl.home ? hullInfo(fl.home.model).R : 600;
       let u = 0;
       if (fl.role === "strike")
         u = rng() < 0.7 ? 0.55 + rng() * 0.45 : 0.1 + rng() * 0.35;
+      else if (fl.role === "bomber") u = 0.25 + rng() * 0.4;
+      else if (fl.role === "hunter") u = 0.3 + rng() * 0.4;
       _a.lerpVectors(hp, ap, u);
       _b.copy(ap).sub(hp);
       if (_b.lengthSq() < 1) _b.set(0, 0, 1);
@@ -372,7 +394,7 @@ export class Fighters {
       leader.pos.copy(_a);
 
       // starting mode, goal and heading
-      if (fl.role === "transit") {
+      if (fl.role === "escort") {
         this._pickDest(leader);
         leader.mode = MODE.TRANSIT;
         if (leader.dest)
@@ -410,14 +432,22 @@ export class Fighters {
     this.glow.end();
   }
 
-  // periodic upkeep for leaders (every half second): lost anchor/home, dogfight acquisition, role flips
+  // periodic upkeep for leaders (every half second): lost anchor/home, dogfight acquisition, turret
+  // targets for escorts, role flips between strike and cap
   _maintain(f, t) {
     const fl = f.flight;
-    if (fl.role !== "transit" && (!fl.anchor || fl.anchor.health <= 0)) {
+    const def = f.def;
+    const roles = def.role || {};
+    if (fl.role !== "escort" && (!fl.anchor || fl.anchor.health <= 0)) {
       fl.anchor = this._nearestShip(f.pos, fl.side, false);
       if (!fl.anchor) fl.role = "cap";
       this._applyFlightShips(fl);
-      if (f.mode === MODE.ATTACK || f.mode === MODE.PATROL) setPatrol(f, t);
+      if (
+        f.mode === MODE.ATTACK ||
+        f.mode === MODE.BOMB ||
+        f.mode === MODE.PATROL
+      )
+        setPatrol(f, t);
     }
     if (!fl.home || fl.home.health <= 0) {
       const h = this._nearestShip(f.pos, fl.side, true);
@@ -426,13 +456,30 @@ export class Fighters {
         this._applyFlightShips(fl);
       }
     }
+    // pick a fight: chance and sight range per type (bombers and escorts never chase)
+    const dog = roles.dogfight !== undefined ? roles.dogfight : 0.2;
     if (
+      dog > 0 &&
       (f.mode === MODE.PATROL || f.mode === MODE.CAP) &&
       t >= f.noFightUntil &&
-      f.rng() < 0.2
+      f.rng() < dog
     ) {
-      const q = this._nearestEnemyFighter(f, f.mode === MODE.CAP ? 2400 : 1500);
+      const sight = roles.sight || (f.mode === MODE.CAP ? 2400 : 1500);
+      const q = this._nearestEnemyFighter(f, sight);
       if (q) startDogfight(f, q, t);
+    }
+    if (def.turret) {
+      const q = this._nearestEnemyFighter(f, def.turret.range * 1.3, true);
+      for (const m of fl.members) m.turretTarget = q;
+    }
+    if (fl.base !== "strike") {
+      // bombers whose anchor came back get their mission back
+      if (fl.role === "cap" && fl.base === "bomber" && fl.anchor) {
+        fl.role = "bomber";
+        this._applyFlightShips(fl);
+        setPatrol(f, t);
+      }
+      return;
     }
     if (fl.role === "cap" && fl.anchor && f.rng() < 0.004) {
       fl.role = "strike";
@@ -489,7 +536,7 @@ export class Fighters {
         turn = f.def.turn;
         if (t >= f.modeUntil) {
           if (f.lead) f.mode = MODE.FORM;
-          else if (f.role === "transit") {
+          else if (f.role === "escort") {
             this._pickDest(f);
             f.mode = MODE.TRANSIT;
           } else setPatrol(f, t);
@@ -530,26 +577,26 @@ export class Fighters {
     f.quat.setFromRotationMatrix(_m);
     if (!withGlow) return;
     const en = f.def.engine;
-    const p = en.pos;
-    const gx = e[12] + e[0] * p[0] + e[4] * p[1] + e[8] * p[2];
-    const gy = e[13] + e[1] * p[0] + e[5] * p[1] + e[9] * p[2];
-    const gz = e[14] + e[2] * p[0] + e[6] * p[1] + e[10] * p[2];
     const flicker =
       0.9 + 0.1 * Math.sin(this.time * 41 + f.phase * 10) + f.speed * 0.0006;
-    this.glow.push(
-      gx,
-      gy,
-      gz,
-      f.vel.x,
-      f.vel.y,
-      f.vel.z,
-      en.color[0],
-      en.color[1],
-      en.color[2],
-      en.size,
-      en.tail,
-      en.glow * flicker,
-    );
+    const list = en.list;
+    for (let k = 0; k < list.length; k++) {
+      const p = list[k];
+      this.glow.push(
+        e[12] + e[0] * p[0] + e[4] * p[1] + e[8] * p[2],
+        e[13] + e[1] * p[0] + e[5] * p[1] + e[9] * p[2],
+        e[14] + e[2] * p[0] + e[6] * p[1] + e[10] * p[2],
+        f.vel.x,
+        f.vel.y,
+        f.vel.z,
+        en.color[0],
+        en.color[1],
+        en.color[2],
+        en.size,
+        en.tail,
+        en.glow * flicker,
+      );
+    }
   }
 
   // ---- damage, destruction, respawn ----
@@ -607,6 +654,7 @@ export class Fighters {
     f.fireTimer = 2;
     f.quarry = null;
     f.threat = null;
+    f.turretTarget = null;
     f.hunters = 0;
     refreshNear(f, this.ships, this.hulls);
     this.mesh.setVisibleAt(f.id, true);
@@ -629,7 +677,7 @@ export class Fighters {
         f.lead = null;
         f.slot = 0;
         if (f.mode === MODE.FORM) {
-          if (fl.role === "transit") {
+          if (fl.role === "escort") {
             this._pickDest(f);
             f.mode = MODE.TRANSIT;
           } else setPatrol(f, this.time);
