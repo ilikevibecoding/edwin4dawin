@@ -6,7 +6,7 @@ import { B } from '../../blocks.js';
 import { PlanFrame, computeLayout, insetLimits } from '../plan.js';
 import { buildTiered } from './tiered.js';
 
-export const SPIRE_MIN = 16;          // smallest lot side that still leaves rooms inside a rounded footprint
+export const SPIRE_MIN = 18;          // smallest lot side that still leaves >= 2 rooms a floor inside a rounded footprint
 const P = 3.2;                        // superellipse exponent: rounded square
 
 export function spire(bp, lot, ctx) {

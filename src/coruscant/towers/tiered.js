@@ -2,7 +2,7 @@
 // every level, floors on the 5-block lattice (slab at 5f, walk level 5f + 1), facade rings per floor, a
 // double-height lobby with the entrance on the lot edge, an optional boulevard-level sky lobby, skybridge stubs,
 // and a crown. Families describe themselves as a spec; see slab.js for the simplest one.
-import { B } from '../../blocks.js';
+import { B, BLOCKS } from '../../blocks.js';
 import { FORCE_AIR } from '../blueprint.js';
 import { PlanFrame, computeLayout, planFloor, cutEntrance, insetLimits } from '../plan.js';
 import { buildCore } from '../core.js';
@@ -25,7 +25,7 @@ export function buildTiered(bp, spec) {
   const frame = new PlanFrame(ext, front);
   const layout = computeLayout(frame.Iu, frame.Iv);
   const lim = insetLimits(frame, layout);
-  const lot = bp.lot;
+  const lot = bp.lot, roomsAt = bp.meta.rooms.length;
   const strips = spec.strips === false ? null : stripPlan(lot, spec.family);
   if (strips) style.lit = Math.min(style.lit, 0.3);      // the strips carry the night look; fewer random dots
   const tiers = spec.tiers.map((t, i) => {
@@ -103,7 +103,10 @@ export function buildTiered(bp, spec) {
   }
 
   // 2b. lit vertical strips on the facade rings above the podium
-  if (strips) for (const t of tiers) stripRing(bp, t.ring, Math.max(t.f0, strips.f0), t.f1, strips);
+  if (strips) {
+    for (const t of tiers) stripRing(bp, t.ring, Math.max(t.f0, strips.f0), t.f1, strips);
+    bp.meta.strips = { pitch: strips.pitch, phase: strips.phase, block: strips.block, faces: strips.faces ? [...strips.faces] : null, fromFloor: strips.f0 };
+  }
 
   // 3. crown plan (decides how many extra core floors), core, entrance, sky-lobby door, tier hooks, crown
   const top = tiers[tiers.length - 1];
@@ -115,7 +118,34 @@ export function buildTiered(bp, spec) {
   let extra = 0;
   if (crown) extra = buildCrown(bp, crown, { style, seed, strips, stripRing });
   else if (hooks.crown !== false) extra = paintCrown(bp, top.ext, 5 * nF, style, bp.rng, hooks.crownKind || style.crown);
+  relightRooms(bp, tiers, nF, !!crown, roomsAt);
   return { frame, layout, tiers, nF, doorU, extra, used, lim, crown: crown ? { style: crown.style, tiers: crown.K, height: extra } : null, strips: !!strips };
+}
+
+// Rooms that can have lost their light after the planner furnished them: under a setback or a crown tier the upper
+// wall's band row is the ceiling slab of the floor below (a small room's single ceiling panel goes with it), and in
+// a rounded corner the template's light cell may have fallen on the wall ring. Those rooms (recorded since `from`)
+// are rescanned and, when no block in or over them emits, get a panel hung under the ceiling over an interior cell.
+function relightRooms(bp, tiers, nF, crowned, from) {
+  const rooms = bp.meta.rooms, lot = bp.lot;
+  for (let i = from; i < rooms.length; i++) {
+    const r = rooms[i], lvl = r.y - bp.y0, f = (lvl - 1) / 5;
+    if (r.kind === 'stairwell' || (lvl - 1) % 5 !== 0 || f < 0 || f >= nF) continue;
+    const t = tiers.find((tt) => f >= tt.f0 && f <= tt.f1);
+    if (!t) continue;
+    const x0 = r.x - lot.x0, z0 = r.z - lot.z0, x1 = x0 + r.w - 1, z1 = z0 + r.d - 1;
+    let cx = x0 + (r.w >> 1), cz = z0 + (r.d >> 1), cut = false;
+    if (t.interior) {
+      cx = -1;
+      for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) { if (t.interior(x, z)) { if (cx < 0) { cx = x; cz = z; } } else cut = true; }
+      if (cx < 0) continue;
+    }
+    if (!cut && !(f === t.f1 && (t.index < tiers.length - 1 || crowned))) continue;
+    const yTop = Math.min(bp.h - 1, lvl + 4);
+    let lit = false;
+    for (let x = x0; x <= x1 && !lit; x++) for (let z = z0; z <= z1 && !lit; z++) for (let y = lvl - 1; y <= yTop; y++) { const v = bp.get(x, y, z); if (v !== 0 && v !== FORCE_AIR && BLOCKS[v] && BLOCKS[v].emit > 0) { lit = true; break; } }
+    if (!lit) bp.set(cx, Math.min(bp.h - 1, lvl + 3), cz, B.GLOW_PANEL);
+  }
 }
 
 // Height (blocks above the ground slab) a tiered blueprint needs: floors + crown allowance.
@@ -156,7 +186,12 @@ export function bridgeStubs(bp, lot, cityLayout, res, style) {
     else { a0 = 0; a1 = e.z0 - 1; wallAt = e.z0; dirIn = 1; }
     const put = (a, yy, k, id) => { const [px, pz] = along(k); if (px === null) bp.set(a, yy, pz, id); else bp.set(px, yy, a, id); };
     const airAt = (a, yy, k) => { const [px, pz] = along(k); return px === null ? bp.isAir(a, yy, pz) : bp.isAir(px, yy, a); };
+    // the opening and vestibule never cut into the lift / stair core: a bridge that lands beside it stops at the wall
+    const core = shaft.layout && shaft.layout.core, ce = core && shaft.frame ? shaft.frame.rect(core.u0, core.v0, core.u1, core.v1) : null;
+    const inCore = (a, k) => { if (!ce) return false; const [px, pz] = along(k); const x = px === null ? a : px, z = px === null ? pz : a; return x >= ce.x0 && x <= ce.x1 && z >= ce.z0 && z <= ce.z1; };
+    const putIn = (a, yy, k, id) => { if (!inCore(a, k)) put(a, yy, k, id); };
     const tube = hash2(br.id, lot.id, 0x7b) < 0.4;
+    (bp.meta.bridgeStubs || (bp.meta.bridgeStubs = [])).push({ bridge: br.id, side, y: bp.wy(y), stub: a1 >= a0, tube, lit: a1 >= a0 });
     if (a1 >= a0) {
       for (let a = a0; a <= a1; a++) for (let k = -2; k <= 2; k++) {
         put(a, y, k, B.DECK_PLATE);
@@ -171,8 +206,8 @@ export function bridgeStubs(bp, lot, cityLayout, res, style) {
     }
     // opening in the tier wall + vestibule two cells deep
     for (let k = -1; k <= 1; k++) {
-      put(wallAt, y + 1, k, FORCE_AIR); put(wallAt, y + 2, k, FORCE_AIR);
-      for (let s = 1; s <= 2; s++) { put(wallAt + dirIn * s, y + 1, k, FORCE_AIR); put(wallAt + dirIn * s, y + 2, k, FORCE_AIR); put(wallAt + dirIn * s, y, k, B.DECK_PLATE); }
+      putIn(wallAt, y + 1, k, FORCE_AIR); putIn(wallAt, y + 2, k, FORCE_AIR);
+      for (let s = 1; s <= 2; s++) { putIn(wallAt + dirIn * s, y + 1, k, FORCE_AIR); putIn(wallAt + dirIn * s, y + 2, k, FORCE_AIR); putIn(wallAt + dirIn * s, y, k, B.DECK_PLATE); }
     }
     put(wallAt, y + 3, 0, B.GLOW_PANEL);
     put(wallAt, y + 3, -1, B.GLOW_PANEL_BLUE); put(wallAt, y + 3, 1, B.GLOW_PANEL_BLUE);

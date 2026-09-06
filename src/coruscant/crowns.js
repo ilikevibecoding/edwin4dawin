@@ -13,7 +13,7 @@
 import { B } from '../blocks.js';
 import { RNG, hash2 } from '../rng.js';
 import { FORCE_AIR } from './blueprint.js';
-import { rectRing, maskRing, paintRing, paintRoof } from './facade.js';
+import { rectRing, maskRing, paintRing } from './facade.js';
 import { Room } from './rooms/room.js';
 import { ROOMS, pickRoom } from './rooms/index.js';
 
@@ -136,6 +136,17 @@ export function ringFromTable(e, tbl) {
   return cells;
 }
 const ringOf = (ext, inside) => { const t = tableOf(inside, ext); return t ? ringFromTable(ext, t) : maskRing(ext, inside); };
+// Must cells [x, z, inner]: a footprint mask has to contain every cell, and the cells flagged `inner` (the core box,
+// its walkway margins and the cell behind each door) with all four neighbours, so the tier's wall ring - the mask's
+// boundary cells - never runs through the core, the corridor or a doorway. `ok(i, j)` tests a cell of the ext rect.
+function mustHold(ext, must, ok) {
+  for (const [x, z, inner] of must) {
+    const i = x - ext.x0, j = z - ext.z0;
+    if (!ok(i, j)) return false;
+    if (inner && !(ok(i - 1, j) && ok(i + 1, j) && ok(i, j - 1) && ok(i, j + 1))) return false;
+  }
+  return true;
+}
 // Superellipse |x/rx|^p + |z/rz|^p <= 1 over the rect. The two power terms are separable, so they are tabulated per
 // row / column first; when `must` cells are given and one of them falls outside, no table is built (returns null).
 function roundedMask(ext, p, must = null) {
@@ -143,10 +154,22 @@ function roundedMask(ext, p, must = null) {
   const px = new Float64Array(w), pz = new Float64Array(d);
   for (let i = 0; i < w; i++) px[i] = Math.pow(Math.abs(ext.x0 + i + 0.5 - cx) / rx, p);
   for (let j = 0; j < d; j++) pz[j] = Math.pow(Math.abs(ext.z0 + j + 0.5 - cz) / rz, p);
-  if (must) for (const [x, z] of must) { if (!inRect(ext, x, z) || px[x - ext.x0] + pz[z - ext.z0] > 1) return null; }
+  if (must && !mustHold(ext, must, (i, j) => i >= 0 && i < w && j >= 0 && j < d && px[i] + pz[j] <= 1)) return null;
   const tbl = new Uint8Array(w * d);
   for (let i = 0, k = 0; i < w; i++) { const a = px[i]; for (let j = 0; j < d; j++, k++) if (a + pz[j] <= 1) tbl[k] = 1; }
   return tableLookup(ext, tbl);
+}
+// The plate over `e` at level y minus the cells of `skip` (the core box: its walls and shafts are painted for the
+// whole height and the stairwell void must stay open until the core's top slab).
+function plateSkip(bp, e, y, id, skip) {
+  if (y < 0 || y >= bp.h) return;
+  const b = bp.blocks, h = bp.h, d = bp.d;
+  const x0 = Math.max(0, e.x0), x1 = Math.min(bp.w - 1, e.x1), z0 = Math.max(0, e.z0), z1 = Math.min(d - 1, e.z1);
+  for (let x = x0; x <= x1; x++) {
+    const cut = skip && x >= skip.x0 && x <= skip.x1 && skip.z0 <= z1 && skip.z1 >= z0;
+    if (!cut) { for (let z = z0, i = (x * d + z0) * h + y; z <= z1; z++, i += h) b[i] = id; continue; }
+    for (let z = z0, i = (x * d + z0) * h + y; z <= z1; z++, i += h) if (z < skip.z0 || z > skip.z1) b[i] = id;
+  }
 }
 // Filled ellipse (radii rx, rz about cx, cz) at level y, one strided row write per x (Blueprint.disc fills cell by cell).
 function ellipse(bp, cx, cz, rx, rz, y, id) {
@@ -165,7 +188,7 @@ function ellipse(bp, cx, cz, rx, rz, y, id) {
 function chamferMask(ext, c, must = null) {
   const w = W(ext), d = D(ext);
   const fits = (i, j) => i + j >= c && (w - 1 - i) + j >= c && i + (d - 1 - j) >= c && (w - 1 - i) + (d - 1 - j) >= c;
-  if (must) for (const [x, z] of must) { if (!inRect(ext, x, z) || !fits(x - ext.x0, z - ext.z0)) return null; }
+  if (must && !mustHold(ext, must, (i, j) => i >= 0 && i < w && j >= 0 && j < d && fits(i, j))) return null;
   const tbl = new Uint8Array(w * d);
   for (let i = 0, k = 0; i < w; i++) for (let j = 0; j < d; j++, k++) if (fits(i, j)) tbl[k] = 1;
   return tableLookup(ext, tbl);
@@ -190,10 +213,11 @@ function shellTier(plan, prev, a, k, needDoor = true) {
   const ext = frame.rect(clip.u0 - 1, clip.v0 - 1, clip.u1 + 1, clip.v1 + 1);
   return { k, f: plan.nF + k - 1, clip, ext, terrace, doors, inside: null, ring: rectRing(ext), bare: false };
 }
-// bare tier: only the 6x6 core rises through this level (stair head)
+// bare tier: only the stair head rises through this level - the 6x6 core plus the one-cell wall that closes the
+// stairwell's two open faces (7x7), see capCore
 function bareTier(plan, k) {
   const c = plan.core, frame = plan.frame;
-  const ext = frame.rect(c.u0, c.v0, c.u1, c.v1);
+  const ext = frame.rect(c.u0, c.v0, c.u1 + 1, c.v1 + 1);
   return { k, f: plan.nF + k - 1, clip: { u0: c.u0, u1: c.u1, v0: c.v0, v1: c.v1 }, ext, terrace: null, doors: [], inside: null, ring: null, bare: true };
 }
 // Door cells (ring cells + the interior cell behind each) of a tier in xz.
@@ -205,12 +229,13 @@ function doorCells(plan, t) {
   }
   return out;
 }
-// Cells a shell tier's footprint must keep: the core box with its margins and the door cells (cached on the tier).
+// Cells a shell tier's footprint must keep (cached on the tier): the core box with its margins and the cell behind
+// each door as interior cells (flag 1: the wall ring may not touch them), the door cells themselves on the ring.
 function mustCells(plan, t) {
   if (t.must) return t.must;
   const c = plan.core, F = plan.frame, must = [];
-  for (let u = Math.max(t.clip.u0, c.u0 - 1); u <= Math.min(t.clip.u1, c.u1 + 1); u++) for (let v = Math.max(t.clip.v0, c.v0 - 2); v <= Math.min(t.clip.v1, c.v1 + 1); v++) must.push([F.X(u, v), F.Z(u, v)]);
-  for (const d of doorCells(plan, t)) { must.push([d.x, d.z]); must.push([d.ix, d.iz]); }
+  for (let u = Math.max(t.clip.u0, c.u0 - 1); u <= Math.min(t.clip.u1, c.u1 + 1); u++) for (let v = Math.max(t.clip.v0, c.v0 - 2); v <= Math.min(t.clip.v1, c.v1 + 1); v++) must.push([F.X(u, v), F.Z(u, v), 1]);
+  for (const d of doorCells(plan, t)) { must.push([d.x, d.z, 0]); must.push([d.ix, d.iz, 1]); }
   t.must = must;
   return must;
 }
@@ -227,23 +252,21 @@ function shapeTier(plan, t, kind) {
   }
 }
 // Keeps a shell tier on the roof below it when that roof is a masked footprint (octagon / ellipse habitats,
-// rounded tiers): the tier may only stand on cells strictly inside the footprint below, so its wall is always
-// at least one cell in from the edge below. Skipped when that would cut the core or a door.
+// rounded tiers): cells of the tier outside the footprint below would have no floor, so they are cut. Skipped
+// when the cut would run the wall through the core, a walkway or a door (buildShell then floors the overhang).
 function constrainTier(plan, t, below) {
   if (!below) return;
-  const own = t.inside, e = t.ext, d = D(e), tbl = new Uint8Array(W(e) * d), ownT = tableOf(own, e);
-  // the footprint below as a table: a cell is "inner" when it and its four neighbours are set
+  const own = t.inside, e = t.ext, w = W(e), d = D(e), tbl = new Uint8Array(w * d), ownT = tableOf(own, e);
   const bt = below.tbl, be = below.ext, bd = below.d;
   const inB = bt ? (x, z) => x >= be.x0 && x <= be.x1 && z >= be.z0 && z <= be.z1 && bt[(x - be.x0) * bd + (z - be.z0)] === 1 : below;
   let cut = false;
   for (let x = e.x0, i = 0; x <= e.x1; x++) for (let z = e.z0; z <= e.z1; z++, i++) {
     if (ownT ? ownT[i] !== 1 : (own && !own(x, z))) continue;
-    if (inB(x, z) && inB(x - 1, z) && inB(x + 1, z) && inB(x, z - 1) && inB(x, z + 1)) tbl[i] = 1; else cut = true;
+    if (inB(x, z)) tbl[i] = 1; else cut = true;
   }
   if (!cut) return;
-  const inside = tableLookup(e, tbl);
-  for (const [x, z] of mustCells(plan, t)) if (!inside(x, z)) return;
-  t.inside = inside; t.ring = ringFromTable(e, tbl);
+  if (!mustHold(e, mustCells(plan, t), (i, j) => i >= 0 && i < w && j >= 0 && j < d && tbl[i * d + j] === 1)) return;
+  t.inside = tableLookup(e, tbl); t.ring = ringFromTable(e, tbl);
 }
 
 // ------------------------------------------------------------------------------------------------ planning
@@ -338,7 +361,7 @@ export function buildCrown(bp, plan, o) {
   let prevExt = plan.top.ext;
   for (const t of plan.tiers) {
     const y = 5 * t.f, yRoof = y + 5;
-    if (t.bare) { capCore(bp, plan, yRoof, style); top = Math.max(top, yRoof + 1); prevExt = t.ext; continue; }
+    if (t.bare) { capCore(bp, plan, t, style); top = Math.max(top, yRoof + 1); prevExt = t.ext; continue; }
     buildShell(bp, plan, t, style, seed, o, prevExt);
     top = Math.max(top, yRoof + 2);
     prevExt = t.ext;
@@ -349,13 +372,20 @@ export function buildCrown(bp, plan, o) {
   top = Math.max(top, yCap + capH);
   const height = Math.min(bp.h - 1, top) - R;
   bp.meta.crown = { style: plan.style, height, topY: bp.wy(R + height), tiers: plan.K, cap: plan.cap.kind, climbable: true };
+  // blocks above lot.height that lane / clearance checks must add (also available without a build via lotCrown)
   bp.meta.crownHeight = height;
+  if (bp.lot) bp.lot.crownHeight = height;
   return height;
 }
 
-function capCore(bp, plan, yTop, style) {
-  const c = plan.core, F = plan.frame;
-  const e = F.rect(c.u0, c.v0, c.u1, c.v1);
+// The stair head of a bare tier: the core rises through the level (buildCore painted its lift wall, door wall and
+// shafts); the stairwell's two open faces - right of and behind the flights - get a wall so the head is a closed
+// 7x7 box, then the roof slab that also closes the well, and a parapet with blue corner lights.
+function capCore(bp, plan, t, style) {
+  const c = plan.core, F = plan.frame, e = t.ext, y = 5 * t.f, yTop = y + 5;
+  const wall = style.coreWall || B.DURASTEEL;
+  for (let v = c.v0; v <= c.v1 + 1; v++) { const x = F.X(c.u1 + 1, v), z = F.Z(c.u1 + 1, v); bp.fill(x, y + 1, z, x, yTop - 1, z, wall); }
+  for (let u = c.u0; u <= c.u1; u++) { const x = F.X(u, c.v1 + 1), z = F.Z(u, c.v1 + 1); bp.fill(x, y + 1, z, x, yTop - 1, z, wall); }
   slab(bp, e.x0, e.z0, e.x1, e.z1, yTop, style.roof);
   bp.walls(e.x0, yTop + 1, e.z0, e.x1, yTop + 1, e.z1, style.corner);
   for (const [x, z] of [[e.x0, e.z0], [e.x1, e.z1]]) bp.set(x, yTop + 1, z, B.GLOW_PANEL_BLUE);
@@ -365,21 +395,38 @@ function buildShell(bp, plan, t, style, seed, o, prevExt) {
   const c = plan.core, F = plan.frame;
   const y = 5 * t.f, lvl = y + 1, yRoof = y + 5;
   const glass = plan.cap.kind === 'dome' || plan.cap.kind === 'needle' || plan.style === 'halo';
+  const e = t.ext, ed = D(e), mt = tableOf(t.inside, e), blocks = bp.blocks, h = bp.h;
+  const coreE = F.rect(c.u0, c.v0, c.u1, c.v1);
+  // buildCore has already painted the core through every crown tier up to its top slab at coreTop: a tier roof
+  // below that level leaves the core box alone so the stairwell void (and the flight in it) stays open
+  const coreTop = 5 * (plan.nF + plan.K), skip = yRoof < coreTop ? coreE : null;
+  const inMask = (i, x, z) => (mt ? mt[i] === 1 : (!t.inside || t.inside(x, z)));
+  // floor: the tier stands on the roof below; a footprint cell overhanging a masked roof gets its own plate
+  {
+    const fl = style.roof;
+    for (let x = e.x0, i = 0; x <= e.x1; x++) for (let z = e.z0; z <= e.z1; z++, i++) {
+      if (!inMask(i, x, z) || inRect(coreE, x, z)) continue;
+      const k = (x * bp.d + z) * h + y, v = blocks[k];
+      if (v === 0 || v === AIR) blocks[k] = fl;
+    }
+  }
   // walls (glass drums for the dome / needle lookout / halo lounge), roof + parapet
   paintRing(bp, t.ring, t.f, style, seed, glass ? { lobby: true } : {});
   const deckTop = plan.cap.kind === 'deck' && t.k === 1;      // the landing deck plate replaces this roof + parapet
-  const e = t.ext, ed = D(e), mt = tableOf(t.inside, e);
   if (t.inside) {
-    if (mt) { if (yRoof < bp.h) { const rf = style.roof, blocks = bp.blocks, h = bp.h; for (let x = e.x0, i = 0; x <= e.x1; x++) for (let z = e.z0; z <= e.z1; z++, i++) if (mt[i] === 1) blocks[(x * bp.d + z) * h + yRoof] = rf; } }
-    else for (let x = e.x0; x <= e.x1; x++) for (let z = e.z0; z <= e.z1; z++) if (t.inside(x, z)) bp.set(x, yRoof, z, style.roof);
+    if (yRoof < bp.h) { const rf = style.roof; for (let x = e.x0, i = 0; x <= e.x1; x++) for (let z = e.z0; z <= e.z1; z++, i++) if (inMask(i, x, z) && !(skip && inRect(skip, x, z))) blocks[(x * bp.d + z) * h + yRoof] = rf; }
     if (!deckTop) for (const cc of t.ring) bp.set(cc.x, yRoof + 1, cc.z, cc.corner ? style.corner : (plan.style === 'spire' ? B.CHROME : B.IRON_BARS));
-  } else if (deckTop) slab(bp, e.x0, e.z0, e.x1, e.z1, yRoof, style.roof);
-  else paintRoof(bp, e, yRoof, style, true);
+  } else {
+    plateSkip(bp, e, yRoof, style.roof, skip);
+    if (!deckTop) {
+      bp.walls(e.x0, yRoof + 1, e.z0, e.x1, yRoof + 1, e.z1, B.IRON_BARS);
+      for (const [x, z] of [[e.x0, e.z0], [e.x1, e.z0], [e.x0, e.z1], [e.x1, e.z1]]) { bp.set(x, yRoof + 1, z, style.corner); bp.set(x, yRoof + 2, z, B.CITY_LAMP); }
+    }
+  }
   if (!glass && o.strips && plan.style !== 'deck') o.stripRing(bp, t.ring, t.f, t.f, { ...o.strips, pitch: plan.style === 'tiered' || plan.style === 'spire' ? 2 : 3, faces: null });
   // The tier stands on the roof below (its floor) and nothing but the core has been written in its volume yet, so
   // the interior only needs its ceiling fixtures (a 3-block lattice, white / blue) before the rooms go in.
   // interior = cells strictly inside the ring (all four neighbours in the footprint) and outside the core box
-  const coreE = F.rect(c.u0, c.v0, c.u1, c.v1);
   const itbl = new Uint8Array(W(e) * ed);
   for (let x = e.x0 + 1, i = ed + 1; x < e.x1; x++, i += 2) for (let z = e.z0 + 1; z < e.z1; z++, i++) {
     if (inRect(coreE, x, z)) continue;
@@ -393,7 +440,7 @@ function buildShell(bp, plan, t, style, seed, o, prevExt) {
     bp.set(x, lvl + 3, z, (x % 2 === 0) ? B.GLOW_PANEL : B.GLOW_PANEL_BLUE);
   }
   // rooms beside and behind the core (open to the landing corridor), then the corridor itself
-  furnishTier(bp, plan, t, style, o);
+  furnishTier(bp, plan, t, style, o, interior);
   // corridor: two rows in front of the core across the whole clip, lift landing lights
   for (let u = t.clip.u0; u <= t.clip.u1; u++) for (const v of [c.v0 - 2, c.v0 - 1]) {
     const x = F.X(u, v), z = F.Z(u, v);
@@ -401,10 +448,17 @@ function buildShell(bp, plan, t, style, seed, o, prevExt) {
     for (let yy = lvl; yy <= lvl + 2; yy++) bp.set(x, yy, z, AIR);
     if (u % 3 === 0 && v === c.v0 - 1) bp.set(x, lvl + 3, z, B.GLOW_PANEL);
   }
-  // the straight path from the stair door to the front door and the margins around the core stay clear
-  for (const u of [c.u0 + 4, c.u0 + 5]) for (let v = t.clip.v0; v < c.v0 - 2; v++) { const x = F.X(u, v), z = F.Z(u, v); if (interior(x, z)) for (let yy = lvl; yy <= lvl + 2; yy++) bp.set(x, yy, z, AIR); }
-  for (let v = c.v0; v <= c.v1 + 1; v++) for (const u of [c.u0 - 1, c.u1 + 1]) { const x = F.X(u, v), z = F.Z(u, v); if (interior(x, z)) for (let yy = lvl; yy <= lvl + 2; yy++) bp.set(x, yy, z, AIR); }
-  for (let u = c.u0 - 1; u <= c.u1 + 1; u++) { const x = F.X(u, c.v1 + 1), z = F.Z(u, c.v1 + 1); if (interior(x, z)) for (let yy = lvl; yy <= lvl + 2; yy++) bp.set(x, yy, z, AIR); }
+  // the straight path from the stair door to the front door and the walkways round the core stay clear: the
+  // column beside the lift wall and the row behind the lifts. The stairwell's two open faces (right of and behind
+  // the flights; the planner walls them in the floors below) get a wall so the well is a shaft, not a pit.
+  const clear = (u, v) => { const x = F.X(u, v), z = F.Z(u, v); if (interior(x, z)) for (let yy = lvl; yy <= lvl + 2; yy++) bp.set(x, yy, z, AIR); };
+  const cw = style.coreWall || B.DURASTEEL;
+  const wallAt = (u, v) => { const x = F.X(u, v), z = F.Z(u, v); if (interior(x, z)) bp.fill(x, lvl, z, x, lvl + 3, z, cw); };
+  for (const u of [c.u0 + 4, c.u0 + 5]) for (let v = t.clip.v0; v < c.v0 - 2; v++) clear(u, v);
+  for (let v = c.v0; v <= c.v1 + 1; v++) clear(c.u0 - 1, v);
+  for (let u = c.u0; u <= c.u0 + 3; u++) clear(u, c.v1 + 1);
+  for (let v = c.v0 + 1; v <= c.v1 + 1; v++) wallAt(c.u1 + 1, v);
+  for (let u = c.u0 + 4; u <= c.u1; u++) wallAt(u, c.v1 + 1);
   bp.room('lift_landing', F.X(t.clip.u0, c.v0 - 2), lvl, F.Z(t.clip.u0, c.v0 - 2), F.X(t.clip.u1, c.v0 - 1), F.Z(t.clip.u1, c.v0 - 1));
   bp.spot(F.X(c.u0 + 3, c.v0 - 2), lvl, F.Z(c.u0 + 3, c.v0 - 2), 'stand');
   // doors onto the terrace: 2 wide, 2 high, lit lintel, a lamp post beside each on the terrace
@@ -427,7 +481,8 @@ const TECH_POOL = ['control_room', 'comms_room', 'server_room', 'storage', 'reac
 
 // Furnishes the three rectangles a shell tier has around the core (left, right, behind) with room-library
 // templates when they are big enough; every block is recorded as a room so NPC planners and the harness see it.
-function furnishTier(bp, plan, t, style, o) {
+// The templates write through the interior mask only, so nothing lands on the wall ring or the core.
+function furnishTier(bp, plan, t, style, o, interior) {
   const c = plan.core, F = plan.frame, lvl = 5 * t.f + 1;
   const pool = plan.family === 'stack' || plan.family === 'pad' ? TECH_POOL : TIER_POOL;
   const blocks = [
@@ -437,20 +492,17 @@ function furnishTier(bp, plan, t, style, o) {
   ];
   const side = F.sideTowardFront();
   const alongX = side === 'N' || side === 'S';
-  const mt = tableOf(t.inside, t.ext), ed = D(t.ext);
+  const it = interior.tbl, ie = interior.ext, id = interior.d;
   for (const b of blocks) {
     if (b.u1 - b.u0 + 1 < 3 || b.v1 - b.v0 + 1 < 3) continue;
     const rc = F.rect(b.u0, b.v0, b.u1, b.v1);
     const w = alongX ? W(rc) : D(rc), d = alongX ? D(rc) : W(rc);
-    if (t.inside) {
-      let n = 0;
-      if (mt) { for (let x = rc.x0; x <= rc.x1; x++) { const row = (x - t.ext.x0) * ed - t.ext.z0; for (let z = rc.z0; z <= rc.z1; z++) if (mt[row + z] === 1) n++; } }
-      else for (let x = rc.x0; x <= rc.x1; x++) for (let z = rc.z0; z <= rc.z1; z++) if (t.inside(x, z)) n++;
-      if (n < 0.6 * W(rc) * D(rc)) continue;
-    }
+    let n = 0;
+    for (let x = rc.x0; x <= rc.x1; x++) { const row = (x - ie.x0) * id - ie.z0; for (let z = rc.z0; z <= rc.z1; z++) if (it[row + z] === 1) n++; }
+    if (n < 0.6 * W(rc) * D(rc)) continue;
     const tpl = pickRoom(pool, w, d, plan.rng, null);
     const doorU = Math.max(0, Math.floor((w - 2) / 2));
-    const room = new Room(bp, { ...rc, y: lvl, h: 4, side, doorU, doorW: 2, mask: t.inside }, tpl.name, { isTop: true, floor: t.f, family: plan.family, style });
+    const room = new Room(bp, { ...rc, y: lvl, h: 4, side, doorU, doorW: 2, mask: interior }, tpl.name, { isTop: true, floor: t.f, family: plan.family, style });
     tpl.fn(room, plan.rng, { isTop: true, floor: t.f, family: plan.family, style });
     room.finalize();
     room.putRaw(doorU, 3, 0, B.GLOW_PANEL);
@@ -617,7 +669,8 @@ function paintDeck(bp, plan, style, o) {
     : { u0: tc.u0, u1: tc.u1, v0: t.clip.v0, v1: tc.v1 };
   const e = F.rect(clip.u0, clip.v0, clip.u1, clip.v1);
   const te = t.ext;
-  slab(bp, e.x0, e.z0, e.x1, e.z1, y, B.DECK_PLATE);
+  // the plate leaves the core box alone: the stair head rises through the deck and its flight needs the well open
+  plateSkip(bp, e, y, B.DECK_PLATE, F.rect(c.u0, c.v0, c.u1, c.v1));
   // tapered underside (struts) under the overhang only
   for (let k = 1; k <= 3; k++) {
     for (let x = e.x0; x <= e.x1; x++) for (let z = e.z0; z <= e.z1; z++) {

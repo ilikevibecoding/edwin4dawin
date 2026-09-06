@@ -120,6 +120,7 @@ export function spine(bp, lot, ctx) {
   if (resA.crown) {
     bp.meta.crown = { style: 'spinecap', height: spineTop - 5 * nFA, topY: bp.wy(spineTop), tiers: resA.crown.tiers, cap: 'spine', climbable: true };
     bp.meta.crownHeight = bp.meta.crown.height;
+    lot.crownHeight = bp.meta.crown.height;
   }
   return { ...resA, twinB: resB, doors: [doorA, doorB], nF: Math.max(resA.nF, resB.nF), extra };
 }

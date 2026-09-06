@@ -40,13 +40,14 @@ export const DISTRICT_MIX = {
     industrial: { slab: [['needle', 0.25]] },
   },
   // lots wide enough for two shafts (across the front >= SPINE_MIN) in these districts become spine towers at this share
-  wide: { financial: 0.6, senate: 0.6, entertainment: 0.4, residential: 0.3 },
+  wide: { financial: 0.7, senate: 0.7, entertainment: 0.5, residential: 0.5, industrial: 0.3 },
+  wideFrom: ['slab', 'twin', 'setback', 'habitat', 'pad'],
 };
 function districtMix(lot, name, across) {
   if (!DISTRICT_MIX.enabled || lot.kind !== 'tower' || (lot.height ?? 0) < DISTRICT_MIX.minHeight) return name;
   const seed = (lot.seed ?? 0) >>> 0;
   const wide = DISTRICT_MIX.wide[lot.district];
-  if (wide && across >= SPINE_MIN && (name === 'slab' || name === 'twin' || name === 'setback') && hash2(seed, 0x12, 0xFA) < wide) return 'spine';
+  if (wide && across >= SPINE_MIN && DISTRICT_MIX.wideFrom.includes(name) && hash2(seed, 0x12, 0xFA) < wide) return 'spine';
   const rules = DISTRICT_MIX.rules[lot.district];
   const opts = rules && rules[name];
   if (!opts) return name;
