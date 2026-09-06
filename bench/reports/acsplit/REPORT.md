@@ -153,4 +153,4 @@ and doc comments).
 - `diff.py` — the pixel + `metrics.json` diff (`python3 diff.py <outA> <outB> view,view,...`).
 - `scenedump.mjs` — the scene-graph dump (`node scenedump.mjs http://127.0.0.1:<port>/ out.json`); `scene-base.json`
   and `scene-step3.json` are the two dumps compared above.
-- `flight.log` — the flight-harness run on the split build.
+- `flight.txt` — the flight-harness run on the split build (`.log` files are git-ignored).
