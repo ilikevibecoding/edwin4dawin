@@ -87,3 +87,36 @@ Changed:
 
 Remains: to be judged on the round-2 captures (queued behind the Chrome slot gate); perf still to be measured
 against the base.
+
+## Round 3 — per-yard bake, cheaper noise, seabed, beach edges (commits 663219e5 … db3a98c5)
+
+Judged on the round-0/1 captures again while the Chrome gate was saturated (rounds 2 and 3 are captured together
+on the round-3 build; round 2's captures were dropped from the queue so as not to hold a slot twice):
+- suburb_500m / park_150m: one tone across every yard — the baked `det.g` was a hash per street block, so the
+  only variation between 150 m and 1.2 km was the 27 m tile's mottle; real sprawl from the air is a patchwork of
+  yards on the street grid.
+- keys_30m (the ocean-front hotel beach the anchor search found), downtown_30m: a **mosaic of pavement squares in
+  the sand** along the back of the beach: the jittered 10 m zone lookup dithers the hotel / downtown ground
+  against the beach, and the two differ too much for a dither to pass as a boundary.
+- park paths break into dashes and vanish past ~1 m/px (from about 150 m up), so the park reads as flat at 500 m.
+- Round-0 perf far over budget; the sea bed under the water plane was shaded with the full noise stack although
+  the water is opaque over it (water.ts shades its own bed, alpha 1).
+- No driftwood / debris beyond the wrack-line grain; the dry sand had no mid-scale features between the grain
+  and the damp mottle.
+
+Changed:
+- `bakeDetail`: `det.g` is a per-lot tone (20 m lots in two rows along the block's long side — the lots
+  `city.ts` fills — 70 %, the block 30 %), so from 150 m up the suburb is a patchwork of kept / dry / paved yards
+  on the street grid; mowing-stripe direction and the dry/green bias follow it per yard.
+- Every built zone that meets a beach (mid-rise, downtown, hotel, industrial, golf, lot, construction, stadium,
+  marina, road) converges on the beach's sandy scrub through the same `sandy` fringe the parks and yards use, so
+  both sides of the jittered boundary carry the same colour.
+- Park paths: once thinner than a pixel the line widens to the pixel and pales in proportion, kept to 5 m/px.
+- Driftwood every 10–30 m along the older wrack line (bleached grey to dark bark, a shadow side), 1.5–3 m long;
+  wind-strung heavy-mineral streaks (4–10 m by 0.5 m, along the prevailing wind) on the dry sand in patches.
+- Cost: the sea bed / bars under the water plane return a depth tint with no noise and no taps (never seen);
+  the 3 m noise and the 5–11 m fbm octaves are replaced by their means past 2 / 4 m/px (`fbm3Band`); mid-rise
+  ground computed once in the 6/8 branch; the unreachable sandbar branch removed.
+
+Remains: captures and perf pending the Chrome gate; no building contact tone (no footprints available to the
+terrain); the h = 0.05 waterline is faceted by the bilinear height read (shared with water.ts).
