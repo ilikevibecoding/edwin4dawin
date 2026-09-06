@@ -11,7 +11,7 @@ import * as THREE from 'three';
 import { B } from '../blocks.js';
 import { CHUNK_SIZE as CS } from '../constants.js';
 import { Vehicle } from './vehicle.js';
-import { VoxelGrid, buildVoxelMesh, buildExtrasMesh, voxelMaterial } from './voxelMesh.js';
+import { VoxelGrid, buildVoxelMesh, buildExtrasMesh, voxelMaterial, LIGHT_SAMPLES } from './voxelMesh.js';
 import { ROUTE, CARS, CAR_LENGTH, DOOR_OFFSETS, TRAIN_LENGTH, TRAIN_HEIGHT, SCHEDULE, RIDE_TIME, PERIOD, trainState } from './route.js';
 import { TrainAudio } from './trainAudio.js';
 
@@ -38,6 +38,7 @@ const GLOW_BY_ID = {
 const cellGlow = (id) => GLOW_BY_ID[id] || null;
 // light groups: 1 = on while heading west (engine leads), 2 = on while heading east (observation car leads)
 const STRIP = [1, 1, 0], STEADY = [0.85, 0, 0], HEAD_W = [1.2, 0, 1], HEAD_E = [1.2, 0, 2], TAIL_W = [2.2, 0, 1], TAIL_E = [2.2, 0, 2];
+const CEILING = [0.45, 0, 0];   // wide cabin ceiling panels: lit, not blown out (the thin strips carry the glow)
 
 // ------------------------------------------------------------------------------------------------ model builder
 // Returns the collision grid plus everything the meshes need: `skip` (cells drawn as extras or moving parts),
@@ -53,7 +54,7 @@ export function buildTrainGrid() {
   // so none of its faces is coplanar with the surrounding sills / jambs
   const pane = (x0, y0, z0, x1, y1, z1, px0, py0, pz0, px1, py1, pz1) => {
     for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) setSkip(x, y, z, GLASS);
-    box(px0, py0, pz0, px1, py1, pz1, GLASS, { stretch: true, shade: 1.0 });
+    box(px0, py0, pz0, px1, py1, pz1, GLASS, { stretch: true, shade: 1.0, cabin: 0 });   // frames lit by the world; the cabin shows through
   };
   const wallPaneN = (xa, xb) => pane(xa, 3, 0, xb - 1, 3, 0, xa + 0.02, 3.02, 0.3, xb - 0.02, 3.98, 0.7);
   const wallPaneS = (xa, xb) => pane(xa, 3, 5, xb - 1, 3, 5, xa + 0.02, 3.02, 5.3, xb - 0.02, 3.98, 5.7);
@@ -121,7 +122,7 @@ export function buildTrainGrid() {
     box(xa + 0.5, 5.0, 0.86, xb - 0.5, 5.14, 1.0, B.GLOW_PANEL_BLUE, { glow: STRIP, stretch: 'cell' });
     box(xa + 0.5, 5.0, 5.0, xb - 0.5, 5.14, 5.14, B.GLOW_PANEL_BLUE, { glow: STRIP, stretch: 'cell' });
   };
-  const ceilingBar = (xa, xb) => box(xa, 4.9, 2.6, xb, 5.0, 3.4, B.GLOW_PANEL, { glow: [0.9, 0, 0], stretch: 'cell' });
+  const ceilingBar = (xa, xb) => box(xa, 4.9, 2.6, xb, 5.0, 3.4, B.GLOW_PANEL, { glow: CEILING, stretch: 'cell' });
 
   for (let ci = 0; ci < CARS.length; ci++) {
     const car = CARS[ci], x0 = car.x0, x1 = x0 + CAR_LENGTH - 1;
@@ -164,7 +165,7 @@ export function buildTrainGrid() {
       for (const l of [8, 11]) { seam(X(l), true); seam(X(l), false); }
       roofSeam(X(11));
       skirts(X(1), X(14)); roofline(X(8), X(14)); ceilingBar(X(9), X(13));
-      box(X(6), 3.9, 2.6, X(8), 4.0, 3.4, B.GLOW_PANEL, { glow: [0.9, 0, 0], stretch: 'cell' }); // cab ceiling bar (roof at 4)
+      box(X(6), 3.9, 2.6, X(8), 4.0, 3.4, B.GLOW_PANEL, { glow: CEILING, stretch: 'cell' }); // cab ceiling bar (roof at 4)
     } else {
       const tail = car.kind === 'observation';
       const bodyEnd = tail ? 9 : 13;                                  // last x of the full-height body
@@ -219,7 +220,10 @@ export function buildTrainGrid() {
   }
   // lit floor guide strip along the aisle from the cab to the rear bench
   box(CARS[0].x0 + 6, 2.0, 2.9, CARS[CARS.length - 1].x0 + 12, 2.02, 3.1, B.GLOW_PANEL_BLUE, { glow: [0.8, 0, 0], stretch: 'cell' });
-  return { grid: g, doors, skip, extras, leaves, displays };
+  // cabin cells for the mesh's interior / exterior split: the walkable rows between the walls plus the doorways
+  const doorCells = new Set(doors.map(([x, y, z]) => g.idx(x, y, z)));
+  const inside = (x, y, z) => y >= 2 && y <= 4 && ((z >= 1 && z <= 4) || (z === 5 && doorCells.has(g.idx(x, y, z))));
+  return { grid: g, doors, skip, extras, leaves, displays, inside };
 }
 
 // ------------------------------------------------------------------------------------------------ holo displays
@@ -388,15 +392,17 @@ export class SpaceTrain extends Vehicle {
     const game = this.game, m = this.model;
     this.material = voxelMaterial(game.atlas);
     this.material.uniforms.uEmissive.value = this.emissive;
+    this.material.uniforms.uSelfTint.value.set(0.84, 0.9, 1.0);   // the cabin's own light is a cool LED white
+    this.material.uniforms.uLightSpan.value = this.grid.w;
     // the hull is built with the doorways open so the jamb faces exist whatever the door state is later
     const closed = this.doorsClosed;
     if (closed) this.applyDoorCells(false);
-    this.mesh = buildVoxelMesh(this.grid, game.atlas, { material: this.material, glow: cellGlow, extras: m.extras, cells: (x, y, z) => !m.skip.has(this.grid.idx(x, y, z)) });
+    this.mesh = buildVoxelMesh(this.grid, game.atlas, { material: this.material, glow: cellGlow, extras: m.extras, inside: m.inside, cells: (x, y, z) => !m.skip.has(this.grid.idx(x, y, z)) });
     if (closed) this.applyDoorCells(true);
     this.mesh.name = this.name;
     game.scene.add(this.mesh);
     this.meshes = [this.mesh];
-    this.doorMeshes = [buildExtrasMesh(m.leaves.west, this.material), buildExtrasMesh(m.leaves.east, this.material)];
+    this.doorMeshes = [buildExtrasMesh(m.leaves.west, this.material, m.inside), buildExtrasMesh(m.leaves.east, this.material, m.inside)];
     this.doorMeshes[0].name = 'space_train_doors_west'; this.doorMeshes[1].name = 'space_train_doors_east';
     for (const d of this.doorMeshes) { game.scene.add(d); this.meshes.push(d); }
     // holo boards: one canvas texture, one mesh riding with the train, one static mesh for the stations
@@ -517,6 +523,7 @@ export class SpaceTrain extends Vehicle {
     if (this.doorAnim !== target) this.doorAnim = target > this.doorAnim ? Math.min(1, this.doorAnim + dt / DOOR_TIME) : Math.max(0, this.doorAnim - dt / DOOR_TIME);
     super.update(dt, alpha, camera);
     const st = this.state, u = this.material.uniforms;
+    this.sampleLightAlong();
     this.time += dt;
     u.uTime.value = this.time % 3600;
     u.uPulse.value = Math.min(1, Math.abs(st.v) / SCHEDULE.vmax) * (st.v < 0 ? -1 : 1);
@@ -529,6 +536,20 @@ export class SpaceTrain extends Vehicle {
     if (this.display && this.displayTimer >= 0.5) {
       this.displayTimer = 0;
       this.display.update(st);
+    }
+  }
+
+  // World light sampled at cabin height along the train (the base class samples the centre only): the frontier
+  // station's hall roofs the dock, so the cars inside are lit by the hall lamps while the nose stands in daylight.
+  sampleLightAlong() {
+    const world = this.game && this.game.world;
+    if (!world || !this.cur) return;
+    const g = this.grid, along = this.material.uniforms.uLightAlong.value;
+    for (let k = 0; k < LIGHT_SAMPLES; k++) {
+      const gx = 0.5 + (g.w - 1) * k / (LIGHT_SAMPLES - 1);
+      const w = this.toWorld(gx, 3.5, g.d / 2, this.cur, { x: 0, y: 0, z: 0 });
+      const l = world.sampleLight(w.x, w.y, w.z);
+      along[k].set(l[0], l[1]);
     }
   }
 

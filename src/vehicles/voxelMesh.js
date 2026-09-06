@@ -13,7 +13,14 @@
 //   - `extras`: visual-only sub boxes in grid units (light strips, seats, skirts, door leaves) textured from a block
 //     id or a raw atlas tile, split per cell with cropped UVs like the partial shapes, unless `stretch` maps one
 //     tile over the whole box (true) or one whole tile over every cell-sized piece ('cell': LED segments);
-//   - `material`: reuse one material for several meshes of the same vehicle (one set of uniforms to update).
+//   - `material`: reuse one material for several meshes of the same vehicle (one set of uniforms to update);
+//   - `uLightAlong[LIGHT_SAMPLES]` + `uLightSpan`: world light sampled at several points along the vehicle's x axis
+//     (grid units), interpolated per vertex, so a long train half inside a station hall is lit like the hall there
+//     and like the open sky at its nose (uLightSpan 0 = the single `uLight` sample as before);
+//   - `uSelfTint`: colour of the `uEmissive` floor light (default the warm block light; LED cabins pass a cool white);
+//   - `inside(x, y, z)`: per-vertex `aCabin` flag - faces looking into the vehicle's interior get the `uEmissive`
+//     floor light, exterior faces are lit by the world only (a train at night: dark hull, lit windows). Without it
+//     every face gets the floor, as before.
 import * as THREE from 'three';
 import { SHADING_PARS, bindShading } from '../render/shading.js';
 import { BLOCKS, SHAPE } from '../blocks.js';
@@ -45,14 +52,24 @@ function faceUV(dir, x, y, z, out) {
   return out;
 }
 
+export const LIGHT_SAMPLES = 12;
 const VERT = /* glsl */ `
-attribute float aShade; attribute vec3 aEmit;
-varying vec2 vUv; varying float vShade; varying float vDist; varying vec3 vEmit; varying float vAlong;
+#define LIGHT_SAMPLES ${LIGHT_SAMPLES}
+attribute float aShade; attribute vec3 aEmit; attribute float aCabin;
+uniform vec2 uLight; uniform vec2 uLightAlong[LIGHT_SAMPLES]; uniform float uLightSpan;
+varying vec2 vUv; varying float vShade; varying float vDist; varying vec3 vEmit; varying float vAlong; varying vec2 vLight; varying float vCabin;
 #if FANCY
 varying vec3 vWorldPos;
 #endif
 void main() {
-  vUv = uv; vShade = aShade; vEmit = aEmit; vAlong = position.x;
+  vUv = uv; vShade = aShade; vEmit = aEmit; vAlong = position.x; vCabin = aCabin;
+  // world light: one sample for the whole vehicle, or interpolated between samples spread along its x axis
+  vLight = uLight;
+  if (uLightSpan > 0.0) {
+    float f = clamp(position.x / uLightSpan, 0.0, 1.0) * float(LIGHT_SAMPLES - 1);
+    int i = int(floor(f)); int j = i + 1; if (j > LIGHT_SAMPLES - 1) j = LIGHT_SAMPLES - 1;
+    vLight = mix(uLightAlong[i], uLightAlong[j], fract(f));
+  }
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = length(mv.xyz);
 #if FANCY
@@ -62,10 +79,10 @@ void main() {
 }`;
 const FRAG = /* glsl */ `
 uniform sampler2D map;
-uniform vec2 uLight; uniform float uEmissive;
+uniform float uEmissive; uniform vec3 uSelfTint;
 uniform float uTime; uniform float uPulse; uniform float uGlow; uniform float uHeadWest; uniform float uHeadEast;
 uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar; uniform float uFlash;
-varying vec2 vUv; varying float vShade; varying float vDist; varying vec3 vEmit; varying float vAlong;
+varying vec2 vUv; varying float vShade; varying float vDist; varying vec3 vEmit; varying float vAlong; varying vec2 vLight; varying float vCabin;
 #if FANCY
 varying vec3 vWorldPos;
 #endif
@@ -75,22 +92,25 @@ float blockCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.6)
 void main() {
   vec4 tex = texture2D(map, vUv);
   if (tex.a < 0.5) discard;
-  float sky = lightCurve(uLight.x) * uSkyLight;
-  float blk = blockCurve(max(uLight.y, uEmissive));
+  float skyVis = lightCurve(vLight.x);
+  float sky = skyVis * uSkyLight;
+  // block light: the world's (warm) lamps around the vehicle, or its own cabin light floor (interior faces) in its
+  // own tint
+  vec3 blkCol = max(vec3(blockCurve(vLight.y)) * vec3(1.0, 0.9, 0.72), vec3(blockCurve(uEmissive * vCabin)) * uSelfTint);
 #if FANCY
   // flat cube faces: the normal comes from the position derivatives (no normal attribute in the vehicle geometry)
   vec3 N = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));
   vec3 V = normalize(uCamPos - vWorldPos);
-  vec3 light = shadingLight(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72), vWorldPos, N, lightCurve(uLight.x), vDist);
+  vec3 light = shadingLight(vec3(sky) * uSkyTint, blkCol, vWorldPos, N, skyVis, vDist);
   vec3 fogC = fogColorDir(uFogColor, -V);
 #else
-  vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
+  vec3 light = max(vec3(sky) * uSkyTint, blkCol);
   vec3 fogC = uFogColor;
 #endif
   light = max(light, vec3(0.05)) + vec3(uFlash);
   vec3 col = tex.rgb * light * vShade;
 #if FANCY
-  col += sunSpecular(vWorldPos, N, N, V, 0.35, 0.8, tex.rgb, lightCurve(uLight.x), vDist) * vShade;   // hull metal
+  col += sunSpecular(vWorldPos, N, N, V, 0.35, 0.8, tex.rgb, skyVis, vDist) * vShade;   // hull metal
 #endif
   // emissive faces (light strips, displays, head / tail lights): self-lit in HDR so bloom picks them up. Strips
   // flagged as pulsing breathe and carry a slow wave along the vehicle while it moves (uPulse = normalised speed,
@@ -108,7 +128,8 @@ void main() {
 export function voxelMaterial(atlas) {
   const m = new THREE.ShaderMaterial({
     uniforms: {
-      map: { value: atlas }, uLight: { value: new THREE.Vector2(1, 0) }, uEmissive: { value: 0 },
+      map: { value: atlas }, uLight: { value: new THREE.Vector2(1, 0) }, uEmissive: { value: 0 }, uSelfTint: { value: new THREE.Vector3(1.0, 0.9, 0.72) },
+      uLightAlong: { value: Array.from({ length: LIGHT_SAMPLES }, () => new THREE.Vector2(1, 0)) }, uLightSpan: { value: 0 },
       uTime: { value: 0 }, uPulse: { value: 0 }, uGlow: { value: 1.8 }, uHeadWest: { value: 1 }, uHeadEast: { value: 1 },
       uSkyLight: SHARED.uSkyLight, uSkyTint: SHARED.uSkyTint, uFogColor: SHARED.uFogColor, uFogNear: SHARED.uFogNear, uFogFar: SHARED.uFogFar, uFlash: SHARED.uFlash,
     },
@@ -123,11 +144,13 @@ export function voxelMaterial(atlas) {
 const NO_EMIT = [0, 0, 0];
 
 class GeoBuffer {
-  constructor() { this.pos = []; this.uv = []; this.shade = []; this.emit = []; this.idx = []; this.faces = 0; this.uvTmp = [0, 0]; this.curEmit = NO_EMIT; }
+  constructor() { this.pos = []; this.uv = []; this.shade = []; this.emit = []; this.cabin = []; this.idx = []; this.faces = 0; this.uvTmp = [0, 0]; this.curEmit = NO_EMIT; this.curCabin = 1; }
   // emissive channel for the faces emitted next: [intensity 0..1, pulse 0..1, group 0 | 1 | 2]
   setEmit(e) { this.curEmit = e || NO_EMIT; }
+  // 1 = the faces emitted next look into the cabin (they get the uEmissive floor light), 0 = exterior
+  setCabin(c) { this.curCabin = c; }
   pushVertex(x, y, z, u, v, shade) {
-    this.pos.push(x, y, z); this.uv.push(u, v); this.shade.push(shade);
+    this.pos.push(x, y, z); this.uv.push(u, v); this.shade.push(shade); this.cabin.push(this.curCabin);
     const e = this.curEmit; this.emit.push(e[0], e[1] || 0, e[2] || 0);
   }
   // one face of the sub box [x0..x1, y0..y1, z0..z1] inside cell (bx, by, bz)
@@ -174,6 +197,7 @@ class GeoBuffer {
     g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
     g.setAttribute('aShade', new THREE.Float32BufferAttribute(this.shade, 1));
     g.setAttribute('aEmit', new THREE.Float32BufferAttribute(this.emit, 3));
+    g.setAttribute('aCabin', new THREE.Float32BufferAttribute(this.cabin, 1));
     g.setIndex(this.idx);
     g.computeBoundingSphere();
     g.computeBoundingBox();
@@ -181,12 +205,14 @@ class GeoBuffer {
   }
 }
 
-// Visual-only sub box in grid units: { x0, y0, z0, x1, y1, z1, id?, tile?, glow?, stretch?, shade? }.
+// Visual-only sub box in grid units: { x0, y0, z0, x1, y1, z1, id?, tile?, glow?, stretch?, shade?, cabin? }.
 // Textures come from block `id` (per face) or one raw atlas `tile`; boxes spanning several cells are split per cell
 // so every piece samples one whole tile (like the partial shapes), unless `stretch` maps the tile over the whole box.
-function emitExtra(buf, e) {
+// `cabin` (interior faces, see aCabin) defaults to whether the box's centre cell lies inside the vehicle.
+function emitExtra(buf, e, inside = null) {
   const tex = (f) => (e.tile !== undefined ? e.tile : BLOCKS[e.id || 0].tex[f]);
   buf.setEmit(e.glow);
+  buf.setCabin(e.cabin !== undefined ? e.cabin : (inside ? (inside(Math.floor((e.x0 + e.x1) / 2), Math.floor((e.y0 + e.y1) / 2), Math.floor((e.z0 + e.z1) / 2)) ? 1 : 0) : 1));
   const shadeOf = (f) => (e.shade !== undefined ? e.shade : FACES[f].shade);
   if (e.stretch === true) {
     for (let f = 0; f < 6; f++) buf.boxFaceStretched(f, e.x0, e.y0, e.z0, e.x1, e.y1, e.z1, tex(f), shadeOf(f));
@@ -220,15 +246,17 @@ function emitExtra(buf, e) {
 // (glass) against air are kept.
 // opts.glow: (id, x, y, z) => [intensity, pulse, group] | null - emissive channel of a cell's faces (default none);
 // opts.extras: visual-only sub boxes (see emitExtra); opts.cells: (x, y, z, id) => false to skip a cell (its
-// geometry lives in another mesh, e.g. door leaves that move on their own).
+// geometry lives in another mesh, e.g. door leaves that move on their own); opts.inside: (x, y, z) => boolean, the
+// vehicle's interior cells - a face looking into one (or belonging to a partial shape standing in one) is a cabin face.
 export function buildVoxelGeometry(grid, opts = {}) {
   const buf = new GeoBuffer();
   const { w, h, d } = grid;
-  const glow = opts.glow || null;
+  const glow = opts.glow || null, inside = opts.inside || null;
   const at = (x, y, z) => (x < 0 || y < 0 || z < 0 || x >= w || y >= h || z >= d) ? 0 : grid.get(x, y, z);
   const opaqueAt = (x, y, z) => { const id = at(x, y, z); return id !== 0 && BLOCKS[id].opaque; };
   // a face flush with the cell boundary is hidden when the neighbour is opaque or the same block (glass runs)
   const hidden = (x, y, z, f, id) => { const F = FACES[f]; const nid = at(x + F.n[0], y + F.n[1], z + F.n[2]); return nid !== 0 && (opaqueAt(x + F.n[0], y + F.n[1], z + F.n[2]) || nid === id); };
+  const cabinFace = (x, y, z, f) => { if (!inside) return 1; const F = FACES[f]; return inside(x + F.n[0], y + F.n[1], z + F.n[2]) || inside(x, y, z) ? 1 : 0; };
   for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) for (let z = 0; z < d; z++) {
     const id = at(x, y, z);
     if (id === 0) continue;
@@ -238,10 +266,12 @@ export function buildVoxelGeometry(grid, opts = {}) {
     if (def.shape === SHAPE.CUBE || def.shape === SHAPE.LIQUID) {
       for (let f = 0; f < 6; f++) {
         if (hidden(x, y, z, f, id)) continue;
+        buf.setCabin(cabinFace(x, y, z, f));
         buf.face(f, x, y, z, 0, 0, 0, 1, 1, 1, def.tex[f]);
       }
       continue;
     }
+    buf.setCabin(inside ? (inside(x, y, z) ? 1 : 0) : 1);
     if (def.shape === SHAPE.RAIL) {
       const alongX = BLOCKS[at(x + 1, y, z)].shape === SHAPE.RAIL || BLOCKS[at(x - 1, y, z)].shape === SHAPE.RAIL;
       const alongZ = BLOCKS[at(x, y, z + 1)].shape === SHAPE.RAIL || BLOCKS[at(x, y, z - 1)].shape === SHAPE.RAIL;
@@ -279,15 +309,15 @@ export function buildVoxelGeometry(grid, opts = {}) {
       }
     }
   }
-  buf.setEmit(null);
-  if (opts.extras) for (const e of opts.extras) emitExtra(buf, e);
+  buf.setEmit(null); buf.setCabin(1);
+  if (opts.extras) for (const e of opts.extras) emitExtra(buf, e, inside);
   return { geometry: buf.build(), faces: buf.faces };
 }
 
 // Geometry of extras alone (no grid cells): parts that move relative to the hull, e.g. sliding door leaves.
-export function buildExtrasGeometry(extras) {
+export function buildExtrasGeometry(extras, inside = null) {
   const buf = new GeoBuffer();
-  for (const e of extras) emitExtra(buf, e);
+  for (const e of extras) emitExtra(buf, e, inside);
   return { geometry: buf.build(), faces: buf.faces };
 }
 
@@ -314,8 +344,8 @@ export function buildVoxelMesh(grid, atlas, opts = {}) {
 }
 
 // A mesh of extras only (see buildExtrasGeometry) sharing the vehicle's material.
-export function buildExtrasMesh(extras, material) {
-  const { geometry, faces } = buildExtrasGeometry(extras);
+export function buildExtrasMesh(extras, material, inside = null) {
+  const { geometry, faces } = buildExtrasGeometry(extras, inside);
   const mesh = new THREE.Mesh(geometry, material);
   mesh.frustumCulled = true;
   mesh.userData.faces = faces;
