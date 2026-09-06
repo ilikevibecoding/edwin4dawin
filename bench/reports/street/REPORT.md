@@ -112,6 +112,22 @@ lane lines sit 2 cm above the paving; the masts' pools light the yard at night t
 (0.36–0.46, the critic's "0.35–0.45") rendered at sRGB 171 against the 99 of the terrain ground it covers — near-white
 under this renderer's sun, as the walks were in round 1 — and was brought down to 0.17–0.25 (a8360bfe).
 
+### Round 7 — plazas as designed ground, streets with parked cars, plazas lit (the h09 read at 200 m; DEFECTS 7.1–7.6)
+
+- **Planting beds** (`K_PLAZA`, shader only): about a third of the 10.8 m paving fields, picked by a smooth per-field
+  noise so they cluster two to six with 2.7 m paved paths between, each a lawn-and-groundcover fill with a mulch margin
+  inside a 0.45 m concrete kerb. From 200–500 m a plaza is grey paving with lawn groups instead of one flat plane.
+- **Curbside parking** (`parkCurb`): 6.2 m bays 1.2 m in from the curb along the dense districts' 12–14 m grid
+  streets (the traffic drives 1.8 m from the centreline there; the arterials' outer lane leaves no room), from 8 m past
+  each corner, clear of bus stops and hydrants, 60 % taken downtown and 45 % in the mid-rise rings, one car in six a
+  van, noses with the traffic; 11.3 k cars. Where another carriageway overlaps the street the bay is skipped.
+- **Yard LOD**: the two-box near shapes are drawn within 160 m in three dimensions (was 300 m horizontal), so from
+  200 m up every car and planter is its one-box far shape; the parking lanes come in under the h09 street-triangle
+  count in the three aerial views (node estimate city_north 225 → 216 k, city_200m 210 → 207 k, city_500m 197 → 195 k;
+  street_2m 287 → 302 k).
+- **Plaza lanterns**: pedestrian lamps over one open cell in ten of every plaza (394), so the plazas are lit spaces at
+  night with their own dots and 5 m pools.
+
 ## Counts (node harness over the generated world)
 
 | item | count |
@@ -119,13 +135,13 @@ under this renderer's sun, as the walks were in round 1 — and was brought down
 | sidewalk runs / curb returns | 23 117 / 22 163 |
 | signalised intersections / mast arms | 601 / 2 250 |
 | stop signs | 9 911 |
-| lamps (arterial / street / ped / highway) | 2 478 / 35 574 / 52 / 123 (round 2); 39 817 street-planned after round 4 (highway poles now the highway module's, + verge lamps, lot lamps, masts) |
+| lamps (arterial / street / ped / highway) | 2 478 / 35 574 / 52 / 123 (round 2); 39 817 street-planned after round 4 (highway poles now the highway module's, + verge lamps, lot lamps, masts); round 7: arterial 3 571 / street 36 215 / ped 446 / mast 15 = 40 247 |
 | sidewalk triangles (fine / far index) | 2.52 M / 0.83 M |
 | kit triangles (large / small) | 0.37 M / 1.09 M |
-| plazas / lots (round 4, merged tree) | 72 / 38 |
-| parked cars / planters | 5 996 / 1 780 |
-| paving triangles (plazas + lots 47 k, port yard 26 k) / yard triangles (near / far shapes) | 73 k / 203 k / 85 k |
-| street cells | 558 |
+| plazas / lots (round 4, merged tree) | 72 / 38 (round 7 tree: 71 / 40) |
+| parked cars (lots / curbside) / planters | 5 018 / 11 283 / 1 773 (round 7; the lots held 5 996 at 42 % occupancy in round 4) |
+| paving triangles (plazas + lots 47 k, port yard 26 k) / yard triangles (near / far shapes) | 70 k / 396 k / 181 k (round 7, with the parking lanes; 203 k / 85 k in round 5) |
+| street cells | 558 (566 in round 7) |
 | lamp map | 3449 × 2559 texels, 2.5 m, 8.8 MB |
 
 Per-view upper bounds within the cull radii (no frustum): `bridge-low` 253 k tris / 46 draws, `street2m` 424 k / 66,
@@ -189,7 +205,8 @@ lamp density, LODs), round 2 = the surface read (aged asphalt, repaving bands, p
 aggregate grain, darker concrete, apex ramps), night pools at a gain that grades instead of clipping, lamp budget,
 cameras re-posed over the carriageway; round 3 = the h03 surfaces and lighting infrastructure (wheel-path rhythm, oil
 strip, ghost markings, ironwork, slab grid, kerb stones; thin members, masts, verge lamps); round 4 = plazas and lots;
-round 5 = budget trims and the eye-level read; round 6 = the plaza-tree regression and the terminal hardstand.
+round 5 = budget trims and the eye-level read; round 6 = the plaza-tree regression and the terminal hardstand; round 7 =
+plaza planting beds, curbside parking with the yard LOD that pays for it, plaza lanterns.
 
 ## Self-scores (h03 critic → h09 frames, 0–10; the critic's h03 scores in brackets)
 
@@ -225,4 +242,9 @@ c500-night) are the last verified night state of the lamps and pools.
   walls (the paving stops where any of a cell's samples is under 0.9 m); that strip reads as the quay coping.
 - **Traffic agent**: the lots carry static parked cars (two boxes, `street-yards` soup); if the traffic system grows
   parked cars of its own, drop `parkCars` in favour of its models — the bay geometry is 2.6 m bays in double rows
-  either side of 6.5 m aisles, 16.5 m period, from the lot corner in the district frame.
+  either side of 6.5 m aisles, 16.5 m period, from the lot corner in the district frame. The curbside cars
+  (`parkCurb`, round 7) stand 1.2 m in from the curb of the 12–14 m grid streets, i.e. 4.8–5.8 m from the centreline,
+  assuming the street traffic keeps to `laneOff0` = 1.8 m; if that offset grows past ~2.6 m the parking lane must go.
+  Conversely, a kerbed median on the arterials (the gauntlet's "medians with curbs and planting strips", defect 1.15)
+  needs the arterial `laneOff0` moved from 1.5 m to ~2.6 m first: with the inner lane at 1.5 m a car body starts
+  0.6 m from the centreline and no median wider than paint fits.
