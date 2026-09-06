@@ -65,16 +65,17 @@ const SW_MAIN = /* glsl */ `
   float grain = mix(vnoise(wp * 3.1), 0.5, smoothstep(0.1, 0.4, fp));
   vec3 conc = mix(vec3(0.50, 0.49, 0.47), vec3(0.60, 0.59, 0.56), n) * (0.94 + 0.12 * grain);
   bool face = vSwNrm.y < 0.5;
-  float slabId = floor(along / 1.5);
-  float tone = 0.93 + 0.14 * hash12(vec2(slabId, floor(across / 1.5) + kind * 7.0));
-  vec3 col = conc * tone;
   float fade = 1.0 - smoothstep(0.15, 0.5, fp); // fine detail vanishes from altitude
+  float slabFade = 1.0 - smoothstep(0.3, 1.0, fp); // per-slab tones (1.5 m) average out before they can sparkle
+  float slabId = floor(along / 1.5);
+  float tone = 1.0 + (0.14 * hash12(vec2(slabId, floor(across / 1.5) + kind * 7.0)) - 0.07) * slabFade;
+  vec3 col = conc * tone;
   float joint = max(swLine((fract(along / 1.5) - 0.5) * 1.5, 0.012, fwL), swLine(across - ${CURB_TOP.toFixed(2)}, 0.012, fwA)) * fade;
   if (kind > 0.5 && kind < 1.5) {
     // promenade: warm sand-coloured pavers on a 0.6 m grid, a darker band every fifth course
     vec3 pav = mix(vec3(0.58, 0.53, 0.45), vec3(0.68, 0.63, 0.54), n) * (0.94 + 0.12 * grain);
     float pid = hash12(floor(vec2(along, across) / 0.6));
-    pav *= 0.92 + 0.16 * pid;
+    pav *= 1.0 + (0.16 * pid - 0.08) * slabFade;
     float band = step(fract(across / 3.0), 0.2);
     pav = mix(pav, vec3(0.42, 0.40, 0.38), band * 0.6);
     joint = max(swLine((fract(along / 0.6) - 0.5) * 0.6, 0.01, fwL), swLine((fract(across / 0.6) - 0.5) * 0.6, 0.01, fwA)) * fade;
@@ -97,7 +98,7 @@ const SW_MAIN = /* glsl */ `
       float wc = floor((along + 4.0) / 12.0);
       float wa = along + 4.0 - wc * 12.0 - 6.0;
       float wx = across - (${CURB_TOP.toFixed(2)} + slabW - 1.1);
-      float well = step(abs(wa), 0.75) * step(abs(wx), 0.75) * step(0.35, hash12(vec2(wc, 3.0)));
+      float well = step(abs(wa), 0.75) * step(abs(wx), 0.75) * step(0.35, hash12(vec2(wc, 3.0))) * slabFade;
       float rim = well * (1.0 - step(abs(wa), 0.62) * step(abs(wx), 0.62));
       vec3 soil = mix(vec3(0.22, 0.17, 0.12), vec3(0.30, 0.25, 0.16), vnoise(wp * 2.0)) * (0.85 + 0.3 * grain);
       col = mix(col, soil, well * (1.0 - rim));
@@ -117,7 +118,7 @@ const SW_MAIN = /* glsl */ `
   col *= 1.0 - 0.4 * joint;
   // tactile pad on the dished corner ramps
   if (ramp > 0.03) {
-    float dots = smoothstep(0.55, 0.75, vnoise(wp * 7.0));
+    float dots = mix(smoothstep(0.55, 0.75, vnoise(wp * 7.0)), 0.4, smoothstep(0.05, 0.2, fp));
     vec3 pad = vec3(0.72, 0.52, 0.18) * (0.85 + 0.25 * dots);
     col = mix(col, pad, smoothstep(0.03, 0.2, ramp) * (1.0 - step(${CURB_TOP.toFixed(2)} + 1.2, across)) * (face ? 0.0 : 1.0));
   }
