@@ -52,7 +52,7 @@ export class CoruscantPopulation {
     this.view = { x: 0, y: 0, z: 1 };   // camera forward at the last spawn cycle: big halls seat their crowd in view
     this.rng = new RNG(0xc0c0);
     this.hour = 12; this.tickCount = 0; this.time = 0; this.enabled = true;
-    this.stats = { spawned: 0, despawned: 0, trips: 0, tripsFailed: 0, legs: 0, legsFailed: 0, legsFailedBy: {}, retargets: 0, stuck: 0, lifts: 0, bubbles: 0, talks: 0, unloadedWaits: 0, unplaceable: 0, errands: 0, arrivals: 0, recycled: 0, stays: 0 };
+    this.stats = { spawned: 0, despawned: 0, trips: 0, tripsFailed: 0, legs: 0, legsFailed: 0, legsFailedBy: {}, retargets: 0, stuck: 0, lifts: 0, bubbles: 0, talks: 0, unloadedWaits: 0, unplaceable: 0, errands: 0, arrivals: 0, recycled: 0, stays: 0, tickMs: 0, updateMs: 0 };
     this.disaster = null; this.watching = false;
     this.lastBubbleAt = -10; this.lastChatAt = -10;
     this.playerCtx = { vandalT: 0, bumpT: 0 };
@@ -422,6 +422,7 @@ export class CoruscantPopulation {
   // ---------------------------------------------------------------------------------------- per tick
   tick() {
     if (!this.enabled) return;
+    const t0 = performance.now();
     this.tickCount++;
     const sky = this.game.sky;
     this.hour = ((sky ? sky.time : 0.5) * 24) % 24;
@@ -446,6 +447,8 @@ export class CoruscantPopulation {
     if (this.tickCount % 4 === 0) this.separate(p);
     if (this.tickCount % CYCLE_TICKS === 5) this.chatter(p);
     if (this.talkBox.npc && (this.talkBox.npc.dead || Math.hypot(this.talkBox.npc.pos.x - p.x, this.talkBox.npc.pos.z - p.z) > 6)) this.talkBox.close();
+    // the population's own CPU cost (rubric row 11), smoothed: ms per tick (20 ticks/s) and per frame (see update)
+    this.stats.tickMs = this.stats.tickMs * 0.95 + (performance.now() - t0) * 0.05;
   }
 
   // Once a second while parked: schedule changes, wandering, job errands.
@@ -704,6 +707,7 @@ export class CoruscantPopulation {
   // ---------------------------------------------------------------------------------------- per frame
   update(dt, alpha, camera) {
     if (!this.enabled) return;
+    const t0 = performance.now();
     this.time += dt;
     this.frame++;
     const cp = camera.position, p = this.player.pos;
@@ -747,6 +751,7 @@ export class CoruscantPopulation {
     }
     this.bubbles.update(this.time, camera);
     this.crowd.update(this.time);
+    this.stats.updateMs = this.stats.updateMs * 0.95 + (performance.now() - t0) * 0.05;
   }
 
   // ---------------------------------------------------------------------------------------- census (row 4 / scripts)
@@ -787,6 +792,7 @@ export class CoruscantPopulation {
       failRate: s.trips ? +((s.tripsFailed + s.retargets) / s.trips).toFixed(4) : 0, legFailRate: s.legs ? +(s.legsFailed / s.legs).toFixed(4) : 0,
       spawned: s.spawned, despawned: s.despawned, recycled: s.recycled, stays: s.stays, bubbles: s.bubbles, talks: s.talks, unloadedWaits: s.unloadedWaits, unplaceable: s.unplaceable,
       paths: { ...this.paths.stats, ms: +this.paths.stats.ms.toFixed(1), pending: this.paths.pending }, coarse: { ...this.nav.stats }, drawCalls: this.crowd.drawCalls,
+      cpu: { tickMs: +s.tickMs.toFixed(3), updateMs: +s.updateMs.toFixed(3) },
     };
   }
 
