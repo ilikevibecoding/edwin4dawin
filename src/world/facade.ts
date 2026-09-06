@@ -44,7 +44,9 @@ flat varying vec4 vStyle;
 flat varying vec4 vStyle2;
 varying vec3 vWorldPosF;
 flat varying float vRound;
-flat varying vec3 vCamLocal;`)
+flat varying vec3 vCamLocal;
+flat varying vec3 vAxisX;
+flat varying vec3 vAxisZ;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 {
   float form = aStyle2.w;
@@ -67,7 +69,10 @@ vRound = aPart < -0.5 ? 1.0 : 0.0;
 vWorldPosF = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;
 // camera in the instance's unit-box space (the parallax rooms trace rays in it); the mirror pass renders from
 // the camera reflected under the water, so a negative camera height marks that pass in the fragment shader
-vCamLocal = (inverse(modelMatrix * instanceMatrix) * vec4(cameraPosition, 1.0)).xyz;`);
+vCamLocal = (inverse(modelMatrix * instanceMatrix) * vec4(cameraPosition, 1.0)).xyz;
+// the instance's local x / z axes in world space (the roof shader casts its parapet's shadow in that frame)
+vAxisX = normalize((modelMatrix * instanceMatrix * vec4(1.0, 0.0, 0.0, 0.0)).xyz);
+vAxisZ = normalize((modelMatrix * instanceMatrix * vec4(0.0, 0.0, 1.0, 0.0)).xyz);`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform float uNight;
@@ -79,7 +84,12 @@ flat varying vec4 vStyle2;
 varying vec3 vWorldPosF;
 flat varying float vRound;
 flat varying vec3 vCamLocal;
+flat varying vec3 vAxisX;
+flat varying vec3 vAxisZ;
 ${GLSL_NOISE}
+// direct-light mask of this fragment (a parapet's shadow on its roof): the sun is scaled by it in the light loop,
+// the sky and probe terms are not, so the shadow keeps the sky's colour as a real one does
+float facadeShade = 1.0;
 // per-pane tilt of the glazing (view space), applied to the shading normal after it is computed
 vec3 facadeTilt = vec3(0.0);
 // how much of this fragment is glazing and how high up the facade it sits (0 grade .. 1 roof): the sky a pane
@@ -191,6 +201,7 @@ normal = normalize(normal + facadeTilt);`)
         /RE_Direct\( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight \);/g,
         `{
   vec3 facadePreSpec = reflectedLight.directSpecular;
+  directLight.color *= facadeShade;
   RE_Direct( directLight, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
   reflectedLight.directSpecular = facadePreSpec + (reflectedLight.directSpecular - facadePreSpec) * facadeLobeScale + directLight.color * facadeGlint(directLight.direction, geometryViewDir);
 }`))
@@ -348,6 +359,110 @@ if (facadeGlass > 0.0) {
       facadeRoom = inner * 2.0;
       facadeHf = 1.0;
       rough = mix(0.08, 0.5, frame); metal = 0.0;
+    } else if (style == 20.0) {
+      // parking structure: open decks. Each 3 m deck is a slab edge and a 1.1 m upstand of precast, then the void
+      // of the deck itself: near-black at the back with the columns of the 7.5 m structural grid standing in it
+      // and, in a third of the bays, the roof and glass of a parked car catching the light. The top deck is the
+      // same striped asphalt as a surface lot (city.ts parks its cars on it).
+      if (isTop) {
+        float along = vDims.x >= vDims.z ? meters.x : meters.z, across = vDims.x >= vDims.z ? meters.z : meters.x;
+        float wa = fwidth(along), wc = fwidth(across);
+        col = vec3(0.11, 0.11, 0.115) * (0.92 + 0.16 * vnoise(vWorldPosF.xz * 0.7));
+        float p = mod(across - 0.6, 17.1);
+        float stallBand = fpulse(p / 17.1, 0.0, 5.0 / 17.1, wc / 17.1) + fpulse(p / 17.1, 11.5 / 17.1, 16.5 / 17.1, wc / 17.1);
+        float stripe = fpulse((along - 0.6) / 2.6, 0.0, 0.05, wa / 2.6) * stallBand;
+        float head = (fpulse(p / 17.1, 0.0, 0.025, wc / 17.1) + fpulse(p / 17.1, 16.475 / 17.1, 16.5 / 17.1, wc / 17.1));
+        col = mix(col, vec3(0.62), clamp(stripe + head, 0.0, 1.0) * 0.9 * (1.0 - smoothstep(0.25, 0.7, wa)));
+        float edgeD = min(min(meters.x, vDims.x - meters.x), min(meters.z, vDims.z - meters.z));
+        col = mix(col, vec3(0.58, 0.57, 0.55), 1.0 - fstep(0.9, edgeD, fwidth(edgeD)));   // the upstand's top
+        rough = 0.85;
+      } else {
+        float fl = v / 3.0;
+        float fy = fract(fl);
+        float pwv = fwidth(v) / 3.0;
+        float slab = fpulse(fy, 0.0, 0.14, pwv) + fpulse(fy, 0.14, 0.5, pwv) * 0.85;   // slab edge, upstand
+        float colm = fpulse(ku / 7.5, 0.0, 0.08, wku / 7.5);
+        vec3 pre = wall * (0.9 + 0.2 * hash11(seed + floor(fl)));
+        pre *= 1.0 - 0.35 * fpulse(fy, 0.12, 0.16, pwv);   // the shadow line under the slab edge
+        float bayId = floor(ku / 7.5) + floor(fl) * 31.0;
+        float carOn = step(0.6, hash12(vec2(bayId, seed)));
+        vec3 carC = mix(vec3(0.5, 0.52, 0.55), fasciaPalette(hash12(vec2(bayId, seed + 3.0))), 0.5);
+        float carBlob = carOn * fpulse(fy, 0.5, 0.72, pwv) * fpulse(fract(ku / 7.5), 0.2, 0.75, wku / 7.5);
+        vec3 voidC = vec3(0.035, 0.035, 0.04);
+        voidC = mix(voidC, carC * 0.35, carBlob);
+        voidC = mix(voidC, pre * 0.55, colm);
+        col = mix(voidC, pre, clamp(slab, 0.0, 1.0));
+        col *= 0.92 + 0.16 * grime;
+        rough = 0.8;
+        emis = vec3(0.9, 0.95, 1.0) * (1.0 - clamp(slab, 0.0, 1.0)) * 0.25 * nightOn * step(0.3, hash11(seed + floor(fl) * 1.3));
+      }
+    } else if (style == 21.0) {
+      // surface parking lot: asphalt with painted stalls (2.6 m bays in double rows either side of a 6.5 m aisle),
+      // oil-dark aisles, a concrete kerb round the edge; the stripes fade to the mean as they go sub-pixel
+      if (isTop) {
+        float along = vDims.x >= vDims.z ? meters.x : meters.z, across = vDims.x >= vDims.z ? meters.z : meters.x;
+        float wa = fwidth(along), wc = fwidth(across);
+        col = vec3(0.085, 0.085, 0.09) * (0.88 + 0.24 * vnoise(vWorldPosF.xz * 0.5)) * (0.92 + 0.16 * vnoise(vWorldPosF.xz * 3.0));
+        float p = mod(across - 0.6, 17.1);
+        float stallBand = fpulse(p / 17.1, 0.0, 5.0 / 17.1, wc / 17.1) + fpulse(p / 17.1, 11.5 / 17.1, 16.5 / 17.1, wc / 17.1);
+        float aisle = fpulse(p / 17.1, 5.0 / 17.1, 11.5 / 17.1, wc / 17.1);
+        col *= 1.0 - 0.25 * aisle * smoothstep(0.4, 0.8, vnoise(vWorldPosF.xz * 0.35 + seed));   // wheel-path grime
+        float stripe = fpulse((along - 0.6) / 2.6, 0.0, 0.05, wa / 2.6) * stallBand;
+        float head = fpulse(p / 17.1, 0.0, 0.025, wc / 17.1) + fpulse(p / 17.1, 16.475 / 17.1, 16.5 / 17.1, wc / 17.1);
+        col = mix(col, vec3(0.6), clamp(stripe + head, 0.0, 1.0) * 0.85 * (1.0 - smoothstep(0.25, 0.7, wa)));
+        float edgeD = min(min(meters.x, vDims.x - meters.x), min(meters.z, vDims.z - meters.z));
+        col = mix(col, vec3(0.5, 0.49, 0.47), 1.0 - fstep(0.35, edgeD, fwidth(edgeD)));   // kerb
+        rough = 0.9;
+      } else { col = vec3(0.5, 0.49, 0.47); rough = 0.8; }
+    } else if (style == 22.0) {
+      // plaza: 1.2 m pavers in two tones banded every 6 m, dark joints, a contrasting border course; the joints
+      // fade first, then the bands, so from altitude it is one warm-grey plane a shade darker than a roof
+      if (isTop) {
+        float wx = fwidth(meters.x), wz = fwidth(meters.z);
+        vec3 a = vec3(0.42, 0.40, 0.37), b = vec3(0.30, 0.29, 0.28);
+        float k = hash11(seed * 1.7 + 0.3);
+        if (k < 0.33) { a = vec3(0.46, 0.44, 0.40); b = vec3(0.34, 0.30, 0.27); }
+        else if (k < 0.66) { a = vec3(0.38, 0.39, 0.40); b = vec3(0.26, 0.27, 0.29); }
+        float band = fpulse(meters.x / 6.0, 0.0, 0.5, wx / 6.0) * fpulse(meters.z / 6.0, 0.0, 0.5, wz / 6.0) + (1.0 - fpulse(meters.x / 6.0, 0.0, 0.5, wx / 6.0)) * (1.0 - fpulse(meters.z / 6.0, 0.0, 0.5, wz / 6.0));
+        col = mix(a, b, band * 0.7);
+        col *= 0.94 + 0.12 * hash12(floor(meters.xz / 1.2) + seed) * (1.0 - smoothstep(0.3, 0.9, wx / 1.2));
+        float joint = max(fpulse(meters.x / 1.2, 0.0, 0.04, wx / 1.2), fpulse(meters.z / 1.2, 0.0, 0.04, wz / 1.2));
+        col *= 1.0 - 0.3 * joint;
+        float edgeD = min(min(meters.x, vDims.x - meters.x), min(meters.z, vDims.z - meters.z));
+        col = mix(col, b * 0.8, (1.0 - fstep(1.2, edgeD, fwidth(edgeD))) * 0.8);
+        col *= 0.92 + 0.16 * vnoise(vWorldPosF.xz * 0.3);
+        rough = 0.75;
+      } else { col = vec3(0.5, 0.49, 0.47); rough = 0.8; }
+    } else if (style == 23.0) {
+      // lawn: mown grass, mottled, a worn path where the noise runs low; the sides are the kerb of its bed
+      if (isTop) {
+        float n = vnoise(vWorldPosF.xz * 0.6), n2 = vnoise(vWorldPosF.xz * 4.0);
+        col = mix(vec3(0.16, 0.26, 0.07), vec3(0.24, 0.32, 0.10), n) * (0.9 + 0.2 * n2);
+        col = mix(col, vec3(0.30, 0.27, 0.20), smoothstep(0.72, 0.85, vnoise(vWorldPosF.xz * 0.18 + seed)) * 0.6);
+        rough = 0.95;
+      } else { col = wall * 0.75; rough = 0.95; }   // a hedge's sides, a lawn bed's grassy edge
+    } else if (style == 24.0) {
+      // parked car: one box; the paint carries a dark glasshouse band with a pale sill line under it and the
+      // wheels' shadow at the base; the top is the roof with the windscreen and rear glass at the ends
+      float fy = v / H;
+      vec3 glassC = vec3(0.05, 0.06, 0.08);
+      if (isTop) {
+        float along = vDims.x >= vDims.z ? meters.x / vDims.x : meters.z / vDims.z;
+        float wa = fwidth(along);
+        float glass = fpulse(along, 0.2, 0.36, wa) + fpulse(along, 0.7, 0.8, wa);
+        col = mix(wall, glassC, clamp(glass, 0.0, 1.0));
+        rough = mix(0.35, 0.08, clamp(glass, 0.0, 1.0));
+      } else {
+        float wf = fwidth(fy);
+        float glass = fpulse(fy, 0.56, 0.92, wf);
+        float sill = fpulse(fy, 0.5, 0.56, wf);
+        float base = 1.0 - fstep(0.2, fy, wf);
+        col = mix(wall, glassC, glass);
+        col = mix(col, wall * 1.2, sill * 0.5);
+        col = mix(col, vec3(0.05), base * 0.7);
+        rough = mix(0.35, 0.1, glass);
+      }
+      metal = 0.25;
     } else {
       // ducts, pipes, vents, stacks, masts, tank legs: galvanised sheet with joints, darker underneath
       col = wall * (0.92 + 0.16 * hash11(seed));
@@ -382,33 +497,80 @@ if (facadeGlass > 0.0) {
       col = mix(col, vec3(0.75, 0.8, 0.85), sky * 0.7);
       rough = 0.7;
     } else {
-      // tower roofs: the membrane per building: white TPO, pale grey, gravel ballast or dark EPDM (glass and
-      // stone towers lean dark, stucco and concrete pale), with ballast grain while it spans pixels and ponding
-      // stains at the low spots. Albedos are the weathered ones (TPO greys to ~0.6 in a few years, ballast is
-      // ~0.35, EPDM ~0.12): at 0.8 / 0.6 / 0.5 the tone curve's shoulder folded all four into one white plate.
-      float mk = hash11(seed * 4.7 + 1.9) + (glassy || style == 9.0 ? 0.35 : style == 10.0 ? 0.2 : style == 3.0 || style == 6.0 ? -0.1 : 0.0);
-      vec3 base = mk < 0.3 ? vec3(0.64, 0.64, 0.62) : mk < 0.6 ? vec3(0.44, 0.44, 0.43) : mk < 0.85 ? vec3(0.35, 0.34, 0.32) : vec3(0.12, 0.125, 0.135);
-      if (style == 3.0 && mk < 0.6) base = mix(base, wall * 0.8, 0.3);
-      bool gravel = mk >= 0.6 && mk < 0.85;
-      col = base * (0.88 + 0.24 * vnoise(vWorldPosF.xz * 0.6));
+      // Flat roofs: one of five roof families per building, at weathered albedos. Glass and stone towers lean
+      // to ballast and dark sheet, stucco and precast to the pale coating, brick to bitumen. Each has the marks
+      // that say what it is at 130-500 m (the seam grid, the paver walkway, the ponding, the panel ribs) and they
+      // fade to the family's mean as they go sub-pixel, so a far roof is a tone, never a shimmer.
+      float mk = hash11(seed * 4.7 + 1.9) + (glassy || style == 9.0 ? 0.3 : style == 10.0 ? 0.15 : style == 3.0 || style == 6.0 ? -0.15 : 0.0);
+      int rfam = mk < 0.2 ? 0 : mk < 0.42 ? 1 : mk < 0.72 ? 2 : mk < 0.93 ? 3 : 4;
       float roofPx = fwidth(vWorldPosF.x) + fwidth(vWorldPosF.z);
-      float grain = vnoise(vWorldPosF.xz * (gravel ? 6.0 : 3.0));
-      col *= 1.0 + ((gravel ? 0.22 : 0.1) * grain - (gravel ? 0.11 : 0.05)) * (1.0 - smoothstep(0.15, 0.6, roofPx));
-      col *= 1.0 - 0.18 * smoothstep(0.62, 0.8, vnoise(vWorldPosF.xz * 0.25 + seed));
-      // membrane seams every 2 m on the sheet roofs, a drainage stain fanning from a low corner
-      if (!gravel) col *= 1.0 - 0.08 * fpulse(meters.x / 2.0, 0.0, 0.03, fwidth(meters.x) / 2.0) * (1.0 - smoothstep(0.1, 0.4, roofPx));
+      float fine = 1.0 - smoothstep(0.15, 0.6, roofPx);   // sub-metre marks
+      float midv = 1.0 - smoothstep(0.6, 2.5, roofPx);    // metre-scale marks
+      float n1 = vnoise(vWorldPosF.xz * 0.6), n2 = vnoise(vWorldPosF.xz * 0.25 + seed);
+      float longX = step(vDims.z, vDims.x);
+      float across = mix(meters.x, meters.z, longX), acrossW = mix(vDims.x, vDims.z, longX);
+      if (rfam == 0) {
+        // pale TPO / PVC sheet, weathered to 0.6: seams every 2 m, grime drifting into the corners and patches
+        col = vec3(0.60, 0.60, 0.58) * (0.9 + 0.2 * n1);
+        col *= 1.0 - 0.12 * fpulse(meters.x / 2.0, 0.0, 0.03, fwidth(meters.x) / 2.0) * fine;
+        col *= 1.0 - 0.25 * smoothstep(0.5, 0.85, n2);
+        col = mix(col, vec3(0.5, 0.5, 0.49), step(0.7, hash12(floor(vWorldPosF.xz / 3.0) + seed)) * 0.5 * midv * smoothstep(0.55, 0.7, vnoise(vWorldPosF.xz * 0.45 + 3.0)));
+        rough = 0.7;
+      } else if (rfam == 1) {
+        // grey elastomeric coating / mineral cap sheet: rolled seams every metre, chalky wear
+        col = vec3(0.42, 0.42, 0.41) * (0.9 + 0.2 * n1);
+        col *= 1.0 - 0.1 * fpulse(across / 1.0, 0.0, 0.05, fwidth(across)) * fine;
+        col = mix(col, vec3(0.5, 0.49, 0.47), smoothstep(0.6, 0.9, vnoise(vWorldPosF.xz * 1.5)) * 0.3 * midv);
+        rough = 0.85;
+      } else if (rfam == 2) {
+        // gravel ballast: the stone's grain while it spans pixels, a 0.6 m paver walkway along the roof to the units
+        float grain = vnoise(vWorldPosF.xz * 6.0);
+        col = vec3(0.34, 0.33, 0.31) * (0.88 + 0.24 * n1) * (1.0 + (0.25 * grain - 0.12) * fine);
+        col *= 1.0 - 0.15 * smoothstep(0.62, 0.8, n2);
+        float wPos = acrossW * (0.3 + 0.4 * hash11(seed * 3.3));
+        float walk = fpulse((across - wPos) / 0.6, 0.0, 1.0, fwidth(across) / 0.6) * step(6.0, min(vDims.x, vDims.z));
+        col = mix(col, vec3(0.5, 0.49, 0.46), walk * 0.8 * midv);
+        rough = 0.95;
+      } else if (rfam == 3) {
+        // dark bitumen / EPDM: 0.11, ponding at the low spots (a sky-mirroring sheen), pale flashing at the upstand
+        col = vec3(0.11, 0.115, 0.12) * (0.9 + 0.2 * n1);
+        float pond = smoothstep(0.66, 0.8, vnoise(vWorldPosF.xz * 0.2 + seed * 2.0)) * step(0.5, hash11(seed * 1.3));
+        col = mix(col, vec3(0.08, 0.09, 0.1), pond);
+        rough = mix(0.8, 0.15, pond);
+      } else {
+        // standing-seam metal: pale grey, white or teal panels, ribs every 0.45 m, a low sheen
+        float mh = hash11(seed * 6.6);
+        vec3 mc = mh < 0.4 ? vec3(0.55, 0.56, 0.57) : mh < 0.7 ? vec3(0.68, 0.68, 0.66) : vec3(0.22, 0.38, 0.38);
+        col = mc * (0.94 + 0.12 * n1);
+        col *= 1.0 - 0.18 * fpulse(across / 0.45, 0.0, 0.1, fwidth(across) / 0.45) * fine;
+        rough = 0.4; metal = 0.6;
+      }
+      // a drainage stain fanning from a low corner
       vec2 drain = vec2(hash11(seed * 3.1) < 0.5 ? 1.5 : vDims.x - 1.5, hash11(seed * 5.9) < 0.5 ? 1.5 : vDims.z - 1.5);
       col *= 1.0 - 0.14 * (1.0 - smoothstep(2.0, 9.0, length(meters.xz - drain))) * step(0.4, hash11(seed * 2.6));
-      // parapet coping around the edge, a shadow inside it, rain staining; the shader's mechanical pads stand in
-      // for the rooftop kit only beyond its draw distance (city.ts ROOF_BIG_FAR)
+      // Parapet: the coping (pale metal, or the wall's own stone on the masonry families) round the edge, and the
+      // upstand's shadow on the roof along the edges the sun stands beyond: its reach is the upstand's height
+      // (0.45 m on the curtain walls, 0.55-1.15 m elsewhere) over the sun's tangent, in the roof's own frame. It
+      // masks the direct light only (facadeShade), so the shadow stays sky-lit. The shader's mechanical pads stand
+      // in for the rooftop kit only beyond its draw distance (city.ts ROOF_BIG_FAR).
       float edgeD = min(min(meters.x, vDims.x - meters.x), min(meters.z, vDims.z - meters.z));
       float wm = fwidth(edgeD);
-      col = mix(col * 0.62, col, fstep(1.2, edgeD, wm) * 0.6 + 0.4 * smoothstep(0.6, 3.0, edgeD));
-      col = mix(col, vec3(0.80, 0.80, 0.78), (1.0 - fstep(0.45, edgeD, wm)) * (style == 5.0 ? 0.0 : 0.8));
+      float pH = (style < 0.5 || style == 8.0 || style == 11.0) ? 0.45 : 0.55 + 0.6 * hash11(seed * 7.7);
+      vec3 copeC = (style == 10.0 || style == 1.0 || style == 3.0) ? mix(wall, vec3(0.8), 0.5) : vec3(0.78, 0.78, 0.76);
+      col = mix(col, copeC, (1.0 - fstep(0.45, edgeD, wm)) * (style == 5.0 ? 0.0 : 0.85));
+#if NUM_DIR_LIGHTS > 0
+      if (!isTrim && min(vDims.x, vDims.z) > 3.0) {
+        vec3 sunW = inverseTransformDirection(directionalLights[0].direction, viewMatrix);
+        vec2 t = vec2(dot(sunW, vAxisX), dot(sunW, vAxisZ)) / max(sunW.y, 0.08) * pH;
+        float wx = fwidth(meters.x), wz = fwidth(meters.z);
+        float sh = max(max(1.0 - fstep(max(0.0, -t.x), meters.x, wx), fstep(vDims.x - max(0.0, t.x), meters.x, wx)),
+                       max(1.0 - fstep(max(0.0, -t.y), meters.z, wz), fstep(vDims.z - max(0.0, t.y), meters.z, wz)));
+        facadeShade = 1.0 - sh * fstep(0.45, edgeD, wm) * smoothstep(0.03, 0.15, sunW.y);
+      }
+#endif
       float kitFar = smoothstep(1500.0, 2200.0, length(vWorldPosF - cameraPosition));
       col = mix(col, col * 0.55, step(0.62, hash12(floor(vWorldPosF.xz / 6.0) + seed)) * 0.3 * kitFar);
       col *= 0.9 + 0.2 * grime;
-      rough = gravel ? 0.95 : 0.8;
       // aviation beacon on the tallest roofs
       if (vDims.y > 140.0 && !isTrim) {
         float dc = length(meters.xz - vDims.xz * 0.5);
@@ -1014,6 +1176,6 @@ if (facadeGlass > 0.0) {
   totalEmissiveRadiance += emis;
 }`);
   };
-  mat.customProgramCacheKey = () => 'facade-v14';
+  mat.customProgramCacheKey = () => 'facade-v15';
   return mat;
 }
