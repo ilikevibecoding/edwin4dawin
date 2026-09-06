@@ -128,6 +128,31 @@ under this renderer's sun, as the walks were in round 1 — and was brought down
 - **Plaza lanterns**: pedestrian lamps over one open cell in ten of every plaza (394), so the plazas are lit spaces at
   night with their own dots and 5 m pools.
 
+### Round 8 — the h10 read: the lamp budget root cause, cars at eye level, bed tone (DEFECTS 8.1–8.5)
+
+- **Headless frame harness** (`/tmp/street/frame-entry.ts`, node): the full world with the CSM cascade fitting,
+  `ViewCull` and every system's `updateLod`, then triangles per system and per pass (camera, each cascade, mirror).
+  It found what the camera-only frustum harness had missed: a lamp is drawn up to four times a frame and the props'
+  2.5 km chunk LOD keeps its fine shape over the whole 600 m lamp range, so round 7's 394 lanterns (128 triangles)
+  cost street_2m 94 k and city_north 48 k, which put city_north 3 k over the cap in h10.
+- **Lamp diet** (`props.ts`, feaf5ba8): open-tube poles, 8-gon fine / 4-gon coarse shapes, one glowing head box in the
+  coarse shape (arterial/street 52 / 32 triangles, were 84–76 / 60; lantern 42 / 16, were 128 / 80), and the mirror
+  and shadow batches always take the coarse shape. Measured in h11: city_north −107 k (estimate −107 k), street_2m
+  −126 k, city_200m −90 k, city_500m −25 k; every view under the cap.
+- **Cars at eye level** (380606fc): a belted body with a dark sill band for tyres, arches and underside, and a raked
+  cabin with glass sides and the roof in the paint (28 triangles, were 20; the soup shades faces by belt line, no extra
+  geometry). Far shapes unchanged.
+- **Bed tone** (72a88424): the bed lawn into the parks' turf family (0.060–0.136, was 0.15–0.34: lime from 200 m) and
+  the mulch to dark bark.
+
+### Round 9 — signal heads from the air, arterial pole spacing (DEFECTS 9.1–9.3)
+
+- **Signal heads** (8ac38df2): FDOT-pattern heads — highway-yellow housing and visors on a 0.66 × 1.42 m black
+  backplate (a two-sided 4-triangle sheet), near and far shapes, thin-flagged: from 200 m a head is a 2 × 5 px dark
+  tab with a yellow line down it at the arm's end, where a dark housing merged with the asphalt. +3.5–6.5 k a view.
+- **Arterial poles at most 40 m apart** (d7baee2b): `ceil` instead of `floor` for the run intervals (29–40 m over the
+  block lengths; a 100 m block had 44 m), verge lamps 35 m; arterial lamps 3 571 → 4 109.
+
 ## Counts (node harness over the generated world)
 
 | item | count |
@@ -135,9 +160,9 @@ under this renderer's sun, as the walks were in round 1 — and was brought down
 | sidewalk runs / curb returns | 23 117 / 22 163 |
 | signalised intersections / mast arms | 601 / 2 250 |
 | stop signs | 9 911 |
-| lamps (arterial / street / ped / highway) | 2 478 / 35 574 / 52 / 123 (round 2); 39 817 street-planned after round 4 (highway poles now the highway module's, + verge lamps, lot lamps, masts); round 7: arterial 3 571 / street 36 215 / ped 446 / mast 15 = 40 247 |
+| lamps (arterial / street / ped / highway) | 2 478 / 35 574 / 52 / 123 (round 2); 39 817 street-planned after round 4 (highway poles now the highway module's, + verge lamps, lot lamps, masts); round 7: arterial 3 571 / street 36 215 / ped 446 / mast 15 = 40 247; round 9: arterial 4 109 / street 36 215 / ped 446 / mast 15 = 40 785 |
 | sidewalk triangles (fine / far index) | 2.52 M / 0.83 M |
-| kit triangles (large / small) | 0.37 M / 1.09 M |
+| kit triangles (large / small) | 0.37 M / 1.09 M (round 9: 1.48 M near kits together, 0.20 M far kits) |
 | plazas / lots (round 4, merged tree) | 72 / 38 (round 7 tree: 71 / 40) |
 | parked cars (lots / curbside) / planters | 5 018 / 11 283 / 1 773 (round 7; the lots held 5 996 at 42 % occupancy in round 4) |
 | paving triangles (plazas + lots 47 k, port yard 26 k) / yard triangles (near / far shapes) | 70 k / 396 k / 181 k (round 7, with the parking lanes; 203 k / 85 k in round 5) |
@@ -198,6 +223,26 @@ h09 = 1989b9fb (18:17, this branch at 2b537141: rounds 3–6 with the trims). Th
 (estimate −30 k); every view is under the 1.5 M cap, and the three aerial city views sit within +40 k / +3 calls of
 h07 while carrying the lots, plazas, cars, poles, masts and the terminal hardstand.
 
+| view | h09 calls / tris | h10 (rounds 3–7) | Δ h09→h10 | h11 (lamp diet) | Δ h10→h11 | Δ h07→h11 |
+|------|-----------------:|-----------------:|----------:|----------------:|----------:|----------:|
+| city_north | 283 / 1 466 k | 285 / 1 503 k | +2 / +37 k | 285 / 1 396 k | 0 / −107 k | +1 / −45 k |
+| city_200m | 262 / 1 420 k | 262 / 1 447 k | 0 / +27 k | 262 / 1 357 k | 0 / −90 k | +2 / −23 k |
+| city_500m | 210 / 920 k | 212 / 934 k | +2 / +14 k | 212 / 909 k | 0 / −25 k | −5 / −90 k |
+| street_2m | 268 / 1 307 k | 273 / 1 410 k | +5 / +103 k | 273 / 1 285 k | 0 / −126 k | +8 / +35 k |
+| harbor | 286 / 1 072 k | 287 / 1 073 k | +1 / +1 k | 287 / 1 068 k | 0 / −5 k | +10 / +5 k |
+| night | 262 / 1 289 k | 262 / 1 289 k | 0 | 262 / 1 289 k | 0 | −3 / −20 k |
+| skyline_high | 240 / 1 231 k | 240 / 1 231 k | 0 | 240 / 1 231 k | 0 | −1 / −12 k |
+| cockpit | 275 / 1 147 k | 275 / 1 147 k | 0 | 275 / 1 147 k | 0 | −1 / −11 k |
+
+h10 = 5b3fcb77 (19:17, this branch at bcf7ffa4: round 7's lanterns and parking lanes) went 3 k over the cap in
+city_north; the headless frame harness traced the +37 k / +103 k to the lamps being drawn into the mirror and two
+cascades at their fine shape (DEFECTS 8.1). h11 = b0850ffa (20:17, feaf5ba8: the lamp diet) measured −107 k in
+city_north against an estimate of −107 k, −126 k in street_2m (estimate −140 k), −90 k in city_200m (−138 k), −25 k
+in city_500m (−51 k). Every view is under the 1.5 M cap with ≥ 100 k of headroom, and the three aerial city views sit
+below h07 — before any of this branch's rounds 3–9 — while carrying the lots, plazas, beds, cars, poles, masts,
+signals and the hardstand. Rounds 8–9's later commits (cars, bed tone, backplates, arterial poles) are estimated by
+the frame harness at +5–8 k a view (street_2m +9 k with the cars' near shapes), to be read in h12.
+
 ## Rounds
 
 See `DEFECTS.md`. Round 0 = baseline, round 1 = first build (shader compile fix, terrain z-fight, footing validation,
@@ -206,22 +251,26 @@ aggregate grain, darker concrete, apex ramps), night pools at a gain that grades
 cameras re-posed over the carriageway; round 3 = the h03 surfaces and lighting infrastructure (wheel-path rhythm, oil
 strip, ghost markings, ironwork, slab grid, kerb stones; thin members, masts, verge lamps); round 4 = plazas and lots;
 round 5 = budget trims and the eye-level read; round 6 = the plaza-tree regression and the terminal hardstand; round 7 =
-plaza planting beds, curbside parking with the yard LOD that pays for it, plaza lanterns.
+plaza planting beds, curbside parking with the yard LOD that pays for it, plaza lanterns; round 8 = the h10 budget root
+cause (the lamp diet, measured in h11), cars at eye level, bed tone; round 9 = signal heads from the air, arterial
+pole spacing.
 
-## Self-scores (h03 critic → h09 frames, 0–10; the critic's h03 scores in brackets)
+## Self-scores (h03 critic → h11 frames, 0–10; the critic's h03 scores in brackets)
 
-| frame | 21 street-level detail | 22 lighting infrastructure | seen in h09 |
+| frame | 21 street-level detail | 22 lighting infrastructure | seen in h11 (b0850ffa: rounds 3–7 and the lamp diet) |
 |-------|-----------------------:|---------------------------:|-------------|
-| city_north | 7 (5) | 6 (3) | apron lots with cars, plazas with fields and planters, poles along the six-lane avenue as pixel lines; signal heads not yet legible at 200 m by day (mast arms are, heads are 0.3 m) |
+| city_north | 7 (5) | 6 (3) | apron lots with cars, plazas with fields, planters and beds (the beds lime until 72a88424, h12), poles along the six-lane avenue as pixel lines unchanged by the diet; signal heads read only as lit red dots — the yellow heads on backplates (8ac38df2) are for h12 |
 | city_200m | 7 (6) | 6 (4) | lots and poles at A5–D8; the lamp line along the bayfront arterial |
-| city_500m | 7 (5) | 5 (4) | plazas read as paved fields with planters and the street trees back; poles are sub-pixel at 500 m by day |
-| street_2m | 7 (5) | 7 (6) | wheel-path rhythm, oil strip, ghost markings, ironwork, kerb stones; signals and lamps at eye level (unchanged since round 2) |
-| harbor | 6 (4) | 5 (3) | masts over the yards; the hardstand carries slab tones, lanes and the slot grid but rendered too light in h09 (re-toned in a8360bfe, to be seen in h10) |
-| night | — | 6 (5) | the causeway lamp line (highway module) and the city dots at 3 km; the city_north / port300 night frames are still queued (own capture) |
+| city_500m | 7 (5) | 5 (4) | plazas read as paved fields with bed groups, planters and the street trees; poles are sub-pixel at 500 m by day |
+| street_2m | 7 (5) | 7 (6) | wheel-path rhythm, oil strip, ghost markings, ironwork, kerb stones; signal mast arms with lit aspects and the lamp arms over the avenue; the kerbside cars still the two-box shapes (380606fc is for h12) |
+| harbor | 7 (4) | 6 (3) | masts over the yards; the hardstand at median sRGB 126 with slab tones, truck-lane darkening and the slot grid (was 171 in h09, near-white) |
+| night | — | 6 (5) | the causeway lamp line (highway module) and the city dots at 3 km; the city_north / port300 / street_2m night frames are still queued (own capture, `r102`) |
 
-Not claimed: a night frame of the downtown grid at 200 m (lamp lines, pools, signal aspects) — the branch's own
-night jobs have been queued on the builder slots since 15:58; the round-2 night captures (street2m-night, isect60-night,
-c500-night) are the last verified night state of the lamps and pools.
+Not claimed: a night frame of the downtown grid at 200 m (lamp lines, lanterns, pools, signal aspects) — the branch's
+own night jobs have been queued on the two builder slots since 15:58 (`r100`/`r101`) and 18:39 (`r102`), the slots
+held by other agents' sessions for 4–8 h; the round-2/3 night captures (street2m-night, isect60-night, c500-night at
+15:17) are the last verified night state of the lamps and pools, and nothing since has changed the dots or the lamp
+map except the masts' dot gain and the coarse shape's glowing head box.
 
 ## Requests to other agents
 
