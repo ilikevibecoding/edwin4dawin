@@ -283,8 +283,10 @@ function cardAtlas(rng: Rng): THREE.CanvasTexture {
       const leaf = 0.5 + 0.5 * perlin2(u * 26 + seed, v * 26 + seed * 2);
       const lobes = 0.5 + 0.5 * perlin2(u * 9 - seed, v * 9 + seed);
       // lumpy clusters with a flat radial falloff: from the air a crown is a textured clump, not a shaded
-      // ball (the old 0.3 k^2 falloff made every aerial crown a bubble with a dark rim)
-      put(col, row, x, y, gBase * (0.62 + 0.6 * lobes) * (0.86 + 0.28 * leaf) * (1 - 0.14 * k * k), 0);
+      // ball (the old 0.3 k^2 falloff made every aerial crown a bubble with a dark rim); the cluster field
+      // is kept under the channel's ceiling so its peaks stay separate (the card shader's terminator
+      // follows it: clipped peaks read as one flat lit plateau)
+      put(col, row, x, y, gBase * (0.5 + 0.5 * lobes) * (0.86 + 0.28 * leaf) * (1 - 0.14 * k * k), 0);
     }
   };
   const trunk = (col: number, row: number, cx0: number, cx1: number, v0: number, v1: number, halfW: number, g: number) => {
@@ -861,11 +863,17 @@ const CROWN_FRAG = /* glsl */ `
     #if NUM_DIR_LIGHTS > 0
     sunW = normalize((vec4(directionalLights[0].direction, 0.0) * viewMatrix).xyz);
     #endif
-    float cap = smoothstep(-0.35, 0.8, dot(crownDir, normalize(vec3(0.0, 1.0, 0.0) + 0.9 * sunW)));
-    // the sunlit leaf is a warm yellow-green, the leaf in the shade of its own crown a cool blue-grey: the
-    // albedo itself carries the split (the direct light model only decides how much sun each side gets)
-    vec3 sunlit = diffuseColor.rgb * vec3(1.28, 1.2, 0.96);
-    vec3 shade = diffuseColor.rgb * vec3(0.5, 0.56, 0.58);
+    // leaf clusters: fine value noise breaks the smooth shading of the puffs, and the sunlit cap follows
+    // it — the raised clusters catch the sun, the hollows between them stay in shade — so a crown reads as
+    // a mottled clump of lit tips rather than a shaded ball (the cards' terminator follows their atlas
+    // clusters the same way)
+    float leaf = vnoise(vWP.xz * 1.7 + vWP.y * 1.3);
+    float cap = smoothstep(-0.35, 0.8, dot(crownDir, normalize(vec3(0.0, 1.0, 0.0) + 0.9 * sunW)) + 0.5 * (leaf - 0.5));
+    // the sunlit leaf is a pale warm yellow-green, the leaf in the shade of its own crown a deep neutral
+    // green (not blue: the sky bounce already cools it): the albedo itself carries the split (the direct
+    // light model only decides how much sun each side gets)
+    vec3 sunlit = diffuseColor.rgb * vec3(1.45, 1.36, 1.2);
+    vec3 shade = diffuseColor.rgb * vec3(0.44, 0.48, 0.42);
     diffuseColor.rgb = mix(shade, sunlit, cap);
     // sky light: the cap sees the whole sky, the underside a little ground bounce; a plant standing among
     // taller neighbours sees their leaves instead of the sky (its cap too: they overtop it)
@@ -874,8 +882,7 @@ const CROWN_FRAG = /* glsl */ `
     // and a share of the sun: the shadow probe (one lookup per plant) misses the leaves of the neighbours
     // that lean over this crown's lower half; kept milder than the cards' so the handover stays level
     diffuseColor.rgb *= 1.0 - 0.3 * vOcc * (1.0 - 0.4 * cap);
-    // leaf clusters: fine value noise breaks the smooth shading of the puffs; gaps between clusters darken
-    float leaf = vnoise(vWP.xz * 1.7 + vWP.y * 1.3);
+    // the cluster field's own shading (peaks pale, hollows dark); gaps between cluster groups darken
     diffuseColor.rgb *= 0.82 + 0.36 * leaf;
     diffuseColor.rgb *= 1.0 - 0.3 * smoothstep(0.62, 0.9, vnoise(vWP.xz * 0.55 + vWP.y * 0.4 + 17.0));
   }
@@ -964,7 +971,9 @@ void RE_IndirectDiffuse_Foliage( const in vec3 irradiance, const in vec3 geometr
 void RE_IndirectSpecular_Foliage( const in vec3 radiance, const in vec3 irradiance, const in vec3 clearcoatRadiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
   float foliage = ${isFoliage};
   float sky = vegSky( foliage );
-  RE_IndirectSpecular_Physical( radiance * mix( 1.0, sky, 0.5 ), irradiance * sky, clearcoatRadiance, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+  // the sky's reflection off the leaf mass is kept low: on the shade side of a crown the 4 % Fresnel of a
+  // blue sky was as bright as the leaf itself and every shaded crown went cyan
+  RE_IndirectSpecular_Physical( radiance * mix( 1.0, 0.6 * sky, foliage ), irradiance * sky, clearcoatRadiance, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
 }
 #undef RE_Direct
 #define RE_Direct RE_Direct_Foliage
@@ -1136,14 +1145,15 @@ ${VEG_SHADOW_PROBE_VARS}
   vec4 mvCentre = modelViewMatrix * centre;
   // mirror every other card so the same atlas tile reads as two silhouettes
   float flip = step(0.5, fract(aVar.y * 37.0)) * 2.0 - 1.0;
-  // beyond ~800 m the cards grow up to a quarter so neighbours overlap into one canopy instead of a
-  // stipple of separate dots with ground between them (camera passes only: the shadow cards keep their size)
+  // beyond ~800 m the cards grow a little so neighbours overlap into one canopy instead of a stipple of
+  // separate dots with ground between them (camera passes only: the shadow cards keep their size); kept
+  // small, since the reference canopy does show ground in its gaps and a grown card reads as a bigger ball
   #ifdef VEG_DEPTH
   vFar = 0.0;
   #else
   vFar = smoothstep(800.0, 3000.0, length(toCam));
   #endif
-  mvPosition = mvCentre + vec4(position.xy * vec2(aVar.z, 2.0 * aVar.w) * s * (1.0 + 0.25 * vFar), 0.0, 0.0);
+  mvPosition = mvCentre + vec4(position.xy * vec2(aVar.z, 2.0 * aVar.w) * s * (1.0 + 0.15 * vFar), 0.0, 0.0);
   gl_Position = projectionMatrix * mvPosition;
   vCardUv = vec2(flip > 0.0 ? uv.x : 1.0 - uv.x, uv.y);
   float cls = arche > 3.5 && arche < 4.5 ? 3.0 : arche > 6.5 ? 2.0 : arche < 1.5 ? 0.0 : 1.0;
@@ -1206,10 +1216,14 @@ const CARD_FRAG = /* glsl */ `
   // far away the lit share shrinks to the crown tops (the reference's distant canopy is dark with small
   // bright tips)
   float term = 0.25 - 0.4 * sunV.z + 0.15 * vFar;
-  float lit = mix(0.5, mix(0.5, smoothstep(term - 0.25, term + 0.25, dot(vDisc, sunDir)), proj), sunOn);
+  // the terminator follows the leaf clusters (the atlas shading about its mean): the raised clusters on
+  // the sun side catch the light and the hollows between them stay in shade, so from the air a crown is a
+  // mottled clump of lit tips and dark gaps (the reference canopy), not a ball with a lit half
+  float clusters = t.r - 0.68;
+  float lit = mix(0.5, mix(0.5, smoothstep(term - 0.16, term + 0.16, dot(vDisc, sunDir) + clusters), proj), sunOn);
   // lit leaf mass yellows, shaded parts cool off: matches the 3D crowns' albedo split; the trunk mask
   // paints bark instead of tinted foliage
-  float shade = mix(t.r, 0.92, 0.5 * vFar);
+  float shade = mix(t.r, 0.8, 0.5 * vFar);
   vec3 foliage = diffuseColor.rgb * shade * mix(vec3(0.86, 0.9, 0.95), vec3(1.03, 1.02, 0.96), smoothstep(0.4, 1.05, shade));
   // distant canopy: the per-plant tints move toward the canopy mean so a far island reads as one wooded
   // mass, not a brown / green speckle — but only part way, so the odd paler or darker crown still breaks
@@ -1218,10 +1232,11 @@ const CARD_FRAG = /* glsl */ `
   // and the individuals differ: a distant canopy is a mix of paler and darker crowns (species, age, the
   // odd emergent in full sun), not one tone repeated
   foliage *= mix(1.0, mix(0.78, 1.28, vCardVar), vFar);
-  // the sunlit leaf is a pale yellow-green (the reference's lit band: sRGB [134, 141, 113], saturation 0.2),
-  // the shaded leaf a dark green ([49, 56, 46], not the cyan the sky light alone would leave): the lit side
-  // is pushed toward that pale yellow, the shade side deep and no bluer than the leaf
-  foliage *= mix(mix(vec3(0.36, 0.42, 0.4), vec3(1.6, 1.5, 1.28), lit), vec3(mix(0.5, 1.75, lit)), vFar);
+  // the sunlit leaf is a pale yellow-green (the reference's lit band over the canopy alone: sRGB
+  // [124, 133, 119], saturation 0.1), the shaded leaf a dark neutral green ([46, 53, 47], saturation 0.12 —
+  // not the cyan the sky light alone would leave): the lit side is pushed toward that pale yellow-green,
+  // the shade side deep and warmer than the leaf so the blue sky bounce does not tint it
+  foliage *= mix(mix(vec3(0.3, 0.32, 0.25), vec3(2.0, 1.9, 1.75), lit), vec3(mix(0.42, 2.0, lit)), vFar);
   // a crown overtopped by its neighbours stands in their shadow (the occlusion packed in aVar.x): the
   // whole card darkens, its base most, so the inside of a dense stand goes dark and the emergent crowns
   // stand out lit
@@ -1255,7 +1270,7 @@ function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: 
       .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-crown-v11';
+  mat.customProgramCacheKey = () => 'veg-crown-v12';
   return mat;
 }
 
@@ -1277,7 +1292,7 @@ function palmMaterial(tex: THREE.Texture, time: THREE.IUniform<number>, wind: TH
       .replace('#include <normal_fragment_begin>', PALM_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-palm-v11';
+  mat.customProgramCacheKey = () => 'veg-palm-v12';
   return mat;
 }
 
@@ -1315,7 +1330,7 @@ function cardMaterial(atlas: THREE.Texture, canopyMean: THREE.Vector3): THREE.Me
       .replace('#include <color_fragment>', CARD_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-card-v12';
+  mat.customProgramCacheKey = () => 'veg-card-v13';
   return mat;
 }
 
