@@ -199,6 +199,7 @@ export class PlaneModel {
   // animated parts
   readonly propeller = new THREE.Group();
   readonly propDisc: THREE.Mesh;
+  private readonly propDiscPivot = new THREE.Group();
   /** spinner + hub (always turning) and the three blades (hidden at speed, when the blur disc takes over) */
   readonly propHub: THREE.Mesh;
   readonly propBlades: THREE.Mesh;
@@ -617,11 +618,16 @@ export class PlaneModel {
     this.propBlades.renderOrder = 14;
     const discMat = new THREE.MeshStandardMaterial({ map: propDiscTexture(), transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide, roughness: 0.5, metalness: 0.0, color: 0xffffff });
     this.materials.push(discMat);
+    // The disc hangs off its own pivot at the hub, not off the spinning propeller group: rotating a texture
+    // with ghost sectors and a tip glint at 2500 RPM turns ~250 degrees per 60 Hz frame and strobed as a
+    // flicker at the nose. The pivot turns slowly so the blur pattern still drifts.
     this.propDisc = new THREE.Mesh(new THREE.CircleGeometry(1.5, 48), discMat);
     this.propDisc.rotation.y = Math.PI / 2;
     this.propDisc.position.x = 0.05;
     this.propDisc.renderOrder = 15;
-    this.propeller.add(this.propDisc);
+    this.propDiscPivot.position.copy(this.propeller.position);
+    this.propDiscPivot.add(this.propDisc);
+    this.root.add(this.propDiscPivot);
 
     // ------------------------------------------------------------ wing
     // straight trailing edge (sweep chosen so xTE is constant), gentle taper, thin 11% airfoil with washout
@@ -1343,6 +1349,7 @@ export class PlaneModel {
     // the engine idles at 600 RPM (the tachometer's reading, setInstruments) and the prop turns at that speed too
     const rpmVal = 600 + rpm * 2000;
     this.propeller.rotation.x += rpmVal * (Math.PI * 2 / 60) * dt;
+    this.propDiscPivot.rotation.x += 1.7 * dt;
     // cross-fade from crisp blades to the blur disc between ~500 and ~1200 RPM (at idle the blades are already a
     // third of the way to a smear: 10 turns a second); above that only the disc and the spinner remain
     const blend = Math.pow(THREE.MathUtils.clamp((rpmVal - 500) / 700, 0, 1), 0.6);

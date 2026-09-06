@@ -86,7 +86,6 @@ async function boot(): Promise<void> {
   if (params.autostart) start();
 
   let last = performance.now();
-  let acc = 0;
   const loop = () => {
     const now = performance.now();
     let frameDt = params.fixedDt ?? Math.min(0.1, (now - last) / 1000);
@@ -107,12 +106,14 @@ async function boot(): Promise<void> {
       game.flightCamera.orbitYaw = input.orbitYaw;
       game.flightCamera.orbitPitch = input.orbitPitch;
     }
-    // fixed-step simulation for stable physics
-    acc += frameDt;
-    const step = 1 / 60;
-    let n = 0;
-    while (acc >= step && n < 8) { game.update(step, started); acc -= step; n++; }
-    if (n === 8) acc = 0;
+    // Substeps of at most 1/60 s that cover this frame exactly, so the simulated state always lands on the
+    // rendered instant. The previous accumulator (whole 1/60 s steps, remainder carried over) advanced the
+    // aircraft by 0, 1 or 2 steps per frame on 120-144 Hz displays or under a 40-50 fps load while the chase
+    // camera moved smoothly every frame: the airframe visibly buzzed against the camera and the world.
+    const maxStep = 1 / 60;
+    const n = Math.min(8, Math.max(1, Math.ceil(frameDt / maxStep - 1e-6)));
+    const sub = frameDt / n;
+    if (frameDt > 0) for (let i = 0; i < n; i++) game.update(sub, started);
     game.flightCamera.update(game.aircraft.flight, game.aircraft.model, frameDt);
     game.render();
     hud.update(game.aircraft.flight.telemetry, game.aircraft.inputs.throttle, game.flightCamera.mode, game.atmos.hour, frameDt);

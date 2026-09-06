@@ -30,8 +30,9 @@ export class FlightCamera {
   private time = 0;
   private initialised = false;
   baseFov = 50;
-  /** 0 = rock steady, 1 = full turbulence/buffet sway; toggled with V in play mode */
-  shakeScale = 0.5;
+  /** 0 = rock steady, 1 = full turbulence/buffet sway; off by default (the sway read as a buzz on the
+   *  airframe in chase view), V switches it on in play mode */
+  shakeScale = 0;
   /** external orbit offsets (mouse) */
   orbitYaw = 0;
   orbitPitch = 0;
