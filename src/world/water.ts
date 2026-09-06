@@ -228,8 +228,11 @@ vec2 swellSlopeC(vec2 p, vec2 dir, float L, float A, float t, float phase, float
   return (A * 0.7 * c * (1.0 + s)) * (k * dir + dwarp);
 }
 // Footprint fade of a wave set of wavelength L: it leaves (its slope variance going into the roughness) between
-// 10 and 4.5 px per wavelength; fewer drew the set as moire rows.
+// 10 and 4.5 px per wavelength; fewer drew the set as moire rows. The footprint that matters is the pixel's
+// extent along the set's wave vector: a set whose crests run away from the camera is sampled across the screen
+// and stays resolved far beyond the range at which the along-view stretch of the pixel would have removed it.
 float setFade(float L, float foot) { return 1.0 - smoothstep(0.1 * L, 0.22 * L, foot); }
+float footAlong(vec2 dir, vec2 dx, vec2 dy) { return abs(dot(dx, dir)) + abs(dot(dy, dir)); }
 // Slope variance of a sharpened set: E[c^2 (1 + s)^2] = 5/8 of the squared slope amplitude.
 float setVar(float L, float A) { float S = A * 0.7 * 6.2831853 / L; return 0.625 * S * S; }
 float smithBeckmann(float cosT, float alpha) {
@@ -493,7 +496,8 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   // swell: three long-crested sets of incommensurate wavelength and heading whose crests meander (phase warped
   // by a ~250 m noise) under wave groups travelling at half the phase speed, plus a long low ground swell from
   // another quarter; each set fades on its own wavelength
-  float fS0 = setFade(83.0, foot), fS1 = setFade(51.3, foot), fS2 = setFade(33.7, foot), fSL = setFade(340.0, foot);
+  float fS0 = setFade(83.0, footAlong(rot2(wd, -0.31), dxw, dyw)), fS1 = setFade(51.3, footAlong(rot2(wd, 0.07), dxw, dyw)),
+        fS2 = setFade(33.7, footAlong(rot2(wd, 0.53), dxw, dyw)), fSL = setFade(340.0, footAlong(rot2(wd, 0.95), dxw, dyw));
   if (swellF > 0.001 && fS0 > 0.001) {
     vec3 warp = noised(wp * 0.0045 + 2.3);
     float wv = (warp.x - 0.5) * 3.2;
@@ -513,7 +517,8 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   mss += a0 * a0 * (1.0 - w0 * w0);
   // wind sea: short-crested directional waves whose height follows the wave groups of the layer above and whose
   // crests are bent by it (the group noise warps their phase)
-  float fW0 = setFade(11.6, foot), fW1 = setFade(7.1, foot), fW2 = setFade(4.7, foot);
+  float fW0 = setFade(11.6, footAlong(rot2(wd, -0.33), dxw, dyw)), fW1 = setFade(7.1, footAlong(rot2(wd, 0.21), dxw, dyw)),
+        fW2 = setFade(4.7, footAlong(rot2(wd, -0.08), dxw, dyw));
   if (fW0 > 0.001 && chopF > 0.001) {
     float grp = (0.55 + 0.9 * val0) * chopF * windG;
     float wv = (val0 - 0.5) * 3.0;
@@ -536,7 +541,8 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   // drawn as sharpened crests riding on a softer noise floor (noise alone read as featureless blotches)
   float w2 = 1.0 - smoothstep(0.35, 0.75, foot);
   float a2 = 0.10 * windG * rippleF * laneA;
-  float fC0 = setFade(3.4, foot), fC1 = setFade(2.15, foot), fC2 = setFade(1.3, foot);
+  float fC0 = setFade(3.4, footAlong(rot2(wd, -0.35), dxw, dyw)), fC1 = setFade(2.15, footAlong(rot2(wd, 0.25), dxw, dyw)),
+        fC2 = setFade(1.3, footAlong(rot2(wd, 0.05), dxw, dyw));
   float crestNet = 0.0; // caustic filaments: the crests of the short sets focus the sun on the bed (zero mean)
   if (w2 > 0.001 || fC0 > 0.001) {
     g += chopSlope(wp, rot2(wd, 0.3), 1.7, 1.4, 1.6, t, 7.1, a2, val2, dvalT) * w2;
@@ -885,7 +891,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v11-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v12-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 
