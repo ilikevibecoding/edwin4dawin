@@ -173,20 +173,50 @@ function leafClusterTexture(rng: Rng): THREE.CanvasTexture {
   c.width = c.height = T * N;
   const ctx = c.getContext('2d')!;
   ctx.clearRect(0, 0, T * N, T * N);
+  // tiles 0 and 1 (top row): hardwood clusters; tile 2: the big round leaves of a sea grape; tile 3: pine
+  // needle tufts (see LEAF_TILE in the crown vertex stage)
   for (let ty = 0; ty < N; ty++) for (let tx = 0; tx < N; tx++) {
     const ox = tx * T, oy = ty * T;
-    // a few big leaves at the centre, smaller ones toward the edge, leaving gaps between them
-    const n = 22 + rng.int(0, 8);
+    const tile = ty * N + tx;
+    if (tile === 3) {
+      // a few radiating bunches of long thin needles, brighter toward the bunch's tip
+      for (let b = 0; b < 5; b++) {
+        const bx = 0.5 + rng.range(-0.22, 0.22), by = 0.5 + rng.range(-0.22, 0.22);
+        const dir = rng.range(0, Math.PI * 2);
+        for (let i = 0; i < 26; i++) {
+          const a = dir + rng.range(-0.7, 0.7), len = rng.range(0.16, 0.3);
+          const g = Math.round(255 * Math.min(1, 0.55 + 0.5 * rng.next()));
+          ctx.strokeStyle = `rgb(${g}, 0, 0)`;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(ox + bx * T, oy + by * T);
+          ctx.lineTo(ox + (bx + Math.cos(a) * len) * T, oy + (by + Math.sin(a) * len) * T);
+          ctx.stroke();
+        }
+      }
+      continue;
+    }
+    // a few big leaves at the centre, smaller ones toward the edge, leaving gaps between them; the sea
+    // grape's leaves are half as many, round and twice the size
+    const grape = tile === 2;
+    const n = grape ? 11 + rng.int(0, 3) : 22 + rng.int(0, 8);
     for (let i = 0; i < n; i++) {
-      const ang = rng.range(0, Math.PI * 2), rad = Math.pow(rng.next(), 0.6) * 0.34;
+      const ang = rng.range(0, Math.PI * 2), rad = Math.pow(rng.next(), 0.6) * (grape ? 0.3 : 0.34);
       const cx = 0.5 + Math.cos(ang) * rad, cy = 0.5 + Math.sin(ang) * rad;
-      const len = (0.09 + 0.09 * rng.next()) * (1 - 0.5 * rad), wid = len * (0.4 + 0.35 * rng.next());
+      const len = (grape ? 0.14 + 0.08 * rng.next() : 0.09 + 0.09 * rng.next()) * (1 - 0.5 * rad), wid = len * (grape ? 0.85 + 0.15 * rng.next() : 0.4 + 0.35 * rng.next());
       const shade = 0.62 + 0.5 * rng.next() * (1 - 0.6 * rad);
       const g = Math.round(255 * Math.min(1, shade));
       ctx.fillStyle = `rgb(${g}, 0, 0)`;
       ctx.beginPath();
       ctx.ellipse(ox + cx * T, oy + cy * T, len * T, wid * T, rng.range(0, Math.PI), 0, Math.PI * 2);
       ctx.fill();
+      if (grape) {
+        // the leaf's darker centre and vein
+        ctx.fillStyle = `rgb(${Math.round(g * 0.7)}, 0, 0)`;
+        ctx.beginPath();
+        ctx.ellipse(ox + cx * T, oy + cy * T, len * T * 0.25, wid * T * 0.25, 0, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
   }
   const tex = new THREE.CanvasTexture(c);
@@ -460,7 +490,13 @@ const FROND_LEAFLETS = 40;
 /** frond texture size (the shader derives the sampled mip level from it) */
 const FROND_TEX_W = 256;
 const FROND_TEX_H = 512;
-function palmGeometry(): THREE.BufferGeometry {
+/** Fins a side of a frond of the near palm geometry: each is a slice of the strip hinged on the rachis */
+const FROND_FINS = 5;
+/** Unit palm (see above). `hi`: the near tier's geometry, whose fronds are not flat strips but two rows of
+ *  FROND_FINS fins hinged on the rachis and drooping from it at their own angles (the V cross-section of a
+ *  coconut frond, its leaflets hanging in groups), so at 30-60 m a frond has depth and a serrated edge
+ *  instead of reading as a painted strip (13 x 10 fins = 260 triangles + the trunk). */
+function palmGeometry(hi = false): THREE.BufferGeometry {
   const pos: number[] = [], nrm: number[] = [], uv: number[] = [], part: number[] = [];
   const segs = 3, sides = 4;
   const ring = (t: number): [number, number, number][] => {
@@ -485,28 +521,55 @@ function palmGeometry(): THREE.BufferGeometry {
     // alternate fronds sit a little lower and shorter: a two-tier crown instead of a flat star
     const tier = k % 2;
     const len = 0.6 - 0.08 * tier;
-    const pts: [number, number, number][] = [];
-    for (let i = 0; i <= segs2; i++) {
-      const t = i / segs2;
-      const rr = len * t;
-      // leaves the crown climbing (+0.16 at mid length), tips at -0.21 (upper tier) / -0.38 (lower): an open
-      // star with sky between the fronds, not the dome of wide overlapping strips the iter09 palms were
-      const yv = 1.0 - 0.05 * tier + 0.24 * Math.sin(t * Math.PI * 0.9) - (0.28 + 0.12 * tier) * t * t;
-      const px = Math.cos(a) * rr, pz = Math.sin(a) * rr;
-      // narrow petiole, widest past mid length, tapering to the tip (the card's frond profile)
-      const width = 0.11 * (0.35 + 0.65 * Math.sin(Math.min(1, t * 1.6) * Math.PI * 0.5)) * (1 - 0.3 * t);
-      const wx = -Math.sin(a) * width, wz = Math.cos(a) * width;
-      pts.push([px - wx, yv, pz - wz], [px + wx, yv, pz + wz]);
-    }
-    const tri = (i0: number, i1: number, i2: number) => {
-      for (const i of [i0, i1, i2]) {
-        pos.push(pts[i][0], pts[i][1], pts[i][2]); nrm.push(0, 1, 0); part.push(k + 1);
-        const row = Math.floor(i / 2), side = i % 2;
-        uv.push(side * 0.5, 1 - row / segs2);
+    // leaves the crown climbing (+0.16 at mid length), tips at -0.21 (upper tier) / -0.38 (lower): an open
+    // star with sky between the fronds, not the dome of wide overlapping strips the iter09 palms were
+    const rachis = (t: number): [number, number, number] => [Math.cos(a) * len * t, 1.0 - 0.05 * tier + 0.24 * Math.sin(t * Math.PI * 0.9) - (0.28 + 0.12 * tier) * t * t, Math.sin(a) * len * t];
+    // narrow petiole, widest past mid length, tapering to the tip (the card's frond profile)
+    const width = (t: number) => 0.11 * (0.35 + 0.65 * Math.sin(Math.min(1, t * 1.6) * Math.PI * 0.5)) * (1 - 0.3 * t);
+    const perp: [number, number, number] = [-Math.sin(a), 0, Math.cos(a)];
+    if (!hi) {
+      const pts: [number, number, number][] = [];
+      for (let i = 0; i <= segs2; i++) {
+        const t = i / segs2;
+        const [px, yv, pz] = rachis(t);
+        const w = width(t);
+        pts.push([px - perp[0] * w, yv, pz - perp[2] * w], [px + perp[0] * w, yv, pz + perp[2] * w]);
       }
-    };
-    // wound so the front face is the frond's upper side (the shader lights the underside as the top too)
-    for (let i = 0; i < segs2; i++) { const b = i * 2; tri(b, b + 1, b + 2); tri(b + 1, b + 3, b + 2); }
+      const tri = (i0: number, i1: number, i2: number) => {
+        for (const i of [i0, i1, i2]) {
+          pos.push(pts[i][0], pts[i][1], pts[i][2]); nrm.push(0, 1, 0); part.push(k + 1);
+          const row = Math.floor(i / 2), side = i % 2;
+          uv.push(side * 0.5, 1 - row / segs2);
+        }
+      };
+      // wound so the front face is the frond's upper side (the shader lights the underside as the top too)
+      for (let i = 0; i < segs2; i++) { const b = i * 2; tri(b, b + 1, b + 2); tri(b + 1, b + 3, b + 2); }
+      continue;
+    }
+    // fins: the same texture slice as the strip (u 0.25 at the rachis, 0 / 0.5 at the edges), each hinged on
+    // the rachis and turned down about it by its own angle
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < FROND_FINS; i++) {
+        const t0 = i / FROND_FINS, t1 = (i + 1) / FROND_FINS;
+        const h = Math.abs(Math.sin(k * 12.9898 + i * 78.233 + side * 37.719) * 43758.5453) % 1;
+        // leaflets hang in a V from the rachis, steeper toward the tip; the groups differ by up to 20 deg
+        const theta = (28 + 14 * t0 + 20 * (h - 0.5)) * Math.PI / 180;
+        const d: [number, number, number] = [side * perp[0] * Math.cos(theta), -Math.sin(theta), side * perp[2] * Math.cos(theta)];
+        const r0 = rachis(t0), r1 = rachis(t1);
+        const w0 = width(t0), w1 = width(t1);
+        const e0: [number, number, number] = [r0[0] + d[0] * w0, r0[1] + d[1] * w0, r0[2] + d[2] * w0];
+        const e1: [number, number, number] = [r1[0] + d[0] * w1, r1[1] + d[1] * w1, r1[2] + d[2] * w1];
+        // fin normal: the rachis direction crossed with the droop direction, on the upper side of the fin
+        const tx = r1[0] - r0[0], ty = r1[1] - r0[1], tz = r1[2] - r0[2];
+        let nx = -side * (ty * d[2] - tz * d[1]), ny = -side * (tz * d[0] - tx * d[2]), nz = -side * (tx * d[1] - ty * d[0]);
+        const nl = Math.hypot(nx, ny, nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+        const ue = 0.25 + side * 0.25;
+        const verts: [number, number, number, number, number][] = [[...r0, 0.25, 1 - t0], [...e0, ue, 1 - t0], [...e1, ue, 1 - t1], [...r1, 0.25, 1 - t1]];
+        // wound so the front face is the upper side (the mirrored side reverses the order)
+        const order = side > 0 ? [0, 1, 2, 0, 2, 3] : [0, 2, 1, 0, 3, 2];
+        for (const vi of order) { const v = verts[vi]; pos.push(v[0], v[1], v[2]); nrm.push(nx, ny, nz); uv.push(v[3], v[4]); part.push(k + 1); }
+      }
+    }
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -551,11 +614,14 @@ vec3 lobeCentre(float cls, int variant, int k, float squash) {
   if (cls < 1.5) return vec3(ca * L.y * 1.3, (L.w * 0.35 - 0.05) * squash, sa * L.y * 1.3);
   return vec3(ca * L.y * 0.45, (-0.25 - 0.3 * float(k - 2)) * squash, sa * L.y * 0.45);
 }
-// the limb a lobe hangs on: from the trunk top (pines: the trunk at the tier's height) to the lobe centre;
-// a mangrove's limbs are prop roots instead, arching from low on the trunk down to the ground around it
+// the limb a lobe hangs on, from the fork to the lobe centre. A round crown forks just under its main puff
+// (the stem itself runs on into the puff), so the limbs show against the sky for a stretch before they
+// enter the lobes from below; a spreading crown forks at its short trunk's top; a pine's limbs leave the
+// trunk at the tier's height. A mangrove's limbs are prop roots instead, arching from low on the trunk down
+// to the ground around it.
 void branchEnds(float arche, float cls, int variant, int k, float squash, float centreY, out vec3 start, out vec3 end) {
   end = lobeCentre(cls, variant, k, squash);
-  start = vec3(0.0, cls > 1.5 ? end.y - 0.1 * squash : -0.3 * squash, 0.0);
+  start = vec3(0.0, cls > 1.5 ? end.y - 0.1 * squash : cls < 0.5 ? -0.95 * squash : -0.3 * squash, 0.0);
   if (arche > 1.5 && arche < 2.5) {
     vec4 L = LOBES[variant * 3 + k - 2];
     end = vec3(cos(L.x) * 0.55, -centreY, sin(L.x) * 0.55);
@@ -622,8 +688,9 @@ ${VEG_SHADOW_PROBE_VARS}
   float centreY = trunkLen + 0.85 * squash + 0.12 * (h2 - 0.5) * squash;
   vec3 iw = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
   vLeafUv = vec2(0.0);
-  // trunk: thinner on the spreading class and the pines, stouter on emergents; reaches into the main puff
-  float tr = cls > 1.5 ? 0.7 : cls > 0.5 ? 0.6 : arche > 0.5 ? 1.3 : 1.0;
+  // trunk: thinner on the spreading class and the pines, stouter on emergents and on the spreading
+  // ficus-like broadleaf crowns (low squash); reaches into the main puff
+  float tr = cls > 1.5 ? 0.7 : cls > 0.5 ? 0.6 : arche > 0.5 ? 1.3 : mix(1.5, 0.9, smoothstep(0.58, 1.05, squash));
   if (aPart < 0.5) {
     transformed.xz *= tr;
     transformed.y *= centreY - 0.3 * squash;
@@ -651,7 +718,7 @@ ${VEG_SHADOW_PROBE_VARS}
     // in the water) or a tussock
     float show = 1.0 - step(1.5, arche) * step(arche, 2.5) - step(4.5, arche) * step(arche, 5.5);
     float r = length(position.xz);
-    transformed = (vec3(position.x, 0.0, position.z) * (0.07 * tr * 4.5) + vec3(0.0, 0.01 + 0.05 * (1.0 - r), 0.0)) * show;
+    transformed = (vec3(position.x, 0.0, position.z) * (0.07 * tr * 3.6) + vec3(0.0, 0.01 + 0.05 * (1.0 - r), 0.0)) * show;
     vRel = vec3(0.0);
     vLeafUv = uv;
   } else {
@@ -695,7 +762,11 @@ ${VEG_SHADOW_PROBE_VARS}
       vec3 up = normalize(vec3(MV[0][1], MV[1][1], MV[2][1]));
       float hc = hash11(seed * 13.7 + cardId * 0.37 + puffPart);
       float fade = 1.0 - smoothstep(${FRINGE_FADE_NEAR}.0, ${FRINGE_FADE_FAR}.0, length(cameraPosition - iw));
-      float sz = ps.x * (0.6 + 0.3 * hc) * fade;
+      // the species' leaf: a sea grape's clusters are big round leaves (larger cards), a pine's needle
+      // tufts (smaller, more of the outline left to the tiers), a mangrove's small and dense
+      bool grape = arche > 5.5 && arche < 6.5;
+      float leafScale = grape ? 1.35 : cls > 1.5 ? 0.8 : (arche > 1.5 && arche < 2.5) ? 0.85 : 1.0;
+      float sz = ps.x * (0.6 + 0.3 * hc) * fade * leafScale;
       vec2 corner = uv - 0.5;
       // per-card spin: the same cluster tile reads as different clusters
       float spin = hc * 6.2831;
@@ -705,7 +776,9 @@ ${VEG_SHADOW_PROBE_VARS}
       // outline of a crown shimmers while its mass sways
       float fp = uTime * (4.2 + 2.0 * hc) + hc * 40.0 + puffPart;
       transformed += (right * sin(fp) + up * (0.5 * cos(fp * 1.3))) * (uWind * 0.02 * sz);
-      float tile = floor(hash11(seed * 7.9 + cardId * 1.13) * 4.0);
+      // leaf-cluster tile: hardwoods draw from the two cluster tiles, the sea grape its round leaves (2),
+      // the pine its needle tufts (3)
+      float tile = grape ? 2.0 : cls > 1.5 ? 3.0 : floor(hash11(seed * 7.9 + cardId * 1.13) * 2.0);
       vLeafUv = (uv + vec2(mod(tile, 2.0), floor(tile / 2.0))) * 0.5;
     }
   }
@@ -743,14 +816,14 @@ const CROWN_FRAG = /* glsl */ `
     // (the crown's shadow falls on it too, so the tree stands in a dark ring instead of on untouched lawn)
     float r = length(vLeafUv);
     float rim = 0.55 + 0.45 * vnoise(vWP.xz * 1.4 + vSeed);
-    float a = 1.0 - smoothstep(0.3 * rim, rim, r);
+    float a = 1.0 - smoothstep(0.2 * rim, rim, r);
     if (a < 0.04) discard;
     diffuseColor.a = a;
-    diffuseColor.rgb = vec3(0.2, 0.16, 0.1) * (0.7 + 0.5 * vnoise(vWP.xz * 5.0)) * mix(0.8, 1.15, vnoise(vWP.xz * 1.1 + 5.0));
+    diffuseColor.rgb = vec3(0.27, 0.22, 0.13) * (0.7 + 0.5 * vnoise(vWP.xz * 5.0)) * mix(0.8, 1.15, vnoise(vWP.xz * 1.1 + 5.0));
   } else if (vPart < 0.5 || vPart > ${BRANCH_PART - 0.5}) {
     // bark (trunk and limbs): grey-brown, paler on the pines; furrowed along the grain and darker toward the
     // ground, where the crown shades it and the moss sits
-    vec3 bark = vArche > 6.5 ? vec3(0.36, 0.3, 0.24) : vec3(0.3, 0.24, 0.18);
+    vec3 bark = vArche > 6.5 ? vec3(0.4, 0.29, 0.21) : vec3(0.3, 0.24, 0.18);
     float grain = vnoise(vWP.xz * 3.0 + vWP.y * 2.0);
     float furrow = vnoise(vec2(vWP.x * 7.0 + vWP.z * 5.0, vWP.y * 0.9));
     diffuseColor.rgb = bark * (0.65 + 0.4 * grain + 0.3 * furrow) * mix(0.55, 1.0, smoothstep(0.0, 0.3, vRel.y));
@@ -932,6 +1005,10 @@ ${VEG_SHADOW_PROBE_VARS}
     float bob = sin(uTime * 2.3 + fp - t * 1.6) * 0.7 + sin(uTime * 3.7 + fp * 1.3 - t * 2.5) * 0.3;
     rel.y += bob * uWind * 0.03 * t * t * (1.0 - dead);
     rel.xz += normalize(rel.xz + 1e-4) * cos(uTime * 1.9 + fp) * uWind * 0.012 * t * t * (1.0 - dead);
+    // and the leaflet groups quiver about the rachis (the fin's edge moves, its hinge on the rachis does
+    // not), quick and small: the thin leaves move more than the frond they hang on
+    float fin = abs(uv.x - 0.25) * 4.0;
+    rel.y += sin(uTime * 5.3 + fp * 2.1 + t * 9.0) * uWind * 0.012 * fin * t * (1.0 - dead);
     transformed = vec3(0.0, 1.0, 0.0) + rel;
   }
   float bend = lean * transformed.y * transformed.y;
@@ -1097,30 +1174,34 @@ const CARD_FRAG = /* glsl */ `
   float a = smoothstep(thr - w, thr + w, t.a);
   if (a < 0.3) discard;
   diffuseColor.a = a;
-  // sun side: the crown as a rough ball facing the camera, its normal at this point of the disc against
-  // the view-space sun direction, so the terminator sits where a sphere's would: the lit side faces the
-  // sun's screen direction, nearly the whole disc is lit with the sun behind the camera (the high aerial)
-  // and nearly none of it against the sun. Leaves self-shadow, so the lit side needs more than a grazing
-  // sun (the ramp starts a little past the geometric terminator); the darks of a dense canopy come from
-  // the neighbour occlusion below, not from shading a fixed share of every crown
+  // sun side: the sun's screen direction decides which side of the disc is lit, and the terminator sits a
+  // quarter radius past the centre toward the sun, so ~40 % of every crown is lit and 60 % shaded whatever
+  // the sun's elevation. A real crown is not a ball: seen from the air only its top clusters catch the sun
+  // and the rest shades itself (the reference canopy is dark with lit tips), which a sphere lit by the
+  // view-space sun cannot give — with the sun behind the camera it lit the whole disc and the canopy went
+  // flat. With the sun straight behind the camera the split fades (nothing decides a side) and the
+  // neighbour occlusion below carries the darks
   vec3 sunV = vec3(0.0, 0.7, 0.7);
   float sunOn = 0.0;
   #if NUM_DIR_LIGHTS > 0
   sunV = directionalLights[0].direction;
   sunOn = smoothstep(0.0, 0.3, max(directionalLights[0].color.r, directionalLights[0].color.g));
   #endif
-  float nz = sqrt(max(0.0, 1.0 - min(dot(vDisc, vDisc), 1.0)));
-  float ndl = dot(vDisc, sunV.xy) + nz * sunV.z;
-  float lit = mix(0.6, smoothstep(-0.05, 0.4, ndl), sunOn);
+  vec2 sunDir = sunV.xy / max(length(sunV.xy), 1e-3);
+  float proj = min(length(sunV.xy) * 4.0, 1.0);
+  float lit = mix(0.5, mix(0.5, smoothstep(0.0, 0.5, dot(vDisc, sunDir)), proj), sunOn);
   // lit leaf mass yellows, shaded parts cool off: matches the 3D crowns' albedo split; the trunk mask
   // paints bark instead of tinted foliage
   float shade = mix(t.r, 0.92, 0.5 * vFar);
   vec3 foliage = diffuseColor.rgb * shade * mix(vec3(0.86, 0.9, 0.95), vec3(1.03, 1.02, 0.96), smoothstep(0.4, 1.05, shade));
   // distant canopy: the per-plant tints converge on the canopy mean so a far island reads as one wooded
-  // mass, not a brown / green speckle; the lit / shade split stays as a 0.6-1.25 modulation there so the
+  // mass, not a brown / green speckle; the lit / shade split stays as a 0.5-1.4 modulation there so the
   // mass still reads as separate lit and shaded crowns
   foliage = mix(foliage, uCanopyMean * shade, 0.55 * vFar);
-  foliage *= mix(mix(vec3(0.42, 0.48, 0.54), vec3(1.38, 1.28, 1.02), lit), vec3(mix(0.6, 1.25, lit)), vFar);
+  // the sunlit leaf is a pale yellow-green (the reference's lit band: sRGB [134, 141, 113], saturation 0.2),
+  // the shaded leaf a dark cool green ([49, 56, 46]): the lit side is pushed toward that pale yellow, the
+  // shade side deep
+  foliage *= mix(mix(vec3(0.34, 0.4, 0.46), vec3(1.62, 1.52, 1.3), lit), vec3(mix(0.5, 1.4, lit)), vFar);
   // a crown overtopped by its neighbours stands in their shadow (the occlusion packed in aVar.x): the
   // whole card darkens, its base most, so the inside of a dense stand goes dark and the emergent crowns
   // stand out lit
@@ -1154,7 +1235,7 @@ function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: 
       .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-crown-v10';
+  mat.customProgramCacheKey = () => 'veg-crown-v11';
   return mat;
 }
 
@@ -1214,7 +1295,7 @@ function cardMaterial(atlas: THREE.Texture, canopyMean: THREE.Vector3): THREE.Me
       .replace('#include <color_fragment>', CARD_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-card-v10';
+  mat.customProgramCacheKey = () => 'veg-card-v11';
   return mat;
 }
 
@@ -1296,6 +1377,8 @@ const ULTRA_CROWNS = 8192;
 /** instances the palm batches hold (camera / mirror); a palm tile that does not fit draws its own mesh */
 const NEAR_PALMS = 16384;
 const MIRROR_PALMS = 8192;
+/** palms the finned near tier can hold (the cells inside PALM_HI_DISTANCE) */
+const HI_PALMS = 4096;
 /** casting tiles a coarse cascade (texel over NEAR_TEXEL) draws at most, nearest first */
 const COARSE_SHADOW_TILES = 8;
 const _casting = new Array<number>(MAX_CASCADES).fill(0);
@@ -1306,6 +1389,8 @@ const NEAR_DISTANCE = 420;
 /** palms hand over to their cards further out: fronds are thin, and a frond-star card reads as a sprite
  *  long before a crown card does (iter09 "sprite palms" at 100-400 m) */
 const PALM_NEAR_DISTANCE = 650;
+/** palm cells closer than this draw the finned frond geometry (2.8x the strip palm's triangles) */
+const PALM_HI_DISTANCE = 150;
 /** crown cells (150 m) closer than these to the camera draw the level-1 / level-2 tessellations (both carry
  *  the leaf-cluster fringe, which fades out over FRINGE_FADE_NEAR..FAR) */
 const HI_DISTANCE = 420;
@@ -1396,6 +1481,285 @@ const CANOPY_DESAT = 0.48;
 const _hsl = { h: 0, s: 0, l: 0 };
 const _grey = new THREE.Color();
 
+// ---------------------------------------------------------------- near grass
+
+/** Grass tufts stand within this distance of the camera (fading out over the last 15 m) */
+const GRASS_RADIUS = 60;
+/** lattice spacing of the tuft candidates (m) */
+const GRASS_SPACING = 1.6;
+/** the tufts are generated in chunks of this size (m), cached while the camera is near */
+const GRASS_CHUNK = 20;
+/** instances the grass mesh can hold (a 60 m disc at 1.6 m spacing is ~4400 candidates) */
+const GRASS_MAX = 6000;
+const GRASS_TILES = 3;
+
+/** Grass blade cut-outs: three 128 x 256 tiles — a lawn tuft, a meadow tuft with seed heads, dune grass
+ *  (sea oats: sparse long blades with hanging heads). Alpha is the coverage, R the shading (dark at the
+ *  base, light at the tip); the instance tint gives the colour. */
+function grassTexture(rng: Rng): THREE.CanvasTexture {
+  const W = 128, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W * GRASS_TILES; c.height = H;
+  const ctx = c.getContext('2d')!;
+  ctx.clearRect(0, 0, c.width, H);
+  for (let tile = 0; tile < GRASS_TILES; tile++) {
+    const ox = tile * W;
+    const blades = tile === 0 ? 18 : tile === 1 ? 12 : 9;
+    for (let i = 0; i < blades; i++) {
+      const x0 = ox + W * (0.5 + rng.range(-0.16, 0.16));
+      const lean = rng.range(-0.5, 0.5) * (tile === 2 ? 1.3 : 1);
+      const hgt = H * (tile === 0 ? rng.range(0.5, 1.0) : rng.range(0.6, 1.0));
+      const wBase = tile === 2 ? rng.range(3, 5) : rng.range(5, 9);
+      const shade = rng.range(0.4, 0.65);
+      const tipX = x0 + lean * hgt, tipY = H - hgt;
+      const midX = x0 + lean * hgt * 0.3, midY = H - hgt * 0.55;
+      const grad = ctx.createLinearGradient(0, H, 0, tipY);
+      grad.addColorStop(0, `rgb(${Math.round(255 * shade)}, 0, 0)`);
+      grad.addColorStop(1, `rgb(${Math.round(255 * Math.min(1, shade + 0.45))}, 0, 0)`);
+      ctx.fillStyle = grad;
+      // a tapered blade bowing toward its tip
+      ctx.beginPath();
+      ctx.moveTo(x0 - wBase / 2, H);
+      ctx.quadraticCurveTo(midX - wBase / 4, midY, tipX, tipY);
+      ctx.quadraticCurveTo(midX + wBase / 4, midY, x0 + wBase / 2, H);
+      ctx.closePath();
+      ctx.fill();
+      if ((tile === 1 && rng.chance(0.45)) || tile === 2) {
+        // seed head at the tip: a small pale ellipse (hanging off the tip on the dune grass)
+        const hx = tipX + (tile === 2 ? lean * 8 : 0), hy = tipY + (tile === 2 ? 10 : 4);
+        ctx.fillStyle = `rgb(${Math.round(255 * Math.min(1, shade + 0.5))}, 0, 0)`;
+        ctx.beginPath();
+        ctx.ellipse(hx, hy, tile === 2 ? 3 : 2.5, tile === 2 ? 12 : 7, lean * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.NoColorSpace;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.generateMipmaps = true;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+/** Unit tuft: three quads crossed at 60 deg, 0.8 wide and 1 tall, normals up (a tuft is lit like the
+ *  ground it grows from, not like a fence of leaves). */
+function grassGeometry(): THREE.BufferGeometry {
+  const pos: number[] = [], nrm: number[] = [], uv: number[] = [];
+  for (let q = 0; q < 3; q++) {
+    const a = (q / 3) * Math.PI;
+    const cx = Math.cos(a) * 0.4, cz = Math.sin(a) * 0.4;
+    const corners: [number, number, number, number][] = [[-cx, 0, -cz, 0], [cx, 0, cz, 1], [cx, 1, cz, 1], [-cx, 0, -cz, 0], [cx, 1, cz, 1], [-cx, 1, -cz, 0]];
+    for (const [x, y, z, u] of corners) { pos.push(x, y, z); nrm.push(0, 1, 0); uv.push(u, y); }
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.5, 0), 1.2);
+  return g;
+}
+
+const GRASS_VERTEX = /* glsl */ `
+vec3 transformed = position;
+{
+  float t = position.y;
+  mat3 M = mat3(instanceMatrix);
+  float s = length(M[0]);
+  vec3 iw = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+  // wind: the tips lean to the slow gust field the crowns sway to (one wind over grass and trees), with a
+  // finer phase per tuft and a quick flutter on top; the bend grows with the square of the height and is
+  // applied in world space (the tufts are yawed at random) so the whole field leans one way
+  float phase = iw.x * 0.13 + iw.z * 0.17;
+  float gust = sin(uTime * 1.3 + phase) * 0.6 + sin(uTime * 2.7 + phase * 1.9) * 0.4;
+  float flutter = sin(uTime * 6.3 + iw.x * 0.9 + iw.z * 1.1 + aGrass.y * 20.0);
+  vec3 dW = vec3(gust * 0.22 + flutter * 0.05, 0.0, cos(uTime * 1.1 + phase) * 0.13 + flutter * 0.03) * (t * t * uWind);
+  vec3 dL = (transpose(M) * dW) / max(s, 1e-4);
+  transformed += dL;
+  // the tip comes down a little as it leans
+  transformed.y -= 0.5 * length(dL.xz) * t;
+  vGrassUv = vec2((uv.x + aGrass.x) / ${GRASS_TILES}.0, uv.y);
+  vGrassFade = 1.0 - smoothstep(${GRASS_RADIUS - 15}.0, ${GRASS_RADIUS}.0, length(cameraPosition - iw));
+}
+`;
+const GRASS_FRAG = /* glsl */ `
+#include <color_fragment>
+{
+  vec4 g = texture2D(uGrass, vGrassUv);
+  float a = smoothstep(0.35, 0.65, g.a) * vGrassFade;
+  if (a < 0.2) discard;
+  diffuseColor.a = a;
+  // the blade's own shading: the base of the tuft stands in its own shade, the tips catch the light
+  diffuseColor.rgb *= 0.5 + 0.75 * g.r;
+}
+`;
+function grassMaterial(tex: THREE.Texture, time: THREE.IUniform<number>, wind: THREE.IUniform<number>): THREE.MeshStandardMaterial {
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, alphaToCoverage: true, side: THREE.DoubleSide });
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uTime = time;
+    shader.uniforms.uWind = wind;
+    shader.uniforms.uGrass = { value: tex };
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uWind;\nattribute vec2 aGrass;\nvarying vec2 vGrassUv;\nvarying float vGrassFade;')
+      .replace('#include <begin_vertex>', GRASS_VERTEX);
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uGrass;\nvarying vec2 vGrassUv;\nvarying float vGrassFade;')
+      .replace('#include <color_fragment>', GRASS_FRAG)
+      // both faces of a blade are lit as its upper side (the flipped back-face normal made every blade seen
+      // from behind a dark stroke)
+      .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n#ifdef DOUBLE_SIDED\nnormal *= faceDirection;\n#endif');
+    balanceGroundIbl(shader);
+  };
+  mat.customProgramCacheKey = () => 'veg-grass-v1';
+  return mat;
+}
+
+/** The tufts of one GRASS_CHUNK square, generated on demand and cached while the camera is near. */
+interface GrassChunk { n: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array; box: THREE.Box3; stamp: number }
+
+/** Grass near the camera: tufts on a jittered lattice over the lawns, parks, golf course, wetland prairie
+ *  and the upper beach (dune grass) within GRASS_RADIUS, generated per chunk from the map (zone, height,
+ *  slope, the building occupancy) with the species, height and colour of the ground they stand on, drawn
+ *  in one instanced draw with a wind bend, culled by chunk, and skipped altogether when the camera is too
+ *  high for any ground to lie within reach. */
+class GrassField {
+  readonly mesh: THREE.InstancedMesh;
+  private readonly extras: THREE.InstancedBufferAttribute;
+  private readonly chunks = new Map<number, GrassChunk>();
+  private frame = 0;
+  private readonly _m = new THREE.Matrix4();
+  private readonly _q = new THREE.Quaternion();
+  private readonly _q2 = new THREE.Quaternion();
+  private readonly _up = new THREE.Vector3();
+  private readonly _p = new THREE.Vector3();
+  private readonly _s = new THREE.Vector3();
+  private readonly _c = new THREE.Color();
+
+  constructor(private readonly map: WorldMap, private readonly occupied: (x: number, z: number) => boolean, material: THREE.Material) {
+    const geo = grassGeometry();
+    const mesh = new THREE.InstancedMesh(geo, material, GRASS_MAX);
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(GRASS_MAX * 3), 3);
+    mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+    this.extras = new THREE.InstancedBufferAttribute(new Float32Array(GRASS_MAX * 2), 2);
+    this.extras.setUsage(THREE.DynamicDrawUsage);
+    geo.setAttribute('aGrass', this.extras);
+    mesh.frustumCulled = false;
+    mesh.matrixAutoUpdate = false;
+    mesh.receiveShadow = true;
+    mesh.castShadow = false;
+    mesh.count = 0;
+    mesh.visible = false;
+    mesh.name = 'grass';
+    mesh.layers.set(LAYER_CAMERA);
+    this.mesh = mesh;
+  }
+
+  /** Fill the mesh with the chunks in reach and in view of the camera. */
+  update(cam: THREE.Vector3, cull: ViewCull): void {
+    const mesh = this.mesh;
+    this.frame++;
+    const ground = this.map.heightAt(cam.x, cam.z);
+    if (cam.y - ground > GRASS_RADIUS + 12) { mesh.count = 0; mesh.visible = false; return; }
+    const C = GRASS_CHUNK, R = GRASS_RADIUS;
+    const matrices = mesh.instanceMatrix.array as Float32Array;
+    const colors = mesh.instanceColor!.array as Float32Array;
+    const extras = this.extras.array as Float32Array;
+    let n = 0;
+    const cx0 = Math.floor((cam.x - R) / C), cx1 = Math.floor((cam.x + R) / C);
+    const cz0 = Math.floor((cam.z - R) / C), cz1 = Math.floor((cam.z + R) / C);
+    for (let cz = cz0; cz <= cz1; cz++) {
+      for (let cx = cx0; cx <= cx1; cx++) {
+        const mx = (cx + 0.5) * C - cam.x, mz = (cz + 0.5) * C - cam.z;
+        if (mx * mx + mz * mz > (R + C * 0.71) * (R + C * 0.71)) continue;
+        const key = (cx + 32768) * 65536 + (cz + 32768);
+        let chunk = this.chunks.get(key);
+        if (!chunk) { chunk = this.build(cx, cz); this.chunks.set(key, chunk); }
+        chunk.stamp = this.frame;
+        if (chunk.n === 0 || n + chunk.n > GRASS_MAX || !cull.boxInView(chunk.box)) continue;
+        matrices.set(chunk.matrices, n * 16);
+        colors.set(chunk.colors, n * 3);
+        extras.set(chunk.extras, n * 2);
+        n += chunk.n;
+      }
+    }
+    // chunks the camera has left are dropped (they are cheap to rebuild)
+    if (this.chunks.size > 96) for (const [k, c] of this.chunks) if (c.stamp !== this.frame) this.chunks.delete(k);
+    mesh.count = n;
+    mesh.visible = n > 0;
+    if (n > 0) {
+      mesh.instanceMatrix.clearUpdateRanges(); mesh.instanceMatrix.addUpdateRange(0, n * 16); mesh.instanceMatrix.needsUpdate = true;
+      mesh.instanceColor!.clearUpdateRanges(); mesh.instanceColor!.addUpdateRange(0, n * 3); mesh.instanceColor!.needsUpdate = true;
+      this.extras.clearUpdateRanges(); this.extras.addUpdateRange(0, n * 2); this.extras.needsUpdate = true;
+    }
+  }
+
+  private build(cx: number, cz: number): GrassChunk {
+    const map = this.map, C = GRASS_CHUNK, G = GRASS_SPACING;
+    const per = Math.round(C / G);
+    const mats: number[] = [], cols: number[] = [], ext: number[] = [];
+    const box = new THREE.Box3();
+    let n = 0;
+    for (let j = 0; j < per; j++) {
+      for (let i = 0; i < per; i++) {
+        const gi = cx * per + i, gj = cz * per + j;
+        const x = cx * C + (i + hash2(gi, gj, 1)) * G, z = cz * C + (j + hash2(gi, gj, 2)) * G;
+        const zn = map.zoneAt(x, z);
+        // the ground the tuft grows on: 0 lawn (suburb, park), 1 mown (golf), 2 meadow (wetland prairie,
+        // airport), 3 dune grass (upper beach)
+        let kind: number;
+        if (zn === Zone.PARK || zn === Zone.RES_LOW) kind = 0;
+        else if (zn === Zone.GOLF) kind = 1;
+        else if (zn === Zone.WETLAND_FLAT || zn === Zone.AIRPORT) kind = 2;
+        else if (zn === Zone.BEACH) kind = 3;
+        else continue;
+        const y = map.heightAt(x, z);
+        if (y < 0.3 || this.occupied(x, z)) continue;
+        const h4 = hash2(gi, gj, 4), h5 = hash2(gi, gj, 5), h6 = hash2(gi, gj, 6);
+        // density: lawns in patches (worn and lush), the prairie nearly solid, the dune grass only on the
+        // upper beach where the sand ramps up, in the patches the ground shader draws it
+        const patch = 0.5 + 0.5 * perlin2(x / 9 + 3.1, z / 9 - 7.7);
+        let p: number, hMin: number, hMax: number, tile: number;
+        if (kind === 0) { p = 0.35 + 0.55 * patch; hMin = 0.2; hMax = 0.42; tile = h6 < 0.8 ? 0 : 1; }
+        else if (kind === 1) { p = 0.5; hMin = 0.12; hMax = 0.2; tile = 0; }
+        else if (kind === 2) { p = 0.8; hMin = 0.35; hMax = 0.8; tile = 1; }
+        else {
+          const dune = smoothstep(0.95, 1.5, y) * smoothstep(0.45, 0.65, 0.5 + 0.5 * perlin2(x / 20 + 4.0, z / 20 + 4.0));
+          if (dune <= 0.05) continue;
+          p = 0.7 * dune; hMin = 0.45; hMax = 0.95; tile = 2;
+        }
+        if (h4 >= p) continue;
+        const h = hMin + (hMax - hMin) * h5 * h5;
+        // stand on the local ground plane (finite differences of the height field), yawed at random
+        const nx = (map.heightAt(x - 1, z) - map.heightAt(x + 1, z)) * 0.5, nz = (map.heightAt(x, z - 1) - map.heightAt(x, z + 1)) * 0.5;
+        this._up.set(nx, 1, nz).normalize();
+        this._q.setFromUnitVectors(_yAxis, this._up);
+        this._q2.setFromAxisAngle(_yAxis, hash2(gi, gj, 3) * Math.PI * 2);
+        this._q.multiply(this._q2);
+        this._m.compose(this._p.set(x, y - 0.04, z), this._q, this._s.set(h, h, h));
+        this._m.toArray(mats, n * 16);
+        // colour (linear): the ground's own lawn / dry grass mix (openGround in the terrain shader), the
+        // golf course's greener turf, the prairie's tan-green, the dune grass khaki
+        const c = this._c;
+        if (kind === 0) c.setRGB(0.19, 0.33, 0.11).lerp(_dryGrass, smoothstep(0.35, 0.75, 0.5 + 0.5 * perlin2(x / 14 - 2.0, z / 14 + 5.0)));
+        else if (kind === 1) c.setRGB(0.22, 0.46, 0.12);
+        else if (kind === 2) c.setRGB(0.36, 0.38, 0.16);
+        else c.setRGB(0.42, 0.42, 0.2);
+        c.multiplyScalar(0.85 + 0.3 * hash2(gi, gj, 7));
+        cols.push(c.r, c.g, c.b);
+        ext.push(tile, hash2(gi, gj, 8));
+        box.expandByPoint(this._p);
+        n++;
+      }
+    }
+    box.min.y -= 0.2; box.max.y += 1.2; box.min.x -= 0.5; box.max.x += 0.5; box.min.z -= 0.5; box.max.z += 0.5;
+    return { n, matrices: new Float32Array(mats), colors: new Float32Array(cols), extras: new Float32Array(ext), box, stamp: 0 };
+  }
+}
+const _yAxis = new THREE.Vector3(0, 1, 0);
+const _dryGrass = new THREE.Color(0.44, 0.4, 0.21);
+
 export class Vegetation {
   readonly group = new THREE.Group();
   readonly materials: THREE.MeshStandardMaterial[] = [];
@@ -1420,12 +1784,16 @@ export class Vegetation {
   readonly cameraPalms: THREE.InstancedMesh;
   readonly mirrorPalms: THREE.InstancedMesh;
   private readonly palmBatch: InstanceBatch<CellSource>;
+  /** the palms of the cells inside PALM_HI_DISTANCE, drawn with the finned frond geometry */
+  private readonly palmHiBatch: InstanceBatch<CellSource>;
   private readonly palmMirrorBatch: InstanceBatch<CellSource>;
   /** the crowns of the near tiles' cells in view, one draw per tessellation level (chosen per cell by distance) */
   private readonly nearBatch: InstanceBatch<CellSource>;
   private readonly hiBatch: InstanceBatch<CellSource>;
   private readonly ultraBatch: InstanceBatch<CellSource>;
   private readonly crownBatches: InstanceBatch<CellSource>[];
+  /** the grass tufts within GRASS_RADIUS of the camera */
+  private readonly grass: GrassField;
 
   constructor(map: WorldMap, occupied: (x: number, z: number) => boolean) {
     const rng = new Rng('vegetation');
@@ -1438,11 +1806,15 @@ export class Vegetation {
     const canopyMean = new THREE.Vector3();
     const cardMat = cardMaterial(atlas, canopyMean);
     const cardDepth = cardDepthMaterial(atlas);
-    this.materials.push(crownMat, palmMat, cardMat);
+    const grassMat = grassMaterial(grassTexture(rng.fork('grass')), this.uTime, this.uWind);
+    this.materials.push(crownMat, palmMat, cardMat, grassMat);
+    this.grass = new GrassField(map, occupied, grassMat);
+    this.group.add(this.grass.mesh);
     const crownGeo = crownGeometry(0);
     const crownGeoHi = crownGeometry(1);
     const crownGeoUltra = crownGeometry(2);
     const palmGeo = palmGeometry();
+    const palmGeoHi = palmGeometry(true);
     const cardGeo = cardGeometry();
     this.cameraBatch = new InstanceBatch(CAMERA_CARDS, cardGeo, cardMat, CARD_EXTRAS, true, cardDepth);
     this.cameraCards = this.cameraBatch.mesh;
@@ -1467,11 +1839,14 @@ export class Vegetation {
     this.cameraPalms = this.palmBatch.mesh;
     this.cameraPalms.layers.set(LAYER_CAMERA);
     this.cameraPalms.name = 'palms';
+    this.palmHiBatch = new InstanceBatch<CellSource>(HI_PALMS, palmGeoHi, palmMat, CARD_EXTRAS, true);
+    this.palmHiBatch.mesh.layers.set(LAYER_CAMERA);
+    this.palmHiBatch.mesh.name = 'palms-hi';
     this.palmMirrorBatch = new InstanceBatch<CellSource>(MIRROR_PALMS, palmGeo, palmMat, CARD_EXTRAS, true);
     this.mirrorPalms = this.palmMirrorBatch.mesh;
     this.mirrorPalms.layers.set(LAYER_MIRROR);
     this.mirrorPalms.name = 'palms-mirror';
-    this.group.add(this.cameraPalms, this.mirrorPalms);
+    this.group.add(this.cameraPalms, this.palmHiBatch.mesh, this.mirrorPalms);
 
     const plants: Plant[] = [];
     /** the understory (cards only), kept apart so it never enters the crown / palm tiles */
@@ -1496,7 +1871,9 @@ export class Vegetation {
       if (arche === 0 || arche === 1 || arche === 2 || arche === 6 || arche === 7) { canopySum.x += tint.r; canopySum.y += tint.g; canopySum.z += tint.b; canopyN++; }
       // broadleaf crowns run from the spreading, ficus-like (0.58) to the tall-domed (1.05)
       const squash = arche === 2 ? prng.range(0.5, 0.7) : arche === 3 ? prng.range(0.55, 0.8) : arche === 5 ? prng.range(0.32, 0.45) : arche === 6 ? prng.range(0.5, 0.72) : arche === 1 ? prng.range(0.95, 1.25) : arche === 7 ? prng.range(1.3, 1.7) : prng.range(0.58, 1.05);
-      const trunk = arche === 2 ? prng.range(0.15, 0.3) : arche === 3 || arche === 5 ? 0.02 : arche === 6 ? prng.range(0.08, 0.2) : arche === 1 ? prng.range(0.7, 1.05) : arche === 7 ? prng.range(0.6, 1.0) : prng.range(0.45, 0.75);
+      // a spreading, ficus-like broadleaf crown sits on a short trunk (the shader gives it a stout one), a
+      // domed crown on a longer one: the two ends of the squash range read as different species
+      const trunk = arche === 2 ? prng.range(0.15, 0.3) : arche === 3 || arche === 5 ? 0.02 : arche === 6 ? prng.range(0.08, 0.2) : arche === 1 ? prng.range(0.7, 1.05) : arche === 7 ? prng.range(0.6, 1.0) : THREE.MathUtils.lerp(0.36, 0.72, (squash - 0.58) / 0.47) + prng.range(-0.06, 0.06);
       const seed = prng.next();
       const variant = prng.int(0, VARIANTS - 1);
       // plants are sized by their height in metres (clamped to the species' range): the instance scale is
@@ -1850,8 +2227,8 @@ export class Vegetation {
   }
 
   /** Instances drawn from each batch this frame (for the bench and budget checks). */
-  stats(): { near: number; hi: number; ultra: number; palms: number; mirrorPalms: number; cards: number; mirrorCards: number } {
-    return { near: this.nearBatch.mesh.count, hi: this.hiBatch.mesh.count, ultra: this.ultraBatch.mesh.count, palms: this.palmBatch.mesh.count, mirrorPalms: this.palmMirrorBatch.mesh.count, cards: this.cameraBatch.mesh.count, mirrorCards: this.mirrorBatch.mesh.count };
+  stats(): { near: number; hi: number; ultra: number; palms: number; hiPalms: number; mirrorPalms: number; cards: number; mirrorCards: number; grass: number } {
+    return { near: this.nearBatch.mesh.count, hi: this.hiBatch.mesh.count, ultra: this.ultraBatch.mesh.count, palms: this.palmBatch.mesh.count, hiPalms: this.palmHiBatch.mesh.count, mirrorPalms: this.palmMirrorBatch.mesh.count, cards: this.cameraBatch.mesh.count, mirrorCards: this.mirrorBatch.mesh.count, grass: this.grass.mesh.count };
   }
 
   private static cells(t: Tile): VegCells {
@@ -1879,6 +2256,7 @@ export class Vegetation {
     // the cards are the better representation; the camera height comes from the view frustum's apex
     const camY = frustumApex(cull.viewFrustum, _apex, camX, camZ).y;
     const cam = camPos ?? _apex;
+    this.grass.update(cam, cull);
     for (const t of tiles) t.d = Math.max(0, Math.sqrt((t.lodCenter.x - camX) ** 2 + (t.lodCenter.z - camZ) ** 2 + (t.lodCenter.y - camY) ** 2) - t.lodR);
     // in-place insertion sort by distance: the order barely changes between frames, so this is
     // linear and allocation-free (the budget below is spent nearest-first)
@@ -1959,14 +2337,18 @@ export class Vegetation {
             for (let i = 0; i < cells.length; i++) {
               const c = cells[i];
               const count = cull.boxInView(c.box) ? c.count : 0;
-              const far = c.box.distanceToPoint(cam) >= PALM_NEAR_DISTANCE;
+              const d = c.box.distanceToPoint(cam);
+              const far = d >= PALM_NEAR_DISTANCE;
               // a card cell the card batch cannot take falls back to the 3D palms
               const asCards = far && this.cameraBatch.set(vc.cards[i], count);
               if (!far) this.cameraBatch.set(vc.cards[i], 0);
-              if (!this.palmBatch.set(c, asCards ? 0 : count)) batchedPalms = false;
+              // the nearest cells draw the finned fronds (a full finned batch falls back to the strip palms)
+              const hi = !asCards && d < PALM_HI_DISTANCE && this.palmHiBatch.set(c, count);
+              if (!hi) this.palmHiBatch.set(c, 0);
+              if (!this.palmBatch.set(c, asCards || hi ? 0 : count)) batchedPalms = false;
             }
           }
-          if (!batchedPalms) { for (const c of cells) this.palmBatch.set(c, 0); for (const c of vc.cards) this.cameraBatch.set(c, 0); nearCardCells = false; }
+          if (!batchedPalms) { for (const c of cells) { this.palmBatch.set(c, 0); this.palmHiBatch.set(c, 0); } for (const c of vc.cards) this.cameraBatch.set(c, 0); nearCardCells = false; }
           t.palmCells = batchedPalms;
         }
         if (t.palmMirrorCells) { for (const c of t.cells!.near) this.palmMirrorBatch.set(c, 0); t.palmMirrorCells = false; }
@@ -2027,6 +2409,7 @@ export class Vegetation {
     this.cameraBatch.commit();
     this.mirrorBatch.commit();
     this.palmBatch.commit();
+    this.palmHiBatch.commit();
     this.palmMirrorBatch.commit();
     for (const b of this.crownBatches) b.commit();
   }
