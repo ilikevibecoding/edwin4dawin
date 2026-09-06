@@ -168,17 +168,19 @@ export class Game {
     this.registerLit(this.terrain.material);
     this.terrain.group.name = 'terrain';
     this.scene.add(this.terrain.group);
-    this.water = new Water(this.textures, this.wakes.texture, this.wakes.nearTexture);
+    this.water = new Water(this.textures, this.wakes.texture, this.wakes.nearTexture, this.wakes.heightTexture, this.wakes.heightTexel);
     this.registerLit(this.water.material);
+    this.registerLit(this.water.patchMaterial);
     this.water.mesh.name = 'water';
-    this.scene.add(this.water.mesh);
+    this.water.patch.name = 'water-near';
+    this.scene.add(this.water.mesh, this.water.patch);
     // planar reflection pass (after installCascadeRouting: it wraps the routed shadow render). The mirror image
     // only needs what is close enough to survive the roughness streaking: beyond the reflection range the
     // terrain clipmap rings, building tiles and prop chunks are left out (the water there mirrors the
     // environment sky, which is what a streak that long carries anyway).
     const reflRange = REFLECTION_RANGE[this.params.quality];
     this.reflection = new PlanarReflection(this.renderer, this.atmos, REFLECTION_SCALE[this.params.quality], reflRange);
-    this.reflection.exclude(this.water.mesh, this.sky.dome);
+    this.reflection.exclude(this.water.mesh, this.water.patch, this.sky.dome);
     this.reflection.excludeChildrenWhen(this.terrain.group, (ring) => boundsRadius(ring) > reflRange * 1.2);
     this.water.attachReflection(this.reflection.uniforms);
 
@@ -404,6 +406,8 @@ export class Game {
     this.passCalls0 = info.calls; this.passTriangles0 = info.triangles;
     this.wakes.render(this.renderer, cx, cz, planePos.x, planePos.z);
     mark('wake');
+    // the displaced water patch around the aircraft only while it is low enough for its hull waves to exist
+    this.water.setPatchActive(airHeight < 45 && this.map.heightAt(planePos.x, planePos.z) < 0.05);
     // after the wake maps are placed: the water samples them at this frame's centres
     this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size, this.wakes.nearCenter, this.wakes.nearSize);
     this.sky.render(this.renderer, cam, this.post.width, this.post.height);

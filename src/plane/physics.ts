@@ -34,6 +34,7 @@ const G = 9.81;
 
 type StationKind = 'bow' | 'step' | 'stern' | 'plane' | 'wheel' | 'structure';
 interface Station { p: THREE.Vector3; kind: StationKind; }
+export interface FloatState { bow: number; step: number; stern: number; vy: number; surfaceY: number; }
 
 /**
  * Rigid-body flight model of a DHC-2-class floatplane (~2.3 t): lift/drag/side force with a stall break,
@@ -105,8 +106,24 @@ export class FlightModel {
   /** height of the datum above the surface when resting on the floats / on the wheels */
   static readonly FLOAT_REST_Y = 1.96;
   static readonly WHEEL_REST_Y = 2.57;
+  /**
+   * Per float (0 port, 1 starboard): immersion depth (m, negative when clear) of the bow, step and stern keel
+   * points, the vertical speed of the step (m/s, negative sinking), and the water surface elevation under the
+   * float. Read by the effects (touchdown splash, spray height) and the hull shader (wet band).
+   */
+  readonly floats: FloatState[] = [{ bow: -1, step: -1, stern: -1, vy: 0, surfaceY: 0 }, { bow: -1, step: -1, stern: -1, vy: 0, surfaceY: 0 }];
+  /** wave time of the water shader (uWaveTime): set every frame by the owner, advanced through the substeps */
+  waveTime = 0;
 
-  constructor(private heightAt: (x: number, z: number) => number) {}
+  /**
+   * @param heightAt terrain height (m); water where it is at or below 0
+   * @param waveAt elevation of the water surface above the still level (m) at a spot and wave time: the same wave
+   *   sets the water shader draws (world/waves.ts), so the floats ride the crests it renders
+   */
+  constructor(private heightAt: (x: number, z: number) => number, private waveAt: (x: number, z: number, t: number) => number = () => 0) {}
+
+  /** elevation of the water surface (m) at a spot, at the current wave time */
+  surfaceAt(x: number, z: number): number { return this.waveAt(x, z, this.waveTime); }
 
   reset(x: number, y: number, z: number, headingRad: number, speed: number): void {
     this.position.set(x, y, z);
@@ -254,15 +271,31 @@ export class FlightModel {
     const q = this.quaternion;
     const pitchNow = Math.asin(clamp(2 * (q.x * q.y + q.w * q.z), -1, 1)); // elevation of body +X
     this.contactUp = 0;
+    this.waveTime += dt;
+    // the wave elevation under each float (one sample per float per substep: the crests the floats ride are
+    // metres long, so the three keel points of a 5.7 m hull see the same swell with a small pitch from the bow
+    // to stern difference sampled at the bow and stern stations)
+    const keelDir = new THREE.Vector3(0, 0, 1).applyQuaternion(this.quaternion);
+    keelDir.y = 0; keelDir.normalize();
     for (const st of this.stations) {
       const cp = st.p;
       cpWorld.copy(cp).applyQuaternion(this.quaternion).add(this.position);
       const ground = this.heightAt(cpWorld.x, cpWorld.z);
       const isWater = ground <= 0.05;
-      const surface = isWater ? 0 : ground;
-      const depth = surface - cpWorld.y;
-      if (depth <= 0) continue;
       const isWheel = st.kind === 'wheel', isStructure = st.kind === 'structure', isFloat = !isWheel && !isStructure;
+      const surface = isWater ? (isFloat ? this.waveAt(cpWorld.x, cpWorld.z, this.waveTime) : 0) : ground;
+      const depth = surface - cpWorld.y;
+      if (isWater && isFloat && st.kind !== 'plane') {
+        const fs = this.floats[cp.z > 0 ? 1 : 0];
+        if (st.kind === 'bow') fs.bow = depth; else if (st.kind === 'stern') fs.stern = depth;
+        else {
+          fs.step = depth;
+          vPoint.copy(this.omega).applyQuaternion(this.quaternion).cross(this.tmpV.copy(cpWorld).sub(this.position)).add(this.velocity);
+          fs.vy = vPoint.y;
+          fs.surfaceY = surface;
+        }
+      }
+      if (depth <= 0) continue;
       if (isWater && isWheel) continue;            // wheels do nothing in water
       if (!isWater && isFloat && this.gearDown) continue; // on land the wheels carry the load
       anyContact = true;
@@ -281,10 +314,15 @@ export class FlightModel {
         const wet = Math.min(depth / 0.1, 1);
         if (st.kind === 'plane') {
           // planing lift ~ rho_w V^2 x wetted area x trim, so the aircraft rides higher as speed builds (forebody
-          // ~12 cm immersed at 20 m/s, ~6 cm at 26 m/s); the velocity term is water-impact / added-mass damping
-          // (about zeta 0.5 against the planing stiffness) so a firm touchdown does not skip
+          // ~15 cm immersed at 20 m/s, ~8 cm at 26 m/s); the wetted area grows with the immersion down to the
+          // chine flare (0.5 m), so a touchdown drives the forebody well past its running depth before the lift
+          // arrests it. The velocity term is water-impact / added-mass damping, about zeta 0.15 against the planing
+          // stiffness: a soft touchdown (~1.5 m/s) drives the steps ~10 cm under and rebounds onto the step in one
+          // swing, a firm one (3 m/s) drives them ~35 cm under, skips clear for ~0.4 s and settles on the second
+          // touch, as a floatplane does (250 N s/m per m/s gave zeta 0.5 and glued the aircraft to the surface
+          // whatever the sink rate; 40 / 80 rebounded but never quite cleared the water)
           const trim = clamp(0.5 + 3.0 * pitchNow, 0.25, 1.3);
-          fy = (40 * vh * vh * Math.min(depth / 0.35, 1) * trim - 250 * vh * wet * vPoint.y) * planing;
+          fy = (55 * vh * vh * Math.min(depth / 0.5, 1) * trim - 55 * vh * wet * vPoint.y) * planing;
           fh = 0;
         } else {
           wetStations++;
@@ -299,12 +337,21 @@ export class FlightModel {
           const fade = isStern ? 1 - 0.9 * planing : isBow ? 1 - 0.6 * planing : 1 - 0.3 * planing;
           // deck awash: the flared hull resists being driven under (keeps a nose-over from submarining)
           fy = K * Math.min(immersion, 0.9) * fade + 30000 * Math.max(depth - 0.45, 0) ** 2;
-          // heave damping 5500 N s/m per station (zeta ~0.65 for the 1.3 Hz heave mode; 1800 gave 0.37 and a
-          // visible wallow after every touchdown), fading with immersion so a barely-wet stern does not damp
-          fy -= 5500 * wet * (1 - 0.5 * planing) * vPoint.y;
+          // heave damping 2400 N s/m per station: zeta ~0.28 for the 1.3 Hz heave mode, so a touchdown drives the
+          // floats visibly deeper than their waterline, they rebound and settle in two or three swings over ~2.5 s
+          // like a hull in water (5500, zeta 0.65, killed every overshoot and the aircraft looked glued to a plane;
+          // 1800 wallowed for longer than a real hull does); fading with immersion so a barely-wet stern does not damp
+          fy -= 2400 * wet * (1 - 0.5 * planing) * vPoint.y;
           // hydrodynamic drag: hump drag before planing (~60% of static thrust at 12 m/s), then mostly spray and
           // skin friction; the linear term is wave-making at taxi speed and coasts the aircraft to rest at idle
           fh = -(4.5 * vh * vh * (1 - 0.85 * planing) + 30 * vh) * Math.min(depth / 0.3, 1);
+          // keel / chine side force: the V-bottom and the water rudders resist sideways flow far more than fore-aft,
+          // so a taxiing aircraft tracks its heading (and a crosswind heels rather than skids it) instead of
+          // drifting like a raft on the isotropic drag above; strongest at the bows and sterns (yaw stiffness)
+          const vSide = vPoint.x * keelDir.x + vPoint.z * keelDir.z;
+          const keel = -(420 * vSide + 90 * Math.abs(vSide) * vSide) * wet * (1 - 0.6 * planing);
+          worldF.set(keelDir.x * keel, 0, keelDir.z * keel);
+          this.applyForce(worldF, cpWorld, dt);
         }
       } else {
         onGround = true;
@@ -426,7 +473,12 @@ export class FlightModel {
       const ground = this.heightAt(this.tmpV.x, this.tmpV.z);
       const isWater = ground <= 0.05;
       if (isWater && st.kind === 'wheel') continue;
-      const depth = (isWater ? 0 : ground) - this.tmpV.y;
+      const surface = isWater ? this.waveAt(this.tmpV.x, this.tmpV.z, this.waveTime) : ground;
+      const depth = surface - this.tmpV.y;
+      if (isWater && st.kind !== 'plane' && st.kind !== 'wheel') {
+        const fs = this.floats[st.p.z > 0 ? 1 : 0];
+        if (st.kind === 'bow') fs.bow = depth; else if (st.kind === 'stern') fs.stern = depth; else { fs.step = depth; fs.vy = 0; fs.surfaceY = surface; }
+      }
       if (depth <= 0) continue;
       if (isWater) onWater = true; else onGround = true;
     }

@@ -9,7 +9,7 @@ import {
   cabinMaps, CHEAT_LINE, DIAL, floatMaps, fuselageMaps, GAUGES, glassDirtTexture, GPS_SCREEN, GpsScreen, INSTRUMENT_ATLAS, instrumentAtlas, LIVERY, OVERHEAD, PANEL, PANEL_UV, panelTexture, propDiscTexture, tailV, wingMaps, wingV,
   type FuselageLayout, type GaugeDef, type UvRect,
 } from './textures';
-import type { FlightTelemetry } from './physics';
+import type { FlightTelemetry, FloatState } from './physics';
 
 /** fuselage skin thickness: the cabin interior is the exterior loft offset inwards by this much */
 const SKIN = 0.05;
@@ -247,6 +247,8 @@ export class PlaneModel {
   readonly floatBowR = new THREE.Vector3(2.6, -2.0, 1.25);
   readonly wingTipL = new THREE.Vector3(-0.04, 1.40, -7.5);
   readonly wingTipR = new THREE.Vector3(-0.04, 1.40, 7.5);
+  /** hull-local y of the wet line on each float: port bow, port stern, starboard bow, starboard stern (setWaterline) */
+  private readonly wetLine = { value: new THREE.Vector4(-2.02, -1.94, -2.02, -1.94) };
   /** pilot's eye: left seat, 0.13 m under the headliner (inner crest 1.13), at the windshield's vertical centre (0.99) */
   readonly cockpitEye = new THREE.Vector3(1.0, 0.93, -0.30);
   readonly exteriorMeshes: THREE.Mesh[] = [];
@@ -375,6 +377,32 @@ export class PlaneModel {
       normalMap: flt.normalMap, normalScale: new THREE.Vector2(0.6, 0.6),
       color: 0xffffff, roughness: 1.0, metalness: 1.0, clearcoat: 0.45, clearcoatRoughness: 0.22, envMapIntensity: 1.0,
     });
+    // Live waterline: the hull below the water (and the film it leaves as it rises) is darker and glossy, from the
+    // immersion the flight model reports per float (setWaterline), so a float driven under at touchdown reads wet
+    // to the deck and a planing float runs with a dry bow; the painted band in the texture is only the scum stain.
+    const wetLine = this.wetLine;
+    floatPaint.onBeforeCompile = (shader) => {
+      shader.uniforms.uWetLine = wetLine;
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nvarying vec3 vHullLocal;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvHullLocal = position;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform vec4 uWetLine;\nvarying vec3 vHullLocal;')
+        .replace('#include <roughnessmap_fragment>', /* glsl */ `
+          #include <roughnessmap_fragment>
+          // wet line (hull-local y) interpolated from the bow (x 2.6) to the stern (x -2.3) of this float
+          float hullU = clamp((2.6 - vHullLocal.x) / 4.9, 0.0, 1.0);
+          vec2 wetEnds = vHullLocal.z > 0.0 ? uWetLine.zw : uWetLine.xy;
+          float wetLineY = mix(wetEnds.x, wetEnds.y, hullU);
+          float hullWet = 1.0 - smoothstep(wetLineY - 0.01, wetLineY + 0.025, vHullLocal.y);
+          // a darker meniscus line where the water meets the paint
+          float hullMeniscus = exp(-pow((vHullLocal.y - wetLineY) * 60.0, 2.0));
+          roughnessFactor = mix(roughnessFactor, 0.10, 0.85 * hullWet);
+          diffuseColor.rgb *= 1.0 - 0.36 * hullWet - 0.2 * hullMeniscus;
+        `)
+        .replace('#include <lights_physical_fragment>', '#include <lights_physical_fragment>\nmaterial.clearcoatRoughness = mix(material.clearcoatRoughness, 0.06, 0.8 * hullWet);\nmaterial.clearcoat = max(material.clearcoat, 0.9 * hullWet);');
+    };
+    floatPaint.customProgramCacheKey = () => 'float-paint-wetline-v1';
     // Thin glass: a faint cool tint at low alpha; the reflection comes from the physically based specular terms and
     // is composited on top with premultiplied blending so it does not depend on the opacity. The Fresnel term also
     // reduces the transmitted background. Front faces only: the outer pane is seen from outside, the inner (flipped)
@@ -1332,6 +1360,27 @@ export class PlaneModel {
    * Animate control surfaces, propeller, lights, cockpit controls and instruments. Inputs in [-1,1], flaps 0..1,
    * rpm 0..1. With `telemetry` the gauges read the live flight state (`throttle` drives the throttle lever).
    */
+  /**
+   * Move the wet line on each float to the immersion the flight model reports (hull-local y at the bow and stern
+   * keel points: bow keel -2.08, stern keel -1.98). The water climbs the stem with the bow wave and stands a little
+   * higher at the transom at displacement speed; when a hull rises (rebound, planing) the film it leaves drains
+   * off at ~0.2 m/s, so a bow that has just lifted clear still glistens for a second and a planing float is dry.
+   */
+  setWaterline(floats: readonly FloatState[], dt: number, speed: number): void {
+    const v = this.wetLine.value;
+    const planingW = THREE.MathUtils.smoothstep(speed, 11, 19);
+    const climbBow = 0.02 + 0.012 * Math.min(speed, 6) + 0.03 * planingW;
+    const climbStern = 0.03 + 0.008 * Math.min(speed, 6) * (1 - planingW);
+    const drain = 0.2 * dt;
+    for (let i = 0; i < 2; i++) {
+      const f = floats[i];
+      const bow = -2.08 + f.bow + climbBow, stern = -1.98 + f.stern + climbStern;
+      const ob = i === 0 ? v.x : v.z, os = i === 0 ? v.y : v.w;
+      const nb = Math.max(bow, ob - drain), ns = Math.max(stern, os - drain);
+      if (i === 0) v.set(nb, ns, v.z, v.w); else v.set(v.x, v.y, nb, ns);
+    }
+  }
+
   animate(pitch: number, roll: number, yaw: number, flaps: number, rpm: number, dt: number, time: number, night: number, gearDown: boolean, telemetry: FlightTelemetry | null = null, throttle = rpm): void {
     this.aileronR.rotation.z = -roll * 0.35;
     this.aileronL.rotation.z = roll * 0.35;

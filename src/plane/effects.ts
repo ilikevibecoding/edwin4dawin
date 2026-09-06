@@ -274,7 +274,11 @@ export class PlaneEffects {
   private readonly tmp2 = new THREE.Vector3();
   private readonly right = new THREE.Vector3();
   private sprayAcc = 0;
+  private tailAcc = 0;
   private exhaustAcc = 0;
+  /** per float: was the step under water last frame, and the time of its last touchdown splash */
+  private readonly wasWet = [false, false];
+  private readonly splashAt = [-10, -10];
 
   constructor(wakes: WakeBatch, scene: THREE.Scene) {
     // float hull: 5.7 m from stern to stem, 0.37 m half-beam at the chine (see model.ts floatSections)
@@ -295,8 +299,46 @@ export class PlaneEffects {
   reset(): void {
     this.wakeL.reset(); this.wakeR.reset(); this.vortexL.reset(); this.vortexR.reset();
     this.spray.clear(); this.exhaust.clear();
-    this.sprayAcc = 0; this.exhaustAcc = 0;
+    this.sprayAcc = 0; this.tailAcc = 0; this.exhaustAcc = 0;
+    this.wasWet[0] = this.wasWet[1] = false;
+    this.splashAt[0] = this.splashAt[1] = -10;
     this.rng = new Rng('plane-effects');
+  }
+
+  /**
+   * Touchdown splash of one float: the hull slaps the water at `sink` m/s and throws a burst of sheets forward
+   * and outward from the stem plus a curtain along the chine, larger and higher the harder it hits; a separate
+   * event from the steady planing spray (which only starts once the float is running on the surface).
+   */
+  private splash(flight: FlightModel, model: PlaneModel, side: number, sink: number, surfaceY: number): void {
+    const q = flight.quaternion, v = flight.velocity;
+    const fwd = flight.forward(this.tmp3);
+    const right = this.right.set(0, 0, 1).applyQuaternion(q);
+    const bow = side > 0 ? model.floatBowR : model.floatBowL;
+    const hard = clamp((sink - 0.8) / 2.2, 0, 1);
+    const n = Math.round(12 + 26 * hard);
+    for (let i = 0; i < n; i++) {
+      const stem = this.rng.next() < 0.45;
+      // stem sheets leave the forward hull, the curtain the chine from the step forward
+      const ax = stem ? 1.9 + this.rng.next() * 1.0 : -0.3 + this.rng.next() * 2.4;
+      const p = this.tmp.copy(bow).setX(ax).setZ(bow.z + side * 0.38).applyQuaternion(q).add(flight.position);
+      const out = stem ? 1.0 + this.rng.next() * 1.6 : 1.6 + this.rng.next() * 2.2;
+      const ahead = stem ? 1.2 + this.rng.next() * 1.8 : (this.rng.next() - 0.3) * 1.0;
+      const up = (stem ? 2.6 : 1.8) + 2.0 * hard + this.rng.next() * (1.4 + 1.5 * hard);
+      const carry = stem ? 0.4 : 0.28;
+      const sheet = this.rng.next() < 0.7;
+      this.spray.emit({
+        x: p.x, y: surfaceY + 0.1, z: p.z,
+        vx: v.x * carry + fwd.x * ahead + right.x * side * out + (this.rng.next() - 0.5) * 0.8,
+        vy: up,
+        vz: v.z * carry + fwd.z * ahead + right.z * side * out + (this.rng.next() - 0.5) * 0.8,
+        life: 0.55 + this.rng.next() * 0.45 + 0.2 * hard, age: 0,
+        size: 1, tile: sheet ? 0 : 1,
+        len: (sheet ? 1.1 + this.rng.next() * 1.2 : 0.9 + this.rng.next() * 0.9) * (1 + 0.5 * hard),
+        wid: (sheet ? 0.6 + this.rng.next() * 0.6 : 0.4 + this.rng.next() * 0.4) * (1 + 0.4 * hard),
+        alpha: 0.45 + 0.3 * this.rng.next() + 0.15 * hard,
+      });
+    }
   }
 
   update(flight: FlightModel, model: PlaneModel, dt: number, time: number, pixelHeight: number): void {
@@ -310,9 +352,21 @@ export class PlaneEffects {
     // grows as they move; the emitter is the stern at displacement speeds and slides to the step once planing
     const planing = smoothstep(11, 19, speed);
     const emitX = lerp(-2.75, -0.35, planing);
-    for (const [trail, stern] of [[this.wakeL, model.floatSternL], [this.wakeR, model.floatSternR]] as const) {
+    const floats = flight.floats;
+    for (const [trail, stern, i] of [[this.wakeL, model.floatSternL, 0], [this.wakeR, model.floatSternR, 1]] as const) {
       const p = this.tmp.copy(stern).setX(emitX).applyQuaternion(q).add(flight.position);
-      trail.update(p.x, p.z, fdx, fdz, time, t.onWater, speed);
+      // the head runs from the emitter to the real bow (x 2.95) wherever the emitter sits on the hull
+      trail.lead = 2.95 - emitX;
+      // this float is in the water when its step or bow keel is under the surface
+      const fs = floats[i];
+      const wet = fs.step > 0 || fs.bow > 0;
+      trail.update(p.x, p.z, fdx, fdz, time, wet, speed);
+      // touchdown: the float comes down onto the surface at more than ~0.8 m/s (a skip lands again the same way)
+      if (wet && !this.wasWet[i] && -fs.vy > 0.8 && time - this.splashAt[i] > 0.35) {
+        this.splashAt[i] = time;
+        this.splash(flight, model, i === 0 ? -1 : 1, -fs.vy, fs.surfaceY);
+      }
+      this.wasWet[i] = wet;
     }
     // spray: the bow wave tears into sheets from about 5 m/s (the hump), then the chines throw a fan of sheets
     // and droplets sideways and aft from the forebody while planing; dies away once the floats are unloaded
@@ -326,6 +380,9 @@ export class PlaneEffects {
         this.sprayAcc -= 1;
         for (const bow of [model.floatBowL, model.floatBowR]) {
           const side = bow.z > 0 ? 1 : -1;
+          const fs = floats[side > 0 ? 1 : 0];
+          // only a float that is actually running in the water throws spray
+          if (fs.step < -0.02 && fs.bow < -0.02) continue;
           // emission station: at the bow in the hump phase, spread over the forebody chine when planing
           const ax = lerp(2.3, 0.4 + this.rng.next() * 1.6, planing);
           const p = this.tmp.copy(bow).setX(ax).setZ(bow.z + side * 0.3).applyQuaternion(q).add(flight.position);
@@ -337,7 +394,7 @@ export class PlaneEffects {
           // sheets are short and wide (a blister of water, not a spike) and translucent; the droplet clusters
           // carry the mist the sheets break into
           this.spray.emit({
-            x: p.x, y: 0.12, z: p.z,
+            x: p.x, y: fs.surfaceY + 0.12, z: p.z,
             vx: v.x * carry + right.x * side * lat + (this.rng.next() - 0.5) * 1.2,
             vy: up,
             vz: v.z * carry + right.z * side * lat + (this.rng.next() - 0.5) * 1.2,
@@ -347,6 +404,34 @@ export class PlaneEffects {
             len: sheet ? 0.7 + this.rng.next() * 0.8 + speed * 0.015 : 0.8 + this.rng.next() * 0.9,
             wid: sheet ? 0.55 + this.rng.next() * 0.5 : 0.35 + this.rng.next() * 0.4,
             alpha: sheet ? 0.3 + 0.25 * this.rng.next() : 0.3 + 0.25 * this.rng.next(),
+          });
+        }
+      }
+    }
+    // rooster tail: on the step the flow leaves the transom clean and closes behind it in a plume of spray a
+    // hull length back, one per float, thrown up and left behind (it hangs nearly still in the water's frame)
+    if (t.onWater && planing > 0.05) {
+      this.tailAcc += 34 * planing * dt;
+      const v = flight.velocity;
+      while (this.tailAcc >= 1) {
+        this.tailAcc -= 1;
+        for (let i = 0; i < 2; i++) {
+          const fs = floats[i];
+          if (fs.step < -0.02) continue;
+          const stern = i === 0 ? model.floatSternL : model.floatSternR;
+          const back = 1.4 + this.rng.next() * 1.8 + 0.06 * speed;
+          const p = this.tmp.copy(stern).setX(-0.35 - back).setZ(stern.z + (this.rng.next() - 0.5) * 0.5).applyQuaternion(q).add(flight.position);
+          const droplet = this.rng.next() < 0.55;
+          this.spray.emit({
+            x: p.x, y: fs.surfaceY + 0.15, z: p.z,
+            vx: v.x * 0.1 + (this.rng.next() - 0.5) * 1.4,
+            vy: (2.2 + this.rng.next() * 2.6) * planing,
+            vz: v.z * 0.1 + (this.rng.next() - 0.5) * 1.4,
+            life: 0.5 + this.rng.next() * 0.4, age: 0,
+            size: 1, tile: droplet ? 1 : 0,
+            len: droplet ? 0.8 + this.rng.next() * 0.9 : 0.9 + this.rng.next() * 0.8,
+            wid: droplet ? 0.35 + this.rng.next() * 0.35 : 0.5 + this.rng.next() * 0.4,
+            alpha: 0.3 + 0.25 * this.rng.next(),
           });
         }
       }

@@ -3,16 +3,20 @@ import { PlaneModel } from './model';
 import { FlightModel, type FlightInputs } from './physics';
 import { PlaneEffects } from './effects';
 import type { WakeBatch } from '../render/wakes';
+import { WaveField } from '../world/waves';
 
 /** The player's seaplane: model + flight model + effects glued together. */
 export class Aircraft {
   readonly model = new PlaneModel();
   readonly flight: FlightModel;
   readonly effects: PlaneEffects;
+  /** the water surface's wave sets on the CPU: the floats ride the same crests the water shader draws */
+  readonly waves: WaveField;
   readonly inputs: FlightInputs = { throttle: 0, pitch: 0, roll: 0, yaw: 0, flaps: 0, brake: false };
 
   constructor(heightAt: (x: number, z: number) => number, scene: THREE.Scene, wakes: WakeBatch) {
-    this.flight = new FlightModel(heightAt);
+    this.waves = new WaveField(heightAt);
+    this.flight = new FlightModel(heightAt, (x, z, t) => this.waves.heightAt(x, z, t));
     this.effects = new PlaneEffects(wakes, scene);
     scene.add(this.model.root);
   }
@@ -45,10 +49,15 @@ export class Aircraft {
   update(dt: number, time: number, night: number, wind: THREE.Vector3, turbulence: number, pixelHeight: number, simulate: boolean): void {
     this.flight.wind.copy(wind);
     this.flight.turbulence = turbulence;
+    const ws = Math.hypot(wind.x, wind.z);
+    if (ws > 0.01) this.waves.setWind(wind.x, wind.z, ws);
+    // the substeps integrate the wave clock from the start of this frame to `time`
+    this.flight.waveTime = time - (simulate ? dt : 0);
     if (simulate) this.flight.step(this.inputs, dt);
     this.syncModel();
     const t = this.flight.telemetry;
     this.model.animate(this.inputs.pitch, this.inputs.roll, this.inputs.yaw, this.inputs.flaps, t.rpm, dt, time, night, t.gearDown, t, this.inputs.throttle);
+    this.model.setWaterline(this.flight.floats, dt, t.groundSpeed);
     this.effects.update(this.flight, this.model, dt, time, pixelHeight);
   }
 }

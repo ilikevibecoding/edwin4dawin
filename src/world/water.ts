@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { createReflectionUniforms, type ReflectionUniforms } from '../render/reflection';
+import { WAKE_HEIGHT_SCALE } from '../render/wakes';
 import { WORLD_SIZE } from './map';
 import type { MapTextures } from './terrain';
 
@@ -29,10 +30,73 @@ const WATER_DEBUG = 0;
 const WATER_VERT_PARS = /* glsl */ `
 uniform vec3 uWaterOffset;
 varying vec3 vWorldPos;
+#ifdef WATER_PATCH
+uniform sampler2D uHeightTex;
+uniform float uWorldSize;
+uniform float uWaveTime;
+uniform float uWindSpeed;
+uniform vec2 uWindDir;
+uniform sampler2D uWakeHeightTex;
+uniform vec4 uWakeNearRegion;
+${GLSL_NOISE}
+float terrainHeightV(vec2 wp) { return texture2D(uHeightTex, (wp + vec2(uWorldSize * 0.5)) / uWorldSize).r; }
+vec2 rot2v(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
+float noisedVal(vec2 p) {
+  vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float a = hash12(i), b = hash12(i + vec2(1.0, 0.0)), c = hash12(i + vec2(0.0, 1.0)), d = hash12(i + vec2(1.0, 1.0));
+  return a + (b - a) * u.x + (c - a) * u.y + (a - b - c + d) * u.x * u.y;
+}
+float fbm2oV(vec2 p) { return 0.667 * vnoise(p) + 0.333 * vnoise(mat2(1.6, 1.2, -1.2, 1.6) * p + 5.2); }
+// zero-mean height of one sharpened set (the fragment stage differentiates the same profile: swellSlope)
+float setH(vec2 p, vec2 dir, float L, float A, float t, float phase, float warp) {
+  float k = 6.2831853 / L; float w = sqrt(9.81 * k);
+  float s = sin(k * dot(p, dir) + w * t + phase + warp);
+  return 0.7 * A * (s + 0.5 * s * s - 0.25);
+}
+// Elevation of the three wind-sea sets the fragment stage shades (same shelter, group and phase-warp terms).
+// world/waves.ts is the CPU copy of this: the flight model floats on the same field, so the hulls rise and fall
+// with the crests drawn under them. The swell sets and the noise chop layers are left out, see waves.ts.
+float waveHeight(vec2 wp, float t) {
+  vec2 wd = uWindDir, wc = vec2(-wd.y, wd.x);
+  float depth = max(-terrainHeightV(wp), 0.0);
+  float sway = vnoise(wp * 0.0019 + 4.1) - 0.5;
+  vec2 wj = normalize(wd + wc * (0.5 * sway));
+  float reach = 0.8 + 0.4 * (vnoise(wp * 0.0031 + 9.3) - 0.5);
+  float o1 = 1.0 - smoothstep(-2.5, 0.2, terrainHeightV(wp + wj * (90.0 * reach)));
+  float o2 = 1.0 - smoothstep(-2.5, 0.2, terrainHeightV(wp + wj * (240.0 * reach)));
+  float o3 = 1.0 - smoothstep(-3.0, 0.2, terrainHeightV(wp + wj * (520.0 * reach)));
+  float open = (o1 + o2 + o3) * 0.3333;
+  float chopF = mix(0.2, 1.0, open) * smoothstep(0.0, 1.2, depth);
+  float wind = clamp(uWindSpeed / 6.0, 0.35, 1.8);
+  vec2 gpw = wp + wd * (5.0 * t);
+  float windG = wind * (0.74 + 0.52 * fbm2oV(vec2(dot(gpw, wd) / 640.0, dot(gpw, wc) / 270.0) + 3.7));
+  float h = 0.0;
+  if (chopF > 0.001) {
+    vec2 d0 = rot2v(wd, 0.15); vec2 c0 = vec2(-d0.y, d0.x);
+    float val0 = noisedVal(vec2((dot(wp, d0) + 4.5 * t) * 2.0 / 14.0 + 1.3, dot(wp, c0) / 14.0 + 1.3 * 1.73));
+    float grp = (0.55 + 0.9 * val0) * chopF * windG;
+    float wv = (val0 - 0.5) * 3.0;
+    h += (setH(wp, rot2v(wd, -0.33), 11.6, 0.046, t, 1.0, wv) + setH(wp, rot2v(wd, 0.21), 7.1, 0.058, t, 3.3, wv * 0.7) + setH(wp, rot2v(wd, -0.08), 4.7, 0.038, t, 5.9, wv * 0.5)) * grp;
+  }
+  return h;
+}
+#endif
 `;
 const WATER_VERT_MAIN = /* glsl */ `
-vec3 wp = position + uWaterOffset;
-wp.y = 0.0;
+#ifdef WATER_PATCH
+  // the patch grid spans the near wake region; its vertices crowd toward the centre (the aircraft) where the
+  // hull humps are decimetres across and thin out toward the edge where only the arms and swell remain
+  vec2 pg = sign(position.xz) * pow(abs(position.xz) * 2.0, vec2(1.5)) * 0.5;
+  vec3 wp = vec3(pg.x * uWakeNearRegion.z + uWakeNearRegion.x, 0.0, pg.y * uWakeNearRegion.z + uWakeNearRegion.y);
+  vec2 nuvV = vec2(pg.x + 0.5, 0.5 - pg.y);
+  vec4 hh = texture2D(uWakeHeightTex, nuvV);
+  // the swell displacement fades out toward the patch edge, where it meets the flat main plane
+  float edgeF = 1.0 - smoothstep(0.3, 0.5, max(abs(pg.x), abs(pg.y)));
+  wp.y = (hh.r - hh.g) * ${WAKE_HEIGHT_SCALE.toFixed(2)} + waveHeight(wp.xz, uWaveTime) * edgeF;
+#else
+  vec3 wp = position + uWaterOffset;
+  wp.y = 0.0;
+#endif
 vWorldPos = wp;
 `;
 
@@ -42,7 +106,9 @@ uniform sampler2D uZoneTex; // r: zone id, g: vegetation, b: 128 + 0.5 * signed 
 uniform sampler2D uWakeTex;
 uniform vec4 uWakeRegion; // center.xy, size, unused
 uniform sampler2D uWakeNearTex;   // fine wake map around the aircraft (render/wakes.ts)
-uniform vec4 uWakeNearRegion;
+uniform vec4 uWakeNearRegion;     // center.xy, size, w: 1 while the displaced near patch is drawn over the region
+uniform sampler2D uWakeHeightTex; // signed hull-wave elevation over the near region (R up, G down)
+uniform float uWakeHeightTexel;   // metres per texel of it
 uniform float uWorldSize;
 uniform float uWaveTime;
 uniform float uWindSpeed;
@@ -415,22 +481,37 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   // ---- wakes: r = foam, gb = normal perturbation, a = coverage
   // the wake map is rendered top-down with screen-up = north (-Z), so v grows toward -Z
   vec2 wuv = vec2(wp.x - uWakeRegion.x, uWakeRegion.y - wp.y) / uWakeRegion.z + 0.5;
-  vec4 wake = vec4(0.0);
-  if (all(greaterThan(wuv, vec2(0.0))) && all(lessThan(wuv, vec2(1.0)))) wake = texture2D(uWakeTex, wuv);
+  vec4 wakeFar = vec4(0.0);
+  if (all(greaterThan(wuv, vec2(0.0))) && all(lessThan(wuv, vec2(1.0)))) wakeFar = texture2D(uWakeTex, wuv);
   // the fine map around the aircraft replaces the coarse one where it is defined (soft edge)
   vec2 nuv = vec2(wp.x - uWakeNearRegion.x, uWakeNearRegion.y - wp.y) / uWakeNearRegion.z + 0.5;
+  vec4 wake = wakeFar;
+  float nearW = 0.0;
   if (all(greaterThan(nuv, vec2(0.0))) && all(lessThan(nuv, vec2(1.0)))) {
+    #ifndef WATER_PATCH
+      // the displaced patch draws the water inside the near region while it is active
+      if (uWakeNearRegion.w > 0.5) discard;
+    #endif
     vec2 ed = min(nuv, 1.0 - nuv);
-    float nearW = smoothstep(0.0, 0.08, min(ed.x, ed.y));
-    wake = mix(wake, texture2D(uWakeNearTex, nuv), nearW);
+    nearW = smoothstep(0.0, 0.08, min(ed.x, ed.y));
+    wake = mix(wakeFar, texture2D(uWakeNearTex, nuv), nearW);
   }
   // the ribbons are alpha-blended over a cleared (black) map, so the stored colour is premultiplied by the
   // coverage: undo that before decoding (a ribbon's flat interior must decode to a flat surface, not to a
   // tilt toward the map's origin that lit the whole ribbon polygon as a pale slab)
   float wa = max(wake.a, 1e-3);
   float wakeFoam = min(wake.r / wa, 1.0) * min(wake.a * 2.5, 1.0);
-  // gb: surface gradient of bow waves, Kelvin arms and stern waves
-  g += (wake.gb / wa - 0.5) * min(wake.a * 4.0, 1.0);
+  // gb of the far map: surface gradient of bow waves, Kelvin arms and stern waves seen from altitude; in the near
+  // region the slope is the finite difference of the real height field the patch is displaced by, so the normal
+  // (reflections, glitter) bends exactly where the surface does
+  float waF = max(wakeFar.a, 1e-3);
+  g += (wakeFar.gb / waF - 0.5) * min(wakeFar.a * 4.0, 1.0) * (1.0 - nearW);
+  if (nearW > 0.0) {
+    vec2 e = vec2(uWakeHeightTexel / uWakeNearRegion.z, 0.0);
+    vec2 hx = texture2D(uWakeHeightTex, nuv + e).rg - texture2D(uWakeHeightTex, nuv - e).rg;
+    vec2 hz = texture2D(uWakeHeightTex, nuv - e.yx).rg - texture2D(uWakeHeightTex, nuv + e.yx).rg;
+    g += vec2(hx.r - hx.g, hz.r - hz.g) * (${WAKE_HEIGHT_SCALE.toFixed(2)} / (2.0 * uWakeHeightTexel)) * nearW;
+  }
   // the churned lane is slick: turbulence has wiped the capillary ripples off it, so it glitters less and
   // reads as the smooth dark road behind a hull rather than as foam alone
   // (kept moderate: from a low camera a fully glassy lane mirrored the horizon sky as a bright haze band that
@@ -637,17 +718,25 @@ gl_FragColor = vec4( outgoingLight, 1.0 );
 export class Water {
   readonly mesh: THREE.Mesh;
   readonly material: THREE.MeshStandardMaterial;
+  /**
+   * Dense grid over the near wake region (the water around the aircraft), displaced by the hull height field
+   * and the swell so the surface really humps at the stems, hollows behind the step and lifts the floats with
+   * the waves; the main plane leaves that region to it. Same shading, one more draw.
+   */
+  readonly patch: THREE.Mesh;
+  readonly patchMaterial: THREE.MeshStandardMaterial;
   private readonly offset = { value: new THREE.Vector3() };
   readonly uniforms: Record<string, THREE.IUniform>;
 
-  constructor(textures: MapTextures, wakeTex: THREE.Texture, wakeNearTex: THREE.Texture = wakeTex) {
-    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.0 });
+  constructor(textures: MapTextures, wakeTex: THREE.Texture, wakeNearTex: THREE.Texture = wakeTex, wakeHeightTex: THREE.Texture = wakeTex, wakeHeightTexel = 0.125) {
     this.uniforms = {
       uHeightTex: { value: textures.height },
       uZoneTex: { value: textures.zone },
       uWakeTex: { value: wakeTex },
       uWakeRegion: { value: new THREE.Vector4(0, 0, 3000, 0) },
       uWakeNearTex: { value: wakeNearTex },
+      uWakeHeightTex: { value: wakeHeightTex },
+      uWakeHeightTexel: { value: wakeHeightTexel },
       // an empty region until update() places the near map
       uWakeNearRegion: { value: new THREE.Vector4(1e9, 1e9, 1, 0) },
       uWaterOffset: this.offset,
@@ -659,12 +748,40 @@ export class Water {
       // inactive placeholders until attachReflection() shares the reflection pass's uniforms
       ...createReflectionUniforms(),
     };
+    this.material = this.makeMaterial(false);
+    this.patchMaterial = this.makeMaterial(true);
+
+    // A flat grid reaching past the far clip plane so the horizon is always water; shading is per pixel
+    // and a modest tessellation keeps the interpolation of the huge quad numerically friendly.
+    const size = 130000;
+    const geo = new THREE.PlaneGeometry(size, size, 64, 64);
+    geo.rotateX(-Math.PI / 2);
+    this.mesh = new THREE.Mesh(geo, this.material);
+    this.mesh.frustumCulled = false;
+    this.mesh.receiveShadow = true;
+    this.mesh.matrixAutoUpdate = false;
+    this.mesh.renderOrder = 5;
+    // the near patch: a unit grid the vertex shader maps onto the near region (192^2 cells, crowded toward
+    // the centre: ~9 cm between vertices around the floats, ~45 cm at the edge)
+    const pgeo = new THREE.PlaneGeometry(1, 1, 192, 192);
+    pgeo.rotateX(-Math.PI / 2);
+    this.patch = new THREE.Mesh(pgeo, this.patchMaterial);
+    this.patch.frustumCulled = false;
+    this.patch.receiveShadow = true;
+    this.patch.matrixAutoUpdate = false;
+    this.patch.renderOrder = 5;
+    this.patch.visible = false;
+  }
+
+  private makeMaterial(patch: boolean): THREE.MeshStandardMaterial {
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.3, metalness: 0.0 });
     const uniforms = this.uniforms;
     const prev = mat.onBeforeCompile;
     mat.onBeforeCompile = (shader, renderer) => {
       prev?.(shader, renderer);
       Object.assign(shader.uniforms, uniforms);
-      shader.vertexShader = shader.vertexShader
+      const define = patch ? '#define WATER_PATCH\n' : '';
+      shader.vertexShader = define + shader.vertexShader
         .replace('#include <common>', `#include <common>\n${WATER_VERT_PARS}`)
         .replace('#include <begin_vertex>', `${WATER_VERT_MAIN}\nvec3 transformed = wp;`);
       // the CSM patches ShaderChunk.lights_fragment_begin (where the shadow lookups are) and three expands the
@@ -672,7 +789,7 @@ export class Water {
       const lights = THREE.ShaderChunk.lights_fragment_begin.replace(
         /getShadow\( directionalShadowMap\[ i \], directionalLightShadow\.shadowMapSize, directionalLightShadow\.shadowIntensity, directionalLightShadow\.shadowBias, directionalLightShadow\.shadowRadius, vDirectionalShadowCoord\[ i \] \)/g,
         'waterShadow( directionalShadowMap[ i ], directionalLightShadow, vDirectionalShadowCoord[ i ], directionalShadowMatrix[ i ], wShadowOff )');
-      shader.fragmentShader = (WATER_DEBUG ? `#define WATER_DEBUG ${WATER_DEBUG}\n` : '') + shader.fragmentShader
+      shader.fragmentShader = define + (WATER_DEBUG ? `#define WATER_DEBUG ${WATER_DEBUG}\n` : '') + shader.fragmentShader
         .replace('#include <common>', `#include <common>\n${WATER_FRAG_PARS}`)
         .replace('#include <shadowmap_pars_fragment>', `#include <shadowmap_pars_fragment>\n${WATER_SHADOW_FN}`)
         .replace('#include <normal_fragment_begin>', `#include <normal_fragment_begin>\n${WATER_FRAG_SURFACE}`)
@@ -680,19 +797,14 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v6-${WATER_DEBUG}`;
-    this.material = mat;
+    mat.customProgramCacheKey = () => `water-v7-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    return mat;
+  }
 
-    // A flat grid reaching past the far clip plane so the horizon is always water; shading is per pixel
-    // and a modest tessellation keeps the interpolation of the huge quad numerically friendly.
-    const size = 130000;
-    const geo = new THREE.PlaneGeometry(size, size, 64, 64);
-    geo.rotateX(-Math.PI / 2);
-    this.mesh = new THREE.Mesh(geo, mat);
-    this.mesh.frustumCulled = false;
-    this.mesh.receiveShadow = true;
-    this.mesh.matrixAutoUpdate = false;
-    this.mesh.renderOrder = 5;
+  /** Draw the displaced near patch (the aircraft is on or near the water) or leave the region to the flat plane. */
+  setPatchActive(on: boolean): void {
+    this.patch.visible = on;
+    this.uniforms.uWakeNearRegion.value.w = on ? 1 : 0;
   }
 
   /** Sample the planar reflection pass. The pass mutates its uniform values in place, so sharing the value
@@ -708,6 +820,6 @@ export class Water {
     this.uniforms.uWindDir.value.copy(windDir);
     this.uniforms.uSunDirW.value.copy(sunDir);
     this.uniforms.uWakeRegion.value.set(wakeCenter.x, wakeCenter.y, wakeSize, 0);
-    if (wakeNearCenter && wakeNearSize > 0) this.uniforms.uWakeNearRegion.value.set(wakeNearCenter.x, wakeNearCenter.y, wakeNearSize, 0);
+    if (wakeNearCenter && wakeNearSize > 0) { const r = this.uniforms.uWakeNearRegion.value as THREE.Vector4; r.set(wakeNearCenter.x, wakeNearCenter.y, wakeNearSize, r.w); }
   }
 }

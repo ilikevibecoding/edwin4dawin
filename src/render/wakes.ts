@@ -15,6 +15,8 @@ const TAN_KELVIN = 0.3536;
 export class WakeMap {
   readonly rt: THREE.WebGLRenderTarget;
   readonly nearRt: THREE.WebGLRenderTarget;
+  /** signed surface elevation of the hull wave systems over the near region (R up, G down, metres / HEIGHT_SCALE) */
+  readonly heightRt: THREE.WebGLRenderTarget;
   readonly scene = new THREE.Scene();
   readonly camera: THREE.OrthographicCamera;
   readonly nearCamera: THREE.OrthographicCamera;
@@ -24,14 +26,16 @@ export class WakeMap {
   readonly nearSize: number;
   private readonly texel: number;
   private readonly nearTexel: number;
+  readonly heightTexel: number;
   /** every wake ribbon (boats, floats) in one draw; trails are created with it as their target */
   readonly batch = new WakeBatch();
 
-  constructor(resolution = 1024, size = 3200, nearResolution = 1024, nearSize = 64) {
+  constructor(resolution = 1024, size = 3200, nearResolution = 1024, nearSize = 64, heightResolution = 512) {
     this.size = size;
     this.nearSize = nearSize;
     this.texel = size / resolution;
     this.nearTexel = nearSize / nearResolution;
+    this.heightTexel = nearSize / heightResolution;
     const make = (res: number, mips: boolean) => {
       const rt = new THREE.WebGLRenderTarget(res, res, { type: THREE.UnsignedByteType, depthBuffer: false, minFilter: mips ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: mips });
       rt.texture.wrapS = rt.texture.wrapT = THREE.ClampToEdgeWrapping;
@@ -41,6 +45,9 @@ export class WakeMap {
     // line without mipmaps); the near map is only ever magnified
     this.rt = make(resolution, true);
     this.nearRt = make(nearResolution, false);
+    // the height field is smooth at the decimetre scale (bow hump, hollow, rooster tail): a quarter of the near
+    // map's texels, sampled by the water patch's vertices and finite-differenced for its normal
+    this.heightRt = make(heightResolution, false);
     this.camera = new THREE.OrthographicCamera(-size / 2, size / 2, size / 2, -size / 2, 1, 400);
     this.camera.up.set(0, 0, -1);
     this.nearCamera = new THREE.OrthographicCamera(-nearSize / 2, nearSize / 2, nearSize / 2, -nearSize / 2, 1, 400);
@@ -50,8 +57,10 @@ export class WakeMap {
 
   get texture(): THREE.Texture { return this.rt.texture; }
   get nearTexture(): THREE.Texture { return this.nearRt.texture; }
+  get heightTexture(): THREE.Texture { return this.heightRt.texture; }
 
-  /** Render both maps: the far one around the camera, the near one around (nearX, nearZ), the aircraft. */
+  /** Render the maps: the far one around the camera, the near foam/slope map and the height field around
+   *  (nearX, nearZ), the aircraft. Three draws of the one batch. */
   render(renderer: THREE.WebGLRenderer, camX: number, camZ: number, nearX = camX, nearZ = camZ): void {
     this.batch.upload();
     this.center.set(Math.round(camX / 8) * 8, Math.round(camZ / 8) * 8);
@@ -63,6 +72,10 @@ export class WakeMap {
     renderer.setClearColor(0x008080, 0);
     this.pass(renderer, this.rt, this.camera, this.center, this.texel);
     this.pass(renderer, this.nearRt, this.nearCamera, this.nearCenter, nt);
+    renderer.setClearColor(0x000000, 0);
+    this.batch.useHeight(true);
+    this.pass(renderer, this.heightRt, this.nearCamera, this.nearCenter, this.heightTexel);
+    this.batch.useHeight(false);
     renderer.setClearColor(prevClear, prevAlpha);
     renderer.setRenderTarget(prev);
   }
@@ -260,6 +273,117 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
   blending: THREE.NormalBlending,
 });
 
+/** metres of surface elevation per unit of the height map's channels */
+export const WAKE_HEIGHT_SCALE = 1.0;
+
+/**
+ * Height pass of the same ribbons: the signed elevation (m) of the water around a hull, summed over hulls
+ * (additive blend, R up / G down so bytes carry both signs). Over the hull: the bow wave as a hump wrapping
+ * the stem and sweeping aft, the hollow along the sides behind it and the stern rise at displacement speed;
+ * at planing speed the hump dies, the water dips along the chines from the forebody to the step, separates
+ * off the step into a hollow and closes behind the transom in a rooster tail. Behind the transom at
+ * displacement speed: the transverse stern waves and the crests of the Kelvin arms. The water shader's near
+ * patch displaces its vertices by this field and takes its normal from it, so the surface really bends around
+ * the floats instead of only being shaded as if it did. Only rendered for the near region.
+ */
+export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
+  vertexShader: WAKE_MATERIAL.vertexShader,
+  fragmentShader: /* glsl */ `
+    varying vec4 vA; varying vec4 vGeom; varying vec2 vWp; flat varying vec4 vTrail;
+    uniform float uTexel;
+    const float TANK = ${TAN_KELVIN};
+    const float HSCALE = ${WAKE_HEIGHT_SCALE.toFixed(2)};
+    float hullHalfBeam(float ax, float w0, float len) {
+      float u = clamp(ax / len, 0.0, 1.0);
+      float bow = 1.0 - pow(1.0 - smoothstep(0.0, 0.55, u), 1.6);
+      float stern = 1.0 - 0.35 * smoothstep(0.7, 1.0, u);
+      return w0 * bow * stern;
+    }
+    float g1(float x, float w) { return exp(-x * x / (w * w)); }
+    void main() {
+      float age = vA.x, side = vA.y, fade = vA.z, speed = vA.w;
+      float d = vGeom.x, hw = max(vGeom.y, 1e-3);
+      float w0 = vTrail.y, lead = vTrail.z;
+      float laneLen = vTrail.w * clamp(speed / 8.0, 0.5, 1.6);
+      float ay = abs(side * hw);
+      float life = 1.0 - age;
+      float spd = smoothstep(0.6, 5.0, speed);
+      float planing = smoothstep(11.0, 19.0, speed);
+      float hullScale = 0.6 + 0.4 * min(w0, 2.0);
+      // bow wave height: grows with the square of the speed up to hull speed (a float pushes a 20 cm hump at
+      // taxi speed, 35 cm at the hump; the stagnation rise v^2/2g is 70 cm at 7 kt, so this is the sober end),
+      // gone once the hull planes with its bow clear
+      float sp = min(speed, 7.0);
+      float Hb = min(0.04 + 0.016 * sp * sp, 0.5) * hullScale * (1.0 - planing) * smoothstep(0.4, 2.0, speed);
+      // one continuous field over hull and wake (a branch at the transom left a step in the surface that the
+      // patch mesh drew as a jagged shelf across the stern): every term is windowed smoothly in d
+      float ax = lead + d;                 // metres behind the bow (negative ahead of the stem, > lead behind the transom)
+      float u = ax / lead;
+      float uc = clamp(u, 0.0, 1.0);
+      float hb = hullHalfBeam(ax, w0, lead);
+      float insideX = step(0.0, ax) * step(ax, lead);
+      float inside = insideX * max(hb - ay, 0.0);
+      float sideDist = ax < 0.0 ? length(vec2(ax, ay)) : (ax > lead ? length(vec2(ax - lead, max(ay - hb, 0.0))) : max(ay - hb, 0.0));
+      float dp = max(d, 0.0);
+      float h = 0.0;
+      // ---- bow hump: a crest standing off the stem, wrapping it and sweeping aft along the hull, losing
+      //      height as it spreads; past midships it hands over to the Kelvin arm it becomes
+      float bowLift = (0.1 + 0.06 * sp) * hullScale;
+      float c = bowLift + max(ax, 0.0) * 0.27 + hb;
+      float cx = ax < 0.0 ? sqrt(ax * ax + ay * ay) : ay;
+      float dc = ax < 0.0 ? cx - bowLift : ay - c;
+      float bowHW = (0.28 + 0.06 * sp) * hullScale + 0.15 * w0;
+      // tallest where it wraps the stem; the arms sweeping aft lose most of it within the forebody (the two
+      // floats' inner arms meet between the hulls, and their sum must not out-top the stems)
+      float bowDecay = 1.0 - 0.85 * smoothstep(0.0, lead * 0.6, ax);
+      float bowReach = 1.0 - smoothstep(lead * 0.55, lead * 1.1, ax);
+      h += Hb * bowDecay * g1(dc, bowHW) * bowReach;
+      // ---- Kelvin arm crests, fading in over the after-body where the bow crest fades out
+      float armLen = laneLen * 2.5;
+      float armY = w0 * 0.8 + (d + lead) * TANK;
+      float armW = max(0.45 + 0.3 * w0 + 0.012 * dp, 0.3);
+      float armEnv = (1.0 - smoothstep(armLen * 0.25, armLen * 0.7, dp)) * smoothstep(lead * 0.45, lead * 1.0, ax);
+      h += (0.012 + 0.03 * spd) * hullScale * g1(ay - armY, armW) * armEnv * smoothstep(0.8, 2.0, speed) * (1.0 - 0.5 * planing);
+      // ---- hollow along the sides behind the bow crest (displacement speed)
+      float sideW = 0.6 * hullScale + 0.3 * w0;
+      h += -0.45 * Hb * smoothstep(0.15, 0.45, uc) * (1.0 - smoothstep(0.7, 1.0, uc)) * g1(sideDist, sideW);
+      // ---- transverse stern waves: the first crest builds along the after-body and stands at the transom,
+      //      then the train runs down the lane (wavelength 2 pi v^2 / g) and decays
+      float laneHalf = w0 * 1.05 + 0.45 * sqrt(dp * max(w0, 0.15));
+      float across = 1.0 - smoothstep(laneHalf * 1.2, laneHalf * 3.0, ay);
+      float lam = max(6.2832 * speed * speed / 9.81, 0.5);
+      float twA = 0.045 * hullScale * spd * (1.0 - 0.8 * planing);
+      h += twA * exp(-dp / (laneLen * 0.6)) * across * cos(6.2832 * d / lam) * smoothstep(-0.5 * lam, 0.0, d);
+      h += 0.2 * Hb * g1(ax - lead, 0.6 * hullScale) * g1(sideDist, 0.5) * (1.0 - planing);
+      // ---- planing: the water is thrown out and down along the chines from the forebody to the step, leaves
+      //      the step as a hollow and closes behind the transom in a rooster tail a hull length back
+      float hl = clamp(0.1 * speed, 0.8, 3.0);
+      float lane = 1.0 - smoothstep(w0 * 0.9, w0 * 2.0, ay);
+      float chine = -0.12 * hullScale * smoothstep(0.35, 0.6, u) * (1.0 - smoothstep(1.0, 1.1, u)) * g1(sideDist, 0.5);
+      float hollow = -0.22 * hullScale * smoothstep(0.0, 0.5, d) * (1.0 - smoothstep(hl * 0.6, hl * 1.1, d)) * lane;
+      float tailH = 0.30 * hullScale * smoothstep(13.0, 22.0, speed);
+      float tail = tailH * (g1(d - hl - 1.0, 1.0) * (1.0 - smoothstep(w0 * 0.6, w0 * 1.6, ay)) - 0.35 * g1(d - hl - 3.2, 1.4) * lane + 0.15 * g1(d - hl - 5.6, 1.8) * lane);
+      h += planing * (chine + hollow + tail);
+      // under the hull the surface is hidden; keep it from rising through the deck at the stem
+      h = mix(h, min(h, 0.0), smoothstep(0.0, 0.12, inside));
+      float edge = 1.0 - smoothstep(0.85, 1.0, abs(side));
+      h *= life * edge * fade / HSCALE;
+      gl_FragColor = vec4(max(h, 0.0), max(-h, 0.0), 0.0, 1.0);
+    }
+  `,
+  uniforms: { uTexel: { value: 0.125 } },
+  transparent: true,
+  depthTest: false,
+  depthWrite: false,
+  side: THREE.DoubleSide,
+  blending: THREE.CustomBlending,
+  blendEquation: THREE.AddEquation,
+  blendSrc: THREE.OneFactor,
+  blendDst: THREE.OneFactor,
+  blendSrcAlpha: THREE.OneFactor,
+  blendDstAlpha: THREE.OneFactor,
+});
+
 /** Contrail ribbon drawn in the main scene: soft white, fading with age, slightly hazy. */
 export const CONTRAIL_MATERIAL = new THREE.ShaderMaterial({
   // drawn in the main scene: must write/compare log depth like every other material there
@@ -309,16 +433,20 @@ export class WakeBatch {
   private geom = new Float32Array(0);
   private trail = new Float32Array(0);
   private index = new Uint32Array(0);
+  private readonly heightMaterial: THREE.ShaderMaterial;
 
   constructor() {
     this.material = WAKE_MATERIAL.clone();
+    this.heightMaterial = WAKE_HEIGHT_MATERIAL.clone();
     this.geo.setDrawRange(0, 0);
     this.mesh = new THREE.Mesh(this.geo, this.material);
     this.mesh.frustumCulled = false;
     this.mesh.matrixAutoUpdate = false;
   }
 
-  setTexel(t: number): void { this.material.uniforms.uTexel.value = t; }
+  setTexel(t: number): void { this.material.uniforms.uTexel.value = t; this.heightMaterial.uniforms.uTexel.value = t; }
+  /** draw the batch as the signed height field (additive) instead of foam / slope */
+  useHeight(on: boolean): void { this.mesh.material = on ? this.heightMaterial : this.material; }
 
   add(trail: WakeTrail): void {
     this.trails.push(trail);
@@ -392,8 +520,10 @@ export class WakeTrail {
   strength: number;
   /** hull half-beam (wakes) or ribbon half-width (contrails), m */
   readonly halfWidth: number;
-  /** transom-to-bow length of the hull (wakes) */
-  readonly lead: number;
+  /** transom-to-bow length of the hull (wakes): the length of the live head ahead of the emitter, so an emitter
+   *  that moves along the hull (a float's emission point slides from the stern to the step as it planes) keeps
+   *  the head's bow at the real bow */
+  lead: number;
   /** distance over which the turbulent lane dies out */
   readonly laneLen: number;
   readonly positions: Float32Array;
@@ -573,7 +703,12 @@ export class WakeTrail {
         this.writeVertexPair(count++, x, z, dx, dz, w, 0, 0, speed, 0);
       }
       const bowMargin = 0.6 + 0.15 * speed + 0.4 * this.halfWidth;
-      this.writeVertexPair(count, x, z, dx, dz, w, 0, 1, speed, 0);
+      // a point laid this frame sits a few centimetres behind the transom pair: give the transom pair the same
+      // direction so the sliver quad between them cannot fold over (the height pass adds, so a fold doubled
+      // the elevation in a bright line across the stern)
+      const close = last && !bridge && Math.hypot(x - last.x, z - last.z) < 0.5 ? last : null;
+      const tdx = close ? close.dx : dx, tdz = close ? close.dz : dz;
+      this.writeVertexPair(count, x, z, tdx, tdz, w, 0, 1, speed, 0);
       const hx = x + dx * (this.lead + bowMargin), hz = z + dz * (this.lead + bowMargin);
       this.writeVertexPair(count + 1, hx, hz, dx, dz, w, 0, 1, speed, -(this.lead + bowMargin));
       count += 2;
