@@ -35,8 +35,9 @@ import {
 export const chamfer = (zr) =>
   pw(
     [
-      [0, 1.3],
-      [105, 2.2],
+      [0, 1.5],
+      [105, 2.8],
+      [232, 2.8],
       [272, 1.6],
     ],
     zr,
@@ -342,21 +343,27 @@ export function nacelle({ x, r }, lod) {
   const domeSecs = (
     lod === 0
       ? [
-          [0, 0.3],
-          [0.25, 0.62],
-          [0.55, 0.86],
-          [0.8, 0.96],
+          [0, 0.22],
+          [0.12, 0.5],
+          [0.3, 0.74],
+          [0.55, 0.9],
+          [0.8, 0.98],
           [1, 1],
         ]
       : [
-          [0, 0.35],
-          [0.45, 0.8],
+          [0, 0.3],
+          [0.3, 0.72],
           [1, 1],
         ]
   ).map(([f, k]) => ({ z: Z(N.z0 + f * N.domeLen), pts: circle(r * k, seg) }));
   const dome = loftProfile(domeSecs, { capEnd: false }).hull;
   dome.translate(x, y, 0);
   hull.push(dome);
+  // dark hub disc in the middle of the dome (the show's darker centre cap)
+  if (lod < 2)
+    dark.push(
+      cylZ(r * 0.14, r * 0.22, 0.8, seg).translate(x, y, Z(N.z0 - 0.2)),
+    );
   // body: open cylinder from the dome to the nozzle step
   const bodyLen = N.nozzleZ - zBody0;
   hull.push(

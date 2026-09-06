@@ -244,11 +244,12 @@ export function wallDetail(ctx, bayZ) {
     // gun bays: a dark recess with a lighter frame and twin barrels reaching out of the wall
     for (const zr of bayZ) {
       const T = wallTop(zr);
-      const yc = T * 0.5;
+      const yc = T * 0.52;
       const xw = wallXAt(zr, yc);
-      const h = Math.min(4.6, T * 0.5);
+      const h = Math.min(6, T * 0.6);
+      const hl = 6.2;
       add(
-        mbox(s, xw - 0.4, xw + 0.14, yc - h / 2, yc + h / 2, zr - 5, zr + 5),
+        mbox(s, xw - 0.5, xw + 0.14, yc - h / 2, yc + h / 2, zr - hl, zr + hl),
         "dark",
         {
           color: PAL.recess,
@@ -256,52 +257,52 @@ export function wallDetail(ctx, bayZ) {
         },
       );
       if (mid) {
-        add(
-          mbox(
-            s,
-            xw,
-            xw + 0.55,
-            yc + h / 2,
-            yc + h / 2 + 0.7,
-            zr - 5.6,
-            zr + 5.6,
-          ),
-          "hull",
-          {
-            color: PAL.wall,
-            texel: 1 / 4,
-          },
-        );
-        add(
-          mbox(
-            s,
-            xw,
-            xw + 0.55,
-            yc - h / 2 - 0.7,
-            yc - h / 2,
-            zr - 5.6,
-            zr + 5.6,
-          ),
-          "hull",
-          {
-            color: PAL.wall,
-            texel: 1 / 4,
-          },
-        );
-        for (const dz of [-1.3, 1.3]) {
-          const g = new THREE.CylinderGeometry(0.42, 0.5, 6.5, 6);
+        // raised frame round the bay (sill and lintel plus end posts)
+        for (const [y0, y1] of [
+          [yc + h / 2, yc + h / 2 + 0.8],
+          [yc - h / 2 - 0.8, yc - h / 2],
+        ])
+          add(
+            mbox(s, xw, xw + 0.6, y0, y1, zr - hl - 0.7, zr + hl + 0.7),
+            "hull",
+            {
+              color: PAL.wall,
+              texel: 1 / 4,
+            },
+          );
+        for (const dz of [-hl - 0.7, hl])
+          add(
+            mbox(
+              s,
+              xw,
+              xw + 0.6,
+              yc - h / 2,
+              yc + h / 2,
+              zr + dz,
+              zr + dz + 0.7,
+            ),
+            "hull",
+            { color: PAL.wall, texel: 1 / 4 },
+          );
+        // twin turbolaser on a trunnion block inside the bay, barrels reaching well out of the wall
+        for (const dz of [-1.5, 1.5]) {
+          const g = new THREE.CylinderGeometry(0.5, 0.62, 10, 6);
           g.rotateZ(Math.PI / 2);
-          g.translate(s * (xw + 2.6), yc, Z(zr + dz));
+          g.translate(s * (xw + 4.2), yc + 0.2, Z(zr + dz));
           add(g, "dark", { color: PAL.dark, texel: 1 / 3 });
+          const collar = new THREE.CylinderGeometry(0.9, 0.9, 2.2, 6);
+          collar.rotateZ(Math.PI / 2);
+          collar.translate(s * (xw + 1.6), yc + 0.2, Z(zr + dz));
+          add(collar, "dark", { color: PAL.dark, texel: 1 / 3 });
         }
         const mant = mbox(
           s,
-          xw - 0.2,
-          xw + 1.4,
-          yc - 1.3,
-          yc + 1.3,
-          zr - 2.4,
-          zr + 2.4,
+          xw - 0.3,
+          xw + 1.2,
+          yc - 1.6,
+          yc + 1.8,
+          zr - 2.8,
+          zr + 2.8,
         );
         add(mant, "dark", { color: PAL.dark, texel: 1 / 3 });
       }
@@ -309,7 +310,7 @@ export function wallDetail(ctx, bayZ) {
     if (!fine) continue;
     // window rows between the bays: two rows of small lit panes
     for (let zr = 14; zr < 226; zr += 5.5) {
-      if (bayZ.some((b) => Math.abs(zr - b) < 8)) continue;
+      if (bayZ.some((b) => Math.abs(zr - b) < 9.5)) continue;
       const T = wallTop(zr);
       if (T < 6) continue;
       for (const f of [0.7, 0.4]) {
@@ -330,7 +331,7 @@ export function wallDetail(ctx, bayZ) {
     }
     // vertical panel grooves on the wall every ~11 m and a horizontal groove at 30 % height
     for (let zr = 20; zr < 228; zr += 11) {
-      if (bayZ.some((b) => Math.abs(zr - b) < 6.5)) continue;
+      if (bayZ.some((b) => Math.abs(zr - b) < 8)) continue;
       const T = wallTop(zr);
       const yc = T * 0.5;
       add(
@@ -413,7 +414,7 @@ export function bellyDetail(ctx) {
         const len = Math.hypot(x1 - x0, z1 - z0);
         const y0 = bellyY(z0, x0);
         const y1 = bellyY(z1, x1);
-        const g = new THREE.BoxGeometry(3.4, 0.2, len);
+        const g = new THREE.BoxGeometry(5, 0.2, len);
         // lie on the belly: tilt across the V, pitch along the keel's fall, then swing to the plan
         g.rotateZ(
           s * Math.atan2(bellyY(zc, xc + 1.5) - bellyY(zc, xc - 1.5), 3),
@@ -528,27 +529,66 @@ export function tipDetail(ctx) {
 // -------------------------------------------------------------------------------------------------
 // nose block and trench: forward tubes, a dark vent slit, trench-floor machinery
 // -------------------------------------------------------------------------------------------------
+// forward ordnance tubes: two pairs lying on the deck either side of the spine's red wedge
+export const TUBES = { x: 11.2, dx: 2.1, y: 12.4, z0: 98, z1: 118 };
 export function noseDetail(ctx) {
-  const { add, fine, mid } = ctx;
+  const { add, fine, mid, addZones, loft } = ctx;
   if (!mid) return;
+  // the spine's terminus: a bold red arrowhead wedge rising above the spine (the show's red block at the
+  // head of the trench), lofted from a point at the deck's apex to the spine's width
+  const wedge = [
+    [104, 0.4, 0.5],
+    [109, 3.6, 2.2],
+    [117, 6.4, 4.2],
+    [125, 7.6, 4.2],
+    [129, 7.6, 3.2],
+  ].map(([zr, hw, up]) => {
+    const base = deckC(zr) - 0.4;
+    const top = deckC(zr) + up;
+    const ch = Math.min(1.1, hw * 0.3);
+    return {
+      z: Z(zr),
+      pts: [
+        [-hw, base],
+        [hw, base],
+        [hw, top - ch],
+        [hw - ch, top],
+        [-(hw - ch), top],
+        [-hw, top - ch],
+      ],
+    };
+  });
+  addZones(
+    loft(wedge, ["trim", "trim", "trim", "block", "trim", "trim"], "trim"),
+    1 / 8,
+  );
   for (const s of [-1, 1]) {
-    // twin forward ordnance tubes on each side of the centre deck ahead of the spine's wedge, in a
-    // low housing, muzzles reaching forward over the prong tops
-    const yT = wallTop(98) + 1.5;
-    for (const dx of [0, 1.9]) {
-      const x = s * (SLOT_X + 1.6 + dx);
-      add(cylZ(0.55, 0.62, 16, 8).translate(x, yT, Z(94)), "dark", {
-        color: PAL.dark,
-        texel: 1 / 3,
-      });
+    // twin tubes in a low housing on the deck beside the wedge, muzzles reaching forward over the
+    // prong tops
+    for (const dx of [0, TUBES.dx]) {
+      const x = s * (TUBES.x + dx);
+      add(
+        cylZ(0.6, 0.68, TUBES.z1 - TUBES.z0, 8).translate(
+          x,
+          TUBES.y,
+          Z((TUBES.z0 + TUBES.z1) / 2),
+        ),
+        "dark",
+        { color: PAL.dark, texel: 1 / 3 },
+      );
     }
     add(
-      mbox(s, SLOT_X + 0.6, SLOT_X + 5, wallTop(98) + 0.2, yT + 1.2, 92, 104),
+      mbox(
+        s,
+        TUBES.x - 1.2,
+        TUBES.x + TUBES.dx + 1.2,
+        deckHeightAt(112, TUBES.x) - 0.3,
+        TUBES.y + 0.9,
+        106,
+        TUBES.z1 + 1,
+      ),
       "hull",
-      {
-        color: PAL.wall,
-        texel: 1 / 4,
-      },
+      { color: PAL.wall, texel: 1 / 4 },
     );
   }
   if (!fine) return;

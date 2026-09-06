@@ -77,6 +77,7 @@ import {
   bellyDetail,
   tipDetail,
   noseDetail,
+  TUBES,
   wingDetail,
   blockDetail,
 } from "./arquitensDetail.js";
@@ -375,7 +376,18 @@ function buildLod(lod) {
   // -------------------------------------------------------------------------
   // surface detail
   // -------------------------------------------------------------------------
-  const ctx = { add, rand, lod, fine, mid, texel, mainSecs, prongSecs };
+  const ctx = {
+    add,
+    addZones,
+    loft,
+    rand,
+    lod,
+    fine,
+    mid,
+    texel,
+    mainSecs,
+    prongSecs,
+  };
   deckDetail(ctx);
   if (mid) {
     wallDetail(ctx, BAY_Z);
@@ -477,8 +489,11 @@ function buildLod(lod) {
       );
       // fixed broadside bays in the walls and forward tubes beside the nose block
       for (const zr of BAY_Z)
-        fixed([s * (wallX(zr) + 5.8), wallTop(zr) * 0.5, Z(zr)], [s, 0, 0]);
-      fixed([s * (SLOT_X + 2.55), wallTop(98) + 1.5, Z(86)], [0, 0, -1]);
+        fixed(
+          [s * (wallX(zr) + 9.2), wallTop(zr) * 0.52 + 0.2, Z(zr)],
+          [s, 0, 0],
+        );
+      fixed([s * TUBES.x, TUBES.y, Z(TUBES.z0 - 1)], [0, 0, -1]);
     }
   }
   // turret pedestals (hex bases) and prong-shoulder platforms

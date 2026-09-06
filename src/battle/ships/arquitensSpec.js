@@ -158,13 +158,13 @@ export const railH = (zr) =>
   );
 // T-shaped bridge: a narrow boxy neck and the wide 28 m head with a window band across the front and a
 // lipped cap plate (the show's cab reads as a box about 2.3 : 1 wide : tall)
-export const NECK = { z0: 200, z1: 212, halfW: 5, y0: 19.5, y1: 22.5 };
+export const NECK = { z0: 199, z1: 215, halfW: 5.2, y0: 19.5, y1: 22.5 };
 export const HEAD = {
-  z0: 197,
-  z1: 217,
-  halfW: 14,
+  z0: 196,
+  z1: 218,
+  halfW: 15,
   y0: 22.5,
-  y1: 34,
+  y1: 35,
   lip: 0.8,
 };
 // swept delta struts on the lower flank wall from the waist out to the outer nacelles' upper inner
@@ -188,8 +188,8 @@ export const NACELLE = {
   outer: { x: 57.5, r: 12.5 },
   centre: { x: 0, r: 12 },
   nozzleR: 10.5,
-  ringZ: [277, 283.5],
-  domeLen: 10,
+  ringZ: [279, 286.5],
+  domeLen: 12,
   nozzleZ: 316,
 };
 export const BAR = { x: 46, y: -4, halfH: 3.5, z0: 292, z1: 304 };
