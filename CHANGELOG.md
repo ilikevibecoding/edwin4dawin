@@ -3,6 +3,70 @@
 Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served in `window.__build` and in
 `BUILD_ID.txt` next to the deployed `index.html`.
 
+## iter10 — wave 6 builders, master directive (deployed as 6130eae71052-20260906T063811Z)
+- Master directive (GTA-level overhaul): rubric v2 with 30 categories (`bench/rubric.json`; v1 kept as
+  `rubric_v1.json`), hero targets 9.25 / ordinary 8.0 and the merge gate (overall >= 9.0, none < 8.0) reported by
+  `aggregate.py`; critic protocol adds the anti-cheating rule, self-play review and camera/water/aircraft/city test
+  matrices; builder and critic briefs live in `bench/` (push after every commit, reports under `bench/reports/`).
+  Bench `dev` view (`?bench=dev&cam=x,y,z&hdg=&pch=&plane=…`) and `label@query` views in `capture.mjs` so
+  builders pose cameras without editing `views.ts`.
+- Play loop: substeps cover each frame exactly (the fixed 1/60 s loop with a carried remainder alternated 1 and 2
+  physics steps per render frame and read as a buzz on the airframe); propeller blur disc on its own slow pivot so
+  its ghost sectors no longer strobe with the blade RPM; camera sway off by default (V toggles it).
+- Terrain clipmap extended two rings (to +-98 km, past the far plane) so the ground reaches the haze horizon: the
+  far water plane had shown as an arc of blue dashes above the far land in skyline-high.
+- Water interaction phase 2 (wakes loop 3 follow-on): signed hull height map and a displaced 192² near-water patch
+  (bow humps, chine hollows, stern wave, rooster tail bending reflections around the floats), CPU wave field under
+  each float station with retuned heave/planing damping (soft touchdown overshoot ~22 cm, firm 3 m/s skips once),
+  keel side force for taxiing, touchdown splash event and rooster-tail spray, live wet band on the hulls;
+  `water-landing-firm` view.
+- Facade phase 2: far-field sun lobe and per-pane reflectance grain on distant glass, height-bent sky reflection,
+  eight bayfront landmarks (tiara / slot recipes) and a taller core toward the bay, near trim geometry (balconies,
+  ledges, coping, corner columns) within 600 m, parallax rooms in near panes.
+- Wave 6 merges before those: sky/horizon/lighting (far-plane dissolve removes the horizon seam, clear-sky
+  gradient re-tuned, sun disc limb tint), water surface 3 (incommensurate irrationally rotated wave sets with phase
+  warp, capillary set, wind lanes, wave-displaced water shadow), aircraft 5 (per-panel clear coat, painted-aluminium
+  floats, yoke/hands/pilot arms, beacon/strobe/nav lights, cabin glow), wakes 3 (hull-scale bow waves, Kelvin arms,
+  lit instanced spray, near/far wake maps), vegetation 4 (species sized in metres, three crown levels, 13-frond
+  palms, canopy shimmer fix), foliage coverage (authored canopy classes: hammock belt beside the Garza approach,
+  wooded keys, shore and scrub mixes; no lots in canopy cells), facade realism (box-filtered pane grids, twelve
+  styles, wall families, weathering, night masks), bridges 3 (parabolic alignment, column bents, H pylons / tied
+  arches, dense lane-queued deck traffic, moored sailboats, cruise ship).
+- The VM was rebuilt mid-wave-7 (all worktrees and `/tmp` lost; only pushed branches survived): builders now push
+  after every commit and keep evidence in the repo.
+
+## Unreleased — wave 7 (in progress; hourly page at `progress/`)
+- Hourly before/after page for the user (`progress/index.html`, published to gh-pages by
+  `tools/progress-hourly.sh` -> `progress-snapshot.sh` -> `progress-publish.sh`): every hour the integration
+  worktree takes the lead branch plus every pushed builder branch (rerere replays the lead's recorded conflict
+  resolutions; `tools/integration-fixups/*.patch` reconcile semantics across branches, e.g. streets skip highway
+  lamps when `highway.ts` lights the highway), typechecks, builds, and shoots 22 fixed views from one Chrome
+  (`bench/scripts/shots.mjs`; one slot for the batch instead of one per view). Snapshot `h00` is the lead build
+  before the wave; the page pins its data to the gh-pages commit on jsDelivr because the branch URLs stayed stale
+  for hours after purges.
+- Bench `?fly=<s>` runs the view's clip inputs for `s` seconds before the frozen frame (a still of the floats 1 s
+  after touchdown or planing 4 s later; the water-landing stills were all airborne at t = 0).
+- Chrome gate (`tools/chrome-gate.sh`, installed as `/usr/local/bin/google-chrome`): two machine-wide slots for
+  builders, slot 3 reserved for the progress snapshot by process ancestry; `CHROME_SLOTS` is ignored after two
+  builders found it and held a third browser for an hour each.
+- Wave 7a merged into the lead (deployed as 7f95c5ea8c9b-20260906T132622Z): `street` (sidewalks, curbs, signals,
+  crosswalks, lamp plan in `world/streets.ts`), `highway` (guardrails, barriers, gantries, median twin-arm poles in
+  `world/highway.ts`; streets no longer plan highway lamps), `waterrender` (mirrored base follows the dome, wave
+  field), `waterphys` (three wake maps, ditching matrix, continuous hull displacement). The two cross-branch
+  conflicts (`game.ts` props/highway lamps, `water.ts` update signature) are resolved once here so the hourly
+  integration stops re-conflicting. Flight harness 23/23, deterministic. Budget note from the h03 integration:
+  `city_north` 1.54 M and `foliage_park` 1.67 M triangles exceed the 1.5 M view budget (facade near-detail kinds and
+  street kits); the performance pass after wave 7 owns the trim.
+- Progress snapshot typechecks after each builder merge and drops the branch that breaks the build (the `boats`
+  worktree has been mid-refactor and uncommitted since 07:32; its files are backed up on
+  `cursor/boats-wip-backup-8213`).
+- Wave 7b merged into the lead (deployed as bc348b0db7c9-20260906T152637Z): every builder branch tip as of 15:15
+  (highway rounds to junction paint and stop bars; street repaving bands; water rendering rounds 1-7; water physics
+  sheltered-slope split, merged with the group modulation of the unresolved roughness; clouds4 r9d; light3 rounds
+  1-3; facade3 round 10; veg5 round 14; terrain5 round 4; acgeo rounds 3-7). Flight harness 23/23, deterministic;
+  six sanity stills clean. Subagents stopped at 15:10 on an account billing block (unpaid invoice); uncommitted
+  worktree changes were rescued to `cursor/<name>-wip-backup-8213` branches (acgeo, facade3, veg5, boats).
+
 ## iter09 — wave 5 builders (deployed as aa8b21f9f839-20260905T121546Z)
 - Iteration 08 scored (bench/results/iter08/scores.md): no category regressed; aircraft geometry +1.5,
   wakes +1.5, ten categories +1.0; flat at 5.0: vegetation and repetition. Wave 5 targeted those plus
@@ -195,3 +259,7 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 | 6b3d3214497a-20260905T063622Z | d4e414a3391693e4779def304942f3d29904666d | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/d4e414a3391693e4779def304942f3d29904666d/play.html | verified: build id matched, loaded in 17.8 s, water takeoff to 86 m in 30 s, no console errors; 144 draw calls / 0.18 M tris in the water-landing view. Performance loop 2 + vegetation tint |
 | 45d3ba89fc54-20260905T040053Z | a94d74e3d96a3d8d54f274bf1dc6b9c42865909f | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/a94d74e3d96a3d8d54f274bf1dc6b9c42865909f/play.html | verified: build id matched, loaded in 16.9 s, water takeoff to 86 m in 30 s, no console errors; 171 draw calls / 0.59 M tris in the water-landing view. Wave 4 (aircraft 3, shadows, clouds 3) + planar reflections + wake foam fix. A first deploy of this round (1b11b7f0e45c) was replaced after the verifier caught a NaN propeller tip ring |
 | 4642d4630c87-20260904T235001Z | a3c7ba5670942411bf607043d4a14a60dbb8ef81 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/a3c7ba5670942411bf607043d4a14a60dbb8ef81/play.html | verified: build id matched, loaded in 15.5 s, water takeoff to 86 m in 30 s, no console errors; 164 draw calls / 0.49 M tris in the water-landing view. Includes bridges/skyline loop 2, cockpit with live instruments, vegetation loop 2, IBL-hitch and shader warm-up fixes, night exposure, play-feel changes |
+| 6130eae71052-20260906T063811Z | 8b15377fe0b3dd927af87dd6b1e093011e560523 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/8b15377fe0b3dd927af87dd6b1e093011e560523/play.html | verified: build id matched, loaded in 35 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 146 draw calls / 0.22 M tris at the spawn |
+| b366a423870c-20260906T120411Z | 460ace25e1e376c940320201c66b42346dff6111 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/460ace25e1e376c940320201c66b42346dff6111/play.html | verified: build id matched, loaded in 34 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 146 draw calls / 0.22 M tris at the spawn. Lead + aircraft module split (pixel-identical); the wave-7 builder branches are only in the hourly progress integration so far |
+| 7f95c5ea8c9b-20260906T132622Z | 225d58bf12ed3eeea98682847ac98b63d2a2c869 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/225d58bf12ed3eeea98682847ac98b63d2a2c869/play.html | verified: build id matched, loaded in 30.7 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 153 draw calls / 0.23 M tris at the spawn. Lead + wave 7a (streets, highway, water rendering, water physics) |
+| bc348b0db7c9-20260906T152637Z | d3382d59e665cb537c25c38b5d716d6974ed0dd0 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/d3382d59e665cb537c25c38b5d716d6974ed0dd0/play.html | verified: build id matched, loaded in 29.6 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 153 draw calls / 0.25 M tris at the spawn. Lead + wave 7b (all builder branch tips) |

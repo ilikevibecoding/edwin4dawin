@@ -5,6 +5,7 @@
  *   &weather=clear|scattered|cloudy|storm
  *   &quality=low|medium|high|ultra
  *   &freeze=1                  hold simulation time at the view's fixed timestamp
+ *   &fly=1.2                   bench: fly the view's clip inputs for this many seconds before the frozen frame
  *   &dt=1/60                   fixed simulation timestep (seconds) instead of wall-clock
  *   &nohud=1                   hide DOM HUD (for clean frames)
  *   &w=1920&h=1080             force canvas resolution (otherwise window size)
@@ -24,6 +25,8 @@ export interface Params {
   weather: Weather | null;
   quality: Quality;
   freeze: boolean;
+  /** seconds of flight (the view's clip inputs) simulated after setup, before the first frame */
+  fly: number;
   fixedDt: number | null;
   noHud: boolean;
   width: number | null;
@@ -32,7 +35,7 @@ export interface Params {
   grid: boolean;
   debug: boolean;
   debugRoads: boolean;
-  /** comma-separated debug switches: noterrain, noshadow, nowake, noveg, nocity, norefl (no water reflection pass), reflview (blit the mirror image over the frame), cascades (tint lit surfaces by shadow cascade and shadow term) */
+  /** comma-separated debug switches: noterrain, noshadow, nowake, noveg, nocity, norefl (no water reflection pass), reflview (blit the mirror image over the frame), cascades (tint lit surfaces by shadow cascade and shadow term), nobloom (composite without the bloom term, for A/B of what blooms) */
   dbg: Set<string>;
 }
 
@@ -56,6 +59,7 @@ export function readParams(): Params {
     weather: (q.get('weather') as Weather | null) ?? null,
     quality: ['low', 'medium', 'high', 'ultra'].includes(quality) ? quality : 'high',
     freeze: q.get('freeze') === '1',
+    fly: Math.max(0, num('fly') ?? 0),
     fixedDt: num('dt'),
     noHud: q.get('nohud') === '1',
     width: num('w'),

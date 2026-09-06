@@ -1,0 +1,893 @@
+{
+ "items": [
+  {
+   "id": "aircraft",
+   "name": "Aircraft (crop duster / floatplane)"
+  },
+  {
+   "id": "water",
+   "name": "Water: surface, wakes, landing, boats"
+  },
+  {
+   "id": "city",
+   "name": "City: skyline, facades, streets"
+  },
+  {
+   "id": "highway",
+   "name": "Highway and causeways"
+  },
+  {
+   "id": "foliage",
+   "name": "Foliage and ground"
+  },
+  {
+   "id": "shore",
+   "name": "Shoreline and beach"
+  },
+  {
+   "id": "sky",
+   "name": "Sky, clouds, lighting"
+  }
+ ],
+ "snapshots": [
+  {
+   "tag": "h00",
+   "build": "4f5d63e0",
+   "time": "2026-09-06T09:52Z",
+   "views": [
+    {
+     "label": "aircraft_rear",
+     "title": "Aircraft, rear three-quarter (taxiing)",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "aircraft_front",
+     "title": "Aircraft, front three-quarter (cowl, propeller, floats)",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "cockpit",
+     "title": "Cockpit approaching downtown",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "glass",
+     "title": "Cockpit glass in direct sun",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "water_landing",
+     "title": "Touchdown: floats 1.0 s after contact (displacement, spray, splash)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "water_step",
+     "title": "Planing on the step 4 s after touchdown (wake, spray, hull foam)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "harbor",
+     "title": "Harbour: boats, wakes, marina",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "island_pass",
+     "title": "Low pass over the keys (shore, water colour)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "skyline_high",
+     "title": "Skyline from 1.2 km",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_500m",
+     "title": "Downtown from 500 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_200m",
+     "title": "Downtown and the bayfront from 200 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_north",
+     "title": "Downtown from its southern edge, 200 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "street_2m",
+     "title": "Street level, downtown avenue (camera on the street centreline)",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "night",
+     "title": "Downtown at night",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "sunset",
+     "title": "Sunset over the bay",
+     "item": "sky",
+     "ok": true
+    },
+    {
+     "label": "cloudy",
+     "title": "Overcast deck",
+     "item": "sky",
+     "ok": true
+    },
+    {
+     "label": "highway_bridge",
+     "title": "Causeway flyover at 45 m",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_aerial",
+     "title": "Reference aerial: approach highway across Garza",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "foliage_suburb",
+     "title": "Suburb canopy from 130 m",
+     "item": "foliage",
+     "ok": true
+    },
+    {
+     "label": "foliage_park",
+     "title": "Park canopy from 130 m",
+     "item": "foliage",
+     "ok": true
+    },
+    {
+     "label": "shore_beach",
+     "title": "Garza beach from 60 m",
+     "item": "shore",
+     "ok": true
+    },
+    {
+     "label": "highway_200m",
+     "title": "Approach highway over Garza and the causeway to downtown, 120 m",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_along",
+     "title": "Along the coastal highway through the suburbs, 180 m",
+     "item": "highway",
+     "ok": true
+    }
+   ],
+   "notes": "source: lead 4f5d63e0\nbuild: 4f5d63e0 from /workspace\n"
+  },
+  {
+   "tag": "h01",
+   "build": "953c687e",
+   "time": "2026-09-06T10:10Z",
+   "views": [
+    {
+     "label": "aircraft_rear",
+     "title": "Aircraft, rear three-quarter (taxiing)",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "aircraft_front",
+     "title": "Aircraft, front three-quarter (cowl, propeller, floats)",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "cockpit",
+     "title": "Cockpit approaching downtown",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "glass",
+     "title": "Cockpit glass in direct sun",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "water_landing",
+     "title": "Touchdown: floats 1.0 s after contact (displacement, spray, splash)",
+     "item": "water",
+     "ok": false
+    },
+    {
+     "label": "water_step",
+     "title": "Planing on the step 4 s after touchdown (wake, spray, hull foam)",
+     "item": "water",
+     "ok": false
+    },
+    {
+     "label": "harbor",
+     "title": "Harbour: boats, wakes, marina",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "island_pass",
+     "title": "Low pass over the keys (shore, water colour)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "skyline_high",
+     "title": "Skyline from 1.2 km",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_500m",
+     "title": "Downtown from 500 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_200m",
+     "title": "Downtown and the bayfront from 200 m",
+     "item": "city",
+     "ok": false
+    },
+    {
+     "label": "city_north",
+     "title": "Downtown from its southern edge, 200 m",
+     "item": "city",
+     "ok": false
+    },
+    {
+     "label": "street_2m",
+     "title": "Street level, downtown avenue (camera on the street centreline)",
+     "item": "city",
+     "ok": false
+    },
+    {
+     "label": "night",
+     "title": "Downtown at night",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "sunset",
+     "title": "Sunset over the bay",
+     "item": "sky",
+     "ok": true
+    },
+    {
+     "label": "cloudy",
+     "title": "Overcast deck",
+     "item": "sky",
+     "ok": true
+    },
+    {
+     "label": "highway_bridge",
+     "title": "Causeway flyover at 45 m",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_aerial",
+     "title": "Reference aerial: approach highway across Garza",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_200m",
+     "title": "Coastal highway from 200 m (old camera; recomposed from h04)",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "foliage_suburb",
+     "title": "Suburb canopy from 130 m",
+     "item": "foliage",
+     "ok": true
+    },
+    {
+     "label": "foliage_park",
+     "title": "Park canopy from 130 m",
+     "item": "foliage",
+     "ok": true
+    },
+    {
+     "label": "shore_beach",
+     "title": "Garza beach from 60 m",
+     "item": "shore",
+     "ok": true
+    }
+   ],
+   "notes": "base: f540bbea (cursor/vice-city-aerial-8213)\nmerged acsplit: 3dce05f4 Aircraft split report: pinned-stamp re-capture \u2014 split build rebuilt with BUILD_ID set t\nmerged waterrender: c09c81c8 Water rendering report: draft (defects, changes, rationale, weaknesses, shared hunks); sco\nskip waterphys: merge conflict\nskip boats: no remote branch\nmerged clouds4: ce5c5a5c Clouds: fine march step grows with distance along the ray (footprint-sized near the camera\nmerged light3: ac49aba9 light3 defect log: round 3 results (seam closed at 30 m, low-sun probe side effects, dusk \nmerged street: ca76fd0f Street report skeleton: systems, counts, budgets, requests\nskip highway: merge conflict\nmerged facade3: 36450ce0 WIP City rooftop kit + street level: near-detail kinds roof / roofcyl (700 m) and roofbig \nmerged veg5: 031f8e49 Vegetation loop 6 WIP (round 7b, aerial canopy contrast; runtime verification pending): ca\nmerged terrain5: 6e674330 Terrain: beach distance measured from the visible waterline (h = 0.05, where the water pla\nbuild: 953c687e from /home/ubuntu/wt-integration\ncdn: data.json still stale after 5 purges\n"
+  },
+  {
+   "tag": "h02",
+   "build": "e9db7f93",
+   "time": "2026-09-06T11:17Z",
+   "views": [
+    {
+     "label": "aircraft_rear",
+     "title": "Aircraft, rear three-quarter (taxiing)",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "aircraft_front",
+     "title": "Aircraft, front three-quarter (cowl, propeller, floats)",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "cockpit",
+     "title": "Cockpit approaching downtown",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "glass",
+     "title": "Cockpit glass in direct sun",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "water_landing",
+     "title": "Touchdown: floats 1.0 s after contact (displacement, spray, splash)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "water_step",
+     "title": "Planing on the step 4 s after touchdown (wake, spray, hull foam)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "harbor",
+     "title": "Harbour: boats, wakes, marina",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "island_pass",
+     "title": "Low pass over the keys (shore, water colour)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "skyline_high",
+     "title": "Skyline from 1.2 km",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_500m",
+     "title": "Downtown from 500 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_200m",
+     "title": "Downtown and the bayfront from 200 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_north",
+     "title": "Downtown from its southern edge, 200 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "street_2m",
+     "title": "Street level, downtown avenue (camera on the street centreline)",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "night",
+     "title": "Downtown at night",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "sunset",
+     "title": "Sunset over the bay",
+     "item": "sky",
+     "ok": true
+    },
+    {
+     "label": "cloudy",
+     "title": "Overcast deck",
+     "item": "sky",
+     "ok": true
+    },
+    {
+     "label": "highway_bridge",
+     "title": "Causeway flyover at 45 m",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_aerial",
+     "title": "Reference aerial: approach highway across Garza",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_200m",
+     "title": "Coastal highway from 200 m (old camera; recomposed from h04)",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "foliage_suburb",
+     "title": "Suburb canopy from 130 m",
+     "item": "foliage",
+     "ok": true
+    },
+    {
+     "label": "foliage_park",
+     "title": "Park canopy from 130 m",
+     "item": "foliage",
+     "ok": true
+    },
+    {
+     "label": "shore_beach",
+     "title": "Garza beach from 60 m",
+     "item": "shore",
+     "ok": true
+    }
+   ],
+   "notes": "base: d7b89cf5 (cursor/vice-city-aerial-8213)\nmerged acsplit: 3dce05f4 Aircraft split report: pinned-stamp re-capture \u2014 split build rebuilt with BUILD_ID set t\nmerged waterrender: d9b6f649 Water rendering defect log: rounds 6-8 (footprint fade per wave vector, the r7 streak filt\nmerged waterphys (recorded resolution): f6262d74 Wreck flooding scales with the striking part's speed (the other wing dipping in at 14 m/s \nskip boats: no remote branch\nmerged clouds4: ce5c5a5c Clouds: fine march step grows with distance along the ray (footprint-sized near the camera\nmerged light3: ac49aba9 light3 defect log: round 3 results (seam closed at 30 m, low-sun probe side effects, dusk \nmerged street (recorded resolution): c71cd156 Sidewalk shader: decode the packed slab-width / ramp attribute tolerant of interpolation r\nmerged highway (recorded resolution): 1258a3f4 Highway guardrail opens at the mouths of the roads meeting the highway on its side (crossi\nmerged facade3: 4442382f Facades: rain runs down the masonry from the coping joints and the corners (dark tongues a\nmerged veg5: 2e4c6fb4 Vegetation defect log: rounds 7c-10b verified at r12/r14 (budgets, trunks, near crowns, bl\nmerged terrain5: d9607f28 Terrain: lawn/dry balance recentred (parks and yards were nearly all dry grass), litter fl\nfixup applied: streets-highway-lamps.patch\nbuild: e9db7f93 from /home/ubuntu/wt-integration\ncdn: pinned data.json serves h02\n"
+  },
+  {
+   "tag": "h03",
+   "build": "7fe5d685",
+   "time": "2026-09-06T12:17Z",
+   "views": [
+    {
+     "label": "aircraft_rear",
+     "title": "Aircraft, rear three-quarter (taxiing)",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "aircraft_front",
+     "title": "Aircraft, front three-quarter (cowl, propeller, floats)",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "cockpit",
+     "title": "Cockpit approaching downtown",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "glass",
+     "title": "Cockpit glass in direct sun",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "water_landing",
+     "title": "Touchdown: floats 1.0 s after contact (displacement, spray, splash)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "water_step",
+     "title": "Planing on the step 4 s after touchdown (wake, spray, hull foam)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "harbor",
+     "title": "Harbour: boats, wakes, marina",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "island_pass",
+     "title": "Low pass over the keys (shore, water colour)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "skyline_high",
+     "title": "Skyline from 1.2 km",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_500m",
+     "title": "Downtown from 500 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_200m",
+     "title": "Downtown and the bayfront from 200 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_north",
+     "title": "Downtown from its southern edge, 200 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "street_2m",
+     "title": "Street level, downtown avenue (camera on the street centreline)",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "night",
+     "title": "Downtown at night",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "sunset",
+     "title": "Sunset over the bay",
+     "item": "sky",
+     "ok": true
+    },
+    {
+     "label": "cloudy",
+     "title": "Overcast deck",
+     "item": "sky",
+     "ok": true
+    },
+    {
+     "label": "highway_bridge",
+     "title": "Causeway flyover at 45 m",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_aerial",
+     "title": "Reference aerial: approach highway across Garza",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_200m",
+     "title": "Coastal highway from 200 m (old camera; recomposed from h04)",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "foliage_suburb",
+     "title": "Suburb canopy from 130 m",
+     "item": "foliage",
+     "ok": true
+    },
+    {
+     "label": "foliage_park",
+     "title": "Park canopy from 130 m",
+     "item": "foliage",
+     "ok": true
+    },
+    {
+     "label": "shore_beach",
+     "title": "Garza beach from 60 m",
+     "item": "shore",
+     "ok": true
+    }
+   ],
+   "notes": "base: 6b120b36 (cursor/vice-city-aerial-8213)\nskip acsplit: nothing new\nmerged waterrender: 7ab21f54 Water rendering report: the mirrored base's colour follows the dome\nmerged waterphys (recorded resolution): 62a49aa4 Defect log round 4: the ditching matrix run numerically (belly, firm, wheels down, wing ti\nskip boats: no remote branch\nmerged clouds4: 4142901d clouds4: report draft (diagnosis, changes; evidence sections pending GPU rounds)\nmerged light3: 72b5ad65 light3 report: method and kept-palette sections\nmerged street (recorded resolution): f919366d Crosswalk bars and lines run continuous across the centreline\nskip highway: merge conflict in \nmerged facade3: 024cd5ce Facades: the lobby's ceiling band no longer shadows the GLSL built-in ceil()\nmerged veg5: 8694c03b Vegetation defect log: the black box bisected to the city's house kind\nmerged terrain5: 16fe638b Terrain: park paths kept as pixel-wide fading lines to 5 m/px instead of breaking up past \nfixup not needed: streets-highway-lamps.patch\nbuild: 7fe5d685 from /home/ubuntu/wt-integration\ncdn: pinned data.json serves h03\n"
+  },
+  {
+   "tag": "h04",
+   "build": "637747df",
+   "time": "2026-09-06T13:18Z",
+   "views": [
+    {
+     "label": "aircraft_rear",
+     "title": "Aircraft, rear three-quarter (taxiing)",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "aircraft_front",
+     "title": "Aircraft, front three-quarter (cowl, propeller, floats)",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "cockpit",
+     "title": "Cockpit approaching downtown",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "glass",
+     "title": "Cockpit glass in direct sun",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "water_landing",
+     "title": "Touchdown: floats 1.0 s after contact (displacement, spray, splash)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "water_step",
+     "title": "Planing on the step 4 s after touchdown (wake, spray, hull foam)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "harbor",
+     "title": "Harbour: boats, wakes, marina",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "island_pass",
+     "title": "Low pass over the keys (shore, water colour)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "skyline_high",
+     "title": "Skyline from 1.2 km",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_500m",
+     "title": "Downtown from 500 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_200m",
+     "title": "Downtown and the bayfront from 200 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_north",
+     "title": "Downtown from its southern edge, 200 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "street_2m",
+     "title": "Street level, downtown avenue (camera on the street centreline)",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "night",
+     "title": "Downtown at night",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "sunset",
+     "title": "Sunset over the bay",
+     "item": "sky",
+     "ok": true
+    },
+    {
+     "label": "cloudy",
+     "title": "Overcast deck",
+     "item": "sky",
+     "ok": true
+    },
+    {
+     "label": "highway_bridge",
+     "title": "Causeway flyover at 45 m",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_aerial",
+     "title": "Reference aerial: approach highway across Garza",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "foliage_suburb",
+     "title": "Suburb canopy from 130 m",
+     "item": "foliage",
+     "ok": true
+    },
+    {
+     "label": "foliage_park",
+     "title": "Park canopy from 130 m",
+     "item": "foliage",
+     "ok": true
+    },
+    {
+     "label": "shore_beach",
+     "title": "Garza beach from 60 m",
+     "item": "shore",
+     "ok": true
+    },
+    {
+     "label": "highway_200m",
+     "title": "Approach highway over Garza and the causeway to downtown, 120 m",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_along",
+     "title": "Along the coastal highway through the suburbs, 180 m",
+     "item": "highway",
+     "ok": true
+    }
+   ],
+   "notes": "base: 7f95c5ea (cursor/vice-city-aerial-8213)\nskip acsplit: nothing new\nskip waterrender: nothing new\nskip waterphys: nothing new\nskip boats: no remote branch\nmerged clouds4: 4142901d clouds4: report draft (diagnosis, changes; evidence sections pending GPU rounds)\nmerged light3: 72b5ad65 light3 report: method and kept-palette sections\nskip street: nothing new\nmerged highway: 1e89ad93 Highway defect log: round 6 (spit terrain through the pavement, lane tone at noon, barrier\nmerged facade3: c4e85411 Facades: the probe's sun aureole stood in the mirrored sky at the wrong height. The height\nmerged veg5: 25446639 Vegetation loop 6 WIP (round 14, runtime verification pending): the understory draws its s\nmerged terrain5: f4c324f8 terrain5 report: round 3 defect entry\nbuild: 637747df from /home/ubuntu/wt-integration\ncdn: pinned data.json serves h04\n"
+  },
+  {
+   "tag": "h05",
+   "build": "a41b535e",
+   "time": "2026-09-06T14:18Z",
+   "views": [
+    {
+     "label": "aircraft_rear",
+     "title": "Aircraft, rear three-quarter (taxiing)",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "aircraft_front",
+     "title": "Aircraft, front three-quarter (cowl, propeller, floats)",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "cockpit",
+     "title": "Cockpit approaching downtown",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "glass",
+     "title": "Cockpit glass in direct sun",
+     "item": "aircraft",
+     "ok": true
+    },
+    {
+     "label": "water_landing",
+     "title": "Touchdown: floats 1.0 s after contact (displacement, spray, splash)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "water_step",
+     "title": "Planing on the step 4 s after touchdown (wake, spray, hull foam)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "harbor",
+     "title": "Harbour: boats, wakes, marina",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "island_pass",
+     "title": "Low pass over the keys (shore, water colour)",
+     "item": "water",
+     "ok": true
+    },
+    {
+     "label": "skyline_high",
+     "title": "Skyline from 1.2 km",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_500m",
+     "title": "Downtown from 500 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_200m",
+     "title": "Downtown and the bayfront from 200 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "city_north",
+     "title": "Downtown from its southern edge, 200 m",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "street_2m",
+     "title": "Street level, downtown avenue (camera on the street centreline)",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "night",
+     "title": "Downtown at night",
+     "item": "city",
+     "ok": true
+    },
+    {
+     "label": "sunset",
+     "title": "Sunset over the bay",
+     "item": "sky",
+     "ok": true
+    },
+    {
+     "label": "cloudy",
+     "title": "Overcast deck",
+     "item": "sky",
+     "ok": true
+    },
+    {
+     "label": "highway_bridge",
+     "title": "Causeway flyover at 45 m",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_aerial",
+     "title": "Reference aerial: approach highway across Garza",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_200m",
+     "title": "Approach highway over Garza and the causeway to downtown, 120 m",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "highway_along",
+     "title": "Along the coastal highway through the suburbs, 180 m",
+     "item": "highway",
+     "ok": true
+    },
+    {
+     "label": "foliage_suburb",
+     "title": "Suburb canopy from 130 m",
+     "item": "foliage",
+     "ok": true
+    },
+    {
+     "label": "foliage_park",
+     "title": "Park canopy from 130 m",
+     "item": "foliage",
+     "ok": true
+    },
+    {
+     "label": "shore_beach",
+     "title": "Garza beach from 60 m",
+     "item": "shore",
+     "ok": true
+    }
+   ],
+   "notes": "base: 9e8704db (cursor/vice-city-aerial-8213)\nskip acsplit: nothing new\nmerged waterrender: 529cd551 Water rendering report: final-state stills of rounds 1-7 (sun path by time of day, altitud\nskip waterphys: merge conflict in bench/scripts/flighttest.mjs src/world/water.ts \nskip boats: no remote branch\nmerged clouds4: 18f48393 Clouds r7c-e (work in progress): base ramp scaled by column height (130 m under a core, 20\nmerged light3: 4a0ed1f4 light3 report: request to the water agent to drive the mirror pass's cloud-shadow share fr\nmerged street: 5a857b5d Lamp dots hold full strength to 4 km and fade out over 4-5 km (they were at 22 % by 3.7 km\nmerged highway: b2a733ab Highway report: landingSurface and the pinned end rows\nmerged facade3: d596a103 City report: self-scores 17-20 with reasons, self-critique, next attack, failed / reverted\nmerged veg5: 25446639 Vegetation loop 6 WIP (round 14, runtime verification pending): the understory draws its s\nmerged terrain5: f561ffd0 terrain5 report: round 4 (pass budget) defect entry\nskip acgeo: nothing new\nbuild: a41b535e from /home/ubuntu/wt-integration\n"
+  }
+ ],
+ "updated": "2026-09-06T14:18Z"
+}

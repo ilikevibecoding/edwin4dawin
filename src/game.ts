@@ -14,6 +14,7 @@ import { CascadeFitter, installCascadeDebug } from './render/shadows';
 import { buildRoadMeshes, buildRoadNetwork, createRoadLightUniforms, createRoadMaterial, type RoadSegment } from './world/roads';
 import { SW_DEBUG, Streets } from './world/streets';
 import { buildBridges, type BridgeBuild } from './world/bridges';
+import { buildHighway, type HighwayBuild } from './world/highway';
 import { buildCity, type CityBuild } from './world/city';
 import { MIRROR_DISTANCE, Vegetation } from './world/vegetation';
 import { Props } from './world/props';
@@ -60,6 +61,7 @@ export class Game {
   water!: Water;
   sky!: Sky;
   wakes!: WakeMap;
+  private readonly tmpCamFwd = new THREE.Vector3();
   csm!: CSM;
   cascades!: CascadeFitter;
   post!: PostPipeline;
@@ -67,6 +69,7 @@ export class Game {
   roads!: RoadSegment[];
   streets!: Streets;
   bridges!: BridgeBuild;
+  highway!: HighwayBuild;
   city!: CityBuild;
   vegetation!: Vegetation;
   props!: Props;
@@ -170,7 +173,7 @@ export class Game {
     this.registerLit(this.terrain.material);
     this.terrain.group.name = 'terrain';
     this.scene.add(this.terrain.group);
-    this.water = new Water(this.textures, this.wakes.texture, this.wakes.nearTexture, this.wakes.heightTexture, this.wakes.heightTexel);
+    this.water = new Water(this.textures, this.wakes.texture, this.wakes.nearTexture, this.wakes.heightTexture, this.wakes.heightTexel, this.wakes.midTexture);
     this.registerLit(this.water.material);
     this.registerLit(this.water.patchMaterial);
     this.water.mesh.name = 'water';
@@ -185,6 +188,8 @@ export class Game {
     this.reflection.exclude(this.water.mesh, this.water.patch, this.sky.dome);
     this.reflection.excludeChildrenWhen(this.terrain.group, (ring) => boundsRadius(ring) > reflRange * 1.2);
     this.water.attachReflection(this.reflection.uniforms);
+    this.water.attachAtmosphere(this.atmos.uniforms);
+    this.water.attachCloudField(this.sky.coverageField);
 
     await this.tick(progress, 'Laying out streets', 0.4);
     const network = buildRoadNetwork(this.map);
@@ -206,6 +211,12 @@ export class Game {
     // the instanced steelwork that is too fine to cast a shadow (railings, hangers, cable stays: ~130 k
     // triangles) is far below a texel of the mirror image as well
     this.reflection.excludeChildrenWhen(this.bridges.group, (m) => (m as THREE.InstancedMesh).isInstancedMesh === true && !m.castShadow);
+    // highway furniture (barriers, guardrail, lighting, gantries and signs along the highway / causeway classes);
+    // its thin steel (userData.noMirror) is far below a texel of the mirror image
+    this.highway = buildHighway(this.map, this.roads, (m) => this.registerLit(m));
+    this.highway.group.name = 'highway';
+    this.scene.add(this.highway.group);
+    this.reflection.excludeChildrenWhen(this.highway.group, (m) => m.userData.noMirror === true);
 
     await this.tick(progress, 'Building the city', 0.52);
     this.city = buildCity(this.map, network.blocksByDistrict, this.atmos.uniforms.uNight);
@@ -235,6 +246,7 @@ export class Game {
     this.reflection.excludeChildrenWhen(this.streets.group, () => true);
 
     await this.tick(progress, 'Dressing harbours and airports', 0.66);
+    // the highway / causeway lighting is part of the highway furniture (highway.ts); the streets plan lights the city roads
     this.props = new Props(this.map, this.bridges.lampPositions, this.city.markOccupied, this.streets.lamps);
     for (const m of this.props.materials) this.registerLit(m);
     this.props.group.name = 'props';
@@ -280,8 +292,8 @@ export class Game {
     const base = this.map.pois.find((p) => p.kind === 'seaplane')!;
     this.aircraft.place(base.x + 120, 1.6, base.z + 60, 0, 0, 0, 0, 0); // facing north: 3 km of open water ahead
 
-    this.post = new PostPipeline(this.renderer, this.atmos, { samples: q.samples, bloom: q.bloom });
     const dbg = this.params.dbg;
+    this.post = new PostPipeline(this.renderer, this.atmos, { samples: q.samples, bloom: q.bloom && !dbg.has('nobloom') });
     if (dbg.has('noterrain')) this.terrain.group.visible = false;
     if (dbg.has('noshadow')) this.renderer.shadowMap.enabled = false;
     if (dbg.has('noveg')) this.vegetation.group.visible = false;
@@ -290,9 +302,12 @@ export class Game {
     if (dbg.has('nostreets')) this.streets.group.visible = false;
     if (dbg.has('swdebug')) SW_DEBUG.value = 1;
     if (dbg.has('nopools')) this.streets.poolsEnabled = false;
+    if (dbg.has('nohighway')) this.highway.group.visible = false;
     if (dbg.has('notraffic')) this.traffic.group.visible = false;
     if (dbg.has('nocloudshadow')) { this.post.cloudShadowStrength = 0; this.reflection.cloudShadowStrength = 0; }
     if (dbg.has('norefl')) this.reflection.enabled = false;
+    // ditching bench: wheels forced down over water (the wheels-first case of the ditching matrix)
+    if (dbg.has('geardown')) this.aircraft.flight.gearOverride = true;
     this.atmos.update(0);
     this.refreshEnvironment();
     await this.tick(progress, 'Compiling shaders', 0.97);
@@ -423,12 +438,15 @@ export class Game {
     const ps = this.passStats;
     const mark = this.markPass;
     this.passCalls0 = info.calls; this.passTriangles0 = info.triangles;
-    this.wakes.render(this.renderer, cx, cz, planePos.x, planePos.z);
+    // the mid wake map sits ahead of the camera along its horizontal view direction
+    const camFwd = cam.getWorldDirection(this.tmpCamFwd);
+    const camFwdL = Math.hypot(camFwd.x, camFwd.z) || 1;
+    this.wakes.render(this.renderer, cx, cz, planePos.x, planePos.z, camFwd.x / camFwdL, camFwd.z / camFwdL);
     mark('wake');
     // the displaced water patch around the aircraft only while it is low enough for its hull waves to exist
     this.water.setPatchActive(airHeight < 45 && this.map.heightAt(planePos.x, planePos.z) < 0.05);
     // after the wake maps are placed: the water samples them at this frame's centres
-    this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size, this.wakes.nearCenter, this.wakes.nearSize);
+    this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size, this.wakes.nearCenter, this.wakes.nearSize, this.wakes.midCenter, this.wakes.midSize);
     this.sky.render(this.renderer, cam, this.post.width, this.post.height);
     mark('sky');
     // the shadow cascades are rendered by the first of the two scene renders below (the mirror pass when it

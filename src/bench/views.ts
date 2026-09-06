@@ -125,6 +125,13 @@ export const BENCH_VIEWS: BenchView[] = [
     plane: { pos: [-400, 320, -900], headingDeg: 318, pitchDeg: 0, bankDeg: 0, speed: 55, throttle: 0.7 },
     presim: 30, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
   },
+  {
+    id: 'city-close', name: 'Downtown core at facade range', description: 'Fixed camera 120 m up over the west side of downtown looking east into the core: a wide glass slab at 300 m in the centre, two glass drums with lantern crowns at 350-450 m on the left, the taller core behind, pastel mid-rises at 150-250 m below. The sun (17:18, el 13.7 deg, az 275) stands behind the camera: a vertical west-facing pane mirrors it at camera height + d tan(el), i.e. 190 m up the central slab, so the glint field and the sky mirrored by height are both in frame.',
+    time: 17.3, weather: 'clear',
+    camera: { mode: 'fixed', pos: [-3330, 120, -3670], headingDeg: 90, pitchDeg: 8, fov: 50, follow: true },
+    plane: { fromCamera: { screenX: 0.8, screenY: 0.82, distance: 110 }, headingDeg: 90, pitchDeg: 0, bankDeg: 0, speed: 50, throttle: 0.6 },
+    presim: 30, clipInputs: { pitch: 0, roll: 0, yaw: 0 },
+  },
 ];
 
 /** Aircraft inspection views (used by the aircraft / glass / cockpit gauntlet loops). The aircraft taxis at 3.5 m/s

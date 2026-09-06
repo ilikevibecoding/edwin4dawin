@@ -523,7 +523,9 @@ export class Streets {
     this.roads = new RoadIndex(graph.chains);
     const signalPoles = this.signalPoles;
     for (const chain of graph.chains) {
-      if (chain.cls === 'highway' || chain.cls === 'causeway') { this.planHighwayLamps(chain); this.planHighwayEndMasts(chain); continue; }
+      // highway and causeway lighting is built with the highway furniture (world/highway.ts): median twin-arm poles;
+      // the streets keep the high masts where a highway lands (its ends are the interchanges with the surface grid)
+      if (chain.cls === 'highway' || chain.cls === 'causeway') { this.planHighwayEndMasts(chain); continue; }
       if (chain.cls !== 'arterial' && chain.cls !== 'street') continue;
       if (chain.s1 - chain.s0 < 2) continue;
       const covered: [[number, number][], [number, number][]] = [[], []];
@@ -1049,27 +1051,6 @@ export class Streets {
         const g = this.map.heightAt(x, z);
         if (g < 0.8) continue;
         this.lamp(x, g, z, Math.atan2(f.cz * side, -f.cx * side), 'arterial');
-      }
-    }
-  }
-
-  /** Highway and causeway approaches on land: a pole every 40 m, sides alternating (the water spans carry the
-   *  bridges' own lamps), the arm turned across the road — a line of light along every approach at night. */
-  private planHighwayLamps(chain: RoadChain): void {
-    let k = 0;
-    for (const seg of chain.segs) {
-      const dx = seg.b[0] - seg.a[0], dz = seg.b[1] - seg.a[1];
-      const len = Math.hypot(dx, dz);
-      if (len < 1) continue;
-      const ux = dx / len, uz = dz / len;
-      const yaw = Math.atan2(-uz, ux);
-      for (let s = 20; s < len; s += 40, k++) {
-        const side = k % 2 === 0 ? -1 : 1;
-        const x = seg.a[0] + ux * s + -uz * (seg.width / 2 + 1) * side;
-        const z = seg.a[1] + uz * s + ux * (seg.width / 2 + 1) * side;
-        const g = this.map.heightAt(x, z);
-        if (g < 0.8 || !this.roads.clear(x, z, 0.3)) continue;
-        this.lamp(x, g, z, yaw, 'highway');
       }
     }
   }
