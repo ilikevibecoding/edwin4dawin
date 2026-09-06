@@ -284,12 +284,12 @@ function chamber(bp, P, meta) {
   // public viewing gallery on top (bins 44..52): stepped seats toward the rail
   const gy = G.GALLERY_Y;
   eachSector(bp, P, 44, gr1, 0, TAU, (x, z, b) => {
-    bp.set(x, gy - 1, z, (b === 44) ? TRIM : ((x + z) % 5 === 0 ? GLOW : PLATE));
+    bp.set(x, gy - 1, z, (b === 44) ? TRIM : ((x + z) % 5 === 0 ? GLOW : STONE));
     bp.fill(x, gy, z, x, gy + 8, z, AIR);
     if (b === 44) bp.set(x, gy, z, B.IRON_BARS);
     else if (b === 46 || b === 48) { if ((x + z) % 2 === 0) { bp.set(x, gy, z, SEAT); bp.spot(x, gy, z, 'seat'); } }
   });
-  for (let b = 44; b <= gr1; b++) { bp.set(CX + b, gy - 1, CZ, PLATE); bp.fill(CX + b, gy, CZ, CX + b, gy + 8, CZ, AIR); }
+  for (let b = 44; b <= gr1; b++) { bp.set(CX + b, gy - 1, CZ, STONE); bp.fill(CX + b, gy, CZ, CX + b, gy + 8, CZ, AIR); }
   // the enclosing wall (bin 53) from the floor to the dome: plaster with chrome pilasters and lit slits above the
   // public gallery; solid behind the galleries
   eachSector(bp, P, G.R_HALL, G.R_HALL, 0, TAU, (x, z, b, a) => {
@@ -625,9 +625,10 @@ function bands(bp, P, rng, meta) {
   // corridors and service rings on every level (top-down so a lower level's ceiling lights land in the floor above)
   for (let li = G.LEVELS.length - 1; li >= 0; li--) {
     const y = G.LEVELS[li];
-    eachSector(bp, P, cr0, cr1, 0, TAU, (x, z, b) => { bp.set(x, y - 1, z, (b === cr0 || b === cr1) ? B.PANEL_BLACK : PLATE); bp.fill(x, y, z, x, y + 3, z, AIR); bp.set(x, y + 4, z, ((x + z) % 5 === 0) ? GLOW : STONE); });
+    // public corridors: the visitor route's stone, brick and gold; service ring: deck plate and striped panels
+    eachSector(bp, P, cr0, cr1, 0, TAU, (x, z, b) => { bp.set(x, y - 1, z, (b === cr0 || b === cr1) ? GOLD : ((x + z) % 4 === 0 ? BAND : STONE)); bp.fill(x, y, z, x, y + 3, z, AIR); bp.set(x, y + 4, z, ((x + z) % 5 === 0) ? GLOW : STONE); });
     eachSector(bp, P, sr0, sr1, 0, TAU, (x, z) => { bp.set(x, y - 1, z, ((x + z) % 3) ? PLATE : B.PANEL_STRIPE); bp.fill(x, y, z, x, y + 3, z, AIR); bp.set(x, y + 4, z, ((x + z) % 4 === 0) ? GLOW : DARK); });
-    for (const [b0, b1] of [[cr0, cr1], [sr0, sr1]]) for (let b = b0; b <= b1; b++) { bp.set(CX + b, y - 1, CZ, PLATE); bp.fill(CX + b, y, CZ, CX + b, y + 3, CZ, AIR); }   // east seam cells
+    for (const [b0, b1, floor] of [[cr0, cr1, STONE], [sr0, sr1, PLATE]]) for (let b = b0; b <= b1; b++) { bp.set(CX + b, y - 1, CZ, floor); bp.fill(CX + b, y, CZ, CX + b, y + 3, CZ, AIR); }   // east seam cells
     if (y === 1) {   // the grand lobby ring: the outer band joins the corridor (bins 57..66), stone and gold floor
       eachSector(bp, P, rr0, G.OUT_WALL, 0, TAU, (x, z, b) => { bp.set(x, 0, z, (b === rr0 || b === G.OUT_WALL) ? GOLD : ((x + z) % 4 === 0 ? BAND : STONE)); bp.fill(x, 1, z, x, 4, z, AIR); });
       for (let b = rr0; b <= G.OUT_WALL; b++) { bp.set(CX + b, 0, CZ, STONE); bp.fill(CX + b, 1, CZ, CX + b, 4, CZ, AIR); }
@@ -641,7 +642,7 @@ function bands(bp, P, rng, meta) {
       const off = (c === 0 || c === Math.PI) ? -2 : 0;   // east / west: the stairs take the other half of the slot
       eachSlot(bp, P, tier ? G.R_HALL : sr0, cr0, c, 3.5, (x, z, along, perp) => {
         if (Math.abs(perp - off) > 1.5) return;
-        bp.set(x, y - 1, z, Math.floor(along) % 2 ? PLATE : GOLD); bp.fill(x, y, z, x, y + 3, z, AIR); bp.set(x, y + 4, z, Math.floor(along) % 3 ? STONE : GLOW);
+        bp.set(x, y - 1, z, Math.floor(along) % 2 ? STONE : GOLD); bp.fill(x, y, z, x, y + 3, z, AIR); bp.set(x, y + 4, z, Math.floor(along) % 3 ? STONE : GLOW);
       });
       if (y > 1) { const [gx, gz] = [Math.round(CX + Math.cos(c) * 60 - Math.sin(c) * (off + 2.5)), Math.round(CZ + Math.sin(c) * 60 + Math.cos(c) * (off + 2.5))]; if (isFree(bp, gx, y, gz)) guardPost(bp, gx, y, gz, Math.round(-Math.sin(c)) || 0, Math.round(Math.cos(c)) || 0); }
     }
@@ -717,7 +718,9 @@ function bands(bp, P, rng, meta) {
   // level 6: inner band (committee / diplomatic / liaison) and outer band (committee rooms, lounges)
   {
     const y = 6;
-    const inner = [[0, 0, 1, 'hearing_chamber', 'hearing'], [1, 0, 2, 'guard_post', 'security'], [1, 1, 2, 'liaison_lounge', 'liaison'], [2, 0, 2, 'diplomatic_reception', 'reception'], [2, 1, 2, 'meeting_room', 'meeting'], [3, 0, 2, 'archive', 'archive'], [3, 1, 2, 'server_room', 'server']];
+    // the liaison alcove sits just south of the east passage: the Jedi come in by the east (press) entry, up the east
+    // stairs and through the passage, a few steps along the service ring (SPEC §13 Seran Vale's route from the Temple)
+    const inner = [[0, 0, 2, 'liaison_lounge', 'liaison'], [0, 1, 2, 'hearing_chamber', 'hearing'], [1, 0, 2, 'guard_post', 'security'], [1, 1, 2, 'meeting_room', 'meeting'], [2, 0, 2, 'diplomatic_reception', 'reception'], [2, 1, 2, 'meeting_room', 'meeting'], [3, 0, 2, 'archive', 'archive'], [3, 1, 2, 'server_room', 'server']];
     for (const [q, k, n, kind, role] of inner) {
       const [a0, a1] = sub(quad(q), k, n, 1.6 / ir0);
       const s = new Sector(bp, P, y, ir0, ir1, a0, a1, kind, role === 'liaison' ? B.WHITE_WOOL : STONE);
@@ -728,7 +731,11 @@ function bands(bp, P, rng, meta) {
         // the alcove opens onto the bowl's top ring through the inner wall: the liaison steps straight into the chamber
         ringDoor(bp, G.INNER_WALL, s.mid, y, 2, B.WHITE_WOOL, s.range);
         const sp = s.stand(s.rm, s.mid + 1.5 / s.rm, 'stand') || { x: s.center[0], y, z: s.center[1] };
-        meta.liaison = { room: rec, spot: { x: bp.wx(sp.x), y: bp.wy(y), z: bp.wz(sp.z) } };
+        // the in-lot walk from the street east of the lot: forecourt, east (press) entry, lobby ring, the east stairs
+        // (first flight, south stretch), the level-6 east passage, the service ring to the alcove's door, the alcove
+        const W = (x, yy, z) => ({ x: bp.wx(x), y: bp.wy(yy), z: bp.wz(z) });
+        const [rx, rz] = cellOf(sr0 + 0.5, s.mid);
+        meta.liaison = { room: rec, spot: W(sp.x, y, sp.z), route: [W(CX + 80, 1, CZ), W(CX + 69, 1, CZ), W(CX + 64, 1, CZ), W(CX + 63, 1, CZ + 2), W(CX + 63, 6, CZ + 13), W(CX + 64, 6, CZ - 2), W(CX + 55, 6, CZ - 2), W(rx, 6, rz), W(sp.x, y, sp.z)] };
       }
       if (kind === 'hearing_chamber') meta.hearing = rec;
     }
@@ -759,38 +766,45 @@ function bands(bp, P, rng, meta) {
       if (tun !== null) radialDoor(bp, P, s, tun, y);
       const rec = s.register();
       if (kind === 'petition_office') { const [x, z] = s.center; meta.petition = { room: rec, desk: { x: bp.wx(x), y: bp.wy(y), z: bp.wz(z - 1) } }; if (isFree(bp, x, y, z)) { bp.set(x, y, z, B.CONSOLE); bp.work(x, y, z - 1, 'clerk'); } }
+      if (kind === 'freight_storage') meta.freight = s.center;
     }
     // the lobby ring's ceiling lights, written last so the level-6 floors above keep them
     eachSector(bp, P, rr0, cr1, 0, TAU, (x, z) => { if ((x + z) % 4 === 0 && !isPylon(bp, x, 5, z) && bp.get(x, 5, z) !== 0 && bp.get(x, 5, z) !== AIR) bp.set(x, 5, z, GLOW); });
   }
   // ---- stairs
-  // visitor stairs (east and west): flights along the corridor at every level, the last flight radial into the gallery
+  // visitor stairs (east and west): flights along the corridor at every level, the last flight radial into the gallery.
+  // Consecutive flights alternate between the two straight stretches beside the passage (south of it climbing +z,
+  // north of it climbing -z): a flight stacked directly on the one below would bury its headroom with its own base.
   meta.stairs = { visitor: [], service: [] };
   for (const east of [true, false]) {
     const sx = east ? CX + cr0 : CX - cr0 - 1;      // two columns: bins 63..64
-    for (const y of [1, 6, 11, 16]) {
-      stairRun(bp, sx, CZ + 3, 0, 1, y, 5, 2, DARK, STONE, SEAT);
-      // rail along the open side of the well on the level above, lit landing
-      for (let z = CZ + 3; z <= CZ + 10; z++) bp.set(east ? sx + 2 : sx - 1, y + 5, z, B.IRON_BARS);
-      bp.set(sx, y + 8, CZ + 8, GLOW); bp.set(sx, y + 4, CZ + 2, GLOW);
-      meta.stairs.visitor.push({ x: bp.wx(sx), y: bp.wy(y), z: bp.wz(CZ + 3), to: bp.wy(y + 5) });
-    }
+    const railX = east ? sx + 2 : sx - 1;
+    [1, 6, 11, 16].forEach((y, i) => {
+      const south = i % 2 === 0, z0 = south ? CZ + 3 : CZ - 4, dz = south ? 1 : -1;
+      stairRun(bp, sx, z0, 0, dz, y, 5, 2, DARK, STONE, SEAT);
+      // rail along the open side of the well on the level above (not over the top steps: that is the landing), lights
+      for (let k = 0; k < 8; k++) bp.set(railX, y + 5, z0 + dz * k, B.IRON_BARS);
+      bp.set(sx, y + 8, z0 + dz * 5, GLOW); bp.set(sx, y + 4, z0 - dz, GLOW);
+      meta.stairs.visitor.push({ x: bp.wx(sx), y: bp.wy(y), z: bp.wz(z0), to: bp.wy(y + 5), landing: { x: bp.wx(sx), y: bp.wy(y + 5), z: bp.wz(z0 + dz * 10) } });
+    });
     // 21 -> 26: radial flight from the corridor (bin 62) inward to the public gallery (bin 52), z CZ+1..CZ+2
     const dir = east ? -1 : 1, x0 = east ? CX + G.OUT_WALL : CX - G.OUT_WALL;
     for (let k = 0; k < 10; k++) { const x = x0 + dir * k; bp.fill(x, 20, CZ + 1, x, 29, CZ + 2, AIR); }
     stairRun(bp, x0, CZ + 1, dir, 0, 21, 5, 2, DARK, STONE, SEAT);
     for (let k = 0; k <= 10; k++) { const x = x0 + dir * k; bp.set(x, 27, CZ, TRIM); bp.set(x, 27, CZ + 3, TRIM); bp.fill(x, 28, CZ, x, 29, CZ + 3, AIR); bp.set(x, 30, CZ + 1, k % 3 ? STONE : GLOW); bp.set(x, 30, CZ + 2, STONE); }
-    { const gx = x0 + dir * 10; bp.fill(gx, 25, CZ + 1, gx + dir, 25, CZ + 2, PLATE); bp.fill(gx, 26, CZ + 1, gx + dir, 29, CZ + 2, AIR); }
+    { const gx = x0 + dir * 10; bp.fill(gx, 25, CZ + 1, gx + dir, 25, CZ + 2, STONE); bp.fill(gx, 26, CZ + 1, gx + dir, 29, CZ + 2, AIR); }
     meta.stairs.visitor.push({ x: bp.wx(x0), y: bp.wy(21), z: bp.wz(CZ + 1), to: bp.wy(26) });
   }
-  // service stairs (north): flights along the corridor's inner half east of the dock, deck plate treads
-  for (const y of [1, 6, 11, 16]) {
+  // service stairs (north): flights along the corridor's inner half beside the dock, deck plate treads, alternating
+  // east (+x) and west (-x) of the north passage; each flight lands at a service lift's porch (pylons at x +-11..14)
+  [1, 6, 11, 16].forEach((y, i) => {
     const z0 = CZ - cr0 - 1;   // rows z CZ-64, CZ-63 (bins 64, 63)
-    stairRun(bp, CX + 4, z0, 1, 0, y, 5, 2, DARK, PLATE, SEAT);
-    for (let x = CX + 4; x <= CX + 11; x++) bp.set(x, y + 5, z0 - 1, B.IRON_BARS);
-    bp.set(CX + 8, y + 8, z0, GLOW); bp.set(CX + 3, y + 4, z0, GLOW);
-    meta.stairs.service.push({ x: bp.wx(CX + 4), y: bp.wy(y), z: bp.wz(z0), to: bp.wy(y + 5) });
-  }
+    const dx = i % 2 === 0 ? 1 : -1, x0 = CX + dx * 2;
+    stairRun(bp, x0, z0, dx, 0, y, 5, 2, DARK, PLATE, SEAT);
+    for (let k = 0; k < 8; k++) bp.set(x0 + dx * k, y + 5, z0 - 1, B.IRON_BARS);
+    bp.set(x0 + dx * 5, y + 8, z0, GLOW); bp.set(x0 - dx, y + 4, z0, GLOW);
+    meta.stairs.service.push({ x: bp.wx(x0), y: bp.wy(y), z: bp.wz(z0), to: bp.wy(y + 5), landing: { x: bp.wx(x0 + dx * 10), y: bp.wy(y + 5), z: bp.wz(z0) } });
+  });
   // ---- entrances at ground level: south security screening, north loading dock, east press, west diplomatic
   entrances(bp, P, meta);
 }
@@ -829,7 +843,7 @@ function entrances(bp, P, meta) {
   eachSlot(bp, P, rr0, cr1, Math.PI * 1.5, 8, (x, z, along, perp) => { bp.set(x, 0, z, Math.abs(perp) < 2 ? B.PANEL_STRIPE : PLATE); bp.fill(x, 1, z, x, 4, z, AIR); bp.set(x, 5, z, (Math.floor(along) + Math.floor(perp)) % 4 === 0 ? GLOW : DARK); });
   eachSlot(bp, P, G.SKIN_R[0], G.SKIN_R[1] + 1, Math.PI * 1.5, 3.5, (x, z) => { bp.fill(x, 1, z, x, 5, z, AIR); bp.set(x, 6, z, B.PANEL_STRIPE); bp.set(x, 0, z, B.PANEL_STRIPE); });
   for (const px of [-6, -5, 5, 6]) for (const dz of [-60, -59]) { bp.set(CX + px, 1, CZ + dz, B.CRATE); if ((px + dz) % 2) bp.set(CX + px, 2, CZ + dz, B.CRATE); }
-  bp.set(CX - 7, 1, CZ - 63, B.BARREL); bp.set(CX + 7, 1, CZ - 63, B.BARREL);
+  bp.set(CX - 7, 1, CZ - 61, B.BARREL); bp.set(CX + 7, 1, CZ - 61, B.BARREL);
   bp.set(CX - 3, 1, CZ - 58, B.PANEL_BLACK); bp.set(CX - 3, 2, CZ - 58, B.CONSOLE); bp.work(CX - 3, 1, CZ - 57, 'stock');
   guardPost(bp, CX + 3, 1, CZ - 58, 0, 1);
   bp.room('loading_dock_storage', CX - 8, 1, CZ - cr1, CX + 8, CZ - rr0);
@@ -837,7 +851,8 @@ function entrances(bp, P, meta) {
   // east (press) and west (diplomatic) entries: an arch (6 wide, 6 high) into the lobby ring, guard kiosks, holo signs
   for (const [c, kind] of [[0, 'vestibule'], [Math.PI, 'diplomatic_vestibule']]) {
     const ux = Math.cos(c);
-    eachSlot(bp, P, G.SKIN_R[0], G.SKIN_R[1] + 1, c, 3.5, (x, z) => { bp.fill(x, 1, z, x, 6, z, AIR); bp.set(x, 7, z, GLOW); bp.set(x, 0, z, GOLD); });
+    // (the arch's top row is a balustrade: the level-6 corridor runs past the opening five blocks up)
+    eachSlot(bp, P, G.SKIN_R[0], G.SKIN_R[1] + 1, c, 3.5, (x, z) => { bp.fill(x, 1, z, x, 5, z, AIR); bp.set(x, 6, z, B.IRON_BARS); bp.set(x, 7, z, GLOW); bp.set(x, 0, z, GOLD); });
     eachSlot(bp, P, G.SKIN_R[0], G.SKIN_R[1] + 1, c, 4.5, (x, z, along, perp) => { if (Math.abs(perp) > 3.5) { bp.fill(x, 1, z, x, 8, z, TRIM); bp.set(x, 9, z, BLUE); } });
     const gx = Math.round(CX + ux * 64);
     guardPost(bp, gx, 1, CZ - 5, 0, 1); guardPost(bp, gx, 1, CZ + 5, 0, -1);
@@ -943,17 +958,21 @@ function approaches(bp, P, lot, meta) {
 function routes(bp, meta) {
   const W = (x, y, z) => ({ x: bp.wx(x), y: bp.wy(y), z: bp.wz(z) });
   const dx = CX;
+  // plaza gate -> avenue -> arch -> security screening -> grand lobby -> east stairs (four flights, alternating
+  // stretches) -> level 21 -> radial flight -> public gallery -> across the gallery ring to the north
+  const e = CX + G.CORR_R[0];
   const visitor = [
     W(dx, 1, bp.d - 2), W(dx, 1, bp.d - 14), W(dx, 1, CZ + G.SKIN_R[1] + 3), W(dx, 1, CZ + G.SKIN_R[1]), W(dx, 1, CZ + 62), W(dx, 1, CZ + 58),
-    W(CX + 30, 1, CZ + 55), W(CX + G.CORR_R[0], 1, CZ + 2),
-    W(CX + G.CORR_R[0], 6, CZ + 14), W(CX + G.CORR_R[0], 11, CZ + 14), W(CX + G.CORR_R[0], 16, CZ + 14), W(CX + G.CORR_R[0], 21, CZ + 14),
+    W(CX + 30, 1, CZ + 55), W(e, 1, CZ + 2),
+    W(e, 6, CZ + 13), W(e, 11, CZ - 14), W(e, 16, CZ + 13), W(e, 21, CZ - 14),
     W(CX + G.OUT_WALL - 1, 21, CZ + 1), W(CX + G.OUT_WALL - 10, 26, CZ + 1), W(CX + 47, 26, CZ + 1), W(CX, 26, CZ - 47),
   ];
-  const svc0 = G.CORR_R[1];
+  // loading dock -> freight stores -> service stairs (alternating east / west of the north passage) -> tier-1 service
+  // ring -> Kessar's back corridor and pod door -> the pod
   const k = meta.delegations.find((d) => d.id === 'kessar');
   const service = [
-    W(dx, 1, CZ - G.SKIN_R[1] - 2), W(dx, 1, CZ - 61), W(CX - 4, 1, CZ - 48), W(CX + 4, 1, CZ - svc0),
-    W(CX + 14, 6, CZ - svc0), W(CX + 4, 6, CZ - svc0), W(CX + 14, 11, CZ - svc0), W(CX, 11, CZ - 60), W(CX, 11, CZ - 55),
+    W(dx, 1, CZ - G.SKIN_R[1] - 2), W(dx, 1, CZ - 61), W(dx, 1, CZ - 50), W(meta.freight[0], 1, meta.freight[1]), W(CX + 2, 1, CZ - 64),
+    W(CX + 12, 6, CZ - 64), W(CX - 2, 6, CZ - 64), W(CX - 12, 11, CZ - 64), W(CX, 11, CZ - 60), W(CX, 11, CZ - 55),
     W(CX + 40, 11, CZ - 37),   // service ring, quadrant 4 -> 1 via the east slot
   ];
   if (k) service.push({ x: k.suite.podDoor.x, y: k.suite.podDoor.y, z: k.suite.podDoor.z }, { ...k.pod.spot });

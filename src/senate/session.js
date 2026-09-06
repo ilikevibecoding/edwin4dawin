@@ -54,6 +54,11 @@ export class SenateSim {
   }
 
   scenario(session = this.session) { return session < 0 ? null : scenarioForSession(session); }
+  // index of the session that convenes next after `hour` (consistent with advance()'s day * slots + slot)
+  nextSession(hour) {
+    for (let s = 0; s < SESSION_SLOTS.length; s++) if (hour < SESSION_SLOTS[s]) return this.day * SESSION_SLOTS.length + s;
+    return (this.day + 1) * SESSION_SLOTS.length;
+  }
 
   // returns the transitions crossed while moving the clock to `hour` (0..24), oldest first
   advance(hour) {

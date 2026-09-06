@@ -1,0 +1,103 @@
+/* Senate session board, delegation plaques and the speaker subtitle strip (src/ui/senate.js, rubric 17 rows 6, 10,
+   13, 18). Passive HUD overlays (never a screen): the admin panel's hard pixel edges and monospace type in the
+   Senate's own palette - night-blue steel, chrome and gold. Nothing smaller than 12 px. */
+#senate-board, #senate-plaque, #senate-subtitle {
+  --sn-bg: rgba(12, 16, 26, 0.94);
+  --sn-edge: #070a12;
+  --sn-edge-hi: rgba(150, 190, 255, 0.16);
+  --sn-text: #eef0f6;
+  --sn-dim: #8d97ad;
+  --sn-gold: #ffd080;
+  --sn-blue: #9cc4ff;
+  --sn-for: #7ad43b;
+  --sn-against: #e0564f;
+  --sn-und: #c9a24a;
+  --sn-font: 'Lucida Console', 'Courier New', ui-monospace, Menlo, Consolas, monospace;
+  position: absolute;
+  z-index: 5;
+  box-sizing: border-box;
+  color: var(--sn-text);
+  font: 13px/1.4 var(--sn-font);
+  background: var(--sn-bg);
+  border: 2px solid var(--sn-edge);
+  box-shadow: inset 2px 2px 0 var(--sn-edge-hi), inset -2px -2px 0 rgba(0, 0, 0, 0.6), 0 8px 22px rgba(0, 0, 0, 0.5);
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.85);
+  user-select: none;
+  pointer-events: none;
+}
+#senate-board[hidden], #senate-plaque[hidden], #senate-subtitle[hidden] { display: none; }
+#senate-board *, #senate-plaque *, #senate-subtitle * { box-sizing: border-box; }
+#senate-board h2, #senate-board p, #senate-plaque p { margin: 0; }
+
+/* ------------------------------------------------------------------ session board (top right) */
+#senate-board { right: 12px; top: 12px; width: 340px; max-width: calc(100vw - 24px); }
+.sb-head { display: flex; align-items: center; gap: 10px; padding: 7px 10px; background: linear-gradient(#1d2740, #141b2c); border-bottom: 2px solid var(--sn-edge); box-shadow: 0 1px 0 var(--sn-edge-hi); }
+.sb-seal { flex: none; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle at 50% 50%, #ffe7a8 0 3px, #b8862e 3px 5px, #1d2740 5px 7px, #cfd6e6 7px 9px); box-shadow: 1px 1px 0 #000; }
+.sb-head h2 { flex: 1 1 auto; font-size: 13px; line-height: 1.2; letter-spacing: 2px; text-transform: uppercase; color: var(--sn-gold); text-shadow: 2px 2px 0 #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-state { flex: none; padding: 2px 7px; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--sn-dim); border: 1px solid var(--sn-dim); }
+.sb-state[data-state='convening'] { color: var(--sn-blue); border-color: var(--sn-blue); }
+.sb-state[data-state='session'] { color: var(--sn-for); border-color: var(--sn-for); }
+.sb-state[data-state='vote'] { color: var(--sn-gold); border-color: var(--sn-gold); animation: sb-pulse 1.2s ease-in-out infinite; }
+.sb-state[data-state='adjourned'] { color: var(--sn-und); border-color: var(--sn-und); }
+@keyframes sb-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+.sb-body { display: flex; flex-direction: column; gap: 9px; padding: 9px 10px 10px; }
+.sb-label { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--sn-dim); }
+.sb-title { font-size: 14px; font-weight: bold; line-height: 1.25; color: var(--sn-blue); margin-top: 2px; }
+.sb-question { font-size: 12px; line-height: 1.4; color: var(--sn-text); margin-top: 3px; font-style: italic; }
+.sb-sponsor { font-size: 12px; color: var(--sn-dim); margin-top: 2px; }
+.sb-bar { display: flex; height: 14px; width: 100%; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--sn-edge); box-shadow: inset 1px 1px 0 rgba(0, 0, 0, 0.6); overflow: hidden; }
+.sb-bar i { display: block; height: 100%; transition: width 300ms linear; }
+.sb-bar .sb-for { background: linear-gradient(#93e65a, #5faa2c); }
+.sb-bar .sb-against { background: linear-gradient(#f07a72, #b53a33); }
+.sb-bar .sb-und { background: linear-gradient(#e1bb65, #a3802f); }
+.sb-legend { display: flex; justify-content: space-between; gap: 8px; margin-top: 4px; font-size: 12px; }
+.sb-legend .sb-for-t { color: var(--sn-for); }
+.sb-legend .sb-against-t { color: var(--sn-against); }
+.sb-legend .sb-und-t { color: var(--sn-und); }
+.sb-split { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; padding: 5px 8px; font-size: 12px; line-height: 1.35; color: var(--sn-dim); background: rgba(0, 0, 0, 0.32); border-left: 3px solid var(--sn-blue); }
+.sb-split b { color: var(--sn-text); }
+.sb-split .sb-nums { color: var(--sn-text); white-space: nowrap; }
+.sb-clock { font-size: 13px; color: var(--sn-gold); }
+.sb-clock small { display: block; font-size: 12px; color: var(--sn-dim); }
+.sb-speaker { font-size: 12px; line-height: 1.4; color: var(--sn-text); padding: 5px 8px; background: rgba(60, 100, 160, 0.16); border: 1px solid #2a3a5c; }
+.sb-speaker b { color: var(--sn-blue); }
+.sb-speaker:empty { display: none; }
+.sb-last { font-size: 12px; line-height: 1.4; color: var(--sn-text); border-top: 1px solid rgba(150, 190, 255, 0.18); padding-top: 7px; }
+.sb-last .sb-label { display: block; margin-bottom: 2px; }
+.sb-last[data-outcome='pass'] .sb-outcome { color: var(--sn-for); }
+.sb-last[data-outcome='fail'] .sb-outcome { color: var(--sn-against); }
+.sb-last:empty { display: none; }
+
+/* ------------------------------------------------------------------ delegation plaque (top centre) */
+#senate-plaque {
+  left: 50%; top: 14px; transform: translateX(-50%); width: 460px; max-width: calc(100vw - 24px);
+  display: flex; align-items: stretch; gap: 12px; padding: 9px 12px 10px;
+  background: linear-gradient(rgba(24, 30, 46, 0.96), rgba(12, 16, 26, 0.96));
+  border-color: #b8862e; box-shadow: inset 2px 2px 0 rgba(255, 224, 160, 0.22), inset -2px -2px 0 rgba(0, 0, 0, 0.6), 0 0 0 2px var(--sn-edge), 0 8px 22px rgba(0, 0, 0, 0.5);
+}
+.sp-emblem { flex: none; width: 46px; height: 46px; align-self: center; border: 2px solid var(--sp-trim, #cfd6e6); background: var(--sp-wall, #333); position: relative; box-shadow: 1px 1px 0 #000, inset 1px 1px 0 rgba(255, 255, 255, 0.15); }
+.sp-emblem::before { content: ''; position: absolute; left: 8px; right: 8px; top: 8px; bottom: 8px; background: var(--sp-accent, #ffd080); box-shadow: 0 0 6px var(--sp-accent, #ffd080); }
+.sp-emblem::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 8px; background: var(--sp-floor, #555); border-top: 1px solid rgba(0, 0, 0, 0.5); }
+.sp-text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.sp-kicker { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--sn-dim); }
+.sp-name { font-size: 15px; font-weight: bold; line-height: 1.2; color: var(--sn-gold); text-shadow: 2px 2px 0 #000; }
+.sp-senator { font-size: 12px; color: var(--sn-blue); }
+.sp-emblem-text { font-size: 12px; color: var(--sn-dim); font-style: italic; }
+.sp-position { font-size: 12px; line-height: 1.4; color: var(--sn-text); margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(255, 208, 128, 0.22); }
+.sp-position .sp-pos { font-weight: bold; letter-spacing: 1px; text-transform: uppercase; margin-right: 6px; }
+.sp-position .sp-pos[data-pos='for'] { color: var(--sn-for); }
+.sp-position .sp-pos[data-pos='against'] { color: var(--sn-against); }
+.sp-position .sp-pos[data-pos='undecided'] { color: var(--sn-und); }
+.sp-position .sp-firm { color: var(--sn-dim); font-size: 12px; margin-left: 4px; }
+.sp-room { font-size: 12px; color: var(--sn-dim); margin-top: 1px; }
+.sp-room:empty { display: none; }
+
+/* ------------------------------------------------------------------ speaker subtitle (above the hotbar) */
+#senate-subtitle { left: 50%; bottom: 128px; transform: translateX(-50%); width: 620px; max-width: calc(100vw - 32px); padding: 7px 12px 8px; font-size: 14px; line-height: 1.4; text-align: center; }
+#senate-subtitle b { color: var(--sn-blue); margin-right: 8px; }
+#senate-subtitle .ss-clerk { color: var(--sn-gold); }
+
+@media (max-width: 900px) {
+  #senate-board { width: 280px; }
+  #senate-plaque { width: 380px; }
+}
