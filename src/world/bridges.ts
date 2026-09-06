@@ -46,8 +46,9 @@ const MAX_GRADE = 0.055;
 
 function buildAlignment(spec: BridgeSpec, map: WorldMap, total: number): Alignment {
   const rampLen = Math.min(160, total * 0.35);
-  const hA = Math.max(map.heightAt(spec.pts[0][0], spec.pts[0][1]), 0.5) + 0.3;
-  const hB = Math.max(map.heightAt(spec.pts[spec.pts.length - 1][0], spec.pts[spec.pts.length - 1][1]), 0.5) + 0.3;
+  // the deck top meets the road surface (roads.ts lifts its pavement 0.15 m off the terrain) with a 4 cm approach-slab step
+  const hA = Math.max(map.heightAt(spec.pts[0][0], spec.pts[0][1]), 0.5) + 0.19;
+  const hB = Math.max(map.heightAt(spec.pts[spec.pts.length - 1][0], spec.pts[spec.pts.length - 1][1]), 0.5) + 0.19;
   const D = spec.deck;
   const pvi: { s: number; h: number; L: number }[] = [{ s: 0, h: hA, L: 0 }];
   if (spec.archHeight > 0 && spec.archLength > 0) {
@@ -1059,6 +1060,12 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
       }
       // expansion joint across the carriageway over every pier
       P.steel.box(f.x, f.y + 0.03, f.z, cw, 0.04, 0.3, yaw, 0, S_DARK, false);
+    }
+    // abutment joints: the approach-slab finger joint where the road runs onto each end of the deck
+    for (const s of [0.45, total - 0.45]) {
+      const P = parts[chunkOf(s)];
+      const f = frameAt(s);
+      P.steel.box(f.x, f.y + 0.03, f.z, cw, 0.04, 0.5, yawAt(f), 0, S_DARK, false);
     }
 
     // ------------------------------------------------------------ main span structure

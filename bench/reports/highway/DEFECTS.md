@@ -26,3 +26,17 @@ Baseline = `bench/out/highway-r0` (commit 6130eae7, before any highway work).
 | # | view | what reads wrong | status |
 |---|------|------------------|--------|
 | 9 | all | world generation aborted: the 1024² sign atlas overflowed with the gantry faces (`sign atlas full`) | fixed 1027bbad (2048×1024, smaller faces) |
+
+## Round 3 — dev shots on 7beec3c3 (`/tmp/highway/shots`, 15 views in one page)
+
+| # | view | what reads wrong | status |
+|---|------|------------------|--------|
+| 10 | 200 m along, 600 m along, 1500 m | the corridor still reads as a pale ribbon: the highway pavement is sun-bleached concrete-asphalt (roads.ts, albedo ~0.35) — as pale as the barrier, the compacted-shell verge and the dry ground, so only the pole shadow strokes and the gantry register at 200 m and nothing at 600 m+ | verges redesigned 217e5a69 (dark gravel band along the pavement + 5 m mown grass / sand), darker columns; pavement contrast (dark lanes, pale shoulders, edge lines) requested from the Street Detail agent |
+| 11 | shoulder (north verge) | the verge is indistinguishable from the ground; the delineator and the median poles read well; the barrier reads well | verge 217e5a69 |
+| 12 | spit (80 m) | at the spit's tip the terrain swallows the last 30 m of the highway and the deck's first metres (a sand hump over both): the abutment stands inside the hump | terrain mesh vs `heightAt` at a narrow ridge — request to the Terrain agent; the U-abutment is correct but hidden |
+| 13 | junction (60 m) | the arterial T-junction has no signals; the barrier terminal reads as a small pyramid; the median opening is bare | signals 64f53311 (mast arms on the far corners), sand-drum crash cushions 7beec3c3 |
+| 14 | gantry (shoulder) | gantry, pedestals, truss and panel backs read right; a warehouse stands 3 m from the pavement edge (City agent) | ok / noted |
+| 15 | night 300 m | the median lighting reads as a string of lit dots to the horizon | ok |
+| 16 | 9:00 from 300 m | pole shadow strokes every 60 m across the pavement (shadow proxies working); the barrier's shadow is a hairline | ok |
+| 17 | landing (garza-west, Garza end) | camera inside the shore vegetation; re-shot from over the water | re-shot r4 |
+| 18 | top-down 120 m | a district street runs adjacent to the highway's south edge for kilometres (the grid's frontage street): the verge on that side is under it (correct, hidden) | noted for the City / Street Detail agents |
