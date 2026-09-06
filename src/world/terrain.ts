@@ -546,7 +546,8 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     //      island as a contour.
     float slopeLen = max(length(vSlope), 0.006);
     vec2 offshore = -vSlope / slopeLen;
-    float dLine = max(h, 0.0) / slopeLen;
+    // the water plane covers the sand up to h = 0.05 (water.ts discards above it): that is the visible line
+    float dLine = max(h - 0.05, 0.0) / slopeLen;
     float shoreD = mix(dLine, max(-coast, 0.0), smoothstep(5.0, 18.0, dLine));
     float facing = 0.5 + 0.5 * dot(offshore, WIND_DIR);
     float exposure = expo * (0.3 + 0.7 * facing) * 0.85;
