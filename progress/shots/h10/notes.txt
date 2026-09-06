@@ -5,11 +5,10 @@ merged waterphys: 80e763b2 Report: verification state (seen / measured / queued)
 skip boats: no remote branch
 skip clouds4: nothing new
 skip light3: nothing new
-merged street: 2b537141 Street defect log: round 6 (plaza trees regression, terminal hardstand, slot situation)
+merged street: bcf7ffa4 Plaza beds: the lawn and mulch noise (0.9-1.7/m) fades to its mean with the pixel footprin
 skip highway: nothing new
 skip facade3: nothing new
 skip veg5: nothing new
 skip terrain5: nothing new
 skip acgeo: nothing new
-build: 1989b9fb from /home/ubuntu/wt-integration
-cdn: pinned data.json serves h09
+build: 5b3fcb77 from /home/ubuntu/wt-integration
