@@ -215,12 +215,32 @@ before it was "analytic sky only", so no version of the water has ever mirrored 
 was represented, as a uniform grey band.
 Change (`skyReflection`): the lobe's centre ray is carried to the cloud base plane and the shared 2D cloud
 field (`cloudFieldRaw`/`cloudThreshold`, the field the dome's raymarch and the ground shadows use, with the same
-wind offset) says whether a cloud hangs there; the sky is blended toward the grey of a lit base (horizon
-luminance × 1.15, the deck's colour at low coverage) by that coverage × the haze extinction of the path up to
-the base; the field's edge ramp is widened by the lobe's footprint on the base plane (chop blurs the mirrored
+wind offset) says whether a cloud hangs there; the sky is blended toward the colour of a lit base (first the
+deck's grey, horizon luminance × 1.15, then × 0.8; replaced in round 10 by the dome's own base lighting) by that
+coverage × the haze extinction of the path up to the base; the field's edge ramp is widened by the lobe's
+footprint on the base plane (chop blurs the mirrored
 cloud). One field evaluation per pixel, skipped where the sky term weighs under 6 % of the pixel (steep views:
 Fresnel), where the ray is within 2.3° of the horizon (haze band anyway), and in clear presets (uniform gate).
 The overcast band stays as the floor (`max`), so the cloudy preset's look is unchanged.
 Why: a cumulus over water is mirrored as a bright patch under itself on every real sea; it is the most visible
 sky feature the water can carry after the sun path, and the field is exactly the one the visible cloud has, so
 the patch sits under its cloud and drifts with it.
+
+## Round 10 — the mirrored base in the dome's own light
+
+Observed (reasoning over the dome's shader, before the round 9 captures landed — the slot queue held them): the
+sky dome lights a cloud sample with `skyAmb · aoSky + gndAmb + lightCol · lt` (`sky.ts`: the sky's ambient
+occluded by the column above, the world's bounce plus the sun-side haze at a low sun, and the sun that leaks
+through, 5–25 % of it at the base of a tower, most of it when a low sun reaches the bases from below). At a 30°
+sun that puts a lone cumulus base near (0.43, 0.45, 0.48) linear — 1.6 × the horizon luminance, brighter than the
+horizon sky, as the visible bases in every 14:00 still are — while round 9's mirrored base was a *neutral grey at
+0.8 × the horizon luminance*: darker than the sky around it, and at 17:45 a grey cut-out in a salmon sky whose
+clouds the dome lights pink from below.
+Change (`skyReflection`): the lone base's colour is the dome's formula at the mean values of a base (`aoSky` 0.4,
+`lt` 0.13 under a high sun rising to 0.5 at a low one, the same `lowSun`/`nightMix` ramps as `sky.ts`), from the
+shared atmosphere uniforms (`uSunColor`, `uZenithColor`, `uHazeColor`, `uSunHazeColor`); a closed deck keeps the
+probe's 1.9 band. No extra texture reads.
+Why it reduces the defect: the water mirrors the cloud the player sees, in the colour the player sees it — a light
+neutral grey by day, salmon at sunset, blue-grey at dusk — instead of a second, unrelated shade of grey.
+Evidence to capture: `low30` (three cumulus over the bridge at 14:00, r7 without any cloud term vs r10),
+`tod1745`, `aerial-a` (cloud and its mirror in one frame), `cloudy` (the deck: unchanged).
