@@ -2,19 +2,23 @@
 // on the first line, its category on the second - plus the HUD toast "Entering <name> - <category>" / "Leaving ..."
 // when the player walks into or out of a building.
 //
-// One small plane per door (shared PlaneGeometry, 2.4 x 0.6 blocks: Minecraft sign proportions), textured with a
+// One small plane per door (shared PlaneGeometry, 2.6 x 0.65 blocks: Minecraft sign proportions), textured with a
 // 256x64 canvas (dark panel, glowing text) that is cached by its text and created lazily the first time a sign comes
 // within view. Signs further than VIEW_DIST are hidden and only the MAX_VISIBLE nearest are drawn, so the cost is at
 // most 40 small transparent quads. Doors come from `cityMeta()` (ground `doors[]` and the boulevard `midDoor`), which
-// grows as chunks stream in, so the list is re-synced every second.
+// grows as chunks stream in, so the list is re-synced every second. A board hangs just above the door's lintel on the
+// outside of the wall; it settles against the real blocks (3-tall openings, rails hung a block out) when first drawn.
 import * as THREE from 'three';
 import { LEVELS } from './layout.js';
 import { purposeFor } from './purposes.js';
+import { B, BLOCKS } from '../blocks.js';
 
 export const SIGN_W = 2.6, SIGN_H = 0.65;     // 4:1 like the 256x64 texture; a shade over two blocks, like a Minecraft sign
 export const VIEW_DIST = 48;
 export const MAX_VISIBLE = 40;
-const LINTEL_CLEAR = 1.4;                       // sign centre above the door lintel (doors are 2 tall: lintel = y + 2)
+const LINTEL_CLEAR = 1.4;                       // sign centre above the lintel block (the first wall block over the opening)
+const FACE_GAP = 0.08;                          // how far the board hangs in front of the surface it is mounted on
+const CS = 16;                                  // chunk size, for the "is this door's chunk built yet" check
 const TOAST_DEBOUNCE = 5;                       // seconds between toasts for the same lot
 const TEXTURE_TTL = 90;                         // seconds a texture survives unseen before it is freed
 export const CATEGORY_LABEL = { housing: 'Housing', office: 'Offices', government: 'Government', hospitality: 'Hospitality', retail: 'Retail', food: 'Food & drink', industry: 'Industry', transport: 'Transport', security: 'Security', culture: 'Culture', medical: 'Medical', media: 'Media', religion: 'Religion' };
@@ -91,14 +95,16 @@ export class Signs {
     if (meta.midDoor) doors.push({ x: meta.midDoor.x, y: meta.midDoor.y, z: meta.midDoor.z, side: lot.door ? lot.door.side : null, mid: true });
     const seen = new Set();
     for (const d of doors) {
-      const k = `${d.x},${d.y},${d.z}`;
-      if (seen.has(k)) continue; seen.add(k);
       const dir = this.dirOf(d, lot);
       if (!dir) continue;
-      // ground doors are recorded as the wall cell, the boulevard midDoor as the cell just outside the wall: either
-      // way the board hangs 0.08 in front of the outer wall face, above the lintel
-      const off = d.mid ? -0.42 : 0.58;
-      const s = { lotId: lot.id, x: d.x + 0.5 + dir.nx * off, y: d.y + 2 + LINTEL_CLEAR, z: d.z + 0.5 + dir.nz * off, yaw: Math.atan2(dir.nx, dir.nz), mesh: null, mid: d.mid, key: null };
+      // ground doors are recorded as the wall cell, the boulevard midDoor as the cell just outside the wall: the board
+      // starts from an estimate (2-tall opening, flush facade) and settles against the real blocks once its chunk exists
+      const wall = d.mid ? { x: d.x - dir.nx, y: d.y, z: d.z - dir.nz } : { x: d.x, y: d.y, z: d.z };
+      const s = { lotId: lot.id, wall, nx: dir.nx, nz: dir.nz, yaw: Math.atan2(dir.nx, dir.nz), mesh: null, mid: d.mid, key: null, settled: false, settleTries: 0 };
+      this.place(s, wall.y + 2, 0);
+      // a landmark can list the same boulevard entrance both in doors[] and as midDoor: one board per spot
+      const k = `${wall.x},${wall.y},${wall.z}`;
+      if (seen.has(k)) continue; seen.add(k);
       this.signs.push(s);
       let arr = this.byLot.get(lot.id); if (!arr) { arr = []; this.byLot.set(lot.id, arr); } arr.push(s);
     }
@@ -114,6 +120,31 @@ export class Signs {
     const dists = [[d.x - lot.x0, { nx: -1, nz: 0 }], [lot.x1 - 1 - d.x, { nx: 1, nz: 0 }], [d.z - lot.z0, { nx: 0, nz: -1 }], [lot.z1 - 1 - d.z, { nx: 0, nz: 1 }]];
     dists.sort((a, b) => a[0] - b[0]);
     return dists[0][1];
+  }
+  // Board centre for a lintel at `lintelY`, hung `stepOut` whole blocks in front of the wall face.
+  place(s, lintelY, stepOut) {
+    const off = stepOut + 0.5 + FACE_GAP;
+    s.x = s.wall.x + 0.5 + s.nx * off; s.z = s.wall.z + 0.5 + s.nz * off; s.y = lintelY + LINTEL_CLEAR;
+    if (s.mesh) s.mesh.position.set(s.x, s.y, s.z);
+  }
+  // Fit the board to the built facade: openings are 2 or 3 blocks tall, so the lintel is the first solid wall block
+  // above the door; "setback" and arcade facades hang rails, bars or canopies a block out from the wall at that height,
+  // so the board steps out in front of whatever occupies its cell. Runs once the door's chunk has been generated.
+  settle(s) {
+    const w = this.game.world;
+    if (!w) { s.settled = true; return; }
+    const c = w.getChunk(Math.floor(s.wall.x / CS), Math.floor(s.wall.z / CS));
+    if (!c || !c.generated) { if (++s.settleTries > 200) s.settled = true; return; }
+    let lintel = s.wall.y + 2;
+    for (let y = s.wall.y + 2; y <= s.wall.y + 5; y++) {
+      const id = w.getBlock(s.wall.x, y, s.wall.z);
+      if (id !== B.AIR && BLOCKS[id] && BLOCKS[id].solid !== false) { lintel = y; break; }
+    }
+    const yc = Math.floor(lintel + LINTEL_CLEAR);
+    let stepOut = 0;
+    while (stepOut < 3 && w.getBlock(s.wall.x + s.nx * (stepOut + 1), yc, s.wall.z + s.nz * (stepOut + 1)) !== B.AIR) stepOut++;
+    this.place(s, lintel, stepOut);
+    s.settled = true;
   }
 
   textFor(lotId) {
@@ -137,6 +168,7 @@ export class Signs {
     return t;
   }
   ensureMesh(s) {
+    if (!s.settled) this.settle(s);
     const text = this.textFor(s.lotId);
     if (s.mesh && s.key === text.key) { this.material(text); return s.mesh; }
     if (s.mesh) { this.group.remove(s.mesh); s.mesh = null; }

@@ -123,7 +123,8 @@ export class ShopUI {
     if (!c || !this.isOpen) return;
     const eco = this.eco, p = c.purpose;
     this.walletEl.textContent = fmt(eco.credits);
-    this.walletNote.textContent = eco.free ? 'creative: prices shown, nothing charged' : '';
+    this.walletNote.textContent = eco.free ? 'creative: free' : '';
+    this.walletNote.title = eco.free ? 'Creative mode shows prices but never charges' : '';
     const mult = districtMult(p.district);
     const status = eco.isOpenNow(p) ? 'open now' : 'closed (staff still trades)';
     this.titleEl.textContent = p.name;
@@ -218,7 +219,7 @@ export class ShopUI {
     const c = this.ctx, eco = this.eco, p = c.purpose, inv = this.game.inventory;
     this.invEl.replaceChildren();
     const buys = p.buys || [];
-    this.invHint.textContent = buys.length ? (buys.includes('any') ? 'buys anything at 30% - click a stack to sell 1, Shift+click 8' : `buys ${buys.join(', ')} at 45% - click a stack to sell 1, Shift+click 8`) : 'this vendor does not buy from players';
+    this.invHint.textContent = buys.length ? (buys.includes('any') ? 'buys anything at 30% of value' : `buys ${buys.join(', ')} at 45% of value`) : 'does not buy from players';
     for (let i = 0; i < inv.slots.length; i++) {
       const slot = inv.slots[i];
       const offer = slot ? eco.offerFor(p, slot.id) : null;

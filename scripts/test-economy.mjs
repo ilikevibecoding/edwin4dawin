@@ -188,7 +188,8 @@ try {
   for (let i = 0; i < 40; i++) { const n = await ev('game.signs.count()'); if (n >= 10) break; await page.sleep(500); }
   const sg = await evj(`(() => { game.signs.sync(); game.signs.update(game.player); const near = game.signs.nearest(10); const tx = [...game.signs.textures.values()][0]; return { count: game.signs.count(), lots: game.signs.stats.lots, visible: game.signs.stats.visible, near, texW: tx ? tx.tex.image.width : 0, texH: tx ? tx.tex.image.height : 0, geo: game.signs.geo.parameters, meshes: game.signs.group.children.length }; })()`);
   check('signs exist for >= 10 doors of the streamed buildings', sg.count >= 10, `${sg.count} signs over ${sg.lots} lots`);
-  check('the 10 nearest signs have meshes and are visible (within 48 blocks)', sg.near.length === 10 && sg.near.every((s) => s.visible && s.d <= 48), sg.near.map((s) => `${s.d}m${s.mid ? '(mid)' : ''}`).join(' '));
+  const nearIn = sg.near.filter((s) => s.d <= 48), nearOut = sg.near.filter((s) => s.d > 48);
+  check('every sign within 48 blocks has a mesh and is visible; farther ones are culled', sg.near.length === 10 && nearIn.length >= 3 && nearIn.every((s) => s.visible) && nearOut.every((s) => !s.visible), sg.near.map((s) => `${s.d}m${s.mid ? '(mid)' : ''}${s.visible ? '' : ' culled'}`).join(' '));
   check('at most 40 signs are drawn at once, texture 256x64, one shared ~2 x 0.65 plane geometry', sg.visible <= 40 && sg.visible > 0 && sg.texW === 256 && sg.texH === 64 && sg.geo.width >= 2 && sg.geo.width <= 3 && sg.geo.height >= 0.5 && sg.geo.height <= 1, `${sg.visible} visible, ${sg.meshes} meshes, ${sg.geo.width} x ${sg.geo.height}`);
   const tex = await evj(`(() => { const s = game.signs.nearest(1)[0]; const t = game.signs.textFor(s.lotId); return { key: s.key, name: t.name, category: t.category, cached: game.signs.textures.has(s.key) }; })()`);
   check('a sign carries the lot name + category and its texture is cached by text', tex.cached && tex.key === `${tex.name}|${tex.category}` && tex.name.length > 0, `${tex.name} - ${tex.category}`);
@@ -256,7 +257,9 @@ try {
   check('Accept makes the courier run the active job (card tagged "accepted") with a HUD status line and a compass target', accepted.active && accepted.kind === 'courier' && accepted.tagged && /^Courier: deliver the package to /.test(accepted.status) && accepted.target && Math.abs(accepted.target.x - board.first.to.x) < 0.01 && accepted.remaining > 0.99, accepted.status);
   const strip = await evj(`(() => { game.hud.render(game); const p = game.player.pos, t = game.economy.jobs.target(); return { dist: Math.round(Math.hypot(t.x - p.x, t.z - p.z)), toasts: game.hud.toasts.map((x) => x.text) }; })()`);
   check('HUD renders with the active-job strip (distance to target shown)', strip.dist > 50, `${strip.dist} m; toasts ${JSON.stringify(strip.toasts)}`);
+  await ev('(async () => { game.input.locked = true; await __t.frames(3); })()');
   await shot('job_accepted_hud');
+  await ev('game.input.locked = false');
   const busy = await evj(`(() => { const eco = game.economy, lot = eco.lotById(${T.lot.id}); const ok = eco.jobs.accept(eco.jobs.board(lot)[1], lot); return { ok, kind: eco.jobs.active.job.kind }; })()`);
   check('only one job at a time (a second Accept is refused)', busy.ok === false && busy.kind === 'courier');
   const done = await evj(`(async () => { const eco = game.economy, j = eco.jobs.active.job, before = game.player.credits; await __t.go(j.to.x, ${y}, j.to.z); __t.ticks(8); return { before, after: game.player.credits, reward: j.reward, active: !!eco.jobs.active, jobsDone: eco.stats.jobsDone, toasts: game.hud.toasts.map((x) => x.text) }; })()`);

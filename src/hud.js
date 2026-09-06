@@ -335,31 +335,29 @@ export class HUD {
     if (!eco || !eco.jobs || !eco.jobs.active) return;
     const ctx = this.ctx, s = this.scale, W = this.canvas.width, ls = Math.max(1, s - 1);
     const status = eco.jobs.status() || '';
-    const left = eco.jobs.remaining();
-    const timeTxt = left >= 1 ? `${left.toFixed(1)}d` : `${Math.max(0, Math.round(left * 24 * 60))}m`;
-    const reward = `+${eco.jobs.active.job.reward}cr`;
-    const tw = measureText(status, ls), rw = measureText(`${reward}  ${timeTxt}`, ls);
+    const left = eco.jobs.remaining(), hoursLeft = left * 24;
+    const timeTxt = hoursLeft >= 1 ? `${Math.round(hoursLeft)}h` : `${Math.max(0, Math.round(hoursLeft * 60))} min`;
+    const tgt = eco.jobs.target(), p = game.player.pos;
+    const dist = tgt ? Math.round(Math.hypot(tgt.x - p.x, tgt.z - p.z)) : null;
+    const right = `+${eco.jobs.active.job.reward}cr  ${dist != null ? `${dist}m  ` : ''}${timeTxt}`;
+    const tw = measureText(status, ls), rw = measureText(right, ls);
     const w = Math.min(W - 20 * s, 14 * s + tw + 6 * s + rw + 6 * s), h = 12 * s;
     const x = Math.floor(W / 2 - w / 2), y = hotbarY - 46 * s;
     ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(x, y, w, h);
     ctx.fillStyle = 'rgba(80,140,200,0.7)'; ctx.fillRect(x, y, w, s); ctx.fillRect(x, y + h - s, w, s);
     // compass arrow: rotated to the target relative to the view direction (yaw 0 faces -z; turning right lowers yaw)
-    const tgt = eco.jobs.target();
     const cx = x + 7 * s, cy = y + 6 * s;
     if (tgt) {
-      const p = game.player.pos;
       const rel = Math.atan2(-(tgt.x - p.x), -(tgt.z - p.z)) - game.player.yaw;
       ctx.save(); ctx.translate(cx, cy); ctx.rotate(-rel);
       this.pixelArt(ARROW, -4.5 * ls, -4.5 * ls, '#000000', ls);
       this.pixelArt(ARROW, -4.5 * ls - ls * 0.5, -4.5 * ls - ls * 0.5, '#ffd866', ls);
       ctx.restore();
-      const dist = Math.round(Math.hypot(tgt.x - p.x, tgt.z - p.z));
-      this.text(`${dist}m`, cx - measureText(`${dist}m`, ls) / 2, y + h + s, '#c0d8ff', true, ls);
     } else { ctx.fillStyle = '#6a7a8a'; ctx.fillRect(cx - ls, cy - ls, 2 * ls, 2 * ls); }
     ctx.save(); ctx.beginPath(); ctx.rect(x + 14 * s, y, w - 14 * s - rw - 8 * s, h); ctx.clip();
     this.text(status, x + 14 * s, y + 2 * s + (s - ls), '#ffffff', true, ls);
     ctx.restore();
-    this.text(`${reward}  ${timeTxt}`, x + w - rw - 4 * s, y + 2 * s + (s - ls), left < 0.1 ? '#ff7070' : '#ffd866', true, ls);
+    this.text(right, x + w - rw - 4 * s, y + 2 * s + (s - ls), hoursLeft < 2 ? '#ff7070' : '#ffd866', true, ls);
   }
   drawToasts(hotbarY) {
     const now = performance.now(), s = this.scale, W = this.canvas.width;
