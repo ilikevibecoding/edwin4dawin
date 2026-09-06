@@ -5,11 +5,10 @@ merged waterphys: 80e763b2 Report: verification state (seen / measured / queued)
 skip boats: no remote branch
 skip clouds4: nothing new
 skip light3: nothing new
-merged street: ac0bb6ad Street defect log / report: 7.5 closed (parked cars cast at eye level)
+merged street: 2b8c96d1 Street defect log / report: round 10 — the h12 read (counters, beds, cars, heads) and th
 skip highway: nothing new
 skip facade3: nothing new
 skip veg5: nothing new
 skip terrain5: nothing new
 skip acgeo: nothing new
-build: 5d1a1da5 from /home/ubuntu/wt-integration
-cdn: pinned data.json serves h12
+build: 9719cbd1 from /home/ubuntu/wt-integration
