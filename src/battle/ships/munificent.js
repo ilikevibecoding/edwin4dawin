@@ -1,15 +1,16 @@
 // Munificent-class star frigate (Separatist / InterGalactic Banking Clan), 825 m long, 426 m across the
 // lateral wing, 243 m tall. Rebuilt one-to-one against the reference stills and the two ICS cutaways;
-// the layout (see munificentSpec.js) runs bow to stern: the broad flat-topped hood with its wedge lip
-// and crescent nose, open aft as a cowl and open on its upper flanks over the transceiver drums; the
-// sensor cross at 26 % (tall dorsal blade, ventral blade, 426 m wing on a dark spar); the boxy neck
-// with round reactor ports and tall window bands; the flat 168 m dome with the dark spine trench along
-// its top, rounded nose, dark lower hull and keel; the bridge tower at the trench end; and the two
-// armour shells thinning past the tower into the long inward-curving stern blades either side of the
-// thruster block (three thrusters up, two below). Banking Clan livery: pale grey-white plating with
-// dark plank seams, blue bands and the white hexagon with the Confederacy emblem on each flank, ochre
-// wing stripes, yellow running lights and the green-lit bridge glass.
-// Tracking heavy turrets on the dome deck, light turrets along the lower hull, hood flanks and spar.
+// the layout (see munificentSpec.js) runs bow to stern: the 132 m hood cowl with its wedge lip and
+// crescent nose, open aft over the transceiver drums on the dark machinery deck; the sensor cross at
+// 26 % (tall dorsal blade, ventral blade, 426 m wing on a dark spar); the dark machinery neck with its
+// row of round reactor ports and tall lit bays; the 164 m dome with the dark spine trench along its
+// top, its shell edge raked back over the reactor sphere, shallow dark lower hull and keel; the tiered
+// bridge tower at the trench end; and the two armour shells thinning past the tower into the long
+// inward-curving stern blades either side of the thruster block (three thrusters up, two below).
+// Banking Clan livery: pale grey-white plating with dark plank seams, blue bands and the white hexagon
+// with the Confederacy emblem on each flank, ochre wing stripes, yellow running lights and the
+// green-lit bridge glass.
+// Tracking heavy turrets on the dome deck, light turrets along the lower hull, hood flanks and wing.
 import * as THREE from "three";
 import { assemble } from "./shipKit.js";
 import { mpart, rng } from "./munificentGeo.js";
@@ -94,7 +95,7 @@ export function buildMunificent(mats) {
     for (const z of [50, 125, 200, 268])
       mount(
         "light",
-        [side * (HW.lower + 1.2), -21, z],
+        [side * (HW.lower + 1.2), -21.5, z],
         [side, 0, 0],
         [0, 0, -1],
         [side * 0.85, 0.05, -0.5],
@@ -115,7 +116,7 @@ export function buildMunificent(mats) {
         5,
       );
     }
-    mount("light", [side * 104, 13.2, Z.fin], [0, 1, 0], [0, 0, -1], [side * 0.4, 0.6, -0.7], "light", 7000, 5);
+    mount("light", [side * 70, 10.2, Z.fin], [0, 1, 0], [0, 0, -1], [side * 0.4, 0.6, -0.7], "light", 7000, 5);
     mount("light", [side * 42, Y.neckTop + 0.2, -96], [0, 1, 0], [0, 0, -1], [side * 0.4, 0.6, -0.7], "light", 7000, 5);
     {
       const a = 72 * D2R;
@@ -145,9 +146,9 @@ export function buildMunificent(mats) {
         kind: "light",
         range: 7000,
       });
-    // forward heavy guns under the hood lip
+    // forward heavy guns in the hood lip (the lip is a crescent: it sits 16 m aft of the corners here)
     hardpoints.push({
-      pos: [side * 30, 2, Z.nose + 6],
+      pos: [side * 22, 9.5, Z.nose + 17],
       dir: [side * 0.15, 0, -1],
       kind: "heavy",
       range: 12000,

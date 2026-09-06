@@ -1,15 +1,16 @@
 // Layout, palette and section generators shared by the Munificent-class frigate builders. Everything is
 // measured against the reference stills and the two ICS cutaways; fractions are of the 825 m length,
 // counted from the bow (forward is -z, up +y, origin at the hull centre):
-//   - 0-33.5 %: the hood — a broad flat-topped arch (172 m beam) that thins to a wedge lip at the nose
-//     (a shallow crescent notch seen from above), rises to 53 m at the fin and stays open aft as a cowl
-//     over the transceiver drums; its upper flanks are open between 20 % and 29 %;
-//   - 26 %: the sensor cross — the 50 m chord dorsal blade to +125 m, the ventral blade to -118 m
-//     (243 m tip to tip) and the 426 m lateral wing on a dark spar;
-//   - 33.5-51.5 %: the boxy neck (110 m wide, 85 m tall) with round reactor ports and window bands;
-//   - 51.5-100 %: the dome — a 168 m flat arch 60 m tall over a dark lower hull, rounded nose, the dark
-//     spine trench along its top to the bridge tower at 80-87 %, and the two armour shells thinning past
-//     the tower into the long inward-curving stern blades either side of the thruster block (86.4 %).
+//   - 0-32.4 %: the hood — a round-topped cowl (132 m beam, 46 m tall) that thins to a wedge lip at the
+//     nose (a shallow crescent notch seen from above) and stays open aft over the transceiver drums;
+//   - 26 %: the sensor cross — the 46 m chord dorsal blade to +132 m, the ventral blade to -108 m
+//     (240 m tip to tip) and the 426 m lateral wing on a dark spar;
+//   - 32.4-51.5 %: the dark machinery neck (96 m wide, 64 m tall) with the row of round reactor ports,
+//     the tall lit bays low on its flanks and the antenna deck on top;
+//   - 51.5-100 %: the dome — a 164 m arch 66 m tall over a shallow dark lower hull, its shell edge raked
+//     back from the eave to the top over the reactor sphere, the dark spine trench along its top to the
+//     tiered bridge tower at 78-86 %, and the two armour shells thinning past the tower into the long
+//     inward-curving stern blades either side of the thruster block (86.4 %).
 import { col } from "./munificentGeo.js";
 import { smoothTable } from "./munificentHull.js";
 
@@ -18,43 +19,42 @@ export const D2R = Math.PI / 180;
 
 export const Z = {
   nose: -412.5,
-  hoodOpen0: -247, // upper flank plating stops: open framework with the transceiver drums
-  hoodOpen1: -173,
-  hoodEnd: -136, // hood aft rim; the neck begins
+  hoodEnd: -145, // hood aft rim; the neck begins
   fin: -200, // fin / wing station (26 % from the bow)
-  neckEnd: 12, // neck meets the dome nose
-  domeFull: 70, // dome at its full section; the trench begins
-  split: 228, // trench ends; the shells start narrowing into the stern blades
+  neckEnd: 12, // the dome shell's eave edge; the neck core runs on under the raked shell
+  domeFull: 66, // the shell edge reaches the top of the arch; the trench begins
+  split: 226, // trench ends; the shells start narrowing into the stern blades
+  towerBase: 232, // bridge tower plinth
   eng: 300, // stern face with the thrusters
   tip: 412.5,
 };
 export const Y = {
-  domeTop: 59, // peak of the dome; its top slopes down toward the stern (see domeH)
+  domeTop: 61, // peak of the dome; its top slopes down toward the stern (see domeH)
   eave: -5,
-  lowerBot: -36,
-  keelBot: -63,
-  neckTop: 27,
-  neckBot: -58,
-  hoodPeak: 44,
-  hoodFloor: -13,
-  deckBot: -27,
-  wing: 2,
-  finTop: 125,
-  lowFinBot: -118,
+  lowerBot: -30,
+  keelBot: -40,
+  neckTop: 24,
+  neckBot: -40,
+  hoodPeak: 42,
+  hoodFloor: -4,
+  deckBot: -30,
+  wing: 4,
+  finTop: 132,
+  lowFinBot: -108,
 };
 export const HW = {
-  dome: 84,
-  hood: 84,
-  neck: 55,
-  lower: 62,
-  trench: 17.5,
+  dome: 82,
+  hood: 66,
+  neck: 48,
+  lower: 58,
+  trench: 17,
   wing: 213,
-  keel: 40,
-  stern: 36,
+  keel: 34,
+  stern: 34,
 };
-export const SHELL_P = 2.3; // superellipse exponent of the arches (flat-topped)
+export const SHELL_P = 2.1; // superellipse exponent of the dome arch (a slightly squared barrel)
 export const SHELL_TH = 4.5; // armour shell thickness
-export const HOOD_P = 2.0; // the hood cowl is a rounder arch than the dome
+export const HOOD_P = 2.0; // the hood cowl is an elliptical arch
 
 // palette: vertex tints over the shared plating (mean albedo ~0.62 before tint). Pale grey-white with
 // a cool cast (the TCW frigate), a clear step above the Recusant's gunmetal and cooler than the Venator.
@@ -140,19 +140,19 @@ const prongT = smoothTable([
   [395, 0.9],
   [Z.tip, 1],
 ]);
-// arch height above the eave: the dome peaks at 58-62 % and its top slopes down all the way to the
-// thin tail (WSMI side view: 28 m lower at the tower, a sliver at the tip)
+// arch height above the eave: the dome peaks at 52-66 % and its top slopes down all the way to the
+// thin tail (WSMI side view: 11 m lower at the tower, 45 m lower near the tip)
 const domeH = smoothTable([
   [Z.neckEnd, Y.domeTop - Y.eave],
-  [120, Y.domeTop - Y.eave],
-  [170, 60],
-  [215, 54],
-  [250, 45],
-  [290, 34],
-  [330, 22],
-  [370, 12],
-  [395, 6],
-  [Z.tip, 1.5],
+  [130, Y.domeTop - Y.eave],
+  [170, 63],
+  [210, 58],
+  [250, 51],
+  [290, 43],
+  [330, 34],
+  [370, 24],
+  [396, 16],
+  [Z.tip, 9],
 ]);
 /** Dome section at z: half-width, arch height, shell centre x offset (starboard) and eave height. */
 export function domeSection(z) {
@@ -162,11 +162,16 @@ export function domeSection(z) {
   const k = t ** 0.75;
   const tip = t > 0.985 ? (t - 0.985) / 0.015 : 0;
   return {
-    hw: (HW.dome - 74 * k) * (1 - 0.9 * tip),
+    hw: (HW.dome - 72 * k) * (1 - 0.9 * tip),
     h,
     cx: 46 * k,
-    yE: Y.eave - 20 * t,
+    yE: Y.eave - 8 * t,
   };
+}
+/** z of the dome shell's raked front edge at arch angle a: the eave leads, the top is set back. */
+export function shellFrontZ(a) {
+  const from = Math.min(a, Math.PI - a);
+  return Z.neckEnd + (Z.domeFull - Z.neckEnd) * (1 - Math.cos(from));
 }
 /** Height of the dome top (trench rim level) at z. */
 export function domeTop(z) {
@@ -201,33 +206,31 @@ export function domeSurf(z, s, side = 1, lift = 0) {
 
 // ---- hood ----
 const hoodHW = smoothTable([
-  [Z.nose, 42],
-  [-407, 58],
-  [-399, 67],
-  [-388, 74],
-  [-365, 80.5],
+  [Z.nose, 34],
+  [-407, 46],
+  [-399, 53],
+  [-388, 58.5],
+  [-365, 63.5],
   [-330, HW.hood],
   [-300, HW.hood],
   [-200, HW.hood],
-  [-165, 82.5],
-  [-150, 80],
-  [Z.hoodEnd, 76],
+  [-170, 65],
+  [Z.hoodEnd, 62],
 ]);
 const hoodTop = smoothTable([
-  [Z.nose, 9],
-  [-388, 15],
-  [-338, 29],
+  [Z.nose, 12],
+  [-388, 18],
+  [-338, 30],
   [-297, 37],
-  [-256, 41],
+  [-256, 40.5],
   [-206, Y.hoodPeak],
-  [-165, 41],
-  [-148, 38],
-  [Z.hoodEnd, 34],
+  [-170, 40.5],
+  [Z.hoodEnd, 38],
 ]);
 const hoodFloor = smoothTable([
-  [Z.nose, 7],
-  [-388, 0],
-  [-338, -9],
+  [Z.nose, 10],
+  [-388, 4],
+  [-338, -1],
   [-300, Y.hoodFloor],
   [Z.hoodEnd, Y.hoodFloor],
 ]);
@@ -235,11 +238,11 @@ export function hoodSection(z) {
   const yF = hoodFloor(z);
   return { hw: hoodHW(z), yF, h: hoodTop(z) - yF };
 }
-// the nose lip is a shallow crescent: the centre sits 14 m aft of the corners
+// the nose lip is a shallow crescent: the centre sits 20 m aft of the corners
 export function noseShift(x, z) {
-  const k = 1 - Math.min(1, (z - Z.nose) / 60);
-  const c = Math.max(0, 1 - (Math.abs(x) / 66) ** 2);
-  return 14 * c * k * k;
+  const k = 1 - Math.min(1, (z - Z.nose) / 70);
+  const c = Math.max(0, 1 - (Math.abs(x) / 52) ** 2);
+  return 20 * c * k * k;
 }
 /** Point on the hood arch at station z and angle a (0 = starboard eave, PI = port eave). */
 export function hoodPoint(z, a, lift = 0) {

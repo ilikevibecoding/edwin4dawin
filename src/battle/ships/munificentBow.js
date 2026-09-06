@@ -1,7 +1,7 @@
-// Bow of the Munificent-class frigate: the hood (a flat-topped arch that thins to a wedge lip at the
-// crescent nose, stays open aft as a cowl and has its upper flanks open over the transceiver drums),
-// the machinery deck and drums under it, arch ribs across the openings, the sensor cross (dorsal and
-// ventral blades, the 426 m lateral wing on its dark spar) and the hood livery.
+// Bow of the Munificent-class frigate: the hood (an elliptical cowl that thins to a wedge lip at the
+// crescent nose and stays open aft over the transceiver drums), the machinery deck and drums under it,
+// the sensor cross (dorsal and ventral blades, the 426 m lateral wing on its dark spar) and the hood
+// livery.
 import * as THREE from "three";
 import { bar, slabProfile, smoothstep, sweep, tubeZ, wingProfile } from "./munificentGeo.js";
 import { loftStrips, ribbon } from "./munificentHull.js";
@@ -89,59 +89,29 @@ function bandOnHood(add, zs, sLo, sHi, m, mat, opts, lift = 0.45) {
 export function buildBow(add, rand) {
   const zNose = Z.nose;
   // ---------------------------------------------------------------------------
-  // hood plating: five angular bands so the upper flanks can be left open over the drums
+  // hood plating: one closed cowl from the nose lip to the open aft rim
   // ---------------------------------------------------------------------------
   const frontZ = {
-    0: [zNose, -409, -404, -398, -390, -380, -368, -355, -340, -322, -300, -280, -262, Z.hoodOpen0],
-    1: [zNose, -405, -394, -378, -352, -318, -282, Z.hoodOpen0],
-    2: [zNose, -403, -388, -362, -318, -268, Z.hoodOpen0],
+    0: [zNose, -409, -404, -398, -390, -380, -368, -355, -340, -322, -300, -280, -262, -244, -226, -208, -190, -172, -158, Z.hoodEnd],
+    1: [zNose, -405, -394, -378, -352, -318, -282, -246, -210, -176, Z.hoodEnd],
+    2: [zNose, -403, -388, -362, -318, -268, -210, Z.hoodEnd],
   };
-  const openZ = { 0: [-230, -212, -195, -178], 1: [-210], 2: [-210] };
-  const aftZ = {
-    0: [Z.hoodOpen1, -160, -148, Z.hoodEnd],
-    1: [Z.hoodOpen1, -152, Z.hoodEnd],
-    2: [Z.hoodOpen1, Z.hoodEnd],
-  };
-  const bands = [
-    { a0: 0, a1: 22, m: [4, 3, 2], open: false },
-    { a0: 22, a1: 70, m: [8, 5, 4], open: true },
-    { a0: 70, a1: 110, m: [7, 4, 4], open: false },
-    { a0: 110, a1: 158, m: [8, 5, 4], open: true },
-    { a0: 158, a1: 180, m: [4, 3, 2], open: false },
-  ];
   for (const lod of [0, 1, 2]) {
-    const allZ = [...frontZ[lod], ...openZ[lod], ...aftZ[lod]];
-    for (const b of bands) {
-      const m = b.m[lod];
-      const runs =
-        b.open && lod < 2 ? [frontZ[lod], aftZ[lod]] : [allZ];
-      for (const zs of runs) {
-        add(
-          loftStrips(
-            zs.map((z) => hoodRing(z, b.a0, b.a1, m)),
-            { texel: TEX },
-          ),
-          "hull",
-          { uv: "keep", lod, tint: hoodTint },
-        );
-      }
-      // inner face of the cowl (seen through the aft arch and the flank openings)
-      if (lod < 2) {
-        const zsIn = allZ.filter((z) => z >= -330);
-        add(
-          loftStrips(
-            zsIn.map((z) => hoodRing(z, b.a1, b.a0, m, -SHELL_TH)),
-            { texel: 1 / 8 },
-          ),
-          "dark",
-          {
-            uv: "keep",
-            lod,
-            tint: (x, y, z, o) =>
-              o.set(MACH_DK).multiplyScalar(0.7 + 0.3 * smoothstep(-330, -180, z)),
-          },
-        );
-      }
+    const allZ = frontZ[lod];
+    const m = lod === 0 ? 29 : lod === 1 ? 17 : 9;
+    add(loftStrips(allZ.map((z) => hoodRing(z, 0, 180, m)), { texel: TEX }), "hull", {
+      uv: "keep",
+      lod,
+      tint: hoodTint,
+    });
+    // inner face of the cowl (seen through the aft arch)
+    if (lod < 2) {
+      const zsIn = allZ.filter((z) => z >= -300);
+      add(loftStrips(zsIn.map((z) => hoodRing(z, 180, 0, m, -SHELL_TH)), { texel: 1 / 8 }), "dark", {
+        uv: "keep",
+        lod,
+        tint: (x, y, z, o) => o.set(MACH_DK).multiplyScalar(0.7 + 0.3 * smoothstep(-300, -170, z)),
+      });
     }
     // shovel floor from the lip back to the machinery deck
     {
@@ -174,7 +144,7 @@ export function buildBow(add, rand) {
         color: MACH_DK,
       });
     }
-    // aft rim of the cowl and the cut edges of the flank openings
+    // aft rim of the cowl
     if (lod < 2) {
       const m = lod === 0 ? 25 : 13;
       add(
@@ -185,30 +155,14 @@ export function buildBow(add, rand) {
         "dark",
         { uv: "keep", lod, color: MACH_DK },
       );
-      for (const [z, back] of [
-        [Z.hoodOpen0, -300],
-        [Z.hoodOpen1, -120],
-      ])
-        for (const [a0, a1] of [
-          [22, 70],
-          [110, 158],
-        ])
-          add(
-            loftStrips([hoodRing(z, a0, a1, 6), hoodRing(z, a0, a1, 6, -SHELL_TH)], {
-              texel: 1 / 6,
-              orient: [0, 10, back],
-            }),
-            "dark",
-            { uv: "keep", lod, color: MACH_DK },
-          );
     }
   }
 
   // ---------------------------------------------------------------------------
-  // machinery deck, transceiver drums, ribs and stringers in the openings
+  // machinery deck under the cowl, transceiver drums, conduits
   // ---------------------------------------------------------------------------
   for (const lod of [0, 1, 2]) {
-    const deckHW = 64;
+    const deckHW = 50;
     add(
       new THREE.BoxGeometry(deckHW * 2, Y.hoodFloor - Y.deckBot, Z.hoodEnd + 322).translate(
         0,
@@ -219,18 +173,18 @@ export function buildBow(add, rand) {
       { texel: 1 / 8, lod, color: MACH_DK },
     );
     if (lod === 2) continue;
-    // drums lying fore-aft on the deck
+    // drums lying fore-aft on the deck, seen through the open aft rim
     const seg = lod === 0 ? 18 : 10;
-    for (const x of [-52, -19, 19, 52]) {
-      const r = 12.5;
-      add(tubeZ(r, r, 84, seg, x, Y.hoodFloor + r - 1, -201, false), "dark", {
+    for (const x of [-40, -14, 14, 40]) {
+      const r = 11;
+      add(tubeZ(r, r, 90, seg, x, Y.hoodFloor + r - 1, -200, false), "dark", {
         texel: 1 / 6,
         lod,
         tint: (px, py, pz, o) =>
           o.set(MACH_LT).multiplyScalar(0.8 + 0.25 * smoothstep(-6, 12, py)),
       });
       if (lod === 0)
-        for (const z of [-236, -201, -166])
+        for (const z of [-238, -200, -162])
           add(tubeZ(r + 1.2, r + 1.2, 3, seg, x, Y.hoodFloor + r - 1, z, true), "dark", {
             texel: 1 / 6,
             lod,
@@ -238,41 +192,30 @@ export function buildBow(add, rand) {
           });
     }
     // conduits between the drums and along the deck flanks
-    for (const x of [-36, 0, 36])
+    for (const x of [-27, 0, 27])
       add(tubeZ(2.2, 2.2, 100, 8, x, Y.hoodFloor + 1.5, -200, false), "dark", {
         texel: 1 / 4,
         lod,
         color: MACH,
       });
     for (const side of [-1, 1])
-      for (const y of [-17, -23])
-        add(tubeZ(1.8, 1.8, 150, 8, side * (deckHW + 1.4), y, -226, false), "dark", {
+      for (const y of [-13, -20, -26])
+        add(tubeZ(1.8, 1.8, 160, 8, side * (deckHW + 1.4), y, -226, false), "dark", {
           texel: 1 / 4,
           lod,
-          color: MACH,
+          color: y === -20 ? MACH_LT : MACH,
         });
-    // arch ribs standing in the openings (the plating frames)
-    const ribZ = lod === 0 ? [-236, -222, -208, -190, -178] : [-230, -205, -180];
-    for (const z of ribZ)
-      for (const [a0, a1] of [
-        [16, 76],
-        [104, 164],
-      ])
-        add(
-          loftStrips([hoodRing(z - 1.4, a0, a1, 9, -0.6), hoodRing(z + 1.4, a0, a1, 9, -0.6)], {
-            texel: 1 / 4,
-            orient: [0, 12, z],
-          }),
-          "dark",
-          { uv: "keep", lod, color: MACH },
-        );
-    // stringers along the openings
-    for (const a of [34, 52, 128, 146])
-      add(
-        bar(hoodPoint(Z.hoodOpen0, a * D2R, -2.4), hoodPoint(Z.hoodOpen1, a * D2R, -2.4), 1.6, 1.6),
-        "dark",
-        { texel: 1 / 4, lod, color: MACH_LT },
-      );
+    // frames and boxes on the exposed underside (the dark machinery under the cowl)
+    if (lod === 0)
+      for (const side of [-1, 1])
+        for (let k = 0; k < 8; k++) {
+          const z = -296 + k * 20 + rand() * 4;
+          add(
+            new THREE.BoxGeometry(3 + rand() * 4, 5 + rand() * 9, 7 + rand() * 8).translate(side * (deckHW + 2.5), -12 - rand() * 12, z),
+            "dark",
+            { texel: 1 / 4, lod, color: rand() < 0.5 ? MACH_DK : MACH },
+          );
+        }
   }
 
   // ---------------------------------------------------------------------------
@@ -346,8 +289,8 @@ export function buildBow(add, rand) {
       );
   };
   for (const lod of [0, 1, 2]) {
-    blade(lod, Y.hoodPeak - 8, Y.finTop - 7, 50, 42, 10, 7, 6);
-    blade(lod, Y.deckBot + 4, Y.lowFinBot + 6, 46, 36, 9, 6, 0);
+    blade(lod, Y.hoodPeak - 8, Y.finTop - 7, 46, 38, 9.5, 6.5, 6);
+    blade(lod, Y.deckBot + 4, Y.lowFinBot + 6, 42, 32, 8.5, 5.5, 0);
     if (lod === 0) {
       add(bar([0, Y.finTop - 1, Z.fin - 9], [0, Y.finTop + 12, Z.fin - 9], 0.8, 0.8), "dark", {
         texel: 1 / 3,
@@ -362,9 +305,10 @@ export function buildBow(add, rand) {
     }
   }
 
-  // lateral wing: lens plank, tapering 46 -> 30 m chord and 9 -> 4 m thick
-  const chordAt = (x) => 46 - 16 * Math.max(0, (Math.abs(x) - 40) / 173);
-  const thickAt = (x) => 9 - 5 * Math.max(0, (Math.abs(x) - 40) / 173);
+  // lateral wing: lens plank, tapering 42 -> 26 m chord and 8 -> 3.5 m thick (TCW: a thin plate about
+  // a tenth of the half-span in chord)
+  const chordAt = (x) => 42 - 16 * Math.max(0, (Math.abs(x) - 40) / 173);
+  const thickAt = (x) => 8 - 4.5 * Math.max(0, (Math.abs(x) - 40) / 173);
   const wingTint = (x, y, z, o) => {
     o.copy(HULL).multiplyScalar(0.98 * plankTone(x / 11 + 100));
     o.multiplyScalar(y < Y.wing - 0.3 ? 0.88 : 1);
@@ -392,13 +336,13 @@ export function buildBow(add, rand) {
       "hull",
       { uv: "keep", lod, tint: wingTint },
     );
-    // spar: a dark greebled beam through the hood, standing out to +-120 m
-    add(new THREE.BoxGeometry(240, 18, 42).translate(0, 4, Z.fin), "dark", {
+    // spar: a dark beam through the hood carrying the wing and both blades
+    add(new THREE.BoxGeometry(130, 16, 40).translate(0, Y.wing, Z.fin), "dark", {
       texel: 1 / 6,
       lod,
       color: MACH_DK,
     });
-    add(new THREE.BoxGeometry(48, 16, 32).translate(0, 22, Z.fin), "dark", {
+    add(new THREE.BoxGeometry(40, 18, 30).translate(0, 22, Z.fin), "dark", {
       texel: 1 / 6,
       lod,
       color: MACH,
@@ -417,7 +361,7 @@ export function buildBow(add, rand) {
         color: MACH_DK,
       });
       // ochre edge stripes and the dark spar seam on the upper surface
-      const xs2 = lod === 0 ? [122, 140, 160, 180, 196, 206] : [122, 165, 206];
+      const xs2 = lod === 0 ? [74, 92, 112, 134, 156, 178, 196, 206] : [74, 140, 206];
       for (const [u0, u1] of [
         [0.8, 0.58],
         [-0.58, -0.8],
@@ -459,23 +403,23 @@ export function buildBow(add, rand) {
         }
         add(fanPoly(pts, [0, 1, 0]), "paint", { texel: 1 / 4, lod, color: WHITE });
       }
-      // wing root fairing where the plank leaves the spar, and greebles along the spar top
-      add(new THREE.BoxGeometry(14, 12, 46).translate(side * 122, Y.wing + 1, Z.fin), "hull", {
+      // wing root fairing where the plank leaves the cowl, greebles and leading-edge lights outboard
+      add(new THREE.BoxGeometry(12, 11, 46).translate(side * 70, Y.wing + 0.5, Z.fin), "hull", {
         texel: 1 / 5,
         lod,
         color: HULL_DK,
       });
       if (lod === 0) {
-        for (let k = 0; k < 7; k++) {
-          const x = side * (88 + k * 4.6);
+        for (let k = 0; k < 6; k++) {
+          const x = side * (78 + k * 5.2);
           add(
-            new THREE.BoxGeometry(3.2, 2 + rand() * 3, 5 + rand() * 9).translate(x, 13.5 + 1.5, Z.fin - 8 + rand() * 16),
+            new THREE.BoxGeometry(3.2, 1.6 + rand() * 2, 5 + rand() * 8).translate(x, Y.wing + thickAt(x) / 2 + 1, Z.fin - 6 + rand() * 12),
             "dark",
             { texel: 1 / 3, lod, color: MACH },
           );
         }
-        for (let k = 0; k < 8; k++) {
-          const x = side * (128 + k * 9.5);
+        for (let k = 0; k < 9; k++) {
+          const x = side * (110 + k * 10.5);
           const c = chordAt(x) / 2;
           add(
             new THREE.BoxGeometry(3, 1.4, 2.4).translate(x, Y.wing + thickAt(x) / 2 * 0.5 + 0.4, Z.fin - c * 0.94),
@@ -484,20 +428,26 @@ export function buildBow(add, rand) {
           );
         }
       }
+      // lit strips along the leading and trailing edges (TCW: yellow-lit wing edges)
+      if (lod < 2)
+        for (const s of [-1, 1]) {
+          const xs3 = lod === 0 ? [80, 110, 140, 170, 204] : [80, 204];
+          add(
+            loftStrips(
+              xs3.map((x) => {
+                const zE = Z.fin + s * (chordAt(x) / 2) * 0.985;
+                return [
+                  [side * x, Y.wing - 0.45, zE],
+                  [side * x, Y.wing + 0.45, zE],
+                ];
+              }),
+              { texel: 1 / 4, orient: [side * 140, Y.wing, Z.fin] },
+            ),
+            "windows",
+            { uv: "keep", lod, color: WINDOW },
+          );
+        }
     }
-    // lit strips on the spar block and the beam faces
-    if (lod < 2)
-      for (const s of [-1, 1]) {
-        add(new THREE.BoxGeometry(30, 1.2, 0.3).translate(0, 24, Z.fin + s * 16.2), "windows", {
-          lod,
-          color: WINDOW,
-        });
-        for (const x of [-100, -92, 92, 100])
-          add(new THREE.BoxGeometry(4, 1.4, 0.3).translate(x, 6, Z.fin + s * 21.2), "windows", {
-            lod,
-            color: WINDOW,
-          });
-      }
   }
 
   // ---------------------------------------------------------------------------
@@ -506,44 +456,41 @@ export function buildBow(add, rand) {
   const sTotal = HOOD_ARC.total;
   const sA = HOOD_ARC.sOfA(56 * D2R);
   for (const lod of [0, 1]) {
-    const zs = lod === 0 ? [-392, -380, -365, -345, -320, -295, -270, -252] : [-392, -360, -310, -252];
+    const zs = lod === 0 ? [-392, -380, -365, -345, -320, -295, -270, -245, -220, -195, -170, -158] : [-392, -360, -310, -250, -200, -158];
     for (const side of [-1, 1]) {
       const sc = side > 0 ? sA : sTotal - sA;
       bandOnHood(add, zs, () => sc - 4.2, () => sc + 4.2, 2, "paint", { lod, color: BLUE });
-      const zd = lod === 0 ? [-398, -385, -368, -350, -330, -312, -300] : [-398, -350, -300];
-      const sc2 = (z) => {
-        const t = (z + 398) / 98;
-        const a = (18 + 30 * t) * D2R;
-        const s = HOOD_ARC.sOfA(a);
-        return side > 0 ? s : sTotal - s;
-      };
-      bandOnHood(add, zd, (z) => sc2(z) - 6.5, (z) => sc2(z) + 6.5, 3, "paint", { lod, color: BLUE });
+      // two diagonal bands on each flank (TCW), rising toward the top going aft
+      for (const [zStart, span] of [
+        [-398, 98],
+        [-262, 90],
+      ]) {
+        const zd = lod === 0 ? [0, 0.14, 0.3, 0.48, 0.66, 0.84, 1].map((t) => zStart + span * t) : [0, 0.5, 1].map((t) => zStart + span * t);
+        const sc2 = (z) => {
+          const t = (z - zStart) / span;
+          const a = (18 + 30 * t) * D2R;
+          const s = HOOD_ARC.sOfA(a);
+          return side > 0 ? s : sTotal - s;
+        };
+        bandOnHood(add, zd, (z) => sc2(z) - 6.5, (z) => sc2(z) + 6.5, 3, "paint", { lod, color: BLUE });
+      }
     }
   }
   // dark plank seams along the hood (LOD 0)
   for (const a of [12, 46, 90, 134, 168]) {
-    const runs =
-      a === 46 || a === 134
-        ? [
-            [-396, Z.hoodOpen0 - 2],
-            [Z.hoodOpen1 + 2, -140],
-          ]
-        : [[-396, -140]];
-    for (const [z0, z1] of runs) {
-      const zs = [];
-      for (let z = z0; z < z1; z += 22) zs.push(z);
-      zs.push(z1);
-      const pts = zs.map((z) => hoodPoint(z, a * D2R, 0));
-      const nrm = zs.map((z) => hoodNormal(z, a * D2R));
-      const acr = nrm.map((n) => [n[1], -n[0], 0]);
-      add(ribbon(pts, nrm, acr, 1.3, 0.28), "dark", { uv: "keep", lod: 0, color: MACH_DK });
-    }
+    const zs = [];
+    for (let z = -396; z < -150; z += 22) zs.push(z);
+    zs.push(-150);
+    const pts = zs.map((z) => hoodPoint(z, a * D2R, 0));
+    const nrm = zs.map((z) => hoodNormal(z, a * D2R));
+    const acr = nrm.map((n) => [n[1], -n[0], 0]);
+    add(ribbon(pts, nrm, acr, 1.3, 0.28), "dark", { uv: "keep", lod: 0, color: MACH_DK });
   }
   // window rows low on the flanks and antenna clusters on the ridge
   for (const lod of [0, 1])
     for (const side of [-1, 1]) {
       const a = (side > 0 ? 11 : 169) * D2R;
-      for (const z of [-330, -282])
+      for (const z of [-330, -282, -234, -180])
         slotRow(add, {
           c: hoodPoint(z, a, 0),
           n: hoodNormal(z, a),
@@ -558,7 +505,7 @@ export function buildBow(add, rand) {
           rim: MACH_DK,
         });
     }
-  for (const z of [-262, -150])
+  for (const z of [-262, -166])
     antennaCluster(add, {
       base: hoodPoint(z, Math.PI / 2, 0),
       up: [0, 1, 0],
