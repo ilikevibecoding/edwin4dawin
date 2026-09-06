@@ -21,11 +21,27 @@ uniform mat4 uInvView;
 uniform vec3 uCamPos;
 uniform float uLogDepthFC;
 uniform float uCloudShadowStrength;
+uniform vec2 uTexel;
 varying vec2 vUv;
+vec3 viewDir(vec2 uv) {
+  vec4 vdir4 = uInvProj * vec4(uv * 2.0 - 1.0, 1.0, 1.0);
+  vec3 vdir = vdir4.xyz / vdir4.w;
+  return normalize((uInvView * vec4(vdir, 0.0)).xyz);
+}
 void main() {
   vec4 c = texture2D(tColor, vUv);
   float depth = texture2D(tDepth, vUv).r;
-  if (depth >= 0.99999) { gl_FragColor = c; return; }
+  if (depth >= 0.99999) {
+    // The horizon row: MSAA resolves those pixels to a mix of the dome and the *unhazed* far water (the haze is
+    // applied here from the resolved depth, which took the dome's sample), leaving a one-pixel dark seam along
+    // the whole horizon at any altitude. Where a neighbour holds geometry beyond the dissolve start (all haze
+    // once hazed), the dark share can only be that water: lift the pixel to the sky it should have dissolved into.
+    float dn = min(min(texture2D(tDepth, vUv + vec2(uTexel.x, 0.0)).r, texture2D(tDepth, vUv - vec2(uTexel.x, 0.0)).r),
+                   min(texture2D(tDepth, vUv + vec2(0.0, uTexel.y)).r, texture2D(tDepth, vUv - vec2(0.0, uTexel.y)).r));
+    if (dn < 0.99999 && exp2(dn * 2.0 / uLogDepthFC) - 1.0 > uFarDissolve.x) c.rgb = max(c.rgb, skyRadiance(viewDir(vUv)));
+    gl_FragColor = c;
+    return;
+  }
   vec2 ndc = vUv * 2.0 - 1.0;
   vec4 vdir4 = uInvProj * vec4(ndc, 1.0, 1.0);
   vec3 vdir = vdir4.xyz / vdir4.w;
@@ -152,6 +168,7 @@ export class PostPipeline {
         uCamPos: { value: new THREE.Vector3() },
         uLogDepthFC: { value: 1 },
         uCloudShadowStrength: { value: 1 },
+        uTexel: { value: new THREE.Vector2(1 / 1280, 1 / 720) },
       },
       depthTest: false,
       depthWrite: false,
@@ -186,6 +203,7 @@ export class PostPipeline {
       this.bloomTmp[i].setSize(Math.max(1, Math.round(w / s)), Math.max(1, Math.round(h / s)));
     }
     this.compositeMat.uniforms.uResolution.value.set(w, h);
+    this.aerialMat.uniforms.uTexel.value.set(1 / w, 1 / h);
   }
 
   get target(): THREE.WebGLRenderTarget { return this.sceneRT; }
