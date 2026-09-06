@@ -536,13 +536,14 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
   /** Near-detail geometry for a building body (drawn within TRIM_FAR, see BuildingBatches): balcony slabs with
    *  glass balustrades on the two long faces of balcony and hotel slabs, a ledge per floor on the deco and
    *  egg-crate frames, parapet coping on the masonry families, corner columns on the glass towers. Every item
-   *  is a unit box; `y` and `h` are the body's batch values (base buried 0.4 m), so floors match the shader's. */
+   *  is a unit box; `y` and `h` are the body's batch values (base buried 0.4 m), so floors match the shader's.
+   *  Trims carry roof = -1 (aStyle.w) so the shader skips its mast, crown, beacon and ground-grime paths on them. */
   const TRIM_LIGHT = new THREE.Color('#e9e7e1'), TRIM_DARK = new THREE.Color('#3c3f43'), TRIM_GLASS = new THREE.Color('#9fb6c8');
   const addTrims = (x: number, y: number, z: number, w: number, h: number, d: number, rot: number, style: number, floorH: number, wall: THREE.Color) => {
     // offsets rotate the way the instance matrix does (Matrix4.makeRotationY: x' = x c + z s, z' = -x s + z c)
     const cr = Math.cos(rot), sr = Math.sin(rot);
     const trim = (ox: number, oy: number, oz: number, tw: number, th: number, td: number, col: THREE.Color, st: number) =>
-      batches.add('trim', { x: x + ox * cr + oz * sr, y: y + oy, z: z - ox * sr + oz * cr, w: tw, h: th, d: td, rot, color: col, style: st, floorH: 3, seed: 0, roof: 5, lit: 0, warm: 0.5, variant: 0.5, form: 0 });
+      batches.add('trim', { x: x + ox * cr + oz * sr, y: y + oy, z: z - ox * sr + oz * cr, w: tw, h: th, d: td, rot, color: col, style: st, floorH: 3, seed: 0, roof: -1, lit: 0, warm: 0.5, variant: 0.5, form: 0 });
     const glassy = style === S.GLASS_BLUE || style === S.GLASS_GREEN || style === S.STONE;
     if (style === S.BALCONY || style === S.HOTEL) {
       // the slab rings the two long faces; the balustrade stands at its edge (shader: slab 0-14 %, rail to 42 %)

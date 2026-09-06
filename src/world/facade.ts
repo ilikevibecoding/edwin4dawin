@@ -168,7 +168,8 @@ if (facadeGlass > 0.0) {
   float facadeSeed = seed + floor(sideX + 0.5) * 3.7 + step(0.0, vLocalN.x + vLocalN.z) * 11.1;
   bool glassy = style < 0.5 || style == 8.0 || style == 9.0;
   // thin, tall concrete frusta are the spires / masts on the crowns
-  bool mast = style == 6.0 && vDims.x < 10.0 && vDims.y > 12.0 && vDims.y > vDims.x * 3.0;
+  bool isTrim = vStyle.w < -0.5;   // trim layer: slabs, rails, ledges, coping, corner columns (city.ts)
+  bool mast = style == 6.0 && !isTrim && vDims.x < 10.0 && vDims.y > 12.0 && vDims.y > vDims.x * 3.0;
   vec3 glassDark = vec3(0.07, 0.10, 0.13);
   vec3 col = wall;
   float rough = 0.75;
@@ -217,7 +218,7 @@ if (facadeGlass > 0.0) {
       col *= 0.9 + 0.2 * grime;
       rough = 0.9;
       // aviation beacon on the tallest roofs
-      if (vDims.y > 140.0) {
+      if (vDims.y > 140.0 && !isTrim) {
         float dc = length(meters.xz - vDims.xz * 0.5);
         emis += vec3(1.0, 0.08, 0.04) * step(dc, 1.0) * 5.0 * uNight;
       }
@@ -577,22 +578,24 @@ if (facadeGlass > 0.0) {
         rough = mix(0.8, 0.12, shop);
         metal = shop * 0.5;
         emis = vec3(1.0, 0.88, 0.7) * shop * 1.5 * nightOn + fasciaCol * fascia * 1.2 * nightOn;
-      } else {
+      } else if (!isTrim) {
         col = mix(col, col * 0.8, 1.0 - fstep(0.8, v, wv));
       }
       // weathering: grime near the ground, rain staining under the parapet
-      col *= 1.0 - 0.18 * smoothstep(0.55, 0.85, grime) * (1.0 - smoothstep(2.0, 12.0, v));
-      col *= 1.0 - 0.12 * smoothstep(0.45, 0.8, grime) * smoothstep(H - 3.0, H - 0.5, v) * step(12.0, H);
+      if (!isTrim) {
+        col *= 1.0 - 0.18 * smoothstep(0.55, 0.85, grime) * (1.0 - smoothstep(2.0, 12.0, v));
+        col *= 1.0 - 0.12 * smoothstep(0.45, 0.8, grime) * smoothstep(H - 3.0, H - 0.5, v) * step(12.0, H);
+      }
       // crown lighting on about two thirds of the tall towers at night: a lit band just below the roof line, warm,
       // cool or (rarely) magenta, brighter than the windows so the skyline keeps its hierarchy after dark
-      if (H > 110.0 && hash11(seed * 1.9 + 3.1) < 0.66) {
+      if (H > 110.0 && !isTrim && hash11(seed * 1.9 + 3.1) < 0.66) {
         float crown = smoothstep(H - 7.0, H - 5.0, v) * (1.0 - smoothstep(H - 1.0, H, v));
         float pick = hash11(seed * 2.7);
         vec3 crownCol = pick < 0.5 ? vec3(1.0, 0.85, 0.6) : pick < 0.88 ? vec3(0.4, 0.8, 1.0) : vec3(1.0, 0.35, 0.7);
         emis += crownCol * crown * 8.0 * uNight;
       }
       // red obstruction lights at the top corners of the tallest towers
-      if (H > 140.0) {
+      if (H > 140.0 && !isTrim) {
         float dc = min(length(vec2(u - 0.6, v - (H - 0.9))), length(vec2(u - (faceW - 0.6), v - (H - 0.9))));
         emis += vec3(1.0, 0.08, 0.04) * (1.0 - fstep(0.45, dc, wu)) * 6.0 * uNight;
       }
