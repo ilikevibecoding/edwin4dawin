@@ -1,5 +1,17 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { flatUv } from './util';
+
+/**
+ * A plain part (horn, rod, bracket) merged into a wing-paint batch next to `wingPanel` geometries: it gets the white
+ * vertex colour the panels carry and samples one texel of the paint at (u, v).
+ */
+export function withPaint<T extends THREE.BufferGeometry>(geo: T, u: number, v: number): T {
+  flatUv(geo, u, v);
+  const n = geo.getAttribute('position').count;
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
+  return geo;
+}
 
 // ------------------------------------------------------------------ wings
 

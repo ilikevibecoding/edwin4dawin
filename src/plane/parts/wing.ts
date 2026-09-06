@@ -93,7 +93,25 @@ export function buildWing(ctx: BuildContext): WingBuild {
   };
   const [flapR, flapL] = mkSurface(0.87, 3.53, flapHinge, 5);
   const [aileronR, aileronL] = mkSurface(3.67, 6.88, ailHinge, 6);
-  // pitot tube under the port wing
-  fittings.add(new THREE.CylinderGeometry(0.015, 0.015, 0.45, 6), at([WING_POS.x + 0.45, wl(WING_POS.x + 0.25) - 0.06, -3.2], [0, 0, Math.PI / 2]), SURF.metal);
+  // External hinge brackets under the trailing edge: a DHC-2's slotted flaps and drooping ailerons hang on plate
+  // brackets below the wing (three per flap, two per aileron), one of the silhouette's giveaways from the rear
+  // quarter and from below. Each is a plate 12 mm thick standing 8 cm under the skin, its lower edge raked aft.
+  for (const side of [1, -1]) {
+    for (const [z, hinge] of [[1.35, flapHinge], [2.2, flapHinge], [3.05, flapHinge], [4.4, ailHinge], [6.3, ailHinge]] as const) {
+      const yl = WING_POS.y + wingLowerY(wingSpec, hinge, z);
+      fittings.add(new THREE.BoxGeometry(0.30, 0.10, 0.012), at([WING_POS.x + hinge + 0.02, yl - 0.02, side * z], [-side * wingSpec.dihedral, 0, 0.28]), SURF.strut);
+    }
+    // static wicks trailing from the tip's trailing edge
+    for (const z of [6.98, 7.16]) {
+      const xt = WING_POS.x + wingXTE(wingSpec, z);
+      const y = WING_POS.y + Math.tan(wingSpec.dihedral) * z;
+      fittings.add(new THREE.CylinderGeometry(0.009, 0.009, 0.03, 6), at([xt + 0.005, y, side * z], [0, 0, Math.PI / 2]), SURF.metal);
+      fittings.add(new THREE.CylinderGeometry(0.0035, 0.0035, 0.20, 5), at([xt - 0.11, y - 0.012, side * z], [0, 0, Math.PI / 2 + 0.12]), SURF.rubber);
+    }
+  }
+  // pitot tube under the port wing, on a mast (the bare tube read as a stray line)
+  const pitotY = wl(WING_POS.x + 0.25, -3.2) - 0.07;
+  fittings.add(new THREE.CylinderGeometry(0.012, 0.012, 0.40, 6), at([WING_POS.x + 0.50, pitotY, -3.2], [0, 0, Math.PI / 2]), SURF.metal);
+  fittings.add(new THREE.BoxGeometry(0.05, 0.075, 0.016), at([WING_POS.x + 0.36, pitotY + 0.035, -3.2]), SURF.metal);
   return { spec: wingSpec, flapL, flapR, aileronL, aileronR };
 }

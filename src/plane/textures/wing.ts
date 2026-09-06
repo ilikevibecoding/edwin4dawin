@@ -95,6 +95,23 @@ export function wingMaps(): PbrMaps {
   const tailRibs: number[] = [];
   for (let m = 0.12; m < pinM - 0.1; m += 0.55) tailRibs.push(ty(m) / h);
   panels(hctx, actx, w, h, [0.3, 0.7], tailRibs, 36, { y0: T0 * h, strength: 0.5 });
+  // elevator trim tabs (both elevators, both faces): hinge line 13 cm ahead of the trailing edge and the two side
+  // gaps, on the stabiliser's rows only (the elevator spans z 0.12 .. 2.28 of a 2.45 m half span; the rudder's rows
+  // start at v 0.877 and are not touched). Drawn as a groove in the height map and a dark line in the albedo.
+  {
+    const span = 2.45, z0 = 0.38, z1 = 0.88, chordAt = (z: number) => 1.05 - 0.25 * (z / span);
+    const vAt = (z: number) => (0.997 - (0.997 - T0) * ((span - z) / WING_TEX.TAIL_SPAN)) * h;
+    const uTop = (z: number) => 0.5 * (0.13 / chordAt(z)) * w;
+    for (const [ctx, style, lw] of [[hctx, '#484848', 2.2], [actx, 'rgba(20,20,25,0.55)', 1.6]] as const) {
+      ctx.strokeStyle = style; ctx.lineWidth = lw;
+      for (const mirror of [false, true]) {
+        const U = (u: number) => (mirror ? w - u : u);
+        ctx.beginPath();
+        ctx.moveTo(U(0), vAt(z0)); ctx.lineTo(U(uTop(z0)), vAt(z0)); ctx.lineTo(U(uTop(z1)), vAt(z1)); ctx.lineTo(U(0), vAt(z1));
+        ctx.stroke();
+      }
+    }
+  }
   // packed clear coat (R) / roughness (G) / metalness (B) companions of the roughness canvas: chips down to the metal
   // along the leading edges (stones, spray, ice) and around the strut fittings and the fuel cap; the walkway grit has
   // no clear coat and the stripe decals keep theirs
