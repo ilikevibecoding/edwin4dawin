@@ -121,10 +121,11 @@ const sideOf = (ux, uz) => Math.abs(ux) >= Math.abs(uz) ? (ux > 0 ? 'E' : 'W') :
 // the door are carved with a floor so the car always opens onto a walkable cell; returns { x, z } of the car
 function polarLift(bp, r, a, ya, yb, doors) {
   const [x, z] = cellOf(r, a);
-  const lx = x - 1, lz = z - 1;
+  const lx = x - 1, lz = z - 1, sides = {};
   liftShaft(bp, lx, lz, ya, yb);
   for (const [y, dir] of doors) {
     const side = sideOf(dir * Math.cos(a), dir * Math.sin(a));
+    sides[y] = side;
     liftDoor(bp, lx, lz, y, side);
     const [sx, sz] = side === 'E' ? [1, 0] : side === 'W' ? [-1, 0] : side === 'S' ? [0, 1] : [0, -1];
     // porch: two cells beyond the door, both car columns
@@ -133,7 +134,15 @@ function polarLift(bp, r, a, ya, yb, doors) {
       bp.fill(px, y, pz, px, y + 2, pz, AIR); if (isFree(bp, px, y - 1, pz)) bp.set(px, y - 1, pz, PLATE);
     }
   }
-  return { x: lx, z: lz };
+  return { x: lx, z: lz, sides };
+}
+// the two lintel cells over a lift door (the shaft wall above the opening): a plaque light goes there
+function liftLintel(lift, y, side) {
+  const [lx, lz] = [lift.x, lift.z];
+  if (side === 'S') return [[lx, y + 3, lz + 2], [lx + 1, y + 3, lz + 2]];
+  if (side === 'N') return [[lx, y + 3, lz - 1], [lx + 1, y + 3, lz - 1]];
+  if (side === 'E') return [[lx + 2, y + 3, lz], [lx + 2, y + 3, lz + 1]];
+  return [[lx - 1, y + 3, lz], [lx - 1, y + 3, lz + 1]];
 }
 function statue(bp, x, y, z) { bp.fill(x, y, z, x, y + 1, z, STONE); bp.fill(x, y + 2, z, x, y + 5, z, GOLD); bp.set(x, y + 6, z, STONE); bp.set(x, y + 7, z, GLOW); }
 function lamp(bp, x, y, z, h = 2, id = B.LANTERN) { bp.fill(x, y, z, x, y + h - 1, z, B.IRON_BARS); bp.set(x, y + h, z, id); }
@@ -613,8 +622,10 @@ function suite(bp, P, meta, deleg, y, plan, tier, podAngles, lift) {
   const [px, pz] = cellOf(G.R_HALL + 0.5, best.p.a); bp.set(px, y + 3, pz, lightId(pal.accent));
   // the back corridor stretch of this suite: palette floor
   eachSector(bp, P, G.SERVICE_R[0], G.SERVICE_R[1], a0, a1, (x, z) => { if (!isPylon(bp, x, y - 1, z)) bp.set(x, y - 1, z, pal.floor); });
-  // plaque light over the suite entrance
+  // plaque light over the suite entrance, and over the delegation's lift door in the grand lobby (the lift's outward
+  // side at level 1), so the lobby ring shows twelve differently lit doors
   const [ex, ez] = entry.cell; bp.set(ex, y + 3, ez, lightId(pal.accent));
+  if (lift.sides && lift.sides[1]) for (const [px, py, pz] of liftLintel(lift, 1, lift.sides[1])) bp.set(px, py, pz, lightId(pal.accent));
   best.p.delegation = deleg.id;
   return {
     id: deleg.id, name: deleg.name, senator: deleg.senator, world: deleg.world, concern: deleg.concern, palette: deleg.palette, emblem: deleg.emblem, tier,

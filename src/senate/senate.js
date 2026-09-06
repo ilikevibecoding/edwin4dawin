@@ -145,7 +145,7 @@ export class Senate {
   }
   liaisonSpot() { const m = this.meta; return m && m.liaison ? { ...m.liaison.spot } : null; }
   // Temple -> Senate liaison alcove: street waypoints on the ground level, then the in-lot walk (east press entry,
-  // lobby ring, west stairs to level 6, west passage, the alcove); `when` says which game hours the liaison is due
+  // lobby ring, east stairs to level 6, east passage, the alcove); `when` says which game hours the liaison is due
   liaisonRoute() {
     const L = this.game.coruscant && this.game.coruscant.layout, m = this.meta; if (!L || !m) return null;
     const temple = L.lots.find((l) => l.kind === 'landmark' && l.family === 'temple'), lot = this.lot;
