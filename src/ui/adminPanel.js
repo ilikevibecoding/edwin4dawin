@@ -311,6 +311,10 @@ export class AdminPanel {
     this.btnCommit = h('button', { class: 'ap-btn', id: 'ap-btn-commit', type: 'button', text: 'Commit damage to save', onclick: () => this._onCommit() });
     this.btnDiscard = h('button', { class: 'ap-btn', id: 'ap-btn-discard', type: 'button', text: 'Discard damage', onclick: () => this._onDiscard() });
     this.statsEl = h('p', { class: 'ap-help', id: 'ap-stats', text: '' });
+    // economy (src/economy/economy.js): wallet grant and a full reset of the per-client economy state
+    this.ecoHint = h('p', { class: 'ap-help', id: 'ap-eco-hint', text: 'Wallet: n/a' });
+    this.btnGrant = h('button', { class: 'ap-btn', id: 'ap-btn-grant', type: 'button', text: 'Grant 10,000 credits', title: 'Adds 10,000 Republic credits to your wallet', onclick: () => this._onGrant() });
+    this.btnEcoReset = h('button', { class: 'ap-btn', id: 'ap-btn-eco-reset', type: 'button', text: 'Reset economy', title: 'Wallet back to 250, no ships, no apartment, fresh vendor stock, no job', onclick: () => this._onEcoReset() });
     this.developer = h('details', { class: 'ap-disclosure', id: 'ap-developer' },
       h('summary', {}, h('span', { text: 'Developer' }), this.perfEl),
       h('div', { class: 'ap-disclosure-body' },
@@ -323,6 +327,10 @@ export class AdminPanel {
           h('div', { class: 'ap-dev-head' }, h('span', { class: 'ap-dev-title', text: 'Save' })),
           this.saveHint,
           h('div', { class: 'ap-btn-row' }, this.btnCommit, this.btnDiscard)),
+        h('div', { class: 'ap-dev-block', id: 'ap-economy' },
+          h('div', { class: 'ap-dev-head' }, h('span', { class: 'ap-dev-title', text: 'Economy' })),
+          this.ecoHint,
+          h('div', { class: 'ap-btn-row' }, this.btnGrant, this.btnEcoReset)),
         this.statsEl));
     this.developer.addEventListener('toggle', () => { if (this.store.ui.developer !== this.developer.open) { this.store.ui.developer = this.developer.open; this._scheduleSave(); } });
 
@@ -958,6 +966,33 @@ export class AdminPanel {
     });
   }
 
+  // ---------------------------------------------------------------- economy (rubric 08 #8)
+  _onGrant() {
+    const eco = this.game.economy;
+    if (!eco) { this._note('The economy is not running here.'); return; }
+    eco.grant(10000);
+    this._refreshEconomy();
+    this._note(`Granted 10,000 credits - wallet ${fmtInt(eco.credits)} cr.`);
+  }
+  _onEcoReset() {
+    const eco = this.game.economy;
+    if (!eco) { this._note('The economy is not running here.'); return; }
+    this._confirm({
+      title: 'Reset the economy?',
+      text: 'Wallet back to 250 credits; owned ships, the rented apartment, the active job and vendor stock changes are cleared. Chests and blocks are untouched.',
+      confirmLabel: 'Reset economy',
+      danger: true,
+      onConfirm: () => { eco.reset(); this._refreshEconomy(); this._note('Economy reset.'); },
+    });
+  }
+  _refreshEconomy() {
+    const eco = this.game.economy;
+    if (!this.ecoHint) return;
+    if (!eco) { setText(this.ecoHint, 'Wallet: n/a'); return; }
+    const s = eco.summary();
+    setText(this.ecoHint, `Wallet: ${fmtInt(s.credits)} cr${s.mode === 'creative' ? ' (creative: never charged)' : ''} \u00b7 ships: ${s.ships.length ? s.ships.join(', ') : 'none'} \u00b7 apartment: ${s.apartment || 'none'} \u00b7 job: ${s.job || 'none'}`);
+  }
+
   _onLiveIntensity() {
     const v = Number(this.liveSlider.value);
     setText(this.liveVal, fmtNum(v, 0.05));
@@ -1145,6 +1180,7 @@ export class AdminPanel {
     const save = this.game.save;
     setText(this.saveHint, `Recorded damage: ${plural(s.journal, 'block')}` + (save ? `  \u00b7  saved edits: ${save.count}${save.dirty ? ' (writing\u2026)' : ''}` : '') + (s.journal > 0 && !(finished || idle) ? '  \u00b7  stop the disaster to commit' : ''));
     setText(this.statsEl, `Edits ${fmtInt(s.edits)} \u00b7 restored ${fmtInt(s.restored)} \u00b7 tick ${fmtInt(s.tick)}` + (s.type && !idle ? ` \u00b7 ${s.type}` : ''));
+    this._refreshEconomy();
   }
 
   _refreshPerf() {
