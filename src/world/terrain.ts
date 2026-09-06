@@ -402,7 +402,8 @@ Ground groundMeans() {
 }
 Ground groundDetail(vec2 wp, float w, float w2, float foot) {
   Ground g = groundMeans();
-  float micro = 1.0 - smoothstep(0.9, 1.6, foot);
+  // the 3 m tile is under three pixels across past 1 m/px: only its mean is left in it there
+  float micro = 1.0 - smoothstep(0.7, 1.2, foot);
   if (micro > 0.0) {
     vec4 m = tapRot(uGroundTex, wp, 1.0 / 3.0, w);
     g.grass = mix(g.grass, restore(m.r, w), micro);
@@ -521,7 +522,7 @@ vec3 farmland(vec2 wp, float n2) {
 struct Sand { float alb; float ripple; vec2 slope; };
 Sand sandDetail(vec2 wp, float w, float foot) {
   Sand s;
-  float vis = 1.0 - smoothstep(0.9, 1.6, foot);
+  float vis = 1.0 - smoothstep(0.7, 1.2, foot);
   if (vis > 0.0) {
     vec4 t = tapShift(uSandTex, wp, WIND_FRAME * (1.0 / SAND_TILE), w);
     s.alb = mix(uSandMean.x, restore(t.r, w), vis);
@@ -548,8 +549,11 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
   float n3 = vnoise(wp * 0.008);
   float n4 = fbm3(wp * 0.0032 + 17.0);
   float dist = length(cameraPosition - vWorldPos);
-  float w = smoothstep(0.42, 0.58, n2); // the anti-tiling blend weight of every detail tap
-  float w2 = smoothstep(0.42, 0.58, n3); // .. and of the meso tile, at the meso tile's own scale
+  // the anti-tiling blend weights of the detail taps (micro and sand from the 22 m noise, meso from the 125 m
+  // one): a step over a tenth of the noise's range, so the two-tap blend zone is a 2-3 m seam between one-tap
+  // fields of either variant of the tile, and about a fifth of the pixels
+  float w = smoothstep(0.45, 0.55, n2);
+  float w2 = smoothstep(0.45, 0.55, n3);
   gd = groundDetail(wp, w, w2, foot);
   rough = 0.9;
   vec3 c;

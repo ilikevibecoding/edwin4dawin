@@ -346,11 +346,12 @@ export function createGroundDetailTextures(renderer?: THREE.WebGLRenderer): Grou
   const enc = (v: Float32Array) => { const o = new Float32Array(v.length); for (let i = 0; i < v.length; i++) o[i] = v[i] * 0.5 + 0.5; return o; };
   const ground = pack(n, grass, bare, soil, foot);
   const sand = pack(n, sandA, sandH, enc(nx), enc(nz));
-  // 2x anisotropy: the ground is seen obliquely almost always, and every extra anisotropic sample multiplies
-  // the fetch count of the four detail taps a land pixel takes; noise-like detail forgives the streak blur
-  const aniso = renderer ? Math.min(2, renderer.capabilities.getMaxAnisotropy()) : 1;
-  ground.anisotropy = aniso;
-  sand.anisotropy = aniso;
+  // The ground is seen obliquely almost always, and every anisotropic sample multiplies the fetch count of the
+  // two to four ground taps a land pixel takes: the ground tile (noise-like clumps and grain, which forgive the
+  // streak blur of a plain trilinear read) takes none; the sand tile keeps 2x for its ripples and footprints,
+  // which have an orientation to lose, and is only read on beaches
+  ground.anisotropy = 1;
+  sand.anisotropy = renderer ? Math.min(2, renderer.capabilities.getMaxAnisotropy()) : 1;
   const mean = (v: Float32Array) => { let s = 0; for (let i = 0; i < v.length; i++) s += v[i]; return s / v.length; };
   return {
     ground, sand,
