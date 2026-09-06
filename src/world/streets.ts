@@ -23,12 +23,16 @@ export type LampKind = 'arterial' | 'street' | 'ped' | 'highway' | 'mast';
 export interface LampPlan { x: number; y: number; z: number; yaw: number; kind: LampKind }
 
 const CELL = 500;
-/** sidewalks, signals, shelters and stop signs are drawn within this range */
-const FAR = 1500;
-/** benches, bins, hydrants, bollards, cabinets: under a pixel beyond this */
-const SMALL_FAR = 450;
-/** sidewalks switch to their four-triangle-a-row far index beyond this (a curb face is under a pixel there) */
-const WALK_NEAR = 500;
+/** sidewalks, signals and shelters are drawn within this range (from 200 m up a 3.6 m walk is two pixels at 1.2 km) */
+const FAR = 1200;
+/** signals and shelters switch to their far shapes (no base, cap, bracket, seat or end glass; square lenses) beyond
+ *  this, per cell, and only the near shapes cast */
+const LARGE_NEAR = 300;
+/** benches, bins, hydrants, bollards, cabinets, stop signs, visors, pedestrian heads: under a pixel beyond this —
+ *  measured in three dimensions, so from the air the small kit goes as soon as it would from the street */
+const SMALL_FAR = 300;
+/** sidewalks switch to their four-triangle-a-row far index beyond this (a curb face is a quarter pixel there) */
+const WALK_NEAR = 400;
 /** the large furniture (poles, mast arms, shelters, benches) casts shadows, into the fine cascades only, within this
  *  range: a shelter roof is a pixel or two of shadow at 300 m and a mast arm nothing at all */
 const SHADOW_FAR = 300;
@@ -410,8 +414,25 @@ class RoadIndex {
 }
 
 /** unit shapes of the furniture (non-indexed, centred; cylinders and plates along +y, the x-plate faces +x) */
+/** a unit box without its -y face (10 triangles): anything that stands on the ground never shows its underside */
+function openBox(): THREE.BufferGeometry {
+  const g = new THREE.BoxGeometry(1, 1, 1).toNonIndexed();
+  const p = g.getAttribute('position'), n = g.getAttribute('normal');
+  const pos: number[] = [], nrm: number[] = [];
+  for (let i = 0; i < p.count; i += 3) {
+    if (n.getY(i) < -0.5) continue;
+    for (let k = i; k < i + 3; k++) { pos.push(p.getX(k), p.getY(k), p.getZ(k)); nrm.push(n.getX(k), n.getY(k), n.getZ(k)); }
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  return out;
+}
 const UNIT = {
   box: new THREE.BoxGeometry(1, 1, 1).toNonIndexed(),
+  boxOpen: openBox(),
+  /** square plate of diameter 1 in the y-z plane facing +x: a lens seen from 300 m on */
+  plate4: new THREE.CircleGeometry(0.5, 4).rotateY(Math.PI / 2).toNonIndexed(),
   cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 8).toNonIndexed(),
   cyl6: new THREE.CylinderGeometry(0.5, 0.5, 1, 6).toNonIndexed(),
   /** open-ended 8-gon tube: poles, whose ends are capped by something else or out of sight */
@@ -470,6 +491,7 @@ interface StreetCell {
   walkFar: THREE.Mesh | null;
   walk: THREE.Mesh | null;
   large: THREE.Mesh | null;
+  largeFar: THREE.Mesh | null;
   small: THREE.Mesh | null;
   /** parked cars, planters, benches of the plazas and lots (drawn within YARD_FAR, never cast) */
   yard: THREE.Mesh | null;
@@ -507,8 +529,8 @@ export class Streets {
   readonly kitMaterial: THREE.MeshStandardMaterial;
   readonly uniforms = { uSignalTime: { value: 0 } as THREE.IUniform<number>, uNight: { value: 0 } as THREE.IUniform<number>, uFocalPx: { value: 1000 } as THREE.IUniform<number> };
   private readonly cells: StreetCell[] = [];
-  private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup }>();
-  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0 };
+  private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup }>();
+  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
   private readonly roads: RoadIndex;
   /** debug: `?dbg=nopools` turns the lamp pools off */
   poolsEnabled = true;
@@ -603,10 +625,10 @@ export class Streets {
     return c;
   }
 
-  private soupsAt(x: number, z: number): { walk: WalkSoup; large: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup } {
+  private soupsAt(x: number, z: number): { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup } {
     const key = cellKey(x, z, CELL);
     let b = this.builds.get(key);
-    if (!b) { b = { walk: new WalkSoup(), large: new KitSoup(), small: new KitSoup(), yard: new KitSoup(), yardFar: new KitSoup() }; this.builds.set(key, b); }
+    if (!b) { b = { walk: new WalkSoup(), large: new KitSoup(), largeFar: new KitSoup(), small: new KitSoup(), yard: new KitSoup(), yardFar: new KitSoup() }; this.builds.set(key, b); }
     return b;
   }
 
@@ -750,7 +772,7 @@ export class Streets {
   }
 
   /** Lamps (both sides on arterials, staggered on streets) and the furniture kits along a run. */
-  private dressRun(run: Run, soups: { walk: WalkSoup; large: KitSoup; small: KitSoup }): void {
+  private dressRun(run: Run, soups: { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; small: KitSoup }): void {
     const { chain, side, sa, sb, zone } = run;
     const cross = this.crossOf(chain);
     const L = sb - sa;
@@ -824,6 +846,11 @@ export class Streets {
           part(soup, UNIT.box, f, 1.3, 1.25, -1.7, 0.08, 2.4, 0.08, C.galv, 0.45, 0.7);
           part(soup, UNIT.box, f, 1.3, 1.25, 1.7, 0.08, 2.4, 0.08, C.galv, 0.45, 0.7);
           part(soup, UNIT.box, f, 0.05, 1.3, 0, 0.03, 2.1, 3.3, C.glass, 0.15, 0.8);
+          // far shape: roof, the two curb-side posts and the glazed back
+          part(soups.largeFar, UNIT.box, f, 0.6, 2.45, 0, 1.6, 0.08, 3.6, C.dark, 0.5, 0.5);
+          part(soups.largeFar, UNIT.box, f, 1.3, 1.25, -1.7, 0.08, 2.4, 0.08, C.galv, 0.45, 0.7);
+          part(soups.largeFar, UNIT.box, f, 1.3, 1.25, 1.7, 0.08, 2.4, 0.08, C.galv, 0.45, 0.7);
+          part(soups.largeFar, UNIT.box, f, 0.05, 1.3, 0, 0.03, 2.1, 3.3, C.glass, 0.15, 0.8);
           part(soup, UNIT.box, f, 0.65, 1.3, -1.72, 1.1, 2.1, 0.03, C.glass, 0.15, 0.8);
           part(soup, UNIT.box, f, 0.7, 0.5, 0.3, 0.4, 0.06, 1.6, C.dark, 0.7, 0.4);
           part(soup, UNIT.box, f, 0.7, 0.25, 0.3, 0.08, 0.44, 1.5, C.dark, 0.7, 0.4);
@@ -881,9 +908,10 @@ export class Streets {
     while (!this.roads.clear(px, pz, 0.4) && backed < 8) { px -= R.dir[0] * 0.5; pz -= R.dir[1] * 0.5; backed += 0.5; }
     if (backed >= 8 || this.map.heightAt(px, pz) < 0.8) { this.counts.rejected++; return; }
     poles.push([px, pz]);
-    // the pole, arm, heads and lenses read to 1.5 km; visors, pedestrian heads, buttons and blades are small-kit
+    // the pole, arm, heads and lenses read to FAR (past LARGE_NEAR as the far shape: pole, arm, heads, square lenses);
+    // visors, pedestrian heads, buttons and blades are small-kit
     const soups = this.soupsAt(px, pz);
-    const soup = soups.large, fine = soups.small;
+    const soup = soups.large, far = soups.largeFar, fine = soups.small;
     const y = roadEdgeY(c, R.s, R.sign > 0 ? -1 : 1) + CURB_H;
     // frame: +x toward the approaching traffic (R.dir); +z is then -right, i.e. from the pole toward the roadway
     const f = frame(px, y, pz, Math.atan2(-R.dir[1], R.dir[0]));
@@ -893,17 +921,21 @@ export class Streets {
     // pole, arm, heads and lenses are thin members: held to a pixel across, so the signals stand out of the aerial
     // views to 1.5 km and the lit lenses stay coloured points at night
     part(soup, UNIT.tube, f, 0, armH / 2 + 0.15, 0, 0.3, armH + 0.3, 0.3, C.galv, 0.45, 0.7, EM_NONE, 0, 0, 1);
+    part(far, UNIT.tube, f, 0, armH / 2 + 0.15, 0, 0.3, armH + 0.3, 0.3, C.galv, 0.45, 0.7, EM_NONE, 0, 0, 1);
     part(soup, UNIT.box, f, 0, armH + 0.32, 0, 0.34, 0.06, 0.34, C.galv, 0.45, 0.7); // pole cap
     part(soup, UNIT.cyl6, f, 0, 0.12, 0, 0.5, 0.24, 0.5, C.concrete, 0.9, 0);
     const lanes = c.lanes >= 4 ? [1.5, 4.7] : [1.8];
     // arm over the roadway, long enough to reach the innermost approach lane
     const armLen = hw + 0.9 - lanes[0] + 0.6;
     part(soup, UNIT.box, f, 0, armH, armLen / 2, 0.16, 0.16, armLen, C.galv, 0.45, 0.7, EM_NONE, 0, 0, 2);
+    part(far, UNIT.box, f, 0, armH, armLen / 2, 0.16, 0.16, armLen, C.galv, 0.45, 0.7, EM_NONE, 0, 0, 2);
     part(soup, UNIT.box, f, 0, armH - 0.3, 0.35, 0.14, 0.7, 0.7, C.galv, 0.45, 0.7); // arm bracket
     const head = (hz: number, hy: number) => {
       part(soup, UNIT.box, f, 0, hy, hz, 0.3, 1.05, 0.36, C.signal, 0.6, 0.3, EM_NONE, 0, 0, 1);
+      part(far, UNIT.box, f, 0, hy, hz, 0.3, 1.05, 0.36, C.signal, 0.6, 0.3, EM_NONE, 0, 0, 1);
       const lens = (dy: number, em: number) => {
         part(soup, UNIT.plate, f, 0.16, hy + dy, hz, 1, 0.26, 0.26, C.lensOff, 0.3, 0.1, em, phase, 0, 3);
+        part(far, UNIT.plate4, f, 0.16, hy + dy, hz, 1, 0.26, 0.26, C.lensOff, 0.3, 0.1, em, phase, 0, 3);
         part(fine, UNIT.box, f, 0.2, hy + dy + 0.15, hz, 0.24, 0.03, 0.3, C.signal, 0.6, 0.3); // visor
       };
       lens(0.34, EM_RED); lens(0, EM_AMBER); lens(-0.34, EM_GREEN);
@@ -1199,7 +1231,7 @@ export class Streets {
         if (u + 1.3 > u1 - 1) break;
         for (const half of [0, 1]) {
           const k = hash2(Math.round(u * 10), Math.round((vs + half) * 10), 5);
-          if (k < 0.58) continue;
+          if (k < 0.67) continue;
           const vc = vs + (half ? 14.0 : 2.5);
           const [x, z] = toWorld(u + (k - 0.7) * 0.3, vc);
           if (occupied(x, z) || !this.roads.clear(x, z, 1)) continue;
@@ -1207,10 +1239,10 @@ export class Streets {
           // nose away from the aisle; the body along v, so the frame's +x is turned to v (+u yaw - 90 deg)
           const f = frame(x, y, z, uYaw - Math.PI / 2 + (hash2(i, half, 9) - 0.5) * 0.06);
           const paint = CAR_PAINT[Math.floor(hash2(Math.round(u * 3), Math.round(vc * 3), 11) * CAR_PAINT.length) % CAR_PAINT.length];
-          part(soup, UNIT.box, f, 0, 0.55, 0, 4.4, 0.7, 1.8, paint, 0.35, 0.6);
-          part(soup, UNIT.box, f, half ? 0.2 : -0.2, 1.22, 0, 2.5, 0.62, 1.62, C.glassDark, 0.3, 0.5);
+          part(soup, UNIT.boxOpen, f, 0, 0.55, 0, 4.4, 0.7, 1.8, paint, 0.35, 0.6);
+          part(soup, UNIT.boxOpen, f, half ? 0.2 : -0.2, 1.22, 0, 2.5, 0.62, 1.62, C.glassDark, 0.3, 0.5);
           // far shape: one box in the paint, roof at cabin height
-          part(far, UNIT.box, f, 0, 0.7, 0, 4.4, 1.3, 1.8, paint, 0.4, 0.5);
+          part(far, UNIT.boxOpen, f, 0, 0.7, 0, 4.4, 1.3, 1.8, paint, 0.4, 0.5);
           n++;
         }
       }
@@ -1240,9 +1272,9 @@ export class Streets {
       if (!this.roads.clear(x, z, 2.2)) continue;
       const y = this.map.heightAt(x, z) + PAVE_CLEAR + 0.01;
       const f = frame(x, y, z, -rot + (k > 0.15 ? Math.PI / 2 : 0));
-      part(soup, UNIT.box, f, 0, 0.28, 0, 1.6, 0.56, 1.6, C.concrete, 0.9, 0);
-      part(soup, UNIT.box, f, 0, 0.78, 0, 1.4, 0.46, 1.4, C.shrub, 0.95, 0);
-      part(far, UNIT.box, f, 0, 0.5, 0, 1.6, 1.0, 1.6, C.shrub, 0.95, 0);
+      part(soup, UNIT.boxOpen, f, 0, 0.28, 0, 1.6, 0.56, 1.6, C.concrete, 0.9, 0);
+      part(soup, UNIT.boxOpen, f, 0, 0.78, 0, 1.4, 0.46, 1.4, C.shrub, 0.95, 0);
+      part(far, UNIT.boxOpen, f, 0, 0.5, 0, 1.6, 1.0, 1.6, C.shrub, 0.95, 0);
       if (hash2(j, i, 4) < 0.5) {
         // bench beside the planter, facing the same way
         part(soup, UNIT.box, f, 1.7, 0.45, 0, 0.45, 0.05, 1.7, C.wood, 0.85, 0);
@@ -1313,7 +1345,7 @@ export class Streets {
 
   private flush(): void {
     for (const [key, b] of this.builds) {
-      const cell: StreetCell = { key, box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, walk: null, walkFar: null, large: null, small: null, yard: null, yardFar: null, height: 0 };
+      const cell: StreetCell = { key, box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, walk: null, walkFar: null, large: null, largeFar: null, small: null, yard: null, yardFar: null, height: 0 };
       const mk = (g: THREE.BufferGeometry | null, mat: THREE.Material, name: string, casts: boolean): THREE.Mesh | null => {
         if (!g) return null;
         const m = new THREE.Mesh(g, mat);
@@ -1331,6 +1363,7 @@ export class Streets {
       cell.walk = mk(b.walk.build(), this.walkMaterial, 'sidewalks', false);
       cell.walkFar = cell.walk ? mk(b.walk.buildFar(cell.walk.geometry), this.walkMaterial, 'sidewalks-far', false) : null;
       cell.large = mk(b.large.build(), this.kitMaterial, 'street-kits', true);
+      cell.largeFar = mk(b.largeFar.build(), this.kitMaterial, 'street-kits-far', false);
       // the small soup (visors, pedestrian heads, buttons, name blades, stop signs) never casts: nothing in it is
       // worth a 0.4 m shadow texel, and drawn into two cascades it cost as much again as the whole street pass
       cell.small = mk(b.small.build(), this.kitMaterial, 'street-kits-small', false);
@@ -1338,6 +1371,7 @@ export class Streets {
       cell.yardFar = mk(b.yardFar.build(), this.kitMaterial, 'street-yards-far', false);
       this.counts.walkTriangles += b.walk.triangles;
       this.counts.kitTriangles += b.large.triangles + b.small.triangles;
+      this.counts.kitFarTriangles += b.largeFar.triangles;
       this.counts.yardTriangles += b.yard.triangles;
       this.counts.yardFarTriangles += b.yardFar.triangles;
       if (!cell.walk && !cell.large && !cell.small && !cell.yard) continue;
@@ -1379,12 +1413,15 @@ export class Streets {
         m.visible = visible || cast;
         m.layers.mask = mask;
       };
-      set(c.large, inView);
-      if (c.small) c.small.visible = inView && d < SMALL_FAR; // camera layer only (see flush)
+      const largeNear = d < LARGE_NEAR || !c.largeFar;
+      set(c.large, inView && largeNear);
+      if (c.largeFar) c.largeFar.visible = inView && !largeNear;
+      // the small kit's range is measured in three dimensions: from 200 m up it is gone 220 m out
+      const d3 = Math.hypot(d, Math.max(0, camPos.y - c.box.max.y));
+      if (c.small) c.small.visible = inView && d3 < SMALL_FAR; // camera layer only (see flush)
       if (c.yard) c.yard.visible = inView && (d < YARD_NEAR || !c.yardFar);
       if (c.yardFar) c.yardFar.visible = inView && d >= YARD_NEAR && d < YARD_FAR;
     }
-    void camPos;
   }
 
   dispose(): void {
