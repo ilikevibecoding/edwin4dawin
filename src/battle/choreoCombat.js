@@ -106,11 +106,11 @@ export class Heat {
 }
 
 // Starting heat for a fleet with `heavyGuns` heavy hardpoints and a band centred on `mid`: at heat 1 a
-// heavy gun keeps roughly 0.4 bolts in the air on average (2.5 bolts a salvo over 4-5 s of flight every
-// ~14 s, half the guns masked or out of range), so the exchange opens near its steady state instead of
-// flooding the band and waiting a minute for the controller
+// heavy gun keeps roughly half a bolt in the air on average (2.5 bolts a salvo over 4-5 s of flight
+// every ~14 s, a third of the guns masked or out of range), so the exchange opens near its steady state
+// instead of flooding the band and waiting a minute for the controller
 export function initialHeat(heavyGuns, mid) {
-  return THREE.MathUtils.clamp(mid / (0.4 * Math.max(1, heavyGuns)), 0.3, 1.5);
+  return THREE.MathUtils.clamp(mid / (0.5 * Math.max(1, heavyGuns)), 0.3, 1.5);
 }
 
 // nominal heavy recharge between salvos (divided by heat); the initial cooldowns are spread over it so

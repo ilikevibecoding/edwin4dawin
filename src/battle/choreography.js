@@ -592,7 +592,9 @@ export function createBattle({
       }
       avoidPass(states, boxes);
     }
-    heat.update(inFlight.heavy, dt);
+    // the controller waits while the opening salvos fill the sky (the first seconds of the pre-roll),
+    // otherwise it reads the empty air as too little fire and overshoots
+    if (time > -PREROLL + 8) heat.update(inFlight.heavy, dt);
     updateGroups(groups, dt, time);
     for (const st of states) {
       if (st.pending && st.pending.group && st.pending.slot) {
