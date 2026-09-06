@@ -57,8 +57,8 @@ export class WakeMap {
     this.midTexel = midSize / midResolution;
     this.nearTexel = nearSize / nearResolution;
     this.heightTexel = nearSize / heightResolution;
-    const make = (res: number, mips: boolean) => {
-      const rt = new THREE.WebGLRenderTarget(res, res, { type: THREE.UnsignedByteType, depthBuffer: false, minFilter: mips ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: mips });
+    const make = (res: number, mips: boolean, type: THREE.TextureDataType = THREE.UnsignedByteType) => {
+      const rt = new THREE.WebGLRenderTarget(res, res, { type, depthBuffer: false, minFilter: mips ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: mips });
       rt.texture.wrapS = rt.texture.wrapT = THREE.ClampToEdgeWrapping;
       return rt;
     };
@@ -69,8 +69,10 @@ export class WakeMap {
     this.midRt = make(midResolution, true);
     this.nearRt = make(nearResolution, false);
     // the height field is smooth at the decimetre scale (bow hump, hollow, rooster tail): a quarter of the near
-    // map's texels, sampled by the water patch's vertices and finite-differenced for its normal
-    this.heightRt = make(heightResolution, false);
+    // map's texels, sampled by the water patch's vertices and finite-differenced for its normal. Half float: in
+    // 8 bits a metre of range had 4 mm steps, and the 5 cm transverse train behind a taxiing float (8 mm between
+    // the two texels of the normal's difference) decoded to a 0.9 deg slope staircase, or to nothing
+    this.heightRt = make(heightResolution, false, THREE.HalfFloatType);
     this.camera = new THREE.OrthographicCamera(-size / 2, size / 2, size / 2, -size / 2, 1, 400);
     this.camera.up.set(0, 0, -1);
     this.midCamera = new THREE.OrthographicCamera(-midSize / 2, midSize / 2, midSize / 2, -midSize / 2, 1, 400);
@@ -314,7 +316,11 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         float lam = max(6.2832 * aspd * aspd / 9.81, 0.5);
         float tw = smoothstep(2.0 * uTexel, 4.0 * uTexel, lam) * exp(-d / (laneLen * 0.6)) * (1.0 - smoothstep(laneHalf * 1.2, laneHalf * 3.0, ay)) * spd;
         g += -fwd * (0.07 * tw * sin(6.2832 * (d + shift) / lam));
-        cover = max(max(laneMask * laneFade * 0.9, armBump * armEnv * 0.8), min(foam * 3.0, 1.0)) * 0.9 + 0.1;
+        // coverage (the water shader's slick: the lane's short ripples are wiped): the turbulence outlasts the
+        // froth by a good margin, so the smooth road behind a hull runs on past the end of its foam (a taxiing
+        // float's for a minute, a ship's toward a kilometre)
+        float slickFade = 1.0 - smoothstep(0.0, laneLen * 2.2, d);
+        cover = max(max(laneMask * slickFade * 0.9, armBump * armEnv * 0.8), min(foam * 3.0, 1.0)) * 0.9 + 0.1;
       } else {
         // ---- hull zone: ax metres behind the bow (negative ahead of the stem); nothing pushes water on a hull
         //      going astern (speed < 0), only the meniscus stays
@@ -453,7 +459,9 @@ export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
       float armY = (w0 * 0.8 + (d + lead) * TANK) * (1.0 - s * asym);
       float armW = max(0.45 + 0.3 * w0 + 0.012 * dp, 0.3);
       float armEnv = (1.0 - smoothstep(armLen * 0.25, armLen * 0.7, dp)) * smoothstep(lead * 0.45, lead * 1.0, ax);
-      h += (0.012 + 0.03 * spd) * hullScale * g1(ay - armY, armW) * armEnv * smoothstep(0.8, 2.0, aspd) * (1.0 - 0.5 * planing);
+      // (r8: a float's divergent crests at hump speed stand 4-5 cm over a 1 m wide crest; at 2.7 cm they were
+      // under the 8-bit map's slope quantum and the V behind a taxiing aircraft did not read at all)
+      h += (0.015 + 0.04 * spd) * hullScale * g1(ay - armY, armW) * armEnv * smoothstep(0.8, 2.0, aspd) * (1.0 - 0.5 * planing);
       // ---- hollow along the sides behind the bow crest (displacement speed)
       float sideW = 0.6 * hullScale + 0.3 * w0;
       h += -0.45 * Hb * smoothstep(0.15, 0.45, uc) * (1.0 - smoothstep(0.7, 1.0, uc)) * g1(sideDist, sideW);

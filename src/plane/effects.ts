@@ -364,8 +364,11 @@ export class PlaneEffects {
   constructor(wakes: WakeBatch, scene: THREE.Scene) {
     // float hull: 5.7 m from stern to stem, 0.37 m half-beam at the chine (see model.ts floatSections); a float
     // has no propeller behind it (no prop wash lane) and planes at ~15 m/s
-    this.wakeL = new WakeTrail(80, 0.37, 16, 1.1, wakes, 5.7, 1.5);
-    this.wakeR = new WakeTrail(80, 0.37, 16, 1.1, wakes, 5.7, 1.5);
+    // (r8: 30 s of lane, not 16: the slick road a taxiing float leaves outlasts its froth, and at 3.8 m/s the
+    // 16 s ribbon ended 60 m astern, right where the chase camera's foreground is; 80 points at 1.5 m spacing
+    // hold 120 m, so at planing speed the capacity, not the lifetime, still bounds the ribbon)
+    this.wakeL = new WakeTrail(80, 0.37, 30, 1.1, wakes, 5.7, 1.5);
+    this.wakeR = new WakeTrail(80, 0.37, 30, 1.1, wakes, 5.7, 1.5);
     for (const w of [this.wakeL, this.wakeR]) { w.propWash = 0; w.planingSpeed = 15; w.churn = 0.85; }
     this.splats = wakes.splats;
     const tex = spriteTexture();
