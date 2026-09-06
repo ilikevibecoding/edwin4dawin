@@ -109,6 +109,12 @@ export function analyzeBlueprint(bp, lot) {
     const walled = ring > 0 && ringSolid / ring > 0.5 && r.w > 2 && r.d > 2;
     let floorCells = 0, furniture = 0, reach = false, emit = 0, entry = null;
     const blockIds = new Set(), furnitureIds = new Set();
+    // a planner room is registered as its interior: a panel set into its wall ring (the stairwell light of the
+    // tower core, a corridor lintel) lights it, so the ring counts toward the light
+    if (!walled) for (let x = rx0 - 1; x <= rx1 + 1; x++) for (let z = rz0 - 1; z <= rz1 + 1; z++) {
+      if (x >= rx0 && x <= rx1 && z >= rz0 && z <= rz1) continue;
+      for (let yy = ry; yy <= ry + 4; yy++) if (emits(at(x, yy, z))) emit++;
+    }
     for (let x = rx0; x <= rx1; x++) for (let z = rz0; z <= rz1; z++) {
       for (let yy = ry - 1; yy <= ry + 1; yy++) if (visited[key(x, yy, z)]) { reach = true; if (!entry) entry = { x, y: yy, z }; }
       for (let yy = ry - 1; yy <= ry + 4; yy++) { const v = at(x, yy, z); if (emits(v)) emit++; if (!isAir(v)) blockIds.add(v); }

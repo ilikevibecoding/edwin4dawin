@@ -19,7 +19,7 @@ const symDiff = (A, Bs) => { let n = 0; for (const x of A) if (!Bs.has(x)) n++; 
 const jaccard = (A, Bs) => { let i = 0; for (const x of A) if (Bs.has(x)) i++; const u = A.size + Bs.size - i; return u ? i / u : 1; };
 const l1 = (a, b) => a.reduce((s, v, i) => s + Math.abs(v - (b[i] || 0)), 0);
 const name = (id) => (BLOCKS[id] ? BLOCKS[id].name : String(id));
-const GENERIC_VERBS = new Set(['talk to staff', 'use the lift', 'leave by the service door']);
+export const GENERIC_VERBS = new Set(['talk to staff', 'use the lift', 'leave by the service door']);
 
 // The seven axes. Each returns { differs, distance, a, b, why } - `why` names the measure that crossed its threshold.
 export const AXES = {

@@ -551,11 +551,15 @@ defProgramRoom('staff_break', { minW: 3, minD: 3, tags: ['service'] }, (r, rng, 
 });
 defProgramRoom('back_office', { minW: 3, minD: 3, tags: ['office', 'private'] }, (r, rng, ctx) => {
   const P = pal(ctx);
-  const t = propSomewhere(r, B.TABLE, [[r.cu, r.back - 1], [r.cu, r.back], [r.cu - 1, r.back], [r.cu + 1, r.back], [1, r.back], [r.w - 2, r.back]]) || [r.cu, r.back - 1];
-  r.put(t[0], 1, t[1], B.CONSOLE);
-  for (const [du, dv] of [[0, 1], [0, -1], [-1, 0], [1, 0]]) if (r.free(t[0] + du, t[1] + dv) && r.empty(t[0] + du, 0, t[1] + dv)) { r.seat(t[0] + du, t[1] + dv, P.seatSlab); r.work(t[0] + du, t[1] + dv, 'executive'); break; }
-  r.put(0, 0, r.back, B.IRON_BLOCK); r.put(0, 1, r.back, B.IRON_BLOCK);                               // the safe
-  r.put(r.w - 1, 0, r.back, B.BOOKSHELF); r.put(r.w - 1, 1, r.back, B.CHEST);                        // ledgers
+  // the safe and the ledgers take the back corners first (where the back door leaves them); the desk then lands on
+  // a cell that is still empty, so the console the interaction needs is never overwritten by the safe
+  if (r.empty(0, 0, r.back)) { r.put(0, 0, r.back, B.IRON_BLOCK); r.put(0, 1, r.back, B.IRON_BLOCK); }    // the safe
+  if (r.w > 1 && r.empty(r.w - 1, 0, r.back)) { r.put(r.w - 1, 0, r.back, B.BOOKSHELF); r.put(r.w - 1, 1, r.back, B.CHEST); }   // ledgers
+  const t = propSomewhere(r, B.TABLE, [[r.cu, r.back - 1], [r.cu, r.back], [r.cu - 1, r.back], [r.cu + 1, r.back], [1, r.back], [r.w - 2, r.back]]);
+  if (t) {
+    r.put(t[0], 1, t[1], B.CONSOLE);
+    for (const [du, dv] of [[0, 1], [0, -1], [-1, 0], [1, 0]]) if (r.free(t[0] + du, t[1] + dv) && r.empty(t[0] + du, 0, t[1] + dv)) { r.seat(t[0] + du, t[1] + dv, P.seatSlab); r.work(t[0] + du, t[1] + dv, 'executive'); break; }
+  } else propSomewhere(r, B.CONSOLE, [[r.cu, 2], [0, 2], [r.w - 1, 2]]);
   r.lantern(r.cu, 2);
 });
 
@@ -1158,9 +1162,74 @@ defProgramRoom('observation_lounge', { minW: 4, minD: 4, tags: ['public', 'glass
   r.lantern(0, r.back - 1); r.lantern(r.w - 1, r.back - 1);
 });
 defProgramRoom('bath_house', { minW: 3, minD: 3, tags: ['service'] }, (r, rng, ctx) => {
-  for (let u = 0; u < r.w; u++) { r.put(u, 0, r.back, B.TROUGH); r.put(u, 1, r.back, u % 2 ? B.WHITE_WOOL : B.GLASS); }
-  for (let v = 2; v < r.back; v += 2) { r.put(0, 0, v, B.WHITE_WOOL); r.put(0, 1, v, B.WHITE_WOOL); }    // towel stacks
-  r.put(r.w - 1, 0, 2, B.SHELF); r.work(r.w - 1, 3 <= r.back - 1 ? 3 : 2, 'attendant');
+  let pools = 0;
+  for (let u = 0; u < r.w; u++) { if (r.put(u, 0, r.back, B.TROUGH)) pools++; r.put(u, 1, r.back, u % 2 ? B.WHITE_WOOL : B.GLASS); }
+  // a back door eats the pool row: the plunge pool moves to the side wall
+  if (!pools) propSomewhere(r, B.TROUGH, [[0, r.back - 1], [r.w - 1, r.back - 1], [0, 2], [r.w - 1, 2]]);
+  for (let v = 2; v < r.back; v += 2) if (r.empty(0, 0, v)) { r.put(0, 0, v, B.WHITE_WOOL); r.put(0, 1, v, B.WHITE_WOOL); }    // towel stacks
+  if (r.empty(r.w - 1, 0, 2)) r.put(r.w - 1, 0, 2, B.SHELF);
+  r.work(r.w - 1, 3 <= r.back - 1 ? 3 : 2, 'attendant');
   lights(r, 3, B.GLOW_PANEL);
 });
 defProgramRoom('tea_kitchen', { minW: 4, minD: 4, tags: ['service'] }, (r, rng, ctx) => { ROOMS.kitchen.fn(r, rng, ctx); stoveSomewhere(r); });
+
+// ---- generic programs' signature rooms ------------------------------------------------------------------------
+// the HoloNet studio floor: the news desk in front of the holo stage, camera droids on the floor, the gallery window
+defProgramRoom('news_studio', { minW: 5, minD: 5, tags: ['culture', 'tech'] }, (r, rng, ctx) => {
+  const P = pal(ctx);
+  for (let u = 0; u < r.w; u++) { r.put(u, 0, r.back, B.SMOOTH_STONE); r.put(u, 1, r.back, u % 2 ? B.HOLO_SIGN : B.PANEL_BLACK); r.putRaw(u, r.h - 1, r.back, B.GLOW_PANEL_BLUE); }   // the holo stage and its backdrop
+  const dv = Math.max(2, r.back - 2);
+  r.put(r.cu - 1, 0, dv, B.TABLE); r.put(r.cu, 0, dv, B.CONSOLE); r.put(r.cu + 1, 0, dv, B.TABLE);         // the news desk
+  r.seat(r.cu - 1, dv + 1 <= r.back ? dv + 1 : dv, P.seatSlab); r.work(r.cu, dv + 1 <= r.back ? dv + 1 : dv, 'journalist');
+  for (const u of [0, r.w - 1]) if (r.free(u, dv)) { r.put(u, 0, dv, B.IRON_BLOCK); r.put(u, 1, dv, B.GLASS); }   // camera droids
+  for (const u of [0, r.w - 1]) if (r.free(u, 2)) { r.put(u, 0, 2, B.CONSOLE); }
+  r.work(1 < r.w ? 1 : 0, 2, 'operator');
+  r.put(r.cu, 1, 2, B.HOLO_SIGN);                                                                          // the running order
+  lights(r, 3, B.GLOW_PANEL);
+});
+
+// ---- library rooms hardened for the bays the planner hands a program -------------------------------------------
+// The library's dining and class rooms lay their seating in rows from v = 2 to back - 3: a room of the template's
+// minimum depth (5) has no such row and gets a counter with nobody to serve. The program versions run the library
+// template and, when no seat survived, seat the room in the rows the door zones leave (`order food` / `sit` /
+// `attend a lesson` all need a seat spot).
+function seatCount(r) {
+  const xa = r.X(0, 0), xb = r.X(r.w - 1, r.d - 1), za = r.Z(0, 0), zb = r.Z(r.w - 1, r.d - 1);
+  const x0 = r.bp.wx(Math.min(xa, xb)), x1 = r.bp.wx(Math.max(xa, xb)), z0 = r.bp.wz(Math.min(za, zb)), z1 = r.bp.wz(Math.max(za, zb)), y = r.bp.wy(r.y);
+  let n = 0;
+  for (const s of r.bp.meta.spots) if (s.kind === 'seat' && s.y === y && s.x >= x0 && s.x <= x1 && s.z >= z0 && s.z <= z1) n++;
+  return n;
+}
+// tables for two in the free rows between the door zone and the counter
+function diningSeats(r, P, vLast = r.back - 2) {
+  let n = 0;
+  for (let v = 2; v <= vLast; v += 2) for (let u = 1; u < r.w; u += 3) {
+    if (!r.free(u, v) || !r.empty(u, 0, v) || !r.empty(u, 1, v)) continue;
+    if (!r.table(u, v)) continue;
+    for (const du of [-1, 1]) if (r.free(u + du, v) && r.empty(u + du, 0, v)) { r.seat(u + du, v, P.seatSlab); n++; }
+  }
+  // a single free row against the side walls: a bench of seats facing the counter
+  if (!n) for (let v = 2; v <= vLast && !n; v++) for (let u = 0; u < r.w; u += 2) if (r.free(u, v) && r.empty(u, 0, v)) { r.seat(u, v, P.seatSlab); n++; }
+  return n;
+}
+defProgramRoom('restaurant', { minW: 6, minD: 5, tags: ['food', 'public'] }, (r, rng, ctx) => {
+  ROOMS.restaurant.fn(r, rng, ctx);
+  if (!seatCount(r)) diningSeats(r, pal(ctx), r.back - 2);
+});
+defProgramRoom('cafeteria', { minW: 6, minD: 5, tags: ['food'] }, (r, rng, ctx) => {
+  ROOMS.cafeteria.fn(r, rng, ctx);
+  if (!seatCount(r)) diningSeats(r, pal(ctx), r.back - 2);
+});
+defProgramRoom('school_room', { minW: 5, minD: 4, tags: ['culture', 'public'] }, (r, rng, ctx) => {
+  ROOMS.school_room.fn(r, rng, ctx);
+  if (seatCount(r)) return;
+  const P = pal(ctx);
+  // shallow classroom: a row of desks two in front of the board, the seats behind them facing it
+  let n = 0;
+  for (let v = r.back - 2; v >= 2 && !n; v--) for (let u = 0; u < r.w; u += 2) {
+    if (!r.free(u, v) || !r.empty(u, 0, v)) continue;
+    if (v - 1 >= 1 && r.free(u, v - 1) && r.empty(u, 0, v - 1) && r.table(u, v)) { r.seat(u, v - 1, P.seatSlab); n++; }
+    else { r.seat(u, v, P.seatSlab); n++; }
+  }
+});
+defProgramRoom('kitchen', { minW: 4, minD: 4, tags: ['service'] }, (r, rng, ctx) => { ROOMS.kitchen.fn(r, rng, ctx); stoveSomewhere(r); });

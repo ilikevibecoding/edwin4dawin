@@ -37,6 +37,52 @@ export function ownerOf(lot, program) {
 // lot-seeded variant index (0..n-1) - a variation axis the templates and the room selection read
 export const variantOf = (lot, n = 3) => new RNG((lot.seed ^ 0x2545f491) >>> 0).int(0, n - 1);
 
+// purpose kind -> playable lots of that kind, once per layout
+const KIND_INDEX = new WeakMap();
+function lotsByKind(layout) {
+  let m = KIND_INDEX.get(layout);
+  if (m) return m;
+  m = new Map();
+  if (Array.isArray(layout.lots)) for (const l of layout.lots) {
+    if (l.kind !== 'tower' && l.kind !== 'landmark') continue;
+    const k = purposeFor(l, layout).kind;
+    if (!m.has(k)) m.set(k, []);
+    m.get(k).push(l);
+  }
+  KIND_INDEX.set(layout, m);
+  return m;
+}
+
+const DIR = (dx, dz) => (Math.abs(dx) > Math.abs(dz) ? (dx > 0 ? 'east' : 'west') : (dz > 0 ? 'south' : 'north'));
+
+/**
+ * The story of one building: the local problem (the program's pool, picked by the lot variant) and the connection to
+ * another location - the program's words plus the nearest building of the kinds it connects to, named, with the
+ * distance in blocks and the direction, so the dossier points at a place that exists in this layout.
+ */
+export function storyFor(lot, prog, variant, layout) {
+  const st = prog.story || {};
+  const pool = st.problems && st.problems.length ? st.problems : [st.problem];
+  const problem = pool[variant % pool.length];
+  let place = null;
+  if (layout && st.connectsTo && Array.isArray(layout.lots)) {
+    const idx = lotsByKind(layout);
+    const cx = (lot.x0 + lot.x1) / 2, cz = (lot.z0 + lot.z1) / 2;
+    let best = null;
+    for (const k of st.connectsTo) for (const o of idx.get(k) || []) {
+      if (o.id === lot.id) continue;
+      const d = Math.hypot((o.x0 + o.x1) / 2 - cx, (o.z0 + o.z1) / 2 - cz);
+      if (!best || d < best.d) best = { o, d, k };
+    }
+    if (best) {
+      const op = purposeFor(best.o, layout);
+      place = { lotId: best.o.id, name: op.name, kind: best.k, district: best.o.district, blocks: Math.max(1, Math.round(best.d / 40)), direction: DIR((best.o.x0 + best.o.x1) / 2 - cx, (best.o.z0 + best.o.z1) / 2 - cz) };
+    }
+  }
+  const connection = place ? `${st.connection}: ${place.name} (lot ${place.lotId}, ${place.blocks} block${place.blocks === 1 ? '' : 's'} ${place.direction})` : st.connection;
+  return { problem, connection, place, resolutions: st.resolutions || null, connectsTo: st.connectsTo || [] };
+}
+
 export function programFor(lot, purpose = null, layout = null) {
   if (!lot) return null;
   const p = purpose || (layout ? purposeFor(lot, layout) : null);
@@ -51,8 +97,12 @@ export function programFor(lot, purpose = null, layout = null) {
   const rooms = featured ? prog.rooms.map((r) => ({ ...r, signature: r.kind === featured })) : prog.rooms;
   const interactions = {};
   for (const r of rooms) interactions[r.kind] = r.interactions.slice();
+  // a shop's flows are the goods its purpose advertises
+  const sold = p && p.sells ? p.sells.map((s) => s.item) : [];
+  const inputs = prog.inputs === 'sells' ? sold.slice() : prog.inputs.slice();
+  const outputs = prog.outputs === 'sells' ? sold.slice() : prog.outputs.slice();
   return {
-    id, name: prog.name, special: !!prog.special,
+    id, name: prog.name, special: !!prog.special, generic: !!prog.generic,
     address: addressOf(lot), owner,
     purpose: p ? { kind: p.kind, category: p.category, name: p.name, hours: p.hours, greeting: p.greeting } : null,
     staff: p ? p.roles.filter((r) => r.job !== 'patron' && r.job !== 'resident' && r.job !== 'visitor').map((r) => ({ job: r.job, count: r.count, rooms: r.rooms })) : [],
@@ -62,8 +112,8 @@ export function programFor(lot, purpose = null, layout = null) {
     rooms, featured,
     materials: mats.names, materialIds: mats.ids,
     interactions,
-    inputs: prog.inputs.slice(), outputs: prog.outputs.slice(), wants: prog.wants.slice(),
-    story: prog.story, schedule: prog.schedule || null,
+    inputs, outputs, wants: prog.wants.slice(),
+    story: storyFor(lot, prog, variant, layout), schedule: prog.schedule || null,
     variant,
   };
 }

@@ -50,6 +50,11 @@ export function offeredVerbs(kind) {
 }
 // structural / facade blocks that tell one building's material identity from another's (furniture is excluded)
 const PALETTE_SKIP = new Set([B.GLASS, B.WINDOW_LIT, B.WINDOW_DARK, B.TABLE, B.CHEST, B.SHELF, B.CRATE, B.BARREL, B.BOOKSHELF, B.HOLO_SIGN, B.CONSOLE, B.BED_HEAD, B.BED_FOOT, B.IRON_BARS, B.OAK_FENCE, B.TROUGH, B.FURNACE].filter((x) => x !== undefined));
+// props the scorer reads per room: storage (spec 17 "believable storage"), plausible sound sources, light kinds
+const STORAGE = new Set([B.CHEST, B.CRATE, B.BARREL, B.SHELF, B.BOOKSHELF].filter((x) => x !== undefined));
+const SOUND = new Set([B.PIANO, B.FURNACE, B.CONSOLE, B.ANVIL, B.VENT, B.NEON_PINK, B.NEON_GREEN, B.HOLO_SIGN, B.WATER, B.MAGMA].filter((x) => x !== undefined));
+const emissive = (v) => BLOCKS[v] && BLOCKS[v].emit > 0;
+const HANGS = new Set([B.HOLO_SIGN, B.LANTERN, B.CITY_LAMP, B.TORCH].filter((x) => x !== undefined));
 
 /**
  * The room graph of one floor. Nodes are the registered rooms plus the corridor components (walkable floor cells
@@ -79,7 +84,7 @@ function floorGraph(an, lot, rooms, idx, y) {
     corridors.push({ id: next, cells: cells.length, y });
     next++;
   }
-  const node = (x, z) => (label[x * d + z] >= 0 ? label[x * d + z] : comp[x * d + z]);
+  const node = (x, z) => (x < 0 || z < 0 || x >= w || z >= d) ? -1 : (label[x * d + z] >= 0 ? label[x * d + z] : comp[x * d + z]);
   const edges = new Set();
   for (let x = 0; x < w; x++) for (let z = 0; z < d; z++) {
     const a = node(x, z);
@@ -92,7 +97,7 @@ function floorGraph(an, lot, rooms, idx, y) {
       edges.add(a < b ? `${a}-${b}` : `${b}-${a}`);
     }
   }
-  return { corridors, edges, corridorCells: corridors.reduce((s, c) => s + c.cells, 0) };
+  return { corridors, edges, node, corridorCells: corridors.reduce((s, c) => s + c.cells, 0) };
 }
 
 export function profileLot(lot, layout) {
@@ -109,7 +114,9 @@ export function profileLot(lot, layout) {
     const evidenced = VERBS.filter((v) => evidence(v, s, ectx));
     const offered = offeredVerbs(s.kind);
     const verbs = offered.filter((v) => evidenced.includes(v));
-    return { kind: s.kind, f: fIdx.get(s.y) ?? 0, x: s.x, y: s.y, z: s.z, w: s.w, d: s.d, area: s.floorCells, reach: s.reach, lit: s.lit, density: +s.density.toFixed(3), dense: s.density >= barFor(s), variety: s.variety, spots: s.spots, works: s.works, beds: s.beds, verbs, offered, evidenced, deg: 0, circulation: CIRCULATION.has(s.kind) };
+    let storage = false, sound = false, lights = 0;
+    for (const id of s.blockIds) { if (STORAGE.has(id)) storage = true; if (SOUND.has(id)) sound = true; if (emissive(id)) lights++; }
+    return { kind: s.kind, f: fIdx.get(s.y) ?? 0, x: s.x, y: s.y, z: s.z, w: s.w, d: s.d, area: s.floorCells, reach: s.reach, lit: s.lit, density: +s.density.toFixed(3), dense: s.density >= barFor(s), variety: s.variety, spots: s.spots, works: s.works, beds: s.beds, verbs, offered, evidenced, deg: 0, circulation: CIRCULATION.has(s.kind), storage, sound, lights };
   });
   // room graph: per floor, rooms + corridor components joined at doorways; lifts and stacked stairwells join floors
   const edges = new Set();
@@ -119,35 +126,43 @@ export function profileLot(lot, layout) {
   let corridorCells = 0;
   // corridor node ids continue after the rooms; each floor's graph is offset so ids never collide
   const corridorNodes = [];
+  const lookup = new Map();   // y -> (local x, z) -> global node id on that floor
   for (const [y, idx] of [...byFloor.entries()].sort((a, b) => a[0] - b[0])) {
     const g = floorGraph(an, lot, rooms, idx, y);
     const off = rooms.length + corridorNodes.length;
-    const remap = (n) => (n < rooms.length ? n : off + (n - rooms.length));
+    const remap = (n) => (n < 0 ? -1 : n < rooms.length ? n : off + (n - rooms.length));
     for (const c of g.corridors) corridorNodes.push({ id: remap(c.id), cells: c.cells, y, f: fIdx.get(y) ?? 0, deg: 0 });
     for (const e of g.edges) { const [a, b] = e.split('-').map(Number); edges.add(`${remap(a)}-${remap(b)}`); }
+    lookup.set(y, (x, z) => remap(g.node(x, z)));
     corridorCells += g.corridorCells;
   }
   const nodeOf = (id) => (id < rooms.length ? rooms[id] : corridorNodes[id - rooms.length]);
-  const nodeAt = (x, z, y) => {
-    for (let i = 0; i < rooms.length; i++) { const r = rooms[i]; if (r.y === y && x >= r.x && x < r.x + r.w && z >= r.z && z < r.z + r.d) return i; }
-    // the corridor component around the shaft: any corridor node on that floor (the landing) - the closest by floor
-    const c = corridorNodes.findIndex((n) => n.y === y);
-    return c >= 0 ? rooms.length + c : -1;
-  };
+  // the node standing at world (x, z) on the floor at y: the room or the corridor component there
+  const nodeAt = (x, z, y) => { const f = lookup.get(y); return f ? f(x - lot.x0, z - lot.z0) : -1; };
+  const join = (a, b) => { if (a >= 0 && b >= 0 && a !== b) edges.add(a < b ? `${a}-${b}` : `${b}-${a}`); };
   for (const l of m.lifts) {
     let prev = -1;
     for (const y of ys) {
       if (y < l.y0 || y > l.y1 + 1) continue;
       let n = -1;
-      for (const [dx, dz] of [[0, 2], [2, 0], [0, -2], [-2, 0], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { n = nodeAt(l.x + dx, l.z + dz, y); if (n >= 0) break; }
+      for (const [dx, dz] of [[0, 2], [2, 0], [0, -2], [-2, 0], [1, 1], [-1, -1], [1, -1], [-1, 1], [0, 3], [3, 0], [0, -3], [-3, 0]]) { n = nodeAt(l.x + dx, l.z + dz, y); if (n >= 0) break; }
       if (n < 0) continue;
-      if (prev >= 0 && prev !== n) edges.add(prev < n ? `${prev}-${n}` : `${n}-${prev}`);
+      join(prev, n);
       prev = n;
     }
   }
-  // stairwells stacked on consecutive floors are one vertical route
+  // a stairwell climbs to the floor above: it joins the stairwell stacked there, else whatever stands over its
+  // cells on that floor (the top landing of the tower core opens onto the top floor's corridor)
   const stairs = rooms.map((r, i) => ({ r, i })).filter((o) => /stair/.test(o.r.kind));
-  for (const a of stairs) for (const b of stairs) if (a.i < b.i && a.r.x === b.r.x && a.r.z === b.r.z && Math.abs(a.r.f - b.r.f) === 1) edges.add(`${a.i}-${b.i}`);
+  for (const a of stairs) {
+    const above = ys[(fIdx.get(a.r.y) ?? 0) + 1];
+    if (above === undefined) continue;
+    const b = stairs.find((o) => o.r.y === above && o.r.x === a.r.x && o.r.z === a.r.z);
+    if (b) { join(a.i, b.i); continue; }
+    let n = -1;
+    for (let x = a.r.x - 1; x <= a.r.x + a.r.w && n < 0; x++) for (let z = a.r.z - 1; z <= a.r.z + a.r.d && n < 0; z++) n = nodeAt(x, z, above);
+    join(a.i, n);
+  }
   const edgeList = [...edges].map((e) => e.split('-').map(Number));
   const N = rooms.length + corridorNodes.length;
   const adj = Array.from({ length: N }, () => []);
@@ -171,7 +186,8 @@ export function profileLot(lot, layout) {
   const perFloorArea = ys.map((y) => rooms.filter((r) => r.y === y).reduce((s, r) => s + r.area, 0));
   // palette: the blocks that carry the building's material identity, by count over the whole blueprint
   const counts = new Map();
-  for (let i = 0; i < bp.blocks.length; i++) { const v = bp.blocks[i]; if (isAir(v) || PALETTE_SKIP.has(v)) continue; counts.set(v, (counts.get(v) || 0) + 1); }
+  const emissiveKinds = new Set();
+  for (let i = 0; i < bp.blocks.length; i++) { const v = bp.blocks[i]; if (isAir(v)) continue; if (emissive(v)) emissiveKinds.add(v); if (PALETTE_SKIP.has(v)) continue; counts.set(v, (counts.get(v) || 0) + 1); }
   const palette = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0] - b[0]).slice(0, 6).map((e) => e[0]);
   // staff: the work records (the stations NPCs are given) by kind
   const staff = {};
@@ -192,22 +208,23 @@ export function profileLot(lot, layout) {
     if (st) signature = { kind: st.kind, f: st.f, area: st.area, program: true };
   }
   if (!signature && occupied.length) { const st = occupied.slice().sort((a, b) => b.area - a.area)[0]; signature = { kind: st.kind, f: st.f, area: st.area, program: false }; }
-  // floating blocks: solid cells above the ground with nothing solid in the 6-neighbourhood (technical integrity)
+  // floating blocks: solid cells above the ground with nothing solid in the 6-neighbourhood (technical integrity);
+  // a projected holo sign and a hung lamp float by design
   let floating = 0;
   const { w, h, d } = bp;
   const at = an.at;
   for (let x = 0; x < w; x++) for (let z = 0; z < d; z++) for (let y = 1; y < h - 1; y++) {
-    const v = at(x, y, z); if (!solid(v)) continue;
+    const v = at(x, y, z); if (!solid(v) || HANGS.has(v)) continue;
     if (solid(at(x, y - 1, z)) || solid(at(x, y + 1, z)) || solid(at(x - 1, y, z)) || solid(at(x + 1, y, z)) || solid(at(x, y, z - 1)) || solid(at(x, y, z + 1))) continue;
     floating++;
   }
   const n = rooms.length || 1;
   return {
     id: lot.id, kind: lot.kind, family: m.family, district: lot.district, purpose: purpose ? { kind: purpose.kind, category: purpose.category, name: purpose.name, roles: purpose.roles, sells: purpose.sells || [], buys: purpose.buys || [], hours: purpose.hours } : null,
-    program: program ? program.id : null, programRecord: m.program || null, sign: purpose ? purpose.name : m.name, name: m.name,
+    program: program ? program.id : null, programInfo: program, programRecord: m.program || null, sign: purpose ? purpose.name : m.name, name: m.name,
     floors: ys.length, height: bp.h, w: lot.w, d: lot.d, area: lot.w * lot.d, perFloorArea, rooms,
     graph: { nodes: rooms.length + corridorNodes.filter((c) => c.deg > 0).length, roomNodes: rooms.length, corridorNodes: corridorNodes.filter((c) => c.deg > 0).length, edges: edgeList.length, edgeList, degHist: degHist.map((v) => +(v / n).toFixed(3)), deadEnds, deadEndRatio: +(occupied.length ? deadEnds / occupied.length : 0).toFixed(3), corridorShare: +(corridorArea / totalArea).toFixed(3), components, connected: components <= 1, isolatedRooms: rooms.filter((r) => r.deg === 0).length },
-    palette, staff: { kinds: staff, total: m.work.length }, interactions, verbs: new Set(Object.keys(interactions)), entry, signature,
+    palette, emissiveKinds: emissiveKinds.size, staff: { kinds: staff, total: m.work.length }, interactions, verbs: new Set(Object.keys(interactions)), entry, signature,
     reachShare: +(rooms.filter((r) => r.reach).length / n).toFixed(3), litShare: +(rooms.filter((r) => r.lit).length / n).toFixed(3), denseShare: +(rooms.filter((r) => r.dense).length / n).toFixed(3),
     varietyMean: +(rooms.reduce((s, r) => s + r.variety, 0) / n).toFixed(2), floating, spots: m.spots.length, beds: m.beds.length, reachCount: an.reachCount,
   };
