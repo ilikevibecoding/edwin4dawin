@@ -545,7 +545,7 @@ if (facadeGlass > 0.0) {
       metal *= 1.0 - occl;
       col *= 1.0 - 0.5 * occl;
     }
-    if (!mast && metal > 0.3) {
+    if (!mast && glass > 0.0 && metal > 0.3 * glass) {
       // Glass seen from afar: once the panes no longer resolve, their tilts no longer show as separate glints but
       // as the spread of the face's normal distribution, i.e. a wider specular lobe (the box filter of the pane
       // normals). Widening the roughness with distance makes the sun light the whole sun-facing side of a tower
@@ -555,7 +555,7 @@ if (facadeGlass > 0.0) {
       rough = mix(rough, max(rough, 0.45), glass * (1.0 - vis));
       col *= 1.0 + (fract(paneH * 7.9) - 0.5) * 0.44 * (0.4 + 0.6 * vis) * glass;
     }
-    facadeGlass = glass * step(0.3, metal);
+    facadeGlass = glass * step(0.3 * glass, metal);   // glazing at 30 %+ reflectance, whatever its pixel coverage
     facadeHf = clamp(v / H, 0.0, 1.0);
     // through a lit room the pane glows unevenly: bright where the ceiling panels are, dimmer on the walls
     emis *= mix(1.0, 0.55 + 1.1 * roomPanel, par * glass);
