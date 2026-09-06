@@ -72,7 +72,10 @@ export function bakeLots(footprints: readonly Footprint[]): Uint8Array {
 /** GPU textures shared by terrain, water and anything that needs to know the ground height. */
 export class MapTextures {
   height: THREE.DataTexture;
+  /** smooth fields per map cell (patch noise, canopy, coast distance, exposure), linearly filtered */
   zone: THREE.DataTexture;
+  /** the zone id per map cell (R8, nearest) */
+  zoneId: THREE.DataTexture;
   /** baked hinterland detail (streets, block tone, urbanity, corridor strips), see bakeDetail */
   detail: THREE.DataTexture;
   /** tileable ground-detail textures (grass, soil, sand, footprints), see groundDetail.ts */
@@ -99,23 +102,38 @@ export class MapTextures {
     this.height.generateMipmaps = false;
     this.height.needsUpdate = true;
 
-    // R = zone id, G = canopy density (veg), B = signed coast distance (128 + m/2), A = wave exposure
+    // R = the 300 m patch noise of the ground shading (baked: three octaves of value noise the shader would
+    // otherwise evaluate per pixel), G = canopy density (veg), B = signed coast distance (128 + m/2), A = wave
+    // exposure; all four are smooth fields, read bilinearly in one tap. The zone id has its own texture.
     const z = new Uint8Array(MAP_N * MAP_N * 4);
-    for (let i = 0; i < MAP_N * MAP_N; i++) {
-      z[i * 4] = map.zone[i];
-      z[i * 4 + 1] = map.veg[i];
-      const c = map.coast[i];
-      z[i * 4 + 2] = Math.max(0, Math.min(255, Math.round(128 + c * 0.5)));
-      z[i * 4 + 3] = map.exposure[i];
+    const ids = new Uint8Array(MAP_N * MAP_N);
+    const cell = WORLD_SIZE / MAP_N;
+    for (let j = 0; j < MAP_N; j++) {
+      const wz = -HALF + j * cell;
+      for (let i = 0; i < MAP_N; i++) {
+        const idx = j * MAP_N + i;
+        const wx = -HALF + i * cell;
+        ids[idx] = map.zone[idx];
+        z[idx * 4] = Math.round(255 * Math.min(1, Math.max(0, fbm3(wx * 0.0032 + 17, wz * 0.0032 + 17))));
+        z[idx * 4 + 1] = map.veg[idx];
+        const c = map.coast[idx];
+        z[idx * 4 + 2] = Math.max(0, Math.min(255, Math.round(128 + c * 0.5)));
+        z[idx * 4 + 3] = map.exposure[idx];
+      }
     }
     this.zone = new THREE.DataTexture(z, MAP_N, MAP_N, THREE.RGBAFormat, THREE.UnsignedByteType);
-    // linearly filtered: the smooth channels (canopy, coast distance, exposure) come out bilinear in one tap;
-    // the zone id is read at texel centres (zoneCell in the terrain shader), where the filter returns the texel
     this.zone.minFilter = THREE.LinearFilter;
     this.zone.magFilter = THREE.LinearFilter;
     this.zone.wrapS = this.zone.wrapT = THREE.ClampToEdgeWrapping;
     this.zone.generateMipmaps = false;
     this.zone.needsUpdate = true;
+    // the zone id alone, fetched by texel (no filtering: an id must never be interpolated)
+    this.zoneId = new THREE.DataTexture(ids, MAP_N, MAP_N, THREE.RedFormat, THREE.UnsignedByteType);
+    this.zoneId.minFilter = THREE.NearestFilter;
+    this.zoneId.magFilter = THREE.NearestFilter;
+    this.zoneId.wrapS = this.zoneId.wrapT = THREE.ClampToEdgeWrapping;
+    this.zoneId.generateMipmaps = false;
+    this.zoneId.needsUpdate = true;
 
     this.detail = new THREE.DataTexture(bakeDetail(map), MAP_N, MAP_N, THREE.RGBAFormat, THREE.UnsignedByteType);
     this.detail.minFilter = THREE.LinearFilter;
@@ -126,6 +144,30 @@ export class MapTextures {
 
     this.groundDetail = createGroundDetailTextures(renderer);
   }
+}
+
+/** The shader's value noise (common.glsl hash12 / vnoise / fbm3) on the CPU, for the fields baked per map cell. */
+function fract(x: number): number { return x - Math.floor(x); }
+function hash12(x: number, y: number): number {
+  let px = fract(x * 0.1031), py = fract(y * 0.1031), pz = fract(x * 0.1031);
+  const d = px * (py + 33.33) + py * (pz + 33.33) + pz * (px + 33.33);
+  px += d; py += d; pz += d;
+  return fract((px + py) * pz);
+}
+function vnoise(x: number, y: number): number {
+  const ix = Math.floor(x), iy = Math.floor(y), fx = x - ix, fy = y - iy;
+  const ux = fx * fx * (3 - 2 * fx), uy = fy * fy * (3 - 2 * fy);
+  const a = hash12(ix, iy), b = hash12(ix + 1, iy), c = hash12(ix, iy + 1), d = hash12(ix + 1, iy + 1);
+  return (a + (b - a) * ux) * (1 - uy) + (c + (d - c) * ux) * uy;
+}
+function fbm3(x: number, y: number): number {
+  let v = 0, a = 0.5;
+  for (let i = 0; i < 3; i++) {
+    v += a * vnoise(x, y);
+    const nx = 1.6 * x - 1.2 * y, ny = 1.2 * x + 1.6 * y; // mat2(1.6, 1.2, -1.2, 1.6) * p (column-major columns)
+    x = nx; y = ny; a *= 0.5;
+  }
+  return v;
 }
 
 /** Baked ground detail for the hinterland shading, one texel per map cell (~10 m), linearly filtered:
@@ -382,7 +424,8 @@ vSlope = vec2(hx, hz) / (2.0 * e);
 
 const TERRAIN_FRAG_PARS = /* glsl */ `
 #define MAP_HALF_CELL ${(0.5 * WORLD_SIZE / MAP_N).toFixed(6)}
-uniform sampler2D uZoneTex;
+uniform sampler2D uZoneTex;   // r patch noise (300 m), g canopy, b coast distance, a exposure: smooth, bilinear
+uniform sampler2D uZoneIdTex; // r zone id, one texel per map cell, fetched unfiltered
 uniform sampler2D uDetailTex;
 uniform sampler2D uHeightTex;
 uniform sampler2D uGroundTex; // r grass clumps, g bare-patch mask, b soil grain, a footprints (groundDetail.ts)
@@ -407,15 +450,15 @@ vec2 gDetailSlope = vec2(0.0);
 // branch, so its mip level is given explicitly from these instead of the undefined implicit derivative
 vec2 gDwx = vec2(0.0), gDwy = vec2(0.0);
 
-// zone texture: the id (R) is read at a texel centre (the texture is linearly filtered for the sake of the
-// smooth channels, and the filter returns the texel exactly there); canopy (G), coast distance (B) and
-// exposure (A) are read bilinearly in one tap
-vec4 zoneCell(vec2 wp) {
-  vec2 t = (wp + vec2(uWorldSize * 0.5)) / uWorldSize * uMapN;
-  return texture2D(uZoneTex, (floor(t + 0.5) + 0.5) / uMapN); // nearest sample, as map.zoneAt() rounds
+// the zone id: the nearest map cell, as map.zoneAt() rounds, fetched by texel (an id is never interpolated,
+// and the unfiltered fetch is a fraction of a bilinear tap's cost); the smooth fields (patch noise, canopy, coast
+// distance, exposure) come bilinear from their own texture in one tap
+int zoneCell(vec2 wp) {
+  vec2 t = floor((wp + vec2(uWorldSize * 0.5)) / uWorldSize * uMapN + 0.5);
+  return int(texelFetch(uZoneIdTex, ivec2(clamp(t, vec2(0.0), vec2(uMapN - 1.0))), 0).r * 255.0 + 0.5);
 }
-vec3 zoneSmooth(vec2 wp) {
-  return texture2D(uZoneTex, (wp + vec2(uWorldSize * 0.5 + MAP_HALF_CELL)) / uWorldSize).gba;
+vec4 zoneSmooth(vec2 wp) {
+  return texture2D(uZoneTex, (wp + vec2(uWorldSize * 0.5 + MAP_HALF_CELL)) / uWorldSize);
 }
 
 // ---- detail textures. A tap takes the tile's uv as a linear map J of the world xz (uv = J * wp + offset),
@@ -657,7 +700,7 @@ Sand sandDetail(vec2 wp, float w, float foot) {
   } else { s.alb = uSandMean.x; s.ripple = uSandMean.y; s.slope = vec2(0.0); }
   return s;
 }
-vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, vec4 det, float foot, out Ground gd, out float rough) {
+vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, float macroN, vec4 det, float foot, out Ground gd, out float rough) {
   // The sea bed and the bars under the water plane (h < 0.05; the rim above it took the land's zone in main):
   // the water is opaque over them (water.ts shades its own bed and writes alpha 1), so nothing of this is ever
   // seen and only its cost would be. A depth tint without noise or taps, in case the water is ever hidden.
@@ -672,7 +715,7 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
   float n1 = foot < 2.0 ? mix(vnoise(wp * 0.35), 0.5, smoothstep(1.0, 2.0, foot)) : 0.5;
   float n2 = fbm3Band(wp * 0.045, 1.0 - smoothstep(2.0, 4.0, foot));
   float n3 = vnoise(wp * 0.008);
-  float n4 = fbm3(wp * 0.0032 + 17.0);
+  float n4 = macroN; // the 300 m fbm, baked per map cell (MapTextures) and read with the canopy
   float dist = length(cameraPosition - vWorldPos);
   // the anti-tiling blend weights of the detail taps (micro and sand from the 22 m noise, meso from the 125 m
   // one): a step over a tenth of the noise's range, so the two-tap blend zone is a 2-3 m seam between one-tap
@@ -964,8 +1007,7 @@ const TERRAIN_FRAG_MAIN = /* glsl */ `
   // jittered zone lookup hides the cell grid of the zone map
   float cellSize = uWorldSize / uMapN;
   vec2 jitter = (hash22(floor(vWorldPos.xz * 0.5)) - 0.5) * cellSize * 1.35;
-  vec4 zs = zoneCell(vWorldPos.xz + jitter);
-  int zone = int(zs.r * 255.0 + 0.5);
+  int zone = zoneCell(vWorldPos.xz + jitter);
   // The zone map's coastline (10 m cells) does not follow the waterline: sea cells (the nearshore is all
   // 'sandbar', map.ts) stand above the water for several metres along every shore. That rim is shaded as
   // the land behind it (the zone read 12 m uphill; the beach where that is sea too, as on a true bar), so
@@ -973,13 +1015,14 @@ const TERRAIN_FRAG_MAIN = /* glsl */ `
   // blocky mosaic along the old shoreline.
   if ((zone == 0 || zone == 1 || zone == 17) && vHeight > -0.05) {
     float sl = max(length(vSlope), 0.006);
-    int land = int(zoneCell(vWorldPos.xz + vSlope / sl * 12.0).r * 255.0 + 0.5);
+    int land = zoneCell(vWorldPos.xz + vSlope / sl * 12.0);
     zone = (land == 0 || land == 1 || land == 17) ? 2 : land;
   }
-  vec3 smoothVE = zoneSmooth(vWorldPos.xz);
-  float veg = smoothVE.x;
-  float coast = (smoothVE.y - 0.5) * 512.0;
-  float expo = smoothVE.z;
+  vec4 smoothVE = zoneSmooth(vWorldPos.xz);
+  float veg = smoothVE.g;
+  float coast = (smoothVE.b - 0.5) * 512.0;
+  float expo = smoothVE.a;
+  float macroN = smoothVE.r;
   float rough;
   // metres of ground per pixel: every procedural pattern fades before it goes subpixel
   gDwx = dFdx(vWorldPos.xz); gDwy = dFdy(vWorldPos.xz);
@@ -989,7 +1032,7 @@ const TERRAIN_FRAG_MAIN = /* glsl */ `
   vec4 det = texture2D(uDetailTex, (vWorldPos.xz + vec2(uWorldSize * 0.5 + MAP_HALF_CELL)) / uWorldSize) * (1.0 - beyond);
   det.g = mix(0.5, det.g, 1.0 - beyond);
   Ground gd;
-  vec3 alb = zoneAlbedo(zone, vWorldPos.xz, vHeight, veg, coast, expo, det, foot, gd, rough);
+  vec3 alb = zoneAlbedo(zone, vWorldPos.xz, vHeight, veg, coast, expo, macroN, det, foot, gd, rough);
   // streets of the district grids and the arterials, baked so the lattice survives to the horizon where the
   // road meshes are subpixel; the carriageway is dark, the verge beside it worn to dust and bare soil
   if (zone != 0 && zone != 1 && zone != 2 && zone != 17 && zone != 3 && zone != 12) {
@@ -1063,6 +1106,7 @@ export class Terrain {
     const uniforms = {
       uHeightTex: { value: textures.height },
       uZoneTex: { value: textures.zone },
+      uZoneIdTex: { value: textures.zoneId },
       uDetailTex: { value: textures.detail },
       uGroundTex: { value: textures.groundDetail.ground },
       uSandTex: { value: textures.groundDetail.sand },
