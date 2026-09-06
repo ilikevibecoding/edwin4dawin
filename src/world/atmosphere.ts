@@ -191,8 +191,11 @@ export class Atmosphere {
     // the environment map already darkens with the sky colours; the multiplier only mutes the IBL at night
     // (the night exposure boost would otherwise turn the dark-blue sky into a strong ground fill). Under a deck
     // the light the sun loses to the clouds comes back as diffuse skylight from the whole grey ceiling
-    // (an overcast sky is a far brighter diffuse source than a clear one), so the IBL is lifted with the cover
-    s.ambientIntensity = k.amb * (1 + 0.6 * grey);
+    // (an overcast sky is a far brighter diffuse source than a clear one). The probe draws that ceiling at
+    // 1.15-1.9x the horizon luminance (sky.ts); with the clear-sky keys halved for the fill (see `amb`) the
+    // overcast level is set on its own: 1.2 puts a white horizontal at ~0.85x the sky band (lin 0.38 under a
+    // 0.45 sky), where 0.5 x 1.5 left it at 0.26 — a white wing darker than the grey overcast above it.
+    s.ambientIntensity = lerp(k.amb, 1.2, grey);
     const horLum = s.horizon.r * 0.2126 + s.horizon.g * 0.7152 + s.horizon.b * 0.0722;
     const overcast = new THREE.Color(horLum, horLum, horLum).lerp(s.horizon, 0.3);
     const zl = s.zenith.clone().lerp(overcast, grey * 0.85);
