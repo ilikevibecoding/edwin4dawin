@@ -27,8 +27,10 @@ export class CastActors {
     const seed = (pp.seed ^ 0xca57) >>> 0 || 1;
     const app = composeAppearance(seed, { ...pp.appearance });
     const model = buildAppearanceModel(app);
-    model.root.frustumCulled = false;
-    const tag = makeTag(pp.name, model.height || 1.8);
+    // the real top of the model (a droid's dome, a hat), for the tag and the box: buildAppearanceModel's height is nominal
+    const top = new THREE.Box3().setFromObject(model.root).max.y;
+    model.height = top > 0.5 ? +top.toFixed(3) : (model.height || 1.8);
+    const tag = makeTag(pp.name, model.height);
     model.root.add(tag);
     c = { model, app, tag };
     this.cache.set(pp.castId, c);
@@ -88,7 +90,7 @@ export class CastActors {
     }
     if (a.blink) setEyesClosed(a, v.mode === MODE.SLEEPING);
     a.tag.visible = camDist < TAG_DIST && !npc.lying;
-    if (a.tag.visible) a.tag.position.y = (m.height || 1.8) + 0.35 + (npc.sitting ? -0.42 : 0);
+    if (a.tag.visible) a.tag.position.y = (m.height || 1.8) / (s[1] || 1) + 0.3 + (npc.sitting ? -0.42 : 0);   // root-local: the root carries the scale
   }
   update(dt, time) {
     this.time = time;

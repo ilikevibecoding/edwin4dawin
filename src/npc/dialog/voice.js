@@ -118,11 +118,18 @@ export class SpeechOutput {
     this.shown++;
     this.current = { name, text, until: nowS() + dur };
     if (!this.overlay) return;
+    this.placeSubtitle();
     this.overlay.querySelector('#npc-subtitles-name').textContent = name + ':';
     this.overlay.querySelector('#npc-subtitles-text').textContent = text;
     const mode = this.overlay.querySelector('#npc-subtitles-mode');
     mode.textContent = !this.settings.voice ? 'text only' : this.available ? '' : 'text only - no speech voices in this browser';
     this.overlay.style.display = 'block';
+  }
+  // above the talk box while a conversation is open (the box sits at bottom 18%), else at the usual subtitle height
+  placeSubtitle() {
+    if (!this.overlay) return;
+    const box = document.getElementById('npc-talk');
+    this.overlay.style.bottom = box && !box.hidden ? `calc(18% + ${Math.round(box.getBoundingClientRect().height) + 10}px)` : '17%';
   }
   hideSubtitle() { this.current = null; if (this.overlay) this.overlay.style.display = 'none'; }
   update() { if (this.current && nowS() > this.current.until) this.hideSubtitle(); }

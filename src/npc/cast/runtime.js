@@ -87,8 +87,11 @@ export class CastRuntime {
     pop.stats.talks++; this.stats.talks++;
     const line = this.dialog.lineFor(pp, { trigger: 'greet', talkOpen: true });   // selected against the history before this talk
     this.registry.recordTalk(pp);
+    const options = this.options(npc, pp, null);
+    pop.talkBox.open(npc, '', options, this.registry.describe(pp));            // open first: the subtitle sits above the box
     const said = line ? this.deliver(pp, npc, line, true) : null;
-    pop.talkBox.open(npc, said ? said.text : `${pp.name} looks up.`, this.options(npc, pp, null), this.registry.describe(pp));
+    pop.talkBox.show(said ? said.text : `${pp.name} looks up.`, options);
+    this.dialog.speech.placeSubtitle();
     return true;
   }
   options(npc, pp, asked) {
@@ -110,6 +113,7 @@ export class CastRuntime {
     this.registry.recordTalk(pp, key);
     if (!line) return { line: `${pp.name} says nothing to that.`, spoken: true, options: this.options(npc, pp, key) };
     const said = this.deliver(pp, npc, line, true);
+    if (typeof setTimeout === 'function') setTimeout(() => this.dialog.speech.placeSubtitle(), 0);   // once the box shows the reply
     return { line: said.text, spoken: true, options: this.options(npc, pp, key) };
   }
   onTalkClose(npc, turns) {
