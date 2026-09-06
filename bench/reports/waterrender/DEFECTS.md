@@ -153,3 +153,49 @@ the 10–50 m cells carry almost none, so the altitude view is grain and gust mo
 is the term that breaks a sun path's margins into streaks across the waves with darker water between them (a
 rough cell reaches the sun from farther off the path than a glassy one), which is what the resolved sets cannot
 do 1 km out.
+
+## Round 6 — footprint fade along each set's own wave vector
+
+Observed (`low30`, r3/r5): the mid-distance (100–400 m) at 30 m altitude went oily: the wind-sea sets were faded
+out by a footprint measured along the view (the pixel's long axis), although their crests run across the view
+and are still 3–4 px apart there.
+Change: `footAlong(k, dx, dy)` = the pixel's extent along the set's wave vector; every set (swell, wind, chop)
+fades on that, so a set whose crests run across the view stays resolved to the distance where its wavelength
+really reaches the pixel size, and only sets seen along their crests leave early.
+Result (`crops/r7_low30_r3_vs_r7.jpg`, right): the mid-distance shows the wind sea as fine dashes/ripples out to
+the horizon band; the highlight dabs of r3 are clusters of 1–3 px glints.
+
+## Round 7 — streak filter of the mirror image (night)
+
+Observed (`night`, r4–r6, `crops/r7_night_teeth.jpg`): the towers' reflections were hard-edged pale teeth: a
+sharp silhouette of the tower's mirror image filled with a flat blur, brighter than the towers themselves.
+Change (r7, `uReflTune`): streak per unit rms slope 0.38 → 1.2 (Cox–Munk 1.41; the measured distribution is
+peaked, so a little under), cross-blur = the across-spread instead of half the streak, taps one footprint apart,
+as many as the streak needs (≤ 13, Gaussian), the image fade moved to streaks of 0.35–0.8 of the height.
+Result: no change in shape: the teeth got bigger and flatter. A debug view of the kernel (`crops/r7_night_kernel_debug.jpg`,
+R = share of the mirror distance beyond the surface, G = streak, B = lod) showed why: all three are
+step functions of the *pixel's own* mirror hit (the tower's texels read share 0.3, the sky next to them share
+0.05 from the sky fallback), so the kernel is long inside the silhouette and 3 texels outside it. The blur
+has the right length; it is applied on the wrong side of the silhouette (a gather set by the receiver, where the
+physics is a scatter from the source: a window's light lands on the water below *and above* its mirror image).
+Also confirmed in the debug: the share of a tower window is y / (H + y) (window height over camera height plus
+it), 0.24–0.5 from 320 m, not ~1 — from an aircraft the streaks are compact; from a beach they are the long
+pillars of the photographs.
+
+## Round 8 — scatter kernel over a share pyramid
+
+Change (`reflection.ts`, `water.ts`): the resolve pass writes a second target, the share 1 − wp/wq of every
+texel's mirror distance beyond the surface (premultiplied by the coverage), and builds the same Gaussian pyramid
+over it; a coarse tap of it gives the mean share of the objects in the tap's footprint. The water's kernel: the
+reach is 1.5 × the rms streak of the mean share in reach (top level, ×1.5 so the taller objects of a mixed
+footprint keep their tails), 6 taps a side one quarter of that rms apart; each tap reads the share of its cell
+and is weighted by *its own* Gaussian (light of a source conserved whatever its streak: 0.4 step/σ e^{−½(y/σ)²}),
+its colour read at the level of its own across-spread (floored at half the spacing so the taps tile). The
+wave-tilt displacement of the lookup uses the share of the reach as well, so it is continuous across silhouettes.
+No per-pixel depth reads any more (were 8), and open water leaves after one top-level coverage read (the r7
+kernel ran its taps on every water pixel).
+Why it reduces the defect: a sky pixel below a tower now gathers the tower's light with the tower's streak, so
+the reflection is a soft column fading out at ±1.5 rms with no silhouette; a hull's reflection (share 0) keeps
+its edges because its own taps have a 0.6-texel σ.
+Cost: 2 reads (gate) + 13 × (share + colour) in the reach of a reflected object; the reflection pass renders one
+more 640 × 360 resolve and 6 small pyramid levels (+7 draw calls).
