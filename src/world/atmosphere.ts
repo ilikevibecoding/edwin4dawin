@@ -23,13 +23,18 @@ interface Key { el: number; sun: [number, number, number]; sunI: number; zen: [n
 
 /**
  * Radiometric balance. The sky colours below are the radiance of the visible dome (what the camera and the
- * water reflections see). The image-based light integrates that dome over the hemisphere, so for the sun to
- * dominate on sunlit surfaces the way it does outdoors (direct : sky diffuse ≈ 4 : 1 on a horizontal white
- * at midday) its irradiance has to be about 18x the zenith radiance. `sunI` in the keys is the normalised
- * 0..1 strength that the cloud raymarch and the sun disc were tuned against; the CSM light receives
- * `sunI * SUN_IRRADIANCE`. Moonlight keeps a 1:1 scale (the night exposure boost does the rest).
+ * water reflections see). The image-based light integrates that dome over the hemisphere; the cloud
+ * raymarch lights its tops with the normalised sun (`sunI`, 0..1), so a sunlit cloud top comes out at a
+ * radiance of ~1.0. A sunlit white surface has to land at the same radiance (it is the same white under the
+ * same sun): irradiance E gives a Lambertian white E / pi, so E ≈ 3 puts sunlit paint, sand and cloud tops
+ * on one scale (measured cloud tops sRGB 220-224, i.e. ~0.8; white paint then lands at ~1.0 with its share
+ * of sky), and direct : sky-diffuse ≈ 4.5 : 1 on a horizontal surface at midday (the sky's cos-weighted mean
+ * radiance is ~0.2 -> E_sky ≈ 0.65), the ratio of a clear day. The previous 6.0 lit the paint to 1.8 (a stop above the clouds):
+ * every sunlit white, the sand and the concrete sat on the tonemapper's shoulder as a flat 244 with no
+ * texture, and the exposure that made the sky match the reference could not hold them. `sunI * SUN_IRRADIANCE`
+ * is what the CSM light receives. Moonlight keeps a 1:1 scale (the night exposure boost does the rest).
  */
-export const SUN_IRRADIANCE = 6.0;
+export const SUN_IRRADIANCE = 3.0;
 const MOON_IRRADIANCE = 1.0;
 /** Mean albedo of the sunlit world below the horizon (water, sand, roads, canopy): warm neutral. */
 const GROUND_ALBEDO = new THREE.Color(0.26, 0.24, 0.20);
@@ -46,13 +51,22 @@ const KEYS: Key[] = [
   // the sun-side haze is ~1 : 0.18 : 0.04 (a photographed (255,170,80) sky once the tonemapper has compressed
   // it), the horizon away from the sun a salmon that skyRadiance cools toward violet; `hor` and the aureole
   // sit low enough in G that the sun side stays orange instead of clipping to cream
-  { el: 4, sun: [1.0, 0.42, 0.16], sunI: 0.25, zen: [0.03, 0.09, 0.28], hor: [0.52, 0.21, 0.15], haze: [0.58, 0.30, 0.19], sunHaze: [0.62, 0.11, 0.025], amb: 0.85 },
-  { el: 14, sun: [1.0, 0.74, 0.46], sunI: 0.62, zen: [0.03, 0.11, 0.34], hor: [0.50, 0.43, 0.40], haze: [0.55, 0.50, 0.50], sunHaze: [1.0, 0.66, 0.36], amb: 1.0 },
+  { el: 4, sun: [1.0, 0.42, 0.16], sunI: 0.25, zen: [0.03, 0.09, 0.28], hor: [0.52, 0.21, 0.15], haze: [0.58, 0.30, 0.19], sunHaze: [0.62, 0.11, 0.025], amb: 0.5 },
+  { el: 14, sun: [1.0, 0.74, 0.46], sunI: 0.62, zen: [0.03, 0.11, 0.34], hor: [0.50, 0.43, 0.40], haze: [0.55, 0.50, 0.50], sunHaze: [1.0, 0.66, 0.36], amb: 0.55 },
   // day: `hor` is the saturated blue-cyan of the sky a few degrees above the horizon, `zen` the deep cerulean
   // of the upper sky, `haze` the pale cyan-white the horizon and distant objects fade into (the reference
-  // frame's horizon is a cyan-blue (148,181,194), not a neutral grey: the haze keeps R well below B)
-  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.006, 0.125, 0.36], hor: [0.11, 0.30, 0.45], haze: [0.40, 0.55, 0.66], sunHaze: [1.0, 0.92, 0.80], amb: 1.0 },
-  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.005, 0.125, 0.36], hor: [0.10, 0.30, 0.45], haze: [0.39, 0.55, 0.67], sunHaze: [0.98, 0.93, 0.84], amb: 1.0 },
+  // frame's horizon is a cyan-blue (148,181,194), not a neutral grey: the haze keeps R well below B).
+  // amb: the environment probe (sky.ts) whitens the dome toward a bright neutral haze/ground fill so that
+  // shadows are grey rather than blue; under a high sun that fill averages ~0.45, two to three times the
+  // visible sky's mean radiance, and lit the shaded side of a white hull to 0.5 (sRGB 202 against a 244
+  // sunlit top: 1.5 : 1 on screen where a photograph shows 4-6 : 1). Halving the IBL at high sun brings the
+  // shaded white to ~0.2 (a 5 : 1 sunlit : shade ratio with the 3.0 sun) without touching the water's
+  // mirror (it reads the probe without envMapIntensity). At low sun the salmon dome is drawn bright for its
+  // glow, but as an illuminant a sunset sky delivers a third of the noon sky: with amb 0.8 the shaded faces
+  // of the towers at 17:45 came out as bright as the sunlit ones (no long-shadow contrast at all), so the
+  // low-sun keys are held near 0.5 too (shaded white ~0.4 of the horizon sky, as in a photograph).
+  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.006, 0.125, 0.36], hor: [0.11, 0.30, 0.45], haze: [0.40, 0.55, 0.66], sunHaze: [1.0, 0.92, 0.80], amb: 0.5 },
+  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.005, 0.125, 0.36], hor: [0.10, 0.30, 0.45], haze: [0.39, 0.55, 0.67], sunHaze: [0.98, 0.93, 0.84], amb: 0.5 },
 ];
 
 function mixKey(el: number): Key {
