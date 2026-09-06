@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { raycastBlocks } from '../interaction.js';
 import { QUALITY, applyQuality } from '../quality.js';
 import { pixelIcon, disasterIcon } from './adminIcons.js';
+import { BUILD } from '../build.js';
 
 const STORAGE_KEY = 'frontier-craft:admin';
 const STATUS_REFRESH_MS = 200;   // 5 Hz DOM refresh of status while open
@@ -227,7 +228,7 @@ export class AdminPanel {
     this.badgeAdmin = h('span', { class: 'ap-badge', id: 'ap-badge-admin', text: 'Admin' });
     this.badges = h('div', { class: 'ap-badges' }, this.badgeOnline, this.badgeAdmin);
     const header = h('header', { class: 'ap-header' },
-      h('div', { class: 'ap-title' }, h('h2', { text: 'Disaster Control' }), h('small', { text: 'Administrator \u00b7 Esc closes' })),
+      h('div', { class: 'ap-title' }, h('h2', { text: 'Disaster Control' }), h('small', { text: `Administrator \u00b7 Esc closes \u00b7 build ${BUILD}` })),
       this.badges,
       h('button', { class: 'ap-close', id: 'ap-close', type: 'button', title: 'Close (Esc / F4)', 'aria-label': 'Close panel', text: '\u00d7', onclick: () => this._requestClose() }));
 

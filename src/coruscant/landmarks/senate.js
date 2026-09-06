@@ -448,11 +448,8 @@ function approaches(bp, lot) {
     for (let x = cx - 12; x <= cx + 12; x++) for (let z = cz - 12; z <= cz + 12; z++) { const r = Math.hypot(x - cx, z - cz); bp.set(x, 6, z, r > 10.5 && r <= 11.5 ? B.PANEL_STRIPE : r <= 1.2 ? GLOW : ((x === cx || z === cz) && r < 9) ? GLOW : PLATE); }
     for (const [lx, lz] of [[cx - 11, cz - 11], [cx + 11, cz - 11], [cx - 11, cz + 11], [cx + 11, cz + 11]]) lamp(bp, lx, 7, lz, 2, B.CITY_LAMP);
     stairZ(bp, cx - 1, cx, cz + 13, -1, 1, 6);
-    // shuttle
-    bp.fill(cx - 6, 7, cz - 2, cx + 6, 9, cz + 2, B.DURASTEEL); bp.fill(cx - 5, 8, cz - 1, cx + 5, 8, cz + 1, AIR);
-    bp.fill(cx + 6, 8, cz - 1, cx + 7, 9, cz + 1, GLASS); bp.fill(cx - 8, 7, cz - 1, cx - 7, 8, cz + 1, DARK); bp.set(cx - 9, 7, cz, BLUE);
-    bp.fill(cx - 3, 10, cz - 6, cx + 2, 10, cz - 3, TRIM); bp.fill(cx - 3, 10, cz + 3, cx + 2, 10, cz + 6, TRIM);
-    bp.fill(cx - 3, 11, cz - 6, cx + 2, 13, cz - 6, B.DURASTEEL); bp.fill(cx - 3, 11, cz + 6, cx + 2, 13, cz + 6, B.DURASTEEL);
+    // the pads stay clear: a block-built shuttle used to sit here and read as a box glued to the Senate's flank;
+    // real ships come from the voxel fleet (src/ships), never from chunk blocks
     bp.room('landing_pad', cx - 12, 7, cz - 12, cx + 12, cz + 12);
     bp.spot(cx - 8, 7, cz + 8, 'stand'); bp.work(cx + 8, 7, cz + 8, 'deck officer');
   }

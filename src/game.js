@@ -24,6 +24,7 @@ import { SHARED, makeEntityMaterial } from './entityMaterial.js';
 import { TICK_DT, REACH, PLAYER_EYE } from './constants.js';
 import { PerfMonitor } from './perf.js';
 import { EventBus } from './events.js';
+import { BUILD } from './build.js';
 import { Permissions } from './permissions.js';
 import { SaveManager } from './save.js';
 import { DisasterManager } from './disasters/manager.js';
@@ -1001,7 +1002,7 @@ export class Game {
     const bx = Math.floor(p.x), by = Math.floor(p.y), bz = Math.floor(p.z);
     const facing = ['south (+z)', 'west (-x)', 'north (-z)', 'east (+x)'][Math.round(((this.player.yaw % (Math.PI * 2)) + Math.PI * 2) / (Math.PI / 2)) % 4];
     const lines = [
-      `Frontier Craft  ${this.fps} fps  (js ${(this.jsMs || 0).toFixed(1)} ms)  T: ${this.terrain.stats.meshed} meshes / ${this.terrain.stats.chunks} chunks`,
+      `Frontier Craft  build ${BUILD}  ${this.fps} fps  (js ${(this.jsMs || 0).toFixed(1)} ms)  T: ${this.terrain.stats.meshed} meshes / ${this.terrain.stats.chunks} chunks`,
       `XYZ: ${p.x.toFixed(3)} / ${p.y.toFixed(3)} / ${p.z.toFixed(3)}`,
       `Block: ${bx} ${by} ${bz}   Chunk: ${bx >> 4} ${bz >> 4}`,
       `Facing: ${facing}  (yaw ${(this.player.yaw * 180 / Math.PI).toFixed(1)} / pitch ${(this.player.pitch * 180 / Math.PI).toFixed(1)})`,
