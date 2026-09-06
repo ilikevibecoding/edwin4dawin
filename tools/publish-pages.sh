@@ -21,8 +21,10 @@ touch dist/.nojekyll
 sed 's#"\./assets/#"https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@gh-pages/assets/#g' dist/index.html > dist/play.html
 WORK=$(mktemp -d)
 rm -rf "$WORK"
-git fetch -q origin gh-pages || true
-git worktree add -q "$WORK" gh-pages
+git fetch -q origin gh-pages
+# detached at the remote tip (the local gh-pages branch is not kept up to date: the progress page publishes
+# to origin the same way), pushed back as HEAD:gh-pages
+git worktree add -q --detach "$WORK" origin/gh-pages
 # progress/ is the hourly before/after page (published by tools/progress-publish.sh): keep it across deploys
 find "$WORK" -mindepth 1 -maxdepth 1 ! -name .git ! -name progress -exec rm -rf {} +
 cp -a dist/. "$WORK"/
@@ -32,7 +34,7 @@ mkdir -p "$WORK/.github/workflows" && cp tools/pages-workflow.yml "$WORK/.github
   git add -A
   if git diff --cached --quiet; then echo "gh-pages already up to date"; else
     git commit -q -m "Deploy Bahía Vista build $BUILD_ID (from $SRC_SHA)"
-    git push -q origin gh-pages
+    git push -q origin HEAD:gh-pages
   fi
   PAGES_SHA=$(git rev-parse HEAD)
   echo "gh-pages commit: $PAGES_SHA"
