@@ -801,6 +801,8 @@ function rayAABB(o, d, b) {
 // vehicle list, then attach the population as game.coruscant.population and register it for tick/update.
 export function installPopulation(game, layout) {
   if (!game || typeof requestAnimationFrame !== 'function') return;
+  // ?crowd=0 leaves the city without its population (the bench baseline; nothing of the crowd is built)
+  if (typeof location !== 'undefined' && /[?&]crowd=0(&|$)/.test(location.search)) return;
   const tryInstall = () => {
     if (game.coruscant && game.coruscant.population) return;
     if (game.vehicles && game.npcs && game.world && game.scene && game.player && game.sky) {
