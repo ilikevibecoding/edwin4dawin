@@ -19,12 +19,12 @@ import { heavyTurret, lightTurret, HEAVY, LIGHT } from "./venatorTurrets.js";
 import { buildHull } from "./venatorHull.js";
 import { buildTowers } from "./venatorTowers.js";
 import { buildDetail } from "./venatorDetail.js";
-import { VENATOR, L, GREY_DECK, GREY_WING, DARK } from "./venatorSpec.js";
+import { VENATOR, L, GREY_LIGHT, GREY_WING, DARK } from "./venatorSpec.js";
 
 export { VENATOR };
 
 // plating scales (tiles per metre) per LOD: fine seams close up, coarser far away
-const HULL_TEXEL = [1 / 14, 1 / 22, 1 / 24];
+const HULL_TEXEL = [1 / 40, 1 / 44, 1 / 48];
 
 /**
  * Build the part list for one LOD. `open` parts the deck doors and adds a lit hangar bay.
@@ -93,7 +93,7 @@ function build(mats, { open = false } = {}) {
           barrels: heavy.barrels,
           bodyMaterial: "hull",
           barrelMaterial: "dark",
-          bodyColor: mulColor(GREY_DECK, 1.08),
+          bodyColor: mulColor(GREY_LIGHT, 0.9),
           barrelColor: DARK,
           texel: 1 / 5,
           ...HEAVY,

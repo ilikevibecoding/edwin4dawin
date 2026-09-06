@@ -19,7 +19,6 @@ import {
   tube,
 } from "./venatorKit.js";
 import { boxMM } from "./shipKit.js";
-import { LIGHT } from "./venatorTurrets.js";
 import { EDGE } from "./venatorHull.js";
 import {
   Z,
@@ -29,20 +28,18 @@ import {
   yBot,
   flankSteps,
   doorEdge,
-  redInner,
-  turretX,
+  ROUNDEL_ZR,
+  roundelX,
   DOOR_Z0,
   DOOR_Z1,
-  DOOR_H,
-  CENTRE_HALF,
-  BAY_HALF,
-  SEAM_HALF,
-  WING,
+  PLATFORM,
   BLOCK,
+  platY,
+  TURRET_X,
+  TURRET_R,
   ENGINES,
   BELLY_BAYS,
   VENT_Z1,
-  GREY_DECK,
   GREY_WING,
   GREY_FLANK,
   GREY_LOWER,
@@ -58,7 +55,7 @@ import {
 } from "./venatorSpec.js";
 
 export function buildDetail(ctx, secs) {
-  const { lod, fine, mid, add, hullTexel, rand, open } = ctx;
+  const { lod, fine, mid, add, hullTexel, rand } = ctx;
   const plateTexel = lod === 0 ? 1 / 30 : 1 / 40;
   const soot = (color, z) => {
     const s = sootAt(z);
@@ -71,12 +68,12 @@ export function buildDetail(ctx, secs) {
   // stern engine bank
   // -------------------------------------------------------------------------
   const zs = Z(L) - 3;
-  // dark recessed band behind the main row and the small upper row
-  add(boxMM([-238, -46, zs - 1], [238, 14, Z(L) + 0.4]), "dark", {
+  // dark recessed band behind the main row and the small upper row (inside the 75 m stern face)
+  add(boxMM([-238, -28, zs - 1], [238, 20, Z(L) + 0.4]), "dark", {
     color: DARK_RECESS,
     texel: 1 / 10,
   });
-  add(boxMM([-120, 8, zs - 1], [120, 34, Z(L) + 0.3]), "dark", {
+  add(boxMM([-104, 20, zs - 1], [104, 40, Z(L) + 0.3]), "dark", {
     color: DARK_RECESS,
     texel: 1 / 10,
   });
@@ -100,22 +97,22 @@ export function buildDetail(ctx, secs) {
   if (mid) {
     // heat-stained armour frames between the bells and the stern's greebled upper wall
     for (const s of [-1, 1]) {
-      add(boxMM([s * 84 - 3, -46, zs + 1], [s * 84 + 3, 14, zs + 8]), "hull", {
+      add(boxMM([s * 79 - 3, -28, zs + 1], [s * 79 + 3, 20, zs + 8]), "hull", {
         color: soot(GREY_FLANK, Z(L)),
         texel: 1 / 8,
       });
       add(
-        boxMM([s * 160 - 3, -46, zs + 1], [s * 160 + 3, 14, zs + 8]),
+        boxMM([s * 155 - 3, -28, zs + 1], [s * 155 + 3, 20, zs + 8]),
         "hull",
         { color: soot(GREY_FLANK, Z(L)), texel: 1 / 8 },
       );
     }
     for (let i = 0; i < (fine ? 22 : 8); i++) {
       const x = -230 + rand() * 460;
-      const y = 16 + rand() * 20;
+      const y = 22 + rand() * 18;
       const w = 4 + rand() * 10;
       const h = 2 + rand() * 5;
-      if (Math.abs(x) < 122 && y < 34) continue;
+      if (Math.abs(x) < 106 && y < 41) continue;
       add(
         boxMM(
           [x - w / 2, y - h / 2, Z(L) - 2],
@@ -411,95 +408,59 @@ export function buildDetail(ctx, secs) {
   };
   for (const s of [-1, 1]) {
     const R = s > 0;
-    // wings: from the bow wedge to the shoulders (skip the turret barbettes and the insignia).
-    // Starboard edge 8 runs from the deck edge (t=0) to the door edge (t=1); port runs the other way.
+    // wings: from the bow deck to the stern (skip the insignia). Starboard edge 7 runs from the deck
+    // edge (t=0) to the band wall's foot (t=1); port runs the other way. Large plate groups.
     stripField(
       R ? EDGE.wingR : EDGE.wingL,
       GREY_WING,
-      { zr0: 300, zr1: 686, max: 24, skip: 0.3 },
+      { zr0: 270, zr1: 1080, max: 45, keep: 0.25, skip: 0.3 },
       (cv, ta, tb) => {
         const zr = cv - Z(0);
         const tm = R ? (ta + tb) / 2 : 1 - (ta + tb) / 2;
-        const x = halfW(zr) - tm * WING;
-        const dx = Math.abs(x - turretX(zr));
-        const nearTurret = [292, 445, 600].some(
-          (tz) => Math.abs(zr - tz) < 34 && dx < 30,
-        );
-        const nearRing =
-          Math.abs(zr - 560) < 26 &&
-          Math.abs(x - (doorEdge(560) + halfW(560)) / 2) < 26;
-        return nearTurret || nearRing;
+        const x = halfW(zr) - tm * (halfW(zr) - doorEdge(zr));
+        const roundel =
+          Math.abs(zr - ROUNDEL_ZR) < 26 &&
+          Math.abs(x - roundelX(ROUNDEL_ZR)) < 26;
+        // the shelves stand on the wings here
+        const shelf =
+          zr > PLATFORM.z0 - 6 && zr < PLATFORM.z1 + 6 && x < PLATFORM.xOut + 6;
+        return roundel || shelf;
       },
     );
-    // door tops: red plating on the red strips only (the grey inner margin stays bare deck).
-    // Starboard edge 10 runs from the door edge (t=0) to the centre (t=1); port the other way.
-    const gapHalf = open ? BAY_HALF : SEAM_HALF;
-    stripField(
-      R ? EDGE.doorR : EDGE.doorL,
-      RED,
-      {
-        zr0: DOOR_Z0 + 4,
-        zr1: DOOR_Z1 - 4,
-        max: 36,
-        keep: 0.3,
-        skip: 0.45,
-        mat: "paint",
-        grooves: false,
-      },
-      (cv, ta, tb) => {
-        const zr = cv - Z(0);
-        const xw = doorEdge(zr);
-        const tIn = R ? tb : 1 - ta; // parameter of the cell edge nearest the centre, in starboard terms
-        const xInner = xw - tIn * (xw - gapHalf);
-        const ri = redInner(zr, open);
-        return xInner < ri + 2 || xw - ri < 12;
-      },
-    );
+    // door halves: red plating on the red loft strips (edge 10 runs from the red outer edge, t=0, to
+    // the inner edge at the centre strip, t=1; port the other way)
+    stripField(R ? EDGE.doorR : EDGE.doorL, RED, {
+      zr0: DOOR_Z0 + 4,
+      zr1: DOOR_Z1 - 4,
+      t0: 0.03,
+      t1: 0.97,
+      max: 45,
+      keep: 0.3,
+      skip: 0.45,
+      mat: "paint",
+      grooves: false,
+    });
     // lower hull slope and the belly halves
     stripField(R ? EDGE.lowerR : EDGE.lowerL, GREY_LOWER, {
       zr0: 200,
       zr1: 1120,
-      max: 30,
+      max: 40,
       skip: 0.3,
     });
     stripField(
       R ? EDGE.bellyR : EDGE.bellyL,
       GREY_BELLY,
-      { zr0: 350, zr1: 1120, max: 34, skip: 0.34 },
+      { zr0: 350, zr1: 1120, max: 45, skip: 0.34 },
       (cv) => {
         const zr = cv - Z(0);
         return BELLY_BAYS.some(([z0, z1]) => zr > z0 - 10 && zr < z1 + 10);
       },
     );
   }
-  // centre strip between the doors: hatches and small plates (flat, axis aligned)
   if (fine) {
-    // (on the bow wedge too, where the centre strip is bare deck between the two red panels)
-    for (let zr = 140; zr < DOOR_Z1 - 20; zr += 14 + rand() * 24) {
-      const inDoor = zr > DOOR_Z0 + 8;
-      if (zr > DOOR_Z0 - 10 && !inDoor) continue;
-      if (inDoor && open) continue;
-      const s = rand() < 0.5 ? -1 : 1;
-      const xMax = inDoor ? redInner(zr, open) - 5 : CENTRE_HALF - 4;
-      const x = s * (5 + rand() * Math.max(2, xMax - 5));
-      const w = 3 + rand() * 4;
-      const y = yTop(zr) + (inDoor ? DOOR_H : 0);
-      add(
-        boxMM(
-          [x - w / 2, y, Z(zr) - 3],
-          [x + w / 2, y + 0.5 + rand() * 0.8, Z(zr) + 3],
-        ),
-        rand() < 0.5 ? "dark" : "hull",
-        {
-          color: rand() < 0.5 ? DARK : GREY_FLANK,
-          texel: 1 / 4,
-        },
-      );
-    }
     // deck greebles along the wing edge: small hatches and vents
     for (const s of [-1, 1])
-      for (let zr = 320; zr < 830; zr += 12 + rand() * 20) {
-        if ([292, 445, 600, 755].some((tz) => Math.abs(zr - tz) < 26)) continue;
+      for (let zr = 320; zr < 1080; zr += 12 + rand() * 20) {
         const x = s * (halfW(zr) - 8 - rand() * 14);
         const w = 2.5 + rand() * 4;
         const d = 2.5 + rand() * 6;
@@ -515,50 +476,48 @@ export function buildDetail(ctx, secs) {
           },
         );
       }
-    // terrace tops: axis-aligned plate fields (clipped to the taper)
-    const t1 = BLOCK.t1;
-    const cells = partition(
-      rand,
-      {
-        u0: BLOCK.t2.hx + 6,
-        u1: halfW(t1.z1) - t1.inset - 10,
-        v0: Z(t1.z0 + 30),
-        v1: Z(t1.z1 - 6),
-      },
-      { max: 28, keep: 0.25 },
-    );
-    for (const c of cells)
-      for (const s of [-1, 1]) {
-        const cv = (c.v0 + c.v1) / 2;
-        const xa = Math.min(s * c.u0, s * c.u1) + 1.5;
-        const xb = Math.max(s * c.u0, s * c.u1) - 1.5;
-        add(grooveMM(xa - 0.35, xa + 0.35, c.v0, c.v1, t1.y1), "dark", {
-          color: DARK_SEAM,
-          texel: 1 / 4,
-        });
-        add(grooveMM(xa, xb, c.v0 - 0.35, c.v0 + 0.35, t1.y1), "dark", {
-          color: DARK_SEAM,
-          texel: 1 / 4,
-        });
-        if (rand() < 0.35) continue;
-        add(
-          plateMM(
-            xa,
-            xb,
-            c.v0 + 1.5,
-            c.v1 - 1.5,
-            t1.y1,
-            0.5 + rand() * 0.9,
-            0.8,
-            { texel: plateTexel },
-          ),
-          "hull",
-          {
-            color: plateTint(GREY_WING, cv),
-            uv: "keep",
-          },
-        );
-      }
+    // shelf tops: plate fields between the turrets and the shelf edges. The tops rise aft, so the
+    // cells stay short in z and each plate sits at the shelf height of its own centre.
+    const P = PLATFORM;
+    for (const [u0, u1] of [
+      [BLOCK.legs.xOutFoot + 3, TURRET_X - TURRET_R - 5],
+      [TURRET_X + TURRET_R + 5, P.xOut - 4],
+    ]) {
+      const cells = partition(
+        rand,
+        { u0, u1, v0: Z(P.z0 + 8), v1: Z(P.z1 - 8) },
+        { max: 26, keep: 0.25 },
+      );
+      for (const c of cells)
+        for (const s of [-1, 1]) {
+          const cv = (c.v0 + c.v1) / 2;
+          const zr = cv - Z(0);
+          const y = platY(zr);
+          const xa = Math.min(s * c.u0, s * c.u1) + 1.5;
+          const xb = Math.max(s * c.u0, s * c.u1) - 1.5;
+          const slope = (platY(zr + 1) - platY(zr - 1)) / 2;
+          const lift = Math.abs(slope) * (c.v1 - c.v0) * 0.5;
+          add(grooveMM(xa - 0.35, xa + 0.35, c.v0, c.v1, y + lift), "dark", {
+            color: DARK_SEAM,
+            texel: 1 / 4,
+          });
+          if (rand() < 0.35) continue;
+          add(
+            plateMM(
+              xa,
+              xb,
+              c.v0 + 1.5,
+              c.v1 - 1.5,
+              y + lift,
+              0.5 + rand() * 0.7,
+              0.8,
+              { texel: plateTexel, sink: lift + 0.6 },
+            ),
+            "hull",
+            { color: plateTint(GREY_WING, cv), uv: "keep" },
+          );
+        }
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -591,7 +550,7 @@ export function buildDetail(ctx, secs) {
         light(p.toArray(), [s * 0.5, -0.5, -0.7], fr.n.toArray());
       }
       light(
-        [s * (BLOCK.t2.hx + 20), BLOCK.t1.y1 + 0.2, Z(960)],
+        [s * (TURRET_X + 34), yTop(1035) + 0.2, Z(1035)],
         [s * 0.7, 0.3, -0.6],
       );
       light(
@@ -637,6 +596,4 @@ export function buildDetail(ctx, secs) {
       );
     }
   }
-  void GREY_DECK;
-  void LIGHT;
 }

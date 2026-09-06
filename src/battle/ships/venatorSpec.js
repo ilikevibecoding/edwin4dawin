@@ -1,33 +1,52 @@
-// Canonical Venator-class dimensions, derived from the reference stills and the DK cutaway (length 1137 m,
-// wingspan 548 m, height 268 m). Everything is in metres; `zr` is the distance aft of the bow tip, ship
-// forward is -Z, up +Y, origin at the hull centre. The functions here are the single source of truth for
-// the hull plan, the vertical profile, the deck markings and the placement of the big masses; the
-// geometry modules read them so the silhouette matches from the top, side and front.
-import { lin, pw } from "./venatorKit.js";
+// Canonical Venator-class dimensions (length 1137 m, wingspan ~548 m) matched against the user's
+// reference render through a camera fitted to it (rms 3 px on 31 landmarks: nose face, ramp foot and
+// top, shaft and head edges, the centre seam along the deck, roundels, wing corners; ~1770 m away, 10
+// degrees to port of the bow, 4 degrees up, 14.4 degree FOV). Measured there and built here:
+//  - plan: a straight arrowhead from the 44 m blunt nose to the 524 m wing corners at 0.81 L (a gentle
+//    kink at 0.53 L), the deck edge silhouette back-projected onto the deck plane;
+//  - the red door band is a raised slab: both halves red with a narrow dark seam, 57 m wide where it
+//    leaves the flat bow deck at 0.22 L, 86 m wide and 19.5 m above the wings where it meets the block
+//    at 0.56 L (its side walls carry window rows), the turret shelves continue its slope aft;
+//  - the block: a 43 m plated ramp at 48 degrees from the sill to a roof 105 m over the wings, with
+//    steep light "legs" under the shafts flanking it and dark sides; the two shafts 12.4 m wide with a
+//    33 m gap, 43 m tall; the heads 28 m wide, 24 m tall, 136 m long with light fronts overhanging the
+//    shafts by 46 m and a round pod under each; a low sensor body, drum and mast on top (262 m keel to
+//    mast).
+// Everything is in metres; `zr` is the distance aft of the bow tip, ship forward is -Z, up +Y, origin at
+// the hull centre. These functions are the single source of truth for the plan, the vertical profile,
+// the deck markings and the placement of the big masses; the geometry modules read them so the
+// silhouette matches from every view.
+import { lin, pw, clamp } from "./venatorKit.js";
 
-export const VENATOR = { length: 1137, width: 548, height: 268 };
+export const VENATOR = { length: 1137, width: 548, height: 262 };
 export const L = VENATOR.length;
 export const zBow = -L / 2;
 export const Z = (zr) => zBow + zr;
 
-// ---- palette (linear albedo multipliers on the plating map, see shipKit: 0.9 ~ light grey-white,
-// 0.35 ~ dark grey). The hull is a light neutral grey (the reference render's sunlit deck reads ~175
-// sRGB), the tower and block sides a very dark cool grey, the lower hull dark, nothing cream.
-export const GREY_DECK = lin(0.34, 0.345, 0.36); // dorsal deck, doors, tower fronts, bridge heads
-export const GREY_WING = lin(0.3, 0.305, 0.32); // shoulder wings, terraces
-export const GREY_TOWER = lin(0.27, 0.275, 0.29); // terrace walls, step blocks
-export const GREY_SIDE = lin(0.07, 0.074, 0.098); // block and shaft sides (near-black blue-grey)
-export const GREY_FLANK = lin(0.23, 0.235, 0.25); // deck lip, lower lip faces
-export const GREY_LOWER = lin(0.15, 0.155, 0.185); // angled lower hull
-export const GREY_BELLY = lin(0.14, 0.145, 0.17); // belly
-export const GREY_STERN = lin(0.17, 0.165, 0.16); // heat-stained stern armour
+// ---- palette (linear albedo multipliers on the plating map, see shipKit: the map is scaled x1.4 to a
+// mean albedo of ~0.62). Warm light hull grey for the deck, wings, block roof and heads; near-white
+// fronts (the reference's nose, shaft and head fronts are blown out); a slightly darker slab below the
+// trench; dark blue-grey only on the shaft / head / leg sides and inside recesses.
+export const GREY_HULL = lin(0.49, 0.48, 0.455); // deck, wings, shelves, block roof (sunlit ~172 sRGB)
+export const GREY_DECK = GREY_HULL;
+export const GREY_WING = GREY_HULL;
+export const GREY_TOWER = GREY_HULL;
+export const GREY_LIGHT = lin(1.0, 0.99, 0.93); // nose block, shaft / head / leg fronts, pods, sill
+export const GREY_RAMP = lin(0.68, 0.65, 0.57); // the block's plated front ramp (a little below the fronts)
+export const GREY_BLOCK = lin(0.2, 0.2, 0.23); // the block body's dark sides and pedestal
+export const GREY_SIDE = lin(0.19, 0.2, 0.25); // dark blue-grey sides of the shafts, heads and legs
+export const GREY_FLANK = lin(0.48, 0.47, 0.45); // deck lip face, band walls, barbettes, trims
+export const GREY_LOWER = lin(0.36, 0.36, 0.38); // angled lower slab (shadowed flank 60-80 sRGB)
+export const GREY_BELLY = lin(0.3, 0.3, 0.33); // belly
+export const GREY_STERN = lin(0.34, 0.33, 0.32); // heat-stained stern armour
+export const GREY_RECESS = lin(0.2, 0.2, 0.23); // recesses and openings (hull material)
 export const DARK = 0xb4b8be; // machinery greebles on the dark texture
 export const DARK_RECESS = 0x6a6e76; // hangar interiors, nozzle bells
-export const DARK_TRENCH = 0x4c505a; // flank trench walls and floor
-export const DARK_SEAM = 0x62656c; // panel-line grooves
-export const RED = 0x5c0e12; // Republic crimson, deep (door strips, bow wedge, shoulder stripes)
-export const RED_DARK = 0x460a0e; // shadowed red (door front steps)
-export const INSIGNIA = 0xb8963f; // Open Circle emblem (muted gold)
+export const DARK_TRENCH = 0x50545c; // flank trench walls and floor (dark material)
+export const DARK_SEAM = 0x5a5d64; // panel-line grooves
+export const RED = lin(0.26, 0.01, 0.012); // Republic crimson-maroon (door band, bow stripes, trim)
+export const RED_DARK = lin(0.22, 0.01, 0.012); // shadowed red
+export const INSIGNIA = 0xc9a23a; // Open Circle roundel (gold)
 export const WINDOW_WARM = 0xffe2b0;
 export const WINDOW_COOL = 0xd6e6ff;
 export const ROW_WARM = 0xd8bc90; // long window rows stay under the bloom threshold
@@ -35,167 +54,232 @@ export const ROW_COOL = 0xb4c4e0;
 export const HANGAR_WARM = 0xffd9a0;
 export const HANGAR_BLUE = 0x9cc8ff;
 
-// ---- plan view: straight arrowhead taper to the shoulders, near-parallel flanks aft, slight stern taper
+// ---- plan view: a straight arrowhead from the 44 m nose to the 524 m wing corners at 0.81 L, the
+// taper steepening a little behind 0.53 L, then a slight taper to the stern
+export const CORNER_ZR = 925;
 export const halfW = (zr) =>
-  zr <= 830
-    ? 70 + 204 * (zr / 830)
-    : zr <= 1040
-      ? 274
-      : 274 - 30 * ((zr - 1040) / 97);
+  pw(
+    [
+      [0, 22],
+      [600, 150],
+      [CORNER_ZR, 262],
+      [L, 240],
+    ],
+    zr,
+  );
 
-// ---- side view: flat deck aft of zr 300 dipping toward the prong tips; the keel is a shallow wedge
-// (hull 94 m thick at the stern; the tower structure above the deck is twice that, as in the stills)
+// ---- side view: a thin hull; the nose block is 18 m tall, the wing-level deck rises from +30 at the
+// nose to the flat +45 deck by 0.22 L, the keel drops to -30 at the stern (75 m thick there)
 export const yTop = (zr) =>
   pw(
     [
-      [0, 24],
-      [96, 32],
-      [300, 40],
-      [L, 40],
+      [0, 30],
+      [90, 35],
+      [250, 45],
+      [L, 45],
     ],
     zr,
   );
 export const yBot = (zr) =>
   pw(
     [
-      [0, -8],
-      [96, -20],
-      [300, -34],
-      [700, -48],
-      [1000, -54],
-      [L, -54],
+      [0, 2],
+      [90, -3],
+      [300, -12],
+      [600, -18],
+      [CORNER_ZR, -28],
+      [L, -30],
     ],
     zr,
   );
-export const DECK_Y = 40;
+export const DECK_Y = 45;
+export const up = (h) => DECK_Y + h;
 
-// ---- bow: two chunky prongs either side of a short notch
-export const NOTCH_HALF = 18;
-export const NOTCH_DEPTH = 92;
-export const PRONG_END = 96; // where the prongs merge into the wedge
+// ---- nose: a single blunt light block (the reference bow has no notch) carrying two triplets of round
+// emitters; the deck slab above it is set back a little; the hull loft starts behind it at z1
+export const NOSE = {
+  hx: 22,
+  y0: 2,
+  y1: 20,
+  z1: 10,
+  cans: [6, 11, 16],
+  canX: 17,
+  canR: 2.4,
+};
 
-// ---- dorsal deck layout. Wing = the grey strip between the door edge and the deck edge (constant, so
-// the red strips converge toward the nose as the deck narrows). Each door half is red over its outer
-// ~85 % with a grey margin inboard; together with the centre strip that gives the grey middle band.
-export const WING = 58;
-export const CENTRE_HALF = 24; // grey centre strip between the door halves
-export const DOOR_INNER = 0.15; // grey fraction of each door half, inboard side
-export const DOOR_Z0 = 275;
-export const DOOR_Z1 = 800;
-export const DOOR_H = 2; // doors stand a little proud of the wings
-export const WEDGE_Z0 = 106; // bow wedge red panels
-export const WEDGE_Z1 = 247;
-export const WEDGE_BORDER = 30; // grey border outside the wedge red
-export const doorEdge = (zr) => halfW(zr) - WING; // outer edge of the door halves / red strips
+// ---- dorsal deck layout. The red door band is a raised slab down the centre: its half-width grows
+// linearly from 20 m at the nose to 43 m at the block's foot (0.56 L); on the bow deck (zr 20-250) the
+// two stripes lie flat with a grey centre gap that narrows aft; from 0.22 L the band rises on vertical
+// side walls to 19.5 m over the wings at the sill. Both halves are red up to a 1.5 m grey lip along the
+// walls and a narrow dark seam down the middle. The wings outboard stay at deck level.
+export const DOOR_Z0 = 250; // the band leaves the flat bow deck here
+export const DOOR_Z1 = 640; // 0.56 L: the sill at the block's foot
+export const BAND_H = 19.5; // band top over the wings at the sill
+export const LIP = 1.5; // grey lip along the band's outer edges
+export const bandHalf = (zr) => 19.3 + 0.037 * zr; // 28.5 at 0.22 L, 43 at the sill
+export const bandRise = (zr) => (BAND_H * (zr - DOOR_Z0)) / (DOOR_Z1 - DOOR_Z0);
+export const bandH = (zr) => clamp(bandRise(zr), 0, BAND_H);
+export const bandTop = (zr) => yTop(zr) + bandH(zr);
+export const SILL_Y = up(BAND_H); // the band top where it meets the block
+export const WEDGE_Z0 = 20; // bow stripes start over the nose block ...
+export const WEDGE_Z1 = DOOR_Z0; // ... and run straight into the band
+export const TRIM_Z0 = 110; // red trim segments along the deck edge beside the bow stripes
+export const TRIM_Z1 = 250;
+export const doorEdge = bandHalf; // foot of the band's side wall
+export const redOuter = (zr) => bandHalf(zr) - LIP;
+// grey gap between the two red halves: 5 m at the nose narrowing to the seam edge at the band
+export const centreHalf = (zr) =>
+  SEAM_HALF + 0.8 + 3.6 * clamp((DOOR_Z0 - zr) / (DOOR_Z0 - WEDGE_Z0), 0, 1);
 export const inDoors = (zr) => zr > DOOR_Z0 + 0.005 && zr < DOOR_Z1 + 0.005;
+export const inWedge = (zr) => zr > WEDGE_Z0 + 0.005 && zr < WEDGE_Z1 + 0.005;
+// deck height at (x, zr): the raised band inside the door zone, the wing level elsewhere
+export function deckY(x, zr) {
+  if (inDoors(zr) && Math.abs(x) < bandHalf(zr)) return bandTop(zr);
+  return yTop(zr);
+}
+// closed variant: a narrow dark seam between the halves
+export const SEAM_HALF = 1.6;
+export const SEAM_DEPTH = 2.5;
+// open variant: the doors part over a lit bay this wide (clamped inside the band) / deep
+export const BAY_HALF = 24;
+export const BAY_DEPTH = 50;
+export const bayHalf = (zr) => Math.min(BAY_HALF, redOuter(zr) - 7);
 // inner edge of the red door strip (closed doors); the open variant clamps it outside the bay
 export const redInner = (zr, open = false) =>
-  Math.max(
-    CENTRE_HALF + DOOR_INNER * (doorEdge(zr) - CENTRE_HALF),
-    open ? BAY_HALF + 3 : 0,
-  );
+  Math.max(centreHalf(zr), open ? bayHalf(zr) + 3 : 0);
+export const ROUNDEL_ZR = 478; // 0.42 L, on the wings 48 m outboard of the band
+export const roundelX = () => 85;
 
-// open variant: the doors part over a lit bay this wide/deep
-export const BAY_HALF = 54;
-export const BAY_DEPTH = 58;
-// closed variant: a narrow dark seam between the halves
-export const SEAM_HALF = 3;
-export const SEAM_DEPTH = 3;
-
-// ---- flank steps (relative to the local hull thickness so the bow stays a clean wedge)
+// ---- flank steps (relative to the local hull thickness so the bow stays a clean wedge): one deck lip,
+// a dark recessed machinery trench directly under it, then the lower slab leaning in to the belly
 export function flankSteps(zr) {
   const yt = yTop(zr);
   const yb = yBot(zr);
   const T = yt - yb;
-  const lipH = Math.min(7, 0.08 * T);
-  const trenchH = Math.min(32, 0.36 * T);
-  const lowLipH = Math.min(6, 0.07 * T);
-  const recess = Math.min(16, 0.18 * T);
+  const lipH = Math.min(4, 0.09 * T);
+  const trenchH = Math.min(14, 0.26 * T);
+  const recess = Math.min(11, 0.2 * T);
   const yLipBot = yt - lipH;
   const yTrBot = yLipBot - trenchH;
-  const yLowBot = yTrBot - lowLipH;
-  return {
-    yt,
-    yb,
-    T,
-    lipH,
-    trenchH,
-    lowLipH,
-    recess,
-    yLipBot,
-    yTrBot,
-    yLowBot,
-  };
+  return { yt, yb, T, lipH, trenchH, recess, yLipBot, yTrBot };
 }
-export const bellyHalf = (zr) => halfW(zr) * 0.52;
+export const bellyHalf = (zr) => halfW(zr) * 0.5;
 
 // ---- ventral hangar: a long lit slot under the bow
-export const VENT_Z0 = 118;
-export const VENT_Z1 = 335;
-export const VENT_HALF = 34;
-export const VENT_DEPTH = 22;
+export const VENT_Z0 = 110;
+export const VENT_Z1 = 330;
+export const VENT_HALF = 26;
+export const VENT_DEPTH = 14;
 export const inVent = (zr) => zr > VENT_Z0 + 0.005 && zr < VENT_Z1 + 0.005;
 
-// ---- shoulders: raised wing plates with the red stripes, heavy turret row along the door edge
-export const SHOULDER_Z0 = 690;
-export const SHOULDER_Z1 = 826;
-export const TURRET_ZR = [292, 445, 600, 755];
-export const turretX = (zr) => doorEdge(zr) + 14; // barbettes straddle the red strip's outer edge
-export const SHOULDER_X0 = (zr) => doorEdge(zr) + 34; // shoulder plate: outboard of the turret row
-export const SHOULDER_X1 = (zr) => halfW(zr) + 3; // ...overhanging the deck edge a little
-
-// ---- rear superstructure (zr) and the twin towers
-// Heights are metres above the deck through up(); TOWER_SCALE stretches the whole tower stack. The
-// data-file height (268 m) matches the Clone Wars model (heads ~160 m above the deck); the user's
-// reference render has them ~250 m up. At scale 1 the heads top out 232 m above the deck (y 272,
-// 326 m keel to head, 340 m to the sensor blocks) - between the two, biased toward the reference render.
-// Measured in the reference render, against the 548 m deck: block base ~140 m wide narrowing to the two
-// shafts (~40 m each, ~26 m gap), block height ~= shaft height, heads ~2x the shaft depth, projecting
-// forward; the block front slopes ~65 degrees and the shafts continue it a little steeper.
-export const TOWER_SCALE = 1;
-export const up = (h) => DECK_Y + h * TOWER_SCALE;
+// ---- rear superstructure (zr) and the twin towers. Heights are absolute y (wing deck +45).
+// Turret shelves: one per side from 0.51 L (a front step) to the block's rear at 0.83 L, from the
+// block's foot out to x 98, their tops continuing the band's slope 3 m below it (the band's wall shows
+// as a dark step beside the red); the four heavy turrets per side stand on them at x +-78.
+// The block: a 43 m wide plated ramp rising at 48 degrees from the sill to a 39 m wide roof 105 m over
+// the wings at 0.63 L, its body's sides shaded; under each shaft a steep light "leg" runs from the
+// roof down to the shelf, flaring outboard, so the shaft lines continue to the deck with the body's
+// dark side showing as a triangle between leg and ramp. Shafts 12.4 m wide, 90 m deep, 43 m tall,
+// centred at +-22.5 (a 33 m gap), standing on the roof. Heads: 28 m wide slabs 24 m tall from the shaft
+// top, 136 m long, a light front section overhanging 46 m ahead of the shaft (a round pod under it),
+// dark panelled sides; a dark bridge box joins the shafts behind their fronts; a low sensor body with a
+// light drum and a mast on each head (262 m keel to mast).
+export const PLATFORM = {
+  z0: 580, // front step
+  z1: 940, // the block's rear
+  xIn: 21, // inner edge, buried in the band / the block's foot
+  xOut: 98,
+  drop: 3, // shelf top below the band's top line
+};
+// shelf top height (absolute y) at zr: the band's slope continued aft
+export const platY = (zr) => yTop(zr) + bandRise(zr) - PLATFORM.drop;
 export const BLOCK = {
-  t1: { z0: 806, z1: 1126, y1: up(16), inset: 88 }, // lower terrace, |x| <= halfW - inset
-  t2: { z0: 878, z1: 1108, y1: up(38), hx: 124 }, // upper terrace
-  // the sloped-front block joining the towers: foot at the deck just aft of the doors, top level with
-  // the shaft feet; front slope ~65 degrees, sides leaning in slightly (they continue into the shafts)
-  base: { z0: 812, z1: 972, zTop0: 864, y1: up(112), hx0: 74, hx1: 54 },
-  // stepped superstructure behind the towers, down toward the stern
+  base: {
+    z0: 640, // sill front
+    zFoot: 642, // ramp foot
+    zTop0: 718, // roof front edge
+    z1: 940, // back at the top
+    z1Foot: 935, // back at the foot (the rear face leans forward a little)
+    yFoot: SILL_Y, // the ramp starts on the band's top
+    y1: up(105), // roof
+    hxSill: 26.5,
+    hxFoot: 21.7,
+    hx1: 19.5,
+  },
+  // steep light legs under the shafts: plan at the roof (the shaft's footprint) and at the shelf
+  legs: {
+    xInTop: 16.3,
+    xOutTop: 28.7,
+    zTop: 792,
+    xInFoot: 20,
+    xOutFoot: 38,
+    zFoot: 810,
+    z1: 940,
+  },
+  // dark box joining the shafts behind their fronts, seen through the gap between them
+  bridge: { z0: 812, z1: 850, y1: up(127), hx: 15.5 },
+  // steps behind the block, down toward the stern
   steps: [
-    { z0: 972, z1: 1030, y1: up(86), hx: 62 },
-    { z0: 1030, z1: 1085, y1: up(60), hx: 82 },
+    { z0: 940, z1: 985, y1: up(78), hx: 24 },
+    { z0: 985, z1: 1015, y1: up(62), hx: 22 },
   ],
 };
 export const TOWER = {
-  x: 33, // shaft centres at +-x
-  z0: 894, // shaft base centre (zr): front flush with the block's top front edge
-  lean: 27, // aft shift of the shaft centre over its height (~74 degree front)
-  y0: up(112),
-  y1: up(206), // shaft top
-  hx0: 20,
-  hz0: 30, // half sizes at the base
-  hx1: 17,
-  hz1: 26, // half sizes at the top
-  headY0: up(206),
-  headY1: up(232),
-  headHx: 30, // heads 1.5x the shaft width, 6 m apart (the reference heads nearly touch)
-  headHz: 50, // T-head half sizes (front rounded), the head runs 100 m fore-aft
-  headZ: 897, // head centre (zr): rear flush with the shaft top, nose 48 m ahead of it
-  sensorY1: up(246),
+  x: 22.5, // shaft centres at +-x
+  hx: 6.2, // shaft half-width (12.4 m)
+  depth: 90, // shaft depth (z)
+  zFront: 792, // shaft front face at the foot
+  lean: 2, // aft shift of the shaft over its height
+  y0: BLOCK.base.y1, // on the roof
+  y1: up(148), // shaft top = head underside
+  headX: 28, // head centres at +-x
+  headHx: 14.2, // 28.4 m wide: a 27.6 m gap between the heads
+  headY0: up(148),
+  headY1: up(172),
+  frontZ0: 746, // light front section from here (46 m ahead of the shaft) ...
+  frontZ1: 780, // ... to here; the dark panelled rear runs on to headZ1
+  headZ1: 886,
+  visorY0: up(160), // the wide upper slab of the front section starts here ...
+  jawW: 20, // ... below it only the outboard jaw is light (this wide), the pod hangs inboard
+  chin: 3, // dark underside band below the jaw
+  podR: 5,
+  podX: 19.5, // pod centre (inboard, under the slab's overhang)
+  podY: 188.5,
+  podZ0: 752,
+  podLen: 24,
+  sensor: { hx: 12, z0: 780, z1: 830, y1: up(180) }, // low sensor body on the head
+  drumR: 5, // light drum on the sensor body
+  drumY1: up(184),
+  mastY1: up(187), // overall height 262 m from the keel (-30)
 };
+
+// ---- shoulder stripes: four red stripes along the wings' aft outer corners (fore-aft, spaced across)
+export const SHOULDER = {
+  z0: 960,
+  z1: 1020,
+  inset: 12,
+  pitch: 18.6,
+  w: 9,
+  n: 4,
+};
+// heavy turret row on the shelves
+export const TURRET_ZR = [600, 690, 780, 870];
+export const TURRET_R = 15;
+export const TURRET_X = 78;
+export const turretX = () => TURRET_X;
 
 // ---- stern engine bank: [x, y, r] four mains, two medium outboard, four small above
 export const ENGINES = [
-  [-124, -14, 27],
-  [-42, -14, 27],
-  [42, -14, 27],
-  [124, -14, 27],
-  [-196, -10, 16],
-  [196, -10, 16],
-  [-92, 22, 9],
-  [-31, 22, 9],
-  [31, 22, 9],
-  [92, 22, 9],
+  [-118, -4, 23],
+  [-40, -4, 23],
+  [40, -4, 23],
+  [118, -4, 23],
+  [-186, 0, 14],
+  [186, 0, 14],
+  [-88, 30, 8],
+  [-30, 30, 8],
+  [30, 30, 8],
+  [88, 30, 8],
 ];
 export const STERN_ZR = L;
 
@@ -209,5 +293,5 @@ export const BELLY_BAYS = [
 export function sootAt(z) {
   const k = Math.min(1, Math.max(0, (z - Z(900)) / (Z(L) - Z(900))));
   const kk = k * k;
-  return [1 - 0.3 * kk, 1 - 0.34 * kk, 1 - 0.4 * kk];
+  return [1 - 0.22 * kk, 1 - 0.26 * kk, 1 - 0.3 * kk];
 }

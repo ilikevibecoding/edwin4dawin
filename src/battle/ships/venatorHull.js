@@ -1,19 +1,20 @@
-// Venator main hull: the tagged cross-section loft (belly, angled lower hull, two flank ledges with the
-// dark window trench between them, deck lip, grey wings, raised door halves over the centre seam or the
-// open bay, the ventral bow hangar slot), the two bow prongs around the notch, the deck markings (red
-// door strips converging toward the nose, the two bow-wedge panels, shoulder stripes, Open Circle rings)
-// and the heavy turret row on the shoulders. Geometry is object space, non-indexed, added through
-// ctx.add(geo, materialKey, opts).
+// Venator main hull, matched to the reference render: the tagged cross-section loft (belly, the lower
+// slab leaning in, the dark machinery trench under the single deck lip, the flat grey wings, the raised
+// red door band with its side walls, grey lip and dark centre seam, the converging red bow stripes on
+// the flat bow deck, the ventral bow hangar slot), the blunt light nose block with its two emitter
+// triplets, the deck markings (red edge trim, shoulder stripes, gold roundels), the window rows along
+// the band walls and the heavy turret row on the shelves. Geometry is object space, non-indexed, added
+// through ctx.add(geo, materialKey, opts).
 import * as THREE from "three";
 import {
   loftProfile,
   loftFrame,
   deckStrip,
-  prismPoly,
   ringFacing,
   quadFacing,
   flipGeometry,
   mulColor,
+  cylZ,
 } from "./venatorKit.js";
 import { boxMM } from "./shipKit.js";
 import { HEAVY } from "./venatorTurrets.js";
@@ -25,18 +26,23 @@ import {
   yBot,
   flankSteps,
   bellyHalf,
-  NOTCH_HALF,
-  PRONG_END,
-  CENTRE_HALF,
+  NOSE,
   DOOR_Z0,
   DOOR_Z1,
-  DOOR_H,
   WEDGE_Z0,
-  WEDGE_Z1,
-  WEDGE_BORDER,
+  TRIM_Z0,
+  TRIM_Z1,
+  bandH,
+  bandTop,
   doorEdge,
+  centreHalf,
+  redOuter,
   redInner,
+  bayHalf,
   inDoors,
+  inWedge,
+  ROUNDEL_ZR,
+  roundelX,
   BAY_HALF,
   BAY_DEPTH,
   SEAM_HALF,
@@ -46,34 +52,39 @@ import {
   VENT_HALF,
   VENT_DEPTH,
   inVent,
-  SHOULDER_Z0,
-  SHOULDER_Z1,
-  SHOULDER_X0,
-  SHOULDER_X1,
+  SHOULDER,
   TURRET_ZR,
+  TURRET_R,
   turretX,
-  GREY_DECK,
-  GREY_WING,
+  platY,
+  GREY_HULL,
+  GREY_LIGHT,
   GREY_FLANK,
   GREY_LOWER,
   GREY_BELLY,
   GREY_STERN,
   DARK_RECESS,
   DARK_TRENCH,
-  DARK_SEAM,
   DARK,
   RED,
-  RED_DARK,
   INSIGNIA,
   HANGAR_WARM,
   HANGAR_BLUE,
   WINDOW_COOL,
+  ROW_WARM,
+  ROW_COOL,
   sootAt,
 } from "./venatorSpec.js";
 
-// ---- cross section: 13 starboard points mirrored to a 26-point loop, counter-clockwise seen from +z.
-// Edge j runs from point j to j+1; the tags below name the tint zone / material of each strip.
-export function hullProfile(zr, { gap = 0, depth = 0, vent = false } = {}) {
+// ---- cross section: 14 starboard points mirrored to a 28-point loop, counter-clockwise seen from +z.
+// Edge j runs from point j to j+1; the tags below name the tint zone / material of each strip. Inside
+// the door zone the band is a raised slab: the wing deck runs in to the band wall's foot, the wall
+// rises to the band top, then the grey lip, the red half, the grey centre strip and the seam (or the
+// open bay). On the bow wedge the two red stripes lie on the flat deck (the wall has no height).
+export function hullProfile(
+  zr,
+  { gap = 0, depth = 0, vent = false, open = false } = {},
+) {
   const hw = halfW(zr);
   const f = flankSteps(zr);
   const yt = f.yt;
@@ -81,25 +92,39 @@ export function hullProfile(zr, { gap = 0, depth = 0, vent = false } = {}) {
   const wB = Math.max(bellyHalf(zr), (vent ? VENT_HALF : 0) + 6);
   const s = vent ? VENT_HALF : 0;
   const hs = vent ? VENT_DEPTH : 0;
-  const door = inDoors(zr);
-  const xw = door ? doorEdge(zr) : 0;
-  const dh = door ? DOOR_H : 0;
-  const g = door ? gap : 0;
-  const h = door ? depth : 0;
+  let xw = 0;
+  let ro = 0;
+  let ri = 0;
+  let yB = yt;
+  let g = 0;
+  let h = 0;
+  if (inDoors(zr)) {
+    xw = doorEdge(zr);
+    ro = redOuter(zr);
+    ri = redInner(zr, open);
+    yB = bandTop(zr);
+    g = open ? bayHalf(zr) : gap;
+    h = g > 0 ? depth : 0;
+  } else if (inWedge(zr)) {
+    xw = doorEdge(zr);
+    ro = redOuter(zr);
+    ri = centreHalf(zr);
+  }
   const R = [
     [s, yb + hs],
     [s, yb],
     [wB, yb],
-    [hw - 1, f.yLowBot],
     [hw - 1, f.yTrBot],
     [hw - f.recess, f.yTrBot],
     [hw - f.recess, f.yLipBot],
     [hw, f.yLipBot],
     [hw, yt],
     [xw, yt],
-    [xw, yt + dh],
-    [g, yt + dh],
-    [g, yt + dh - h],
+    [xw, yB],
+    [ro, yB],
+    [ri, yB],
+    [g, yB],
+    [g, yB - h],
   ];
   const left = R.map(([x, y]) => [-x, y]).reverse();
   return [...R, ...left];
@@ -107,68 +132,86 @@ export function hullProfile(zr, { gap = 0, depth = 0, vent = false } = {}) {
 const R_TAGS = [
   "dark", // 0 ventral slot wall
   "belly", // 1 belly
-  "lower", // 2 angled lower hull
-  "flank", // 3 lower lip face
-  "dark", // 4 trench floor (lower lip top)
-  "dark", // 5 trench wall
-  "dark", // 6 deck lip underside
-  "flank", // 7 deck lip face
-  "wing", // 8 wing deck
-  "deck", // 9 door outer step
-  "deck", // 10 door top
-  "dark", // 11 seam / bay wall
+  "lower", // 2 angled lower slab
+  "dark", // 3 trench floor
+  "dark", // 4 trench wall
+  "dark", // 5 deck lip underside
+  "flank", // 6 deck lip face
+  "wing", // 7 wing deck
+  "wall", // 8 the band's side wall
+  "lip", // 9 grey lip along the band's edge
+  "door", // 10 red door half / bow stripe
+  "deck", // 11 grey centre strip
+  "dark", // 12 seam / bay wall
 ];
 export const HULL_TAGS = [
   ...R_TAGS,
-  "dark", // 12 seam / bay floor
-  ...R_TAGS.slice().reverse(), // 13..24 port side
-  "dark", // 25 ventral slot ceiling
+  "dark", // 13 seam / bay floor
+  ...R_TAGS.slice().reverse(), // 14..26 port side
+  "dark", // 27 ventral slot ceiling
 ];
-// profile edge indices for placing detail: starboard edge k is mirrored to port edge 24 - k, whose
+// profile edge indices for placing detail: starboard edge k is mirrored to port edge 26 - k, whose
 // parameter t runs the opposite way (port t = 1 - starboard t)
 export const EDGE = {
   bellyR: 1,
   lowerR: 2,
-  lowLipR: 3,
-  trenchFloorR: 4,
-  trenchWallR: 5,
-  deckLipR: 7,
-  wingR: 8,
+  trenchFloorR: 3,
+  trenchWallR: 4,
+  deckLipR: 6,
+  wingR: 7,
+  wallR: 8,
   doorR: 10,
-  bellyL: 23,
-  lowerL: 22,
-  lowLipL: 21,
-  trenchFloorL: 20,
-  trenchWallL: 19,
-  deckLipL: 17,
-  wingL: 16,
-  doorL: 14,
+  bellyL: 25,
+  lowerL: 24,
+  trenchFloorL: 23,
+  trenchWallL: 22,
+  deckLipL: 20,
+  wingL: 19,
+  wallL: 18,
+  doorL: 16,
 };
 
+// sections include every kink of halfW / yTop / yBot (90, 250, 300, 600, 925) so the silhouette is exact
 const SECTIONS_FULL = [
-  PRONG_END,
-  150,
-  190,
-  240,
+  NOSE.z1,
+  40,
+  90,
+  130,
+  180,
+  250,
   300,
   360,
   430,
   500,
   580,
-  660,
-  740,
+  600,
+  640,
+  720,
   830,
-  900,
+  925,
   980,
-  1040,
+  1035,
   1090,
   1120,
   L,
 ];
-const SECTIONS_MID = [PRONG_END, 190, 300, 430, 580, 740, 830, 1040, L];
-const SECTIONS_FAR = [PRONG_END, 300, 580, 830, 1040, L];
+const SECTIONS_MID = [
+  NOSE.z1,
+  90,
+  180,
+  250,
+  300,
+  430,
+  600,
+  640,
+  720,
+  925,
+  1035,
+  L,
+];
+const SECTIONS_FAR = [NOSE.z1, 90, 250, 300, 600, 640, 925, L];
 
-// pairs of sections a hair apart give the recesses abrupt end walls
+// pairs of sections a hair apart give the recesses and the door band abrupt end walls
 function withBreaks(zrs, breaks) {
   const list = [...zrs];
   for (const b of breaks) list.push(b, b + 0.01);
@@ -178,58 +221,36 @@ function withBreaks(zrs, breaks) {
 export function hullSections(lod, open) {
   const base =
     lod === 0 ? SECTIONS_FULL : lod === 1 ? SECTIONS_MID : SECTIONS_FAR;
-  const breaks = [DOOR_Z0, DOOR_Z1];
+  const breaks = [WEDGE_Z0, DOOR_Z0, DOOR_Z1];
   if (lod < 2) breaks.push(VENT_Z0, VENT_Z1);
   const zrs = withBreaks(base, breaks);
   const gap = open ? BAY_HALF : lod < 2 ? SEAM_HALF : 0;
   const depth = open ? BAY_DEPTH : lod < 2 ? SEAM_DEPTH : 0;
   return zrs.map((zr) => ({
     z: Z(zr),
-    pts: hullProfile(zr, { gap, depth, vent: lod < 2 && inVent(zr) }),
+    pts: hullProfile(zr, {
+      gap,
+      depth,
+      open,
+      vent: lod < 2 && inVent(zr),
+    }),
   }));
 }
 
-// bow prongs: the same stepped flank as the hull on the outside, a flat dark wall toward the notch
-function prongProfile(zr) {
-  const hw = halfW(zr);
-  const f = flankSteps(zr);
-  const xi = NOTCH_HALF;
-  const wB = Math.max(bellyHalf(zr), xi + 6);
-  return [
-    [xi, f.yb],
-    [wB, f.yb],
-    [hw - 1, f.yLowBot],
-    [hw - 1, f.yTrBot],
-    [hw - f.recess, f.yTrBot],
-    [hw - f.recess, f.yLipBot],
-    [hw, f.yLipBot],
-    [hw, f.yt],
-    [xi, f.yt],
-  ];
-}
-const PRONG_TAGS = [
-  "belly",
-  "lower",
-  "flank",
-  "dark",
-  "dark",
-  "dark",
-  "flank",
-  "wing",
-  "dark", // notch wall
-];
-
 export const ZONE_TINT = {
-  deck: GREY_DECK,
-  wing: GREY_WING,
+  deck: GREY_HULL,
+  lip: GREY_HULL,
+  wing: GREY_HULL,
+  wall: GREY_FLANK,
   flank: GREY_FLANK,
   lower: GREY_LOWER,
   belly: GREY_BELLY,
   stern: GREY_STERN,
+  nose: GREY_LIGHT,
 };
 
 /**
- * Add the hull, prongs and deck markings for one LOD. Returns { secs } (the hull sections, for frames).
+ * Add the hull, nose and deck markings for one LOD. Returns { secs } (the hull sections, for frames).
  */
 export function buildHull(ctx) {
   const { lod, fine, mid, add, hullTexel, open, rand } = ctx;
@@ -248,140 +269,95 @@ export function buildHull(ctx) {
   const secs = hullSections(lod, open);
   const geos = loftProfile(secs, {
     tags: HULL_TAGS,
-    capStart: false,
+    capStart: true,
     capEnd: true,
     capTag: "stern",
     uv: hullTexel,
   });
+  // the start cap (the nose face around the nose block) shares the stern tag; recolour it by z
   for (const [zone, tint] of Object.entries(ZONE_TINT)) {
     if (!geos[zone]) continue;
     const p = add(geos[zone], "hull", { color: tint, uv: "keep" });
+    if (zone === "stern") {
+      const pos = p.geo.attributes.position;
+      const col = p.geo.attributes.color;
+      const nose = new THREE.Color(ZONE_TINT.nose);
+      for (let i = 0; i < pos.count; i++)
+        if (pos.getZ(i) < Z(L / 2)) col.setXYZ(i, nose.r, nose.g, nose.b);
+    }
     sootTint(p.geo);
   }
+  if (geos.door) add(geos.door, "paint", { color: RED, uv: "keep" });
   if (geos.dark) {
     const p = add(geos.dark, "dark", { color: DARK_TRENCH, texel: 1 / 10 });
     sootTint(p.geo);
   }
 
-  // ---- prongs and the notch
+  // ---- nose: the blunt light block at the tip carrying two triplets of round emitters in dark frames,
+  // the deck slab above it set back a little, a red-tipped fitting underneath
+  const N = NOSE;
+  add(boxMM([-N.hx, N.y0, Z(0)], [N.hx, N.y1, Z(N.z1 + 2)]), "hull", {
+    color: GREY_LIGHT,
+    texel: 1 / 6,
+  });
+  add(
+    boxMM(
+      [-N.hx + 2, N.y1 - 0.1, Z(4)],
+      [N.hx - 2, yTop(N.z1) + 0.05, Z(N.z1 + 2)],
+    ),
+    "hull",
+    { color: GREY_LIGHT, texel: 1 / 6 },
+  );
   for (const s of [-1, 1]) {
-    const zrs =
-      lod === 2 ? [0, 60, PRONG_END + 0.5] : [0, 30, 70, 100, PRONG_END + 0.5];
-    const psecs = zrs.map((zr) => ({
-      z: Z(zr),
-      pts: prongProfile(zr).map(([x, y]) => [s * x, y]),
-    }));
-    const pg = loftProfile(psecs, {
-      tags: PRONG_TAGS,
-      capStart: true,
-      capEnd: false,
-      capTag: "deck", // the blunt nose faces are the light armour of the deck
-      uv: hullTexel,
-    });
-    for (const [zone, tint] of Object.entries(ZONE_TINT))
-      if (pg[zone]) add(pg[zone], "hull", { color: tint, uv: "keep" });
-    if (pg.dark) add(pg.dark, "dark", { color: DARK_TRENCH, texel: 1 / 8 });
-    // nose face: the tractor-beam / sensor emitters (three dark discs) and a dark seam across the face
-    if (mid) {
-      const yt = yTop(0);
-      const yb = yBot(0);
-      const xc = s * ((NOTCH_HALF + halfW(0)) / 2);
-      const w = halfW(0) - NOTCH_HALF - 8;
-      for (const [dx, dy] of [
-        [-0.3, 0.6],
-        [0.3, 0.6],
-        [0, 0.28],
-      ]) {
-        const r = Math.min(4, (yt - yb) * 0.1);
-        add(
-          new THREE.CylinderGeometry(r, r, 1.6, 12)
-            .rotateX(Math.PI / 2)
-            .translate(xc + dx * w * 0.5, yb + (yt - yb) * dy, Z(0) - 0.7),
-          "dark",
-          { color: DARK, texel: 1 / 3 },
-        );
-      }
-      add(
-        boxMM(
-          [xc - w / 2, yb + (yt - yb) * 0.45, Z(0) - 0.3],
-          [xc + w / 2, yb + (yt - yb) * 0.45 + 0.8, Z(0) + 0.1],
-        ),
-        "dark",
-        { color: DARK_SEAM, texel: 1 / 4 },
-      );
-    }
-    if (mid) {
-      // tractor-beam emitter rings on the notch walls near the tip, and a lit slot at the back
-      for (const zr of [22, 52]) {
-        const y = (yTop(zr) + yBot(zr)) / 2;
-        add(
-          ringFacing(
-            [s * (NOTCH_HALF + 0.3), y, Z(zr)],
-            [-s, 0, 0],
-            [0, 1, 0],
-            2.5,
-            5,
-            12,
-          ),
-          "dark",
-          { color: DARK, texel: 1 / 3 },
-        );
-        add(
-          quadFacing(
-            [s * (NOTCH_HALF + 0.2), y, Z(zr)],
-            [-s, 0, 0],
-            [0, 1, 0],
-            4.6,
-            4.6,
-          ),
-          "windows",
-          { color: HANGAR_BLUE, uv: "keep" },
-        );
-      }
-    }
-  }
-  // notch back wall (the hull's open front) with a lit hangar mouth
-  {
-    const zr = PRONG_END;
-    const yt = yTop(zr);
-    const yb = yBot(zr);
+    const xa = s * (N.canX - 4);
+    const xb = s * (N.canX + 4);
     add(
-      quadFacing(
-        [0, (yt + yb) / 2, Z(zr) + 0.05],
-        [0, 0, -1],
-        [0, 1, 0],
-        NOTCH_HALF * 2,
-        yt - yb,
+      boxMM(
+        [Math.min(xa, xb), N.cans[0] - 3.5, Z(0) - 0.5],
+        [Math.max(xa, xb), N.cans[2] + 3.5, Z(0) + 0.6],
       ),
       "dark",
-      { color: DARK_RECESS, texel: 1 / 8 },
+      { color: DARK_RECESS, texel: 1 / 4 },
     );
-    if (mid) {
-      // a small lit docking mouth at the bottom of the notch wall
+    if (mid)
+      for (const cy of N.cans)
+        add(
+          cylZ(N.canR, N.canR, 3.2, lod === 0 ? 12 : 8).translate(
+            s * N.canX,
+            cy,
+            Z(0) - 0.9,
+          ),
+          "hull",
+          { color: GREY_LIGHT, texel: 1 / 4 },
+        );
+  }
+  add(boxMM([-9, yBot(0) - 3, Z(1)], [9, yBot(0) + 1.5, Z(14)]), "paint", {
+    color: RED,
+    texel: 1 / 4,
+  });
+  if (mid) {
+    // dark underside fittings either side of the red tip
+    for (const s of [-1, 1])
       add(
-        quadFacing(
-          [0, yb + 9, Z(zr) - 0.3],
-          [0, 0, -1],
-          [0, 1, 0],
-          NOTCH_HALF * 2 - 16,
-          6,
+        boxMM(
+          [Math.min(s * 10, s * 19), yBot(0) - 1.5, Z(2)],
+          [Math.max(s * 10, s * 19), yBot(0) + 1, Z(12)],
         ),
-        "windows",
-        { color: HANGAR_WARM, uv: "keep" },
+        "dark",
+        { color: DARK, texel: 1 / 4 },
       );
-    }
   }
 
   // ---- ventral hangar slot: lit ceiling strips facing down (the slot itself is part of the loft)
   if (mid) {
     const yc = (zr) => yBot(zr) + VENT_DEPTH - 0.2;
-    for (const dx of [-18, 0, 18])
+    for (const dx of [-16, 0, 16])
       add(
         flipGeometry(
           deckStrip(
             [VENT_Z0 + 8, VENT_Z1 - 8],
-            () => dx - 3,
-            () => dx + 3,
+            () => dx - 2.5,
+            () => dx + 2.5,
             yc,
             Z,
             { lift: 0 },
@@ -395,14 +371,14 @@ export function buildHull(ctx) {
   // ---- open variant: the flight deck floor of the dorsal bay, lit with landing strips, hangar lamps
   // along the bay walls and a scatter of dark equipment (the bay itself is the loft's recess)
   if (open) {
-    const yFloor = (zr) => yTop(zr) + DOOR_H - BAY_DEPTH;
-    const lit = lod === 2 ? [0] : [-30, 0, 30];
+    const yFloor = (zr) => bandTop(zr) - BAY_DEPTH;
+    const lit = lod === 2 ? [0] : [-12, 0, 12];
     for (const dx of lit)
       add(
         deckStrip(
           [DOOR_Z0 + 12, DOOR_Z1 - 12],
-          () => dx - 1.6,
-          () => dx + 1.6,
+          () => dx - 1.2,
+          () => dx + 1.2,
           yFloor,
           Z,
           { lift: 0.3 },
@@ -412,10 +388,11 @@ export function buildHull(ctx) {
       );
     if (mid) {
       for (let zr = DOOR_Z0 + 30; zr < DOOR_Z1 - 20; zr += fine ? 40 : 80) {
+        const bh = bayHalf(zr);
         for (const s of [-1, 1])
           add(
             quadFacing(
-              [s * (BAY_HALF - 0.3), yFloor(zr) + BAY_DEPTH * 0.7, Z(zr)],
+              [s * (bh - 0.3), yFloor(zr) + BAY_DEPTH * 0.7, Z(zr)],
               [-s, 0, 0],
               [0, 1, 0],
               12,
@@ -425,8 +402,8 @@ export function buildHull(ctx) {
             { color: HANGAR_WARM, uv: "keep" },
           );
         if (fine && rand() < 0.7) {
-          const x = (rand() - 0.5) * 2 * (BAY_HALF - 14);
-          const w = 4 + rand() * 8;
+          const x = (rand() - 0.5) * 2 * (bh - 10);
+          const w = 3 + rand() * 6;
           const d = 6 + rand() * 12;
           add(
             boxMM(
@@ -441,147 +418,82 @@ export function buildHull(ctx) {
     }
   }
 
-  // ---- deck markings (paint material). The door top is at yTop + DOOR_H, the wedge on the bare deck.
-  const zrsDoor = [];
-  for (let zr = DOOR_Z0 + 1.5; zr < DOOR_Z1 - 1.5; zr += lod === 2 ? 180 : 45)
-    zrsDoor.push(zr);
-  zrsDoor.push(DOOR_Z1 - 1.5);
-  const inner = redInner(DOOR_Z0 + 0.01, open);
+  // ---- deck markings (paint material): the red halves and bow stripes are loft strips; here the red
+  // trim segments along the deck edge beside the bow stripes and the gold roundels
   // the far LOD is drawn from 9 km up: lift the paint further off the deck so it cannot z-fight
   const paintLift = lod === 2 ? 1.2 : 0.15;
-  for (const s of [-1, 1]) {
-    // door red strip: inner edge a grey margin in from the centre strip, outer edge 3 m inside the door
-    // edge (both converge toward the bow with the deck)
-    add(
-      deckStrip(
-        zrsDoor,
-        (zr) => s * redInner(zr, open),
-        (zr) => s * (doorEdge(zr) - 3),
-        (zr) => yTop(zr) + DOOR_H,
-        Z,
-        { minW: 4, lift: paintLift },
-      ),
-      "paint",
-      { color: RED, texel: 1 / 12 },
-    );
-    // bow wedge panel: converging trapezoid with a grey border to the deck edge
-    const zrsW =
-      lod === 2 ? [WEDGE_Z0, WEDGE_Z1] : [WEDGE_Z0, 170, 210, WEDGE_Z1];
-    add(
-      deckStrip(
-        zrsW,
-        () => s * CENTRE_HALF,
-        (zr) => s * (halfW(zr) - WEDGE_BORDER),
-        yTop,
-        Z,
-        { minW: 4, lift: paintLift },
-      ),
-      "paint",
-      { color: RED, texel: 1 / 12 },
-    );
-    if (mid) {
-      // door front face in the shadowed red, so the step reads from ahead
-      const xw = doorEdge(DOOR_Z0 + 0.01);
-      add(
-        quadFacing(
-          [
-            s * ((inner + xw - 3) / 2),
-            yTop(DOOR_Z0) + DOOR_H / 2,
-            Z(DOOR_Z0) - 0.1,
-          ],
-          [0, 0, -1],
-          [0, 1, 0],
-          xw - 3 - inner,
-          DOOR_H,
-        ),
-        "paint",
-        { color: RED_DARK, texel: 1 / 4 },
-      );
-      // panel lines across the red strips (dark grooves every ~55 m) and along the centre edge
-      if (fine) {
-        for (let zr = DOOR_Z0 + 55; zr < DOOR_Z1 - 20; zr += 55) {
-          const xw = doorEdge(zr) - 3;
-          const xi = redInner(zr, open);
-          add(
-            boxMM(
-              [Math.min(s * xi, s * xw), yTop(zr) + DOOR_H + 0.16, Z(zr) - 0.4],
-              [Math.max(s * xi, s * xw), yTop(zr) + DOOR_H + 0.3, Z(zr) + 0.4],
-            ),
-            "dark",
-            { color: 0x50242a, texel: 1 / 4 },
-          );
-        }
+  if (mid)
+    for (const s of [-1, 1])
+      for (let za = TRIM_Z0; za < TRIM_Z1 - 10; za += 34) {
+        const zb = Math.min(za + 22, TRIM_Z1 - 2);
+        add(
+          deckStrip(
+            [za, zb],
+            (zr) => s * (halfW(zr) - 1.5),
+            (zr) => s * (halfW(zr) - 6),
+            yTop,
+            Z,
+            { minW: 2, lift: paintLift },
+          ),
+          "paint",
+          { color: RED, texel: 1 / 8 },
+        );
       }
-    }
-  }
-  // grey centre strip between the door halves is bare deck; the seam is in the loft. Insignia rings on
-  // the wings and lower flanks (Open Circle mark: ring + inner arc)
+  // gold roundels (Open Circle) on the wings outboard of the band, faded ones on the lower flank
   for (const s of [-1, 1]) {
-    const zr = 560;
-    const xc = s * ((doorEdge(zr) + halfW(zr)) / 2);
-    const y = yTop(zr) + 0.2;
+    const zr = ROUNDEL_ZR;
+    const xc = s * roundelX(zr);
+    const y = yTop(zr) + paintLift;
+    add(ringFacing([xc, y, Z(zr)], [0, 1, 0], [0, 0, -1], 8, 11, 28), "paint", {
+      color: INSIGNIA,
+      texel: 1 / 8,
+    });
     add(
-      ringFacing([xc, y, Z(zr)], [0, 1, 0], [0, 0, -1], 13.5, 17.5, 28),
+      new THREE.CircleGeometry(8, 24)
+        .rotateX(-Math.PI / 2)
+        .translate(xc, y, Z(zr)),
       "paint",
-      {
-        color: INSIGNIA,
-        texel: 1 / 8,
-      },
+      { color: mulColor(INSIGNIA, 0.55), texel: 1 / 8 },
     );
     if (mid)
       add(
-        ringFacing([xc, y, Z(zr)], [0, 1, 0], [0, 0, -1], 6, 9.5, 20, 1.2),
+        ringFacing(
+          [xc, y + 0.05, Z(zr)],
+          [0, 1, 0],
+          [0, 0, -1],
+          3.6,
+          5.8,
+          20,
+          1.2,
+        ),
         "paint",
-        {
-          color: INSIGNIA,
-          texel: 1 / 8,
-        },
+        { color: INSIGNIA, texel: 1 / 8 },
       );
-    // lower flank ring near the stern (faded)
     if (mid) {
       const j = s > 0 ? EDGE.lowerR : EDGE.lowerL;
       const fr = loftFrame(secs, j, 0.5, Z(880));
       const c = fr.p.clone().addScaledVector(fr.n, 0.2);
       add(
-        ringFacing(c.toArray(), fr.n.toArray(), [0, 1, 0], 10, 13, 24),
+        ringFacing(c.toArray(), fr.n.toArray(), [0, 1, 0], 9, 12, 24),
         "paint",
-        {
-          color: mulColor(INSIGNIA, 0.75),
-          texel: 1 / 8,
-        },
+        { color: mulColor(INSIGNIA, 0.7), texel: 1 / 8 },
       );
     }
   }
 
-  // ---- shoulders: raised wing plates at the widest point with four red stripes across them
+  // ---- shoulder stripes: red stripes running fore-aft along the wings' aft outer corners
   for (const s of [-1, 1]) {
-    const x0 = (zr) => s * SHOULDER_X0(zr);
-    const x1 = (zr) => s * SHOULDER_X1(zr);
-    const plan = [
-      [x0(SHOULDER_Z0), Z(SHOULDER_Z0)],
-      [x1(SHOULDER_Z0), Z(SHOULDER_Z0)],
-      [x1(SHOULDER_Z1), Z(SHOULDER_Z1)],
-      [x0(SHOULDER_Z1), Z(SHOULDER_Z1)],
-    ];
-    const pl = prismPoly(plan, yTop(SHOULDER_Z0), yTop(SHOULDER_Z0) + 5, {
-      inset: 3,
-      capTag: "top",
-    });
-    add(pl.hull, "hull", { color: GREY_FLANK, texel: hullTexel });
-    add(pl.top, "hull", { color: GREY_WING, texel: hullTexel });
-    // four red stripes across the plate
-    const yS = yTop(SHOULDER_Z0) + 5.15;
-    for (let i = 0; i < 4; i++) {
-      const za = SHOULDER_Z0 + 14 + i * 27;
-      const zb = za + 13;
+    const n = lod === 2 ? 2 : SHOULDER.n;
+    for (let i = 0; i < n; i++) {
+      const off = SHOULDER.inset + i * SHOULDER.pitch * (SHOULDER.n / n);
       add(
         deckStrip(
-          [za, zb],
-          (zr) => x0(zr) + s * 3,
-          (zr) => x1(zr) - s * 4,
-          () => yS,
+          [SHOULDER.z0, SHOULDER.z1],
+          (zr) => s * (halfW(zr) - off - SHOULDER.w),
+          (zr) => s * (halfW(zr) - off),
+          yTop,
           Z,
-          { lift: 0 },
+          { lift: paintLift },
         ),
         "paint",
         { color: RED, texel: 1 / 8 },
@@ -589,49 +501,68 @@ export function buildHull(ctx) {
     }
   }
 
-  // ---- heavy turret row on the wings (tracking turrets are drawn by the Fleet; the far LOD gets boxes)
+  // ---- window rows along the band's side walls (they face outboard over the wings)
+  if (mid)
+    for (const s of [-1, 1]) {
+      const j = s > 0 ? EDGE.wallR : EDGE.wallL;
+      for (let zr = DOOR_Z0 + 60; zr < DOOR_Z1 - 30; zr += fine ? 34 : 68) {
+        if (bandH(zr) < 6) continue;
+        const rows = fine && bandH(zr) > 12 ? [0.35, 0.65] : [0.5];
+        for (const t of rows) {
+          const fr = loftFrame(secs, j, s > 0 ? t : 1 - t, Z(zr));
+          const c = fr.p.clone().addScaledVector(fr.n, 0.2);
+          add(
+            quadFacing(
+              c.toArray(),
+              fr.n.toArray(),
+              [0, 1, 0],
+              fine ? 22 : 50,
+              1.3,
+            ),
+            "windows",
+            { color: t < 0.5 ? ROW_WARM : ROW_COOL, uv: "keep" },
+          );
+        }
+      }
+    }
+
+  // ---- heavy turret row on the shelves (tracking turrets are drawn by the Fleet; the far LOD gets boxes)
   for (const s of [-1, 1]) {
     for (const zr of TURRET_ZR) {
       const tx = s * turretX(zr);
       const tz = Z(zr);
-      const y = yTop(zr);
-      // barbette: a low octagonal pedestal
+      const yT = platY(zr);
       add(
-        new THREE.CylinderGeometry(17, 18.5, 2.6, 8).translate(tx, y + 1.3, tz),
+        new THREE.CylinderGeometry(TURRET_R, TURRET_R + 1.5, 2.6, 8).translate(
+          tx,
+          yT + 1.3,
+          tz,
+        ),
         "hull",
-        {
-          color: GREY_FLANK,
-          texel: 1 / 8,
-        },
+        { color: GREY_FLANK, texel: 1 / 8 },
       );
       if (lod === 2) {
         add(
-          boxMM([tx - 13, y + 2.6, tz - 12], [tx + 13, y + 15, tz + 12]),
+          boxMM([tx - 13, yT + 2.6, tz - 12], [tx + 13, yT + 15, tz + 12]),
           "hull",
-          {
-            color: GREY_WING,
-            texel: 1 / 6,
-          },
+          { color: GREY_HULL, texel: 1 / 6 },
         );
         add(
-          boxMM([tx - 6, y + 12, tz - 46], [tx + 6, y + 16, tz - 8]),
+          boxMM([tx - 6, yT + 12, tz - 46], [tx + 6, yT + 16, tz - 8]),
           "dark",
-          {
-            color: DARK,
-            texel: 1 / 6,
-          },
+          { color: DARK, texel: 1 / 6 },
         );
       }
       if (lod === 0) {
         const fwd = [s * 0.35, 0, -1];
         ctx.turrets.push({
           type: "heavy",
-          pos: [tx, y + 2.6, tz],
+          pos: [tx, yT + 2.6, tz],
           up: [0, 1, 0],
           forward: fwd,
         });
         ctx.hardpoints.push({
-          pos: [tx, y + 2.6 + HEAVY.pivotY, tz],
+          pos: [tx, yT + 2.6 + HEAVY.pivotY, tz],
           dir: new THREE.Vector3(...fwd)
             .normalize()
             .toArray()
@@ -644,7 +575,7 @@ export function buildHull(ctx) {
     }
   }
 
-  // ---- notch-side hangar lights along the ventral slot walls and the wing edge running lights
+  // ---- hangar lights along the ventral slot walls
   if (fine) {
     for (const s of [-1, 1]) {
       for (let zr = VENT_Z0 + 20; zr < VENT_Z1 - 10; zr += 40) {
@@ -655,13 +586,10 @@ export function buildHull(ctx) {
             [-s, 0, 0],
             [0, 1, 0],
             6,
-            2.2,
+            2.0,
           ),
           "windows",
-          {
-            color: WINDOW_COOL,
-            uv: "keep",
-          },
+          { color: WINDOW_COOL, uv: "keep" },
         );
       }
     }
