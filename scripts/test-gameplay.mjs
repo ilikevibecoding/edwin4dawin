@@ -244,13 +244,15 @@ try {
     const { tilePixels } = await __t.mod('/src/textures.js');
     const rows = ITEM_PALETTE.map((id) => {
       const it = ITEMS[id], def = BLOCKS[id];
-      const px = tilePixels(def.tex[0]); let opaque = 0; for (let i = 3; i < px.length; i += 4) if (px[i] > 0) opaque++;
+      // tiles are 64x64 since the HD pass; the icon must be painted (not empty) and must keep transparent surroundings
+      const px = tilePixels(def.tex[0]); const total = px.length / 4; let opaque = 0; for (let i = 3; i < px.length; i += 4) if (px[i] > 0) opaque++;
+      opaque = Math.round(opaque * 256 / total);   // normalised to a 16x16 count
       let drawn = 'ok'; try { game.hud.drawItem({ id, count: 1 }, -100, -100); } catch (e) { drawn = e.message; }
       return { id, name: it.displayName, sameName: def.displayName === it.displayName, food: it.food, opaquePixels: opaque, drawn };
     });
     return JSON.stringify({ n: rows.length, maxStack: MAX_STACK, rows });
   })()`));
-  check('14 registered items, each with a painted 16x16 icon that renders through the HUD item path', items.n === 14 && items.maxStack === 64 && items.rows.every((r) => r.drawn === 'ok' && r.sameName && r.opaquePixels > 20 && r.opaquePixels < 256), items.rows.map((r) => `${r.name}:${r.opaquePixels}px`).join(' '));
+  check('14 registered items, each with a painted icon (transparent surround) that renders through the HUD item path', items.n === 14 && items.maxStack === 64 && items.rows.every((r) => r.drawn === 'ok' && r.sameName && r.opaquePixels > 20 && r.opaquePixels < 256), items.rows.map((r) => `${r.name}:${r.opaquePixels}px/256`).join(' '));
   const foods = Object.fromEntries(items.rows.filter((r) => r.food).map((r) => [r.name, [r.food.hunger, r.food.saturation]]));
   check('Minecraft food values', foods.Apple[0] === 4 && foods.Apple[1] === 2.4 && foods.Bread[0] === 5 && foods.Bread[1] === 6 && foods.Steak[0] === 8 && foods.Steak[1] === 12.8 && foods['Cooked Chicken'][0] === 6 && foods['Cooked Chicken'][1] === 7.2 && foods['Raw Beef'][0] === 3 && foods['Raw Chicken'][1] === 1.2, JSON.stringify(foods));
   await ev(`(() => { game.hud.mouse.x = 4; game.hud.mouse.y = 4; })()`); // no tooltip over the icon rows

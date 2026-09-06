@@ -12,7 +12,8 @@
     "bench": "node scripts/bench.mjs",
     "test": "node scripts/test-unit.mjs && node scripts/test-textures.mjs && node scripts/test-coruscant-towers.mjs && node scripts/test-spaceport.mjs && node scripts/test-deathstar.mjs && node scripts/test-disasters.mjs",
     "material-table": "node scripts/material-table.mjs",
-    "mp-test": "node scripts/mp-test.mjs"
+    "mp-test": "node scripts/mp-test.mjs",
+    "gameplay-test": "node scripts/test-gameplay.mjs --url http://localhost:5173"
   },
   "dependencies": {
     "three": "^0.185.1",
