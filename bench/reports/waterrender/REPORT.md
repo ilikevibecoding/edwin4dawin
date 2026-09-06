@@ -63,10 +63,11 @@ Defect log with per-round evidence: `DEFECTS.md`; crops in `crops/` (labelled r<
   height.
 - **Clouds in the sky term**: the lobe's centre ray is carried to the cloud base plane and the shared 2D cloud
   field (the dome's own, with its wind offset) says whether a cloud hangs there; the sky is blended toward the
-  grey of a lit base by that coverage × the haze extinction up to it, with the field's edge ramp widened by the
-  lobe's footprint. One evaluation per pixel, only where the sky term weighs > 6 % of the pixel (Fresnel) and
-  the ray is not near-horizontal; the overcast band of before is kept as the floor. No version of the water
-  had mirrored a cumulus (the probe was "analytic sky only").
+  colour the dome lights a base with (its formula: sky ambient under the column, the world's bounce, the sun
+  leaking through — a light grey by day, salmon at sunset) by that coverage × the haze extinction up to it, with
+  the field's edge ramp widened by the lobe's footprint. One evaluation per pixel, only where the sky term
+  weighs > 6 % of the pixel (Fresnel) and the ray is not near-horizontal; the overcast band of before is kept as
+  the floor. No version of the water had mirrored a cumulus (the probe was "analytic sky only").
 - **Set fades along the wave vector** (`footAlong`): each set leaves on the pixel's extent along its own wave
   vector, so sets whose crests run away from the camera stay resolved across the screen.
 - `wakes.ts`: `patch` → `wwPatch` (compile fix only).
