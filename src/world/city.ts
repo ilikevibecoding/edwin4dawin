@@ -501,6 +501,8 @@ export interface CityBuild {
   /** occupancy grid (10 m cells) marking footprints so vegetation avoids buildings */
   occupied: (x: number, z: number) => boolean;
   markOccupied: (x: number, z: number, r: number) => void;
+  /** every building body placed on the ground (rooftop items excluded), for the terrain's lot map (terrain.ts stampLots) */
+  footprints: { x: number; z: number; w: number; d: number; h: number; rot: number; kind: Kind; style: number }[];
 }
 
 interface PlaceOpts {
@@ -556,6 +558,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
   };
 
   /** Places one instance sitting on the highest ground corner (so nothing floats). Returns the roof height or null. */
+  const footprints: CityBuild['footprints'] = [];
   const place = (kind: Kind, x: number, z: number, w: number, h: number, d: number, rot: number, color: string | THREE.Color, style: number, floorH: number, o: PlaceOpts = {}): number | null => {
     let y = -Infinity;
     for (const [px, pz] of corners(x, z, w, d, rot)) y = Math.max(y, map.heightAt(px, pz));
@@ -567,7 +570,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       lit: o.lit ?? 0.3, warm: o.warm ?? 0.7, variant: o.variant ?? 0.5, form: o.form ?? 0,
     });
     const margin = o.margin ?? 3;
-    if (margin >= 0) markFootprint(x, z, w, d, rot, margin);
+    if (margin >= 0) { markFootprint(x, z, w, d, rot, margin); footprints.push({ x, z, w, d, h, rot, kind, style }); }
     if (kind === 'box' && margin >= 0 && h >= 10) addTrims(x, y - 0.4, z, w, h + 0.4, d, rot, style, floorH, col);
     return y + h;
   };
@@ -1752,7 +1755,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
   }
 
   batches.build();
-  return { batches, landmarkPositions, occupied, markOccupied };
+  return { batches, landmarkPositions, occupied, markOccupied, footprints };
 }
 
 export function districtByZone(map: WorldMap, zone: Zone): District[] {
