@@ -289,6 +289,7 @@ export class Game {
     if (dbg.has('nobridges')) this.bridges.group.visible = false;
     if (dbg.has('nostreets')) this.streets.group.visible = false;
     if (dbg.has('swdebug')) SW_DEBUG.value = 1;
+    if (dbg.has('nopools')) this.streets.poolsEnabled = false;
     if (dbg.has('notraffic')) this.traffic.group.visible = false;
     if (dbg.has('nocloudshadow')) { this.post.cloudShadowStrength = 0; this.reflection.cloudShadowStrength = 0; }
     if (dbg.has('norefl')) this.reflection.enabled = false;

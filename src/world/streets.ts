@@ -453,6 +453,8 @@ export class Streets {
   private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; small: KitSoup }>();
   counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0 };
   private readonly roads: RoadIndex;
+  /** debug: `?dbg=nopools` turns the lamp pools off */
+  poolsEnabled = true;
   /** signal pole footings per signalised node (the corner lamps keep clear of them) */
   readonly signalPoles = new Map<RoadNode, Vec2[]>();
   /** the lamp irradiance map's texture (owned here, sampled through `lights`) */
@@ -1075,7 +1077,7 @@ export class Streets {
     this.uniforms.uSignalTime.value = time;
     this.uniforms.uNight.value = night;
     // warm high-pressure sodium / warm-white LED mix; the pools scale with the night factor like the lamp heads
-    this.lights.uLampColor.value.set(1.0, 0.78, 0.5).multiplyScalar(1.7 * night);
+    this.lights.uLampColor.value.set(1.0, 0.78, 0.5).multiplyScalar(1.7 * night * (this.poolsEnabled ? 1 : 0));
   }
 
   /** Per-frame culling: cells in view within FAR (small kits within SMALL_FAR); kits cast into the fine cascades
