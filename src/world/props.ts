@@ -963,8 +963,9 @@ export class Props {
     const ground = (u: number, v: number) => { const [x, z] = world(u, v); return this.map.heightAt(x, z); };
     const occupy = (u: number, v: number, r: number) => { const [x, z] = world(u, v); this.markOccupied(x, z, r); };
     const boxColours = ['red', 'blue', 'green', 'orange', 'steel', 'white', 'blue', 'red'];
-    // ---- apron furniture, all in the island frame. `paint` lays road markings as 5 cm slabs on the concrete.
-    const paint = (mat: string, u: number, v: number, alongU: number, alongV: number) => { const g = ground(u, v); if (g >= 1) pbox(mat, u, g + 0.02, v, alongU, 0.05, alongV); };
+    // ---- apron furniture, all in the island frame. `paint` lays road markings as 3 cm slabs on the yard paving (the
+    // streets pave the island 8 cm over the ground, world/streets.ts buildPortYard).
+    const paint = (mat: string, u: number, v: number, alongU: number, alongV: number) => { const g = ground(u, v); if (g >= 1) pbox(mat, u, g + 0.1, v, alongU, 0.03, alongV); };
     const jitter = (a: number) => rng.range(-a, a);
     /** yawed box in the island frame: `yawJ` radians added to the quay-aligned yaw */
     const jbox = (mat: string, u: number, y: number, v: number, alongU: number, h: number, alongV: number, yawJ: number) => { const [x, z] = world(u, v); this.box(mat, x, y, z, alongU, h, alongV, yaw + yawJ); };

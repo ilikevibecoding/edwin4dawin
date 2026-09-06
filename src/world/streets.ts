@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { hash2 } from '../core/seed';
 import { clamp } from '../core/noise';
-import { Zone, type Vec2, type WorldMap } from './map';
+import { PORT_ISLAND, Zone, type Vec2, type WorldMap } from './map';
 import { GLSL_LIGHT_POOLS, chainCross, chainFrame, frameAt, roadEdgeY, rowPositions, type Block, type RoadChain, type RoadCorner, type RoadGraph, type RoadLightUniforms, type RoadNode, type RoadRay } from './roads';
 import { balanceGroundIbl } from './terrain';
 import { THIN_VERTEX_MAIN, THIN_VERTEX_PARS, cellKey } from './batching';
@@ -48,7 +48,7 @@ const SIGNAL_GREEN = 24, SIGNAL_AMBER = 4, SIGNAL_RED = 2;
 const SIGNAL_HALF = SIGNAL_GREEN + SIGNAL_AMBER + SIGNAL_RED;
 
 /** sidewalk kinds carried in `aSw.z` */
-const K_WALK = 0, K_PROMENADE = 1, K_APRON = 3, K_PARAPET = 4, K_LOT = 5, K_PLAZA = 6;
+const K_WALK = 0, K_PROMENADE = 1, K_APRON = 3, K_PARAPET = 4, K_LOT = 5, K_PLAZA = 6, K_YARD = 7;
 /** parked cars, planters and benches of the plazas and lots are drawn within this range; beyond YARD_NEAR a car is
  *  its one-box far shape and a planter its shrub, at half the triangles (a car is 2–3 px at 300 m from the air) */
 const YARD_FAR = 650;
@@ -112,6 +112,35 @@ const SW_MAIN = /* glsl */ `
     float paint = max(bayLine, rowLine) * (0.55 + 0.45 * smoothstep(0.3, 0.7, fbm3(wp * 0.4 + 6.0)));
     float drip = smoothstep(0.5, 0.8, vnoise(wp * 0.9)) * inBay * (step(vv, 1.6) + step(14.9, vv)) * (1.0 - smoothstep(0.3, 1.0, fp));
     col = mix(asph * (1.0 - 0.07 * inBay - 0.35 * drip), vec3(0.8, 0.8, 0.78), paint * 0.85);
+    joint = 0.0;
+  } else if (kind > 6.5) {
+    // container terminal hardstand (across, along = the port island's u + HW, v + HH): aged concrete 0.36-0.46 in 7.5 m
+    // slabs a tone apart with 30 m staining blotches, the yard slot grid of the north yard blocks (yellow lines at the
+    // stacks' 12.6 x 5.25 m pitch, in 9 columns of 175 m from u = -HW + 90 and 4 rows of 58 m from v = -HH + 70),
+    // oil stains under the bays, and on the truck lanes (two 7 m lanes about v = 92, an aisle 16 m before every block
+    // row) polished wheel tracks, drips and a lane-wide darkening; the lines are box-filtered so from the air the
+    // slots read as a faint tone over the block instead of sparkling
+    float u = across - ${PORT_ISLAND.hw.toFixed(1)}, v = along - ${PORT_ISLAND.hh.toFixed(1)};
+    vec3 slab = mix(vec3(0.36, 0.355, 0.34), vec3(0.46, 0.45, 0.43), n) * (0.94 + 0.12 * grain);
+    slab *= 0.9 + 0.2 * fbm3(wp * 0.03 + 5.0);
+    slab *= 1.0 + (0.12 * hash12(floor(vec2(u, v) / 7.5) + 11.0) - 0.06);
+    float slabJ = max(swLine((fract(u / 7.5) - 0.5) * 7.5, 0.02, fwA), swLine((fract(v / 7.5) - 0.5) * 7.5, 0.02, fwL)) * (1.0 - smoothstep(0.15, 0.5, fp));
+    float bu = u + ${(PORT_ISLAND.hw - 90).toFixed(1)}, bv = v + ${(PORT_ISLAND.hh - 70).toFixed(1)};
+    float cu = floor(bu / 175.0), cv = floor(bv / 58.0);
+    float lu = bu - cu * 175.0 + 6.3, lv = bv - cv * 58.0 + 2.625; // from the block's first slot line
+    float inBlock = step(0.0, lu) * step(lu, 126.0) * step(0.0, lv) * step(lv, 31.5) * step(-0.5, cu) * step(cu, 8.5) * step(-0.5, cv) * step(cv, 3.5);
+    float slot = max(swLine((fract(lu / 12.6) - 0.5) * 12.6, 0.06, fwA), swLine((fract(lv / 5.25) - 0.5) * 5.25, 0.06, fwL)) * inBlock;
+    vec2 bayC = (fract(vec2(lu / 12.6, lv / 5.25)) - 0.5) * vec2(12.6, 5.25) / vec2(5.0, 1.9);
+    float stain = (1.0 - smoothstep(0.5, 1.0, length(bayC))) * step(0.4, hash12(floor(vec2(lu / 12.6, lv / 5.25)) + cu * 7.0 + cv * 3.0)) * inBlock * (0.5 + 0.7 * fbm3(wp * 0.3 + 9.0));
+    // lanes: distance to the nearest lane centre (main lane 88.5 / 95.5; aisle lanes at the aisle centre +- 3.5)
+    float aisle = step(-262.0, v) * step(v, -50.0);
+    float dA = abs(mod(v + 275.0, 58.0) - 29.0); // to the nearest aisle centre v = -246 + 58 k
+    float dLane = min(abs(abs(v - 92.0) - 3.5), abs(dA - 3.5) + 1e3 * (1.0 - aisle));
+    float laneBand = max(1.0 - smoothstep(6.0, 8.5, abs(v - 92.0)), aisle * (1.0 - smoothstep(6.0, 8.5, dA)));
+    float track = exp(-pow(abs(dLane - 0.9) * 3.0, 2.0)) * (0.5 + 0.5 * fbm3(wp * 0.15 + 2.0)) * (1.0 - smoothstep(0.5, 1.5, fp)) * laneBand;
+    float drip = exp(-pow(dLane * 2.0, 2.0)) * smoothstep(0.5, 0.8, vnoise(wp * 0.7)) * (1.0 - smoothstep(0.4, 1.2, fp)) * laneBand;
+    slab *= 1.0 - 0.25 * slabJ - 0.08 * laneBand - 0.14 * track - 0.3 * drip - 0.28 * stain;
+    col = mix(slab, vec3(0.78, 0.64, 0.12), slot * 0.75 * (0.6 + 0.4 * smoothstep(0.3, 0.7, fbm3(wp * 0.4 + 6.0))));
     joint = 0.0;
   } else if (kind > 5.5) {
     // plaza: 0.9 m concrete pavers in two greys with a darker band every fourth course, albedo 0.28-0.38 (darker than
@@ -574,6 +603,7 @@ export class Streets {
     }
     this.buildPromenade();
     this.buildPlazas(blocks, occupied);
+    this.buildPortYard();
     this.flush();
     this.buildLampMap();
     this.counts.lamps = this.lamps.length;
@@ -1211,16 +1241,29 @@ export class Streets {
     }
   }
 
+  /** The container terminal's hardstand: the port island paved edge to edge (short of the roads and the quay walls) in
+   *  the yard kind, 250 m tiles so each lands in its own cell for culling, all sharing the island frame's origin so the
+   *  shader's slot grid and truck lanes line up with the props' stacks and painted lanes (world/props.ts buildPort). */
+  private buildPortYard(): void {
+    const P = PORT_ISLAND;
+    const c = Math.cos(P.rot), s = Math.sin(P.rot);
+    const toWorld = (u: number, v: number): Vec2 => [P.cx + u * c - v * s, P.cz + u * s + v * c];
+    const clear = CURB_TOP + walkWidth(Zone.INDUSTRIAL) + 0.6;
+    const T = 250;
+    for (let v = -P.hh; v < P.hh; v += T) for (let u = -P.hw; u < P.hw; u += T) this.pave(toWorld, u, v, Math.min(u + T, P.hw), Math.min(v + T, P.hh), K_YARD, clear, -P.hw, -P.hh);
+  }
+
   /** Paving quads over [u0,u1] x [v0,v1] of the district frame: 10 m cells, split to 2.5 m where a road crosses, no
-   *  quad within `clear` of a carriageway edge (that band is the sidewalk's). aSw carries (u, v, kind, 0). */
-  private pave(toWorld: (u: number, v: number) => Vec2, u0: number, v0: number, u1: number, v1: number, kind: number, clear: number): void {
+   *  quad within `clear` of a carriageway edge (that band is the sidewalk's). aSw carries (u - ou, v - ov, kind, 0):
+   *  the origin defaults to the rect's corner, a tile of a larger field passes the field's. */
+  private pave(toWorld: (u: number, v: number) => Vec2, u0: number, v0: number, u1: number, v1: number, kind: number, clear: number, ou = u0, ov = v0): void {
     const [cx, cz] = toWorld((u0 + u1) / 2, (v0 + v1) / 2);
     const soup = this.soupsAt(cx, cz).walk;
     const lift = PAVE_CLEAR + (kind === K_PLAZA ? 0.01 : 0);
     const ok = (u: number, v: number) => { const [x, z] = toWorld(u, v); return this.roads.distance(x, z) >= clear + 0.1 && this.map.heightAt(x, z) >= 0.9; };
     const vert = (u: number, v: number) => {
       const [x, z] = toWorld(u, v);
-      return soup.vert({ x, y: this.map.heightAt(x, z) + lift, z, nx: 0, ny: 1, nz: 0, across: u - u0, along: v - v0, kind, w: 0 });
+      return soup.vert({ x, y: this.map.heightAt(x, z) + lift, z, nx: 0, ny: 1, nz: 0, across: u - ou, along: v - ov, kind, w: 0 });
     };
     let tris = 0;
     const cell = (ua: number, va: number, size: number): void => {
