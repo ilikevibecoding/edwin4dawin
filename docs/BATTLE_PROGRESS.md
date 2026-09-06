@@ -207,3 +207,32 @@ Chrome-rendering agents) killed six agents mid-work; all were resumed from their
 peak 488 in flight, 1 637 particles; 66/71 alive with 5 staged deaths; 0 fighters inside hulls; 13 cuts in
 80 s, camera clear of hulls; `battle.update` ≤ 0.71 ms per 1/60 step; textures 38 MB; page ready 2.8 s;
 production build OK.
+
+## Venator exact-match rebuild (user feedback: "I gave you a reference and everything")
+
+The user's reference render is the authority. Two independent rebuilds ran in parallel worktrees from the
+same numeric brief (tower, block, deck-marking and colour targets measured off the render); each fitted a
+camera to the render by landmark projection (rms ≈ 3 px) so reference | render side-by-sides compare the
+same pixels, and iterated against that view (14 and 17 iterations). Attempt B matched the whole-ship read
+(tower proportions, twin red door strips with the grey centre deck, one red bow wedge, light neutral grey)
+and was merged; attempt A's pose and single narrow red band drifted from the render.
+
+Three passes on B, all in `src/battle/ships/venator*.js`:
+
+1. Structure: arrowhead plan, raised red door band with side walls and a hairline seam, two light shafts
+   with a clear gap on a 25° ramp block, T-heads, turret shelves with DBY-827 housings at the measured
+   x ±85 m, crimson doors at half the deck's sRGB as in the render, coarse plating.
+2. Heads and ramp: flared light hammerheads (slab 2.3× the shaft width, dark recessed window band, lofted
+   chin, sensor block and drum), ramp relief as real geometry (grille rows, raised plates, steps), shaft and
+   block sides reduced to dark slots and seams, the bridge deck visible through the gap.
+3. Scene views (the reference angle hid these): the 40 m plating texel read as a chessboard at the
+   `venator_close` distance, so the base texel went back to the Acclamator's fine scale with a new
+   `staggered()` partition driving 16–90 m raised plate fields and `plateWall()` relief on every tower
+   face; the stern, a flat wall of cubes, became terraced aft shoulders behind free-standing shaft rears
+   with a lit stern hangar mouth, window rows, vents, dishes and sloped turret shelves.
+
+Result: 28.6k / 7.0k / 1.9k triangles per LOD, 4 materials, 28 tracking turrets, 10 engines. Measured at
+the fitted camera: sunlit deck 172 sRGB (render 126–180 depending on the wing), ramp 211 vs 216, shaft
+fronts held at ~208 under the bloom threshold (the render's are blown to 250 by its low sun). What still
+differs is lighting — the render's near-horizon sun 45° to starboard blackens its port faces; the scene's
+sun is 48° high with no shadows — plus a faint 12 m seam grid baked into the shared plating map.
