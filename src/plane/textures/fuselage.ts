@@ -139,18 +139,29 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   const stations = [3.9, 3.2, 2.32, 1.85, 0.0, -0.9, -1.6, -2.6, -3.7, -4.7].map((x) => lay.uOf(x));
   const stringers = [0.12, 0.2, 0.3, 0.42, 0.5, 0.58, 0.7, 0.8, 0.88];
   panels(hctx, actx, w, h, stations, stringers, 26);
-  // door outline under the door window (both sides) with a handle
-  hctx.strokeStyle = '#3a3a3a'; hctx.lineWidth = 3;
-  actx.strokeStyle = 'rgba(20,20,25,0.35)'; actx.lineWidth = 2;
+  // door seam (both sides): the door carries its window, so the seam runs from the door's bottom line up both
+  // window pillars to a header just over the window top. A real door gap is a 4-5 mm dark slot with the door skin's
+  // edge standing a hair proud: a dark line in the albedo, a groove plus a light ridge on the door side in the height
+  // map. The handle recess is a darker plate (the lever itself is geometry, see buildFittings).
   const du0 = lay.uOf(1.77) * w, du1 = lay.uOf(0.95) * w;
   for (const side of [1, -1]) {
-    const v0 = lay.vOf(1.3, 0.40) ?? 0.2, v1 = lay.vOf(1.3, -0.42) ?? 0.4;
-    const y0 = (side > 0 ? v0 : 1 - v0) * h, y1 = (side > 0 ? v1 : 1 - v1) * h;
-    const top = Math.min(y0, y1), hh = Math.abs(y1 - y0);
-    hctx.strokeRect(du0, top, du1 - du0, hh);
-    actx.strokeRect(du0, top, du1 - du0, hh);
+    const V = (v: number) => (side > 0 ? v : 1 - v) * h;
+    const vBot = lay.vOf(1.3, -0.42) ?? 0.4, vTop = lay.vOf(1.3, 1.10) ?? 0.08; // header 3 cm over the window top (1.07)
+    const yBot = V(vBot), yTop = V(vTop);
+    const seam = (ctx: CanvasRenderingContext2D, style: string, lw: number, inset: number) => {
+      ctx.strokeStyle = style; ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.moveTo(du0 + inset, yBot - inset * side); ctx.lineTo(du1 - inset, yBot - inset * side);
+      ctx.lineTo(du1 - inset, yTop + inset * side); ctx.lineTo(du0 + inset, yTop + inset * side); ctx.closePath();
+      ctx.stroke();
+    };
+    seam(hctx, '#3c3c3c', 3, 0);
+    seam(hctx, '#a0a0a0', 1.2, 2.2);
+    seam(actx, 'rgba(15,15,20,0.62)', 2.4, 0);
+    seam(actx, 'rgba(255,255,255,0.18)', 1, 2.2);
     const hv = lay.vOf(1.0, 0.05) ?? 0.25;
-    actx.fillStyle = '#8a8f94'; actx.fillRect(du1 - 40, (side > 0 ? hv : 1 - hv) * h - 4, 22, 8);
+    actx.fillStyle = 'rgba(40,42,46,0.55)'; actx.fillRect(du1 - 46, V(hv) - 7, 30, 14);
+    hctx.fillStyle = '#5a5a5a'; hctx.fillRect(du1 - 46, V(hv) - 7, 30, 14);
   }
   // exhaust staining: a streak trailing aft from the exhaust stubs (starboard side, low), darkest at the stubs and
   // widening as it fades; the roughness map gets the same streak (soot is matte)

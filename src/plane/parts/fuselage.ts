@@ -372,13 +372,29 @@ export function buildFittings(ctx: BuildContext): void {
     // the skin's radial grows toward the tail here: tilt the plate in the straight-down frame before turning it to aS
     fittings.add(new THREE.BoxGeometry(x0 - x1, 0.004, 0.17), at(c, [aS, 0, -Math.atan2(r0 - r1, x0 - x1)]), SURF.metal);
   }
-  // ------------------------------------------------------------ door steps
+  // ------------------------------------------------------------ doors and steps
   // under the door's bottom line: the tread stands clear of the skin on two brackets. It used to sit at a fixed z
   // inside the boxy cabin's skin, so only a corner poked through the paint as a flat grey rectangle (read as a stray
   // decal / a glass ghost by the iter08 critics).
+  const skinAt = (x: number, y: number) => halfWidthAt(sectionAt(sections, x), y);
   for (const side of [-1, 1]) {
-    const skinZ = halfWidthAt(sectionAt(sections, 1.3), -0.45);
+    const skinZ = skinAt(1.3, -0.45);
     fittings.add(new THREE.BoxGeometry(0.3, 0.03, 0.2), at([1.3, -0.45, side * (skinZ + 0.11)]), SURF.darkMetal);
     for (const dx of [-0.11, 0.11]) fittings.add(new THREE.BoxGeometry(0.03, 0.1, 0.18), at([1.3 + dx, -0.40, side * (skinZ + 0.085)], [0, 0, 0]), SURF.darkMetal);
+    // exterior door handle: a paddle lever lying in its recess (the recess plate is painted), and the two external
+    // hinges on the door's front edge (the seam itself is painted, see fuselageMaps)
+    fittings.add(new THREE.BoxGeometry(0.11, 0.024, 0.014), at([1.04, 0.05, side * (skinAt(1.04, 0.05) + 0.006)], [0, 0, 0.06]), SURF.metal);
+    for (const y of [0.62, -0.18]) fittings.add(new THREE.BoxGeometry(0.03, 0.09, 0.012), at([1.81, y, side * (skinAt(1.81, y) + 0.005)]), SURF.metal);
+  }
+  // belly-tank filler caps in a row on the port side under the cabin (a DHC-2 carries its fuel in fuselage belly
+  // tanks, filled from the left side): a flush cap in a dark ring, each turned to the skin's normal where the lower
+  // body rounds under
+  for (const x of [1.95, 0.45, -1.0]) {
+    const y = -0.48, zs = skinAt(x, y), dzdy = (skinAt(x, y + 0.01) - skinAt(x, y - 0.01)) / 0.02;
+    const n = new THREE.Vector2(-dzdy, 1).normalize(); // (ny, nz) outward on the starboard side
+    const tilt = Math.atan2(-n.y, n.x); // port side: rotX turning +Y onto (ny, -nz)
+    const p = (d: number) => [x, y + n.x * d, -(zs + n.y * d)] as [number, number, number];
+    fittings.add(new THREE.CylinderGeometry(0.06, 0.06, 0.003, 14), at(p(0.001), [tilt, 0, 0]), SURF.rubber);
+    fittings.add(new THREE.CylinderGeometry(0.045, 0.045, 0.008, 14), at(p(0.004), [tilt, 0, 0]), SURF.metal);
   }
 }
