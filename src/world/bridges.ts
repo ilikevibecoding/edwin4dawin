@@ -129,6 +129,8 @@ export interface BridgeBuild {
   /** carriageway ribbons: `aRoadUv` (across -1..1, metres along) and `aRoadInfo` (lanes, width, median half-width) */
   deckGeometry: THREE.BufferGeometry;
   lampPositions: THREE.Vector3[];
+  /** per bridge: where the deck stands on fill and where the abutments face the water (debug / bench) */
+  approaches: { id: string; total: number; fill: [number, number][]; abutments: { s: number; dir: 1 | -1 }[] }[];
 }
 
 // ------------------------------------------------------------------ constants
@@ -723,6 +725,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
   };
   const group = new BridgeGroup(culler);
   const routes: BridgeRoute[] = [];
+  const approaches: BridgeBuild['approaches'] = [];
   const allDecks = new Soup(5);
   /** aRoadUv + aRoadInfo of the structure: lanes = 0 marks plain concrete; aRoadInfo.y = 1 adds the formwork panel
    *  joints of the piers and pylons (see CONCRETE_FRAG) */
@@ -787,6 +790,16 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
       else if (!flags[i] && flags[i + 1]) abutments.push({ s: Math.min(total, (i + 0.5) * STEP), dir: -1 });
     }
     const inU = (s: number) => abutments.some((a) => (a.dir > 0 ? s > a.s - U_LEN && s <= a.s : s >= a.s && s < a.s + U_LEN));
+    {
+      const fill: [number, number][] = [];
+      for (let i = 0; i <= n; i++) {
+        if (!flags[i]) continue;
+        const s0 = Math.min(total, i * STEP);
+        while (i < n && flags[i + 1]) i++;
+        fill.push([s0, Math.min(total, i * STEP)]);
+      }
+      approaches.push({ id: spec.id, total, fill, abutments: abutments.map((a) => ({ ...a })) });
+    }
     const FILL_INFO = [0, 0, 0, 2, 0];
     const RIPRAP_INFO = [0, 0, 0, 3, 0];
     const sandy = (x: number, z: number) => map.zoneAt(x, z) === 2;
@@ -1209,7 +1222,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
 
   const deckGeometry = allDecks.build([['aRoadUv', 2], ['aRoadInfo', 3]]);
   // the lamps are part of the bridge steel (they need the dusk glow), so props gets none to place
-  return { group, routes, deckGeometry, lampPositions: [] };
+  return { group, routes, deckGeometry, lampPositions: [], approaches };
 }
 
 /** Minimal geometry merge (positions, normals, indices) for same-material static geometry. */

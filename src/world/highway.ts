@@ -65,6 +65,7 @@ const S_DARK: Rgb = [0.30, 0.31, 0.33];       // sign backs, brackets
 const S_HEAD: Rgb = [0.90, 0.88, 0.82];       // cobra-head luminaire
 const S_WHITE: Rgb = [0.92, 0.92, 0.90];      // delineator posts
 const S_AMBER: Rgb = [1.0, 0.72, 0.18];       // reflectors facing traffic
+const S_DRUM: Rgb = [0.95, 0.72, 0.12];
 const S_FACE: Rgb = [1, 1, 1];                // sign faces (the atlas carries the colour)
 const S_YELLOW: Rgb = [0.95, 0.78, 0.10];     // chevron panel backs
 const S_WOOD: Rgb = [0.42, 0.34, 0.25];       // guardrail posts on the sandy approaches
@@ -741,6 +742,14 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         loftH(P((a + b) / 2).conc, frames, BARRIER_PROFILE, scale, [C_BARRIER, C_BARRIER, C_BARRIER, C_BARRIER_TOP, C_BARRIER, C_BARRIER, C_BARRIER], 1, BARRIER_H * 0.45);
       }
       counts.barrierM += run.s1 - run.s0;
+      // crash cushions: three yellow sand drums nosing each open terminal
+      for (const [end, dir] of [[run.s0, 1], [run.s1, -1]] as const) {
+        if (!(dir > 0 ? taperStart : taperEnd)) continue;
+        for (const [ds, da] of [[1.0, 0], [2.1, -0.55], [2.1, 0.55]] as const) {
+          const f = frameAt(c, end + dir * ds);
+          P(end + dir * ds).signs.cylinder(f.x + f.rx * da, f.y + 0.02, f.z + f.rz * da, 0.9, 0.95, 8, S_DRUM, true, [0, 0, 0]);
+        }
+      }
       // barrier-mounted reflectors every 12 m (amber toward the traffic that sees them, both faces)
       for (let s = Math.ceil((run.s0 + TAPER + 2) / 12) * 12; s < run.s1 - TAPER - 2; s += 12) {
         const f = frameAt(c, s);
