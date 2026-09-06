@@ -203,8 +203,22 @@ if (facadeGlass > 0.0) {
   // colour; the real ray crosses kilometres of air and shows the haze band instead, which is why distant
   // towers read pale and sky-coloured rather than grey: below-horizon radiance blends toward the haze.
   vec3 rv = inverseTransformDirection(reflect(-geometryViewDir, geometryNormal), viewMatrix);
-  vec3 rb = normalize(vec3(rv.x, rv.y + 0.4 * (facadeHf - 0.4), rv.z));
-  vec3 sky = textureCubeUV(envMap, envMapRotation * rb, facadeSkyRough).rgb * envMapIntensity;
+  // The bend stands in for the probe's missing parallax, but near the sun's image it moved the probe's aureole
+  // up or down the tower to heights no mirror geometry puts it (two soft blobs 40-80 m below the true mirror
+  // point on a 200 m slab): it fades out within ~30 deg of the sun, and the probe's own disc is masked there
+  // (facadeGlint draws the disc, per pane, with the cascade's shadow).
+  float bendW = 1.0;
+  float sunMask = 1.0;
+  vec3 rb;
+#if NUM_DIR_LIGHTS > 0
+  vec3 sunW = inverseTransformDirection(directionalLights[0].direction, viewMatrix);
+  bendW = 1.0 - smoothstep(0.85, 0.985, dot(rv, sunW));
+  rb = normalize(vec3(rv.x, rv.y + 0.4 * (facadeHf - 0.4) * bendW, rv.z));
+  sunMask = 1.0 - 0.85 * smoothstep(0.994, 0.9995, dot(rb, sunW));
+#else
+  rb = normalize(vec3(rv.x, rv.y + 0.4 * (facadeHf - 0.4), rv.z));
+#endif
+  vec3 sky = textureCubeUV(envMap, envMapRotation * rb, facadeSkyRough).rgb * envMapIntensity * sunMask;
   float below = smoothstep(0.0, -0.2, rb.y);
   if (below > 0.0) {
     // a ray mirrored downward from a tower a few hundred metres away lands on the sunlit blocks around it (the
@@ -980,6 +994,6 @@ if (facadeGlass > 0.0) {
   totalEmissiveRadiance += emis;
 }`);
   };
-  mat.customProgramCacheKey = () => 'facade-v11';
+  mat.customProgramCacheKey = () => 'facade-v12';
   return mat;
 }
