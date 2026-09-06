@@ -33,7 +33,23 @@ const _b = new THREE.Vector3();
 const _c = new THREE.Vector3();
 
 const PHASE = { HL: 0.0, FL: 0.25, HR: 0.5, FR: 0.75 };
+// The trot (gait r6, the retreat from a truck inside 4 m): diagonal pairs
+// move together — HL with FR, HR with FL — at a duty of 0.5, so the body is
+// carried on one diagonal and then the other. The per-leg phase offsets and
+// the duty are blended toward these by `trot` (0..1) in update(), so the
+// change of gait is a stride of transition rather than a jump of the windows.
+const PHASE_TROT = { HL: 0.0, FL: 0.5, HR: 0.5, FR: 1.0 };
 const DUTY = 0.6;
+const DUTY_TROT = 0.5;
+// How the swing's horizontal progress runs on u: smoothstep(u^SWING_SKEW).
+// At 1 it is the symmetric ease of round 4, with the paw barely moved a
+// tenth of the way into the swing while the body walked on — the leg was at
+// 97 % of its length, one rod from hip to toe in the first fifth of every
+// hind swing (round-5 walk_03/04). At 0.7 the protraction is front-loaded
+// the way a cat's is (peak speed near a third of the way, 34 % of the step
+// covered by u = 0.25 against 16 %), and the last quarter is the paw coming
+// in low and slow to its spot; the arrival speed is still zero.
+const SWING_SKEW = 0.7;
 // A forefoot lands a little ahead of its anchor and leaves well behind it; a
 // hind foot's stance is centred. The fraction of the stance travel spent ahead
 // of the anchor, per pair.
@@ -101,6 +117,13 @@ export class Feet {
       phase: PHASE[l.name],
       lastLift: 0,
     }));
+    // the gait: 0 the lateral-sequence walk, 1 the trot (see PHASE_TROT).
+    // update() takes the target from its options, or from `gaitSource.trot`
+    // when the caller passes none (src/wildlife/index.js points that at the
+    // brain; lion/index.js's step() does not forward the brain's trot yet)
+    this.trot = 0;
+    this.duty = DUTY;
+    this.gaitSource = null;
     this.root = { x: 0, y: 0, z: 0, yaw: 0 };
     this.contact = this.legs.map(() => ({ contact: new THREE.Vector3(), fwd: new THREE.Vector3(), up: new THREE.Vector3() }));
     // where the trunk's ends sit over the ground in root space, for the plane fit
@@ -266,13 +289,23 @@ export class Feet {
    * `dt`
    * `rise`   0..1, how quickly a standing foot may catch up (pose transitions)
    */
-  update(dt, { root, vel, yawRate = 0, moving, speed, anchors, stepDur = 0.42 }) {
+  update(dt, { root, vel, yawRate = 0, moving, speed, anchors, stepDur = 0.42, trot }) {
     Object.assign(this.root, root);
     if (anchors) for (let i = 0; i < 4; i++) this.legs[i].anchor.copy(anchors[i]);
     const s = this.s;
 
     this.vel = vel;
     this.yawRate = yawRate;
+    if (trot === undefined) trot = this.gaitSource ? this.gaitSource.trot || 0 : 0;
+    // the gait blend: the per-leg windows slide toward the trot's diagonal
+    // timing at a bounded rate (a quarter cycle in half a second), so a foot
+    // mid-stance is not thrown into a swing window in one frame
+    if (trot !== this.trot) {
+      this.trot += THREE.MathUtils.clamp(trot - this.trot, -dt * 2, dt * 2);
+      for (const l of this.legs) l.phase = THREE.MathUtils.lerp(PHASE[l.spec.name], PHASE_TROT[l.spec.name], this.trot) % 1;
+      this.duty = THREE.MathUtils.lerp(DUTY, DUTY_TROT, this.trot);
+    }
+    const DUTY_ = this.duty;
     if (moving && speed > 0.02) {
       if (!this.moving) this.setOff();
       this.moving = true;
@@ -290,12 +323,12 @@ export class Feet {
       const T = THREE.MathUtils.clamp(this.stride / Math.max(0.05, vEff), 0.6, 2.2);
       this.T = T;
       this.phase = (this.phase + dt / T) % 1;
-      const swingDur = (1 - DUTY) * T;
+      const swingDur = (1 - DUTY_) * T;
       for (const l of this.legs) {
         const p = (this.phase - l.phase + 1) % 1;
-        if (p < DUTY) {
+        if (p < DUTY_) {
           // how far through its stance a planted foot is, for the poser's loading
-          l.stance = p / DUTY;
+          l.stance = p / DUTY_;
           // a swing still in the air when its stance window opens comes down now
           if (l.swing) this.stepSwing(l, dt, l.swing.retarget ? 1 : undefined);
           continue;
@@ -308,7 +341,7 @@ export class Feet {
           // starts that far in, so the foot is not left a quarter of a stride
           // behind where the leg can reach; a foot that was already standing
           // in its window when the walk began takes what is left of it.
-          l.swing.p0 = p - dt / T < DUTY ? DUTY : p;
+          l.swing.p0 = p - dt / T < DUTY_ ? DUTY_ : p;
         }
         // a gait swing runs on the cycle phase, not its own clock, across
         // whatever is left of its window: when the animal speeds up mid-swing
@@ -322,7 +355,7 @@ export class Feet {
         }
       }
       // a foot may step once per cycle
-      for (const l of this.legs) if ((this.phase - l.phase + 1) % 1 < DUTY) l.stepped = false;
+      for (const l of this.legs) if ((this.phase - l.phase + 1) % 1 < DUTY_) l.stepped = false;
       this.fitPlane(dt);
       return;
     }
@@ -380,6 +413,7 @@ export class Feet {
    */
   setOff() {
     const s = this.s;
+    const DUTY_ = this.duty;
     const c = Math.cos(this.root.yaw);
     const sn = Math.sin(this.root.yaw);
     const behind = this.legs.map((l) => {
@@ -390,12 +424,12 @@ export class Feet {
     let best = 0;
     let bestCost = Infinity;
     for (let f = 0; f < 4; f++) {
-      const ph = (this.legs[f].phase + DUTY - 0.04 + 1) % 1;
+      const ph = (this.legs[f].phase + DUTY_ - 0.04 + 1) % 1;
       let cost = behind[f] * 1e-3;
       for (let i = 0; i < 4; i++) {
         const l = this.legs[i];
         const p = (ph - l.phase + 1) % 1;
-        const wait = p < DUTY ? DUTY - p : 0;
+        const wait = p < DUTY_ ? DUTY_ - p : 0;
         const over = wait * SETOFF_TRAVEL * s - behind[i] - REACH_BEHIND[l.spec.front ? 'front' : 'hind'] * s;
         if (over > 0) cost += over * over;
       }
@@ -404,13 +438,13 @@ export class Feet {
         best = f;
       }
     }
-    this.phase = (this.legs[best].phase + DUTY - 0.04 + 1) % 1;
+    this.phase = (this.legs[best].phase + DUTY_ - 0.04 + 1) % 1;
     for (const l of this.legs) {
       l.stepped = false;
       if (!l.swing || l.swing.retarget) continue;
       const p = (this.phase - l.phase + 1) % 1;
       const u = l.u || 0;
-      if (p < DUTY || u > 0.9) continue;
+      if (p < DUTY_ || u > 0.9) continue;
       // p0 such that the gait's progress through the window, (p - p0) / (1 - p0),
       // is the swing's own progress now, so the arc carries on unbroken
       l.swing.retarget = true;
@@ -431,7 +465,7 @@ export class Feet {
    */
   landing(l, ahead, out) {
     const vel = this.vel;
-    const travel = this.moving ? DUTY * (this.T || 1) * STANCE_AHEAD[l.spec.front ? 'front' : 'hind'] : 0;
+    const travel = this.moving ? this.duty * (this.T || 1) * STANCE_AHEAD[l.spec.front ? 'front' : 'hind'] : 0;
     const aheadYaw = this.root.yaw + this.yawRate * (ahead + travel);
     const c = Math.cos(aheadYaw);
     const sn = Math.sin(aheadYaw);
@@ -500,11 +534,13 @@ export class Feet {
       this.plant(l, sw.to);
       return;
     }
-    // ease the horizontal, arc the vertical. The arc is skewed: the foot
-    // comes up quickly off the toes, peaks at ~40 % of the swing and then
-    // reaches forward and down, so the last quarter is the paw coming in low
-    // over the ground and it lands at a third of the take-off's vertical speed
-    const e = u * u * (3 - 2 * u);
+    // ease the horizontal (front-loaded, SWING_SKEW), arc the vertical. The
+    // arc is skewed too: the foot comes up quickly off the toes, peaks at
+    // ~40 % of the swing and then reaches forward and down, so the last
+    // quarter is the paw coming in low over the ground and it lands at a
+    // third of the take-off's vertical speed
+    const v = Math.pow(u, SWING_SKEW);
+    const e = v * v * (3 - 2 * v);
     l.pos.lerpVectors(sw.from, sw.to, e);
     const su = Math.sin(u * Math.PI);
     l.pos.y += ((su * (1 + 0.35 * Math.cos(u * Math.PI))) / 1.055) * sw.lift;

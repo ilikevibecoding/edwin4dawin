@@ -358,7 +358,10 @@ if (probeSec > 0) {
           lions.forEach((l, li) => {
             const rep = l.footReport();
             for (const f of rep) {
-              const g = terrain.heightAt(f.x, f.z);
+              // the pad is carried pose.js PAW_LIFT above the contact (gait
+              // r6, 6 mm on a lioness; the decal carries the contact), so the
+              // ground the pad is measured against is heightAt() plus that
+              const g = terrain.heightAt(f.x, f.z) + (l.poser.padLift || 0);
               const key = li + ':' + f.name;
               // how far the solved leg missed the contact the foot is meant to be on
               const r = Math.hypot(f.x - f.cx, f.y - f.cy, f.z - f.cz);
@@ -422,6 +425,7 @@ if (probeSec > 0) {
         b.dwell = 1e9;
       });
       res.worst = worst;
+      res.padLift_m = lions.map((l) => +(l.poser.padLift || 0).toFixed(4));
       return res;
     },
     { probeSec },

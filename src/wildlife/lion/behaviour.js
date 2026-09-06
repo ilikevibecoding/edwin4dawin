@@ -97,12 +97,38 @@ const STATES = {
   amble: { dwell: [4, 12], next: ['stand', 'lie', 'lie', 'sit'] },
   alert: { dwell: [6, 14], next: ['sit', 'stand', 'lie'] },
   pace: { dwell: [5, 9], next: ['alert'] },
-  // pushed by the truck (push()): up, turned away, and off at a quick amble
-  // to a spot six to eight metres clear before standing to watch it
+  // pushed by the truck (push()): up, turned away, and off at a walk — a trot
+  // while the truck is inside TROT_GAP — to a spot six to eight metres clear
+  // before standing to watch it
   retreat: { dwell: [4, 14], next: ['alert'] },
 };
 // the walking states, and how fast each goes relative to walkSpeed
-const GAIT_SPEED = { walk: 1, amble: 0.5, pace: 1.3, retreat: 0.7 };
+const GAIT_SPEED = { walk: 1, amble: 0.5, pace: 1.3, retreat: 1.0 };
+
+// The approach (gait r6). Round 5's push fired at 0.3 m between the truck's
+// circle and the animal's — a truck at 3 m/s was inside the lion before it
+// moved. Now the truck's nearest circle closing on a course that passes
+// within reach (src/wildlife/index.js decides the course) gets the animal up
+// at APPROACH_RISE metres; inside TROT_GAP the retreat is a trot at
+// TROT_SPEED (m/s for a unit lion, the per-animal speed goes with the square
+// root of the scale so a lioness trots at 1.8 and the male at 2.0), and the
+// gait falls back to the walk once the truck is TROT_GAP_OFF away. A lion the
+// truck comes within LASH_GAP of lashes its tail once, one sweep of LASH_DUR
+// seconds, no more than once in LASH_EVERY.
+const APPROACH_RISE = 6;
+const TROT_GAP = 4;
+const TROT_GAP_OFF = 5.5;
+const TROT_SPEED = 2.0;
+const LASH_GAP = 4;
+const LASH_DUR = 0.6;
+const LASH_EVERY = 6;
+// A lion that has retreated lies down again rather than sitting, once the
+// alarm has fallen to SETTLE_AFTER_RETREAT for SETTLE_TIME seconds; the
+// stationary truck's proximity term in the alarm (below) stops at
+// PROXIMITY_DIST, so a truck parked beyond it lets the animal settle.
+const SETTLE_AFTER_RETREAT = 0.45;
+const SETTLE_TIME = 6;
+const PROXIMITY_DIST = 12;
 
 const BLEND = { toLie: 1.9, toStand: 1.6, default: 1.2, shoved: 0.9 };
 // A lion the truck's footprint has actually entered is moved out of it, at no
@@ -171,6 +197,16 @@ export class Brain {
     this.pushT = 0;
     this.shove = new THREE.Vector3();
     this.outVel = new THREE.Vector3();
+    // the approach: gap to the truck's nearest circle when it is on a closing
+    // course (Infinity otherwise), the trot blend, and the tail lash timers
+    this.gap = Infinity;
+    this.trot = 0;
+    this.trotSpeed = THREE.MathUtils.clamp(TROT_SPEED * Math.sqrt(scale), 1.4, 2.2);
+    this.lash = 0;
+    this.lashT = 0;
+    this.lashSide = 1;
+    this.retreated = false;
+    this.settleT = 0;
   }
 
   pick(list) {
@@ -193,10 +229,32 @@ export class Brain {
     // shoved, a lying lion is up in under a second, not the leisurely 1.6
     if (state === 'retreat') this.blendDur = Math.min(this.blendDur, BLEND.shoved);
     this.blend = 0;
+    if (state === 'retreat') this.retreated = true;
+    else if (lying) this.retreated = false;
     this.state = state;
     this.timer = 0;
     const [a, b] = STATES[state].dwell;
     this.dwell = a + this.rnd() * (b - a);
+  }
+
+  /**
+   * The truck's footprint seen coming (src/wildlife/index.js, every frame):
+   * `gap` metres from its nearest circle's edge to this animal's centre,
+   * `closing` m/s along the line to the animal, `onCourse` whether its line
+   * passes within reach, `x, z` the unit direction from the truck to the
+   * animal and `side` the way off its line. Inside APPROACH_RISE on a closing
+   * course the animal gets up and goes (push, with no depth); inside LASH_GAP
+   * the tail lashes once.
+   */
+  approach({ gap, closing, onCourse, x, z, side }) {
+    this.gap = onCourse ? gap : Infinity;
+    if (gap < LASH_GAP && this.lashT <= 0) {
+      this.lash = LASH_DUR;
+      this.lashT = LASH_EVERY;
+      // toward the truck's side of the body, so the sweep is seen from it
+      this.lashSide = x * Math.cos(this.yaw) - z * Math.sin(this.yaw) >= 0 ? -1 : 1;
+    }
+    if (onCourse && gap < APPROACH_RISE && closing > 1 && this.state !== 'retreat') this.push({ x, z, depth: 0, side });
   }
 
   /**
@@ -360,7 +418,7 @@ export class Brain {
     const dist = Math.hypot(dx, dz);
     const loud = THREE.MathUtils.clamp(Math.abs(truck.speed) / 12, 0, 1) * 0.65 + truck.throttle * 0.35;
     const near = THREE.MathUtils.smoothstep(dist, 8, 60);
-    const want = (1 - near) * (0.35 + loud * 0.9) + (dist < 14 ? 0.35 : 0);
+    const want = (1 - near) * (0.35 + loud * 0.9) + (dist < PROXIMITY_DIST ? 0.35 : 0);
     // startles fast, settles slowly
     const rate = want > this.alarm ? 2.2 : 0.16;
     this.alarm += (want - this.alarm) * (1 - Math.exp(-dt * rate));
@@ -376,10 +434,13 @@ export class Brain {
     } else if (this.alarm > 1.05 && dist < 12 && this.state === 'alert' && this.timer > 1.5 && this.kind !== 'male') {
       this.enter('pace');
     } else if (this.state === 'alert') {
-      // stay up while it is loud; settle once it has gone quiet for a while
-      if (this.alarm < 0.3) this.settleT += dt;
+      // stay up while it is loud; settle once it has gone quiet for a while.
+      // After a retreat the animal lies down again, and sooner: the alarm
+      // only has to be off its peak, not gone (a truck parked 12 m off
+      // holds it at 0.34 for as long as it stands there)
+      if (this.alarm < (this.retreated ? SETTLE_AFTER_RETREAT : 0.3)) this.settleT += dt;
       else this.settleT = 0;
-      if (this.settleT > 6 && this.blend >= 1) this.enter(this.pick(['sit', 'sit', 'lie']));
+      if (this.settleT > SETTLE_TIME && this.blend >= 1) this.enter(this.retreated ? 'lie' : this.pick(['sit', 'sit', 'lie']));
     } else if (GAIT_SPEED[this.state]) {
       if (this.dest) {
         const ddx = this.dest.x - this.pos.x;
@@ -403,6 +464,11 @@ export class Brain {
     // a pushed lion goes as soon as it is on its feet (the retreat is the one
     // gait entered from the ground; the legs must be unfolded before they step)
     const retreating = this.state === 'retreat';
+    // the trot: on inside TROT_GAP while retreating, off again past TROT_GAP_OFF
+    // or once the retreat is over; the blend takes about half a second each way
+    const wantTrot = retreating && this.gap < (this.trot > 0.5 ? TROT_GAP_OFF : TROT_GAP) ? 1 : 0;
+    this.trot += (wantTrot - this.trot) * (1 - Math.exp(-dt * 4));
+    if (this.trot < 0.01 && !wantTrot) this.trot = 0;
     let targetSpeed = 0;
     if (GAIT_SPEED[this.state] && this.dest && (retreating ? this.pose.hipH > 0.9 : this.blend > 0.4)) {
       const ddx = this.dest.x - this.pos.x;
@@ -433,8 +499,7 @@ export class Brain {
       this.yawRate = THREE.MathUtils.clamp(e * 2.2, -maxTurn, maxTurn);
       // slow down for the turn, for the arrival, and for whoever is in the way
       targetSpeed =
-        this.walkSpeed *
-        GAIT_SPEED[this.state] *
+        THREE.MathUtils.lerp(this.walkSpeed * GAIT_SPEED[this.state], this.trotSpeed, this.trot) *
         (retreating ? THREE.MathUtils.clamp(1.2 - Math.abs(e) * 0.45, 0.45, 1) : THREE.MathUtils.clamp(1.2 - Math.abs(e) * 0.9, 0.25, 1)) *
         THREE.MathUtils.clamp(d / (1.2 * s), 0.3, 1) *
         THREE.MathUtils.clamp(1 - block * 1.2, 0.15, 1);
@@ -550,6 +615,14 @@ export class Brain {
     if (this.flick > 0) this.flick -= dt;
     const flick = this.flick > 0 ? Math.sin((this.flick / 0.9) * Math.PI) : 0;
     const tailSway = THREE.MathUtils.lerp(restful ? 0.12 : 0.3, 0.5 + this.speed * 0.35, walkAmt) + flick * (restful ? 0.8 : 1.1 - 0.6 * walkAmt) + this.alarm * 0.4;
+    // the lash (approach): progress through the sweep, 0..1.26 so the tip,
+    // which the poser lags a quarter behind the root, finishes too
+    if (this.lashT > 0) this.lashT -= dt;
+    let tailLash = 0;
+    if (this.lash > 0) {
+      this.lash -= dt;
+      tailLash = ((LASH_DUR - Math.max(0, this.lash)) / LASH_DUR) * 1.26;
+    }
 
     return {
       pose: this.pose,
@@ -558,6 +631,7 @@ export class Brain {
       speed: outSpeed,
       vel: outVel,
       yawRate: this.yawRate,
+      trot: this.trot,
       anim: {
         breath,
         blink: [blinkAmt, blinkAmt],
@@ -565,6 +639,8 @@ export class Brain {
         tailSway,
         tailPhase: this.tailPhase,
         tailSide: this.tailSide,
+        tailLash,
+        tailLashSide: this.lashSide,
         walkAmt,
       },
       state: this.state,

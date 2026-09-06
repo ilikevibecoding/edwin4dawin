@@ -55,6 +55,13 @@ const lionRadius = (kind) => (kind === 'cub' ? 0.7 : 1.2);
 const TRUCK_FOOT = { r: 1.05, half: 1.5 };
 const PUSH_MARGIN = 0.3;
 const PUSH_CLOSING = 0.15;
+// The approach (gait r6): a truck whose line passes within APPROACH_MISS of
+// an animal's centre (its own circle, the animal's, and a margin) is on a
+// closing course; the brain gets the gap to its nearest circle every frame
+// and decides when to get up (Brain.approach). A truck cruising the mainline
+// 20 m off never qualifies.
+const APPROACH_MISS = 3.5;
+const APPROACH_RANGE = 15;
 
 export function createWildlife({ terrain, env = null, quality = 'high' } = {}) {
   const group = new THREE.Group();
@@ -84,6 +91,9 @@ export function createWildlife({ terrain, env = null, quality = 'high' } = {}) {
       variation: { hue: m.hue, val: m.val, mane: m.mane },
     });
     pride.push(lion.brain);
+    // the feet take their gait (walk / trot) from the brain; lion/index.js's
+    // step() does not forward it yet
+    lion.feet.gaitSource = lion.brain;
     lions.push(lion);
     group.add(lion.root);
   });
@@ -174,6 +184,24 @@ export function createWildlife({ terrain, env = null, quality = 'high' } = {}) {
     const nz0 = dz - foot.az * along;
     const d = Math.hypot(nx0, nz0);
     const clear = d - foot.r - lionRadius(l.kind);
+    // the approach: gap from the nearest circle's edge to the animal's
+    // centre, the closing speed along the line to it, and whether the truck's
+    // line passes within reach — every frame it is within range, so the
+    // brain also knows when it has gone
+    {
+      const dl = Math.hypot(dx, dz);
+      const gap = d - foot.r;
+      if (gap < APPROACH_RANGE && dl > 1e-6) {
+        const closing = (foot.vx * dx + foot.vz * dz) / dl;
+        const miss = Math.abs(foot.ax * dz - foot.az * dx);
+        const onCourse = foot.known && miss < APPROACH_MISS && (dx * foot.ax + dz * foot.az) * Math.sign(foot.vx * foot.ax + foot.vz * foot.az || 1) > 0;
+        const perp0 = foot.ax * dz - foot.az * dx;
+        const left = perp0 >= 0;
+        b.approach({ gap, closing, onCourse, x: dx / dl, z: dz / dl, side: { x: left ? -foot.az : foot.az, z: left ? foot.ax : -foot.ax } });
+      } else if (b.gap !== Infinity) {
+        b.gap = Infinity;
+      }
+    }
     if (clear > PUSH_MARGIN) return;
     // the way out is across the truck's line, on the animal's side of it —
     // not away from the nearest point of the footprint, which for an animal

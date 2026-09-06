@@ -93,14 +93,46 @@ const TAIL_GAIT_PHASE = -0.1 * Math.PI;
 // is carried in the pelvis frame, the hanging part hangs plumb in the world
 const TAIL_PLUMB = [0.2, 0.5, 0.8, 1.0, 1.0];
 // how much of the trunk's terrain roll the neck takes back out, bone by bone,
-// so the head stays nearer level on a side slope than the shoulders do
-const HEAD_LEVEL = [0, 0.3, 0.6];
-const HEAD_LEVEL_HEAD = 0.8;
+// so the head stays level on a side slope while the shoulders roll with it
+// (gait r6: the head took 80 % back and sat 2.5 degrees off level on a 12.5
+// degree flank; a cat's vestibular righting holds the head level)
+const HEAD_LEVEL = [0, 0.35, 0.7];
+const HEAD_LEVEL_HEAD = 1.0;
+// the lash (anim.tailLash, 0..1 over one sweep): a fast sideways sweep of
+// the whole tail growing to the tip, on top of whatever the carry is doing
+const TAIL_LASH = [0.12, 0.28, 0.48, 0.7, 0.9];
 
-// Swing-phase shaping of the leg, in swing progress u (0 lift-off, 1 landing).
-// How far the wrist / hock folds ahead over the paw (the paw hangs back under
-// a flexed wrist), as a pastern lean, peaking mid-swing.
-const SWING_FOLD = 0.45;
+// Swing-phase shaping of the leg, in swing progress u (0 lift-off, 1 landing),
+// as a lean of the pastern (positive: wrist / hock behind the paw).
+// Foreleg: the wrist folds ahead over the paw and the paw hangs back under it
+// (carpal flexion), a bell peaking mid-swing and gone by u = 0.85 for the
+// landing; SWING_FOLD_ONSET < 1 skews it toward lift-off. Gait r6: 0.45 -> 0.7
+// (wrist flexion at mid-swing 52 -> 66 degrees).
+const SWING_FOLD = { front: 0.7 };
+const SWING_FOLD_ONSET = 0.7;
+// Hind leg (gait r6). The hock is the backward joint of the zigzag, so its
+// flexion is the paw swinging forward under it — the opposite lean to the
+// wrist's. Round 4 gave the hind pastern the forelimb's forward fold, which
+// extended the hock (13-33 degrees at mid-swing) while the stifle over-folded
+// to 105 to keep the paw on its arc: the leg read as one rod from hip to paw
+// in every round-5 swing frame. Now the pastern leans forward only over the
+// first third (the peel: hock over the trailing toes, which is where the
+// geometry puts it anyway — a paw 0.36 m behind the hip cannot be reached
+// with the hock behind it), then leans back through the rest of the swing so
+// the hock folds (peak near u = 0.55) and comes back to the landing lean at
+// u = 1, where the stance's own k takes over.
+const HIND_PEEL = 0.35;
+const HIND_FLEX = 0.55;
+// A planted paw is carried this far above its contact point (unit lion; 6 mm
+// on a lioness) with the pad decal carrying the contact. The rendered terrain
+// is a mesh interpolated between 0.6 m vertices and sits -2.1 to +3.9 mm off
+// terrain.heightAt() along the pride's walk line (measured, gait r6), so a
+// pad set exactly on heightAt() was buried up to 4 mm in places and its
+// lowest rows flickered in and out of the dirt between frames (the round-5
+// "toe re-plant" column). The feet still stand on heightAt() and never slide;
+// the poser lifts the whole paw off that point. `Poser.padLift` tells the
+// probe about it.
+export const PAW_LIFT = 0.0072;
 // The paw's extra nose-down pitch: toes trail at lift-off, hang mid-swing,
 // come level for the landing. Capped so the toe never goes into the ground:
 // the paw peels off from the heel with the toes still on the dirt.
@@ -133,6 +165,7 @@ export class Poser {
     this.minHip = Math.max(BELLY.pelvis, BELLY.spine1 - spine1Up / scale) * bf + (BELLY.drop + 0.02) * scale;
     this.minChest = (BELLY.chest + 0.005) * bf + (BELLY.drop + 0.02) * scale;
     this.tailR = 0.035 * scale;
+    this.padLift = PAW_LIFT * scale;
     // where the hock joint sits when the point of the hock rests on the ground
     this.hockRest = 0.11 * scale * legR;
     this.wristRest = 0.07 * scale * legR;
@@ -147,6 +180,7 @@ export class Poser {
     this.mid = new THREE.Vector3();
     this.right = new THREE.Vector3();
     this.fwdBody = new THREE.Vector3();
+    this.rollAxis = new THREE.Vector3();
     this.fwdT = new THREE.Vector3();
     // how much lower the chest / hips would have to be for every planted foot
     // to be within reach, measured by the last solve; the caller fits the body
@@ -226,6 +260,7 @@ export class Poser {
       _q2.setFromAxisAngle(bodyDir, rollMean + terrainRoll);
       this.bodyQ.premultiply(_q2);
     }
+    this.rollAxis.copy(bodyDir);
     // rotation that carries a rest-frame direction into the current body frame
     const delta = this.delta.copy(this.bodyQ).multiply(this.restBodyInv);
     const right = this.right.copy(X).applyQuaternion(delta);
@@ -272,7 +307,31 @@ export class Poser {
       const pitch = pose.neckPitch * 0.5 + pose.headPitch + nod * 0.07;
       const dir = rest.get('head').dir.clone().applyQuaternion(turn(pitch, yaw, _q)).applyQuaternion(delta);
       const r = _w.copy(X).applyQuaternion(_q2.setFromAxisAngle(Y, yaw)).applyQuaternion(delta);
-      if (terrainRoll) r.applyQuaternion(_q2.setFromAxisAngle(_v.copy(dir).normalize(), -terrainRoll * HEAD_LEVEL_HEAD));
+      if (terrainRoll) {
+        // Right the head against the level rather than by the trunk's roll
+        // angle: the trunk rolled about its own (pitched) axis and the head
+        // points elsewhere, so unwinding the same angle about the head's axis
+        // left it 1.1 degrees over on a 12.5 degree flank. Rotate the right
+        // vector about the head's direction until its elevation is what it
+        // would be with no terrain roll (the gait roll stays in), scaled by
+        // HEAD_LEVEL_HEAD. r ⟂ dir, so r(a) = r cos a + (dir x r) sin a.
+        const dn = _v.copy(dir).normalize();
+        const want = _d.copy(r).applyQuaternion(_q2.setFromAxisAngle(this.rollAxis, -terrainRoll)).y;
+        const B = _d.copy(dn).cross(r).y;
+        const A = r.y;
+        const m = Math.hypot(A, B);
+        if (m > 1e-6) {
+          const a0 = Math.atan2(B, A);
+          const c = Math.acos(THREE.MathUtils.clamp(want / m, -1, 1));
+          // the two solutions; take the one nearest no rotation
+          let a = a0 + c;
+          const a2 = a0 - c;
+          a = Math.atan2(Math.sin(a), Math.cos(a));
+          const b2 = Math.atan2(Math.sin(a2), Math.cos(a2));
+          if (Math.abs(b2) < Math.abs(a)) a = b2;
+          r.applyQuaternion(_q2.setFromAxisAngle(dn, a * HEAD_LEVEL_HEAD));
+        }
+      }
       set('head', p, fk('head', dir, r));
     }
     const childOf = (name, parentName, extraQ) => {
@@ -306,6 +365,9 @@ export class Poser {
     const gaitTail = ph + TAIL_GAIT_PHASE;
     const sway = anim.tailSway || 0;
     const carry = pose.tailCarry || 0;
+    // the lash: one sweep out to one side and back, tip lagging the root
+    const lashAmt = anim.tailLash || 0;
+    const lashSide = anim.tailLashSide || 1;
     const tailRight = rolledRight(rest.get('tail1').dir.clone().applyQuaternion(delta), rollHind - rollMean, new THREE.Vector3());
     for (let i = 0; i < TAIL.length; i++) {
       const n = TAIL[i];
@@ -324,7 +386,8 @@ export class Poser {
       // sagittal direction — a yaw about the vertical would not move a tail
       // that hangs — so the hanging part swings like a pendulum and the part
       // lying on the ground sweeps along it. Lying, the tail also curls to one side.
-      const lat = sway * TAIL_SWAY[i] * wLat + pose.tailGround * 0.3 * k * (anim.tailSide || 1) - terrainRoll * TAIL_PLUMB[i] * (1 - pose.tailGround);
+      let lat = sway * TAIL_SWAY[i] * wLat + pose.tailGround * 0.3 * k * (anim.tailSide || 1) - terrainRoll * TAIL_PLUMB[i] * (1 - pose.tailGround);
+      if (lashAmt > 0) lat += lashSide * TAIL_LASH[i] * Math.sin(Math.PI * Math.max(0, Math.min(1, lashAmt - i * 0.06))) * (1 - 0.6 * pose.tailGround);
       const cl = Math.cos(lat);
       const dir = _w.set(Math.sin(lat), Math.sin(pitch) * cl, -Math.cos(pitch) * cl).applyQuaternion(delta);
       // the tail lies on the ground, it does not go through it: a segment that
@@ -365,14 +428,15 @@ export class Poser {
       let pawPitch = 0;
       if (swinging) {
         const want = SWING_PAW_PITCH * Math.sin(Math.PI * Math.pow(Math.min(1, u / 0.9), 0.75));
-        const cap = Math.atan2((f.clear || 0) + TOE_UP * s, TOE_AHEAD * s);
+        const cap = Math.atan2((f.clear || 0) + TOE_UP * s + this.padLift, TOE_AHEAD * s);
         pawPitch = Math.min(want, cap);
       }
       const pa = 0.2426 + pawPitch;
       const pawDir = _d.copy(fwdT).multiplyScalar(Math.cos(pa)).addScaledVector(up, -Math.sin(pa)).normalize();
       const pawQ = basisQuat(pawDir, right, new THREE.Quaternion());
       const pad = PAD_OFFSET[leg.front ? 'front' : 'hind'];
-      const pawP = f.contact.clone().sub(_v.set(pad[0] * s, pad[1] * s, pad[2] * s).applyQuaternion(pawQ));
+      // the pad sits PAW_LIFT above the contact point along the ground normal
+      const pawP = f.contact.clone().addScaledVector(up, this.padLift).sub(_v.set(pad[0] * s, pad[1] * s, pad[2] * s).applyQuaternion(pawQ));
 
       // Pastern hangs from the wrist / hock, leaning further forward as the paw
       // goes ahead. Swinging, the joint folds forward over the paw so the paw
@@ -380,7 +444,10 @@ export class Poser {
       // planted and moving, it gives a little under load at mid-stance.
       const ahead = (pawP.z - (rootP.z + (leg.front ? 0.06 : 0.0) * s)) / s;
       let k = THREE.MathUtils.clamp((leg.front ? 0.33 : 0.22) + ahead * 0.9, -0.3, 1.1);
-      if (swinging) k -= SWING_FOLD * Math.sin(Math.PI * Math.min(1, u / 0.85));
+      if (swinging) {
+        if (leg.front) k -= SWING_FOLD.front * Math.sin(Math.PI * Math.pow(Math.min(1, u / 0.85), SWING_FOLD_ONSET));
+        else k += HIND_FLEX * Math.sin(Math.PI * THREE.MathUtils.clamp((u - 0.12) / 0.88, 0, 1)) - HIND_PEEL * Math.sin(Math.PI * Math.min(1, u / 0.3));
+      }
       else if (f.stance !== undefined && f.stance >= 0) k += 0.12 * Math.sin(Math.PI * f.stance);
       // direction from the paw joint up to the wrist / hock. Folded poses pull
       // it toward a resting point on the ground; the blend is on the direction
