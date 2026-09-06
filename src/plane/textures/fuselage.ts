@@ -98,15 +98,19 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     actx.closePath();
     actx.fill();
   }
-  // nose bowl (u 0 .. the bowl / cowl joint at x 4.22): bare polished aluminium (metalness from the packed map), with
-  // faint circumferential brush marks; the joint itself is a raised lap edge with a ring of Dzus fasteners behind it
-  const ringU = lay.uOf(4.22) * w;
-  actx.fillStyle = '#c4c8cc'; actx.fillRect(0, 0, ringU, h);
+  // nose bowl (u 0 .. the bowl / cowl joint at x 4.22): painted in the livery like the rest of the cowl, with only the
+  // rolled inlet lip ring (the front 6 cm) left as bare polished aluminium (metalness from the packed map) with faint
+  // circumferential brush marks — a whole bare bowl read as a chrome drum from the bow at 4 m; the lip / bowl joint
+  // and the bowl / cowl joint are raised lap edges, the latter with a ring of Dzus fasteners behind it
+  const ringU = lay.uOf(4.22) * w, lipU = lay.uOf(4.44) * w;
+  actx.fillStyle = '#c4c8cc'; actx.fillRect(0, 0, lipU, h);
   for (let i = 0; i < 60; i++) {
     const y = rng.range(0, h), a = rng.range(0.05, 0.16), light = rng.next() < 0.5;
     actx.fillStyle = light ? `rgba(255,255,255,${a})` : `rgba(60,64,70,${a})`;
-    actx.fillRect(0, y, ringU, rng.range(1, 3));
+    actx.fillRect(0, y, lipU, rng.range(1, 3));
   }
+  hctx.fillStyle = '#5c5c5c'; hctx.fillRect(lipU - 2, 0, 3, h);
+  actx.fillStyle = 'rgba(20,20,25,0.40)'; actx.fillRect(lipU - 1, 0, 2, h);
   hctx.fillStyle = '#5c5c5c'; hctx.fillRect(ringU - 3, 0, 3, h);
   actx.fillStyle = 'rgba(20,20,25,0.45)'; actx.fillRect(ringU - 2, 0, 2, h);
   /** Dzus fastener: a 12 mm dished button with a slot, drawn as a dark ring in the albedo and a dimple in the height map */
@@ -260,23 +264,23 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   }
   rctx.fillStyle = 'rgba(255,255,255,0.10)'; rctx.fillRect(0, h * 0.44, w, h * 0.12);   // spray-dulled belly
   rctx.fillStyle = 'rgba(255,255,255,0.05)'; rctx.fillRect(0, 0, w, h * 0.08); rctx.fillRect(0, h * 0.92, w, h * 0.08); // sun-chalked roof
-  // polished bowl: roughness ~0.30 with the brush marks as streaks of 0.22 .. 0.40 (a hand-polished bowl is never
+  // polished lip ring: roughness ~0.30 with the brush marks as streaks of 0.22 .. 0.40 (a hand-polished bowl is never
   // a mirror; the streaks stretch the sun's highlight around it)
-  rctx.fillStyle = '#4d4d4d'; rctx.fillRect(0, 0, ringU, h);
+  rctx.fillStyle = '#4d4d4d'; rctx.fillRect(0, 0, lipU, h);
   for (let i = 0; i < 90; i++) {
     const y = rng.range(0, h), a = rng.range(0.10, 0.30), light = rng.next() < 0.5;
     rctx.fillStyle = light ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a})`;
-    rctx.fillRect(0, y, ringU, rng.range(1, 4));
+    rctx.fillRect(0, y, lipU, rng.range(1, 4));
   }
   sootStreak(rctx, '170,170,170', 0.7);
-  // packed clear coat (R) / roughness (G) / metalness (B): the bowl is bare metal with no clear coat, the anti-glare
+  // packed clear coat (R) / roughness (G) / metalness (B): the lip ring is bare metal with no clear coat, the anti-glare
   // panel is a flat lacquer with a third of the coat's gloss, everything else is the clear-coated livery
   const [mc, mctx] = canvas(w, h);
   const [kc, kctx] = canvas(w, h);
   mctx.fillStyle = '#000000'; mctx.fillRect(0, 0, w, h);
-  mctx.fillStyle = '#ffffff'; mctx.fillRect(0, 0, ringU - 3, h);
+  mctx.fillStyle = '#ffffff'; mctx.fillRect(0, 0, lipU - 2, h);
   kctx.fillStyle = '#ffffff'; kctx.fillRect(0, 0, w, h);
-  kctx.fillStyle = '#000000'; kctx.fillRect(0, 0, ringU - 3, h);
+  kctx.fillStyle = '#000000'; kctx.fillRect(0, 0, lipU - 2, h);
   kctx.fillStyle = '#555555';
   for (const side of [1, -1]) {
     const edge = side > 0 ? 0 : h;
@@ -314,7 +318,7 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   // clearcoat roughness (green channel): what the eye reads as the finish. Regions first: the roof and the top of
   // the tail cone are chalked by the sun (0.30), the white sides are waxed (0.11), the yellow belly band chalks
   // faster and takes the spray (0.22); then every skin panel differs by up to +-0.055 (repainted / polished at
-  // different times), the seams and worn zones are duller, the anti-glare panel is flat, the bowl is bare metal
+  // different times), the seams and worn zones are duller, the anti-glare panel is flat, the lip ring is bare metal
   const [cc, cctx] = canvas(w / 4, h / 4);
   cctx.scale(0.25, 0.25);
   const ccFill = (g: number, x0: number, y0: number, x1: number, y1: number) => { cctx.fillStyle = `rgb(0,${g},0)`; cctx.fillRect(x0, y0, x1 - x0, y1 - y0); };

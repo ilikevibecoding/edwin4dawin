@@ -23,21 +23,28 @@ export function buildLights(ctx: BuildContext, wingSpec: WingSpec, lightPower: {
   lightsMat.onBeforeCompile = (shader) => {
     shader.uniforms.uLightPower = lightPower;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aLight;\nvarying float vLight;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLight = aLight;');
+      .replace('#include <common>', '#include <common>\nattribute float aLight;\nattribute float aPatch;\nvarying float vLight;\nvarying float vPatch;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvLight = aLight;\nvPatch = aPatch;');
+    // the lit skin patches exist only while their channel is powered: by day they would otherwise show as dark
+    // tinted decals on the tips (a brown-red blotch on each yellow wingtip from below)
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nuniform float uLightPower[${N_LIGHTS}];\nvarying float vLight;`)
+      .replace('#include <common>', `#include <common>\nuniform float uLightPower[${N_LIGHTS}];\nvarying float vLight;\nvarying float vPatch;`)
+      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (vPatch > 0.5 && uLightPower[int(vLight + 0.5)] < 0.02) discard;')
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vColor * uLightPower[int(vLight + 0.5)];');
   };
-  lightsMat.customProgramCacheKey = () => 'plane-lights-v2';
+  lightsMat.customProgramCacheKey = () => 'plane-lights-v3';
   materials.push(lightsMat);
-  /** tag a geometry with the channel and its (linear) tint scaled by `gain`: lenses at 1, the lit skin patches dimmer */
-  const lit = (g: THREE.BufferGeometry, tint: number, channel: number, gain = 1): THREE.BufferGeometry => {
+  /**
+   * tag a geometry with the channel and its (linear) tint scaled by `gain`: lenses at 1, the lit skin patches dimmer
+   * and flagged as patches (drawn only while their channel is powered)
+   */
+  const lit = (g: THREE.BufferGeometry, tint: number, channel: number, gain = 1, patch = false): THREE.BufferGeometry => {
     const n = g.getAttribute('position').count, c = new THREE.Color(tint).multiplyScalar(gain);
-    const col = new Float32Array(n * 3), ch = new Float32Array(n);
+    const col = new Float32Array(n * 3), ch = new Float32Array(n), pa = new Float32Array(n).fill(patch ? 1 : 0);
     for (let i = 0; i < n; i++) { col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b; ch[i] = channel; }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     g.setAttribute('aLight', new THREE.BufferAttribute(ch, 1));
+    g.setAttribute('aPatch', new THREE.BufferAttribute(pa, 1));
     return g;
   };
   const lens = (r: number, tint: number, channel: number) => lit(new THREE.SphereGeometry(r, 8, 6), tint, channel);
@@ -62,7 +69,7 @@ export function buildLights(ctx: BuildContext, wingSpec: WingSpec, lightPower: {
     for (const [y, flipY] of [[yUpper, 0], [yLower, Math.PI]] as const) {
       const patch = new THREE.CircleGeometry(0.22, 12);
       patch.scale(1.6, 1, 1);
-      lightKit.add(lit(patch, tint, channel, 0.22), at([tip.x - 0.05, y, sgn * 7.28], [-Math.PI / 2 + flipY, 0, 0]));
+      lightKit.add(lit(patch, tint, channel, 0.22, true), at([tip.x - 0.05, y, sgn * 7.28], [-Math.PI / 2 + flipY, 0, 0]));
     }
     glows.push({ p: V3(tip.x + 0.125, tip.y, zOut), tint, channel, size: 0.7 }, { p: V3(tip.x - 0.09, tip.y, zOut), tint: 0xf2f4ff, channel: LIGHT.strobe, size: 0.6 });
   }

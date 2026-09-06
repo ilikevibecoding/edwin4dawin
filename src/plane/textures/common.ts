@@ -185,7 +185,7 @@ export function chips(actx: CanvasRenderingContext2D, mctx: CanvasRenderingConte
       ctx.fillStyle = style;
       ctx.beginPath(); ctx.ellipse(cx, cy, r * sx + grow, r * sy + grow, a, 0, Math.PI * 2); ctx.fill();
     };
-    flake(actx, 'rgba(70,60,45,0.7)', 0.8);
+    flake(actx, 'rgba(70,60,45,0.45)', 0.5);
     flake(actx, '#bcc0c4', 0);
     if (mctx) flake(mctx, '#ffffff', 0);
     if (kctx) flake(kctx, '#000000', 0.4);
