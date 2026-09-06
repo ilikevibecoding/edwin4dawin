@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { BridgeSpec, Vec2, WorldMap } from './map';
+import { MAP_N, WORLD_SIZE, type BridgeSpec, type Vec2, type WorldMap } from './map';
 import { clamp, lerp, smoothstep } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { ALL_CASCADES, ViewCull, layerMask, maskCasts, type CasterClass } from './culling';
@@ -44,11 +44,40 @@ interface Alignment { s: number[]; h: number[]; L: number[]; }
 const APPROACH_GRADE = 0.04;
 const MAX_GRADE = 0.055;
 
+/** The ground as the clipmap renders it: terrain.ts samples the height texture without the half-texel offset, so its
+ *  surface is `heightAt` shifted half a cell toward +x, +z; anything that must clear the ground clears both readings. */
+export function terrainAt(map: WorldMap, x: number, z: number): number {
+  const half = (WORLD_SIZE / MAP_N) * 0.5;
+  return Math.max(map.heightAt(x, z), map.heightAt(x - half, z - half));
+}
+
+/** Height of the road surface where the approach road meets a deck end at (x, z), the road arriving along (dx, dz):
+ *  the roads.ts pavement there (heightAt + 0.15), or 8 cm over the highest point of the rendered terrain under the
+ *  last 30 m of the approach across the road's width where that stands higher - the highway's course rides over
+ *  such a crown (highway.ts lift field) and must arrive flush with the approach slab. Shared by the deck alignment
+ *  (deck end = this + 4 cm) and the highway's end rows. */
+export function landingSurface(map: WorldMap, x: number, z: number, dx: number, dz: number, hw: number): number {
+  let h = Math.max(map.heightAt(x, z), 0.5) + 0.15;
+  const nx = -dz, nz = dx;
+  for (let s = 0; s <= 30; s += 2.5) {
+    for (let a = -hw; a <= hw + 1e-6; a += hw / 4) {
+      const px = x - dx * s + nx * a, pz = z - dz * s + nz * a;
+      h = Math.max(h, terrainAt(map, px, pz) + 0.08);
+    }
+  }
+  return h;
+}
+
 function buildAlignment(spec: BridgeSpec, map: WorldMap, total: number): Alignment {
   const rampLen = Math.min(160, total * 0.35);
-  // the deck top meets the road surface (roads.ts lifts its pavement 0.15 m off the terrain) with a 4 cm approach-slab step
-  const hA = Math.max(map.heightAt(spec.pts[0][0], spec.pts[0][1]), 0.5) + 0.19;
-  const hB = Math.max(map.heightAt(spec.pts[spec.pts.length - 1][0], spec.pts[spec.pts.length - 1][1]), 0.5) + 0.19;
+  // the deck top meets the road surface (roads.ts lifts its pavement 0.15 m off the terrain, the highway's course
+  // rides over the terrain where it crowns under the approach) with a 4 cm approach-slab step
+  const n = spec.pts.length;
+  const [ax, az] = spec.pts[0], [bx, bz] = spec.pts[1], [yx, yz] = spec.pts[n - 2], [zx, zz] = spec.pts[n - 1];
+  const lA = Math.hypot(bx - ax, bz - az) || 1, lB = Math.hypot(zx - yx, zz - yz) || 1;
+  // the road arrives at each end travelling onto the deck: its last 30 m lie behind the end, away from the deck
+  const hA = landingSurface(map, ax, az, (bx - ax) / lA, (bz - az) / lA, 11) + 0.04;
+  const hB = landingSurface(map, zx, zz, (yx - zx) / lB, (yz - zz) / lB, 11) + 0.04;
   const D = spec.deck;
   const pvi: { s: number; h: number; L: number }[] = [{ s: 0, h: hA, L: 0 }];
   if (spec.archHeight > 0 && spec.archLength > 0) {

@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { MAP_N, WORLD_SIZE, type BridgeSpec, type RoadClass, type Vec2, type WorldMap } from './map';
+import type { BridgeSpec, RoadClass, Vec2, WorldMap } from './map';
 import type { RoadSegment } from './roads';
 import { clamp, lerp } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
-import { F_BARRIER_H, F_BARRIER_PROFILE, GLSL_AA_LINE, MIN_WIDTH_VERT, STEEL_ALPHA_FRAG, Soup, lampGlowFor, type Frame, type Rgb } from './bridges';
+import { F_BARRIER_H, F_BARRIER_PROFILE, GLSL_AA_LINE, MIN_WIDTH_VERT, STEEL_ALPHA_FRAG, Soup, lampGlowFor, landingSurface, terrainAt, type Frame, type Rgb } from './bridges';
 import { ALL_CASCADES, MAX_CASCADES, ViewCull, cascadeIsFine, layerMask, maskCasts, type CasterClass } from './culling';
 
 /**
@@ -71,7 +71,7 @@ const C_BARRIER_TOP: Rgb = [0.93, 0.93, 0.91];
 const C_PEDESTAL: Rgb = [0.72, 0.72, 0.70];
 const C_APRON: Rgb = [0.62, 0.62, 0.60];
 const C_GRATE: Rgb = [0.16, 0.16, 0.17];
-const C_VERGE_GRASS: Rgb = [0.40, 0.54, 0.24];   // mown verge: fresher than the dry ground around
+const C_VERGE_GRASS: Rgb = [0.36, 0.52, 0.21];   // mown, irrigated verge: fresher and deeper than the dry lots around
 const C_VERGE_SAND: Rgb = [0.74, 0.66, 0.52];    // packed sand and shell where the highway crosses the beaches
 const S_GALV: Rgb = [0.56, 0.58, 0.60];       // galvanised guardrail, posts, gantry steel (satin, blotchy in the shader)
 const S_POLE: Rgb = [0.46, 0.47, 0.49];       // weathered galvanised lighting columns (read against the pale pavement from the air)
@@ -471,13 +471,6 @@ function buildChains(map: WorldMap, segments: RoadSegment[]): Chain[] {
   return out;
 }
 
-/** The ground as the clipmap renders it: terrain.ts samples the height texture without the half-texel offset, so its
- *  surface is `heightAt` shifted half a cell toward +x, +z; anything draped on the ground clears both readings. */
-function terrainAt(map: WorldMap, x: number, z: number): number {
-  const half = (WORLD_SIZE / MAP_N) * 0.5;
-  return Math.max(map.heightAt(x, z), map.heightAt(x - half, z - half));
-}
-
 /** The roads.ts pavement follows the height field at its two edges only, every 15 m, so where the ground crowns under
  *  the carriageway - the dune crest the spit highway runs along, a bump under the middle of the road - the rendered
  *  terrain stands through the pavement in sand-coloured blotches; the clipmap also samples the height texture half a
@@ -485,7 +478,9 @@ function terrainAt(map: WorldMap, x: number, z: number): number {
  *  from the CPU height field. The course and everything standing on the pavement ride over both: per row, at the
  *  five knots across, the lift is the largest excess of the terrain (heightAt at the point and half a texel back,
  *  as the clipmap renders it) over the pavement anywhere within a full row along and a full knot across (so the
- *  bilinear field between the knots is never under a sampled point), plus 6 cm; zero over nearly all the network. */
+ *  bilinear field between the knots is never under a sampled point), plus 6 cm; zero over nearly all the network.
+ *  Where the chain runs onto a deck its end row is pinned to the landing surface the deck alignment uses
+ *  (bridges.ts landingSurface, which covers the same last 30 m), so the course arrives flush with the approach slab. */
 function computeLifts(map: WorldMap, c: Chain): void {
   const terrain = (x: number, z: number) => terrainAt(map, x, z);
   const N_ALONG = 7, N_ACROSS = 7;
@@ -510,6 +505,19 @@ function computeLifts(map: WorldMap, c: Chain): void {
       }
     }
   }
+  // the landing surface is evaluated exactly as the deck alignment evaluates it (the deck's own end point and the
+  // direction the road arrives along), so the two heights agree to the centimetre
+  const pin = (s: number, row: Row, spec: BridgeSpec) => {
+    const p = s === 0 ? c.pts[0] : c.pts[c.pts.length - 1];
+    const n = spec.pts.length;
+    const atStart = Math.hypot(spec.pts[0][0] - p[0], spec.pts[0][1] - p[1]) <= Math.hypot(spec.pts[n - 1][0] - p[0], spec.pts[n - 1][1] - p[1]);
+    const [ex, ez] = atStart ? spec.pts[0] : spec.pts[n - 1], [ox, oz] = atStart ? spec.pts[1] : spec.pts[n - 2];
+    const l = Math.hypot(ox - ex, oz - ez) || 1;
+    const h = landingSurface(map, ex, ez, (ox - ex) / l, (oz - ez) / l, 11);
+    for (let j = 0; j < LIFT_KNOTS.length; j++) row.up[j] = Math.max(0, h - pavementAt(c, s, LIFT_KNOTS[j] * c.hw));
+  };
+  if (c.bridgeStart) pin(0, c.rows[0].row[0], c.bridgeStart);
+  if (c.bridgeEnd) { const last = c.rows[c.rows.length - 1]; pin(c.total, last.row[last.steps], c.bridgeEnd); }
 }
 
 function locate(c: Chain, s: number): { i: number; t: number } {
