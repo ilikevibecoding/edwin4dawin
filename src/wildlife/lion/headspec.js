@@ -25,58 +25,81 @@
 import { EYE_LIDS, HEAD_JOINTS } from './spec.js';
 
 /**
- * [z, cy, rx, ryTop, ryBot, n, taper, bot]: `taper` narrows the upper half
- * toward the top (the width at the crown is rx × (1 − taper)), so across the
- * orbits the section is a forehead narrower than the cheeks under it; `bot`
- * narrows the lower half the same way, so the jaw is narrower than the muzzle
- * and the cheeks (see topTaper).
+ * [z, cy, rx, ryTop, ryBot, n, taper, bot, nBot, tp]: `taper` narrows the
+ * upper half toward the top (the width at the crown is rx × (1 − taper)), so
+ * across the orbits the section is a forehead narrower than the cheeks under
+ * it; `bot` narrows the lower half the same way, so the jaw is narrower than
+ * the muzzle and the cheeks (see topTaper). Round 8: `nBot` is the lower
+ * half's own superellipse exponent, where `n` is the upper half's (the
+ * muzzle's upper half is a rounded ridge, its lower half a broader lip), and
+ * `tp` is the power the taper grows with up the half (topTaper: 1.6 bites
+ * only near the crown, a ridge; 1.0 is a straight lean from the widest row
+ * up, a trapezoid).
  */
 export const HEAD_ROWS = [
   // the occiput: a rounded skull back, its pole a little above the head joint
-  [-0.085, 0.045, 0.04, 0.045, 0.06, 2.0, 0, 0],
+  [-0.085, 0.045, 0.04, 0.045, 0.06, 2.0, 0, 0, 2.0, 1.6],
   // (the lower halves of the rear rows reach down into the neck loft: shallower
   // and the ground shows between throat and chest from the front)
-  [-0.06, 0.05, 0.088, 0.075, 0.1, 2.4, 0.06, 0.05],
+  [-0.06, 0.04, 0.088, 0.085, 0.09, 2.6, 0.14, 0.05, 2.4, 1.2],
   // the crown: broad and flat between the ears, 0.16 over the head joint — the
   // cranium above the eye line is 0.22 L, which is what a lion skull gives
   // with its fur (the brief's 0.33 L was built twice, at 0.17 and 0.185, and
-  // read as a bear's dome both times; the rest of the face is to the brief). The section is a tall box — flat
-  // cheeks, a flat top, the corners square where the ears root (a crown that
-  // narrows to a dome is the bear) — with its widest point just under the eye
-  // line and the lower half drawing in toward the jaw, so from the front the
-  // face is a wedge that narrows to the chin, not an oval widest at the jowls.
-  [-0.02, 0.06, 0.112, 0.095, 0.125, 3.4, 0.08, 0.06],
-  [0.03, 0.065, 0.118, 0.093, 0.135, 3.7, 0.08, 0.06], // braincase
-  [0.08, 0.065, 0.122, 0.093, 0.14, 3.7, 0.08, 0.07], // zygomatic arches: the widest point of the head, 0.63 L across with the cheek sculpt
-  [0.125, 0.06, 0.12, 0.085, 0.13, 3.4, 0.08, 0.08], // the forehead starts down toward the brow
+  // read as a bear's dome both times; the rest of the face is to the brief).
+  // Round 8: the section is a trapezoid widest at the zygomatic arches, 3 cm
+  // UNDER the eye line (cy 0.036-0.04, where rounds 5-7 had the widest row at
+  // the eye line itself), its sides leaning straight in from there to the
+  // ear roots (taper 0.2-0.28 at power 1.0: 0.83 of the arches' width 3 cm
+  // over the eye line, 0.77 at the ear roots, where round 7's box was 0.91
+  // and 0.87 — every critic's flat-browed bear from the front) with a flat
+  // crown between the ears (exponent 4-4.5: the corners square where the
+  // ears root; a crown that narrows to a dome is the bear) and the lower
+  // half drawing in toward the jaw (bot 0.1-0.15), so from the front the
+  // face is a wedge widest at the cheekbones. The rx and the bottom line are
+  // unchanged, so the zygomatic width (0.63 L) and every ratio measured on it
+  // hold; HEAD_BUMPS hollows the temple between the brow and the ear.
+  [-0.02, 0.04, 0.112, 0.115, 0.105, 4.0, 0.2, 0.1, 3.0, 1.0],
+  [0.03, 0.038, 0.118, 0.12, 0.108, 4.4, 0.2, 0.12, 3.0, 1.0], // braincase
+  [0.08, 0.036, 0.122, 0.122, 0.111, 4.5, 0.22, 0.13, 3.0, 1.0], // zygomatic arches: the widest point of the head, 0.63 L across with the cheek sculpt
+  [0.125, 0.04, 0.12, 0.105, 0.11, 4.0, 0.28, 0.15, 2.8, 1.0], // the forehead starts down toward the brow
   // the forehead falls in a straight line from the crown through the brow to
   // the stop, about 35 degrees: the eyes sit in that fall, under the brow
   // ledge and over the muzzle box, well inside the cheeks' outline (the eye
   // centre 3 cm in from the skin; round 4 had the balls on the skull's top
-  // corners)
-  [0.165, 0.046, 0.106, 0.06, 0.114, 2.9, 0.1, 0.08], // brow
+  // corners). Round 8: the forehead over the eyes is 1.4 interpupillary
+  // distances wide at the brow's top (taper 0.24; round 7's 0.1 gave 1.6, a
+  // plateau from temple to temple).
+  [0.165, 0.044, 0.106, 0.062, 0.112, 3.0, 0.26, 0.14, 2.6, 1.3], // brow
   // round 7: the cheek arch — the zygomatic's width is held forward under
   // the eye (0.85 of the skull half-width at z 0.178, where round 6 had
   // already tapered to 0.74) and the section's widest point sits low, at the
   // arch, so the eye looks out over a shelf of cheek and the muzzle is a
   // narrower volume stepping in from it over the next two rows (critic A:
   // "no zygomatic shelf"; the round-6 fold crease alone did not read)
-  [0.178, 0.04, 0.1, 0.052, 0.112, 2.8, 0.14, 0.08], // cheek arch: eye plane, the cheek widest under the eye
+  // Round 8: under the arch the section draws in toward the jaw line (bot
+  // 0.08 → 0.15-0.2, nBot 2.4-2.5): the lower face at the mouth corner is a
+  // wedge from the cheeks to the jaw, not a box as wide at the lip as at the
+  // cheek (critic B's "rectangular muzzle block").
+  [0.178, 0.04, 0.1, 0.052, 0.112, 2.8, 0.26, 0.15, 2.5, 1.6], // cheek arch: eye plane, the cheek widest under the eye
   // The stop is a real step: the top of these three rows drops a centimetre
   // and a half (0.052 → 0.038 / 0.036 / 0.042 over the centre line), so the
   // forehead's fall ends at a plane level with the eye's centre and the
   // eyes look out over the bridge (round 6: with the round-5 heights the
   // muzzle's top corner at the eye's x hid the lower half of the iris from
   // the face camera — raycast 0.46 of the disc; 0.62 with this).
-  [0.19, 0.036, 0.09, 0.038, 0.108, 2.7, 0.22, 0.08],
-  // the muzzle rows carry the lower jaw too: the mouth line is painted across
-  // the lower half (FACE.lipY) and creased into it (HEAD_BUMPS, round 7), so
-  // what hangs below it is jaw and chin — made only a little narrower than
-  // the muzzle over it (a bottom taper under 0.1: the round-5 draft's 0.2
-  // tapered the jaw to a hippo's rounded chin), so the lower jaw fills the
-  // muzzle's footprint — and the jaw loft adds the broad chin
-  [0.2, 0.03, 0.08, 0.036, 0.104, 2.6, 0.3, 0.07], // the stop: the step down to the bridge
-  [0.215, 0.022, 0.073, 0.042, 0.1, 2.5, 0.38, 0.05], // root of the muzzle
+  [0.19, 0.036, 0.09, 0.038, 0.108, 2.7, 0.28, 0.18, 2.4, 1.6],
+  // Round 8: the muzzle rows carry the upper lip only. Round 7's rows ran on
+  // down to y −0.078 past the mouth line (painted at FACE.lipY and creased
+  // in), so the "lower lip" was 2.8 cm of the same loft under a groove and
+  // the mouth read as a line drawn across a loaf; now the loft's underside
+  // sits 6-7 mm under the lip line and IS the upper lip's edge, broad and
+  // flat (nBot 2.6), and the lower lip and chin are the jaw loft (JAW_ROWS)
+  // hanging under it 8-9 mm inside its width — an upper lip that overhangs.
+  // The bottom taper draws the sides in under the whisker pads toward that
+  // edge (0.78 of the pad width at the lip), so the section is a rounded
+  // block widest at the pads, not a box with vertical sides.
+  [0.2, 0.03, 0.08, 0.036, 0.104, 2.6, 0.32, 0.18, 2.4, 1.6], // the stop: the step down to the bridge
+  [0.215, 0.022, 0.073, 0.042, 0.09, 2.5, 0.38, 0.14, 2.5, 1.6], // root of the muzzle: the lip edge starts to lift toward the pads
   // Round 7: the muzzle's cross-section is round. Round 6 built it as a box
   // (exponents 3.1-3.2 through the stop and root, no top taper), and at 1280
   // every critic read a loaf with a flat top and a flat front. The rows are
@@ -85,20 +108,22 @@ export const HEAD_ROWS = [
   // half is 0.9 of the pad width, two thirds up 0.75), which is the nasal
   // bridge as a rounded ridge falling to the whisker pads at the sides — the
   // pads are the widest part of a lion's muzzle, the bridge a hand's width
-  // over them. Top line, bottom line and pad width are unchanged, so the
-  // muzzle ratios (0.33 L long, 0.34 L across, 0.34 L deep) hold.
-  [0.255, 0.0, 0.062, 0.056, 0.078, 2.5, 0.44, 0.03], // muzzle: 0.34 L across with the whisker pads, half the cheek width
-  [0.285, -0.008, 0.058, 0.052, 0.07, 2.5, 0.45, 0.04], // whisker pads
+  // over them. Top line and pad width are unchanged, so the muzzle ratios
+  // (0.33 L long, 0.34 L across, 0.34 L deep — the depth now to the jaw's
+  // chin) hold. Round 8: the centre line sits at the pads' height (the
+  // section's widest row is the pads), upper exponent 2.3.
+  [0.255, -0.01, 0.062, 0.066, 0.05, 2.3, 0.42, 0.12, 2.0, 1.6], // muzzle: 0.34 L across with the whisker pads, half the cheek width; lip edge y −0.06
+  [0.285, -0.016, 0.058, 0.06, 0.038, 2.3, 0.42, 0.12, 2.0, 1.6], // whisker pads; lip edge y −0.054
   // the front rounds off over the last two centimetres instead of ending in
   // a flat disc (round 6's cap at z 0.315 was 7 by 9 cm of vertical plane
   // under the nose): the pads draw in to the nose end in plan, the lip
   // drops nearly vertical under the leather and the leather block stands
   // on the rounded top. The last row is a 2.4 cm sliver — the front of the
   // philtrum and lip — so the head length (nose tip z 0.321) is unchanged.
-  [0.303, -0.008, 0.05, 0.046, 0.064, 2.4, 0.42, 0.06], // the lip recedes a little under the nose
-  [0.312, -0.006, 0.04, 0.038, 0.058, 2.3, 0.38, 0.1],
-  [0.318, -0.004, 0.026, 0.028, 0.05, 2.2, 0.3, 0.16],
-  [0.321, -0.003, 0.012, 0.014, 0.044, 2.0, 0.2, 0.2], // nose end: the philtrum's front under the leather
+  [0.303, -0.014, 0.05, 0.052, 0.042, 2.3, 0.4, 0.12, 2.3, 1.6], // the lip hangs on under the nose, its edge over the chin (the underside squarer toward the front, so the chin sits under it and not out past a keel)
+  [0.312, -0.012, 0.04, 0.044, 0.041, 2.2, 0.36, 0.14, 2.5, 1.6],
+  [0.318, -0.01, 0.026, 0.034, 0.04, 2.2, 0.3, 0.16, 2.6, 1.6],
+  [0.321, -0.008, 0.012, 0.019, 0.04, 2.0, 0.2, 0.2, 2.6, 1.6], // nose end: the philtrum's front under the leather
 ];
 
 export const HEAD_Z0 = HEAD_ROWS[0][0];
@@ -106,7 +131,15 @@ export const HEAD_Z1 = HEAD_ROWS[HEAD_ROWS.length - 1][0];
 /** The loft changes atlas region here: skull behind, muzzle ahead. */
 export const HEAD_SPLIT = 0.2;
 
-/** The lower jaw, on the jaw bone: [z, cy, rx, ryTop, ryBot]. Chin at the end. */
+/**
+ * The lower jaw, on the jaw bone: [z, cy, rx, ryTop, ryBot]. Chin at the end.
+ * Round 8: ahead of the mouth corner its top sits 8-10 mm up inside the upper
+ * loft (whose underside is now the upper lip's edge, HEAD_ROWS) and it is 0.5
+ * of the pads' width, so what shows under the lip edge in profile and from
+ * the front is a lower lip and chin narrower than the upper lip hanging
+ * over them; its bottom line is where round 7's was, so the muzzle depth to
+ * the chin (0.34 L) holds.
+ */
 export const JAW_ROWS = [
   // behind the mouth corner the jaw sits inside the head (the cheek and jowl
   // are the upper loft's), so nothing of it bulges under the cheek
@@ -115,10 +148,11 @@ export const JAW_ROWS = [
   // ahead of the corner it is hidden under the upper lip (well inside the
   // tapered underside of the muzzle loft, so no edge of it shows under the
   // cheek as a tusk) but for the chin at the front, under the nose
-  [0.2, -0.066, 0.04, 0.016, 0.014],
-  [0.26, -0.066, 0.042, 0.012, 0.014],
-  [0.29, -0.066, 0.038, 0.011, 0.014], // the chin: broad and squared, half a centimetre under the loft's bottom
-  [0.305, -0.06, 0.026, 0.008, 0.01],
+  [0.2, -0.062, 0.038, 0.014, 0.016],
+  [0.26, -0.068, 0.025, 0.018, 0.013],
+  [0.285, -0.067, 0.022, 0.016, 0.012], // the chin: its top 8 mm up inside the lip, 0.8 of the lip's width there, so no shelf of it shows from above
+  [0.298, -0.067, 0.014, 0.01, 0.01], // and rounded off to the front and down, under the lip's edge, no flat disc under the nose (a squared pale chin read as teeth)
+  [0.304, -0.066, 0.005, 0.004, 0.005],
 ];
 
 /** Where the features are, in head metres (mirrored in x). */
@@ -138,8 +172,8 @@ export const FACE = {
   // round 7: 4 mm more, to 10 mm, with the lids opened to 0.55 / 0.68 rad
   // so the rims sit at the limbus and no lid cap shows over the iris)
   eye: [0.0585, 0.07, 0.158],
-  eyeR: 0.0261, // EYE.r × EYE_LIDS.scale (spec.js): the ball head.js builds
-  eyeSkin: 0.0293, // radius of the sphere the skin around the eye is kept outside of (1.12 × the ball)
+  eyeR: 0.0248, // EYE.r × EYE_LIDS.scale (spec.js): the ball head.js builds
+  eyeSkin: 0.0277, // radius of the sphere the skin around the eye is kept outside of (1.12 × the ball)
   // centre of the nose leather at the squared front of the muzzle, its top
   // level with the bridge; 0.15 L wide (round 4's 0.09 was 0.37 L: a hippo's)
   nose: [0, 0.012, 0.308],
@@ -198,10 +232,15 @@ export const EYE_FRAME = (() => {
  * radians (positive `start` grows the almond past the lid rims, for the
  * eyeline the painter draws on the skin around it). The almond pinches to its
  * corners short of the lateral axis: the skin keeps the ball covered
- * beyond about 60 degrees to the side (so the eye shows from the side too);
- * with the lids at 34 / 30 degrees the opening is 1.6 times as wide as it is
- * tall, a cat's almond and not a round button. Used by the head loft to carve the
- * socket and by the face painter to line the edge.
+ * beyond about 50 degrees to the side (so the eye shows from the side too);
+ * with the lids at 34 / 30 degrees the opening is 1.5 times as wide as it is
+ * tall, a cat's almond and not a round button. Round 8: the corners closed
+ * from 54-72 degrees to 46-60 — the lid caps' rims are great circles through
+ * the lateral axis, so between them the ball was bare out to 90 degrees, and
+ * in the near-profile face view its lower outer quarter stood out of the
+ * face as a sphere with no lid over it (critic: "the eyeball is still
+ * proud"); now the skin, hugging the ball, closes over that quarter. Used by
+ * the head loft to carve the socket and by the face painter to line the edge.
  */
 export function almondOpen(dx, dy, dz, soft = 0.14, start = 0.02) {
   const id = 1 / Math.max(Math.hypot(dx, dy, dz), 1e-4);
@@ -211,7 +250,7 @@ export function almondOpen(dx, dy, dz, soft = 0.14, start = 0.02) {
   const aUp = Math.asin(Math.max(-1, Math.min(1, (dx * F.up[0] + dy * F.up[1] + dz * F.up[2]) * id)));
   const aDn = Math.asin(Math.max(-1, Math.min(1, (dx * F.down[0] + dy * F.down[1] + dz * F.down[2]) * id)));
   const aL = Math.abs(Math.asin(Math.max(-1, Math.min(1, (dx * F.l[0] + dy * F.l[1] + dz * F.l[2]) * id))));
-  return sstep(start + soft, start, aUp) * sstep(start + soft, start, aDn) * sstep(1.25 + start, 0.95 + start, aL);
+  return sstep(start + soft, start, aUp) * sstep(start + soft, start, aDn) * sstep(1.05 + start, 0.8 + start, aL);
 }
 
 function sstep(a, b, x) {
@@ -250,12 +289,12 @@ export function rowsAt(rows, z) {
  * crown). Superellipse parametrisation, so a boxy section stays boxy.
  */
 export function headPoint(z, a, out = [0, 0, 0]) {
-  const [cy, rx, ryTop, ryBot, n, taper, bot = 0] = rowsAt(HEAD_ROWS, z);
+  const [cy, rx, ryTop, ryBot, n, taper, bot = 0, nBot = n, tp = 1.6] = rowsAt(HEAD_ROWS, z);
   const ca = Math.sin(a);
   const sa = -Math.cos(a);
-  const e = 2 / n;
+  const e = 2 / (sa >= 0 ? n : nBot);
   const ry = sa >= 0 ? ryTop : ryBot;
-  out[0] = rx * Math.sign(ca) * Math.pow(Math.abs(ca), e) * topTaper(sa, taper, bot);
+  out[0] = rx * Math.sign(ca) * Math.pow(Math.abs(ca), e) * topTaper(sa, taper, bot, tp);
   out[1] = cy + ry * Math.sign(sa) * Math.pow(Math.abs(sa), e);
   out[2] = z;
   return out;
@@ -312,12 +351,14 @@ export function ringAngles(around) {
 
 /**
  * Width factor of a section at height fraction `sa` (−1 bottom, 1 top): the
- * upper half narrows toward the crown by `taper`, the lower half toward the
- * jaw's underside by `bot` (the lower jaw is narrower than the muzzle over it,
- * so the jowls hang over it and the mouth line turns under).
+ * upper half narrows toward the crown by `taper`, growing with the power `tp`
+ * (1.6: a ridge, the lean all near the top; 1.0: a straight-sided trapezoid
+ * from the widest row up), the lower half toward the jaw's underside by `bot`
+ * (the lower jaw is narrower than the muzzle over it, so the jowls hang over
+ * it and the mouth line turns under).
  */
-export function topTaper(sa, taper, bot = 0) {
-  return sa > 0 ? 1 - taper * Math.pow(sa, 1.6) : 1 - bot * Math.pow(-sa, 1.8);
+export function topTaper(sa, taper, bot = 0, tp = 1.6) {
+  return sa > 0 ? 1 - taper * Math.pow(sa, tp) : 1 - bot * Math.pow(-sa, 1.8);
 }
 
 /**
@@ -350,7 +391,7 @@ export const HEAD_BUMPS = [
   // the ruff and the throat
   [0.1, -0.048, 0.075, 0.03, 0.045, 0.05, 0.011],
   [0.085, -0.088, 0.06, 0.03, 0.018, 0.05, -0.007],
-  [0.048, -0.022, 0.274, 0.026, 0.026, 0.04, 0.016], // whisker pad: a real swell, the follicle rows sit on it
+  [0.046, -0.022, 0.28, 0.026, 0.026, 0.04, 0.019], // whisker pad: a real swell, the follicle rows sit on it (round 8: 3 mm more, and 6 mm further forward, so the two lobes stand either side of the philtrum from the front)
   // the lower lip and chin fill in under the pads, so the pads do not
   // overhang a dark recess that reads as an open mouth from the front
   [0.02, -0.068, 0.285, 0.035, 0.02, 0.03, 0.005],
@@ -358,23 +399,27 @@ export const HEAD_BUMPS = [
   // round-6 flat-bridge bump is gone; in its place a soft rounding of the
   // ridge's crest so the top of the muzzle is a dome and not a keel
   [0.0, 0.05, 0.25, 0.02, 0.015, 0.05, 0.002],
-  [0.1, 0.09, 0.09, 0.03, 0.04, 0.045, -0.006], // temple: the hollow over the arch behind the eye
+  // round 8: the temporal fossa — a hollow a centimetre deep over the arch
+  // behind the brow's outer end, from the eye's z back to the ear root, at
+  // the brow's height (round 7's 6 mm dish sat lower, on the arch itself, and
+  // the head-on silhouette ran straight from the arches to the ears); the
+  // brow's outer end stands out over it as the postorbital corner, so from
+  // the front the brow line ends in two corners with the temple dished behind
+  // them, the way a lion's brow does
+  [0.1, 0.1, 0.118, 0.032, 0.022, 0.028, -0.014],
+  [0.09, 0.1, 0.158, 0.018, 0.016, 0.02, 0.009],
   // round 7: the zygomatic shelf — a plateau along the arch from under the
   // eye's outer corner back toward the ear root, 6 mm proud with a rim, so
   // the cheek under the eye is a bone with an edge and the masseter hollow
   // below it reads (critic A: "no zygomatic shelf"); set below and ahead of
   // the arch's widest point so the zygomatic width (0.63 L) is unchanged
   [0.1, 0.03, 0.15, 0.026, 0.018, 0.045, 0.006, 0.45],
-  // round 7: the mouth is geometry. A crease along the lip line (FACE.lipY,
-  // sheared with it: `tilt` is dy per dz) all round the muzzle from the nose
-  // back to the corner, where it fades out (full from z 0.235, 0.03 at the
-  // corner's z 0.2), 4.5 mm deep and 9 mm wide, so the upper lip overhangs
-  // a lower lip instead of a line painted across a smooth loft (critic B:
-  // "give the mouth line 6 mm of geometry")
-  [0.0, -0.0511, 0.275, 0.12, 0.0045, 0.08, -0.0045, 0.5, 0.185],
+  // (round 7 cut the mouth as a crease along the lip line here; round 8's
+  // mouth is the upper loft's own lower edge over the jaw loft, and the
+  // crease, which ran along that edge, notched it — gone)
   // and the philtrum: a groove down the front of the upper lip from the
   // leather to the lip line, 5 mm half-width
-  [0.0, -0.026, 0.319, 0.005, 0.02, 0.012, -0.0035],
+  [0.0, -0.024, 0.315, 0.006, 0.016, 0.018, -0.0045],
 ];
 
 /**

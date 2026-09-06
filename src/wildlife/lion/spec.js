@@ -148,7 +148,11 @@ export const EYE = { r: 0.0195, lidUp: 0.46, lidDown: 0.46 };
 // 78 pale pixels round the left iris at 512); with the rims moved out to the
 // limbus and the ball deeper, what shows between the lids is iris, and the
 // caps sit under the skin. The almond's height is still under the ball's.
-export const EYE_LIDS = { up: 0.55, down: 0.68, scale: 1.34, roll: 0.14 };
+// Round 8: the ball 5 % smaller (scale 1.34 -> 1.27; the lids, the socket
+// and the skin sphere follow it) — in the near-profile face view its lower
+// outer quarter stood out of the almond as a sphere; the almond's corners
+// are closed to 46-60 degrees with it (headspec.js almondOpen).
+export const EYE_LIDS = { up: 0.55, down: 0.68, scale: 1.27, roll: 0.14 };
 
 /**
  * Head-child joints re-placed for the head in head.js, laid out like JOINTS

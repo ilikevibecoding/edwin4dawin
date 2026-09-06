@@ -17,7 +17,7 @@ import { EYE, EYE_LIDS, KINDS } from '../src/wildlife/lion/spec.js';
 import { DETAIL, SkinBuilder } from '../src/wildlife/lion/geometry.js';
 import { addHead } from '../src/wildlife/lion/head.js';
 import { ATLAS } from '../src/wildlife/lion/textures.js';
-import { FACE, EYE_FRAME, almondOpen } from '../src/wildlife/lion/headspec.js';
+import { FACE, EYE_FRAME, HEAD_ROWS, almondOpen, rowsAt } from '../src/wildlife/lion/headspec.js';
 
 const argv = process.argv.slice(2);
 const arg = (n, d) => {
@@ -205,6 +205,56 @@ const irisFrac = irisSeen / irisAll;
 const noseW = nose.length ? 2 * max(nose, (v) => Math.abs(v.x)) : FACE.noseW;
 const noseH = nose.length ? max(nose, (v) => v.y) - min(nose, (v) => v.y) : FACE.noseH;
 
+// --- round 8: skull form and muzzle head-on --------------------------------------------
+// the brow band: the forehead over the eyes, from just over the ball's top rim
+// up to the brow ledge (eye y + 2 to 6 cm); its width at the eye's z is the
+// brow width, which on a lion is well inside the zygomatic width under it
+const browBand = (z, w = 0.008) => upper.filter((v) => Math.abs(v.z - z) < w && v.y > eyeL[1] + 0.02 && v.y < eyeL[1] + 0.06);
+const bandW = (z, w) => {
+  const b = browBand(z, w);
+  return b.length ? 2 * max(b, (v) => Math.abs(v.x)) : NaN;
+};
+const browW = bandW(eyeL[2], 0.008);
+const eyeLineW = widthAt(eyeL[2], 0.008);
+// the temporal hollow: in a slab 3 cm over the eye line (the temple, over
+// the arch and behind the brow's outer end), the head's width along z from
+// the ear root forward to the brow's outer corner (the widest of the slab
+// from z 0.14 to the eye's z), and its largest dip under the chord between
+// the two, per side
+const templeW = (z) => {
+  const b = upper.filter((v) => Math.abs(v.z - z) < 0.01 && Math.abs(v.y - (eyeL[1] + 0.03)) < 0.008);
+  return b.length ? 2 * max(b, (v) => Math.abs(v.x)) : NaN;
+};
+const hollowZs = [];
+for (let z = earBase[2]; z <= eyeL[2] + 0.012; z += 0.004) {
+  if (Number.isFinite(templeW(z))) hollowZs.push(z);
+}
+const hollowW = hollowZs.map((z) => templeW(z));
+let hollow = 0;
+let hollowZ = hollowZs[0];
+let browCorner = hollowZs.length - 1;
+for (let i = 0; i < hollowZs.length; i++) if (hollowZs[i] >= 0.14 && hollowW[i] > hollowW[browCorner]) browCorner = i;
+for (let i = 0; i < browCorner; i++) {
+  const t = (hollowZs[i] - hollowZs[0]) / (hollowZs[browCorner] - hollowZs[0]);
+  const chord = hollowW[0] * (1 - t) + hollowW[browCorner] * t;
+  const d = (chord - hollowW[i]) / 2;
+  if (d > hollow) {
+    hollow = d;
+    hollowZ = hollowZs[i];
+  }
+}
+// the widest row of the loft: at or below the eye line on a lion (zygV above)
+// the lip: the upper loft's width within 12 mm of its lower edge at the pads'
+// z, and how far the jaw's top sits up inside it (the upper lip's overhang
+// over the lower lip, in profile)
+const lipBottom = min(upper.filter((v) => Math.abs(v.z - padZ) < 0.012), (v) => v.y);
+const lipBand = upper.filter((v) => Math.abs(v.z - padZ) < 0.012 && v.y < lipBottom + 0.012);
+const lipW = 2 * max(lipBand, (v) => Math.abs(v.x));
+const jawTop = jaw.length ? max(jaw.filter((v) => Math.abs(v.z - padZ) < 0.012 && Math.abs(v.x) < 0.012), (v) => v.y) : NaN;
+const overhang = jawTop - lipBottom;
+const lipRow = rowsAt(HEAD_ROWS, padZ);
+const lipN = lipRow[7] ?? lipRow[4];
+
 // --- profile: the top line from the nose to the occiput ---------------------------------
 const profile = [];
 for (let z = Math.round(occiput * 100) / 100; z <= noseTip; z += 0.02) {
@@ -233,6 +283,15 @@ const rows = [
   ['iris disc visible from straight ahead (fraction)', '', irisFrac.toFixed(2), '>= 0.60'],
   ['nose leather width / L', noseW.toFixed(3), r(noseW), '0.15'],
   ['nose leather height / L', noseH.toFixed(3), r(noseH), '~0.1'],
+  // round 8
+  ['brow width over the eyes / zygomatic', browW.toFixed(3), (browW / zyg).toFixed(3), '<= 0.78'],
+  ['section width at the eye z (cheek arch) / zygomatic', eyeLineW.toFixed(3), (eyeLineW / zyg).toFixed(3), ''],
+  ['widest row y - eye y (at or below the eye line)', (zygV.y - eyeL[1]).toFixed(3), '', '<= 0'],
+  ['temporal hollow behind the brow, per side', hollow.toFixed(4), `z ${hollowZ.toFixed(3)}`, '>= 0.006'],
+  ['muzzle width at the lip / zygomatic', lipW.toFixed(3), (lipW / zyg).toFixed(3), '<= 0.62'],
+  ['muzzle width at the pads / zygomatic', muzzleW.toFixed(3), (muzzleW / zyg).toFixed(3), ''],
+  ['lower-half superellipse exponent at the lip rows', '', lipN.toFixed(2), '1.6-1.8'],
+  ['upper lip overhang: jaw top over the lip edge (profile)', overhang.toFixed(4), '', '>= 0.008'],
 ];
 
 const out = {
@@ -252,6 +311,7 @@ const out = {
   ear: { base: earBase, h: earH, w: earW, tipY: earTipY, lean: earLean, pitch: earForward },
   nose: { w: noseW, h: noseH },
   irisFrac,
+  r8: { browW, eyeLineW, hollow, hollowZ, hollowProfile: hollowZs.map((z, i) => [Number(z.toFixed(3)), Number(hollowW[i].toFixed(4))]), lipW, lipN, lipBottom, jawTop, overhang },
   profile,
   tris: body.idx.length / 3,
 };

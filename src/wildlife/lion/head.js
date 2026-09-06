@@ -121,21 +121,23 @@ export function addHead(b, alpha, skel, K, D) {
     const split = zs.findIndex((z) => z > HEAD_SPLIT);
     zs.splice(split, 0, HEAD_SPLIT, HEAD_SPLIT);
     const ringAt = (z, region) => {
-      const [cy, rx, ryTop, ryBot, n, taper, bot = 0] = rowsAt(HEAD_ROWS, z);
-      const e = 2 / n;
+      const [cy, rx, ryTop, ryBot, n, taper, bot = 0, nBot = n, tp = 1.6] = rowsAt(HEAD_ROWS, z);
       const ring = [];
       for (let k = 0; k <= around; k++) {
         // mirrored around: both sides read the same texel column
         const { a, um } = angles[k];
         const ca = Math.sin(a);
         const sa = -Math.cos(a);
+        // round 8: the lower half has its own exponent (a rounder lip under a
+        // flatter bridge, a rounder jaw line under a squarer crown)
+        const e = 2 / (sa >= 0 ? n : nBot);
         const ry = sa >= 0 ? ryTop : ryBot;
-        const tp = topTaper(sa, taper, bot);
-        const px = rx * Math.sign(ca) * Math.pow(Math.abs(ca), e) * tp;
+        const tf = topTaper(sa, taper, bot, tp);
+        const px = rx * Math.sign(ca) * Math.pow(Math.abs(ca), e) * tf;
         const py = cy + ry * Math.sign(sa) * Math.pow(Math.abs(sa), e);
         // outward normal of the underlying ellipse, for the sculpt (the taper
         // leans the upper sides inward)
-        _n.set(ca / (rx * tp), sa / ry, 0);
+        _n.set(ca / (rx * tf), sa / ry, 0);
         if (_n.lengthSq() < 1e-8) _n.set(0, sa >= 0 ? 1 : -1, 0);
         _n.normalize();
         const o = headBump(px, py, z);

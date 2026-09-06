@@ -218,10 +218,39 @@ function coatShade(u, v, seed, { spots, su = u, sv = v }) {
   const m0 = fbm(su * 3 + seed, sv * 4, { octaves: 2, period: 8, seed: 397 + seed });
   const m1 = fbm(su * 6 + seed, sv * 9, { octaves: 3, period: 16, seed: 401 + seed });
   const m2 = fbm(su * 56, sv * 28 + seed, { octaves: 3, period: 56, seed: 409 + seed });
-  const streak = fbm(su * 60 + seed, sv * 10, { octaves: 3, period: 60, seed: 419 + seed });
+  // Round 8: the streaks are a flow field at the frame's scale — 2.8 cm
+  // across by 22 cm along (8:1; 57 round the 1.6 m trunk, so the tile still
+  // wraps at the belly seam), which at the gauntlet's close range is 5-6 px
+  // across at 640 where round 7's 6:1 at 2.7 by 11 cm, under the isotropic
+  // cells and grain, measured |dY/dy| / |dY/dx| 0.75-0.89 on the flank
+  // against the brief's 1.3. The hair's lie turns with the body: along the
+  // trunk over the flank and shoulder, in toward the tail root over the rump
+  // (v < 0.25), straight again within 0.12 of the belly seam so the wrap
+  // holds. The amplitude is
+  // 0.16 broken by the tuft cells (0.12-0.2 lock to lock), so the streaks
+  // are short overlapping locks and not round 6's unbroken wood grain.
+  const fx = (su - 0.5) * 1.6;
+  const fy = sv * 1.1;
+  const fside = Math.sign(su - 0.5) || 1;
+  const fseam = smoothstep(0.5, 0.38, Math.abs(su - 0.5));
+  // (the shoulder's own down-and-back lie was tried at 0.6 and 0.35 rad: in
+  // the close frame, where the lying animal's trunk runs level, it turned the
+  // streaks over the shoulder 35-40 degrees off level and the flank's
+  // gradient ratio stayed at 1.0; along the trunk it is)
+  const th = fside * fseam * 0.45 * smoothstep(0.25, 0.0, sv);
+  const ct = Math.cos(th);
+  const st = Math.sin(th);
+  const across = (fx * ct - fy * st) * (57 / 1.6);
+  const along = (fx * st + fy * ct) / 0.22;
   const tuft = worley(su * 40 + seed, sv * 22, 40, 131 + seed);
-  const cell = (tuft.id - 0.5) * 0.12 - smoothstep(0.08, 0.0, tuft.f2 - tuft.f1) * 0.06;
-  const light = 1 + (m0 - 0.5) * 0.14 + (m1 - 0.5) * 0.2 + (m2 - 0.5) * 0.05 + (streak - 0.5) * 0.14 + cell;
+  const streak = fbm(across + seed, along, { octaves: 3, period: 57, seed: 419 + seed });
+  // (second cut: the streaks 0.22 and the isotropic terms — the cells' own
+  // values and borders, the fine grain — halved; at 0.16 over the round-7
+  // cells the close frame's flank was the same mottle it was, |dY/dy| /
+  // |dY/dx| 0.77, since at 640 a 4 cm cell with a dark border is the
+  // strongest thing in the high-pass and it has no direction)
+  const cell = (tuft.id - 0.5) * 0.07 - smoothstep(0.08, 0.0, tuft.f2 - tuft.f1) * 0.03;
+  const light = 1 + (m0 - 0.5) * 0.14 + (m1 - 0.5) * 0.2 + (m2 - 0.5) * 0.03 + (streak - 0.5) * 0.22 * (0.75 + 0.5 * tuft.id) + cell;
   c = [c[0] * light, c[1] * light, c[2] * light];
   if (spots) {
     // cub rosettes: sparse cells, strongest on the belly and flanks, fading
@@ -334,29 +363,28 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
     // (below and inside the eye only: the brow over it carries the pale spot)
     const inner = smoothstep(0.06, 0.03, hx) * smoothstep(ey + 0.01, ey - 0.01, hy);
     c = mixRgb(c, COAT.lip, ring * near * (0.12 + 0.3 * inner));
-    c = mixRgb(c, COAT.black, margin * near * 0.75);
+    // round 8: the margin is the upper lid's — heavy over the eye and at the
+    // corners, half as strong under it, where a lion's lower lid is a thin
+    // dark line over pale skin (round 7 ran a second 8 mm black band on down
+    // the cheek from here to 2.7 R — every critic's raccoon mask; the under-
+    // eye is now the pale patch below and the thin tear line from the inner
+    // corner)
+    const below = smoothstep(ey + 0.006, ey - 0.008, hy) * smoothstep(0.03, 0.055, hx);
+    c = mixRgb(c, COAT.black, margin * near * (0.75 - 0.4 * below));
     c = mixRgb(c, COAT.black, line * near * 0.9);
   }
-  // round 7: under the eye the margin runs on to 0.5 rad past the lower rim
-  // (8 mm more of skin), with its own reach. The loft's cheek puts the skin
-  // just under and inboard of the eye 50-62 mm from the eye's centre (the
-  // brow above tapers in to 35), beyond the `near` gate that scales the
-  // terms above, so no margin reached it; from the truck looking down onto
-  // the face the 4 mm margin foreshortened to under a pixel at 512 and the
-  // lit cheek — the stop and cheek-arch rows turn it to the sun — met the
-  // iris with no lid line between (80 px under the left iris; paint ablation
-  // by distance band: not the lid cap, the ball, the tear stroke, the muzzle
-  // buff, the cornea's sky or the sheen).
-  if (de < R * 2.7) {
-    const under = almondOpen(hx - ex, hy - ey, hz - ez, 0.25, 0.25) * smoothstep(ey + 0.004, ey - 0.012, hy);
-    c = mixRgb(c, COAT.black, under * smoothstep(R * 2.7, R * 2.2, de) * 0.7);
-  }
+  // round 8: the pale patch under the eye — buff on the cheek from the lower
+  // lid down to the arch, inside the tear line, the mark under a lion's eye
+  const pu = Math.hypot((hx - ex - 0.008) / 0.02, (hy - ey + 0.028) / 0.013, (hz - ez - 0.002) / 0.022);
+  c = mixRgb(c, buff, smoothstep(1.0, 0.45, pu) * 0.4);
   // the dark line at the outer corner, back toward the temple
   const wing = segDist(hx, hy, hz, [ex + 0.024, ey - 0.001, ez - 0.006], [ex + 0.042, ey + 0.005, ez - 0.03]);
   c = mixRgb(c, COAT.black, smoothstep(0.006, 0.002, wing) * 0.8);
   // the dark tear line from the inner corner down the side of the muzzle
+  // (round 8: a 5 mm stroke, from 10 — the critics' brief is a thin dark
+  // line from the inner corner down the side of the muzzle)
   const tear = segDist(hx, hy, hz, [ex - 0.024, ey - 0.006, ez + 0.012], [ex - 0.022, ey - 0.046, ez + 0.075]);
-  c = mixRgb(c, COAT.lip, smoothstep(0.0075, 0.0025, tear) * 0.85 * smoothstep(0.25, 0.2, hz));
+  c = mixRgb(c, COAT.lip, smoothstep(0.0045, 0.0015, tear) * 0.85 * smoothstep(0.25, 0.2, hz));
   // whisker follicles: rows of small dark spots on the pad (2 mm, not the
   // half-centimetre buttons of round 3), each with a fine pale whisker
   // stroke running back and out from it over the pad
@@ -461,8 +489,11 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
         });
         // short strokes, faint and scattered in direction: the grain of a
         // coat, not a brushed velvet (long parallel strokes read as stripes)
-        hairStrokes(ctx, ATLAS.body, S, rnd, { count: 18000, len: [4, 11], light: 0.085 });
-        ticking(ctx, ATLAS.body, S, rnd, 11000, 'rgba(50,32,18,0.5)', 1.3, 3.5);
+        // (round 8: strokes 1-2.5 cm long, from 0.4-1.1 — at the gauntlet's
+        // 5 mm per pixel the short ones were under two pixels and averaged
+        // to an isotropic grain — and the ticking's tips longer still)
+        hairStrokes(ctx, ATLAS.body, S, rnd, { count: 14000, len: [10, 26], light: 0.1 });
+        ticking(ctx, ATLAS.body, S, rnd, 11000, 'rgba(50,32,18,0.5)', 1.1, 6);
 
         // --- legs: u around from the outside, v = 0 at the paw ----------------
         fillRegion(ctx, ATLAS.leg, S, (u, v, o) => {
@@ -723,8 +754,11 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           // the lower lip runs along the top of the jaw loft (u = 0.5) and is
           // dark like the upper; only it and the chin show under the upper lip
           c = mixRgb(c, COAT.lip, smoothstep(0.16, 0.1, Math.abs(u - 0.5)) * smoothstep(0.96, 0.9, v) * 0.8);
-          // the chin: small and pale buff, not white
-          c = mixRgb(c, mixRgb(COAT.side, COAT.cream, 0.55), smoothstep(0.8, 0.92, v) * 0.85);
+          // the chin: small and pale buff, not white (round 8: the jaw hangs
+          // 2 cm under the upper lip's edge now, so the pale is kept to the
+          // rounded chin end and half as strong — a pale block under a dark
+          // lip line read as teeth from the front)
+          c = mixRgb(c, mixRgb(COAT.side, COAT.cream, 0.5), smoothstep(0.86, 0.96, v) * 0.55);
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];

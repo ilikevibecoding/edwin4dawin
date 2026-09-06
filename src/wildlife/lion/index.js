@@ -153,7 +153,14 @@ function furRim(m) {
           IncidentLight rimLight;
           getDirectionalLightInfo( directionalLights[ 0 ], rimLight );
           #if defined( USE_SHADOWMAP ) && ( NUM_DIR_LIGHT_SHADOWS > 0 )
-          rimLight.color *= ( rimLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ 0 ], directionalLightShadows[ 0 ].shadowMapSize, directionalLightShadows[ 0 ].shadowIntensity, directionalLightShadows[ 0 ].shadowBias, directionalLightShadows[ 0 ].shadowRadius, vDirectionalShadowCoord[ 0 ] ) : 1.0;
+          // round 8: the shadow gate is floored at 0.4 — along the dorsal
+          // outline the animal's own shadow map is marginal (the outline is
+          // exactly where its depth compare flips), and the rim dropped out
+          // in 1-3 column runs where the lookup landed in shadow; a hair
+          // fringe against a low sun is lit through the hair, not stopped by
+          // the skin's shadow (ablation, dusk close, columns carrying a rim
+          // of +0.3 st: 82 -> 85 %)
+          rimLight.color *= ( rimLight.visible && receiveShadow ) ? max( 0.4, getShadow( directionalShadowMap[ 0 ], directionalLightShadows[ 0 ].shadowMapSize, directionalLightShadows[ 0 ].shadowIntensity, directionalLightShadows[ 0 ].shadowBias, directionalLightShadows[ 0 ].shadowRadius, vDirectionalShadowCoord[ 0 ] ) ) : 1.0;
           #endif
           float rimEdge = pow( 1.0 - saturate( dot( geometryNormal, geometryViewDir ) ), 4.0 );
           float rimBehind = saturate( 0.5 - 0.5 * dot( geometryViewDir, rimLight.direction ) );
