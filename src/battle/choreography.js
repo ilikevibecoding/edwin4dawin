@@ -22,6 +22,7 @@ import {
   classInfo,
   isAgileRole,
   layoutFleet,
+  plannedShips,
 } from "./choreoLayout.js";
 import {
   updateGroups,
@@ -35,6 +36,7 @@ import {
 import {
   Heat,
   HEAVY_RECHARGE,
+  initialHeat,
   chooseTargets,
   updateGuns,
   makeFighterFire,
@@ -140,6 +142,11 @@ export function createBattle({
   fleet.enableInstanceColor();
   const boxes = new Map();
   for (const m of Object.values(models)) boxes.set(m.id, modelBox(m));
+  // the effect load per ship eases as the roster grows past the 45 ships the budgets were tuned on
+  // (fires per ship, the share of the fleet already burning), so the particle layers and the frame
+  // cost stay where they were with the full 67-ship roster
+  const planned = plannedShips(models, scale);
+  const fireK = THREE.MathUtils.clamp(45 / Math.max(1, planned), 0.65, 1);
 
   const states = [];
   const stateByShip = new Map();
@@ -226,6 +233,7 @@ export function createBattle({
       hp: info.hp * (0.85 + rnd() * 0.3),
       hits: 0,
       nextFire: 0,
+      fireStep: 0, // hit points between one fire catching and the next
       target: null,
       target2: null,
       targetSmall: null,
@@ -285,7 +293,8 @@ export function createBattle({
         }
       },
     };
-    st.nextFire = st.hp / 7;
+    st.fireStep = st.hp / (7 * fireK);
+    st.nextFire = st.fireStep;
     for (let i = 0; i < n; i++) st.aimIdx[i] = rnd.int(65535);
     states.push(st);
     stateByShip.set(s, st);
@@ -366,7 +375,21 @@ export function createBattle({
 
   // ---- combat plumbing
   const inFlight = { n: 0, heavy: 0 }; // capital bolts in flight (all / heavy turbolasers)
-  const heat = new Heat(Math.round(80 * fxScale), Math.round(140 * fxScale));
+  // the heavy-bolt band grows a little with the roster (more hulls over a wider volume carry more fire
+  // without reading denser); the controller starts near the steady state for this many heavy guns and
+  // the guns' opening cooldowns are spread over the recharge at that heat
+  const sizeK = THREE.MathUtils.clamp(Math.sqrt(states.length / 45), 1, 1.3);
+  const heatLo = Math.round(80 * fxScale * sizeK);
+  const heatHi = Math.round(140 * fxScale * sizeK);
+  let heavyGuns = 0;
+  for (const st of states)
+    for (const h of st.ship.model.hardpoints)
+      if (h.kind === "heavy") heavyGuns++;
+  const heat0 = initialHeat(heavyGuns, 0.5 * (heatLo + heatHi));
+  for (const st of states)
+    for (let i = 0; i < st.ship.cooldowns.length; i++)
+      st.ship.cooldowns[i] /= heat0;
+  const heat = new Heat(heatLo, heatHi, heat0);
   const ctx = {
     states,
     fleet,
@@ -405,7 +428,7 @@ export function createBattle({
     if (st.role === "melee" && st.cls === "munificent") {
       frac = rand.range(0.35, 0.5);
       nFires = 3;
-    } else if (rand() < 0.3) {
+    } else if (rand() < 0.3 * fireK) {
       frac = rand.range(0.08, 0.3);
       nFires = 1 + (rand() < 0.3 ? 1 : 0);
     }
@@ -413,7 +436,7 @@ export function createBattle({
     st.hits = st.hp * frac;
     s.damage = 12 * frac;
     s.health = 1 - frac;
-    while (st.nextFire <= st.hits) st.nextFire += st.hp / 7;
+    while (st.nextFire <= st.hits) st.nextFire += st.fireStep;
     for (let i = 0; i < nFires; i++) {
       s.randomSurfacePoint(_w, rand);
       _inv.copy(s.matrix).invert();

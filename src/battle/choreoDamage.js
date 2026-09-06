@@ -31,6 +31,7 @@ const HULK_RETIRE = [180, 300]; // s after death before a wreck is retired
 const MAX_FIRES = 12; // persistent fire records per ship
 const FIRE_LIFE = [100, 240]; // s a fire burns on a ship that is still fighting (wrecks burn until retired)
 const MIN_DEATH_GAP = 30; // s between deaths the director did not schedule (the marked ones set the beat)
+const DOOMED_DEATH_GAP = 12; // s a marked ship at zero hit points waits after another death
 
 // Budget test on one particle layer ("add" for everything that glows, "smoke" for the smoke puffs).
 // Falls back to the summed count for an Explosions without the per-layer test.
@@ -216,7 +217,7 @@ export class Director {
     st.hits += b.damage * (st.doomed ? 4 : 0.2);
     s.damage = 12 * Math.min(1, st.hits / st.hp); // the fleet's scorch tint runs 0..12
     if (st.hits >= st.nextFire) {
-      st.nextFire += st.hp / 7;
+      st.nextFire += st.fireStep || st.hp / 7;
       const size = (45 + rand() * 50) * fx;
       const life = rand.range(FIRE_LIFE[0], FIRE_LIFE[1]);
       if (s.fires.length < 6) this.ignite(st, _local, size, life);
@@ -227,10 +228,15 @@ export class Director {
         st.hits = st.hp * 0.92;
         return;
       }
-      // marked ships go now; an unscheduled loss needs a free slot in the window and a little
-      // distance from the last death, so two ships never blow within seconds of each other
-      const spaced = this.ctx.time() - this.lastDeathAt() > MIN_DEATH_GAP;
-      if (st.doomed || (spaced && this.canDie())) this.beginDeath(st);
+      // marked ships go now (a few seconds after the last death at least); an unscheduled loss needs
+      // a free slot in the window and more distance from the last death, so two ships never blow
+      // within seconds of each other
+      const gap = this.ctx.time() - this.lastDeathAt();
+      if (
+        (st.doomed && gap > DOOMED_DEATH_GAP) ||
+        (gap > MIN_DEATH_GAP && this.canDie())
+      )
+        this.beginDeath(st);
       else {
         // the window's deaths are spent (or the fleet is at its floor): critical, burning, holding
         // together until the director's next pick, which strongly prefers ships in this state
@@ -481,8 +487,13 @@ export class Director {
         if (d.t >= d.dur) this.finishDeath(st);
         continue;
       }
-      // a doomed ship that somehow survives the focus fire goes anyway
-      if (st.doomed && now - st.doomedAt > DOOM_FORCE) {
+      // a doomed ship that somehow survives the focus fire goes anyway (keeping its distance from the
+      // last death, like every other death)
+      if (
+        st.doomed &&
+        now - st.doomedAt > DOOM_FORCE &&
+        now - this.lastDeathAt() > DOOMED_DEATH_GAP
+      ) {
         this.beginDeath(st);
         continue;
       }

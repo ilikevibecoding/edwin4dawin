@@ -1,8 +1,9 @@
 // Fleet layout for the Battle of Coruscant: a Republic main line in staggered pairs and wedges to the
-// south (-Z, facing north) with Dreadnoughts in its gaps as artillery and Acclamator transports behind
-// it, Arquitens and Carrack escorts weaving under the Venators and Consular couriers darting along their
-// flanks; the Separatist line to the north with the Providences behind a screen of Munificent frigates
-// and Recusant destroyers and the Lucrehulk battleships hanging far behind, above and below the layer;
+// south (-Z, facing north) with Acclamator transports behind it and the Dreadnought artillery in an arc
+// 6-9 km behind and below it, Arquitens and Carrack escorts weaving under the Venators and Consular
+// couriers darting along their flanks; the Separatist line to the north with the Providences behind a
+// screen of Munificent frigates and Recusant destroyers and the Lucrehulk battleships hanging 4-6 km
+// behind that body, one above and one below the layer;
 // a melee zone in the middle where ships of both sides pass close at odd angles, and a few ships far
 // below near the planet or high above, so every camera angle has ships in the foreground, middle and
 // background. Placement is deterministic from the seeded rng and ends with a pairwise separation pass on
@@ -41,10 +42,11 @@ export const CLASS_INFO = {
   venator: { hp: 130, deathWeight: 1.0, cruise: [10, 18], spacing: 2400 },
   venatorOpen: { hp: 130, deathWeight: 1.0, cruise: [10, 18], spacing: 2400 },
   acclamator: { hp: 85, deathWeight: 1.5, cruise: [9, 16], spacing: 1750 },
-  dreadnought: { hp: 72, deathWeight: 1.6, cruise: [10, 17], spacing: 1500 },
+  dreadnought: { hp: 72, deathWeight: 1.4, cruise: [8, 14], spacing: 1500 },
+  // the small ships: a third of the deaths between them (they go in seconds, with small blasts)
   arquitens: {
     hp: 38,
-    deathWeight: 2.8,
+    deathWeight: 2.0,
     cruise: [30, 46],
     spacing: 900,
     turn: 3.4,
@@ -53,7 +55,7 @@ export const CLASS_INFO = {
   },
   carrack: {
     hp: 42,
-    deathWeight: 2.6,
+    deathWeight: 1.8,
     cruise: [28, 42],
     spacing: 900,
     turn: 3.0,
@@ -62,7 +64,7 @@ export const CLASS_INFO = {
   },
   consular: {
     hp: 20,
-    deathWeight: 3.4,
+    deathWeight: 2.2,
     cruise: [55, 80],
     spacing: 500,
     turn: 10,
@@ -84,13 +86,17 @@ export const CLASS_INFO = {
 };
 export const classInfo = (id) => CLASS_INFO[id] || CLASS_INFO.venator;
 export const isAgileRole = (role) => role === "escort" || role === "courier";
-// line ships that escorts and couriers attach themselves to
-export const WARD_CLASSES = new Set([
-  "venator",
-  "venatorOpen",
-  "dreadnought",
-  "acclamator",
-]);
+// line ships that escorts and couriers attach themselves to (the Dreadnoughts sit too far back)
+export const WARD_CLASSES = new Set(["venator", "venatorOpen", "acclamator"]);
+
+// planned number of capital ships at a given scale for the classes present (for load scaling)
+export function plannedShips(models, scale) {
+  let n = 0;
+  for (const side of Object.values(FLEET_PLAN))
+    for (const [id, count] of Object.entries(side))
+      if (models[id]) n += Math.max(1, Math.round(count * scale));
+  return n;
+}
 
 const _p = new THREE.Vector3();
 const _dir = new THREE.Vector3();
@@ -163,11 +169,12 @@ export function layoutFleet({ models, rand, scale, addShip, boxes }) {
       -0.05,
       0.0002,
     ),
-    // the battleships barely move: a third of the carriers' drift, almost no turn
+    // the battleships barely move: a third of the carriers' drift, almost no turn; 4.4 km behind the
+    // carriers and 6 km behind the destroyers
     sepBattleships: makeGroup(
       "separatist battleships",
       "separatist",
-      [0, 0, 9300],
+      [0, 0, 11000],
       [0.4, 0, -1.1],
       0,
       -0.00006,
@@ -288,25 +295,22 @@ export function layoutFleet({ models, rand, scale, addShip, boxes }) {
     }
   });
 
-  // ---- Dreadnought artillery in the gaps of the line, a little behind it; extras off the ends, then
-  // a second rank
+  // ---- Dreadnought artillery: an arc 6-9 km behind and below the line (the centre ship deepest and
+  // lowest, the wings nearer), bows toward the enemy, firing over the line at long range
   {
-    const gapSlots = [];
-    for (let u = 0; u + 1 < units.length; u++)
-      gapSlots.push([-lineSpan / 2 + (u + 0.5) * UNIT_DX, -1500]);
-    gapSlots.push([-lineSpan / 2 - 1600, -1200], [lineSpan / 2 + 1600, -1200]);
-    for (let u = 0; u < units.length; u++)
-      gapSlots.push([-lineSpan / 2 + u * UNIT_DX, -2700]);
+    const arcHalf = Math.max(3200, lineSpan * 0.55);
     for (let i = 0; i < nD; i++) {
-      const [gx, gz] = gapSlots[i % gapSlots.length];
+      // -1..1 across the arc: three ships sit at the wings and the centre, two at the quarter points
+      const u = nD === 1 ? 0 : nD === 2 ? i - 0.5 : (i / (nD - 1)) * 2 - 1;
+      const bulge = 1 - u * u;
       put(
         models.dreadnought,
-        gx + rand.range(-200, 200),
-        rand.range(-450, 450),
-        gz + rand.range(-250, 250),
-        Math.PI + rand.range(-0.25, 0.25),
-        rand.range(-0.12, 0.12),
-        rand.range(-0.3, 0.3),
+        u * arcHalf + rand.range(-250, 250),
+        -1300 - 900 * bulge + rand.range(-250, 250),
+        -6000 - 3000 * bulge + rand.range(-300, 300),
+        Math.PI + rand.range(-0.12, 0.12),
+        rand.range(-0.04, 0.1),
+        rand.range(-0.2, 0.2),
         "line",
         groups.repLine,
       );
@@ -381,7 +385,7 @@ export function layoutFleet({ models, rand, scale, addShip, boxes }) {
       groups.sepCarriers,
     );
   }
-  // ---- Lucrehulk battleships: 4-6 km behind the destroyer line, one above and one below the layer,
+  // ---- Lucrehulk battleships: 4-6 km behind the Separatist body, one above and one below the layer,
   // rings level but for a small roll, the bow gap toward the Republic, at least 3.5 km apart
   {
     const slots =

@@ -85,20 +85,32 @@ const MAX_RANGE = 16000;
 // heavy turbolaser bolts are in flight and drops when there are too many. The heavy salvos are what
 // reads on camera at a few kilometres; the light guns ride along on the same factor.
 export class Heat {
-  constructor(lo = 80, hi = 140) {
+  constructor(lo = 80, hi = 140, initial = 1) {
     this.lo = lo;
     this.hi = hi;
-    this.value = 1;
+    this.value = initial;
+    this.smooth = -1; // smoothed in-flight count (salvos arrive in bursts)
   }
   update(inFlight, dt) {
-    // slow proportional slew outside the band: the guns answer a change of heat only after their
-    // current recharge (several seconds), so a fast integrator would hunt
+    // the count is smoothed over ~6 s and the divisor slews slowly outside the band: the guns answer
+    // a change of heat only after their current recharge (up to 20 s at low heat, plus the bolts'
+    // flight), so a fast integrator hunts between the band's ends
+    if (this.smooth < 0) this.smooth = inFlight;
+    this.smooth += (inFlight - this.smooth) * Math.min(1, dt / 6);
     const mid = 0.5 * (this.lo + this.hi);
     let err = 0;
-    if (inFlight < this.lo) err = (this.lo - inFlight) / mid;
-    else if (inFlight > this.hi) err = (this.hi - inFlight) / mid;
-    this.value = THREE.MathUtils.clamp(this.value + err * 0.15 * dt, 0.4, 3.0);
+    if (this.smooth < this.lo) err = (this.lo - this.smooth) / mid;
+    else if (this.smooth > this.hi) err = (this.hi - this.smooth) / mid;
+    this.value = THREE.MathUtils.clamp(this.value + err * 0.06 * dt, 0.25, 3.0);
   }
+}
+
+// Starting heat for a fleet with `heavyGuns` heavy hardpoints and a band centred on `mid`: at heat 1 a
+// heavy gun keeps roughly 0.4 bolts in the air on average (2.5 bolts a salvo over 4-5 s of flight every
+// ~14 s, half the guns masked or out of range), so the exchange opens near its steady state instead of
+// flooding the band and waiting a minute for the controller
+export function initialHeat(heavyGuns, mid) {
+  return THREE.MathUtils.clamp(mid / (0.4 * Math.max(1, heavyGuns)), 0.3, 1.5);
 }
 
 // nominal heavy recharge between salvos (divided by heat); the initial cooldowns are spread over it so
@@ -162,6 +174,9 @@ export function chooseTargets(st, states, rand) {
       bestSide = Math.sign(_to.dot(_side)) || 1;
     }
   }
+  // the reach of the ship's main guns: targets beyond it score badly (the artillery far behind the
+  // lines picks what it can actually hit)
+  const reach = gi.heavy ? gi.heavyRange : gi.lightRange || MAX_RANGE;
   if (!best)
     for (const o of states) {
       if (o.side === st.side || o.dead || o.dying) continue;
@@ -173,6 +188,7 @@ export function chooseTargets(st, states, rand) {
       score *= 1 + 0.18 * (o.targetedBy - (st.target === o ? 1 : 0));
       score *= 1 + 0.5 * Math.abs(Math.log2(o.ship.model.length / Ls));
       score *= classInfo(o.cls).drawFire || 1;
+      if (d > reach) score *= 3;
       score *= 0.7 + 0.6 * rand();
       if (score < bestScore) {
         bestScore = score;

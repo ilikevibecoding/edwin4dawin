@@ -211,6 +211,24 @@ for (const cp of checkpoints) {
     console.log(
       `   hull overlaps (oriented boxes touching): ${overlaps.length}${overlaps.length ? " " + JSON.stringify(overlaps) : ""}`,
     );
+  // per-class roster: alive (dying) + wrecks still drawn, with the roles the class is flying
+  const classes = await page.evaluate(() =>
+    window.debugAPI.battle.classCounts
+      ? window.debugAPI.battle.classCounts()
+      : null,
+  );
+  if (classes) {
+    const line = Object.entries(classes)
+      .map(([cls, c]) => {
+        const roles = Object.entries(c.roles)
+          .map(([r, n]) => `${r} ${n}`)
+          .join(", ");
+        return `${cls} ${c.alive}${c.dying ? `+${c.dying} dying` : ""}${c.dead ? `+${c.dead} wreck` : ""} [${roles}]`;
+      })
+      .join("  ");
+    console.log(`   classes: ${line}`);
+    results[results.length - 1].classes = classes;
+  }
   const minSep = await page.evaluate(() => {
     const ships = window.debugAPI.fleet.ships.filter((s) => s.alive);
     let best = null;
@@ -271,6 +289,22 @@ const deathLog = await page.evaluate(() => {
   const d = window.debugAPI.battle.director;
   return d && d.deathLog ? d.deathLog : [];
 });
+// roster summary: ships per class at the start and the end (alive, incl. dying), deaths per class
+const roster = results[0].classes;
+if (roster) {
+  const end = results[results.length - 1].classes || {};
+  console.log(
+    "roster (class: alive at start -> at end, deaths): " +
+      Object.keys(roster)
+        .map((cls) => {
+          const a = roster[cls];
+          const b = end[cls] || { alive: 0, dying: 0 };
+          const deaths = deathLog.filter((e) => e.cls === cls).length;
+          return `${cls} ${a.alive + a.dying}->${b.alive + b.dying}${deaths ? ` (-${deaths})` : ""}`;
+        })
+        .join("  "),
+  );
+}
 if (deathLog.length) {
   console.log(
     `deaths (${deathLog.length} over ${total} s): ` +
