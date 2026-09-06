@@ -30,7 +30,7 @@ const DOOM_FORCE = 18; // s: a doomed ship that outlives the focus fire this lon
 const HULK_RETIRE = [180, 300]; // s after death before a wreck is retired
 const MAX_FIRES = 12; // persistent fire records per ship
 const FIRE_LIFE = [100, 240]; // s a fire burns on a ship that is still fighting (wrecks burn until retired)
-const MIN_DEATH_GAP = 30; // s between deaths the director did not schedule (the marked ones set the beat)
+const MIN_DEATH_GAP = 45; // s between deaths the director did not schedule (the marked ones set the beat)
 const DOOMED_DEATH_GAP = 12; // s a marked ship at zero hit points waits after another death
 
 // Budget test on one particle layer ("add" for everything that glows, "smoke" for the smoke puffs).

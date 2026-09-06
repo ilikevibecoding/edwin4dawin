@@ -6,6 +6,7 @@
 // Usage: node tools/choreo-soak.mjs [--base http://127.0.0.1:5307/battle.html] [--out /tmp/soak]
 //        [--step 60] [--total 180] [--views wide,lines] [--shots 0,6,7]  (cinematic shot indices to grab)
 //        [--shot-t 5] [--shots-at 60,120]   e.g. a 20-minute run: --total 1200 --step 120 --views ""
+//        [--size 960x540]  screenshot size (software GL renders a 1280x720 frame in about twice the time)
 import { chromium } from "playwright-core";
 import { mkdirSync, existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -26,6 +27,7 @@ const views = opt("--views", "wide").split(",").filter(Boolean);
 const shots = opt("--shots", "").split(",").filter(Boolean).map(Number);
 const shotT = +opt("--shot-t", 5);
 const shotsAt = opt("--shots-at", "").split(",").filter(Boolean).map(Number); // checkpoints that grab shots (default all)
+const [width, height] = opt("--size", "960x540").split("x").map(Number);
 mkdirSync(outDir, { recursive: true });
 
 const executablePath = [
@@ -50,7 +52,7 @@ const browser = await chromium.launch({
   ],
 });
 const page = await browser.newPage({
-  viewport: { width: 1280, height: 720 },
+  viewport: { width: width || 960, height: height || 540 },
   deviceScaleFactor: 1,
 });
 page.setDefaultTimeout(240000);
