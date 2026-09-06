@@ -197,6 +197,96 @@ const VIEWS = {
     pitch: 0.18,
   },
   fighters_close: { fighter: 0, distance: 70, yaw: 2.4, pitch: 0.2 },
+  lucrehulk_close: {
+    ship: { side: "separatist", cls: "lucrehulk", i: 0 },
+    distance: 2600,
+    yaw: 0.7,
+    pitch: 0.3,
+  },
+  lucrehulk_medium: {
+    ship: { side: "separatist", cls: "lucrehulk", i: 1 },
+    distance: 5500,
+    yaw: -2.3,
+    pitch: 0.22,
+  },
+  lucrehulk_far: {
+    ship: { side: "separatist", cls: "lucrehulk", i: 0 },
+    distance: 14000,
+    yaw: 2.6,
+    pitch: 0.15,
+  },
+  dreadnought_close: {
+    ship: { side: "republic", cls: "dreadnought", i: 0 },
+    distance: 700,
+    yaw: 0.7,
+    pitch: 0.25,
+  },
+  dreadnought_medium: {
+    ship: { side: "republic", cls: "dreadnought", i: 1 },
+    distance: 1600,
+    yaw: 2.4,
+    pitch: 0.2,
+  },
+  dreadnought_far: {
+    ship: { side: "republic", cls: "dreadnought", i: 1 },
+    distance: 9000,
+    yaw: 3.1,
+    pitch: 0.12,
+  },
+  acclamator_close: {
+    ship: { side: "republic", cls: "acclamator", i: 0 },
+    distance: 800,
+    yaw: 0.7,
+    pitch: 0.25,
+  },
+  acclamator_medium: {
+    ship: { side: "republic", cls: "acclamator", i: 1 },
+    distance: 1900,
+    yaw: -2.3,
+    pitch: 0.2,
+  },
+  acclamator_far: {
+    ship: { side: "republic", cls: "acclamator", i: 2 },
+    distance: 9000,
+    yaw: 0.4,
+    pitch: 0.15,
+  },
+  arquitens_close: {
+    ship: { side: "republic", cls: "arquitens", i: 0 },
+    distance: 420,
+    yaw: 0.7,
+    pitch: 0.25,
+  },
+  arquitens_medium: {
+    ship: { side: "republic", cls: "arquitens", i: 1 },
+    distance: 1100,
+    yaw: 2.4,
+    pitch: 0.2,
+  },
+  carrack_close: {
+    ship: { side: "republic", cls: "carrack", i: 0 },
+    distance: 420,
+    yaw: 0.7,
+    pitch: 0.25,
+  },
+  carrack_medium: {
+    ship: { side: "republic", cls: "carrack", i: 1 },
+    distance: 1100,
+    yaw: -2.3,
+    pitch: 0.2,
+  },
+  consular_close: {
+    ship: { side: "republic", cls: "consular", i: 0 },
+    distance: 220,
+    yaw: 0.7,
+    pitch: 0.25,
+  },
+  consular_medium: {
+    ship: { side: "republic", cls: "consular", i: 1 },
+    distance: 600,
+    yaw: 2.4,
+    pitch: 0.2,
+  },
   providence_medium: {
     ship: { side: "separatist", cls: "providence", i: 1 },
     distance: 2200,
@@ -241,10 +331,12 @@ const VIEWS = {
 };
 
 function shipFor(spec) {
+  // ship variants share a class prefix (venator / venatorOpen); a class absent from this build falls back
+  // to any ship so the view still renders something sensible
   const list = fleet.ships.filter(
-    (s) => s.side === spec.side && s.model.id === spec.cls,
+    (s) => s.side === spec.side && s.model.id.startsWith(spec.cls),
   );
-  return list[spec.i % list.length] || fleet.ships[0];
+  return list.length ? list[spec.i % list.length] : fleet.ships[0];
 }
 
 // ---------------------------------------------------------------------------

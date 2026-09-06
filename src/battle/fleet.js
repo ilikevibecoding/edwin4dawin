@@ -281,6 +281,7 @@ export class Fleet {
   }
 
   update(dt, camPos) {
+    this._frame = (this._frame || 0) + 1;
     // motion
     for (const s of this.ships) {
       if (!s.alive) continue;
@@ -307,7 +308,9 @@ export class Fleet {
         const L = s.lod;
         const i = counts[L]++;
         if (i >= entry.capacity) continue;
-        if (entry.turrets) this._updateTurrets(entry, s, dt, L < 2);
+        // turrets slew every frame while drawn; distant (LOD 2) ships aim on every 4th frame
+        if (entry.turrets && (L < 2 || ((this._frame + s.id) & 3) === 0))
+          this._updateTurrets(entry, s, L < 2 ? dt : dt * 4, L < 2);
         // damage darkens the hull tint; a dead hull is a dark wreck and its windows / engine cores go out
         const dead = s.health <= 0;
         const k = dead ? 0.42 : Math.max(0.55, 1 - s.damage * 0.04);
