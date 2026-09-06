@@ -981,6 +981,8 @@ export class Streets {
       if (k > occupancy) continue;
       if (keepClear.some(([cs, r]) => Math.abs(s - cs) < r + 2.6)) continue;
       const q = at(s + (k / occupancy - 0.5) * 0.5, -1.2);
+      // 1.2 m inside its own carriageway edge; deeper means another road's carriageway overlaps this one here
+      if (this.roads.distance(q.x, q.z) < -2.2) { this.counts.rejected++; continue; }
       const { yard, yardFar } = this.soupsAt(q.x, q.z);
       const y = roadEdgeY(chain, s, side) + 0.02;
       // the cross vector is the right-hand normal of +s, so with right-hand traffic the nose points +s on side +1
