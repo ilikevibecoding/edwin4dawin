@@ -45,6 +45,7 @@ const RAIL_PROFILE: readonly [number, number][] = [[0.0, 0.55], [0.085, 0.625], 
 const POST_SPACING = 1.905;
 /** median lighting: twin-arm cobra heads 12 m over the pavement every 60 m (barrier-mounted poles) */
 const POLE_SPACING = 60;
+const POLE_SPACING_JUNCTION = 40;
 const POLE_H = 11.4;
 const ARM_REACH = 2.9;
 /** verge beside the pavement edge: a gravel band along the pavement, mown grass (sand on the beaches) beyond */
@@ -68,10 +69,13 @@ const _n = new THREE.Vector3(), _d = new THREE.Vector3(), _a = new THREE.Vector3
 
 const C_BARRIER: Rgb = [0.86, 0.86, 0.84];
 const C_BARRIER_TOP: Rgb = [0.93, 0.93, 0.91];
+const C_ISLAND_TOP: Rgb = [0.30, 0.34, 0.20];   // planted top of the cross-road median islands
 const C_PEDESTAL: Rgb = [0.72, 0.72, 0.70];
 const C_APRON: Rgb = [0.62, 0.62, 0.60];
 const C_GRATE: Rgb = [0.16, 0.16, 0.17];
-const C_VERGE_GRASS: Rgb = [0.36, 0.52, 0.21];   // mown, irrigated verge: fresher and deeper than the dry lots around
+const C_VERGE_GRASS: Rgb = [0.19, 0.32, 0.12];   // mown, irrigated verge: a shade fresher than the terrain's lawn (0.064, 0.105, 0.038 before the
+                                                 // material's 0xb8b4aa base), not the bright band it was: from 200-1500 m it must read as a strip of
+                                                 // the same grass as the lots, kept, not as a neon ribbon
 const C_VERGE_SAND: Rgb = [0.74, 0.66, 0.52];    // packed sand and shell where the highway crosses the beaches
 const S_GALV: Rgb = [0.56, 0.58, 0.60];       // galvanised guardrail, posts, gantry steel (satin, blotchy in the shader)
 const S_POLE: Rgb = [0.46, 0.47, 0.49];       // weathered galvanised lighting columns (read against the pale pavement from the air)
@@ -143,6 +147,13 @@ const CONCRETE_FRAG = /* glsl */ `
     // the drainage swale 5-8 m out: damper ground, the grass darker and rank
     float swale = smoothstep(4.6, 6.0, across) * (1.0 - smoothstep(7.0, 8.4, across));
     cover *= 1.0 - isGrass * swale * (0.14 + 0.08 * n);
+    // where the irrigation misses, 40-80 m patches have dried to the khaki of the yards around (the terrain's dry
+    // grass, 0.19, 0.155, 0.064, before the material base), and past the mowing limit the outer 4 m go over to it,
+    // so the strip is neither one tone along nor a hard-edged band across
+    vec3 dry = vec3(0.40, 0.34, 0.16) * (0.86 + 0.28 * n) * (0.92 + 0.16 * grain);
+    float dryPatch = smoothstep(0.5, 0.64, fbm3(vWorldPosH.xz * 0.017 + 4.0));
+    float outer = smoothstep(7.5, 12.0, across);
+    cover = mix(cover, dry, isGrass * max(0.8 * dryPatch, 0.55 * outer));
     diffuseColor.rgb = mix(cover, gravel, band);
     roughnessFactor = 0.97;
   } else if (kind > 3.5 && kind < 4.5) {
@@ -165,7 +176,7 @@ const CONCRETE_FRAG = /* glsl */ `
     float secTone = 0.84 + 0.32 * hash11(floor((along + lane * 137.0) / 310.0) * 7.0 + lane + 11.0);
     asphalt *= mix(secTone, 1.0, 0.3);
     float wheel = exp(-pow((abs(xm - mix(1.5, 4.7, lane)) - 0.8) * 2.5, 2.0)) * (1.0 - onShoulder);
-    asphalt *= 1.0 - 0.10 * wheel;
+    asphalt *= 1.0 - 0.16 * wheel;
     vec3 shoulderMix = mix(vec3(0.20, 0.20, 0.19), vec3(0.27, 0.265, 0.25), nC) * (0.95 + 0.10 * n2);
     shoulderMix *= 1.0 + 0.12 * smoothstep(${(PAVE_JOINT + 1.5).toFixed(2)}, 10.6, xm) * (0.5 + 0.5 * fbm3(vWorldPosH.xz * 0.5 + 3.0));
     asphalt = mix(asphalt, shoulderMix, onShoulder);
@@ -439,9 +450,12 @@ interface Chain {
   bridgeEnd: BridgeSpec | null;
 }
 
-/** a road meeting the chain: station, whether it is an arterial / highway, and the side (+1 = toward +cross, i.e.
- *  the right of the chain's forward direction) it leaves toward (0 when it crosses) */
-interface Junction { s: number; major: boolean; side: -1 | 0 | 1; }
+/** one leg of a road leaving a junction: the point on the highway axis it leaves from, its unit direction away
+ *  from the highway, its length to the far end and the segment (width, lift) it belongs to */
+interface Arm { x: number; z: number; dx: number; dz: number; len: number; seg: RoadSegment; }
+/** a road meeting the chain: station, whether it is an arterial / highway, the side (+1 = toward +cross, i.e.
+ *  the right of the chain's forward direction) it leaves toward (0 when it crosses), and its arms */
+interface Junction { s: number; major: boolean; side: -1 | 0 | 1; arms: Arm[]; }
 
 function buildChains(map: WorldMap, segments: RoadSegment[]): Chain[] {
   const chains: RoadSegment[][] = [];
@@ -630,6 +644,15 @@ function makeRoadTest(c: Chain, segments: RoadSegment[]): (x: number, z: number,
   };
 }
 
+/** Distance from a point to a road segment's centreline. */
+function distToSegment(x: number, z: number, s: RoadSegment): number {
+  const ax = s.a[0], az = s.a[1], dx = s.b[0] - ax, dz = s.b[1] - az;
+  const l2 = dx * dx + dz * dz;
+  if (l2 < 1e-6) return Math.hypot(x - ax, z - az);
+  const t = clamp(((x - ax) * dx + (z - az) * dz) / l2, 0, 1);
+  return Math.hypot(ax + dx * t - x, az + dz * t - z);
+}
+
 /** Stations of other roads meeting the chain: segment crossings and end points on the pavement. */
 function findJunctions(c: Chain, segments: RoadSegment[]): Junction[] {
   const js: Junction[] = [];
@@ -650,7 +673,13 @@ function findJunctions(c: Chain, segments: RoadSegment[]): Junction[] {
           // a crossing, unless the other road only starts / ends here (then it leaves toward its far end)
           const ends = u < 0.02 ? s.b : u > 0.98 ? s.a : null;
           const side: -1 | 0 | 1 = ends ? (Math.sign(c.cross[i][0] * (ends[0] - ax) + c.cross[i][1] * (ends[1] - az)) as -1 | 0 | 1) : 0;
-          js.push({ s: c.cum[i] + t * c.segLen[i], major, side });
+          const px = s.a[0] + q[0] * u, pz = s.a[1] + q[1] * u;
+          const arms: Arm[] = [];
+          for (const far of ends ? [ends] : [s.a, s.b]) {
+            const len = Math.hypot(far[0] - px, far[1] - pz);
+            if (len > 1) arms.push({ x: px, z: pz, dx: (far[0] - px) / len, dz: (far[1] - pz) / len, len, seg: s });
+          }
+          js.push({ s: c.cum[i] + t * c.segLen[i], major, side, arms });
           continue;
         }
       }
@@ -662,7 +691,8 @@ function findJunctions(c: Chain, segments: RoadSegment[]): Junction[] {
         if (d < c.hw + 2.5) {
           const far = p === s.a ? s.b : s.a;
           const side = Math.sign(c.cross[i][0] * (far[0] - ax) + c.cross[i][1] * (far[1] - az)) as -1 | 0 | 1;
-          js.push({ s: c.cum[i] + t * c.segLen[i], major, side });
+          const len = Math.hypot(far[0] - p[0], far[1] - p[1]);
+          js.push({ s: c.cum[i] + t * c.segLen[i], major, side, arms: len > 1 ? [{ x: p[0], z: p[1], dx: (far[0] - p[0]) / len, dz: (far[1] - p[1]) / len, len, seg: s }] : [] });
         }
       }
     }
@@ -671,8 +701,8 @@ function findJunctions(c: Chain, segments: RoadSegment[]): Junction[] {
   const out: Junction[] = [];
   for (const j of js) {
     const last = out[out.length - 1];
-    if (last && Math.abs(last.s - j.s) < 20) { last.major ||= j.major; if (last.side !== j.side) last.side = 0; continue; }
-    out.push({ ...j });
+    if (last && Math.abs(last.s - j.s) < 20) { last.major ||= j.major; if (last.side !== j.side) last.side = 0; last.arms.push(...j.arms); continue; }
+    out.push({ ...j, arms: [...j.arms] });
   }
   return out;
 }
@@ -935,6 +965,14 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     const nearFoot = (s: number, r: number) => footbridges.some((b) => Math.abs(b - s) < r);
     const openings: Run[] = majors.map((j) => ({ s0: j.s - 19, s1: j.s + 19 }));
     if (toll) openings.push({ s0: toll.s - 48, s1: toll.s + 48 });
+    // no terminal may stand in the mouth of a road meeting the highway (the plaza's west terminal, drums and all,
+    // stood in the path of a street crossing there): an opening whose end falls within a mouth grows past it
+    for (const o of openings) {
+      for (const j of junctions) {
+        if (Math.abs(j.s - o.s0) < 13) o.s0 = Math.min(o.s0, j.s - 13);
+        if (Math.abs(j.s - o.s1) < 13) o.s1 = Math.max(o.s1, j.s + 13);
+      }
+    }
     const endPad = 1.2;
     const barrierRuns = subtractRuns({ s0: endPad, s1: c.total - endPad }, openings);
     const TAPER = 7;
@@ -980,6 +1018,45 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       }
     }
 
+    // -------------------------------------------------------- cross-road medians: a kerbed island down the centre of every arterial arm of a
+    // signalised junction, from the kerb returns of the box out to 60 m (the approach a mast arm implies), stopped
+    // short of any other road mouth on the arm. The traffic drives the innermost arterial lane 1.5 m off the centre
+    // line (1.8 m on two-lane arterials, traffic.ts), so the island is a raised divider 0.6 m wide there (1.0 m
+    // with a planted top on two-lane arms) - what fits between the wheel tracks. The arm's pavement is the roads.ts
+    // strip - the height field at its two edges, ROAD_LIFT up - so the island is built on that surface row by row,
+    // its kerb footing 8 cm into the pavement to ride out the strip's own rows
+    for (const j of majors) {
+      for (const arm of j.arms) {
+        if (arm.seg.cls !== 'arterial') continue;
+        const d0 = hw + 4.0;
+        let d1 = Math.min(d0 + 60, arm.len - 8);
+        for (let d = d0; d <= d1; d += 2) {
+          const x = arm.x + arm.dx * d, z = arm.z + arm.dz * d;
+          if (segments.some((o) => o !== arm.seg && o.cls !== c.cls && o.cls !== 'runway' && o.cls !== 'taxiway' && distToSegment(x, z, o) < o.width * 0.5 + 1.0)) { d1 = d - 7; break; }
+        }
+        if (d1 < d0 + 14) continue;
+        const yaw = Math.atan2(arm.dx, arm.dz);
+        const nx = -arm.dz, nz = arm.dx, ew = arm.seg.width * 0.5;
+        const pav = (d: number) => {
+          const x = arm.x + arm.dx * d, z = arm.z + arm.dz * d;
+          return 0.5 * (map.heightAt(x + nx * ew, z + nz * ew) + map.heightAt(x - nx * ew, z - nz * ew)) + ROAD_LIFT + arm.seg.lift;
+        };
+        const soup = P(j.s).conc;
+        const n = Math.ceil((d1 - d0) / 7.5);
+        for (let k = 0; k < n; k++) {
+          const a = d0 + ((d1 - d0) * k) / n, b = d0 + ((d1 - d0) * (k + 1)) / n, m = (a + b) / 2;
+          const y = Math.max(pav(a), pav(b), pav(m));
+          const x = arm.x + arm.dx * m, z = arm.z + arm.dz * m;
+          // the nose piece tapers: half width, so the island points at the box
+          const wFull = arm.seg.lanes >= 4 ? 0.6 : 1.0;
+          const w = k === 0 ? wFull * 0.55 : wFull;
+          soup.box(x, y - 0.08, z, w, 0.23, b - a + 0.02, yaw, 0, C_BARRIER, false, [0, 0, 0, 0]);
+          if (k > 0 && wFull >= 1.0) soup.box(x, y + 0.15, z, w - 0.4, 0.03, b - a - 0.3, yaw, 0, C_ISLAND_TOP, false, [0, 0, 0, 0]);
+        }
+        counts.barrierM += d1 - d0;
+      }
+    }
+
     // -------------------------------------------------------- verges: the mown right-of-way strip beside each pavement edge (a gravel band, then
     // grass - or sand on the beaches - out to 12 m), draped on the terrain row by row and stopped at the water's edge; it
     // gives the corridor its edges from the air and the posts stand on it
@@ -998,8 +1075,12 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
           const g = terrainAt(map, x, z);
           if (k > 0 && g < 0.15) break;
           // 5 cm under the pavement edge, then on the rendered terrain at the lift the roads use (the clipmap sits
-          // under it), never dropping or climbing faster than a real graded verge would between two rows
-          const y = k === 0 ? surfaceAt(c, s, a) - 0.05 : clamp(g + ROAD_LIFT - 0.05, yPrev - 0.35 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]), yPrev + 0.12 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]));
+          // under it), never dropping or climbing faster than a real graded verge would between two rows; under
+          // another road's pavement (a frontage street beside the shoulder, a street mouth) the row is sunk well
+          // below it - that pavement is flat between its 15 m rows while the terrain the verge follows is not, and
+          // the verge showed through it in green blotches from 180 m
+          const under = k > 0 && inRoad(x, z, 0.4) ? 0.45 : 0.05;
+          const y = k === 0 ? surfaceAt(c, s, a) - 0.05 : clamp(g + ROAD_LIFT - under, yPrev - 0.35 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]), yPrev + 0.12 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]));
           yPrev = y;
           out.push({ p: new THREE.Vector3(x, y, z), tone: map.zoneAt(x, z) === 2 || g < 1.2 ? C_VERGE_SAND : C_VERGE_GRASS });
         }
@@ -1218,7 +1299,9 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     // -------------------------------------------------------- lighting: barrier-mounted twin-arm poles every 60 m
     /** stations of the poles that stand (the wearing course lays a lamp pool under each at night) */
     const poleStations: number[] = [];
-    for (let s = 32; s < c.total - 12; s += POLE_SPACING) {
+    // 60 m spacing along the open road, 40 m through the 160 m either side of a signalised junction (the denser
+    // lighting a junction gets, and the pole rhythm the 180 m junction views read)
+    for (let s = 32; s < c.total - 12; s += majors.some((j) => Math.abs(j.s - s) < 160) ? POLE_SPACING_JUNCTION : POLE_SPACING) {
       if (nearGantry(s, 24) || nearFoot(s, 9) || openings.some((o) => s > o.s0 - 4 && s < o.s1 + 4)) continue;
       poleStations.push(s);
       const f = frameAt(c, s);
