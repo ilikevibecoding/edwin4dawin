@@ -136,7 +136,7 @@ if (facadeGlass > 0.0) {
   // colour; the real ray crosses kilometres of air and shows the haze band instead, which is why distant
   // towers read pale and sky-coloured rather than grey: below-horizon radiance blends toward the haze.
   vec3 rv = inverseTransformDirection(reflect(-geometryViewDir, geometryNormal), viewMatrix);
-  vec3 rb = normalize(vec3(rv.x, rv.y + 0.55 * (facadeHf - 0.4), rv.z));
+  vec3 rb = normalize(vec3(rv.x, rv.y + 0.4 * (facadeHf - 0.4), rv.z));
   vec3 sky = textureCubeUV(envMap, envMapRotation * rb, material.roughness).rgb * envMapIntensity;
   radiance = mix(radiance, sky, facadeGlass);
   float below = smoothstep(0.0, -0.2, rb.y) * facadeGlass;

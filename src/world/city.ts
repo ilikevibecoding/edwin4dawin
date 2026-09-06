@@ -931,24 +931,23 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('box', x + 17, z, 26, 196, 58, 0.03, '#a9bccb', S.GLASS_BLUE, 3.9, o);
     place('box', x, z, 10, 9, 54, 0.03, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 187, lit: 0.9, warm: 0.3, variant: 0.5, margin: -1 });
     place('box', x, z, 10, 5, 50, 0.03, '#dfe4e8', S.CONCRETE, 3, { yBase: g + 96, margin: -1 });
-    place('frustum', x + 17, z, 2.5, 26, 2.5, 0.03, '#cfd8dc', S.CONCRETE, 3, { yBase: g + 196, margin: -1 });
-    return 222;
+    return 196;
   });
   landmark('Ziggurat', 400, 170, (x, z, g) => {
-    // stepped pastel setbacks, every tier's roof a terrace, a mast on the last
+    // stepped pastel setbacks, every tier's roof a terrace, a lit lantern on the last
     for (const [w, h] of [[64, 48], [52, 94], [42, 132], [32, 162], [22, 184]]) place('box', x, z, w, h, w * 0.85, 0.02, '#f2d9c4', S.DECO, 3.4, { lit: 0.35, warm: 0.8, variant: 0.7 });
-    place('frustum', x, z, 6, 30, 6, 0.02, '#e8e4dc', S.CONCRETE, 3, { yBase: g + 184, margin: -1 });
-    return 214;
+    place('box', x, z, 12, 6, 10, 0.02, '#c2d0da', S.GLASS_BLUE, 3.9, { yBase: g + 184, lit: 0.9, warm: 0.6, variant: 0.5, margin: -1 });
+    return 190;
   });
   landmark('Twin Sails', 520, -250, (x, z, g) => {
     // twin glass towers with tapered tops on a shared podium, one five floors taller
     const o = { lit: 0.5, warm: 0.25, variant: 0.4 };
     place('box', x, z, 92, 14, 60, 0.05, '#c9c4b8', S.PUNCHED, 3.5, { lit: 0.2, warm: 0.6, variant: 0.5 });
-    place('box', x - 25, z, 30, 168, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, o);
-    place('frustum', x - 25, z, 30, 22, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, { ...o, yBase: g + 168, margin: -1 });
-    place('box', x + 25, z, 30, 148, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, o);
-    place('frustum', x + 25, z, 30, 22, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, { ...o, yBase: g + 148, margin: -1 });
-    return 190;
+    place('box', x - 25, z, 30, 198, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, o);
+    place('frustum', x - 25, z, 30, 24, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, { ...o, yBase: g + 198, margin: -1 });
+    place('box', x + 25, z, 30, 176, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, o);
+    place('frustum', x + 25, z, 30, 24, 40, 0.05, '#8fa9bd', S.GLASS_BLUE, 3.9, { ...o, yBase: g + 176, margin: -1 });
+    return 222;
   });
   landmark('Coral Crown', 380, 340, (x, z, g) => {
     // residential point tower on a retail podium, four fins and a lantern for a crown
@@ -977,6 +976,22 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     place('box', x, z, 22, 206, 18, 0.02, '#f3ead6', S.GRID, 3.5, { lit: 0.6, warm: 0.6, variant: 0.4 });
     place('frustum', x, z, 5, 34, 5, 0.02, '#e8eef2', S.CONCRETE, 3, { yBase: g + 206, margin: -1 });
     return 240;
+  });
+  landmark('Marina Point', 450, 500, (x, z, g) => {
+    // round glass condominium tower at the south end of the wall, a brim and a lit crown ring
+    const o = { lit: 0.45, warm: 0.5, variant: 0.5 };
+    place('cyl', x, z, 38, 158, 38, 0, '#a9c4cf', S.GLASS_GREEN, 3.4, o);
+    place('cyl', x, z, 46, 5, 46, 0, '#e8eef2', S.CONCRETE, 3, { yBase: g + 150, margin: -1 });
+    place('cyl', x, z, 30, 8, 30, 0, '#cfe0ec', S.GLASS_BLUE, 3.9, { yBase: g + 158, lit: 0.9, warm: 0.4, variant: 0.4, margin: -1 });
+    return 166;
+  });
+  landmark('North Quay', 380, -560, (x, z, g) => {
+    // two stepped white slabs at the north end, the taller one crowned by a plant screen
+    const o = { lit: 0.4, warm: 0.6, variant: 0.4 };
+    place('box', x - 22, z, 36, 128, 48, 0.02, '#f4f1ea', S.GRID, 3.5, o);
+    place('box', x + 24, z, 36, 168, 48, 0.02, '#f4f1ea', S.GRID, 3.5, o);
+    place('box', x + 24, z, 30, 7, 40, 0.02, '#b9bfc3', S.GRID, 3.5, { yBase: g + 168, lit: 0, variant: 0.3, margin: -1 });
+    return 175;
   });
 
   // ------------------------------------------------------------- district fills
@@ -1039,7 +1054,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           // height hierarchy: many 40-100 m, a cluster of 120-230 m near the core and along the bay (landmarks own 250-360 m)
           const u = drng.next();
           let h: number;
-          if (u < 0.1 + 0.24 * core + 0.14 * east) h = drng.range(120, 205 + 30 * east);
+          if (u < 0.1 + 0.24 * core + 0.2 * east) h = drng.range(120, 205 + 35 * east);
           else if (u < 0.45 + 0.2 * core + 0.1 * east) h = drng.range(75, 130);
           else h = drng.range(36, 72);
           h *= lerp(0.7, 1.0, Math.max(core, 0.7 * east));
