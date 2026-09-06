@@ -436,18 +436,45 @@ function buildLod(lod) {
       range: kind === "heavy" ? 12000 : 6000,
     });
   };
+  // deck turret flanking the bridge (the show's pair of turrets beside the command tower), light
+  // emplacements on the deck ahead of them, and the ventral bow pair under the prongs
+  const DECK_HEAVY = { zr: 188, x: 30 };
+  const DECK_LIGHT = { zr: 135, x: 27 };
+  const prongBellyY = (zr, x) => {
+    // underside of a prong at |x| (between its inner wall and the chine)
+    const K = keelP(zr);
+    const xc = Math.max(SLOT_X + 2.5, 0.6 * wOut(zr));
+    return -K + ((Math.abs(x) - SLOT_X) / (xc - SLOT_X)) * (K - 0.42 * K);
+  };
+  const bellySlope = (prongBellyY(80, 15.5) - prongBellyY(80, 12.5)) / 3;
   if (lod === 0) {
     for (const s of [-1, 1]) {
-      // deck shoulders forward of the bridge
-      const zd = 135;
-      heavy([s * 26, deckHeightAt(zd, 26) + 0.3, Z(zd)], [s * 0.35, 0, -1]);
+      heavy(
+        [
+          s * DECK_HEAVY.x,
+          deckHeightAt(DECK_HEAVY.zr, DECK_HEAVY.x) + 0.3,
+          Z(DECK_HEAVY.zr),
+        ],
+        [s * 0.35, 0, -1],
+      );
       // ledge platforms at the shoulder jog where the deck begins
       const zp = 104;
       heavy([s * (wOut(zp) + 0.5), 0, Z(zp)], [s * 0.7, 0, -1]);
-      // light emplacements: prong tips, beside the bridge, ventral
+      // light emplacements: prong tops, deck, ventral bow
       light([s * 11.5, wallTop(24) + 0.4, Z(24)], [s * 0.3, 0, -1]);
-      light([s * 25, deckHeightAt(206, 25) + 0.2, Z(206)], [s * 0.6, 0, -1]);
-      light([s * 14, -keel(160) * 0.72, Z(160)], [s * 0.4, 0, -1], [0, -1, 0]);
+      light(
+        [
+          s * DECK_LIGHT.x,
+          deckHeightAt(DECK_LIGHT.zr, DECK_LIGHT.x) + 0.2,
+          Z(DECK_LIGHT.zr),
+        ],
+        [s * 0.5, 0, -1],
+      );
+      light(
+        [s * 14, prongBellyY(80, 14) - 0.2, Z(80)],
+        [s * 0.4, 0, -1],
+        [s * bellySlope, -1, 0],
+      );
       // fixed broadside bays in the walls and forward tubes beside the nose block
       for (const zr of BAY_Z)
         fixed([s * (wallX(zr) + 5.8), wallTop(zr) * 0.5, Z(zr)], [s, 0, 0]);
@@ -463,9 +490,9 @@ function buildLod(lod) {
     if (mid) {
       add(
         new THREE.CylinderGeometry(5.4, 5.8, 1, 6).translate(
-          s * 26,
-          deckHeightAt(135, 26) + 0.3,
-          Z(135),
+          s * DECK_HEAVY.x,
+          deckHeightAt(DECK_HEAVY.zr, DECK_HEAVY.x) + 0.3,
+          Z(DECK_HEAVY.zr),
         ),
         "hull",
         { color: mulColor(PAL.deck, 0.9), texel: 1 / 4 },
@@ -479,6 +506,12 @@ function buildLod(lod) {
         "hull",
         { color: mulColor(PAL.ledge, 0.9), texel: 1 / 4 },
       );
+      // ventral turret pad under the prong
+      const yv = prongBellyY(80, 14);
+      const pad = new THREE.CylinderGeometry(2.8, 2.6, 0.8, 8);
+      pad.rotateZ(s * Math.atan(bellySlope));
+      pad.translate(s * 14, yv - 0.1, Z(80));
+      add(pad, "hull", { color: mulColor(PAL.belly, 1.1), texel: 1 / 4 });
     }
   }
 

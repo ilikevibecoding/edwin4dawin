@@ -35,7 +35,7 @@ import {
   keelP,
   BLOCK,
   blockHalfW,
-  RAMP_TOP,
+  blockTop,
   RAIL,
   railH,
   HEAD,
@@ -381,7 +381,7 @@ export function bellyDetail(ctx) {
     const xa = Math.abs(x);
     const xc = 0.6 * W;
     if (xa >= xc)
-      return -0.42 * K + ((xa - xc) / Math.max(1, W - xc)) * (0.42 * K - 2.2);
+      return -0.42 * K + ((xa - xc) / Math.max(1, W - xc)) * (0.42 * K - 3);
     return -K + (xa / xc) * (K - 0.42 * K);
   };
   if (mid) {
@@ -573,9 +573,10 @@ export function noseDetail(ctx) {
 // -------------------------------------------------------------------------------------------------
 export function wingDetail(ctx) {
   const { add, mid, fine } = ctx;
+  const yTop = WING.y1;
   for (const s of [-1, 1]) {
     if (mid)
-      add(wing(s, 0.12, WING.halfH, WING.halfH + 0.6), "hull", {
+      add(wing(s, 0.12, yTop, yTop + 0.5), "hull", {
         color: PAL.deck,
         texel: 1 / 6,
       });
@@ -586,23 +587,22 @@ export function wingDetail(ctx) {
     const g = new THREE.BoxGeometry(2.6, 0.2, len - 3);
     g.translate(-1.5 * s, 0, 0);
     g.rotateY(ang * s);
-    g.translate(
-      (s * (a[0] + b[0])) / 2,
-      WING.halfH + 0.7,
-      Z((a[1] + b[1]) / 2),
-    );
+    g.translate((s * (a[0] + b[0])) / 2, yTop + 0.6, Z((a[1] + b[1]) / 2));
     add(g, "paint", { color: PAL.red, texel: 1 / 8 });
     if (fine) {
-      for (const zr of [281, 287])
+      // Republic chevrons across the strut's top near the nacelle, machinery on its underside
+      for (let k = 0; k < 3; k++) {
+        const zr = 264 + k * 3.6;
         add(
-          mbox(s, 22, 30, WING.halfH + 0.6, WING.halfH + 1.1, zr, zr + 2.4),
-          "dark",
+          mbox(s, 30 + k * 3, 48, yTop + 0.5, yTop + 0.68, zr, zr + 1.8),
+          "paint",
           {
-            color: PAL.dark,
-            texel: 1 / 4,
+            color: k % 2 ? lin(0.86, 0.85, 0.82) : PAL.red,
+            texel: 1 / 8,
           },
         );
-      add(mbox(s, 24, 34, -WING.halfH - 0.9, -WING.halfH, 270, 288), "dark", {
+      }
+      add(mbox(s, 24, 40, WING.y0 - 0.8, WING.y0, 258, 274), "dark", {
         color: PAL.dark,
         texel: 1 / 4,
       });
@@ -615,17 +615,21 @@ export function wingDetail(ctx) {
 // -------------------------------------------------------------------------------------------------
 export function blockDetail(ctx) {
   const { add, fine, mid, rand } = ctx;
+  const rampSlope = Math.atan2(
+    blockTop(BLOCK.crestZ) - blockTop(272),
+    272 - BLOCK.crestZ,
+  );
   for (const s of [-1, 1]) {
-    // red band along the block's top chamfer
+    // red band along the block's top chamfer: under the head and down the ramp
     for (const [z0, z1] of [
-      [209, 231],
-      [236, 268],
+      [201, 214],
+      [223, 268],
     ]) {
       const zc = (z0 + z1) / 2;
       const bx0 = blockHalfW(z0) - 1.2;
       const bx1 = blockHalfW(z1) - 1.2;
-      const t0 = z0 <= BLOCK.z1 ? BLOCK.top : RAMP_TOP(z0);
-      const t1 = z1 <= BLOCK.z1 ? BLOCK.top : RAMP_TOP(z1);
+      const t0 = blockTop(z0);
+      const t1 = blockTop(z1);
       const len = Math.hypot(z1 - z0, t1 - t0);
       const g = new THREE.BoxGeometry(2, 0.18, len - 1);
       g.rotateX(-Math.atan2(t1 - t0, z1 - z0));
@@ -633,20 +637,27 @@ export function blockDetail(ctx) {
       g.translate(s * ((bx0 + bx1) / 2 - 0.4), (t0 + t1) / 2 + 0.12, Z(zc));
       add(g, "paint", { color: PAL.red, texel: 1 / 8 });
     }
-    if (!fine) continue;
-    // vents on the block sides, hatches on the ramp
-    for (const zr of [212, 220, 228]) {
+    // docking ring on each flank of the ramp block behind the bridge (the show's side docking ports)
+    if (mid) {
+      const zr = 229;
       const bx = blockHalfW(zr);
+      const y = blockTop(zr) - 4.6;
+      const ring = new THREE.CylinderGeometry(2.4, 2.4, 0.9, 12);
+      ring.rotateZ(Math.PI / 2);
+      ring.translate(s * (bx + 0.35), y, Z(zr));
+      add(ring, "hull", { color: PAL.ledge, texel: 1 / 3 });
+      const port = new THREE.CylinderGeometry(1.6, 1.6, 1.1, 12);
+      port.rotateZ(Math.PI / 2);
+      port.translate(s * (bx + 0.35), y, Z(zr));
+      add(port, "dark", { color: PAL.recess, texel: 1 / 3 });
+    }
+    if (!fine) continue;
+    // vents on the ramp's flanks, hatches on the ramp
+    for (const zr of [237, 245, 253]) {
+      const bx = blockHalfW(zr);
+      const t = blockTop(zr);
       add(
-        mbox(
-          s,
-          bx + 0.05,
-          bx + 0.3,
-          BLOCK.top - 5.5,
-          BLOCK.top - 2,
-          zr - 2.4,
-          zr + 2.4,
-        ),
+        mbox(s, bx + 0.05, bx + 0.3, t - 5.5, t - 2.4, zr - 2.4, zr + 2.4),
         "dark",
         {
           color: PAL.recess,
@@ -656,28 +667,27 @@ export function blockDetail(ctx) {
     }
     for (let zr = 238; zr < 268; zr += 9) {
       const x = s * (3 + rand() * (blockHalfW(zr) - 7));
-      const t = RAMP_TOP(zr);
+      const t = blockTop(zr);
       const g = new THREE.BoxGeometry(3 + rand() * 2, 0.5, 4);
-      g.rotateX(Math.atan2(18.5, 40));
+      g.rotateX(rampSlope);
       g.translate(x, t + 0.1, Z(zr));
       add(g, "dark", { color: PAL.dark, texel: 1 / 3 });
     }
   }
   if (!mid) return;
-  // machinery cluster behind the neck on the block top and a dish
-  add(mbox(1, -5, 5, BLOCK.top, BLOCK.top + 1.6, 219, 227), "dark", {
+  // machinery cluster on the ramp crest behind the head and a dish
+  const tc = blockTop(224);
+  add(mbox(1, -5, 5, tc, tc + 1.6, 221, 228), "dark", {
     color: PAL.dark,
     texel: 1 / 3,
   });
   if (fine) {
-    add(facetedDome(1.8, 1.4, 8, 2).translate(5.5, BLOCK.top, Z(224)), "hull", {
+    add(facetedDome(1.8, 1.4, 8, 2).translate(5.5, tc, Z(225)), "hull", {
       color: PAL.block,
       texel: 1 / 3,
     });
-    add(
-      tube([-5, BLOCK.top + 1.6, Z(223)], [-5, BLOCK.top + 6, Z(223)], 0.18, 5),
-      "dark",
-      { color: PAL.dark },
-    );
+    add(tube([-5, tc + 1.6, Z(224)], [-5, tc + 6, Z(224)], 0.18, 5), "dark", {
+      color: PAL.dark,
+    });
   }
 }

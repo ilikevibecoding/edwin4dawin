@@ -1,28 +1,34 @@
 // Arquitens-class light cruiser — dimensions, plan/height profiles and palette shared by the geometry
 // modules. All profile functions take `zr` = metres aft of the prong tips (0 at the bow, 325 at the
-// nacelle nozzles) and return metres. Heights are relative to the ledge datum (the broad horizontal
-// step at the base of the flank wall, y = 0); `Y0` shifts the whole ship so the origin sits near the
-// hull's mid-height. Ship forward is -Z: model z = zr - L / 2.
+// nacelle nozzles) and return metres. Heights are relative to the ledge datum (the base of the flank
+// wall, where the red stripe band meets the belly, y = 0); `Y0` shifts the whole ship so the origin sits
+// near the hull's mid-height. Ship forward is -Z: model z = zr - L / 2.
+//
+// Reference proportions (fan ortho + show stills, metres): kite hull 325 long, 125 wide at the deck
+// shoulders (zr ~ 185), 139 over the nacelles; fork gap 9 m, closed at zr ~ 62; bridge head 28 wide,
+// 12 tall, its top 48 m above the keel line; nacelles r 12.5 at x ±57.5 hanging a little below the keel.
 import { lin, pw } from "./venatorKit.js";
 
-export const ARQUITENS = { length: 325, width: 142, height: 60 };
+export const ARQUITENS = { length: 325, width: 140, height: 58 };
 export const L = ARQUITENS.length;
 export const Z = (zr) => zr - L / 2;
 export const Y0 = -6;
 
 // ---- plan (half-widths) -------------------------------------------------------------------------
-// outer edge of the ledge: a straight kite wedge from the blunt prong tips to the shoulders at ~56 %
-// of the length, a small jog where the deck rail starts (zr ~ 105), then the swept aft edge down to
-// the waist and the narrow aft body that carries the centre nacelle
+// outer edge of the hull: a straight kite wedge from the blunt prong tips to the shoulders at ~57 %
+// of the length, a small jog where the deck begins (zr ~ 105, the shoulder turret platforms), then
+// the swept aft edge down to the waist and the narrow aft body that carries the centre nacelle
 export const wOut = (zr) =>
   pw(
     [
-      [0, 13],
-      [100, 41],
+      [0, 14],
+      [100, 42],
       [108, 47],
-      [182, 63.5],
-      [190, 61.5],
-      [230, 27],
+      [124, 47.5],
+      [182, 62.5],
+      [190, 60],
+      [230, 26],
+      [238, 24],
       [272, 21],
     ],
     zr,
@@ -30,15 +36,15 @@ export const wOut = (zr) =>
 export const ledgeW = (zr) =>
   pw(
     [
-      [0, 2],
-      [105, 5.5],
-      [232, 6.5],
-      [272, 5],
+      [0, 1.6],
+      [105, 2.6],
+      [232, 3],
+      [272, 2.5],
     ],
     zr,
   );
 export const wallX = (zr) => wOut(zr) - ledgeW(zr);
-export const SLOT_X = 6.5; // inner walls of the prongs (the fork is 13 m wide)
+export const SLOT_X = 4.5; // inner walls of the prongs (the fork is 9 m wide)
 // raised central spine on the deck: 14 m wide with red shoulders, a light 5 m ridge along its crest
 // and a dark groove along its base
 export const SPINE_X = 7;
@@ -47,30 +53,30 @@ export const RIDGE_H = 0.8;
 export const GROOVE_W = 2.2;
 
 // ---- heights (ledge datum) -----------------------------------------------------------------------
-// top of the flank wall (= prong tops forward): low at the tips, rising toward the bridge and falling
-// away over the aft body to the small transom
+// top of the flank wall (= prong tops forward): the show's wall band is a near-constant 10–12 m aft of
+// the fork, lower on the thin prong tips; it falls away over the aft body to the small transom
 export const wallTop = (zr) =>
   pw(
     [
-      [0, 5.5],
+      [0, 6],
       [60, 8.5],
-      [105, 10.5],
-      [200, 12.5],
-      [232, 11.5],
-      [272, 1],
+      [105, 10],
+      [185, 12],
+      [232, 11],
+      [272, 2],
     ],
     zr,
   );
-// deck height at the spine base (the deck is a shallow pyramid: higher at the centreline; it flattens
-// onto the aft body's deck where the main loft hands over at zr 232)
+// deck height at the spine base (the deck is a shallow pyramid ~4 m higher at the centreline; it
+// flattens onto the aft body's deck where the main loft hands over at zr 232)
 export const deckC = (zr) =>
   pw(
     [
-      [103, 11.1],
-      [130, 15],
-      [200, 20],
-      [220, 17.5],
-      [232, 12.8],
+      [103, 10.8],
+      [130, 12],
+      [185, 13.6],
+      [205, 13.6],
+      [232, 12.2],
     ],
     zr,
   );
@@ -80,21 +86,24 @@ export const spineUp = (zr) =>
   pw(
     [
       [112, 0],
-      [126, 2.4],
-      [232, 2.4],
+      [126, 2],
+      [232, 2],
     ],
     zr,
   );
-// keel depth of the main hull below the datum
+// keel depth of the main hull below the datum: the belly deepens gently aft (the ortho's keel line is
+// straight while the deck climbs to the bridge), 15.5 m under the shoulders
 export const keel = (zr) =>
   pw(
     [
-      [103, 15],
-      [150, 19.5],
-      [180, 21.5],
-      [232, 21],
-      [255, 17],
-      [272, 9],
+      [103, 9.6],
+      [150, 13],
+      [185, 15.5],
+      [230, 15.5],
+      [240, 13],
+      [250, 10.5],
+      [262, 8.2],
+      [272, 7.5],
     ],
     zr,
   );
@@ -103,79 +112,87 @@ export const keelP = (zr) =>
   pw(
     [
       [0, 4.5],
-      [60, 9.5],
-      [107, 13.3],
+      [60, 8],
+      [107, 9.6],
     ],
     zr,
   );
 
 // ---- aft superstructure, bridge, nacelles -----------------------------------------------------------
-// the spine runs into a 16 m pedestal under the bridge neck (zr 201–220) that flares to the aft body's
-// width by zr 232, where the long ramp down to the transom begins
-export const BLOCK = { z0: 204, z1: 232, top: 24.5 };
+// the spine runs into a low pedestal under the bridge neck (zr 196–215); right behind the head the
+// hull steps up into the ramp block's crest (zr 221) and then runs down a long ramp to the transom
+export const BLOCK = { z0: 196, z1: 232, top: 19.5, crest: 23.5, crestZ: 221 };
 export const blockHalfW = (zr) =>
   pw(
     [
-      [204, 8],
-      [220, 8],
+      [196, 8],
+      [215, 8],
+      [221, 12],
       [232, 20],
       [272, 17],
     ],
     zr,
   );
-export const RAMP_TOP = (zr) =>
+export const blockTop = (zr) =>
   pw(
     [
-      [232, 24.5],
-      [272, 7],
+      [BLOCK.z0, deckC(BLOCK.z0) + spineUp(BLOCK.z0) + 0.4],
+      [200, BLOCK.top],
+      [215, BLOCK.top],
+      [BLOCK.crestZ, BLOCK.crest],
+      [272, 4],
     ],
     zr,
   );
-// raised deck rails 6 m inboard of the chamfer stripe, growing from low kerbs at the shoulders to tall
+export const RAMP_TOP = blockTop;
+// raised deck rails 6 m inboard of the chamfer stripe, growing from low kerbs at the shoulders to
 // ridges beside the bridge
 export const RAIL = { z0: 118, z1: 226, inset: 6, foot: 5, crest: 2.7 };
 export const railH = (zr) =>
   pw(
     [
-      [118, 1.4],
-      [226, 4.4],
+      [118, 1.2],
+      [226, 3.6],
     ],
     zr,
   );
-// T-shaped bridge: a narrow boxy neck and the wide 25 m head with a vertical window band across the
-// front and a lipped cap plate (the show's cab reads as a box about 2.5 : 1 wide : tall)
-export const NECK = { z0: 199, z1: 211.5, halfW: 4.8, y0: 24.5, y1: 31.5 };
+// T-shaped bridge: a narrow boxy neck and the wide 28 m head with a window band across the front and a
+// lipped cap plate (the show's cab reads as a box about 2.3 : 1 wide : tall)
+export const NECK = { z0: 200, z1: 212, halfW: 5, y0: 19.5, y1: 22.5 };
 export const HEAD = {
-  z0: 196,
-  z1: 214,
-  halfW: 12.5,
-  y0: 31.5,
-  y1: 40.5,
+  z0: 197,
+  z1: 217,
+  halfW: 14,
+  y0: 22.5,
+  y1: 34,
   lip: 0.8,
 };
-// swept delta wings at the ledge level from the waist out to the outer nacelles (plan, starboard)
+// swept delta struts on the lower flank wall from the waist out to the outer nacelles' upper inner
+// quadrant (plan, starboard); y range [y0, y1] on the ledge datum
 export const WING = {
   pts: [
-    [12, 246],
-    [26.5, 231],
-    [45.5, 274],
-    [45.5, 294],
-    [12, 294],
+    [14, 250],
+    [24.5, 236],
+    [52, 262],
+    [52, 276],
+    [14, 276],
   ],
-  halfH: 3,
+  y0: 0.2,
+  y1: 5,
+  halfH: 2.4,
 };
 export const NACELLE = {
-  z0: 272,
+  z0: 268,
   z1: 325,
-  y: -2.5,
-  outer: { x: 57, r: 14 },
-  centre: { x: 0, r: 13 },
-  nozzleR: 11.5,
-  ringZ: [281, 288],
-  domeLen: 11,
+  y: -4,
+  outer: { x: 57.5, r: 12.5 },
+  centre: { x: 0, r: 12 },
+  nozzleR: 10.5,
+  ringZ: [277, 283.5],
+  domeLen: 10,
   nozzleZ: 316,
 };
-export const BAR = { x: 46, y: -2.5, halfH: 4, z0: 292, z1: 304 };
+export const BAR = { x: 46, y: -4, halfH: 3.5, z0: 292, z1: 304 };
 
 // ---- palette. Vertex tints on the shared plating map (albedo ~0.62 after the material's x1.4), given
 // in linear so a tint of 0.8 lands on a light warm grey-white under the sun. The Arquitens is whiter

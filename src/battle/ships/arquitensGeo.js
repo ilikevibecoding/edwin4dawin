@@ -23,7 +23,7 @@ import {
   keelP,
   BLOCK,
   blockHalfW,
-  RAMP_TOP,
+  blockTop,
   NECK,
   HEAD,
   NACELLE,
@@ -75,8 +75,8 @@ export function prongSection(zr, s) {
   // the underside continues the main hull's V: deepest at the inner wall, a chine at 60 % of the width
   const pts = [
     [SLOT_X, -K],
-    [Math.max(SLOT_X + 2.5, 0.6 * xo), -K * 0.45],
-    [xo, -2],
+    [Math.max(SLOT_X + 2.5, 0.6 * xo), -K * 0.42],
+    [xo, -3],
     [xo, 0],
     [xw, 0],
     [xw - 0.5, T - c * 0.8],
@@ -127,7 +127,7 @@ export function mainSection(zr) {
   const half = [
     [0, -K],
     [0.6 * W, -0.42 * K],
-    [W, -2.2],
+    [W, -3],
     [W, 0],
     [xw, 0],
     [xw - 0.5, T - c * 0.8],
@@ -168,7 +168,7 @@ export function aftSection(zr, shrink = 1) {
   const half = [
     [0, -K],
     [0.6 * W, -0.42 * K],
-    [W, -2.2 * shrink],
+    [W, -3 * shrink],
     [W, 0],
     [xw, 0],
     [xw - 0.5, T - c * 0.8],
@@ -187,29 +187,21 @@ function mirrored(zr, half) {
   return { z: Z(zr), pts };
 }
 
-// Superstructure (zr 201–272): the spine's pedestal under the bridge (a wedge front rising from the
-// spine to the neck base), flaring to the aft body's width, then the long ramp down to the transom.
-// Chamfered top edges.
+// Superstructure (zr 196–272): the spine's low pedestal under the bridge neck, the step up into the
+// ramp block's crest right behind the head, the flare to the aft body's width and the long ramp down
+// to the transom. Chamfered top edges.
 export function blockSections(lod) {
   const zs =
     lod === 0
-      ? [201, 203, 205.5, 220, 226, 232, 245, 258, 272]
-      : [201, 205.5, 220, 232, 272];
+      ? [196, 198, 200, 215, 218, 221, 226, 232, 245, 258, 272]
+      : [196, 200, 215, 221, 232, 272];
   return zs.map((zr) => {
     const bx = Math.min(
       blockHalfW(zr),
       wallX(zr) - chamfer(zr) - (zr > BLOCK.z1 ? 1.2 : 2.5),
     );
     const base = zr <= BLOCK.z1 ? deckC(zr) - 1 : wallTop(zr) - 0.8;
-    const top = pw(
-      [
-        [BLOCK.z0, deckC(BLOCK.z0) + spineUp(BLOCK.z0) + 0.6],
-        [205.5, BLOCK.top],
-        [BLOCK.z1, BLOCK.top],
-        [272, RAMP_TOP(272)],
-      ],
-      zr,
-    );
+    const top = blockTop(zr);
     const ch = Math.min(1.2, (top - base) * 0.4);
     return {
       z: Z(zr),
@@ -265,11 +257,12 @@ export function noseSections() {
 }
 export const NOSE_TAGS = ["wall", "wall", "wall", "block", "wall", "wall"];
 
-// Dark filler between the prongs' inner walls from their undersides up to the nose block's underside
-// (y = -2), closing the fork from below aft of the wedge; the fork is open ahead of it (zr < 57).
+// Dark trench floor between the prongs' inner walls from their undersides up to y = -2 (8–10 m below
+// the prong tops), running from just behind the tips to the nose block; the fork is open through only
+// at the very tips (zr < 14).
 export function fillerSections() {
   const hw = SLOT_X - 0.1;
-  return [57, 82, 104].map((zr) => ({
+  return [14, 40, 57, 82, 104].map((zr) => ({
     z: Z(zr),
     pts: [
       [-hw, -keelP(zr) + 0.4],
@@ -394,7 +387,7 @@ export function engineBar() {
   const B = BAR;
   return boxMM([-B.x, B.y - B.halfH, Z(B.z0)], [B.x, B.y + B.halfH, Z(B.z1)]);
 }
-export function wing(s, inset = 0, y0 = -WING.halfH, y1 = WING.halfH) {
+export function wing(s, inset = 0, y0 = WING.y0, y1 = WING.y1) {
   // prism() maps the plan's second coordinate to -z; `inset` shrinks the plan for a stacked top plate
   const c = WING.pts.reduce(
     (a, p) => [a[0] + p[0] / 5, a[1] + p[1] / 5],
