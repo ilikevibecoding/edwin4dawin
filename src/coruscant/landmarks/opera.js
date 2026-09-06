@@ -266,7 +266,8 @@ function auditorium(bp, rng) {
     for (let x = ELL.cx - hw; x <= ELL.cx + hw - 1; x++) {
       bp.fill(x, y - 1, z, x, level - 1, z, DARK);
       bp.set(x, level, z, step === 2 ? SLAB : CARPET);
-      if (!isAisle(x) && step === 1) { bp.set(x, level + 1, z, RWOOL); if (x % 3 === 0) bp.spot(x, level + 1, z, 'seat'); }
+      // every third seat is the one an NPC takes: a spruce slab (a spot inside a solid wool block is pruned)
+      if (!isAisle(x) && step === 1) { if (x % 3 === 0) { bp.set(x, level + 1, z, B.SPRUCE_SLAB); bp.spot(x, level + 1, z, 'seat'); } else bp.set(x, level + 1, z, RWOOL); }
     }
   }
   bp.room('stalls', ELL.cx - halfW(s0), y, s0, ELL.cx + halfW(s0), 41);
@@ -279,7 +280,7 @@ function auditorium(bp, rng) {
         bp.set(x, level, z, k % 3 === 2 ? SLAB : CARPET);
         const aisle = x === 46 || x === 47;
         if (z === zf) { bp.set(x, level + 1, z, (x % 3) ? BARS : GOLD); continue; }
-        if (!aisle && k % 3 === 1) { bp.set(x, level + 1, z, RWOOL); if (x % 3 === 0) bp.spot(x, level + 1, z, 'seat'); }
+        if (!aisle && k % 3 === 1) { if (x % 3 === 0) { bp.set(x, level + 1, z, B.SPRUCE_SLAB); bp.spot(x, level + 1, z, 'seat'); } else bp.set(x, level + 1, z, RWOOL); }
       }
     }
     // the balcony front face in gold with glow strip; lights in the underside over the rows below

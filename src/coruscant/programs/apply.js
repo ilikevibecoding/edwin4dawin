@@ -212,7 +212,11 @@ export function applyProgram(bp, lot, layout, o = {}) {
 
   for (const spec of [...specs.filter((s) => s.core), ...specs.filter((s) => !s.core)]) {
     // a landmark's own hand-built rooms satisfy a spec by kind pattern
-    if (o.landmark && spec.accept && existing.some((k) => spec.accept.test(k))) { record.satisfied.push({ kind: spec.kind, by: existing.filter((k) => spec.accept.test(k))[0] }); continue; }
+    if (o.landmark && spec.accept && existing.some((k) => spec.accept.test(k))) {
+      record.satisfied.push({ kind: spec.kind, by: existing.filter((k) => spec.accept.test(k))[0] });
+      for (const c of cands) if (spec.accept.test(c.r.kind)) c.used = true;   // the rooms that satisfy a spec are not refurnished for another
+      continue;
+    }
     const tpl = programRoom(spec.kind);
     if (!tpl) { record.missing.push(spec.kind); continue; }
     // landmarks: only generic library rooms are refurnished, never a signature room of the module
