@@ -10,6 +10,7 @@ import { hash2 } from '../rng.js';
 import { getLayout, layoutToJSON, PLATEAU, SPACEPORT, LEVELS, DECK_HALF, MARGIN, RIM } from './layout.js';
 import { blueprintFor, prewarmBlueprints } from './buildings.js';
 import { installSkyline } from './skyline.js';
+import { installPopulation } from '../npc/coruscant/index.js';
 
 const G = LEVELS.ground, DK = LEVELS.deck;
 const T_ALLEY = 0, T_LOT = 1, T_DECK = 2, T_MARGIN = 3, T_RIM = 4, T_PORT = 5, T_PLAZA = 6, T_STAIR = 7;
@@ -26,6 +27,8 @@ export function register(gen, game) {
   prewarmBlueprints(layout);
   gen.addStructure({ name: 'coruscant', x0: PLATEAU.x0, z0: PLATEAU.z0, x1: PLATEAU.x1, z1: PLATEAU.z1, fill: (chunk) => fillChunk(chunk, layout) });
   if (game) game.coruscant = { layout, cityMeta, dumpLayout, skyline: installSkyline(game, layout), timing: () => { const s = gen.structures.find((st) => st.name === 'coruscant'); return s ? { chunks: s.chunks || 0, msTotal: +(s.msTotal || 0).toFixed(1), msPerChunk: s.chunks ? +(s.msTotal / s.chunks).toFixed(2) : 0 } : null; } };
+  // city life (rubric 07): the population attaches itself as game.coruscant.population once the game loop exists
+  if (game) installPopulation(game, layout);
   console.log('[coruscant] layout: ' + JSON.stringify(layout.stats));
 }
 

@@ -1,0 +1,421 @@
+// Per-lot knowledge for the population: the blueprint metadata (rooms with floor boxes, work/spot/bed records,
+// lifts, doors) indexed by activity and job, plus standability tests on the blueprint's own block array so spots
+// and lift landings can be resolved before the chunks around them exist. Pure (no THREE, no DOM); the offline
+// scripts (test-rooms.mjs, npc-census.mjs) use it too.
+import { blueprintFor } from '../../coruscant/buildings.js';
+import { purposeFor } from '../../coruscant/purposes.js';
+import { BLOCKS, SHAPE, B } from '../../blocks.js';
+import { hash2 } from '../../rng.js';
+import { roomFunction, VISITOR_JOBS, BIG_ROOM_SEATS } from './rooms.js';
+
+// blueprint work-record kinds a job may occupy (first match wins); jobs missing here fall back to their room function
+export const JOB_WORK_KINDS = {
+  clerk: ['desk'], executive: ['executive', 'desk'], teller: ['teller', 'desk'], advocate: ['desk'], aide: ['desk'], senator: ['desk', 'chancellor'], journalist: ['desk', 'comms'],
+  receptionist: ['receptionist'], concierge: ['receptionist'], 'protocol droid': ['receptionist', 'ticket clerk', 'cloakroom attendant'], broker: ['broker', 'shopkeeper', 'desk'],
+  guard: ['guard', 'vault guard', 'red guard'], 'senate guard': ['red guard', 'guard'], officer: ['guard', 'desk'], bouncer: ['guard'], 'customs officer': ['guard', 'desk'], 'vault guard': ['vault guard', 'guard'],
+  quartermaster: ['quartermaster', 'stock'], warden: ['warden', 'guard'], conductor: ['conductor', 'ticket clerk'],
+  cook: ['cook'], server: ['server'], barista: ['server', 'bartender', 'cook'], bartender: ['bartender'], 'waitress droid': ['waitress droid', 'server'],
+  medic: ['medic', 'surgeon', 'nurse'], nurse: ['nurse', 'medic'], pharmacist: ['medic', 'shopkeeper'], surgeon: ['surgeon'],
+  technician: ['technician', 'comms', 'operator'], mechanic: ['mechanic', 'technician', 'droid tech'], 'droid tech': ['droid tech', 'technician'], smelter: ['operator', 'technician'],
+  engineer: ['engineer', 'operator'], foreman: ['operator', 'stock'], 'dock worker': ['stock'], 'cargo droid': ['stock'], porter: ['stock', 'laundry'], 'maintenance droid': ['laundry', 'stock'],
+  stock: ['stock'], comms: ['comms'], operator: ['operator'], astromech: ['technician', 'mechanic', 'droid tech'],
+  vendor: ['vendor', 'shopkeeper'], shopkeeper: ['shopkeeper'], tailor: ['shopkeeper'], gardener: ['gardener'],
+  archivist: ['archivist', 'librarian'], librarian: ['librarian'], teacher: ['teacher'], attendant: ['attendant', 'croupier'], curator: ['attendant'], guide: ['attendant'],
+  projectionist: ['projectionist'], musician: ['musician', 'performer'], dj: ['dj'], judge: ['judge'], witness: ['witness'], speaker: ['chancellor', 'desk'],
+};
+// room kinds where a job works when no work record matches (from ROOM_FUNCTIONS) - resolved lazily via roomsForJob
+// rooms any job can work from when the building has no room for it (see candidates)
+const FALLBACK_ROOMS = ['lobby_atrium', 'open_plan_office', 'meeting_room', 'executive_office', 'storage', 'lounge', 'security_post'];
+
+const passableId = (id) => { if (id === 0 || id === 255) return true; const b = BLOCKS[id]; return b ? (!b.solid || !!b.door || b.shape === SHAPE.SLAB || b.shape === SHAPE.BED) : false; };
+const standableId = (id) => { if (id === 0 || id === 255) return false; const b = BLOCKS[id]; return b ? (b.solid || b.shape === SHAPE.LIQUID) : true; };
+
+export class LotInfo {
+  constructor(lot, layout) {
+    this.lot = lot;
+    this.layout = layout;
+    this.bp = blueprintFor(lot, layout);
+    this.meta = this.bp.meta;
+    this.purpose = purposeFor(lot, layout);
+    this.id = lot.id;
+    this.name = this.meta.name || this.purpose.name;
+    this._byWorkKind = null;
+    this._byRoomKind = null;
+    this._landings = new Map();
+    this._reach = new Map();
+    this._noStairs = new Set();   // 'fromY>toY' floor pairs whose stairs the live world did not walk
+    this.occupied = new Map();   // spot key -> npc id (live occupancy)
+    this.stats = { assigned: 0, fallbacks: 0 };
+  }
+
+  // ---------------------------------------------------------------- blueprint block tests (world coords)
+  blockAt(x, y, z) {
+    const lx = x - this.lot.x0, ly = y - this.bp.y0, lz = z - this.lot.z0;
+    if (lx < 0 || lz < 0 || lx >= this.bp.w || lz >= this.bp.d || ly < 0 || ly >= this.bp.h) return -1;
+    return this.bp.blocks[(lx * this.bp.d + lz) * this.bp.h + ly];
+  }
+  // feet may be at (x, y, z): floor below, two passable cells (three when standing on a slab, bed or other partial
+  // block, whose top lifts the head into the cell above - the same rule as pathfinding.standHeight)
+  standable(x, y, z) {
+    const here = this.blockAt(x, y, z), above = this.blockAt(x, y + 1, z), below = this.blockAt(x, y - 1, z);
+    if (here < 0 || above < 0 || below < 0) return false;
+    if (!passableId(here) || !passableId(above)) return false;
+    const partial = here !== 0 && here !== 255 && BLOCKS[here] && BLOCKS[here].solid && !BLOCKS[here].door;
+    if (partial) { const a2 = this.blockAt(x, y + 2, z); return a2 >= 0 && passableId(a2); }
+    return standableId(below);
+  }
+  inside(x, z) { return x >= this.lot.x0 && x < this.lot.x1 && z >= this.lot.z0 && z < this.lot.z1; }
+  // Yaw (atan2(dx, dz)) toward the prop a worker at (x, y, z) faces: the adjacent non-passable block at feet or head
+  // height (consoles, counters, tables, beds, anvils), preferring `props` (names in B) when given. null = nothing near.
+  faceOf(x, y, z, props = null) {
+    const ids = props ? props.map((n) => B[n]).filter((v) => v !== undefined) : null;
+    let best = null, bestScore = -1;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      for (const dy of [0, 1, -1]) {
+        const id = this.blockAt(x + dx, y + dy, z + dz);
+        if (id <= 0 || id === 255) continue;
+        const b = BLOCKS[id];
+        if (!b || !b.solid || b.door) continue;
+        if (dy === -1 && b.shape !== SHAPE.SLAB && b.shape !== SHAPE.BED) continue;
+        const score = (ids && ids.includes(id) ? 4 : 0) + (dy === 0 ? 2 : dy === 1 ? 1 : 0.5);
+        if (score > bestScore) { bestScore = score; best = Math.atan2(dx, dz); }
+      }
+    }
+    return best;
+  }
+
+  // ---------------------------------------------------------------- rooms
+  roomAt(x, y, z) {
+    for (const r of this.meta.rooms) if (r.y === y && x >= r.x && x < r.x + r.w && z >= r.z && z < r.z + r.d) return r;
+    return null;
+  }
+  roomsOfKind(kinds) {
+    if (!this._byRoomKind) { this._byRoomKind = new Map(); for (const r of this.meta.rooms) { if (!this._byRoomKind.has(r.kind)) this._byRoomKind.set(r.kind, []); this._byRoomKind.get(r.kind).push(r); } }
+    const out = [];
+    for (const k of kinds) { const l = this._byRoomKind.get(k); if (l) out.push(...l); }
+    return out;
+  }
+  get roomKinds() { if (!this._byRoomKind) this.roomsOfKind([]); return [...this._byRoomKind.keys()]; }
+
+  // Standable cells of a room (its floor box), optionally only those next to a prop block of `props` (names in B).
+  roomCells(room, props = null, max = 12) {
+    const f = room.floor || room, out = [];
+    const ids = props ? props.map((n) => B[n]).filter((v) => v !== undefined) : null;
+    for (let x = f.x; x < f.x + f.w && out.length < max; x++) for (let z = f.z; z < f.z + f.d && out.length < max; z++) {
+      if (!this.standable(x, room.y, z)) continue;
+      if (ids) {
+        let ok = false;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const id = this.blockAt(x + dx, room.y, z + dz); if (ids.includes(id) || (id > 0 && id !== 255 && ids.includes(this.blockAt(x + dx, room.y + 1, z + dz)))) { ok = true; break; } }
+        if (!ok) continue;
+      }
+      out.push({ x, y: room.y, z, kind: 'floor', room });
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------- work / spot records
+  workByKind(kinds) {
+    if (!this._byWorkKind) { this._byWorkKind = new Map(); for (const w of this.meta.work) { if (!this._byWorkKind.has(w.kind)) this._byWorkKind.set(w.kind, []); this._byWorkKind.get(w.kind).push(w); } }
+    const out = [];
+    for (const k of kinds) { const l = this._byWorkKind.get(k); if (l) out.push(...l); }
+    return out;
+  }
+  spotsIn(rooms, kinds = null) {
+    const out = [];
+    for (const s of this.meta.spots) {
+      if (kinds && !kinds.includes(s.kind)) continue;
+      for (const r of rooms) if (s.y === r.y && s.x >= r.x && s.x < r.x + r.w && s.z >= r.z && s.z < r.z + r.d) { out.push({ ...s, room: r }); break; }
+    }
+    return out;
+  }
+
+  // Seat spots of a room (any height inside its rectangle: the Senate pods rise 26 blocks above the chamber floor).
+  roomSeats(room) {
+    const out = [];
+    for (const s of this.meta.spots) if (s.kind === 'seat' && s.x >= room.x && s.x < room.x + room.w && s.z >= room.z && s.z < room.z + room.d && s.y >= room.y && s.y < room.y + 40) out.push({ ...s, room });
+    return out;
+  }
+  // Work records (desks, consoles, counters) on a room's own floor
+  roomWork(room) {
+    let n = 0;
+    for (const w of this.meta.work) if (w.y === room.y && w.x >= room.x && w.x < room.x + room.w && w.z >= room.z && w.z < room.z + room.d) n++;
+    return n;
+  }
+  // Number of beds inside a room's rectangle (its own floor)
+  roomBeds(room) {
+    let n = 0;
+    for (const b of this.meta.beds) if (b.x >= room.x && b.x < room.x + room.w && b.z >= room.z && b.z < room.z + room.d && b.y >= room.y - 1 && b.y <= room.y + 1) n++;
+    return n;
+  }
+  // Vertical span of a room: [floor y, highest seat/work/floor y] (for "is the player on this room's floor")
+  roomSpan(room) {
+    if (room._span) return room._span;
+    let y1 = room.y;
+    for (const s of this.roomSeats(room)) if (s.y > y1) y1 = s.y;
+    room._span = [room.y, y1];
+    return room._span;
+  }
+  // Rooms whose floor (or seat tiers) the player at feet height `y` shares, with their indices
+  roomsAtHeight(y, slack = 5) {
+    const out = [];
+    this.meta.rooms.forEach((r, i) => { const [a, b] = this.roomSpan(r); if (y >= a - slack && y <= b + slack) out.push([i, r]); });
+    return out;
+  }
+
+  // Cells inside `room` for act (room occupants, see census.staffRoom): work at the room's own records/props, sleep
+  // in its beds, eat at its seats. Falls back to the whole lot when the room has nothing usable.
+  roomCandidates(person, act, room) {
+    const job = person.job, f = roomFunction(room.kind);
+    const inRoom = (s) => s.x >= room.x && s.x < room.x + room.w && s.z >= room.z && s.z < room.z + room.d && s.y >= room.y && s.y < room.y + 40;
+    if (act === 'sleep' || act === 'home') {
+      const beds = this.meta.beds.filter(inRoom).map((b) => ({ ...b, kind: 'bed', room }));
+      if (beds.length) return beds;
+      const seats = this.roomSeats(room);
+      return seats.length ? seats : null;
+    }
+    if (act === 'meal') { const seats = f.meal ? this.roomSeats(room) : []; return seats.length ? seats : null; }
+    if (act !== 'work') return null;
+    if (person.visitor || VISITOR_JOBS.has(job)) {
+      const seats = this.roomSeats(room);
+      if (seats.length) return seats;
+      const cells = this.roomCells(room, null, 6);
+      return cells.length ? cells : null;
+    }
+    const wk = JOB_WORK_KINDS[job];
+    if (wk) { const w = this.workByKind(wk).filter(inRoom); if (w.length) return w.map((s) => ({ ...s, room })); }
+    const seats = this.roomSeats(room);
+    if (seats.length >= BIG_ROOM_SEATS) return seats;                       // a session / an audience: take the seats
+    let cells = this.roomCells(room, f.prop && f.prop.length ? f.prop : null, 8);
+    if (cells.length) return cells;
+    if (seats.length) return seats;
+    cells = this.roomCells(room, null, 6);
+    return cells.length ? cells : null;
+  }
+
+  // Candidate cells for `act` of a person: work (staff or visitor), meal, sleep, leisure. Each is { x, y, z, kind, room? }.
+  candidates(person, act) {
+    const job = person.job;
+    if (person.room) {
+      const room = this.meta.rooms[person.room.index];
+      if (room && room.kind === person.room.kind) { const c = this.roomCandidates(person, act, room); if (c) return c; }
+    }
+    if (act === 'sleep' || act === 'home') {
+      if (this.meta.beds.length) return this.meta.beds.map((b) => ({ ...b, kind: 'bed' }));
+      const rooms = this.roomsOfKind(['hotel_room', 'family_apartment', 'studio', 'penthouse', 'barracks', 'clinic_ward', 'medbay', 'ward', 'lounge']);
+      const seats = this.spotsIn(rooms, ['seat']);
+      return seats.length ? seats : this.anySpots(['seat', 'stand']);
+    }
+    if (act === 'meal') {
+      const rooms = this.meta.rooms.filter((r) => roomFunction(r.kind).meal);
+      const seats = this.spotsIn(rooms, ['seat']);
+      if (seats.length) return seats;
+      const cells = []; for (const r of rooms) cells.push(...this.roomCells(r, ['TABLE', 'PANEL_BLACK', 'STONE_BRICK_SLAB'], 6));
+      return cells.length ? cells : this.anySpots(['seat', 'stand']);
+    }
+    if (act === 'leisure') {
+      const rooms = this.meta.rooms.filter((r) => roomFunction(r.kind).leisure);
+      const spots = this.spotsIn(rooms, ['seat', 'stand', 'dance', 'wait']);
+      return spots.length ? spots : this.anySpots(['seat', 'stand', 'wait']);
+    }
+    // work
+    if (person.visitor || VISITOR_JOBS.has(job)) {
+      const kinds = person.workRooms && person.workRooms.length ? person.workRooms : null;
+      let rooms = kinds ? this.roomsOfKind(kinds) : [];
+      if (!rooms.length) rooms = this.meta.rooms.filter((r) => roomFunction(r.kind).visitors);
+      const spots = this.spotsIn(rooms, ['seat', 'stand', 'dance', 'wait']);
+      if (spots.length) return spots;
+      const cells = []; for (const r of rooms.slice(0, 8)) cells.push(...this.roomCells(r, null, 4));
+      return cells.length ? cells : this.anySpots(['seat', 'stand', 'wait']);
+    }
+    const wk = JOB_WORK_KINDS[job];
+    if (wk) { const w = this.workByKind(wk); if (w.length) return w; }
+    // rooms whose function hosts this job: stand next to the room's prop blocks
+    const rooms = this.meta.rooms.filter((r) => { const f = roomFunction(r.kind); return f.jobs.some((j) => j.job === job); });
+    const cells = [];
+    for (const r of rooms.slice(0, 10)) { const f = roomFunction(r.kind); cells.push(...this.roomCells(r, f.prop && f.prop.length ? f.prop : null, 4)); }
+    if (cells.length) return cells;
+    for (const r of rooms.slice(0, 10)) cells.push(...this.roomCells(r, null, 3));
+    if (cells.length) return cells;
+    const spots = this.spotsIn(rooms, ['stand', 'seat']);
+    if (spots.length) return spots;
+    // no room of this building hosts the job (the purpose says "office", the planner built no office): work from the
+    // lobby counter, a meeting room or the stores rather than at another trade's post
+    this.stats.fallbacks++;
+    const generic = this.roomsOfKind(FALLBACK_ROOMS);
+    for (const r of generic.slice(0, 6)) { const f = roomFunction(r.kind); cells.push(...this.roomCells(r, f.prop && f.prop.length ? f.prop : null, 3)); }
+    if (cells.length) return cells;
+    if (this.meta.work.length) return this.meta.work;
+    return this.anySpots(['stand', 'seat', 'wait']);
+  }
+  anySpots(kinds) {
+    const s = this.meta.spots.filter((p) => kinds.includes(p.kind));
+    if (s.length) return s;
+    if (this.meta.spots.length) return this.meta.spots;
+    return this.meta.lobby ? [{ ...this.meta.lobby, kind: 'lobby' }] : [];
+  }
+
+  // Deterministic pick for a person (hash of key and act), skipping cells occupied by other live NPCs.
+  pick(person, act, npcId = -1, near = null) {
+    let c = this.candidates(person, act);
+    if (!c.length) return null;
+    // spot records were pruned by the blueprint's looser rule (one cell of headroom): drop what a body cannot stand in
+    if (c.length > 1) { const ok = c.filter((s) => s.kind === 'floor' || this.standable(s.x, s.y, s.z)); if (ok.length) c = ok; }
+    // room occupants fill their room's seats in generation order (desk after desk in an office); in a big hall (the
+    // Senate pods, an auditorium) they take the free seats closest to the player, so the tiers around the visitor
+    // are the ones in session; everyone else starts at a hash of who they are
+    let start;
+    if (person.room && near && c.length >= BIG_ROOM_SEATS) {
+      // seats behind the viewer come last; among those in front, prefer the ones inside the camera's frustum (the full
+      // view vector when known, else the viewer's own height: the tiers below a level camera are out of frame) and the
+      // nearer tiers (a pod fifty blocks across the rotunda is a dot), mixed with a deterministic jitter so the hall
+      // reads as occupied rather than as one packed corner
+      const score = (s) => {
+        const dx = s.x + 0.5 - near.x, dz = s.z + 0.5 - near.z, dy = s.y + 1 - (near.y + 1.6), d = Math.hypot(dx, dz), jitter = hash2(s.x, s.z, s.y) * 1500;
+        let pen = 0;
+        if (near.fx !== undefined) {
+          if (dx * near.fx + dz * near.fz < 0) pen += 1e6;
+          else if (near.fy !== undefined) { const dot = (dx * near.fx + dy * near.fy + dz * near.fz) / (Math.hypot(dx, dy, dz) || 1); pen += 6000 * Math.max(0, 0.9 - dot); }
+          else pen += 3 * (s.y - near.y) ** 2;
+        } else pen += 3 * (s.y - near.y) ** 2;
+        return 30 * d + jitter + pen;
+      };
+      c = c.map((s) => [score(s), s]).sort((a, b) => a[0] - b[0]).map((t) => t[1]);
+      start = 0;
+    } else start = person.room ? ((person.slot || 0) % 64) % c.length : Math.floor(hash2(person.key & 0xffff, act.length * 31 + (person.slot || 0), person.key >>> 16) * c.length) % c.length;
+    const free = (s) => { const who = this.occupied.get(s.x + ',' + s.y + ',' + s.z); return who === undefined || who === npcId; };
+    // the cell the player stands in (and its neighbours) is taken last: nobody materialises inside the visitor
+    const atPlayer = (s) => near && (s.x + 0.5 - near.x) ** 2 + (s.z + 0.5 - near.z) ** 2 < 2.5 * 2.5 && Math.abs(s.y - near.y) < 3;
+    for (let pass = 0; pass < 2; pass++) for (let k = 0; k < c.length; k++) {
+      const s = c[(start + k) % c.length];
+      if (pass === 0 && atPlayer(s)) continue;
+      if (free(s)) { this.stats.assigned++; return { ...s, key: s.x + ',' + s.y + ',' + s.z, lot: this.id }; }
+    }
+    // everything is taken: a room occupant stands on a free floor cell of the room rather than in someone's seat
+    if (person.room) {
+      const room = this.meta.rooms[person.room.index];
+      if (room) for (const s of this.roomCells(room, null, 24)) if (free(s)) return { ...s, key: s.x + ',' + s.y + ',' + s.z, lot: this.id };
+    }
+    const s = c[start];
+    return { ...s, key: s.x + ',' + s.y + ',' + s.z, lot: this.id };
+  }
+  occupy(spot, npcId) { if (spot && spot.key) this.occupied.set(spot.key, npcId); }
+  vacate(spot, npcId) { if (spot && spot.key && this.occupied.get(spot.key) === npcId) this.occupied.delete(spot.key); }
+  // a spot the live world turned out not to allow standing in: nobody picks it again (-2 is no citizen id)
+  block(spot) { if (spot && spot.key) { this.occupied.set(spot.key, -2); this.stats.blocked = (this.stats.blocked || 0) + 1; } }
+
+  // ---------------------------------------------------------------- vertical / entry geometry
+  // Floor y of a world y inside the lot (the walk level of the room at that height)
+  floorOf(y) { let best = this.meta.floorY; for (const f of this.meta.floors) if (f <= y + 0.01 && f > best) best = f; return best; }
+  // A standable cell beside a lift shaft at floor `y` (cached per floor). null when no shaft reaches the floor.
+  landing(y) {
+    if (this._landings.has(y)) return this._landings.get(y);
+    // the shafts sit inside a walled core with chrome doors: the landing is the first standable cell within four
+    // cells of the shaft column, preferably one that touches a chrome (door) block
+    let out = null, fallback = null;
+    const chrome = B.CHROME;
+    for (const lf of this.meta.lifts) {
+      if (y < lf.y0 - 0.01 || y > lf.y1 + 0.01) continue;
+      for (let r = 1; r <= 4 && !out; r++) {
+        for (let dx = -r; dx <= r && !out; dx++) for (let dz = -r; dz <= r; dz++) {
+          if (Math.max(Math.abs(dx), Math.abs(dz)) !== r) continue;
+          const x = lf.x + dx, z = lf.z + dz;
+          if (!this.standable(x, y, z)) continue;
+          const byDoor = this.blockAt(x + 1, y, z) === chrome || this.blockAt(x - 1, y, z) === chrome || this.blockAt(x, y, z + 1) === chrome || this.blockAt(x, y, z - 1) === chrome;
+          if (byDoor) { out = { x, y, z, lift: lf }; break; }
+          if (!fallback) fallback = { x, y, z, lift: lf };
+        }
+      }
+      if (out) break;
+    }
+    if (!out) out = fallback;
+    this._landings.set(y, out);
+    return out;
+  }
+  hasLiftTo(y) { return !!this.landing(y); }
+  // The way on foot from `from` to floor `toY` (steps of one block: stairs, slabs, ramps) inside the blueprint, or
+  // null - how a mezzanine or the strip's tenement upstairs connects to a floor no lift lands on. Returns
+  // { top, bottom }: the last cell on the starting floor before the climb (the head of the stairs) and the first cell
+  // on the target floor, so the walk is two short legs (the shared pathfinder accepts a partial path that ends in the
+  // goal's column at any height - one long leg would end on the floor above the stairs). Bounded breadth-first search
+  // over the blueprint's cells, cached per start region and target floor.
+  reach(from, toY, maxCells = 8000) {
+    const sx = Math.floor(from.x), sy = Math.floor(from.y + 0.01), sz = Math.floor(from.z);
+    const key = `${sx >> 3},${sy},${sz >> 3}>${toY}`;
+    if (this._noStairs.has(sy + '>' + toY)) return null;
+    if (this._reach.has(key)) return this._reach.get(key);
+    const startKey = `${sx},${sy},${sz}`;
+    const came = new Map([[startKey, null]]);
+    const q = [[sx, sy, sz, startKey]];
+    let found = null;
+    for (let qi = 0; qi < q.length && qi < maxCells && !found; qi++) {
+      const [x, y, z, pk] = q[qi];
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        for (const dy of [0, 1, -1]) {
+          const nx = x + dx, ny = y + dy, nz = z + dz;
+          if (!this.inside(nx, nz)) continue;
+          const k = `${nx},${ny},${nz}`;
+          if (came.has(k) || !this.standable(nx, ny, nz)) continue;
+          came.set(k, pk);
+          if (ny === toY) { found = k; break; }
+          q.push([nx, ny, nz, k]);
+        }
+        if (found) break;
+      }
+    }
+    let out = null;
+    if (found) {
+      const cells = [];
+      for (let k = found; k; k = came.get(k)) { const [x, y, z] = k.split(',').map(Number); cells.push({ x, y, z }); }
+      cells.reverse();
+      let top = cells[0];
+      for (let i = 1; i < cells.length && cells[i].y === sy; i++) top = cells[i];
+      out = { top, bottom: cells[cells.length - 1], key };
+    }
+    this._reach.set(key, out);
+    return out;
+  }
+  // The world did not walk the stairs the blueprint promised (a door, a slab the pathfinder refuses): forget them, so
+  // the next trip from that floor keeps the occupant there instead of failing again
+  unreach(key) {
+    if (!key) return;
+    this._reach.set(key, null);
+    const m = /^-?\d+,(-?\d+),-?\d+>(-?\d+)$/.exec(key);
+    if (m) this._noStairs.add(m[1] + '>' + m[2]);
+  }
+  // entrances: { level: 'ground'|'deck', out: {x,y,z}, in: {x,y,z} } - `out` on the street, `in` one step inside
+  entrances() {
+    if (this._entr) return this._entr;
+    const m = this.meta, e = [];
+    const step = (p, side, k) => side === 'W' ? { x: p.x + k, z: p.z } : side === 'E' ? { x: p.x - k, z: p.z } : side === 'N' ? { x: p.x, z: p.z + k } : { x: p.x, z: p.z - k };
+    const side = this.lot.front || (this.lot.door && this.lot.door.side) || 'S';
+    if (m.door && m.inside) e.push({ level: 'ground', out: { ...m.door }, in: { ...m.inside }, side });
+    if (m.midDoor) {
+      const y = m.midDoor.y;
+      // one to three steps in from the wall column, whichever is standable at the mid-door floor
+      let inn = null;
+      for (let k = 2; k <= 4 && !inn; k++) { const c = step(m.midDoor, side, k); if (this.standable(c.x, y, c.z)) inn = { x: c.x, y, z: c.z }; }
+      if (!inn) { const c = step(m.midDoor, side, 2); inn = { x: c.x, y, z: c.z }; }
+      e.push({ level: 'deck', out: { ...m.midDoor }, in: inn, side });
+    }
+    this._entr = e;
+    return e;
+  }
+  entrance(level) { return this.entrances().find((e) => e.level === level) || null; }
+  get midDoorY() { return this.meta.midDoor ? this.meta.midDoor.y : null; }
+}
+
+// Cache of LotInfo by lot id (bounded: far lots are dropped so the blueprint LRU is not thrashed)
+export class LotCache {
+  constructor(layout, max = 96) { this.layout = layout; this.max = max; this.map = new Map(); }
+  get(lotId) {
+    let li = this.map.get(lotId);
+    if (li) { this.map.delete(lotId); this.map.set(lotId, li); return li; }
+    const lot = this.layout.lots[lotId];
+    if (!lot || lot.kind === 'plaza') return null;
+    li = new LotInfo(lot, this.layout);
+    this.map.set(lotId, li);
+    if (this.map.size > this.max) this.map.delete(this.map.keys().next().value);
+    return li;
+  }
+  peek(lotId) { return this.map.get(lotId) || null; }
+}
