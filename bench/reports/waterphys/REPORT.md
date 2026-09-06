@@ -89,6 +89,17 @@ Frame numbers are 10 fps clip frames (frame n = n/10 s). Change size vs the r1 b
   the lane's coverage, so the lane lies as a smooth road mirroring the sky in the rippled sea, behind a taxiing
   float and behind every boat. The coverage outlasts the froth (2.2 lane lengths for a float, 4 for a ship, toward
   a kilometre at 11 kt) and float lanes live 30 s (a 16 s ribbon ended in the chase camera's foreground).
+- **The ribbon folded over itself on the inside of every turn.** The quads must span the Kelvin envelope (19.5°
+  a side: 23 m half-width 50 m astern of a float, 67 m at 100 m behind a runabout in a turn), and both sides took
+  the outer width, so the inner edge of a turning ribbon ran past the turn's centre and every quad there folded
+  over its neighbour — drawn twice (double-sided), lane and arm lines mirrored over the inner region, the additive
+  height pass doubled. Ribbon driven round circles in Node: 44 of 80 quads folded behind a float in a 15 m taxi
+  turn (from 19 m astern), 64 of 121 behind a runabout in a 40 m turn, 54 of 112 behind a yacht in 60 m — the
+  inside of every route turn and every taxi turn. Now each side takes its own width (mirroring the shader's inner
+  arm closing on the track / outer arm spreading), the inner edge is clamped inside the local turn radius, the
+  vertex carries its signed across-position (side × half-width interpolates quadratically once the sides differ)
+  and the curvature is measured every frame from the relaxed track (once-at-relaxation read a third low). Zero
+  folded quads in all five cases; a straight track is unchanged.
 - **The lane's froth never died behind a hull that stopped.** Every time-like decay of the foam pass was written
   in ribbon distance, which is speed × time only while the hull keeps going; the points just astern of a stopped
   hull kept `d ≈ 0`, so the churn held its transom density for the ribbon's whole life and the slick never let go.
@@ -144,8 +155,9 @@ next attack).
    hull's paint shows no waterline stain or sheen where it cuts the surface. This needs a hull-waterline decal
    from `model.ts` (see hooks). Highest value for 11/12.
 2. **The interleaved A/B perf ratio for the mid-map pass** is not yet measured; do it on two preview ports.
-3. Wake **turning / shore interaction** and **1 km persistence** are only spot-checked (the `turn100` and ship
-   views); stopping is handled (r9) but its frames are still to be reviewed.
+3. Wake **shore interaction** and **1 km persistence** are only spot-checked (the ship views); turning is fixed
+   numerically (r10, no folds) and stopping (r9) and skipping (r10) are handled, but their frames are still to be
+   reviewed.
 4. Reflections/glitter over the churned lane (cat 26) are only lightly touched.
 
 ## Failed / reverted candidates
