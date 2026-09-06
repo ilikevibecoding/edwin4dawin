@@ -169,3 +169,47 @@ The previous vegetation agent's loop-5 commits were lost with the VM; rounds 1�
   crown (trunk, limbs, root zone: `vegHard`) take the full per-fragment shadow with no leaf floor.
 - **Also**: the hardwood leaf-cluster tiles redrawn as 120–150 small leaves in 4–6 overlapping bunches (the
   two dozen big ellipses radiating from the tile centre read as hands at 5–10 m).
+
+### Rounds 7c / 8 / 9 / 10 / 10b / 6c — verified (`r12`, `r14`, build 5d48600d)
+- **Budgets** (`r12`): pose C 242 calls / **1 564 816** tris (main 1 214 678, reflection 187 064, shadow 141 076,
+  wake 21 972; without vegetation 838 032 → vegetation 727 k: 886 level-1 crowns × 268, 242 level-2 × 548,
+  101 709 cards, 182 + 61 palms); aerial-a 290 / 1 095 378; pose A 187 / 890 180. `r14` ground views: park
+  263 / 1 284 777, palm grove 175 / **1 607 852** (2 347 level-1 crowns: the level-1 band had no budget), prq
+  231 / 1 040 379, island 255 / 552 937. The level-1 budget (R6c, commit 0d8c5ac6: `HI_BUDGET` 700 nearest
+  first, level-1 fringe 18/6, understory 1.6 km / 450 / 900) was written after this build — measured in `r15`.
+- **Grass** (`r14-park`, eye level): the 0.8 m lattice with rank thinning reads as a lawn with tufts to ~40 m,
+  the sunlit strip across it convincing; on the shaded lawn the tufts are a shade darker than the ground and
+  stand out as specks (they take the crown shadow but not the terrain's canopy darkening — noted, terrain.ts).
+- **Trunks** (`r14-park`, `r14-beach`): still pale grey posts in the shade — the R6c shadow floor was the wrong
+  fix: the crown's shadow (a light-facing card at the crown centre) falls *behind* the tree, so its own trunk is
+  never in it; the trunk's colour is the full sky irradiance on a 0.3 albedo, brighter than the shaded lawn
+  beside it, which the terrain darkens under canopy. → R11.
+- **Near crowns** (`r14-park`, 3–10 m under the canopy): smooth khaki balls — the puffs are solid shells, the
+  rim dissolve alone does not say "leaves"; the undersides glow mustard (the translucency term at full strength
+  on a face turned to the camera: `back` ≈ 1, `ndl` ≈ −1 → 0.8 × sun through metres of leaves). → R11.
+- **Pine tufts** (`r14-park`): the needle-tuft tile reads as flat starbursts (5 bunches of 26 two-pixel spokes).
+  → R11.
+- **Black box** (`r8-park`, `s1` sweep 3 of 100 stations, `bb-*` bisection pending): a solid black rectangle
+  with 8-px stepped edges, always rows 139–313 of 540 (26–58 % of the frame height) whatever the station or
+  heading, ~190 px wide, at headings 0 and 270 (sun ahead / to the side) never 90 / 180; the vegetation instance
+  data has no non-finite values (in-page probe over 829 tiles). The fixed screen band and the coarse steps say
+  a NaN in a screen-space pass (a bloom mip, or the reflection blur) rather than a world object.
+- **Palm fins** (`r14-palm`, `r14-beach`): the finned fronds resolve as leaflet combs at 10–30 m; the camera
+  finder put the palm station inside an understory shrub (a near-black card fills the frame: shade
+  ×[0.3, 0.32, 0.25] under a 0.6 occlusion — a shrub in deep shade is dark, not black; noted for R12).
+- **Terrain, not mine** (`r14-beach`): 2 × 2 m axis-aligned green squares on the pale ground of the shaded
+  grove behind the beach (the ground type per cell shows as a checkerboard where lawn and sand meet) — a
+  terrain.ts request.
+
+## Round 11 — bark under the canopy, translucency as a rim, leaf-shell puffs, pine tufts (commit c8876734)
+- **Changed**: `vegAmb` — the share of the sky the hard parts see, set by the colour stage and applied to the
+  indirect diffuse and specular: trunk / limbs `mix(0.5, 0.22, vOcc) × mix(1, 0.45, height in crown)`, root
+  zone `mix(0.55, 0.3, vOcc)`, palm trunks `mix(0.7, 0.3, vOcc)`. Crown translucency × `(1 − n·v)(1 − 0.5 n·v)`
+  (`rim: true` in `CROWN_LIGHT`; palms and cards are one leaf and keep theirs). Inside 150 m the puffs open
+  leaf-cluster hollows over their whole face — `cut = max(rim band, clusters − mix(1.1, 0.72, close))`, a
+  soft coverage ramp of ±0.03 — and the crown material is double-sided so the far side of the shell shows
+  through them at 45 %. Pine tile: nine bottle-brushes of 70 fine needles (1.2 px, 9–20 px long) fanned about
+  twigs radiating from the tile centre, tip half brighter.
+- **Why**: a trunk under a crown is lit by the sky it sees around the horizon, not the whole dome; a leaf mass
+  is translucent at its edges only; a crown at 5–50 m is a shell of clusters with hollows, not a ball.
+- **Measured**: `r16` (below).
