@@ -69,6 +69,13 @@ export function buildTail(ctx: BuildContext): TailBuild {
   // (rows of the tail band clear of the elevator trim-tab lines painted at the stabiliser's inboard stations)
   const dorsalGeo = wingPanel(dorsalSpec, { z0: 0, z1: 0.33, segments: 3, part: 'full', n: 10, tipRound: 0.05, vOf: (z) => tailV(z, 1.2) });
   airframe.add(dorsalGeo, at([-2.94, 0.62, 0], [-Math.PI / 2, 0, 0]));
+  // ventral fin under the tail cone: the float conversion's yaw-stability fin (a 1.05 m x 0.33 m swept plate with
+  // a near-vertical trailing edge). The panel is flipped to hang downward, then tilted to follow the keel line,
+  // which rises 0.2 m per metre toward the stern post, with its root buried 3 cm inside the rounded bottom.
+  const ventralSpec: WingSpec = { span: 0.33, rootChord: 1.05, tipChord: 0.42, sweep: -0.5, dihedral: 0, thickness: 0.10, twist: 0, camber: 0, te: TAIL_TE };
+  const ventralGeo = wingPanel(ventralSpec, { z0: 0, z1: 0.33, segments: 3, part: 'full', n: 10, tipRound: 0.06, vOf: (z) => tailV(z, 1.2) });
+  ventralGeo.rotateX(Math.PI / 2);
+  airframe.add(ventralGeo, at([-4.25, 0.03, 0], [0, 0, -Math.atan(0.2)]));
   mesh(airframe.build(), wingPaint);
   mesh(white.build(), plainPaint);
   const rudder = new THREE.Group();
