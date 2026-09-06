@@ -532,15 +532,18 @@ export function buildTowers(ctx) {
   // hangar mouth above the engine bank. One loft, so the shafts' rear faces stand clear above it.
   const A = AFT;
   const yDeck = DECK_Y;
-  const aftSec = ([zr, hx, y]) => ({
-    z: Z(zr),
-    pts: [
-      [-hx, yDeck - 0.3],
-      [hx, yDeck - 0.3],
-      [hx, y],
-      [-hx, y],
-    ],
-  });
+  const aftSec = ([zr, hx, y]) => {
+    const hb = hx + A.batter * (y - yDeck);
+    return {
+      z: Z(zr),
+      pts: [
+        [-hb, yDeck - 0.3],
+        [hb, yDeck - 0.3],
+        [hx, y],
+        [-hx, y],
+      ],
+    };
+  };
   const sooted = (col, zr) => {
     const k = sootAt(Z(zr));
     return mulColor(col, k[0], k[1], k[2]);
@@ -560,18 +563,30 @@ export function buildTowers(ctx) {
   const zAft = Z(last[0]);
   const hxAft = last[1];
   const yAft = last[2];
-  // aft foot face: a frame of four slabs around the hangar mouth
+  // aft foot face: the battered trapezoid end of the loft with the hangar mouth cut out of it
   const hg = A.hangar;
   const faceCol = sooted(GREY_BLOCK, last[0]);
-  const slab = (x0, y0, x1, y1) =>
-    add(boxMM([x0, y0, zAft - 2.5], [x1, y1, zAft + 0.4]), "hull", {
+  const hbAft = hxAft + A.batter * (yAft - yDeck);
+  {
+    const shape = new THREE.Shape([
+      new THREE.Vector2(-hbAft, yDeck - 0.3),
+      new THREE.Vector2(hbAft, yDeck - 0.3),
+      new THREE.Vector2(hxAft, yAft),
+      new THREE.Vector2(-hxAft, yAft),
+    ]);
+    shape.holes.push(
+      new THREE.Path([
+        new THREE.Vector2(-hg.hx, hg.y0),
+        new THREE.Vector2(-hg.hx, hg.y1),
+        new THREE.Vector2(hg.hx, hg.y1),
+        new THREE.Vector2(hg.hx, hg.y0),
+      ]),
+    );
+    add(new THREE.ShapeGeometry(shape).translate(0, 0, zAft), "hull", {
       color: faceCol,
       texel: hullTexel,
     });
-  slab(-hxAft, hg.y1, hxAft, yAft + 0.2);
-  slab(-hxAft, yDeck - 0.3, hxAft, hg.y0);
-  slab(-hxAft, hg.y0 - 0.1, -hg.hx, hg.y1 + 0.1);
-  slab(hg.hx, hg.y0 - 0.1, hxAft, hg.y1 + 0.1);
+  }
   // the hangar: an inward-facing dark box, a lit floor strip along the back wall, a few small lights
   add(
     flipGeometry(
@@ -680,22 +695,25 @@ export function buildTowers(ctx) {
         );
       }
     };
-    // vertical side wall of a segment: frame along the wall (u aft along it, v up), plates + seams
+    // battered side wall of a segment: p(t, y) = (sx (hx(t) + batter (yTop(t) - y)), y, z(t)); frame with
+    // u along the wall, v up the slope, n outward
     const wallField = (seg, sx) => {
       const { z0, z1, hx0, hx1, y0, y1 } = seg;
       const dz = Z(z1) - Z(z0);
-      const dx = sx * (hx1 - hx0);
-      const len = Math.hypot(dx, dz);
-      const u = new THREE.Vector3(dx / len, 0, dz / len);
-      const n = new THREE.Vector3(sx * (dz / len), 0, -sx * (dx / len));
-      const v = new THREE.Vector3(0, 1, 0);
+      const at = (t, y) =>
+        new THREE.Vector3(
+          sx * (hx0 + (hx1 - hx0) * t + A.batter * (y0 + (y1 - y0) * t - y)),
+          y,
+          Z(z0) + dz * t,
+        );
+      const len = at(1, yDeck).distanceTo(at(0, yDeck));
+      const u = at(1, yDeck).sub(at(0, yDeck)).normalize();
+      const v = new THREE.Vector3(-sx * A.batter, 1, 0).normalize();
+      const n = new THREE.Vector3().crossVectors(u, v);
+      if (n.x * sx < 0) n.negate();
+      n.normalize();
       const top = Math.min(y0, y1);
-      const frameAt = (a, b) => ({
-        p: new THREE.Vector3(sx * hx0, 0, Z(z0)).addScaledVector(u, a).setY(b),
-        n,
-        u,
-        v,
-      });
+      const frameAt = (a, b) => ({ p: at(a / len, b), n, u, v });
       const cells = staggered(
         rand,
         { u0: 2, u1: len - 2, v0: yDeck + 2, v1: top - 1.5 },
@@ -757,27 +775,34 @@ export function buildTowers(ctx) {
           "windows",
           { color: ROW_COOL, uv: "keep" },
         );
-        const nSlots = fine ? 6 : 3;
+        // small dark vents in a row above the windows, a seam under the top edge, two short raised
+        // plates offset left and right so the face breaks up without stripes
+        const nSlots = fine ? 5 : 3;
         for (let i = 0; i < nSlots; i++) {
-          const x = -hx + 4 + ((hx * 2 - 8) * (i + 0.5)) / nSlots;
-          add(faceBox(frameAt(x, 0.7), 3.2, slope * 0.22, 0.4, 0.05), "hull", {
-            color: GREY_RECESS,
+          const x = -hx + 5 + ((hx * 2 - 10) * (i + 0.5)) / nSlots;
+          add(faceBox(frameAt(x, 0.66), 2.2, slope * 0.12, 0.3, 0.05), "dark", {
+            color: DARK_RECESS,
             texel: 1 / 6,
           });
         }
         if (fine) {
-          add(faceBox(frameAt(0, 0.92), hx * 2 - 3, 0.6, 0.2, 0.05), "dark", {
+          add(faceBox(frameAt(0, 0.93), hx * 2 - 3, 0.6, 0.2, 0.05), "dark", {
             color: DARK_SEAM,
             texel: 1 / 4,
           });
-          add(
-            faceBox(frameAt(0, 0.15), hx * 2 - 10, slope * 0.16, 0.9, 0.05),
-            "hull",
-            {
-              color: sooted(GREY_HULL, z0),
-              texel: hullTexel,
-            },
-          );
+          for (const sx of [-1, 1])
+            add(
+              framePlate(
+                frameAt(sx * hx * 0.45, 0.14 + (sx > 0 ? 0.04 : 0)),
+                hx * 0.7,
+                slope * 0.14,
+                0.6,
+                0.6,
+                { texel: hullTexel, sink: 0.3 },
+              ),
+              "hull",
+              { color: sooted(GREY_HULL, z0), uv: "keep" },
+            );
         }
       } else if (fine) {
         treadField(z0, z1, Math.min(hx0, hx1), y0, (z0 + z1) / 2);

@@ -226,7 +226,7 @@ export const BLOCK = {
   // with a dark hood on top (the sky shows through the rest of the gap)
   bridge: { z0: 812, z1: 850, y1: up(118), hx: 15.5, hoodH: 7 },
 };
-// aft body behind the shafts: one loft of [zr, half-width, top y] sections — three sloped risers with
+// aft body behind the shafts: one loft of [zr, top half-width, top y] sections — three sloped risers with
 // short flat treads between (36 degree risers, 28 degrees overall, widening as it descends) down to a stern shelf, then the aft
 // foot face carrying the dark stern hangar mouth above the engine bank; the wing deck runs on to the
 // stern behind it
@@ -240,6 +240,7 @@ export const AFT = {
     [1034, 34, up(32)],
     [1085, 36, up(32)],
   ],
+  batter: 0.25, // the side walls lean out toward the deck this much per metre of height (sloped shoulders)
   hangar: { hx: 25, y0: up(1.5), y1: up(25), depth: 30 },
 };
 export const TOWER = {
