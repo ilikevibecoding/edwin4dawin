@@ -590,6 +590,15 @@ async function boot() {
       driver.state.cruise = 0;
       vehicle.root.updateMatrixWorld(true);
       const ok = rig.setView(name);
+      if (ok && view?.aim === 'key') {
+        // look along the hour's key light (the moon at night), then turn off
+        // it by the view's yaw/pitch so the disc sits away from centre
+        _v.copy(skyRig.sunDir).multiplyScalar(500).add(camera.position);
+        camera.lookAt(_v);
+        camera.rotateY(THREE.MathUtils.degToRad(view.yaw || 0));
+        camera.rotateX(THREE.MathUtils.degToRad(view.pitch || 0));
+        camera.updateProjectionMatrix();
+      }
       skyRig.follow(vehicle.root.position);
       return ok;
     },

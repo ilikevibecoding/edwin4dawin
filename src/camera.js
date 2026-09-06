@@ -32,6 +32,16 @@ export const VIEWS = {
   // capture: every other framing here is relative to a truck sitting on the
   // spur, and no camera placement can show a road the truck is not on.
   mainroad: { pos: [4.6, 2.5, -8.4], target: [-0.4, 1.1, 9.0], fov: 44, place: 'main', t: 0.06 },
+  // The sky's key light — the sun by day, the moon at night — from the hero
+  // position. `aim: 'key'` tells whoever resets the world to look along the
+  // hour's key direction and then turn off it so the disc sits up and right of
+  // centre with the horizon in the frame; the target here is a placeholder.
+  // Round 5's three critics scanned 29 night frames for the moon and found it
+  // in none, so the disc, corona and star cap were never scored. The moon
+  // stands at 43°: a 64° lens turned 21.5° under it puts the disc at 0.16 of
+  // the height and the horizon at 0.84, and 22° off it in yaw puts it at 0.7
+  // of the width.
+  moon: { pos: [4.9, 1.62, 5.0], target: [0.1, 1.05, 0.5], fov: 64, aim: 'key', yaw: 22, pitch: -21.5 },
 
   // The glass gauntlet. Its own family so the default capture and the digit
   // keys never see it: nine conditions (close, medium, interior, sun, shade,
