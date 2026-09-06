@@ -91,7 +91,7 @@ const float BASE_WARP = 380.0;
 // march and the light march start there instead of planing those cells off at uCloudBase
 float slabBottom() {
   float deck = smoothstep(0.45, 0.7, uCloudCoverage);
-  return uCloudBase - mix(0.15, 0.25, deck) * (uCloudTop - uCloudBase) - BASE_WARP * 0.45;
+  return uCloudBase - mix(0.15, 0.25, deck) * (uCloudTop - uCloudBase) - BASE_WARP * 0.8;
 }
 
 // interleaved gradient noise: a pure function of the pixel position, so frames are reproducible
@@ -121,13 +121,12 @@ vec3 noiseCoord(vec3 p, vec4 f) {
   return q + vec3(f.y * 0.8 + f.w * 0.15, f.z * 0.25, f.y * 0.5 + f.w * 0.1);
 }
 
-/** Geometric relief of the base: the height coordinate is displaced by an isotropic perlin fetch, faded out
- *  above a third of the slab so the crown keeps its own shape. hf0 = height fraction over the smooth base. */
-float baseWarp(vec3 q, float hf0) {
-  float fade = 1.0 - smoothstep(0.2, 0.35, hf0);
-  if (fade <= 0.0) return 0.0;
-  float n = texture(uNoise3D, q * 2.0 + vec3(0.23, 0.71, 0.47)).a;
-  return (n - 0.5) * BASE_WARP * fade;
+/** Geometric relief of the base: the height coordinate is displaced by the isotropic perlin channel of the
+ *  shape fetch (B: periods 325/162 m, std 0.10, otherwise unused at this coordinate, so the relief costs no
+ *  extra fetch), faded out above a third of the slab so the crown keeps its own shape.
+ *  hf0 = height fraction over the smooth base. */
+float baseWarp(vec4 n, float hf0) {
+  return (n.b - 0.5) * (BASE_WARP * 1.6) * (1.0 - smoothstep(0.2, 0.35, hf0));
 }
 
 /** Vertical envelope of the layer (before noise): a base whose footprint is exactly cloudCoverage2D
@@ -186,12 +185,11 @@ float meanDensity(float e, float hn) { return clamp(e * 1.2 - 0.5 * mix(0.9, 1.3
 float densityBase(vec3 p, vec4 f) {
   float thick = uCloudTop - uCloudBase;
   float hf0 = (p.y - baseAltitude(f)) / thick;
-  if (hf0 > 1.0 || hf0 < -BASE_WARP * 0.5 / thick) return 0.0;
-  vec3 q = noiseCoord(p, f);
+  if (hf0 > 1.0 || hf0 < -BASE_WARP * 0.8 / thick) return 0.0;
+  vec4 n = texture(uNoise3D, noiseCoord(p, f));
   float hf, hn, H;
-  float e = envelope(p, f, baseWarp(q, hf0), hf, hn, H);
+  float e = envelope(p, f, baseWarp(n, hf0), hf, hn, H);
   if (e <= 0.002) return 0.0;
-  vec4 n = texture(uNoise3D, q);
   return clamp(shapeDensity(e, hn, n), 0.0, 1.0);
 }
 
@@ -360,9 +358,11 @@ void main() {
       float hf, hn, H;
       float e = 0.0;
       vec3 q = vec3(0.0);
-      if (covTest > 0.0 && hf0 < 1.0 && hf0 > -BASE_WARP * 0.5 / thick) {
+      vec4 n = vec4(0.5);
+      if (covTest > 0.0 && hf0 < 1.0 && hf0 > -BASE_WARP * 0.8 / thick) {
         q = noiseCoord(p, f);
-        e = envelope(p, f, baseWarp(q, hf0), hf, hn, H);
+        n = texture(uNoise3D, q);
+        e = envelope(p, f, baseWarp(n, hf0), hf, hn, H);
         e *= 1.0 - smoothstep(0.0, 1.0, (t - farFade0) * farFadeK);
       }
       if (e <= 0.004) {
@@ -378,7 +378,6 @@ void main() {
         continue;
       }
       float mott;
-      vec4 n = texture(uNoise3D, q);
       // near-field texture only where the step can resolve it
       float nearK = (1.0 - smoothstep(1500.0, 4000.0, t)) * (1.0 - detFade);
       float dens = densityFull(q, n, e, hf, hn, detFade, nearK, mott);
