@@ -42,6 +42,7 @@ export class LotInfo {
     this._byWorkKind = null;
     this._byRoomKind = null;
     this._landings = new Map();
+    this._reach = new Map();
     this.occupied = new Map();   // spot key -> npc id (live occupancy)
     this.stats = { assigned: 0, fallbacks: 0 };
   }
@@ -281,8 +282,11 @@ export class LotInfo {
       start = 0;
     } else start = person.room ? ((person.slot || 0) % 64) % c.length : Math.floor(hash2(person.key & 0xffff, act.length * 31 + (person.slot || 0), person.key >>> 16) * c.length) % c.length;
     const free = (s) => { const who = this.occupied.get(s.x + ',' + s.y + ',' + s.z); return who === undefined || who === npcId; };
-    for (let k = 0; k < c.length; k++) {
+    // the cell the player stands in (and its neighbours) is taken last: nobody materialises inside the visitor
+    const atPlayer = (s) => near && (s.x + 0.5 - near.x) ** 2 + (s.z + 0.5 - near.z) ** 2 < 2.5 * 2.5 && Math.abs(s.y - near.y) < 3;
+    for (let pass = 0; pass < 2; pass++) for (let k = 0; k < c.length; k++) {
       const s = c[(start + k) % c.length];
+      if (pass === 0 && atPlayer(s)) continue;
       if (free(s)) { this.stats.assigned++; return { ...s, key: s.x + ',' + s.y + ',' + s.z, lot: this.id }; }
     }
     // everything is taken: a room occupant stands on a free floor cell of the room rather than in someone's seat
@@ -327,6 +331,47 @@ export class LotInfo {
     return out;
   }
   hasLiftTo(y) { return !!this.landing(y); }
+  // The way on foot from `from` to floor `toY` (steps of one block: stairs, slabs, ramps) inside the blueprint, or
+  // null - how a mezzanine or the strip's tenement upstairs connects to a floor no lift lands on. Returns
+  // { top, bottom }: the last cell on the starting floor before the climb (the head of the stairs) and the first cell
+  // on the target floor, so the walk is two short legs (the shared pathfinder accepts a partial path that ends in the
+  // goal's column at any height - one long leg would end on the floor above the stairs). Bounded breadth-first search
+  // over the blueprint's cells, cached per start region and target floor.
+  reach(from, toY, maxCells = 8000) {
+    const sx = Math.floor(from.x), sy = Math.floor(from.y + 0.01), sz = Math.floor(from.z);
+    const key = `${sx >> 3},${sy},${sz >> 3}>${toY}`;
+    if (this._reach.has(key)) return this._reach.get(key);
+    const startKey = `${sx},${sy},${sz}`;
+    const came = new Map([[startKey, null]]);
+    const q = [[sx, sy, sz, startKey]];
+    let found = null;
+    for (let qi = 0; qi < q.length && qi < maxCells && !found; qi++) {
+      const [x, y, z, pk] = q[qi];
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        for (const dy of [0, 1, -1]) {
+          const nx = x + dx, ny = y + dy, nz = z + dz;
+          if (!this.inside(nx, nz)) continue;
+          const k = `${nx},${ny},${nz}`;
+          if (came.has(k) || !this.standable(nx, ny, nz)) continue;
+          came.set(k, pk);
+          if (ny === toY) { found = k; break; }
+          q.push([nx, ny, nz, k]);
+        }
+        if (found) break;
+      }
+    }
+    let out = null;
+    if (found) {
+      const cells = [];
+      for (let k = found; k; k = came.get(k)) { const [x, y, z] = k.split(',').map(Number); cells.push({ x, y, z }); }
+      cells.reverse();
+      let top = cells[0];
+      for (let i = 1; i < cells.length && cells[i].y === sy; i++) top = cells[i];
+      out = { top, bottom: cells[cells.length - 1] };
+    }
+    this._reach.set(key, out);
+    return out;
+  }
   // entrances: { level: 'ground'|'deck', out: {x,y,z}, in: {x,y,z} } - `out` on the street, `in` one step inside
   entrances() {
     if (this._entr) return this._entr;

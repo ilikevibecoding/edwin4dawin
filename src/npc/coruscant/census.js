@@ -29,7 +29,7 @@ const STREET_MIX = {
   market: [['vendor', 6], ['shopper', 6], ['astromech', 2], ['courier', 2], ['sweeper droid', 1], ['security officer', 1], ['tourist', 2]],
   spaceport: [['pilot', 6], ['passenger', 5], ['customs officer', 3], ['astromech', 3], ['mechanic', 7], ['dock worker', 4], ['courier', 1], ['tourist', 2], ['bartender', 1], ['vendor', 1], ['sweeper droid', 1]],
 };
-const PORT_CROWD = 64;    // spaceport crews (the port has no lots: pads, terminal and hangar are one structure)
+const PORT_CROWD = 150;   // spaceport crews and passengers (the port has no lots: eight pads with four gear positions each, terminal, hangar, workshop)
 
 function pickWeighted(list, rng) {
   let total = 0; for (const [, w] of list) total += w;
@@ -152,7 +152,8 @@ export function buildPool(layout, opts = {}) {
       continue;
     }
     // every plaza draws its own regulars on top of the district's density; the Senate plaza is the busiest
-    const anchor = plazaOf(d.kind) || usable.find((l) => l.district === d.kind) || null;
+    // two districts share a kind (financial, residential): each anchors on the plaza nearest its own centre
+    const anchor = plazaOf(d.kind, { x: (d.x0 + d.x1) / 2, z: (d.z0 + d.z1) / 2 }) || usable.find((l) => l.district === d.kind) || null;
     const n = Math.max(8, Math.round(STREET_BASE * prof.density)) + (anchor && anchor.kind === 'plaza' ? (PLAZA_REGULARS[d.kind] || PLAZA_REGULARS.default) : 0);
     const anchorLot = anchor;
     const cands = purposed.filter((p) => p.lot.district === d.kind);
@@ -170,8 +171,9 @@ export function buildPool(layout, opts = {}) {
       else if (cands.length && rng.next() < 0.4) post = cands[Math.floor(rng.next() * cands.length)].lot;
       const p = makePerson(rng, job, d.kind, post, null, i);
       p.street = true;
-      // the entertainment and market districts run on nightlife: half their street people work the night shift
-      const nightlife = d.kind === 'entertainment' || d.kind === 'market';
+      // the entertainment district runs on nightlife: half its street people work the night shift (the market is a
+      // daytime crowd; a quarter of everyone else works nights)
+      const nightlife = d.kind === 'entertainment';
       p.shift = job === 'bounty hunter' || job === 'patron' || job === 'musician' || job === 'bouncer' ? 'evening' : ((nightlife ? i % 2 === 1 : i % 4 === 3) ? 'night' : 'day');
       // street people mostly eat outdoors too (vendor stalls, plaza benches): the lunch crowd stays on the plaza
       if (!p.droid && p.plaza != null && rng.next() < 0.7) p.meal = p.plaza;

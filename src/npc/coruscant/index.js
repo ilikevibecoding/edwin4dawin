@@ -25,10 +25,11 @@ export const SPAWN_R = 96, DESPAWN_R = 128, MAX_LIVE = 150;
 const SPAWN_PER_CYCLE = 10, CYCLE_TICKS = 10;
 const INDOOR_PENALTY = 40, INDOOR_MARGIN = 24, INDOOR_MAX = 20, OWN_LOT_MAX = 110;   // see spawnCycle
 const RECYCLE_AGE = 160, RECYCLE_PER_CYCLE = 4;                    // out-of-sight recycling: min age (ticks), rate
+const WANDER_MIN = 4, WANDER_MAX = 24, STROLL_P = 0.4;             // idle seconds on a street spot; share of arrivals already strolling
 const SKIP_TICKS = 200;                                            // 10 s before retrying someone who could not be placed
 const RUN_SPEED = 4.2;
 const HOP_S = 0.6, HOP_H = 1.05;                                   // the kerb hop: seconds, rise (clears the railing)
-const LEG_NODES = { street: 1600, lot: 4000, door: 900, spot: 3000 };
+const LEG_NODES = { street: 1600, lot: 4000, door: 900, spot: 3000, stairs: 7000 };
 const CIVIC = new Set(['senate', 'financial']);
 const VENDOR_JOBS = new Set(['vendor', 'shopkeeper', 'tailor', 'pharmacist', 'bartender', 'barista', 'server', 'cook', 'broker']);
 
@@ -51,7 +52,7 @@ export class CoruscantPopulation {
     this.view = { x: 0, y: 0, z: 1 };   // camera forward at the last spawn cycle: big halls seat their crowd in view
     this.rng = new RNG(0xc0c0);
     this.hour = 12; this.tickCount = 0; this.time = 0; this.enabled = true;
-    this.stats = { spawned: 0, despawned: 0, trips: 0, tripsFailed: 0, legs: 0, legsFailed: 0, legsFailedBy: {}, retargets: 0, stuck: 0, lifts: 0, bubbles: 0, talks: 0, unloadedWaits: 0, unplaceable: 0, errands: 0, arrivals: 0, recycled: 0 };
+    this.stats = { spawned: 0, despawned: 0, trips: 0, tripsFailed: 0, legs: 0, legsFailed: 0, legsFailedBy: {}, retargets: 0, stuck: 0, lifts: 0, bubbles: 0, talks: 0, unloadedWaits: 0, unplaceable: 0, errands: 0, arrivals: 0, recycled: 0, stays: 0 };
     this.disaster = null; this.watching = false;
     this.lastBubbleAt = -10; this.lastChatAt = -10;
     this.playerCtx = { vandalT: 0, bumpT: 0 };
@@ -215,7 +216,11 @@ export class CoruscantPopulation {
     npc.spot = spot;
     this.occupy(spot, npc);
     if (from) this.beginTrip(npc, spot);
-    else this.arrive(npc, spot);
+    else {
+      this.arrive(npc, spot);
+      // a share of the street crowd is already on its way somewhere when it appears, so a plaza never starts frozen
+      if ((spot.kind === 'street' || spot.kind === 'plaza') && this.rng.next() < STROLL_P) this.retarget(npc, 0);
+    }
     return true;
   }
   // standable feet cell at/near a spot in the live world, or null (also null when the chunk is not loaded)
@@ -268,7 +273,28 @@ export class CoruscantPopulation {
     npc.path = null; npc.errand = null; npc.legFails = 0; npc.pathFails = 0;
     const legs = this.planner.planTrip(npc, spot);
     this.stats.trips++;
-    if (!legs) { this.stats.tripsFailed++; npc.tripFails = (npc.tripFails || 0) + 1; if (npc.tripFails < 3) this.retarget(npc, npc.tripFails); else { npc.tripFails = 0; this.settle(npc, 20); } return; }
+    if (legs === 'stay') {
+      // no door of this building is reachable from this floor: the occupant keeps to it (eats upstairs, sleeps at the
+      // post) rather than teleporting out - not a failed transition, nobody goes anywhere
+      this.stats.stays++;
+      npc.confined = true;
+      if (spot && (spot.lot !== npc.lot || Math.abs(spot.y - npc.pos.y) > 1.5)) {
+        this.vacate(spot, npc);
+        npc.spot = { x: Math.floor(npc.pos.x), y: Math.round(npc.pos.y), z: Math.floor(npc.pos.z), lot: npc.lot, kind: 'floor', level: 'lot' };
+      }
+      this.settle(npc, 45);
+      return;
+    }
+    if (!legs) {
+      this.stats.tripsFailed++;
+      // the last few failures, for the census script and debugging (who could not get from where to where)
+      const ft = this.stats.failedTrips || (this.stats.failedTrips = []);
+      ft.push({ job: npc.person.job, act: npc.act, from: { x: Math.round(npc.pos.x), y: Math.round(npc.pos.y), z: Math.round(npc.pos.z), lot: npc.lot, level: npc.level }, to: { x: spot.x, y: spot.y, z: spot.z, lot: spot.lot ?? null, level: spot.level || null, kind: spot.kind || null } });
+      if (ft.length > 30) ft.shift();
+      npc.tripFails = (npc.tripFails || 0) + 1;
+      if (npc.tripFails < 3) this.retarget(npc, npc.tripFails); else { npc.tripFails = 0; this.settle(npc, 20); }
+      return;
+    }
     npc.tripFails = 0;
     npc.legs = legs; npc.legIdx = 0;
     npc.sitting = false; npc.lying = false; npc.hidden = false;
@@ -311,16 +337,30 @@ export class CoruscantPopulation {
       npc.waitingPath = false;
       if (npc.dead) return;
       if (path) { npc.path = path; npc.pathIdx = 0; npc.state = 'walk'; npc.pathFails = 0; npc.stuckT = 0; npc.lastProgress = { x: npc.pos.x, z: npc.pos.z, t: this.tickCount }; this.applyWalkMode(npc); return; }
-      this.stats.legsFailed++;
-      this.stats.legsFailedBy[leg.tag] = (this.stats.legsFailedBy[leg.tag] || 0) + 1;
-      // the last few failures, for the census script and debugging (from -> to, tag, who)
-      const fl = this.stats.failedLegs || (this.stats.failedLegs = []);
-      fl.push({ tag: leg.tag, from: [Math.floor(npc.pos.x), Math.floor(npc.pos.y + 0.01), Math.floor(npc.pos.z)], to: [goal.x, goal.y, goal.z], lot: npc.lot, level: npc.level, act: npc.act, job: npc.person.job, nodes: LEG_NODES[leg.tag] || 1500 });
-      if (fl.length > 12) fl.shift();
-      npc.pathFails++;
-      if (npc.pathFails >= 3) { npc.pathFails = 0; npc.tripFails = (npc.tripFails || 0) + 1; this.retarget(npc, npc.tripFails); }
-      else { npc.state = 'wait'; npc.timer = 0.8 + this.rng.next(); }
+      this.legFailed(npc, leg, goal, 'path');
     }, pr);
+  }
+  // A leg could not be walked (no path, or the path ended on another floor): retry from where we stand, after the
+  // third time give the trip up and pick another target (rubric row 6: logged as a retarget)
+  legFailed(npc, leg, goal, why) {
+    this.stats.legsFailed++;
+    const tag = why === 'path' ? leg.tag : leg.tag + ':' + why;
+    this.stats.legsFailedBy[tag] = (this.stats.legsFailedBy[tag] || 0) + 1;
+    // the last few failures, for the census script and debugging (from -> to, tag, who)
+    const fl = this.stats.failedLegs || (this.stats.failedLegs = []);
+    fl.push({ tag, from: [Math.floor(npc.pos.x), Math.floor(npc.pos.y + 0.01), Math.floor(npc.pos.z)], to: [goal.x, goal.y, goal.z], lot: npc.lot, level: npc.level, act: npc.act, job: npc.person.job, nodes: LEG_NODES[leg.tag] || 1500 });
+    if (fl.length > 12) fl.shift();
+    npc.pathFails++;
+    if (npc.pathFails >= 3) { npc.pathFails = 0; npc.tripFails = (npc.tripFails || 0) + 1; this.retarget(npc, npc.tripFails); }
+    else { npc.state = 'wait'; npc.timer = 0.8 + this.rng.next(); }
+  }
+  // The path ended: on the leg's floor, on to the next leg. On another floor (the shared pathfinder accepts a partial
+  // path that ends in the goal's column at any height - the floor above a stair bottom) the leg failed.
+  walkDone(npc) {
+    const leg = npc.legs && npc.legs[npc.legIdx];
+    npc.path = null;
+    if (leg && leg.kind === 'walk' && leg.y != null && Math.abs(npc.pos.y - leg.y) > 1.5) { this.legFailed(npc, leg, leg, 'floor'); return; }
+    this.nextLeg(npc);
   }
   standNear(x, y, z) {
     const s = findStand(this.world, x, y, z, 2);
@@ -353,7 +393,8 @@ export class CoruscantPopulation {
       if (spot.yaw != null) npc.targetYaw = spot.yaw;
     }
     if (npc.errand) { npc.timer = npc.errand.waitS; }
-    npc.wanderT = spot && (spot.kind === 'street' || spot.kind === 'plaza') ? 10 + this.rng.next() * 30 : Infinity;
+    // street and plaza people linger WANDER_MIN..WANDER_MAX seconds, then stroll somewhere else (rubric row 10)
+    npc.wanderT = spot && (spot.kind === 'street' || spot.kind === 'plaza') ? WANDER_MIN + this.rng.next() * (WANDER_MAX - WANDER_MIN) : Infinity;
     this.applyPose(npc, spot);
   }
   applyPose(npc, spot) {
@@ -446,7 +487,7 @@ export class CoruscantPopulation {
 
   stepWalk(npc) {
     const path = npc.path;
-    if (!path || npc.pathIdx >= path.length) { this.nextLeg(npc); return; }
+    if (!path || npc.pathIdx >= path.length) { this.walkDone(npc); return; }
     const c = path[npc.pathIdx];
     const tx = c.x + 0.5, tz = c.z + 0.5, ty = c.h;
     const dx = tx - npc.pos.x, dz = tz - npc.pos.z;
@@ -455,7 +496,7 @@ export class CoruscantPopulation {
     if (d <= step + 0.02) {
       npc.pos.x = tx; npc.pos.z = tz; npc.pos.y = ty;
       npc.pathIdx++;
-      if (npc.pathIdx >= path.length) { this.nextLeg(npc); return; }
+      if (npc.pathIdx >= path.length) { this.walkDone(npc); return; }
       const nx = path[npc.pathIdx];
       npc.targetYaw = Math.atan2(nx.x + 0.5 - npc.pos.x, nx.z + 0.5 - npc.pos.z);
     } else {
@@ -731,7 +772,7 @@ export class CoruscantPopulation {
       hour: +this.hour.toFixed(2), pool: this.people.length, live: this.live.length, visible, visibleOutdoors, within96, outdoors96, outdoors40, onPlaza, onStreet, inLots, unseenIndoors, otherLevel, walking, droids, stuckNow, states, acts, modes, jobs,
       stuck: s.stuck, trips: s.trips, tripsFailed: s.tripsFailed, legs: s.legs, legsFailed: s.legsFailed, legsFailedBy: s.legsFailedBy, retargets: s.retargets, lifts: s.lifts, hops: s.hops || 0, errands: s.errands,
       failRate: s.trips ? +((s.tripsFailed + s.retargets) / s.trips).toFixed(4) : 0, legFailRate: s.legs ? +(s.legsFailed / s.legs).toFixed(4) : 0,
-      spawned: s.spawned, despawned: s.despawned, recycled: s.recycled, bubbles: s.bubbles, talks: s.talks, unloadedWaits: s.unloadedWaits, unplaceable: s.unplaceable,
+      spawned: s.spawned, despawned: s.despawned, recycled: s.recycled, stays: s.stays, bubbles: s.bubbles, talks: s.talks, unloadedWaits: s.unloadedWaits, unplaceable: s.unplaceable,
       paths: { ...this.paths.stats, ms: +this.paths.stats.ms.toFixed(1), pending: this.paths.pending }, coarse: { ...this.nav.stats }, drawCalls: this.crowd.drawCalls,
     };
   }

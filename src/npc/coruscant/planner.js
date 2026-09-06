@@ -16,6 +16,7 @@ const NEAR_R = 40;   // street spots are sampled this close to the player first 
 // VIEW_MIN (no one pops into view at arm's length) and VIEW_MAX blocks (see inView).
 const VIEW_AHEAD = 20, VIEW_MIN = 14, VIEW_MAX = 60;
 const PERSONAL_R = 3;   // nobody picks an idle spot this close to the player
+const STAIR_MAX = 16;   // floors this close (blocks) are reached on foot when no lift lands there (stairs, ramps)
 
 const walk = (p, tag) => ({ kind: 'walk', x: p.x, y: p.y, z: p.z, tag });
 // a nav.route leg as a trip leg: street walks, kerb hops (plaza railing) and intersection lift rides
@@ -32,7 +33,10 @@ export class Planner {
   resolveSpot(npc, act, lotId, rng, within = null) {
     const p = npc.person;
     if (lotId === PORT) {
-      const cands = portSpots(p.job, act, p.visitor);
+      let cands = portSpots(p.job, act, p.visitor);
+      // the port is 350 blocks long: a crew's spot is one of its kind near the player (the far pads' spots would only
+      // be skipped as out of the spawn ring), the hash still decides which
+      if (within) { const near = cands.filter((s) => Math.hypot(s.x - within.x, s.z - within.z) <= within.r); if (near.length) cands = near; }
       return this.pickFree(cands, npc, act, (s) => ({ ...s, lot: null, level: 'port', port: true }));
     }
     const lot = lotId != null ? this.layout.lots[lotId] : null;
@@ -151,15 +155,26 @@ export class Planner {
       const li = this.lots.get(curLot);
       if (!li) return null;
       const target = tLot != null ? this.lots.get(tLot) : null;
-      const E = this.exitEntrance(li, target, spot);
-      if (!E) return null;
       const floorHere = li.floorOf(cur.y);
+      const E = this.exitEntrance(li, target, spot, cur, floorHere);
+      // no door of this building can be reached from this floor (a tenement upstairs without lift or stairs in the
+      // blueprint): the occupant stays where they are rather than teleporting (see CoruscantPopulation.beginTrip)
+      if (!E) return 'stay';
       if (floorHere !== E.in.y) {
         const a = li.landing(floorHere), b = li.landing(E.in.y);
-        if (!a || !b) return null;
-        if (dist2(cur, a) > 1) legs.push(walk(a, 'lot'));
-        legs.push(lift(a, b));
-        cur = b;
+        if (a && b) {
+          if (dist2(cur, a) > 1) legs.push(walk(a, 'lot'));
+          legs.push(lift(a, b));
+          cur = b;
+        } else {
+          // no lift lands on this floor (the strip's cantina upstairs, a mezzanine): take the stairs - a block-level
+          // walk to the first cell of the lower floor the blueprint connects on foot, with a bigger node budget
+          const s = this.stairsTo(li, cur, floorHere, E.in.y);
+          if (!s) return 'stay';
+          if (dist2(cur, s.top) > 1) legs.push(walk(s.top, 'lot'));
+          legs.push(walk(s.bottom, 'stairs'));
+          cur = s.bottom;
+        }
       }
       legs.push(walk(E.in, 'lot'), walk(E.out, 'door'));
       cur = { ...E.out }; curLevel = E.level; curLot = null;
@@ -169,7 +184,7 @@ export class Planner {
       if (!lt) return null;
       if (curLot !== tLot) {
         // 2. street travel to the target's door, 3. door -> lobby
-        const Ein = this.enterEntrance(lt, curLevel);
+        const Ein = this.enterEntrance(lt, curLevel, spot.y);
         if (!Ein) return null;
         if (dist2(cur, Ein.out) > 4) {
           const route = this.nav.route(cur, curLevel, Ein.out, Ein.level);
@@ -183,10 +198,17 @@ export class Planner {
       const floorHere = lt.floorOf(cur.y);
       if (spot.y !== floorHere && Math.abs(spot.y - floorHere) > 1) {
         const a = lt.landing(floorHere), b = lt.landing(spot.y);
-        if (!a || !b) return null;
-        if (dist2(cur, a) > 1) legs.push(walk(a, 'lot'));
-        legs.push(lift(a, b));
-        cur = b;
+        if (a && b) {
+          if (dist2(cur, a) > 1) legs.push(walk(a, 'lot'));
+          legs.push(lift(a, b));
+          cur = b;
+        } else {
+          const s = this.stairsTo(lt, cur, floorHere, spot.y);
+          if (!s) return null;
+          if (dist2(cur, s.top) > 1) legs.push(walk(s.top, 'lot'));
+          legs.push(walk(s.bottom, 'stairs'));
+          cur = s.bottom;
+        }
       }
       legs.push(walk(spot, 'spot'));
     } else {
@@ -205,9 +227,17 @@ export class Planner {
     return legs;
   }
 
-  // Door to leave `li` by, heading for lot `target` (or a street spot): share a street level when both lots offer it
-  exitEntrance(li, target, spot) {
-    const es = li.entrances();
+  // The first cell of floor `toY` that the blueprint connects on foot to `cur` on `floorHere` (stairs, slabs, ramps),
+  // when the floors are close enough to climb; null when there is no such way
+  stairsTo(li, cur, floorHere, toY) {
+    if (Math.abs(floorHere - toY) > STAIR_MAX) return null;
+    return li.reach(cur, toY);
+  }
+  // Door to leave `li` by, heading for lot `target` (or a street spot): share a street level when both lots offer it.
+  // Only doors whose floor can be reached from `floorHere` count (by lift, or on foot when the floors are close).
+  exitEntrance(li, target, spot, cur = null, floorHere = null) {
+    let es = li.entrances();
+    if (cur && floorHere != null) es = es.filter((e) => e.in.y === floorHere || (li.landing(floorHere) && li.landing(e.in.y)) || this.stairsTo(li, cur, floorHere, e.in.y));
     if (!es.length) return null;
     const pref = this.daytimeDeck() ? ['deck', 'ground'] : ['ground', 'deck'];
     if (target) {
@@ -218,10 +248,18 @@ export class Planner {
     const want = spot.level || pref[0];
     return es.find((e) => e.level === want) || es.find((e) => e.level === pref[0]) || es[0];
   }
-  enterEntrance(lt, curLevel) {
+  // Door to enter `lt` by: on the current street level when possible, but only a door from whose floor the spot's
+  // floor can be reached (by lift, or on foot when close) - the street route changes level for the other doors
+  enterEntrance(lt, curLevel, spotY = null) {
     const es = lt.entrances();
     if (!es.length) return null;
-    return es.find((e) => e.level === curLevel) || es.find((e) => e.level === 'deck') || es[0];
+    let list = es;
+    if (spotY != null) {
+      const f = lt.floorOf(spotY);
+      const ok = es.filter((e) => e.in.y === f || (lt.landing(e.in.y) && lt.landing(f)) || Math.abs(e.in.y - f) <= STAIR_MAX);
+      if (ok.length) list = ok;
+    }
+    return list.find((e) => e.level === curLevel) || list.find((e) => e.level === 'deck') || list[0];
   }
   daytimeDeck() { return this.pop.hour >= 6 && this.pop.hour <= 21; }
   isNight() { return this.pop.hour < 5.5 || this.pop.hour > 21.5; }

@@ -13,14 +13,14 @@ const base = args.url || 'http://localhost:5214/';
 const wait = parseInt(args.wait || '20000', 10);
 const out = args.out || '/tmp/npc-census.json';
 const rd = args.rd || '8';
-// the five core vantage points: Senate plaza, market plaza, financial plaza (boulevard decks, feet 97), the Uscru
-// undercity strip (ground, feet 61) and the spaceport apron (deck, feet 97)
+// the five vantage points: Senate plaza, market plaza, financial plaza (the core districts: boulevard decks, feet 97),
+// the Uscru undercity strip (ground, feet 61) and the spaceport apron between the pad pairs (deck, feet 97)
 const SPOTS = args.spots ? JSON.parse(args.spots) : [
   { name: 'senate_plaza', x: 2975, z: 120, y: 97.2, yaw: 0, pitch: -2, core: true },
   { name: 'market_plaza', x: 2806, z: -34, y: 97.2, yaw: 0, pitch: -2, core: true },
   { name: 'financial_plaza', x: 3352, z: -34, y: 97.2, yaw: 0, pitch: -2, core: true },
   { name: 'undercity_strip', x: 2748, z: 386, y: 61.2, yaw: 0, pitch: 3, core: false },
-  { name: 'spaceport_apron', x: 2660, z: -20, y: 97.2, yaw: 0, pitch: -2, core: false },
+  { name: 'spaceport_apron', x: 2616, z: -62, y: 97.2, yaw: 90, pitch: -4, core: false },
 ];
 const TIMES = (args.times || '0.5,0.8,0').split(',').map(Number);   // noon, 19:12, midnight
 const label = (t) => { const h = (t * 24) % 24; return `${String(Math.floor(h)).padStart(2, '0')}:${String(Math.round((h % 1) * 60)).padStart(2, '0')}`; };
