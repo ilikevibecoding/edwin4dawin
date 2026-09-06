@@ -4,7 +4,7 @@ import {
   arcFraction, deckGeometry, flatUv, gridGeometry, halfWidthAt, humpGeometry, inBlock, insetSections, keyedRing, loftGrid, paneGeometry, revealGeometry, revolveGeometry, sectionAt, sectionPerimeter, sectionPoint, smoothStations, strutGeometry, tOfHeight, withStations,
   type LoftGrid, type QuadBlock, type Section,
 } from '../geometry';
-import { CHEAT_LINE, SURF, type FuselageLayout } from '../textures';
+import { CHEAT_LINE, DOORS, SURF, type FuselageLayout } from '../textures';
 import { at, CABIN_FRONT, CABIN_REAR, FLOOR, SILL, SKIN, WIN_TOP, WS_BASE, type BuildContext } from './context';
 
 /**
@@ -380,13 +380,15 @@ export function buildFittings(ctx: BuildContext): void {
   // decal / a glass ghost by the iter08 critics).
   const skinAt = (x: number, y: number) => halfWidthAt(sectionAt(sections, x), y);
   for (const side of [-1, 1]) {
-    const skinZ = skinAt(1.3, -0.45);
-    fittings.add(new THREE.BoxGeometry(0.3, 0.03, 0.2), at([1.3, -0.45, side * (skinZ + 0.11)]), SURF.darkMetal);
-    for (const dx of [-0.11, 0.11]) fittings.add(new THREE.BoxGeometry(0.03, 0.1, 0.18), at([1.3 + dx, -0.40, side * (skinZ + 0.085)], [0, 0, 0]), SURF.darkMetal);
-    // exterior door handle: a paddle lever lying in its recess (the recess plate is painted), and the two external
-    // hinges on the door's front edge (the seam itself is painted, see fuselageMaps)
-    fittings.add(new THREE.BoxGeometry(0.11, 0.024, 0.014), at([1.04, 0.05, side * (skinAt(1.04, 0.05) + 0.006)], [0, 0, 0.06]), SURF.metal);
-    for (const y of [0.62, -0.18]) fittings.add(new THREE.BoxGeometry(0.03, 0.09, 0.012), at([1.81, y, side * (skinAt(1.81, y) + 0.005)]), SURF.metal);
+    for (const { handleX, hingeX, stepX } of DOORS) {
+      const skinZ = skinAt(stepX, -0.45);
+      fittings.add(new THREE.BoxGeometry(0.3, 0.03, 0.2), at([stepX, -0.45, side * (skinZ + 0.11)]), SURF.darkMetal);
+      for (const dx of [-0.11, 0.11]) fittings.add(new THREE.BoxGeometry(0.03, 0.1, 0.18), at([stepX + dx, -0.40, side * (skinZ + 0.085)], [0, 0, 0]), SURF.darkMetal);
+      // exterior door handle: a paddle lever lying in its recess (the recess plate is painted), and the two external
+      // hinges on the door's hinged edge (the seam itself is painted, see fuselageMaps)
+      fittings.add(new THREE.BoxGeometry(0.11, 0.024, 0.014), at([handleX - 0.02, 0.05, side * (skinAt(handleX, 0.05) + 0.006)], [0, 0, 0.06]), SURF.metal);
+      for (const y of [0.62, -0.18]) fittings.add(new THREE.BoxGeometry(0.03, 0.09, 0.012), at([hingeX, y, side * (skinAt(hingeX, y) + 0.005)]), SURF.metal);
+    }
   }
   // belly-tank filler caps in a row on the port side under the cabin (a DHC-2 carries its fuel in fuselage belly
   // tanks, filled from the left side): a flush cap in a dark ring, each turned to the skin's normal where the lower
