@@ -263,9 +263,20 @@ export class LotInfo {
     // are the ones in session; everyone else starts at a hash of who they are
     let start;
     if (person.room && near && c.length >= BIG_ROOM_SEATS) {
-      // seats behind the viewer come last; among those in view, prefer the viewer's own height and mix near and far
-      // tiers (a deterministic jitter) so the hall reads as occupied rather than as one packed corner
-      const score = (s) => { const dx = s.x - near.x, dz = s.z - near.z, jitter = hash2(s.x, s.z, s.y) * 2500; return 3 * (s.y - near.y) ** 2 + jitter + (near.fx !== undefined && dx * near.fx + dz * near.fz < 0 ? 1e6 : 0); };
+      // seats behind the viewer come last; among those in front, prefer the ones inside the camera's frustum (the full
+      // view vector when known, else the viewer's own height: the tiers below a level camera are out of frame) and the
+      // nearer tiers (a pod fifty blocks across the rotunda is a dot), mixed with a deterministic jitter so the hall
+      // reads as occupied rather than as one packed corner
+      const score = (s) => {
+        const dx = s.x + 0.5 - near.x, dz = s.z + 0.5 - near.z, dy = s.y + 1 - (near.y + 1.6), d = Math.hypot(dx, dz), jitter = hash2(s.x, s.z, s.y) * 1500;
+        let pen = 0;
+        if (near.fx !== undefined) {
+          if (dx * near.fx + dz * near.fz < 0) pen += 1e6;
+          else if (near.fy !== undefined) { const dot = (dx * near.fx + dy * near.fy + dz * near.fz) / (Math.hypot(dx, dy, dz) || 1); pen += 6000 * Math.max(0, 0.9 - dot); }
+          else pen += 3 * (s.y - near.y) ** 2;
+        } else pen += 3 * (s.y - near.y) ** 2;
+        return 30 * d + jitter + pen;
+      };
       c = c.map((s) => [score(s), s]).sort((a, b) => a[0] - b[0]).map((t) => t[1]);
       start = 0;
     } else start = person.room ? ((person.slot || 0) % 64) % c.length : Math.floor(hash2(person.key & 0xffff, act.length * 31 + (person.slot || 0), person.key >>> 16) * c.length) % c.length;

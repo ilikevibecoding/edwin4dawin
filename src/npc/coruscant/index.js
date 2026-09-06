@@ -48,7 +48,7 @@ export class CoruscantPopulation {
     this.liveByPerson = new Map();
     this.occupied = new Map();     // port spot keys -> citizen id (lot spots are tracked by LotInfo)
     this.skip = new Map();         // person id -> tick before which spawning is not retried
-    this.view = { x: 0, z: 1 };    // camera forward (xz) at the last spawn cycle: big halls seat their crowd in view
+    this.view = { x: 0, y: 0, z: 1 };   // camera forward at the last spawn cycle: big halls seat their crowd in view
     this.rng = new RNG(0xc0c0);
     this.hour = 12; this.tickCount = 0; this.time = 0; this.enabled = true;
     this.stats = { spawned: 0, despawned: 0, trips: 0, tripsFailed: 0, legs: 0, legsFailed: 0, legsFailedBy: {}, retargets: 0, stuck: 0, lifts: 0, bubbles: 0, talks: 0, unloadedWaits: 0, unplaceable: 0, errands: 0, arrivals: 0, recycled: 0 };
@@ -104,7 +104,7 @@ export class CoruscantPopulation {
   }
   spawnCycle() {
     const p = this.player.pos;
-    if (this.game.camera && this.game.camera.getWorldDirection) { const v = this.game.camera.getWorldDirection(_dir); this.view.x = v.x; this.view.z = v.z; }
+    if (this.game.camera && this.game.camera.getWorldDirection) { const v = this.game.camera.getWorldDirection(_dir); this.view.x = v.x; this.view.y = v.y; this.view.z = v.z; }
     // despawn: far away, stuck for too long, or the player left the city
     const leave = !this.nearPlateau(p);
     for (let i = this.live.length - 1; i >= 0; i--) {
@@ -178,7 +178,7 @@ export class CoruscantPopulation {
     npc.act = a.act; npc.actLot = a.lot;
     const rng = () => this.rng.next();
     const p = this.player.pos;
-    const spot = this.planner.resolveSpot(npc, a.act, a.lot, rng, { x: p.x, y: p.y, z: p.z, r: SPAWN_R - 4, fx: this.view.x, fz: this.view.z });
+    const spot = this.planner.resolveSpot(npc, a.act, a.lot, rng, { x: p.x, y: p.y, z: p.z, r: SPAWN_R - 4, fx: this.view.x, fy: this.view.y, fz: this.view.z });
     if (!spot) { this.skip.set(person.id, this.tickCount + SKIP_TICKS); return false; }
     // street spots are picked around the post, which may itself be near the edge of the ring: never spawn someone
     // who would be despawned by the next cycle
@@ -188,7 +188,7 @@ export class CoruscantPopulation {
     let from = null;
     const prev = activityAt(person, this.hour - 0.7);
     if ((prev.act !== a.act || prev.lot !== a.lot) && this.placeDist(prev, p) < 110) {
-      const ps = this.planner.resolveSpot(npc, prev.act, prev.lot, rng, { x: p.x, y: p.y, z: p.z, r: DESPAWN_R - 16, fx: this.view.x, fz: this.view.z });
+      const ps = this.planner.resolveSpot(npc, prev.act, prev.lot, rng, { x: p.x, y: p.y, z: p.z, r: DESPAWN_R - 16, fx: this.view.x, fy: this.view.y, fz: this.view.z });
       if (ps && this.world.isLoaded(ps.x, ps.z) && Math.hypot(ps.x - p.x, ps.z - p.z) < DESPAWN_R - 16) from = ps;
     }
     const start = from || spot;
@@ -250,7 +250,7 @@ export class CoruscantPopulation {
   // Choose a spot for the current activity (an alternative after `attempt` failures) and start the trip there.
   retarget(npc, attempt) {
     const rng = () => this.rng.next();
-    const p = this.player.pos, within = { x: p.x, y: p.y, z: p.z, r: DESPAWN_R - 16, fx: this.view.x, fz: this.view.z };
+    const p = this.player.pos, within = { x: p.x, y: p.y, z: p.z, r: DESPAWN_R - 16, fx: this.view.x, fy: this.view.y, fz: this.view.z };
     this.vacate(npc.spot, npc);
     let spot = attempt === 0 ? this.planner.resolveSpot(npc, npc.act, npc.actLot, rng, within) : null;
     if (!spot) {
@@ -705,6 +705,10 @@ export class CoruscantPopulation {
     let fwd = null;
     if (camera && camera.getWorldDirection) { const v = camera.getWorldDirection(_dir); fwd = { x: v.x, z: v.z }; }
     const lotAt = this.playerLot(p);
+    // the hall the player stands in (the Senate rotunda spans 27 blocks of tiers): its occupants are in view too
+    const li = lotAt != null ? this.lots.peek(lotAt) : null;
+    const halls = li ? li.roomsAtHeight(p.y).map(([, r]) => r) : [];
+    const inHall = (n) => halls.some((r) => n.pos.x >= r.x && n.pos.x < r.x + r.w && n.pos.z >= r.z && n.pos.z < r.z + r.d && n.pos.y >= r.y - 1 && n.pos.y <= li.roomSpan(r)[1] + 2);
     for (const n of this.live) {
       states[n.state] = (states[n.state] || 0) + 1;
       acts[n.act] = (acts[n.act] || 0) + 1;
@@ -717,7 +721,7 @@ export class CoruscantPopulation {
       const dx = n.pos.x - p.x, dz = n.pos.z - p.z, d = Math.hypot(dx, dz);
       if (!n.hidden && d <= 96) { within96++; if (n.lot == null) { outdoors96++; if (d <= 40) outdoors40++; } }
       const dy = Math.abs(n.pos.y - p.y);
-      const seen = n.lot == null ? dy <= 8 : (n.lot === lotAt && dy <= 4);
+      const seen = n.lot == null ? dy <= 8 : (n.lot === lotAt && (dy <= 4 || inHall(n)));
       if (n.lot != null && n.lot !== lotAt) unseenIndoors++; else if (n.lot == null && dy > 8) otherLevel++;
       if (!n.hidden && seen && d < 64 && (!fwd || d < 6 || (dx * fwd.x + dz * fwd.z) / d > -0.2)) { visible++; if (n.lot == null) visibleOutdoors++; }
       if (n.lot == null && n.spot && n.spot.kind === 'plaza') onPlaza++;

@@ -15,6 +15,7 @@ const NEAR_R = 40;   // street spots are sampled this close to the player first 
 // is pushed VIEW_AHEAD blocks forward and the first attempts insist on a cell in front of the camera between
 // VIEW_MIN (no one pops into view at arm's length) and VIEW_MAX blocks (see inView).
 const VIEW_AHEAD = 20, VIEW_MIN = 14, VIEW_MAX = 60;
+const PERSONAL_R = 3;   // nobody picks an idle spot this close to the player
 
 const walk = (p, tag) => ({ kind: 'walk', x: p.x, y: p.y, z: p.z, tag });
 // a nav.route leg as a trip leg: street walks, kerb hops (plaza railing) and intersection lift rides
@@ -41,7 +42,7 @@ export class Planner {
     if (!li) return this.streetSpot(npc, act, rng, null, within);
     // street people do not enter their post: they haunt the street outside it
     if (p.street && act === 'work') return this.streetSpot(npc, act, rng, li, within);
-    const s = li.pick(p, act, npc.id, within ? { x: within.x, y: within.y ?? npc.pos.y, z: within.z, fx: within.fx, fz: within.fz } : null);
+    const s = li.pick(p, act, npc.id, within ? { x: within.x, y: within.y ?? npc.pos.y, z: within.z, fx: within.fx, fy: within.fy, fz: within.fz } : null);
     if (!s) return this.streetSpot(npc, act, rng, li, within);
     const yaw = li.faceOf(s.x, s.y, s.z);
     return { ...s, lot: lotId, level: 'lot', yaw };
@@ -89,6 +90,7 @@ export class Planner {
       if (Math.hypot(x + 0.5 - cx, z + 0.5 - cz) < 5) continue;           // the fountain
       if (within && t < 12 && Math.hypot(x - within.x, z - within.z) > within.r) continue;
       if (within && t < 8 && !this.inView(within, x, z)) continue;
+      if (within && t < 13 && Math.hypot(x + 0.5 - within.x, z + 0.5 - within.z) < PERSONAL_R) continue;
       if (this.pop.idleCount(x, z, 4) > 6) continue;
       return { x, y: this.nav.yOf('deck'), z, lot: null, level: 'deck', kind: 'plaza', plaza: plaza.id, yaw: rng() * Math.PI * 2 };
     }
@@ -125,12 +127,12 @@ export class Planner {
         const vc = this.viewCentre(within);
         for (let t = 0; t < 8 && !pt; t++) {
           const c = this.nav.randomPoint(lv, vc.x, vc.z, Math.min(radius, NEAR_R), { next: rng });
-          if (c && Math.hypot(c.x - anchor.x, c.z - anchor.z) <= radius + 8 && (t >= 5 || this.inView(within, c.x, c.z))) pt = c;
+          if (c && Math.hypot(c.x - anchor.x, c.z - anchor.z) <= radius + 8 && Math.hypot(c.x - within.x, c.z - within.z) >= PERSONAL_R && (t >= 5 || this.inView(within, c.x, c.z))) pt = c;
         }
       }
       for (let t = 0; t < 6 && !pt; t++) {
         const c = this.nav.randomPoint(lv, anchor.x, anchor.z, radius, { next: rng });
-        if (c && (!within || t === 5 || Math.hypot(c.x - within.x, c.z - within.z) <= within.r)) pt = c;
+        if (c && (!within || t === 5 || (Math.hypot(c.x - within.x, c.z - within.z) <= within.r && Math.hypot(c.x - within.x, c.z - within.z) >= PERSONAL_R))) pt = c;
       }
       if (pt) break;
     }

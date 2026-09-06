@@ -163,7 +163,7 @@ export function roomStaff(kind, seats = 0, beds = 0, works = 0) {
   if (seats >= BIG_ROOM_SEATS) {
     const fill = f.fill || VISITOR_FILL[f.base] || null;
     if (fill) {
-      let n = Math.min(seats >= 400 ? BIG_ROOM_MAX + 20 : BIG_ROOM_MAX, Math.ceil(seats / 4));
+      let n = Math.min(seats >= 400 ? BIG_ROOM_MAX + 60 : BIG_ROOM_MAX, Math.ceil(seats / 4));
       if (f.beds && VISITOR_JOBS.has(fill)) n = Math.min(n, out.length + Math.max(1, beds));
       while (out.length < n) out.push(fill);
     }
