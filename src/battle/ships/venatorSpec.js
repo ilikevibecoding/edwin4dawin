@@ -177,7 +177,7 @@ export const inVent = (zr) => zr > VENT_Z0 + 0.005 && zr < VENT_Z1 + 0.005;
 // ---- rear superstructure (zr) and the twin towers. Heights are absolute y (wing deck +45).
 // Turret shelves: one per side from 0.51 L (a front step) to the block's rear at 0.83 L, from the
 // block's foot out to x 98, their tops continuing the band's slope 3 m below it (the band's wall shows
-// as a dark step beside the red); the four heavy turrets per side stand on them at x +-78.
+// as a dark step beside the red); the four heavy turrets per side stand on them at x +-85.
 // The block: a 43 m wide plated ramp rising at 48 degrees from the sill to a 39 m wide roof 105 m over
 // the wings at 0.63 L, its body's sides shaded; under each shaft a steep light "leg" runs from the
 // roof down to the shelf, flaring outboard, so the shaft lines continue to the deck with the body's
@@ -266,8 +266,8 @@ export const SHOULDER = {
 };
 // heavy turret row on the shelves
 export const TURRET_ZR = [600, 690, 780, 870];
-export const TURRET_R = 15;
-export const TURRET_X = 78;
+export const TURRET_R = 10;
+export const TURRET_X = 85;
 export const turretX = () => TURRET_X;
 
 // ---- stern engine bank: [x, y, r] four mains, two medium outboard, four small above

@@ -17,7 +17,7 @@ import {
   cylZ,
 } from "./venatorKit.js";
 import { boxMM } from "./shipKit.js";
-import { HEAVY } from "./venatorTurrets.js";
+import { HEAVY, HEAVY_SCALE } from "./venatorTurrets.js";
 import {
   Z,
   L,
@@ -531,13 +531,20 @@ export function buildHull(ctx) {
         { color: GREY_FLANK, texel: 1 / 8 },
       );
       if (lod === 2) {
+        const k = HEAVY_SCALE;
         add(
-          boxMM([tx - 13, yT + 2.6, tz - 12], [tx + 13, yT + 15, tz + 12]),
+          boxMM(
+            [tx - 13 * k, yT + 2.6, tz - 12 * k],
+            [tx + 13 * k, yT + 2.6 + 12.4 * k, tz + 12 * k],
+          ),
           "hull",
           { color: GREY_HULL, texel: 1 / 6 },
         );
         add(
-          boxMM([tx - 6, yT + 12, tz - 46], [tx + 6, yT + 16, tz - 8]),
+          boxMM(
+            [tx - 6 * k, yT + 2.6 + 9.4 * k, tz - 46 * k],
+            [tx + 6 * k, yT + 2.6 + 13.4 * k, tz - 8 * k],
+          ),
           "dark",
           { color: DARK, texel: 1 / 6 },
         );

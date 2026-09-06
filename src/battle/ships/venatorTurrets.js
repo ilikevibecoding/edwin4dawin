@@ -11,9 +11,13 @@ import { cylZ, yLoft } from "./venatorKit.js";
 const box = (sx, sy, sz, x, y, z) =>
   new THREE.BoxGeometry(sx, sy, sz).translate(x, y, z);
 
+// the reference's heavy turrets are compact: ~18 m housings with ~24 m barrels, so the DBY-827 model
+// below is built at its 30 m design size and scaled down here
+export const HEAVY_SCALE = 0.62;
+export const HEAVY_BARREL_SCALE = 0.56;
 export const HEAVY = {
-  pivotY: 12.5,
-  barrelLen: 48,
+  pivotY: 12.5 * HEAVY_SCALE,
+  barrelLen: 48 * HEAVY_BARREL_SCALE,
   yawLimit: 2.6,
   pitchMin: -0.05,
   pitchMax: 1.2,
@@ -89,7 +93,13 @@ export function heavyTurret() {
     barrels.push(cylZ(1.7, 1.7, 2, 8).translate(bx, 0.5, -37));
   }
   barrels.push(cylZ(1.2, 1.2, 14, 6).translate(0, 2.6, -12));
-  return { body: mergeParts(body), barrels: mergeParts(barrels) };
+  const k = HEAVY_SCALE;
+  const kb = HEAVY_BARREL_SCALE;
+  return {
+    body: mergeParts(body).scale(k, k, k),
+    // barrels keep the housing's scale across, shorter along the bore
+    barrels: mergeParts(barrels).scale(k, k, kb),
+  };
 }
 
 /** Twin point-defence laser: round pedestal, boxy housing, two 8 m barrels from a mantlet block. */

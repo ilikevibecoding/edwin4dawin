@@ -500,6 +500,7 @@ export function buildDetail(ctx, secs) {
       [BLOCK.legs.xOutFoot + 3, TURRET_X - TURRET_R - 5],
       [TURRET_X + TURRET_R + 5, P.xOut - 4],
     ]) {
+      if (u1 - u0 < 6) continue;
       const cells = partition(
         rand,
         { u0, u1, v0: Z(P.z0 + 8), v1: Z(P.z1 - 8) },

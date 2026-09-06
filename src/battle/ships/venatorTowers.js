@@ -776,9 +776,9 @@ export function buildTowers(ctx) {
     }
   }
 
-  // ---- greebles on the shelf tops: hatches, vents, small boxes either side of the turret row
+  // ---- greebles on the shelf tops: a few hatches, vents and small boxes either side of the turret row
   if (fine) {
-    for (let i = 0; i < 40; i++) {
+    for (let i = 0; i < 22; i++) {
       const s = rand() < 0.5 ? -1 : 1;
       const zr = P.z0 + 12 + rand() * (P.z1 - P.z0 - 30);
       const outer = rand() < 0.6;
