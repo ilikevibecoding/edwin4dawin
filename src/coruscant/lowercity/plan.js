@@ -74,11 +74,12 @@ export function cellAt(side, band, row, j) {
   let kind;
   const pick = h(0);
   if (Math.abs(v0) + LC.cell > LC.cornerV) kind = pick < 0.5 ? K.YARD : K.PLAZA;
-  else kind = pick < 0.56 ? K.MASS : pick < 0.66 ? K.ROOM : pick < 0.76 ? K.WELL : pick < 0.9 ? K.YARD : K.PLAZA;
-  // footprint
+  else kind = pick < 0.62 ? K.MASS : pick < 0.72 ? K.ROOM : pick < 0.8 ? K.WELL : pick < 0.92 ? K.YARD : K.PLAZA;
+  // footprint: masses fill their cell to within 1..2 blocks (alleys 2..4 wide between them), yards and plazas sit back
   let fv0, fv1, fr0, fr1;
+  const inset = (n) => (kind === K.MASS ? 1 : 2) + Math.floor(h(n) * 2);
   if (kind === K.WELL) { fv0 = v0 + 10; fv1 = v0 + 18; fr0 = r0 + 10; fr1 = r0 + 18; }
-  else { fv0 = v0 + 2 + Math.floor(h(1) * 3); fv1 = v1 - 2 - Math.floor(h(2) * 3); fr0 = r0 + 2 + Math.floor(h(3) * 3); fr1 = r1 - 2 - Math.floor(h(4) * 3); }
+  else { fv0 = v0 + inset(1); fv1 = v1 - inset(2); fr0 = r0 + inset(3); fr1 = r1 - inset(4); }
   // keep 3 clear of a trench (ledges at tv -5 / 4) and 2 clear of a corridor (cv -2 .. 1)
   const clip = (a, b) => {                       // remove [a, b) from [fv0, fv1), keeping the larger remainder
     if (b <= fv0 || a >= fv1) return;
@@ -94,7 +95,7 @@ export function cellAt(side, band, row, j) {
   const env = envelope(bandStartD(band) + fr1 - 1);                    // the envelope at the footprint's far edge
   const roof = Math.max(ground + 6, env - 1 - Math.floor(h(5) * 3));   // parapet at roof + 1 stays under the envelope
   const style = Math.floor(h(6) * WALLS.length);
-  const lit = 0.08 + h(7) * 0.1;
+  const lit = 0.12 + h(7) * 0.14;
   const beacon = roof + 2 <= env && h(8) < 0.35;
   c = { side, band, row, j, kind, v0, v1, r0, r1, fv0, fv1, fr0, fr1, ground, roof, env, style, lit, beacon, seed: Math.floor(h(9) * 1e6) };
   if (cellCache.size > 4096) cellCache.clear();

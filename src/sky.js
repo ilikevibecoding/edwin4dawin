@@ -308,10 +308,12 @@ export class Sky {
       this.cloudMat.opacity *= 1 - co;      // the city sits above its cloud deck; towers punch through nothing
     }
     if (lo > 0.001) {
-      const cool = new THREE.Color(0.30, 0.36, 0.46);
-      this.fogColor.lerp(cool, lo * 0.35);
-      this.fogNear *= 1 - 0.3 * lo; this.fogFar *= 1 - 0.25 * lo;
-      u.uSkyHorizon.value.lerp(cool, lo * 0.2);
+      // slightly denser and cooler than the plateau's smog: the haze pools in the basin (kept subtle so the terraces
+      // stay readable from the rim at the default render distance)
+      const cool = new THREE.Color(0.34, 0.40, 0.50);
+      this.fogColor.lerp(cool, lo * 0.3);
+      this.fogNear *= 1 - 0.12 * lo; this.fogFar *= 1 - 0.08 * lo;
+      u.uSkyHorizon.value.lerp(cool, lo * 0.15);
       this.cloudMat.opacity *= 1 - lo;
     }
   }

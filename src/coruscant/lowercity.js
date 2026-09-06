@@ -225,7 +225,7 @@ function paintMass(set, cell, u, t, w, dd, g, d, v) {
       if (corner) id = D;
       else if (y === roof) id = STR;
       else if (y <= g + 2) id = mod(u + t, 6) === 0 && y === g + 1 ? VENT : DD;
-      else if ((y - g) % 4 === 0 && y < roof - 1) {
+      else if ((y - g) % 3 === 0 && y < roof - 1) {
         const along = onT ? u : t;
         if (along % 3 === 1) id = hash3(v, y, d, cell.seed) < cell.lit ? WLIT : WDK;
       }
