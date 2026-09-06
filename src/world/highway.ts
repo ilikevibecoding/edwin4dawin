@@ -47,8 +47,9 @@ const POST_SPACING = 1.905;
 const POLE_SPACING = 60;
 const POLE_H = 11.4;
 const ARM_REACH = 2.9;
-/** compacted-shell verge beside the pavement edge */
-const VERGE_W = 2.6;
+/** verge beside the pavement edge: a gravel band along the pavement, mown grass (sand on the beaches) beyond */
+const VERGE_W = 5.0;
+const VERGE_GRAVEL_W = 0.7;
 const _n = new THREE.Vector3(), _d = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 
 // ------------------------------------------------------------------ colours (multiply the material colour)
@@ -58,9 +59,10 @@ const C_BARRIER_TOP: Rgb = [0.93, 0.93, 0.91];
 const C_PEDESTAL: Rgb = [0.72, 0.72, 0.70];
 const C_APRON: Rgb = [0.62, 0.62, 0.60];
 const C_GRATE: Rgb = [0.16, 0.16, 0.17];
-const C_VERGE: Rgb = [0.84, 0.80, 0.70];
+const C_VERGE_GRASS: Rgb = [0.40, 0.54, 0.24];   // mown verge: fresher than the dry ground around
+const C_VERGE_SAND: Rgb = [0.74, 0.66, 0.52];    // packed sand and shell where the highway crosses the beaches
 const S_GALV: Rgb = [0.56, 0.58, 0.60];       // galvanised guardrail, posts, gantry steel (satin, blotchy in the shader)
-const S_POLE: Rgb = [0.60, 0.61, 0.62];
+const S_POLE: Rgb = [0.46, 0.47, 0.49];       // weathered galvanised lighting columns (read against the pale pavement from the air)
 const S_DARK: Rgb = [0.30, 0.31, 0.33];       // sign backs, brackets
 const S_HEAD: Rgb = [0.90, 0.88, 0.82];       // cobra-head luminaire
 const S_WHITE: Rgb = [0.92, 0.92, 0.90];      // delineator posts
@@ -105,15 +107,16 @@ const CONCRETE_FRAG = /* glsl */ `
     diffuseColor.rgb *= 0.55 + 0.9 * bar;
     roughnessFactor = 0.7;
   } else if (kind > 2.5 && kind < 3.5) {
-    // compacted shell and gravel verge: fine grain, a darker wheel-off track along the pavement, grass creeping
-    // in from the outer edge; the grain fades to its mean as a pixel grows past it
+    // verge: a dark gravel band along the pavement edge (ragged where the cover takes over), then the cover the
+    // vertex colour names (mown grass, or sand on the beaches); the grain fades to its mean as a pixel grows past it
     float across = vInfoH.z;
     float fp = length(fwidth(vWorldPosH.xz));
     float grain = mix(vnoise(vWorldPosH.xz * 2.6), 0.5, smoothstep(0.2, 0.7, fp));
-    float track = exp(-pow((across - 0.22) * 5.0, 2.0)) * (0.5 + 0.5 * fbm3(vec2(vInfoH.y * 0.05, 3.0)));
-    float creep = smoothstep(0.45, 1.0, across) * smoothstep(0.35, 0.7, fbm3(vWorldPosH.xz * 0.5 + 11.0));
-    diffuseColor.rgb *= (0.86 + 0.28 * n) * (0.9 + 0.2 * grain) * (1.0 - 0.12 * track);
-    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.38, 0.44, 0.24) * (0.85 + 0.3 * grain), creep * 0.85);
+    float bandW = ${(VERGE_GRAVEL_W / VERGE_W).toFixed(3)};
+    float band = 1.0 - smoothstep(bandW - 0.05, bandW + 0.08 + 0.14 * fbm3(vWorldPosH.xz * 0.9), across);
+    vec3 gravel = vec3(0.36, 0.345, 0.31) * (0.84 + 0.32 * grain);
+    vec3 cover = diffuseColor.rgb * (0.86 + 0.28 * n) * (0.92 + 0.16 * grain);
+    diffuseColor.rgb = mix(cover, gravel, band);
     roughnessFactor = 0.97;
   } else {
     diffuseColor.rgb *= 0.9 + 0.2 * n;
@@ -778,10 +781,11 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const base = soup.vertexCount;
         _n.subVectors(cur.inner, prev.inner).cross(_d.subVectors(prev.outer, prev.inner)).normalize();
         if (_n.y < 0) _n.negate();
-        soup.vertex(prev.inner.x, prev.inner.y, prev.inner.z, _n.x, _n.y, _n.z, C_VERGE, [3, ss[i - 1], 0]);
-        soup.vertex(cur.inner.x, cur.inner.y, cur.inner.z, _n.x, _n.y, _n.z, C_VERGE, [3, ss[i], 0]);
-        soup.vertex(cur.outer.x, cur.outer.y, cur.outer.z, _n.x, _n.y, _n.z, C_VERGE, [3, ss[i], 1]);
-        soup.vertex(prev.outer.x, prev.outer.y, prev.outer.z, _n.x, _n.y, _n.z, C_VERGE, [3, ss[i - 1], 1]);
+        const tone = map.zoneAt(cur.outer.x, cur.outer.z) === 2 || map.heightAt(cur.outer.x, cur.outer.z) < 1.2 ? C_VERGE_SAND : C_VERGE_GRASS;
+        soup.vertex(prev.inner.x, prev.inner.y, prev.inner.z, _n.x, _n.y, _n.z, tone, [3, ss[i - 1], 0]);
+        soup.vertex(cur.inner.x, cur.inner.y, cur.inner.z, _n.x, _n.y, _n.z, tone, [3, ss[i], 0]);
+        soup.vertex(cur.outer.x, cur.outer.y, cur.outer.z, _n.x, _n.y, _n.z, tone, [3, ss[i], 1]);
+        soup.vertex(prev.outer.x, prev.outer.y, prev.outer.z, _n.x, _n.y, _n.z, tone, [3, ss[i - 1], 1]);
         _a.subVectors(cur.inner, prev.inner).cross(_b.subVectors(cur.outer, prev.inner));
         if (_a.y >= 0) soup.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
         else soup.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
