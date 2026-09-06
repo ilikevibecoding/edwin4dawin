@@ -157,9 +157,10 @@ function createSteelMaterial(pixelScale: THREE.IUniform<number>, atlas: THREE.Te
       .replace('#include <color_fragment>', `#include <color_fragment>\n${STEEL_ALPHA_FRAG}\nfloat spangle = fbm3(vWorldPosH.xz * 1.9 + vWorldPosH.y * 1.3);\nfloat plainSteel = 1.0 - step(0.001, vMapUv.x + vMapUv.y);\ndiffuseColor.rgb *= 1.0 + plainSteel * (0.24 * spangle - 0.12);`)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = clamp(roughnessFactor + plainSteel * 0.3 * (spangle - 0.5), 0.25, 1.0);\nroughnessFactor = mix(roughnessFactor, 0.45, 1.0 - plainSteel);')
       .replace('#include <metalnessmap_fragment>', '#include <metalnessmap_fragment>\nmetalnessFactor *= plainSteel;')
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vGlow;');
+      // the emitters glow in their own (normalised) vertex colour: warm white lamp heads, red / green signal lenses
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vGlow * vColor.rgb / max(max(vColor.r, vColor.g), max(vColor.b, 1e-3));');
   };
-  mat.customProgramCacheKey = () => 'highway-steel-v1';
+  mat.customProgramCacheKey = () => 'highway-steel-v2';
   return mat;
 }
 
@@ -991,24 +992,29 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     };
     if (jd) for (const j of majors) {
       const arrowFor = (dir: 1 | -1): Arrow => (j.side === 0 ? 'both' : j.side * dir > 0 ? 'right' : 'left');
-      if (j.s > 330 && !nearGantry(j.s - 330, 60)) groundSign(j.s - 330, 1, 3.0, 1.5, atlas.guide([jd[0], '300 m'], arrowFor(1), 256, 128), S_DARK);
-      if (j.s < c.total - 330 && !nearGantry(j.s + 330, 60)) groundSign(j.s + 330, -1, 3.0, 1.5, atlas.guide([jd[0], '300 m'], arrowFor(-1), 256, 128), S_DARK);
+      // advance direction signs 1 km and 300 m ahead of the junction on both approaches
+      for (const [ahead, label] of [[1000, '1 km'], [330, '300 m']] as const) {
+        if (j.s > ahead + 30 && !nearGantry(j.s - ahead, 60) && !nearJunction(j.s - ahead, 14)) groundSign(j.s - ahead, 1, 3.0, 1.5, atlas.guide([jd[0], label], arrowFor(1), 256, 128), S_DARK);
+        if (j.s < c.total - ahead - 30 && !nearGantry(j.s + ahead, 60) && !nearJunction(j.s + ahead, 14)) groundSign(j.s + ahead, -1, 3.0, 1.5, atlas.guide([jd[0], label], arrowFor(-1), 256, 128), S_DARK);
+      }
     }
 
     // -------------------------------------------------------- traffic signals at the arterial junctions: mast arms on the far corners
-    /** a signal head (three lenses) hanging from `y` at (x, z), its lenses looking along `faceN` */
-    const signalHead = (part: (typeof parts)[number], x: number, y: number, z: number, faceN: THREE.Vector3, yaw: number) => {
+    /** a signal head (three lenses) hanging from `y` at (x, z), its lenses looking along `faceN`; lens `lit`
+     *  (0 red, 2 green) is the one showing: it glows through the steel material's night emissive in its own colour */
+    const signalHead = (part: (typeof parts)[number], x: number, y: number, z: number, faceN: THREE.Vector3, yaw: number, lit: 0 | 2) => {
       part.signs.box(x, y - 1.05, z, 0.36, 1.05, 0.32, yaw, 0, S_DARK, false, [0, 0, 0]);
       const lenses: Rgb[] = [[0.85, 0.08, 0.06], [0.95, 0.55, 0.05], [0.05, 0.62, 0.22]];
       lenses.forEach((cl, i) => {
         const ly = y - 0.2 - i * 0.33;
-        part.signs.box(x + faceN.x * 0.17, ly - 0.11, z + faceN.z * 0.17, 0.22, 0.22, 0.04, yaw, 0, cl, false, [0, 0, 0]);
+        const on = i === lit;
+        part.signs.box(x + faceN.x * 0.17, ly - 0.11, z + faceN.z * 0.17, 0.22, 0.22, 0.04, yaw, 0, on ? cl : [cl[0] * 0.35, cl[1] * 0.35, cl[2] * 0.35], false, [on ? 0.7 : 0, 0, 0]);
         // hood over each lens
         part.signs.box(x + faceN.x * 0.2, ly + 0.11, z + faceN.z * 0.2, 0.28, 0.03, 0.12, yaw, 0, S_DARK, false, [0, 0, 0]);
       });
     };
     /** mast arm: pole at (px, pz) on the ground `ground`, arm of `armLen` toward `armDir` (unit, horizontal), heads at the `along` distances from the pole */
-    const mastArm = (part: (typeof parts)[number], px: number, pz: number, ground: number, armDir: THREE.Vector3, armLen: number, heads: number[], faceN: THREE.Vector3) => {
+    const mastArm = (part: (typeof parts)[number], px: number, pz: number, ground: number, armDir: THREE.Vector3, armLen: number, heads: number[], faceN: THREE.Vector3, lit: 0 | 2) => {
       const yaw = Math.atan2(armDir.x, armDir.z) + Math.PI / 2;   // box x along the arm
       part.conc.box(px, ground - 0.3, pz, 0.9, 0.5, 0.9, yaw, 0, C_PEDESTAL, false, [0, 0, 0]);
       part.signs.cylinder(px, ground + 0.2, pz, 0.36, 6.6, 8, S_GALV, true, [0, 0, 0], true);
@@ -1022,10 +1028,10 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const hx = px + armDir.x * d, hz = pz + armDir.z * d;
         const ay = ground + 6.55 + 0.35 * (d / armLen);
         part.signs.box(hx, ay - 0.35, hz, 0.06, 0.35, 0.06, yaw, 0, S_DARK, true, [0, 0, 0], true);
-        signalHead(part, hx, ay - 0.35, hz, faceN, headYaw);
+        signalHead(part, hx, ay - 0.35, hz, faceN, headYaw, lit);
       }
       // a small head on the pole for the near lane and the pedestrians
-      signalHead(part, px + armDir.x * 0.4, ground + 4.6, pz + armDir.z * 0.4, faceN, headYaw);
+      signalHead(part, px + armDir.x * 0.4, ground + 4.6, pz + armDir.z * 0.4, faceN, headYaw, lit);
     };
     for (const j of majors) {
       for (const dir of [1, -1] as const) {
@@ -1039,7 +1045,8 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const ground = Math.min(surfaceAt(c, s, side * hw) - ROAD_LIFT, map.heightAt(px, pz));
         const armDir = new THREE.Vector3(-f.rx * side, 0, -f.rz * side);
         const faceN = new THREE.Vector3(-f.dx * dir, 0, -f.dz * dir);
-        mastArm(P(s), px, pz, ground, armDir, hw + 1.0, [hw + 1.6 - 8.25, hw + 1.6 - 5.5, hw + 1.6 - 2.75], faceN);
+        // the highway has the green (the frozen bench frame shows the through movement running)
+        mastArm(P(s), px, pz, ground, armDir, hw + 1.0, [hw + 1.6 - 8.25, hw + 1.6 - 5.5, hw + 1.6 - 2.75], faceN, 2);
       }
       // the cross road's approach(es): a mast arm across the highway from it, arm over the cross road's lanes
       for (const from of j.side === 0 ? [-1, 1] : [j.side]) {
@@ -1051,7 +1058,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const ground = Math.min(surfaceAt(c, sP, -from * hw) - ROAD_LIFT, map.heightAt(px, pz));
         const armDir = new THREE.Vector3(-f.dx, 0, -f.dz);
         const faceN = new THREE.Vector3(f.rx * from, 0, f.rz * from);
-        mastArm(P(sP), px, pz, ground, armDir, 13, [6, 9.5, 13], faceN);
+        mastArm(P(sP), px, pz, ground, armDir, 13, [6, 9.5, 13], faceN, 0);
       }
     }
     for (const dir of [1, -1] as const) {
