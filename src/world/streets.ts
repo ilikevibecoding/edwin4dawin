@@ -30,6 +30,8 @@ const SMALL_FAR = 450;
 const SHADOW_FAR = 700;
 const CURB_H = 0.15;
 const CURB_TOP = 0.3;
+/** clearance of the slab over the terrain (the terrain is bilinear on a ~10 m grid: it can bulge between rows) */
+const SLAB_CLEAR = 0.1;
 /** lamp irradiance map texel (m) */
 const LAMP_TEXEL = 2.5;
 const LAMP_MAP_MAX = 4096;
@@ -121,20 +123,27 @@ const SW_MAIN = /* glsl */ `
   col *= 1.0 - 0.1 * smoothstep(0.6, 0.75, fbm3(wp * 0.05 + 8.0));
   diffuseColor.rgb = col;
   roughnessFactor = 0.9 - 0.08 * grain;
+  // DEBUG-SW (temporary): kind / across / ramp to emissive
+  if (uSwDebug > 0.5) { diffuseColor.rgb = vec3(0.0); totalEmissiveRadiance = vec3(kind / 4.0, clamp(across / 4.0, 0.0, 1.0), ramp); }
 }
 `;
 
+/** temporary diagnostic toggle (`?dbg=swdebug`) */
+export const SW_DEBUG: THREE.IUniform<number> = { value: 0 };
+
 function createSidewalkMaterial(lights: RoadLightUniforms): THREE.MeshStandardMaterial {
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0 });
+  // biased toward the camera against the terrain (nearly coplanar where the slab rides just over the ground)
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uLampMap = lights.uLampMap;
     shader.uniforms.uLampRect = lights.uLampRect;
     shader.uniforms.uLampColor = lights.uLampColor;
+    shader.uniforms.uSwDebug = SW_DEBUG;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec4 aSw; varying vec4 vSw; varying vec3 vSwNrm; varying vec3 vWorldPosS;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSw = aSw; vSwNrm = normal; vWorldPosS = (modelMatrix * vec4(position, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${SW_PARS}`)
+      .replace('#include <common>', `#include <common>\n${SW_PARS}\nuniform float uSwDebug;`)
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${SW_MAIN}`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * lampPools(vWorldPosS);');
     balanceGroundIbl(shader);
@@ -472,19 +481,23 @@ export class Streets {
     const at = (across: number) => { const a = Math.min(across, radiusCap); return { x: x + nx * a, z: z + nz * a }; };
     const out: number[] = [];
     const face = (across: number, y: number) => { const p = at(across); out.push(soup.vert({ x: p.x, y, z: p.z, nx: -ux, ny: 0, nz: -uz, across, along, kind: run.kind, w: wCode + ramp })); };
-    const top = (across: number, y: number, kind = run.kind) => { const p = at(across); out.push(soup.vert({ x: p.x, y, z: p.z, nx: 0, ny: 1, nz: 0, across, along, kind, w: wCode + ramp })); };
+    const top = (across: number, y: number, kind = run.kind) => { const p = at(across); out.push(soup.vert({ x: p.x, y, z: p.z, nx: 0, ny: 1, nz: 0, across, along, kind, w: wCode + ramp })); return p; };
+    // the curb is tied to the pavement edge; the slab behind it rides over the ground where the ground rises above
+    // the curb level (the terrain is not flat across a block face), so it never z-fights with the terrain
+    const slabY = (across: number) => { const p = at(across); return Math.max(yFull, this.map.heightAt(p.x, p.z) + SLAB_CLEAR); };
     face(-0.05, yRoad - 0.04);
     face(0, yTop);
     top(0, yTop);
     top(CURB_TOP, yTop);
     if (run.light) {
-      top(CURB_TOP + W, yFull);
+      top(CURB_TOP + W, slabY(CURB_TOP + W));
     } else {
-      top(Math.min(1.5, CURB_TOP + W), yFull);
-      top(CURB_TOP + W, yFull);
-      const back = at(CURB_TOP + W + 0.6);
-      const g = this.map.heightAt(back.x, back.z) + 0.03;
-      top(CURB_TOP + W + 0.6, Math.min(g, yFull - 0.02), K_APRON);
+      top(Math.min(1.5, CURB_TOP + W), slabY(Math.min(1.5, CURB_TOP + W)));
+      const yBack = slabY(CURB_TOP + W);
+      top(CURB_TOP + W, yBack);
+      const ap = at(CURB_TOP + W + 0.6);
+      const g = this.map.heightAt(ap.x, ap.z) + 0.03;
+      top(CURB_TOP + W + 0.6, Math.min(g, yBack - 0.02), K_APRON);
     }
     return out;
   }
@@ -551,7 +564,9 @@ export class Streets {
       if (i < n - 1) along += Math.hypot(k.arc[i + 1][0] - p[0], k.arc[i + 1][1] - p[1]);
     }
     this.counts.corners++;
-    // a lamp at the corner (on the curb line, 0.75 m behind the curb face), kept clear of the signal poles
+    // a lamp at the corner (on the curb line, 0.75 m behind the curb face), kept clear of the signal poles;
+    // low-density suburbs light two diagonal corners of a crossing, not four
+    if (zone === Zone.RES_LOW && k.a.chain.cls !== 'arterial' && k.b.chain.cls !== 'arterial' && (k.sideA > 0) !== (k.a.chain.id % 2 === 0)) return;
     const midIdx = n >> 1;
     const mid = k.arc[midIdx];
     const cands: { x: number; z: number; tx: number; tz: number }[] = [];
@@ -590,15 +605,22 @@ export class Streets {
       return { x: f.x + f.cx * side * (chain.hw + across), z: f.z + f.cz * side * (chain.hw + across), nx: f.cx * side, nz: f.cz * side, dx: 0, dz: 0 };
     };
     const yawToRoad = (nx: number, nz: number) => Math.atan2(nz, -nx); // +x of the unit toward -n (the roadway)
-    if (L >= 20) {
-      const n = Math.max(1, Math.round((L - 12) / pitch));
-      const p = (L - 12) / n;
-      const stagger = arterial ? 0 : side > 0 ? 0 : p / 2;
-      for (let i = 0; i <= n; i++) {
-        const s = sa + 6 + i * p + stagger;
-        if (s > sb - 6) continue;
-        const q = at(s, 0.65);
+    // low-density suburbs light one side of the street only (the side alternates per chain)
+    const lit = zone !== Zone.RES_LOW || side === (chain.id % 2 === 0 ? 1 : -1);
+    if (lit && L >= 30) {
+      const n = Math.floor((L - 12) / pitch);
+      if (n === 0) {
+        const s = (sa + sb) / 2, q = at(s, 0.65);
         this.lamps.push({ x: q.x, y: yAt(s), z: q.z, yaw: yawToRoad(q.nx, q.nz), kind: arterial ? 'arterial' : 'street' });
+      } else {
+        const p = (L - 12) / n;
+        const stagger = arterial ? 0 : side > 0 ? 0 : p / 2;
+        for (let i = 0; i <= n; i++) {
+          const s = sa + 6 + i * p + stagger;
+          if (s > sb - 6) continue;
+          const q = at(s, 0.65);
+          this.lamps.push({ x: q.x, y: yAt(s), z: q.z, yaw: yawToRoad(q.nx, q.nz), kind: arterial ? 'arterial' : 'street' });
+        }
       }
     }
     if (!DENSE.has(zone as Zone) && zone !== Zone.INDUSTRIAL && zone !== Zone.PARK) return;
@@ -872,8 +894,15 @@ export class Streets {
   /** Splat every planned lamp's pool into the ground irradiance map the road / sidewalk shaders sample at night. */
   private buildLampMap(): void {
     if (!this.lamps.length) return;
+    // the map covers the dense districts (downtown, mid-rise, hotel row) at full resolution: the residential grids
+    // and arterials reach across the whole 20 km world, where lamps keep their lit heads and dots but throw no pool
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
-    for (const l of this.lamps) { x0 = Math.min(x0, l.x); z0 = Math.min(z0, l.z); x1 = Math.max(x1, l.x); z1 = Math.max(z1, l.z); }
+    for (const d of this.map.districts) {
+      if (!DENSE.has(d.zone)) continue;
+      const r = Math.hypot(d.hw, d.hh);
+      x0 = Math.min(x0, d.cx - r); z0 = Math.min(z0, d.cz - r); x1 = Math.max(x1, d.cx + r); z1 = Math.max(z1, d.cz + r);
+    }
+    if (!Number.isFinite(x0)) return;
     x0 -= 24; z0 -= 24; x1 += 24; z1 += 24;
     const texel = Math.max(LAMP_TEXEL, (x1 - x0) / LAMP_MAP_MAX, (z1 - z0) / LAMP_MAP_MAX);
     const w = Math.min(LAMP_MAP_MAX, Math.ceil((x1 - x0) / texel)), h = Math.min(LAMP_MAP_MAX, Math.ceil((z1 - z0) / texel));

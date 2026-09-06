@@ -12,7 +12,7 @@ import { PostPipeline } from './render/post';
 import { PlanarReflection, boundsRadius, distanceToBounds, trianglesOf } from './render/reflection';
 import { CascadeFitter, installCascadeDebug } from './render/shadows';
 import { buildRoadMeshes, buildRoadNetwork, createRoadLightUniforms, createRoadMaterial, type RoadSegment } from './world/roads';
-import { Streets } from './world/streets';
+import { SW_DEBUG, Streets } from './world/streets';
 import { buildBridges, type BridgeBuild } from './world/bridges';
 import { buildCity, type CityBuild } from './world/city';
 import { MIRROR_DISTANCE, Vegetation } from './world/vegetation';
@@ -288,6 +288,7 @@ export class Game {
     if (dbg.has('nocity')) this.city.batches.group.visible = false;
     if (dbg.has('nobridges')) this.bridges.group.visible = false;
     if (dbg.has('nostreets')) this.streets.group.visible = false;
+    if (dbg.has('swdebug')) SW_DEBUG.value = 1;
     if (dbg.has('notraffic')) this.traffic.group.visible = false;
     if (dbg.has('nocloudshadow')) { this.post.cloudShadowStrength = 0; this.reflection.cloudShadowStrength = 0; }
     if (dbg.has('norefl')) this.reflection.enabled = false;
