@@ -190,7 +190,7 @@ export class ShopUI {
       const a = eco.apartment;
       note = a && a.lotId === p.id ? `yours - paid through day ${a.paidUntilDay}` : 'first free room, one night';
     } else if (g.service === 'heal') note = 'full health, +6 food';
-    else if (g.service === 'ride') note = 'to any landmark';
+    else if (g.service === 'ride') note = eco.jobs && eco.jobs.active ? 'landmarks or your job' : 'to any landmark';
     const card = h('button', {
       class: 'sh-card sh-service' + cls + (!eco.canAfford(price) && !disabled ? ' sh-poor' : ''), type: 'button', disabled,
       title: `${g.label} - ${price} cr. ${g.desc || ''}`,
@@ -205,11 +205,11 @@ export class ShopUI {
   }
   // Air-taxi destinations: replaces the goods grid with the landmark list until one is picked.
   pickDestination(purpose, entry, unit) {
-    const eco = this.eco, lm = (eco.layout && eco.layout.landmarks) || [];
+    const eco = this.eco;
     this.goodsEl.replaceChildren(h('p', { class: 'sh-empty', text: `Where to? ${unit} cr a ride.` }));
-    for (const l of lm) {
+    for (const l of eco.destinations()) {
       const d = Math.round(Math.hypot(l.x - this.game.player.pos.x, l.z - this.game.player.pos.z));
-      this.goodsEl.append(h('button', { class: 'sh-card sh-dest', type: 'button', onclick: () => eco.ride(purpose, unit, l) },
+      this.goodsEl.append(h('button', { class: 'sh-card sh-dest' + (l.job ? ' sh-dest-job' : ''), type: 'button', onclick: () => eco.ride(purpose, unit, l) },
         serviceIcon('ride'), h('span', { class: 'sh-name', text: l.name }), h('span', { class: 'sh-stock', text: `${d} blocks` })));
     }
     this.goodsEl.append(h('button', { class: 'sh-card sh-dest', type: 'button', onclick: () => this.renderGoods() }, h('span', { class: 'sh-name', text: 'Back' })));

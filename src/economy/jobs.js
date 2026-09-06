@@ -23,14 +23,17 @@ const centre = (lot) => ({ x: lot.door ? lot.door.out.x + 0.5 : (lot.x0 + lot.x1
 const dist = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const fmtName = (p) => p.name;
 
-// Reward formulas (documented in docs/economy_balance.md; the offline test checks them)
+// Reward formulas (documented in docs/economy_balance.md; the offline test checks them). The courier curve is
+// concave in distance: the first blocks of a run pay best, so the typical 250-400 block run lands near 90 cr while
+// the 30-120 range holds at its ends.
 export const REWARD = {
-  courier: (d) => Math.round(30 + 90 * clamp((d - 100) / 500, 0, 1)),
+  courier: (d) => Math.round(30 + 90 * Math.sqrt(clamp((d - 100) / 500, 0, 1))),
   delivery: (cost) => Math.round(cost * 1.4),
   shipRepair: (n, jitter = 0) => clamp(Math.round(n * 40 + jitter), 80, 200),
   cleanup: (n) => 5 * n,
-  harvest: (item, n) => n * (item === 'wheat' ? 5 : 12) + 10,
+  harvest: (item, n) => n * (item === 'wheat' ? 8 : 18) + 15,
 };
+const DELIVERY_COST = [60, 240];   // a delivery run moves goods worth this much (the 40% margin is then worth the trip)
 
 // Job type mix per terminal kind (weights). The first job of every board is a courier run so a terminal always offers
 // the simplest way to earn.
@@ -70,14 +73,18 @@ export function generateBoard(seed, day, lot, ctx) {
       return { id, kind: 'courier', title: `Courier run to ${fmtName(to)}`, desc: `Carry a sealed package from here to ${to.name} (${to.category}, ${d} blocks). Payment on arrival.`, from: { lotId: lot.id, x: here.x, z: here.z, name: lot.purposeName || 'the terminal' }, to: { lotId: to.id, x: to.x, z: to.z, name: to.name }, distance: d, reward: REWARD.courier(d), expiresIn: JOB_TTL_DAYS };
     }
     if (jobKind === 'delivery') {
-      const cands = others.filter((l) => { const d = dist(here, l); return d >= 80 && d <= 500 && !used.has(l.id) && l.sells && l.sells.some((s) => GOODS[s.item] && GOODS[s.item].id != null && s.stock >= 6); });
+      // goods worth carrying: unit price >= 6 (bread, meat, lanterns, furniture, consoles) and enough stock for the run
+      const stocked = (s) => GOODS[s.item] && GOODS[s.item].id != null && s.stock >= 8 && buyPrice(s.item, null, s.price) >= 6;
+      const cands = others.filter((l) => { const d = dist(here, l); return d >= 80 && d <= 400 && !used.has(l.id) && l.sells && l.sells.some(stocked); });
       const vendor = pick(cands);
       if (!vendor) return null;
       used.add(vendor.id);
-      const goods = vendor.sells.filter((s) => GOODS[s.item] && GOODS[s.item].id != null && s.stock >= 6);
+      const goods = vendor.sells.filter(stocked);
       const g = goods[Math.floor(rng.next() * goods.length)];
-      const count = rng.int(2, 6);
       const unit = buyPrice(g.item, vendor.district, g.price);
+      // size the order so the goods are worth 60-240 cr (2-8 items): the 40% margin then pays for the round trip
+      const target = rng.int(DELIVERY_COST[0], DELIVERY_COST[1]);
+      const count = clamp(Math.round(target / unit), 2, 8);
       const cost = unit * count;
       const d = Math.round(dist(here, vendor));
       return { id, kind: 'delivery', title: `Fetch ${count} \u00d7 ${label(g.item)} from ${vendor.name}`, desc: `Buy ${count} ${label(g.item)} at ${vendor.name} (${d} blocks away, about ${cost} cr) and bring them back to this terminal. Pays the cost plus 40%.`, from: { lotId: lot.id, x: here.x, z: here.z, name: lot.purposeName || 'the terminal' }, vendor: { lotId: vendor.id, x: vendor.x, z: vendor.z, name: vendor.name }, items: [{ key: g.item, id: GOODS[g.item].id, count }], cost, reward: REWARD.delivery(cost), expiresIn: JOB_TTL_DAYS };
@@ -110,12 +117,12 @@ export function generateBoard(seed, day, lot, ctx) {
   const mix = MIX[kind] || MIX.transit_station;
   const first = make('courier', 0);
   if (first) jobs.push(first);
-  // at most two jobs of a kind (one ship repair) so a board reads as a mix rather than three courier runs
+  // at most two jobs of a kind so a board reads as a mix rather than three courier runs
   let guard = 0;
   while (jobs.length < n && guard++ < 24) {
     const kind = pickWeighted(mix, rng);
     const same = jobs.filter((o) => o.kind === kind).length;
-    if (same >= (kind === 'ship_repair' ? 1 : 2)) continue;
+    if (same >= 2) continue;
     const j = make(kind, jobs.length);
     if (j) jobs.push(j);
   }

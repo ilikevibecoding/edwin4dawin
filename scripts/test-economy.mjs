@@ -42,6 +42,7 @@ check('buy price applies the district multiplier (apple: 4 base -> 3 undercity, 
 check('ship prices are quoted flat in every district', SHIP_CLASSES.every((c) => buyPrice('ship_' + c, 'senate') === GOODS['ship_' + c].base));
 check('sell price = 45% of buy (bread 8 -> 4, chest 40 -> 18, senate bread 11 -> 5)', SELL_RATIO === 0.45 && sellPrice('bread') === 4 && sellPrice('chest') === 18 && sellPrice('bread', 'senate') === 5);
 check('pawn pays 30% (chest 40 -> 12)', PAWN_RATIO === 0.3 && sellPrice('chest', null, null, true) === 12);
+check('offers under 0.75 cr are not made: dug-up cobblestone, stone, dirt and seeds sell for nothing anywhere, wheat/feathers still fetch 1', sellPrice('cobblestone') === null && sellPrice('stone', 'senate') === null && sellPrice('grass_block', null, null, true) === null && sellPrice('seeds', 'senate') === null && sellPrice('wheat') === 1 && sellPrice('feather') === 1 && vendorSellPrice({ district: 'market', buys: ['any'], sells: [] }, 3) === null);
 check('a vendor entry price overrides the base (cantina bread 10 -> sells for 10, buys at 5)', buyPrice('bread', null, 10) === 10 && sellPrice('bread', null, 10) === 5);
 check('category trading: a food shop buys apples/wheat/meat but not planks; a general store buys planks; pawn buys anything', vendorBuys(['food', 'produce', 'meat'], I.APPLE) && vendorBuys(['food', 'produce', 'meat'], I.WHEAT) && vendorBuys(['food', 'produce', 'meat'], GOODS.raw_beef.id) && !vendorBuys(['food', 'produce', 'meat'], GOODS.planks.id) && vendorBuys(['material'], GOODS.planks.id) && vendorBuys(['any'], GOODS.planks.id) && vendorBuys(['any'], I.APPLE) && !vendorBuys([], I.APPLE));
 check('farm goods are categorised so produce/meat/hide vendors buy them (wheat, meat, leather, feathers, ores)', itemCategory(I.WHEAT) === 'produce' && itemCategory(GOODS.raw_beef.id) === 'meat' && itemCategory(GOODS.leather.id) === 'hide' && itemCategory(GOODS.feather.id) === 'hide' && itemCategory(GOODS.iron_ore.id) === 'ore' && goodsKey(I.APPLE) === 'apple');
@@ -66,7 +67,7 @@ for (let day = 0; day < 4; day++) {
       kindsSeen.add(j.kind);
       if (!JOB_KINDS.includes(j.kind) || !j.id || !j.title || !j.desc || !(j.reward > 0) || j.expiresIn !== 1) badJobs.push(j.id + ':shape');
       if (j.kind === 'courier' && !(j.distance >= 100 && j.distance <= 600 && j.reward >= 30 && j.reward <= 120 && j.reward === REWARD.courier(j.distance))) badJobs.push(j.id + ':courier');
-      if (j.kind === 'delivery' && !(j.items[0].count >= 2 && j.items[0].count <= 6 && j.reward === Math.round(j.cost * 1.4) && j.vendor && j.vendor.lotId !== t.lot.id)) badJobs.push(j.id + ':delivery');
+      if (j.kind === 'delivery' && !(j.items[0].count >= 2 && j.items[0].count <= 8 && j.cost >= 12 && j.cost <= 260 && j.reward === Math.round(j.cost * 1.4) && j.vendor && j.vendor.lotId !== t.lot.id)) badJobs.push(j.id + ':delivery');
       if (j.kind === 'ship_repair' && !(j.parts >= 3 && j.parts <= 5 && j.reward >= 80 && j.reward <= 200 && j.pad && j.pad.index >= 0)) badJobs.push(j.id + ':repair');
       if (j.kind === 'cleanup' && !(j.count >= 4 && j.count <= 8 && j.reward === 5 * j.count)) badJobs.push(j.id + ':cleanup');
       if (j.kind === 'harvest' && !(j.items[0].count >= 3 && j.to && j.reward === REWARD.harvest(j.items[0].key === 'wheat' ? 'wheat' : 'meat', j.items[0].count))) badJobs.push(j.id + ':harvest');
@@ -76,7 +77,7 @@ for (let day = 0; day < 4; day++) {
 check('every board lists 3-6 jobs', sizes.every((n) => n >= 3 && n <= 6), `sizes ${Math.min(...sizes)}..${Math.max(...sizes)} over ${sizes.length} boards`);
 check('the first job of every board is a courier run', firstCourier);
 check('all five job kinds appear across terminals and days', JOB_KINDS.every((k) => kindsSeen.has(k)), [...kindsSeen].join(','));
-check('job payouts follow the book (courier 30-120 by distance, delivery cost+40%, repair 80-200, cleanup 5 each, harvest)', badJobs.length === 0, badJobs.slice(0, 6).join(' '));
+check('job payouts follow the book (courier 30-120 by distance, delivery 2-8 goods worth <= 260 cr paying cost+40%, repair 80-200, cleanup 5 each, harvest)', badJobs.length === 0, badJobs.slice(0, 6).join(' '));
 const t0 = termLot(terminals[0]);
 const a = JSON.stringify(generateBoard(seed, 3, t0, ctx)), b = JSON.stringify(generateBoard(seed, 3, t0, ctx));
 check('board generation is deterministic for (seed, day, lot)', a === b);
@@ -84,11 +85,11 @@ check('a different day or seed gives a different board', JSON.stringify(generate
 check('different terminals get different boards on the same day', JSON.stringify(generateBoard(seed, 3, termLot(terminals[1]), ctx)) !== a);
 
 log('\n== Payout maths ==');
-check('courier: 30 cr at 100 blocks, 120 at 600, monotonic', REWARD.courier(100) === 30 && REWARD.courier(600) === 120 && REWARD.courier(350) === 75 && REWARD.courier(50) === 30 && REWARD.courier(900) === 120);
+check('courier: 30 cr at 100 blocks, 120 at 600, concave in distance (350 -> 94), clamped outside', REWARD.courier(100) === 30 && REWARD.courier(600) === 120 && REWARD.courier(350) === 94 && REWARD.courier(225) === 75 && REWARD.courier(50) === 30 && REWARD.courier(900) === 120 && REWARD.courier(300) < REWARD.courier(400));
 check('delivery: cost + 40% (100 -> 140, 37 -> 52)', REWARD.delivery(100) === 140 && REWARD.delivery(37) === 52);
 check('ship repair: 40 per part, clamped 80-200 (3 parts 120, 5 parts 200, jitter -40 -> 80 floor)', REWARD.shipRepair(3) === 120 && REWARD.shipRepair(5) === 200 && REWARD.shipRepair(3, -40) === 80 && REWARD.shipRepair(5, 40) === 200);
 check('cleanup: 5 per block', REWARD.cleanup(6) === 30 && REWARD.cleanup(8) === 40);
-check('harvest: 5/wheat or 12/meat + 10 (10 wheat 60, 4 meat 58)', REWARD.harvest('wheat', 10) === 60 && REWARD.harvest('meat', 4) === 58);
+check('harvest: 8/wheat or 18/meat + 15 (10 wheat 95, 4 meat 87)', REWARD.harvest('wheat', 10) === 95 && REWARD.harvest('meat', 4) === 87);
 
 log('\n== Restock ledger ==');
 const st = new StockLedger();

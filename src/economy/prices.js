@@ -27,8 +27,8 @@ export const GOODS = {
   planks: { id: B.OAK_PLANKS, base: 2, cat: 'material' },
   spruce_planks: { id: B.SPRUCE_PLANKS, base: 2, cat: 'material' },
   oak_log: { id: B.OAK_LOG, base: 4, cat: 'material' },
-  cobblestone: { id: B.COBBLESTONE, base: 2, cat: 'material' },
-  stone: { id: B.STONE, base: 2, cat: 'material' },
+  cobblestone: { id: B.COBBLESTONE, base: 1, cat: 'material' },
+  stone: { id: B.STONE, base: 1, cat: 'material' },
   stone_bricks: { id: B.STONE_BRICKS, base: 4, cat: 'material' },
   bricks: { id: B.BRICKS, base: 4, cat: 'material' },
   glass: { id: B.GLASS, base: 5, cat: 'material' },
@@ -51,7 +51,7 @@ export const GOODS = {
   console: { id: B.CONSOLE, base: 55, cat: 'material' },
   dandelion: { id: B.DANDELION, base: 2, cat: 'material' },
   poppy: { id: B.POPPY, base: 2, cat: 'material' },
-  grass_block: { id: B.GRASS, base: 2, cat: 'material' },
+  grass_block: { id: B.GRASS, base: 1, cat: 'material' },
   // ores and metals
   coal_ore: { id: B.COAL_ORE, base: 6, cat: 'ore' },
   iron_ore: { id: B.IRON_ORE, base: 14, cat: 'ore' },
@@ -99,11 +99,15 @@ export function buyPrice(key, district = null, vendorPrice = null) {
   if (g && g.service === 'ship') return b;
   return roundCr(b * districtMult(district));
 }
-// What a vendor pays the player for one item: 45% of what it would sell it for (pawn: 30% of the base price).
+// What a vendor pays the player for one item: 45% of what it would sell it for (pawn: 30% of the base price). Offers
+// under three quarters of a credit are not made at all (null): dug-up stone, dirt and grass seeds are worth nothing,
+// which keeps "dig and sell" from out-earning honest work.
+export const MIN_OFFER = 0.75;
 export function sellPrice(key, district = null, vendorPrice = null, pawn = false) {
   const b = basePrice(key, vendorPrice);
   if (b == null) return null;
-  return roundCr(b * districtMult(district) * (pawn ? PAWN_RATIO : SELL_RATIO));
+  const v = b * districtMult(district) * (pawn ? PAWN_RATIO : SELL_RATIO);
+  return v < MIN_OFFER ? null : Math.round(v);
 }
 // Does a vendor with `buys` categories accept an item id? ('any' = pawn broker)
 export function vendorBuys(buys, id) {
@@ -120,5 +124,5 @@ export function vendorSellPrice(purpose, id) {
   const listed = key ? (purpose.sells || []).find((s) => s.item === key) : null;
   const pawn = (purpose.buys || []).includes('any');
   if (key) return sellPrice(key, purpose.district, listed ? listed.price : null, pawn);
-  return roundCr(2 * districtMult(purpose.district) * PAWN_RATIO);   // unknown block: scrap value
+  return null;   // a block the book does not price (city cladding, dirt): no scrap value
 }

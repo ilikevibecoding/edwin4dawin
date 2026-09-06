@@ -227,15 +227,28 @@ export class Economy {
       default: return false;
     }
   }
-  // Air taxi: a paid teleport to a landmark's front door (ground level).
-  ride(purpose, unit, landmark) {
-    const lot = this.lotById(landmark.lot);
-    if (!lot) return false;
-    if (!this.charge(unit, `the ride to ${landmark.name}`)) return false;
-    const d = lot.door ? lot.door.out : { x: lot.x0 + (lot.w >> 1), z: lot.z1 };
+  // Air-taxi destinations: the landmarks, plus the active job's next stop (a courier with a taxi fare beats one on
+  // foot - that loop is what makes the 4,000 cr speeder reachable in about an hour, see docs/economy_balance.md).
+  destinations() {
+    const list = ((this.layout && this.layout.landmarks) || []).map((l) => ({ name: l.name, lot: l.lot, x: l.x, z: l.z }));
+    const t = this.jobs.active ? this.jobs.target() : null;
+    if (t) list.unshift({ name: `Your job: ${t.label}`, x: t.x, y: t.y, z: t.z, job: true });
+    return list;
+  }
+  // Air taxi: a paid teleport to a destination's front door (ground level) or to the active job's marker.
+  ride(purpose, unit, dest) {
+    let x, y = LEVELS.underWalk, z;
+    if (dest.job) { x = dest.x; z = dest.z; if (dest.y != null) y = dest.y; }
+    else {
+      const lot = this.lotById(dest.lot);
+      if (!lot) return false;
+      const d = lot.door ? lot.door.out : { x: lot.x0 + (lot.w >> 1), z: lot.z1 };
+      x = d.x + 0.5; z = d.z + 0.5;
+    }
+    if (!this.charge(unit, `the ride to ${dest.name}`)) return false;
     this.game.closeScreen();
-    this.game.player.teleport(d.x + 0.5, LEVELS.underWalk, d.z + 0.5);
-    this.toast(`Air taxi: ${landmark.name}`, '#9ad8ff');
+    this.game.player.teleport(x, y, z);
+    this.toast(`Air taxi: ${dest.name}`, '#9ad8ff');
     return true;
   }
 

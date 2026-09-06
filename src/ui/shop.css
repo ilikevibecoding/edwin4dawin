@@ -115,6 +115,8 @@
 .sh-owned-ship { border-color: var(--sh-gold) #8a5f22 #8a5f22 var(--sh-gold); box-shadow: 0 0 0 2px var(--sh-edge), inset 0 0 22px rgba(255, 208, 128, 0.12); }
 .sh-owned-ship .sh-stock { color: var(--sh-green); }
 .sh-dest { min-height: 88px; }
+.sh-dest-job { border-color: var(--sh-gold) #5a3a10 #5a3a10 var(--sh-gold); box-shadow: inset 0 0 0 1px rgba(255, 216, 102, 0.35); }
+.sh-dest-job .sh-name { color: var(--sh-gold); }
 
 /* ------------------------------------------------------------------ your inventory (9 x 4 slots) */
 .sh-slots { display: grid; grid-template-columns: repeat(9, 46px); gap: 4px; justify-content: start; }
