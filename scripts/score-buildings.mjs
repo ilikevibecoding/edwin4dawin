@@ -26,6 +26,7 @@ import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { GOODS } from '../src/economy/prices.js';
 import { roomFunction, JOB_ARCHETYPE, VISITOR_JOBS } from '../src/npc/coruscant/rooms.js';
+import { JOB_WORK_KINDS } from '../src/npc/coruscant/lots.js';
 import { JOB_LINES, TIME_LINES, GOSSIP } from '../src/npc/dialog/lines.js';
 import { buildBlueprint } from '../src/coruscant/buildings.js';
 import { ROOMS } from '../src/coruscant/rooms/index.js';
@@ -157,7 +158,9 @@ export function scoreLot(p, ctx, o = {}) {
   // 5. NPC behaviour: every staff role of the purpose has a room that hosts it (W4's room functions or the role's own
   //    room list), work stations for the head count, idle spots for the visitors, beds where residents live, and
   //    >= 30 eligible unique lines for every role (job bank + time bank + district gossip) plus opening hours
-  const hosts = (role) => role.rooms.some((k) => kinds.has(k)) || [...kinds].some((k) => roomFunction(k).jobs.some((j) => j.job === role.job));
+  // W4's placement order (src/npc/coruscant/lots.js candidates): the job's work-record kinds, then a room whose function
+  // lists the job; visitors take the role's own room list
+  const hosts = (role) => (JOB_WORK_KINDS[role.job] || []).some((k) => p.staff.kinds[k] > 0) || role.rooms.some((k) => kinds.has(k)) || [...kinds].some((k) => roomFunction(k).jobs.some((j) => j.job === role.job));
   const covered = staffRoles.filter(hosts);
   const heads = staffRoles.reduce((s, r) => s + r.count, 0);
   const visitors = visitorRoles.reduce((s, r) => s + r.count, 0);

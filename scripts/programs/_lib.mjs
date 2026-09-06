@@ -171,7 +171,7 @@ export function checkHost(lot, layout, o = {}) {
   const purpose = purposeFor(lot, layout);
   const prog = programFor(lot, purpose, layout);
   const rec = bp.meta.program;
-  const res = { lotId: lot.id, program: prog ? prog.id : null, family: bp.meta.family, district: lot.district, compact: rec ? rec.compact : null, sign: purpose ? purpose.name : (bp.meta.name || ''), ok: true, issues: [], rooms: [], serviceDoor: !!(rec && rec.serviceDoor), genMs, plannerRooms: bp.meta.rooms.length };
+  const res = { lotId: lot.id, program: prog ? prog.id : null, family: bp.meta.family, district: lot.district, compact: rec ? rec.compact : null, sign: purpose ? purpose.name : (bp.meta.name || ''), ok: true, issues: [], rooms: [], serviceDoor: !!(rec && rec.serviceDoor), streetDoor: !!(rec && rec.streetDoor), genMs, plannerRooms: bp.meta.rooms.length };
   if (!prog) { res.ok = false; res.issues.push('no program for this lot'); return res; }
   if (!rec) { res.ok = false; res.issues.push('blueprint carries no program record (applyProgram did not run)'); return res; }
   if (!res.sign) { res.ok = false; res.issues.push('no sign name'); }
@@ -242,7 +242,7 @@ export function checkProgram(programId, layout, o = {}) {
 }
 
 export function formatHost(r) {
-  const head = `  lot ${String(r.lotId).padStart(3)} ${r.family.padEnd(9)} ${r.district.padEnd(13)} ${r.compact ? 'compact ' : 'extended'} rooms ${r.rooms.filter((x) => x.status !== 'missing').length}/${r.rooms.length}${r.serviceDoor ? ' +service door' : ''}  sign "${r.sign}"  ${r.ok ? 'OK' : (r.soft ? 'REPORT' : 'FAIL')}`;
+  const head = `  lot ${String(r.lotId).padStart(3)} ${r.family.padEnd(9)} ${r.district.padEnd(13)} ${r.compact ? 'compact ' : 'extended'} rooms ${r.rooms.filter((x) => x.status !== 'missing').length}/${r.rooms.length}${r.serviceDoor ? ' +service door' : ''}${r.streetDoor ? ' +street door' : ''}  sign "${r.sign}"  ${r.ok ? 'OK' : (r.soft ? 'REPORT' : 'FAIL')}`;
   const lines = [head];
   for (const i of r.issues) lines.push(`      - ${i}`);
   if (r.notes) for (const n of r.notes) lines.push(`      note: ${n}`);

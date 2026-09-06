@@ -62,6 +62,8 @@ function doorway(bp, x0, z0, x1, z1, y, h = 3, frame = TRIM, lintel = GLOW) {
   else { bp.fill(x0, y, z0 - 1, x0, y + h, z0 - 1, frame); bp.fill(x0, y, z1 + 1, x0, y + h, z1 + 1, frame); bp.fill(x0, y + h, z0, x0, y + h, z1, lintel); }
 }
 function lampPost(bp, x, y, z, h = 2, id = B.CITY_LAMP) { bp.fill(x, y, z, x, y + h - 1, z, BARS); bp.set(x, y + h, z, id); }
+// a rigging rod: bars from (x, y, z) up to the first solid block above (the fly floor, the dome), at most 12 high
+function hangFrom(bp, x, y, z) { for (let yy = y; yy < y + 12 && yy < bp.h; yy++) { if (!bp.isAir(x, yy, z)) return; bp.set(x, yy, z, BARS); } }
 
 const DRESS = [B.SHELF, B.CHEST, B.CRATE, B.BARREL, B.BOOKSHELF, B.CONSOLE];
 const CIVIC = new Set(['courtroom', 'control_room', 'executive_office', 'meeting_room', 'lobby_atrium', 'archive', 'library', 'medbay', 'clinic_ward', 'council_chamber', 'holo_theatre', 'observation_deck', 'gallery', 'museum_hall', 'lounge', 'restaurant', 'cafeteria', 'open_plan_office']);
@@ -235,7 +237,7 @@ function auditorium(bp, rng) {
   for (let x = 37; x <= 57; x += 4) bp.set(x, y + 9, STAGE.z1 + 2, GOLD);
   // stage: holo backdrop, wings, lighting bridge, footlights, scenery flats
   for (let x = STAGE.x0; x <= STAGE.x1; x++) for (let yy = y; yy <= y + 12; yy++) bp.set(x, yy, STAGE.z0 - 1, (x + yy) % 9 === 0 ? BLUE : HOLO);
-  for (let x = STAGE.x0 + 2; x <= STAGE.x1 - 2; x += 3) { bp.set(x, y + 14, STAGE.z1 - 1, BARS); bp.set(x, y + 13, STAGE.z1 - 1, (x % 2) ? GLOW : B.LANTERN); }
+  for (let x = STAGE.x0 + 2; x <= STAGE.x1 - 2; x += 3) { hangFrom(bp, x, y + 14, STAGE.z1 - 1); bp.set(x, y + 13, STAGE.z1 - 1, (x % 2) ? GLOW : B.LANTERN); }   // the lighting bridge hangs on its rods from the fly floor
   for (let x = 36; x <= 58; x += 2) bp.set(x, y - 1, STAGE.z1, GLOW);
   for (const [x, z] of [[STAGE.x0 + 3, STAGE.z0 + 4], [STAGE.x1 - 3, STAGE.z0 + 4], [STAGE.x0 + 6, STAGE.z0 + 9], [STAGE.x1 - 6, STAGE.z0 + 9]]) { bp.fill(x, y, z, x, y + 4, z, TRIM); bp.set(x, y + 2, z, HOLO); }
   for (let x = 44; x <= 50; x += 3) { bp.set(x, y, STAGE.z0 + 6, GOLD); bp.spot(x, y, STAGE.z0 + 7, 'stand'); }
@@ -338,7 +340,7 @@ function auditorium(bp, rng) {
     bp.room('vomitory', x0 - 1, y, 30, x1 + 1, 56);
   }
   // lighting bridge over the stalls and the dome's chandelier cluster
-  for (let x = 30; x <= 64; x += 2) { bp.set(x, 44, 30, BARS); bp.set(x, 43, 30, (x % 4) ? GLOW : B.LANTERN); }
+  for (let x = 30; x <= 64; x += 2) { hangFrom(bp, x, 44, 30); bp.set(x, 43, 30, (x % 4) ? GLOW : B.LANTERN); }
   const cy = domeH(47, 38) - 3;
   bp.fill(46, cy, 37, 47, cy + 2, 38, TRIM);
   for (let r = 1; r <= 4; r++) for (let a = 0; a < 8; a++) { const x = Math.round(46.5 + r * 1.6 * Math.cos(a / 8 * Math.PI * 2)), z = Math.round(37.5 + r * 1.6 * Math.sin(a / 8 * Math.PI * 2)); bp.set(x, cy - r + 3, z, (r + a) % 2 ? GLOW : TRIM); }

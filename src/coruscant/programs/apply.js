@@ -73,6 +73,7 @@ function exteriorBack(bp, c, front, lot) {
 const whereOk = (spec, c, top) => {
   switch (spec.where) {
     case 'ground': return c.f === 0;
+    case 'first': return c.f === 1;
     case 'low': return c.f <= 2;
     case 'upper': return c.f >= 1;
     case 'top': return c.f === top || (top >= 1 && c.f === top - 1);
@@ -100,8 +101,12 @@ function targetFloor(spec, seed, top) {
   return 1 + (h % top);
 }
 
-function score(spec, c, top, rng, service, seed = 1, variant = 1) {
+// role: 'entry' for the room that takes the service door, 'street' for the public ground-floor room a variant-1 host
+// opens to the street; both want an exterior ground-floor bay above everything else
+function score(spec, c, top, rng, service, seed = 1, variant = 1, role = null) {
   let s = whereOk(spec, c, top) ? 10 : 0;
+  if (role === 'entry' && service) s += c.exterior ? 20 : 0;
+  if (role === 'street') s += c.exterior ? 12 : 0;
   if (spec.where === 'upper' && (spec.signature || spec.core)) { const dt = Math.abs(c.f - targetFloor(spec, seed, top)); s += dt === 0 ? 4 : dt === 1 ? 2 : 0; }
   if (spec.where === 'inner' && c.inner) s += 6;
   if (spec.where !== 'inner' && c.inner) s -= 3;                         // public rooms should open off the corridor
@@ -112,7 +117,6 @@ function score(spec, c, top, rng, service, seed = 1, variant = 1) {
   if (spec.signature || spec.merge) s += (spec.signature && spec.where === 'upper' && variant === 0) ? Math.max(0, 8 - (c.w * c.d) / 6) : size;
   else if (spec.service) s -= Math.min(4, (c.w * c.d) / 12);            // back of house takes the small rooms
   if (!spec.signature && !spec.merge) s -= Math.max(0, c.w * c.d - 80) / 16;   // a landmark's hall is no place for a locker room
-  if (service && spec.serviceEntry) s += c.exterior ? 8 : 0;
   if (c.fr.backDoorU >= 0 && !spec.service) s -= 3;                    // a pass-through room loses its back wall to the second door
   return s + rng.next() * 2;
 }
@@ -209,13 +213,25 @@ export function applyProgram(bp, lot, layout, o = {}) {
   const rng = new RNG(((lot.seed ?? 1) ^ 0x7a3c9e1d) >>> 0);
   const planned = meta.rooms.filter((r) => !PROTECTED.has(r.kind)).length;
   const compact = planned < EXTENDED_MIN_ROOMS;
-  const specs = prog ? prog.rooms.filter((s) => s.core || !compact) : [];
   const variant = prog ? prog.variant : variantOf(lot);
+  // the three arrangements of a program's street-level signature room (spec.upstairs): variant 0 puts it on the
+  // first floor up the stair from the lobby (the upstairs showroom), variant 1 gives it its own street door,
+  // variant 2 a double bay
+  const specs = prog ? prog.rooms.filter((s) => s.core || !compact).map((s) => (s.upstairs && variant === 0 && !compact && !o.landmark ? { ...s, where: 'first' } : s)) : [];
   const ctx = { program: prog, palette: prog ? prog.materialIds : null, variant, style: o.style || null, rng, district: lot.district };
   const wantsService = !!(prog && prog.circulation && prog.circulation.service);
-  const record = { id: prog ? prog.id : null, variant, compact, rooms: [], satisfied: [], missing: [], serviceDoor: null, adaptations: [] };
+  const record = { id: prog ? prog.id : null, variant, compact, rooms: [], satisfied: [], missing: [], serviceDoor: null, streetDoor: null, adaptations: [] };
   const existing = meta.rooms.map((r) => r.kind);
   const placements = [];
+  // the room that takes the service door: the program's service-entry room, else its first back-of-house room (a
+  // records dock, a guard post at the goods door) - service circulation gets a real door wherever the shell allows
+  const entrySpec = wantsService ? (specs.find((s) => s.serviceEntry) || specs.find((s) => s.service) || null) : null;
+  // variant 1 is the street-connected host: its public ground-floor program room (the shop, the tellers' hall, the
+  // diner counter) opens to the street with its own door beside the tower lobby - the entry arrangement of the
+  // building differs from a sibling whose same room is reached through the lobby alone
+  const groundPublic = (s) => !s.service && (s.where === 'ground' || s.where === 'low');
+  const streetSpec = variant === 1 && !o.landmark && !compact ? (specs.find((s) => s.signature && groundPublic(s)) || specs.find((s) => s.core && groundPublic(s)) || null) : null;
+  const roleOf = (s) => (s === entrySpec ? 'entry' : s === streetSpec ? 'street' : null);
   // record only (the Senate: another builder's blueprint, checked by kind pattern, never refurnished)
   if (o.noBuild) {
     for (const spec of specs) {
@@ -251,19 +267,22 @@ export function applyProgram(bp, lot, layout, o = {}) {
     let best = pool.filter((c) => whereOk(spec, c, floors.top));
     if (!best.length) best = pool;
     if (!best.length) { record.missing.push(spec.kind); continue; }
-    const scored = best.map((c) => ({ c, s: score(spec, c, floors.top, rng, wantsService, (lot.seed ?? 1) >>> 0, variant) })).sort((a, b) => b.s - a.s || a.c.i - b.c.i);
+    const scored = best.map((c) => ({ c, s: score(spec, c, floors.top, rng, wantsService, (lot.seed ?? 1) >>> 0, variant, roleOf(spec)) })).sort((a, b) => b.s - a.s || a.c.i - b.c.i);
     const pick = scored[0].c;
     pick.used = true;
     placements.push({ spec, tpl, c: pick });
   }
 
-  // the service door: the serviceEntry room if it sits on the ground floor against an exterior wall, else any
-  // placed back-of-house ground-floor room with one
+  // the service door: the entry room if it sits on the ground floor against an exterior wall, else any placed
+  // back-of-house ground-floor room with one
   let serviceAt = null;
   if (wantsService) {
     const withExt = placements.filter((p) => p.c && p.c.exterior);
-    serviceAt = withExt.find((p) => p.spec.serviceEntry) || withExt.find((p) => p.spec.service) || null;
+    serviceAt = withExt.find((p) => p.spec === entrySpec) || withExt.find((p) => p.spec.service) || null;
   }
+  // the street door of a variant-1 host: its public ground-floor room, when it landed against an exterior wall
+  let streetAt = null;
+  if (streetSpec) { const p = placements.find((q) => q.spec === streetSpec); if (p && p.c && p.c.exterior && p !== serviceAt) streetAt = p; }
 
   // build: merged bays first (they rewrite meta.rooms), then single rooms
   const trim = o.style ? o.style.trim : B.CHROME;
@@ -296,12 +315,12 @@ export function applyProgram(bp, lot, layout, o = {}) {
     }
     const c = p.c;
     clearRoom(bp, c, o.style && o.style.floor);
-    const isService = serviceAt === p;
-    const room = furnish(bp, c, p.spec, p.tpl, ctx, rng, isService ? { backDoorU: c.exterior.du } : {});
+    const isService = serviceAt === p, isStreet = streetAt === p;
+    const room = furnish(bp, c, p.spec, p.tpl, ctx, rng, isService || isStreet ? { backDoorU: c.exterior.du } : {});
     if (isService) record.serviceDoor = cutServiceDoor(bp, c, c.exterior, trim);
+    if (isStreet) { record.streetDoor = { ...cutServiceDoor(bp, c, c.exterior, trim), side: c.exterior.side, room: p.spec.kind }; room.putRaw(c.exterior.du, c.fr.h - 1, c.fr.d - 1, B.HOLO_SIGN); }   // the unit's own sign inside its street door
     meta.rooms[c.i].kind = p.spec.kind;
-    record.rooms.push({ kind: p.spec.kind, x: c.r.x, y: c.r.y, z: c.r.z, w: c.r.w, d: c.r.d, spec: p.spec.kind, core: p.spec.core, floor: c.f, signature: p.spec.signature, serviceDoor: isService });
-    void room;
+    record.rooms.push({ kind: p.spec.kind, x: c.r.x, y: c.r.y, z: c.r.z, w: c.r.w, d: c.r.d, spec: p.spec.kind, core: p.spec.core, floor: c.f, signature: p.spec.signature, serviceDoor: isService, streetDoor: isStreet });
   }
   if (record.serviceDoor && o.landmark) meta.doors.push({ x: record.serviceDoor.x, y: record.serviceDoor.y, z: record.serviceDoor.z, side: 'service' });
   if (!o.landmark) applyAdaptations(bp, lot, cands, compact, ctx, rng, record, o);

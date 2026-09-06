@@ -85,7 +85,7 @@ export const INTERACTIONS = {
   'watch the broadcast': { blocks: ['HOLO_SIGN', 'GLOW_PANEL_BLUE'] },
 };
 
-const R = (kind, fn, o = {}) => ({ kind, function: fn, core: o.core !== false, where: o.where || 'any', signature: !!o.signature, service: !!o.service, serviceEntry: !!o.serviceEntry, merge: !!o.merge, accept: o.accept || null, interactions: o.interactions || ['talk to staff'], served: o.served !== false });
+const R = (kind, fn, o = {}) => ({ kind, function: fn, core: o.core !== false, where: o.where || 'any', signature: !!o.signature, service: !!o.service, serviceEntry: !!o.serviceEntry, merge: !!o.merge, upstairs: !!o.upstairs, accept: o.accept || null, interactions: o.interactions || ['talk to staff'], served: o.served !== false });
 
 export const PROGRAMS = [
   {
@@ -297,6 +297,7 @@ export const PROGRAMS = [
       R('delivery_store', 'deliveries behind the kiosks', { where: 'ground', service: true, serviceEntry: true, accept: /deliver|store|storage|stock/, interactions: ['browse stock'] }),
       R('navigation_kiosk', 'navigation and data services vendor, fixed prices', { core: false, where: 'low', accept: /nav|data|chart|holo|book/, interactions: ['buy', 'use console'] }),
       R('salvage_kiosk', 'salvage vendor, haggling', { core: false, where: 'low', accept: /salvage|scrap|junk|pawn/, interactions: ['buy', 'haggle'] }),
+      R('droid_bay', 'the porter droids\' bay behind the stalls: chargers and the repair rig', { core: false, where: 'ground', service: true, accept: /droid|bay/, interactions: ['charge a droid', 'watch the work'] }),
     ],
     circulation: { public: ['street', 'entry', 'lobby_atrium', 'produce_kiosk', 'mechanical_kiosk', 'textile_kiosk', 'appliance_kiosk', 'navigation_kiosk', 'salvage_kiosk'], service: ['service_entry', 'delivery_store', 'produce_kiosk'] },
     graph: [['lobby_atrium', 'produce_kiosk'], ['lobby_atrium', 'mechanical_kiosk'], ['lobby_atrium', 'textile_kiosk'], ['lobby_atrium', 'appliance_kiosk'], ['delivery_store', 'produce_kiosk'], ['delivery_store', 'appliance_kiosk'], ['lobby_atrium', 'navigation_kiosk'], ['lobby_atrium', 'salvage_kiosk']],
@@ -530,7 +531,7 @@ export const PROGRAMS = [
     palette: { accent: 'RED_WOOL', seat: 'STONE_BRICK_SLAB', counter: 'PANEL_BLACK', light: 'GLOW_PANEL', trim: 'DURASTEEL' },
     districtPalette: { financial: { accent: 'BLUE_WOOL', trim: 'CHROME' }, residential: { accent: 'GREEN_WOOL' }, industrial: { accent: 'PANEL_STRIPE' } },
     rooms: [
-      R('shop', 'the sales floor: the counter, the shelves and the window display', { where: 'ground', signature: true, accept: /shop|sales|store_front|showroom|kiosk/, interactions: ['buy', 'browse stock', 'haggle'] }),
+      R('shop', 'the sales floor: the counter, the shelves and the window display', { where: 'ground', signature: true, upstairs: true, accept: /shop|sales|store_front|showroom|kiosk/, interactions: ['buy', 'browse stock', 'haggle'] }),
       R('storage', 'the stock room behind the counter', { where: 'ground', service: true, serviceEntry: true, accept: /stock|storage|store_room|warehouse/, interactions: ['browse stock'] }),
       R('back_office', 'the shopkeeper\'s back office: the books and the safe', { where: 'low', service: true, accept: /back_office|office|counting/, interactions: ['use console'] }),
       R('staff_break', 'the staff break room', { core: false, where: 'upper', service: true, accept: /break|staff|rest/, interactions: ['sit'] }),
@@ -539,6 +540,12 @@ export const PROGRAMS = [
     circulation: { public: ['street', 'entry', 'lobby_atrium', 'shop'], service: ['service_entry', 'storage', 'back_office', 'staff_break'] },
     graph: [['lobby_atrium', 'shop'], ['shop', 'storage'], ['storage', 'back_office'], ['back_office', 'staff_break'], ['shop', 'workshop']],
     customers: 'the street: residents of the towers around it, the diner\'s cook buying in, a courier with a list',
+    // the trades that need a room the shop template has not got, by purpose kind
+    byKind: {
+      bakery: [R('kitchen', 'the bakehouse: the ovens and the proving racks', { core: false, where: 'ground', service: true, accept: /kitchen|bake|oven/, interactions: ['cook a meal'] })],
+      butcher: [R('kitchen', 'the cutting room and the cold store', { core: false, where: 'ground', service: true, accept: /kitchen|cold|cutting/, interactions: ['cook a meal'] })],
+      armorer: [R('armory', 'the armoury: racks of plate and blasters behind the cage', { core: false, where: 'low', accept: /armou?ry|weapons/, interactions: ['check out equipment'] })],
+    },
     inputs: 'sells', outputs: 'sells', wants: ['wholesale_delivery'],
     story: { problems: ['the wholesaler\'s delivery is two days late and the window display is all there is left', 'somebody has been short-changing the till and the shopkeeper suspects the new droid', 'the landlord has doubled the rent and the back-office ledger says the shop cannot pay it', 'a customer returns every afternoon to haggle over the same item and never buys it'], problem: 'the wholesaler\'s delivery is two days late and the window display is all there is left', connection: 'the depot the stock comes from', connectsTo: ['depot', 'warehouse', 'market_stall'] },
   },

@@ -66,7 +66,8 @@ const HANGS = new Set([B.HOLO_SIGN, B.LANTERN, B.CITY_LAMP, B.TORCH].filter((x) 
 function floorGraph(an, lot, rooms, idx, y) {
   const w = lot.w, d = lot.d, ly = y - an.y0;
   const label = new Int32Array(w * d).fill(-1);
-  for (const i of idx) { const r = rooms[i]; for (let x = r.x - lot.x0; x < r.x - lot.x0 + r.w; x++) for (let z = r.z - lot.z0; z < r.z - lot.z0 + r.d; z++) if (x >= 0 && z >= 0 && x < w && z < d && label[x * d + z] < 0) label[x * d + z] = i; }
+  // largest rects first, so a room registered inside another's rect (a landmark's pit in its hall) owns its own cells
+  for (const i of idx.slice().sort((a, b) => rooms[b].w * rooms[b].d - rooms[a].w * rooms[a].d)) { const r = rooms[i]; for (let x = r.x - lot.x0; x < r.x - lot.x0 + r.w; x++) for (let z = r.z - lot.z0; z < r.z - lot.z0 + r.d; z++) if (x >= 0 && z >= 0 && x < w && z < d) label[x * d + z] = i; }
   const corridors = [];
   let next = rooms.length;
   const comp = new Int32Array(w * d).fill(-1);
@@ -163,20 +164,69 @@ export function profileLot(lot, layout) {
     for (let x = a.r.x - 1; x <= a.r.x + a.r.w && n < 0; x++) for (let z = a.r.z - 1; z <= a.r.z + a.r.d && n < 0; z++) n = nodeAt(x, z, above);
     join(a.i, n);
   }
+  // flights that are not registered stairwells (a rotunda's half-step flight to its upper room, the ramp to a roof
+  // terrace, a raked hall): the standing cells off every floor level are walked with the flood fill's step rule and
+  // the floor nodes each run of them touches are joined - the plan is connected wherever a player can walk it
+  // Two horizontally adjacent standing cells are linked when the mover can drop from the higher onto the lower (up to
+  // three blocks) or climb one: the lower cell's column must be open from above its head room up to the mover's head
+  // at the higher cell - a stack of crates under the slab of the floor above joins nothing.
+  {
+    const levels = new Set(ys.map((y) => y - an.y0));
+    const nodeLocal = (x, ly, z) => (levels.has(ly) ? nodeAt(x + lot.x0, z + lot.z0, ly + an.y0) : -1);
+    const linked = (x, y, z, nx, ny, nz) => {
+      if (Math.abs(ny - y) > 3 || ny < 1 || !an.standing(nx, ny, nz)) return false;
+      if (ny === y) return true;
+      const lo = ny < y ? [nx, ny, nz] : [x, y, z], hiY = Math.max(y, ny);
+      for (let yy = lo[1] + 2; yy <= hiY + 1; yy++) if (!passable(an.at(lo[0], yy, lo[2]))) return false;
+      return true;
+    };
+    const seen3 = new Uint8Array(an.w * an.h * an.d);
+    const STEPS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    for (let x = 0; x < an.w; x++) for (let z = 0; z < an.d; z++) for (let y = 1; y + 1 < an.h; y++) {
+      if (levels.has(y) || seen3[an.key(x, y, z)] || !an.standing(x, y, z)) continue;
+      const touched = new Set();
+      const st = [[x, y, z]]; seen3[an.key(x, y, z)] = 1;
+      while (st.length) {
+        const [cx, cy, cz] = st.pop();
+        for (const [dx, dz] of STEPS) for (let dy = -3; dy <= 3; dy++) {
+          const nx = cx + dx, ny = cy + dy, nz = cz + dz;
+          if (!linked(cx, cy, cz, nx, ny, nz)) continue;
+          if (levels.has(ny)) { const n = nodeLocal(nx, ny, nz); if (n >= 0) touched.add(n); }
+          else if (!seen3[an.key(nx, ny, nz)]) { seen3[an.key(nx, ny, nz)] = 1; st.push([nx, ny, nz]); }
+        }
+      }
+      const t = [...touched];
+      for (let i = 1; i < t.length; i++) join(t[0], t[i]);
+    }
+    // floor cells that step straight onto a cell of another floor level (a change of level without a flight)
+    for (let x = 0; x < an.w; x++) for (let z = 0; z < an.d; z++) for (const ly of levels) {
+      if (!an.standing(x, ly, z)) continue;
+      const a = nodeLocal(x, ly, z);
+      if (a < 0) continue;
+      for (const [dx, dz] of STEPS) for (let dy = -3; dy <= 3; dy++) {
+        if (dy === 0 || !levels.has(ly + dy) || !linked(x, ly, z, x + dx, ly + dy, z + dz)) continue;
+        join(a, nodeLocal(x + dx, ly + dy, z + dz));
+      }
+    }
+  }
   const edgeList = [...edges].map((e) => e.split('-').map(Number));
   const N = rooms.length + corridorNodes.length;
   const adj = Array.from({ length: N }, () => []);
   for (const [a, b] of edgeList) { adj[a].push(b); adj[b].push(a); nodeOf(a).deg++; nodeOf(b).deg++; }
-  // corridor fragments joined to nothing (ledges, cornices, roof cells at a room's level) are not circulation
-  const live = (i) => i < rooms.length || corridorNodes[i - rooms.length].deg > 0;
+  // the plan's components are the ones holding a room: corridor fragments joined to no room (ledges, cornices, the
+  // terraces of a rock, a stepped cone roof) are terrain, not circulation
   const seen = new Uint8Array(N);
   let components = 0;
-  for (let i = 0; i < N; i++) {
-    if (seen[i] || !live(i)) continue;
+  for (let i = 0; i < rooms.length; i++) {
+    if (seen[i]) continue;
     components++;
     const st = [i]; seen[i] = 1;
     while (st.length) { const c = st.pop(); for (const n of adj[c]) if (!seen[n]) { seen[n] = 1; st.push(n); } }
   }
+  // the graph's nodes and edges are those of the plan: rooms plus the corridor nodes in a room's component
+  const inPlan = (i) => seen[i] === 1;
+  const planCorridors = corridorNodes.filter((c, k) => inPlan(rooms.length + k)).length;
+  const planEdges = edgeList.filter(([a, b]) => inPlan(a) && inPlan(b)).length;
   const occupied = rooms.filter((r) => !r.circulation);
   const deadEnds = occupied.filter((r) => r.deg <= 1).length;   // an occupied room with a single way in is a dead end
   const degHist = [0, 0, 0, 0, 0];
@@ -209,13 +259,15 @@ export function profileLot(lot, layout) {
   }
   if (!signature && occupied.length) { const st = occupied.slice().sort((a, b) => b.area - a.area)[0]; signature = { kind: st.kind, f: st.f, area: st.area, program: false }; }
   // floating blocks: solid cells above the ground with nothing solid in the 6-neighbourhood (technical integrity);
-  // a projected holo sign and a hung lamp float by design
+  // a projected holo sign, a hung lamp and a light panel are fixtures that float by design, and a block on y = 1
+  // over a plateau cell the blueprint leaves in place (0, not FORCE_AIR) stands on the plateau
   let floating = 0;
   const { w, h, d } = bp;
   const at = an.at;
   for (let x = 0; x < w; x++) for (let z = 0; z < d; z++) for (let y = 1; y < h - 1; y++) {
-    const v = at(x, y, z); if (!solid(v) || HANGS.has(v)) continue;
+    const v = at(x, y, z); if (!solid(v) || HANGS.has(v) || emissive(v)) continue;
     if (solid(at(x, y - 1, z)) || solid(at(x, y + 1, z)) || solid(at(x - 1, y, z)) || solid(at(x + 1, y, z)) || solid(at(x, y, z - 1)) || solid(at(x, y, z + 1))) continue;
+    if (y === 1 && at(x, 0, z) === 0) continue;
     floating++;
   }
   const n = rooms.length || 1;
@@ -223,7 +275,7 @@ export function profileLot(lot, layout) {
     id: lot.id, kind: lot.kind, family: m.family, district: lot.district, purpose: purpose ? { kind: purpose.kind, category: purpose.category, name: purpose.name, roles: purpose.roles, sells: purpose.sells || [], buys: purpose.buys || [], hours: purpose.hours } : null,
     program: program ? program.id : null, programInfo: program, programRecord: m.program || null, sign: purpose ? purpose.name : m.name, name: m.name,
     floors: ys.length, height: bp.h, w: lot.w, d: lot.d, area: lot.w * lot.d, perFloorArea, rooms,
-    graph: { nodes: rooms.length + corridorNodes.filter((c) => c.deg > 0).length, roomNodes: rooms.length, corridorNodes: corridorNodes.filter((c) => c.deg > 0).length, edges: edgeList.length, edgeList, degHist: degHist.map((v) => +(v / n).toFixed(3)), deadEnds, deadEndRatio: +(occupied.length ? deadEnds / occupied.length : 0).toFixed(3), corridorShare: +(corridorArea / totalArea).toFixed(3), components, connected: components <= 1, isolatedRooms: rooms.filter((r) => r.deg === 0).length },
+    graph: { nodes: rooms.length + planCorridors, roomNodes: rooms.length, corridorNodes: planCorridors, edges: planEdges, edgeList: edgeList.filter(([a, b]) => inPlan(a) && inPlan(b)), degHist: degHist.map((v) => +(v / n).toFixed(3)), deadEnds, deadEndRatio: +(occupied.length ? deadEnds / occupied.length : 0).toFixed(3), corridorShare: +(corridorArea / totalArea).toFixed(3), components, connected: components <= 1, isolatedRooms: rooms.filter((r) => r.deg === 0).length },
     palette, emissiveKinds: emissiveKinds.size, staff: { kinds: staff, total: m.work.length }, interactions, verbs: new Set(Object.keys(interactions)), entry, signature,
     reachShare: +(rooms.filter((r) => r.reach).length / n).toFixed(3), litShare: +(rooms.filter((r) => r.lit).length / n).toFixed(3), denseShare: +(rooms.filter((r) => r.dense).length / n).toFixed(3),
     varietyMean: +(rooms.reduce((s, r) => s + r.variety, 0) / n).toFixed(2), floating, spots: m.spots.length, beds: m.beds.length, reachCount: an.reachCount,

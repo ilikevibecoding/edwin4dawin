@@ -143,6 +143,7 @@ function finishMeta(bp, lot, fam, res, ground, front, ldoor, midDoorF) {
   if (res.doors) for (const dd of res.doors) m.doors.push({ x: lot.x0 + dd.x, y: walk, z: lot.z0 + dd.z, side: 'arcade' });
   if (res.houseDoor) m.doors.push({ x: lot.x0 + res.houseDoor.x, y: walk, z: lot.z0 + res.houseDoor.z, side: 'plaza' });
   if (m.program && m.program.serviceDoor) { const s = m.program.serviceDoor; m.doors.push({ x: s.x, y: s.y, z: s.z, side: 'service' }); }
+  if (m.program && m.program.streetDoor) { const s = m.program.streetDoor; m.doors.push({ x: s.x, y: s.y, z: s.z, side: s.side }); }   // a program room's own street door (variant-1 hosts)
   if (!m.lobby) m.lobby = { x: inn.x, y: walk, z: inn.z };
   m.floors = [];
   for (let f = 0; f < (res.nF || 0); f++) m.floors.push(ground + 5 * f + 1);

@@ -94,7 +94,9 @@ export function programFor(lot, purpose = null, layout = null) {
   const variant = variantOf(lot);
   // programs with several households / featured rooms: the variant chooses which one is the signature room
   const featured = prog.featured ? prog.featured[variant % prog.featured.length] : null;
-  const rooms = featured ? prog.rooms.map((r) => ({ ...r, signature: r.kind === featured })) : prog.rooms;
+  // the trades of a purpose kind that need a room the program's list has not got (a bakery's ovens) are appended
+  const base = prog.byKind && p && prog.byKind[p.kind] ? prog.rooms.concat(prog.byKind[p.kind]) : prog.rooms;
+  const rooms = featured ? base.map((r) => ({ ...r, signature: r.kind === featured })) : base;
   const interactions = {};
   for (const r of rooms) interactions[r.kind] = r.interactions.slice();
   // a shop's flows are the goods its purpose advertises
