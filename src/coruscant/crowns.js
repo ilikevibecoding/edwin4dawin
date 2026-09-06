@@ -82,7 +82,7 @@ export function crownProfile(lot, family, ground = GROUND) {
     case 'ziggurat': height = 5 + 2 * Math.min(4, Math.floor((H - 8) / 2)) + 3; taper = 0.4; break;
     case 'spire': height = Math.min(H, 10 + Math.max(3, Math.round(small * 0.18)) + 4); taper = 0.45; break;
     case 'needle': height = Math.min(H, 25); taper = 0.75; break;
-    case 'spinecap': height = Math.min(H - 2, 18); break;
+    case 'spinecap': height = Math.min(H - 1, 15); taper = 0.9; break;   // the 3x3 spine column above the slabs
     default: height = 5;
   }
   return { style, height: Math.min(H, height), taper };
@@ -130,7 +130,7 @@ function chamferMask(ext, c) {
 // A shell tier k (1-based) above `prev` (the clip of the level below), inset `a` cells per side but never cutting
 // into the core, its 1-cell walkway margin or the 2-row landing corridor in front of the stair door. Returns null
 // when no side keeps a terrace of >= 1 cell for the tier's door.
-function shellTier(plan, prev, a, k) {
+function shellTier(plan, prev, a, k, needDoor = true) {
   const c = plan.core, frame = plan.frame;
   const minU0 = c.u0 - 1, maxU1 = c.u1 + 1, minV0 = c.v0 - 2, maxV1 = c.v1 + 1;
   const clip = {
@@ -142,7 +142,7 @@ function shellTier(plan, prev, a, k) {
   if (terrace.f >= 2) doors.push('f');
   if (terrace.l >= 2) doors.push('l');
   if (terrace.r >= 2) doors.push('r');
-  if (!doors.length) return null;
+  if (!doors.length && needDoor) return null;
   const ext = frame.rect(clip.u0 - 1, clip.v0 - 1, clip.u1 + 1, clip.v1 + 1);
   return { k, f: plan.nF + k - 1, clip, ext, terrace, doors, inside: null, ring: rectRing(ext), bare: false };
 }
@@ -260,7 +260,7 @@ export function planCrown(bp, o) {
     }
     case 'needle': {
       // the lookout in the base of the tip: same footprint as the top floor, glass all round, no terrace door
-      const t = shellTier(plan, o.top.clip, 0, 1);
+      const t = shellTier(plan, o.top.clip, 0, 1, false);
       if (t) { t.doors = []; t.inside = o.top.inside || null; t.ring = t.inside ? maskRing(t.ext, t.inside) : rectRing(t.ext); plan.tiers.push(t); }
       plan.cap = { kind: 'needle' };
       break;
@@ -526,10 +526,12 @@ function paintCap(bp, plan, last, y0, style, o) {
       return hb + 2;
     }
     case 'fins': {
-      // low chrome fins at the corners with blue tips and a lit parapet: the spine between the slabs is the crown
-      for (const [x, z] of [[e.x0 + 1, e.z0 + 1], [e.x1 - 1, e.z0 + 1], [e.x0 + 1, e.z1 - 1], [e.x1 - 1, e.z1 - 1]]) { if (!bp.inside(x, y0, z)) continue; bp.fill(x, y0 + 1, z, x, y0 + 4, z, B.CHROME); bp.set(x, y0 + 5, z, B.GLOW_PANEL_BLUE); }
-      bp.walls(e.x0, y0 + 1, e.z0, e.x1, y0 + 1, e.z1, B.GLOW_PANEL);
-      return 6;
+      // on the slab roof itself (the last tier is only the stair head): chrome fins at the roof corners with blue
+      // tips and a lit parapet; the spine column between the slabs is the family's real crown
+      const te = plan.top.ext, yr = plan.R;
+      for (const [x, z] of [[te.x0 + 1, te.z0 + 1], [te.x1 - 1, te.z0 + 1], [te.x0 + 1, te.z1 - 1], [te.x1 - 1, te.z1 - 1]]) { if (!bp.inside(x, yr, z)) continue; bp.fill(x, yr + 1, z, x, yr + 6, z, B.CHROME); bp.set(x, yr + 7, z, B.GLOW_PANEL_BLUE); }
+      bp.walls(te.x0, yr + 1, te.z0, te.x1, yr + 1, te.z1, B.GLOW_PANEL);
+      return Math.max(0, yr + 8 - y0);
     }
     default: return 0;
   }

@@ -24,21 +24,20 @@ export function stripPlan(lot, family) {
   return { pitch, phase, faces, block: blue ? B.GLOW_PANEL_BLUE : B.WINDOW_LIT, f0: STRIP_FROM_FLOOR };
 }
 
+const KEEP_TBL = new Uint8Array(256);
+for (const id of KEEP) KEEP_TBL[id] = 1;
+
 // Paints the strips of one facade ring for floors f0..f1 (slab rows included from the second floor on, so the
-// line is continuous).
+// line is continuous). A strip column is one contiguous y-run of the block array, so it is written directly.
 export function stripRing(bp, ring, f0, f1, p) {
   if (f1 < f0) return;
   const pitch = Math.max(2, p.pitch | 0), phase = p.phase | 0;
+  const blocks = bp.blocks, h = bp.h, d = bp.d, block = p.block;
+  const yA = 5 * f0 + 1, yB = Math.min(h - 1, 5 * f1 + 4);
   for (const c of ring) {
     if (c.corner || (p.faces && !p.faces.has(c.face))) continue;
     if ((((c.along + phase) % pitch) + pitch) % pitch !== 0) continue;
-    for (let f = f0; f <= f1; f++) {
-      const y = 5 * f;
-      for (let dy = f > f0 ? 0 : 1; dy <= 4; dy++) {
-        const v = bp.get(c.x, y + dy, c.z);
-        if (KEEP.has(v)) continue;
-        bp.set(c.x, y + dy, c.z, p.block);
-      }
-    }
+    const base = (c.x * d + c.z) * h;
+    for (let y = yA; y <= yB; y++) { if (KEEP_TBL[blocks[base + y]] === 0) blocks[base + y] = block; }
   }
 }

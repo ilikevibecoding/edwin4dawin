@@ -36,7 +36,19 @@ export function buildTiered(bp, spec) {
     for (const s of layout.strips) if (s.wallAtBack && s.kind !== 'front' && v1 >= s.roomV0 - 1 && v1 < s.roomV1 + 2) v1 = s.roomV0 - 2;
     const clip = { u0: l, u1: frame.Iu - 1 - r, v0: fr, v1 };
     const text = frame.rect(clip.u0 - 1, clip.v0 - 1, clip.u1 + 1, clip.v1 + 1);
-    const inside = spec.mask ? (x, z) => x >= text.x0 && x <= text.x1 && z >= text.z0 && z <= text.z1 && spec.mask(x, z, i, text) : null;
+    // the footprint mask is evaluated once per cell into a table: rings, the planner and every floor's repaint
+    // query it thousands of times, and a family's mask may be as costly as a superellipse power
+    let inside = null, cellsIn = null, cellsOut = null;
+    if (spec.mask) {
+      const tw = text.x1 - text.x0 + 1, td = text.z1 - text.z0 + 1, tbl = new Uint8Array(tw * td);
+      const cin = [], cout = [];
+      for (let x = text.x0; x <= text.x1; x++) for (let z = text.z0; z <= text.z1; z++) {
+        const base = (x * bp.d + z) * bp.h;      // column base in the block array
+        if (spec.mask(x, z, i, text)) { tbl[(x - text.x0) * td + (z - text.z0)] = 1; cin.push(base); } else cout.push(base);
+      }
+      // a rect-shaped mask is no mask at all
+      if (cout.length) { inside = (x, z) => x >= text.x0 && x <= text.x1 && z >= text.z0 && z <= text.z1 && tbl[(x - text.x0) * td + (z - text.z0)] === 1; cellsIn = cin; cellsOut = cout; }
+    }
     let interior = null;
     if (inside || spec.exclude) {
       // interior = inside cells that are not exterior wall (ring) cells and not excluded (e.g. a rotunda the
@@ -46,8 +58,9 @@ export function buildTiered(bp, spec) {
       for (let x = text.x0; x <= text.x1; x++) for (let z = text.z0; z <= text.z1; z++) if (ok(x, z) && !(spec.exclude && spec.exclude(x, z))) m[x * bp.d + z] = 1;
       interior = (x, z) => x >= 0 && z >= 0 && x < bp.w && z < bp.d && m[x * bp.d + z] === 1;
     }
-    return { f0: t.f0, f1: t.f1, clip, ext: text, inside, interior, ring: inside ? maskRing(text, inside) : rectRing(text), index: i };
+    return { f0: t.f0, f1: t.f1, clip, ext: text, inside, cellsIn, cellsOut, interior, ring: inside ? maskRing(text, inside) : rectRing(text), index: i };
   });
+  const blocks = bp.blocks;
   const nF = tiers[tiers.length - 1].f1 + 1;
   const doorU = spec.door ? frame.U(spec.door.x, spec.door.z) : Math.floor(frame.Iu / 2) - 1;
   const floorOpts = (f, t) => {
@@ -61,12 +74,12 @@ export function buildTiered(bp, spec) {
   for (const t of tiers) {
     for (let f = t.f0; f <= t.f1; f++) {
       const y = 5 * f;
-      if (t.inside) { for (let x = t.ext.x0; x <= t.ext.x1; x++) for (let z = t.ext.z0; z <= t.ext.z1; z++) if (t.inside(x, z)) bp.set(x, y, z, style.floor); }
+      if (t.inside) { const fl = style.floor; for (const base of t.cellsIn) blocks[base + y] = fl; }
       else { bp.fill(t.ext.x0, y, t.ext.z0, t.ext.x1, y, t.ext.z1, style.floor); paintRing(bp, t.ring, f, style, seed, floorOpts(f, t)); }
     }
     const yRoof = 5 * (t.f1 + 1);
     if (t.inside) {
-      for (let x = t.ext.x0; x <= t.ext.x1; x++) for (let z = t.ext.z0; z <= t.ext.z1; z++) if (t.inside(x, z)) bp.set(x, yRoof, z, style.roof);
+      if (yRoof < bp.h) { const rf = style.roof; for (const base of t.cellsIn) blocks[base + yRoof] = rf; }
       for (const c of t.ring) bp.set(c.x, yRoof + 1, c.z, c.corner ? style.corner : style.railing);
     } else paintRoof(bp, t.ext, yRoof, style, t.index > 0 && style.railing === B.IRON_BARS);
   }
@@ -79,8 +92,8 @@ export function buildTiered(bp, spec) {
     planFloor(bp, { frame, layout, clip: t.clip, lvl: 5 * f + 1, style, pools, pool, ctx: { isTop: f === nF - 1, floor: f, family: spec.family }, mode, used, doorU, interior: t.interior });
     if (t.inside) {
       // masked footprint: drop what the planner wrote outside the mask, then paint the ring over it
-      const y0 = f === t.f0 ? 5 * f + 1 : 5 * f, y1 = 5 * f + 4;
-      for (let x = t.ext.x0; x <= t.ext.x1; x++) for (let z = t.ext.z0; z <= t.ext.z1; z++) if (!t.inside(x, z)) bp.fill(x, y0, z, x, y1, z, 0);
+      const y0 = f === t.f0 ? 5 * f + 1 : 5 * f, y1 = Math.min(bp.h - 1, 5 * f + 4);
+      for (const base of t.cellsOut) blocks.fill(0, base + y0, base + y1 + 1);
       paintRing(bp, t.ring, f, style, seed, floorOpts(f, t));
     }
   }
