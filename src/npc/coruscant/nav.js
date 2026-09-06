@@ -87,6 +87,8 @@ export class CityNav {
       try { li = new LotInfo(lot, L); } catch (e) { continue; }
       this.landmarkCells += this.sampleLot(li, this.ground, GROUND_Y) + this.sampleLot(li, this.deck, DECK_Y);
     }
+    // plazas share the deck level but the boulevard kerb railing runs along their whole edge: routes hop it (kerbHop)
+    this.plazas = L.lots.filter((l) => l.kind === 'plaza').map((l) => ({ id: l.id, x0: l.x0, z0: l.z0, x1: l.x1, z1: l.z1 }));
     // the spaceport deck (feet 97): its own level, walkable around the terminal, hangar, fuel farm and tower
     this.port = new Uint8Array(this.w * this.d);
     const pr = portRects();
@@ -233,8 +235,37 @@ export class CityNav {
   }
   nearestLift(p) { return this.liftBetween(p, p); }
 
+  // Plaza (record) containing block (x, z), or null
+  plazaAt(x, z) { for (const p of this.plazas) if (x >= p.x0 && x < p.x1 && z >= p.z0 && z < p.z1) return p; return null; }
+  // A deck-level segment a -> b that crosses a plaza edge crosses the boulevard's kerb railing (one block, no gaps):
+  // returns { before, after } - the cell beside the kerb on a's side and the one beside it on b's side - or null.
+  // The walker is routed to `before` and hops the kerb to `after` (a 'hop' leg), the way the player jumps it.
+  kerbHop(a, b) {
+    const pa = this.plazaAt(Math.floor(a.x), Math.floor(a.z)), pb = this.plazaAt(Math.floor(b.x), Math.floor(b.z));
+    if (pa === pb) return null;
+    const len = Math.hypot(b.x - a.x, b.z - a.z);
+    if (len < 0.5) return null;
+    const n = Math.ceil(len * 4);
+    let prev = { x: Math.floor(a.x), z: Math.floor(a.z) };
+    for (let i = 1; i <= n; i++) {
+      const t = i / n, x = Math.floor(a.x + (b.x - a.x) * t), z = Math.floor(a.z + (b.z - a.z) * t);
+      if (x === prev.x && z === prev.z) continue;
+      const here = this.plazaAt(x, z);
+      if (here !== pa) {
+        // the plaza edge lies between prev and (x, z); the kerb is the deck cell of the pair (outside the plaza)
+        const inside = here ? { x, z } : prev, kerb = here ? prev : { x, z };
+        const dx = Math.sign(kerb.x - inside.x), dz = Math.sign(kerb.z - inside.z);
+        const side = { x: kerb.x + dx, z: kerb.z + dz };          // the sidewalk cell beyond the kerb
+        return here ? { before: side, after: inside } : { before: inside, after: side };
+      }
+      prev = { x, z };
+    }
+    return null;
+  }
+
   // Street route between two points on named levels: array of legs
   //   { kind: 'walk', x, y, z, level }  walk (block-level A*) to the point
+  //   { kind: 'hop', x, y, z, tx, ty, tz, level }  hop the plaza kerb railing from (x, z) to (tx, tz)
   //   { kind: 'lift', x, y, z, toY, level, toLevel, lift }  ride the intersection lift from the stand cell to the other level
   // null when no coarse route exists.
   route(from, fromLevel, to, toLevel) {
@@ -243,7 +274,19 @@ export class CityNav {
       const pts = this.coarsePath(level, a, b);
       if (!pts) return false;
       const y = this.yOf(level);
-      for (const p of pts) legs.push({ kind: 'walk', x: p.x, y, z: p.z, level });
+      let prev = a;
+      for (const p of pts) {
+        if (level === 'deck') {
+          const hop = this.kerbHop(prev, p);
+          if (hop) {
+            legs.push({ kind: 'walk', x: hop.before.x, y, z: hop.before.z, level });
+            legs.push({ kind: 'hop', x: hop.before.x, y, z: hop.before.z, tx: hop.after.x, ty: y, tz: hop.after.z, level });
+            if (Math.abs(p.x - hop.after.x) < 1.5 && Math.abs(p.z - hop.after.z) < 1.5) { prev = p; continue; }
+          }
+        }
+        legs.push({ kind: 'walk', x: p.x, y, z: p.z, level });
+        prev = p;
+      }
       return true;
     };
     if (fromLevel === 'port' || toLevel === 'port') {

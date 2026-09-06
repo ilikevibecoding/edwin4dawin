@@ -17,7 +17,9 @@ const LEISURE_KINDS = new Set(['holo_arcade', 'cantina', 'archive', 'gym', 'gene
 
 // Street archetypes per district: [job, weight]. Counts scale with DISTRICT_PROFILE.density (STREET_BASE per unit).
 const STREET_BASE = 56;
-const PLAZA_REGULARS = { senate: 130, default: 60 };   // extra street people anchored on each district's plaza
+// extra street people anchored on each district's plaza (the core plazas carry the midday crowd of rubric row 4;
+// nightlife districts lose half of theirs to the night shift)
+const PLAZA_REGULARS = { senate: 210, market: 150, financial: 130, default: 90 };
 const STREET_MIX = {
   senate: [['senate guard', 4], ['protocol droid', 3], ['aide', 3], ['journalist', 3], ['tourist', 4], ['courier', 2], ['jedi', 1], ['security officer', 2]],
   financial: [['clerk', 5], ['executive', 2], ['courier', 5], ['security officer', 2], ['protocol droid', 1], ['sweeper droid', 2], ['tourist', 1], ['journalist', 1]],
@@ -106,8 +108,8 @@ export function buildPool(layout, opts = {}) {
     const plaza = plazaOf(district, c);
     let meal = null;
     if (!droid && food.length) { const near = nearest(food, c, 4, workLot ? workLot.id : -1); meal = near[Math.floor(rng.next() * near.length)].lot.id; }
-    // a third of the workers eat outdoors on the district plaza when it is close (the lunch crowd of rubric row 10)
-    if (!droid && plaza && rng.next() < 0.34 && dist(centre(plaza), c) < 140) meal = plaza.id;
+    // half of the workers eat outdoors on the district plaza when it is close (the lunch crowd of rubric row 10)
+    if (!droid && plaza && rng.next() < 0.5 && dist(centre(plaza), c) < 140) meal = plaza.id;
     let leisureLot = plaza ? plaza.id : null;
     if (rng.next() < 0.45 && leisure.length) { const near = nearest(leisure, c, 5, workLot ? workLot.id : -1); leisureLot = near[Math.floor(rng.next() * near.length)].lot.id; }
     return {

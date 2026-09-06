@@ -4,14 +4,21 @@
 // (both modelled as a 2 s ride in the shaft), never by teleporting. Legs:
 //   { kind: 'walk', x, y, z, tag }            block-level A* to this cell (tag: lot | door | street | spot)
 //   { kind: 'lift', x, y, z, tx, ty, tz }     ride: wait 2 s hidden at (x, y, z), reappear at (tx, ty, tz)
+//   { kind: 'hop', x, y, z, tx, ty, tz }      jump the plaza kerb railing from (x, y, z) to (tx, ty, tz) (0.6 s arc)
 //   { kind: 'arrive' }                        settle into the activity pose at the spot
 import { PORT, portSpots, PORT_Y } from './port.js';
 import { hash2 } from '../../rng.js';
 
 export const LIFT_WAIT = 2;
-const NEAR_R = 44;   // street spots are sampled this close to the player first (see streetSpot)
+const NEAR_R = 40;   // street spots are sampled this close to the player first (see streetSpot)
+// Fresh arrivals and wander targets go where the camera looks (rubric row 4: >= 120 visible): the sampling centre
+// is pushed VIEW_AHEAD blocks forward and the first attempts insist on a cell in front of the camera between
+// VIEW_MIN (no one pops into view at arm's length) and VIEW_MAX blocks (see inView).
+const VIEW_AHEAD = 20, VIEW_MIN = 14, VIEW_MAX = 60;
 
 const walk = (p, tag) => ({ kind: 'walk', x: p.x, y: p.y, z: p.z, tag });
+// a nav.route leg as a trip leg: street walks, kerb hops (plaza railing) and intersection lift rides
+const fromRoute = (l) => l.kind === 'walk' ? walk(l, 'street') : l.kind === 'hop' ? { kind: 'hop', x: l.x, y: l.y, z: l.z, tx: l.tx, ty: l.ty, tz: l.tz, tag: 'hop' } : { kind: 'lift', x: l.x, y: l.y, z: l.z, tx: l.x, ty: l.toY, tz: l.z };
 const lift = (a, b) => ({ kind: 'lift', x: a.x, y: a.y, z: a.z, tx: b.x, ty: b.y, tz: b.z });
 const dist2 = (a, b) => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
 
@@ -51,6 +58,18 @@ export class Planner {
     const s = cands[start];
     return { ...decorate(s), key: 'p' + s.x + ',' + s.y + ',' + s.z };
   }
+  // Is block (x, z) where the player sees it: in front of the camera, VIEW_MIN..VIEW_MAX blocks away? Without a
+  // camera direction (offline, tests) every cell qualifies.
+  inView(within, x, z) {
+    if (!within || within.fx == null) return true;
+    const dx = x + 0.5 - within.x, dz = z + 0.5 - within.z, d = Math.hypot(dx, dz);
+    return d >= VIEW_MIN && d <= VIEW_MAX && (dx * within.fx + dz * within.fz) / d > 0.25;
+  }
+  // The point to sample street cells around: the player, pushed forward along the view direction
+  viewCentre(within) {
+    if (within.fx == null) return { x: within.x, z: within.z };
+    return { x: within.x + within.fx * VIEW_AHEAD, z: within.z + within.fz * VIEW_AHEAD };
+  }
   // A cell on a plaza deck, spread out (rubric row 10: no idle cluster > 8 within 4 blocks)
   plazaSpot(npc, plaza, act, rng, within = null) {
     const cx = plaza.x0 + plaza.w / 2, cz = plaza.z0 + plaza.d / 2;
@@ -65,10 +84,11 @@ export class Planner {
         if (c && (!within || t === 5 || Math.hypot(c.x - within.x, c.z - within.z) <= within.r)) return { ...c, lot: null, kind: 'street', yaw: rng() * Math.PI * 2 };
       }
     }
-    for (let t = 0; t < 10; t++) {
+    for (let t = 0; t < 14; t++) {
       const x = plaza.x0 + 5 + Math.floor(rng() * (plaza.w - 10)), z = plaza.z0 + 5 + Math.floor(rng() * (plaza.d - 10));
       if (Math.hypot(x + 0.5 - cx, z + 0.5 - cz) < 5) continue;           // the fountain
-      if (within && t < 8 && Math.hypot(x - within.x, z - within.z) > within.r) continue;
+      if (within && t < 12 && Math.hypot(x - within.x, z - within.z) > within.r) continue;
+      if (within && t < 8 && !this.inView(within, x, z)) continue;
       if (this.pop.idleCount(x, z, 4) > 6) continue;
       return { x, y: this.nav.yOf('deck'), z, lot: null, level: 'deck', kind: 'plaza', plaza: plaza.id, yaw: rng() * Math.PI * 2 };
     }
@@ -89,18 +109,30 @@ export class Planner {
     const night = this.isNight();
     const nightlife = p.district === 'entertainment' || p.district === 'market';
     if (night && rng() < (nightlife ? 0.8 : 0.55) && level === 'deck' && !p.droid) level = 'ground';
-    if (npc.level === 'ground' && npc.lot == null && rng() < 0.6) level = 'ground';
+    // someone already down on the undercity streets mostly stays there (npc.slot: placed in the world; a fresh
+    // Citizen's level is only the constructor default)
+    if (npc.slot && npc.level === 'ground' && npc.lot == null && rng() < 0.6) level = 'ground';
     if (npc.level === 'port' || (li && li.lot.district === 'spaceport')) level = 'port';
+    // a fresh arrival takes the player's street level first (the deck crowd is invisible from the undercity and the
+    // other way round), the post's own level when that has no cell in reach
+    const levels = [level];
+    if (within && within.y != null && !npc.slot && level !== 'port') { const pl = this.nav.levelAt(within.x, within.y, within.z); if (pl !== level && pl !== 'port') levels.unshift(pl); }
     let pt = null;
-    // the bustle should be where the player can see it: first try cells around the player that are still within the
-    // post's radius (guards stay by their post; the strip's crowd gathers around whoever walks its street)
-    if (within) for (let t = 0; t < 4 && !pt; t++) {
-      const c = this.nav.randomPoint(level, within.x, within.z, Math.min(radius, NEAR_R), { next: rng });
-      if (c && Math.hypot(c.x - anchor.x, c.z - anchor.z) <= radius + 8) pt = c;
-    }
-    for (let t = 0; t < 6 && !pt; t++) {
-      const c = this.nav.randomPoint(level, anchor.x, anchor.z, radius, { next: rng });
-      if (c && (!within || t === 5 || Math.hypot(c.x - within.x, c.z - within.z) <= within.r)) pt = c;
+    for (const lv of levels) {
+      // the bustle should be where the player can see it: first try cells around the player that are still within
+      // the post's radius (guards stay by their post; the strip's crowd gathers around whoever walks its street)
+      if (within) {
+        const vc = this.viewCentre(within);
+        for (let t = 0; t < 8 && !pt; t++) {
+          const c = this.nav.randomPoint(lv, vc.x, vc.z, Math.min(radius, NEAR_R), { next: rng });
+          if (c && Math.hypot(c.x - anchor.x, c.z - anchor.z) <= radius + 8 && (t >= 5 || this.inView(within, c.x, c.z))) pt = c;
+        }
+      }
+      for (let t = 0; t < 6 && !pt; t++) {
+        const c = this.nav.randomPoint(lv, anchor.x, anchor.z, radius, { next: rng });
+        if (c && (!within || t === 5 || Math.hypot(c.x - within.x, c.z - within.z) <= within.r)) pt = c;
+      }
+      if (pt) break;
     }
     if (!pt) return null;
     return { ...pt, lot: null, kind: 'street', yaw: rng() * Math.PI * 2 };
@@ -140,7 +172,7 @@ export class Planner {
         if (dist2(cur, Ein.out) > 4) {
           const route = this.nav.route(cur, curLevel, Ein.out, Ein.level);
           if (!route) return null;
-          for (const l of route) legs.push(l.kind === 'walk' ? walk(l, 'street') : { kind: 'lift', x: l.x, y: l.y, z: l.z, tx: l.x, ty: l.toY, tz: l.z });
+          for (const l of route) legs.push(fromRoute(l));
         }
         legs.push(walk(Ein.out, 'door'), walk(Ein.in, 'door'));
         cur = { ...Ein.in };
@@ -158,10 +190,12 @@ export class Planner {
     } else {
       // street / plaza / port target
       const tLevel = spot.level || this.nav.levelAt(spot.x, spot.y, spot.z);
-      if (dist2(cur, spot) > 9 || curLevel !== tLevel) {
+      // a plaza edge between here and the spot means a kerb to hop (nav.route inserts the hop leg)
+      const kerb = tLevel === 'deck' && curLevel === 'deck' && this.nav.plazaAt(Math.floor(cur.x), Math.floor(cur.z)) !== this.nav.plazaAt(Math.floor(spot.x), Math.floor(spot.z));
+      if (dist2(cur, spot) > 9 || curLevel !== tLevel || kerb) {
         const route = this.nav.route(cur, curLevel, spot, tLevel);
         if (!route) return null;
-        for (const l of route) legs.push(l.kind === 'walk' ? walk(l, 'street') : { kind: 'lift', x: l.x, y: l.y, z: l.z, tx: l.x, ty: l.toY, tz: l.z });
+        for (const l of route) legs.push(fromRoute(l));
       }
       legs.push(walk(spot, 'spot'));
     }
