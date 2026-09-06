@@ -145,7 +145,13 @@ function bakeDetail(map: WorldMap): Uint8Array {
         const ax = lineDist(lx, grid.xs), az = lineDist(lz, grid.zs);
         const dd = Math.min(ax.d, az.d);
         out[idx * 4] = Math.round(255 * Math.max(0, Math.min(1, 1 - (dd - hw) / 7)));
-        out[idx * 4 + 1] = Math.round(1 + 253 * hash(ax.k, az.k, di + 1));
+        // the tone is the yard's, not the block's: the houses stand in two rows of 16-24 m lots along the block's
+        // long side (city.ts fillHouses), each lawn kept, let go or paved by its own owner, so from 150 m up the
+        // suburb is a patchwork of yards on the street grid; the block keeps a share so a street still has a character
+        const lot = Math.floor((lx - grid.xs[ax.k]) / 20);
+        const row = lz < 0.5 * (grid.zs[az.k] + grid.zs[Math.min(az.k + 1, grid.zs.length - 1)]) ? 0 : 1;
+        const tone = 0.3 * hash(ax.k, az.k, di + 1) + 0.7 * hash(ax.k * 131 + lot, az.k * 7 + row, di + 1001);
+        out[idx * 4 + 1] = Math.round(1 + 253 * tone);
       }
     }
   });
@@ -373,6 +379,17 @@ vec4 tapShift(sampler2D t, vec2 wp, mat2 J, float w) {
   return mix(a, b, w);
 }
 float restore(float v, float w) { return (v - 0.5) * inversesqrt(1.0 - 2.0 * w + 2.0 * w * w) + 0.5; }
+// fbm3 whose two finer octaves fade to their mean (0.1875) as 'fine' goes to 0: the same value as fbm3 where the
+// octaves are visible, one third of its work where they would be subpixel
+float fbm3Band(vec2 p, float fine) {
+  float v = 0.5 * vnoise(p);
+  if (fine <= 0.0) return v + 0.1875;
+  mat2 m = mat2(1.6, 1.2, -1.2, 1.6);
+  p = m * p;
+  float o2 = vnoise(p);
+  float o3 = vnoise(m * p);
+  return v + mix(0.1875, 0.25 * o2 + 0.125 * o3, fine);
+}
 
 // The open ground's detail: a 3 m micro tile (blade clumps, bare spots, soil grain) and a 27 m meso tile
 // (worn areas and mottle 3-13 m across). Beyond the footprint where a tile has averaged out its taps are
@@ -436,10 +453,10 @@ vec3 sandyScrub(float n1, float n2, Ground gd) {
   return mix(c, vec3(0.143, 0.126, 0.043) * (0.85 + 0.3 * n1), tuft * 0.55);
 }
 // the ground of the mid-rise ring: paved courts, service yards and worn lawns between the blocks
-vec3 midriseGround(float n1, float n2, vec2 wp, Ground gd) {
+vec3 midriseGround(float n1, float n2, vec2 wp, Ground gd, float foot) {
   vec3 c = mix(vec3(0.108, 0.105, 0.095), vec3(0.165, 0.16, 0.145), n2) * (0.92 + 0.16 * n1) * (0.9 + 0.2 * gd.soil);
   vec3 lawn = vec3(0.072, 0.11, 0.045) * (0.78 + 0.44 * gd.grass);
-  return mix(c, lawn, smoothstep(0.6, 0.75, fbm3(wp * 0.02 + 1.0)) * 0.7 * (1.0 - 0.6 * gd.bare));
+  return mix(c, lawn, smoothstep(0.6, 0.75, fbm3Band(wp * 0.02 + 1.0, 1.0 - smoothstep(4.0, 8.0, foot))) * 0.7 * (1.0 - 0.6 * gd.bare));
 }
 // Suburban ground. Near the camera: lawns, dry yards and sandy lots under the street trees (the houses
 // themselves are instanced). Where the house instances go subpixel a baked mottle takes over: roofs at
@@ -456,7 +473,7 @@ vec3 suburbGround(vec2 wp, float n1, float n2, float n3, float n4, float canopy,
     c *= 1.0 + 0.045 * stripeVis * sin(along * 4.4);
   }
   vec3 lot = vec3(0.194, 0.165, 0.125) * (0.84 + 0.32 * gd.soil);
-  c = mix(c, lot, smoothstep(0.55, 0.7, fbm3(wp * 0.03 + 5.0)) * 0.6);
+  c = mix(c, lot, smoothstep(0.55, 0.7, fbm3Band(wp * 0.03 + 5.0, 1.0 - smoothstep(3.0, 6.0, foot))) * 0.6);
   c *= 0.84 + 0.28 * tone;
   c = mix(c, c * vec3(0.9, 1.04, 0.86), smoothstep(0.6, 0.9, tone) * 0.5);
   float farF = smoothstep(1200.0, 3800.0, dist);
@@ -482,7 +499,7 @@ vec3 suburbGround(vec2 wp, float n1, float n2, float n3, float n4, float canopy,
   }
   // the outer urban ring: the ground greys toward the mid-rise look where the gradient rises
   float ub = smoothstep(0.45, 0.95, det.b + 0.15 * (n3 - 0.5));
-  c = mix(c, midriseGround(n1, n2, wp, gd), ub * 0.85);
+  if (ub > 0.0) c = mix(c, midriseGround(n1, n2, wp, gd, foot), ub * 0.85);
   c = mix(c, canopyFloor(n1, n2, gd), canopy * (0.85 - 0.4 * ub));
   return mix(c, sandyScrub(n1, n2, gd), sandy);
 }
@@ -515,8 +532,10 @@ Sand sandDetail(vec2 wp, float w, float foot) {
   return s;
 }
 vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, vec4 det, float foot, out Ground gd, out float rough) {
-  float n1 = vnoise(wp * 0.35);
-  float n2 = fbm3(wp * 0.045);
+  // the 3 m noise and the 5-11 m octaves of the 22 m one go subpixel at 1-4 m/px: past that they are replaced by
+  // their means (what their mip would be), which is a third of the noise work in every aerial view
+  float n1 = foot < 2.0 ? mix(vnoise(wp * 0.35), 0.5, smoothstep(1.0, 2.0, foot)) : 0.5;
+  float n2 = fbm3Band(wp * 0.045, 1.0 - smoothstep(2.0, 4.0, foot));
   float n3 = vnoise(wp * 0.008);
   float n4 = fbm3(wp * 0.0032 + 17.0);
   float dist = length(cameraPosition - vWorldPos);
@@ -601,13 +620,33 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     float streak = 1.0 - smoothstep(0.0, 0.6, abs(sd - swashW * 0.95));
     if (streak > 0.0) c *= 1.0 - 0.10 * streak * smoothstep(0.25, 0.6, vnoise(wp * 0.4 + 3.0));
     float wrackD = swashW * 1.3 + 1.0;
+    float oldLine = wrackD * 1.8 + 2.0 - 1.5 * wander2;
     float tide1 = 1.0 - smoothstep(0.0, 0.7, abs(sd - wrackD));
-    float tide2 = 1.0 - smoothstep(0.0, 0.5, abs(sd - (wrackD * 1.8 + 2.0 - 1.5 * wander2)));
+    float tide2 = 1.0 - smoothstep(0.0, 0.5, abs(sd - oldLine));
     if (tide1 + tide2 > 0.0) {
       float grainVis = 1.0 - smoothstep(0.3, 1.0, foot);
       float debris = mix(0.3, smoothstep(0.55, 0.75, vnoise(wp * 1.3 + 9.0)) * step(0.35, vnoise(wp * 0.09)), grainVis);
       c *= 1.0 - 0.14 * tide1 * (0.5 + 0.5 * n1) - 0.07 * tide2;
       c = mix(c, vec3(0.056, 0.043, 0.016), (0.7 * tide1 + 0.4 * tide2) * debris);
+    }
+    // driftwood along the older line: a bleached stick or branch every 10-30 m, 1.5-3 m long, lying along the
+    // shore where the highest tide left it, a few on the fresh wrack line too; gone with the footprint
+    float driftVis = (1.0 - smoothstep(0.25, 0.8, foot)) * step(abs(sd - oldLine), 3.0);
+    if (driftVis > 0.0) {
+      vec2 along = vec2(-offshore.y, offshore.x);
+      float a = dot(wp, along) / 12.0;
+      float cellA = floor(a);
+      vec2 hd = hash22(vec2(cellA, floor(dot(wp, offshore) / 60.0)) + 2.7);
+      float u = fract(a) - 0.5 - (hd.x - 0.5) * 0.5;      // along the stick, in 12 m cells
+      float halfLen = 0.06 + 0.07 * hd.y;                  // 0.7-1.6 m half-length
+      float across = sd - oldLine - (hd.y - 0.5) * 2.4 - 0.4 * sin(u * 40.0 + hd.x * 6.0) * hd.x; // a slight bend
+      float thick = max(0.07, foot * 0.6);
+      float stick = step(abs(u), halfLen) * (1.0 - smoothstep(thick * 0.6, thick, abs(across))) * step(0.55, hash12(vec2(cellA, 5.0) + hd.y));
+      stick *= driftVis * (0.7 + 0.3 * smoothstep(halfLen, halfLen * 0.6, abs(u)));
+      vec3 wood = mix(vec3(0.20, 0.17, 0.13), vec3(0.075, 0.06, 0.045), hd.x); // bleached grey to dark wet bark
+      c = mix(c, wood * (0.85 + 0.3 * n1), stick);
+      // shadow side: the stick stands 6-10 cm proud of the sand
+      c *= 1.0 - 0.35 * stick * smoothstep(0.0, thick * 0.6, across) * step(0.0, across);
     }
     // wind ripples on the dry sand only (the wash smooths the wet band), stronger on exposed shores
     float ripStr = (1.0 - damp) * (0.55 + 0.45 * smoothstep(0.3, 0.8, expo));
@@ -708,8 +747,9 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     rough = mix(0.85, 0.6, slough);
   } else if (zone == 6 || zone == 8) {
     // mid-rise ring; at the frayed district edge (low urbanity) the ground is already the suburb's
-    float ub = smoothstep(0.3, 0.8, det.b + 0.1 * (n3 - 0.5));
-    c = mix(suburbGround(wp, n1, n2, n3, n4, canopy, sandy, det, dist, foot, gd), midriseGround(n1, n2, wp, gd), zone == 8 ? 1.0 : ub);
+    float ub = zone == 8 ? 1.0 : smoothstep(0.3, 0.8, det.b + 0.1 * (n3 - 0.5));
+    c = midriseGround(n1, n2, wp, gd, foot);
+    if (ub < 1.0) c = mix(suburbGround(wp, n1, n2, n3, n4, canopy, sandy, det, dist, foot, gd), c, ub);
     rough = 0.8;
   } else if (zone == 7) {
     c = mix(vec3(0.066, 0.066, 0.066), vec3(0.126, 0.122, 0.112), n2) * (0.92 + 0.16 * n1) * (0.94 + 0.12 * gd.soil);
