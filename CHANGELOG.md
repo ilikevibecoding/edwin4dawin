@@ -17,6 +17,77 @@ numbers the targets are about.
 
 ---
 
+## Round 6, second half — the skirt was a material, the far shadows were never on, the stars were dashes — build `2250d88` live
+
+Six more gated landings on top of `e244efd`. Three of them fixed things no
+critic had named, found by ablation on the way to the thing they were sent for.
+
+- **Terrain r6 (`ab2aaac`).** The hill floor and ceiling had never engaged on
+  the ranges the critics box: both guards were weighted by a height key that
+  read 0.57–0.75 on low far crests, so the 0.76 floor lifted an into-sun
+  crest six tenths of the way and the over-ridge sky sample under-read a lit
+  cirrus sheet by a fifth — 0.76 × 0.6 × 0.8 is the critics' 0.58. Guards keyed
+  on height *or* distance, floor 0.84 / ceiling 0.87, the dome's cirrus and
+  sun glow evaluated in the sample: `lion_far` ridge rows 51 → 92 % in band,
+  its cols 0–80 0.61 → 0.79; `camp_beyond` 55 → 88 %; `lion_pride` 74 → 89 %.
+  The kopje reflection samples the rock tile on each ellipsoid with the rims
+  broken by the ripple; the pride ring is trodden earth inside 6 m (inner/plain
+  1.03 → 0.86, pale stems 20.8 → 1.8 %). And the skirt band, ablated: with
+  all vegetation hidden the terrain's far flat and near plain meet at −0.01 st.
+- **Vegetation r6 (`0293443`).** The pale mid-ground band chased since round 4
+  as terrain, grass density and tint was a material class: the far skirt was a
+  `MeshStandardMaterial`, and at roughness 1 that still puts a ~4 % dielectric
+  specular on the key which the Lambert terrain never had — +0.23 st over bare
+  ground, +0.45 in the critics' box. `MeshLambertMaterial`: 0.343 → 0.251,
+  which is the bare ground. The pride lawn is straw on the plain's own tile
+  (lawn Y 0.09 → 0.27, straw mask 20 → 42 % of the lower third, saturation
+  0.54 → 0.45 with a dust term); dusk crowns pass transmission broadside
+  (−3.35 → −2.14 st under the sky, black 24 → 11 %); sun split on the crown
+  +0.06 → +1.23 st. The first pass broke the near acacia into loose clumps
+  (silhouette 46 → 36 %) and was sent back before landing; golden-angle card
+  fill with ring tiers holds 45.5 % with no detached fragments.
+- **Lighting r7 (`e298790`).** Every star was a vertical dash: the field is a
+  Gaussian in octahedral map space, whose scale differs along azimuth and
+  elevation. Evaluated in screen space through the map's Jacobian: aspect
+  1.54 → 1.20, count held, a count-law magnitude curve (p90/p50 2.0 → 3.1) so
+  the field has bright stars and faint ones instead of one brightness. The
+  moonlit ground follows a luma-normalised night bounce tint with the warm
+  day bias gated (hero ground hue 5° → 256°, sat 0.36 → 0.17). And the far
+  shadow cascade's `uCascade` uniform had never reached a single program — its
+  install guard keyed on a uniform three r185 no longer lists — so every far
+  shadow since round 3 ran on the fallback constants; fixed, 9 taps, day
+  `farRadius` 4.5: the mess awning's penumbra 12–19 → 25–38 px. Night fill
+  34 → 56, `groundIndirect` 1.2, palette a quarter less saturated: pad/band
+  0.88 → 0.67, paint over the upper sky +0.15 → +0.99 st, sky sat 0.68 →
+  0.55. The dusk and night cascade values now apply for the first time and
+  were written blind.
+- **Capture (`f8c0531`).** `setView` resets the driver's dynamics, the truck
+  (wheel angle, steer, suspension, tyre tracks) and the wheel dust's seeded
+  stream before the pre-roll: two shots of one view in one page were 7.7 % of
+  pixels apart (wheel spin phase, tracks) and are pose-identical now, with a
+  residual 0.9 % over 8/255 in the dust sheet still unexplained.
+- **Lion form r8 (`d75c60e`).** Skull rows a trapezoid widest 3 cm under the
+  eye line with a flat crown (brow/zygomatic 0.773 → 0.742; the forehead 17 %
+  narrower than the cheeks in frame); muzzle rows carry the upper lip with the
+  sides drawn in under the whisker pads (lip/zygomatic 0.444 → 0.406; the lip
+  hangs 8.5 mm over a narrower chin); the r7 under-eye black margin — the
+  raccoon mask — replaced by a 4.5 mm tear line and a buff patch (dark pixels
+  in the eye box 28 → 1.5 %); ball −5 %; coat streaks in an 8:1 flow field
+  along the body; rim shadow gate floored (rim columns 82 → 86 %). Head
+  ratios and tris held. Still: the eyeball laterally proud, the temporal
+  hollow 3.4 of 6 mm, and the male's mane still radial ribbons.
+- **Hero car r7 (`2250d88`).** The windscreen returns the sky from outside
+  the cab (graze gated to exterior cameras: front-quarter screen hue 54° →
+  216°, blue-leaning pixels 18 → 48 %, the seat veil held at 0.059); the
+  `BEAM.dusk` cut that r6 made against the pitched truck had removed the dusk
+  pool on the level one — the consensus's caution was right — and it is
+  restored toward the band (mainroad pool 0.036 → 0.13, ground over the dusk
+  sky 0 %); a near-field spill per side (dirt ahead of the bumper p95 0.036 →
+  0.123); nine pods verified at 1280 (9 blobs over 0.5, 332 px in the critics'
+  box). The builder stopped on a usage block before its report; the numbers
+  are measured from its before/after sets. The glare profile and the paint
+  horizon did not move and are carried.
+
 ## Round 6 landed — the car's lamps, the lion's walk and face, the night, the fire — build `e244efd` live
 
 Nine builds since fleet r4, each gated at fast, high and ultra with the
