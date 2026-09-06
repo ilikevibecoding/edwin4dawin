@@ -527,10 +527,10 @@ void main() {
     float ma = texture(uNoise3D, vec3(fc.x / 48000.0, 0.13, fc.y / 16000.0)).a;
     float mb = texture(uNoise3D, vec3(fc.x / 17000.0 + 0.37, 0.71, fc.y / 6000.0)).a;
     float m = ma + (mb - 0.5) * 0.6;
-    float patch = smoothstep(0.44, 0.66, m);
-    float haze = 0.12 * smoothstep(0.32, 0.66, m) * (1.0 - 0.5 * patch);
+    float band = smoothstep(0.44, 0.66, m);
+    float haze = 0.12 * smoothstep(0.32, 0.66, m) * (1.0 - 0.5 * band);
     float veil = haze;
-    if (patch > 0.002) {
+    if (band > 0.002) {
       // the fibre octaves fade with distance: the fine one is a few pixels wide beyond 25 km, the coarse one
       // beyond 60 km (the band is then a haze streak)
       float lod1 = smoothstep(20000.0, 60000.0, tc);
@@ -542,7 +542,7 @@ void main() {
       float streak = smoothstep(0.44, 0.70, b1 + (b2 - 0.5) * 0.7 * (1.0 - lod2));
       streak = mix(streak, 0.45, lod1);
       // the band core is denser (heads), its fringe thins to single strands
-      veil += patch * streak * (0.5 + 0.5 * patch);
+      veil += band * streak * (0.5 + 0.5 * band);
     }
     // optically thin (od ~0.1-0.4): ice crystals scatter strongly forward (bright near the sun) plus a diffuse
     // share. Hazed with the physical optical depth to 9 km only: applyAerial's far-plane dissolve (33-57 km,
