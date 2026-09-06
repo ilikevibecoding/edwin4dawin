@@ -28,8 +28,9 @@ const FAR = 1500;
 const SMALL_FAR = 450;
 /** sidewalks switch to their four-triangle-a-row far index beyond this (a curb face is under a pixel there) */
 const WALK_NEAR = 500;
-/** furniture casts shadows (into the fine cascades only) within this range */
-const SHADOW_FAR = 700;
+/** the large furniture (poles, mast arms, shelters, benches) casts shadows, into the fine cascades only, within this
+ *  range: a shelter roof is a pixel or two of shadow at 300 m and a mast arm nothing at all */
+const SHADOW_FAR = 300;
 const CURB_H = 0.15;
 const CURB_TOP = 0.3;
 /** clearance of the slab over the terrain (the terrain is bilinear on a ~10 m grid: it can bulge between rows) */
@@ -1063,7 +1064,9 @@ export class Streets {
       cell.walk = mk(b.walk.build(), this.walkMaterial, 'sidewalks', false);
       cell.walkFar = cell.walk ? mk(b.walk.buildFar(cell.walk.geometry), this.walkMaterial, 'sidewalks-far', false) : null;
       cell.large = mk(b.large.build(), this.kitMaterial, 'street-kits', true);
-      cell.small = mk(b.small.build(), this.kitMaterial, 'street-kits-small', true);
+      // the small soup (visors, pedestrian heads, buttons, name blades, stop signs) never casts: nothing in it is
+      // worth a 0.4 m shadow texel, and drawn into two cascades it cost as much again as the whole street pass
+      cell.small = mk(b.small.build(), this.kitMaterial, 'street-kits-small', false);
       this.counts.walkTriangles += b.walk.triangles;
       this.counts.kitTriangles += b.large.triangles + b.small.triangles;
       if (!cell.walk && !cell.large && !cell.small) continue;
@@ -1086,8 +1089,8 @@ export class Streets {
     this.lights.uLampColor.value.set(1.0, 0.78, 0.5).multiplyScalar(0.35 * night * (this.poolsEnabled ? 1 : 0));
   }
 
-  /** Per-frame culling: cells in view within FAR (small kits within SMALL_FAR); kits cast into the fine cascades
-   *  within SHADOW_FAR, sidewalks never cast. */
+  /** Per-frame culling: cells in view within FAR (small kits within SMALL_FAR); the large kits cast into the fine
+   *  cascades within SHADOW_FAR, the small kits and the sidewalks never cast. */
   updateLod(camX: number, camZ: number, cull: ViewCull, camPos: THREE.Vector3): void {
     for (const c of this.cells) {
       const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
@@ -1104,7 +1107,7 @@ export class Streets {
         m.layers.mask = mask;
       };
       set(c.large, inView);
-      set(c.small, inView && d < SMALL_FAR);
+      if (c.small) c.small.visible = inView && d < SMALL_FAR; // camera layer only (see flush)
     }
     void camPos;
   }
