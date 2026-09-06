@@ -1,6 +1,6 @@
 // Arquitens-class light cruiser (Republic), 325 m. Original procedural geometry matched against the
 // reference stills and orthos: a kite-shaped hull whose bow is cleaved into two long box-section prongs
-// with a 9 m trench between them (open at the tips, a dark floor 7 m down, closed at zr ~ 100 by the
+// with an 11 m trench between them (open at the tips, a dark floor 7 m down, closed at zr ~ 100 by the
 // crotch ramp under the red arrowhead wedge that heads the spine), a broad ledge at mid-height with a
 // tall flank wall above it, a shallow pyramid deck with a raised red-flanked central spine and two
 // straight red-flanked rails converging aft into the wedge-fronted superstructure block that carries
@@ -301,8 +301,8 @@ function buildLod(lod) {
               s,
               NECK.halfW,
               NECK.halfW + 0.8,
-              NECK.y0 + 2,
-              NECK.y0 + 5.5,
+              NECK.y0 + 1,
+              NECK.y1 - 0.6,
               NECK.z0 + 6,
               NECK.z1 - 2,
             ),

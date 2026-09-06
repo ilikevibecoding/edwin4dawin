@@ -5,12 +5,13 @@
 // near the hull's mid-height. Ship forward is -Z: model z = zr - L / 2.
 //
 // Reference proportions (fan ortho + show stills, metres): kite hull 325 long, 125 wide at the deck
-// shoulders (zr ~ 185), 139 over the nacelles; fork gap 9 m, a trench 7 m deep from the tips to the
-// red wedge at zr ~ 100; bridge head 30 wide, 12.5 tall, its top 48 m above the keel line; nacelles
-// r 12.5 at x ±57.5 hanging a little below the keel.
+// shoulders (zr ~ 185), 142 over the nacelles; fork gap 11 m, a trench 7 m deep from the tips to the
+// red wedge at zr ~ 100; hull 33 m deep at the shoulders (keel 12.5 under the ledge, wall 11.5, deck
+// pyramid and spine 9 more); bridge head 28 wide, 10 tall, 22 long, its top 49.5 m above the keel line
+// on a 4 m neck over the 23 m block; nacelles r 13 at x ±57.5 with their centres 8.5 m above the keel.
 import { lin, pw } from "./venatorKit.js";
 
-export const ARQUITENS = { length: 325, width: 140, height: 58 };
+export const ARQUITENS = { length: 325, width: 142, height: 53 };
 export const L = ARQUITENS.length;
 export const Z = (zr) => zr - L / 2;
 export const Y0 = -6;
@@ -22,7 +23,7 @@ export const Y0 = -6;
 export const wOut = (zr) =>
   pw(
     [
-      [0, 14],
+      [0, 13],
       [100, 42],
       [108, 47],
       [124, 47.5],
@@ -45,7 +46,7 @@ export const ledgeW = (zr) =>
     zr,
   );
 export const wallX = (zr) => wOut(zr) - ledgeW(zr);
-export const SLOT_X = 4.5; // inner walls of the prongs (the fork is 9 m wide)
+export const SLOT_X = 5.5; // inner walls of the prongs (the fork is 11 m wide)
 // the trench between the prongs: open through at the tips, then a dark floor 7 m below the prong
 // tops running aft to the crotch ramp under the red wedge (zr 88–103)
 export const TRENCH = { z0: 12, depth: 7, rampZ0: 88, rampZ1: 98 };
@@ -63,51 +64,52 @@ export const GROOVE_W = 2.2;
 export const wallTop = (zr) =>
   pw(
     [
-      [0, 6],
+      [0, 5.5],
       [60, 8.5],
       [105, 10],
-      [185, 12],
+      [185, 11.5],
       [232, 11],
       [272, 2],
     ],
     zr,
   );
-// deck height at the spine base (the deck is a shallow pyramid ~4 m higher at the centreline; it
-// flattens onto the aft body's deck where the main loft hands over at zr 232)
+// deck height at the spine base (the deck is a low pyramid ~4 m higher at the centreline than at the
+// wall chamfer; it flattens onto the aft body's deck where the main loft hands over at zr 232)
 export const deckC = (zr) =>
   pw(
     [
-      [103, 10.8],
-      [130, 12],
-      [185, 13.6],
-      [205, 13.6],
+      [103, 11.3],
+      [130, 12.8],
+      [185, 15.5],
+      [205, 15.5],
       [232, 12.2],
     ],
     zr,
   );
 // spine raise above the deck: nothing forward of the red wedge block (zr 100–131) that is the
-// spine's terminus, rising inside it to a constant 3.2 m step up to the superstructure block
+// spine's terminus, rising inside it to a 3 m step that grows to 4.5 m at the superstructure block
 export const spineUp = (zr) =>
   pw(
     [
       [112, 0],
-      [128, 3.2],
-      [232, 3.2],
+      [128, 3],
+      [196, 4.5],
+      [232, 4.5],
     ],
     zr,
   );
 // keel depth of the main hull below the datum: the belly deepens gently aft (the ortho's keel line is
-// straight while the deck climbs to the bridge), 15.5 m under the shoulders
+// straight while the deck climbs to the bridge), 12.5 m under the shoulders
 export const keel = (zr) =>
   pw(
     [
-      [103, 9.6],
-      [150, 13],
-      [185, 15.5],
-      [230, 15.5],
-      [240, 13],
-      [250, 10.5],
-      [262, 8.2],
+      [103, 9.2],
+      [150, 11.5],
+      [185, 12.5],
+      [230, 12.5],
+      [240, 11],
+      [250, 9.5],
+      [262, 8],
       [272, 7.5],
     ],
     zr,
@@ -116,9 +118,9 @@ export const keel = (zr) =>
 export const keelP = (zr) =>
   pw(
     [
-      [0, 4.5],
-      [60, 8],
-      [107, 9.6],
+      [0, 4],
+      [60, 7.5],
+      [107, 9.2],
     ],
     zr,
   );
@@ -126,7 +128,7 @@ export const keelP = (zr) =>
 // ---- aft superstructure, bridge, nacelles -----------------------------------------------------------
 // the spine runs into a low pedestal under the bridge neck (zr 196–215); right behind the head the
 // hull steps up into the ramp block's crest (zr 221) and then runs down a long ramp to the transom
-export const BLOCK = { z0: 196, z1: 232, top: 19.5, crest: 23.5, crestZ: 221 };
+export const BLOCK = { z0: 196, z1: 232, top: 23, crest: 26.5, crestZ: 221 };
 export const blockHalfW = (zr) =>
   pw(
     [
@@ -166,20 +168,20 @@ export const RAIL = {
 export const railH = (zr) =>
   pw(
     [
-      [112, 2.2],
-      [230, 3.6],
+      [112, 2.4],
+      [230, 4.4],
     ],
     zr,
   );
-// T-shaped bridge: a narrow boxy neck and the wide 28 m head with a window band across the front and a
-// lipped cap plate (the show's cab reads as a box about 2.3 : 1 wide : tall)
-export const NECK = { z0: 199, z1: 215, halfW: 5.2, y0: 19.5, y1: 22.5 };
+// T-shaped bridge: a boxy 12 m neck and the wide flat 28 m head (10 m tall, 22 long; the ortho draws
+// it 30 x 8.5, the show still a little taller) with a window band across the front and a lipped cap
+export const NECK = { z0: 199, z1: 215, halfW: 6, y0: 23, y1: 27 };
 export const HEAD = {
   z0: 196,
   z1: 218,
-  halfW: 15,
-  y0: 22.5,
-  y1: 35,
+  halfW: 14,
+  y0: 27,
+  y1: 37,
   lip: 0.8,
 };
 // swept delta struts on the lower flank wall from the waist out to the outer nacelles' upper inner
@@ -200,8 +202,8 @@ export const NACELLE = {
   z0: 268,
   z1: 325,
   y: -4,
-  outer: { x: 57.5, r: 12.5 },
-  centre: { x: 0, r: 12 },
+  outer: { x: 57.5, r: 13 },
+  centre: { x: 0, r: 12.5 },
   nozzleR: 10.5,
   ringZ: [279, 286.5],
   domeLen: 12,

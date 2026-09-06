@@ -543,7 +543,14 @@ export function tipDetail(ctx) {
 // wedge and trench: the red arrowhead at the spine's head, forward tubes, trench-floor machinery
 // -------------------------------------------------------------------------------------------------
 // forward ordnance tubes: two pairs of fat launch tubes lying on the deck either side of the wedge
-export const TUBES = { x: 10.8, dx: 2.7, r: 1.25, y: 12.7, z0: 96, z1: 120 };
+export const TUBES = {
+  x: 10.8,
+  dx: 2.7,
+  r: 1.25,
+  y: deckC(112) + 1.6,
+  z0: 96,
+  z1: 120,
+};
 export function noseDetail(ctx) {
   const { add, fine, mid, addZones, loft } = ctx;
   if (!mid) return;
