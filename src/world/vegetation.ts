@@ -815,6 +815,8 @@ const CROWN_FRAG = /* glsl */ `
   vec3 toCam = cameraPosition - vWP;
   float camDist = length(toCam);
   vegNear = 1.0 - smoothstep(200.0, 320.0, camDist);
+  // the hard parts (bark, root zone) take the full per-fragment shadow: no leaf floor
+  vegHard = vPart < 0.5 || vPart > ${BRANCH_PART - 0.5} ? 1.0 : 0.0;
   if (vPart > ${DISC_PART - 0.5}) {
     // root zone: leaf litter and bare earth in a ragged patch about the trunk, fading out toward its rim
     // (the crown's shadow falls on it too, so the tree stands in a dark ring instead of on untouched lawn)
@@ -1098,9 +1100,12 @@ ${THREE.ShaderChunk.shadowmap_vertex.replace(/worldPosition/g, 'vegShadowPos')}
  *  or a building keeps a fifth of the direct sun instead of going black. Wraps three's getShadow. */
 const VEG_SHADOW_PARS_FRAG = /* glsl */ `
 #include <shadowmap_pars_fragment>
+// 1 on the hard parts (bark: trunk, limbs, the root zone), which take the full shadow like any solid
+// surface — a trunk under its own crown stands in the dark with the ground around it
+float vegHard = 0.0;
 #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
 float vegShadow( sampler2D shadowMap, vec2 shadowMapSize, float shadowIntensity, float shadowBias, float shadowRadius, vec4 shadowCoord ) {
-  return mix( 0.2, 1.0, getShadow( shadowMap, shadowMapSize, shadowIntensity, shadowBias, shadowRadius, shadowCoord ) );
+  return mix( 0.2 * ( 1.0 - vegHard ), 1.0, getShadow( shadowMap, shadowMapSize, shadowIntensity, shadowBias, shadowRadius, shadowCoord ) );
 }
 #endif
 `;
@@ -1270,7 +1275,7 @@ function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: 
       .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-crown-v12';
+  mat.customProgramCacheKey = () => 'veg-crown-v13';
   return mat;
 }
 
@@ -1292,7 +1297,7 @@ function palmMaterial(tex: THREE.Texture, time: THREE.IUniform<number>, wind: TH
       .replace('#include <normal_fragment_begin>', PALM_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-palm-v12';
+  mat.customProgramCacheKey = () => 'veg-palm-v13';
   return mat;
 }
 
@@ -1330,7 +1335,7 @@ function cardMaterial(atlas: THREE.Texture, canopyMean: THREE.Vector3): THREE.Me
       .replace('#include <color_fragment>', CARD_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-card-v13';
+  mat.customProgramCacheKey = () => 'veg-card-v14';
   return mat;
 }
 
@@ -1520,12 +1525,16 @@ const _grey = new THREE.Color();
 
 /** Grass tufts stand within this distance of the camera (fading out over the last 15 m) */
 const GRASS_RADIUS = 60;
-/** lattice spacing of the tuft candidates (m) */
-const GRASS_SPACING = 1.6;
+/** lattice spacing of the tuft candidates (m): the full lattice stands inside GRASS_DENSE, thinning to a
+ *  quarter of it at GRASS_RADIUS (each tuft's rank hash against the distance), so the ground under the
+ *  camera is a carpet and the far tufts a scatter */
+const GRASS_SPACING = 0.8;
+const GRASS_DENSE = 18;
 /** the tufts are generated in chunks of this size (m), cached while the camera is near */
 const GRASS_CHUNK = 20;
-/** instances the grass mesh can hold (a 60 m disc at 1.6 m spacing is ~4400 candidates) */
-const GRASS_MAX = 6000;
+/** instances the grass mesh can hold (a 60 m disc at 0.8 m spacing is ~17 000 candidates before the
+ *  thinning and the ground's own density) */
+const GRASS_MAX = 12000;
 const GRASS_TILES = 3;
 
 /** Grass blade cut-outs: three 128 x 256 tiles — a lawn tuft, a meadow tuft with seed heads, dune grass
@@ -1646,12 +1655,12 @@ function grassMaterial(tex: THREE.Texture, time: THREE.IUniform<number>, wind: T
       .replace('#include <normal_fragment_begin>', '#include <normal_fragment_begin>\n#ifdef DOUBLE_SIDED\nnormal *= faceDirection;\n#endif');
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-grass-v1';
+  mat.customProgramCacheKey = () => 'veg-grass-v2';
   return mat;
 }
 
 /** The tufts of one GRASS_CHUNK square, generated on demand and cached while the camera is near. */
-interface GrassChunk { n: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array; box: THREE.Box3; stamp: number }
+interface GrassChunk { n: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array; /** per-tuft rank in [0, 1) for the distance thinning */ ranks: Float32Array; box: THREE.Box3; stamp: number }
 
 /** Grass near the camera: tufts on a jittered lattice over the lawns, parks, golf course, wetland prairie
  *  and the upper beach (dune grass) within GRASS_RADIUS, generated per chunk from the map (zone, height,
@@ -1712,11 +1721,19 @@ class GrassField {
         let chunk = this.chunks.get(key);
         if (!chunk) { chunk = this.build(cx, cz); this.chunks.set(key, chunk); }
         chunk.stamp = this.frame;
-        if (chunk.n === 0 || n + chunk.n > GRASS_MAX || !cull.boxInView(chunk.box)) continue;
-        matrices.set(chunk.matrices, n * 16);
-        colors.set(chunk.colors, n * 3);
-        extras.set(chunk.extras, n * 2);
-        n += chunk.n;
+        if (chunk.n === 0 || !cull.boxInView(chunk.box)) continue;
+        // thinning by distance: a tuft stands when its rank is under the density at its distance (the
+        // full lattice inside GRASS_DENSE, a quarter of it at the radius)
+        const M = chunk.matrices, K = chunk.colors, E = chunk.extras, rk = chunk.ranks;
+        for (let i = 0; i < chunk.n && n < GRASS_MAX; i++) {
+          const dx = M[i * 16 + 12] - cam.x, dz = M[i * 16 + 14] - cam.z;
+          const d = Math.sqrt(dx * dx + dz * dz);
+          if (rk[i] > 1 - 0.75 * smoothstep(GRASS_DENSE, R, d)) continue;
+          for (let k = 0; k < 16; k++) matrices[n * 16 + k] = M[i * 16 + k];
+          colors[n * 3] = K[i * 3]; colors[n * 3 + 1] = K[i * 3 + 1]; colors[n * 3 + 2] = K[i * 3 + 2];
+          extras[n * 2] = E[i * 2]; extras[n * 2 + 1] = E[i * 2 + 1];
+          n++;
+        }
       }
     }
     // chunks the camera has left are dropped (they are cheap to rebuild)
@@ -1733,7 +1750,7 @@ class GrassField {
   private build(cx: number, cz: number): GrassChunk {
     const map = this.map, C = GRASS_CHUNK, G = GRASS_SPACING;
     const per = Math.round(C / G);
-    const mats: number[] = [], cols: number[] = [], ext: number[] = [];
+    const mats: number[] = [], cols: number[] = [], ext: number[] = [], ranks: number[] = [];
     const box = new THREE.Box3();
     let n = 0;
     for (let j = 0; j < per; j++) {
@@ -1766,13 +1783,19 @@ class GrassField {
         }
         if (h4 >= p) continue;
         const h = hMin + (hMax - hMin) * h5 * h5;
+        // a tuft is wider than it is tall (a clump of blades splaying out, not a single upright blade):
+        // the crossed quads span 0.8 of the scale, so 1.6-2.2x the height puts a lawn tuft at 0.3-0.7 m
+        const wdt = h * (kind === 3 ? 1.3 : 1.6 + 0.6 * hash2(gi, gj, 9));
         // stand on the local ground plane (finite differences of the height field), yawed at random
         const nx = (map.heightAt(x - 1, z) - map.heightAt(x + 1, z)) * 0.5, nz = (map.heightAt(x, z - 1) - map.heightAt(x, z + 1)) * 0.5;
         this._up.set(nx, 1, nz).normalize();
         this._q.setFromUnitVectors(_yAxis, this._up);
         this._q2.setFromAxisAngle(_yAxis, hash2(gi, gj, 3) * Math.PI * 2);
         this._q.multiply(this._q2);
-        this._m.compose(this._p.set(x, y - 0.04, z), this._q, this._s.set(h, h, h));
+        this._m.compose(this._p.set(x, y - 0.04, z), this._q, this._s.set(wdt, h, wdt));
+        // the rank decides how far from the camera this tuft survives the thinning: the lattice's own
+        // hash, so the same tufts stand from every camera position (no popping as it moves)
+        ranks.push(hash2(gi, gj, 10));
         this._m.toArray(mats, n * 16);
         // colour (linear): the ground's own lawn / dry grass mix (openGround in the terrain shader), the
         // golf course's greener turf, the prairie's tan-green, the dune grass khaki
@@ -1789,7 +1812,7 @@ class GrassField {
       }
     }
     box.min.y -= 0.2; box.max.y += 1.2; box.min.x -= 0.5; box.max.x += 0.5; box.min.z -= 0.5; box.max.z += 0.5;
-    return { n, matrices: new Float32Array(mats), colors: new Float32Array(cols), extras: new Float32Array(ext), box, stamp: 0 };
+    return { n, matrices: new Float32Array(mats), colors: new Float32Array(cols), extras: new Float32Array(ext), ranks: new Float32Array(ranks), box, stamp: 0 };
   }
 }
 const _yAxis = new THREE.Vector3(0, 1, 0);
