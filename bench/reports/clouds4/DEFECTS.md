@@ -77,3 +77,49 @@ cockpit-city 269 / 1.12 M, night 252 / 1.28 M; console clean. Sync frame (sw) ae
 - gentler noise-domain warp driven by the 10 km tower field (D2);
 - darker multiple-scattering tail for cumulus: octaves 0.44·e^−od, 0.34·e^−0.3od, 0.14·e^−0.2od (deck path kept);
 - prototype result U1: base relief std 12 m → ~70 m, base sRGB ~205 → ~150 with lumps, ragged fringe, scud.
+
+Also found while porting the field to numpy: the Python `hash22` had the GLSL swizzle wrong, so the first
+offline cell positions were fiction; fixed (`fract((p3.xx + p3.yz) * p3.zy)`) and re-validated against the game's
+shadow pattern from a 9 km plan-view shot. The `under` cameras below were re-placed on real cells:
+`under` = `cam=5000,790,-7600&hdg=0&pch=40&fov=60` (cell base 991 m, i.e. 309 m below `uCloudBase` — a cell the
+baseline planes off), `under2` = `cam=-1300,990,1900&hdg=0&pch=35&fov=60` (base 1187 m).
+
+## Rounds 1–5 — first GPU verification (builds c8b52a32 r1 … ce5c5a5c r5, stills 1280×720 high)
+
+Kept (crops in `crops/r5_*`):
+- **D1 fixed in the aerial views** (`r1_aerial_zoom_base_vs_r1`, `r5_aerial_top_base_vs_r5`): the bases are grey,
+  lumpy undersides with a ragged fringe and sunlit cauliflower crowns; the cell whose base sits below `uCloudBase`
+  now hangs down instead of ending in a plane. Cloudy deck (`r5_cloudy_base_vs_r5`): visible cell relief and
+  dark/bright cells on the underside instead of an even lid. Sunset: bellies shaded, rims brighter. Night: no
+  visible change at this scale (moon key path untouched).
+- **Slab clip**: confirmed on GPU — `under` (200 m below a cell with base 991 m) shows a flat ceiling with a
+  straight edge in the baseline and a hanging, lumpy underside in r1+.
+
+Rejected / new defects:
+- **D7 funnel** (`r5_under2_base_vs_r5_funnel`, r4/r5): with the relief taken from the 3D noise *at the sample*,
+  the base iso-surface `y = base + warp(x, y, z)` folds over wherever ∂warp/∂y > 1 m/m (σ 60 m over a 162 m
+  vertical period gives slopes up to ~3): pointed sacks hang from the base and one reads as a funnel cloud.
+  r1's 3-octave A-channel relief showed it less, r4's B-channel (2 octaves) more.
+- **D8 radial streaks from inside the layer** (`r5_baselevel_base_vs_r5_streaks`): same cause seen edge-on — a
+  horizontal ray at base altitude passes in and out of the folded surface, so the density switches on and off
+  along each ray and the overhead mass shows rays radiating from the vanishing point. r5's distance-proportional
+  step made the near puffs at left better resolved but did not remove the streaks.
+- **D9 the close base is a soft blur** (`r5_under_base_vs_r5`): 200 m under the base the relief is 100–300 m
+  soft lumps with no crisp detail; the near-field worley erosion (r3) hardly shows because the density
+  saturates inside the base zone, and the ambient has nothing that shades the relief (sun above the cloud,
+  `aoSky` at its floor under a tall column).
+- **D10 cirrus veil invisible** (`r5_island_base_vs_r5`, aerial, cockpit): the veil sits at 9 km, i.e. 30–90 km
+  away for elevations under 17°, and `applyAerial`'s far-plane dissolve (33→57 km) blends it exactly to the sky
+  colour; every bench camera sees the sky below 25° elevation, so nothing was drawn.
+- Cost: interleaved timings in one browser were too noisy to read (3 Chrome instances on the machine, ±30 %
+  between identical views); `under` (all cloud, close) 1.2 s → 1.7–2.2 s is the one consistent regression and
+  is addressed in r6 (one fewer fetch per light-march step, relief fetch only in the base zone of the main march).
+
+## Round 6 — fixes (build 9c116e21)
+- relief as a **2D height field**: fetched at `(x, baseAltitude, z)`, so `y = base + warp(x, z)` cannot fold
+  (D7, D8); ramp 0.07 → 0.05 (110 m) for a crisper condensation level;
+- **relief shading**: pouch bottoms open to the horizon/ground bounce (+30 % ground ambient, +20 % sky),
+  hollows shadowed by their neighbours (−30 / −20 %) — the only cue the ambient can give for the relief (D9);
+- light march on the smooth base (one fetch per short step; a pouch lit as if at the mean base is close to right);
+- cirrus: hazed with the physical optical depth to 9 km instead of `applyAerial` (D10), fibre octaves fade
+  beyond 20–60 km so a 2.6 km fibre does not shimmer at a few pixels wide.
