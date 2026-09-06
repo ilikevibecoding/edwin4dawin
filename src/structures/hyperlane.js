@@ -1,7 +1,8 @@
 // The hyperlane: an elevated straight track at y ~90 along z = 0 from the frontier station (x 240..315) to the
-// Coruscant west-edge station (x 2473..2548): deck, guide rails, glow strips, lamps, supports every 32 blocks down
-// to the terrain or sea floor, buffer stops. Registered lazily per chunk; `register` also registers the two
-// stations and adds the space train to the vehicle manager.
+// Coruscant west-edge station (x 2473..2548), through the spaceport's west apron where the Westport terminus
+// (x 2264..2323, under the grand terminal) is the intermediate stop: deck, guide rails, glow strips, lamps, supports
+// every 32 blocks down to the terrain or sea floor, buffer stops. Registered lazily per chunk; `register` also
+// registers the three stations and adds the space train to the vehicle manager.
 // The train corridor (every route x, z -4..3, y 89..96) holds nothing but the deck, the lips and the rails: lamps
 // hang from brackets outside it (z = -5) and the buffer stops sit beyond the docked train's ends.
 import { B } from '../blocks.js';
@@ -11,6 +12,7 @@ import { SpaceTrain } from '../vehicles/train.js';
 import { registerStations, stationLayout } from './stations.js';
 import { lowerLocal, lowerGround } from '../worldgen.js';
 import { lowerFloorAt } from '../coruscant/lowercity/plan.js';
+import { SPACEPORT_TERMINUS } from '../coruscant/spaceport.js';
 
 export const LOWER_PYLON_EVERY = 24;   // bridge pylon spacing over the lower city (spec section 4)
 
@@ -28,11 +30,15 @@ export function chunkSetter(chunk) {
 const DECK = ROUTE.deckY, RAIL = ROUTE.railY;
 export const DECK_Z0 = -4, DECK_Z1 = 3; // deck spans z = -4..3 (8 wide); the train uses -3..2
 // walkway on the platform side (z 3..5, floor top level with the car sills at y 92) with a railing at z 6: hopping
-// off a slow train or off the roof lands here instead of 40 blocks down; the stations fill their own platforms
+// off a slow train or off the roof lands here instead of 40 blocks down; the stations fill their own platforms (the
+// Westport terminus undercroft too: its platform 1 continues the walkway at the same level between its end walls)
 export const WALK_Z0 = 3, WALK_Z1 = 5, WALK_Y = ROUTE.floorY - 1;
 let walkSkip = null;   // the stations' own footprints (platform, stair tower, concourse), resolved lazily (module cycle)
 const onWalkway = (x) => {
-  if (!walkSkip) walkSkip = [ROUTE.frontier, ROUTE.coruscant].map((S) => { const L = stationLayout(S); return [L.x0 - 1, L.x1 + 1]; });
+  if (!walkSkip) {
+    walkSkip = [ROUTE.frontier, ROUTE.coruscant].map((S) => { const L = stationLayout(S); return [L.x0 - 1, L.x1 + 1]; });
+    walkSkip.push([SPACEPORT_TERMINUS.box.x0, SPACEPORT_TERMINUS.box.x1]);
+  }
   return x >= ROUTE.x0 + 2 && x <= ROUTE.x1 - 2 && !walkSkip.some(([a, b]) => x >= a && x <= b);
 };
 

@@ -67,6 +67,7 @@ function paintScreens(p) {
     const [x0, x1] = p.xRange(U.trackX0 + 2, U.trackX1 - 2);
     for (let x = x0; x <= x1; x++) {
       const door = doors.some((dx) => x === dx || x === dx + 1);
+      p.set(x, FLOOR, z, M.D);                                                           // the screen stands on the platform's edge course over the track lip
       p.set(x, FEET, z, door ? M.AIR : M.GL); p.set(x, FEET + 1, z, door ? M.AIR : M.GL);
       p.set(x, FEET + 2, z, door ? M.HOLO : (x % 6 === 3 ? M.GLOW : M.DD));
       if (door) p.set(x, FLOOR, z + (pl.n === 4 ? -1 : 1), M.GLOW);
@@ -117,12 +118,17 @@ function paintSpareTrain(p) {
   p.box(x0 - 8, FEET + 1, z0 + 1, x0 - 8, FEET + 2, z0 + 4, M.HOLO);
 }
 
-// Name boards for the terminus on the platform 2 / 3 island ends and lit "WESTPORT" strips under the plate.
+// Name boards for the terminus on the platform 2 / 3 island ends and lit "WESTPORT" strips under the plate, the
+// platform 1 number set into the west wall and the timetable text rows (WALL_SIGN tiles; stations.js registers the
+// text) beside it.
 function paintDressing(p) {
   for (const x of [U.trackX0 - 4, U.trackX1 + 4]) for (const z of [15, 31, 45]) if (p.overlaps(x, z, x, z)) { p.col(x, z, FEET, FEET + 1, M.CHR); p.set(x, FEET + 2, z, M.BLUE); }
   for (const z of [8, 23, 39]) for (let x = U.trackX0 + 10; x <= U.trackX1 - 10; x += 16) if (p.overlaps(x, z, x + 2, z)) { p.box(x, FEET, z, x + 2, FEET, z, M.SLAB); }
   for (let x = U.x0; x <= U.x1; x += 12) if (p.overlaps(x, 7, x + 5, 7)) p.box(x, 95, 6, x + 5, 95, 6, M.HOLO);
-  wallNumber(p, 1, BOX.x0 + 1, FEET, 6, M.GLOW, M.BLK);
+  if (p.overlaps(BOX.x0, 4, BOX.x0 + 1, 14)) {
+    wallNumber(p, 1, BOX.x0, FLOOR, 6, M.GLOW, M.BLK);
+    for (const s of U.signs) for (let k = 0; k < 4; k++) p.set(s.x, s.y, s.z - k, M.SIGN);
+  }
 }
 
 export function paintTerminus(p) {

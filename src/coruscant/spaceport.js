@@ -148,17 +148,29 @@ export function fillSpaceportChunk(chunk) {
   paintTower(p, P.WEST_TOWER);
 }
 
-// The halls as `cityMeta` records for the signs / toast / economy systems: { id, name, kind, purpose, rect, doors,
-// spots, height }. The city layout appends the same halls as landmark lots (layout.js), so lookups by lot id work;
-// this list is what the spaceport itself knows.
-export function spaceportHallMeta() {
-  return P.HALLS.map((h, i) => ({
-    key: h.key, name: h.name, kind: 'landmark', family: 'slab', purpose: h.purpose, height: 0,
-    x0: h.rect.x0, z0: h.rect.z0, x1: h.rect.x1 + 1, z1: h.rect.z1 + 1, w: h.rect.x1 + 1 - h.rect.x0, d: h.rect.z1 + 1 - h.rect.z0,
-    front: h.front, floorY: DECK_Y, order: i,
-    doors: h.doors.map((d) => ({ x: d.x, y: DECK_Y, z: d.z, side: d.side })),
-    spots: h.spots.map(([x, z]) => ({ x, y: DECK_Y, z })),
-  }));
+// The halls as building records in the shape of the city's `cityMeta()` entries (buildings.js finishMeta): id (the
+// layout lot appended by layout.js for the hall, matched by key), name, kind, purpose, bounds, floorY, the ground
+// doors (wall cells at the deck level, with the side they face so signs.js hangs a board over each), door / inside /
+// lobby (the first door and the cell inside it), the staff spots (NPC work spots on the deck) and empty room / bed
+// lists (nothing to rent here). The lot ids come from the layout when one is given.
+export function spaceportHallMeta(layout = null) {
+  const byKey = new Map();
+  if (layout && layout.lots) for (const l of layout.lots) if (l.spaceport) byKey.set(l.spaceport, l);
+  const step = { W: [-1, 0], E: [1, 0], N: [0, -1], S: [0, 1] };
+  return P.HALLS.map((h, i) => {
+    const lot = byKey.get(h.key);
+    const r = h.rect, d0 = h.doors[0], [nx, nz] = step[d0.side];
+    return {
+      id: lot ? lot.id : -1 - i, key: h.key, name: h.name, kind: 'landmark', family: 'spaceport_hall', purpose: h.purpose, district: 'spaceport',
+      height: 0, floorY: DECK_Y, front: h.front, order: i,
+      bounds: { x0: r.x0, x1: r.x1, z0: r.z0, z1: r.z1 },
+      x0: r.x0, z0: r.z0, x1: r.x1 + 1, z1: r.z1 + 1, w: r.x1 + 1 - r.x0, d: r.z1 + 1 - r.z0,
+      doors: h.doors.map((d) => ({ x: d.x, y: DECK_Y, z: d.z, side: d.side })),
+      door: { x: d0.x + nx, y: DECK_Y, z: d0.z + nz }, inside: { x: d0.x - nx, y: DECK_Y, z: d0.z - nz }, lobby: { x: d0.x - nx, y: DECK_Y, z: d0.z - nz },
+      midDoor: null, floors: [DECK_Y], rooms: [], beds: [],
+      spots: h.spots.map(([x, z]) => ({ x, y: DECK_Y, z })),
+    };
+  });
 }
 
 export function register(gen, game) {
@@ -166,7 +178,14 @@ export function register(gen, game) {
   gen.addStructure({ name: 'spaceport', x0: S.x0, z0: S.z0, x1: S.x1, z1: S.z1, fill: fillSpaceportChunk });
   gen.addStructure({ name: 'frontier-spaceport', x0: FRONTIER.x0, z0: FRONTIER.z0, x1: FRONTIER.x1, z1: FRONTIER.z1, fill: fillFrontierChunk });
   if (game) {
-    game.spaceportHalls = spaceportHallMeta();
+    const layout = game.coruscant && game.coruscant.layout ? game.coruscant.layout : null;
+    game.spaceportHalls = spaceportHallMeta(layout);
+    // the signs / toasts / economy read building records through game.coruscant.cityMeta(): the city registers first
+    // (structures/index.js), so its records are extended with the halls' (the city painter never builds them)
+    if (game.coruscant && typeof game.coruscant.cityMeta === 'function') {
+      const cityMeta = game.coruscant.cityMeta, halls = game.spaceportHalls.filter((m) => m.id >= 0);
+      game.coruscant.cityMeta = () => [...cityMeta(), ...halls];
+    }
     installShipTraffic(game, {
       pads: S.pads, deckY: DECK_Y, repairBerths: S.repairBerths,
       center: { x: (P.RECT.x0 + P.RECT.x1) / 2, y: DECK_Y, z: 0 },

@@ -98,6 +98,9 @@ export const TERMINUS = {
   spareTrainX0: 2246,                                           // west end of the parked spare train on track A
   stairs: [{ x0: 2282, z0: 9, z1: 10 }, { x0: 2282, z0: 23, z1: 24 }, { x0: 2282, z0: 38, z1: 39 }],   // 10 half steps eastward from the hall floor (97 -> 92)
   lifts: [{ x: 2312, z: 6 }, { x: 2312, z: 23 }, { x: 2312, z: 38 }],                                 // 3x3 glass shafts 91..101 (decorative, like the city's)
+  // timetable text rows (4 WALL_SIGN tiles each, first tile at z, running -z) on the west wall beside platform 1; the
+  // text itself is registered by structures/stations.js
+  signs: [{ x: 2201, y: 94, z: 13 }, { x: 2201, y: 93, z: 13 }],
 };
 
 // ------------------------------------------------------------------------------------------------ pads
