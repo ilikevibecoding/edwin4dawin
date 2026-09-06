@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="1800">
+<title>Bahía Vista — overnight progress (before / after)</title>
+<style>
+  :root { color-scheme: dark; --bg: #0d1117; --panel: #161b22; --line: #30363d; --fg: #e6edf3; --muted: #8b949e; --accent: #58a6ff; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  header { position: sticky; top: 0; z-index: 2; background: rgba(13,17,23,.92); backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); padding: 12px 20px; display: flex; flex-wrap: wrap; gap: 14px; align-items: center; }
+  header h1 { font-size: 17px; margin: 0 12px 0 0; font-weight: 600; }
+  header label { color: var(--muted); font-size: 13px; display: flex; gap: 6px; align-items: center; }
+  select { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 14px; }
+  .status { margin-left: auto; color: var(--muted); font-size: 13px; text-align: right; }
+  main { max-width: 1680px; margin: 0 auto; padding: 18px 20px 60px; }
+  .item { margin: 0 0 34px; }
+  .item h2 { font-size: 18px; margin: 18px 0 8px; font-weight: 600; }
+  .view { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 14px; margin: 0 0 14px; }
+  .view h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .pair figure { margin: 0; }
+  .pair img { width: 100%; height: auto; display: block; border-radius: 6px; background: #000; cursor: zoom-in; }
+  figcaption { font-size: 12.5px; color: var(--muted); margin: 6px 2px 0; display: flex; justify-content: space-between; gap: 8px; }
+  figcaption b { color: var(--fg); font-weight: 600; }
+  .strip { display: flex; gap: 6px; margin-top: 10px; overflow-x: auto; padding-bottom: 4px; }
+  .strip img { height: 54px; border-radius: 4px; border: 2px solid transparent; cursor: pointer; opacity: .8; }
+  .strip img.sel { border-color: var(--accent); opacity: 1; }
+  .strip img.selb { border-color: #d29922; opacity: 1; }
+  details { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+  pre { white-space: pre-wrap; font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+  .missing { color: #f85149; font-size: 13px; }
+  .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.92); display: none; align-items: center; justify-content: center; z-index: 9; cursor: zoom-out; }
+  .lightbox img { max-width: 98vw; max-height: 96vh; }
+  @media (max-width: 900px) { .pair { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Bahía Vista — overnight before / after</h1>
+  <label>Item <select id="item"></select></label>
+  <label>Before <select id="before"></select></label>
+  <label>After <select id="after"></select></label>
+  <div class="status" id="status">loading…</div>
+</header>
+<main id="main"></main>
+<div class="lightbox" id="lightbox"><img alt=""></div>
+<script>
+const $ = (s) => document.querySelector(s);
+let data = null, itemSel = 'all', beforeTag = null, afterTag = null;
+
+async function load() {
+  const r = await fetch('data.json?ts=' + Date.now(), { cache: 'no-store' });
+  const d = await r.json();
+  const hadLatest = data && data.snapshots.length ? data.snapshots[data.snapshots.length - 1].tag : null;
+  data = d;
+  const tags = d.snapshots.map((s) => s.tag);
+  if (!beforeTag || !tags.includes(beforeTag)) beforeTag = tags[0];
+  if (!afterTag || afterTag === hadLatest || !tags.includes(afterTag)) afterTag = tags[tags.length - 1];
+  fillSelects();
+  render();
+}
+function snap(tag) { return data.snapshots.find((s) => s.tag === tag); }
+function fmt(s) { return `${s.tag} · ${s.time.replace('T', ' ')} · build ${s.build}`; }
+function fillSelects() {
+  const item = $('#item');
+  item.innerHTML = '<option value="all">All items</option>' + data.items.map((i) => `<option value="${i.id}">${i.name}</option>`).join('');
+  item.value = itemSel;
+  for (const [id, cur] of [['#before', beforeTag], ['#after', afterTag]]) {
+    const el = $(id);
+    el.innerHTML = data.snapshots.map((s) => `<option value="${s.tag}">${fmt(s)}</option>`).join('');
+    el.value = cur;
+  }
+  const last = data.snapshots[data.snapshots.length - 1];
+  $('#status').innerHTML = `${data.snapshots.length} snapshot${data.snapshots.length === 1 ? '' : 's'} · latest ${last ? last.time.replace('T', ' ') + ' UTC (build ' + last.build + ')' : '—'}<br>page re-checks every 5 min; a new snapshot lands about once an hour`;
+}
+function img(tag, label) { return `shots/${tag}/${label}.jpg`; }
+function render() {
+  const main = $('#main');
+  const items = itemSel === 'all' ? data.items : data.items.filter((i) => i.id === itemSel);
+  const b = snap(beforeTag), a = snap(afterTag);
+  const views = a ? a.views : (b ? b.views : []);
+  main.innerHTML = items.map((it) => {
+    const vs = views.filter((v) => v.item === it.id);
+    if (!vs.length) return '';
+    return `<section class="item"><h2>${it.name}</h2>${vs.map((v) => {
+      const bv = b && b.views.find((x) => x.label === v.label && x.ok);
+      const av = a && a.views.find((x) => x.label === v.label && x.ok);
+      const strip = data.snapshots.map((s) => {
+        const ok = s.views.find((x) => x.label === v.label && x.ok);
+        if (!ok) return '';
+        const cls = s.tag === afterTag ? 'sel' : s.tag === beforeTag ? 'selb' : '';
+        return `<img class="${cls}" src="${img(s.tag, v.label)}" title="${fmt(s)} (click: after · shift-click: before)" data-tag="${s.tag}" loading="lazy">`;
+      }).join('');
+      return `<div class="view"><h3>${v.title}</h3><div class="pair">
+        <figure>${bv ? `<img src="${img(beforeTag, v.label)}" loading="lazy">` : '<div class="missing">no frame in this snapshot</div>'}<figcaption><b>Before</b><span>${b ? fmt(b) : ''}</span></figcaption></figure>
+        <figure>${av ? `<img src="${img(afterTag, v.label)}" loading="lazy">` : '<div class="missing">no frame in this snapshot</div>'}<figcaption><b>After</b><span>${a ? fmt(a) : ''}</span></figcaption></figure>
+      </div><div class="strip">${strip}</div></div>`;
+    }).join('')}</section>`;
+  }).join('') + (a ? `<details><summary>What is in the "after" build (${fmt(a)})</summary><pre>${a.notes || ''}</pre></details>` : '');
+}
+$('#item').addEventListener('change', (e) => { itemSel = e.target.value; render(); });
+$('#before').addEventListener('change', (e) => { beforeTag = e.target.value; render(); });
+$('#after').addEventListener('change', (e) => { afterTag = e.target.value; render(); });
+document.addEventListener('click', (e) => {
+  const t = e.target;
+  if (t.tagName === 'IMG' && t.closest('.strip')) { if (e.shiftKey) beforeTag = t.dataset.tag; else afterTag = t.dataset.tag; fillSelects(); render(); return; }
+  if (t.tagName === 'IMG' && t.closest('.pair')) { $('#lightbox img').src = t.src; $('#lightbox').style.display = 'flex'; return; }
+  if (t.closest('#lightbox')) $('#lightbox').style.display = 'none';
+});
+load();
+setInterval(load, 5 * 60 * 1000);
+</script>
+</body>
+</html>

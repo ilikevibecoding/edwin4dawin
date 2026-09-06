@@ -1,0 +1,22 @@
+source: lead a6a15f19
+build: a6a15f19 from /workspace
+shot failed: aircraft_rear
+shot failed: aircraft_front
+shot failed: cockpit
+shot failed: glass
+shot failed: water_landing
+shot failed: harbor
+shot failed: island_pass
+shot failed: skyline_high
+shot failed: city_500m
+shot failed: city_200m
+shot failed: street_2m
+shot failed: night
+shot failed: sunset
+shot failed: cloudy
+shot failed: highway_bridge
+shot failed: highway_aerial
+shot failed: highway_200m
+shot failed: foliage_suburb
+shot failed: foliage_park
+shot failed: shore_beach
