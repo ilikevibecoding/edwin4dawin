@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
-import { Rng } from '../core/seed';
+import { Rng, hash2 } from '../core/seed';
 import { clamp } from '../core/noise';
 import { Zone, type District, type RoadClass, type RoadSpec, type Vec2, type WorldMap } from './map';
 import { balanceGroundIbl } from './terrain';
@@ -17,6 +17,9 @@ export interface RoadSegment {
 }
 
 const CLASS_WIDTH: Record<RoadClass, number> = { highway: 22, causeway: 22, arterial: 15, street: 10, lane: 7, runway: 45, taxiway: 18 };
+
+/** height of the carriageway surface over the terrain (the strip floats clear of the ground mesh) */
+export const ROAD_LIFT = 0.15;
 
 function isLandSegment(map: WorldMap, a: Vec2, b: Vec2, margin = 0.6): boolean {
   const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
@@ -52,7 +55,7 @@ export interface Block { x0: number; x1: number; z0: number; z1: number; streetW
  *  in the list take priority: streets and blocks of a later district are dropped where they fall
  *  inside an earlier one (parks and golf courses stay free of the surrounding suburb's grid). Island
  *  settlements with a `track` get a sandy lane and small lots along it instead of a grid. */
-export function buildRoadNetwork(map: WorldMap): { segments: RoadSegment[]; streetsByDistrict: Map<string, RoadSegment[]>; blocksByDistrict: Map<string, Block[]> } {
+export function buildRoadNetwork(map: WorldMap): { segments: RoadSegment[]; streetsByDistrict: Map<string, RoadSegment[]>; blocksByDistrict: Map<string, Block[]>; graph: RoadGraph } {
   const segments: RoadSegment[] = [];
   const streetsByDistrict = new Map<string, RoadSegment[]>();
   const blocksByDistrict = new Map<string, Block[]>();
@@ -129,14 +132,380 @@ export function buildRoadNetwork(map: WorldMap): { segments: RoadSegment[]; stre
   for (const r of map.runways) {
     segments.push({ a: r.a, b: r.b, width: r.width, cls: 'runway', lanes: 0, traffic: 0, lift: 0 });
   }
-  return { segments, streetsByDistrict, blocksByDistrict };
+  const graph = buildRoadGraph(map, segments);
+  return { segments, streetsByDistrict, blocksByDistrict, graph };
 }
+
+// ------------------------------------------------------------------ road graph (chains, intersections, corners)
+
+/** A polyline of stitched segments of one class and width: the unit the carriageway strips, the intersections
+ *  and the sidewalks are built on. `s0..s1` is the along range actually paved (a chain that ends on another
+ *  road is cut back to that road's edge so the two carriageways meet without overlapping). */
+export interface RoadChain {
+  id: number;
+  segs: RoadSegment[];
+  pts: Vec2[];
+  /** cumulative along-distance at each polyline vertex */
+  cum: number[];
+  length: number;
+  width: number;
+  hw: number;
+  cls: RoadClass;
+  lanes: number;
+  lift: number;
+  /** intersections on this chain, sorted by along */
+  nodes: ChainNode[];
+  s0: number;
+  s1: number;
+  /** along-positions of the carriageway mesh rows and the surface height at each row's two edges (side -1, +1),
+   *  filled by buildRoadMeshes so the sidewalks meet the pavement edge exactly */
+  rows: number[];
+  rowY: [number[], number[]];
+}
+
+/** one intersection as seen from one chain: where it is along the chain, how far its box reaches on each side
+ *  (before / after the node) and which markings the chain draws there (ROAD_F_* bits) */
+export interface ChainNode { node: RoadNode; s: number; hMinus: number; hPlus: number; flags: number }
+
+/** A half-road leaving a node: the chain, the along-position of the node on it, the unit direction of the ray
+ *  (away from the node) and whether the chain continues in that direction (`sign` = +1 toward increasing along). */
+export interface RoadRay { chain: RoadChain; s: number; dir: Vec2; sign: 1 | -1; angle: number; stub: boolean }
+
+/** The curb return between two angularly adjacent rays of a node: the point `c` where the two carriageway edges
+ *  would meet, the tangent points `ta` / `tb` on those edges, the arc between them (from ta to tb) and the
+ *  along-position / side of each tangent point on its chain (sidewalk runs stop and start there). */
+export interface RoadCorner {
+  node: RoadNode; a: RoadRay; b: RoadRay; c: Vec2; ta: Vec2; tb: Vec2; arc: Vec2[]; r: number;
+  /** centre of the curb-return arc (inside the block corner, `r` from both carriageway edges) */
+  o: Vec2;
+  sA: number; sideA: number; sB: number; sideB: number;
+  /** distance from the node to `c` measured along each ray (the reach of the crossing road along this one) */
+  reachA: number; reachB: number;
+}
+
+export interface RoadNode {
+  id: number;
+  x: number;
+  z: number;
+  rays: RoadRay[];
+  corners: RoadCorner[];
+  /** traffic signals (mast arms) rather than stop signs */
+  signal: boolean;
+  /** the chains that stop here when the node is not signalised (two-way / all-way stop) */
+  stops: Set<RoadChain>;
+  /** highest road class present: 2 arterial, 1 street, 0 lane */
+  rank: number;
+  zone: Zone | null;
+}
+
+export interface RoadGraph { chains: RoadChain[]; nodes: RoadNode[] }
+
+/** marking flags carried per (chain, node) into the carriageway shader (`aIsect.w`) */
+export const ROAD_F_BOX = 1;          // suppress lines inside the intersection box (the crossing road runs through it)
+export const ROAD_F_LADDER = 2;       // ladder crosswalk on both sides of the box
+export const ROAD_F_LINES = 4;        // two-line crosswalk
+export const ROAD_F_STOP = 8;         // stop bar on the approach half
+export const ROAD_F_ARROWS = 16;      // lane arrows on the approach lanes
+export const ROAD_F_EDGE_MINUS = 32;  // T junction: break the edge line on the across < 0 side
+export const ROAD_F_EDGE_PLUS = 64;   // T junction: break the edge line on the across > 0 side
+
+const GRAPH_CLASSES = new Set<RoadClass>(['arterial', 'street', 'lane']);
+
+/** Stitch consecutive segments of one polyline into chains (same class, width and lift, shared end point). */
+function stitchChains(segments: RoadSegment[]): RoadChain[] {
+  const chains: RoadChain[] = [];
+  let last: RoadChain | null = null;
+  for (const s of segments) {
+    if (Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) < 1) continue;
+    const prev = last && last.segs[last.segs.length - 1];
+    if (last && prev && prev.cls === s.cls && prev.width === s.width && prev.lift === s.lift && prev.b[0] === s.a[0] && prev.b[1] === s.a[1]) {
+      last.segs.push(s);
+    } else {
+      last = { id: chains.length, segs: [s], pts: [], cum: [], length: 0, width: s.width, hw: s.width * 0.5, cls: s.cls, lanes: s.lanes, lift: s.lift, nodes: [], s0: 0, s1: 0, rows: [], rowY: [[], []] };
+      chains.push(last);
+    }
+  }
+  for (const c of chains) {
+    c.pts = [c.segs[0].a, ...c.segs.map((s) => s.b)];
+    let acc = 0;
+    c.cum.push(0);
+    for (let i = 0; i < c.pts.length - 1; i++) { acc += Math.hypot(c.pts[i + 1][0] - c.pts[i][0], c.pts[i + 1][1] - c.pts[i][1]); c.cum.push(acc); }
+    c.length = acc;
+    c.s1 = acc;
+  }
+  return chains;
+}
+
+/** Point and unit direction of a chain at along-position `s` (clamped). */
+export function chainFrame(c: RoadChain, s: number): { x: number; z: number; dx: number; dz: number; seg: number } {
+  const n = c.pts.length;
+  let i = 0;
+  while (i < n - 2 && c.cum[i + 1] < s) i++;
+  const [ax, az] = c.pts[i], [bx, bz] = c.pts[i + 1];
+  const len = c.cum[i + 1] - c.cum[i] || 1;
+  const t = clamp((s - c.cum[i]) / len, 0, 1);
+  return { x: ax + (bx - ax) * t, z: az + (bz - az) * t, dx: (bx - ax) / len, dz: (bz - az) / len, seg: i };
+}
+
+/** Intersection of segments p+t*r and q+u*w (t, u in [0,1] with tolerance `eps` in metres), or null. */
+function segIntersect(p: Vec2, r: Vec2, q: Vec2, w: Vec2, eps: number): { t: number; u: number } | null {
+  const den = r[0] * w[1] - r[1] * w[0];
+  if (Math.abs(den) < 1e-9) return null;
+  const qx = q[0] - p[0], qz = q[1] - p[1];
+  const t = (qx * w[1] - qz * w[0]) / den, u = (qx * r[1] - qz * r[0]) / den;
+  const lr = Math.hypot(r[0], r[1]), lw = Math.hypot(w[0], w[1]);
+  const et = eps / lr, eu = eps / lw;
+  if (t < -et || t > 1 + et || u < -eu || u > 1 + eu) return null;
+  return { t: clamp(t, 0, 1), u: clamp(u, 0, 1) };
+}
+
+const RANK: Partial<Record<RoadClass, number>> = { arterial: 2, street: 1, lane: 0 };
+
+/** Curb-return radius by the classes meeting at a corner. */
+function cornerRadius(a: RoadChain, b: RoadChain): number {
+  const r = Math.max(RANK[a.cls] ?? 0, RANK[b.cls] ?? 0);
+  return r >= 2 ? 6 : r === 1 ? 4.5 : 3;
+}
+
+/**
+ * Intersections of the ground road network. Every place where two chains cross or one ends on another becomes
+ * a node with rays (half-roads) sorted by angle; adjacent rays get a curb-return corner. Stubs (chains ending on
+ * another road) are cut back to that road's edge. Nodes on arterials and in the dense districts are signalised,
+ * the rest are stop-controlled on the minor road; the per-chain node records carry the marking flags the
+ * carriageway shader draws (box suppression, crosswalks, stop bars, arrows).
+ */
+export function buildRoadGraph(map: WorldMap, segments: RoadSegment[]): RoadGraph {
+  const chains = stitchChains(segments);
+  const graphChains = chains.filter((c) => GRAPH_CLASSES.has(c.cls));
+  // spatial hash of chain segments
+  const CELL = 250;
+  const hash = new Map<number, { c: RoadChain; i: number }[]>();
+  const key = (x: number, z: number) => Math.floor((x + 10000) / CELL) * 4096 + Math.floor((z + 10000) / CELL);
+  for (const c of graphChains) {
+    for (let i = 0; i < c.pts.length - 1; i++) {
+      const [ax, az] = c.pts[i], [bx, bz] = c.pts[i + 1];
+      const x0 = Math.floor((Math.min(ax, bx) - 2 + 10000) / CELL), x1 = Math.floor((Math.max(ax, bx) + 2 + 10000) / CELL);
+      const z0 = Math.floor((Math.min(az, bz) - 2 + 10000) / CELL), z1 = Math.floor((Math.max(az, bz) + 2 + 10000) / CELL);
+      for (let kx = x0; kx <= x1; kx++) for (let kz = z0; kz <= z1; kz++) {
+        const k = kx * 4096 + kz;
+        let list = hash.get(k);
+        if (!list) { list = []; hash.set(k, list); }
+        list.push({ c, i });
+      }
+    }
+  }
+  // raw incidences: (point, chain, along) for every crossing / touching pair
+  interface Inc { x: number; z: number; c: RoadChain; s: number }
+  const incs: Inc[] = [];
+  const EPS = 1.2;
+  const seen = new Set<number>();
+  const segKey = (e: { c: RoadChain; i: number }) => e.c.id * 64 + Math.min(e.i, 63);
+  for (const list of hash.values()) {
+    for (let p = 0; p < list.length; p++) for (let q = p + 1; q < list.length; q++) {
+      const A = list[p], B = list[q];
+      if (A.c === B.c) continue;
+      const ka = segKey(A), kb = segKey(B);
+      const pairKey = (Math.min(ka, kb)) * 2097152 + Math.max(ka, kb);
+      if (seen.has(pairKey)) continue;
+      seen.add(pairKey);
+      const pa = A.c.pts[A.i], pb = A.c.pts[A.i + 1], qa = B.c.pts[B.i], qb = B.c.pts[B.i + 1];
+      const hit = segIntersect(pa, [pb[0] - pa[0], pb[1] - pa[1]], qa, [qb[0] - qa[0], qb[1] - qa[1]], EPS);
+      if (!hit) continue;
+      const x = pa[0] + (pb[0] - pa[0]) * hit.t, z = pa[1] + (pb[1] - pa[1]) * hit.t;
+      const sA = A.c.cum[A.i] + hit.t * (A.c.cum[A.i + 1] - A.c.cum[A.i]);
+      const sB = B.c.cum[B.i] + hit.u * (B.c.cum[B.i + 1] - B.c.cum[B.i]);
+      incs.push({ x, z, c: A.c, s: sA }, { x, z, c: B.c, s: sB });
+    }
+  }
+  // cluster incidences into nodes (points within 3 m)
+  const NODE_CELL = 3;
+  const buckets = new Map<number, Inc[][]>();
+  const clusters: Inc[][] = [];
+  for (const inc of incs) {
+    const bx = Math.floor(inc.x / NODE_CELL), bz = Math.floor(inc.z / NODE_CELL);
+    let found: Inc[] | null = null;
+    for (let dx = -1; dx <= 1 && !found; dx++) for (let dz = -1; dz <= 1 && !found; dz++) {
+      const list = buckets.get((bx + dx) * 100003 + (bz + dz));
+      if (!list) continue;
+      for (const cl of list) if (Math.hypot(cl[0].x - inc.x, cl[0].z - inc.z) < 3) { found = cl; break; }
+    }
+    if (found) { found.push(inc); continue; }
+    const cl = [inc];
+    clusters.push(cl);
+    const k = bx * 100003 + bz;
+    let list = buckets.get(k);
+    if (!list) { list = []; buckets.set(k, list); }
+    list.push(cl);
+  }
+  const nodes: RoadNode[] = [];
+  for (const cl of clusters) {
+    // one incidence per chain (the along positions of duplicates agree within the cluster radius)
+    const byChain = new Map<RoadChain, Inc>();
+    let sx = 0, sz = 0;
+    for (const inc of cl) { sx += inc.x; sz += inc.z; if (!byChain.has(inc.c)) byChain.set(inc.c, inc); }
+    const x = sx / cl.length, z = sz / cl.length;
+    const rays: RoadRay[] = [];
+    for (const [c, inc] of byChain) {
+      const s = clamp(inc.s, 0, c.length);
+      const f = chainFrame(c, Math.min(s + 0.5, c.length));
+      const g = chainFrame(c, Math.max(s - 0.5, 0));
+      if (s < c.length - 1.5) rays.push({ chain: c, s, dir: [f.dx, f.dz], sign: 1, angle: 0, stub: s < 1.5 });
+      if (s > 1.5) rays.push({ chain: c, s, dir: [-g.dx, -g.dz], sign: -1, angle: 0, stub: s > c.length - 1.5 });
+    }
+    if (rays.length < 3) continue;
+    for (const r of rays) r.angle = Math.atan2(r.dir[1], r.dir[0]);
+    rays.sort((a, b) => a.angle - b.angle);
+    let rank = 0;
+    for (const r of rays) rank = Math.max(rank, RANK[r.chain.cls] ?? 0);
+    const node: RoadNode = { id: nodes.length, x, z, rays, corners: [], signal: false, stops: new Set(), rank, zone: map.districtAt(x, z)?.zone ?? null };
+    nodes.push(node);
+  }
+  // corners between angularly adjacent rays
+  for (const node of nodes) {
+    const n = node.rays.length;
+    for (let i = 0; i < n; i++) {
+      const A = node.rays[i], B = node.rays[(i + 1) % n];
+      let theta = B.angle - A.angle;
+      if (theta <= 0) theta += Math.PI * 2;
+      if (theta > Math.PI * 0.94 || theta < Math.PI / 6) continue; // straight-through or too sharp for a return
+      const r = cornerRadius(A.chain, B.chain);
+      const t = r / Math.tan(theta / 2);
+      // edge lines facing the wedge: A's on its +n side, B's on its -n side (n = dir rotated by +90 deg)
+      const nA: Vec2 = [-A.dir[1], A.dir[0]], nB: Vec2 = [-B.dir[1], B.dir[0]];
+      const pA: Vec2 = [node.x + nA[0] * A.chain.hw, node.z + nA[1] * A.chain.hw];
+      const pB: Vec2 = [node.x - nB[0] * B.chain.hw, node.z - nB[1] * B.chain.hw];
+      // solve pA + u*dirA = pB + v*dirB
+      const den = A.dir[0] * B.dir[1] - A.dir[1] * B.dir[0];
+      if (Math.abs(den) < 1e-6) continue;
+      const qx = pB[0] - pA[0], qz = pB[1] - pA[1];
+      const u = (qx * B.dir[1] - qz * B.dir[0]) / den;
+      const c: Vec2 = [pA[0] + A.dir[0] * u, pA[1] + A.dir[1] * u];
+      const ta: Vec2 = [c[0] + A.dir[0] * t, c[1] + A.dir[1] * t];
+      const tb: Vec2 = [c[0] + B.dir[0] * t, c[1] + B.dir[1] * t];
+      // arc centre: along the wedge bisector from c
+      const bis: Vec2 = [A.dir[0] + B.dir[0], A.dir[1] + B.dir[1]];
+      const bl = Math.hypot(bis[0], bis[1]) || 1;
+      const oc = r / Math.sin(theta / 2);
+      const o: Vec2 = [c[0] + (bis[0] / bl) * oc, c[1] + (bis[1] / bl) * oc];
+      const a0 = Math.atan2(ta[1] - o[1], ta[0] - o[0]);
+      let a1 = Math.atan2(tb[1] - o[1], tb[0] - o[0]);
+      // sweep the short way round
+      while (a1 - a0 > Math.PI) a1 -= Math.PI * 2;
+      while (a1 - a0 < -Math.PI) a1 += Math.PI * 2;
+      const steps = Math.max(3, Math.ceil(Math.abs(a1 - a0) * r / 1.2));
+      const arc: Vec2[] = [];
+      for (let k = 0; k <= steps; k++) { const a = a0 + (a1 - a0) * (k / steps); arc.push([o[0] + Math.cos(a) * r, o[1] + Math.sin(a) * r]); }
+      const reachA = (c[0] - node.x) * A.dir[0] + (c[1] - node.z) * A.dir[1];
+      const reachB = (c[0] - node.x) * B.dir[0] + (c[1] - node.z) * B.dir[1];
+      const sA = A.s + A.sign * ((ta[0] - node.x) * A.dir[0] + (ta[1] - node.z) * A.dir[1]);
+      const sB = B.s + B.sign * ((tb[0] - node.x) * B.dir[0] + (tb[1] - node.z) * B.dir[1]);
+      node.corners.push({ node, a: A, b: B, c, ta, tb, arc, r, o, sA, sideA: A.sign, sB, sideB: -B.sign, reachA, reachB });
+    }
+  }
+  // control type and per-chain node records
+  for (const node of nodes) {
+    const chainsHere = [...new Set(node.rays.map((r) => r.chain))];
+    const arterial = node.rank >= 2;
+    const dense = node.zone === Zone.DOWNTOWN;
+    const mid = node.zone === Zone.RES_MID || node.zone === Zone.HOTEL;
+    const fourWay = node.rays.length >= 4;
+    const h = hash2(Math.round(node.x), Math.round(node.z), 77);
+    if (node.rank === 0) node.signal = false;
+    else if (arterial) node.signal = chainsHere.filter((c) => c.cls !== 'lane').length >= 2;
+    else if (dense) node.signal = fourWay || h < 0.5;
+    else if (mid) node.signal = fourWay ? h < 0.55 : h < 0.2;
+    else node.signal = false;
+    if (!node.signal) {
+      // stops: stubs always; at a 4-way of equal rank the chain nearer north-south stops (two-way stop)
+      const through = chainsHere.filter((c) => node.rays.filter((r) => r.chain === c).length === 2);
+      for (const c of chainsHere) if (!through.includes(c)) node.stops.add(c);
+      if (through.length >= 2) {
+        const ranked = through.slice().sort((a, b) => (RANK[a.cls] ?? 0) - (RANK[b.cls] ?? 0) || a.hw - b.hw);
+        const minor = ranked[0], major = ranked[ranked.length - 1];
+        if ((RANK[minor.cls] ?? 0) < (RANK[major.cls] ?? 0) || minor.hw < major.hw) node.stops.add(minor);
+        else {
+          // equal rank: pick by the chain's heading (alternating with a node hash so no district is uniform)
+          const pick = through.slice().sort((a, b) => { const fa = chainFrame(a, 1), fb = chainFrame(b, 1); return Math.abs(fa.dx) - Math.abs(fb.dx); })[h < 0.7 ? 0 : 1];
+          node.stops.add(pick);
+        }
+      }
+    }
+    for (const c of chainsHere) {
+      const raysOf = node.rays.filter((r) => r.chain === c);
+      const s = raysOf[0].s;
+      const through = raysOf.length === 2;
+      // reach of the crossing roads along this chain on each side (from the corner points)
+      let hMinus = 0, hPlus = 0;
+      for (const k of node.corners) {
+        if (k.a.chain === c) { if (k.a.sign > 0) hPlus = Math.max(hPlus, k.reachA); else hMinus = Math.max(hMinus, k.reachA); }
+        if (k.b.chain === c) { if (k.b.sign > 0) hPlus = Math.max(hPlus, k.reachB); else hMinus = Math.max(hMinus, k.reachB); }
+      }
+      // a stub's box reaches to the far corner on its own side only
+      const others = chainsHere.filter((o) => o !== c);
+      const crossHw = others.reduce((m, o) => Math.max(m, o.hw), 0);
+      if (hMinus === 0) hMinus = crossHw;
+      if (hPlus === 0) hPlus = crossHw;
+      let flags = 0;
+      // the crossing road runs through the box when another chain passes through this node
+      const otherThrough = others.some((o) => node.rays.filter((r) => r.chain === o).length === 2);
+      if (otherThrough) flags |= ROAD_F_BOX;
+      else if (through) {
+        // T junction seen from the through road: each stem opens the edge line on its side
+        const f = chainFrame(c, s);
+        for (const stem of node.rays) {
+          if (stem.chain === c) continue;
+          const cross = -f.dz * stem.dir[0] + f.dx * stem.dir[1]; // stem on the right (+across) side of the chain?
+          flags |= cross > 0 ? ROAD_F_EDGE_PLUS : ROAD_F_EDGE_MINUS;
+        }
+      }
+      const urban = node.zone === Zone.DOWNTOWN || node.zone === Zone.RES_MID || node.zone === Zone.HOTEL || node.zone === Zone.INDUSTRIAL;
+      if (node.signal) {
+        flags |= ROAD_F_STOP | ROAD_F_LADDER;
+        if (c.lanes >= 4) flags |= ROAD_F_ARROWS;
+      } else {
+        if (node.stops.has(c)) flags |= ROAD_F_STOP;
+        if (urban && (node.rank >= 1)) flags |= ROAD_F_LINES;
+      }
+      c.nodes.push({ node, s, hMinus, hPlus, flags });
+    }
+  }
+  for (const c of chains) {
+    c.nodes.sort((a, b) => a.s - b.s);
+    // stubs are cut back to the edge of the road they end on
+    for (const cn of c.nodes) {
+      if (cn.s < 1.5) c.s0 = Math.max(c.s0, Math.min(cn.s + cn.hPlus, c.length * 0.5));
+      if (cn.s > c.length - 1.5) c.s1 = Math.min(c.s1, Math.max(cn.s - cn.hMinus, c.length * 0.5));
+    }
+  }
+  return { chains, nodes };
+}
+
+// ------------------------------------------------------------------ carriageway shader
 
 const ROAD_FRAG_PARS = /* glsl */ `
 varying vec2 vRoadUv;   // x across (-1..1), y along (metres)
 varying vec3 vRoadInfo; // lanes, width, class
+varying vec4 vIsect;    // along of the nearest intersection, box reach before / after it, marking flags
 varying vec3 vWorldPosR;
 ${GLSL_NOISE}
+float aaLine(float d, float h, float fw) { return clamp((min(h, d + 0.5 * fw) - max(-h, d - 0.5 * fw)) / fw, 0.0, 1.0); }
+float aaStep(float edge, float x, float fw) { return clamp((x - edge) / fw + 0.5, 0.0, 1.0); }
+float flagBit(float flags, float bit) { return mod(floor(flags / bit + 0.01), 2.0); }
+/** straight arrow pointing toward +u: shaft u in [0, 2.4], head to 3.6; v across (metres) */
+float arrowStraight(vec2 p, float fw) {
+  float shaft = aaLine(p.y, 0.15, fw) * aaLine(p.x - 1.2, 1.2, fw);
+  float hw = 0.6 * clamp((3.6 - p.x) / 1.2, 0.0, 1.0);
+  float head = aaStep(2.4, p.x, fw) * aaStep(p.x, 3.6, fw) * aaStep(abs(p.y), hw, fw);
+  return max(shaft, head);
+}
+/** left-turn arrow: shaft toward +u, then a barb toward -v */
+float arrowLeft(vec2 p, float fw) {
+  float shaft = aaLine(p.y, 0.15, fw) * aaLine(p.x - 1.0, 1.0, fw);
+  float bar = aaLine(p.x - 2.0, 0.15, fw) * aaLine(p.y + 0.4, 0.4, fw);
+  float hw = 0.55 * clamp((p.y + 1.6) / 0.8, 0.0, 1.0);
+  float head = aaStep(-1.6, p.y, fw) * aaStep(p.y, -0.8, fw) * aaStep(abs(p.x - 2.0), hw, fw);
+  return max(max(shaft, bar), head);
+}
 `;
 const ROAD_FRAG_MAIN = /* glsl */ `
 {
@@ -145,10 +514,18 @@ const ROAD_FRAG_MAIN = /* glsl */ `
   float cls = vRoadInfo.z;
   float across = vRoadUv.x; // -1..1
   float along = vRoadUv.y;
-  float xm = across * width * 0.5; // metres from centre
-  float n = fbm3(vWorldPosR.xz * 0.15);
-  float n2 = vnoise(vWorldPosR.xz * 1.7);
+  float hw = width * 0.5;
+  float xm = across * hw; // metres from centre
+  vec2 wp = vWorldPosR.xz;
+  float fwX = max(fwidth(xm), 1e-4);
+  float fwA = max(fwidth(along), 1e-4);
+  float fp = max(length(fwidth(wp)), 1e-4); // metres per pixel on the ground
+  float n = fbm3(wp * 0.15);
+  // 60 cm grain, band-limited so it does not sparkle from altitude
+  float n2 = mix(vnoise(wp * 1.7), 0.5, smoothstep(0.15, 0.5, fp));
   vec3 asphalt = mix(vec3(0.16, 0.16, 0.165), vec3(0.24, 0.235, 0.23), n) * (0.92 + 0.16 * n2);
+  // paving history: 50-100 m stretches were laid at different times and have weathered to different greys
+  asphalt *= 0.9 + 0.2 * fbm3(wp * 0.017 + 5.0);
   // causeways and highways are pale, sun-bleached concrete-asphalt
   if (cls > 2.5 && cls < 4.5) asphalt = mix(vec3(0.30, 0.30, 0.29), vec3(0.40, 0.39, 0.37), n) * (0.94 + 0.12 * n2);
   if (cls < 0.5) {
@@ -157,110 +534,258 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     float rut = exp(-pow((abs(xm) - width * 0.22) * 2.2, 2.0));
     sand *= 1.0 - 0.14 * rut;
     float verge = smoothstep(0.55, 1.0, abs(across)) * (0.5 + 0.5 * n2);
-    float crown = smoothstep(0.05, 0.16, 0.16 - abs(xm) / max(width, 1.0)) * smoothstep(0.3, 0.7, fbm3(vWorldPosR.xz * 0.6 + 2.0));
+    float crown = smoothstep(0.05, 0.16, 0.16 - abs(xm) / max(width, 1.0)) * smoothstep(0.3, 0.7, fbm3(wp * 0.6 + 2.0));
     diffuseColor.rgb = mix(sand, vec3(0.30, 0.36, 0.16) * (0.85 + 0.3 * n2), max(verge * 0.8, crown * 0.5));
     roughnessFactor = 0.95;
   } else if (cls > 4.5) {
     // runway: concrete, centre line dashes, threshold bars
     vec3 concrete = mix(vec3(0.33, 0.33, 0.32), vec3(0.42, 0.41, 0.4), n) * (0.94 + 0.12 * n2);
-    float centre = step(abs(xm), 0.45) * step(fract(along / 60.0), 0.5);
-    float edge = step(width * 0.5 - 1.2, abs(xm)) * step(0.15, width * 0.5 - abs(xm));
+    float centre = aaLine(xm, 0.45, fwX) * mix(aaLine((fract(along / 60.0) - 0.25) * 60.0, 15.0, fwA), 0.5, smoothstep(10.0, 30.0, fwA));
+    float edge = aaLine(abs(xm) - (hw - 0.7), 0.5, fwX);
     // skid marks near the touchdown zone
-    float rubber = smoothstep(0.55, 0.8, fbm3(vWorldPosR.xz * 0.05 + 3.0)) * step(abs(xm), width * 0.28) * 0.35;
+    float rubber = smoothstep(0.55, 0.8, fbm3(wp * 0.05 + 3.0)) * step(abs(xm), width * 0.28) * 0.35;
     diffuseColor.rgb = mix(concrete * (1.0 - rubber), vec3(0.85), max(centre, edge) * 0.8);
     roughnessFactor = 0.85;
   } else {
-    float laneW = width / max(lanes, 1.0);
-    float edgeLine = smoothstep(0.12, 0.05, abs(abs(xm) - (width * 0.5 - 0.35)));
-    float centreLine = 0.0;
-    float dashes = 0.0;
+    // ---- intersection geometry: a = distance outside the intersection box (negative inside), appr = 1 on the
+    //      half of the road whose traffic is heading for the node (right-hand traffic: xm > 0 travels +along)
+    float dI = along - vIsect.x;
+    float reach = dI < 0.0 ? vIsect.y : vIsect.z;
+    float flags = vIsect.w;
+    float fBox = flagBit(flags, 1.0), fLadder = flagBit(flags, 2.0), fLines = flagBit(flags, 4.0), fStop = flagBit(flags, 8.0), fArrows = flagBit(flags, 16.0);
+    float fEdgeM = flagBit(flags, 32.0), fEdgeP = flagBit(flags, 64.0);
+    float a = abs(dI) - reach;
+    float appr = dI < 0.0 ? aaStep(0.0, xm, fwX) : aaStep(xm, 0.0, fwX);
+    float sgn = dI < 0.0 ? 1.0 : -1.0;
+    float marked = fLadder + fLines + fStop + fArrows;
+    // inside the box (a crossing road runs through) the surface is the plain, evenly polished asphalt of the
+    // junction: no lines, no lane-locked wear, so the two overlapping carriageways shade identically
+    float inBox = fBox * (1.0 - aaStep(0.0, a, fwA));
+    // ---- surface: tyre paths, patch repairs, seams, cracks (all band-limited to the pixel footprint)
+    float laneW = lanes >= 3.5 ? (hw - 0.7) / 2.0 : hw;
+    float lp = lanes >= 3.5 ? mod(abs(xm) - 0.25 + laneW, laneW) : mod(xm + hw, laneW);
+    float wheel = mix(exp(-pow((abs(lp - laneW * 0.5) - laneW * 0.27) * 3.2, 2.0)), 0.2, smoothstep(0.6, 2.5, fwX));
+    float wear = 1.0 - 0.13 * wheel * (1.0 - inBox);
+    // patch repairs: 5 x 3 m cells of the road frame, a few percent of them re-laid darker or bleached paler
+    vec2 pc = floor(vec2(along / 5.0, (xm + hw) / 3.0));
+    vec2 pf = fract(vec2(along / 5.0, (xm + hw) / 3.0));
+    float ph = hash12(pc + cls * 13.0);
+    float pin = aaStep(0.08, pf.x, fwA / 5.0) * aaStep(pf.x, 0.92, fwA / 5.0) * aaStep(0.1, pf.y, fwX / 3.0) * aaStep(pf.y, 0.9, fwX / 3.0);
+    float patch = step(0.955, ph) * pin * (1.0 - smoothstep(0.4, 1.5, fp)) * (1.0 - inBox);
+    float patchTone = ph > 0.98 ? 1.18 : 0.78;
+    // longitudinal paving seam at the lane edge and transverse seams every ~27 m
+    float seam = mix(aaLine(min(lp, laneW - lp), 0.03, fwX), 0.0, smoothstep(0.3, 1.0, fwX)) * 0.5;
+    float tseam = mix(aaLine((fract(along / 27.0) - 0.5) * 27.0, 0.03, fwA), 0.0, smoothstep(0.3, 1.0, fwA)) * step(0.4, hash11(floor(along / 27.0) + cls));
+    // cracking: thin dark lines where a low-frequency zone says the pavement is old
+    float crackZone = smoothstep(0.55, 0.72, fbm3(wp * 0.045 + 3.0));
+    float cr = abs(vnoise(wp * 0.7) - 0.5);
+    float crack = (1.0 - smoothstep(0.0, 0.018 + fp * 0.8, cr)) * crackZone * (1.0 - smoothstep(0.08, 0.35, fp));
+    // damp gutter stain along the kerbs
+    float gutter = smoothstep(hw - 0.7, hw - 0.1, abs(xm)) * (1.0 - inBox);
+    vec3 surf = asphalt * wear;
+    surf = mix(surf, asphalt * patchTone, patch * 0.85);
+    surf *= 1.0 - (0.18 * max(seam, tseam) + 0.35 * crack) * (1.0 - inBox) - 0.12 * gutter;
+    surf *= 1.0 - 0.12 * smoothstep(0.6, 0.75, fbm3(wp * 0.04 + 8.0)) * (1.0 - inBox);
+    // ---- markings, each box-filtered over the pixel footprint and faded out where they stop at junctions
+    float wearM = 0.6 + 0.4 * smoothstep(0.3, 0.7, fbm3(wp * 0.35 + 11.0));
+    float lineOK = mix(1.0, aaStep(5.0, a, fwA), fBox + fStop + fLadder + fLines > 0.5 ? 1.0 : 0.0);
+    float edgeOK = mix(1.0, aaStep(4.0, a, fwA), fBox + fLadder + fLines > 0.5 ? 1.0 : 0.0);
+    // T junctions break the edge line on the stem side only
+    float tGap = 1.0 - aaStep(0.0, a, fwA);
+    edgeOK *= 1.0 - tGap * (across > 0.0 ? fEdgeP : fEdgeM);
+    vec3 white = vec3(0.86, 0.86, 0.84), yellow = vec3(0.86, 0.66, 0.16);
+    float whiteC = 0.0, yellowC = 0.0;
+    float dashPulse = mix(aaLine((fract(along / 12.0) - 0.125) * 12.0, 1.5, fwA), 0.25, smoothstep(2.0, 6.0, fwA));
     if (lanes >= 3.5) {
-      // divided: double yellow at centre, dashed white lane lines
-      centreLine = smoothstep(0.1, 0.04, abs(abs(xm) - 0.25)) * 1.0;
-      float k = floor((xm + width * 0.5) / laneW);
-      float lanePos = abs(fract((xm + width * 0.5) / laneW) - 0.0) * laneW;
-      float laneEdge = smoothstep(0.12, 0.05, min(lanePos, laneW - lanePos)) * step(0.5, k) * step(k, lanes - 1.5);
-      dashes = laneEdge * step(fract(along / 12.0), 0.5);
-      centreLine = 0.0;
-      // median dashes around centre count as lane lines except the exact middle which is solid yellow
-      float mid = smoothstep(0.12, 0.05, abs(xm));
-      diffuseColor.rgb = asphalt;
-      vec3 yellow = vec3(0.85, 0.65, 0.15);
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8), max(edgeLine, dashes) * 0.85);
-      diffuseColor.rgb = mix(diffuseColor.rgb, yellow, mid * 0.9);
+      // divided arterial: double yellow centre, dashed white lane line, solid white edge line
+      float dbl = aaLine(abs(xm) - 0.2, 0.06, fwX);
+      yellowC = dbl * lineOK;
+      float laneLine = aaLine(abs(xm) - (0.25 + laneW), 0.06, fwX) * dashPulse * lineOK;
+      float edgeLine = aaLine(abs(xm) - (hw - 0.45), 0.06, fwX) * edgeOK;
+      whiteC = max(laneLine, edgeLine);
+    } else if (width >= 11.5) {
+      // dense-district street: solid double yellow and a white edge line (parking lane)
+      yellowC = aaLine(abs(xm) - 0.2, 0.06, fwX) * lineOK;
+      whiteC = aaLine(abs(xm) - (hw - 0.45), 0.06, fwX) * edgeOK;
     } else {
-      centreLine = smoothstep(0.1, 0.04, abs(xm)) * step(fract(along / 9.0), 0.45);
-      diffuseColor.rgb = mix(asphalt, vec3(0.85, 0.7, 0.2), centreLine * 0.85);
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.8), edgeLine * 0.6 * step(9.5, width));
+      // local street: a dashed yellow centre only
+      yellowC = aaLine(xm, 0.07, fwX) * dashPulse * lineOK;
     }
-    // wear: tyre paths slightly darker, patches
-    float wheel = exp(-pow((abs(mod(xm + width * 0.5, laneW) - laneW * 0.5) - laneW * 0.28) * 4.0, 2.0));
-    diffuseColor.rgb *= 1.0 - 0.12 * wheel;
-    diffuseColor.rgb *= 1.0 - 0.15 * smoothstep(0.6, 0.75, fbm3(vWorldPosR.xz * 0.04 + 8.0));
-    roughnessFactor = 0.78;
+    if (marked > 0.5) {
+      // crosswalk: two transverse lines 3 m apart, ladder bars between them where signalised
+      float cw1 = aaLine(a - 0.65, 0.15, fwA), cw2 = aaLine(a - 3.65, 0.15, fwA);
+      float span = aaStep(0.5, abs(xm), fwX) * aaStep(abs(xm), hw - 0.35, fwX);
+      float bars = aaLine((fract((xm + hw) / 1.2) - 0.5) * 1.2, 0.3, fwX) * aaLine(a - 2.15, 1.35, fwA);
+      bars = mix(bars, 0.5 * aaLine(a - 2.15, 1.35, fwA), smoothstep(0.4, 1.0, fwX));
+      float xwalk = (fLadder + fLines) * max(cw1, cw2) * span * aaStep(0.2, abs(xm) , fwX);
+      xwalk = max(xwalk, fLadder * bars * aaStep(0.3, abs(xm), fwX) * aaStep(abs(xm), hw - 0.3, fwX));
+      // stop bar across the approach half, 4.5 m out (behind the crosswalk)
+      float stopBar = fStop * appr * aaLine(a - 4.5, 0.3, fwA) * aaStep(0.35, abs(xm), fwX) * aaStep(abs(xm), hw - 0.35, fwX);
+      float junction = max(xwalk, stopBar);
+      // lane arrows on the approach lanes of arterials, 8-12 m before the stop bar
+      if (fArrows > 0.5 && lanes >= 3.5) {
+        float u = 11.5 - a;
+        float lane0 = 0.25 + laneW * 0.5, lane1 = 0.25 + laneW * 1.5;
+        float v0 = (abs(xm) - lane0), v1 = (abs(xm) - lane1);
+        float fwArrow = max(fwX, fwA);
+        float arrows = max(arrowLeft(vec2(u, v0), fwArrow), arrowStraight(vec2(u, v1), fwArrow)) * appr * (1.0 - smoothstep(0.25, 0.7, fp));
+        junction = max(junction, arrows);
+      }
+      whiteC = max(whiteC, junction);
+    }
+    // paint ages: worn thin along the wheel paths, and the whole marking fades to a stain from the air
+    whiteC *= wearM * (1.0 - 0.35 * wheel);
+    yellowC *= wearM * (1.0 - 0.3 * wheel);
+    diffuseColor.rgb = mix(surf, white, whiteC * 0.92);
+    diffuseColor.rgb = mix(diffuseColor.rgb, yellow, yellowC * 0.92);
+    // ---- ironwork: manhole covers in the lanes, gully gratings along the kerbs (gone once they are a pixel)
+    float ironFade = 1.0 - smoothstep(0.22, 0.6, fp);
+    if (ironFade > 0.0 && cls < 2.5) {
+      float mc = floor(along / 34.0);
+      float mh = hash11(mc * 3.1 + cls * 7.0);
+      vec2 mo = hash22(vec2(mc, cls * 5.0));
+      float ma = (mc + 0.2 + mo.x * 0.6) * 34.0;
+      float mx = (mo.y - 0.5) * (width - 3.0);
+      float md = length(vec2(along - ma, xm - mx));
+      float manhole = step(0.35, mh) * (1.0 - smoothstep(0.32 - fp, 0.32 + fp, md)) * ironFade * (1.0 - inBox);
+      float rim = manhole * smoothstep(0.2, 0.3, md);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.13, 0.13, 0.135) * (1.0 + 0.5 * rim), manhole);
+      float gc = floor(along / 24.0);
+      float ga = (gc + 0.3 + hash11(gc * 1.7 + cls) * 0.4) * 24.0;
+      float gx = hw - 0.45;
+      float grate = aaLine(along - ga, 0.45, fwA) * aaLine(abs(xm) - gx, 0.22, fwX) * ironFade * (1.0 - inBox);
+      float slots = mix(step(0.5, fract((along - ga) / 0.16)), 0.5, smoothstep(0.05, 0.12, fp));
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.10, 0.10, 0.11) * (0.6 + 0.8 * slots), grate);
+      roughnessFactor = mix(0.78, 0.5, max(manhole, grate));
+    } else roughnessFactor = 0.78;
+    // wet-looking fresh patches and paint are a little smoother than the aggregate
+    roughnessFactor = mix(roughnessFactor, 0.62, max(whiteC, yellowC) * 0.6 + patch * 0.4);
+    roughnessFactor += 0.08 * n2 - 0.04;
   }
 }
 `;
 
-/** All roads in one merged mesh (a single draw call). Consecutive segments of an authored polyline
- *  are stitched into one strip with mitered corners so bends have neither gaps nor overlapping
- *  decks; the strip follows the height field at 15 m steps. */
-export function buildRoadMeshes(map: WorldMap, segments: RoadSegment[], material: THREE.Material): THREE.Mesh[] {
-  const pos: number[] = [], uv: number[] = [], info: number[] = [], idx: number[] = [], nrm: number[] = [];
+/** Chain frame at `s` with the mitred cross vector (the strip's across direction, scaled at polyline bends so the
+ *  edges stay parallel to the centre line). */
+export function frameAt(c: RoadChain, cross: Vec2[], s: number): { x: number; z: number; cx: number; cz: number } {
+  const n = c.pts.length;
+  let i = 0;
+  while (i < n - 2 && c.cum[i + 1] < s) i++;
+  const [ax, az] = c.pts[i], [bx, bz] = c.pts[i + 1];
+  const len = c.cum[i + 1] - c.cum[i] || 1;
+  const t = clamp((s - c.cum[i]) / len, 0, 1);
+  const c0 = cross[i], c1 = cross[i + 1];
+  return { x: ax + (bx - ax) * t, z: az + (bz - az) * t, cx: c0[0] + (c1[0] - c0[0]) * t, cz: c0[1] + (c1[1] - c0[1]) * t };
+}
+
+/** Mitred cross vectors per polyline vertex of a chain (segment normal at the ends, clamped mitre inside). */
+export function chainCross(c: RoadChain): Vec2[] {
+  const m = c.pts.length;
+  const dirs: Vec2[] = [];
+  for (let i = 0; i < m - 1; i++) {
+    const dx = c.pts[i + 1][0] - c.pts[i][0], dz = c.pts[i + 1][1] - c.pts[i][1];
+    const len = Math.hypot(dx, dz) || 1;
+    dirs.push([dx / len, dz / len]);
+  }
+  const cross: Vec2[] = [];
+  for (let i = 0; i < m; i++) {
+    const d0 = dirs[Math.max(0, i - 1)], d1 = dirs[Math.min(m - 2, i)];
+    let nx = -(d0[1] + d1[1]), nz = d0[0] + d1[0];
+    const nl = Math.hypot(nx, nz) || 1;
+    nx /= nl; nz /= nl;
+    const cosHalf = Math.max(0.5, nx * -d1[1] + nz * d1[0]);
+    cross.push([nx / cosHalf, nz / cosHalf]);
+  }
+  return cross;
+}
+
+/** Along-positions where the strip needs a row between `sa` and `sb`: the ends, every polyline vertex inside and
+ *  steps of at most `step` metres between them. */
+export function rowPositions(c: RoadChain, sa: number, sb: number, step: number): number[] {
+  const breaks = [sa];
+  for (const s of c.cum) if (s > sa + 0.01 && s < sb - 0.01) breaks.push(s);
+  breaks.push(sb);
+  const out: number[] = [];
+  for (let i = 0; i < breaks.length - 1; i++) {
+    const a = breaks[i], b = breaks[i + 1];
+    const n = Math.max(1, Math.ceil((b - a) / step));
+    for (let k = 0; k < n; k++) out.push(a + ((b - a) * k) / n);
+  }
+  out.push(sb);
+  return out;
+}
+
+/** All roads in one merged vertex buffer, indexed per ROAD_CHUNK cell (one draw call per cell in view).
+ *  Each chain is a strip that follows the height field at 15 m steps; its rows are split at the midpoints
+ *  between successive intersections so every vertex carries the nearest intersection (`aIsect`: along, box
+ *  reach before / after, marking flags) as a constant, and stubs stop at the edge of the road they end on.
+ *  Curb-return fillets fill the corner between two roads with plain asphalt. */
+export function buildRoadMeshes(map: WorldMap, graph: RoadGraph, material: THREE.Material): THREE.Mesh[] {
+  const pos: number[] = [], uv: number[] = [], info: number[] = [], isect: number[] = [], idx: number[] = [], nrm: number[] = [];
   let vcount = 0;
   const clsId = (c: RoadClass) => (c === 'highway' || c === 'causeway' ? 3 : c === 'arterial' ? 2 : c === 'runway' ? 5 : c === 'taxiway' ? 6 : c === 'lane' ? 0 : 1);
-  const chains: RoadSegment[][] = [];
-  for (const s of segments) {
-    if (Math.hypot(s.b[0] - s.a[0], s.b[1] - s.a[1]) < 1) continue;
-    const last = chains[chains.length - 1];
-    const prev = last && last[last.length - 1];
-    if (prev && prev.cls === s.cls && prev.width === s.width && prev.lift === s.lift && prev.b[0] === s.a[0] && prev.b[1] === s.a[1]) last.push(s);
-    else chains.push([s]);
-  }
-  for (const chain of chains) {
-    const pts: Vec2[] = [chain[0].a, ...chain.map((s) => s.b)];
-    const m = pts.length;
-    const dirs: Vec2[] = [];
-    for (let i = 0; i < m - 1; i++) {
-      const dx = pts[i + 1][0] - pts[i][0], dz = pts[i + 1][1] - pts[i][1];
-      const len = Math.hypot(dx, dz);
-      dirs.push([dx / len, dz / len]);
+  const NONE = [-1e5, 0, 0, 0];
+  for (const chain of graph.chains) {
+    if (chain.s1 - chain.s0 < 1) continue;
+    const cross = chainCross(chain);
+    const hw = chain.hw, cid = clsId(chain.cls), lanes = chain.lanes, lift = chain.lift;
+    // regions of constant nearest-intersection: split at the midpoints between successive nodes
+    const regions: { sa: number; sb: number; att: number[] }[] = [];
+    const nodes = chain.nodes.filter((cn) => cn.s >= chain.s0 - 60 && cn.s <= chain.s1 + 60);
+    if (!nodes.length) regions.push({ sa: chain.s0, sb: chain.s1, att: NONE });
+    else {
+      let sa = chain.s0;
+      for (let i = 0; i < nodes.length; i++) {
+        const sb = i < nodes.length - 1 ? clamp((nodes[i].s + nodes[i + 1].s) / 2, chain.s0, chain.s1) : chain.s1;
+        if (sb > sa + 0.01) regions.push({ sa, sb, att: [nodes[i].s, nodes[i].hMinus, nodes[i].hPlus, nodes[i].flags] });
+        sa = sb;
+      }
     }
-    // cross vector per polyline vertex: segment normal at the ends, mitre (clamped to 2x) inside
-    const cross: Vec2[] = [];
-    for (let i = 0; i < m; i++) {
-      const d0 = dirs[Math.max(0, i - 1)], d1 = dirs[Math.min(m - 2, i)];
-      let nx = -(d0[1] + d1[1]), nz = d0[0] + d1[0];
-      const nl = Math.hypot(nx, nz) || 1;
-      nx /= nl; nz /= nl;
-      const cosHalf = Math.max(0.5, nx * -d1[1] + nz * d1[0]);
-      cross.push([nx / cosHalf, nz / cosHalf]);
-    }
-    const width = chain[0].width, hw = width * 0.5, cid = clsId(chain[0].cls), lanes = chain[0].lanes, lift = chain[0].lift;
-    let along = 0;
-    let first = true;
-    for (let i = 0; i < m - 1; i++) {
-      const [ax, az] = pts[i], [bx, bz] = pts[i + 1];
-      const len = Math.hypot(bx - ax, bz - az);
-      const steps = Math.max(1, Math.ceil(len / 15));
-      const c0 = cross[i], c1 = cross[i + 1];
-      for (let k = first ? 0 : 1; k <= steps; k++) {
-        const t = k / steps;
-        const x = ax + (bx - ax) * t, z = az + (bz - az) * t;
-        const cx = c0[0] + (c1[0] - c0[0]) * t, cz = c0[1] + (c1[1] - c0[1]) * t;
+    chain.rows.length = 0; chain.rowY[0].length = 0; chain.rowY[1].length = 0;
+    for (const rg of regions) {
+      let first = true;
+      for (const s of rowPositions(chain, rg.sa, rg.sb, 15)) {
+        const f = frameAt(chain, cross, s);
+        chain.rows.push(s);
         for (const side of [-1, 1]) {
-          const px = x + cx * hw * side, pz = z + cz * hw * side;
-          const h = map.heightAt(px, pz) + 0.15 + lift;
+          const px = f.x + f.cx * hw * side, pz = f.z + f.cz * hw * side;
+          const h = map.heightAt(px, pz) + ROAD_LIFT + lift;
+          chain.rowY[side < 0 ? 0 : 1].push(h);
           pos.push(px, h, pz);
           nrm.push(0, 1, 0);
-          uv.push(side, along + t * len);
-          info.push(lanes, width, cid);
+          uv.push(side, s);
+          info.push(lanes, chain.width, cid);
+          isect.push(rg.att[0], rg.att[1], rg.att[2], rg.att[3]);
         }
         vcount += 2;
-        if (!first || k > 0) idx.push(vcount - 4, vcount - 3, vcount - 2, vcount - 2, vcount - 3, vcount - 1);
+        if (!first) idx.push(vcount - 4, vcount - 3, vcount - 2, vcount - 2, vcount - 3, vcount - 1);
         first = false;
       }
-      along += len;
+    }
+  }
+  // corner fillets: a fan from the edge-line corner point over the curb-return arc, plain asphalt
+  for (const node of graph.nodes) {
+    for (const k of node.corners) {
+      const ch = k.a.chain;
+      const cid = clsId(ch.cls);
+      const base = vcount;
+      const put = (p: Vec2) => {
+        pos.push(p[0], map.heightAt(p[0], p[1]) + ROAD_LIFT + ch.lift, p[1]);
+        nrm.push(0, 1, 0);
+        uv.push(0, 0);
+        info.push(ch.lanes, ch.width, cid);
+        isect.push(0, 1e4, 1e4, ROAD_F_BOX);
+        vcount++;
+      };
+      put(k.c);
+      for (const p of k.arc) put(p);
+      // orientation: keep the fan facing up (+y) whatever the sweep direction
+      const o = k.arc[0], p1 = k.arc[k.arc.length - 1];
+      const ccw = (o[0] - k.c[0]) * (p1[1] - k.c[1]) - (o[1] - k.c[1]) * (p1[0] - k.c[0]);
+      for (let i = 1; i < k.arc.length; i++) {
+        if (ccw < 0) idx.push(base, base + i, base + i + 1);
+        else idx.push(base, base + i + 1, base + i);
+      }
     }
   }
   // one vertex buffer, one index range per ROAD_CHUNK-metre cell (triangles bucketed by centroid, in their
@@ -270,6 +795,7 @@ export function buildRoadMeshes(map: WorldMap, segments: RoadSegment[], material
   const normal = new THREE.Float32BufferAttribute(nrm, 3);
   const roadUv = new THREE.Float32BufferAttribute(uv, 2);
   const roadInfo = new THREE.Float32BufferAttribute(info, 3);
+  const roadIsect = new THREE.Float32BufferAttribute(isect, 4);
   const chunks = new Map<number, number[]>();
   for (let t = 0; t < idx.length; t += 3) {
     const a = idx[t], b = idx[t + 1], c = idx[t + 2];
@@ -287,6 +813,7 @@ export function buildRoadMeshes(map: WorldMap, segments: RoadSegment[], material
     g.setAttribute('normal', normal);
     g.setAttribute('aRoadUv', roadUv);
     g.setAttribute('aRoadInfo', roadInfo);
+    g.setAttribute('aIsect', roadIsect);
     g.setIndex(list);
     box.makeEmpty();
     for (const i of list) box.expandByPoint(v.set(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]));
@@ -305,18 +832,59 @@ export function buildRoadMeshes(map: WorldMap, segments: RoadSegment[], material
 /** Road network chunk size (m): a cell is one draw call when in view. */
 const ROAD_CHUNK = 3000;
 
-export function createRoadMaterial(): THREE.MeshStandardMaterial {
+/** Surface height of a chain's carriageway edge (side -1 / +1) at along `s`, interpolated between the mesh rows
+ *  (exact where the sidewalk shares a row with the pavement). */
+export function roadEdgeY(c: RoadChain, s: number, side: number): number {
+  const rows = c.rows, ys = c.rowY[side < 0 ? 0 : 1];
+  const n = rows.length;
+  if (n === 0) return ROAD_LIFT + c.lift;
+  if (s <= rows[0]) return ys[0];
+  if (s >= rows[n - 1]) return ys[n - 1];
+  let lo = 0, hi = n - 1;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (rows[mid] <= s) lo = mid; else hi = mid; }
+  const span = rows[hi] - rows[lo];
+  const t = span > 1e-6 ? (s - rows[lo]) / span : 0;
+  return ys[lo] + (ys[hi] - ys[lo]) * t;
+}
+
+/** Street-lamp light pools at night: a ground-plane irradiance map of every lamp (built by the streets system,
+ *  sqrt-encoded 8-bit texels a few metres wide) sampled by the road and sidewalk materials, plus the warm lamp colour
+ *  already scaled by the night factor. `uLampRect` = (x0, z0, 1 / width, 1 / depth) of the map in world metres. */
+export interface RoadLightUniforms { uLampMap: THREE.IUniform<THREE.Texture>; uLampRect: THREE.IUniform<THREE.Vector4>; uLampColor: THREE.IUniform<THREE.Vector3> }
+export function createRoadLightUniforms(): RoadLightUniforms {
+  const empty = new THREE.DataTexture(new Uint8Array([0]), 1, 1, THREE.RedFormat, THREE.UnsignedByteType);
+  empty.needsUpdate = true;
+  return { uLampMap: { value: empty }, uLampRect: { value: new THREE.Vector4(0, 0, 0, 0) }, uLampColor: { value: new THREE.Vector3(0, 0, 0) } };
+}
+export const GLSL_LIGHT_POOLS = /* glsl */ `
+uniform sampler2D uLampMap;
+uniform vec4 uLampRect;
+uniform vec3 uLampColor;
+/** irradiance of the street lamps on the ground at p (the map stores sqrt of the pooled intensity) */
+vec3 lampPools(vec3 p) {
+  vec2 uv = (p.xz - uLampRect.xy) * uLampRect.zw;
+  float m = texture2D(uLampMap, uv).r;
+  return uLampColor * (m * m);
+}
+`;
+
+export function createRoadMaterial(lights: RoadLightUniforms): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8, metalness: 0.0, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 });
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uLampMap = lights.uLampMap;
+    shader.uniforms.uLampRect = lights.uLampRect;
+    shader.uniforms.uLampColor = lights.uLampColor;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 aRoadUv; attribute vec3 aRoadInfo; varying vec2 vRoadUv; varying vec3 vRoadInfo; varying vec3 vWorldPosR;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRoadUv = aRoadUv; vRoadInfo = aRoadInfo; vWorldPosR = (modelMatrix * vec4(position, 1.0)).xyz;');
+      .replace('#include <common>', '#include <common>\nattribute vec2 aRoadUv; attribute vec3 aRoadInfo; attribute vec4 aIsect; varying vec2 vRoadUv; varying vec3 vRoadInfo; varying vec4 vIsect; varying vec3 vWorldPosR;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRoadUv = aRoadUv; vRoadInfo = aRoadInfo; vIsect = aIsect; vWorldPosR = (modelMatrix * vec4(position, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${ROAD_FRAG_PARS}`)
-      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${ROAD_FRAG_MAIN}`);
+      .replace('#include <common>', `#include <common>\n${ROAD_FRAG_PARS}\n${GLSL_LIGHT_POOLS}`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${ROAD_FRAG_MAIN}`)
+      // the lamp pools are added as emitted light of the surface (albedo-tinted), after the lit shading
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * lampPools(vWorldPosR);');
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'road-v3';
+  mat.customProgramCacheKey = () => 'road-v4';
   return mat;
 }
 

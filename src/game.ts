@@ -11,7 +11,8 @@ import { WakeMap } from './render/wakes';
 import { PostPipeline } from './render/post';
 import { PlanarReflection, boundsRadius, distanceToBounds, trianglesOf } from './render/reflection';
 import { CascadeFitter, installCascadeDebug } from './render/shadows';
-import { buildRoadMeshes, buildRoadNetwork, createRoadMaterial, type RoadSegment } from './world/roads';
+import { buildRoadMeshes, buildRoadNetwork, createRoadLightUniforms, createRoadMaterial, type RoadSegment } from './world/roads';
+import { Streets } from './world/streets';
 import { buildBridges, type BridgeBuild } from './world/bridges';
 import { buildCity, type CityBuild } from './world/city';
 import { MIRROR_DISTANCE, Vegetation } from './world/vegetation';
@@ -64,6 +65,7 @@ export class Game {
   post!: PostPipeline;
   reflection!: PlanarReflection;
   roads!: RoadSegment[];
+  streets!: Streets;
   bridges!: BridgeBuild;
   city!: CityBuild;
   vegetation!: Vegetation;
@@ -187,11 +189,12 @@ export class Game {
     await this.tick(progress, 'Laying out streets', 0.4);
     const network = buildRoadNetwork(this.map);
     this.roads = network.segments;
-    const roadMat = createRoadMaterial();
+    const roadLights = createRoadLightUniforms();
+    const roadMat = createRoadMaterial(roadLights);
     this.registerLit(roadMat);
     const roadRender: THREE.Material = this.params.debugRoads ? new THREE.MeshBasicMaterial({ color: 0xff2020 }) : roadMat;
     // roads lie flat on the terrain: not worth mirroring (one 250 k-triangle mesh)
-    for (const m of buildRoadMeshes(this.map, this.roads, roadRender)) { m.name = 'roads'; this.scene.add(m); this.reflection.exclude(m); }
+    for (const m of buildRoadMeshes(this.map, network.graph, roadRender)) { m.name = 'roads'; this.scene.add(m); this.reflection.exclude(m); }
 
     await this.tick(progress, 'Raising bridges', 0.46);
     const concrete = new THREE.MeshStandardMaterial({ color: 0xb8b4aa, roughness: 0.9 });
@@ -222,8 +225,17 @@ export class Game {
       for (let i = 0; i <= n; i++) this.city.markOccupied(s.a[0] + (s.b[0] - s.a[0]) * (i / n), s.a[1] + (s.b[1] - s.a[1]) * (i / n), s.width * 0.5 + 3);
     }
 
+    await this.tick(progress, 'Paving sidewalks and hanging signals', 0.6);
+    // sidewalks, curbs, signals, street furniture and the lamp plan (footings on the curb line) over the road graph;
+    // low and unmirrored (the mirror image is far under its texel size for a curb)
+    this.streets = new Streets(this.map, network.graph, roadLights, this.city.markOccupied);
+    for (const m of this.streets.materials) this.registerLit(m);
+    this.streets.group.name = 'streets';
+    this.scene.add(this.streets.group);
+    this.reflection.excludeChildrenWhen(this.streets.group, () => true);
+
     await this.tick(progress, 'Dressing harbours and airports', 0.66);
-    this.props = new Props(this.map, this.roads, this.bridges.lampPositions, this.city.markOccupied);
+    this.props = new Props(this.map, this.bridges.lampPositions, this.city.markOccupied, this.streets.lamps);
     for (const m of this.props.materials) this.registerLit(m);
     this.props.group.name = 'props';
     this.scene.add(this.props.group);
@@ -275,6 +287,7 @@ export class Game {
     if (dbg.has('noveg')) this.vegetation.group.visible = false;
     if (dbg.has('nocity')) this.city.batches.group.visible = false;
     if (dbg.has('nobridges')) this.bridges.group.visible = false;
+    if (dbg.has('nostreets')) this.streets.group.visible = false;
     if (dbg.has('notraffic')) this.traffic.group.visible = false;
     if (dbg.has('nocloudshadow')) { this.post.cloudShadowStrength = 0; this.reflection.cloudShadowStrength = 0; }
     if (dbg.has('norefl')) this.reflection.enabled = false;
@@ -361,6 +374,7 @@ export class Game {
     this.vegetation.update(this.time, p.windSpeed);
     this.traffic.update(dt, this.time, s.night);
     this.props.setNight(s.night);
+    this.streets.update(this.time, s.night);
     this.aircraft.update(dt, this.time, s.night, this.windVec, p.turbulence, this.height, simulatePlane);
   }
 
@@ -393,6 +407,7 @@ export class Game {
     const pxPerMetre = 0.5 * this.renderer.getDrawingBufferSize(_size).y * cam.projectionMatrix.elements[5];
     this.city.batches.updateLod(cx, cz, this.cull, cam.position, this.reflection.range, pxPerMetre);
     this.props.updateLod(cx, cz, this.cull, cam.position, this.reflection.range, pxPerMetre);
+    this.streets.updateLod(cx, cz, this.cull, cam.position);
     this.traffic.updateCulling(this.cull);
     // the airframe casts only into the cascades its shadow can reach: swept down to the ground under it, so
     // from altitude that is the cascade holding its ground shadow, not all three
