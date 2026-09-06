@@ -949,6 +949,15 @@ if (facadeGlass > 0.0) {
       if (!isTrim) {
         col *= 1.0 - 0.18 * smoothstep(0.55, 0.85, grime) * (1.0 - smoothstep(2.0, 12.0, v));
         col *= 1.0 - 0.12 * smoothstep(0.45, 0.8, grime) * smoothstep(H - 3.0, H - 0.5, v) * step(12.0, H);
+        // rain runs down the masonry from the coping joints and the corners: dark tongues about half a metre
+        // wide fading out 8-20 m below the parapet, on half the walls; gone as they go sub-pixel
+        if (!glassy && H > 12.0 && hash11(seed * 5.3 + 1.1) > 0.5) {
+          float runN = vnoise(vec2(u * 1.7 + seed * 3.0, floor(facadeSeed)));
+          float runW = 1.0 - smoothstep(0.3, 0.9, wu / 0.5);
+          float runs = smoothstep(0.62, 0.8, runN) * smoothstep(H - 8.0 - 12.0 * runN, H - 1.0, v);
+          runs = max(runs, 0.6 * (1.0 - smoothstep(0.0, 0.8, min(u, faceW - u))) * smoothstep(H - 20.0, H - 2.0, v));
+          col *= 1.0 - 0.22 * runs * runW;
+        }
       }
       // crown lighting on about two thirds of the tall towers at night: a lit band just below the roof line, warm,
       // cool or (rarely) magenta, brighter than the windows so the skyline keeps its hierarchy after dark
@@ -971,6 +980,6 @@ if (facadeGlass > 0.0) {
   totalEmissiveRadiance += emis;
 }`);
   };
-  mat.customProgramCacheKey = () => 'facade-v10';
+  mat.customProgramCacheKey = () => 'facade-v11';
   return mat;
 }
