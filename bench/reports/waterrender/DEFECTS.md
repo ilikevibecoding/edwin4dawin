@@ -77,5 +77,41 @@ Why it reduces the defect: the path's core is now brighter than sunlit white (th
 fall-off zone moves up the tone curve from tan into cream and narrows (a Gaussian's band between two radiance
 levels shrinks as it moves outward), and the horizon water shows the dome's own colours (pale peach at sunset,
 cerulean by day, city glow at night) instead of a re-saturated grey fill.
-Evidence: `/tmp/waterrender/r0` vs `r1` at the dev cameras (crops copied to `crops/` once captured).
-Perf: skyRadiance ×3 per pixel replaces one textureCubeUV lookup; A/B measured in a later round.
+Result (`crops/r1_sun1730_path_r0_vs_r1.jpg`, `crops/r1_chase1730_r0_vs_r1.jpg`; brown-glaze metric = share of
+pixels with hue 15–50°, saturation ≥ 0.22, value 0.18–0.8 over the water region x 0.33–0.72, y 0.5–0.75 of the
+frame, which excludes land and bridge):
+
+| view | r0 brown | r1 brown | r0 white | r1 white | note |
+| --- | --- | --- | --- | --- | --- |
+| sun1730 (path + margins) | 4.7 % | 2.1 % | 9.9 % | 17.2 % | path core white-cream, margins cream; water beside it blue |
+| chase1730 | 3.9 % | 3.6 % | 3.2 % | 5.7 % | residual "brown" is the mangrove islands and cars in the crop |
+| sun1630 | 0 | 0 | 26 % | 30 % | white core of the 24° path grows: it is the image of the sun (see round 2/3 for its texture) |
+
+The purple-pink horizon water of r0 (whitened probe × chroma boost) is a pale peach that darkens into blue
+toward the camera, which is what the dome shows above it. No regression at `down300` (body colour, no rim),
+`high1500` (turquoise shelf, gust mottling), `night` (dark water, city glow along the horizon).
+New defect exposed by the brighter glitter (`crops/r2_sun14_r0_r1_r2.jpg`, left and middle): under a high sun
+(sun14, high1500, down300) the sparkle octaves resolve as **white cotton blobs** 20–40 px across scattered over
+the turquoise; at 30 m (`low30`) the crest highlights are white paint dabs. The r0 build had the same blobs at
+a quarter of the brightness (pale mottling).
+Perf: skyRadiance ×3 per pixel replaces one textureCubeUV lookup; A/B measured with the capture run (round 5).
+
+## Round 2 — sparkle cells stretched along the view azimuth (REJECTED, kept in history as 932c5846)
+
+Change: cells stretched along the view azimuth by sqrt(1 / sin(depression)) (was: along the sun's azimuth by the
+sun's elevation), finest octave from 2 px with most of the share, coarse octave damped.
+Result: the blobs are gone at low30 (grain in the same places, `crops/r2_low30_r1_vs_r2.jpg`), but a camera-relative
+axis is wrong in perspective: cells elongated across the view azimuth project as arcs around the camera's
+footprint, so the whole glitter zone at sun14 and sun1630 is combed into a **radial fan of streaks** converging
+on the horizon (`crops/r2_sun14_r0_r1_r2.jpg` right), and the sunset path lost its fragments to an airbrushed
+column (`crops/r2_sun1730_r1_vs_r2.jpg`). The texture also morphs in every turn. Rejected on shape.
+
+## Round 3 — sparkle cells are crest segments of the wind sea
+
+Change: the cells are world-fixed and wind-aligned, 2.5× longer along the crests than across (a short-crested
+sea); the pixel footprint that picks the octave is measured in that metric. No camera term at all: the frame's
+foreshortening flattens the cells into the thin horizontal dashes of a sun path seen from altitude (what a
+photograph shows: crest segments of 5–15 m waves foreshortened to a few pixels tall), leaves them ovals on steep
+near water, and points them at the horizon where the crests run away from the camera. Same 2 px finest octave.
+Why: glitter texture at altitude is set by the wave field (crest-aligned bands), not by the camera; a world axis
+also makes the pattern stable under camera motion (no morphing, glints only move with the water).
