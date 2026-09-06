@@ -24,28 +24,32 @@ export const zBow = -L / 2;
 export const Z = (zr) => zBow + zr;
 
 // ---- palette (linear albedo multipliers on the plating map, see shipKit: the map is scaled x1.4 to a
-// mean albedo of ~0.62). Warm light hull grey for the deck, wings, block roof and heads; near-white
-// fronts (the reference's nose, shaft and head fronts are blown out); a slightly darker slab below the
-// trench; dark blue-grey only on the shaft / head / leg sides and inside recesses.
-export const GREY_HULL = lin(0.49, 0.48, 0.455); // deck, wings, shelves, block roof (sunlit ~172 sRGB)
+// mean albedo of ~0.62). The reference model is one warm light grey all over (deck 135-160 sRGB where
+// the low sun grazes it, the roof 177, the ramp 195, every forward face blown out to 250; the port
+// faces are black only because they are in shadow) with dark paint nowhere but inside recesses and
+// openings, and a deep crimson on the doors (half the deck's sRGB). So: one hull grey on the deck,
+// wings, roof, block sides, shaft and head sides, legs and steps; a near-white on the surfaces the
+// reference blows out (nose, shaft / head fronts, pods); the ramp between; dark only in recesses.
+export const GREY_HULL = lin(0.46, 0.445, 0.385); // deck, wings, roof, block / shaft / head sides
 export const GREY_DECK = GREY_HULL;
 export const GREY_WING = GREY_HULL;
 export const GREY_TOWER = GREY_HULL;
-export const GREY_LIGHT = lin(1.0, 0.99, 0.93); // nose block, shaft / head / leg fronts, pods, sill
-export const GREY_RAMP = lin(0.68, 0.65, 0.57); // the block's plated front ramp (a little below the fronts)
-export const GREY_BLOCK = lin(0.2, 0.2, 0.23); // the block body's dark sides and pedestal
-export const GREY_SIDE = lin(0.19, 0.2, 0.25); // dark blue-grey sides of the shafts, heads and legs
-export const GREY_FLANK = lin(0.48, 0.47, 0.45); // deck lip face, band walls, barbettes, trims
-export const GREY_LOWER = lin(0.36, 0.36, 0.38); // angled lower slab (shadowed flank 60-80 sRGB)
+export const GREY_LIGHT = lin(1.02, 1.0, 0.9); // nose block, shaft / head / leg fronts, pods (just under bloom)
+export const GREY_RAMP = lin(0.7, 0.675, 0.59); // the block's plated front ramp (lit, not blown out)
+export const GREY_BLOCK = lin(0.36, 0.35, 0.3); // block body sides, pedestal, steps (hull grey, shaded)
+export const GREY_SIDE = lin(0.44, 0.425, 0.37); // shaft, head and leg sides (hull grey)
+export const GREY_FLANK = lin(0.46, 0.445, 0.4); // deck lip face, band walls, barbettes, trims, sill
+export const GREY_SHELF = lin(0.33, 0.32, 0.28); // turret shelf tops (the reference's read darker)
+export const GREY_LOWER = lin(0.36, 0.36, 0.37); // angled lower slab (shadowed flank 60-80 sRGB)
 export const GREY_BELLY = lin(0.3, 0.3, 0.33); // belly
 export const GREY_STERN = lin(0.34, 0.33, 0.32); // heat-stained stern armour
-export const GREY_RECESS = lin(0.2, 0.2, 0.23); // recesses and openings (hull material)
+export const GREY_RECESS = lin(0.13, 0.13, 0.15); // recesses and openings (hull material)
 export const DARK = 0xb4b8be; // machinery greebles on the dark texture
 export const DARK_RECESS = 0x6a6e76; // hangar interiors, nozzle bells
 export const DARK_TRENCH = 0x50545c; // flank trench walls and floor (dark material)
 export const DARK_SEAM = 0x5a5d64; // panel-line grooves
-export const RED = lin(0.26, 0.01, 0.012); // Republic crimson-maroon (door band, bow stripes, trim)
-export const RED_DARK = lin(0.22, 0.01, 0.012); // shadowed red
+export const RED = lin(0.115, 0.006, 0.007); // Republic crimson-maroon (door band, bow stripes, trim)
+export const RED_DARK = lin(0.095, 0.005, 0.006); // shadowed red
 export const INSIGNIA = 0xc9a23a; // Open Circle roundel (gold)
 export const WINDOW_WARM = 0xffe2b0;
 export const WINDOW_COOL = 0xd6e6ff;
@@ -212,8 +216,8 @@ export const BLOCK = {
     xOutTop: 28.7,
     zTop: 792,
     xInFoot: 20,
-    xOutFoot: 38,
-    zFoot: 810,
+    xOutFoot: 40,
+    zFoot: 835,
     z1: 940,
   },
   // dark box joining the shafts behind their fronts, seen through the gap between them

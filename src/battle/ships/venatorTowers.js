@@ -8,7 +8,14 @@
 // light drum and mast on top) and the steps down behind the block. Proportions from venatorSpec
 // (PLATFORM / BLOCK / TOWER); only fronts and tops are light, as in the reference.
 import * as THREE from "three";
-import { loftProfile, yLoft, quadFacing, cylZ, tube } from "./venatorKit.js";
+import {
+  loftProfile,
+  yLoft,
+  quadFacing,
+  cylZ,
+  tube,
+  lin,
+} from "./venatorKit.js";
 import { boxMM } from "./shipKit.js";
 import {
   Z,
@@ -26,6 +33,7 @@ import {
   GREY_BLOCK,
   GREY_SIDE,
   GREY_FLANK,
+  GREY_SHELF,
   GREY_RECESS,
   DARK,
   DARK_SEAM,
@@ -34,6 +42,8 @@ import {
   ROW_WARM,
   ROW_COOL,
 } from "./venatorSpec.js";
+
+const GREY_DIM = lin(0.21, 0.21, 0.24); // the bridge box's top: a little lighter than the opening
 
 const rect = (hx, z0, z1) => [
   [-hx, Z(z0)],
@@ -102,7 +112,7 @@ export function buildTowers(ctx) {
         capEnd: true,
         capTag: "cap",
       }),
-      { side: GREY_FLANK, top: GREY_HULL, inner: GREY_FLANK, cap: GREY_FLANK },
+      { side: GREY_FLANK, top: GREY_SHELF, inner: GREY_FLANK, cap: GREY_FLANK },
     );
   }
   // pedestal under the block (the band ends at the sill; the block's foot continues down to the deck)
@@ -118,7 +128,7 @@ export function buildTowers(ctx) {
       [b.hxSill, SILL_Y + 1, Z(b.z0 + 4)],
     ),
     "hull",
-    { color: GREY_LIGHT, texel: 1 / 6 },
+    { color: GREY_FLANK, texel: 1 / 6 },
   );
 
   // ---- the pillar block: the plated ramp front rising from the sill to the roof, shaded sides leaning
@@ -177,61 +187,56 @@ export function buildTowers(ctx) {
   });
   const faceLen = Math.hypot(H, b.zTop0 - b.zFoot);
   if (mid) {
-    // ramp face: strong horizontal banding — raised plate rows separated by dark seams, chunky raised
-    // blocks on some rows, a row of dark slots on others, a lit slit here and there
-    const rows = fine ? 9 : 5;
-    for (let i = 0; i < rows; i++) {
-      const y0 = b.yFoot + (H * i) / rows;
-      const y1 = b.yFoot + (H * (i + 1)) / rows;
-      const ym = (y0 + y1) / 2;
-      const rowH = (faceLen * (y1 - y0)) / H;
-      const halfSpan = hxAt(ym) - 2.4;
-      const w = halfSpan * 2;
-      if (i > 0)
-        add(faceBox(rampFrame(y0, 0), w + 1, 1.4, 0.3, 0.05), "dark", {
-          color: DARK_SEAM,
-          texel: 1 / 4,
-        });
-      add(faceBox(rampFrame(ym, 0), w - 1.2, rowH - 3, 1.4, 0.1), "hull", {
-        color: GREY_RAMP,
-        texel: hullTexel,
+    // ramp face: one large light plate with sparse crisp features, as in the reference — thin seams
+    // every ~28 m up the slope, the port third standing a little proud behind a seam, a lit window-row
+    // frame near the top, a raised bar, a square frame with a dark centre, a few short dark slots
+    const fy = (f) => b.yFoot + H * f;
+    const seam = (f, x, w, h = 0.6) =>
+      add(faceBox(rampFrame(fy(f), x), w, h, 0.25, 0.05), "dark", {
+        color: DARK_SEAM,
+        texel: 1 / 4,
       });
-      if (i % 3 === 1) {
-        // a row of dark slots across the middle of the face
-        const n = fine ? 6 : 3;
-        for (let k = 0; k < n; k++) {
-          const x = ((k + 0.5) / n - 0.5) * w * 0.7;
-          add(
-            faceBox(rampFrame(ym, x), fine ? 2.4 : 4, rowH * 0.32, 0.4, 1.2),
-            "hull",
-            { color: GREY_RECESS, texel: 1 / 6 },
-          );
-        }
-      } else if (fine || i % 2 === 0) {
-        // chunky raised blocks
-        const n = fine ? 2 + Math.floor(rand() * 2) : 2;
-        for (let k = 0; k < n; k++) {
-          const x = ((k + 0.5) / n - 0.5) * w * 0.8 + (rand() - 0.5) * 4;
-          const bw = 6 + rand() * 8;
-          add(
-            faceBox(
-              rampFrame(ym, x),
-              bw,
-              rowH * (0.45 + rand() * 0.25),
-              2.2,
-              1.4,
-            ),
-            "hull",
-            { color: GREY_RAMP, texel: hullTexel },
-          );
-        }
-      }
-      if (fine && i % 3 === 2)
-        add(
-          faceBox(rampFrame(y0 + (y1 - y0) * 0.3, 0), w * 0.45, 0.8, 0.15, 1.6),
-          "windows",
-          { color: i % 2 ? ROW_WARM : ROW_COOL, uv: "keep" },
-        );
+    const plate = (f, x, w, h, d, col = GREY_RAMP, lift = 0.05) =>
+      add(faceBox(rampFrame(fy(f), x), w, h, d, lift), "hull", {
+        color: col,
+        texel: col === GREY_RAMP ? hullTexel : 1 / 6,
+      });
+    const slot = (f, x, w, h, lift = 0.9) =>
+      add(faceBox(rampFrame(fy(f), x), w, h, 0.3, lift), "hull", {
+        color: GREY_RECESS,
+        texel: 1 / 6,
+      });
+    for (const f of [0.17, 0.42, 0.67, 0.88]) seam(f, 0, hxAt(fy(f)) * 2 - 4.5);
+    {
+      const f0 = 0.05;
+      const f1 = 0.72;
+      const fm = (f0 + f1) / 2;
+      const xa = -6.5;
+      const xb = -(hxAt(fy(fm)) - 2.6);
+      plate((f0 + f1) / 2, (xa + xb) / 2, xa - xb, faceLen * (f1 - f0), 0.6);
+      seam(fm, xa + 0.5, 0.5, faceLen * (f1 - f0));
+    }
+    plate(0.795, -9.5, 19.5, 10, 1.0, GREY_LIGHT);
+    if (fine)
+      for (const k of [-3, -1, 1, 3])
+        slot(0.795, -9.5 + k * 2.2, 2.4, 4.6, 1.1);
+    add(faceBox(rampFrame(fy(0.795), -9.5), 16, 0.9, 0.15, 1.45), "windows", {
+      color: ROW_WARM,
+      uv: "keep",
+    });
+    plate(0.635, -8, 16, 3, 1.5);
+    plate(0.38, 3, 10, 15, 1.2);
+    slot(0.38, 3, 6, 9, 1.15);
+    if (fine) {
+      slot(0.575, 0, 1.2, 8);
+      slot(0.575, -4, 1.2, 8);
+      slot(0.275, -1.5, 14, 3);
+      slot(0.13, 4, 1.5, 5);
+      slot(0.2, 4, 1.5, 5);
+      add(faceBox(rampFrame(fy(0.93), -2), 12, 0.7, 0.15, 0.5), "windows", {
+        color: ROW_COOL,
+        uv: "keep",
+      });
     }
     // light corner strips along the ramp's side edges
     for (const s of [-1, 1])
@@ -253,9 +258,11 @@ export function buildTowers(ctx) {
     for (const s of [-1, 1]) {
       for (const [f, col, isRow] of fine
         ? [
+            [0.16, ROW_COOL, true],
             [0.3, ROW_WARM, true],
             [0.5, GREY_FLANK, false],
             [0.68, ROW_COOL, true],
+            [0.84, ROW_WARM, true],
           ]
         : [[0.45, ROW_WARM, true]]) {
         const y = b.yFoot + H * f;
@@ -320,29 +327,44 @@ export function buildTowers(ctx) {
           b.y1 - yLegFoot,
           LG.zTop - LG.zFoot,
         ).normalize();
-        for (const f of [0.25, 0.5, 0.75]) {
+        const legFrame = (f) => {
           const y = yLegFoot + (b.y1 - yLegFoot) * f;
           const xi = LG.xInFoot + (LG.xInTop - LG.xInFoot) * f;
           const xo = LG.xOutFoot + (LG.xOutTop - LG.xOutFoot) * f;
-          const fr = {
-            p: new THREE.Vector3(s * ((xi + xo) / 2), y, Z(legFrontZ(y))),
-            n: legN,
-            u: new THREE.Vector3(1, 0, 0),
-            v: legV,
+          return {
+            w: xo - xi,
+            fr: {
+              p: new THREE.Vector3(s * ((xi + xo) / 2), y, Z(legFrontZ(y))),
+              n: legN,
+              u: new THREE.Vector3(1, 0, 0),
+              v: legV,
+            },
           };
-          add(faceBox(fr, xo - xi - 1, 0.7, 0.2, 0.05), "dark", {
+        };
+        for (const f of [0.25, 0.5, 0.75]) {
+          const { w, fr } = legFrame(f);
+          add(faceBox(fr, w - 1, 0.7, 0.2, 0.05), "dark", {
             color: DARK_SEAM,
             texel: 1 / 4,
+          });
+        }
+        // a column of small dark windows down the leg's light front
+        for (const f of [0.12, 0.3, 0.48, 0.66, 0.84]) {
+          const { fr } = legFrame(f);
+          add(faceBox(fr, 2.4, 2.4, 0.3, 0.3), "hull", {
+            color: GREY_RECESS,
+            texel: 1 / 6,
           });
         }
       }
     }
   }
 
-  // ---- bridge box joining the shafts behind their fronts (seen through the gap): dark with a light top
+  // ---- bridge box joining the shafts behind their fronts (seen through the gap): a dark opening in
+  // the reference, its top a little lighter
   const br = BLOCK.bridge;
   add(boxMM([-br.hx, b.y1 - 0.2, Z(br.z0)], [br.hx, br.y1, Z(br.z1)]), "hull", {
-    color: GREY_SIDE,
+    color: GREY_RECESS,
     texel: hullTexel,
   });
   add(
@@ -351,7 +373,7 @@ export function buildTowers(ctx) {
       [br.hx - 0.5, br.y1 + 0.8, Z(br.z1)],
     ),
     "hull",
-    { color: GREY_LIGHT, texel: 1 / 8 },
+    { color: GREY_DIM, texel: 1 / 8 },
   );
   if (mid) {
     add(
@@ -582,7 +604,7 @@ export function buildTowers(ctx) {
         [Math.max(xOut, jawIn) - 0.3, yChin + 0.1, zf1],
       ),
       "hull",
-      { color: GREY_SIDE, texel: 1 / 8 },
+      { color: GREY_RECESS, texel: 1 / 8 },
     );
     // the dark window slot between the jaw and the slab, recessed, wrapping onto the outboard side
     add(
@@ -590,7 +612,7 @@ export function buildTowers(ctx) {
       "hull",
       { color: GREY_RECESS, texel: 1 / 6 },
     );
-    // inboard dark block under the slab carrying the pod
+    // inboard dark recess under the slab carrying the pod
     const podX = s * T.podX;
     add(
       boxMM(
@@ -598,7 +620,7 @@ export function buildTowers(ctx) {
         [Math.max(xIn + s * 1, podX + T.podR * 0.8), yVis - 1.5, zf1],
       ),
       "hull",
-      { color: GREY_SIDE, texel: 1 / 8 },
+      { color: GREY_RECESS, texel: 1 / 8 },
     );
     // pod: a forward-facing can with a dark mouth
     const seg = fine ? 16 : mid ? 10 : 8;
