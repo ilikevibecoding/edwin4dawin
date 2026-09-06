@@ -34,8 +34,8 @@ const _w = new THREE.Vector3();
  * toward the root, and blown about by the wind in proportion to its height.
  * One merged geometry carries every shell, so a mane is one draw.
  */
-function shellMaterial(base, { wind = 0.05, rootShade = 0.45, droop = 0 } = {}) {
-  const u = { uTime: { value: 0 }, uWind: { value: WIND.clone().multiplyScalar(wind) }, uRoot: { value: rootShade }, uDroop: { value: droop } };
+function shellMaterial(base, { wind = 0.05, rootShade = 0.45, droop = 0, rim = 0 } = {}) {
+  const u = { uTime: { value: 0 }, uWind: { value: WIND.clone().multiplyScalar(wind) }, uRoot: { value: rootShade }, uDroop: { value: droop }, uRim: { value: rim } };
   base.userData.shell = u;
   base.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, u);
@@ -67,13 +67,19 @@ function shellMaterial(base, { wind = 0.05, rootShade = 0.45, droop = 0 } = {}) 
         '#include <common>',
         `#include <common>
         varying float vShell;
-        uniform float uRoot;`,
+        uniform float uRoot;
+        uniform float uRim;`,
       )
       .replace(
         '#include <alphamap_fragment>',
         `#include <alphamap_fragment>
         if ( diffuseColor.a < vShell * 0.97 + 0.02 ) discard;
-        diffuseColor.rgb *= mix( uRoot, 1.0, vShell );`,
+        // hair is translucent: the outer shells brighten where they are seen
+        // at a grazing angle (the ruff's rim, the tips of the locks), so the
+        // silhouette is the palest part of the mane and not, as the stacked
+        // shells' shading would have it, the darkest (uRim 0 on the body fuzz)
+        float shellRim = pow( 1.0 - abs( dot( normalize( vNormal ), normalize( vViewPosition ) ) ), 3.0 );
+        diffuseColor.rgb *= mix( uRoot, 1.0, vShell ) * ( 1.0 + uRim * shellRim * vShell );`,
       );
   };
   base.customProgramCacheKey = () => 'lionshell|' + base.type + '|' + (base.alphaMap ? 'a' : '');
@@ -270,7 +276,10 @@ export function lionMaterials({ env, quality }) {
       side: THREE.DoubleSide,
       name: 'lion-mane-shells',
     }),
-    { wind: 0.045, rootShade: 0.55, droop: 0.05 },
+    // (r9b: root shade 0.55 → 0.8 — at 0.55 the inner shells, seen through
+    // the outer locks' eroded tips at the rim, made the tips read darker
+    // than the roots; the depth now comes from the lock's own root-dark paint)
+    { wind: 0.045, rootShade: 0.8, droop: 0.05, rim: 1.2 },
   );
   const fuzzTex = fuzzStrands(quality === 'fast' ? 128 : 256);
   fuzzTex.repeat.set(9, 5);

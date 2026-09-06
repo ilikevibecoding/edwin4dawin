@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { EYE, EYE_LIDS, HEAD_KINDS, KINDS } from './spec.js';
 import { ATLAS } from './textures.js';
-import { FACE, HEAD_ROWS, HEAD_SPLIT, HEAD_Z0, HEAD_Z1, JAW_ROWS, almondOpen, headBump, ringAngles, rowsAt, topTaper } from './headspec.js';
+import { FACE, HEAD_ROWS, HEAD_SPLIT, HEAD_Z0, HEAD_Z1, JAW_ROWS, almondOpen, headBump, headPoint, ringAngles, rowsAt, topTaper } from './headspec.js';
 import { clamp, lerp, mulberry32, smoothstep } from '../../textures/core.js';
 
 // ---------------------------------------------------------------------------
@@ -342,6 +342,33 @@ export function addHead(b, alpha, skel, K, D) {
         };
         cap(-LID_UP, [[li, 1]], 1, 0);
         cap(LID_DOWN, headBones, -1, 1);
+        // Round 9: the lateral canthus — a third cap over the temporal side
+        // of the ball. The two lid rims are great circles through the eye's
+        // lateral axis, so between them the ball was bare out to 90 degrees
+        // to the side and, in the near-profile face view, its limbus met the
+        // cheek's skin with no lid over it (the socket skin closes over 46-60
+        // degrees but the ball is at 1.0 radii to its 1.12). The cap sits at
+        // 1.05 radii — on the ball, under the socket skin's 1.12 and the lid
+        // caps' 1.1 (a cap outside the skin left the socket's wall, skin from
+        // 1.12 down to the ball, as a sliver between the limb and the lid in
+        // every oblique view) — with its pole 20 degrees below the lateral
+        // axis (the lower-temporal quadrant is where the ball met bare skin;
+        // the upper lid covers the upper-temporal quadrant already) and
+        // reaching 62 degrees in, so the ball's temporal limb is bounded by
+        // lid wherever the almond opens and the outer corner is a dark lid
+        // margin, as on the animal. Twelve segments on a 1.7 cm cap — 84
+        // triangles a side.
+        {
+          const g = new THREE.SphereGeometry(eyeR * 1.05, 12, 4, 0, Math.PI * 2, 0, Math.PI * 0.345);
+          g.rotateZ(-sgn * Math.PI / 2);
+          g.rotateY(-sgn * 0.35);
+          b.addGeometry(g, {
+            matrix: lf,
+            uvRect: ATLAS.lid,
+            uvFn: (u, v) => [u * 0.5, clamp(v)],
+            bones: headBones,
+          });
+        }
       }
     }
   }
@@ -527,157 +554,109 @@ function addEar(b, frame, bones, s, D, sgn) {
 }
 
 /**
- * Mane cards for the male. Rings of tapered strips rooted just under the
- * surface — around the face behind the cheeks, over the crown between the
- * ears, around the neck at two stations and the shoulders — plus a fringe
- * hanging under the chest. Each card points out along the surface normal and
- * falls under its own weight, so the hair frames the face and hangs at the
- * throat the way a mane does; the cutout texture breaks the outline into
- * strands, darker toward the tips.
+ * One lock of the mane as a card: a tapered strip of `segs` quads from `base`
+ * along `dir`, sagging by `sag` (× len t²) so it falls under its own weight,
+ * `width` the half-width at the root (0.65 of it at the tip), its face
+ * square to `face` — the surface normal for a lock seen flat from the side,
+ * the animal's forward axis for one that frames the face from the front —
+ * and twisted `twist` radians about its own axis. Reads one of the two lock
+ * columns of the alpha atlas (STRANDS.mane), tag 4.
+ */
+export function lockCard(alpha, base, dir, len, width, sag, bones, variant, face, twist = 0, segs = 3) {
+  const [u0, u1] = STRANDS.mane[variant % 2];
+  const side = new THREE.Vector3().crossVectors(face, dir);
+  if (side.lengthSq() < 1e-4) side.crossVectors(dir, Y);
+  if (side.lengthSq() < 1e-4) side.set(1, 0, 0);
+  side.normalize();
+  side.applyAxisAngle(dir, twist);
+  const prev = [];
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    const p = base.clone().addScaledVector(dir, len * t).addScaledVector(sag, len * t * t);
+    const w = width * (1 - t * 0.35);
+    const l = p.clone().addScaledVector(side, w);
+    const r = p.clone().addScaledVector(side, -w);
+    const il = alpha.vertex(l, [u0, 1 - t], bones, [1, 1, 1], 4);
+    const ir = alpha.vertex(r, [u1, 1 - t], bones, [1, 1, 1], 4);
+    if (prev.length) {
+      alpha.tri(prev[0], il, prev[1]);
+      alpha.tri(prev[1], il, ir);
+    }
+    prev[0] = il;
+    prev[1] = ir;
+  }
+}
+
+/**
+ * Where a mane lock points, given the surface normal `n` where it roots (rest
+ * space, +Y up), the animal's forward axis `fwd` and a random source: out
+ * along the normal a little, then down under gravity — the more the further
+ * the root is from the crest — and back along the neck, most over the crest
+ * where the hair is swept back between the ears; with ±15° of jitter. Round
+ * 9: rounds 5-8 pointed every card out along the normal of the ring it sat
+ * on, which from the front is a wheel of spokes ("radial ribbons").
+ */
+export function lockDir(n, fwd, rnd, { out = 0.4, down = 1.0, back = 0.3, crestBack = 0.9, crestUp = 0.15 } = {}) {
+  const top = Math.max(0, n.y);
+  const bottom = Math.max(0, -n.y);
+  const dir = n
+    .clone()
+    .multiplyScalar(out * (1 + 0.4 * bottom))
+    .addScaledVector(Y, -down * (1 - 0.85 * top * top) + crestUp * top * top)
+    .addScaledVector(fwd, -(back + (crestBack - back) * top))
+    .normalize();
+  // ±15°: a random vector across the direction, its length the tangent of the angle
+  const j = new THREE.Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5);
+  j.addScaledVector(dir, -j.dot(dir));
+  if (j.lengthSq() > 1e-8) dir.addScaledVector(j.normalize(), Math.tan(0.26) * rnd()).normalize();
+  return dir;
+}
+
+/**
+ * The mane's face ruff for the male: locks rooted on the skull's outline
+ * behind the cheeks and over the crown, hanging down the sides of the face
+ * and under the jaw and swept back over the crown between the ears, faced
+ * toward the front so they frame the face head-on (from the side they are
+ * edge-on and the neck's locks, geometry.js addManeLocks, show instead).
+ * Round 9: rounds 5-8's three rings of cards radiating from the face centre
+ * along the section normals were the "radial ribbons"; the neck and chest
+ * locks moved to geometry.js, on the ruff shell itself.
  */
 function addMane(alpha, skel, K, D, sHead, headFrame, rnd) {
   const s = K.scale;
-  const rest = skel.rest;
   const idx = (n) => skel.index.get(n);
-  const P = (n) => rest.get(n).pos;
   const full = D.head >= 2;
   const segs = full ? 3 : 2;
   const step = full ? 1 : 2;
-  const jitter = (k) => (rnd() - 0.5) * 2 * k;
-  const card = (base, dir, len, width, sag, bones, variant, face = null) => {
-    const [u0, u1] = STRANDS.mane[variant % 2];
-    // the card's face lies along the coat (its width across the surface
-    // tangent) so a hanging card is seen flat from the side, not edge on
-    const side = face ? new THREE.Vector3().crossVectors(face, dir) : new THREE.Vector3().crossVectors(dir, Y);
-    if (side.lengthSq() < 1e-4) side.set(1, 0, 0);
-    side.normalize();
-    // twist the card about its own axis so no two catch the light alike
-    side.applyAxisAngle(dir, jitter(0.6));
-    const prev = [];
-    for (let i = 0; i <= segs; i++) {
-      const t = i / segs;
-      const p = base.clone().addScaledVector(dir, len * t).addScaledVector(sag, len * t * t);
-      const w = width * (1 - t * 0.35);
-      const l = p.clone().addScaledVector(side, w);
-      const r = p.clone().addScaledVector(side, -w);
-      const il = alpha.vertex(l, [u0, 1 - t], bones, [1, 1, 1], 4);
-      const ir = alpha.vertex(r, [u1, 1 - t], bones, [1, 1, 1], 4);
-      if (prev.length) {
-        alpha.tri(prev[0], il, prev[1]);
-        alpha.tri(prev[1], il, ir);
-      }
-      prev[0] = il;
-      prev[1] = ir;
-    }
-  };
-
-  // A ring of cards around a centre: `rx`, `ryTop`, `ryBot` the ellipse the roots
-  // sit on (a little inside the coat), `back` how much the cards lean toward
-  // the tail, `down` how much they hang, `len` in metres of the animal.
-  let variant = 0;
-  const ring = (centre, axes, rx, ryTop, ryBot, count, { len, width, back = 0.3, down = 0.5, out = 1.0, skipTop = 0, bones, lenFn = null }) => {
-    for (let i = 0; i < count; i += step) {
-      const u = (i + 0.5) / count;
-      const a = -Math.PI / 2 + u * Math.PI * 2 + jitter(0.06);
-      const ca = Math.cos(a);
-      const sa = Math.sin(a);
-      // the crown carries short hair: leave the top of the ring thin
-      const top = Math.max(0, sa);
-      if (skipTop > 0 && top > 1 - skipTop && rnd() < 0.6) continue;
-      const ry = sa >= 0 ? ryTop : ryBot;
-      const base = centre.clone().addScaledVector(axes.x, rx * ca).addScaledVector(axes.y, ry * sa);
-      const normal = axes.x.clone().multiplyScalar(ca / rx).addScaledVector(axes.y, sa / ry).normalize();
-      // hair leaves the skin a little, then falls: down the sides and the
-      // throat, swept back over the crown
-      // each lock goes its own way a little: lengths and directions vary so
-      // the ring does not read as spokes
-      const dir = normal
-        .clone()
-        .multiplyScalar(out * (0.3 + 0.35 * top))
-        .addScaledVector(axes.z, -back * (0.3 + 0.7 * top) + jitter(0.15))
-        .addScaledVector(Y, -down * (1 - 0.85 * top) - 0.05 + jitter(0.12))
-        .addScaledVector(axes.x, jitter(0.12))
-        .normalize();
-      const L = (lenFn ? lenFn(u, sa) : len) * (0.7 + rnd() * 0.6);
-      card(base, dir, L, width * (0.8 + rnd() * 0.4), new THREE.Vector3(0, -0.4, 0), bones, variant++, normal);
-    }
-  };
-
-  const headAxes = {
-    x: new THREE.Vector3(1, 0, 0).transformDirection(headFrame),
-    y: new THREE.Vector3(0, 1, 0).transformDirection(headFrame),
-    z: new THREE.Vector3(0, 0, 1).transformDirection(headFrame),
-  };
-  const headC = (z, y = 0.02) => new THREE.Vector3(0, y * sHead, z * sHead).applyMatrix4(headFrame);
   const headBones = [[idx('head'), 1]];
-  // the face ruff: behind the cheeks, from the jaw angle up past the ears
-  // the face ruff radiates from the outline of the face — out to the sides,
-  // down under the jaw, leaning a little back — the way a mane frames a
-  // male's face from the front; it also screens the open ends of the shell
-  // layers behind it
-  // (round 5: the roots follow the taller skull — the crown is at 0.17, the
-  // cheeks 0.12 out — so the ruff leaves the skin and is not buried in it)
-  ring(headC(0.1, 0.05), headAxes, 0.115 * sHead, 0.1 * sHead, 0.125 * sHead, 22, {
-    len: 0.2 * s,
-    width: 0.024 * s,
-    back: 0.7,
-    down: 0.25,
-    out: 1.0,
-    skipTop: 0.2,
-    bones: headBones,
-    lenFn: (u, sa) => (0.16 + 0.1 * Math.max(0, -sa) - 0.05 * Math.max(0, sa)) * s, // longest under the jaw, shortest over the brow
-  });
-  // a second, deeper ruff behind the first, swept further back, for depth
-  ring(headC(0.04, 0.05), headAxes, 0.115 * sHead, 0.105 * sHead, 0.125 * sHead, 18, {
-    len: 0.22 * s,
-    width: 0.024 * s,
-    back: 1.0,
-    down: 0.5,
-    out: 0.8,
-    skipTop: 0.25,
-    bones: headBones,
-    lenFn: (u, sa) => (0.18 + 0.08 * Math.max(0, -sa)) * s,
-  });
-  // the crown and the back of the skull: shorter, swept back between the ears
-  ring(headC(-0.01, 0.05), headAxes, 0.108 * sHead, 0.1 * sHead, 0.11 * sHead, 22, {
-    len: 0.17 * s,
-    width: 0.02 * s,
-    back: 1.2,
-    down: 0.6,
-    out: 0.5,
-    bones: headBones,
-    lenFn: (u, sa) => (0.13 + 0.08 * Math.max(0, -sa)) * s,
-  });
-  // the neck: two rings of long hair, the throat the longest
-  const neckRing = (name, next, rx, ryTop, ryBot, count, len, dropZ = 0) => {
-    const c = P(name).clone();
-    const zAxis = P(next).clone().sub(c).normalize();
-    const xAxis = new THREE.Vector3(1, 0, 0);
-    const yAxis = new THREE.Vector3().crossVectors(zAxis, xAxis).normalize();
-    if (yAxis.y < 0) yAxis.negate();
-    c.addScaledVector(zAxis, dropZ * s);
-    ring(c, { x: xAxis, y: yAxis, z: zAxis }, rx * s, ryTop * s, ryBot * s, count, {
-      len: len * s,
-      width: 0.025 * s,
-      back: 0.45,
-      down: 0.9,
-      out: 0.8,
-      bones: [[idx(name), 1]],
-      lenFn: (u, sa) => len * (0.7 + 0.5 * Math.max(0, -sa)) * s,
-    });
+  const fwd = new THREE.Vector3(0, 0, 1).transformDirection(headFrame);
+  const hp = [0, 0, 0];
+  let variant = 0;
+  // roots on the skull section at z, a little inside the skin, `count` round
+  // it from under the jaw over the side and the crown
+  const ring = (z, count, { len, lenJaw, lenCrown, width, skipCrown = 0, faceFwd = 1.0, root = 0.92 }) => {
+    for (let i = 0; i < count; i += step) {
+      const a = ((i + 0.5 + (rnd() - 0.5) * 0.5) / count) * Math.PI * 2;
+      headPoint(z, a, hp);
+      const [cy] = rowsAt(HEAD_ROWS, z);
+      // outward: from the section's centre, in head space
+      const nh = new THREE.Vector3(hp[0], hp[1] - cy, 0).normalize();
+      const n = nh.clone().transformDirection(headFrame);
+      const top = Math.max(0, n.y);
+      if (skipCrown > 0 && top > 0.6 && rnd() < skipCrown) continue;
+      const base = new THREE.Vector3(hp[0] * root, cy + (hp[1] - cy) * root, hp[2]).multiplyScalar(sHead).applyMatrix4(headFrame);
+      const bottom = Math.max(0, -n.y);
+      const dir = lockDir(n, fwd, rnd, { out: 0.45, down: 1.0, back: 0.2, crestBack: 1.0, crestUp: 0.25 });
+      const face = n.clone().addScaledVector(fwd, faceFwd).normalize();
+      const L = lerp(lerp(len, lenJaw, bottom), lenCrown, top * top) * (0.8 + rnd() * 0.4) * s;
+      lockCard(alpha, base, dir, L, width * (0.85 + rnd() * 0.3) * s, new THREE.Vector3(0, -0.35, 0), headBones, variant++, face, (rnd() - 0.5) * 0.5, segs);
+    }
   };
-  neckRing('neck2', 'head', 0.1, 0.065, 0.18, 24, 0.22);
-  neckRing('neck1', 'neck2', 0.13, 0.07, 0.3, 26, 0.26);
-  neckRing('chest', 'neck1', 0.21, 0.07, 0.42, 28, 0.24, 0.02);
-  // the chest fringe: hanging from the brisket between the forelegs
-  const chest = P('chest');
-  const chestBones = [[idx('chest'), 1]];
-  for (let i = 0; i < 10; i += step) {
-    const x = (i / 9 - 0.5) * 0.3 * s;
-    const base = new THREE.Vector3(chest.x + x, chest.y - 0.56 * s + Math.abs(x) * 0.4, chest.z + 0.16 * s + jitter(0.03) * s);
-    const dir = new THREE.Vector3(x * 1.2, -1, 0.15).normalize();
-    card(base, dir, (0.2 + rnd() * 0.08) * s, 0.024 * s, new THREE.Vector3(0, -0.2, 0.1), chestBones, variant++, new THREE.Vector3(0, 0, 1));
-  }
+  // the ruff proper: behind the jaw angle and the ears, the long locks
+  ring(0.06, 22, { len: 0.17, lenJaw: 0.24, lenCrown: 0.1, width: 0.026, skipCrown: 0.3 });
+  // and forward of it, behind the cheeks: shorter, the mane's front edge
+  // under the ear and along the jaw
+  ring(0.11, 16, { len: 0.12, lenJaw: 0.17, lenCrown: 0.08, width: 0.022, skipCrown: 0.7, root: 0.94 });
 }
 
 /** A tapered strand as a chain of quads, for whiskers. */

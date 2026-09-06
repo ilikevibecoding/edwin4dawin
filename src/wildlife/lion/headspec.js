@@ -149,10 +149,13 @@ export const JAW_ROWS = [
   // tapered underside of the muzzle loft, so no edge of it shows under the
   // cheek as a tusk) but for the chin at the front, under the nose
   [0.2, -0.062, 0.038, 0.014, 0.016],
-  [0.26, -0.068, 0.025, 0.018, 0.013],
-  [0.285, -0.067, 0.022, 0.016, 0.012], // the chin: its top 8 mm up inside the lip, 0.8 of the lip's width there, so no shelf of it shows from above
-  [0.298, -0.067, 0.014, 0.01, 0.01], // and rounded off to the front and down, under the lip's edge, no flat disc under the nose (a squared pale chin read as teeth)
-  [0.304, -0.066, 0.005, 0.004, 0.005],
+  // (round 9: the chin rows a fifth narrower — 0.7 of the lip's width — so
+  // the chin is a soft end to the jaw under the lip's overhang and not a
+  // bulb; the bottom line and the heights are held, so the muzzle depth is)
+  [0.26, -0.068, 0.023, 0.018, 0.013],
+  [0.285, -0.067, 0.018, 0.016, 0.012], // the chin: its top 8 mm up inside the lip, so no shelf of it shows from above
+  [0.298, -0.067, 0.011, 0.01, 0.01], // and rounded off to the front and down, under the lip's edge, no flat disc under the nose (a squared pale chin read as teeth)
+  [0.304, -0.066, 0.004, 0.004, 0.005],
 ];
 
 /** Where the features are, in head metres (mirrored in x). */
@@ -406,8 +409,16 @@ export const HEAD_BUMPS = [
   // brow's outer end stands out over it as the postorbital corner, so from
   // the front the brow line ends in two corners with the temple dished behind
   // them, the way a lion's brow does
-  [0.1, 0.1, 0.118, 0.032, 0.022, 0.028, -0.014],
-  [0.09, 0.1, 0.158, 0.018, 0.016, 0.02, 0.009],
+  // Round 9: a dish, not a Gaussian — round 8's mound was centred 2 cm inside
+  // the skin (x 0.1 against a temple at 0.112-0.116), so at the surface it
+  // was 0.6 of its depth and the measured hollow 3.4-3.9 of 6 mm; the
+  // plateau is full over the temple's face (x 0.095-0.115, y 0.09-0.106,
+  // z 0.10-0.135) and rims out over the next 55 % of its radius, 12.5 mm deep,
+  // and the postorbital corner ahead of it is 12 mm and longer along z, so
+  // the brow ends in a corner the hollow is measured against. The ear root
+  // (z 0.06) is outside the dish's footprint.
+  [0.1, 0.098, 0.118, 0.045, 0.024, 0.03, -0.0125, 0.45],
+  [0.09, 0.1, 0.155, 0.02, 0.016, 0.027, 0.012],
   // round 7: the zygomatic shelf — a plateau along the arch from under the
   // eye's outer corner back toward the ear root, 6 mm proud with a rim, so
   // the cheek under the eye is a bone with an edge and the masseter hollow

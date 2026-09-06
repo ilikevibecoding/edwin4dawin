@@ -135,19 +135,22 @@ function fillRegion(ctx, rect, S, fn) {
  * the body, legs and tail regions. This is the 1 cm grain: without it a coat is
  * a colour, with it the surface has a direction.
  */
-function hairStrokes(ctx, rect, S, rnd, { count, len = [6, 14], light = 0.11, dir = 0 } = {}) {
+function hairStrokes(ctx, rect, S, rnd, { count, len = [6, 14], light = 0.11, dir = 0, width = 1, scatter = 0.5, flow = null } = {}) {
   const r = px(rect, S);
   ctx.save();
   ctx.beginPath();
   ctx.rect(r.x0, r.y0, r.w, r.h);
   ctx.clip();
-  ctx.lineWidth = 1;
+  ctx.lineWidth = width * (S / 1024);
   ctx.lineCap = 'round';
   for (let i = 0; i < count; i++) {
     const x = r.x0 + rnd() * r.w;
     const y = r.y0 + rnd() * r.h;
     const l = lerp(len[0], len[1], rnd()) * (S / 1024);
-    const a = dir + (rnd() - 0.5) * 0.5;
+    // `flow(u, v)` turns the stroke with the coat's lie (round 9: the body's
+    // strokes follow the streak field's flow, coatShade)
+    const th = flow ? flow((x - r.x0) / r.w, 1 - (y - r.y0) / r.h) : 0;
+    const a = dir + Math.PI - th + (rnd() - 0.5) * scatter;
     const shade = (rnd() - 0.5) * 2 * light;
     ctx.strokeStyle = shade > 0 ? `rgba(255,240,215,${shade})` : `rgba(40,25,12,${-shade})`;
     ctx.beginPath();
@@ -167,15 +170,38 @@ function hairStrokes(ctx, rect, S, rnd, { count, len = [6, 14], light = 0.11, di
  * 512 and isotropic, so the coat's grain measured as a mottle whatever the
  * streak field under it did (16 000 dots of 0.65 px on a 512 atlas).
  */
-function ticking(ctx, rect, S, rnd, count, color = 'rgba(50,32,18,0.45)', size = 1.2, elong = 1) {
+function ticking(ctx, rect, S, rnd, count, color = 'rgba(50,32,18,0.45)', size = 1.2, elong = 1, flow = null) {
   const r = px(rect, S);
   ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.lineCap = 'butt';
   for (let i = 0; i < count; i++) {
     const x = r.x0 + rnd() * r.w;
     const y = r.y0 + rnd() * r.h;
     const s = size * (0.6 + rnd() * 0.8) * (S / 1024);
-    ctx.fillRect(x, y, s, s * elong);
+    if (flow) {
+      // a hair tip lying with the coat: a short dash turned by the flow
+      // field, ±25 degrees (round 9)
+      const th = flow((x - r.x0) / r.w, 1 - (y - r.y0) / r.h) + (rnd() - 0.5) * 0.87;
+      ctx.lineWidth = s;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.sin(th) * s * elong, y - Math.cos(th) * s * elong);
+      ctx.stroke();
+    } else ctx.fillRect(x, y, s, s * elong);
   }
+}
+
+/**
+ * The body coat's lie (round 8, coatShade): along the trunk, turning in
+ * toward the tail root over the rump, straight again at the belly seam so
+ * the tile wraps. Returns the angle off "along the animal" at the body
+ * tile's (u, v); the strokes and the ticking follow it (round 9).
+ */
+function bodyFlow(u, v) {
+  const fside = Math.sign(u - 0.5) || 1;
+  const fseam = smoothstep(0.5, 0.38, Math.abs(u - 0.5));
+  return fside * fseam * 0.45 * smoothstep(0.25, 0.0, v);
 }
 
 function coatShade(u, v, seed, { spots, su = u, sv = v }) {
@@ -422,7 +448,9 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
   // face — a lion's chin is near white — and only turn coat coloured back
   // toward the corner and the jaw angle (round 4: a dark lower jaw under the
   // pale upper lip read as an open mouth from the front)
-  c = mixRgb(c, mixRgb(JAW_COAT, buff, smoothstep(0.215, 0.265, hz)), jaw * 0.85);
+  // (round 9: 0.45 of the buff at the front, from all of it — the lip's
+  // underside is the top of the chin's pale bulb in a three-quarter view)
+  c = mixRgb(c, mixRgb(JAW_COAT, buff, 0.45 * smoothstep(0.215, 0.265, hz)), jaw * 0.85);
   c = mixRgb(c, COAT.lip, lowerLip * 0.3);
   c = mixRgb(c, COAT.black, lip * 0.92);
   // the corner: the seam follows the hanging jowl down and back a centimetre, thinning out
@@ -492,8 +520,13 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
         // (round 8: strokes 1-2.5 cm long, from 0.4-1.1 — at the gauntlet's
         // 5 mm per pixel the short ones were under two pixels and averaged
         // to an isotropic grain — and the ticking's tips longer still)
-        hairStrokes(ctx, ATLAS.body, S, rnd, { count: 14000, len: [10, 26], light: 0.1 });
-        ticking(ctx, ATLAS.body, S, rnd, 11000, 'rgba(50,32,18,0.5)', 1.1, 6);
+        // (round 9: the strokes and the ticking lie in the streak field's
+        // flow, ±20-25 degrees; the strokes 4-8 cm long and 6 mm wide — a
+        // texel is 1.6 mm around and 2.7 along, and the gauntlet's 640 frame
+        // is 5 mm a pixel, so anything narrower than 5 mm averages to an
+        // isotropic grain whatever its direction — and the tips 8:1)
+        hairStrokes(ctx, ATLAS.body, S, rnd, { count: 5000, len: [14, 30], light: 0.12, width: 4, scatter: 0.7, flow: bodyFlow });
+        ticking(ctx, ATLAS.body, S, rnd, 9000, 'rgba(50,32,18,0.5)', 1.3, 8, bodyFlow);
 
         // --- legs: u around from the outside, v = 0 at the paw ----------------
         fillRegion(ctx, ATLAS.leg, S, (u, v, o) => {
@@ -750,15 +783,16 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           const m = fbm(u * 8, v * 8, { octaves: 3, period: 16, seed: 531 });
           c = mixRgb(c, COAT.belly, (m - 0.5) * 0.3);
           const under = smoothstep(0.35, 0.48, Math.abs(u - 0.5));
-          c = mixRgb(c, COAT.cream, under * 0.3);
+          c = mixRgb(c, COAT.cream, under * 0.12);
           // the lower lip runs along the top of the jaw loft (u = 0.5) and is
           // dark like the upper; only it and the chin show under the upper lip
           c = mixRgb(c, COAT.lip, smoothstep(0.16, 0.1, Math.abs(u - 0.5)) * smoothstep(0.96, 0.9, v) * 0.8);
-          // the chin: small and pale buff, not white (round 8: the jaw hangs
-          // 2 cm under the upper lip's edge now, so the pale is kept to the
-          // rounded chin end and half as strong — a pale block under a dark
-          // lip line read as teeth from the front)
-          c = mixRgb(c, mixRgb(COAT.side, COAT.cream, 0.5), smoothstep(0.86, 0.96, v) * 0.55);
+          // the chin: the jowl's tone, a touch paler at the rounded end, not
+          // buff (round 8 mixed half cream at 0.55 and the chin was a pale
+          // bulb under the lip in every three-quarter view — the one pale
+          // thing on the lower face; a lion's chin is pale at the very lip
+          // and the coat's colour a centimetre under it)
+          c = mixRgb(c, mixRgb(COAT.side, COAT.cream, 0.3), smoothstep(0.86, 0.96, v) * 0.22);
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];
@@ -846,10 +880,51 @@ export function coatNormal(size = 256) {
 }
 
 /**
+ * The mane shells' map is stretched over the ruff: u runs the 1.6 m round
+ * the neck (0 under the throat, 0.5 on the crest), one repeat of v about half
+ * a metre along it (geometry.js: v = 1.6 f over a 0.8 m chain). Locks are
+ * drawn in surface metres and mapped through this, so a lock is as wide on
+ * the animal as it is meant to be whichever way it runs.
+ */
+const MANE_MAP = { around: 1.6, along: 0.5 };
+
+/**
+ * Where a mane hair points on the ruff, in surface metres (du around toward
+ * the throat, dv along toward the shoulders), at angle `a` round the section
+ * (−π/2 under the throat, 0 on the right side, π/2 on the crest) — gravity
+ * projected onto the neck: straight down the sides, back along the neck over
+ * the crest, and a little back everywhere. The round-3 marks ran along the
+ * chain everywhere, which from the front is radial from the face.
+ */
+function maneFlow(a, out) {
+  const ca = Math.cos(a);
+  const sa = Math.sin(a);
+  out[0] = -ca;
+  out[1] = -(0.3 + 0.7 * Math.abs(sa));
+  const l = Math.hypot(out[0], out[1]);
+  out[0] /= l;
+  out[1] /= l;
+  return out;
+}
+
+/**
  * Shell-fur strand map. Alpha encodes hair length: a shell at height h keeps a
  * texel only where alpha ≥ h, so one texture serves every shell and the hairs
- * thin out toward the outside. RGB is the strand colour, darker under the jaw
- * (u near 0 and 1, the bottom of the mane loft) and blonder on top.
+ * thin out toward the outside. RGB is the strand colour.
+ *
+ * Round 9: locks, not hairs. Rounds 3-8 scattered 37 000 short marks along
+ * the chain, each with its own random length, so the outer shells carried a
+ * confetti of single strands and — on the shells that taper onto the skull —
+ * every mark ran radially from the face ("shredded paper", "radial ribbons",
+ * every round's critics). A mane is clumped: tapered locks 3-6 cm wide that
+ * hang under gravity (maneFlow), each lock one reach for its whole body so
+ * the outer shells show whole clumps with gaps between them, its tip broken
+ * into two to four strands that end at their own lengths (the ragged
+ * outline), dark at the root and paler and warmer at the tip over the crown
+ * and cheeks, the whole palette darker toward the throat and chest. Under
+ * the locks a dense short coat (alpha to 0.42) keeps the inner shells one
+ * mass. Rasterised by hand so a texel's alpha is the length of the LONGEST
+ * hair over it, not the sum.
  */
 export function maneStrands(size = 512) {
   return cached(`lion-mane-${size}`, () => {
@@ -857,62 +932,170 @@ export function maneStrands(size = 512) {
     return cutoutTexture(
       size,
       (ctx, S) => {
-        // Rasterised by hand so a texel's alpha is the length of the LONGEST
-        // hair over it, not the sum: canvas compositing would pile short
-        // hairs up to full alpha and every shell would be a second skin.
         const img = ctx.createImageData(S, S);
         const px = img.data;
-        const n = Math.round(S * S * 0.14);
-        const dark = [58, 40, 26];
-        const brown = [124, 86, 50];
-        const tawny = [182, 134, 80];
-        const blond = [218, 182, 126];
-        for (let i = 0; i < n; i++) {
-          const x = rnd() * S;
-          const y = rnd() * S;
-          const u = x / S;
-          const top = 1 - Math.abs(2 * u - 1);
-          // hair length: the mane is solid to about half its depth, then a
-          // fringe — half the hairs reach three quarters out, a few per cent
-          // the outermost shell — so the body of the mane reads as one mass
-          // and only its edge breaks into strands against the sky
-          let len = rnd() < 0.7 ? 0.6 + 0.4 * Math.pow(rnd(), 2) : 0.1 + 0.5 * rnd();
-          // the long hairs come in locks: a slow field over the map lengthens
-          // the hair in some patches and shortens it in others, so the outer
-          // shells carry tufts rather than a confetti of single strands
-          const lock = fbm(u * 6, (y / S) * 6, { octaves: 2, period: 6, seed: 7337 });
-          len = clamp(len * lerp(0.85, 1.2, smoothstep(0.35, 0.65, lock)), 0.05, 1);
-          // tawny over the crown and shoulders, darkening down the throat and
-          // chest; the long hairs are the dark ones, so the tips of the mane
-          // are darker than its body
+        const dark = [50, 34, 22];
+        const brown = [118, 80, 46];
+        const tawny = [186, 138, 84];
+        const blond = [226, 190, 134];
+        const kx = S / MANE_MAP.around; // texels per surface metre, around
+        const ky = S / MANE_MAP.along; // along
+        // (canvas rows run down and v up: along-toward-the-shoulders is −v)
+        const put = (sx, sy, a, c) => {
+          const xi = ((Math.round(sx * kx) % S) + S) % S;
+          const yi = ((Math.round(-sy * ky) % S) + S) % S;
+          const o = (yi * S + xi) * 4;
+          const a8 = Math.round(clamp(a, 0, 1) * 255);
+          if (px[o + 3] >= a8) return;
+          px[o] = c[0];
+          px[o + 1] = c[1];
+          px[o + 2] = c[2];
+          px[o + 3] = a8;
+        };
+        const flow = [0, 0];
+        const angAt = (su) => -Math.PI / 2 + (su / MANE_MAP.around) * Math.PI * 2;
+        // 1 on the crest, 0 at the sides and under the throat; and the throat
+        const crestAt = (su) => Math.max(0, Math.sin(angAt(su)));
+        const throatAt = (su) => Math.max(0, -Math.sin(angAt(su)));
+
+        // --- the short under-coat: dense dashes along the flow ----------------
+        // (mid-lock tones, brown to tawny: it is what shows between the locks'
+        // fingers on the inner shells, and where it was dark every lock read
+        // as a pale plank laid over a black ground)
+        const nShort = Math.round(S * S * 0.09);
+        for (let i = 0; i < nShort; i++) {
+          const su = rnd() * MANE_MAP.around;
+          const sv = rnd() * MANE_MAP.along;
+          maneFlow(angAt(su) + (rnd() - 0.5) * 0.6, flow);
+          const len = 0.02 + rnd() * 0.03;
+          const a = 0.12 + 0.3 * Math.pow(rnd(), 0.7);
           const t = rnd();
-          let c;
-          if (t < 0.22 + (1 - top) * 0.3 + Math.max(0, len - 0.8) * 1.2) c = dark;
-          else if (t < 0.68) c = brown;
-          else if (t < 0.94) c = tawny;
-          else c = blond;
-          const shade = (0.88 + rnd() * 0.24) * lerp(1.05, 0.85, len);
-          const a8 = Math.round(len * 255);
-          // Short marks with some long hairs among them, so a shell seen
-          // edge-on breaks into dashes rather than reading as a ribbon. They
-          // lie along the animal (the canvas vertical): on the shells that
-          // taper onto the skull this puts the hair radiating from the face,
-          // which is how a mane frames it. (Laid around the neck instead, so
-          // as to hang, the same marks became concentric arcs from the front.)
-          const l = (rnd() < 0.6 ? 2 + rnd() * 5 : 7 + rnd() * 11) * (S / 256);
-          const ang = Math.PI / 2 + (rnd() - 0.5) * 0.9;
-          const dx = Math.cos(ang);
-          const dy = Math.sin(ang);
-          for (let k = -l / 2; k < l / 2; k += 0.7) {
-            const xi = ((Math.round(x + dx * k) % S) + S) % S;
-            const yi = ((Math.round(y + dy * k) % S) + S) % S;
-            const o = (yi * S + xi) * 4;
-            if (px[o + 3] >= a8) continue;
-            px[o] = c[0] * shade;
-            px[o + 1] = c[1] * shade;
-            px[o + 2] = c[2] * shade;
-            px[o + 3] = a8;
+          const c = t < 0.4 ? mixRgb(dark, brown, 0.5) : t < 0.85 ? brown : tawny;
+          const sh = 0.8 + rnd() * 0.3;
+          const col = [c[0] * sh, c[1] * sh, c[2] * sh];
+          for (let k = 0; k < len; k += 0.0012) put(su + flow[0] * k, sv + flow[1] * k, a, col);
+        }
+
+        // --- locks -----------------------------------------------------------------
+        // a hair's own shade within a lock: hashed on its 3.5 mm column and
+        // the lock, so the clump is striped along its length the way hair is
+        const hash = (i, j) => {
+          let h = (i * 374761393 + j * 668265263) | 0;
+          h = ((h ^ (h >>> 13)) * 1274126177) | 0;
+          return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+        };
+        let lockId = 0;
+        const lock = (su0, sv0, W, L, reach, dev, curl) => {
+          // two to four strands across the lock, each ending at its own
+          // length with its own reach, so the tip is a ragged fringe and the
+          // outer shells cut the clump into fingers
+          const id = lockId++;
+          const nS = 2 + Math.floor(rnd() * 3);
+          const strandEnd = [];
+          const strandReach = [];
+          const strandShade = [];
+          for (let k = 0; k < nS; k++) {
+            strandEnd.push(0.62 + rnd() * 0.38);
+            strandReach.push(0.92 + rnd() * 0.08);
+            strandShade.push(0.86 + rnd() * 0.28);
           }
+          // the clump's own shade: locks differ from their neighbours by up
+          // to a stop, so a lit shell reads as clumps and not as one paint
+          const clump = 0.72 + rnd() * 0.5;
+          const crest = crestAt(su0);
+          const throat = throatAt(su0);
+          // root dark, tip pale and warm over the crown and the cheeks — the
+          // sides of the ruff are tawny on the animal; only the throat's and
+          // the chest's locks stay brown to the tip
+          const pale = 1 - throat;
+          // (the sides of the ruff are tawny-brown on the animal, a shade
+          // darker than the coat; only the crown's tips go blond — with the
+          // tips at 0.8 blond all round the ruff was one pale saddle)
+          // (r9b: the tips go blond — a lock's tip is what the outer shells
+          // and the silhouette show, so the ruff's rim has to be its palest
+          // part; the body of the lock stays tawny-brown)
+          const rootC = mixRgb(dark, brown, 0.1 + 0.25 * pale);
+          const midC = mixRgb(brown, tawny, 0.05 + 0.35 * pale + 0.05 * crest);
+          const tipC = mixRgb(tawny, blond, 0.4 + 0.4 * pale + 0.1 * crest);
+          const band = (1 - 0.25 * throat) * clump;
+          let x = su0;
+          let y = sv0;
+          const step = 0.0011;
+          let ang = angAt(su0);
+          for (let d = 0; d <= L; d += step) {
+            const t = d / L;
+            maneFlow(ang, flow);
+            // the lock leaves its root at its own angle and straightens onto
+            // the hang as it falls; a slow curl bends it aside
+            const rot = dev * (1 - t) + curl * Math.sin(t * 2.4);
+            const cr = Math.cos(rot);
+            const sr = Math.sin(rot);
+            const fx = flow[0] * cr - flow[1] * sr;
+            const fy = flow[0] * sr + flow[1] * cr;
+            const w = (W / 2) * (1 - 0.72 * t * t);
+            const nx = -fy;
+            const ny = fx;
+            const cAlong = t < 0.35 ? mixRgb(rootC, midC, t / 0.35) : mixRgb(midC, tipC, (t - 0.35) / 0.65);
+            for (let q = -w; q <= w; q += 0.0016) {
+              const qq = q / Math.max(w, 1e-4);
+              const k = Math.min(nS - 1, Math.floor(((qq + 1) / 2) * nS));
+              if (t > strandEnd[k]) continue;
+              // r9b: the alpha is a rounded bundle across the lock, not a
+              // plateau — the first cut ran pow 0.15, so every shell cut the
+              // lock at the same two straight edges and the stack of eight
+              // read as a plank; at 0.55 each shell out cuts a narrower core
+              // and the lock is a bundle, thin where it stands proud, ragged
+              // at both edges by the hairs' own reach
+              const edge = Math.pow(Math.max(0, 1 - qq * qq), 0.55);
+              const gap = 1 - 0.55 * smoothstep(0.85, 1.0, Math.abs(((qq + 1) / 2) * nS - k - 0.5) * 2) * smoothstep(0.35, 0.7, t);
+              // the single hairs: a column's own reach and shade, so the
+              // clump is striped and the outer shells break its tip into hairs
+              const hh = hash(Math.floor((q + W / 2) / 0.0035), id);
+              // (the hairs' own erosion bites at the lock's edges, so its core
+              // keeps the full reach and the tall locks still make the crest)
+              const a = reach * strandReach[k] * edge * gap * (1 - 0.15 * smoothstep(0.55, 1.0, t / strandEnd[k])) * (1 - 0.3 * hh * smoothstep(0.15, 1.0, t) * (0.25 + 0.75 * Math.abs(qq)));
+              const sh = strandShade[k] * band * (0.94 + 0.12 * Math.abs(qq) * (qq > 0 ? 1 : -1)) * (0.7 + 0.6 * hh);
+              put(x + nx * q, y + ny * q, a, [cAlong[0] * sh, cAlong[1] * sh, cAlong[2] * sh]);
+            }
+            x += fx * step;
+            y += fy * step;
+            ang = angAt(x);
+          }
+        };
+        // the long locks come in patches: a slow field lengthens them here
+        // and shortens them there, so the ruff's outline is irregular
+        const field = (su, sv) => fbm((su / MANE_MAP.around) * 5, (sv / MANE_MAP.along) * 5, { octaves: 2, period: 5, seed: 7337 });
+        // (a texel keeps the longest hair over it, and the locks overlap four
+        // deep, so wherever the reach was spread evenly the outer shells were
+        // one mass to wherever the longest lock reached and the silhouette a
+        // disc. The reach is bimodal: five in six long locks end at 0.55-0.7
+        // of the stand-off — the ruff's mass — and one in six reaches
+        // 0.9-1.0 as a whole clump, so the outer shells carry separate
+        // 3-6 cm clumps, about 40 % covered, standing a third of the
+        // stand-off proud of the mass with gaps between them)
+        // (r9b: locks 2.2-4.2 cm wide — with the bundle profile the outer
+        // shells show the core, a third of that — and one in four tall, so
+        // the silhouette is more, thinner fingers)
+        const nLong = 340;
+        for (let i = 0; i < nLong; i++) {
+          const su = rnd() * MANE_MAP.around;
+          const sv = rnd() * MANE_MAP.along;
+          const f = field(su, sv);
+          const W = 0.022 + rnd() * 0.02;
+          const L = (0.12 + rnd() * 0.14) * lerp(0.8, 1.2, f);
+          const tall = rnd() < 0.36 + 0.1 * smoothstep(0.4, 0.7, f);
+          const reach = clamp((tall ? 0.9 + 0.1 * rnd() : 0.48 + 0.14 * rnd()) * lerp(0.94, 1.04, f), 0.3, 1);
+          lock(su, sv, W, L, reach, (rnd() - 0.5) * 0.3, (rnd() - 0.5) * 0.3);
+        }
+        // shorter locks over them, the body of the ruff
+        const nMid = 700;
+        for (let i = 0; i < nMid; i++) {
+          const su = rnd() * MANE_MAP.around;
+          const sv = rnd() * MANE_MAP.along;
+          const W = 0.018 + rnd() * 0.018;
+          const L = 0.06 + rnd() * 0.08;
+          const reach = 0.3 + 0.25 * rnd();
+          lock(su, sv, W, L, reach, (rnd() - 0.5) * 0.35, (rnd() - 0.5) * 0.35);
         }
         ctx.putImageData(img, 0, 0);
       },
@@ -983,64 +1166,91 @@ export function alphaAtlas(size = 256) {
         const brown = [112, 76, 44];
         const tawny = [172, 126, 74];
         const blond = [210, 172, 116];
+        // Round 9: a card is one lock — a tapered clump of three or four
+        // strands that leave a solid root together, curve the same way and
+        // part toward the tip, each ending at its own length, dark at the
+        // root and paler and warmer toward the tip. Rounds 5-8 drew five
+        // separate narrow ribbons per card with daylight between them from
+        // the root, which on a card standing off the face was the "shredded
+        // paper"; the clump reads as a lock of hair at two metres, its tip as
+        // fingers.
+        // r9b: the card's rectangle never shows — alpha 0 along every border:
+        // the strands leave a rounded root 3 % down from the top edge (the
+        // root sits inside the shell mass), stay 6 % inside the column's
+        // sides (the first cut let a leaning strand run to the column's edge
+        // and cut there in a straight line), and each strand is three
+        // narrower hairs of their own lean and length, so the lock's long
+        // edges are ragged and not two smooth curves 15 cm long.
         const maneCard = (x0, x1, seed) => {
           const r = mulberry32(seed);
           const w = x1 - x0;
           const xc = (x0 + x1) / 2;
-          // A card is a bundle of narrow locks with daylight between them, so
-          // the silhouette of the card is hair and not a paddle: each lock a
-          // tapered ribbon a few millimetres wide, brown at the root and dark
-          // at the tip, ending at its own length; the roots merge in a short
-          // dense band at the top so the bundle grows out of the shells.
-          const lock = (cx, len, wTop, lean, cols) => {
-            const g = ctx.createLinearGradient(0, 0, 0, len);
+          const xMin = x0 + w * 0.06;
+          const xMax = x1 - w * 0.06;
+          const bend = (r() - 0.5) * w * 0.4;
+          const y0 = S * 0.03;
+          const cl = (x) => Math.min(xMax, Math.max(xMin, x));
+          const strand = (cx, len, wTop, wEnd, lean, cols, ends) => {
+            const g = ctx.createLinearGradient(0, y0, 0, y0 + len);
             g.addColorStop(0, rgba(cols[0], 1));
-            g.addColorStop(0.5, rgba(cols[1], 1));
+            g.addColorStop(0.4, rgba(cols[1], 1));
             g.addColorStop(1, rgba(cols[2], 1));
             ctx.fillStyle = g;
             ctx.beginPath();
-            ctx.moveTo(cx - wTop, 0);
-            ctx.lineTo(cx + wTop, 0);
-            ctx.quadraticCurveTo(cx + wTop * 0.7 + lean * 0.4, len * 0.55, cx + lean + wTop * 0.1, len);
-            ctx.lineTo(cx + lean - wTop * 0.1, len);
-            ctx.quadraticCurveTo(cx - wTop * 0.7 + lean * 0.4, len * 0.55, cx - wTop, 0);
+            ctx.moveTo(cl(cx - wTop), y0 + wTop);
+            ctx.quadraticCurveTo(cx, y0 - wTop * 0.6, cl(cx + wTop), y0 + wTop);
+            ctx.quadraticCurveTo(cl(cx + wTop * 0.8 + bend), y0 + len * 0.5, cl(cx + lean + wEnd), y0 + len * ends);
+            ctx.lineTo(cl(cx + lean), y0 + len);
+            ctx.lineTo(cl(cx + lean - wEnd), y0 + len * ends);
+            ctx.quadraticCurveTo(cl(cx - wTop * 0.8 + bend), y0 + len * 0.5, cl(cx - wTop), y0 + wTop);
             ctx.closePath();
             ctx.fill();
           };
-          const nLocks = 5;
-          for (let i = 0; i < nLocks; i++) {
-            const cx = x0 + w * (0.1 + 0.8 * ((i + 0.5) / nLocks) + (r() - 0.5) * 0.08);
-            const centre = 1 - Math.abs(2 * ((i + 0.5) / nLocks) - 1);
-            const len = S * (0.4 + 0.55 * Math.pow(r(), 0.7) * (0.6 + 0.4 * centre));
-            const wTop = w * (0.03 + r() * 0.02);
-            const lean = (r() - 0.5) * w * 0.35;
+          const nS = 3 + Math.floor(r() * 2);
+          for (let i = 0; i < nS; i++) {
+            const k = (i + 0.5) / nS;
+            const cx = xc + (k - 0.5) * w * 0.4;
+            const centre = 1 - Math.abs(2 * k - 1);
+            const len = S * (0.66 + 0.28 * r() * (0.5 + 0.5 * centre));
+            const wTop = w * (0.2 / nS + 0.05);
+            const lean = (k - 0.5) * w * 0.4 + (r() - 0.5) * w * 0.12;
             const t = r();
-            const root = t < 0.15 ? tawny : t < 0.6 ? brown : mixRgb(brown, tawny, 0.5);
-            const mid = t < 0.15 ? mixRgb(tawny, brown, 0.5) : t < 0.6 ? mixRgb(brown, dark, 0.35) : brown;
-            const tip = t < 0.25 ? mixRgb(brown, dark, 0.7) : dark;
-            lock(cx, len, wTop, lean, [root, mid, tip]);
+            const root = mixRgb(dark, brown, 0.3 + 0.3 * t);
+            const mid = mixRgb(brown, tawny, 0.35 + 0.4 * t);
+            const tip = mixRgb(tawny, blond, 0.5 + 0.5 * t);
+            // three hairs per strand, each its own lean and end
+            for (let j = 0; j < 3; j++) {
+              const hx = cx + (j - 1) * wTop * 0.55;
+              const hl = lean + (j - 1) * wTop * 0.4 + (r() - 0.5) * w * 0.05;
+              const hLen = len * (0.8 + r() * 0.24) - S * 0.03;
+              const hw = wTop * 0.5;
+              strand(hx, Math.min(hLen, S - y0 - 1), hw, w * (0.012 + r() * 0.012), hl, [root, mid, tip], 0.86);
+            }
           }
-          // the root band: short broad hair that fills between the locks
-          const rg = ctx.createLinearGradient(0, 0, 0, S * 0.08);
-          rg.addColorStop(0, rgba(brown, 1));
-          rg.addColorStop(0.6, rgba(mixRgb(brown, tawny, 0.3), 0.9));
-          rg.addColorStop(1, rgba(brown, 0));
-          ctx.fillStyle = rg;
-          ctx.fillRect(x0 + w * 0.08, 0, w * 0.84, S * 0.08);
-          // pale and dark hairs over the locks, only where there is already hair
           ctx.save();
           ctx.globalCompositeOperation = 'source-atop';
-          for (let i = 0; i < 60; i++) {
-            const xs = x0 + w * (0.08 + r() * 0.84);
-            const lean = (r() - 0.5) * w * 0.25;
-            const len = S * (0.3 + r() * 0.65);
+          // the root band: the strands' roots darkened where they leave the
+          // shells (drawn onto the hair only — a filled rectangle here was a
+          // square paddle top on every card seen edge-on)
+          const rg = ctx.createLinearGradient(0, 0, 0, S * 0.1);
+          rg.addColorStop(0, rgba(dark, 1));
+          rg.addColorStop(0.6, rgba(mixRgb(dark, brown, 0.6), 0.7));
+          rg.addColorStop(1, rgba(brown, 0));
+          ctx.fillStyle = rg;
+          ctx.fillRect(x0, 0, w, S * 0.1);
+          // the hair's own grain over the clump, only where there is hair:
+          // fine pale and dark strokes following the lock's curve
+          for (let i = 0; i < 90; i++) {
+            const xs = xc + (r() - 0.5) * w * 0.6;
+            const lean = (xs - xc) * 0.9 + (r() - 0.5) * w * 0.15;
+            const len = S * (0.35 + r() * 0.6);
             const t = r();
-            const col = t < 0.45 ? dark : t < 0.75 ? brown : t < 0.92 ? tawny : blond;
-            ctx.strokeStyle = rgba(col, 0.5 + r() * 0.45);
-            ctx.lineWidth = (0.7 + r() * 1.2) * (S / 512);
+            const col = t < 0.4 ? dark : t < 0.7 ? brown : t < 0.9 ? tawny : blond;
+            ctx.strokeStyle = rgba(col, 0.35 + r() * 0.4);
+            ctx.lineWidth = (0.6 + r() * 1.0) * (S / 512);
             ctx.beginPath();
-            ctx.moveTo(xs, 0);
-            ctx.quadraticCurveTo(xs + lean * 0.4, len * 0.5, xs + lean, len);
+            ctx.moveTo(xs, S * 0.02);
+            ctx.quadraticCurveTo(xs + bend * 0.8, len * 0.5, xs + lean, len);
             ctx.stroke();
           }
           ctx.restore();

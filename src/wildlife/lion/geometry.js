@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { BELLY, EYE, KINDS, bellyFactor } from './spec.js';
 import { chainWeights } from './rig.js';
-import { addHead } from './head.js';
+import { addHead, lockCard, lockDir } from './head.js';
 import { ATLAS, SKULL_MAP, uvIn } from './textures.js';
 import { rowsAt } from './headspec.js';
-import { clamp, lerp, smoothstep } from '../../textures/core.js';
+import { clamp, lerp, mulberry32, smoothstep } from '../../textures/core.js';
 
 // ---------------------------------------------------------------------------
 // Lion geometry, built in the rest pose around the skeleton and skinned to it.
@@ -605,7 +605,7 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
   // --- head ------------------------------------------------------------------
   addHead(body, alpha, skel, K, D);
 
-  const out = { body: body.build(), alpha: alpha.count ? alpha.build() : null, mane: null, maneShells: null, fuzz: null };
+  const out = { body: body.build(), alpha: null, mane: null, maneShells: null, fuzz: null };
 
   // --- mane ------------------------------------------------------------------
   if (K.mane && maneShells > 0) {
@@ -662,31 +662,147 @@ export function buildLionGeometry(skel, kind, tier, { fuzzShells = 0, maneShells
     // fades in over the shoulders so the mane's rear edge feathers into the
     // coat, out toward the skull so a shell's rim never carries hair, and
     // shortens over the crown of the neck toward the skull
-    const long = (f, u) => smoothstep(0.04, 0.34, f) * smoothstep(1.0, 0.78, f) * (1 - 0.55 * top(u) * smoothstep(0.4, 1.0, f));
+    // (round 9: the crest's cut 0.55 → 0.4 — with the locks' reach spread the
+    // crest carried hair to half the stand-off and stood 7-8 cm off the neck)
+    const long = (f, u) => smoothstep(0.02, 0.42, f) * smoothstep(1.0, 0.78, f) * (1 - 0.3 * top(u) * smoothstep(0.4, 1.0, f));
     const shells = new SkinBuilder({ alpha: true });
     const n = maneShells;
+    // 1 under the throat, 0 at the sides and on the crest
+    const bottom = (u) => Math.max(0, -Math.sin(u * Math.PI * 2 - Math.PI / 2));
+    const shellOff = (f, u) => maneLength * s * standOff(f, u) * (1 - 0.32 * top(u));
     for (let i = 1; i <= n; i++) {
       // the alpha threshold sits half a step inside the stand-off, so a tier
       // with one or two shells still carries hair on them
       const h = (i - 0.5) / n;
       const o = i / n;
-      const st = chainStations(mane, count, mProfile, mBoneOf, { vFn: (f) => f * 1.6 });
-      // the hair darkens outward and under the throat: a mane is dark at its
-      // tips and blackest on the chest, tawny only along the crown
-      const shade = lerp(0.85, 0.5, o);
+      // (r9b: v runs 0-1 here and the rect is 1.6 tall — uvIn clamps v to
+      // [0, 1], so the old vFn f × 1.6 saturated at f 0.625 and the front
+      // third of the neck's shells sampled the map's last row all the way
+      // to the skull: every lock there a straight band along the chain)
+      const st = chainStations(mane, count, mProfile, mBoneOf, { vFn: (f) => f });
+      // Round 9: the locks are dark at the root and pale at the tip over the
+      // crown and cheeks (rounds 3-8 darkened the outer shells to 0.5, so the
+      // ruff was a dark saddle with no depth in it), and the throat and chest
+      // carry a darker band — a mane is blackest under the neck and on the
+      // brisket, tawny over the crown.
+      // (r9b: 0.9 at the root, not 0.7 — the inner shells show through the
+      // outer locks' erosion at the silhouette, and darker than the lock's
+      // middle they made the rim darker than the ruff's body)
+      const shade = lerp(0.9, 1.0, o);
+      // r9b: each shell samples the map a texel or two aside (±6 mm across
+      // the hang, ±3 mm along it) — with every shell cut at the same texel
+      // columns the lock's two edges stacked into one straight line eight
+      // shells deep (the "planks"); offset, the cuts stagger into a ragged
+      // bundle and the stack leans the way a lock of hair does
+      const du = ((((i * 0.618) % 1) - 0.5) * 4) / 512;
+      const dv = ((((i * 0.382) % 1) - 0.5) * 2) / 512;
       shells.loft(st, around, {
-        uvRect: [0, 0, 1, 1],
+        uvRect: [du, dv, 1 + du, 1.6 + dv],
         tag: h,
-        offsetFn: (p, u, s2) => o * maneLength * s * standOff(s2.f, u) * (1 - 0.4 * top(u)),
+        offsetFn: (p, u, s2) => o * shellOff(s2.f, u),
         colorFn: (p, u, s2) => {
-          const k = shade * (1 - 0.3 * (1 - top(u)) * smoothstep(0.75, 0.2, s2.f));
+          const k = shade * (1 - 0.3 * Math.pow(bottom(u), 0.8) * smoothstep(0.85, 0.3, s2.f));
           return [k, k * 0.96, k * 0.9, long(s2.f, u)];
         },
       });
     }
     out.maneShells = shells.build();
     out.maneShells.setAttribute('aShell', new THREE.Float32BufferAttribute(shells.tag, 1));
+
+    // --- lock cards on the ruff -------------------------------------------------
+    // Round 9: the neck's and chest's cards are scattered over the ruff shell
+    // (a jittered grid in (f, u), thinned over the crest where the hair is
+    // short), rooted inside the shell mass and pointing down and out under
+    // gravity with the crest's swept back (head.js lockDir), in two layers —
+    // an inner short one at the shells' roots and an outer long one a third
+    // of the way out, its dark root inside the mass — so the locks overlap in depth and the outline is ragged. Rounds
+    // 5-8 had three rings of cards radiating along the section normals at the
+    // neck joints. Count within +30 % of the rings' (tier 0: 144 → ≤ 187).
+    if (D.head >= 1) {
+      const rnd = mulberry32(6203);
+      const full = D.head >= 2;
+      const segs = full ? 3 : 2;
+      const fwd = new THREE.Vector3(0, 0, 1);
+      let variant = 0;
+      // a point on the base loft at (f, u) with its outward normal and bones
+      const surface = (f, u) => {
+        const t = mane.curve.getUtoTmapping(f);
+        const c = mane.curve.getPoint(t);
+        const tan = mane.curve.getTangent(t).normalize();
+        const ax = new THREE.Vector3().copy(X).addScaledVector(tan, -tan.dot(X)).normalize();
+        const ay = new THREE.Vector3().crossVectors(tan, ax).normalize();
+        if (ay.y < 0) ay.negate();
+        const p = mProfile(f * mane.total);
+        c.addScaledVector(ay, -(p.drop || 0));
+        const a = -Math.PI / 2 + u * Math.PI * 2;
+        const ca = Math.cos(a);
+        const sa = Math.sin(a);
+        const ry = sa >= 0 ? p.ryTop : p.ryBot;
+        const nrm = ax.clone().multiplyScalar(ca / Math.max(1e-4, p.rx)).addScaledVector(ay, sa / Math.max(1e-4, ry)).normalize();
+        const pos = c.clone().addScaledVector(ax, p.rx * ca).addScaledVector(ay, ry * sa);
+        return { pos, nrm, bones: mBoneOf(f * mane.total) };
+      };
+      const layer = (nF, nU, f0, f1, depth, len, width, crestSkip, uFn = null) => {
+        for (let i = 0; i < nF; i++) {
+          for (let j = 0; j < nU; j++) {
+            const f = lerp(f0, f1, (i + 0.15 + rnd() * 0.7) / nF);
+            // alternate rows offset by half a cell, so no two cards of
+            // neighbouring rows hang at the same u and merge at the outline
+            const uj = (j + 0.15 + rnd() * 0.7 + (i % 2) * 0.5) / nU;
+            const u = (uFn ? uFn(uj) : uj) % 1;
+            const tp = top(u);
+            // the crest carries short hair: thin the locks over it
+            if (tp > 0.55 && rnd() < crestSkip) continue;
+            const { pos, nrm, bones } = surface(f, u);
+            const off = shellOff(f, u);
+            const base = pos.clone().addScaledVector(nrm, depth * off);
+            const dir = lockDir(nrm, fwd, rnd, { out: 0.4, down: 1.0, back: 0.3, crestBack: 0.9, crestUp: 0.1 });
+            // the card faces the diagonal between the surface normal and the
+            // animal's front (more so toward the head), so a lock on the
+            // ruff's side shows from the front — where the shells are edge-on
+            // slivers at the silhouette — as well as from the side; over the
+            // crest the faces turn sideways (a face along the normal there is
+            // horizontal — an edge-on dark sliver from every eye-level view)
+            const lat = Math.cos(-Math.PI / 2 + u * Math.PI * 2) >= 0 ? X : X.clone().negate();
+            const face = nrm
+              .clone()
+              .multiplyScalar(1 - 0.85 * tp)
+              .addScaledVector(lat, 0.85 * tp)
+              .addScaledVector(fwd, (0.7 + 0.5 * smoothstep(0.6, 0.95, f)) * (1 - 0.7 * tp))
+              .normalize();
+            // lengths staggered ±35 % (r9b; ±25 % left the outer cards ending
+            // together in one merged clump 7-12 cm wide at the silhouette)
+            const L = len * (1 + 0.5 * bottom(u)) * (1 - 0.45 * tp) * (0.65 + rnd() * 0.7) * (0.6 + 0.4 * smoothstep(0.15, 0.4, f)) * s;
+            lockCard(alpha, base, dir, L, width * (0.85 + rnd() * 0.3) * s, new THREE.Vector3(0, -0.4, 0), bones, variant++, face, (rnd() - 0.5) * 0.5, segs);
+          }
+        }
+      };
+      // the sides of the ruff (u 0.15-0.35 and 0.65-0.85) carry a third,
+      // sparse layer half way out: head-on, the shells at the silhouette are
+      // seen edge-on as a stack of horizontal slivers, and these are the
+      // locks that stand in front of them
+      const sides = (uj) => (uj < 0.5 ? 0.15 + uj * 0.4 : 0.65 + (uj - 0.5) * 0.4);
+      if (full) {
+        layer(7, 15, 0.28, 0.96, 0.35, 0.17, 0.027, 0.5);
+        layer(5, 10, 0.32, 0.9, 0.1, 0.11, 0.024, 0.6);
+        layer(4, 4, 0.45, 0.92, 0.55, 0.16, 0.028, 0, sides);
+      } else {
+        layer(4, 9, 0.3, 0.95, 0.35, 0.17, 0.027, 0.5);
+        layer(3, 6, 0.35, 0.9, 0.1, 0.11, 0.024, 0.6);
+      }
+      // the chest fringe: hanging from the brisket between the forelegs
+      const chest = P('chest');
+      const chestBones = [[idx('chest'), 1]];
+      const nChest = full ? 10 : 5;
+      for (let i = 0; i < nChest; i++) {
+        const x = ((i + 0.5) / nChest - 0.5) * 0.3 * s;
+        const base = new THREE.Vector3(chest.x + x, chest.y - 0.56 * s + Math.abs(x) * 0.4, chest.z + 0.16 * s + (rnd() - 0.5) * 0.06 * s);
+        const dir = new THREE.Vector3(x * 1.2, -1, 0.15).normalize();
+        lockCard(alpha, base, dir, (0.2 + rnd() * 0.08) * s, 0.024 * s, new THREE.Vector3(0, -0.2, 0.1), chestBones, variant++, fwd, (rnd() - 0.5) * 0.4, segs);
+      }
+    }
   }
+  out.alpha = alpha.count ? alpha.build() : null;
 
   // --- fuzz shells over torso and legs ---------------------------------------
   if (fuzzShells > 0) {
