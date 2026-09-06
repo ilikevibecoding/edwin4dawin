@@ -39,8 +39,9 @@ if [ "$SOURCE" = integration ]; then
       # rerere (enabled repo-wide, autoupdate) replayed a resolution the lead recorded for exactly these conflicts
       echo "merged $b (recorded resolution): $(git rev-parse --short "$ref") $(git log -1 --format=%s "$ref" | cut -c1-90)" >> "$NOTES"
     else
+      conflicted="$(cd "$INTEG" && git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')"
       ( cd "$INTEG" && git merge --abort 2>/dev/null || true )
-      echo "skip $b: merge conflict in $(cd "$INTEG" && git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')" >> "$NOTES"
+      echo "skip $b: merge conflict in $conflicted" >> "$NOTES"
     fi
   done
   # cross-branch fixups (tools/integration-fixups/*.patch): semantic reconciliation a hunk merge cannot express,
