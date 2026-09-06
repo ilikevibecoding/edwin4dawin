@@ -214,4 +214,55 @@ What is wrong (OBSERVE / CRITIQUE, `glass_2km`, `skyline-high`):
   (mirror point 223 m: on the tall tops); 2 km low `cam=-4700,60,-3800 time 18.0` (212 m); 2 km day
   `cam=-4700,150,-3800 pch -2 time 14`; `skyline-high`; `aerial-a`; street `cam=-2950,2,-3900 hdg 90 pch 4`;
   roof `cam=-2750,260,-3950 hdg 60 pch -35`; `sunset`.
-- Evidence: pending (`/tmp/facade3/r9`).
+- Evidence (`/tmp/facade3/r9`, build 4442382f, 13:05-13:10): `glass_2km_low` (18:00, 2 km): the glass towers are
+  dark blue-grey mirrors with a floor rhythm among the warm-lit masonry (the R8 build had them the same pale warm
+  grey as the stucco); `glass_1km` (17:48): the tall slab right of centre reads as glass (dark, sky-toned, the
+  plant on its roof in silhouette), the drum carries one vertical highlight, no face washes out; `city-close`: the
+  glint field is one blaze with a scatter of flashes within three storeys (was two blobs 20 m apart);
+  `skyline_high` 235 calls / 1.23 M tris, `aerial_a` 291 / 1.04 M, `sunset` 283 / 0.95 M, console clean.
+  `skyline-high` clip (`bench/out/city-r9/skyline-high`, 30 frames) for the flicker metric against
+  `bench/out/city-r0-clips`.
+- Remains: `street_lobby` was shot from `cam=-2950,2,-3900`, which is 3 m under the terrain there (the dev
+  camera's y is absolute; downtown's ground is 3.6-6 m): the frame shows the terrain as a plane at eye level and
+  the buildings' undersides through it. Every earlier street pose (R5 `street_day`, R10 `street_park` /
+  `street_bayshore`) had the same fault: the "pure black stepped block" in the R5 and R10 street frames is the
+  underside of a setback's tiers seen from below the ground (down-facing faces take no sun and the probe's ground
+  hemisphere is masked on facades), and the "ledges crossing the sky" in `street_bayshore` are the balcony slabs of
+  a slab the camera stood under. Not rendering defects; the poses are redone at ground + 1.8 m in R10.
+
+## Round 10 — the aureole at the true mirror point; the grid off the sun's lobe (facade.ts)
+
+What is wrong (OBSERVE / CRITIQUE, `city-close` R9):
+
+- **Two soft blobs 40-80 m below the mirror point**: with the disc and band in place, the remaining bright patches
+  on the central slab sat where no mirror geometry puts the sun. Cause: the height bend of the sky lookup (the
+  stand-in for the probe's missing parallax) also bent the direction that lands on the probe's aureole, so the
+  aureole appeared up or down the tower according to `facadeHf`.
+- **The grid of a sunlit face near the sun's image clips to a white lattice**: mullion caps and spandrel panels took
+  the GGX sun term at roughness 0.35 / 0.45, a lobe whose peak is 2.5x the sky over +-10 deg; the whole grid of a
+  face within 20 deg of the mirror point rendered at 250+ over the dark panes, so the tower read as a white
+  lattice rather than glass at 300 m (row profile across the face: 50 / 251 / 55 / 249 ...).
+
+- Changed: the bend fades out within ~30 deg of the sun's image (`bendW`), and the probe's own disc (capped at 12x
+  the sky) is graded down within 4 deg of it (`sunMask`, 0.85) since the disc in a pane is `facadeGlint`'s. A 12 deg
+  mask at 0.92 was built and shot as well: no measurable difference in the region (3548 -> 3509 clipped pixels),
+  so it went back to 4 deg; the soft 50 m glow that remains at the mirror point is the mirrored sky's sunset
+  aureole, which a real tower shows. Mullion caps and spandrel panels at roughness 0.55 (extruded, rounded
+  profiles and matte paint, not flat mirrors).
+- Why: the sun's image in a glass tower is the one place the eye checks first; a blob at the wrong height or a
+  white lattice over the panes both say "not glass".
+- Evidence (`/tmp/facade3/r10`, `r10b`, `r10c`, builds c4e85411 / 9c212a6f / this round): `cc_slab_r9_r10.png`
+  (R9 vs R10): the lower blob is gone, one glow at the predicted 190 m; `cc_slab_r10b_r10c.png`: the grid is pale
+  grey lines over the panes instead of white bars, clipped pixels in the slab region 3548 -> 1311, the blaze at the
+  mirror point compact; `blob_zoom.png` (r10c, 5x nearest): dark panes with beige blinds per floor, the grid
+  grey, the disc in the few panes whose tilt aims it at the eye.
+- Headless lint (`/tmp/facade3/lint.ts`: map, roads and city built as `game.ts` does, every instance scanned):
+  3 995 bodies, 37 306 trims, 23 902 kit items, 13 016 houses; no non-finite or degenerate instance, no
+  near-black body, no kit item at ground level, the longest trims 96.5 m (the coping and balcony slabs of a 96 m
+  slab). The 128 "floating" bodies are landmark parts on purpose (lanterns, fins, the Helix boxes).
+- Street poses for the materials check (`/tmp/facade3/poses.ts` lists downtown street centrelines with what stands
+  in a 50 deg cone ahead; the camera at ground + 1.8 m): mixed street `cam=-3108,7.5,-3838 hdg 91 pch 3` (deco
+  20 m at 87 m, concrete 32 m at 78 m, glass 99 m at 135 m, stone 60-71 m at 200 m), glass tower street
+  `cam=-2706,6.6,-4046 hdg 91 pch 6` (a 285 m setback tower at 190 m), deco street `cam=-2979,7,-3835 hdg 91`,
+  park edge `cam=-2238,5.4,-3928 hdg 271`, 150 m facades from 40 m up `cam=-3108,40,-3838 hdg 91 pch -4 time 16.5`,
+  `city-close` at 22:00 for the lit fraction.
