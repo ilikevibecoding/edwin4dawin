@@ -258,3 +258,16 @@ headings are incommensurate and each carries a noise phase warp, so nothing beat
 30 / 300 / 1500 m (r7 `low30`, `chase30`, `down300`, `high1500`; r9/r10 `chase30`, `aeriala`) no lattice is
 visible either; motion is checked with the 24-frame `water-landing` clips of the base and final builds (flicker
 metric, below).
+
+## Round 11 — the mirrored cloud footprint from the sky's own bake
+
+Observed (cost audit of round 9, offline): `cloudFieldRaw` is three `fbm3` and two 9-cell Worley evaluations
+(~550 ALU) per grazing water pixel with the sky term above 6 % — most of the water in a low view — on top of the
+one the post pass already spends on the cloud shadows; against the +10 % shader budget that is the largest single
+cost this branch added, and the A/B under a load of 10 on 4 cores cannot resolve it (round 7 quads spread
+0.3–2.0).
+Change (`sky.ts` +6 lines: `Sky.coverageField` exposes the raymarch's own 1024² bake of the raw field, 76 km
+around the camera in cloud space; `water.ts`: `uCloudFieldTex/Center/Extent`, one `texture2D` in place of the
+field evaluation; `game.ts` one line: `attachCloudField`). The bake is what the visible cloud's base footprint
+is thresholded from, so the mirror now follows the visible footprint exactly (the analytic field and the bake
+differ only by the bake's 74 m filtering). Look unchanged otherwise: r10 vs r11 `low30` is the check.
