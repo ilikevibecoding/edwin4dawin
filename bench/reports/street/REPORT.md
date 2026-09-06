@@ -126,6 +126,30 @@ Round 1's triangle deltas at +4…6 draw calls in the high views were the lamps:
 their 6-sided coarse shape out to 2.5 km, 0.2 px wide. Round 2 leaves lamp geometry out beyond 600 m per 250 m
 cell (the night dots carry on to 4 km); the street systems themselves are bounded by the cull radii above.
 
+Round 2 bench (build 5a857b5d): cockpit-city 263 / 1 140 k, bridge-low 263 / 758 k, skyline-high 230 / 1 242 k,
+night 258 / 1 297 k.
+
+### Rounds 3–5: the critic's views, before / after (hourly snapshots, same URLs, 1280 × 720)
+
+h07 = integration build 61706b38 (16:17, everything but rounds 3–4 of this branch), h08 = 9a64e1fb (17:17, this
+branch merged at edf280b5: rounds 3 and 4 before the budget trims). The h08 column is what the plazas, lots, masts and
+thin members cost as first built; round 5's trims (far shapes for signals and shelters past 300 m, 3-D range for the
+small kit, open boxes, 33 % bays, far index from 400 m, 1.2 km cull) are estimated by the node frustum harness at
+−99 k in city_north, −54 k in city_200m, −165 k in city_500m and −30 k in street_2m, to be confirmed by the next
+snapshot / own capture.
+
+| view | h07 calls / tris | h08 calls / tris | Δ | after trims |
+|------|-----------------:|-----------------:|--:|------------:|
+| city_north | 284 / 1 441 k | 289 / 1 572 k | +5 / +131 k | |
+| city_200m | 260 / 1 380 k | 263 / 1 467 k | +3 / +87 k | |
+| city_500m | 217 / 999 k | 220 / 1 088 k | +3 / +89 k | |
+| street_2m | 265 / 1 250 k | 267 / 1 325 k | +2 / +75 k | |
+| harbor | 277 / 1 063 k | 281 / 1 055 k | +4 / −7 k | |
+| night | 265 / 1 309 k | 265 / 1 295 k | 0 / −14 k | |
+| highway_bridge | 276 / 797 k | 274 / 790 k | −2 / −7 k | |
+| skyline_high | 241 / 1 243 k | 241 / 1 233 k | 0 / −10 k | |
+| cockpit | 276 / 1 158 k | 276 / 1 152 k | 0 / −6 k | |
+
 ## Rounds
 
 See `DEFECTS.md`. Round 0 = baseline, round 1 = first build (shader compile fix, terrain z-fight, footing validation,
