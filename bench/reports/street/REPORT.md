@@ -60,10 +60,34 @@ to 4 km at night.
 Per-view upper bounds within the cull radii (no frustum): `bridge-low` 253 k tris / 46 draws, `street2m` 424 k / 66,
 `c500` 350 k / 59, `cockpit-city` 6 k / 4, `skyline-high` 0.
 
+## Budgets (renderer counters after the settle frames, 1280 × 720)
+
+Round 0 is the base commit `6130eae7` served from the same worktree; the caps are 400 draw calls / 1.5 M
+triangles per view, with ≤ +25 calls / ≤ +150 k triangles aimed for in `cockpit-city`, `bridge-low`, `skyline-high`.
+
+| view | round 0 | round 1 | Δ round 1 | round 2 | Δ round 2 |
+|------|--------:|--------:|----------:|--------:|----------:|
+| cockpit-city | 263 / 1 047 k | 267 / 1 335 k | +4 / +289 k | | |
+| bridge-low | 264 / 747 k | 267 / 792 k | +3 / +45 k | | |
+| skyline-high | 231 / 1 187 k | 237 / 1 557 k | +6 / +369 k | | |
+| night (bench) | — | 262 / 1 471 k | | | |
+| street2m | 205 / 702 k | 257 / 1 406 k | +52 / +704 k | | |
+| street2m-night | 206 / 697 k | 265 / 1 432 k | +59 / +736 k | | |
+| isect60 (r1 pose) | 118 / 277 k | 141 / 627 k | +23 / +350 k | | |
+| c100 | 130 / 349 k | 158 / 810 k | +28 / +461 k | | |
+| c500 | 170 / 589 k | 210 / 1 184 k | +40 / +595 k | | |
+| c500-night | 173 / 591 k | 220 / 1 218 k | +47 / +627 k | | |
+
+Round 1's triangle deltas at +4…6 draw calls in the high views were the lamps: 38 k poles (2.6 k before) drawing
+their 6-sided coarse shape out to 2.5 km, 0.2 px wide. Round 2 leaves lamp geometry out beyond 600 m per 250 m
+cell (the night dots carry on to 4 km); the street systems themselves are bounded by the cull radii above.
+
 ## Rounds
 
 See `DEFECTS.md`. Round 0 = baseline, round 1 = first build (shader compile fix, terrain z-fight, footing validation,
-lamp density, LODs).
+lamp density, LODs), round 2 = the surface read (aged asphalt, repaving bands, paler wheel paths, matte roughness,
+aggregate grain, darker concrete, apex ramps), night pools at a gain that grades instead of clipping, lamp budget,
+cameras re-posed over the carriageway.
 
 ## Self-scores
 
