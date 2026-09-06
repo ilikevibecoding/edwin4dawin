@@ -1025,6 +1025,7 @@ void RE_IndirectSpecular_Foliage( const in vec3 radiance, const in vec3 irradian
 const PALM_NORMAL = /* glsl */ `
 vec3 objectNormal = normal;
 vSeed = aVar.y;
+vOcc = ${GLSL_OCC};
 if (aPart > 0.5) {
   float seed = aVar.y;
   float rot = hash11(seed * 7.7 + aPart) * 0.9 - 0.45 + hash11(seed * 3.3) * 6.2831;
@@ -1101,8 +1102,10 @@ if (vPart > 0.5) {
   diffuseColor.rgb *= mix(vec3(0.86, 0.9, 0.96), vec3(1.06, 1.03, 0.92), smoothstep(0.55, 0.95, sampledDiffuseColor.r));
   diffuseColor.rgb *= (0.84 + 0.32 * hash11(aVarSeed * 19.3 + 5.0)) * mix(vec3(0.94, 1.0, 1.05), vec3(1.08, 1.03, 0.88), yellow);
 } else {
-  // trunk: grey-brown bark, the ring shading from the atlas (the instance tint is the frond colour)
+  // trunk: grey-brown bark, the ring shading from the atlas (the instance tint is the frond colour); it sees
+  // the sky past its own small crown, less among taller neighbours (a pale post in a shaded grove otherwise)
   diffuseColor.rgb = vec3(0.34, 0.29, 0.24) * (0.5 + 0.9 * sampledDiffuseColor.r);
+  vegAmb = mix(0.7, 0.3, vOcc);
 }
 `;
 
@@ -1328,7 +1331,7 @@ function palmMaterial(tex: THREE.Texture, time: THREE.IUniform<number>, wind: TH
       .replace('#include <begin_vertex>', PALM_VERTEX)
       .replace('#include <shadowmap_vertex>', VEG_SHADOWMAP_VERTEX);
     shader.fragmentShader = softenFoliageShadow(shader.fragmentShader)
-      .replace('#include <common>', `#include <common>\nvarying float vPart; varying vec3 vWP; varying float vSeed;\n#define aVarSeed vSeed\n${GLSL_NOISE}`)
+      .replace('#include <common>', `#include <common>\nvarying float vPart; varying vec3 vWP; varying float vSeed; varying float vOcc;\n#define aVarSeed vSeed\n${GLSL_NOISE}`)
       .replace('#include <lights_physical_pars_fragment>', foliageLighting('step(0.5, vPart)', PALM_LIGHT))
       .replace('#include <color_fragment>', PALM_FRAG)
       .replace('#include <normal_fragment_begin>', PALM_NORMAL_FRAG);
