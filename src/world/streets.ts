@@ -119,10 +119,19 @@ const SW_MAIN = /* glsl */ `
     vec2 pv = floor(vec2(across, along) / 0.9);
     float pid = hash12(pv + kind);
     float bandP = step(mod(pv.y, 4.0), 0.5);
-    vec3 pav = mix(vec3(0.28, 0.275, 0.26), vec3(0.38, 0.37, 0.35), n) * (0.94 + 0.12 * grain);
+    vec3 pav = mix(vec3(0.26, 0.255, 0.24), vec3(0.36, 0.35, 0.33), n) * (0.94 + 0.12 * grain);
     pav *= 1.0 + (0.16 * pid - 0.08) * slabFade;
     pav = mix(pav, vec3(0.21, 0.21, 0.20), bandP * 0.55);
-    joint = max(swLine((fract(along / 0.9) - 0.5) * 0.9, 0.01, fwL), swLine((fract(across / 0.9) - 0.5) * 0.9, 0.01, fwA)) * fade;
+    // the coarse design that survives to 500 m: 10.8 m paving fields a tone apart (a third of them warm), and a
+    // 0.6 m dark granite strip on the field lines
+    vec2 fv = floor(vec2(across, along) / 10.8);
+    float fh = hash12(fv + 3.0 + kind);
+    pav *= 0.9 + 0.2 * fh;
+    pav = mix(pav, pav * vec3(1.08, 1.0, 0.9), step(0.66, fh));
+    vec2 fd = abs(fract(vec2(across, along) / 10.8 + 0.5) - 0.5) * 10.8; // distance to the nearest field line
+    float strip = max(swLine(fd.x, 0.3, fwA), swLine(fd.y, 0.3, fwL));
+    pav = mix(pav, vec3(0.19, 0.19, 0.185), strip * 0.7);
+    joint = max(swLine((fract(along / 0.9) - 0.5) * 0.9, 0.01, fwL), swLine((fract(across / 0.9) - 0.5) * 0.9, 0.01, fwA)) * fade * (1.0 - strip);
     col = pav;
   } else if (kind > 3.5) {
     // parapet: cast stone

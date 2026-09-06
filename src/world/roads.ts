@@ -604,7 +604,11 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     // strip between them, where the sumps drip, is the darkest — a pale-dark-pale rhythm per lane that reads as
     // lane structure from the air as well as at eye level
     float drip = mix(exp(-pow((lp - laneW * 0.5) * 2.6, 2.0)), 0.25, smoothstep(0.6, 2.5, fwX)) * laneMask;
-    float wear = 1.0 + (0.26 * wheel - 0.12 * drip) * (1.0 - inBox);
+    // at eye level (footprint under 5 cm/px) the rhythm is half again as strong and a 2 m mottle of binder bleed and
+    // spilt fuel sits on it; both are gone by the time a pixel covers 30 cm, so the aerial tone is untouched
+    float nearF = 1.0 - smoothstep(0.05, 0.3, fp);
+    float mottle = (fbm3(wp * 0.45 + 17.0) - 0.5) * 0.16 * nearF;
+    float wear = 1.0 + ((0.26 * wheel - 0.12 * drip) * (1.0 + 0.5 * nearF) + mottle) * (1.0 - inBox);
     // patch repairs: 5 x 3 m cells of the road frame, a few percent of them re-laid darker or bleached paler
     vec2 pc = floor(vec2(along / 5.0, (xm + hw) / 3.0));
     vec2 pf = fract(vec2(along / 5.0, (xm + hw) / 3.0));
