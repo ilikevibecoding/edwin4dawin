@@ -1,9 +1,12 @@
 // Fighter flight model: capital-ship no-fly zones (superellipsoid + sphere per hull, with a look-ahead so
 // fighters skim along hulls instead of bouncing off them), formation slots for wingmen, the leader state
-// machine (patrol weave, attack run, break-away, dogfight pursuit, combat air patrol over the home ship,
-// hangar launch, gunship transit), evasive weaving for hunted fighters and the turn-rate-limited
-// integration with banking. Everything here is allocation-free per frame and deterministic given the
-// fixed-step time and each fighter's seeded RNG.
+// machine (patrol weave, strafing attack run, bombing run, break-away, dogfight pursuit, combat air patrol
+// over the home ship, hangar launch, escort transit between friendly ships), evasive weaving for hunted
+// fighters and the turn-rate-limited integration with banking. Roles come from the type table
+// (models.js): strike fighters strafe, bombers make long straight passes along capital hulls and break
+// away slowly, hunters fly wide patrols and pick fights at long range, escorts shuttle slowly between
+// friendly ships firing turrets at anything that comes near. Everything here is allocation-free per frame
+// and deterministic given the fixed-step time and each fighter's seeded RNG.
 import * as THREE from "three";
 
 export const MODE = {
@@ -13,9 +16,10 @@ export const MODE = {
   BREAK: 3, // break away from the hull after a pass (rolling)
   DOGFIGHT: 4, // pursue an enemy fighter
   LAUNCH: 5, // just left the hangar, flying straight out
-  TRANSIT: 6, // gunships: shuttle between friendly ships
+  TRANSIT: 6, // escorts: shuttle between friendly ships
   FORM: 7, // wingman: hold formation on the leader
   DEAD: 8,
+  BOMB: 9, // bombers: long straight run along the anchor's hull, releasing a stick of bombs
 };
 export const MODE_NAMES = [
   "patrol",
@@ -27,6 +31,7 @@ export const MODE_NAMES = [
   "transit",
   "form",
   "dead",
+  "bomb",
 ];
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -265,20 +270,34 @@ export function slotPosition(f, out) {
 // mode transitions
 // ---------------------------------------------------------------------------
 export function setPatrol(f, t) {
-  f.mode = f.role === "cap" || !f.anchor ? MODE.CAP : MODE.PATROL;
-  f.modeUntil = t + 5 + f.rng() * 10;
+  const role = f.role;
+  // hunters and escorts work from the home ship; strike fighters and bombers wait near their anchor
+  f.mode =
+    role === "cap" || role === "hunter" || role === "escort" || !f.anchor
+      ? MODE.CAP
+      : MODE.PATROL;
   f.phase = f.rng() * Math.PI * 2;
-  // orbit radius in hull radii: tight enough that the weave keeps crossing the no-fly zone, which the
-  // avoidance turns into passes along the hull
-  f.orbitK = 0.85 + f.rng() * 0.75;
+  if (role === "bomber") {
+    // bombers re-form well out from the hull between passes and come in from a distance
+    f.modeUntil = t + 14 + f.rng() * 16;
+    f.orbitK = 1.6 + f.rng() * 0.8;
+  } else if (role === "hunter") {
+    f.modeUntil = t + 3 + f.rng() * 5;
+    f.orbitK = 1.4 + f.rng() * 1.0;
+  } else {
+    f.modeUntil = t + 5 + f.rng() * 10;
+    // orbit radius in hull radii: tight enough that the weave keeps crossing the no-fly zone, which the
+    // avoidance turns into passes along the hull
+    f.orbitK = 0.85 + f.rng() * 0.75;
+  }
 }
 
-export function startAttack(f, t) {
+// pick an aim point on the anchor's hull (of four candidates the one facing the fighter)
+function pickAim(f) {
   const ship = f.anchor;
   const s = ship.model.surface;
   const n = s.length / 3;
   if (!n) return false;
-  // four candidate aim points on the hull; take the one facing the fighter
   let bestD = Infinity;
   for (let k = 0; k < 4; k++) {
     const i = Math.min(n - 1, Math.floor(f.rng() * n)) * 3;
@@ -289,13 +308,27 @@ export function startAttack(f, t) {
       f.aimLocal.set(s[i], s[i + 1], s[i + 2]);
     }
   }
-  f.mode = MODE.ATTACK;
-  f.modeUntil = t + 18;
-  f.burst = 3;
   return true;
 }
 
-export function startBreak(f, t, ship, duration = 2.4) {
+export function startAttack(f, t) {
+  if (!pickAim(f)) return false;
+  f.mode = MODE.ATTACK;
+  f.modeUntil = t + 18;
+  f.burst = f.def.burst || 3;
+  return true;
+}
+
+export function startBomb(f, t) {
+  if (!pickAim(f)) return false;
+  f.mode = MODE.BOMB;
+  f.modeUntil = t + 32;
+  f.burst = f.def.burst || 3;
+  f.fireTimer = Math.max(f.fireTimer, 0.5);
+  return true;
+}
+
+export function startBreak(f, t, ship, duration = 2.4, spin = 1) {
   _a.copy(f.pos).sub(ship.position).normalize();
   frame(f.vel, _right, _up);
   const side = f.rng() < 0.5 ? -1 : 1;
@@ -306,7 +339,7 @@ export function startBreak(f, t, ship, duration = 2.4) {
     .normalize();
   f.mode = MODE.BREAK;
   f.modeUntil = t + duration + f.rng() * 1.4;
-  f.breakSpin = side * (3.2 + f.rng() * 2);
+  f.breakSpin = side * (3.2 + f.rng() * 2) * spin;
 }
 
 export function endDogfight(f) {
@@ -326,8 +359,16 @@ export function startDogfight(f, q, t) {
   q.hunters++;
   if (!q.threat) q.threat = f;
   f.mode = MODE.DOGFIGHT;
-  f.modeUntil = t + 6 + f.rng() * 6;
-  f.burst = 3;
+  // hunters stay on a quarry twice as long
+  f.modeUntil =
+    t + (f.role === "hunter" ? 12 + f.rng() * 10 : 6 + f.rng() * 6);
+  f.burst = f.def.burst || 3;
+}
+
+// rest between fights: hunters barely pause
+function fightCooldown(f, t) {
+  f.noFightUntil =
+    t + (f.role === "hunter" ? 2 + f.rng() * 4 : 12 + f.rng() * 20);
 }
 
 // ---------------------------------------------------------------------------
@@ -337,11 +378,13 @@ function shoot(f, ctx, target) {
   if (target) ctx.fire(f, target);
   else ctx.fire(f);
   ctx.stats[target ? "shotsFighter" : "shotsCapital"]++;
+  const def = f.def;
   f.burst--;
-  if (f.burst > 0) f.fireTimer = 0.11;
+  if (f.burst > 0) f.fireTimer = def.gap || 0.11;
   else {
-    f.burst = 3;
-    f.fireTimer = 2.2 + f.rng() * 2.6;
+    f.burst = def.burst || 3;
+    const r = def.reload;
+    f.fireTimer = r ? r[0] + f.rng() * (r[1] - r[0]) : 2.2 + f.rng() * 2.6;
   }
 }
 
@@ -355,13 +398,21 @@ function tryFireHull(f, ctx, aim, maxRange = 1700, cone = 0.965) {
   shoot(f, ctx, null);
 }
 
-function tryFireFighter(f, ctx, q, maxRange = 760) {
-  if (!ctx.fire || f.fireTimer > 0 || !q || !q.alive || !f.anchor) return;
+// fire at an enemy fighter when in range and inside the aim cone (turrets pass cone -1: any bearing)
+function tryFireFighter(f, ctx, q, maxRange = 760, cone = 0.985) {
+  if (!ctx.fire || f.fireTimer > 0 || !q || !q.alive) return;
   _b.copy(q.pos).sub(f.pos);
   const d = _b.length();
   if (d > maxRange || d < 25) return;
-  if (_b.divideScalar(d).dot(f.vel) < 0.985) return;
+  if (_b.divideScalar(d).dot(f.vel) < cone) return;
   shoot(f, ctx, q);
+}
+
+// escorts: turrets engage the flight's turret target from any heading
+function tryFireTurret(f, ctx) {
+  const tur = f.def.turret;
+  if (tur && f.turretTarget)
+    tryFireFighter(f, ctx, f.turretTarget, tur.range, tur.cone);
 }
 
 // ---------------------------------------------------------------------------
@@ -378,13 +429,15 @@ export function steerLeader(f, ctx, desired) {
     case MODE.PATROL:
     case MODE.CAP: {
       const cap = f.mode === MODE.CAP;
+      const bomber = f.role === "bomber";
       const c = cap ? f.home : f.anchor;
       const R = cap ? f.homeR : f.anchorR;
       lissajous(f, c ? c.position : ORIGIN, R * f.orbitK, t, f.goal);
       f.speedTarget = def.speed[1] * f.speedK;
-      // strafe the enemy hull while skimming along it
+      // strafe the enemy hull while skimming along it (bombers save their load for the run)
       if (
         !cap &&
+        !bomber &&
         f.skim > 0.3 &&
         f.nearN &&
         f.near[0] === f.anchor &&
@@ -392,17 +445,15 @@ export function steerLeader(f, ctx, desired) {
       )
         tryFireHull(f, ctx, f.anchor.position, 1500, 0.6);
       if (t >= f.modeUntil) {
-        if (
+        const near =
           !cap &&
           f.anchor &&
           f.anchor.health > 0 &&
           f.pos.distanceToSquared(f.anchor.position) <
-            f.anchorR * f.anchorR * 12
-        ) {
-          startAttack(f, t);
-        } else {
-          f.modeUntil = t + 4 + f.rng() * 6;
-        }
+            f.anchorR * f.anchorR * (bomber ? 40 : 12);
+        if (near && bomber) startBomb(f, t);
+        else if (near && f.role !== "hunter") startAttack(f, t);
+        else f.modeUntil = t + 4 + f.rng() * 6;
       }
       break;
     }
@@ -425,6 +476,27 @@ export function steerLeader(f, ctx, desired) {
       tryFireHull(f, ctx, f.goal);
       break;
     }
+    case MODE.BOMB: {
+      // bombing run: a steady cruise-speed approach straight at the aim point, the stick released
+      // inside 1.1 km, then a long gentle break away from the hull
+      const ship = f.anchor;
+      if (!ship || ship.health <= 0) {
+        setPatrol(f, t);
+        break;
+      }
+      f.goal.copy(f.aimLocal).applyMatrix4(ship.matrix);
+      _a.copy(f.goal).sub(f.pos);
+      const d = _a.length();
+      const passed = _a.dot(f.vel) < 0 && d < 900;
+      if (passed || d < 200 || t >= f.modeUntil) {
+        startBreak(f, t, ship, 4.5, 0.35);
+        break;
+      }
+      f.speedTarget = def.speed[1] * f.speedK;
+      turn = def.turn * 0.9;
+      tryFireHull(f, ctx, f.goal, 1100, 0.9);
+      break;
+    }
     case MODE.BREAK: {
       f.goal.copy(f.pos).addScaledVector(f.breakDir, 900);
       f.speedTarget = def.speed[2] * f.speedK;
@@ -437,15 +509,15 @@ export function steerLeader(f, ctx, desired) {
       const q = f.quarry;
       if (!q || !q.alive || t >= f.modeUntil) {
         endDogfight(f);
-        f.noFightUntil = t + 12 + f.rng() * 20;
+        fightCooldown(f, t);
         setPatrol(f, t);
         break;
       }
       _a.copy(q.pos).sub(f.pos);
       const d = _a.length();
-      if (d > 3200) {
+      if (d > (f.role === "hunter" ? 5000 : 3200)) {
         endDogfight(f);
-        f.noFightUntil = t + 12 + f.rng() * 20;
+        fightCooldown(f, t);
         setPatrol(f, t);
         break;
       }
@@ -475,6 +547,7 @@ export function steerLeader(f, ctx, desired) {
       f.speedTarget = def.speed[1] * f.speedK;
     }
   }
+  tryFireTurret(f, ctx);
   desired.copy(f.goal).sub(f.pos);
   const len = desired.length();
   if (len < 1) desired.copy(f.vel);
@@ -503,12 +576,18 @@ export function steerWingman(f, ctx, desired) {
     def.speed[2] * f.speedK,
   );
   // shoot with the leader
-  if (L.mode === MODE.ATTACK && L.anchor && L.anchor.health > 0) {
+  if (
+    (L.mode === MODE.ATTACK || L.mode === MODE.BOMB) &&
+    L.anchor &&
+    L.anchor.health > 0
+  ) {
     _c.copy(L.aimLocal).applyMatrix4(L.anchor.matrix);
-    tryFireHull(f, ctx, _c, 1600, 0.955);
+    if (L.mode === MODE.BOMB) tryFireHull(f, ctx, _c, 1100, 0.9);
+    else tryFireHull(f, ctx, _c, 1600, 0.955);
   } else if (L.mode === MODE.DOGFIGHT && L.quarry) {
     tryFireFighter(f, ctx, L.quarry);
   }
+  tryFireTurret(f, ctx);
   return def.turn * 1.3;
 }
 
