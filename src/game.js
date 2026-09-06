@@ -35,6 +35,7 @@ import { OrbitalBeam } from './disasters/orbitalBeam.js';
 import { AdminPanel } from './ui/adminPanel.js';
 import { NetClient } from './net/client.js';
 import { RenderPipeline } from './render/pipeline.js';
+import { FarLOD } from './render/farlod.js';
 import { Economy } from './economy/economy.js';
 import { Signs } from './coruscant/signs.js';
 
@@ -159,6 +160,9 @@ export class Game {
     for (const p of pre) {
       if (performance.now() - last > 40) { this.setLoading('Building terrain...', 0.05 + p * 0.9); await this.nextFrame(); last = performance.now(); }
     }
+    this.setLoading('Painting the horizon...', 0.95);
+    await this.nextFrame();
+    this.farLod = new FarLOD(this, { x: sx, z: sz, prebuildMs: 700 });   // far-LOD terrain beyond the near chunk ring (render/farlod.js)
     this.setLoading('Waking up the town...', 0.96);
     await this.nextFrame();
     await this.setupEntities();
@@ -351,7 +355,7 @@ export class Game {
     return true;
   }
   cycleRenderDistance() {
-    const opts = [4, 6, 8, 10, 12, 16, 24];
+    const opts = [4, 6, 8, 10, 12, 16, 24, 32];   // above the preset's near cap the far-LOD layer (render/farlod.js) takes over
     const i = opts.indexOf(this.terrain.renderDistance);
     this.setRenderDistance(opts[(i + 1) % opts.length]);
   }
@@ -457,6 +461,7 @@ export class Game {
     SHARED.uFogFar.value = fogFar;
     SHARED.uFlash.value = flash;
     this.renderer.setClearColor(fogColor);
+    if (this.farLod) this.farLod.update(dt, this.player.pos, this.sky.fogFar);   // far tiles stream (<= 2 ms/frame) and follow the near ring
 
     // entities
     this.particles.update(dt);
