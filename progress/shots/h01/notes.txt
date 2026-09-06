@@ -1,0 +1,14 @@
+base: f540bbea (cursor/vice-city-aerial-8213)
+merged acsplit: 3dce05f4 Aircraft split report: pinned-stamp re-capture — split build rebuilt with BUILD_ID set t
+merged waterrender: c09c81c8 Water rendering report: draft (defects, changes, rationale, weaknesses, shared hunks); sco
+skip waterphys: merge conflict
+skip boats: no remote branch
+merged clouds4: ce5c5a5c Clouds: fine march step grows with distance along the ray (footprint-sized near the camera
+merged light3: ac49aba9 light3 defect log: round 3 results (seam closed at 30 m, low-sun probe side effects, dusk 
+merged street: ca76fd0f Street report skeleton: systems, counts, budgets, requests
+skip highway: merge conflict
+merged facade3: 36450ce0 WIP City rooftop kit + street level: near-detail kinds roof / roofcyl (700 m) and roofbig 
+merged veg5: 031f8e49 Vegetation loop 6 WIP (round 7b, aerial canopy contrast; runtime verification pending): ca
+merged terrain5: 6e674330 Terrain: beach distance measured from the visible waterline (h = 0.05, where the water pla
+build: 953c687e from /home/ubuntu/wt-integration
+cdn: data.json still stale after 5 purges

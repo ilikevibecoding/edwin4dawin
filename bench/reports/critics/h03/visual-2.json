@@ -1,0 +1,3702 @@
+{
+ "critic": "visual-2",
+ "tag": "h03",
+ "frames": {
+  "aircraft_rear": {
+   "giveaway": "A taxiing floatplane whose floats sit in water that shows zero displacement, wake or wet band, under a paint job with no panel lines or weathering.",
+   "scores": {
+    "1": 7,
+    "2": 5,
+    "5": 5,
+    "6": 5,
+    "7": 5,
+    "8": 4,
+    "9": 7,
+    "10": 6,
+    "11": 3,
+    "15": 5,
+    "24": 7,
+    "25": 7,
+    "26": 6,
+    "27": 6,
+    "28": 6,
+    "29": 6
+   },
+   "entries": [
+    {
+     "category": 1,
+     "score": 7,
+     "cells": "C3-H6",
+     "condition": "rear three-quarter, taxi, noon sun",
+     "evidence": "High-wing single-engine floatplane reads correctly; fin C3-D4 is tall and broad for the fuselage volume, wing D3-H3 shows no dihedral.",
+     "defect": "Fin/rudder chord too large; wing reads as a plank at the tip H3.",
+     "fix": "Reduce fin chord ~10 %, add 1.5-2 deg dihedral and a visible airfoil thickness at the tip.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 2,
+     "score": 5,
+     "cells": "C4-F6",
+     "condition": "rear three-quarter, 8 m",
+     "evidence": "Fuselage and wing are smooth surfaces; no panel lines, rivets, control-surface gaps or hinges resolve; float struts are bare cylinders, no water rudders or cables.",
+     "defect": "Structural detail absent at a distance where a production model shows aileron/flap gaps and float rudders.",
+     "fix": "Add flap/aileron/elevator gap lines, rudder hinge, float water rudders with cables, spreader-bar fittings.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 5,
+     "score": 5,
+     "cells": "D3-H3",
+     "condition": "wing top, backlit",
+     "evidence": "Uniform white wing top with no flap/aileron seam; trailing edge at E3 looks thick; nav light only as a coloured tip stripe.",
+     "defect": "Wing is a single unbroken surface.",
+     "fix": "Model control-surface gaps and a thin trailing edge; add wingtip lens geometry.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 6,
+     "score": 5,
+     "cells": "D4-E4",
+     "condition": "rear window, exterior view",
+     "evidence": "Interior is a dark void; no seat backs or pilot visible through the rear glazing.",
+     "defect": "Cabin reads empty from behind.",
+     "fix": "Light the interior with a probe, add rear seat backs and headrests.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 7,
+     "score": 5,
+     "cells": "C4-F6",
+     "condition": "noon, sun behind camera",
+     "evidence": "Uniform gloss on paint, no micro-variation, no exhaust soot below the cowl, floats a flat grey-white with the same roughness as the paint.",
+     "defect": "Uniform roughness across the whole aircraft.",
+     "fix": "Roughness/detail maps: satin paint with orange-peel micro-normal, matte anti-slip float decks, oxidised aluminium spreader bars.",
+     "hardFailure": true,
+     "kind": "visual"
+    },
+    {
+     "category": 8,
+     "score": 4,
+     "cells": "C5-F7",
+     "condition": "taxi",
+     "evidence": "Aircraft is level with no float heave or trim; no wake behind the floats at C6-F7 although the caption says taxiing.",
+     "defect": "Mass and motion not expressed on the water.",
+     "fix": "Drive pitch trim and heave from buoyancy on 4 float points; emit a low-speed displacement wake.",
+     "hardFailure": false,
+     "kind": "technical"
+    },
+    {
+     "category": 9,
+     "score": 7,
+     "cells": "A4-H8",
+     "condition": "noon, looking away from sun",
+     "evidence": "Deep sapphire foreground A7-D8 with turquoise shallows at F4-H5; depth response visible.",
+     "defect": "Foreground has lost the protected tropical turquoise; the shallows read as caustic blotches at G4-H5.",
+     "fix": "Keep the dome-following base but bias shallow-depth colour toward the h00 cyan; remove the high-contrast caustic blotches.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 6,
+     "cells": "A4-H8",
+     "condition": "still frame",
+     "evidence": "Single-scale wind ripple; no swell, no directional bias, no capillary layer near the camera at A8.",
+     "defect": "Only one wave frequency visible.",
+     "fix": "Add a long-wavelength swell (30-60 m) and a near-field capillary normal layer.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 11,
+     "score": 3,
+     "cells": "C5-F7",
+     "condition": "taxi",
+     "evidence": "Floats sit in the water with no bow wave, no wet band on the hull, no stern turbulence, no ripples radiating.",
+     "defect": "Zero displacement response on a moving body.",
+     "fix": "Displacement stamp per float (hump ahead, hollow behind), low-speed transom wake and a wet-line darkening on the float hull.",
+     "hardFailure": false,
+     "kind": "technical"
+    },
+    {
+     "category": 15,
+     "score": 5,
+     "cells": "C3-E3",
+     "condition": "distant marina",
+     "evidence": "Boats at the docks are small white hulls with masts; readable, no detail expected at this range.",
+     "defect": "Hulls are flat white blocks.",
+     "fix": "Add cabin/windshield silhouettes and antenna masts to the LOD.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 7,
+     "cells": "A1-H2",
+     "condition": "noon cumulus",
+     "evidence": "Cumulus have multi-lobe tops and soft bases; shading is present but bases are uniformly level and edges cotton-soft.",
+     "defect": "No ragged base erosion, no silver lining on the sunward edge.",
+     "fix": "Add base-level noise erosion and a forward-scatter rim term.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A6-H8",
+     "condition": "noon",
+     "evidence": "No blown highlights; aircraft shadow on water A6-H8 is very dark and crisp for a surface that should show the sky reflection inside the shadow.",
+     "defect": "Water shadow too dark and too sharp.",
+     "fix": "Shadow should only remove the sun term; keep the sky reflection term inside the shadow and soften with distance from the caster.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 6,
+     "cells": "C6-F8",
+     "condition": "calm water, aircraft above",
+     "evidence": "No yellow/white reflection of the fuselage on the water under the floats, only its shadow; sky reflection and glints fine.",
+     "defect": "Missing local object reflection.",
+     "fix": "Planar or SSR reflection of the aircraft on the near water surface.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 6,
+     "cells": "A3, H3",
+     "condition": "far shore",
+     "evidence": "Thin white sand rim under a tree band; no wet-sand or shallow gradient visible at this range.",
+     "defect": "Shore is a two-tone line.",
+     "fix": "Add shallow-water colour ramp before the sand at 300 m+.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 6,
+     "cells": "A3-H3",
+     "condition": "far shore",
+     "evidence": "Dark uniform green band with a few palms; no crown-size hierarchy.",
+     "defect": "Treeline reads as a hedge.",
+     "fix": "Mix 3-4 crown sizes and lighter species into the shore band.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 6,
+     "cells": "A3-H3",
+     "condition": "marina",
+     "evidence": "Docks, boats, masts, a flat-roofed white building at B3 with a stack; the building is a bare box.",
+     "defect": "Marina building is a primitive.",
+     "fix": "Give the boathouse a pitched roof, doors and signage.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Zero displacement or wake around taxiing floats (C5-F7)",
+    "No panel lines, gaps, water rudders on the aircraft (C4-F6)",
+    "Uniform roughness across paint and floats (C4-F6)"
+   ],
+   "best3": [
+    "Aircraft silhouette and float truss read as a real type",
+    "Clouds have believable cumulus lobes (D1-G2)",
+    "Turquoise shallows at F4-H5 survive"
+   ],
+   "delta": "Water base moved from milky cyan (h00) to a deeper dome-following blue with turquoise only in the shallows; the dotted white streak artifacts at A3-B4 in h00 are gone (improvement); aircraft, clouds and shore unchanged. Net: mixed - artifact removal is an improvement, the foreground colour shift touches the protected tropical-water strength and needs the user's sign-off."
+  },
+  "aircraft_front": {
+   "giveaway": "The cowl is a blank black cylinder with a chrome cone and no propeller blades, in front of a plank-thin wing with a hard shadow line.",
+   "scores": {
+    "1": 7,
+    "2": 5,
+    "3": 4,
+    "4": 3,
+    "5": 5,
+    "6": 6,
+    "7": 5,
+    "9": 8,
+    "10": 6,
+    "11": 4,
+    "17": 5,
+    "23": 5,
+    "24": 7,
+    "25": 7,
+    "26": 6,
+    "27": 6,
+    "28": 5,
+    "29": 6
+   },
+   "entries": [
+    {
+     "category": 1,
+     "score": 7,
+     "cells": "B3-H6",
+     "condition": "front three-quarter at rest",
+     "evidence": "Nose, cabin and float geometry proportion correctly; the wing B3-H3 reads as a flat plank with a knife-edge leading edge.",
+     "defect": "No visible airfoil thickness.",
+     "fix": "Thicken the root airfoil and round the leading edge.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 2,
+     "score": 5,
+     "cells": "B4-F6",
+     "condition": "8 m, sun behind camera",
+     "evidence": "Vertical shading facets on the nose C4-C5; no panel lines or fasteners; float truss bare cylinders.",
+     "defect": "Faceted normals on the cowl and no panel detail.",
+     "fix": "Smooth normals / higher tessellation on the nose; add panel lines and rivet normal map.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 3,
+     "score": 4,
+     "cells": "B4-C5",
+     "condition": "front quarter",
+     "evidence": "Black flat-ended cylinder with a chrome spinner; no intake, cooling vent, exhaust stack or cowl flaps.",
+     "defect": "Cowl is a primitive.",
+     "fix": "Model the cowl inlets, exhaust pipe, cowl-flap seams and a spinner backplate.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 4,
+     "score": 3,
+     "cells": "B4-C5",
+     "condition": "engine state unknown, at rest",
+     "evidence": "No blades, no disc, no hub hardware visible in front of the cowl.",
+     "defect": "Propeller invisible at rest / idle; should show crisp blades.",
+     "fix": "Crisp two/three-blade geometry at idle, disc only above mid RPM.",
+     "hardFailure": true,
+     "kind": "visual"
+    },
+    {
+     "category": 5,
+     "score": 5,
+     "cells": "B3-H3",
+     "condition": "wing top, sunlit",
+     "evidence": "Uniform yellow slab, hard shadow line along the span, no aileron or flap seam, nav light as a stripe at H3.",
+     "defect": "Wing surface unbroken.",
+     "fix": "Add control-surface gaps, fuel caps, inspection panels, tip lens.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 6,
+     "score": 6,
+     "cells": "C3-E4",
+     "condition": "cockpit seen through windshield",
+     "evidence": "Pilot with headset visible at D4, seats and panel hinted; glass has mild tint and frames but no Fresnel gradient.",
+     "defect": "Pilot stiff, glass has no angular reflectance.",
+     "fix": "Fresnel on the glazing; idle animation on the pilot.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 7,
+     "score": 5,
+     "cells": "B4-F6",
+     "condition": "noon",
+     "evidence": "Yellow gloss with faceted highlight; floats flat grey; no weathering.",
+     "defect": "Uniform roughness across the aircraft.",
+     "fix": "Material variation and use-based wear (exhaust, float steps, strut fittings).",
+     "hardFailure": true,
+     "kind": "visual"
+    },
+    {
+     "category": 9,
+     "score": 8,
+     "cells": "A4-H8",
+     "condition": "looking down-sun",
+     "evidence": "Clear cyan-turquoise with smooth depth gradation and sky reflection; matches the protected palette.",
+     "defect": "Ripple scale repeats at one frequency across A5-H8.",
+     "fix": "Second, longer wavelength.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 6,
+     "cells": "A4-H8",
+     "condition": "still",
+     "evidence": "One wind-ripple scale, no swell, no directional bias.",
+     "defect": "Single frequency.",
+     "fix": "Multi-band spectrum with wind direction.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 11,
+     "score": 4,
+     "cells": "C6-F6",
+     "condition": "at rest",
+     "evidence": "Floats sit on the surface with no meniscus, wet band or radiating ripples.",
+     "defect": "No contact response.",
+     "fix": "Waterline darkening and a small buoyancy ripple.",
+     "hardFailure": false,
+     "kind": "technical"
+    },
+    {
+     "category": 17,
+     "score": 5,
+     "cells": "E3-F3",
+     "condition": "skyline at ~4 km",
+     "evidence": "Cluster of box towers of varied height; no spires or mechanical crowns resolve.",
+     "defect": "Rectangles at distance.",
+     "fix": "Add crown/mast silhouettes to the distant LOD.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 23,
+     "score": 5,
+     "cells": "A3-C3",
+     "condition": "causeway at ~2 km",
+     "evidence": "Cable-stay towers at C2-C3 are bare H-frames; no cables resolve; deck is a thin grey line without parapets.",
+     "defect": "Bridge reads as frames and a line.",
+     "fix": "Cable fans as alpha lines, parapet strips and light poles on the deck.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 7,
+     "cells": "C1-H2",
+     "condition": "noon",
+     "evidence": "Cumulus with tower lobes and erosion; edges cotton-soft; C1-C2 cloud lit uniformly with little self-shadow.",
+     "defect": "Weak self-shadowing.",
+     "fix": "Multi-step light march or ambient occlusion in the cloud shader.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "B6-F7",
+     "condition": "noon, sun behind camera",
+     "evidence": "No clipping; aircraft shadow on the water is sharp and very dark.",
+     "defect": "Shadow removes the sky term as well as the sun term.",
+     "fix": "Sun-only shadow on water.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 6,
+     "cells": "B6-F7",
+     "condition": "calm",
+     "evidence": "No yellow reflection of the fuselage under the floats.",
+     "defect": "Missing object reflection.",
+     "fix": "Planar/SSR reflection of the aircraft.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 6,
+     "cells": "G3-H3",
+     "condition": "island at ~1.5 km",
+     "evidence": "Hard band of sand under trees; no shallow gradient in front of the island.",
+     "defect": "Shore is a hard edge.",
+     "fix": "Shallow-water ramp 20-40 m out from the island.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 5,
+     "cells": "G3-H3",
+     "condition": "island",
+     "evidence": "Round blob crowns of one green and one size; a single palm silhouette at G3.",
+     "defect": "Broccoli canopy.",
+     "fix": "Crown variation and species mixing on islands.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 6,
+     "cells": "A3-H3",
+     "condition": "bay",
+     "evidence": "Bridge, skyline, island and channel present; the bay has no boats, buoys or markers in 3 km of water.",
+     "defect": "Empty water.",
+     "fix": "Channel markers and a few moving boats.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "No propeller blades on a resting aircraft (B4-C5)",
+    "Cowl is a blank black cylinder (B4-C5)",
+    "Plank wing with no control-surface seams (B3-H3)"
+   ],
+   "best3": [
+    "Turquoise water with depth gradation (A4-H8)",
+    "Pilot visible through a transparent windshield (D4)",
+    "Cumulus shapes with towers (E1-G2)"
+   ],
+   "delta": "The white wake streak trailing the right float at F5-H6 in h00 is gone (improvement: an opaque streak artifact removed); water is fractionally less saturated but still turquoise (neutral); aircraft, bridge and island identical. Net: slight improvement."
+  },
+  "cockpit": {
+   "giveaway": "Fingerless orange mitten hands on a tube yoke in front of flat decal dials with no bezels or glass, behind a windshield that has no glass at all.",
+   "scores": {
+    "2": 4,
+    "6": 4,
+    "7": 4,
+    "9": 7,
+    "17": 6,
+    "24": 6,
+    "25": 6,
+    "27": 6,
+    "28": 5,
+    "29": 6
+   },
+   "entries": [
+    {
+     "category": 2,
+     "score": 4,
+     "cells": "A1-H3",
+     "condition": "interior structure",
+     "evidence": "Headliner is a flat beige plane with one painted diagonal seam A1-H2; pillars are flat boxes.",
+     "defect": "Interior structure is primitive.",
+     "fix": "Model door frames, headliner stitching, window seals and overhead vents.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 6,
+     "score": 4,
+     "cells": "C5-H8",
+     "condition": "pilot view, daylight",
+     "evidence": "Dials D5-E7 are flat decals with no bezel depth or glass; hands at C7-D8 and E7-F8 are orange blobs without fingers; no arms, legs or seat visible; windshield shows no tint, reflection or dirt.",
+     "defect": "Placeholder pilot hands and flat instruments.",
+     "fix": "Rigged hands with fingers on a proper yoke, 3D bezels with glass, subtle windshield Fresnel and smudges.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 7,
+     "score": 4,
+     "cells": "A1-H8",
+     "condition": "interior",
+     "evidence": "Headliner, panel, yoke all uniform matte.",
+     "defect": "Uniform roughness across the interior.",
+     "fix": "Vinyl/plastic/metal separation, worn yoke grip.",
+     "hardFailure": true,
+     "kind": "visual"
+    },
+    {
+     "category": 9,
+     "score": 7,
+     "cells": "A5-B8",
+     "condition": "shallows from 400 m",
+     "evidence": "Turquoise around the islands with sand-bar gradients; far water a flat lighter plane at C4-H4.",
+     "defect": "Distant water flat.",
+     "fix": "Keep far-field normal detail and glint.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 6,
+     "cells": "D4-E4",
+     "condition": "skyline at ~5 km",
+     "evidence": "Cluster with a dominant tower and varied heights; reads as boxes.",
+     "defect": "No crowns or masts at range.",
+     "fix": "Silhouette detail in far LOD.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 6,
+     "cells": "C3, F3",
+     "condition": "noon",
+     "evidence": "Two soft puffs; no structure at this size.",
+     "defect": "Cotton puffs.",
+     "fix": "Erosion noise at small scale.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 6,
+     "cells": "A1-H8",
+     "condition": "interior vs exterior",
+     "evidence": "Interior lit flat with no shadow of the windshield frame on the panel; exterior haze pleasant.",
+     "defect": "No interior shadowing or exposure adaptation.",
+     "fix": "Shadow-casting frames and slight interior underexposure.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 6,
+     "cells": "A5-B8",
+     "condition": "islands",
+     "evidence": "Sand rims and sandbars read; edges are crisp.",
+     "defect": "No wet-sand band.",
+     "fix": "Wetness gradient.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 5,
+     "cells": "A4-C5",
+     "condition": "suburb from 400 m",
+     "evidence": "Dark uniform canopy texture across the suburb.",
+     "defect": "No crown read.",
+     "fix": "Crown-level colour and size variation.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 6,
+     "cells": "A4-H4",
+     "condition": "metro overview",
+     "evidence": "Keys, causeways, suburb, downtown compose a credible metro.",
+     "defect": "Suburb is a uniform carpet.",
+     "fix": "Break the suburb with parks, water, commercial strips.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Blob hands on a tube yoke (C7-F8)",
+    "Flat decal instruments (D5-H7)",
+    "No glass in the windshield (B3-G4)"
+   ],
+   "best3": [
+    "Aerial perspective toward downtown (D4-E4)",
+    "Turquoise keys at A5-B8",
+    "Legible metro layout"
+   ],
+   "delta": "Cockpit identical to h00; clouds shifted, skyline marginally denser, keys water fractionally less saturated. Neutral."
+  },
+  "glass": {
+   "giveaway": "A cabin side with no door seam or handle, and glazing that is one flat tint with no Fresnel or edge reflection.",
+   "scores": {
+    "1": 7,
+    "2": 6,
+    "5": 6,
+    "6": 6,
+    "7": 6,
+    "9": 6,
+    "10": 6,
+    "11": 5,
+    "17": 6,
+    "23": 5,
+    "24": 6,
+    "25": 7,
+    "26": 6
+   },
+   "entries": [
+    {
+     "category": 1,
+     "score": 7,
+     "cells": "A2-H8",
+     "condition": "close side view",
+     "evidence": "Fuselage taper, cabin roofline and float stance are plausible.",
+     "defect": "Partial view only; tail boom G3 looks slightly short.",
+     "fix": "Check boom length vs reference type.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 2,
+     "score": 6,
+     "cells": "B4-E5",
+     "condition": "close, direct sun",
+     "evidence": "Panel lines and rivet rows resolve at B4-E5; there is no cabin door outline, handle, hinge, static port or pitot; float truss fittings are simple boxes at D6.",
+     "defect": "No door on a cabin aircraft.",
+     "fix": "Cut door seams with handles and hinges; add pitot, static port, fuel drains.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 5,
+     "score": 6,
+     "cells": "A2-H2",
+     "condition": "wing underside",
+     "evidence": "Flat yellow underside with a fuel-cap dot at F2; trailing edge meets the fuselage thick at E2.",
+     "defect": "Underside unbroken, thick trailing edge.",
+     "fix": "Flap tracks, aileron gap, thinner TE.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 6,
+     "score": 6,
+     "cells": "B2-F4",
+     "condition": "glass in direct sun",
+     "evidence": "Pilot with cap and headset, orange seat slabs D3-E3; glass is a uniform light tint with one soft streak at B3; no Fresnel darkening toward grazing angles.",
+     "defect": "Uniform glass tint, low-detail interior.",
+     "fix": "Fresnel reflectance, seat and panel geometry, interior AO.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 7,
+     "score": 6,
+     "cells": "A3-H6",
+     "condition": "direct sun",
+     "evidence": "Paint has specular gradient and panel shading, but no weathering anywhere; white struts and float decks share the same gloss.",
+     "defect": "Clean-showroom finish.",
+     "fix": "Exhaust soot, rivet stains, matte float decks, scuffed step.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 9,
+     "score": 6,
+     "cells": "A3-H8",
+     "condition": "grazing angle",
+     "evidence": "Medium-deep blue with sky reflection; turquoise absent from this angle.",
+     "defect": "Colour reads greyer than the protected palette.",
+     "fix": "Keep a shallow-depth scattering term visible at grazing angles.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 6,
+     "cells": "F6-H8",
+     "condition": "near-field",
+     "evidence": "Single ripple scale; no capillary detail next to the floats.",
+     "defect": "One frequency.",
+     "fix": "Near-field capillary layer.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 11,
+     "score": 5,
+     "cells": "C6-H8",
+     "condition": "at rest",
+     "evidence": "Floats have a plausible waterline but no wet band or ripples.",
+     "defect": "No contact cue.",
+     "fix": "Waterline darkening and micro-ripple.",
+     "hardFailure": false,
+     "kind": "technical"
+    },
+    {
+     "category": 17,
+     "score": 6,
+     "cells": "F2-H2",
+     "condition": "skyline beyond causeway",
+     "evidence": "Varied heights; boxes.",
+     "defect": "No crowns.",
+     "fix": "Far LOD silhouettes.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 23,
+     "score": 5,
+     "cells": "A2-H2",
+     "condition": "causeway at ~600 m",
+     "evidence": "Thin deck on stick piers, no parapet, railing or light poles resolve.",
+     "defect": "Deck without furniture.",
+     "fix": "Parapet strips and pole rows in the mid LOD.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 6,
+     "cells": "A1, D1",
+     "condition": "noon",
+     "evidence": "Two isolated soft puffs.",
+     "defect": "Cotton.",
+     "fix": "Erosion.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A2-H6",
+     "condition": "direct sun",
+     "evidence": "White upper surfaces near clipping but hold; wing shadow on the fuselage soft and correct.",
+     "defect": "Slight over-brightness on white areas at B3-D3.",
+     "fix": "Lower white albedo to ~0.8.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 6,
+     "cells": "F6-H8",
+     "condition": "calm, close",
+     "evidence": "Only shadows of the struts on the water, no mirrored white struts.",
+     "defect": "Missing aircraft reflection.",
+     "fix": "Planar/SSR on near water.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "No cabin door seam (C4-E5)",
+    "Uniform glass tint without Fresnel (B2-F4)",
+    "Water at grazing angle has lost turquoise (A3-H8)"
+   ],
+   "best3": [
+    "Panel lines and rivets resolve (B4-E5)",
+    "Pilot with headset reads through the glass (D3)",
+    "Wing shadow on the fuselage is soft and correct"
+   ],
+   "delta": "Model unchanged; water shifted from bright cyan (h00 G5-H8) to deep sky-blue at this grazing angle - physically defensible, but a visible change to the protected tropical-water colour; interior appears slightly darker through the glass. Neutral/flag."
+  },
+  "water_landing": {
+   "giveaway": "Touchdown drawn as thin semi-opaque white streamer lines behind level floats, with zero displaced water: no bow wave, spray sheet or foam patch.",
+   "scores": {
+    "1": 7,
+    "8": 4,
+    "9": 7,
+    "10": 5,
+    "11": 3,
+    "12": 3,
+    "13": 3,
+    "15": 5,
+    "24": 7,
+    "25": 7,
+    "26": 6,
+    "27": 6,
+    "28": 5,
+    "29": 6
+   },
+   "entries": [
+    {
+     "category": 1,
+     "score": 7,
+     "cells": "C5-F7",
+     "condition": "tail-on chase",
+     "evidence": "Floatplane reads tail-on; horizontal stabiliser D5-E5 a thin plank.",
+     "defect": "Stab too thin.",
+     "fix": "Airfoil thickness on the stab.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 8,
+     "score": 4,
+     "cells": "C5-F7",
+     "condition": "1.0 s after touchdown",
+     "evidence": "Aircraft sits level; no nose-up trim, no float heave, no asymmetric roll.",
+     "defect": "No mass response at contact.",
+     "fix": "Pitch-up on step contact, heave/roll from float buoyancy.",
+     "hardFailure": false,
+     "kind": "technical"
+    },
+    {
+     "category": 9,
+     "score": 7,
+     "cells": "A4-H8",
+     "condition": "down-sun",
+     "evidence": "Turquoise with depth response; ripple texture uniform shower-glass across A5-H8.",
+     "defect": "Uniform ripple.",
+     "fix": "Multi-band spectrum.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 5,
+     "cells": "A4-H8",
+     "condition": "still",
+     "evidence": "Single frequency, no swell, no directional bias.",
+     "defect": "Flat spectrum.",
+     "fix": "Swell + wind sea + capillary.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 11,
+     "score": 3,
+     "cells": "C6-F8",
+     "condition": "touchdown at speed",
+     "evidence": "No bow wave off the float noses, no hollow behind the step, no V wake beyond thin lines at D8-E8.",
+     "defect": "Zero displacement.",
+     "fix": "Displacement stamp per float driven by speed and immersion; Kelvin V with spreading stern waves.",
+     "hardFailure": false,
+     "kind": "technical"
+    },
+    {
+     "category": 12,
+     "score": 3,
+     "cells": "C7-F8",
+     "condition": "1.0 s after contact",
+     "evidence": "Two thin white streak fans from each float and a faint trail; no lifting spray sheet, no rooster tail, no expanding foam patch, no surface depression.",
+     "defect": "Reads as air-flow lines of white.",
+     "fix": "Chine spray sheets (thin, curved, translucent), impact splash, foam patch decal with 5-10 s life, displacement hump.",
+     "hardFailure": true,
+     "kind": "visual"
+    },
+    {
+     "category": 13,
+     "score": 3,
+     "cells": "C7-F8",
+     "condition": "touchdown",
+     "evidence": "Foam is uniform semi-opaque streaks, no density variation, no broken edges.",
+     "defect": "Opaque white streaks.",
+     "fix": "Foam texture with bubbles and lacing, alpha by turbulence, wave-following.",
+     "hardFailure": true,
+     "kind": "visual"
+    },
+    {
+     "category": 15,
+     "score": 5,
+     "cells": "D3, E3, H3",
+     "condition": "distant",
+     "evidence": "Boats as dots.",
+     "defect": "None resolvable.",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 7,
+     "cells": "A1-H2",
+     "condition": "noon",
+     "evidence": "Cumulus lobes with shading; bases flat; no cloud shadows on the water.",
+     "defect": "No cloud shadows.",
+     "fix": "Project cloud coverage onto the water/terrain light.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "noon",
+     "evidence": "No clipping; wing shadow B6-F6 very dark.",
+     "defect": "Dark water shadow.",
+     "fix": "Sun-only shadow term.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 6,
+     "cells": "C6-F7",
+     "condition": "chase",
+     "evidence": "Only the shadow, no aircraft reflection.",
+     "defect": "Missing reflection.",
+     "fix": "SSR/planar.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 6,
+     "cells": "A3-B3, F3-H3",
+     "condition": "far shore",
+     "evidence": "Sand rim and tree band.",
+     "defect": "Two-tone.",
+     "fix": "Shallow ramp.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 5,
+     "cells": "A3-B3",
+     "condition": "far",
+     "evidence": "Flat tree band.",
+     "defect": "Hedge.",
+     "fix": "Crown variation.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 6,
+     "cells": "A3-H3",
+     "condition": "bay",
+     "evidence": "Channel markers C3/E3, boats, shores.",
+     "defect": "Sparse.",
+     "fix": "More moored traffic.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "No displaced water at touchdown (C6-F8)",
+    "Spray as thin white streamer lines (C7-F8)",
+    "Level attitude with no heave or trim (C5-F7)"
+   ],
+   "best3": [
+    "Turquoise base colour",
+    "Cumulus shapes",
+    "Channel markers give scale"
+   ],
+   "delta": "Spray volume reduced from h00's huge opaque feather fans (C6-F8) to thin fans; the row-4 dotted white line artifacts across the water in h00 are gone (improvement). The touchdown now reads even more like white streamer lines; displacement still absent. Net: artifact removal improves, the user's landing complaint stands."
+  },
+  "water_step": {
+   "giveaway": "A planing floatplane sitting level in undisturbed water with smoke-like white wisps trailing from the floats instead of a V-wake and spray sheets.",
+   "scores": {
+    "1": 7,
+    "4": 6,
+    "8": 4,
+    "9": 7,
+    "10": 5,
+    "11": 3,
+    "12": 4,
+    "13": 4,
+    "15": 5,
+    "24": 7,
+    "25": 7,
+    "26": 6,
+    "27": 6,
+    "28": 5,
+    "29": 6
+   },
+   "entries": [
+    {
+     "category": 1,
+     "score": 7,
+     "cells": "C5-F7",
+     "condition": "tail-on, planing",
+     "evidence": "Reads tail-on; stab thin.",
+     "defect": "Plank stab.",
+     "fix": "Airfoil thickness.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 4,
+     "score": 6,
+     "cells": "D4-E4",
+     "condition": "high RPM",
+     "evidence": "Translucent disc visible above the cabin at D4-E4; no blade-tip arcs or hub.",
+     "defect": "Disc lacks tip highlight arcs.",
+     "fix": "Radial blur disc with tip ring and hub.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 8,
+     "score": 4,
+     "cells": "C5-F7",
+     "condition": "on the step",
+     "evidence": "Aircraft level with float sterns buried; no planing trim.",
+     "defect": "No planing attitude.",
+     "fix": "Nose-up 4-6 deg on the step with sterns clear.",
+     "hardFailure": false,
+     "kind": "technical"
+    },
+    {
+     "category": 9,
+     "score": 7,
+     "cells": "A4-H8",
+     "condition": "down-sun",
+     "evidence": "Turquoise, uniform ripple.",
+     "defect": "Uniform ripple.",
+     "fix": "Multi-band.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 5,
+     "cells": "A4-H8",
+     "condition": "still",
+     "evidence": "One frequency.",
+     "defect": "No swell.",
+     "fix": "Spectrum.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 11,
+     "score": 3,
+     "cells": "C6-F8",
+     "condition": "planing",
+     "evidence": "No hump, hollow, V-wake or stern waves; only wisps.",
+     "defect": "Zero displacement.",
+     "fix": "Displacement stamps and Kelvin wake.",
+     "hardFailure": false,
+     "kind": "technical"
+    },
+    {
+     "category": 12,
+     "score": 4,
+     "cells": "C7-F8",
+     "condition": "4 s after touchdown",
+     "evidence": "Wispy translucent trail; no spray sheets, no persistence, no spreading.",
+     "defect": "Smoke-like spray.",
+     "fix": "Chine sheets and foam decals with lifetime.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 13,
+     "score": 4,
+     "cells": "C7-F8",
+     "condition": "planing",
+     "evidence": "Wisps are semi-transparent (better than h00's opaque streaks) but feathered uniformly like smoke.",
+     "defect": "No bubble texture, no broken edges.",
+     "fix": "Foam texture, turbulence alpha.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 15,
+     "score": 5,
+     "cells": "H3",
+     "condition": "distant",
+     "evidence": "Dots.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 7,
+     "cells": "A1-H2",
+     "condition": "noon",
+     "evidence": "Cumulus lobes; flat bases; no shadows cast.",
+     "defect": "No cloud shadows.",
+     "fix": "Project coverage.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "noon",
+     "evidence": "No clipping.",
+     "defect": "Dark water shadow B6-F6.",
+     "fix": "Sun-only term.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 6,
+     "cells": "C6-F7",
+     "condition": "chase",
+     "evidence": "No aircraft reflection.",
+     "defect": "Missing.",
+     "fix": "SSR.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 6,
+     "cells": "A3-B3, F3-H3",
+     "condition": "far",
+     "evidence": "Two-tone shore.",
+     "defect": "No gradient.",
+     "fix": "Shallow ramp.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 5,
+     "cells": "A3-B3",
+     "condition": "far",
+     "evidence": "Flat band.",
+     "defect": "Hedge.",
+     "fix": "Crown variation.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 6,
+     "cells": "A3-H3",
+     "condition": "bay",
+     "evidence": "Markers, boats, shore.",
+     "defect": "Sparse.",
+     "fix": "Traffic.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "No V-wake or displacement while planing (C6-F8)",
+    "Level attitude, sterns buried (C5-F7)",
+    "Smoke-like wisps for spray (C7-F8)"
+   ],
+   "best3": [
+    "Semi-transparent foam replaces opaque streaks",
+    "Prop disc visible at D4-E4",
+    "Turquoise base preserved"
+   ],
+   "delta": "Opaque white streak trails (h00 D7-F8) replaced by semi-transparent wisps - the 'opaque white wake streak' hard failure is reduced (improvement); row-4 dotted-line artifacts gone (improvement); attitude and displacement unchanged. Net: improvement in foam opacity, user's 'air flow lines' complaint remains."
+  },
+  "harbor": {
+   "giveaway": "A container terminal on a blank near-white slab with no yard markings, high-mast lights or tyre wear, every container stack a same-size saturated block.",
+   "scores": {
+    "1": 7,
+    "9": 8,
+    "10": 6,
+    "15": 6,
+    "17": 6,
+    "18": 4,
+    "19": 4,
+    "20": 3,
+    "21": 4,
+    "22": 3,
+    "23": 5,
+    "24": 7,
+    "25": 6,
+    "26": 6,
+    "27": 5,
+    "28": 4,
+    "29": 6
+   },
+   "entries": [
+    {
+     "category": 1,
+     "score": 7,
+     "cells": "C5-F7",
+     "condition": "chase from above",
+     "evidence": "Wing planform, float stance and tail read well from above.",
+     "defect": "Wing tips are square-cut slabs.",
+     "fix": "Tip shaping and lens.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 9,
+     "score": 8,
+     "cells": "G4-H8",
+     "condition": "harbour water, noon",
+     "evidence": "Turquoise with lighter sandbar patches at H4-H5 and deeper blue against the quay A7-D8; protected colour intact.",
+     "defect": "Single ripple frequency.",
+     "fix": "Add swell band.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 6,
+     "cells": "A7-H8",
+     "condition": "still",
+     "evidence": "One wind-ripple scale.",
+     "defect": "No swell/capillary layers.",
+     "fix": "Spectrum.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 15,
+     "score": 6,
+     "cells": "F3-G3, B3-C3",
+     "condition": "moored ships, 400 m",
+     "evidence": "Cruise ship F3-G3 has a white superstructure with dark window bands; cargo ship B3-C3 is a red slab with a white block bridge and no deck cranes, hatches or containers.",
+     "defect": "Cargo ship is a slab.",
+     "fix": "Hatch covers, deck cranes, anchor gear, hull waterline band.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 6,
+     "cells": "E2-H2",
+     "condition": "skyline at 3 km",
+     "evidence": "Height variation present; every top is flat.",
+     "defect": "No crowns/masts at range.",
+     "fix": "Far LOD silhouettes.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 18,
+     "score": 4,
+     "cells": "A5, C4, D3-E4",
+     "condition": "warehouses at 300 m",
+     "evidence": "Flat grey boxes; no roll-up doors, loading docks, downspouts or dock canopies.",
+     "defect": "Warehouses are primitives.",
+     "fix": "Dock doors, canopies, ramps, office annex.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 19,
+     "score": 4,
+     "cells": "A5-E4",
+     "condition": "noon",
+     "evidence": "Warehouse roofs uniform pale grey, tarmac a single value.",
+     "defect": "Uniform roughness/albedo across the terminal.",
+     "fix": "Roof membrane seams, rust streaks, tarmac patches.",
+     "hardFailure": true,
+     "kind": "visual"
+    },
+    {
+     "category": 20,
+     "score": 3,
+     "cells": "A5, C4, D3-E4",
+     "condition": "300 m",
+     "evidence": "Blank roof slabs with no HVAC, skylights or vents.",
+     "defect": "Blank roofs.",
+     "fix": "Rooftop kit instancing.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 21,
+     "score": 4,
+     "cells": "A6-C7",
+     "condition": "container yard",
+     "evidence": "A few faint lines only; no bay grid numbering, lane arrows, tyre marks, oil stains or kerbs.",
+     "defect": "Yard reads as a blank slab.",
+     "fix": "Yard grid decals, wear masks, lane arrows.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 22,
+     "score": 3,
+     "cells": "A3-G5",
+     "condition": "terminal",
+     "evidence": "No high-mast light towers anywhere on a 1 km terminal.",
+     "defect": "Lighting infrastructure missing.",
+     "fix": "30 m masts every 60-80 m along the stacks.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 23,
+     "score": 5,
+     "cells": "A2-C3, D3-E3",
+     "condition": "bridges at 1-2 km",
+     "evidence": "Cable-stay towers bare H-frames; cables invisible; deck a thin line without parapets.",
+     "defect": "Bridge lacks cables and parapets.",
+     "fix": "Cable fans, parapet strips, pole rows.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 7,
+     "cells": "A1-H1",
+     "condition": "noon",
+     "evidence": "Cumulus lobes with shading; bases flat; no shadows on the ground.",
+     "defect": "No cloud shadows.",
+     "fix": "Project coverage.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 6,
+     "cells": "A5-D8",
+     "condition": "noon",
+     "evidence": "Tarmac near-white against saturated containers; reads as a toy set.",
+     "defect": "Pavement albedo too high.",
+     "fix": "Concrete albedo 0.35-0.45 with wear.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 6,
+     "cells": "F4-G4",
+     "condition": "calm harbour",
+     "evidence": "No reflection of the ship or cranes in the harbour water.",
+     "defect": "Missing local reflections.",
+     "fix": "Planar/SSR.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 5,
+     "cells": "A6-D8",
+     "condition": "quay",
+     "evidence": "Hard vertical quay wall with no fenders, bollards, ladders or tide line.",
+     "defect": "Quay is an extrusion.",
+     "fix": "Fender/bollard kit, tide-stain band.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 4,
+     "cells": "C2-D2",
+     "condition": "keys at 2 km",
+     "evidence": "Flat dark green islands.",
+     "defect": "No crown read.",
+     "fix": "Canopy variation in far LOD.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 6,
+     "cells": "A3-G5",
+     "condition": "port",
+     "evidence": "Containers, cranes, trucks, ships present; arrangement perfectly tidy, no reefers, chassis, or light masts; no boats moving in the harbour.",
+     "defect": "Too tidy, no motion.",
+     "fix": "Break stack heights, add moving tugs/pilot boats with wakes.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Blank near-white terminal pavement (A5-D8)",
+    "Warehouses and roofs as blank boxes (A5-E4)",
+    "No high-mast lighting (A3-G5)"
+   ],
+   "best3": [
+    "Harbour turquoise with sandbars (G4-H8)",
+    "Container colour variety at this range",
+    "Cruise ship superstructure reads"
+   ],
+   "delta": "Identical to h00 except fractionally deeper blue in the harbour water and two more clouds. Neutral. No wakes visible in a view titled 'wakes'."
+  },
+  "island_pass": {
+   "giveaway": "Beachfront towers are flat-topped slabs with uniform window grids and blank pale roofs, and the ocean beach has no shorebreak foam line.",
+   "scores": {
+    "1": 7,
+    "9": 8,
+    "10": 6,
+    "17": 6,
+    "18": 5,
+    "19": 5,
+    "20": 3,
+    "21": 4,
+    "24": 7,
+    "25": 7,
+    "26": 7,
+    "27": 7,
+    "28": 5,
+    "29": 7
+   },
+   "entries": [
+    {
+     "category": 1,
+     "score": 7,
+     "cells": "C5-F7",
+     "condition": "chase",
+     "evidence": "Reads well; square tips.",
+     "defect": "Tip shape.",
+     "fix": "Tip lens.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 9,
+     "score": 8,
+     "cells": "A4-H8",
+     "condition": "shore to open sea",
+     "evidence": "Turquoise-to-cobalt gradient with seagrass patches at C4-D4; best water in the set.",
+     "defect": "Offshore ripple G5-H8 is one repeated noise scale.",
+     "fix": "Swell band and glint variation.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 6,
+     "cells": "E4-H8",
+     "condition": "still",
+     "evidence": "Single scale, no swell lines approaching the beach.",
+     "defect": "No swell.",
+     "fix": "Shore-refracted swell.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 6,
+     "cells": "A2-E3",
+     "condition": "beachfront strip at 300 m",
+     "evidence": "Varied heights and colours; every tower a flat-topped slab; no crowns, setbacks or mechanical penthouses.",
+     "defect": "Bar chart with paint.",
+     "fix": "Crown kit and setbacks on 30 % of towers.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 18,
+     "score": 5,
+     "cells": "A2-D3",
+     "condition": "300 m",
+     "evidence": "Window grids and some vertical banding at B2-C2; no balconies on beachfront towers where they are universal.",
+     "defect": "No balcony depth.",
+     "fix": "Balcony slabs/railings on residential towers.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 19,
+     "score": 5,
+     "cells": "A2-D3",
+     "condition": "noon",
+     "evidence": "Each tower one flat colour with a grid; no glass reflectance.",
+     "defect": "Flat materials.",
+     "fix": "Glass reflectance and tint variation.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 20,
+     "score": 3,
+     "cells": "A2-D2",
+     "condition": "250 m",
+     "evidence": "Blank pale roof slabs; no pools, mechanical rooms, parapets.",
+     "defect": "Blank roofs.",
+     "fix": "Rooftop kit.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 21,
+     "score": 4,
+     "cells": "B3-D3",
+     "condition": "streets behind the beach",
+     "evidence": "Flat grey; nothing resolves.",
+     "defect": "No street texture at 300 m.",
+     "fix": "Asphalt/sidewalk contrast, markings.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 7,
+     "cells": "D1-H1",
+     "condition": "noon",
+     "evidence": "Cumulus with structure and shading; cotton edges.",
+     "defect": "No silver lining.",
+     "fix": "Rim scatter.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "noon",
+     "evidence": "Sand bright but not blown; sky gradient credible.",
+     "defect": "Sand near clipping at A3-B3.",
+     "fix": "Sand albedo 0.6.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 7,
+     "cells": "E4-H8",
+     "condition": "offshore",
+     "evidence": "Sky reflection gradient convincing; sun path not in frame.",
+     "defect": "None resolvable here.",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 7,
+     "cells": "A3-D4",
+     "condition": "ocean beach",
+     "evidence": "Wet-sand tone at A4, turquoise shallow gradient, sandbar patches; missing a shorebreak foam line and dune vegetation; beach-to-street boundary at B3 is a hard line.",
+     "defect": "No foam line at the water's edge.",
+     "fix": "Shore foam band driven by depth and swell.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 5,
+     "cells": "B3-E2",
+     "condition": "shore trees",
+     "evidence": "Small uniform dark dots and a hedge band at D2-E2.",
+     "defect": "No crown or species read.",
+     "fix": "Palm/sea-grape mix with size variation.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 7,
+     "cells": "A2-E3",
+     "condition": "beachfront city",
+     "evidence": "Long beach, strip, one boat; beach has no umbrellas, lifeguard towers, paths.",
+     "defect": "Empty beach.",
+     "fix": "Beach props at LOD1.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Blank pale roofs on the strip (A2-D2)",
+    "No shorebreak foam line (A4-D3)",
+    "Uniform dot trees along the shore (B3-E2)"
+   ],
+   "best3": [
+    "Turquoise-to-cobalt gradient with seagrass (A4-H8)",
+    "Wet-sand band at A4",
+    "Facade colour variation"
+   ],
+   "delta": "Facades darker and more varied (window grids, banding) than h00's pastel boxes - improvement in 18/19; wet-sand tone appears near the water (27 improvement); deep water a touch deeper blue, near-shore turquoise preserved (neutral). Net: improvement."
+  },
+  "skyline_high": {
+   "giveaway": "A skyline of flat-topped extrusions with blank grey roofs under a huge cumulus deck that casts no shadow on the city, in a palette that has gone grey.",
+   "scores": {
+    "1": 7,
+    "9": 6,
+    "10": 6,
+    "15": 5,
+    "17": 6,
+    "18": 5,
+    "19": 5,
+    "20": 4,
+    "21": 4,
+    "23": 5,
+    "24": 8,
+    "25": 6,
+    "26": 6,
+    "27": 6,
+    "28": 5,
+    "29": 7
+   },
+   "entries": [
+    {
+     "category": 1,
+     "score": 7,
+     "cells": "E4-F5",
+     "condition": "chase at 1.2 km",
+     "evidence": "Reads; small.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 9,
+     "score": 6,
+     "cells": "B5-H6",
+     "condition": "under cloud deck",
+     "evidence": "Water is a muted grey-teal; turquoise survives only in the shallows at B7 and G3-H4.",
+     "defect": "Protected tropical colour lost under the dome-following base colour.",
+     "fix": "Clamp the dome contribution so the shallow scattering colour survives an overcast dome.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 6,
+     "cells": "B5-H6",
+     "condition": "far",
+     "evidence": "No structure at this range.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 15,
+     "score": 5,
+     "cells": "E7",
+     "condition": "cruise ship",
+     "evidence": "White block.",
+     "defect": "No traffic elsewhere.",
+     "fix": "Channel traffic.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 6,
+     "cells": "C3-E4, A4-C5",
+     "condition": "1.2 km",
+     "evidence": "Tall cluster and secondary cluster give hierarchy; all flat-topped; no spires or masts resolve; both clusters share one palette.",
+     "defect": "Extrusion skyline.",
+     "fix": "Crowns/masts and per-district palettes.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 18,
+     "score": 5,
+     "cells": "C3-E4",
+     "condition": "1.2 km",
+     "evidence": "Grid textures with some depth; no podiums or setbacks.",
+     "defect": "Box massing.",
+     "fix": "Podium + setback massing.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 19,
+     "score": 5,
+     "cells": "C3-E4",
+     "condition": "1.2 km",
+     "evidence": "Blue-grey glass slabs, one grey for podiums.",
+     "defect": "No reflectance variance.",
+     "fix": "Per-building glass tint/roughness.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 20,
+     "score": 4,
+     "cells": "C3-E4, D5-E6",
+     "condition": "1.2 km",
+     "evidence": "Roofs grey slabs (less pale than h00), no mechanical mass on any tower top.",
+     "defect": "Blank roofs.",
+     "fix": "Rooftop kit visible at 1 km.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 21,
+     "score": 4,
+     "cells": "A4-C5",
+     "condition": "1.2 km",
+     "evidence": "Ground plane between towers is one flat grey; no street grid read.",
+     "defect": "No street contrast at range.",
+     "fix": "Darker asphalt in the far LOD.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 23,
+     "score": 5,
+     "cells": "E4-F4, H3-H4",
+     "condition": "1.2 km",
+     "evidence": "Causeway and barrier highway read as lines.",
+     "defect": "No gantries or lighting resolve.",
+     "fix": "Pole rows as far LOD strips.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 8,
+     "cells": "A1-H2",
+     "condition": "cumulus deck",
+     "evidence": "Internal volume, self-shadowed grey bases, lit tops, multi-scale lobes. Differences from production: bases uniformly dark grey without ragged wisps; small A1-B1 puffs are separate cotton balls; the deck casts no shadow on the city below.",
+     "defect": "No cloud shadows; base too uniform.",
+     "fix": "Project cloud coverage onto the light; base erosion.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 6,
+     "cells": "A2-H8",
+     "condition": "under deck",
+     "evidence": "Uniform lighting under a deck; F3-H4 as bright as C3-E4; frame desaturated versus h00 (grey-blue sky, grey suburbs).",
+     "defect": "No cloud shadowing; palette regression.",
+     "fix": "Cloud shadow map; keep sun colour/saturation when the deck is broken.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 6,
+     "cells": "B5-H6",
+     "condition": "far",
+     "evidence": "Uniform grey sky reflection.",
+     "defect": "Flat.",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 6,
+     "cells": "F3-H4, A6-B7",
+     "condition": "keys",
+     "evidence": "Turquoise shallows and sand rims; hard vegetation edge.",
+     "defect": "Hard line.",
+     "fix": "Dune transition.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 5,
+     "cells": "A6-B7, G3-H3",
+     "condition": "island canopy",
+     "evidence": "Uniform dark mass.",
+     "defect": "No crowns.",
+     "fix": "Canopy variation.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 7,
+     "cells": "A2-H8",
+     "condition": "metro",
+     "evidence": "Downtown, port, bridges, barrier islands, suburbs to the horizon; port oversized vs city; both downtown clusters from one generator.",
+     "defect": "Generator sameness.",
+     "fix": "District identities.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "No cloud shadows under a full deck (A2-H8)",
+    "Palette desaturated - water muted teal (B5-H6)",
+    "Blank roofs on every tower (C3-E4)"
+   ],
+   "best3": [
+    "Volumetric self-shadowed cloud deck (A1-H2)",
+    "Metro layout reads (A2-H8)",
+    "Shallow rings around the island (B7)"
+   ],
+   "delta": "Clouds went from white cotton puffs to a shaded volumetric deck (24 up: internal volume and self-shadowing, previously named defects, are now present); downtown facades darker/denser (slight improvement). Regression: the frame lost saturation - sky grey-blue, water muted teal instead of turquoise, suburbs grey instead of warm - touching the protected overall palette and tropical water colour; new inconsistency: a deck this size casts no shadow on the city. Net: mixed."
+  },
+  "city_500m": {
+   "giveaway": "Roofs and sidewalks share the same blank pale grey, so from 500 m every tower top and plaza reads as an untextured slab.",
+   "scores": {
+    "9": 7,
+    "17": 7,
+    "18": 6,
+    "19": 6,
+    "20": 4,
+    "21": 5,
+    "22": 4,
+    "25": 7,
+    "27": 6,
+    "28": 5,
+    "29": 7
+   },
+   "entries": [
+    {
+     "category": 9,
+     "score": 7,
+     "cells": "G1-H3",
+     "condition": "bay",
+     "evidence": "Turquoise preserved.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 7,
+     "cells": "A1-H6",
+     "condition": "500 m looking down",
+     "evidence": "Height distribution plus landmark crowns: spires D2/G2/H2, dome C3, pyramid cap D3. Difference from production: crowns are bare cones/pyramids without masts or mechanical floors; the far cluster D1-F1 is a uniform grid of similar boxes.",
+     "defect": "Bare crowns, gridded far cluster.",
+     "fix": "Mast/mechanical-floor kit; vary the far cluster's footprints.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 18,
+     "score": 6,
+     "cells": "B3-G6",
+     "condition": "500 m",
+     "evidence": "Window grids with depth shading and banding; most towers rise straight from the sidewalk with no podium; the dark towers at D4 and B5 share one facade module; pastel low-rises C4/E4/F4 are smooth boxes.",
+     "defect": "Visible copy-paste (D4/B5) and no podiums.",
+     "fix": "Podium massing, module shuffling.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 19,
+     "score": 6,
+     "cells": "B3-G6",
+     "condition": "noon",
+     "evidence": "Dark glass reads as glass; roof and sidewalk share one pale grey; pastel walls flat.",
+     "defect": "Roof = sidewalk material.",
+     "fix": "Roof membrane/gravel materials with parapet shadow.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 20,
+     "score": 4,
+     "cells": "A5, C6-D6, F7, G7-H7",
+     "condition": "500 m",
+     "evidence": "Blank pale slabs; a few towers have caps, none has HVAC clusters, parapets or stair heads that should read as dark clutter at 500 m.",
+     "defect": "Blank roofs (user priority 3).",
+     "fix": "Instanced rooftop kit with 3-8 units per roof, parapet lip, darker membrane.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 21,
+     "score": 5,
+     "cells": "A6-H8",
+     "condition": "500 m",
+     "evidence": "Asphalt darker than sidewalks, lane dashes and crosswalks at B7/D8/E7; plazas F5-H6 blank; no medians, tree wells or parking lots.",
+     "defect": "Blank plazas.",
+     "fix": "Plaza paving pattern, planters, parking bays.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 22,
+     "score": 4,
+     "cells": "A6-H8",
+     "condition": "500 m",
+     "evidence": "No lamp posts or signal dots resolve along the avenues.",
+     "defect": "No lighting infra at 500 m.",
+     "fix": "Pole instancing visible to 600 m.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "noon",
+     "evidence": "Long shadows correct; plaza at G6-H6 near-blown.",
+     "defect": "Pale plaza albedo.",
+     "fix": "Lower to 0.4.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 6,
+     "cells": "G1-H3",
+     "condition": "bay shore",
+     "evidence": "Sand rim and shallows; marina block.",
+     "defect": "Hard edge.",
+     "fix": "Wet band.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 5,
+     "cells": "B2-E2, F6-G6",
+     "condition": "park band and street trees",
+     "evidence": "Park band a lumpy uniform dark green; street trees uniform dots.",
+     "defect": "No species/crown variety.",
+     "fix": "Crown mix.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "downtown",
+     "evidence": "Dense, with streets, trees, shadows; blank plazas F5-H6 and empty lots A1-B2 undercut.",
+     "defect": "Blank plazas/lots.",
+     "fix": "Fill with parking, construction, parks.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Blank pale roofs (A5, C6-D6, F7, G7-H7)",
+    "Blank plazas (F5-H6)",
+    "No lamp posts at 500 m (A6-H8)"
+   ],
+   "best3": [
+    "Landmark crowns give hierarchy (C3, D3, G2, H2)",
+    "Asphalt/sidewalk contrast with markings (A6-H8)",
+    "Turquoise bay (G1-H3)"
+   ],
+   "delta": "Largest improvement of the set: facades from pastel flat boxes to darker gridded glass with crowns/spires (17/18/19: 'differently sized rectangles' and 'identically lit squares' reduced); streets from a white plane to asphalt with markings (21); street trees added. Roofs remain pale blank slabs (20 unchanged). Bay colour preserved. Net: improvement."
+  },
+  "city_200m": {
+   "giveaway": "Every roof and plaza is the same blank pale slab (D5-E6, A5-B8), so the city reads as textured walls sitting on untextured lids.",
+   "scores": {
+    "9": 8,
+    "15": 5,
+    "17": 7,
+    "18": 6,
+    "19": 6,
+    "20": 4,
+    "21": 6,
+    "22": 4,
+    "23": 5,
+    "25": 7,
+    "26": 6,
+    "27": 6,
+    "28": 5,
+    "29": 7
+   },
+   "entries": [
+    {
+     "category": 9,
+     "score": 8,
+     "cells": "G2-H8",
+     "condition": "bay",
+     "evidence": "Turquoise with a lighter shallow band along the seawall; protected colour intact.",
+     "defect": "Single ripple scale.",
+     "fix": "Swell.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 15,
+     "score": 5,
+     "cells": "G3-H3",
+     "condition": "marina at 500 m",
+     "evidence": "White specks.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 7,
+     "cells": "A1-H4",
+     "condition": "200 m",
+     "evidence": "Hierarchy with landmark crowns (spire D1, cylinder crown B3, dark brown tower G1). Difference from production: crowns are flat white discs and cones with no mechanical floors or masts.",
+     "defect": "Simple crowns.",
+     "fix": "Crown kit.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 18,
+     "score": 6,
+     "cells": "B2-G6",
+     "condition": "200 m",
+     "evidence": "Mullioned grids with depth; the E4 tower has a podium; the low-rise boxes C5/D6/D7 repeat one window module with no entrances, awnings or ledges.",
+     "defect": "Copy-paste low-rises, no entrances.",
+     "fix": "Ground-floor kit and module variation.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 19,
+     "score": 6,
+     "cells": "B2-G6",
+     "condition": "noon",
+     "evidence": "Glass, brick-brown, white facades read; roofs and plaza share one pale grey; pink/yellow blocks flat.",
+     "defect": "Roof/plaza material identity.",
+     "fix": "Separate roof membrane material.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 20,
+     "score": 4,
+     "cells": "D5-E6, C5, D6, D7, B3",
+     "condition": "200 m",
+     "evidence": "Blank white/pale roofs; the cylinder crown at B3 is a flat disc; no HVAC, parapets, stair heads at a range where they must read.",
+     "defect": "Blank roofs (user priority 3).",
+     "fix": "Rooftop kit, parapet lip, darker membrane.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 21,
+     "score": 6,
+     "cells": "A5-F8",
+     "condition": "200 m",
+     "evidence": "Asphalt/sidewalk contrast, lane dashes, crosswalks at C7/E6, a few cars; missing kerb lines, medians, tree wells, parking lanes, manholes; plaza A5-B8 blank.",
+     "defect": "Blank plaza and no kerbs.",
+     "fix": "Kerb line decal, plaza paving, parking bays.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 22,
+     "score": 4,
+     "cells": "C7-E7, G6-H6",
+     "condition": "200 m",
+     "evidence": "No lamp posts resolve on the avenue or the causeway; no signals at intersections.",
+     "defect": "Missing poles.",
+     "fix": "Pole instancing at 200 m.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 23,
+     "score": 5,
+     "cells": "G6-H6",
+     "condition": "causeway at 300 m",
+     "evidence": "Parapets, piers, 3 cars; no lamp posts, signs, joints or shoulder markings.",
+     "defect": "Bare deck.",
+     "fix": "Pole row, sign gantry, joint lines.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "noon",
+     "evidence": "Good shadows; white roof D5-E6 and plaza A6 near-blown.",
+     "defect": "Pale albedo.",
+     "fix": "Lower roof/plaza albedo.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 6,
+     "cells": "G5-H6",
+     "condition": "calm bay",
+     "evidence": "No tower reflections along the seawall.",
+     "defect": "Missing local reflections.",
+     "fix": "Planar/SSR.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 6,
+     "cells": "F7-G8",
+     "condition": "bay beach",
+     "evidence": "Sand strip with a light shallow band; no wet sand or foam; seawall-to-water hard line.",
+     "defect": "Hard edges.",
+     "fix": "Wet band and tide stain.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 5,
+     "cells": "F6-G7",
+     "condition": "waterfront palms",
+     "evidence": "Uniform small dots; most avenues treeless.",
+     "defect": "No street trees.",
+     "fix": "Avenue tree rows with size variety.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "downtown bayfront",
+     "evidence": "Cars, marina, palms, crosswalks; blank plaza and roofs undercut.",
+     "defect": "Blank surfaces.",
+     "fix": "Fill plazas.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Blank roofs (D5-E6, C5, D6, D7)",
+    "Blank plaza (A5-B8)",
+    "No lamp posts on avenue or causeway (C7-E7, G6-H6)"
+   ],
+   "best3": [
+    "Asphalt with markings and crosswalks (C6-F7)",
+    "Cars on the causeway near water preserved (G6)",
+    "Turquoise bay with shallow band (G2-H8)"
+   ],
+   "delta": "Major improvement: streets from a blank white plane to asphalt with lane markings, sidewalks, crosswalks (21); facades from pastel boxes to gridded glass (18/19); waterfront palms added; cars near water preserved (G6). Roofs still blank (20 unchanged). Net: improvement."
+  },
+  "city_north": {
+   "giveaway": "A six-lane downtown avenue with no cars, no lamp posts and no kerbs, fronting a blank grey foreground lot with four identical palms.",
+   "scores": {
+    "9": 7,
+    "17": 7,
+    "18": 6,
+    "19": 6,
+    "20": 4,
+    "21": 5,
+    "22": 3,
+    "24": 6,
+    "25": 7,
+    "28": 4,
+    "29": 6
+   },
+   "entries": [
+    {
+     "category": 9,
+     "score": 7,
+     "cells": "G2-H2",
+     "condition": "bay glimpse",
+     "evidence": "Turquoise.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 7,
+     "cells": "A1-H4",
+     "condition": "200 m",
+     "evidence": "Spires B1/D1/E1, stepped tower D1-D3, crowns; far-left wall A2-B3 is a row of similar slabs.",
+     "defect": "Slab wall at A2-B3.",
+     "fix": "Break heights/footprints.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 18,
+     "score": 6,
+     "cells": "A4-H6",
+     "condition": "200 m",
+     "evidence": "Grids with mullion shading; ground floors undifferentiated (no entrances, canopies); mid-rise boxes D6/E6/F6/G6 repeat one module.",
+     "defect": "Copy-paste modules, dead ground floors.",
+     "fix": "Ground-floor kit.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 19,
+     "score": 6,
+     "cells": "A4-H6",
+     "condition": "noon",
+     "evidence": "Brown, pink, orange, glass; roofs one grey.",
+     "defect": "Roof material.",
+     "fix": "Membrane/gravel.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 20,
+     "score": 4,
+     "cells": "A6-B6, C5, G6, H6",
+     "condition": "200 m",
+     "evidence": "Grey slabs with at most one box; A6-B6 white slab blank.",
+     "defect": "Blank roofs (user priority 3).",
+     "fix": "Rooftop kit.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 21,
+     "score": 5,
+     "cells": "A7-H8",
+     "condition": "avenue and foreground",
+     "evidence": "Lane lines and a crosswalk at D7; foreground A8-H8 a blank grey expanse without bays or kerbs.",
+     "defect": "Blank lot.",
+     "fix": "Parking bays or a park.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 22,
+     "score": 3,
+     "cells": "A7-H8",
+     "condition": "avenue",
+     "evidence": "No lamp posts or signals along a 6-lane avenue at 200 m.",
+     "defect": "Missing.",
+     "fix": "Pole rows.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 6,
+     "cells": "F1",
+     "condition": "noon",
+     "evidence": "Small puffs.",
+     "defect": "Cotton.",
+     "fix": "Erosion.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "noon",
+     "evidence": "Shadows correct; white roofs near-blown.",
+     "defect": "Albedo.",
+     "fix": "Lower.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 4,
+     "cells": "A7, D7, E8, H8",
+     "condition": "palms",
+     "evidence": "Six palms, identical fronds; no street trees.",
+     "defect": "Clone palms.",
+     "fix": "3+ palm variants, tree rows.",
+     "hardFailure": true,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 6,
+     "cells": "A7-H8",
+     "condition": "downtown edge",
+     "evidence": "No traffic, parked cars, buses, people on the avenue.",
+     "defect": "Dead streets.",
+     "fix": "Traffic and parked cars.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Empty avenue without traffic or poles (A7-H8)",
+    "Blank foreground lot (A8-H8)",
+    "Clone palms (A7, D7, E8, H8)"
+   ],
+   "best3": [
+    "Crowns and stepped massing (D1-D3)",
+    "Asphalt with lane lines (A7-H8)",
+    "Facade colour variety"
+   ],
+   "delta": "Streets from white ground to asphalt with lane markings (21 up); facades darker with crowns (17/18 up); roofs from white to grey but still blank; palms identical in both; the foreground blank lot persists. Net: improvement."
+  },
+  "street_2m": {
+   "giveaway": "Storefronts are coloured bars on flat facade planes, and the avenue has no stop line, crosswalk, parked cars or people at 2 m.",
+   "scores": {
+    "17": 6,
+    "18": 4,
+    "19": 4,
+    "20": 5,
+    "21": 5,
+    "22": 6,
+    "24": 6,
+    "25": 6,
+    "29": 4
+   },
+   "entries": [
+    {
+     "category": 17,
+     "score": 6,
+     "cells": "B1-H2",
+     "condition": "street level",
+     "evidence": "Towers behind read; cylinder tower B1-C2.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 18,
+     "score": 4,
+     "cells": "A1-B4, C2-D3, F3-H3",
+     "condition": "2 m",
+     "evidence": "Flat planes with texture windows; balconies at C2-D3 painted not modelled; ground floor is red/blue signage bars at C4-D4; no doors, awnings, canopies.",
+     "defect": "No facade depth or entrances at street level.",
+     "fix": "Modelled ground-floor kit (doors, awnings, columns), parallax windows.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 19,
+     "score": 4,
+     "cells": "A1-H3",
+     "condition": "noon",
+     "evidence": "Glass is a flat sky-blue tint without reflection; concrete uniform.",
+     "defect": "Uniform roughness on facades.",
+     "fix": "Reflective glass, concrete grime.",
+     "hardFailure": true,
+     "kind": "visual"
+    },
+    {
+     "category": 20,
+     "score": 5,
+     "cells": "F2-G2",
+     "condition": "low roof",
+     "evidence": "Cylindrical tanks/vents on the low building - a real read; the C2 roof blank.",
+     "defect": "Only one roof furnished.",
+     "fix": "Kit on all roofs.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 21,
+     "score": 5,
+     "cells": "A5-H8",
+     "condition": "2 m",
+     "evidence": "Double yellow, white edge lines, kerbs, sidewalks, bins present; no stop line or crosswalk at D4-F4, no manholes, gutters, patches; asphalt one tone; sidewalk without joints.",
+     "defect": "No wear or joints, no intersection markings.",
+     "fix": "Stop line, crosswalk, manholes, tyre-wear mask, sidewalk joint grid.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 22,
+     "score": 6,
+     "cells": "D3-F3",
+     "condition": "intersection",
+     "evidence": "Lamp post with arm and three signal heads placed at the intersection; generic style; one lamp in a long block.",
+     "defect": "Spacing too sparse.",
+     "fix": "Lamp every 30-40 m.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 6,
+     "cells": "H1",
+     "condition": "noon",
+     "evidence": "One puff.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 6,
+     "cells": "A5-H8",
+     "condition": "noon",
+     "evidence": "Building shadow across the road correct; left glass wall A1-B4 dark and flat.",
+     "defect": "Glass reads unlit.",
+     "fix": "Reflections.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 4,
+     "cells": "A4-H8",
+     "condition": "2 m",
+     "evidence": "No parked cars, pedestrians, traffic, signage, litter.",
+     "defect": "Dead street.",
+     "fix": "Parked cars, peds, signage.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Storefronts as coloured bars (C4-D4)",
+    "Dead street, no cars or people (A4-H8)",
+    "Flat glass facades (A1-B4)"
+   ],
+   "best3": [
+    "Double yellow, edge lines, kerbs (A5-H8)",
+    "Signals and lamp at the intersection (D3-F3)",
+    "Rooftop tanks on the low building (F2-G2)"
+   ],
+   "delta": "Large improvement: asphalt with double yellow, edge lines, kerbs, a lamp post, signals, bins and rooftop vents replace a blank blue-grey plane with one dashed line (21/22/20 named defects reduced). Facades remain flat with coloured storefront bars. Net: improvement."
+  },
+  "night": {
+   "giveaway": "Every tower is lit with the same uniform window density and the nav lights are oversized round bloom sprites, while no headlights move anywhere in the city.",
+   "scores": {
+    "1": 7,
+    "7": 5,
+    "9": 6,
+    "10": 5,
+    "17": 7,
+    "19": 5,
+    "22": 5,
+    "24": 5,
+    "25": 6,
+    "26": 6,
+    "29": 6
+   },
+   "entries": [
+    {
+     "category": 1,
+     "score": 7,
+     "cells": "C5-F7",
+     "condition": "night chase",
+     "evidence": "Silhouette reads against the water.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 7,
+     "score": 5,
+     "cells": "C5-F7",
+     "condition": "night",
+     "evidence": "Fuselage a flat grey with a red beacon tint; no specular from city lights.",
+     "defect": "Flat night material.",
+     "fix": "Specular from the city probe.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 9,
+     "score": 6,
+     "cells": "A4-H8",
+     "condition": "night",
+     "evidence": "Dark blue with faint ripple.",
+     "defect": "Flat.",
+     "fix": "Moon/sky glint.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 5,
+     "cells": "A4-H8",
+     "condition": "night",
+     "evidence": "No structure visible.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 7,
+     "cells": "B2-F3",
+     "condition": "night skyline",
+     "evidence": "Hierarchy and two coloured crowns at E2; reflections. Difference from production: near-uniform window density on every tower, no dark floors, no aviation beacons on tall towers.",
+     "defect": "Uniform lit grids.",
+     "fix": "Per-floor random occupancy, red beacons.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 19,
+     "score": 5,
+     "cells": "B2-F3",
+     "condition": "night",
+     "evidence": "Emissive grids only.",
+     "defect": "No lit-facade material variation.",
+     "fix": "Warm/cool mix per building.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 22,
+     "score": 5,
+     "cells": "F3-H3, A2-C3",
+     "condition": "night",
+     "evidence": "Port sodium lights and causeway string read; suburbs a uniform white point scatter; no lit street grid, no headlights.",
+     "defect": "No street-lamp lines or traffic.",
+     "fix": "Lamp rows along roads, headlight streams.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 5,
+     "cells": "E1-F1, A1",
+     "condition": "night",
+     "evidence": "Dark flat smudges.",
+     "defect": "No volume at night.",
+     "fix": "Sky-lit cloud base.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 6,
+     "cells": "B5, G5, D7",
+     "condition": "night",
+     "evidence": "Dusk gradient credible; nav-light halos are ~40 px round sprites with hard edges.",
+     "defect": "Oversized bloom sprites.",
+     "fix": "Physically sized glare with soft falloff.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 6,
+     "cells": "C3-F3, D7-E8",
+     "condition": "night",
+     "evidence": "City light streaks on the water good; no glow from the aircraft's lights on the water below.",
+     "defect": "Missing local light on water.",
+     "fix": "Point-light water response.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 6,
+     "cells": "A2-H3",
+     "condition": "night",
+     "evidence": "City, port, suburbs, causeway lit; no moving traffic or boat lights.",
+     "defect": "Static.",
+     "fix": "Traffic.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Uniform lit window density (B2-F3)",
+    "Oversized nav-light sprites (B5, G5)",
+    "No headlights or street-lamp lines (A2-H3)"
+   ],
+   "best3": [
+    "City reflections as streaks (C3-F3)",
+    "Port sodium lights (F3-H3)",
+    "Dusk horizon gradient"
+   ],
+   "delta": "Skyline windows brighter and denser with two coloured crown lights and clearer water reflections; port lights more orange. Brightness alone earns nothing; the only named defect reduced is 'uniform white lights' (a few coloured accents). Aircraft identical. Net: slight improvement."
+  },
+  "sunset": {
+   "giveaway": "The sun's reflection is a soft band that stops dead before the bridge (E2-F4) instead of fragmenting into glitter across the foreground ripples.",
+   "scores": {
+    "1": 7,
+    "7": 6,
+    "9": 7,
+    "10": 6,
+    "17": 5,
+    "22": 6,
+    "23": 6,
+    "24": 7,
+    "25": 7,
+    "26": 5,
+    "27": 5,
+    "28": 5,
+    "29": 7
+   },
+   "entries": [
+    {
+     "category": 1,
+     "score": 7,
+     "cells": "C5-F7",
+     "condition": "chase, backlit",
+     "evidence": "Reads; rim light on the wing.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 7,
+     "score": 6,
+     "cells": "C5-F6",
+     "condition": "sunset",
+     "evidence": "Wing top picks up a pink sky reflection with a soft gradient; no micro-variation.",
+     "defect": "Uniform roughness.",
+     "fix": "Detail roughness map.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 9,
+     "score": 7,
+     "cells": "A4-H8",
+     "condition": "sunset",
+     "evidence": "Mauve sky reflection far, darker foreground; single ripple scale.",
+     "defect": "One frequency.",
+     "fix": "Swell.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 6,
+     "cells": "A5-H8",
+     "condition": "still",
+     "evidence": "No swell.",
+     "defect": "n/a",
+     "fix": "Spectrum.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 5,
+     "cells": "H2",
+     "condition": "far",
+     "evidence": "Small band.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 22,
+     "score": 6,
+     "cells": "B3-C3, F4-H5",
+     "condition": "dusk",
+     "evidence": "Headlights/taillights and lamp dots along the causeway.",
+     "defect": "Sprawl unlit at dusk.",
+     "fix": "Dusk lamp turn-on.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 23,
+     "score": 6,
+     "cells": "A3-H4",
+     "condition": "causeway at 500 m, dusk",
+     "evidence": "Cable-stay towers, traffic with lights, lamp dots; towers bare frames without visible cables, deck has no parapet silhouette.",
+     "defect": "Cables and parapets missing.",
+     "fix": "Cable fans, parapet strip.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 7,
+     "cells": "A1-H1",
+     "condition": "sunset",
+     "evidence": "Warm-lit puffs; undersides not brighter than tops as sunset lighting demands; cotton edges.",
+     "defect": "Inverted/flat sunset shading.",
+     "fix": "Light bases from the low sun.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "sunset",
+     "evidence": "Warm gradient, no clipping; sun glow a soft disc.",
+     "defect": "Glow slightly large.",
+     "fix": "Tighter glare.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 5,
+     "cells": "E2-F4, A5-H8",
+     "condition": "low sun on rippled water",
+     "evidence": "Sun path is a broad diffuse band ending before the bridge; no glitter fragments in the foreground where h00 had them; no brown glaze.",
+     "defect": "Truncated specular path (regression).",
+     "fix": "Restore the glitter BRDF with distance-independent microfacet sampling; path should widen toward the camera.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 5,
+     "cells": "B3-G3",
+     "condition": "islands",
+     "evidence": "Dark blobs with thin rims.",
+     "defect": "Two-tone.",
+     "fix": "Shallow ramp.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 5,
+     "cells": "B3-G3",
+     "condition": "mangroves",
+     "evidence": "Flat dark masses.",
+     "defect": "No crowns.",
+     "fix": "Silhouette variation.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 7,
+     "cells": "A2-H5",
+     "condition": "dusk",
+     "evidence": "Traffic lights on the causeway, sprawl, islands, city.",
+     "defect": "No boats.",
+     "fix": "Boat lights.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Truncated sun path with no foreground glitter (E2-F4, A5-H8)",
+    "Flat sunset cloud shading (A1-H1)",
+    "Mangrove blobs (B3-G3)"
+   ],
+   "best3": [
+    "Causeway traffic lights near water preserved (F4-H5)",
+    "Warm exposure without clipping",
+    "Wing picks up the sky colour"
+   ],
+   "delta": "The glitter path that reached the frame bottom in h00 (E2-H8) is replaced by a truncated diffuse band (26 regression); sun now behind a cloud with soft glow (neutral); palette shifted from pink-magenta to mauve-purple (protected palette flag, neutral); clouds have more shading (slight improvement); cars near water preserved. Net: regression in the water sun path."
+  },
+  "cloudy": {
+   "giveaway": "A perfectly elliptical lagoon (C4-D4) and same-size canopy lobes on the island, under a cloud deck that leaves no shadow pattern on the ground.",
+   "scores": {
+    "1": 7,
+    "9": 8,
+    "10": 6,
+    "15": 5,
+    "17": 6,
+    "23": 6,
+    "24": 7,
+    "25": 7,
+    "26": 6,
+    "27": 7,
+    "28": 6,
+    "29": 7
+   },
+   "entries": [
+    {
+     "category": 1,
+     "score": 7,
+     "cells": "C5-F7",
+     "condition": "overcast chase",
+     "evidence": "Reads.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 9,
+     "score": 8,
+     "cells": "A3-H8",
+     "condition": "overcast",
+     "evidence": "Turquoise lagoons, channel darkening E4-H6, depth gradients; protected colour holds under overcast.",
+     "defect": "Uniform ripple scale.",
+     "fix": "Swell.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 6,
+     "cells": "E5-H8",
+     "condition": "still",
+     "evidence": "One scale.",
+     "defect": "n/a",
+     "fix": "Spectrum.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 15,
+     "score": 5,
+     "cells": "E4",
+     "condition": "marina",
+     "evidence": "Specks.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 6,
+     "cells": "D2-E2",
+     "condition": "far",
+     "evidence": "Dense downtown with hierarchy; flat tops.",
+     "defect": "No crowns at range.",
+     "fix": "Far LOD.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 23,
+     "score": 6,
+     "cells": "A4-B5, D3-F3",
+     "condition": "causeways at 500 m",
+     "evidence": "Parapets, piers, car dots; cable towers bare; no lamp rows or gantries; left causeway lands on the island at A4 without abutment.",
+     "defect": "No abutment/embankment.",
+     "fix": "Abutment and embankment meshes.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 7,
+     "cells": "A1-H1",
+     "condition": "broken deck",
+     "evidence": "Grey undersides and brighter gaps; uniform lobe size; no ragged fringes; no matching shadow pattern below.",
+     "defect": "No ground shadows, uniform lobes.",
+     "fix": "Cloud shadow projection; multi-scale erosion.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "overcast",
+     "evidence": "Soft light; the aircraft's white wing F5-G5 very bright for overcast.",
+     "defect": "Aircraft exposure not tied to sky.",
+     "fix": "Probe from the actual sky.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 6,
+     "cells": "E5-H8",
+     "condition": "overcast",
+     "evidence": "Uniform grey-blue reflection.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 7,
+     "cells": "A7-D8, C4-D4, A5-A6",
+     "condition": "60-500 m",
+     "evidence": "Beach with a shorebreak foam line at C8-D8 and shallow gradient; sand-to-vegetation edge crisp at B7-C7; bare sand blotches at A5-A6; lagoon C4-D4 a perfect ellipse.",
+     "defect": "Perfect ellipse and blotches.",
+     "fix": "Noise the lagoon outline; blend blotches.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 6,
+     "cells": "A6-D7",
+     "condition": "island canopy",
+     "evidence": "Darker denser canopy with crowns and palms; one lobe size, no emergents, no trunks.",
+     "defect": "Uniform lobes.",
+     "fix": "Emergent trees, trunk visibility at edges.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 7,
+     "cells": "A3-H8",
+     "condition": "keys",
+     "evidence": "Marina, causeways with traffic, island roads, downtown.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Elliptical lagoon (C4-D4)",
+    "No cloud shadows under a broken deck (A3-H8)",
+    "Uniform canopy lobes (A6-D7)"
+   ],
+   "best3": [
+    "Turquoise lagoons under overcast (A3-H8)",
+    "Shorebreak foam line (C8-D8)",
+    "Broken deck with grey undersides (A1-H1)"
+   ],
+   "delta": "Deck from a flat white stratus sheet to a broken cumulus deck with grey undersides (24 improvement: flat opaque base reduced); island canopy darker with crowns and palms (28 improvement); foam line clearer (27); water slightly muted but turquoise (neutral). Net: improvement."
+  },
+  "highway_bridge": {
+   "giveaway": "A 400 m causeway with one lamp post, no expansion joints or reflectors, and a hard-edged black shadow on the water that shows none of its piers.",
+   "scores": {
+    "1": 7,
+    "9": 8,
+    "10": 6,
+    "17": 6,
+    "22": 4,
+    "23": 6,
+    "24": 7,
+    "25": 6,
+    "26": 6,
+    "27": 5,
+    "28": 5,
+    "29": 7
+   },
+   "entries": [
+    {
+     "category": 1,
+     "score": 7,
+     "cells": "C5-F7",
+     "condition": "chase",
+     "evidence": "Reads.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 9,
+     "score": 8,
+     "cells": "A2-H8",
+     "condition": "noon",
+     "evidence": "Turquoise with depth-driven lighter patches; far field flat.",
+     "defect": "Flat far field.",
+     "fix": "Far glint.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 6,
+     "cells": "A4-D8",
+     "condition": "still",
+     "evidence": "One scale.",
+     "defect": "n/a",
+     "fix": "Spectrum.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 6,
+     "cells": "E2-H2",
+     "condition": "far",
+     "evidence": "Flat-topped row.",
+     "defect": "No crowns.",
+     "fix": "Far LOD.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 22,
+     "score": 4,
+     "cells": "E4-H8",
+     "condition": "bridge at 45 m",
+     "evidence": "One pole at F4 on 400 m of deck; no pylon aviation light.",
+     "defect": "Lamp spacing absent.",
+     "fix": "Poles every 40-50 m, red pylon light.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 23,
+     "score": 6,
+     "cells": "E1-H8",
+     "condition": "45 m flyover",
+     "evidence": "Six lanes with dashes and shoulder lines, median barrier, edge parapets, piers, cable fans, traffic. Missing: expansion joints, reflectors/delineators, sign gantry, tyre wear on a single flat grey deck, parapet top rail and scuppers.",
+     "defect": "Deck reads as a clean flat extrusion.",
+     "fix": "Joint lines every 30 m, delineators on barriers, wear mask in wheel paths, top rail, gantry before the pylon.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 7,
+     "cells": "A1-H1",
+     "condition": "noon",
+     "evidence": "Cumulus lobes; no shadows on water.",
+     "defect": "No cloud shadows.",
+     "fix": "Projection.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 6,
+     "cells": "A4-D7",
+     "condition": "noon",
+     "evidence": "Causeway shadow on water is a hard-edged, uniformly dark band without pier shadows; too dark for a surface still reflecting sky.",
+     "defect": "Shadow on water too dark and structureless.",
+     "fix": "Sun-only shadow; include pier casters.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 6,
+     "cells": "E6-F8",
+     "condition": "calm around piers",
+     "evidence": "No reflection of bright piers or parapet.",
+     "defect": "Missing local reflection.",
+     "fix": "Planar/SSR.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 5,
+     "cells": "D2-E3",
+     "condition": "island",
+     "evidence": "Crisp edge.",
+     "defect": "No gradient.",
+     "fix": "Shallow ramp.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 5,
+     "cells": "D2-E3",
+     "condition": "island",
+     "evidence": "Lumpy uniform canopy.",
+     "defect": "No crowns.",
+     "fix": "Variation.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 7,
+     "cells": "E2-H8",
+     "condition": "bay",
+     "evidence": "Traffic, port, skyline, channel buoys F4/G3.",
+     "defect": "No boats.",
+     "fix": "Traffic.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "One lamp post on 400 m of bridge (F4)",
+    "No joints, reflectors, gantry, wear on the deck (E4-H8)",
+    "Black structureless causeway shadow (A4-D7)"
+   ],
+   "best3": [
+    "Lane/shoulder markings, median and parapets read (E4-H8)",
+    "Cable fans on the pylon (E1-F3)",
+    "Turquoise with depth patches (A2-H8)"
+   ],
+   "delta": "Near-identical to h00 (highway branch skipped on merge conflict): water fractionally deeper blue, shadow marginally less black, cars near water preserved. Neutral."
+  },
+  "highway_aerial": {
+   "giveaway": "The Garza canopy is a single-green mat of same-size crowns around a perfectly elliptical lagoon, and the highway lies on the island as a flat grey ribbon without verges or embankment.",
+   "scores": {
+    "1": 7,
+    "9": 8,
+    "10": 6,
+    "14": 5,
+    "15": 5,
+    "17": 6,
+    "23": 5,
+    "24": 8,
+    "25": 7,
+    "27": 7,
+    "28": 6,
+    "29": 7
+   },
+   "entries": [
+    {
+     "category": 1,
+     "score": 7,
+     "cells": "F5-H6",
+     "condition": "side profile",
+     "evidence": "Long thin wing, reads as the type.",
+     "defect": "Plank wing.",
+     "fix": "Airfoil thickness.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 9,
+     "score": 8,
+     "cells": "A3-H8",
+     "condition": "noon, 400 m",
+     "evidence": "Turquoise shallows, sandbars, seagrass patches, channel darkening; protected colour intact.",
+     "defect": "One ripple scale.",
+     "fix": "Swell.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 6,
+     "cells": "A5-H8",
+     "condition": "far",
+     "evidence": "One scale.",
+     "defect": "n/a",
+     "fix": "Spectrum.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 14,
+     "score": 5,
+     "cells": "E8",
+     "condition": "boat at speed, 400 m",
+     "evidence": "Compact V wake with a foam trail; arms short, foam a uniform white patch, no transverse waves, ends abruptly ~100 m astern.",
+     "defect": "No Kelvin structure or persistence.",
+     "fix": "Kelvin arms + transverse waves, foam decay over 30-60 s.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 15,
+     "score": 5,
+     "cells": "E8",
+     "condition": "far",
+     "evidence": "Speck.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 6,
+     "cells": "B2-D2, F2-H2",
+     "condition": "far",
+     "evidence": "Two skylines with height variety; flat tops.",
+     "defect": "No crowns at range.",
+     "fix": "Far LOD.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 23,
+     "score": 5,
+     "cells": "C4-D4, E3-F3, A5-B5",
+     "condition": "400 m",
+     "evidence": "Thin grey ribbon with car dots; on-island section has no verges, shoulders or embankment; bare cable towers; no gantries or poles resolve; left causeway has no parapet contrast.",
+     "defect": "Road as a line on the canopy.",
+     "fix": "Verge/shoulder strips, embankment mesh, pole rows in LOD.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 24,
+     "score": 8,
+     "cells": "A1-H1",
+     "condition": "noon",
+     "evidence": "Cumulus with shading and multi-scale lobes, believable bases. Differences: no shadows on the water, cotton-soft edges.",
+     "defect": "No cloud shadows.",
+     "fix": "Projection.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "noon",
+     "evidence": "Beach a muted tan, canopy dark, no clipping; no cloud shadows.",
+     "defect": "n/a",
+     "fix": "Cloud shadows.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 7,
+     "cells": "B4-E7",
+     "condition": "island rim",
+     "evidence": "Sand rim with shallow ring, faint foam at C7-E7; crisp sand-to-canopy edge, flat tan without wet/dry gradient, identical rim width on every islet A3-H4.",
+     "defect": "Uniform rim, no gradient.",
+     "fix": "Wet band, scrub transition, rim-width variation.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 6,
+     "cells": "B4-E7",
+     "condition": "canopy from 400 m",
+     "evidence": "Individual crowns with lighter tops, denser than h00; one lobe size, no emergents, single green, small islets uniform blobs.",
+     "defect": "Single-species mat.",
+     "fix": "Species colour mix, emergent palms/mahogany.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 7,
+     "cells": "A2-H8",
+     "condition": "bay",
+     "evidence": "Causeway traffic, boat, marina, two skylines; islets repeat forms.",
+     "defect": "Repeated islets.",
+     "fix": "Shape variation.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Road on the island without verges/embankment (C4-D4)",
+    "Single-green canopy mat (B4-E7)",
+    "Elliptical lagoon (D4-D5)"
+   ],
+   "best3": [
+    "Water colour and sandbars (A3-H8)",
+    "Cumulus with shading (A1-H1)",
+    "Compact boat wake replaces the long streak (E8)"
+   ],
+   "delta": "Canopy darker/denser with visible crowns (28 improvement); beach from white-pink to muted tan (neutral); boat wake from a long straight white streak to a compact V (14 improvement: opaque streak reduced); water slightly deeper blue with turquoise preserved; clouds more shaded (24 improvement). Net: improvement."
+  },
+  "highway_200m": {
+   "giveaway": "A four-lane arterial drawn as a flat grey ribbon with dashes across khaki lots, with no lamp posts, signals or turn lanes at any junction, beside blank-roofed boxes.",
+   "scores": {
+    "18": 5,
+    "19": 5,
+    "20": 3,
+    "21": 4,
+    "22": 3,
+    "23": 4,
+    "25": 7,
+    "28": 6,
+    "29": 6
+   },
+   "entries": [
+    {
+     "category": 18,
+     "score": 5,
+     "cells": "E2-F4, G6-H7",
+     "condition": "200 m",
+     "evidence": "Apartment blocks G6-H7 have window grids; commercial boxes E2-F4 blank slabs; houses tiny boxes.",
+     "defect": "Blank commercial boxes.",
+     "fix": "Dock doors, signage, parapets.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 19,
+     "score": 5,
+     "cells": "E2-H7",
+     "condition": "noon",
+     "evidence": "Flat colours.",
+     "defect": "No material read.",
+     "fix": "Roof/wall separation.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 20,
+     "score": 3,
+     "cells": "E2-F3, F4-G4, G6-H7",
+     "condition": "200 m",
+     "evidence": "Every roof a blank slab.",
+     "defect": "Blank roofs (user priority 3).",
+     "fix": "Rooftop kit.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 21,
+     "score": 4,
+     "cells": "A2-H8",
+     "condition": "suburban grid",
+     "evidence": "Side streets are pale uniform lines with no markings, kerbs, driveways or sidewalks.",
+     "defect": "Streets as lines.",
+     "fix": "Kerb/sidewalk strips, driveways.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 22,
+     "score": 3,
+     "cells": "D2-H8",
+     "condition": "200 m",
+     "evidence": "No lamp posts on arterial or side streets.",
+     "defect": "Missing.",
+     "fix": "Pole rows.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 23,
+     "score": 4,
+     "cells": "D2-H8",
+     "condition": "arterial at 200 m",
+     "evidence": "Flat grey ribbon with dashes and a few cars; no median, turn lanes, signals, signage, lamp posts, shoulder lines or drainage; verges same khaki as lots; junctions without markings or kerb radii.",
+     "defect": "Arterial without any furniture (user priority 1).",
+     "fix": "Median, turn pockets, signal heads at junctions, poles, shoulder lines, mown-verge strip.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "noon",
+     "evidence": "Long shadows; khaki not blown.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 6,
+     "cells": "B2-E8, A4-B6",
+     "condition": "forest band and lot trees",
+     "evidence": "Varied greens, palm fronds, size variation, grounded shadows; crowns all lobed balls, no emergents or trunks; band edge a hard line on khaki; lot trees evenly scattered.",
+     "defect": "Broccoli mat with a hard edge.",
+     "fix": "Emergents, scrub edge, clustered placement.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 6,
+     "cells": "A2-H8",
+     "condition": "suburb",
+     "evidence": "Houses, lots, preserve, commercial boxes; lots empty khaki without driveways, pools, fences; almost no traffic.",
+     "defect": "Empty lots.",
+     "fix": "Lot props.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Arterial with no furniture at any junction (D2-H8)",
+    "Blank roofs on every box (E2-H7)",
+    "Side streets as pale lines (A2-H8)"
+   ],
+   "best3": [
+    "Canopy tone variety and palm fronds (B2-E8)",
+    "Grounded tree shadows",
+    "Khaki ground not blown"
+   ],
+   "delta": "Ground from pale yellow-green to khaki/olive (neutral); canopy darker with more colour variety and palm fronds (28 improvement); buildings along the arterial changed by the generator (neutral); roads unchanged (highway branch skipped). Net: slight improvement, highway unchanged."
+  },
+  "foliage_suburb": {
+   "giveaway": "Every house is a flat-roofed pastel box centred on an empty khaki lot with no driveway, and the grove is a solid mass of lumpy spheres with cut-out edges.",
+   "scores": {
+    "9": 6,
+    "17": 5,
+    "18": 4,
+    "19": 4,
+    "20": 3,
+    "21": 6,
+    "22": 6,
+    "25": 7,
+    "28": 6,
+    "29": 6
+   },
+   "entries": [
+    {
+     "category": 9,
+     "score": 6,
+     "cells": "C1-D1",
+     "condition": "lake",
+     "evidence": "Flat blue with a light rim.",
+     "defect": "Flat.",
+     "fix": "Shore ramp.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 5,
+     "cells": "G1-H1",
+     "condition": "far",
+     "evidence": "Flat tops.",
+     "defect": "n/a",
+     "fix": "Far LOD.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 18,
+     "score": 4,
+     "cells": "A3-H5",
+     "condition": "130 m",
+     "evidence": "Houses are boxes with identical footprints in rows; no garages, porches, driveways.",
+     "defect": "Clone houses.",
+     "fix": "3-4 house kits with garages/porches, rotation and setback jitter.",
+     "hardFailure": true,
+     "kind": "visual"
+    },
+    {
+     "category": 19,
+     "score": 4,
+     "cells": "A3-H5",
+     "condition": "noon",
+     "evidence": "Pastel flat walls, single-colour roofs.",
+     "defect": "Flat materials.",
+     "fix": "Shingle/tile roofs, stucco.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 20,
+     "score": 3,
+     "cells": "A3-H5, A7-B7",
+     "condition": "130 m",
+     "evidence": "House roofs flat pastel slabs; commercial box A7-B7 blank.",
+     "defect": "Blank roofs (user priority 3).",
+     "fix": "Pitched roofs with ridges, vents, AC units.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 21,
+     "score": 6,
+     "cells": "A7-H8, D2-D8",
+     "condition": "130 m",
+     "evidence": "Asphalt with yellow centre and white edge lines, kerbs, junction lane lines at D7; no stop lines, crosswalks, driveways, sidewalks, manholes.",
+     "defect": "No driveways/sidewalks.",
+     "fix": "Driveway and sidewalk strips.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 22,
+     "score": 6,
+     "cells": "A6, B7, E6, F7",
+     "condition": "130 m",
+     "evidence": "Lamp posts at regular spacing along streets; none at the D7 junction as signals.",
+     "defect": "No junction signals.",
+     "fix": "Signal heads at arterial junctions.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "noon",
+     "evidence": "Long shadows, khaki not blown.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 6,
+     "cells": "D5-G7, B6-C6",
+     "condition": "130 m",
+     "evidence": "Varied greens (olive/yellow/dark), sizes, palm fronds, grounded shadows; crowns lumpy spheres with flat cut-out edges at E5-F5, no trunks at the grove edge D6, no understory or gaps; lawns bare of street trees.",
+     "defect": "Cut-out crown edges, no trunks.",
+     "fix": "Trunk geometry visible at edges; crown normals; understory scatter.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 6,
+     "cells": "A3-H8",
+     "condition": "suburb",
+     "evidence": "Pools, lamp posts, lake, house colour variety; empty lots, no cars, fences, driveways, sidewalks.",
+     "defect": "Empty lots, no traffic.",
+     "fix": "Lot props, parked cars.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Clone flat-roofed houses on empty lots (A3-H5)",
+    "Cut-out crown edges at the grove (E5-F5)",
+    "No driveways/sidewalks (A7-H8)"
+   ],
+   "best3": [
+    "Lamp posts along streets (A6, B7, E6, F7)",
+    "Centre/edge lines and kerbs (A7-H8)",
+    "Canopy tone variety (D5-G7)"
+   ],
+   "delta": "Streets from pale grey with faint dashes to asphalt with yellow centre/white edge lines and kerbs (21 improvement); lamp posts appear (22 improvement, previously none); ground from pale yellow-green to olive/khaki (neutral); canopy greens more varied with palm fronds (28 improvement); houses unchanged. Net: improvement."
+  },
+  "foliage_park": {
+   "giveaway": "The park's edge crowns at C5-D6 are flat jagged cut-outs with a dry yellow-olive tint, and every building around it wears a blank slab roof.",
+   "scores": {
+    "17": 5,
+    "18": 4,
+    "19": 4,
+    "20": 3,
+    "21": 5,
+    "22": 5,
+    "25": 7,
+    "28": 5,
+    "29": 6
+   },
+   "entries": [
+    {
+     "category": 17,
+     "score": 5,
+     "cells": "F1-H1",
+     "condition": "far",
+     "evidence": "Flat tops.",
+     "defect": "n/a",
+     "fix": "Far LOD.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 18,
+     "score": 4,
+     "cells": "C2-D2, G5-H5, H7",
+     "condition": "130 m",
+     "evidence": "Apartment boxes with grids; white boxes blank; houses boxes.",
+     "defect": "Box massing.",
+     "fix": "Kits.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 19,
+     "score": 4,
+     "cells": "C2-H7",
+     "condition": "noon",
+     "evidence": "Flat colours.",
+     "defect": "n/a",
+     "fix": "Materials.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 20,
+     "score": 3,
+     "cells": "C2-D2, G5-H5, H7",
+     "condition": "130 m",
+     "evidence": "Blank slab roofs on every box.",
+     "defect": "Blank roofs (user priority 3).",
+     "fix": "Rooftop kit.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 21,
+     "score": 5,
+     "cells": "D2-E8, D4",
+     "condition": "130 m",
+     "evidence": "Asphalt with centre/edge lines; junction lane lines at D4; no sidewalks, driveways, stop lines; park paths at F6-H7 pixel-thin.",
+     "defect": "Paths barely read.",
+     "fix": "2 m path strips with edge contrast.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 22,
+     "score": 5,
+     "cells": "E7, D6",
+     "condition": "130 m",
+     "evidence": "A few poles; sparse.",
+     "defect": "Sparse.",
+     "fix": "Pole rows.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "noon",
+     "evidence": "Long shadows; olive ground not blown.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 5,
+     "cells": "A5-D8, C5-D6, E6, G6",
+     "condition": "130 m",
+     "evidence": "Tone variety and palm fronds present; park edge crowns C5-D6 are flat sprite cut-outs with jagged silhouettes; canopy a lumpy mat without emergents or trunks; yellow-olive tint reads as dry scrub; lot trees E6/G6 single spheres with identical shadow blobs.",
+     "defect": "Sprite cut-outs and dry tint.",
+     "fix": "Crown meshes with normals at LOD1, tint toward tropical hardwood green, trunk geometry.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 6,
+     "cells": "A1-H8",
+     "condition": "suburb",
+     "evidence": "Other aircraft on approach at D1 (protected, preserved); houses, apartments, park; empty lots, no cars on D3-E8.",
+     "defect": "No traffic.",
+     "fix": "Cars.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Sprite cut-out crowns at the park edge (C5-D6)",
+    "Blank roofs (C2-D2, G5-H5, H7)",
+    "Empty lots and road (D3-E8)"
+   ],
+   "best3": [
+    "Other aircraft on approach preserved (D1)",
+    "Centre/edge lines on the road (D2-E8)",
+    "Canopy tone variety"
+   ],
+   "delta": "Ground from pale yellow to olive (neutral); canopy from bright uniform green to varied olive/dark tones (28: uniform green reduced, but a muddy dry tint appears and edge cut-outs are more visible against the darker mass); roads gain lines and a few poles (21/22 improvement); other aircraft preserved. Net: mixed to slight improvement."
+  },
+  "shore_beach": {
+   "giveaway": "The canopy meets the sand in a hard straight line with no trunks, scrub or wrack line, and the water's glints are a uniform fine speckle rather than a sun path.",
+   "scores": {
+    "9": 8,
+    "10": 6,
+    "17": 6,
+    "23": 5,
+    "25": 7,
+    "26": 6,
+    "27": 7,
+    "28": 6,
+    "29": 6
+   },
+   "entries": [
+    {
+     "category": 9,
+     "score": 8,
+     "cells": "A3-H8",
+     "condition": "60 m, noon",
+     "evidence": "Cobalt-to-turquoise gradient with sandbar brightening at E4-G5; protected colour intact; fine white glint speckle at E4-H5 reads as specular aliasing.",
+     "defect": "Glint speckle.",
+     "fix": "Filter the specular normal (LEAN/Toksvig) at distance.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 10,
+     "score": 6,
+     "cells": "A6-D8",
+     "condition": "still",
+     "evidence": "One scale; diagonal stretched pattern at A6-D8.",
+     "defect": "Stretched ripple.",
+     "fix": "Isotropic normal tiling.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 17,
+     "score": 6,
+     "cells": "D1-F1",
+     "condition": "far",
+     "evidence": "Silhouette with spires; mostly flat tops.",
+     "defect": "n/a",
+     "fix": "Far LOD.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 23,
+     "score": 5,
+     "cells": "B2-E2, H1-H2",
+     "condition": "far",
+     "evidence": "Deck line with cars; bare tower.",
+     "defect": "No parapets/lights.",
+     "fix": "LOD strips.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 25,
+     "score": 7,
+     "cells": "A1-H8",
+     "condition": "noon",
+     "evidence": "No clipping; sand tan; haze plausible.",
+     "defect": "n/a",
+     "fix": "n/a",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 26,
+     "score": 6,
+     "cells": "E4-H5, F4-H5",
+     "condition": "noon",
+     "evidence": "Uniform fine speckle rather than a directional path; no tree reflection on calm shallows.",
+     "defect": "No directional glint.",
+     "fix": "Sun-direction-weighted glitter.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 27,
+     "score": 7,
+     "cells": "F3-H4",
+     "condition": "60 m",
+     "evidence": "Deep-shallow-wet-dry sequence with a visible wet band; only a faint foam line at G4-H4; no wrack line, sand texture; canopy meets sand in a hard line at F2-H3.",
+     "defect": "Hard canopy line, no foam variation.",
+     "fix": "Scrub/trunk transition, variable foam edge, wrack decals.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 28,
+     "score": 6,
+     "cells": "E2-H3",
+     "condition": "60 m",
+     "evidence": "Palms with fronds above a dense broadleaf canopy, tone variation; lumpy spheres, flat crown sprites at G3, no trunks visible at the beach edge.",
+     "defect": "No trunks at the edge.",
+     "fix": "Trunk geometry at LOD0/1.",
+     "hardFailure": false,
+     "kind": "visual"
+    },
+    {
+     "category": 29,
+     "score": 6,
+     "cells": "A2-H4",
+     "condition": "shore",
+     "evidence": "Buoy A4, causeway traffic, skyline; empty beach.",
+     "defect": "Empty beach.",
+     "fix": "Props.",
+     "hardFailure": false,
+     "kind": "visual"
+    }
+   ],
+   "worst3": [
+    "Hard canopy-to-sand line without trunks (F2-H3)",
+    "Glint speckle / no directional path (E4-H5)",
+    "Faint uniform foam edge (G4-H4)"
+   ],
+   "best3": [
+    "Cobalt-to-turquoise gradient with sandbar (A3-H8)",
+    "Wet-sand band (F3-H4)",
+    "Palms above the canopy (F2-H3)"
+   ],
+   "delta": "The diagonal white streak artifact across the foreground (h00 D8-H7) is gone (improvement); deep water shifted from cyan to cobalt at left while turquoise shallows remain (neutral, palette flag); wet-sand band appears (27 improvement); canopy darker with palms standing out (28 improvement); sand from white to tan (neutral). Net: improvement."
+  }
+ }
+}

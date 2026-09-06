@@ -1,0 +1,15 @@
+base: 7ec36aaa (cursor/vice-city-aerial-8213)
+skip acsplit: nothing new
+skip waterrender: nothing new
+merged waterphys: 80e763b2 Report: verification state (seen / measured / queued) and the self-score caption tied to f
+skip boats: no remote branch
+skip clouds4: nothing new
+skip light3: nothing new
+merged street: bcf7ffa4 Plaza beds: the lawn and mulch noise (0.9-1.7/m) fades to its mean with the pixel footprin
+skip highway: nothing new
+skip facade3: nothing new
+skip veg5: nothing new
+skip terrain5: nothing new
+skip acgeo: nothing new
+build: 5b3fcb77 from /home/ubuntu/wt-integration
+cdn: pinned data.json serves h10

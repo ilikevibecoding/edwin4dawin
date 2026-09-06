@@ -1,0 +1,473 @@
+{
+  "critic": "visual-1",
+  "tag": "iter10",
+  "frames": {
+    "aerial-a": {
+      "giveaway": "Every island is ringed by the same constant-width bright-white foam band and covered in identical dark-green tree blobs, while the water has no sun glitter at all and the cumulus sit on flat opaque undersides.",
+      "scores": { "1": 6, "2": 5, "5": 5, "7": 5, "9": 6, "10": 4, "13": 3, "14": 4, "15": 3, "17": 4, "18": 3, "19": 3, "23": 4, "24": 4, "25": 6, "26": 4, "27": 3, "28": 3, "29": 4, "30": 6 },
+      "entries": [
+        { "category": 13, "score": 3, "cells": "C5-E8, B4-C4, G5-H5", "condition": "1256 ft, noon, chase camera matching reference_a", "evidence": "Each island coastline carries a continuous white band of constant width and brightness that follows the shoreline exactly, including the small keys at B4 and H5.", "defect": "Uniform foam ring: no density variation, no broken edges, no dependence on wave exposure or beach slope.", "fix": "Drive shoreline foam from wave-shore intersection noise and depth slope; break it into patches with variable width, opacity and lifetime and remove it from lee shores.", "hardFailure": true, "kind": "visual" },
+        { "category": 28, "score": 3, "cells": "C5-E8, A4-B5, E3-F3", "condition": "1256 ft, noon", "evidence": "The island canopy is a field of same-size, same-hue dark-green spheres with no trunks, no species mix, no shading between crowns and no shadow on the ground.", "defect": "Clone trees at uniform spacing; canopy reads as broccoli texture, not vegetation.", "fix": "Mix 4-6 species with size variation and clustering noise, add crown self-shadow and ground contact shadows, expose trunks at canopy edges and along the beach.", "hardFailure": true, "kind": "visual" },
+        { "category": 24, "score": 4, "cells": "A1-H2", "condition": "noon, cumulus field", "evidence": "Clouds are smooth cotton lobes; the undersides at D1-E1 and G1-H2 are dead level grey planes with no wisps or erosion; the reference shows ragged multi-scale bases.", "defect": "Flat opaque cloud bases with no internal volume or erosion.", "fix": "Add a second erosion noise octave at the base, height-fade density so the base is ragged, and a single-scatter silver lining term toward the sun.", "hardFailure": true, "kind": "visual" },
+        { "category": 26, "score": 4, "cells": "A4-H8", "condition": "noon, sun high behind camera-left", "evidence": "The whole bay is a matte turquoise gradient; there is no specular glitter path, no cloud reflections and the aircraft casts no reflection under G7.", "defect": "Missing specular sun path and reflection of the sky/aircraft; water reads as a coloured surface, not a reflective one.", "fix": "Add a GGX specular term with wave-slope-driven glitter and a planar/SSR reflection of the aircraft and clouds, attenuated by Fresnel.", "hardFailure": false, "kind": "visual" },
+        { "category": 17, "score": 4, "cells": "A3-D3, G3-H3", "condition": "1256 ft, city 4-6 km away", "evidence": "Downtown is a row of pale boxes of similar height with a flat top edge; there are no masts, spires, mechanical floors or roofline steps; the reference skyline has a clear hierarchy.", "defect": "Skyline reads as differently sized rectangles without hierarchy or landmarks.", "fix": "Add 3-4 landmark silhouettes (spire, crown, setback tower), rooftop masts and mechanical floors, and vary the pale colour with darker glass towers.", "hardFailure": false, "kind": "visual" },
+        { "category": 18, "score": 3, "cells": "A3-D3, G3-H3", "condition": "1256 ft", "evidence": "Buildings are flat-shaded extrusions with a uniform window tint; no ledges or facade depth are visible even on the nearest blocks at C3.", "defect": "No facade depth or parallax at any distance.", "fix": "Add window inset normal maps and floor ledges to the mid-LOD, plus a few balcony racks on the beachfront towers.", "hardFailure": false, "kind": "visual" },
+        { "category": 19, "score": 3, "cells": "A3-D3", "condition": "1256 ft", "evidence": "All facades are the same warm off-white; glass, concrete and stone are indistinguishable.", "defect": "One material for the entire city.", "fix": "Introduce glass curtain-wall towers with sky reflection, concrete with weathering streaks, and coloured pastel blocks at the beachfront.", "hardFailure": false, "kind": "visual" },
+        { "category": 23, "score": 4, "cells": "A6-B6, C4-E4", "condition": "1256 ft", "evidence": "The causeway at A6-B6 is a flat grey ribbon with no railings, lamp posts or shoulders; the bridge at C4-E4 has plain box pylons with straight-line cable fans forming single triangles.", "defect": "Highway reads as a road-coloured strip; no furniture legible from flying altitude.", "fix": "Add guardrail ribbons, lamp post rows at 40 m spacing, edge barriers and a slightly raised deck edge; give the pylons real A/H shapes with cable anchor blocks.", "hardFailure": false, "kind": "visual" },
+        { "category": 14, "score": 4, "cells": "E8-F8", "condition": "speedboat under way", "evidence": "The boat at E8 trails a straight, bright, opaque white V with hard edges and no fading.", "defect": "Opaque white wake streak with no Kelvin arms, stern turbulence or dissipation.", "fix": "Replace the streak with a Kelvin-pattern wake texture that fades in alpha and width over time and gets displaced by the wave field.", "hardFailure": true, "kind": "visual" },
+        { "category": 15, "score": 3, "cells": "E8", "condition": "speedboat at ~600 m", "evidence": "The hull is a white wedge with no windshield, seats or outboard visible.", "defect": "Placeholder boat geometry.", "fix": "Provide a 2k-tri speedboat with windshield, seats, outboard and railings for the mid LOD.", "hardFailure": false, "kind": "visual" },
+        { "category": 1, "score": 6, "cells": "G6-H7", "condition": "chase, banked left", "evidence": "The high-wing float plane reads correctly as a type; the wing is very thin in section and the tail is small relative to the fuselage.", "defect": "Wing slab too thin, tail undersized.", "fix": "Thicken the wing airfoil to about 12 percent chord and scale the vertical fin up 15 percent.", "hardFailure": false, "kind": "visual" },
+        { "category": 2, "score": 5, "cells": "G6-H7", "condition": "chase", "evidence": "Float struts and wing struts are present; no control-surface gaps or panel lines are legible at this distance.", "defect": "Mid-LOD lacks any surface detail.", "fix": "Bake panel lines and control-surface gaps into the mid-LOD normal map.", "hardFailure": false, "kind": "visual" },
+        { "category": 5, "score": 5, "cells": "F6-H6", "condition": "chase", "evidence": "Wing is a uniform white slab with yellow tips; the trailing edge is as thick as the leading edge.", "defect": "No airfoil taper; ailerons not distinguishable.", "fix": "Model a tapered trailing edge and aileron/flap hinge gaps.", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 5, "cells": "G6-H7", "condition": "noon sun", "evidence": "The white and yellow paint are uniformly glossy with a plastic highlight and no panel-to-panel variation.", "defect": "Uniform roughness over the whole airframe.", "fix": "Add a roughness map with panel variation, subtle dirt behind the exhaust and on the float tops.", "hardFailure": false, "kind": "visual" },
+        { "category": 9, "score": 6, "cells": "A4-H8", "condition": "noon", "evidence": "Deep-to-shallow turquoise gradient around the island is attractive and close to the reference palette; surface structure is a single-scale noise with no swell.", "defect": "No visible wave structure at altitude.", "fix": "Add a long-wavelength swell normal layer and wind-streak anisotropy.", "hardFailure": false, "kind": "visual" },
+        { "category": 10, "score": 4, "cells": "A4-H8", "condition": "noon, light wind", "evidence": "Surface shows one frequency of ripples everywhere; no directional bias, no swell lines approaching the shore.", "defect": "Single-frequency wave field.", "fix": "Sum at least three spectra (swell, wind sea, capillary) with a dominant direction toward the beach.", "hardFailure": false, "kind": "visual" },
+        { "category": 27, "score": 3, "cells": "C7-E8, B4, D5-E5", "condition": "1256 ft", "evidence": "Sand is a flat cream band that ends in a straight line at both the water and the vegetation; no wet sand, no shallow-water colour ramp within the beach width.", "defect": "Hard texture boundaries on both sides of the beach.", "fix": "Blend sand into water with a wet-sand darkening band and into vegetation with sparse grass scatter; drive the shallow water colour from depth.", "hardFailure": false, "kind": "visual" },
+        { "category": 25, "score": 6, "cells": "A1-H8", "condition": "noon, matching reference", "evidence": "Exposure, sky gradient and horizon haze match the reference well; however no cast shadows exist under trees or buildings, so the island reads flat.", "defect": "Missing shadows on the terrain and vegetation.", "fix": "Enable shadow casting for the canopy impostors and building LODs in the far cascade.", "hardFailure": false, "kind": "visual" },
+        { "category": 29, "score": 4, "cells": "A3-H8", "condition": "1256 ft", "evidence": "One boat, one house cluster at D5-E5 and no piers, moorings, roads or people on the islands.", "defect": "World feels empty at meso scale.", "fix": "Scatter docks, moored boats, a road loop and a few roofs on the large island.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 6, "cells": "n/a", "condition": "still and 12-frame flight capture", "evidence": "42 fps average, 17.6 fps minimum, 289 draw calls, 1.10 M triangles, 343 MB heap, no console errors.", "defect": "1 percent low is under 20 fps.", "fix": "Reduce shadow cascade triangle count for far vegetation impostors.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Uniform white foam ring around every island (C5-E8, B4, H5)",
+        "Clone broccoli trees over the entire island canopy (C5-E8)",
+        "No specular sun glitter or reflection on the bay (A4-H8)"
+      ],
+      "best3": [
+        "Turquoise depth gradient around the island matches the reference palette (C5-F8)",
+        "Composition, altitude and haze match reference_a closely (A3-H8)",
+        "Aircraft silhouette and float rig are legible from the chase position (G6-H7)"
+      ]
+    },
+    "cockpit-city": {
+      "giveaway": "The pilot's hands on the yoke are smooth tan mitts with fused fingers and the instrument panel is a flat decal whose digits float without bezels, under a headliner that is one uniform beige texture.",
+      "scores": { "6": 4, "7": 4, "9": 6, "17": 4, "18": 3, "24": 4, "25": 5, "26": 4, "27": 4, "28": 4, "29": 4, "30": 6 },
+      "entries": [
+        { "category": 6, "score": 4, "cells": "D8, F8, D6-G7, A1-H2", "condition": "cockpit camera, 1050 ft, approaching downtown", "evidence": "Hands at D8 and F8 are featureless tan blobs; gauges at D6-E7 are flat textures with no bezel depth or glass; the MFD digits at F6-F7 float without backlight; the headliner A1-H2 is a flat beige with repeating ribs.", "defect": "Cockpit lacks depth, material response and anatomy in the pilot.", "fix": "Model gauge bezels and recessed dials with glass, add a real hand mesh with separated fingers gripping the yoke, and texture the headliner with fabric normal and stitching.", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 4, "cells": "A3-C4, G2-H3", "condition": "interior", "evidence": "A-pillars and the overhead panel at G2-H3 are flat dark grey with no wear, screws or texture.", "defect": "Uniform interior materials.", "fix": "Add plastic grain, screw heads, and scuffing on the pillars and overhead console.", "hardFailure": false, "kind": "visual" },
+        { "category": 25, "score": 5, "cells": "C4-E5, D3-D4", "condition": "noon, sun ahead-left", "evidence": "The windshield at D3-D4 shows a soft white streak that reads as a painted flare; the outside is washed out while the panel is evenly lit with no interior shadows.", "defect": "Fake flare and no interior/exterior exposure relation.", "fix": "Replace the streak with a physically placed sun glare on the glass and let the panel receive the sun through the windshield.", "hardFailure": false, "kind": "visual" },
+        { "category": 17, "score": 4, "cells": "C5-E5", "condition": "downtown at 3 km", "evidence": "Skyline is a pale, low-contrast set of boxes with almost no height variation.", "defect": "No hierarchy or landmarks.", "fix": "Add landmark towers and roofline variation; darken glass towers for contrast.", "hardFailure": false, "kind": "visual" },
+        { "category": 18, "score": 3, "cells": "C5-E5, A6-B6", "condition": "3 km", "evidence": "Buildings are untextured blocks; suburb at A6-B6 is a flat mottled texture.", "defect": "No facade or roof detail.", "fix": "Add window inset normals and roofline parapets to the mid LOD.", "hardFailure": false, "kind": "visual" },
+        { "category": 24, "score": 4, "cells": "D4-E4, F4-G4, H4", "condition": "noon", "evidence": "Small cumulus at F4-G4 are cotton puffs with flat bases.", "defect": "Flat opaque cloud bases.", "fix": "Ragged base erosion and height-fade density.", "hardFailure": true, "kind": "visual" },
+        { "category": 26, "score": 4, "cells": "A7-B8", "condition": "noon", "evidence": "Water is matte turquoise with no sky reflection or glitter.", "defect": "Missing reflection term.", "fix": "Add specular sun path and sky reflection.", "hardFailure": false, "kind": "visual" },
+        { "category": 27, "score": 4, "cells": "A7-B7", "condition": "1050 ft", "evidence": "Coastline is a hard sand-to-water line with a thin white edge.", "defect": "Hard shoreline boundary.", "fix": "Wet-sand band and depth-driven shallow colour.", "hardFailure": false, "kind": "visual" },
+        { "category": 28, "score": 4, "cells": "A6-B6", "condition": "1050 ft", "evidence": "Mainland trees are uniform dark blobs.", "defect": "Clone vegetation.", "fix": "Species and size variation, ground shadows.", "hardFailure": false, "kind": "visual" },
+        { "category": 9, "score": 6, "cells": "A7-B8", "condition": "noon", "evidence": "Shallow-water colour is attractive.", "defect": "No surface structure at this distance.", "fix": "Add swell normals.", "hardFailure": false, "kind": "visual" },
+        { "category": 29, "score": 4, "cells": "A5-H5", "condition": "3 km", "evidence": "No boats, roads or traffic visible outside; interior has no charts, checklists or personal items.", "defect": "Empty world and cabin.", "fix": "Add a kneeboard, checklist card and headset cable inside; boats and traffic outside.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 6, "cells": "n/a", "condition": "still and flight capture", "evidence": "33 fps average, 13.5 fps minimum, 269 calls, 1.12 M triangles, no console errors.", "defect": "1 percent low is poor.", "fix": "Cull interior geometry from the shadow pass.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Blob hands on the yoke (D8, F8)",
+        "Flat decal instrument panel with floating digits (D6-G7)",
+        "Uniform beige headliner and untextured pillars (A1-H2, A3-C4)"
+      ],
+      "best3": [
+        "Instrument values are live and consistent with the HUD (D6-E7 vs top bar)",
+        "Layout of the panel, yoke and overhead switches is credible (D6-H8)",
+        "Shallow-water colour outside the left window (A7-B8)"
+      ]
+    },
+    "bridge-low": {
+      "giveaway": "The bridge deck is a perfectly flat ribbon with painted lane lines and no guardrails, joints or shoulders, its stay cables are straight lines fanning from plain box pylons, and the cars on it are untextured coloured blocks.",
+      "scores": { "1": 6, "2": 5, "4": 4, "5": 5, "7": 5, "9": 6, "10": 4, "13": 3, "15": 3, "17": 4, "18": 3, "22": 3, "23": 4, "24": 4, "25": 6, "26": 4, "27": 3, "28": 3, "29": 4, "30": 6 },
+      "entries": [
+        { "category": 23, "score": 4, "cells": "E3-H8", "condition": "171 ft, chase, alongside the cable-stayed bridge", "evidence": "Deck is a flat grey plane with lane lines; the edge is a hard vertical cut with no barrier, guardrail, reflectors or drainage; pier caps at E7-F8 are plain cylinders.", "defect": "No highway furniture at all on a hero bridge seen from 50 m.", "fix": "Add concrete edge barriers, guardrail posts, expansion joint lines every 30 m, lamp posts at 40 m spacing and a pier cap with bearing blocks.", "hardFailure": false, "kind": "visual" },
+        { "category": 22, "score": 3, "cells": "F5", "condition": "daylight", "evidence": "A single lamp post is visible on a bridge over 1 km long.", "defect": "Missing streetlight row.", "fix": "Instance lamp posts along the deck spline on both sides.", "hardFailure": false, "kind": "visual" },
+        { "category": 29, "score": 4, "cells": "F6-G7, E3-F4", "condition": "traffic on the deck", "evidence": "Cars are smooth coloured boxes with no wheels, windows or shadows.", "defect": "Placeholder traffic.", "fix": "Use a 500-tri car LOD with wheels, glass and a contact shadow.", "hardFailure": false, "kind": "visual" },
+        { "category": 4, "score": 4, "cells": "E5", "condition": "2048 rpm cruise", "evidence": "The propeller is a faint translucent grey disc with visible ghost blade copies rather than a coherent blurred disc.", "defect": "Strobed ghost blades at high rpm.", "fix": "Render a single alpha disc with radial blur texture whose alpha scales with rpm and hide the blade meshes above 1500 rpm.", "hardFailure": false, "kind": "visual" },
+        { "category": 13, "score": 3, "cells": "B3-C3, A3", "condition": "island shore at 1 km", "evidence": "The island is outlined by a uniform white line.", "defect": "Uniform foam ring.", "fix": "Depth- and wave-driven patchy foam.", "hardFailure": true, "kind": "visual" },
+        { "category": 24, "score": 4, "cells": "A1-H2", "condition": "noon", "evidence": "Cotton cumuli with flat grey undersides at B1-C1 and F1-H1.", "defect": "Flat opaque cloud bases.", "fix": "Base erosion and density fade.", "hardFailure": true, "kind": "visual" },
+        { "category": 25, "score": 6, "cells": "A5-D8", "condition": "noon", "evidence": "The bridge casts a hard-edged dark polygon across the water at A5-D8; exposure and sky are pleasant.", "defect": "Shadow on water is a crisp flat shape with no wave breakup or softening with distance.", "fix": "Add PCSS softening and modulate the water shadow by the wave normal.", "hardFailure": false, "kind": "visual" },
+        { "category": 26, "score": 4, "cells": "A4-D8, G4-H5", "condition": "noon", "evidence": "No glitter; the bridge, pylons and aircraft have no reflection in the water.", "defect": "Missing reflections of nearby structures.", "fix": "Include bridge piers and pylons in the planar reflection pass.", "hardFailure": false, "kind": "visual" },
+        { "category": 17, "score": 4, "cells": "D2-H2", "condition": "skyline at 4 km", "evidence": "Pale boxes with a uniform top line.", "defect": "No hierarchy.", "fix": "Landmark silhouettes and roof masts.", "hardFailure": false, "kind": "visual" },
+        { "category": 18, "score": 3, "cells": "D2-H2, G3-H3", "condition": "4 km", "evidence": "Buildings and warehouses are flat blocks.", "defect": "No facade detail.", "fix": "Window inset normals.", "hardFailure": false, "kind": "visual" },
+        { "category": 15, "score": 3, "cells": "G3-H3", "condition": "port ship", "evidence": "The ship is a red block hull with a white box superstructure; containers are coloured cubes.", "defect": "Placeholder vessel.", "fix": "Add bow flare, bridge windows, cranes and hatch coamings.", "hardFailure": false, "kind": "visual" },
+        { "category": 27, "score": 3, "cells": "B3-C3", "condition": "1 km", "evidence": "Island shore is a hard green-to-white-to-blue banding.", "defect": "Hard shoreline boundaries.", "fix": "Wet-sand and depth ramps.", "hardFailure": false, "kind": "visual" },
+        { "category": 28, "score": 3, "cells": "B3-C3", "condition": "1 km", "evidence": "Island canopy is identical dark blobs.", "defect": "Clone trees.", "fix": "Species variation and shadows.", "hardFailure": false, "kind": "visual" },
+        { "category": 1, "score": 6, "cells": "C5-F8", "condition": "chase from behind", "evidence": "Tail-on view reads correctly; wing slab thin; fin small.", "defect": "Wing thickness and fin size.", "fix": "Thicken airfoil, scale fin.", "hardFailure": false, "kind": "visual" },
+        { "category": 2, "score": 5, "cells": "D6-F8", "condition": "chase", "evidence": "Float struts and spreader bars are present; no rudder hinge gap or elevator gap visible.", "defect": "Missing control-surface gaps.", "fix": "Cut hinge gaps in the mesh.", "hardFailure": false, "kind": "visual" },
+        { "category": 5, "score": 5, "cells": "C5-F5, D7-F7", "condition": "chase", "evidence": "Wing and stabilizer are thin flat slabs with yellow tips and red/blue stripes; no aileron or flap seams.", "defect": "Slab surfaces.", "fix": "Airfoil section and hinge seams.", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 5, "cells": "C5-F8", "condition": "noon", "evidence": "Uniform white gloss with plastic highlights; floats are flat grey.", "defect": "Uniform roughness.", "fix": "Roughness map with panel variation.", "hardFailure": false, "kind": "visual" },
+        { "category": 9, "score": 6, "cells": "A4-D8", "condition": "noon", "evidence": "Colour is good; surface has single-scale ripples.", "defect": "No swell.", "fix": "Multi-spectrum waves.", "hardFailure": false, "kind": "visual" },
+        { "category": 10, "score": 4, "cells": "A4-D8", "condition": "noon", "evidence": "One ripple frequency everywhere.", "defect": "Single-frequency wave field.", "fix": "Three spectra with directional bias.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 6, "cells": "n/a", "condition": "capture", "evidence": "48 fps average, 20.5 fps minimum, 265 calls, 754 k triangles.", "defect": "1 percent low under 30 fps.", "fix": "Reduce shadow pass cost.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Bridge deck with no barriers, guardrails, joints or lamp posts (E3-H8)",
+        "Uniform white foam outline on the island (B3-C3)",
+        "Block cars without wheels or windows on the deck (F6-G7)"
+      ],
+      "best3": [
+        "Bridge pylon and cable composition reads from a distance (E2-F3)",
+        "Water colour and horizon haze (A4-D8, A3-H3)",
+        "Aircraft float rig legible tail-on (D6-F8)"
+      ]
+    },
+    "skyline-high": {
+      "giveaway": "Downtown is a cluster of pale, identically textured boxes on a flat grid, the far terrain is a 2D texture with saturated cyan lakes at B4 and D4, and every rooftop is a bare flat slab.",
+      "scores": { "1": 6, "5": 5, "7": 5, "9": 6, "10": 4, "15": 3, "17": 4, "18": 3, "19": 3, "20": 2, "21": 3, "23": 4, "24": 4, "25": 5, "26": 4, "27": 4, "28": 3, "29": 4, "30": 5 },
+      "entries": [
+        { "category": 20, "score": 2, "cells": "A5-D6, B7-C7", "condition": "2883 ft looking down on downtown", "evidence": "Every roof is a flat untextured slab of the wall colour; no parapets, HVAC, stair heads, tanks or antennas on any building.", "defect": "Rooftops read as extruded footprints.", "fix": "Add a rooftop kit (parapet, 2-6 HVAC units, stair head, antenna) scattered by roof area, and a darker roof material.", "hardFailure": false, "kind": "visual" },
+        { "category": 18, "score": 3, "cells": "A6-C7", "condition": "midtown at 1.5 km", "evidence": "Midtown blocks are identical extruded rectangles repeating on a grid with the same height and window pattern.", "defect": "Clone buildings.", "fix": "Vary footprint, height and facade per block with a seeded generator and add setbacks.", "hardFailure": true, "kind": "visual" },
+        { "category": 17, "score": 4, "cells": "C5-E6", "condition": "2883 ft", "evidence": "Only two or three tower shapes stand out; the rest are similar pastel boxes with flat tops.", "defect": "Weak silhouette hierarchy.", "fix": "Landmarks, masts and mechanical floors.", "hardFailure": false, "kind": "visual" },
+        { "category": 19, "score": 3, "cells": "C5-E6", "condition": "noon", "evidence": "Uniform pale concrete; windows read as tint stripes with no reflection or lit variation.", "defect": "One material and identically lit windows.", "fix": "Glass towers with sky reflection; per-window lit variation.", "hardFailure": false, "kind": "visual" },
+        { "category": 21, "score": 3, "cells": "A6-C7", "condition": "2883 ft", "evidence": "Streets are plain grey strips; no crosswalks or lane texture legible even on wide avenues.", "defect": "Untextured streets.", "fix": "Lane paint and crosswalk decals in the mid LOD.", "hardFailure": false, "kind": "visual" },
+        { "category": 23, "score": 4, "cells": "A5-B6, E6-F6", "condition": "2883 ft", "evidence": "Arterials have no shoulders, ramps or gantries; the port road at E6-F6 is a flat strip.", "defect": "No highway complexity.", "fix": "Ramps, barriers, gantries.", "hardFailure": false, "kind": "visual" },
+        { "category": 25, "score": 5, "cells": "A3-H3, B4, D4", "condition": "noon", "evidence": "Far terrain is a uniformly lit texture with no shadows; the lakes at B4 and D4 are saturated cyan discs.", "defect": "Flat far-terrain lighting and cartoon lakes.", "fix": "Bake ambient occlusion and tree shadows into the far terrain, darken and desaturate inland lakes.", "hardFailure": false, "kind": "visual" },
+        { "category": 24, "score": 4, "cells": "A1-H2", "condition": "noon", "evidence": "Cumulus lobes with flat bases at B2-C2 and E1-G2.", "defect": "Flat opaque cloud bases.", "fix": "Base erosion.", "hardFailure": true, "kind": "visual" },
+        { "category": 26, "score": 4, "cells": "F4-H7", "condition": "noon", "evidence": "No glitter path; water is matte blue.", "defect": "Missing specular.", "fix": "Sun path and reflections.", "hardFailure": false, "kind": "visual" },
+        { "category": 28, "score": 3, "cells": "A4-C5, A8-C8", "condition": "2883 ft", "evidence": "Suburb trees are same-size blobs; the canopy at A8-C8 is one mottled texture.", "defect": "Clone canopy.", "fix": "Species/size variation and shadows.", "hardFailure": false, "kind": "visual" },
+        { "category": 27, "score": 4, "cells": "E5-F5, B8-C8", "condition": "2883 ft", "evidence": "Beach at E5-F5 is a cream strip with a hard edge to the water.", "defect": "Hard boundary.", "fix": "Wet-sand and depth ramps.", "hardFailure": false, "kind": "visual" },
+        { "category": 15, "score": 3, "cells": "F8", "condition": "cruise ship at berth", "evidence": "The ship is a white slab with a blue stripe and no decks or windows.", "defect": "Placeholder vessel.", "fix": "Deck tiers, bridge, windows.", "hardFailure": false, "kind": "visual" },
+        { "category": 29, "score": 4, "cells": "E6-H8", "condition": "port", "evidence": "The container yard adds credible density; the rest of the city has no traffic or people.", "defect": "Density only in the port.", "fix": "Traffic on arterials, boats at the marina.", "hardFailure": false, "kind": "visual" },
+        { "category": 1, "score": 6, "cells": "F6-G6", "condition": "chase", "evidence": "Silhouette reads; thin wing.", "defect": "Wing thickness.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 5, "score": 5, "cells": "F6-G6", "condition": "chase", "evidence": "Slab wing.", "defect": "No section.", "fix": "Airfoil and seams.", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 5, "cells": "F6-G6", "condition": "noon", "evidence": "Uniform gloss.", "defect": "Uniform roughness.", "fix": "Roughness map.", "hardFailure": false, "kind": "visual" },
+        { "category": 9, "score": 6, "cells": "E4-H8", "condition": "noon", "evidence": "Depth gradient good; no structure.", "defect": "No swell.", "fix": "Swell layer.", "hardFailure": false, "kind": "visual" },
+        { "category": 10, "score": 4, "cells": "E4-H8", "condition": "noon", "evidence": "Single frequency.", "defect": "Single spectrum.", "fix": "Three spectra.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 5, "cells": "n/a", "condition": "capture", "evidence": "42 fps average, 17 fps minimum, 234 calls, 1.25 M triangles.", "defect": "Triangle count near budget for a distant view.", "fix": "Aggressive far LOD for buildings.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Bare flat rooftops across all of downtown (A5-D6)",
+        "Identical extruded midtown blocks on a grid (A6-C7)",
+        "Flat far terrain with saturated cyan lakes (A3-H3, B4, D4)"
+      ],
+      "best3": [
+        "Container port adds real density and colour (E6-H8)",
+        "Water depth gradient along the shore (E4-H7)",
+        "Atmospheric haze toward the horizon (A3-H3)"
+      ]
+    },
+    "island-pass": {
+      "giveaway": "The beachfront towers at A3-D3 are pastel boxes standing on a flat, featureless cream ground plane and the shoreline is a razor-straight white foam band the whole length of the beach.",
+      "scores": { "1": 6, "2": 5, "4": 4, "5": 5, "7": 5, "9": 7, "10": 4, "13": 3, "17": 4, "18": 3, "19": 3, "24": 4, "25": 6, "26": 4, "27": 3, "28": 3, "29": 3, "30": 5 },
+      "entries": [
+        { "category": 27, "score": 3, "cells": "A4-E3", "condition": "427 ft, parallel to the beach", "evidence": "The beach is a flat cream strip of constant width with a straight white foam line at the water edge and no wet-sand band; the ground behind the towers is the same flat cream.", "defect": "Uniform foam ring and hard sand boundary.", "fix": "Depth-driven shallow colour ramp, wet-sand band, patchy foam, and paving/grass textures behind the towers.", "hardFailure": true, "kind": "visual" },
+        { "category": 13, "score": 3, "cells": "A4-E3", "condition": "427 ft", "evidence": "Foam is a continuous line of constant brightness.", "defect": "Uniform foam.", "fix": "Break into patches following wave crests.", "hardFailure": true, "kind": "visual" },
+        { "category": 17, "score": 4, "cells": "A3-D3", "condition": "427 ft", "evidence": "Towers are pastel boxes of similar height with flat tops.", "defect": "No roofline hierarchy.", "fix": "Setbacks, mechanical floors, roof rails.", "hardFailure": false, "kind": "visual" },
+        { "category": 18, "score": 3, "cells": "A3-D3", "condition": "427 ft", "evidence": "Identical window grids; no balconies on beachfront condos; no ground-floor detail.", "defect": "Copy-paste facades.", "fix": "Balcony racks, varied window rhythm, podium floors.", "hardFailure": false, "kind": "visual" },
+        { "category": 19, "score": 3, "cells": "A3-D3", "condition": "noon", "evidence": "Flat pastel colour with no reflection or weathering.", "defect": "Flat materials.", "fix": "Glass reflection and concrete streaks.", "hardFailure": false, "kind": "visual" },
+        { "category": 9, "score": 7, "cells": "A4-H8", "condition": "noon", "evidence": "The deep-to-shallow turquoise ramp and visible sandbars at B5-D6 are the best water colour in the set; surface still shows one ripple scale.", "defect": "Single-scale surface.", "fix": "Swell layer.", "hardFailure": false, "kind": "visual" },
+        { "category": 26, "score": 4, "cells": "A4-H8", "condition": "noon, sun high", "evidence": "No glitter path and no aircraft reflection.", "defect": "Missing specular.", "fix": "Sun path and reflection pass.", "hardFailure": false, "kind": "visual" },
+        { "category": 4, "score": 4, "cells": "E5", "condition": "1956 rpm", "evidence": "Ghost translucent disc with blade copies.", "defect": "Strobed prop.", "fix": "Alpha blur disc.", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 5, "cells": "D5-E8", "condition": "noon", "evidence": "White fuselage has no shading variation along its length; the wing slab is uniformly lit.", "defect": "Uniform roughness, no panel variation.", "fix": "Roughness map, panel lines.", "hardFailure": false, "kind": "visual" },
+        { "category": 1, "score": 6, "cells": "C5-G8", "condition": "chase", "evidence": "Readable float plane silhouette; wing thin.", "defect": "Wing slab.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 2, "score": 5, "cells": "D6-F8", "condition": "chase", "evidence": "Struts present; no seams.", "defect": "No control-surface gaps.", "fix": "Hinge gaps.", "hardFailure": false, "kind": "visual" },
+        { "category": 5, "score": 5, "cells": "C6-G6, D7-F7", "condition": "chase", "evidence": "Slab wing and stabilizer.", "defect": "No section.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 10, "score": 4, "cells": "A4-H8", "condition": "noon", "evidence": "Single frequency.", "defect": "Single spectrum.", "fix": "Three spectra.", "hardFailure": false, "kind": "visual" },
+        { "category": 24, "score": 4, "cells": "E1, G1-H2", "condition": "noon", "evidence": "Cotton puffs with flat bases.", "defect": "Flat bases.", "fix": "Erosion.", "hardFailure": true, "kind": "visual" },
+        { "category": 25, "score": 6, "cells": "A1-H8", "condition": "noon", "evidence": "Exposure good; horizon haze good; but the towers cast no shadows on the beach.", "defect": "Missing building shadows.", "fix": "Enable building shadow casting in the mid cascade.", "hardFailure": false, "kind": "visual" },
+        { "category": 28, "score": 3, "cells": "C3-E3", "condition": "427 ft", "evidence": "Palms and trees are blobs of one green.", "defect": "Clone vegetation.", "fix": "Variation and shadows.", "hardFailure": false, "kind": "visual" },
+        { "category": 29, "score": 3, "cells": "A3-E4", "condition": "427 ft", "evidence": "No umbrellas, people, boats, piers or roads on a hero beach.", "defect": "Empty beach.", "fix": "Umbrella/lounger scatter, a pier, moored boats.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 5, "cells": "n/a", "condition": "capture", "evidence": "16.8 fps average and 7.4 fps minimum on the still despite only 549 k triangles and 255 calls.", "defect": "Frame pacing poor relative to load.", "fix": "Profile the water and shadow passes in this view.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Straight uniform foam line and flat cream beach (A4-E3)",
+        "Pastel box towers on a featureless ground plane (A3-D3)",
+        "No sun glitter or reflection on a hero water shot (A4-H8)"
+      ],
+      "best3": [
+        "Turquoise depth ramp with sandbars (B5-D6)",
+        "Horizon haze and sky gradient (A2-H3)",
+        "Float rig and strut geometry legible (D6-F8)"
+      ]
+    },
+    "harbor": {
+      "giveaway": "The container port is a flat white concrete plane with brightly coloured boxes placed on it, no ground texture, joints or tyre marks, and the cruise ship at G4 is a smooth white wedge.",
+      "scores": { "1": 6, "2": 5, "5": 5, "7": 5, "9": 6, "10": 4, "13": 3, "15": 3, "17": 4, "18": 3, "19": 3, "20": 2, "21": 2, "23": 4, "24": 4, "25": 6, "26": 4, "27": 3, "28": 3, "29": 5, "30": 7 },
+      "entries": [
+        { "category": 21, "score": 2, "cells": "A5-D8", "condition": "525 ft over the container terminal", "evidence": "The quay surface is one uniform white plane with no lane markings, expansion joints, drainage, tyre marks or crane rails.", "defect": "Untextured ground plane on a hero industrial site.", "fix": "Concrete slab texture with joints, painted lane and bay markings, crane rails, oil stains and a darker asphalt road strip.", "hardFailure": false, "kind": "visual" },
+        { "category": 20, "score": 2, "cells": "D5-E5, B6-C6", "condition": "525 ft", "evidence": "Warehouse roofs are flat grey with a single ridge; no vents, skylights or units.", "defect": "Bare roofs.", "fix": "Rooftop kit.", "hardFailure": false, "kind": "visual" },
+        { "category": 15, "score": 3, "cells": "G4, C4", "condition": "ships at berth", "evidence": "Cruise ship at G4 is a smooth white wedge with a stripe; cargo ship at C4 is a red block.", "defect": "Placeholder vessels.", "fix": "Deck tiers, lifeboats, bridge windows, hatch coamings.", "hardFailure": false, "kind": "visual" },
+        { "category": 18, "score": 3, "cells": "D5-E5", "condition": "525 ft", "evidence": "Warehouses are grey boxes with no doors, loading bays or windows.", "defect": "No facade detail.", "fix": "Roll-up doors, loading docks, signage.", "hardFailure": false, "kind": "visual" },
+        { "category": 23, "score": 4, "cells": "A4-D4", "condition": "525 ft", "evidence": "The bridge is a flat ribbon with single-triangle cable fans; no barriers or lamps.", "defect": "No highway furniture.", "fix": "Barriers, lamps, real pylons.", "hardFailure": false, "kind": "visual" },
+        { "category": 13, "score": 3, "cells": "A8-C8", "condition": "quay edge", "evidence": "A uniform bright foam line runs along the entire quay wall.", "defect": "Uniform foam ring.", "fix": "Patchy foam driven by wave-wall interaction.", "hardFailure": true, "kind": "visual" },
+        { "category": 29, "score": 5, "cells": "A5-H5", "condition": "525 ft", "evidence": "Containers, cranes, trucks and two ships give the port real density; trucks at A7-B7 are boxes.", "defect": "Vehicles are placeholders.", "fix": "Truck and reach-stacker LODs.", "hardFailure": false, "kind": "visual" },
+        { "category": 17, "score": 4, "cells": "F3-H3", "condition": "3 km", "evidence": "Pale box skyline.", "defect": "No hierarchy.", "fix": "Landmarks.", "hardFailure": false, "kind": "visual" },
+        { "category": 19, "score": 3, "cells": "D5-E5, F3-H3", "condition": "noon", "evidence": "Flat grey and white.", "defect": "One material.", "fix": "Corrugated metal, concrete streaks.", "hardFailure": false, "kind": "visual" },
+        { "category": 24, "score": 4, "cells": "A1-H1", "condition": "noon", "evidence": "Flat-based puffs.", "defect": "Flat bases.", "fix": "Erosion.", "hardFailure": true, "kind": "visual" },
+        { "category": 25, "score": 6, "cells": "A1-H8", "condition": "noon", "evidence": "Exposure good; containers cast small shadows; the aircraft casts no shadow on the quay.", "defect": "Missing aircraft shadow.", "fix": "Include the aircraft in the near cascade.", "hardFailure": false, "kind": "visual" },
+        { "category": 26, "score": 4, "cells": "F5-H8", "condition": "noon", "evidence": "No glitter; no ship reflections.", "defect": "Missing reflections.", "fix": "Reflection pass includes ships.", "hardFailure": false, "kind": "visual" },
+        { "category": 27, "score": 3, "cells": "A8-C8, D3-E3", "condition": "525 ft", "evidence": "Quay edge is a hard line; island at D3-E3 has the uniform outline.", "defect": "Hard edges.", "fix": "Foam and wet-line variation.", "hardFailure": false, "kind": "visual" },
+        { "category": 28, "score": 3, "cells": "D3-E3", "condition": "3 km", "evidence": "Blob canopy.", "defect": "Clone trees.", "fix": "Variation.", "hardFailure": false, "kind": "visual" },
+        { "category": 1, "score": 6, "cells": "C5-G8", "condition": "chase", "evidence": "Readable; thin wing.", "defect": "Wing slab.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 2, "score": 5, "cells": "D6-F8", "condition": "chase", "evidence": "Struts present; no seams.", "defect": "No gaps.", "fix": "Hinge gaps.", "hardFailure": false, "kind": "visual" },
+        { "category": 5, "score": 5, "cells": "C5-G5", "condition": "chase", "evidence": "Slab wing.", "defect": "No section.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 5, "cells": "D6-F8", "condition": "noon", "evidence": "Uniform gloss.", "defect": "Uniform roughness.", "fix": "Roughness map.", "hardFailure": false, "kind": "visual" },
+        { "category": 9, "score": 6, "cells": "F5-H8", "condition": "noon", "evidence": "Colour good.", "defect": "No structure.", "fix": "Swell.", "hardFailure": false, "kind": "visual" },
+        { "category": 10, "score": 4, "cells": "F5-H8", "condition": "noon", "evidence": "Single frequency.", "defect": "Single spectrum.", "fix": "Three spectra.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 7, "cells": "n/a", "condition": "capture", "evidence": "57 fps average, 25.7 fps minimum, 265 calls, 1.01 M triangles.", "defect": "1 percent low under 30.", "fix": "Shadow pass cost.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Untextured white quay plane (A5-D8)",
+        "Wedge-shaped placeholder ships (G4, C4)",
+        "Uniform foam line along the quay wall (A8-C8)"
+      ],
+      "best3": [
+        "Container stacks and cranes give the port density (A5-H5)",
+        "Water colour beside the quay (F5-H8)",
+        "Best frame pacing of the set (57 fps average)"
+      ]
+    },
+    "water-landing": {
+      "giveaway": "A dashed pale line runs straight across the water at row 4 (a tile or LOD seam), and in the flight frame the float spray is a set of thin opaque white streaks like airflow lines rather than a splash sheet.",
+      "scores": { "1": 6, "2": 5, "4": 4, "5": 5, "7": 5, "8": 5, "9": 6, "10": 3, "11": 2, "12": 2, "13": 2, "15": 3, "24": 4, "25": 6, "26": 4, "27": 3, "28": 3, "29": 3, "30": 4 },
+      "entries": [
+        { "category": 10, "score": 3, "cells": "A4-H4, A3-H3", "condition": "8 ft on final approach, noon", "evidence": "A faint horizontal dashed line of lighter pixels crosses the entire frame at row 4 and a second at the bottom of row 3, parallel to the horizon.", "defect": "Visible water tiling/LOD boundary.", "fix": "Blend the near and far water LOD normals over a distance band and jitter the tile phase; verify the geometry seam is welded.", "hardFailure": true, "kind": "visual" },
+        { "category": 12, "score": 2, "cells": "D7-F8 (flight.png)", "condition": "float contact at 41-46 kts", "evidence": "Spray is straight thin white streaks trailing each float plus a symmetric fan of lines; no droplets, sheet, depression or bow wave; the water under the floats is undisturbed.", "defect": "Opaque white streaks read as airflow lines, not water.", "fix": "Spawn a spray sheet from the float chines (textured quads with droplet alpha and gravity), a bow-wave hump and a depression under each float, and fade wake foam by age.", "hardFailure": true, "kind": "visual" },
+        { "category": 11, "score": 2, "cells": "D7-F8 (flight.png)", "condition": "touchdown", "evidence": "No hull hump, hollow or stern wave forms as the floats load the water.", "defect": "No displacement response.", "fix": "Displacement decal per float driven by speed and immersion.", "hardFailure": false, "kind": "visual" },
+        { "category": 13, "score": 2, "cells": "D7-F8 (flight.png)", "condition": "touchdown", "evidence": "Foam is uniform white lines.", "defect": "Opaque white streaks.", "fix": "Density-varying foam texture with broken edges.", "hardFailure": true, "kind": "visual" },
+        { "category": 4, "score": 4, "cells": "E5", "condition": "981 rpm", "evidence": "Ghost translucent disc with blade copies.", "defect": "Strobed prop.", "fix": "Alpha blur disc.", "hardFailure": false, "kind": "visual" },
+        { "category": 8, "score": 5, "cells": "C5-F7", "condition": "approach", "evidence": "Attitude is plausible; the aircraft appears to descend on rails with no float compression or bounce visible after contact in flight.png.", "defect": "No suspension response.", "fix": "Float spring model with pitch response.", "hardFailure": false, "kind": "visual" },
+        { "category": 27, "score": 3, "cells": "A3-H3", "condition": "islands at 2 km", "evidence": "Islands are flat green strips with hard white edges.", "defect": "Hard shoreline.", "fix": "Depth ramps and patchy foam.", "hardFailure": false, "kind": "visual" },
+        { "category": 15, "score": 3, "cells": "H3, C3", "condition": "distant boats", "evidence": "Boats are red and white blocks.", "defect": "Placeholders.", "fix": "Boat LODs.", "hardFailure": false, "kind": "visual" },
+        { "category": 24, "score": 4, "cells": "A1-H2", "condition": "noon", "evidence": "Cotton puffs with flat bases.", "defect": "Flat bases.", "fix": "Erosion.", "hardFailure": true, "kind": "visual" },
+        { "category": 26, "score": 4, "cells": "A4-H8", "condition": "noon", "evidence": "No glitter; no aircraft reflection above the shadow at D7-F8.", "defect": "Missing reflection.", "fix": "Sun path and reflection pass.", "hardFailure": false, "kind": "visual" },
+        { "category": 25, "score": 6, "cells": "D7-F8", "condition": "noon", "evidence": "Exposure good; the aircraft shadow is a hard-edged flat shape.", "defect": "Hard shadow on water.", "fix": "PCSS and wave-normal modulation.", "hardFailure": false, "kind": "visual" },
+        { "category": 1, "score": 6, "cells": "C5-F7", "condition": "chase", "evidence": "Readable; thin wing.", "defect": "Wing slab.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 2, "score": 5, "cells": "D6-F7", "condition": "chase", "evidence": "Struts present; no seams.", "defect": "No gaps.", "fix": "Hinge gaps.", "hardFailure": false, "kind": "visual" },
+        { "category": 5, "score": 5, "cells": "C5-G5", "condition": "chase", "evidence": "Slab wing.", "defect": "No section.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 5, "cells": "D6-F7", "condition": "noon", "evidence": "Uniform gloss.", "defect": "Uniform roughness.", "fix": "Roughness map.", "hardFailure": false, "kind": "visual" },
+        { "category": 9, "score": 6, "cells": "A4-H8", "condition": "noon", "evidence": "Colour good; single ripple scale.", "defect": "No swell.", "fix": "Swell.", "hardFailure": false, "kind": "visual" },
+        { "category": 28, "score": 3, "cells": "A3-C3, G3-H3", "condition": "2 km", "evidence": "Blob canopy.", "defect": "Clone trees.", "fix": "Variation.", "hardFailure": false, "kind": "visual" },
+        { "category": 29, "score": 3, "cells": "A3-H3", "condition": "2 km", "evidence": "Two boats and channel markers; nothing else on the water.", "defect": "Empty bay.", "fix": "Moored boats, buoys, a ferry route.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 4, "cells": "n/a", "condition": "capture", "evidence": "16.2 fps average and 6.3 fps minimum with only 463 k triangles and 209 calls.", "defect": "Frame pacing far below what the load justifies.", "fix": "Profile spray/wake particle update and water passes.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Dashed tile seam across the water (A4-H4)",
+        "Airflow-line spray at touchdown with no splash sheet or depression (D7-F8 flight)",
+        "No displacement under the floats (D7-F8 flight)"
+      ],
+      "best3": [
+        "Water colour and horizon haze (A4-H8)",
+        "Aircraft attitude on approach is plausible (C5-F7)",
+        "Channel markers and distant boats give scale (C3, F3, H3)"
+      ]
+    },
+    "water-landing-firm": {
+      "giveaway": "At touchdown the floats throw two straight, opaque white streaks and a symmetric fan of thin lines that read as airflow, not water, and the surface under the floats is not depressed at all.",
+      "scores": { "1": 6, "2": 5, "4": 4, "5": 5, "7": 5, "8": 4, "9": 6, "10": 3, "11": 2, "12": 2, "13": 2, "15": 3, "24": 4, "25": 6, "26": 4, "27": 3, "28": 3, "29": 3, "30": 5 },
+      "entries": [
+        { "category": 12, "score": 2, "cells": "C7-G8 (flight.png)", "condition": "firm touchdown, -300 fpm, 41 kts", "evidence": "Two opaque white streaks trail the floats to the bottom of the frame with constant width; side spray is a fan of thin parallel lines; no sheet, droplets, splash crown or depression; the splash does not scale with the firmer sink rate versus water-landing.", "defect": "Opaque white wake streaks; impact not scaled by sink rate.", "fix": "Spray sheet from the chines with mass-scaled volume, depression and bow hump under the floats, foam that dissipates with age, and a splash crown on the first frame of contact.", "hardFailure": true, "kind": "visual" },
+        { "category": 11, "score": 2, "cells": "D7-F8 (flight.png)", "condition": "touchdown", "evidence": "Floats do not sink into the surface; no hump or hollow.", "defect": "No displacement.", "fix": "Displacement decals.", "hardFailure": false, "kind": "visual" },
+        { "category": 13, "score": 2, "cells": "C7-G8 (flight.png)", "condition": "touchdown", "evidence": "Uniform opaque white foam lines.", "defect": "Opaque white streaks.", "fix": "Broken-edge foam.", "hardFailure": true, "kind": "visual" },
+        { "category": 10, "score": 3, "cells": "A4-H4", "condition": "10 ft, noon", "evidence": "The dashed horizontal seam is present across row 4.", "defect": "Water tile seam.", "fix": "Blend LOD bands.", "hardFailure": true, "kind": "visual" },
+        { "category": 8, "score": 4, "cells": "C5-F7", "condition": "firm landing", "evidence": "Aircraft attitude does not change between the 10 ft still and contact; no pitch-down or float compression.", "defect": "No mass or suspension response.", "fix": "Float spring model.", "hardFailure": false, "kind": "visual" },
+        { "category": 4, "score": 4, "cells": "E5", "condition": "852 rpm", "evidence": "Ghost disc.", "defect": "Strobed prop.", "fix": "Alpha disc.", "hardFailure": false, "kind": "visual" },
+        { "category": 25, "score": 6, "cells": "D7-F8", "condition": "noon", "evidence": "Shadow under floats is sharp and well placed; the shadow edge is hard on water.", "defect": "Hard shadow.", "fix": "PCSS.", "hardFailure": false, "kind": "visual" },
+        { "category": 26, "score": 4, "cells": "A4-H8", "condition": "noon", "evidence": "No glitter or reflection.", "defect": "Missing specular.", "fix": "Sun path.", "hardFailure": false, "kind": "visual" },
+        { "category": 24, "score": 4, "cells": "A1-H2", "condition": "noon", "evidence": "Flat-based puffs.", "defect": "Flat bases.", "fix": "Erosion.", "hardFailure": true, "kind": "visual" },
+        { "category": 27, "score": 3, "cells": "A3-H3", "condition": "2 km", "evidence": "Flat islands with hard edges.", "defect": "Hard shoreline.", "fix": "Ramps.", "hardFailure": false, "kind": "visual" },
+        { "category": 15, "score": 3, "cells": "H3, C3", "condition": "distant", "evidence": "Block boats.", "defect": "Placeholders.", "fix": "Boat LODs.", "hardFailure": false, "kind": "visual" },
+        { "category": 1, "score": 6, "cells": "C5-F7", "condition": "chase", "evidence": "Readable; thin wing.", "defect": "Wing slab.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 2, "score": 5, "cells": "D6-F7", "condition": "chase", "evidence": "Struts present.", "defect": "No gaps.", "fix": "Hinge gaps.", "hardFailure": false, "kind": "visual" },
+        { "category": 5, "score": 5, "cells": "C5-G5", "condition": "chase", "evidence": "Slab wing.", "defect": "No section.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 5, "cells": "D6-F7", "condition": "noon", "evidence": "Uniform gloss; a red spinner dot at E6 reads as a decal.", "defect": "Uniform roughness.", "fix": "Roughness map.", "hardFailure": false, "kind": "visual" },
+        { "category": 9, "score": 6, "cells": "A4-H8", "condition": "noon", "evidence": "Colour good.", "defect": "No swell.", "fix": "Swell.", "hardFailure": false, "kind": "visual" },
+        { "category": 28, "score": 3, "cells": "A3-C3, G3-H3", "condition": "2 km", "evidence": "Blob canopy.", "defect": "Clone trees.", "fix": "Variation.", "hardFailure": false, "kind": "visual" },
+        { "category": 29, "score": 3, "cells": "A3-H3", "condition": "2 km", "evidence": "Empty bay.", "defect": "Low density.", "fix": "Boats, buoys.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 5, "cells": "n/a", "condition": "capture", "evidence": "24.7 fps average, 9.7 minimum, 209 calls, 459 k triangles.", "defect": "Pacing poor for load.", "fix": "Profile spray update.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Opaque white float streaks and line-fan spray at touchdown (C7-G8 flight)",
+        "No depression or hump under the loaded floats (D7-F8 flight)",
+        "Dashed water tile seam (A4-H4)"
+      ],
+      "best3": [
+        "Float shadow placement on the water (D7-F8)",
+        "Water colour (A4-H8)",
+        "Horizon haze (A3-H3)"
+      ]
+    },
+    "sunset": {
+      "giveaway": "The sun glitter path at E3-F8 is a wide band of constant width made of identical confetti sparkles, and every island at B3-G3 wears the same orange halo of lit shallow water.",
+      "scores": { "1": 6, "2": 5, "4": 4, "5": 5, "7": 5, "9": 6, "10": 4, "17": 4, "22": 3, "23": 4, "24": 4, "25": 6, "26": 4, "27": 3, "28": 3, "29": 4, "30": 6 },
+      "entries": [
+        { "category": 26, "score": 4, "cells": "E3-F8", "condition": "golden hour, sun at E1 ahead", "evidence": "The glitter path keeps the same width from the horizon to the aircraft, and every sparkle is a same-size dot; near the camera the water does not darken with Fresnel and there is no fragmented reflection of the aircraft.", "defect": "Glitter not driven by wave slope; no Fresnel falloff.", "fix": "Compute glitter from the microfacet slope distribution so it widens toward the camera and fragments across wave crests; apply Fresnel to the sky reflection.", "hardFailure": false, "kind": "visual" },
+        { "category": 27, "score": 3, "cells": "B3-G3", "condition": "golden hour", "evidence": "Each island has an identical orange rim of lit shallow water of constant width.", "defect": "Uniform shallow-water halo.", "fix": "Drive the shallow colour from actual bathymetry with varied slopes.", "hardFailure": false, "kind": "visual" },
+        { "category": 24, "score": 4, "cells": "A1-H2", "condition": "golden hour", "evidence": "Clouds are flat pancakes lit uniformly orange with no self-shadowing or silver lining.", "defect": "No volume response to low sun.", "fix": "Single-scatter lighting with shadowed undersides and a bright rim.", "hardFailure": false, "kind": "visual" },
+        { "category": 23, "score": 4, "cells": "A4-E5, G6-H6", "condition": "golden hour", "evidence": "Bridge has piers, cable fans and car headlights but no lamp posts, guardrails or a raised edge; the deck ends flat against the pylons.", "defect": "No highway furniture.", "fix": "Lamp posts, barriers, deck edge.", "hardFailure": false, "kind": "visual" },
+        { "category": 22, "score": 3, "cells": "A4-E5", "condition": "dusk", "evidence": "No streetlights are lit on the bridge or the causeway at dusk; only headlights exist.", "defect": "Missing lighting infrastructure.", "fix": "Emissive lamp posts at 40 m spacing with local light pools.", "hardFailure": false, "kind": "visual" },
+        { "category": 17, "score": 4, "cells": "B3-H3", "condition": "mainland at 5 km", "evidence": "The mainland is a flat grid texture with no silhouette against the sky.", "defect": "No skyline.", "fix": "Far-LOD building impostors.", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 5, "cells": "D5-E8", "condition": "golden hour, sun ahead", "evidence": "Panel lines and registration are visible; the fuselage receives uniform top light with no warm rim on the leading edges from the low sun.", "defect": "Material does not respond to the low sun direction.", "fix": "Check the sun direction feeds the aircraft lighting and add a rim/specular lobe.", "hardFailure": false, "kind": "visual" },
+        { "category": 25, "score": 6, "cells": "A1-H8", "condition": "golden hour", "evidence": "Sky gradient, sun disc and exposure are the best in the set; the aircraft is lit from above rather than from the sun ahead.", "defect": "Aircraft lighting inconsistent with the sun position.", "fix": "Sun-direction lighting on the aircraft.", "hardFailure": false, "kind": "visual" },
+        { "category": 28, "score": 3, "cells": "A3-D3", "condition": "dusk", "evidence": "Islands are dark uniform blobs.", "defect": "Clone canopy.", "fix": "Variation.", "hardFailure": false, "kind": "visual" },
+        { "category": 4, "score": 4, "cells": "E5", "condition": "2048 rpm", "evidence": "Ghost disc.", "defect": "Strobed prop.", "fix": "Alpha disc.", "hardFailure": false, "kind": "visual" },
+        { "category": 1, "score": 6, "cells": "C5-G8", "condition": "chase", "evidence": "Readable; thin wing.", "defect": "Wing slab.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 2, "score": 5, "cells": "D6-F8", "condition": "chase", "evidence": "Struts present.", "defect": "No gaps.", "fix": "Hinge gaps.", "hardFailure": false, "kind": "visual" },
+        { "category": 5, "score": 5, "cells": "C5-G5", "condition": "chase", "evidence": "Slab wing.", "defect": "No section.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 9, "score": 6, "cells": "A5-H8", "condition": "dusk", "evidence": "Fine ripples present; colour plausible.", "defect": "Single scale.", "fix": "Swell.", "hardFailure": false, "kind": "visual" },
+        { "category": 10, "score": 4, "cells": "A5-H8", "condition": "dusk", "evidence": "Single frequency.", "defect": "Single spectrum.", "fix": "Three spectra.", "hardFailure": false, "kind": "visual" },
+        { "category": 29, "score": 4, "cells": "A3-H6", "condition": "dusk", "evidence": "Traffic headlights on the bridge add life; no boats or lit windows.", "defect": "Low density.", "fix": "Boat nav lights and lit windows.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 6, "cells": "n/a", "condition": "capture", "evidence": "27 fps average, 10 fps minimum, 283 calls, 1.02 M triangles.", "defect": "1 percent low.", "fix": "Shadow pass.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Constant-width confetti glitter path (E3-F8)",
+        "Identical orange shallow-water halo around every island (B3-G3)",
+        "No lit streetlights on the bridge at dusk (A4-E5)"
+      ],
+      "best3": [
+        "Sky gradient and sun disc exposure (A1-H2)",
+        "Car headlights on the bridge (A4-E5)",
+        "Fine ripple structure near the aircraft (C6-H8)"
+      ]
+    },
+    "cloudy": {
+      "giveaway": "The overcast is a single flat, opaque grey-white texture sheet across A1-H2 with a hard lower edge, while the aircraft still shows crisp directional highlights and shadows — the lighting contradicts the sky.",
+      "scores": { "1": 6, "2": 5, "4": 4, "5": 5, "7": 5, "9": 6, "10": 4, "17": 4, "18": 3, "23": 3, "24": 2, "25": 4, "27": 3, "28": 3, "29": 4, "30": 3 },
+      "entries": [
+        { "category": 24, "score": 2, "cells": "A1-H2", "condition": "overcast, 984 ft", "evidence": "The deck is a flat opaque texture with a level hard lower edge at row 2 and no volume, ragged bases or brightness gradient toward the sun.", "defect": "Flat opaque cloud base.", "fix": "Render the overcast as a volumetric slab with base erosion noise, thickness-driven transmittance and a bright patch toward the sun.", "hardFailure": true, "kind": "visual" },
+        { "category": 25, "score": 4, "cells": "D5-F8, A5-C8", "condition": "overcast", "evidence": "The aircraft has crisp specular highlights and a sharp shadow while the ground at A5-C8 is flat-lit; the sky has no sun.", "defect": "Directional sun lighting under an overcast sky.", "fix": "Scale direct sun by cloud coverage and raise ambient/sky irradiance; soften shadows.", "hardFailure": false, "kind": "visual" },
+        { "category": 28, "score": 3, "cells": "A5-C8", "condition": "984 ft", "evidence": "Canopy is uniform dark-green blobs of one size with no trunks or shadows.", "defect": "Clone trees.", "fix": "Species/size variation, shadows, trunks.", "hardFailure": true, "kind": "visual" },
+        { "category": 27, "score": 3, "cells": "B7-C8, D5-E5", "condition": "984 ft", "evidence": "Beach shows a speckled dithering pattern and a hard sand/grass boundary.", "defect": "Dither artifact and hard boundary.", "fix": "Fix the terrain blend dithering and add a grass-scatter transition.", "hardFailure": false, "kind": "visual" },
+        { "category": 23, "score": 3, "cells": "A5-B5, C3-G4", "condition": "984 ft", "evidence": "Causeway is a flat slab with tiny unmarked cars; the bridge pylons are simplified boxes.", "defect": "No highway furniture.", "fix": "Barriers, lamps, pylon shapes.", "hardFailure": false, "kind": "visual" },
+        { "category": 17, "score": 4, "cells": "C3-E3, H3", "condition": "3 km", "evidence": "Pale boxes.", "defect": "No hierarchy.", "fix": "Landmarks.", "hardFailure": false, "kind": "visual" },
+        { "category": 18, "score": 3, "cells": "C3-E3", "condition": "3 km", "evidence": "Flat blocks.", "defect": "No facade detail.", "fix": "Window normals.", "hardFailure": false, "kind": "visual" },
+        { "category": 4, "score": 4, "cells": "E5", "condition": "2048 rpm", "evidence": "Ghost disc.", "defect": "Strobed prop.", "fix": "Alpha disc.", "hardFailure": false, "kind": "visual" },
+        { "category": 1, "score": 6, "cells": "C5-G8", "condition": "chase", "evidence": "Readable; thin wing.", "defect": "Wing slab.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 2, "score": 5, "cells": "D6-F8", "condition": "chase", "evidence": "Struts present.", "defect": "No gaps.", "fix": "Hinge gaps.", "hardFailure": false, "kind": "visual" },
+        { "category": 5, "score": 5, "cells": "C5-G5", "condition": "chase", "evidence": "Slab wing.", "defect": "No section.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 5, "cells": "D6-F8", "condition": "overcast", "evidence": "Uniform gloss; highlights too sharp for the sky.", "defect": "Uniform roughness.", "fix": "Roughness map.", "hardFailure": false, "kind": "visual" },
+        { "category": 9, "score": 6, "cells": "C3-H8", "condition": "overcast", "evidence": "Ocean depth colour still reads well under the grey sky.", "defect": "Single-scale surface.", "fix": "Swell.", "hardFailure": false, "kind": "visual" },
+        { "category": 10, "score": 4, "cells": "C3-H8", "condition": "overcast", "evidence": "Single frequency.", "defect": "Single spectrum.", "fix": "Three spectra.", "hardFailure": false, "kind": "visual" },
+        { "category": 29, "score": 4, "cells": "D5-E5", "condition": "984 ft", "evidence": "A dock with moored boats at D5-E5 is a good touch; the rest is empty.", "defect": "Sparse.", "fix": "More docks and traffic.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 3, "cells": "n/a", "condition": "capture", "evidence": "6.4 fps average and 2.3 fps minimum on the still; the flight frame draws 1.55 M triangles, over the 1.5 M budget, with 306 calls.", "defect": "Triangle budget exceeded and pacing collapsed.", "fix": "Cull vegetation impostors in the shadow cascades and lower the overcast mesh cost.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Flat opaque overcast sheet with a hard lower edge (A1-H2)",
+        "Sharp sun highlights and shadows under an overcast sky (D5-F8)",
+        "Clone canopy over the mainland (A5-C8)"
+      ],
+      "best3": [
+        "Ocean depth colour holds up under grey light (C3-H8)",
+        "Dock with moored boats (D5-E5)",
+        "Aircraft silhouette (C5-G8)"
+      ]
+    },
+    "night": {
+      "giveaway": "The skyline's water reflections at B4-F4 are solid pale blobs mirrored directly under each tower instead of fragmented light trails, and every window is the same dotted white.",
+      "scores": { "1": 5, "5": 5, "7": 4, "17": 5, "19": 3, "22": 3, "25": 5, "26": 2, "29": 4, "30": 6 },
+      "entries": [
+        { "category": 26, "score": 2, "cells": "B4-F4", "condition": "night, 1050 ft, city 3 km", "evidence": "Under each lit tower the water shows a solid pale shape the same width as the tower with hard edges; no fragmentation, stretching or wave-driven breakup.", "defect": "Wrong/frozen reflections that read as painted blobs.", "fix": "Elongate and fragment reflections by wave slope (screen-space stretch plus normal jitter) and attenuate by Fresnel and distance.", "hardFailure": true, "kind": "visual" },
+        { "category": 25, "score": 5, "cells": "A2-H3, E7, E8, B5-C5", "condition": "night", "evidence": "A thin dark horizontal seam sits in the sky at the row 2-3 boundary; the beacon at E7 and tail light at E8 bloom into large soft discs; the left wingtip light at B5-C5 is blown-out white.", "defect": "Sky seam, excessive bloom and a wrong nav light colour.", "fix": "Fix the sky dome/horizon band seam, clamp bloom threshold for point lights, and set the left nav light to red.", "hardFailure": true, "kind": "visual" },
+        { "category": 19, "score": 3, "cells": "B3-F3", "condition": "night", "evidence": "Windows are uniform dotted white grids with no variation in lit and unlit rooms or colour temperature.", "defect": "Identically lit windows.", "fix": "Per-window random lit mask with warm/cool variation and floor-level dark bands.", "hardFailure": false, "kind": "visual" },
+        { "category": 22, "score": 3, "cells": "A3-H4", "condition": "night", "evidence": "No street light rows are visible along roads or the causeway; only window dots and a few point lights.", "defect": "Missing streetlight infrastructure.", "fix": "Emissive lamp rows along roads with light pools.", "hardFailure": false, "kind": "visual" },
+        { "category": 17, "score": 5, "cells": "B3-F3", "condition": "night", "evidence": "Lit towers create a readable skyline with one spire; the roofline is still flat overall.", "defect": "Weak hierarchy.", "fix": "Landmark lighting and crowns.", "hardFailure": false, "kind": "visual" },
+        { "category": 5, "score": 5, "cells": "B5-C5, G5", "condition": "night", "evidence": "Right wingtip is green (correct), left wingtip is white instead of red.", "defect": "Wrong nav light colour.", "fix": "Red left nav light.", "hardFailure": false, "kind": "visual" },
+        { "category": 1, "score": 5, "cells": "C5-F8", "condition": "night", "evidence": "Silhouette reads against the water; fuselage nearly black.", "defect": "No ambient fill on the aircraft.", "fix": "Sky/city ambient fill.", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 4, "cells": "C5-F8", "condition": "night", "evidence": "No specular response to the city lights or beacon on the fuselage.", "defect": "Materials go flat at night.", "fix": "Ensure specular responds to point lights.", "hardFailure": false, "kind": "visual" },
+        { "category": 29, "score": 4, "cells": "A3-H4", "condition": "night", "evidence": "City lights but no traffic streams, no lit boats or bridge lights.", "defect": "Low night density.", "fix": "Headlight streams and boat lights.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 6, "cells": "n/a", "condition": "capture", "evidence": "44 fps average, 18 fps minimum, 252 calls, 1.28 M triangles.", "defect": "1 percent low.", "fix": "Shadow pass.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Solid blob reflections of the towers (B4-F4)",
+        "Dark horizontal seam in the night sky (A2-H3)",
+        "Uniform dotted windows (B3-F3)"
+      ],
+      "best3": [
+        "Overall night palette and exposure of the skyline (B3-F3)",
+        "Beacon and nav lights make the aircraft readable (E7, G5)",
+        "Frame pacing at night (44 fps)"
+      ]
+    },
+    "plane-rear-quarter": {
+      "giveaway": "The floats sit on the water with no waterline, no ripple ring and no reflection of the yellow fuselage — the aircraft is placed on the water shader rather than floating in it.",
+      "scores": { "1": 7, "2": 6, "5": 5, "6": 4, "7": 5, "8": 4, "9": 7, "10": 4, "11": 2, "15": 3, "24": 4, "25": 6, "26": 3, "27": 4, "28": 4, "29": 4, "30": 5 },
+      "entries": [
+        { "category": 11, "score": 2, "cells": "C6-F7", "condition": "at rest on water, 6 kts drift, noon", "evidence": "The water plane passes through the floats with no meniscus, waterline darkening, ripple rings or bow ripple from the drift.", "defect": "Floats do not interact with the water at all.", "fix": "Add a per-float displacement/ripple decal, a waterline wet band on the float, and small bow ripples proportional to drift speed.", "hardFailure": true, "kind": "visual" },
+        { "category": 26, "score": 3, "cells": "C6-F8, B6-E8", "condition": "noon, calm water", "evidence": "There is no reflection of the white-and-yellow aircraft on calm turquoise water; the cast shadow at B6-E8 is a hard-edged dark shape filled with bright caustic squiggles.", "defect": "Aircraft excluded from reflections; shadow on water is not wave-modulated.", "fix": "Include the aircraft in the planar reflection pass with wave distortion; soften the shadow and modulate by wave normal.", "hardFailure": false, "kind": "visual" },
+        { "category": 15, "score": 3, "cells": "B3-F3", "condition": "marina at 300 m", "evidence": "Boats are stacked white boxes with black window strips; sailboats are white wedges with masts; docks are plank boxes on cylinder posts with no cleats, fenders or ropes.", "defect": "Placeholder marina.", "fix": "Boat LODs with hull flare, windshields, railings; dock cleats, fenders, mooring lines.", "hardFailure": false, "kind": "visual" },
+        { "category": 6, "score": 4, "cells": "D4-E4, C4", "condition": "looking through the cabin windows", "evidence": "Seat backs are brown boxes; the rear window at C4 reads as an opaque grey pane; the instrument panel is visible as a dark slab with dots.", "defect": "Box interior and an opaque window.", "fix": "Seat meshes with headrests and belts; check the rear window material transparency.", "hardFailure": false, "kind": "visual" },
+        { "category": 2, "score": 6, "cells": "C4-F6", "condition": "close chase", "evidence": "Rivet rows and panel lines are modelled (crop aircraft.png); the rudder hinge at C4-C5 is a drawn dark line with no gap depth; float tops are flat planks.", "defect": "Hinge lines are painted, not cut.", "fix": "Cut hinge gaps and add float deck hardware (cleats, hatches).", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 5, "cells": "C4-F6, D6-F7", "condition": "noon", "evidence": "White and yellow are uniform gloss with no weathering at the steps, exhaust or float tops; float aluminium is flat grey.", "defect": "Uniform roughness across the airframe.", "fix": "Roughness map, dirt at steps and exhaust, brushed aluminium on floats.", "hardFailure": false, "kind": "visual" },
+        { "category": 5, "score": 5, "cells": "B5-C5, D4-H4", "condition": "close chase", "evidence": "Stabilizer and wing are thin flat slabs; the registration is set in an amateur italic serif.", "defect": "Slab surfaces.", "fix": "Airfoil section and proper aviation lettering.", "hardFailure": false, "kind": "visual" },
+        { "category": 1, "score": 7, "cells": "B4-H7", "condition": "rear three-quarter", "evidence": "Proportions of fuselage, fin and floats read correctly from this angle; the wing looks paper-thin in the tip view at H4.", "defect": "Wing thickness.", "fix": "Thicken the airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 8, "score": 4, "cells": "C6-F7", "condition": "at rest", "evidence": "Between still and flight frames the aircraft keeps the identical attitude with no heave or roll on the water.", "defect": "No buoyancy motion.", "fix": "Multi-point float buoyancy with wave sampling.", "hardFailure": false, "kind": "visual" },
+        { "category": 9, "score": 7, "cells": "A4-H8", "condition": "noon", "evidence": "The turquoise near-water with fine ripples is convincing; the far water at A4-H4 is a flat band.", "defect": "Far band flat.", "fix": "Swell normals at distance.", "hardFailure": false, "kind": "visual" },
+        { "category": 10, "score": 4, "cells": "A5-H8", "condition": "calm", "evidence": "Single ripple scale; no swell.", "defect": "Single spectrum.", "fix": "Three spectra.", "hardFailure": false, "kind": "visual" },
+        { "category": 24, "score": 4, "cells": "B1-B2, E2-G2", "condition": "noon", "evidence": "Small two-lobed cotton puffs with flat undersides.", "defect": "Flat bases.", "fix": "Erosion.", "hardFailure": true, "kind": "visual" },
+        { "category": 25, "score": 6, "cells": "A1-H8", "condition": "noon, sun behind-right", "evidence": "Exposure and shading of the fuselage are pleasant; the shadow on water is a hard flat cutout.", "defect": "Hard shadow.", "fix": "PCSS.", "hardFailure": false, "kind": "visual" },
+        { "category": 27, "score": 4, "cells": "G3-H3", "condition": "300 m", "evidence": "Sand strip with a hard edge and a thin foam line.", "defect": "Hard boundary.", "fix": "Wet-sand band.", "hardFailure": false, "kind": "visual" },
+        { "category": 28, "score": 4, "cells": "A3-H3", "condition": "300 m", "evidence": "Palms have fan-blob fronds and curved trunks (good); broadleaf trees are uniform spheres.", "defect": "Blob broadleaf trees.", "fix": "Branch hierarchy and species variation.", "hardFailure": false, "kind": "visual" },
+        { "category": 29, "score": 4, "cells": "A3-H3", "condition": "300 m", "evidence": "Marina, boats and a building give context; no people, cars or signage.", "defect": "Static scene.", "fix": "People on docks, parked cars.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 5, "cells": "n/a", "condition": "capture", "evidence": "10.6 fps average on the still, 30 fps in flight, 3.8 fps minimum, 228 calls, 1.01 M triangles.", "defect": "Pacing poor.", "fix": "Profile the reflection and shadow passes.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Floats on the water with no waterline or ripple (C6-F7)",
+        "No aircraft reflection; hard shadow with caustic squiggles (B6-F8)",
+        "Box-shaped marina boats and docks (B3-F3)"
+      ],
+      "best3": [
+        "Rivet rows and panel lines on the fuselage (crop aircraft.png)",
+        "Aircraft proportions from the rear quarter (B4-H7)",
+        "Near-water turquoise ripple structure (A5-H8)"
+      ]
+    },
+    "plane-front-quarter": {
+      "giveaway": "The propeller at idle is a translucent ghost ellipse in front of a flat charcoal cowl disc, and the pilot's face is a featureless skin-coloured oval.",
+      "scores": { "1": 7, "2": 6, "3": 4, "4": 3, "5": 5, "6": 4, "7": 5, "8": 4, "9": 7, "10": 4, "11": 2, "13": 3, "17": 4, "23": 4, "24": 3, "25": 6, "26": 3, "27": 4, "28": 4, "29": 4, "30": 5 },
+      "entries": [
+        { "category": 4, "score": 3, "cells": "B4-C5", "condition": "981 rpm idle", "evidence": "The propeller is a faint translucent grey ellipse with several stacked ghost blades; at idle a production title shows crisp or lightly streaked blades.", "defect": "Wrong rpm state and strobed ghosting.", "fix": "Show blade meshes with a short motion-blur streak below 1200 rpm and transition to a single alpha disc above.", "hardFailure": false, "kind": "visual" },
+        { "category": 3, "score": 4, "cells": "C5", "condition": "front quarter", "evidence": "The cowl front is a flat dark disc with painted grey segments; the spinner is a good chrome cone; no intakes, cooling vents or exhaust stacks.", "defect": "Cowling has no functional openings.", "fix": "Model two cooling intakes with depth, a carb intake, exhaust stubs and cowl fastener rows.", "hardFailure": false, "kind": "visual" },
+        { "category": 6, "score": 4, "cells": "D4-E4", "condition": "through the windshield", "evidence": "Pilot has a smooth featureless face and a floating headset; the hands are not visibly on the yoke; passenger seats are brown boxes.", "defect": "Placeholder pilot and interior.", "fix": "Face mesh with eyes and mouth, hands on the yoke, seat meshes with headrests.", "hardFailure": false, "kind": "visual" },
+        { "category": 11, "score": 2, "cells": "C6-F7", "condition": "at rest, 6 kts drift", "evidence": "Floats do not displace the water; no waterline, hump or ripple.", "defect": "No interaction.", "fix": "Displacement decals and waterline band.", "hardFailure": true, "kind": "visual" },
+        { "category": 13, "score": 3, "cells": "F5-H6", "condition": "drift", "evidence": "A single soft white smear trails the right float with no structure or dissipation pattern.", "defect": "Structureless foam smear.", "fix": "Foam texture with broken edges and age fade.", "hardFailure": false, "kind": "visual" },
+        { "category": 24, "score": 3, "cells": "B2-H3", "condition": "noon", "evidence": "Large cumulus with dead-flat grey undersides (crop distant.png) and smooth cotton tops.", "defect": "Flat opaque cloud bases.", "fix": "Base erosion and height-fade density.", "hardFailure": true, "kind": "visual" },
+        { "category": 26, "score": 3, "cells": "B7-G8", "condition": "noon", "evidence": "No reflection of the yellow fuselage on calm water; the shadow is a hard-edged shape with caustic squiggles.", "defect": "Aircraft excluded from reflections.", "fix": "Planar reflection with wave distortion.", "hardFailure": false, "kind": "visual" },
+        { "category": 2, "score": 6, "cells": "C4-F6", "condition": "close", "evidence": "Rivet rows along panel seams are modelled; the door steps at D5 are black blocks; strut fittings are simple.", "defect": "Blocky steps and fittings.", "fix": "Detail the steps and strut ends.", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 5, "cells": "C4-F6", "condition": "noon", "evidence": "The yellow has a clean specular highlight; no micro-variation or weathering anywhere.", "defect": "Uniform roughness.", "fix": "Roughness map and dirt.", "hardFailure": false, "kind": "visual" },
+        { "category": 5, "score": 5, "cells": "C4-H4", "condition": "close", "evidence": "The wing is a thin plank with a rounded leading edge and no flap/aileron gaps.", "defect": "Slab wing.", "fix": "Airfoil and hinge gaps.", "hardFailure": false, "kind": "visual" },
+        { "category": 1, "score": 7, "cells": "B4-G6", "condition": "front quarter", "evidence": "Proportions read well; the fuselage cross-section is convincingly round.", "defect": "Thin wing.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 8, "score": 4, "cells": "C6-F7", "condition": "at rest", "evidence": "Attitude identical across frames; no heave or roll.", "defect": "No buoyancy motion.", "fix": "Multi-point buoyancy.", "hardFailure": false, "kind": "visual" },
+        { "category": 9, "score": 7, "cells": "A5-H8", "condition": "noon", "evidence": "Turquoise near water with ripples is convincing.", "defect": "Single scale.", "fix": "Swell.", "hardFailure": false, "kind": "visual" },
+        { "category": 10, "score": 4, "cells": "A5-H8", "condition": "calm", "evidence": "Single ripple scale.", "defect": "Single spectrum.", "fix": "Three spectra.", "hardFailure": false, "kind": "visual" },
+        { "category": 17, "score": 4, "cells": "F4-G4", "condition": "3 km", "evidence": "Pastel boxes with one white cylinder.", "defect": "No hierarchy.", "fix": "Landmarks.", "hardFailure": false, "kind": "visual" },
+        { "category": 23, "score": 4, "cells": "A4-C4", "condition": "1 km", "evidence": "Bridge has H pylons, cable fans and block cars; no railings or lamps.", "defect": "No furniture.", "fix": "Barriers, lamps.", "hardFailure": false, "kind": "visual" },
+        { "category": 27, "score": 4, "cells": "G4-H4", "condition": "800 m", "evidence": "Island shore is a hard edge.", "defect": "Hard boundary.", "fix": "Ramps.", "hardFailure": false, "kind": "visual" },
+        { "category": 28, "score": 4, "cells": "G4-H4", "condition": "800 m", "evidence": "Palms and blob trees.", "defect": "Blob trees.", "fix": "Variation.", "hardFailure": false, "kind": "visual" },
+        { "category": 25, "score": 6, "cells": "A1-H8", "condition": "noon", "evidence": "Exposure good; wing shadow on the fuselage at D4-E4 is present.", "defect": "Hard water shadow.", "fix": "PCSS.", "hardFailure": false, "kind": "visual" },
+        { "category": 29, "score": 4, "cells": "A4-H4", "condition": "800 m", "evidence": "Bridge traffic, a channel marker and an island; no boats.", "defect": "Sparse.", "fix": "Boats.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 5, "cells": "n/a", "condition": "capture", "evidence": "16.4 fps average, 6.2 minimum, 298 calls, 873 k triangles.", "defect": "Pacing poor.", "fix": "Profile.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Ghost-ellipse propeller at idle (B4-C5)",
+        "Flat cowl disc without intakes or exhaust (C5)",
+        "Featureless pilot face and box seats (D4-E4)"
+      ],
+      "best3": [
+        "Chrome spinner with environment reflection (C5)",
+        "Rivet rows along the fuselage seams (C4-F6)",
+        "Near-water turquoise ripple structure (A5-H8)"
+      ]
+    },
+    "glass-sun": {
+      "giveaway": "Looking into the sun, the cabin glass shows no reflection, glare or Fresnel at all — the side windows are clear holes revealing box-shaped seats and a faceless pilot.",
+      "scores": { "1": 6, "2": 6, "5": 5, "6": 3, "7": 5, "9": 7, "11": 2, "17": 4, "23": 4, "24": 3, "25": 5, "26": 3, "29": 4, "30": 4 },
+      "entries": [
+        { "category": 6, "score": 3, "cells": "C3-F4, D4", "condition": "side view into the sun, at rest", "evidence": "Side windows show zero environment reflection or sun glare; seats are untextured brown boxes; the passenger at E4 is a blocky torso; the pilot's face is a featureless oval; the hand at D4 is a pale blob with sausage fingers.", "defect": "Glass has no Fresnel or reflection; interior and pilot are placeholders.", "fix": "Glass material with Fresnel reflection of the sky and a sun glare highlight; seat meshes with headrests and belts; face and hand meshes.", "hardFailure": false, "kind": "visual" },
+        { "category": 25, "score": 5, "cells": "A1-H8", "condition": "sun ahead", "evidence": "No sun disc, glare or rim lighting on the wing leading edges; the scene is lit flat despite the label.", "defect": "Sun-facing shot has no sun response.", "fix": "Sun disc and glare in the sky, rim specular on the airframe, glare on glass.", "hardFailure": false, "kind": "visual" },
+        { "category": 11, "score": 2, "cells": "D8-G8", "condition": "at rest", "evidence": "Floats meet the water with no waterline, meniscus or ripple.", "defect": "No interaction.", "fix": "Displacement and waterline.", "hardFailure": true, "kind": "visual" },
+        { "category": 26, "score": 3, "cells": "F6-H8", "condition": "noon", "evidence": "No reflection of the yellow fuselage; hard-edged shadow with caustic squiggles.", "defect": "Aircraft excluded from reflections.", "fix": "Planar reflection.", "hardFailure": false, "kind": "visual" },
+        { "category": 7, "score": 5, "cells": "A5-G8, C5-C8", "condition": "close", "evidence": "Rivet rows are well modelled with highlights (crop aircraft.png); the paint has no micro-variation or dirt at the steps and exhaust; the door seam at C5-C8 is a drawn line.", "defect": "Uniform paint and painted seams.", "fix": "Roughness map, dirt, cut door gap.", "hardFailure": false, "kind": "visual" },
+        { "category": 2, "score": 6, "cells": "A4-G8", "condition": "close", "evidence": "Rivets and panel lines present; strut fittings simple; steps blocky.", "defect": "Blocky details.", "fix": "Detail fittings and steps.", "hardFailure": false, "kind": "visual" },
+        { "category": 5, "score": 5, "cells": "G4-H4, A2-H2", "condition": "close", "evidence": "The stabilizer seen edge-on at G4-H4 is a thin plank; the wing underside carries a large flat white disc at E2.", "defect": "Thin slabs and a flat decal light.", "fix": "Airfoil thickness; model the landing light as a recessed lens.", "hardFailure": false, "kind": "visual" },
+        { "category": 1, "score": 6, "cells": "A2-H8", "condition": "side view", "evidence": "Fuselage section and cabin proportions read; wing is thin.", "defect": "Wing thickness.", "fix": "Airfoil.", "hardFailure": false, "kind": "visual" },
+        { "category": 9, "score": 7, "cells": "F5-H8", "condition": "noon", "evidence": "Turquoise ripples convincing.", "defect": "Single scale.", "fix": "Swell.", "hardFailure": false, "kind": "visual" },
+        { "category": 24, "score": 3, "cells": "B1, E1", "condition": "noon", "evidence": "Two tiny cotton puffs.", "defect": "Cotton blobs.", "fix": "Volumetric clouds.", "hardFailure": false, "kind": "visual" },
+        { "category": 17, "score": 4, "cells": "G3-H3", "condition": "4 km", "evidence": "Pale boxes.", "defect": "No hierarchy.", "fix": "Landmarks.", "hardFailure": false, "kind": "visual" },
+        { "category": 23, "score": 4, "cells": "F3-H3", "condition": "3 km", "evidence": "Bridge deck on piers; no furniture visible.", "defect": "No furniture.", "fix": "Barriers, lamps.", "hardFailure": false, "kind": "visual" },
+        { "category": 29, "score": 4, "cells": "E1, F3-H3", "condition": "n/a", "evidence": "A tiny distant airliner at E1 is a nice touch; otherwise no boats or life.", "defect": "Sparse.", "fix": "Boats.", "hardFailure": false, "kind": "visual" },
+        { "category": 30, "score": 4, "cells": "n/a", "condition": "capture", "evidence": "7 fps average on the still, 23.7 in flight, 2.4 minimum, 258 calls, 1.15 M triangles.", "defect": "Pacing collapsed.", "fix": "Profile.", "hardFailure": false, "kind": "performance" }
+      ],
+      "worst3": [
+        "Glass with no reflection or glare into the sun (C3-F4)",
+        "Box seats, blocky passenger and faceless pilot (D4-E4)",
+        "Floats without waterline (D8-G8)"
+      ],
+      "best3": [
+        "Rivet rows with correct highlights (crop aircraft.png)",
+        "Chrome float finish reflecting the water (D8-G8)",
+        "Distant airliner adds life (E1)"
+      ]
+    }
+  }
+}

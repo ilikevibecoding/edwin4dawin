@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { BridgeSpec, Vec2, WorldMap } from './map';
+import { MAP_N, WORLD_SIZE, type BridgeSpec, type Vec2, type WorldMap } from './map';
 import { clamp, lerp, smoothstep } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { ALL_CASCADES, ViewCull, layerMask, maskCasts, type CasterClass } from './culling';
@@ -44,10 +44,40 @@ interface Alignment { s: number[]; h: number[]; L: number[]; }
 const APPROACH_GRADE = 0.04;
 const MAX_GRADE = 0.055;
 
+/** The ground as the clipmap renders it: terrain.ts samples the height texture without the half-texel offset, so its
+ *  surface is `heightAt` shifted half a cell toward +x, +z; anything that must clear the ground clears both readings. */
+export function terrainAt(map: WorldMap, x: number, z: number): number {
+  const half = (WORLD_SIZE / MAP_N) * 0.5;
+  return Math.max(map.heightAt(x, z), map.heightAt(x - half, z - half));
+}
+
+/** Height of the road surface where the approach road meets a deck end at (x, z), the road arriving along (dx, dz):
+ *  the roads.ts pavement there (heightAt + 0.15), or 8 cm over the highest point of the rendered terrain under the
+ *  last 30 m of the approach across the road's width where that stands higher - the highway's course rides over
+ *  such a crown (highway.ts lift field) and must arrive flush with the approach slab. Shared by the deck alignment
+ *  (deck end = this + 4 cm) and the highway's end rows. */
+export function landingSurface(map: WorldMap, x: number, z: number, dx: number, dz: number, hw: number): number {
+  let h = Math.max(map.heightAt(x, z), 0.5) + 0.15;
+  const nx = -dz, nz = dx;
+  for (let s = 0; s <= 30; s += 2.5) {
+    for (let a = -hw; a <= hw + 1e-6; a += hw / 4) {
+      const px = x - dx * s + nx * a, pz = z - dz * s + nz * a;
+      h = Math.max(h, terrainAt(map, px, pz) + 0.08);
+    }
+  }
+  return h;
+}
+
 function buildAlignment(spec: BridgeSpec, map: WorldMap, total: number): Alignment {
   const rampLen = Math.min(160, total * 0.35);
-  const hA = Math.max(map.heightAt(spec.pts[0][0], spec.pts[0][1]), 0.5) + 0.3;
-  const hB = Math.max(map.heightAt(spec.pts[spec.pts.length - 1][0], spec.pts[spec.pts.length - 1][1]), 0.5) + 0.3;
+  // the deck top meets the road surface (roads.ts lifts its pavement 0.15 m off the terrain, the highway's course
+  // rides over the terrain where it crowns under the approach) with a 4 cm approach-slab step
+  const n = spec.pts.length;
+  const [ax, az] = spec.pts[0], [bx, bz] = spec.pts[1], [yx, yz] = spec.pts[n - 2], [zx, zz] = spec.pts[n - 1];
+  const lA = Math.hypot(bx - ax, bz - az) || 1, lB = Math.hypot(zx - yx, zz - yz) || 1;
+  // the road arrives at each end travelling onto the deck: its last 30 m lie behind the end, away from the deck
+  const hA = landingSurface(map, ax, az, (bx - ax) / lA, (bz - az) / lA, 11) + 0.04;
+  const hB = landingSurface(map, zx, zz, (yx - zx) / lB, (yz - zz) / lB, 11) + 0.04;
   const D = spec.deck;
   const pvi: { s: number; h: number; L: number }[] = [{ s: 0, h: hA, L: 0 }];
   if (spec.archHeight > 0 && spec.archLength > 0) {
@@ -129,6 +159,8 @@ export interface BridgeBuild {
   /** carriageway ribbons: `aRoadUv` (across -1..1, metres along) and `aRoadInfo` (lanes, width, median half-width) */
   deckGeometry: THREE.BufferGeometry;
   lampPositions: THREE.Vector3[];
+  /** per bridge: where the deck stands on fill and where the abutments face the water (debug / bench) */
+  approaches: { id: string; total: number; fill: [number, number][]; abutments: { s: number; dir: 1 | -1 }[] }[];
 }
 
 // ------------------------------------------------------------------ constants
@@ -153,6 +185,12 @@ const GIRDER_DEPTH = 2.4;
 const PARAPET_H = 1.05;
 const KERB = 0.15;
 const STEP = 10;
+/** F-shape concrete median barrier (81 cm tall, 61 cm base), counter-clockwise from the right foot; shared with
+ *  the highway module so the barrier runs unchanged from the pavement onto the decks */
+export const F_BARRIER_H = 0.81;
+export const F_BARRIER_PROFILE: readonly (readonly [number, number])[] = [[0.305, 0], [0.305, 0.075], [0.24, 0.33], [0.10, F_BARRIER_H], [-0.10, F_BARRIER_H], [-0.24, 0.33], [-0.305, 0.075], [-0.305, 0]];
+/** deck drainage: scupper openings in the kerb every SCUPPER_STEP metres, each with a downpipe under the fascia */
+const SCUPPER_STEP = 15;
 
 // ------------------------------------------------------------------ materials
 
@@ -176,11 +214,14 @@ const CONCRETE_FRAG = /* glsl */ `
     float n = fbm3(vWorldPosR.xz * 0.11);
     // 43 cm grain: band-limited (fades to its mean once a pixel spans a good part of its wavelength)
     float n2 = mix(vnoise(vWorldPosR.xz * 2.3), 0.5, smoothstep(0.12, 0.4, fp));
-    // weathered concrete pavement: mid grey, darker than the shoulders so the white lines and the kerbs read
+    // asphalt wearing course over the concrete deck (the tones of the highway's wearing course, highway.ts, so the
+    // carriageway runs unbroken over the abutment joint): dark lanes, an older paler mix on the shoulders, pale
+    // concrete kerbs and parapets outside - from the air the deck reads as a dark ribbon with bright edges and a
+    // bright median spine over the water, not as one pale slab
     float onShoulder = clamp((abs(xm) - width * 0.5 - 0.005) / fwX + 0.5, 0.0, 1.0);
-    vec3 conc = mix(vec3(0.25, 0.25, 0.245), vec3(0.34, 0.335, 0.32), n) * (0.94 + 0.12 * n2);
-    vec3 shoulder = mix(vec3(0.42, 0.42, 0.40), vec3(0.52, 0.51, 0.49), n) * (0.96 + 0.08 * n2);
-    // transverse pavement joints every 6 m, faint longitudinal joints at the lane edges
+    vec3 conc = mix(vec3(0.07, 0.07, 0.067), vec3(0.11, 0.107, 0.104), n) * (0.94 + 0.12 * n2);
+    vec3 shoulder = mix(vec3(0.20, 0.20, 0.19), vec3(0.27, 0.265, 0.25), n) * (0.95 + 0.10 * n2);
+    // the deck's 6 m joints reflect through the asphalt as faint transverse cracks; paving-lane seams at the lane edges
     float laneW = width / max(lanes, 1.0);
     float u = xm + width * 0.5;
     float k = floor(u / laneW);
@@ -189,7 +230,7 @@ const CONCRETE_FRAG = /* glsl */ `
     float jf = fract(along / 6.0);
     float joint = mix(aaLine((jf - 0.5) * 6.0, 0.065, fwA), 0.022, smoothstep(1.5, 4.0, fwA));
     float laneJoint = mix(aaLine(edgeDist, 0.05, fwX), 0.1 / laneW, smoothstep(0.8, 2.5, fwX));
-    conc *= 1.0 - 0.20 * joint - 0.08 * laneJoint;
+    conc *= 1.0 - 0.14 * joint - 0.08 * laneJoint;
     // tyre paths, joint staining (the dark smear tyres drag off every transverse joint) and weathering patches
     float wheel = mix(exp(-pow((abs(lp - laneW * 0.5) - laneW * 0.28) * 3.0, 2.0)), 0.18, smoothstep(0.5, 2.0, fwX));
     conc *= 1.0 - 0.17 * wheel;
@@ -211,6 +252,23 @@ const CONCRETE_FRAG = /* glsl */ `
     diffuseColor.rgb = mix(conc, vec3(0.92), max(edgeLine, dashes) * 0.92);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.88, 0.66, 0.14), centre * 0.94);
     roughnessFactor = 0.82;
+  } else if (vRoadInfo.y > 2.5) {
+    // riprap: quarried rock 0.5-1 m, every stone its own tone (fading to the mean once a stone is a pixel),
+    // wet and dark below the splash line
+    float fp = length(fwidth(vWorldPosR.xz)) + abs(fwidth(vWorldPosR.y));
+    vec3 pr = vWorldPosR * vec3(1.5, 1.3, 1.5);
+    float stone = hash11(floor(pr.x) * 17.0 + floor(pr.z) * 31.0 + floor(pr.y) * 7.0);
+    float grain = vnoise(pr.xz * 2.7 + pr.y);
+    float far = smoothstep(0.35, 1.4, fp);
+    diffuseColor.rgb *= mix(0.55 + 0.9 * stone, 1.0, far) * mix(0.82 + 0.36 * grain, 1.0, far);
+    diffuseColor.rgb *= 1.0 - 0.4 * (1.0 - smoothstep(-0.2, 1.1, vWorldPosR.y));
+    roughnessFactor = 0.96;
+  } else if (vRoadInfo.y > 1.5) {
+    // embankment fill: mottled earth or sand, a little darker where the slope meets the ground
+    float m = fbm3(vWorldPosR.xz * 0.35);
+    float m2 = mix(vnoise(vWorldPosR.xz * 1.9), 0.5, smoothstep(0.15, 0.6, length(fwidth(vWorldPosR.xz))));
+    diffuseColor.rgb *= (0.84 + 0.3 * m) * (0.92 + 0.16 * m2);
+    roughnessFactor = 0.97;
   } else {
     // run-off streaks down the faces and a little grime
     float streak = fbm3(vec2(vWorldPosR.x + vWorldPosR.z, vWorldPosR.y * 0.25) * 0.7);
@@ -256,7 +314,7 @@ function createConcreteMaterial(concrete: THREE.Material): THREE.MeshStandardMat
 /** Box-filtered coverage of a line of half-width `h` at signed distance `d`, for a pixel footprint `fw` (same
  *  units): exact area of the pixel's interval inside the line, so a line thinner than a pixel dims instead of
  *  breaking into dots. */
-const GLSL_AA_LINE = /* glsl */ `
+export const GLSL_AA_LINE = /* glsl */ `
 float aaLine(float d, float h, float fw) { return clamp((min(h, d + 0.5 * fw) - max(-h, d - 0.5 * fw)) / fw, 0.0, 1.0); }
 `;
 
@@ -266,9 +324,11 @@ float aaLine(float d, float h, float fw) { return clamp((min(h, d + 0.5 * fw) - 
  *  the alpha instead: a 22 cm cable at 2 km is a continuous faint line, not a chain of dots (with or without
  *  MSAA — the clips are captured without). The width the geometry projects to is ~1.7 x the vertex radius
  *  (six-sided prisms, boxes seen across their diagonal). */
-const STEEL_MIN_PX = 1.75;
-const STEEL_VERT = /* glsl */ `
-vGlow = aGlow; vCover = 1.0;
+export const STEEL_MIN_PX = 1.75;
+/** The inflation alone (needs `attribute vec4 aAxis`, `uniform float uPixelScale`, `varying float vCover`); shared
+ *  with the highway furniture, whose barriers and posts use it under their own materials. */
+export const MIN_WIDTH_VERT = /* glsl */ `
+vCover = 1.0;
 if (aAxis.w > 0.5) {
   vec3 offR = transformed - aAxis.xyz;
   float rr = length(offR);
@@ -279,6 +339,17 @@ if (aAxis.w > 0.5) {
     vCover = widthPx / ${STEEL_MIN_PX.toFixed(2)};
   }
 }
+`;
+const STEEL_VERT = /* glsl */ `
+vGlow = aGlow;
+${MIN_WIDTH_VERT}
+`;
+/** A lit lamp head keeps at least this much opacity however far it is (its inflated 2 px dot stays a lit dot to
+ *  the head cut-off distance instead of fading with its sub-pixel coverage: a street light at 4 km is far brighter
+ *  than anything its pixel averages with). Applied through `emissive`, so only while the lamps are on. */
+export const LIT_DOT_ALPHA = 0.55;
+export const STEEL_ALPHA_FRAG = /* glsl */ `
+diffuseColor.a *= max(vCover, vGlow * ${LIT_DOT_ALPHA.toFixed(2)} * smoothstep(0.3, 1.5, length(emissive)));
 `;
 
 /** Bridge steel (railings, cables, lamp posts, arches): vertex-coloured, with a per-vertex `aGlow` mask that turns the
@@ -300,26 +371,32 @@ function createSteelMaterial(steel: THREE.Material): { mat: THREE.MeshStandardMa
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${STEEL_VERT}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vGlow; varying float vCover;')
-      .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.a *= vCover;')
+      .replace('#include <color_fragment>', `#include <color_fragment>\n${STEEL_ALPHA_FRAG}`)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vGlow;');
   };
-  mat.customProgramCacheKey = () => 'bridge-steel-v2';
+  mat.customProgramCacheKey = () => 'bridge-steel-v3';
   return { mat, pixelScale };
+}
+
+/** Lamp glow 0..1 for the key light: on through dusk (sun under ~10 deg) and whenever the key light is the moon. */
+export function lampGlowFor(sunDir: THREE.Vector3, keyIntensity: number): number {
+  const elevation = (Math.asin(clamp(sunDir.y, -1, 1)) * 180) / Math.PI;
+  return Math.max(1 - smoothstep(2, 10, elevation), 1 - smoothstep(0.15, 0.6, keyIntensity));
 }
 
 // ------------------------------------------------------------------ geometry accumulation
 
 /** A centreline sample: position of the deck top, unit `right` (across) and forward direction. */
-interface Frame { x: number; y: number; z: number; rx: number; rz: number; dx: number; dz: number; s: number; }
+export interface Frame { x: number; y: number; z: number; rx: number; rz: number; dx: number; dz: number; s: number; }
 
-type Rgb = readonly [number, number, number];
+export type Rgb = readonly [number, number, number];
 const WHITE: Rgb = [1, 1, 1];
 
 /** World-space indexed triangle soup with flat normals, a vertex colour and `extraSize` extra floats per vertex
  *  (aRoadUv + aRoadInfo for the concrete, aGlow for the steel). Steel soups (`hasAxis`) also carry `aAxis`: the
  *  point of the member's axis nearest to the vertex and a flag marking members thin enough for the screen-space
  *  minimum width (see STEEL_VERT). Baked once; one mesh per chunk. */
-class Soup {
+export class Soup {
   readonly pos: number[] = [];
   readonly nrm: number[] = [];
   readonly col: number[] = [];
@@ -337,7 +414,8 @@ class Soup {
     this.pos.push(x, y, z);
     this.nrm.push(nx, ny, nz);
     this.col.push(c[0], c[1], c[2]);
-    if (this.extraSize) { if (extra) for (let i = 0; i < this.extraSize; i++) this.extra.push(extra[i]); else for (let i = 0; i < this.extraSize; i++) this.extra.push(0); }
+    // extras shorter than the layout are padded with zeros (a soup may carry an optional trailing component)
+    if (this.extraSize) { if (extra) for (let i = 0; i < this.extraSize; i++) this.extra.push(extra[i] ?? 0); else for (let i = 0; i < this.extraSize; i++) this.extra.push(0); }
     if (this.hasAxis) { if (axis) this.extra.push(axis.x, axis.y, axis.z, 1); else this.extra.push(x, y, z, 0); }
     const bb = this.bounds;
     if (x < bb.min.x) bb.min.x = x; if (x > bb.max.x) bb.max.x = x;
@@ -369,12 +447,13 @@ class Soup {
 
   /** Box: x across, z along, y from `yBottom` up `h`, yawed about Y (then pitched about its own X). `sidesOnly`
    *  drops the top and bottom faces (posts, rails and cables never show them). `thin` members (rails, posts, lamp
-   *  arms) record the box's long axis for the screen-space minimum width. */
-  box(x: number, yBottom: number, z: number, w: number, h: number, d: number, yaw: number, pitch: number, c: Rgb, sidesOnly = false, extra?: readonly number[], thin = false): void {
+   *  arms) record the box's long axis for the screen-space minimum width; `'point'` members (lamp heads,
+   *  reflectors) record their centre, so they inflate to a dot in every direction. */
+  box(x: number, yBottom: number, z: number, w: number, h: number, d: number, yaw: number, pitch: number, c: Rgb, sidesOnly = false, extra?: readonly number[], thin: boolean | 'point' = false): void {
     if (h <= 0.005) return;
     _q.setFromEuler(_e.set(pitch, yaw, 0, 'YXZ'));
     _m.compose(_p.set(x, yBottom + h / 2, z), _q, _s.set(w, h, d));
-    const longAxis = w >= h && w >= d ? 0 : h >= d ? 1 : 2;
+    const longAxis = thin === 'point' ? -1 : w >= h && w >= d ? 0 : h >= d ? 1 : 2;
     for (const f of BOX_FACES) {
       if (sidesOnly && f.n[1] !== 0) continue;
       _n.set(f.n[0], f.n[1], f.n[2]).applyQuaternion(_q);
@@ -596,10 +675,7 @@ class BridgeCuller {
       if (this.sunDir.lengthSq() > 1e-6) this.sunDir.normalize(); else this.sunDir.set(0, 1, 0);
       keyIntensity = this.sun.intensity;
     }
-    // lamps: on through dusk (sun under ~10 deg) and whenever the key light is the moon
-    const elevation = (Math.asin(clamp(this.sunDir.y, -1, 1)) * 180) / Math.PI;
-    const glow = Math.max(1 - smoothstep(2, 10, elevation), 1 - smoothstep(0.15, 0.6, keyIntensity));
-    this.steel.emissiveIntensity = LAMP_GLOW * glow;
+    this.steel.emissiveIntensity = LAMP_GLOW * lampGlowFor(this.sunDir, keyIntensity);
 
     if (this.seen.size) { this.cameras = [...this.seen]; this.seen.clear(); }
     if (!this.cameras.length) return; // until a chunk has been drawn the renderer's frustum test alone applies
@@ -667,8 +743,9 @@ const S_PLAIN: Rgb = [1, 1, 1];
 const S_DARK: Rgb = [0.3, 0.3, 0.32];        // expansion joints
 const S_HEAD: Rgb = [0.92, 0.9, 0.84];       // lamp luminaires
 
-/** `_roadMaterial` is kept in the signature for game.ts; the carriageway uses its own pale pavement shading so the
- *  causeways read as light concrete against the water instead of asphalt. */
+/** `_roadMaterial` is kept in the signature for game.ts; the carriageway uses its own pavement shading (asphalt
+ *  lanes between pale concrete shoulders, kerbs and parapets) so the causeways read as structured decks against the
+ *  water at every altitude. */
 export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concrete: THREE.Material, steel: THREE.Material): BridgeBuild {
   const concreteMat = createConcreteMaterial(concrete);
   const { mat: steelMat, pixelScale } = createSteelMaterial(steel);
@@ -683,6 +760,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
   };
   const group = new BridgeGroup(culler);
   const routes: BridgeRoute[] = [];
+  const approaches: BridgeBuild['approaches'] = [];
   const allDecks = new Soup(5);
   /** aRoadUv + aRoadInfo of the structure: lanes = 0 marks plain concrete; aRoadInfo.y = 1 adds the formwork panel
    *  joints of the piers and pylons (see CONCRETE_FRAG) */
@@ -695,7 +773,9 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
     const total = polylineLength(spec.pts);
     const W = spec.width, hw = W * 0.5;
     // the carriageway is narrower than the deck: pale concrete shoulders flank it
-    const cw = clamp(spec.lanes * 3.3, 8, W - 4), chw = cw * 0.5;
+    // decks wide enough for it carry the F-shape median barrier of the highway (the carriageway grows by its base)
+    const hasMedian = spec.lanes >= 6 || (spec.lanes >= 4 && W >= 20);
+    const cw = clamp(spec.lanes * 3.3 + (hasMedian ? 0.7 : 0), 8, W - 4), chw = cw * 0.5;
     const frameAt = (s: number): Frame => {
       const p = pointAt(spec.pts, s);
       return { x: p.x, y: deckHeightProfile(spec, map, s, total), z: p.z, rx: -p.dz, rz: p.dx, dx: p.dx, dz: p.dz, s };
@@ -724,8 +804,61 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
     if ((n & 1) === 1) { const f = frameAt(total); pts3.push(new THREE.Vector3(f.x, f.y, f.z)); }
     routes.push({ id: spec.id, pts: pts3, width: spec.width, lanes: spec.lanes, traffic: spec.traffic });
 
-    const medianHalf = spec.lanes >= 6 ? 0.3 : 0;
+    const medianHalf = hasMedian ? 0.305 : 0;
     const roadInfo = [0, 0, spec.lanes, cw, medianHalf];
+
+    // ------------------------------------------------------------ approaches: where the deck stands on fill
+    // The deck rides an embankment wherever the ground under it is land and within 16 m of the deck (the ramps
+    // at both ends, the banks of a river crossing); the last U_LEN metres before the water are a U-abutment
+    // (walls flush with the fascia, a front wall in the water with a riprap berm around it, splayed wing walls
+    // at its back corners) and the fill behind it slopes 2:1 to the ground, riprap-armoured wherever its toe
+    // reaches the water.
+    const groundAt = (f: Frame) => map.heightAt(f.x, f.z);
+    const fillAt = (f: Frame): boolean => { const gd = groundAt(f); return gd >= 0.3 && f.y - gd <= 16 && f.y - gd > -0.5; };
+    const U_LEN = 24;
+    const flags: boolean[] = [];
+    for (let i = 0; i <= n; i++) flags.push(fillAt(frameAt(Math.min(total, i * STEP))));
+    /** abutment planes: station and the direction (along s) in which the water lies */
+    const abutments: { s: number; dir: 1 | -1 }[] = [];
+    for (let i = 0; i < n; i++) {
+      if (flags[i] && !flags[i + 1]) abutments.push({ s: Math.min(total, (i + 0.5) * STEP), dir: 1 });
+      else if (!flags[i] && flags[i + 1]) abutments.push({ s: Math.min(total, (i + 0.5) * STEP), dir: -1 });
+    }
+    const inU = (s: number) => abutments.some((a) => (a.dir > 0 ? s > a.s - U_LEN && s <= a.s : s >= a.s && s < a.s + U_LEN));
+    {
+      const fill: [number, number][] = [];
+      for (let i = 0; i <= n; i++) {
+        if (!flags[i]) continue;
+        const s0 = Math.min(total, i * STEP);
+        while (i < n && flags[i + 1]) i++;
+        fill.push([s0, Math.min(total, i * STEP)]);
+      }
+      approaches.push({ id: spec.id, total, fill, abutments: abutments.map((a) => ({ ...a })) });
+    }
+    const FILL_INFO = [0, 0, 0, 2, 0];
+    const RIPRAP_INFO = [0, 0, 0, 3, 0];
+    const sandy = (x: number, z: number) => map.zoneAt(x, z) === 2;
+    const C_FILL_SAND: Rgb = [0.92, 0.84, 0.66];
+    const C_FILL_GRASS: Rgb = [0.60, 0.68, 0.40];
+    const C_RIPRAP: Rgb = [0.60, 0.585, 0.55];
+    const SLOPE_TOP = -0.45;      // the fill meets the fascia's lower edge
+    const RIPRAP_TOP = 1.7;       // rock armour from the toe up to the splash zone
+    /** slope section at a frame: the fascia edge, the riprap top and the toe (in the water when the ground falls under it) */
+    const slopeAt = (f: Frame, side: number): { yTop: number; aTop: number; aMid: number; yMid: number; aToe: number; yToe: number; wet: boolean } | null => {
+      const yTop = f.y + SLOPE_TOP, aTop = hw + 0.56;
+      let aToe = aTop + 2 * (yTop - groundAt(f));
+      for (let it = 0; it < 2; it++) {
+        const gt = map.heightAt(f.x + f.rx * side * aToe, f.z + f.rz * side * aToe);
+        aToe = aTop + 2 * (yTop - gt);
+      }
+      let yToe = yTop - (aToe - aTop) * 0.5;
+      if (yToe - 0.35 < 0.2) yToe = -1.2; else yToe -= 0.35;   // the toe is buried a little, or runs on under the water
+      if (aToe - aTop < 0.6) return null;
+      const wet = yToe < 0.3;
+      const yMid = wet ? Math.min(yTop, RIPRAP_TOP) : yToe;
+      const aMid = aTop + 2 * (yTop - yMid);
+      return { yTop, aTop, aMid, yMid, aToe: aTop + 2 * (yTop - yToe), yToe, wet };
+    };
 
     for (let k = 0; k < nChunks; k++) {
       const s0 = k * chunkLen, s1 = Math.min(total, (k + 1) * chunkLen);
@@ -772,18 +905,75 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
       const profileColors: Rgb[] = [C_PLAIN, C_CAP, C_CAP, C_CAP, C_PLAIN, C_SOFFIT, C_UNDER, C_UNDER, C_UNDER, C_SOFFIT, C_PLAIN, C_CAP, C_CAP, C_CAP, C_PLAIN];
       P.struct.loft(frames, profile, profileColors, NO_ROAD);
       if (medianHalf > 0) {
-        const m = medianHalf;
-        P.struct.loft(frames, [[m, 0.02], [m, 0.3], [m * 0.4, 0.9], [-m * 0.4, 0.9], [-m, 0.3], [-m, 0.02]], [C_PLAIN, C_PLAIN, C_CAP, C_PLAIN, C_PLAIN], NO_ROAD);
+        // the same F-shape barrier the highway carries onto the deck (its base sits on the pavement)
+        const lifted = frames.map((f) => ({ ...f, y: f.y + 0.02 }));
+        P.struct.loft(lifted, F_BARRIER_PROFILE, [C_PLAIN, C_PLAIN, C_PLAIN, C_CAP, C_PLAIN, C_PLAIN, C_PLAIN], NO_ROAD);
       }
 
-      // -------------------------------------------------------- approach embankments / abutments
+      // -------------------------------------------------------- approach embankments, U-abutments, wing walls, riprap
       for (let i = 0; i < frames.length - 1; i++) {
-        const f = frames[i];
-        const ground = map.heightAt(f.x, f.z);
-        if (ground < 0.3) continue;
-        const bottom = ground - 0.8, top = f.y - g + 0.15;
-        if (top - bottom < 0.3 || f.y - ground > 16) continue;
-        P.struct.box(f.x, bottom, f.z, W + 0.8, top - bottom, frames[i + 1].s - f.s + 0.4, yawAt(f), 0, C_PLAIN, false, NO_ROAD);
+        const f = frames[i], f1 = frames[i + 1];
+        if (!fillAt(f) || !fillAt(f1)) continue;
+        const yaw = yawAt(f);
+        const ground = groundAt(f);
+        if (inU(f.s) || inU(f1.s)) {
+          // U-abutment: MSE walls flush with the fascia down to a footing under the water line
+          const bottom = Math.min(ground, 0) - 1.2, top = f.y + SLOPE_TOP;
+          if (top - bottom > 0.3) P.struct.box((f.x + f1.x) / 2, bottom, (f.z + f1.z) / 2, W + 1.12, top - bottom, f1.s - f.s + 0.05, yaw, 0, C_PYLON, false, PIER_INFO);
+          continue;
+        }
+        // sloped fill: fascia edge -> (riprap top) -> toe, one strip per face so the tones stay flat-shaded
+        for (const side of [-1, 1]) {
+          const sa = slopeAt(f, side), sb = slopeAt(f1, side);
+          if (!sa || !sb) continue;
+          const tone = sandy(f.x, f.z) ? C_FILL_SAND : C_FILL_GRASS;
+          const pt = (fr: Frame, a: number, y: number) => new THREE.Vector3(fr.x + fr.rx * side * a, y, fr.z + fr.rz * side * a);
+          const strip = (p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3, c: Rgb, info: number[]) => {
+            // p0 -> p1 along the top edge (frame f -> f1), p2 -> p3 along the bottom edge
+            _n.subVectors(p1, p0).cross(_d.subVectors(p2, p0)).normalize();
+            if (_n.dot(_a.set(f.rx * side, 0.5, f.rz * side)) < 0) _n.negate();
+            const base = P.struct.vertexCount;
+            for (const v of [p0, p1, p3, p2]) P.struct.vertex(v.x, v.y, v.z, _n.x, _n.y, _n.z, c, info);
+            _b.subVectors(p1, p0).cross(_c.subVectors(p3, p0));
+            if (_b.dot(_n) >= 0) P.struct.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+            else P.struct.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+          };
+          strip(pt(f, sa.aTop, sa.yTop), pt(f1, sb.aTop, sb.yTop), pt(f, sa.aMid, sa.yMid), pt(f1, sb.aMid, sb.yMid), tone, FILL_INFO);
+          if (sa.wet || sb.wet) strip(pt(f, sa.aMid, sa.yMid), pt(f1, sb.aMid, sb.yMid), pt(f, sa.aToe, sa.yToe), pt(f1, sb.aToe, sb.yToe), C_RIPRAP, RIPRAP_INFO);
+        }
+      }
+      for (const ab of abutments) {
+        if (chunkOf(ab.s) !== k) continue;
+        const f = frameAt(ab.s);
+        const yaw = yawAt(f);
+        const ground = groundAt(f);
+        const waterY = Math.min(ground, 0);
+        const uMid = frameAt(ab.s - ab.dir * U_LEN * 0.5);
+        // riprap berm around the abutment: a 2:1 rock apron from under the water line to the splash zone
+        P.struct.prism(uMid.x, waterY - 1.2, uMid.z, W + 1.12 + 9.0, U_LEN + 9.0, uMid.x, waterY + 1.1, uMid.z, W + 1.12 + 1.6, U_LEN + 1.6, yaw, C_RIPRAP, RIPRAP_INFO, true);
+        // wing walls splayed 35 degrees back from the U's rear corners, retaining the end of the slopes
+        const back = frameAt(ab.s - ab.dir * U_LEN);
+        const top = back.y + SLOPE_TOP;
+        const wl = 9.0, cs = Math.cos(0.61), sn = Math.sin(0.61);
+        for (const side of [-1, 1]) {
+          // wall direction: away from the water and outward
+          const dwx = -back.dx * ab.dir * cs + back.rx * side * sn, dwz = -back.dz * ab.dir * cs + back.rz * side * sn;
+          const cx = back.x + back.rx * side * (hw + 0.56) + dwx * (wl / 2);
+          const cz = back.z + back.rz * side * (hw + 0.56) + dwz * (wl / 2);
+          const bottom = Math.min(map.heightAt(cx, cz), 0.6) - 0.8;
+          if (top - bottom > 0.5) P.struct.box(cx, bottom, cz, 0.45, top - bottom, wl, Math.atan2(dwx, dwz), 0, C_PYLON, false, PIER_INFO);
+          // cap the slope's open end against the wing wall
+          const sc = slopeAt(back, side);
+          if (sc) {
+            const p = (a: number, y: number) => new THREE.Vector3(back.x + back.rx * side * a, y, back.z + back.rz * side * a);
+            const base = P.struct.vertexCount;
+            const nx = -back.dx * ab.dir, nz = -back.dz * ab.dir;
+            const tri = [p(sc.aTop, sc.yTop), p(sc.aToe, sc.yToe), p(sc.aTop, sc.yToe)];
+            for (const v of tri) P.struct.vertex(v.x, v.y, v.z, nx, 0, nz, sandy(back.x, back.z) ? C_FILL_SAND : C_FILL_GRASS, FILL_INFO);
+            _n.subVectors(tri[1], tri[0]).cross(_d.subVectors(tri[2], tri[0]));
+            if (_n.x * nx + _n.z * nz >= 0) P.struct.idx.push(base, base + 1, base + 2); else P.struct.idx.push(base, base + 2, base + 1);
+          }
+        }
       }
 
       // -------------------------------------------------------- railing on the parapets: posts every 4 m, two rails
@@ -804,6 +994,17 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         const yaw = yawAt(f);
         for (const side of [-1, 1]) P.steel.box(f.x + f.rx * (hw + 0.33) * side, f.y + ph, f.z + f.rz * (hw + 0.33) * side, 0.12, 0.9, 0.12, yaw, 0, S_PLAIN, true, undefined, true);
       }
+      // deck drainage: a scupper opening in each kerb face every SCUPPER_STEP m (offset from the piers) and its
+      // downpipe hanging from the drip edge outside the fascia
+      for (let s = Math.ceil((s0 - 7.5) / SCUPPER_STEP) * SCUPPER_STEP + 7.5; s < s1; s += SCUPPER_STEP) {
+        if (s < 4 || s > total - 4) continue;
+        const f = frameAt(s);
+        const yaw = yawAt(f);
+        for (const side of [-1, 1]) {
+          P.steel.box(f.x + f.rx * (chw + 0.01) * side, f.y + 0.03, f.z + f.rz * (chw + 0.01) * side, 0.08, 0.1, 0.5, yaw, 0, S_DARK, false);
+          P.steel.box(f.x + f.rx * (hw + 0.33) * side, f.y - 2.2, f.z + f.rz * (hw + 0.33) * side, 0.13, 1.2, 0.13, yaw, 0, S_DARK, true, undefined, true);
+        }
+      }
       // lamp posts on the parapet caps, alternating sides every 45 m: pole, arm over the shoulder, glowing luminaire
       for (let ls = 22, j = 0; ls < total - 20; ls += 45, j++) {
         if (chunkOf(ls) !== k) continue;
@@ -815,7 +1016,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         const ax = f.x + f.rx * (hw + 0.33 - 1.25) * side, az = f.z + f.rz * (hw + 0.33 - 1.25) * side;
         P.steel.box(ax, f.y + ph + 8.85, az, 2.5, 0.16, 0.16, yaw, 0, S_PLAIN, true, undefined, true);
         const hx = f.x + f.rx * (hw + 0.33 - 2.35) * side, hz = f.z + f.rz * (hw + 0.33 - 2.35) * side;
-        P.heads.box(hx, f.y + ph + 8.62, hz, 0.8, 0.26, 0.5, yaw, 0, S_HEAD, false, [1]);
+        P.heads.box(hx, f.y + ph + 8.62, hz, 0.8, 0.26, 0.5, yaw, 0, S_HEAD, false, [1], 'point');
       }
     }
 
@@ -830,7 +1031,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
     for (const s of pierS) {
       const f = frameAt(s);
       const ground = map.heightAt(f.x, f.z);
-      if (f.y - ground < 2.8) continue;
+      if (f.y - ground < 2.8 || fillAt(f)) continue;
       const P = parts[chunkOf(s)];
       const yaw = yawAt(f);
       const capTop = f.y - g;
@@ -893,6 +1094,12 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
       }
       // expansion joint across the carriageway over every pier
       P.steel.box(f.x, f.y + 0.03, f.z, cw, 0.04, 0.3, yaw, 0, S_DARK, false);
+    }
+    // abutment joints: the approach-slab finger joint where the road runs onto each end of the deck
+    for (const s of [0.45, total - 0.45]) {
+      const P = parts[chunkOf(s)];
+      const f = frameAt(s);
+      P.steel.box(f.x, f.y + 0.03, f.z, cw, 0.04, 0.5, yawAt(f), 0, S_DARK, false);
     }
 
     // ------------------------------------------------------------ main span structure
@@ -1056,7 +1263,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
 
   const deckGeometry = allDecks.build([['aRoadUv', 2], ['aRoadInfo', 3]]);
   // the lamps are part of the bridge steel (they need the dusk glow), so props gets none to place
-  return { group, routes, deckGeometry, lampPositions: [] };
+  return { group, routes, deckGeometry, lampPositions: [], approaches };
 }
 
 /** Minimal geometry merge (positions, normals, indices) for same-material static geometry. */
