@@ -1,0 +1,14 @@
+base: d7b89cf5 (cursor/vice-city-aerial-8213)
+merged acsplit: 3dce05f4 Aircraft split report: pinned-stamp re-capture — split build rebuilt with BUILD_ID set t
+merged waterrender: d9b6f649 Water rendering defect log: rounds 6-8 (footprint fade per wave vector, the r7 streak filt
+merged waterphys (recorded resolution): f6262d74 Wreck flooding scales with the striking part's speed (the other wing dipping in at 14 m/s 
+skip boats: no remote branch
+merged clouds4: ce5c5a5c Clouds: fine march step grows with distance along the ray (footprint-sized near the camera
+merged light3: ac49aba9 light3 defect log: round 3 results (seam closed at 30 m, low-sun probe side effects, dusk 
+merged street (recorded resolution): c71cd156 Sidewalk shader: decode the packed slab-width / ramp attribute tolerant of interpolation r
+merged highway (recorded resolution): 1258a3f4 Highway guardrail opens at the mouths of the roads meeting the highway on its side (crossi
+merged facade3: 4442382f Facades: rain runs down the masonry from the coping joints and the corners (dark tongues a
+merged veg5: 2e4c6fb4 Vegetation defect log: rounds 7c-10b verified at r12/r14 (budgets, trunks, near crowns, bl
+merged terrain5: d9607f28 Terrain: lawn/dry balance recentred (parks and yards were nearly all dry grass), litter fl
+fixup applied: streets-highway-lamps.patch
+build: e9db7f93 from /home/ubuntu/wt-integration
