@@ -316,11 +316,14 @@ void main() {
     t1 = min(t1, uMaxDist);
     float pathLen = t1 - t0;
     // three step sizes: coarse through clear air, fine inside the envelope, and a surface step that
-    // resolves the silhouette while the ray is still mostly transparent. The fine step is budget-limited
-    // over the slab crossing and grows with distance (pixel footprint). The budget share assumes most of a
-    // long crossing is skipped at the coarse step (only the columns are marched finely).
+    // resolves the silhouette while the ray is still mostly transparent. The fine step grows with the
+    // distance along the ray (pixel footprint): dtF = dtF0 * (1 + t / 6 km), with dtF0 set so the whole
+    // crossing fits 80 % of the step budget (the rest assumes clear air is skipped at the coarse step).
+    // A constant step sized for the crossing gave a camera inside the layer 270-360 m steps through the
+    // cloud 50 m in front of it (a smeared fog) while the far band, already fading, got the same fine steps.
     float budget = uCloudSteps * 8.0;
-    float dtF = max(pathLen / (budget * 0.8), 36.0 + t0 * 0.003);
+    float dtF0 = 6000.0 * log((6000.0 + t1) / (6000.0 + t0)) / (budget * 0.8);
+    float dtF = max(dtF0 * (1.0 + t0 / 6000.0), 36.0 + t0 * 0.003);
     float dtC = dtF * 3.0;
     float dtS = dtF * (1.0 / 3.0);
     float t = t0 + ign(gl_FragCoord.xy) * dtF;
@@ -358,6 +361,10 @@ void main() {
     const vec3 ONE3 = vec3(1.0);
     for (int i = 0; i < 200; i++) {
       if (float(i) >= budget || t > t1 || T < 0.01) break;
+      dtF = max(dtF0 * (1.0 + t / 6000.0), 36.0 + t * 0.003);
+      dtC = dtF * 3.0;
+      dtS = dtF * (1.0 / 3.0);
+      detFade = smoothstep(70.0, 220.0, dtF);
       vec3 p = uCamPos + dir * t;
       vec4 f = macroField(p.xz);
       // cheap rejection on the smooth envelope before any noise fetch: outside the footprint, above the
