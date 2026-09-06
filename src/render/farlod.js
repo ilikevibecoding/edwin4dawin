@@ -4,8 +4,9 @@
 //   - Tiles of 256 x 256 blocks (64 x 64 cells of 4 blocks; render/farlod/tiles.js) built from the worldgen column
 //     sampler, incrementally within `budgetMs` (2 ms) per frame, nearest first, as the player moves; all tiles live
 //     in ONE pooled indexed geometry (fixed slot per tile, partial buffer uploads) = one draw call; the frontier
-//     town's buildings are one more merged box mesh (render/farlod/town.js) = a second draw call. The Coruscant far
-//     city is the skyline impostor mesh (coruscant/skyline.js: towers, landmarks, boulevard decks, skybridges).
+//     town's buildings are one more merged box mesh (render/farlod/town.js) = a second draw call; a fully fogged
+//     horizon wall ring that follows the camera (below) is the third. The Coruscant far city is the skyline
+//     impostor mesh (coruscant/skyline.js: towers, landmarks, boulevard decks, skybridges).
 //   - Where real chunks exist they win: the far surface sits SURFACE_DROP under the block tops and is depth tested,
 //     and inside `terrain.nearCullRadius()` (the radius within which every chunk of the near ring has a mesh) its
 //     fragments are discarded outright, so nothing pokes through the near ring - while the ring is still streaming
@@ -17,10 +18,40 @@
 import * as THREE from 'three';
 import { SHARED } from '../entityMaterial.js';
 import { SHADING_PARS, bindShading } from './shading.js';
-import { TileBuilder, VERTS_PER_TILE, INDICES_PER_TILE, TILE_BYTES, TILE as TILE_SIZE, tilesNeeded, tileStale, farRadiusFor } from './farlod/tiles.js';
+import { TileBuilder, VERTS_PER_TILE, INDICES_PER_TILE, TILE_BYTES, TILE as TILE_SIZE, SKIRT_Y, tilesNeeded, tileStale, farRadiusFor } from './farlod/tiles.js';
 import { townBoxes, boxGeometry } from './farlod/town.js';
 
 export { TILE, CELL, tilesNeeded, farRadiusFor, farMemoryEstimate } from './farlod/tiles.js';
+
+// Horizon skirt: the far tiles end at the coverage radius, and from any height the dome's below-horizon colour would
+// show as a polygonal band between that edge and the true horizon. This cone ("lampshade") rises from just inside
+// the coverage edge at the skirt depth to eye height at HORIZON_R blocks (inside the camera's 1000-block far plane),
+// so every view ray that clears the tiles meets it. It is entirely past the fog end (the coverage radius is
+// fogFar + 48), so it renders as pure fog, exactly up to the horizon line where the dome's own horizon colour
+// continues. Rebuilt only when the coverage radius changes; per frame it just follows the camera.
+export const HORIZON_R = 950;
+const HORIZON_SEGS = 72;
+export function horizonGeometry(innerR, outerR = HORIZON_R, out = null) {
+  const n = HORIZON_SEGS, vn = (n + 1) * 2;
+  const rb = Math.min(innerR, outerR - 40);
+  const g = out || { pos: new Float32Array(vn * 3), col: new Uint8Array(vn * 4), nrm: new Int8Array(vn * 3), idx: new Uint32Array(n * 6) };
+  const { pos, col, nrm, idx } = g;
+  for (let i = 0; i <= n; i++) {
+    const a = i / n * Math.PI * 2, cx = Math.cos(a), sz = Math.sin(a);
+    for (let k = 0; k < 2; k++) {
+      const v = i * 2 + k, r = k ? outerR : rb;
+      pos[v * 3] = cx * r; pos[v * 3 + 1] = k; pos[v * 3 + 2] = sz * r;   // y 0 (skirt depth) .. 1 (eye level), scaled per frame
+      col[v * 4] = 22; col[v * 4 + 1] = 58; col[v * 4 + 2] = 128; col[v * 4 + 3] = 255;
+      nrm[v * 3] = Math.round(-cx * 90); nrm[v * 3 + 1] = 90; nrm[v * 3 + 2] = Math.round(-sz * 90);
+    }
+  }
+  // inward-facing quads (the camera is inside and above the cone)
+  for (let i = 0; i < n; i++) {
+    const a = i * 2, b = a + 1, c = a + 2, d = a + 3;
+    idx[i * 6] = a; idx[i * 6 + 1] = c; idx[i * 6 + 2] = b; idx[i * 6 + 3] = c; idx[i * 6 + 4] = d; idx[i * 6 + 5] = b;
+  }
+  return g;
+}
 
 const VERT = /* glsl */ `
 attribute vec4 aColor;
@@ -156,6 +187,7 @@ export class FarLOD {
     this.pool = null;
     this.mesh = null;
     this.townMesh = null;
+    this.horizon = null;
     this.frame = 0;
     this.lastPlan = { x: Infinity, z: Infinity, farR: 0, nearCull: 0 };
     this.stats = { tiles: 0, building: 0, queued: 0, poolCapacity: 0, bytes: 0, buildMs: 0, builtTotal: 0, nearCull: 0, farRadius: 0, drawCalls: 0 };
@@ -169,7 +201,39 @@ export class FarLOD {
     this.mesh.matrixAutoUpdate = false;
     if (game.scene) game.scene.add(this.mesh);
     this._buildTown(game.town);
+    this._buildHorizon();
     if (opts.prebuildMs > 0) this.prebuild(px, pz, opts.prebuildMs, opts.fogFar || 0);
+  }
+
+  _buildHorizon() {
+    this.horizonR = this.lastPlan.farR || farRadiusFor(this.game.terrain ? this.game.terrain.renderDistance : 8, 0);
+    const g = horizonGeometry(this.horizonR - 16);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(g.pos, 3).setUsage(THREE.DynamicDrawUsage));
+    geo.setAttribute('aColor', new THREE.BufferAttribute(g.col, 4, true));
+    geo.setAttribute('normal', new THREE.BufferAttribute(g.nrm, 3, true));
+    geo.setIndex(new THREE.BufferAttribute(g.idx, 1));
+    this.horizonArrays = g;
+    this.horizon = new THREE.Mesh(geo, this.material);
+    this.horizon.frustumCulled = false;
+    this.horizon.renderOrder = 1;
+    this.horizon.name = 'far-lod-horizon';
+    if (this.game.scene) this.game.scene.add(this.horizon);
+  }
+
+  // Cone centred on the camera: base just inside the coverage edge at the skirt depth, rim a hair above eye level
+  // (= the horizon line). The base radius is re-baked when the coverage radius changes.
+  _placeHorizon(farR) {
+    const cam = this.game.camera;
+    if (!this.horizon || !cam) return;
+    if (Math.abs(farR - this.horizonR) > 1) {
+      this.horizonR = farR;
+      horizonGeometry(farR - 16, HORIZON_R, this.horizonArrays);
+      this.horizon.geometry.attributes.position.needsUpdate = true;
+    }
+    const y0 = SKIRT_Y - 4;
+    this.horizon.position.set(cam.position.x, y0, cam.position.z);
+    this.horizon.scale.y = Math.max(1, cam.position.y + 1 - y0);
   }
 
   _ensurePool(capacity) {
@@ -306,6 +370,7 @@ export class FarLOD {
     if (moved > 24 || Math.abs(farR - lp.farR) > 32 || Math.abs(nearCull - lp.nearCull) > 48 || (this.frame % 60 === 0)) this.plan(px, pz, farR, nearCull);
     const left = this.budgetMs - (performance.now() - t0);
     if (this.queue.length && left > 0.1) this.build(left);
+    this._placeHorizon(farR);
     this.stats.nearCull = nearCull; this.stats.farRadius = farR;
     this._refreshStats();
   }
@@ -313,22 +378,25 @@ export class FarLOD {
   _refreshStats() {
     const s = this.stats;
     s.tiles = this.tiles.size - this.queue.length; s.queued = this.queue.length; s.building = this.queue.length && this.queue[0].builder ? 1 : 0;
-    s.poolCapacity = this.pool.capacity; s.bytes = this.memoryBytes(); s.drawCalls = 1 + (this.townMesh ? 1 : 0);
+    s.poolCapacity = this.pool.capacity; s.bytes = this.memoryBytes(); s.drawCalls = 1 + (this.townMesh ? 1 : 0) + (this.horizon ? 1 : 0);
   }
 
   // CPU-side bytes of the far layer (the GPU holds a copy of the same buffers).
   memoryBytes() {
     let b = this.pool ? this.pool.bytes : 0;
-    if (this.townMesh) for (const a of Object.values(this.townMesh.geometry.attributes)) b += a.array.byteLength;
-    if (this.townMesh && this.townMesh.geometry.index) b += this.townMesh.geometry.index.array.byteLength;
+    for (const m of [this.townMesh, this.horizon]) {
+      if (!m) continue;
+      for (const a of Object.values(m.geometry.attributes)) b += a.array.byteLength;
+      if (m.geometry.index) b += m.geometry.index.array.byteLength;
+    }
     return b;
   }
 
-  setVisible(v) { if (this.mesh) this.mesh.visible = v; if (this.townMesh) this.townMesh.visible = v; }
+  setVisible(v) { for (const m of [this.mesh, this.townMesh, this.horizon]) if (m) m.visible = v; }
 
   dispose() {
     if (this.mesh && this.mesh.parent) this.mesh.parent.remove(this.mesh);
-    if (this.townMesh && this.townMesh.parent) { this.townMesh.parent.remove(this.townMesh); this.townMesh.geometry.dispose(); }
+    for (const m of [this.townMesh, this.horizon]) if (m && m.parent) { m.parent.remove(m); m.geometry.dispose(); }
     if (this.pool) this.pool.dispose();
     this.material.dispose();
     this.tiles.clear(); this.queue.length = 0;

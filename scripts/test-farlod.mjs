@@ -333,9 +333,9 @@ if (urlArg > 0) {
       await page.evaluate('game.input.locked = true; game.input.onLockChange = null; "ok"');
       await page.sleep(3000);
       // magenta backdrop: hide the sky dome and pin the clear colour so any uncovered pixel is unmistakable
-      await page.evaluate(`game.sky.dome.visible = false; game.renderer.setClearColor(0xff00ff); game.renderer.setClearColor = () => {}; "ok"`);
+      await page.evaluate(`game.__w7 = { last: performance.now(), x0: game.player.pos.x, scc: game.renderer.setClearColor }; game.sky.dome.visible = false; game.renderer.setClearColor(0xff00ff); game.renderer.setClearColor = () => {}; "ok"`);
       // in-page flight driver (wall-clock 20 blocks/s eastward, independent of the frame rate)
-      await page.evaluate(`game.__w7 = { last: performance.now(), x0: game.player.pos.x }; game.__w7.timer = setInterval(() => { const now = performance.now(); const dt = (now - game.__w7.last) / 1000; game.__w7.last = now; game.player.pos.x += 20 * dt; }, 25); "ok"`);
+      await page.evaluate(`game.__w7.timer = setInterval(() => { const now = performance.now(); const dt = (now - game.__w7.last) / 1000; game.__w7.last = now; game.player.pos.x += 20 * dt; }, 25); "ok"`);
       const analyse = `(() => {
         const g = game, cam = g.camera, V3 = cam.position.constructor;
         const rb = g.pipeline.readback(); const w = rb.width, h = rb.height, d = rb.data;
@@ -369,7 +369,7 @@ if (urlArg > 0) {
       }
       await page.evaluate('clearInterval(game.__w7.timer); "ok"');
       await page.screenshot(`${outDir}/stream_600_magenta.png`);
-      await page.evaluate('game.sky.dome.visible = true; delete game.renderer.setClearColor; "ok"');
+      await page.evaluate('game.sky.dome.visible = true; game.renderer.setClearColor = game.__w7.scc; "ok"');
       await page.sleep(1500);
       await page.screenshot(`${outDir}/stream_600.png`);
       assert.equal(page.exceptions.length, 0, 'no exceptions: ' + page.exceptions.slice(0, 3).join(' | '));
