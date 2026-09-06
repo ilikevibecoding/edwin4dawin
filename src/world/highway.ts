@@ -48,7 +48,9 @@ const POLE_SPACING = 60;
 const POLE_H = 11.4;
 const ARM_REACH = 2.9;
 /** verge beside the pavement edge: a gravel band along the pavement, mown grass (sand on the beaches) beyond */
-const VERGE_W = 5.0;
+/** verge rows (metres out from the pavement edge): the mown right-of-way strip is 12 m wide, draped on the
+ *  terrain row by row so it follows the ground; the swale lies between the 5 and 8 m rows */
+const VERGE_ROWS: readonly number[] = [0, 1.8, 5.0, 8.0, 12.0];
 const VERGE_GRAVEL_W = 0.7;
 const _n = new THREE.Vector3(), _d = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 
@@ -108,14 +110,24 @@ const CONCRETE_FRAG = /* glsl */ `
     roughnessFactor = 0.7;
   } else if (kind > 2.5 && kind < 3.5) {
     // verge: a dark gravel band along the pavement edge (ragged where the cover takes over), then the cover the
-    // vertex colour names (mown grass, or sand on the beaches); the grain fades to its mean as a pixel grows past it
+    // vertex colour names (mown grass, or sand on the beaches); the grain fades to its mean as a pixel grows past it.
+    // across: metres from the pavement edge
     float across = vInfoH.z;
     float fp = length(fwidth(vWorldPosH.xz));
+    float fwAcross = max(fwidth(across), 1e-4);
     float grain = mix(vnoise(vWorldPosH.xz * 2.6), 0.5, smoothstep(0.2, 0.7, fp));
-    float bandW = ${(VERGE_GRAVEL_W / VERGE_W).toFixed(3)};
-    float band = 1.0 - smoothstep(bandW - 0.05, bandW + 0.08 + 0.14 * fbm3(vWorldPosH.xz * 0.9), across);
+    float bandW = ${VERGE_GRAVEL_W.toFixed(2)};
+    float band = 1.0 - smoothstep(bandW - 0.2, bandW + 0.35 + 0.6 * fbm3(vWorldPosH.xz * 0.9), across);
     vec3 gravel = vec3(0.36, 0.345, 0.31) * (0.84 + 0.32 * grain);
     vec3 cover = diffuseColor.rgb * (0.86 + 0.28 * n) * (0.92 + 0.16 * grain);
+    float isGrass = step(diffuseColor.r, diffuseColor.g);
+    // mower passes 2.4 m wide, the nap alternating pass to pass (fades to its mean once a pass is a pixel)
+    float tri = abs(fract(across / 2.4 + 0.3) - 0.5) * 2.0;
+    float stripe = mix(smoothstep(0.3, 0.7, tri), 0.5, smoothstep(0.5, 2.4, fwAcross));
+    cover *= 1.0 + isGrass * (0.05 - 0.1 * stripe);
+    // the drainage swale 5-8 m out: damper ground, the grass darker and rank
+    float swale = smoothstep(4.6, 6.0, across) * (1.0 - smoothstep(7.0, 8.4, across));
+    cover *= 1.0 - isGrass * swale * (0.14 + 0.08 * n);
     diffuseColor.rgb = mix(cover, gravel, band);
     roughnessFactor = 0.97;
   } else {
@@ -761,35 +773,50 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       }
     }
 
-    // -------------------------------------------------------- gravel verges: a compacted-shell strip beside each pavement edge (edge definition from the air; the posts stand on it)
+    // -------------------------------------------------------- verges: the mown right-of-way strip beside each pavement edge (a gravel band, then
+    // grass - or sand on the beaches - out to 12 m), draped on the terrain row by row and stopped at the water's edge; it
+    // gives the corridor its edges from the air and the posts stand on it
     for (const side of [-1, 1] as const) {
       const cuts = new Set<number>(stations(c, 0, c.total));
       for (let k = 1; k < nChunks; k++) cuts.add(k * chunkLen);
       const ss = [...cuts].sort((p, q) => p - q);
-      const aIn = side * hw, aOut = side * (hw + VERGE_W);
-      const at2 = (s: number) => {
+      /** the rows of one station: positions from the pavement edge outward (fewer where the ground goes under water) */
+      const rowsAt = (s: number): { p: THREE.Vector3; tone: Rgb }[] => {
         const f = frameAt(c, s);
-        // 5 cm under the pavement edge, draped on the terrain at the same lift the roads use (the clipmap sits under it)
-        const inner = new THREE.Vector3(f.x + f.rx * aIn, surfaceAt(c, s, aIn) - 0.05, f.z + f.rz * aIn);
-        const ox = f.x + f.rx * aOut, oz = f.z + f.rz * aOut;
-        const outer = new THREE.Vector3(ox, clamp(map.heightAt(ox, oz) + ROAD_LIFT - 0.05, inner.y - 1.2, inner.y + 0.4), oz);
-        return { inner, outer };
+        const out: { p: THREE.Vector3; tone: Rgb }[] = [];
+        let yPrev = 0;
+        for (let k = 0; k < VERGE_ROWS.length; k++) {
+          const a = side * (hw + VERGE_ROWS[k]);
+          const x = f.x + f.rx * a, z = f.z + f.rz * a;
+          const g = map.heightAt(x, z);
+          if (k > 0 && g < 0.15) break;
+          // 5 cm under the pavement edge, then on the terrain at the lift the roads use (the clipmap sits under it),
+          // never dropping or climbing faster than a real graded verge would between two rows
+          const y = k === 0 ? surfaceAt(c, s, a) - 0.05 : clamp(g + ROAD_LIFT - 0.05, yPrev - 0.35 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]), yPrev + 0.12 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]));
+          yPrev = y;
+          out.push({ p: new THREE.Vector3(x, y, z), tone: map.zoneAt(x, z) === 2 || g < 1.2 ? C_VERGE_SAND : C_VERGE_GRASS });
+        }
+        return out;
       };
-      let prev = at2(ss[0]);
+      let prev = rowsAt(ss[0]);
       for (let i = 1; i < ss.length; i++) {
-        const cur = at2(ss[i]);
+        const cur = rowsAt(ss[i]);
         const soup = P((ss[i - 1] + ss[i]) / 2).conc;
-        const base = soup.vertexCount;
-        _n.subVectors(cur.inner, prev.inner).cross(_d.subVectors(prev.outer, prev.inner)).normalize();
-        if (_n.y < 0) _n.negate();
-        const tone = map.zoneAt(cur.outer.x, cur.outer.z) === 2 || map.heightAt(cur.outer.x, cur.outer.z) < 1.2 ? C_VERGE_SAND : C_VERGE_GRASS;
-        soup.vertex(prev.inner.x, prev.inner.y, prev.inner.z, _n.x, _n.y, _n.z, tone, [3, ss[i - 1], 0]);
-        soup.vertex(cur.inner.x, cur.inner.y, cur.inner.z, _n.x, _n.y, _n.z, tone, [3, ss[i], 0]);
-        soup.vertex(cur.outer.x, cur.outer.y, cur.outer.z, _n.x, _n.y, _n.z, tone, [3, ss[i], 1]);
-        soup.vertex(prev.outer.x, prev.outer.y, prev.outer.z, _n.x, _n.y, _n.z, tone, [3, ss[i - 1], 1]);
-        _a.subVectors(cur.inner, prev.inner).cross(_b.subVectors(cur.outer, prev.inner));
-        if (_a.y >= 0) soup.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
-        else soup.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+        const n = Math.min(prev.length, cur.length);
+        for (let k = 0; k + 1 < n; k++) {
+          const p0 = prev[k], p1 = cur[k], p2 = cur[k + 1], p3 = prev[k + 1];
+          const base = soup.vertexCount;
+          _n.subVectors(p1.p, p0.p).cross(_d.subVectors(p3.p, p0.p)).normalize();
+          if (_n.y < 0) _n.negate();
+          const a0 = VERGE_ROWS[k], a1 = VERGE_ROWS[k + 1];
+          soup.vertex(p0.p.x, p0.p.y, p0.p.z, _n.x, _n.y, _n.z, p0.tone, [3, ss[i - 1], a0]);
+          soup.vertex(p1.p.x, p1.p.y, p1.p.z, _n.x, _n.y, _n.z, p1.tone, [3, ss[i], a0]);
+          soup.vertex(p2.p.x, p2.p.y, p2.p.z, _n.x, _n.y, _n.z, p2.tone, [3, ss[i], a1]);
+          soup.vertex(p3.p.x, p3.p.y, p3.p.z, _n.x, _n.y, _n.z, p3.tone, [3, ss[i - 1], a1]);
+          _a.subVectors(p1.p, p0.p).cross(_b.subVectors(p2.p, p0.p));
+          if (_a.y >= 0) soup.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+          else soup.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+        }
         prev = cur;
       }
       counts.vergeM += c.total;
