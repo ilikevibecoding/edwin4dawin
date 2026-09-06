@@ -84,10 +84,11 @@ function paintFaceAndMasts(chunk) {
 // Ring of the 12 cells around a 2 x 2 core in a 4 x 4 footprint (local a, b in 0..3).
 const RING = [[0, 0], [1, 0], [2, 0], [3, 0], [3, 1], [3, 2], [3, 3], [2, 3], [1, 3], [0, 3], [0, 2], [0, 1]];
 // Half-steps from `bottom` to `top` (walking levels), with an optional 5-cell flat landing at `landing`. The last
-// step always lands on RING[0]: the head-house door faces cells (0,1) (a slab half a step under the sill) and (0,2),
-// and the a = 3 column (d 0, walled above 59) carries nothing higher than a full step at 58, so a 1.8 tall player
-// clears its wall. For the public lift (31 -> 61, landing 41) the flat landing covers RING[3..8]: all four a = 3
-// cells behind the deck door.
+// step always lands on RING[0]. In the stair towers (top 60.5) the a = 3 column (d 0) is walled from 60 up, and a
+// 1.8 tall player walking half-steps needs 0.6 of lift room over its head: with RING[0] at 60.5 the a = 3 cells stand
+// at 56 .. 57.5 and the (2,3) cell they are entered from at 58, so nothing in that run touches the wall at 60. For the
+// public lift (31 -> 60.5, landing 41) the flat landing covers RING[4..9] and (3,0) is a half-step under it: the four
+// a = 3 cells behind the 4-wide deck door all meet the deck at 41.
 function helixSteps(bottom, top, landing) {
   const rise = (top - bottom) * 2, landK = landing ? (landing - bottom) * 2 : -1, landLen = landing ? 5 : 0;
   const total = rise + landLen, start = mod(-total, 12), out = [];
@@ -108,9 +109,10 @@ const stepBlock = (F, d, v, s, floorY) => { const L = Math.floor(s), top = s ===
 // its first step is nearest the trench). The head house on the promenade (walls to 63, roof 64, footprint d -4..0 of
 // the 6-wide rim) has the exit door on the plateau side. The deck door is in the outer wall: at the flat landing
 // (the public lift: 41, 4 wide) or at the bottom (service towers: 41). The public lift's bottom (31) leaves through
-// a short lit tunnel under the deck into the trench beside the tower.
+// a short lit tunnel under the deck into the trench beside the tower. The helix tops out at 60.5 on (0,0); the door
+// sill (a -1, b 1..2) is a slab at 60, so (0,1) at 60 -> sill 60.5 -> promenade 61 are half-steps.
 function paintTower(F, T) {
-  const c = T.c, bottom = T.bottom, top = 61, glass = !!T.glass, mirror = !!T.mirror;
+  const c = T.c, bottom = T.bottom, top = 60.5, glass = !!T.glass, mirror = !!T.mirror;
   const dOf = (a) => a - 3, vOf = (b) => c - 2 + (mirror ? 3 - b : b);
   const wallBlock = (y) => (y === bottom - 1 || y === 59 || y === 63 ? D : glass ? ((y - bottom) % 3 === 2 ? D : GL) : (y % 4 === 2 && y > bottom + 1 ? GL : DD));
   for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) {
@@ -127,7 +129,7 @@ function paintTower(F, T) {
   for (let a = -1; a <= 3; a++) for (let b = -1; b <= 4; b++) F(dOf(a), vOf(b), 64, D);
   for (const st of helixSteps(bottom, top, T.landing)) stepBlock(F, dOf(st.a), vOf(st.b), st.s, bottom - 1);
   // rim exit (head-house door onto the promenade), signage and lights
-  for (const b of [1, 2]) { F(dOf(-1), vOf(b), 60, PLATE); for (let y = 61; y <= 63; y++) F(dOf(-1), vOf(b), y, AIR); F(dOf(-1), vOf(b), 64, HOLO); }
+  for (const b of [1, 2]) { F(dOf(-1), vOf(b), 60, SLAB); for (let y = 61; y <= 63; y++) F(dOf(-1), vOf(b), y, AIR); F(dOf(-1), vOf(b), 64, HOLO); }
   F(dOf(-1), vOf(0), 62, GLOW); F(dOf(-1), vOf(3), 62, GLOW);
   F(dOf(1), vOf(-1), 62, GLOW); F(dOf(1), vOf(4), 62, GLOW);
   // deck door in the outer wall (4 wide at the landing, 2 wide at the bottom), signs and lights over it

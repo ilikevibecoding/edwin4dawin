@@ -132,16 +132,24 @@ test('hyperlane: bridge pylons every 24 over the lower city stand on the trench 
 });
 
 // ------------------------------------------------------------------------------------------- 5. the routes
-// Standing at (x, y, z): feet cell y, head cell y + 1 passable, support below (a solid block, or a slab in the feet
-// cell = standing at y + 0.5). Moves: 4-neighbours with a rise <= 1 (a rise over 0.6 is a jump and needs a free
-// block over the head) or a drop <= 3.
+// Standing at (x, y, z): the feet cell y is passable over a solid block (standing at y), or holds a slab (standing at
+// y + 0.5), and the 1.8 tall body is clear: y + 1, and y + 2 when on a slab. Moves follow player.js (moveBox: y, x, z,
+// then a retry from a box lifted by STEP_HEIGHT 0.6 when blocked; no jumping): 4-neighbours with a rise <= 0.6 or a
+// drop <= 3, and both columns clear from the body's bottom up to its top, which is s + 1.8 (rise 0 or a drop) or
+// s + 2.4 (a step up lifts the box by 0.6 first).
 function standAt(x, y, z) {
-  const feet = get(x, y, z), head = get(x, y + 1, z);
-  if (!passable(head)) return null;
-  if (slab(feet)) return y + 0.5;
+  const feet = get(x, y, z);
+  if (!passable(get(x, y + 1, z))) return null;
+  if (slab(feet)) return passable(get(x, y + 2, z)) ? y + 0.5 : null;
   if (!passable(feet)) return null;
-  const below = get(x, y - 1, z);
-  return solid(below) ? y : null;
+  return solid(get(x, y - 1, z)) ? y : null;
+}
+function clearColumn(x, z, y0, y1) { for (let y = y0; y <= y1; y++) if (!passable(get(x, y, z))) return false; return true; }
+function canMove(x, z, s, nx, nz, t) {
+  const rise = t - s;
+  if (rise > 0.6 + 1e-9 || rise < -3 - 1e-9) return false;
+  const top = Math.floor(s + (rise > 1e-9 ? 2.4 : 1.8) - 1e-9);
+  return clearColumn(x, z, Math.ceil(s), top) && clearColumn(nx, nz, Math.ceil(t), top);
 }
 function floodFill(starts, box) {
   const W = box.x1 - box.x0 + 1, H = box.y1 - box.y0 + 1, Dp = box.z1 - box.z0 + 1;
@@ -158,10 +166,7 @@ function floodFill(starts, box) {
     for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       for (let dy = 1; dy >= -3; dy--) {
         const t = standAt(x + dx, y + dy, z + dz);
-        if (t === null) continue;
-        const rise = t - s;
-        if (rise > 1.001) continue;
-        if (rise > 0.6 && !passable(get(x, y + 2, z))) continue;
+        if (t === null || !canMove(x, z, s, x + dx, z + dz, t)) continue;
         push(x + dx, y + dy, z + dz);
       }
     }
