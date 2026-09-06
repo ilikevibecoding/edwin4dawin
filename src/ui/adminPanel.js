@@ -38,7 +38,11 @@ const PHASE_LABEL = {
 const FOCUSABLE = 'button, input, select, textarea, summary, a[href], [tabindex]';
 // View distance presets (chunks). game.setRenderDistance(n) is preferred (it persists); older builds only have
 // terrain.setRenderDistance(n), so the panel persists the choice itself under the same localStorage key.
-const VIEW_DISTANCES = [8, 12, 16, 24];
+// Above the quality preset's near cap (12 Light / 16 Balanced / 20 Cinematic) full chunks stop and the far-LOD
+// heightmap layer carries the view to the selected distance (32 chunks = 512 blocks, Minecraft's maximum).
+const VIEW_DISTANCES = [4, 6, 8, 10, 12, 16, 24, 32];
+const viewDistanceLabel = (n) => (n >= 16 ? `${n} (far LOD)` : String(n));
+const viewDistanceTitle = (n) => (n >= 16 ? `${n} chunks (${n * 16} blocks): full chunks to the preset's near cap, far-LOD terrain beyond` : `${n} chunks`);
 
 // Travel destinations (world is 4000+ blocks across: frontier town at the origin, Coruscant plateau at x 3000, the
 // Death Star in the space region at z -4000). `air` destinations start in creative flight at the given height;
@@ -53,7 +57,7 @@ const DESTINATIONS = [
   { id: 'deathstar', label: 'Death Star (exterior)', hint: 'Exterior, 260 blocks out', x: 60, y: 170, z: -3720, yaw: 10, pitch: -8, air: true },
   { id: 'hangar', label: 'Death Star hangar', hint: 'Hangar mouth in the equatorial trench', x: 0, y: 130, z: -3880, yaw: 0, pitch: -4, air: true },
 ];
-const VIEW_DISTANCE_HELP = '24 chunks loads ~2000 chunks (~550 MB) and needs a strong GPU.';
+const VIEW_DISTANCE_HELP = 'Full chunks stream to the quality preset\u2019s near cap (Light 12, Balanced 16, Cinematic 20); beyond it a far-LOD heightmap carries the view out to 32 chunks (512 blocks).';
 const RD_KEY = 'frontier-craft:rd';
 
 // Parameters shown up front (in this order); everything else goes under "Advanced". Disasters without an entry
@@ -267,7 +271,7 @@ export class AdminPanel {
     this.viewBtns = {};
     this.viewGroup = h('div', { class: 'ap-seg ap-seg-4', id: 'ap-view-distance', role: 'radiogroup', 'aria-labelledby': 'ap-view-title' });
     for (const n of VIEW_DISTANCES) {
-      const b = h('button', { class: 'ap-seg-btn', id: 'ap-view-' + n, type: 'button', role: 'radio', 'aria-checked': 'false', text: n === 24 ? '24 (strong PC)' : String(n), title: n === 24 ? VIEW_DISTANCE_HELP : `${n} chunks`, onclick: () => this._setViewDistance(n) });
+      const b = h('button', { class: 'ap-seg-btn', id: 'ap-view-' + n, type: 'button', role: 'radio', 'aria-checked': 'false', text: viewDistanceLabel(n), title: viewDistanceTitle(n), onclick: () => this._setViewDistance(n) });
       this.viewBtns[n] = b;
       this.viewGroup.append(b);
     }

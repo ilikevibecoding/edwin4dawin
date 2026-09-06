@@ -163,7 +163,8 @@ export function installSkyline(game, layout) {
   const mesh = buildSkyline(layout);
   mesh.onBeforeRender = (renderer, scene, camera) => {
     const u = mesh.material.uniforms;
-    const R = (game.terrain ? game.terrain.renderDistance : 8) * 16;
+    // the ring of real chunks ends at nearRadius (terrain.js); the view distance itself may reach much further
+    const R = (game.terrain ? (game.terrain.nearRadius ?? game.terrain.renderDistance) : 8) * 16;
     u.uChunkFar.value = R;
     u.uNear.value = R * 1.6;
     u.uFar.value = Math.max(R * 5, 900);

@@ -244,6 +244,12 @@ export function makeWorldMaterial(atlas, opts = {}) {
 
 const COST_EMA = 0.2; // smoothing of the per-step cost estimates
 
+// View distance (chunks) the selector may ask for. Full chunks only ever stream to `nearRadius = min(rd, nearCap)`
+// (nearCap comes from the quality preset: 12 Light / 16 Balanced / 20 Cinematic); the far-LOD heightmap layer
+// (render/farlod.js) covers the rest, and the sky fog follows `renderDistance`, not the near ring.
+export const MAX_VIEW_DISTANCE = 32;
+export const DEFAULT_NEAR_CAP = 12;
+
 // AABB against inward-facing planes (same convention as THREE.Frustum.intersectsBox).
 const _pv = new THREE.Vector3();
 function boxInPlanes(planes, box) {
@@ -264,7 +270,11 @@ export class Terrain {
     this.mesher = new Mesher();
     this.material = makeWorldMaterial(atlas, { alphaTest: 0.5 });
     this.waterMaterial = makeWorldMaterial(atlas, { alphaTest: 0.0, opacity: 0.78, transparent: true, side: THREE.DoubleSide, water: true });
+    // renderDistance = the view distance the player picked (sky fog, far layer); nearRadius = the ring that actually
+    // streams full chunks (min(renderDistance, nearCap)). Everything below streams/meshes/unloads by nearRadius.
     this.renderDistance = DEFAULT_RENDER_DISTANCE;
+    this.nearCap = DEFAULT_NEAR_CAP;
+    this.nearRadius = Math.min(this.renderDistance, this.nearCap);
     this.lastCx = null;
     this.lastCz = null;
     this.offsets = [];
@@ -291,7 +301,7 @@ export class Terrain {
   }
 
   buildOffsets() {
-    const r = this.renderDistance + 1;
+    const r = this.nearRadius + 1;
     const arr = [];
     for (let dx = -r; dx <= r; dx++) for (let dz = -r; dz <= r; dz++) {
       const d = Math.sqrt(dx * dx + dz * dz);
@@ -302,9 +312,40 @@ export class Terrain {
   }
 
   setRenderDistance(r) {
-    this.renderDistance = Math.max(2, Math.min(24, r));
+    r = Number.isFinite(r) ? r : DEFAULT_RENDER_DISTANCE;
+    this.renderDistance = Math.max(2, Math.min(MAX_VIEW_DISTANCE, Math.round(r)));
+    this.nearRadius = Math.min(this.renderDistance, this.nearCap);
     this.buildOffsets();
     this.lastCx = null;
+  }
+
+  // Quality preset hook: the largest ring of full chunks this machine should stream (chunks).
+  setNearCap(cap) {
+    this.nearCap = Math.max(2, Math.min(MAX_VIEW_DISTANCE, Math.round(cap || DEFAULT_NEAR_CAP)));
+    this.setRenderDistance(this.renderDistance);
+  }
+
+  // Radius (blocks, from the player) inside which every chunk of the near ring has a mesh, i.e. where the far-LOD
+  // layer can be culled without opening a hole. Walks the distance-sorted offsets until the first chunk without a
+  // mesh and returns the distance from the player to that chunk's nearest edge (capped at the ring itself).
+  nearCullRadius(px, pz) {
+    const pcx = Math.floor(px / CS), pcz = Math.floor(pz / CS);
+    const R = this.nearRadius, offsets = this.offsets, world = this.world;
+    let best = (R - 1) * CS;
+    let firstMiss = Infinity;
+    for (let k = 0; k < offsets.length; k++) {
+      const o = offsets[k];
+      if (o[2] > R + 0.5 || o[2] > firstMiss + 1.5) break;
+      const c = world.getChunk(pcx + o[0], pcz + o[1]);
+      if (c && c.meshed) continue;
+      if (firstMiss === Infinity) firstMiss = o[2];
+      // horizontal distance from the player to the chunk's AABB
+      const x0 = (pcx + o[0]) * CS, z0 = (pcz + o[1]) * CS;
+      const dx = Math.max(x0 - px, 0, px - (x0 + CS)), dz = Math.max(z0 - pz, 0, pz - (z0 + CS));
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d < best) best = d;
+    }
+    return Math.max(0, best);
   }
 
   setLighting(skyLight, skyTint, fogColor, fogNear, fogFar, flash = 0) {
@@ -399,6 +440,7 @@ export class Terrain {
     if (c.mesh) { this.group.remove(c.mesh); c.mesh.geometry.dispose(); }
     if (c.waterMesh) { this.group.remove(c.waterMesh); c.waterMesh.geometry.dispose(); }
     c.mesh = null; c.waterMesh = null;
+    c.meshed = false;   // nearCullRadius(): the far layer must cover this column again until it is remeshed
   }
 
   // Hides in-range chunk meshes whose world AABB is outside the camera frustum (exact: such a mesh
@@ -452,7 +494,7 @@ export class Terrain {
       yield done / total;
     }
     for (const [dx, dz, d] of this.offsets) {
-      if (d > this.renderDistance + 0.5) { done++; continue; }
+      if (d > this.nearRadius + 0.5) { done++; continue; }
       const c = this.world.getChunk(pcx + dx, pcz + dz);
       if (c && c.dirty) this.meshChunk(c);
       done++;
@@ -464,7 +506,7 @@ export class Terrain {
     const t0 = performance.now();
     this._checkCullHook();
     const pcx = Math.floor(px / CS), pcz = Math.floor(pz / CS);
-    const R = this.renderDistance;
+    const R = this.nearRadius;
     const world = this.world, offsets = this.offsets, cost = this.cost;
     let now = t0;
     // generation + lighting pass (nearest first). Generation and lighting are separate steps so the budget
@@ -528,14 +570,15 @@ export class Terrain {
     }
     this.stats.chunks = world.chunks.size;
     this.stats.meshed = this.group.children.length;
+    this.stats.nearRadius = R;
   }
 
-  // Remesh up to maxCount dirty chunks anywhere within render distance (nearest first). Used after bulk edits.
+  // Remesh up to maxCount dirty chunks anywhere within the near ring (nearest first). Used after bulk edits.
   remeshDirty(maxCount, px, pz) {
     const pcx = Math.floor(px / CS), pcz = Math.floor(pz / CS);
     let n = 0;
     for (const [dx, dz, d] of this.offsets) {
-      if (d > this.renderDistance + 0.5) break;
+      if (d > this.nearRadius + 0.5) break;
       const c = this.world.getChunk(pcx + dx, pcz + dz);
       if (c && c.generated && c.dirty && !c.needsRelight && this.neighborsReady(c.cx, c.cz)) { this.meshChunk(c); if (++n >= maxCount) break; }
     }

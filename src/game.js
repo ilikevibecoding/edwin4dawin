@@ -347,7 +347,7 @@ export class Game {
     return true;
   }
   cycleRenderDistance() {
-    const opts = [4, 6, 8, 10, 12, 16, 24];
+    const opts = [4, 6, 8, 10, 12, 16, 24, 32];   // above the preset's near cap the far-LOD layer (render/farlod.js) takes over
     const i = opts.indexOf(this.terrain.renderDistance);
     this.setRenderDistance(opts[(i + 1) % opts.length]);
   }
