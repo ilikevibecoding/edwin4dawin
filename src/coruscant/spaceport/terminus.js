@@ -85,8 +85,9 @@ function paintAccess(p) {
   for (const s of U.stairs) {
     if (!p.overlaps(s.x0 - 1, s.z0 - 1, s.x0 + 11, s.z1 + 1)) continue;
     halfStair(p, s.x0, s.z0, s.z1, DECK_Y, 10, 1);
+    // rails along both sides of the opening in the hall floor; the west end (x0 - 1) is the entry from the hall
     for (let x = s.x0 - 1; x <= s.x0 + 10; x++) { p.set(x, DECK_Y, s.z0 - 1, M.GL); p.set(x, DECK_Y, s.z1 + 1, M.GL); }
-    for (let z = s.z0; z <= s.z1; z++) p.set(s.x0 - 1, DECK_Y, z, M.GL);
+    for (let z = s.z0; z <= s.z1; z++) { p.set(s.x0 - 1, DECK_Y, z, M.AIR); p.set(s.x0 - 1, DECK_Y + 1, z, M.AIR); }
     for (let i = 0; i < 10; i++) { const h = DECK_Y - 0.5 * (i + 1), x = s.x0 + i; for (const z of [s.z0 - 1, s.z1 + 1]) if (h + 1 < 96) p.set(x, Math.floor(h) + 1, z, i % 4 === 0 ? M.DD : M.GL); }
     p.set(s.x0 + 10, FEET + 2, s.z0, M.GLOW);
   }

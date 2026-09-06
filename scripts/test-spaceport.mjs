@@ -313,7 +313,11 @@ test('terminus: four numbered platforms (feet 92) beside the live hyperlane, thr
   assert.ok(train > 1200, `spare train blocks ${train}`);
   for (const dx of doorWorldXs(U.spareTrainX0).slice(0, 2)) assert.equal(get(dx, 92, tz0 + 5), 0, `spare train door open at ${dx}`);
   // access: three stairs (10 half steps) from the hall and three glass lift shafts, lights under the plate
-  for (const s of U.stairs) for (let i = 0; i < 10; i++) assert.ok(standHeights(s.x0 + i, s.z0).includes(DECK_Y - 0.5 * (i + 1)), `stair tread at ${s.x0 + i},${s.z0} at ${DECK_Y - 0.5 * (i + 1)}`);
+  for (const s of U.stairs) for (const z of [s.z0, s.z1]) {
+    // a continuous half-step walk: hall floor (97) at the head, ten treads, the platform (92) at the foot
+    const flight = [[s.x0 - 1, DECK_Y], ...Array.from({ length: 10 }, (_, i) => [s.x0 + i, DECK_Y - 0.5 * (i + 1)]), [s.x0 + 10, 92]];
+    for (const [x, h] of flight) assert.ok(standHeights(x, z).includes(h), `stair tread at ${x},${z} at ${h}: ${standHeights(x, z)}`);
+  }
   for (const l of U.lifts) assert.ok(count(l.x - 1, 92, l.z - 1, l.x + 1, 100, l.z + 1, is(B.STEEL_GLASS)) >= 24 && get(l.x - 1, 92, l.z) === 0 && get(l.x - 1, DECK_Y, l.z) === 0, `lift shaft at ${l.x},${l.z}`);
   assert.ok(count(U.box.x0, 95, U.box.z0, U.box.x1, 95, U.box.z1, is(B.GLOW_PANEL)) >= 40, 'ceiling lights');
   // the platform numbers and the timetable sign tiles on the west wall
