@@ -1,128 +1,367 @@
-// The space train: engine + three passenger cars + observation car (74 blocks) running on the hyperlane between the
-// frontier station and Coruscant on the shared tick clock. One voxel grid for the whole train (walkable end to end
-// through the gangways), a second tiny grid for the sliding doors that closes while moving, announcements, an engine
-// hum, and predictive chunk preloading along the track while the player rides.
+// The space train: a sleek maglev (cab car + three passenger cars + observation car, 74 blocks) running on the
+// hyperlane between the frontier station and Coruscant on the shared tick clock. One voxel grid holds the whole
+// train (walkable end to end through the gangways) and doubles as the collision model; the look comes from the grid
+// cells plus visual-only "extras" (recessed glass panes, light strips, panel seams, seats, grab poles, door leaves),
+// all in one mesh with a shared material that gets sun / shadow / fog from the shading chunk and a per-vertex
+// emissive channel for the strips, head- and tail lights and displays. The sliding doors are two extra meshes (west
+// and east leaves) that glide apart along the car axis; holo displays (route map, next stop, station departures)
+// are quads on one canvas texture redrawn once a second. Motion follows route.js's timetable exactly at the phase
+// boundaries and is eased (jerk-limited) inside the acceleration / braking phases. Sound lives in trainAudio.js.
+import * as THREE from 'three';
 import { B } from '../blocks.js';
 import { CHUNK_SIZE as CS } from '../constants.js';
 import { Vehicle } from './vehicle.js';
-import { VoxelGrid, buildVoxelMesh } from './voxelMesh.js';
-import { ROUTE, CARS, CAR_LENGTH, DOOR_OFFSETS, TRAIN_LENGTH, TRAIN_HEIGHT, SCHEDULE, trainState } from './route.js';
+import { VoxelGrid, buildVoxelMesh, buildExtrasMesh, voxelMaterial } from './voxelMesh.js';
+import { ROUTE, CARS, CAR_LENGTH, DOOR_OFFSETS, TRAIN_LENGTH, TRAIN_HEIGHT, SCHEDULE, RIDE_TIME, PERIOD, trainState } from './route.js';
+import { TrainAudio } from './trainAudio.js';
 
 // grid layout: x = along the track (west -> east), y: 0 undercarriage, 1 floor, 2..4 interior, 5 roof; z: 0 north
 // wall .. 5 south (platform side) wall. Grid (0,0,0) sits at world (x0, ROUTE.railY, ROUTE.trainZ0).
 const W = ROUTE.trainWidth, H = TRAIN_HEIGHT;
-const SEAT = B.BED_FOOT;     // cushioned bench (9/16 high)
-const TABLE = B.CONSOLE;     // holo table between facing seats
-const DOOR_LOW = B.DURASTEEL_DARK, DOOR_HIGH = B.STEEL_GLASS;
-const CLOCK_SNAP_TICKS = 3;  // re-sync to the server clock when the local clock has drifted more than this
+const PLATE = B.IRON_BLOCK;          // white hull plating
+const DARK = B.DURASTEEL_DARK;       // undercarriage, skirts, gangways
+const SEAM = B.PANEL_BLACK;          // panel seams / mullions
+const GLASS = B.STEEL_GLASS;         // canopy band (collision cells; rendered as recessed panes)
+const FLOOR = B.DECK_PLATE;
+const SEAT_CELL = B.STONE_BRICK_SLAB; // collision only (a half slab); the cushion / frame are extras
+const CUSHION = B.BLUE_WOOL;
+const DOOR_LOW = B.DURASTEEL_DARK, DOOR_HIGH = B.STEEL_GLASS; // collision ids of the closed doorway cells
+const CLOCK_SNAP_TICKS = 3;          // re-sync to the server clock when the local clock has drifted more than this
+const DOOR_TIME = 0.6;               // seconds for the leaves to slide fully open / closed
+const DIST = ROUTE.coruscant.dockX0 - ROUTE.frontier.dockX0;
 
+// emissive channel of grid cells by block id: [intensity, pulse, group]
+const GLOW_BY_ID = {
+  [B.HOLO_SIGN]: [0.85, 0, 0], [B.CONSOLE]: [0.55, 0, 0], [B.GLOW_PANEL]: [1, 0, 0], [B.GLOW_PANEL_BLUE]: [1, 1, 0],
+  [B.NEON_PINK]: [1, 0, 0], [B.CITY_LAMP]: [1, 0, 0], [B.WINDOW_LIT]: [0.7, 0, 0],
+};
+const cellGlow = (id) => GLOW_BY_ID[id] || null;
+// light groups: 1 = on while heading west (engine leads), 2 = on while heading east (observation car leads)
+const STRIP = [1, 1, 0], STEADY = [0.85, 0, 0], HEAD_W = [1.2, 0, 1], HEAD_E = [1.2, 0, 2], TAIL_W = [2.2, 0, 1], TAIL_E = [2.2, 0, 2];
+
+// ------------------------------------------------------------------------------------------------ model builder
+// Returns the collision grid plus everything the meshes need: `skip` (cells drawn as extras or moving parts),
+// `extras` (static visual boxes of the hull mesh), `leaves` (door leaf boxes, west- and east-sliding), `doors`
+// (doorway cells, air while open) and `displays` (holo quads: { x, y, z, w, h, n: face normal axis, region }).
 export function buildTrainGrid() {
   const g = new VoxelGrid(TRAIN_LENGTH, H, W);
-  const doors = []; // [x, y, z] cells of the sliding doors (air while docked)
+  const skip = new Set(), extras = [], doors = [], displays = [];
+  const leaves = { west: [], east: [] };
+  const box = (x0, y0, z0, x1, y1, z1, id, opts = {}) => extras.push({ x0, y0, z0, x1, y1, z1, id, ...opts });
+  const setSkip = (x, y, z, id) => { g.set(x, y, z, id); skip.add(g.idx(x, y, z)); };
+  // recessed glass: the cells stay STEEL_GLASS (collision, culling), the pane is one stretched box shrunk by 0.02
+  // so none of its faces is coplanar with the surrounding sills / jambs
+  const pane = (x0, y0, z0, x1, y1, z1, px0, py0, pz0, px1, py1, pz1) => {
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) setSkip(x, y, z, GLASS);
+    box(px0, py0, pz0, px1, py1, pz1, GLASS, { stretch: true, shade: 1.0 });
+  };
+  const wallPaneN = (xa, xb) => pane(xa, 3, 0, xb - 1, 3, 0, xa + 0.02, 3.02, 0.3, xb - 0.02, 3.98, 0.7);
+  const wallPaneS = (xa, xb) => pane(xa, 3, 5, xb - 1, 3, 5, xa + 0.02, 3.02, 5.3, xb - 0.02, 3.98, 5.7);
+  // vertical panel seam / window mullion protruding 0.03 from the wall; `side` -1 / +1 keeps it off a doorway
+  const seam = (x, north, side = 0, top = 4.98) => {
+    const xa = side > 0 ? x + 0.002 : x - 0.06, xb = side < 0 ? x - 0.002 : x + 0.06;
+    if (north) box(xa, 1.02, -0.03, xb, top, 0.75, SEAM, { stretch: true });
+    else box(xa, 1.02, 5.25, xb, top, 6.03, SEAM, { stretch: true });
+  };
+  const roofSeam = (x) => box(x - 0.06, 5.25, 1.02, x + 0.06, 6.03, 4.98, SEAM, { stretch: true });
+  // a seat: half-slab collision cell, blue cushion + backrest against the wall, chrome pedestal
+  const seat = (x, north) => {
+    const z = north ? 1 : 4;
+    setSkip(x, 2, z, SEAT_CELL);
+    if (north) {
+      box(x + 0.08, 2.12, 1.12, x + 0.92, 2.5, 1.92, CUSHION, { stretch: true });
+      box(x + 0.08, 2.5, 1.0, x + 0.92, 3.15, 1.18, CUSHION, { stretch: true });
+      box(x + 0.2, 2.0, 1.25, x + 0.8, 2.12, 1.85, B.CHROME, { stretch: true });
+    } else {
+      box(x + 0.08, 2.12, 4.08, x + 0.92, 2.5, 4.88, CUSHION, { stretch: true });
+      box(x + 0.08, 2.5, 4.82, x + 0.92, 3.15, 5.0, CUSHION, { stretch: true });
+      box(x + 0.2, 2.0, 4.15, x + 0.8, 2.12, 4.75, B.CHROME, { stretch: true });
+    }
+  };
+  const pole = (x, z, top = 5.0) => box(x - 0.06, 2.0, z - 0.06, x + 0.06, top, z + 0.06, B.CHROME);
+  // standard body cross-section at grid x: skirt row, floor, lower plating, (glass band set by the caller), upper
+  // plating with the shoulder step, roof over z 1..4
+  const section = (x) => {
+    g.fill(x, 0, 1, x, 0, 4, DARK);
+    g.fill(x, 1, 0, x, 1, 5, FLOOR); g.set(x, 1, 0, PLATE); g.set(x, 1, 5, PLATE);
+    g.set(x, 2, 0, PLATE); g.set(x, 2, 5, PLATE);
+    g.set(x, 3, 0, PLATE); g.set(x, 3, 5, PLATE);
+    g.set(x, 4, 0, PLATE); g.set(x, 4, 5, PLATE);
+    g.fill(x, 5, 1, x, 5, 4, PLATE);
+  };
+  // end wall with the gangway opening (2 wide, 2 high) and a holo panel above it
+  const endWall = (x, inward) => {
+    g.fill(x, 2, 0, x, 4, 5, PLATE);
+    g.fill(x, 2, 2, x, 3, 3, 0);
+    g.set(x, 4, 2, B.HOLO_SIGN); g.set(x, 4, 3, B.HOLO_SIGN);
+    displays.push({ x: inward > 0 ? x + 1.03 : x - 0.03, y: 4.5, z: 3, w: 1.9, h: 0.84, n: inward > 0 ? '+x' : '-x', region: 0 });
+  };
+  // door: two 2-high cells of the platform wall become the doorway; the leaves (chrome below, glass above, a blue
+  // edge light where they meet) pocket into the opaque wall cells on either side
+  const door = (x, top = 5.0) => {
+    for (let k = 0; k < 2; k++) { g.set(x + k, 2, 5, 0); g.set(x + k, 3, 5, 0); doors.push([x + k, 2, 5], [x + k, 3, 5]); skip.add(g.idx(x + k, 2, 5)); skip.add(g.idx(x + k, 3, 5)); }
+    const leaf = (list, xa, xb, edgeX) => {
+      list.push({ x0: xa, y0: 2.0, z0: 5.3, x1: xb, y1: 3.0, z1: 5.62, id: B.CHROME, stretch: true });
+      list.push({ x0: xa, y0: 3.0, z0: 5.3, x1: xb, y1: 4.0, z1: 5.62, id: GLASS, stretch: true, shade: 1.0 });
+      list.push({ x0: edgeX - 0.02, y0: 2.08, z0: 5.33, x1: edgeX + 0.02, y1: 3.92, z1: 5.59, id: B.GLOW_PANEL_BLUE, glow: STEADY, stretch: true });
+    };
+    leaf(leaves.west, x, x + 1, x + 0.98);
+    leaf(leaves.east, x + 1, x + 2, x + 1.02);
+    // destination board over the door (outside) and grab poles flanking the vestibule
+    displays.push({ x: x + 1, y: 4.5, z: 6.03, w: 2.9, h: 0.84, n: '+z', region: 0 });
+    pole(x, 1.5, top); pole(x + 2, 1.5, top); pole(x, 4.5, top); pole(x + 2, 4.5, top);
+  };
+  const skirts = (xa, xb) => {
+    box(xa + 0.25, 0.35, 0.3, xb - 0.25, 1.0, 1.0, DARK, { stretch: true });
+    box(xa + 0.25, 0.35, 5.0, xb - 0.25, 1.0, 5.7, DARK, { stretch: true });
+    box(xa + 0.5, 0.45, 0.22, xb - 0.5, 0.62, 0.3, B.GLOW_PANEL_BLUE, { glow: STRIP, stretch: 'cell' });
+    box(xa + 0.5, 0.45, 5.7, xb - 0.5, 0.62, 5.78, B.GLOW_PANEL_BLUE, { glow: STRIP, stretch: 'cell' });
+  };
+  const roofline = (xa, xb) => {
+    box(xa + 0.5, 5.0, 0.86, xb - 0.5, 5.14, 1.0, B.GLOW_PANEL_BLUE, { glow: STRIP, stretch: 'cell' });
+    box(xa + 0.5, 5.0, 5.0, xb - 0.5, 5.14, 5.14, B.GLOW_PANEL_BLUE, { glow: STRIP, stretch: 'cell' });
+  };
+  const ceilingBar = (xa, xb) => box(xa, 4.9, 2.6, xb, 5.0, 3.4, B.GLOW_PANEL, { glow: [0.9, 0, 0], stretch: 'cell' });
+
   for (let ci = 0; ci < CARS.length; ci++) {
     const car = CARS[ci], x0 = car.x0, x1 = x0 + CAR_LENGTH - 1;
-    const local = (x) => x - x0;
-    // shell -----------------------------------------------------------------------------------------
-    g.fill(x0 + 1, 0, 1, x1 - 1, 0, 4, B.DURASTEEL_DARK);          // undercarriage skirt
-    for (let x = x0 + 1; x <= x1 - 1; x++) { g.set(x, 0, 1, B.CHROME); g.set(x, 0, 4, B.CHROME); } // skids over the rails
-    g.set(x0 + 1, 0, 2, 0); g.set(x0 + 1, 0, 3, 0); g.set(x1 - 1, 0, 2, 0); g.set(x1 - 1, 0, 3, 0);
-    g.fill(x0, 1, 0, x1, 1, 5, B.DECK_PLATE);                       // floor
-    for (let x = x0; x <= x1; x++) { g.set(x, 1, 0, B.DURASTEEL_DARK); g.set(x, 1, 5, B.DURASTEEL_DARK); } // sills
-    for (let x = x0; x <= x1; x++) for (const z of [0, 5]) {
-      const l = local(x), end = l === 0 || l === CAR_LENGTH - 1;
-      g.set(x, 2, z, car.kind === 'engine' ? B.PANEL_RED : B.PANEL_STRIPE);
-      g.set(x, 3, z, end ? B.DURASTEEL : B.STEEL_GLASS);
-      g.set(x, 4, z, car.kind === 'observation' && !end ? B.STEEL_GLASS : B.DURASTEEL);
-    }
-    g.fill(x0, 5, 0, x1, 5, 5, B.DURASTEEL_DARK);                   // roof
-    // end walls with the gangway opening in the aisle
-    for (const x of [x0, x1]) { g.fill(x, 2, 0, x, 4, 5, B.DURASTEEL); g.fill(x, 2, 2, x, 4, 3, 0); }
-    // ceiling light strips over the aisle
-    for (let x = x0 + 2; x <= x1 - 2; x += 3) { g.set(x, 5, 2, B.GLOW_PANEL); g.set(x, 5, 3, B.GLOW_PANEL); }
-    // roof vents
-    for (let x = x0 + 3; x <= x1 - 3; x += 4) { g.set(x, 5, 0, B.VENT); g.set(x, 5, 5, B.VENT); }
-    // doors on the platform side + destination boards above them
-    for (const dx of DOOR_OFFSETS[car.kind]) for (let k = 0; k < 2; k++) {
-      const x = x0 + dx + k;
-      g.set(x, 2, 5, 0); g.set(x, 3, 5, 0);
-      doors.push([x, 2, 5], [x, 3, 5]);
-      g.set(x, 4, 5, B.HOLO_SIGN);
-      g.set(x, 4, 0, B.HOLO_SIGN); // matching board on the other side
-    }
-    // interior ---------------------------------------------------------------------------------------
-    if (car.kind === 'passenger' || car.kind === 'observation') {
-      const seats = car.kind === 'passenger' ? [1, 4, 5, 7, 8, 12] : [1, 5, 7, 12];
-      const tables = car.kind === 'passenger' ? [6] : [6];
-      for (const z of [1, 4]) {
-        for (const l of seats) g.set(x0 + l, 2, z, SEAT);
-        for (const l of tables) g.set(x0 + l, 2, z, TABLE);
+    const X = (l) => x0 + l;
+    if (car.kind === 'engine') {
+      // ---- cab car: stepped nose over 8 blocks (deck 1 high at the tip, then 2, glass canopy at 3, cab roof 4,
+      // body 5), driver cab behind the windshield, a bulkhead with the aisle opening, seats behind it
+      for (let l = 0; l <= 13; l++) g.fill(X(l), 0, 1, X(l), 0, 4, DARK);
+      g.fill(X(0), 1, 1, X(0), 1, 4, PLATE);
+      for (let l = 1; l <= 7; l++) g.fill(X(l), 1, 0, X(l), 1, 5, PLATE);
+      for (let l = 2; l <= 3; l++) g.fill(X(l), 2, 0, X(l), 2, 5, PLATE);
+      for (let l = 4; l <= 5; l++) { g.set(X(l), 2, 0, PLATE); g.set(X(l), 2, 5, PLATE); }
+      g.fill(X(4), 2, 1, X(4), 2, 4, B.PANEL_BLACK);                 // dash under the windshield
+      g.fill(X(5), 2, 1, X(5), 2, 4, B.CONSOLE);                     // console, visible through the canopy
+      pane(X(4), 3, 0, X(5), 3, 5, X(4) + 0.02, 3.02, 0.02, X(6) - 0.02, 3.98, 5.98); // windshield canopy
+      for (let l = 6; l <= 7; l++) {
+        g.fill(X(l), 1, 1, X(l), 1, 4, FLOOR);
+        g.set(X(l), 2, 0, PLATE); g.set(X(l), 2, 5, PLATE);
+        g.fill(X(l), 4, 0, X(l), 4, 5, PLATE);                       // cab roof
       }
-      if (car.kind === 'observation') {
-        // lounge at the back: glass end wall, seats facing it
-        g.fill(x1, 2, 1, x1, 4, 4, B.STEEL_GLASS);
-        g.fill(x1, 5, 1, x1, 5, 4, B.DURASTEEL_DARK);
-        g.fill(x0 + 1, 5, 1, x1 - 1, 5, 4, B.STEEL_GLASS); // glass dome roof
-        for (let x = x0 + 2; x <= x1 - 2; x += 3) { g.set(x, 5, 0, B.GLOW_PANEL); g.set(x, 5, 5, B.GLOW_PANEL); }
-        g.set(x0 + 9, 2, 1, SEAT); g.set(x0 + 9, 2, 4, SEAT);
-      }
+      wallPaneN(X(6), X(8)); wallPaneS(X(6), X(8));                  // cab side windows
+      // driver's seat (faces the nose), lit floor in the cab
+      box(X(6) + 0.15, 2.12, 2.25, X(6) + 0.85, 2.5, 3.75, CUSHION, { stretch: true });
+      box(X(6) + 0.75, 2.5, 2.25, X(6) + 0.92, 3.2, 3.75, CUSHION, { stretch: true });
+      box(X(6) + 0.3, 2.0, 2.6, X(6) + 0.7, 2.12, 3.4, B.CHROME, { stretch: true });
+      // nose dressing: dark visor bands on the step fronts, head / tail lamp clusters on the tip
+      box(X(2) - 0.03, 2.15, 0.5, X(2), 2.85, 5.5, SEAM, { stretch: true });
+      box(X(6) - 0.03, 4.15, 0.5, X(6), 4.85, 5.5, SEAM, { stretch: true });
+      box(X(8) - 0.03, 5.15, 1.3, X(8), 5.85, 4.7, SEAM, { stretch: true });
+      box(X(0) - 0.04, 1.25, 1.15, X(0), 1.75, 2.35, B.GLOW_PANEL, { glow: HEAD_W, stretch: true });
+      box(X(0) - 0.04, 1.25, 3.65, X(0), 1.75, 4.85, B.GLOW_PANEL, { glow: HEAD_W, stretch: true });
+      box(X(0) - 0.04, 1.3, 2.55, X(0), 1.7, 3.45, B.PANEL_RED, { glow: TAIL_E, stretch: true });
+      box(X(0) - 0.03, 0.4, 1.0, X(0), 0.6, 5.0, B.GLOW_PANEL_BLUE, { glow: STRIP, stretch: 'cell' }); // skirt lip
+      // bulkhead (l = 8) with the aisle opening and the passengers' display, then the body
+      section(X(8)); endWall(X(8), +1);
+      for (let l = 9; l <= 13; l++) section(X(l));
+      wallPaneN(X(9), X(11)); wallPaneN(X(11), X(13)); wallPaneS(X(9), X(11)); wallPaneS(X(11), X(13));
+      for (const l of [9, 10, 11, 12]) { seat(X(l), true); seat(X(l), false); }
+      endWall(X(13), -1);
+      for (const l of [8, 11]) { seam(X(l), true); seam(X(l), false); }
+      roofSeam(X(11));
+      skirts(X(1), X(14)); roofline(X(8), X(14)); ceilingBar(X(9), X(13));
+      box(X(6), 3.9, 2.6, X(8), 4.0, 3.4, B.GLOW_PANEL, { glow: [0.9, 0, 0], stretch: 'cell' }); // cab ceiling bar (roof at 4)
     } else {
-      // engine: chrome wedge nose, cockpit, reactor room
-      g.fill(x0, 0, 0, x0 + 2, 5, 5, 0);
-      g.fill(x0 + 3, 5, 0, x0 + 3, 5, 5, 0);
-      g.fill(x0 + 3, 4, 0, x0 + 3, 4, 5, B.DURASTEEL_DARK);      // sloped roof step
-      g.set(x0 + 3, 4, 2, B.HOLO_SIGN); g.set(x0 + 3, 4, 3, B.HOLO_SIGN); // destination board on the nose
-      g.fill(x0 + 2, 1, 0, x0 + 2, 2, 5, B.CHROME);
-      g.fill(x0 + 2, 3, 0, x0 + 2, 3, 5, B.STEEL_GLASS);           // windshield
-      g.set(x0 + 2, 3, 0, B.CHROME); g.set(x0 + 2, 3, 5, B.CHROME);
-      g.fill(x0 + 1, 1, 0, x0 + 1, 1, 5, B.CHROME);
-      g.fill(x0 + 1, 2, 1, x0 + 1, 2, 4, B.CHROME);
-      g.fill(x0, 1, 1, x0, 1, 4, B.CHROME);
-      g.set(x0, 1, 2, B.GLOW_PANEL_BLUE); g.set(x0, 1, 3, B.GLOW_PANEL_BLUE); // headlights
-      g.fill(x0 + 1, 0, 1, x0 + 1, 0, 4, B.DURASTEEL_DARK);
-      g.fill(x0 + 3, 2, 2, x0 + 3, 4, 3, B.DURASTEEL); g.fill(x0 + 3, 2, 2, x0 + 3, 3, 3, 0); // cab bulkhead: opening kept low
-      // cab consoles (facing the windshield) and side windows
-      for (const z of [1, 4]) { g.set(x0 + 3, 2, z, TABLE); g.set(x0 + 4, 3, 0 + (z === 1 ? 0 : 5), B.STEEL_GLASS); }
-      g.fill(x0 + 3, 2, 0, x0 + 3, 4, 0, B.DURASTEEL); g.fill(x0 + 3, 2, 5, x0 + 3, 4, 5, B.DURASTEEL);
-      g.set(x0 + 4, 4, 0, B.DURASTEEL); g.set(x0 + 4, 4, 5, B.DURASTEEL);
-      // engine room: reactor columns, vents, glowing coolant panels
-      for (const x of [7, 9]) for (const z of [1, 4]) { g.set(x0 + x, 2, z, B.VENT); g.set(x0 + x, 3, z, B.GLOW_PANEL_BLUE); g.set(x0 + x, 4, z, B.VENT); }
-      g.set(x0 + 8, 2, 1, TABLE); g.set(x0 + 8, 2, 4, TABLE);
-      for (let x = x0 + 5; x <= x1 - 1; x++) for (const z of [0, 5]) if (x !== x0 + 10 && x !== x0 + 11) g.set(x, 3, z, x % 3 === 0 ? B.VENT : B.DURASTEEL);
-      g.set(x0 + 6, 3, 0, B.STEEL_GLASS); g.set(x0 + 6, 3, 5, B.STEEL_GLASS);
+      const tail = car.kind === 'observation';
+      const bodyEnd = tail ? 9 : 13;                                  // last x of the full-height body
+      for (let l = 0; l <= bodyEnd; l++) section(X(l));
+      if (tail) {
+        // ---- boat tail shell: roof steps 5 -> 4 (over the rear doors) -> 3 (glass canopy over a rear-facing
+        // bench) -> 2 (tip with the lamp cluster); the glass cells are set by the panes below
+        for (let l = 10; l <= 11; l++) {
+          g.fill(X(l), 0, 1, X(l), 0, 4, DARK);
+          g.fill(X(l), 1, 0, X(l), 1, 5, FLOOR); g.set(X(l), 1, 0, PLATE); g.set(X(l), 1, 5, PLATE);
+          g.set(X(l), 2, 0, PLATE);
+          g.fill(X(l), 4, 0, X(l), 4, 5, PLATE);
+        }
+        g.fill(X(12), 0, 1, X(12), 0, 4, DARK); g.fill(X(12), 1, 0, X(12), 1, 5, PLATE); g.fill(X(12), 1, 1, X(12), 1, 4, FLOOR);
+        g.set(X(12), 2, 0, PLATE); g.set(X(12), 2, 5, PLATE);
+        for (let z = 1; z <= 4; z++) setSkip(X(12), 2, z, SEAT_CELL);
+        g.set(X(12), 3, 0, PLATE); g.set(X(12), 3, 5, PLATE);
+        pane(X(12), 3, 1, X(12), 3, 4, X(12) + 0.02, 3.02, 1.02, X(13) - 0.02, 3.98, 4.98);   // rear canopy
+        box(X(12) + 0.1, 2.12, 1.1, X(12) + 0.9, 2.5, 4.9, CUSHION, { stretch: true });        // rear bench
+        box(X(12) + 0.1, 2.5, 1.1, X(12) + 0.3, 2.95, 4.9, CUSHION, { stretch: true });
+        g.fill(X(13), 0, 1, X(13), 0, 4, DARK); g.fill(X(13), 1, 0, X(13), 1, 5, PLATE); g.fill(X(13), 2, 1, X(13), 2, 4, PLATE);
+        box(X(14), 2.25, 1.15, X(14) + 0.04, 2.75, 2.35, B.GLOW_PANEL, { glow: HEAD_E, stretch: true });
+        box(X(14), 2.25, 3.65, X(14) + 0.04, 2.75, 4.85, B.GLOW_PANEL, { glow: HEAD_E, stretch: true });
+        box(X(14), 2.3, 2.55, X(14) + 0.04, 2.7, 3.45, B.PANEL_RED, { glow: TAIL_W, stretch: true });
+        box(X(14), 0.4, 1.0, X(14) + 0.03, 0.6, 5.0, B.GLOW_PANEL_BLUE, { glow: STRIP, stretch: 'cell' });
+        box(X(10), 5.15, 1.3, X(10) + 0.03, 5.85, 4.7, SEAM, { stretch: true });               // visor bands on the step fronts
+        box(X(12), 4.15, 0.5, X(12) + 0.03, 4.85, 5.5, SEAM, { stretch: true });
+      }
+      endWall(X(0), +1);
+      if (!tail) endWall(X(13), -1);
+      // north canopy band: 3-wide panes between the seams at 1, 4, 7, 10 (13)
+      const nEnd = tail ? 12 : 13;
+      for (let a = 1; a < nEnd; a += 3) wallPaneN(X(a), X(Math.min(a + 3, nEnd)));
+      // south: doors at 2..3 and 10..11 with opaque pockets (1, 4, 9, 12), panes between
+      wallPaneS(X(5), X(7)); wallPaneS(X(7), X(9));
+      for (const dx of DOOR_OFFSETS[car.kind]) door(X(dx), tail && dx === 10 ? 4.0 : 5.0);
+      for (const l of [1, 4, 5, 6, 7, 8, 9, 12]) { if (tail && l === 12) continue; seat(X(l), true); seat(X(l), false); }
+      for (const l of [1, 4, 7, 10]) seam(X(l), true);
+      if (!tail) seam(X(13), true);
+      seam(X(2), false, -1); seam(X(4), false, +1); seam(X(7), false); seam(X(10), false, -1); seam(X(12), false, +1, tail ? 3.98 : 4.98);
+      roofSeam(X(4)); roofSeam(X(7)); if (!tail) roofSeam(X(10));
+      skirts(X(0), X(14)); roofline(X(0), X(bodyEnd + 1)); ceilingBar(X(1), X(bodyEnd + 1));
     }
-    // gangway to the next car
+    // gangway to the next car: dark bellows, floor in the aisle
     if (ci < CARS.length - 1) {
       const gx = x1 + 1;
-      g.set(gx, 1, 2, B.DECK_PLATE); g.set(gx, 1, 3, B.DECK_PLATE);
-      g.fill(gx, 1, 1, gx, 5, 1, B.DURASTEEL); g.fill(gx, 1, 4, gx, 5, 4, B.DURASTEEL);
-      g.set(gx, 5, 2, B.DURASTEEL_DARK); g.set(gx, 5, 3, B.DURASTEEL_DARK);
+      g.fill(gx, 0, 1, gx, 0, 4, DARK);
+      g.set(gx, 1, 2, FLOOR); g.set(gx, 1, 3, FLOOR);
+      g.fill(gx, 1, 1, gx, 5, 1, DARK); g.fill(gx, 1, 4, gx, 5, 4, DARK);
+      g.set(gx, 5, 2, DARK); g.set(gx, 5, 3, DARK);
     }
   }
-  // the engine's front is closed (no gangway opening on the nose side): x0 is the nose itself
-  // the observation car's rear is its glass wall (set above); make sure the opening at x1 is closed
-  const last = CARS[CARS.length - 1]; g.fill(last.x0 + CAR_LENGTH - 1, 2, 2, last.x0 + CAR_LENGTH - 1, 4, 3, B.STEEL_GLASS);
-  return { grid: g, doors };
+  // lit floor guide strip along the aisle from the cab to the rear bench
+  box(CARS[0].x0 + 6, 2.0, 2.9, CARS[CARS.length - 1].x0 + 12, 2.02, 3.1, B.GLOW_PANEL_BLUE, { glow: [0.8, 0, 0], stretch: 'cell' });
+  return { grid: g, doors, skip, extras, leaves, displays };
+}
+
+// ------------------------------------------------------------------------------------------------ holo displays
+// One canvas (three 512 x 128 regions) on a MeshBasicMaterial quad mesh: region 0 = the train's own boards (next
+// stop, countdown, route map with the moving train), 1 / 2 = the stations' departure displays.
+const DISP_W = 512, DISP_H = 128, DISP_REGIONS = 3;
+class HoloDisplay {
+  constructor() {
+    this.canvas = typeof document !== 'undefined' ? document.createElement('canvas') : null;
+    if (!this.canvas) return;
+    this.canvas.width = DISP_W; this.canvas.height = DISP_H * DISP_REGIONS;
+    this.ctx = this.canvas.getContext('2d');
+    this.texture = new THREE.CanvasTexture(this.canvas);
+    this.texture.minFilter = THREE.LinearFilter; this.texture.magFilter = THREE.LinearFilter; this.texture.generateMipmaps = false;
+    this.texture.colorSpace = THREE.NoColorSpace;   // the game's shaders are display-referred (see render/post.js)
+    this.material = new THREE.MeshBasicMaterial({ map: this.texture, transparent: true, depthWrite: false, side: THREE.FrontSide, fog: false, toneMapped: false });
+    this.lastKey = '';
+  }
+  // quads: [{ x, y, z, w, h, n: '+x' | '-x' | '+z' | '-z', region }] -> one mesh (positions in the caller's frame)
+  buildMesh(quads, name) {
+    const pos = [], uv = [], idx = [];
+    for (const q of quads) {
+      // viewer facing the quad (looking along -n): right = up x n
+      const r = q.n === '+x' ? [0, 0, -1] : q.n === '-x' ? [0, 0, 1] : q.n === '+z' ? [1, 0, 0] : [-1, 0, 0];
+      const hw = q.w / 2, hh = q.h / 2, base = pos.length / 3;
+      const v0 = 1 - (q.region + 1) / DISP_REGIONS + 0.004, v1 = 1 - q.region / DISP_REGIONS - 0.004;
+      pos.push(q.x - r[0] * hw, q.y - hh, q.z - r[2] * hw, q.x + r[0] * hw, q.y - hh, q.z + r[2] * hw, q.x + r[0] * hw, q.y + hh, q.z + r[2] * hw, q.x - r[0] * hw, q.y + hh, q.z - r[2] * hw);
+      uv.push(0, v0, 1, v0, 1, v1, 0, v1);
+      idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+    geo.setIndex(idx);
+    geo.computeBoundingSphere();
+    const mesh = new THREE.Mesh(geo, this.material);
+    mesh.name = name; mesh.frustumCulled = true; mesh.renderOrder = 2;
+    mesh.userData.faces = quads.length;
+    return mesh;
+  }
+  static clock(seconds) { const s = Math.max(0, Math.round(seconds)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; }
+  // seconds until the train next stands at `S` with open doors (0 while it does), from the cycle time
+  static untilDock(st, S) {
+    const t = st.cycleT, D = SCHEDULE.dwell, R = RIDE_TIME;
+    if (S === ROUTE.frontier) return t < D ? 0 : PERIOD - t;
+    if (t < D + R) return D + R - t;
+    return t < 2 * D + R ? 0 : PERIOD + D + R - t;
+  }
+  // Redraws when the texts changed (about once a second while counting down). Returns true when redrawn.
+  update(st) {
+    if (!this.ctx) return false;
+    const F = ROUTE.frontier, C = ROUTE.coruscant;
+    const docked = st.phase === 'dwell';
+    const trainLine = docked ? `BOARDING  ·  DEPARTS ${HoloDisplay.clock(SCHEDULE.dwell - st.phaseT)}` : `ARRIVING IN ${HoloDisplay.clock(RIDE_TIME - st.phaseT)}`;
+    const frac = Math.max(0, Math.min(1, (st.x0 - F.dockX0) / DIST));
+    const station = (S) => {
+      const wait = HoloDisplay.untilDock(st, S);
+      const dest = S === F ? C : F;
+      if (wait === 0) return [`TO ${dest.name.toUpperCase()}`, `BOARDING  ·  DEPARTS ${HoloDisplay.clock(SCHEDULE.dwell - st.phaseT)}`];
+      return [`TO ${dest.name.toUpperCase()}`, `NEXT TRAIN IN ${HoloDisplay.clock(wait)}`];
+    };
+    const fs = station(F), cs = station(C);
+    const key = [st.dest.name, trainLine, frac.toFixed(2), fs.join(), cs.join()].join('|');
+    if (key === this.lastKey) return false;
+    this.lastKey = key;
+    const c = this.ctx;
+    c.clearRect(0, 0, DISP_W, DISP_H * DISP_REGIONS);
+    const panel = (r, title, big, line2) => {
+      const y0 = r * DISP_H;
+      c.fillStyle = 'rgba(6, 16, 34, 0.86)'; c.fillRect(0, y0, DISP_W, DISP_H);
+      c.strokeStyle = 'rgba(90, 210, 255, 0.9)'; c.lineWidth = 3; c.strokeRect(3, y0 + 3, DISP_W - 6, DISP_H - 6);
+      c.textBaseline = 'middle'; c.textAlign = 'left';
+      c.fillStyle = '#7fd8ff'; c.font = 'bold 22px "DejaVu Sans", Arial, sans-serif'; c.fillText(title, 20, y0 + 24);
+      c.fillStyle = '#ffffff'; c.font = 'bold 34px "DejaVu Sans", Arial, sans-serif'; c.fillText(big, 20, y0 + 58);
+      c.fillStyle = '#ffd37a'; c.font = 'bold 24px "DejaVu Sans", Arial, sans-serif'; c.fillText(line2, 20, y0 + 96);
+    };
+    // region 0: the train boards, with the route line under the text
+    panel(0, 'NEXT STOP', st.dest.name.toUpperCase(), trainLine);
+    c.strokeStyle = 'rgba(120, 220, 255, 0.8)'; c.lineWidth = 3; c.beginPath(); c.moveTo(300, 118); c.lineTo(492, 118); c.stroke();
+    c.fillStyle = '#7fd8ff'; c.beginPath(); c.arc(300, 118, 5, 0, Math.PI * 2); c.fill(); c.beginPath(); c.arc(492, 118, 5, 0, Math.PI * 2); c.fill();
+    c.fillStyle = '#ffffff'; c.beginPath(); c.arc(300 + 192 * frac, 118, 7, 0, Math.PI * 2); c.fill();
+    c.font = 'bold 12px "DejaVu Sans", Arial, sans-serif'; c.fillStyle = '#9fe4ff'; c.textAlign = 'center';
+    c.fillText('FRONTIER', 300, 104); c.fillText('CORUSCANT', 492, 104);
+    // regions 1 / 2: station departure displays
+    panel(1, F.name.toUpperCase(), fs[0], fs[1]);
+    panel(2, C.name.toUpperCase(), cs[0], cs[1]);
+    this.texture.needsUpdate = true;
+    return true;
+  }
+  dispose() { if (this.texture) this.texture.dispose(); if (this.material) this.material.dispose(); }
+}
+
+// ------------------------------------------------------------------------------------------------ motion easing
+// The timetable ramps with constant acceleration (infinite jerk at both ends of a ramp). Inside a ramp the pose
+// follows a smoothstep speed profile with the same endpoints - identical distance (vmax * T / 2) and speed at the
+// phase boundaries, zero acceleration at both ends - so the schedule stays the source of truth.
+const RAMP_T = SCHEDULE.accel;
+function easedRamp(tau) {
+  const u = Math.min(1, Math.max(0, tau / RAMP_T));
+  return { s: SCHEDULE.vmax * RAMP_T * (u * u * u - 0.5 * u * u * u * u), v: SCHEDULE.vmax * (3 * u * u - 2 * u * u * u) };
+}
+export function smoothState(st) {
+  if (st.phase !== 'accel' && st.phase !== 'decel') return st;
+  const r = st.phase === 'accel' ? easedRamp(st.phaseT) : easedRamp(RIDE_TIME - st.phaseT);
+  const s = st.phase === 'accel' ? r.s : DIST - r.s;
+  const start = st.dir > 0 ? ROUTE.frontier.dockX0 : ROUTE.coruscant.dockX0;
+  return { ...st, x0: start + st.dir * s, v: st.dir * r.v, rawX0: st.x0, rawV: st.v };
 }
 
 export class SpaceTrain extends Vehicle {
   constructor() {
-    const { grid, doors } = buildTrainGrid();
+    const model = buildTrainGrid();
     super({
-      grid, name: 'space_train', emissive: 0.55,
+      grid: model.grid, name: 'space_train', emissive: 0.5,
       // whole cabin volume (floor top to ceiling), including the doorway cells on the platform side
       interiors: [{ x0: 0, x1: TRAIN_LENGTH, y0: 2, y1: 5, z0: 1, z1: 6 }],
     });
-    this.doors = doors;
+    this.model = model;
+    this.doors = model.doors;
     this.doorsClosed = false;
-    this.state = trainState(0);
+    this.doorAnim = 1;          // 0 = leaves closed .. 1 = fully open (visual, follows doorsClosed over DOOR_TIME)
+    this.state = smoothState(trainState(0));
     this.lastState = this.state;
-    this.doorMesh = null;
-    this.humOn = false;
+    this.material = null;
+    this.doorMeshes = [];
+    this.displayMesh = null;    // boards riding with the train
+    this.stationMesh = null;    // departure displays at the stations (world space)
+    this.stationDisplays = [];  // registered by stations.js before the train is added
+    this.display = null;
+    this.trainAudio = new TrainAudio(null);
+    this.time = 0;
+    this.displayTimer = 0;
     this.listeners = []; // (event, train) => void   events: 'doors', 'arrive', 'depart'
     this.preloadStats = { chunks: 0, ms: 0 };
     this.clockOffset = null; // schedule tick - local tick, once synced to a server clock
     this.setDoors(!this.state.doorsOpen);
+    this.doorAnim = this.doorsClosed ? 0 : 1;
   }
+
+  // Station dressing hook (stations.js): a holo board in world space { station, kind: 'departure' | 'route', x, y,
+  // z, w, h }, drawn double-sided on the train's display canvas (departures count down, route maps show the train).
+  addStationDisplay(d) { this.stationDisplays.push(d); }
 
   // The schedule runs on the shared clock: the server tick while connected (every client computes the same train),
   // otherwise the local vehicle tick. Local ticks advance steadily at 20 Hz, so the offset to the server clock is only
@@ -136,27 +375,57 @@ export class SpaceTrain extends Vehicle {
   }
 
   pose(tick) {
-    this.state = trainState(this.scheduleTick(tick));
+    this.state = smoothState(trainState(this.scheduleTick(tick)));
     return { x: this.state.x0, y: ROUTE.railY, z: ROUTE.trainZ0, yaw: 0 };
   }
 
-  buildMeshes() {
-    super.buildMeshes();
-    const dg = new VoxelGrid(this.grid.w, this.grid.h, this.grid.d);
-    for (const [x, y, z] of this.doors) dg.set(x, y, z, y === 2 ? DOOR_LOW : DOOR_HIGH);
-    this.doorMesh = buildVoxelMesh(dg, this.game.atlas, { emissive: this.emissive });
-    this.doorMesh.name = 'space_train_doors';
-    this.doorMesh.visible = this.doorsClosed;
-    this.game.scene.add(this.doorMesh);
-    this.meshes.push(this.doorMesh);
+  onAdd(game) {
+    this.trainAudio.audio = game.audio;
+    super.onAdd(game);
   }
+
+  buildMeshes() {
+    const game = this.game, m = this.model;
+    this.material = voxelMaterial(game.atlas);
+    this.material.uniforms.uEmissive.value = this.emissive;
+    // the hull is built with the doorways open so the jamb faces exist whatever the door state is later
+    const closed = this.doorsClosed;
+    if (closed) this.applyDoorCells(false);
+    this.mesh = buildVoxelMesh(this.grid, game.atlas, { material: this.material, glow: cellGlow, extras: m.extras, cells: (x, y, z) => !m.skip.has(this.grid.idx(x, y, z)) });
+    if (closed) this.applyDoorCells(true);
+    this.mesh.name = this.name;
+    game.scene.add(this.mesh);
+    this.meshes = [this.mesh];
+    this.doorMeshes = [buildExtrasMesh(m.leaves.west, this.material), buildExtrasMesh(m.leaves.east, this.material)];
+    this.doorMeshes[0].name = 'space_train_doors_west'; this.doorMeshes[1].name = 'space_train_doors_east';
+    for (const d of this.doorMeshes) { game.scene.add(d); this.meshes.push(d); }
+    // holo boards: one canvas texture, one mesh riding with the train, one static mesh for the stations
+    this.display = new HoloDisplay();
+    if (this.display.material) {
+      this.displayMesh = this.display.buildMesh(m.displays, 'space_train_displays');
+      game.scene.add(this.displayMesh);
+      if (this.stationDisplays.length) {
+        const quads = [];
+        for (const d of this.stationDisplays) {
+          const region = d.kind === 'route' ? 0 : d.station === ROUTE.coruscant ? 2 : 1;
+          quads.push({ x: d.x, y: d.y, z: d.z + 0.02, w: d.w, h: d.h, n: '+z', region }, { x: d.x, y: d.y, z: d.z - 0.02, w: d.w, h: d.h, n: '-z', region });
+        }
+        this.stationMesh = this.display.buildMesh(quads, 'station_departure_displays');
+        this.stationMesh.frustumCulled = false;
+        game.scene.add(this.stationMesh);
+      }
+      this.display.update(this.state);
+    }
+  }
+
+  applyDoorCells(closed) { for (const [x, y, z] of this.doors) this.grid.set(x, y, z, closed ? (y === 2 ? DOOR_LOW : DOOR_HIGH) : 0); }
 
   setDoors(closed) {
     if (closed === this.doorsClosed) return;
     this.doorsClosed = closed;
-    for (const [x, y, z] of this.doors) this.grid.set(x, y, z, closed ? (y === 2 ? DOOR_LOW : DOOR_HIGH) : 0);
-    if (this.doorMesh) this.doorMesh.visible = closed;
+    this.applyDoorCells(closed);
     if (closed) this.clearDoorways();
+    this.trainAudio.doors(!closed);
     this.emit('doors');
   }
 
@@ -197,9 +466,9 @@ export class SpaceTrain extends Vehicle {
     const game = this.game;
     if (game && game.player) {
       const p = game.player.pos, near = this.distanceTo(p.x, p.y, p.z) <= 80;
-      if (prevState.phase === 'dwell' && st.phase !== 'dwell') { this.emit('depart'); if (near && game.hud) game.hud.addMessage(`Space train departing for ${st.dest.name}. Doors seal at ${SCHEDULE.hopSpeed} blocks per second.`); }
+      if (prevState.phase === 'dwell' && st.phase !== 'dwell') { this.trainAudio.depart(); this.emit('depart'); if (near && game.hud) game.hud.addMessage(`Space train departing for ${st.dest.name}. Doors seal at ${SCHEDULE.hopSpeed} blocks per second.`); }
       if (prevState.doorsOpen && !st.doorsOpen && st.phase !== 'dwell' && near && game.hud) game.hud.addMessage('Doors sealed for the cruise.');
-      if (prevState.phase !== 'dwell' && st.phase === 'dwell') { this.emit('arrive'); if (near && game.hud) game.hud.addMessage(`Arriving at ${st.at.name}.`); }
+      if (prevState.phase !== 'dwell' && st.phase === 'dwell') { this.trainAudio.arrive(); this.emit('arrive'); if (near && game.hud) game.hud.addMessage(`Arriving at ${st.at.name}.`); }
       if (prevState.phase === 'accel' && st.phase === 'cruise' && near && game.hud) game.hud.addMessage(`Next stop: ${st.dest.name}. Cruising at ${SCHEDULE.vmax} blocks per second.`);
     }
     this.preloadAhead();
@@ -234,42 +503,51 @@ export class SpaceTrain extends Vehicle {
     if (done) this.preloadStats.ms += performance.now() - t0;
   }
 
-  update(dt, alpha, camera) {
-    super.update(dt, alpha, camera);
-    this.updateAudio();
+  // The door leaves ride with the hull and slide +-1 block along the car axis (yaw is always 0 on the hyperlane).
+  placeMeshes(alpha) {
+    super.placeMeshes(alpha);
+    const open = this.doorAnim * this.doorAnim * (3 - 2 * this.doorAnim);   // smoothstep: eases in and out
+    if (this.doorMeshes.length === 2) { this.doorMeshes[0].position.x -= open; this.doorMeshes[1].position.x += open; }
+    if (this.displayMesh) { this.displayMesh.position.copy(this.mesh.position); this.displayMesh.rotation.copy(this.mesh.rotation); }
   }
 
-  updateAudio() {
-    const audio = this.game && this.game.audio;
-    if (!audio || !audio.ctx) return;
-    const L = audio.listener, b = this.bounds;
-    if (!b) return;
-    const px = Math.max(b.x0, Math.min(b.x1, L.x)), py = Math.max(b.y0, Math.min(b.y1, L.y)), pz = Math.max(b.z0, Math.min(b.z1, L.z));
-    const [g, pan] = audio.spatial({ x: px, y: py, z: pz }, 150);
-    const f = Math.min(1, Math.abs(this.state.v) / SCHEDULE.vmax);
-    if (g > 0.002 && audio.enabled) {
-      if (!this.humOn) {
-        audio.loopStart('trainHum', { kind: 'osc', type: 'sine', freq: 44, cutoff: 220, q: 0.9, gain: 0 });
-        audio.loopStart('trainWind', { kind: 'noise', filter: 'lowpass', cutoff: 260, q: 0.6, gain: 0 });
-        this.humOn = true;
-      }
-      const inside = this.isPlayerRiding() ? 0.7 : 1; // hull damps the hum for passengers
-      audio.loopSet('trainHum', { freq: 44 + 48 * f, cutoff: 200 + 500 * f, gain: g * (0.09 + 0.13 * f) * inside, pan }, 0.2);
-      audio.loopSet('trainWind', { gain: g * 0.2 * f * f * inside, cutoff: 240 + 1400 * f, rate: 0.8 + 0.5 * f, pan }, 0.2);
-    } else if (this.humOn) {
-      audio.loopStop('trainHum', 0.8); audio.loopStop('trainWind', 0.8); this.humOn = false;
+  update(dt, alpha, camera) {
+    if (!this.meshes.length) return;
+    const target = this.doorsClosed ? 0 : 1;
+    if (this.doorAnim !== target) this.doorAnim = target > this.doorAnim ? Math.min(1, this.doorAnim + dt / DOOR_TIME) : Math.max(0, this.doorAnim - dt / DOOR_TIME);
+    super.update(dt, alpha, camera);
+    const st = this.state, u = this.material.uniforms;
+    this.time += dt;
+    u.uTime.value = this.time % 3600;
+    u.uPulse.value = Math.min(1, Math.abs(st.v) / SCHEDULE.vmax) * (st.v < 0 ? -1 : 1);
+    u.uHeadWest.value = st.dir < 0 ? 1 : 0;
+    u.uHeadEast.value = st.dir > 0 ? 1 : 0;
+    const night = this.game && this.game.sky ? 1 - Math.max(0, Math.min(1, this.game.sky.dayFactor)) : 0;
+    u.uEmissive.value = this.emissive + 0.3 * night;   // the cabin reads lit through the windows at night
+    this.trainAudio.update(this);
+    this.displayTimer += dt;
+    if (this.display && this.displayTimer >= 0.5) {
+      this.displayTimer = 0;
+      this.display.update(st);
     }
   }
 
   onRemove(game) {
     super.onRemove(game);
-    if (this.humOn && game.audio) { game.audio.loopStop('trainHum'); game.audio.loopStop('trainWind'); this.humOn = false; }
+    for (const m of [this.displayMesh, this.stationMesh]) if (m) { game.scene.remove(m); m.geometry.dispose(); }
+    if (this.display) this.display.dispose();
+    this.displayMesh = this.stationMesh = null; this.doorMeshes = [];
+    this.trainAudio.stop(0.2);
   }
 
   // debugging / tests
-  get drawCalls() { return this.meshes.filter((m) => m.visible).length; }
+  get drawCalls() { return [...this.meshes, this.displayMesh, this.stationMesh].filter((m) => m && m.visible).length; }
   info() {
     const st = this.state;
-    return { x0: st.x0, v: st.v, phase: st.phase, at: st.at ? st.at.name : null, dest: st.dest.name, doorsOpen: st.doorsOpen, cycleT: st.cycleT, riding: this.isPlayerRiding(), draws: this.drawCalls, cells: this.grid.count(), faces: this.meshes.reduce((n, m) => n + (m.userData.faces || 0), 0), preload: this.preloadStats, clockOffset: this.clockOffset };
+    return {
+      x0: st.x0, v: st.v, rawX0: st.rawX0 ?? st.x0, rawV: st.rawV ?? st.v, phase: st.phase, at: st.at ? st.at.name : null, dest: st.dest.name, doorsOpen: st.doorsOpen, doorAnim: +this.doorAnim.toFixed(3), cycleT: st.cycleT,
+      riding: this.isPlayerRiding(), draws: this.drawCalls, cells: this.grid.count(), faces: [...this.meshes, this.displayMesh, this.stationMesh].reduce((n, m) => n + (m ? m.userData.faces || 0 : 0), 0),
+      preload: this.preloadStats, clockOffset: this.clockOffset, audio: this.trainAudio.stats,
+    };
   }
 }

@@ -6,11 +6,13 @@
 //
 // Optional (all off by default, so existing callers render exactly as before):
 //   - a per-vertex emissive channel `aEmit` = (intensity, pulse, group): faces of cells the caller's `glow(id)`
-//     table marks as lit are self-lit in HDR (so bloom picks them up); `pulse` faces breathe with `uTime` scaled
-//     by `uPulse` (a normalised speed: steady when 0); `group` 1 / 2 faces are switched by `uHeadWest` /
-//     `uHeadEast` (head- and tail lights of a vehicle that runs both ways);
+//     table marks as lit are self-lit in HDR (so bloom picks them up; intensity > 1 over-drives dark tiles);
+//     `pulse` faces breathe with `uTime` scaled by `uPulse` (a normalised speed, signed by the direction of travel:
+//     steady when 0); `group` 1 / 2 faces are switched by `uHeadWest` / `uHeadEast` (head- and tail lights of a
+//     vehicle that runs both ways);
 //   - `extras`: visual-only sub boxes in grid units (light strips, seats, skirts, door leaves) textured from a block
-//     id or a raw atlas tile, split per cell for correct UVs unless `stretch` maps one tile over the whole box;
+//     id or a raw atlas tile, split per cell with cropped UVs like the partial shapes, unless `stretch` maps one
+//     tile over the whole box (true) or one whole tile over every cell-sized piece ('cell': LED segments);
 //   - `material`: reuse one material for several meshes of the same vehicle (one set of uniforms to update).
 import * as THREE from 'three';
 import { SHADING_PARS, bindShading } from '../render/shading.js';
@@ -91,12 +93,13 @@ void main() {
   col += sunSpecular(vWorldPos, N, N, V, 0.35, 0.8, tex.rgb, lightCurve(uLight.x), vDist) * vShade;   // hull metal
 #endif
   // emissive faces (light strips, displays, head / tail lights): self-lit in HDR so bloom picks them up. Strips
-  // flagged as pulsing breathe and carry a slow wave along the vehicle while it moves (uPulse = normalised speed)
-  // and hold steady when it is docked; group 1 / 2 faces follow the direction of travel.
+  // flagged as pulsing breathe and carry a slow wave along the vehicle while it moves (uPulse = normalised speed,
+  // signed by the direction of travel) and hold steady when it is docked; group 1 / 2 faces follow the direction.
   float on = vEmit.z < 0.5 ? 1.0 : (vEmit.z < 1.5 ? uHeadWest : uHeadEast);
-  float wave = 0.5 + 0.5 * sin(uTime * 4.0 - vAlong * 0.45);
-  float glow = clamp(vEmit.x * on * (1.0 - vEmit.y * uPulse * 0.5 * wave), 0.0, 1.0);
-  vec3 hot = tex.rgb * (uGlow + vEmit.y * uPulse * 0.5);
+  float sp = abs(uPulse), dir = uPulse < 0.0 ? -1.0 : 1.0;
+  float wave = 0.5 + 0.5 * sin(uTime * 4.0 - vAlong * 0.45 * dir);
+  float glow = clamp(vEmit.x * on * (1.0 - vEmit.y * sp * 0.5 * wave), 0.0, 1.0);
+  vec3 hot = tex.rgb * (uGlow * max(vEmit.x, 1.0) + vEmit.y * sp * 0.5);
   col = mix(col, hot, glow);
   col = mix(col, fogC, smoothstep(uFogNear, uFogFar, vDist) * (1.0 - 0.6 * glow));
   gl_FragColor = vec4(col, 1.0);
@@ -185,12 +188,12 @@ function emitExtra(buf, e) {
   const tex = (f) => (e.tile !== undefined ? e.tile : BLOCKS[e.id || 0].tex[f]);
   buf.setEmit(e.glow);
   const shadeOf = (f) => (e.shade !== undefined ? e.shade : FACES[f].shade);
-  if (e.stretch) {
+  if (e.stretch === true) {
     for (let f = 0; f < 6; f++) buf.boxFaceStretched(f, e.x0, e.y0, e.z0, e.x1, e.y1, e.z1, tex(f), shadeOf(f));
     buf.setEmit(null);
     return;
   }
-  const EPS = 1e-6;
+  const EPS = 1e-6, perCell = e.stretch === 'cell';
   const cx0 = Math.floor(e.x0 + EPS), cx1 = Math.ceil(e.x1 - EPS) - 1;
   const cy0 = Math.floor(e.y0 + EPS), cy1 = Math.ceil(e.y1 - EPS) - 1;
   const cz0 = Math.floor(e.z0 + EPS), cz1 = Math.ceil(e.z1 - EPS) - 1;
@@ -199,12 +202,15 @@ function emitExtra(buf, e) {
     const y0 = Math.max(e.y0, cy) - cy, y1 = Math.min(e.y1, cy + 1) - cy;
     const z0 = Math.max(e.z0, cz) - cz, z1 = Math.min(e.z1, cz + 1) - cz;
     // only the faces on the box's own boundary (not the cuts between pieces)
-    if (cx === cx1) buf.face(0, cx, cy, cz, x0, y0, z0, x1, y1, z1, tex(0), shadeOf(0));
-    if (cx === cx0) buf.face(1, cx, cy, cz, x0, y0, z0, x1, y1, z1, tex(1), shadeOf(1));
-    if (cy === cy1) buf.face(2, cx, cy, cz, x0, y0, z0, x1, y1, z1, tex(2), shadeOf(2));
-    if (cy === cy0) buf.face(3, cx, cy, cz, x0, y0, z0, x1, y1, z1, tex(3), shadeOf(3));
-    if (cz === cz1) buf.face(4, cx, cy, cz, x0, y0, z0, x1, y1, z1, tex(4), shadeOf(4));
-    if (cz === cz0) buf.face(5, cx, cy, cz, x0, y0, z0, x1, y1, z1, tex(5), shadeOf(5));
+    const piece = (f) => (perCell
+      ? buf.boxFaceStretched(f, cx + x0, cy + y0, cz + z0, cx + x1, cy + y1, cz + z1, tex(f), shadeOf(f))
+      : buf.face(f, cx, cy, cz, x0, y0, z0, x1, y1, z1, tex(f), shadeOf(f)));
+    if (cx === cx1) piece(0);
+    if (cx === cx0) piece(1);
+    if (cy === cy1) piece(2);
+    if (cy === cy0) piece(3);
+    if (cz === cz1) piece(4);
+    if (cz === cz0) piece(5);
   }
   buf.setEmit(null);
 }
