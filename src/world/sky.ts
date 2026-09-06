@@ -248,23 +248,28 @@ float densityFull(vec3 q, vec4 n, float e, float hf, float hn, vec3 fade, float 
  *  neighbours: the cauliflower relief), the first two on the sample's own macro texel (they move 72 m at most,
  *  one texel of the bake), three long steps sample only the smooth envelope (a long step through the noised field
  *  would switch on and off as it crosses lobes and terrace the shading), and the rest of the column above the
- *  sample is added analytically (the flat base of a tall tower is shadowed by the whole tower). Seven fetches. */
+ *  sample is added analytically (the flat base of a tall tower is shadowed by the whole tower). Seven fetches.
+ *  A sample in the base zone under more than 400 m of column is in the shadow of the whole column: the lobes'
+ *  self-shadowing is invisible there, so it takes two steps (48 m noised, 192 m smooth) and the remainder. */
 float lightOD(vec3 p, vec4 f0, vec3 L, float H, float hf) {
   float thick = uCloudTop - uCloudBase;
   float od = 0.0;
   float t = 0.0;
-  float s = 24.0;
   float last = 0.0;
   float bottom = slabBottom();
+  bool deep = hf < 0.3 && (H - hf) * thick > 400.0;
+  float s = deep ? 48.0 : 24.0;
+  int n = deep ? 2 : 6;
   for (int i = 0; i < 6; i++) {
+    if (i >= n) break;
     vec3 q = p + L * (t + s * 0.5);
     if (q.y > uCloudTop + 1.0 || q.y < bottom) break;
-    if (i < 2) last = densityBase(q, f0);
-    else if (i == 2) last = densityBase(q, macroField(q.xz));
+    if (i == 0 || (i == 1 && !deep)) last = densityBase(q, f0);
+    else if (i == 2 && !deep) last = densityBase(q, macroField(q.xz));
     else { float qhf, qhn, qH; last = meanDensity(envelope(q, macroField(q.xz), qhf, qhn, qH), qhn); }
     od += last * s;
     t += s;
-    s *= 2.0;
+    s *= deep ? 4.0 : 2.0;
   }
   float rem = max((H - hf) * thick / max(L.y, 0.25) - t, 0.0);
   od += min(rem, 1200.0) * last * 0.5;
@@ -405,8 +410,8 @@ void main() {
         continue;
       }
       float dt = level == 2 ? dtS : dtF;
-      // deep inside (T < 0.3) the remaining samples weigh little: lengthen the step up to 2x
-      dt *= 1.0 + max(0.3 - T, 0.0) * (1.0 / 0.3);
+      // deep inside (T < 0.5) the remaining samples weigh little: lengthen the step, up to 2.5x at T = 0
+      dt *= 1.0 + max(0.5 - T, 0.0) * 3.0;
       vec3 fade = stepFade(dt);
       vec3 q = noiseCoord(p, f);
       vec4 n = fadeNoise(texture(uNoise3D, q), fade.x);
@@ -452,8 +457,9 @@ void main() {
         }
       }
       // the light march varies slowly along the ray: reuse it for the next 1-2 samples (3-4 once the ray is
-      // deep inside, where the samples weigh little)
-      int reuse = (level == 2 ? 2 : 1) + (T < 0.5 ? 1 : 0) + (T < 0.2 ? 1 : 0);
+      // deep inside, where the samples weigh little, or once it found deep shadow: the base under a column stays
+      // in shadow, and the base's texture comes from the ambient terms and the per-pixel surface fetch)
+      int reuse = (level == 2 ? 2 : 1) + (T < 0.5 ? 1 : 0) + (T < 0.2 ? 1 : 0) + (lt < 0.12 ? 2 : 0);
       if (sinceLight >= reuse) {
         lt = dot(scatter(lightOD(p, f, L, H, hf), cosSun), ONE3);
         sinceLight = 0;
