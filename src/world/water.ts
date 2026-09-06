@@ -141,6 +141,9 @@ uniform float uWaveTime;
 uniform float uWindSpeed;
 uniform vec2 uWindDir;
 uniform vec3 uSunDirW;
+uniform sampler2D uCloudFieldTex; // the sky's baked macro cloud field (x: raw coverage field), cloud space
+uniform vec2 uCloudFieldCenter;   // its window: centre (cloud space) and extent (m)
+uniform float uCloudFieldExtent;
 uniform sampler2D uReflTex;   // premultiplied mirror image of the scene (alpha 0 where only sky would be seen)
 uniform sampler2D uReflShare; // share of each texel's mirror distance beyond the surface, premultiplied (same pyramid)
 uniform mat4 uReflVP;
@@ -198,7 +201,9 @@ vec3 skyReflection(vec3 R, float mss, vec3 P, float fw) {
   if (uCloudCoverage > 0.03 && e0 > 0.04 && fw > 0.06) {
     float dc = (uCloudBase - P.y) / sin(e0); // metres along the reflected ray to the cloud base
     vec2 cs = P.xz + az * (cos(e0) * dc) + uCloudWind;
-    float f = cloudFieldRaw(cs);
+    // the field the dome's raymarch reads, baked by the sky around the camera (76 km, 74 m a texel; the cells
+    // are kilometres): the mirrored footprint is the very footprint the visible cloud has
+    float f = texture2D(uCloudFieldTex, (cs - uCloudFieldCenter) / uCloudFieldExtent + 0.5).r;
     float thr = cloudThreshold();
     float wr = clamp(dc * sqrt(2.0 * mss) * 3.3e-5, 0.0, 0.3); // the lobe's footprint on the base, in field units
     float cell = smoothstep(thr - wr, thr + 0.09 + wr, f) * exp(-dc * uHazeDensity);
@@ -867,6 +872,10 @@ export class Water {
       uWindSpeed: { value: 6 },
       uWindDir: { value: new THREE.Vector2(0.94, 0.34) },
       uSunDirW: { value: new THREE.Vector3(0, 1, 0) },
+      // an empty field (no cloud mirrored) until attachCloudField() shares the sky's bake
+      uCloudFieldTex: { value: null as THREE.Texture | null },
+      uCloudFieldCenter: { value: new THREE.Vector2() },
+      uCloudFieldExtent: { value: 1 },
       // inactive placeholders until attachReflection() shares the reflection pass's uniforms
       ...createReflectionUniforms(),
     };
@@ -919,7 +928,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v16-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v17-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 
@@ -933,6 +942,13 @@ export class Water {
    *  objects keeps the material current whether or not it has already been compiled. */
   attachReflection(u: ReflectionUniforms): void {
     for (const k of Object.keys(u) as (keyof ReflectionUniforms)[]) this.uniforms[k].value = u[k].value;
+  }
+
+  /** Mirror the clouds from the sky's baked macro field (Sky.coverageField); the value objects are shared live. */
+  attachCloudField(f: { texture: THREE.Texture; center: THREE.Vector2; extent: number }): void {
+    this.uniforms.uCloudFieldTex.value = f.texture;
+    this.uniforms.uCloudFieldCenter.value = f.center;
+    this.uniforms.uCloudFieldExtent.value = f.extent;
   }
 
   /** Share the atmosphere's uniforms (the sky the water mirrors). Must be called before the first render. */
