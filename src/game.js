@@ -750,17 +750,18 @@ export class Game {
   }
 
   // Player state + inventory snapshots (debounced writes); flushed immediately when the page hides / unloads.
-  persistState() {
+  persistState(force = false) {
     if (!this.save || !this.player || this.player.dead) return;
     const p = this.player;
     // the vehicle tick goes with the player so a reload puts the space train where it was (a rider is not stranded)
     this.save.setPlayer({ x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw, pitch: p.pitch, health: p.health, food: p.food, saturation: p.saturation, mode: p.mode, vehicleTick: this.vehicles ? this.vehicles.tickCount : 0 });
     this.save.setInventory(this.inventory.serialize());
-    if (this.economy) this.economy.persist();
+    // the economy blob (the whole city) is written when dirty on the 1 Hz path and always on a flush-now
+    if (this.economy) this.economy.persist(force);
   }
   persistNow() {
     if (!this.save) return;
-    this.persistState();
+    this.persistState(true);
     const c = this.hud && this.hud.chest;
     if (c) this.save.setEntity(c.x, c.y, c.z, c.entity);
     this.save.flush();
