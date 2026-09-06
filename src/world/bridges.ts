@@ -153,6 +153,12 @@ const GIRDER_DEPTH = 2.4;
 const PARAPET_H = 1.05;
 const KERB = 0.15;
 const STEP = 10;
+/** F-shape concrete median barrier (81 cm tall, 61 cm base), counter-clockwise from the right foot; shared with
+ *  the highway module so the barrier runs unchanged from the pavement onto the decks */
+export const F_BARRIER_H = 0.81;
+export const F_BARRIER_PROFILE: readonly (readonly [number, number])[] = [[0.305, 0], [0.305, 0.075], [0.24, 0.33], [0.10, F_BARRIER_H], [-0.10, F_BARRIER_H], [-0.24, 0.33], [-0.305, 0.075], [-0.305, 0]];
+/** deck drainage: scupper openings in the kerb every SCUPPER_STEP metres, each with a downpipe under the fascia */
+const SCUPPER_STEP = 15;
 
 // ------------------------------------------------------------------ materials
 
@@ -211,6 +217,23 @@ const CONCRETE_FRAG = /* glsl */ `
     diffuseColor.rgb = mix(conc, vec3(0.92), max(edgeLine, dashes) * 0.92);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.88, 0.66, 0.14), centre * 0.94);
     roughnessFactor = 0.82;
+  } else if (vRoadInfo.y > 2.5) {
+    // riprap: quarried rock 0.5-1 m, every stone its own tone (fading to the mean once a stone is a pixel),
+    // wet and dark below the splash line
+    float fp = length(fwidth(vWorldPosR.xz)) + abs(fwidth(vWorldPosR.y));
+    vec3 pr = vWorldPosR * vec3(1.5, 1.3, 1.5);
+    float stone = hash11(floor(pr.x) * 17.0 + floor(pr.z) * 31.0 + floor(pr.y) * 7.0);
+    float grain = vnoise(pr.xz * 2.7 + pr.y);
+    float far = smoothstep(0.35, 1.4, fp);
+    diffuseColor.rgb *= mix(0.55 + 0.9 * stone, 1.0, far) * mix(0.82 + 0.36 * grain, 1.0, far);
+    diffuseColor.rgb *= 1.0 - 0.4 * (1.0 - smoothstep(-0.2, 1.1, vWorldPosR.y));
+    roughnessFactor = 0.96;
+  } else if (vRoadInfo.y > 1.5) {
+    // embankment fill: mottled earth or sand, a little darker where the slope meets the ground
+    float m = fbm3(vWorldPosR.xz * 0.35);
+    float m2 = mix(vnoise(vWorldPosR.xz * 1.9), 0.5, smoothstep(0.15, 0.6, length(fwidth(vWorldPosR.xz))));
+    diffuseColor.rgb *= (0.84 + 0.3 * m) * (0.92 + 0.16 * m2);
+    roughnessFactor = 0.97;
   } else {
     // run-off streaks down the faces and a little grime
     float streak = fbm3(vec2(vWorldPosR.x + vWorldPosR.z, vWorldPosR.y * 0.25) * 0.7);
@@ -712,7 +735,9 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
     const total = polylineLength(spec.pts);
     const W = spec.width, hw = W * 0.5;
     // the carriageway is narrower than the deck: pale concrete shoulders flank it
-    const cw = clamp(spec.lanes * 3.3, 8, W - 4), chw = cw * 0.5;
+    // decks wide enough for it carry the F-shape median barrier of the highway (the carriageway grows by its base)
+    const hasMedian = spec.lanes >= 6 || (spec.lanes >= 4 && W >= 20);
+    const cw = clamp(spec.lanes * 3.3 + (hasMedian ? 0.7 : 0), 8, W - 4), chw = cw * 0.5;
     const frameAt = (s: number): Frame => {
       const p = pointAt(spec.pts, s);
       return { x: p.x, y: deckHeightProfile(spec, map, s, total), z: p.z, rx: -p.dz, rz: p.dx, dx: p.dx, dz: p.dz, s };
@@ -741,8 +766,51 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
     if ((n & 1) === 1) { const f = frameAt(total); pts3.push(new THREE.Vector3(f.x, f.y, f.z)); }
     routes.push({ id: spec.id, pts: pts3, width: spec.width, lanes: spec.lanes, traffic: spec.traffic });
 
-    const medianHalf = spec.lanes >= 6 ? 0.3 : 0;
+    const medianHalf = hasMedian ? 0.305 : 0;
     const roadInfo = [0, 0, spec.lanes, cw, medianHalf];
+
+    // ------------------------------------------------------------ approaches: where the deck stands on fill
+    // The deck rides an embankment wherever the ground under it is land and within 16 m of the deck (the ramps
+    // at both ends, the banks of a river crossing); the last U_LEN metres before the water are a U-abutment
+    // (walls flush with the fascia, a front wall in the water with a riprap berm around it, splayed wing walls
+    // at its back corners) and the fill behind it slopes 2:1 to the ground, riprap-armoured wherever its toe
+    // reaches the water.
+    const groundAt = (f: Frame) => map.heightAt(f.x, f.z);
+    const fillAt = (f: Frame): boolean => { const gd = groundAt(f); return gd >= 0.3 && f.y - gd <= 16 && f.y - gd > -0.5; };
+    const U_LEN = 24;
+    const flags: boolean[] = [];
+    for (let i = 0; i <= n; i++) flags.push(fillAt(frameAt(Math.min(total, i * STEP))));
+    /** abutment planes: station and the direction (along s) in which the water lies */
+    const abutments: { s: number; dir: 1 | -1 }[] = [];
+    for (let i = 0; i < n; i++) {
+      if (flags[i] && !flags[i + 1]) abutments.push({ s: Math.min(total, (i + 0.5) * STEP), dir: 1 });
+      else if (!flags[i] && flags[i + 1]) abutments.push({ s: Math.min(total, (i + 0.5) * STEP), dir: -1 });
+    }
+    const inU = (s: number) => abutments.some((a) => (a.dir > 0 ? s > a.s - U_LEN && s <= a.s : s >= a.s && s < a.s + U_LEN));
+    const FILL_INFO = [0, 0, 0, 2, 0];
+    const RIPRAP_INFO = [0, 0, 0, 3, 0];
+    const sandy = (x: number, z: number) => map.zoneAt(x, z) === 2;
+    const C_FILL_SAND: Rgb = [0.92, 0.84, 0.66];
+    const C_FILL_GRASS: Rgb = [0.60, 0.68, 0.40];
+    const C_RIPRAP: Rgb = [0.60, 0.585, 0.55];
+    const SLOPE_TOP = -0.45;      // the fill meets the fascia's lower edge
+    const RIPRAP_TOP = 1.7;       // rock armour from the toe up to the splash zone
+    /** slope section at a frame: the fascia edge, the riprap top and the toe (in the water when the ground falls under it) */
+    const slopeAt = (f: Frame, side: number): { yTop: number; aTop: number; aMid: number; yMid: number; aToe: number; yToe: number; wet: boolean } | null => {
+      const yTop = f.y + SLOPE_TOP, aTop = hw + 0.56;
+      let aToe = aTop + 2 * (yTop - groundAt(f));
+      for (let it = 0; it < 2; it++) {
+        const gt = map.heightAt(f.x + f.rx * side * aToe, f.z + f.rz * side * aToe);
+        aToe = aTop + 2 * (yTop - gt);
+      }
+      let yToe = yTop - (aToe - aTop) * 0.5;
+      if (yToe - 0.35 < 0.2) yToe = -1.2; else yToe -= 0.35;   // the toe is buried a little, or runs on under the water
+      if (aToe - aTop < 0.6) return null;
+      const wet = yToe < 0.3;
+      const yMid = wet ? Math.min(yTop, RIPRAP_TOP) : yToe;
+      const aMid = aTop + 2 * (yTop - yMid);
+      return { yTop, aTop, aMid, yMid, aToe: aTop + 2 * (yTop - yToe), yToe, wet };
+    };
 
     for (let k = 0; k < nChunks; k++) {
       const s0 = k * chunkLen, s1 = Math.min(total, (k + 1) * chunkLen);
@@ -789,18 +857,75 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
       const profileColors: Rgb[] = [C_PLAIN, C_CAP, C_CAP, C_CAP, C_PLAIN, C_SOFFIT, C_UNDER, C_UNDER, C_UNDER, C_SOFFIT, C_PLAIN, C_CAP, C_CAP, C_CAP, C_PLAIN];
       P.struct.loft(frames, profile, profileColors, NO_ROAD);
       if (medianHalf > 0) {
-        const m = medianHalf;
-        P.struct.loft(frames, [[m, 0.02], [m, 0.3], [m * 0.4, 0.9], [-m * 0.4, 0.9], [-m, 0.3], [-m, 0.02]], [C_PLAIN, C_PLAIN, C_CAP, C_PLAIN, C_PLAIN], NO_ROAD);
+        // the same F-shape barrier the highway carries onto the deck (its base sits on the pavement)
+        const lifted = frames.map((f) => ({ ...f, y: f.y + 0.02 }));
+        P.struct.loft(lifted, F_BARRIER_PROFILE, [C_PLAIN, C_PLAIN, C_PLAIN, C_CAP, C_PLAIN, C_PLAIN, C_PLAIN], NO_ROAD);
       }
 
-      // -------------------------------------------------------- approach embankments / abutments
+      // -------------------------------------------------------- approach embankments, U-abutments, wing walls, riprap
       for (let i = 0; i < frames.length - 1; i++) {
-        const f = frames[i];
-        const ground = map.heightAt(f.x, f.z);
-        if (ground < 0.3) continue;
-        const bottom = ground - 0.8, top = f.y - g + 0.15;
-        if (top - bottom < 0.3 || f.y - ground > 16) continue;
-        P.struct.box(f.x, bottom, f.z, W + 0.8, top - bottom, frames[i + 1].s - f.s + 0.4, yawAt(f), 0, C_PLAIN, false, NO_ROAD);
+        const f = frames[i], f1 = frames[i + 1];
+        if (!fillAt(f) || !fillAt(f1)) continue;
+        const yaw = yawAt(f);
+        const ground = groundAt(f);
+        if (inU(f.s) || inU(f1.s)) {
+          // U-abutment: MSE walls flush with the fascia down to a footing under the water line
+          const bottom = Math.min(ground, 0) - 1.2, top = f.y + SLOPE_TOP;
+          if (top - bottom > 0.3) P.struct.box((f.x + f1.x) / 2, bottom, (f.z + f1.z) / 2, W + 1.12, top - bottom, f1.s - f.s + 0.05, yaw, 0, C_PYLON, false, PIER_INFO);
+          continue;
+        }
+        // sloped fill: fascia edge -> (riprap top) -> toe, one strip per face so the tones stay flat-shaded
+        for (const side of [-1, 1]) {
+          const sa = slopeAt(f, side), sb = slopeAt(f1, side);
+          if (!sa || !sb) continue;
+          const tone = sandy(f.x, f.z) ? C_FILL_SAND : C_FILL_GRASS;
+          const pt = (fr: Frame, a: number, y: number) => new THREE.Vector3(fr.x + fr.rx * side * a, y, fr.z + fr.rz * side * a);
+          const strip = (p0: THREE.Vector3, p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3, c: Rgb, info: number[]) => {
+            // p0 -> p1 along the top edge (frame f -> f1), p2 -> p3 along the bottom edge
+            _n.subVectors(p1, p0).cross(_d.subVectors(p2, p0)).normalize();
+            if (_n.dot(_a.set(f.rx * side, 0.5, f.rz * side)) < 0) _n.negate();
+            const base = P.struct.vertexCount;
+            for (const v of [p0, p1, p3, p2]) P.struct.vertex(v.x, v.y, v.z, _n.x, _n.y, _n.z, c, info);
+            _b.subVectors(p1, p0).cross(_c.subVectors(p3, p0));
+            if (_b.dot(_n) >= 0) P.struct.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+            else P.struct.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+          };
+          strip(pt(f, sa.aTop, sa.yTop), pt(f1, sb.aTop, sb.yTop), pt(f, sa.aMid, sa.yMid), pt(f1, sb.aMid, sb.yMid), tone, FILL_INFO);
+          if (sa.wet || sb.wet) strip(pt(f, sa.aMid, sa.yMid), pt(f1, sb.aMid, sb.yMid), pt(f, sa.aToe, sa.yToe), pt(f1, sb.aToe, sb.yToe), C_RIPRAP, RIPRAP_INFO);
+        }
+      }
+      for (const ab of abutments) {
+        if (chunkOf(ab.s) !== k) continue;
+        const f = frameAt(ab.s);
+        const yaw = yawAt(f);
+        const ground = groundAt(f);
+        const waterY = Math.min(ground, 0);
+        const uMid = frameAt(ab.s - ab.dir * U_LEN * 0.5);
+        // riprap berm around the abutment: a 2:1 rock apron from under the water line to the splash zone
+        P.struct.prism(uMid.x, waterY - 1.2, uMid.z, W + 1.12 + 9.0, U_LEN + 9.0, uMid.x, waterY + 1.1, uMid.z, W + 1.12 + 1.6, U_LEN + 1.6, yaw, C_RIPRAP, RIPRAP_INFO, true);
+        // wing walls splayed 35 degrees back from the U's rear corners, retaining the end of the slopes
+        const back = frameAt(ab.s - ab.dir * U_LEN);
+        const top = back.y + SLOPE_TOP;
+        const wl = 9.0, cs = Math.cos(0.61), sn = Math.sin(0.61);
+        for (const side of [-1, 1]) {
+          // wall direction: away from the water and outward
+          const dwx = -back.dx * ab.dir * cs + back.rx * side * sn, dwz = -back.dz * ab.dir * cs + back.rz * side * sn;
+          const cx = back.x + back.rx * side * (hw + 0.56) + dwx * (wl / 2);
+          const cz = back.z + back.rz * side * (hw + 0.56) + dwz * (wl / 2);
+          const bottom = Math.min(map.heightAt(cx, cz), 0.6) - 0.8;
+          if (top - bottom > 0.5) P.struct.box(cx, bottom, cz, 0.45, top - bottom, wl, Math.atan2(dwx, dwz), 0, C_PYLON, false, PIER_INFO);
+          // cap the slope's open end against the wing wall
+          const sc = slopeAt(back, side);
+          if (sc) {
+            const p = (a: number, y: number) => new THREE.Vector3(back.x + back.rx * side * a, y, back.z + back.rz * side * a);
+            const base = P.struct.vertexCount;
+            const nx = -back.dx * ab.dir, nz = -back.dz * ab.dir;
+            const tri = [p(sc.aTop, sc.yTop), p(sc.aToe, sc.yToe), p(sc.aTop, sc.yToe)];
+            for (const v of tri) P.struct.vertex(v.x, v.y, v.z, nx, 0, nz, sandy(back.x, back.z) ? C_FILL_SAND : C_FILL_GRASS, FILL_INFO);
+            _n.subVectors(tri[1], tri[0]).cross(_d.subVectors(tri[2], tri[0]));
+            if (_n.x * nx + _n.z * nz >= 0) P.struct.idx.push(base, base + 1, base + 2); else P.struct.idx.push(base, base + 2, base + 1);
+          }
+        }
       }
 
       // -------------------------------------------------------- railing on the parapets: posts every 4 m, two rails
@@ -820,6 +945,17 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         const f = frameAt(s);
         const yaw = yawAt(f);
         for (const side of [-1, 1]) P.steel.box(f.x + f.rx * (hw + 0.33) * side, f.y + ph, f.z + f.rz * (hw + 0.33) * side, 0.12, 0.9, 0.12, yaw, 0, S_PLAIN, true, undefined, true);
+      }
+      // deck drainage: a scupper opening in each kerb face every SCUPPER_STEP m (offset from the piers) and its
+      // downpipe hanging from the drip edge outside the fascia
+      for (let s = Math.ceil((s0 - 7.5) / SCUPPER_STEP) * SCUPPER_STEP + 7.5; s < s1; s += SCUPPER_STEP) {
+        if (s < 4 || s > total - 4) continue;
+        const f = frameAt(s);
+        const yaw = yawAt(f);
+        for (const side of [-1, 1]) {
+          P.steel.box(f.x + f.rx * (chw + 0.01) * side, f.y + 0.03, f.z + f.rz * (chw + 0.01) * side, 0.08, 0.1, 0.5, yaw, 0, S_DARK, false);
+          P.steel.box(f.x + f.rx * (hw + 0.33) * side, f.y - 2.2, f.z + f.rz * (hw + 0.33) * side, 0.13, 1.2, 0.13, yaw, 0, S_DARK, true, undefined, true);
+        }
       }
       // lamp posts on the parapet caps, alternating sides every 45 m: pole, arm over the shoulder, glowing luminaire
       for (let ls = 22, j = 0; ls < total - 20; ls += 45, j++) {
@@ -847,7 +983,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
     for (const s of pierS) {
       const f = frameAt(s);
       const ground = map.heightAt(f.x, f.z);
-      if (f.y - ground < 2.8) continue;
+      if (f.y - ground < 2.8 || fillAt(f)) continue;
       const P = parts[chunkOf(s)];
       const yaw = yawAt(f);
       const capTop = f.y - g;

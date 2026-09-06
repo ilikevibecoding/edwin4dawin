@@ -3,7 +3,7 @@ import type { BridgeSpec, RoadClass, Vec2, WorldMap } from './map';
 import type { RoadSegment } from './roads';
 import { clamp, lerp } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
-import { GLSL_AA_LINE, MIN_WIDTH_VERT, STEEL_ALPHA_FRAG, Soup, lampGlowFor, type Frame, type Rgb } from './bridges';
+import { F_BARRIER_H, F_BARRIER_PROFILE, GLSL_AA_LINE, MIN_WIDTH_VERT, STEEL_ALPHA_FRAG, Soup, lampGlowFor, type Frame, type Rgb } from './bridges';
 import { ALL_CASCADES, ViewCull, layerMask, maskCasts, type CasterClass } from './culling';
 
 /**
@@ -37,9 +37,9 @@ const SIGN_DISTANCE = 4000;
 const HEAD_DISTANCE = 5000;
 /** peak radiance of the lamp heads at night (matches the bridge lamps) */
 const LAMP_GLOW = 6.0;
-/** F-shape concrete median barrier: 81 cm tall, 61 cm base */
-const BARRIER_H = 0.81;
-const BARRIER_PROFILE: readonly [number, number][] = [[0.305, 0], [0.305, 0.075], [0.24, 0.33], [0.10, BARRIER_H], [-0.10, BARRIER_H], [-0.24, 0.33], [-0.305, 0.075], [-0.305, 0]];
+/** F-shape concrete median barrier (bridges.ts profile: 81 cm tall, 61 cm base) */
+const BARRIER_H = F_BARRIER_H;
+const BARRIER_PROFILE = F_BARRIER_PROFILE;
 /** W-beam guardrail: rail 55-86 cm over the pavement, posts every 1.905 m */
 const RAIL_PROFILE: readonly [number, number][] = [[0.0, 0.55], [0.085, 0.625], [0.0, 0.705], [0.085, 0.785], [0.0, 0.86], [-0.03, 0.86], [-0.03, 0.55], [0.0, 0.55]];
 const POST_SPACING = 1.905;
