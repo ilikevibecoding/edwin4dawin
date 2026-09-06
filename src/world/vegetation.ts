@@ -812,12 +812,19 @@ ${VEG_SHADOW_PROBE_VARS}
       vec3 right = normalize(vec3(MV[0][0], MV[1][0], MV[2][0]));
       vec3 up = normalize(vec3(MV[0][1], MV[1][1], MV[2][1]));
       float hc = hash11(seed * 13.7 + cardId * 0.37 + puffPart);
-      float fade = 1.0 - smoothstep(${FRINGE_FADE_NEAR}.0, ${FRINGE_FADE_FAR}.0, length(cameraPosition - iw));
+      float camD = length(cameraPosition - iw);
+      float fade = 1.0 - smoothstep(${FRINGE_FADE_NEAR}.0, ${FRINGE_FADE_FAR}.0, camD);
       // the species' leaf: a sea grape's clusters are big round leaves (larger cards), a pine's needle
       // tufts (smaller, more of the outline left to the tiers), a mangrove's small and dense
       bool grape = arche > 5.5 && arche < 6.5;
       float leafScale = grape ? 1.35 : cls > 1.5 ? 0.8 : (arche > 1.5 && arche < 2.5) ? 0.85 : 1.0;
       float sz = ps.x * (0.6 + 0.3 * hc) * fade * leafScale;
+      // a card is sized to break the outline of the puff it sits on — the size of the puff, which from
+      // inside 150 m is a frame-filling smooth cut-out (r19-park: 4-6 m cards on a 6 m crown at 12 m, the
+      // cluster tile magnified to blobs); by 40 m, where the shell's own leaf carpet carries the outline,
+      // the card is a leaf cluster's real size (0.7 m, the sea grape's bigger, the pine's tuft smaller)
+      float closeV = 1.0 - smoothstep(40.0, 150.0, camD);
+      sz = mix(sz, min(sz, 0.7 * leafScale / max(length(instanceMatrix[0].xyz), 0.1)), closeV);
       vec2 corner = uv - 0.5;
       // per-card spin: the same cluster tile reads as different clusters
       float spin = hc * 6.2831;
@@ -891,6 +898,10 @@ const CROWN_FRAG = /* glsl */ `
     vec3 cn = normalize(vCrownN);
     // inside 40 m the crown is seen leaf by leaf (its carpet, its own leaf tone); by 150 m it is a mass again
     float close = 1.0 - smoothstep(40.0, 150.0, camDist);
+    // the far side of a shell shows through its gaps only, and the gaps close by 150 m: beyond it the back
+    // faces (a second, hidden shell — the double-sided material doubles the puff fragments) go before the
+    // texture and noise work (ab-park r19: the work build 1.48x the base's frame time under the canopy)
+    if (!gl_FrontFacing && close <= 0.0 && vPart < ${FRINGE_PART - 0.5}) discard;
     if (vPart > ${FRINGE_PART - 0.5}) {
       // leaf-cluster card: the cut-out is the coverage (alpha to coverage under MSAA; a soft ramp so the
       // mip-mapped alpha never flips a whole card between frames), per-leaf shading in R — divided by the
@@ -919,9 +930,14 @@ const CROWN_FRAG = /* glsl */ `
       vec2 tileO = vec2(vArche > 6.5 || (vArche > 4.5 && vArche < 5.5) ? 1.0 : 0.0, 2.0);
       vec2 tsc = vec2(${(1 / LEAF_COLS).toFixed(4)}, ${(1 / LEAF_ROWS).toFixed(4)});
       vec2 p0 = vWP.zy * 0.7 + vSeed, p1 = vWP.xz * 0.7 + vSeed * 1.7, p2 = vWP.xy * 0.7 + vSeed * 2.3;
-      vec2 lt = textureGrad(uLeaf, (fract(p0) + tileO) * tsc, dFdx(p0) * tsc, dFdy(p0) * tsc).ra * tw.x
-              + textureGrad(uLeaf, (fract(p1) + tileO) * tsc, dFdx(p1) * tsc, dFdy(p1) * tsc).ra * tw.y
-              + textureGrad(uLeaf, (fract(p2) + tileO) * tsc, dFdx(p2) * tsc, dFdy(p2) * tsc).ra * tw.z;
+      // the gradients before the branches (derivatives inside non-uniform control flow are undefined); a
+      // plane weighted under 3 % (most of a facet: the fourth power leaves one or two planes) is not sampled
+      vec2 g0x = dFdx(p0) * tsc, g0y = dFdy(p0) * tsc, g1x = dFdx(p1) * tsc, g1y = dFdy(p1) * tsc, g2x = dFdx(p2) * tsc, g2y = dFdy(p2) * tsc;
+      vec2 lt = vec2(0.0);
+      if (tw.x > 0.03) lt += textureGrad(uLeaf, (fract(p0) + tileO) * tsc, g0x, g0y).ra * tw.x;
+      if (tw.y > 0.03) lt += textureGrad(uLeaf, (fract(p1) + tileO) * tsc, g1x, g1y).ra * tw.y;
+      if (tw.z > 0.03) lt += textureGrad(uLeaf, (fract(p2) + tileO) * tsc, g2x, g2y).ra * tw.z;
+      lt /= max(dot(step(vec3(0.03), tw), tw), 1e-3);
       // positive where the surface goes: the rim band, and the carpet's gaps (its coverage against a
       // threshold that rises in the cluster hollows and falls to nothing beyond 150 m; the far side of the
       // shell is cut wider, so from under a crown the sky shows through the leaves of its underside instead
@@ -991,8 +1007,9 @@ const CROWN_FRAG = /* glsl */ `
  *  rather than smooth facets). */
 const CROWN_NORMAL_FRAG = /* glsl */ `
 #include <normal_fragment_begin>
-if (vPart > 0.5 && vPart < ${BRANCH_PART - 0.5} && vegNear > 0.0) {
+if (vPart > 0.5 && vPart < ${FRINGE_PART - 0.5} && vegNear > 0.0) {
   // leaf clusters ~1.2 m across: the gradient of a value noise field tilts the normal cluster by cluster
+  // (the puffs only: a fringe card is a flat cut-out whose tile carries its own per-leaf shading)
   float e = 0.25;
   vec2 p = vWP.xz * 0.85;
   float py = vWP.y * 0.7;
@@ -1390,7 +1407,7 @@ function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: 
       .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-crown-v19';
+  mat.customProgramCacheKey = () => 'veg-crown-v20';
   return mat;
 }
 
@@ -1515,7 +1532,7 @@ function occludePlants(plants: Plant[], receivers: Plant[] = plants): void {
  *  and `height` bound the drawn plants and cards and are only used for culling. */
 /** `hi` (crown family only) is the subdivided mesh drawn instead of `near` when the camera is within
  *  HI_DISTANCE of the tile's plants; it shares the instance buffers of `near`. */
-interface Tile { family: Family; near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; cells: VegCells | null; batched3d: boolean; cardCells: boolean; mirrorCells: boolean; /** palm tiles: cells in the camera / mirror palm batches */ palmCells: boolean; palmMirrorCells: boolean; maxS: number; }
+interface Tile { family: Family; near: THREE.InstancedMesh; hi: THREE.InstancedMesh | null; far: THREE.InstancedMesh; box: THREE.Box3; center: THREE.Vector3; r: number; height: number; lodCenter: THREE.Vector3; lodR: number; n: number; d: number; matrices: Float32Array; colors: Float32Array; extras: Float32Array[]; cells: VegCells | null; batched3d: boolean; cardCells: boolean; mirrorCells: boolean; /** palm tiles: cells in the camera / mirror palm batches */ palmCells: boolean; palmMirrorCells: boolean; maxS: number; /** never drawn in 3D (the grass tussocks) */ cardsOnly: boolean; }
 
 /** The VEG_CELL-metre cells of a tile (built the first time the tile is drawn near or in full): the same
  *  cells once with the 3D mesh's per-instance attribute and once with the card's, so the batches draw
@@ -2317,20 +2334,23 @@ export class Vegetation {
     for (const p of underPlants) p.occ = Math.min(p.occ, 0.88);
 
     // tiles: one near (3D) + one far (card) instanced mesh per family per tile; buffers are shared
-    const byTile = new Map<string, { crown: Plant[]; palm: Plant[]; under: Plant[]; tx: number; tz: number }>();
+    // the grass tussocks in tiles of their own: they stay cards at every distance (a tussock is a tuft
+    // silhouette in the atlas; as a squashed 3D puff in the needle carpet it was a tan sandbag on the lawn,
+    // r20-park), while the shrubs of the same cell draw in 3D inside UNDER_3D
+    const byTile = new Map<string, { crown: Plant[]; palm: Plant[]; under: Plant[]; tussock: Plant[]; tx: number; tz: number }>();
     const tileOf = (p: Plant) => {
       const tx = Math.floor(p.x / TILE), tz = Math.floor(p.z / TILE);
       const key = `${tx}|${tz}`;
       let t = byTile.get(key);
-      if (!t) { t = { crown: [], palm: [], under: [], tx, tz }; byTile.set(key, t); }
+      if (!t) { t = { crown: [], palm: [], under: [], tussock: [], tx, tz }; byTile.set(key, t); }
       return t;
     };
     for (const p of plants) { const t = tileOf(p); (p.arche === 4 ? t.palm : t.crown).push(p); }
-    for (const p of underPlants) tileOf(p).under.push(p);
+    for (const p of underPlants) { const t = tileOf(p); (p.arche === 5 ? t.tussock : t.under).push(p); }
     const shuffleRng = new Rng('veg-shuffle');
     // YXZ: the trunk tilt is applied first and then yawed, so leaning palms lean in every direction
     const m = new THREE.Matrix4(), q = new THREE.Quaternion(), pv = new THREE.Vector3(), sv = new THREE.Vector3(), e = new THREE.Euler(0, 0, 0, 'YXZ');
-    const build = (family: Family, list: Plant[], geo: THREE.BufferGeometry, mat: THREE.Material, geoHi: THREE.BufferGeometry | null) => {
+    const build = (family: Family, list: Plant[], geo: THREE.BufferGeometry, mat: THREE.Material, geoHi: THREE.BufferGeometry | null, cardsOnly = false) => {
       // deterministic shuffle so that reducing the instance count at distance thins the tile evenly
       for (let i = list.length - 1; i > 0; i--) { const j = shuffleRng.int(0, i); const t = list[i]; list[i] = list[j]; list[j] = t; }
       const count = list.length;
@@ -2409,12 +2429,13 @@ export class Vegetation {
       // the understory's near mesh only holds the instance buffers its cards share: it is never drawn
       if (family === Family.UNDER) { near.visible = false; this.group.add(far); } else this.group.add(near, far);
       if (hi) { hi.boundingSphere = sphere.clone(); this.group.add(hi); }
-      this.tiles.push({ family, near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, extras: [farVar], cells: null, batched3d: false, cardCells: false, mirrorCells: false, palmCells: false, palmMirrorCells: false, maxS });
+      this.tiles.push({ family, near, hi, far, box, center: sphere.center, r: sphere.radius, height: box.max.y - box.min.y, lodCenter: lod.center, lodR: lod.radius, n: count, d: 0, matrices: near.instanceMatrix.array as Float32Array, colors: near.instanceColor!.array as Float32Array, extras: [farVar], cells: null, batched3d: false, cardCells: false, mirrorCells: false, palmCells: false, palmMirrorCells: false, maxS, cardsOnly });
     };
     for (const t of byTile.values()) {
       if (t.crown.length) build(Family.CROWN, t.crown, crownGeo, crownMat, crownGeoHi);
       if (t.palm.length) build(Family.PALM, t.palm, palmGeo, palmMat, null);
       if (t.under.length) build(Family.UNDER, t.under, crownGeo, crownMat, null);
+      if (t.tussock.length) build(Family.UNDER, t.tussock, crownGeo, crownMat, null, true);
     }
   }
 
@@ -2474,7 +2495,7 @@ export class Vegetation {
       const under = t.family === Family.UNDER;
       // the understory is cards beyond UNDER_3D; inside it the shrubs draw from the crown batches like any
       // crown (a card at 2-4 m from a ground camera is a blurred billboard the size of the frame)
-      let near = t.d < (under ? UNDER_3D : t.family === Family.CROWN ? NEAR_DISTANCE : PALM_NEAR_DISTANCE) && budget >= t.n;
+      let near = !t.cardsOnly && t.d < (under ? UNDER_3D : t.family === Family.CROWN ? NEAR_DISTANCE : PALM_NEAR_DISTANCE) && budget >= t.n;
       if (near) budget -= t.n;
       const inView = cull.boxInView(t.box);
       let bits = t.d < (under ? UNDER_SHADOW : this.shadowDistance) ? cull.casterCascades(t.center, t.r, t.height) : 0;
