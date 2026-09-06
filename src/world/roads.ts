@@ -607,12 +607,15 @@ float roadCrown = 0.0; // signed 2 % cross-fall of the carriageway, applied to t
     }
     trench *= (1.0 - inBox) * (1.0 - smoothstep(1.2, 3.0, fp));
     // ---- surface: tyre paths, patch repairs, seams, cracks (all band-limited to the pixel footprint)
-    // lanes as the traffic drives them (traffic.ts): arterials 1.5 and 4.7 m from the centre at a 3.2 m pitch, streets
-    // 1.8 m with a parking lane outside 3.6 m
+    // lanes as the traffic drives them (traffic.ts): the 4-lane arterials 2.6 and 5.8 m from the centre at a 3.2 m
+    // pitch either side of the 2 m kerbed median (streets.ts buildMedians; lane edges 1.0 / 4.2 / 7.4 m), other 4-lane
+    // roads 1.5 and 4.7 m, streets 1.8 m with a parking lane outside 3.6 m
+    float median = (cls > 1.5 && cls < 2.5 && lanes >= 3.5) ? 1.0 : 0.0;
+    float laneO = median > 0.5 ? 1.0 : -0.1; // |xm| of the inner lane's inner edge
     float laneW = lanes >= 3.5 ? 3.2 : 3.4;
-    float lp = lanes >= 3.5 ? mod(abs(xm) + 0.1, laneW) : mod(abs(xm) - 0.1 + laneW, laneW);
+    float lp = lanes >= 3.5 ? mod(abs(xm) - laneO + laneW, laneW) : mod(abs(xm) - 0.1 + laneW, laneW);
     float wheel = mix(exp(-pow((abs(lp - laneW * 0.5) - 0.8) * 3.2, 2.0)), 0.2, smoothstep(0.6, 2.5, fwX));
-    float laneMask = lanes >= 3.5 ? step(abs(xm), 6.4) : step(abs(xm), 3.6);
+    float laneMask = lanes >= 3.5 ? step(abs(xm), laneO + 2.0 * laneW + 0.1) * step(laneO, abs(xm)) : step(abs(xm), 3.6);
     wheel *= laneMask;
     // the traffic polishes the binder off the aggregate: the wheel paths are the paler bands of a lane, and the
     // strip between them, where the sumps drip, is the darkest — a pale-dark-pale rhythm per lane that reads as
@@ -690,12 +693,12 @@ float roadCrown = 0.0; // signed 2 % cross-fall of the carriageway, applied to t
       // divided arterial: double yellow centre, dashed white lane line, solid white edge line
       float dbl = aaLine(abs(xm) - 0.2, 0.06, fwX);
       yellowC = dbl * lineOK;
-      float laneLine = aaLine(abs(xm) - 3.1, 0.06, fwX) * dashPulse * lineOK;
-      float edgeLine = aaLine(abs(xm) - min(6.35, hw - 0.45), 0.06, fwX) * edgeOK;
+      float laneLine = aaLine(abs(xm) - (laneO + laneW), 0.06, fwX) * dashPulse * lineOK;
+      float edgeLine = aaLine(abs(xm) - (median > 0.5 ? min(7.1, hw - 0.4) : min(6.35, hw - 0.45)), 0.06, fwX) * edgeOK;
       whiteC = max(laneLine, edgeLine);
       // the ghost of the previous lane line where a repaving band was re-striped 45 cm over, its dashes out of step
       float ghostPulse = mix(aaLine((fract((along + 4.0) / 12.0) - 0.125) * 12.0, 1.5, fwA), 0.25, smoothstep(2.0, 6.0, fwA));
-      float ghost = step(0.6, hash11(bk * 3.7 + 2.0 + cls)) * aaLine(abs(xm) - 3.55, 0.07, fwX) * ghostPulse * lineOK;
+      float ghost = step(0.6, hash11(bk * 3.7 + 2.0 + cls)) * aaLine(abs(xm) - (laneO + laneW + 0.45), 0.07, fwX) * ghostPulse * lineOK;
       whiteC = max(whiteC, 0.22 * ghost);
     } else if (width >= 11.5) {
       // dense-district street: solid double yellow and the white line of the parking lane
@@ -723,7 +726,7 @@ float roadCrown = 0.0; // signed 2 % cross-fall of the carriageway, applied to t
       // lane arrows on the approach lanes of arterials, 8-12 m before the stop bar
       if (fArrows > 0.5 && lanes >= 3.5) {
         float u = 11.5 - a;
-        float lane0 = 1.5, lane1 = 4.7;
+        float lane0 = laneO + 1.6, lane1 = laneO + 1.6 + laneW;
         float v0 = (abs(xm) - lane0), v1 = (abs(xm) - lane1);
         float fwArrow = max(fwX, fwA);
         float arrows = max(arrowLeft(vec2(u, v0), fwArrow), arrowStraight(vec2(u, v1), fwArrow)) * appr * (1.0 - smoothstep(0.25, 0.7, fp));
@@ -750,7 +753,7 @@ float roadCrown = 0.0; // signed 2 % cross-fall of the carriageway, applied to t
       float mh = hash11(mc * 3.1 + cls * 7.0);
       vec2 mo = hash22(vec2(mc, cls * 5.0));
       float ma = (mc + 0.2 + mo.x * 0.6) * 26.0;
-      float laneC = (lanes >= 3.5 ? 1.5 + 3.2 * step(0.5, hash11(mc * 0.7 + cls)) : 1.8);
+      float laneC = (lanes >= 3.5 ? laneO + 1.6 + laneW * step(0.5, hash11(mc * 0.7 + cls)) : 1.8);
       float mx = (mo.y < 0.35 ? 0.0 : (mo.y < 0.68 ? -laneC : laneC)) + (hash11(mc * 5.9 + cls) - 0.5) * 0.3;
       mx = clamp(mx, -(hw - 1.6), hw - 1.6);
       float md = length(vec2(along - ma, xm - mx));

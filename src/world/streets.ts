@@ -49,7 +49,12 @@ const SIGNAL_GREEN = 24, SIGNAL_AMBER = 4, SIGNAL_RED = 2;
 const SIGNAL_HALF = SIGNAL_GREEN + SIGNAL_AMBER + SIGNAL_RED;
 
 /** sidewalk kinds carried in `aSw.z` */
-const K_WALK = 0, K_PROMENADE = 1, K_APRON = 3, K_PARAPET = 4, K_LOT = 5, K_PLAZA = 6, K_YARD = 7;
+const K_WALK = 0, K_PROMENADE = 1, K_APRON = 3, K_PARAPET = 4, K_LOT = 5, K_PLAZA = 6, K_YARD = 7, K_MEDIAN = 8;
+/** the 4-lane arterials' kerbed median: half-width (kerb face to centreline); the traffic's inner lane drives 2.6 m
+ *  out (world/traffic.ts) and the road shader lays the lanes from 1.0 m (world/roads.ts) */
+const MED_HW = 1.0;
+/** the median ends this far past a junction's box: the crosswalk (4 m) and a painted left-turn pocket */
+const MED_OPENING = 21;
 /** parked cars, planters and benches of the plazas, lots and parking lanes are drawn within this range; beyond
  *  YARD_NEAR (measured in three dimensions, so from 200 m up nothing is near) a car is its one-box far shape and a
  *  planter its shrub, at half the triangles: a car is 10 x 4 px at 280 m from the air, 19 px long at 160 m from eye
@@ -115,6 +120,15 @@ const SW_MAIN = /* glsl */ `
     float paint = max(bayLine, rowLine) * (0.55 + 0.45 * smoothstep(0.3, 0.7, fbm3(wp * 0.4 + 6.0)));
     float drip = smoothstep(0.5, 0.8, vnoise(wp * 0.9)) * inBay * (step(vv, 1.6) + step(14.9, vv)) * (1.0 - smoothstep(0.3, 1.0, fp));
     col = mix(asph * (1.0 - 0.07 * inBay - 0.35 * drip), vec3(0.8, 0.8, 0.78), paint * 0.85);
+    joint = 0.0;
+  } else if (kind > 7.5) {
+    // arterial median planting strip (across = signed metres from the centreline): the plaza beds' kept lawn with a
+    // mulched bed down the middle where the palms stand, worn patches; no joints
+    vec3 lawn = mix(vec3(0.060, 0.104, 0.038), vec3(0.084, 0.136, 0.052), mix(fbm3(wp * 0.9 + 4.0), 0.5, 1.0 - slabFade)) * (0.9 + 0.2 * grain);
+    vec3 mulch = mix(vec3(0.105, 0.075, 0.048), vec3(0.15, 0.11, 0.07), mix(vnoise(wp * 1.7), 0.5, 1.0 - slabFade)) * (0.85 + 0.3 * grain);
+    float bed = (1.0 - smoothstep(0.22, 0.38, abs(across))) * smoothstep(0.35, 0.55, fbm3(vec2(along * 0.08, 3.0)));
+    col = mix(lawn, mulch, bed);
+    col *= 1.0 - 0.15 * smoothstep(0.6, 0.8, fbm3(wp * 0.35 + 7.0));
     joint = 0.0;
   } else if (kind > 6.5) {
     // container terminal hardstand (across, along = the port island's u + HW, v + HH): aged asphalt-concrete 0.17-0.25
@@ -252,7 +266,7 @@ function createSidewalkMaterial(lights: RoadLightUniforms): THREE.MeshStandardMa
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * lampPools(vWorldPosS);');
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'sidewalk-v1';
+  mat.customProgramCacheKey = () => 'sidewalk-v2';
   return mat;
 }
 
@@ -687,7 +701,7 @@ export class Streets {
   readonly uniforms = { uSignalTime: { value: 0 } as THREE.IUniform<number>, uNight: { value: 0 } as THREE.IUniform<number>, uFocalPx: { value: 1000 } as THREE.IUniform<number> };
   private readonly cells: StreetCell[] = [];
   private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup }>();
-  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, trees: 0, awnings: 0, signs: 0, newsboxes: 0, mailboxes: 0, racks: 0, cans: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
+  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, trees: 0, medians: 0, medianLength: 0, medianPalms: 0, awnings: 0, signs: 0, newsboxes: 0, mailboxes: 0, racks: 0, cans: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
   private readonly roads: RoadIndex;
   /** debug: `?dbg=nopools` turns the lamp pools off */
   poolsEnabled = true;
@@ -726,6 +740,7 @@ export class Streets {
       for (const k of node.corners) this.buildCorner(k, signalPoles.get(node) ?? []);
       this.planInterchangeMasts(node);
     }
+    this.buildMedians();
     this.buildPromenade();
     this.buildPlazas(blocks, occupied);
     this.buildPortYard();
@@ -876,6 +891,115 @@ export class Streets {
     this.counts.runs++;
     // lamps and furniture along the run
     this.dressRun(run, cellSoups);
+  }
+
+  /** The kerbed medians of the 4-lane arterials (the gauntlet's "medians with curbs and planting strips", defect
+   *  1.15): a 2 m raised strip down the centreline — 0.3 m concrete kerb tops over 0.15 m kerb faces either side of
+   *  a 1.4 m planting strip with a palm every 18-24 m — between the openings: MED_OPENING past the box of every
+   *  signalised junction, arterial crossing and chain end (the crosswalk and a painted left-turn pocket where the
+   *  double yellow runs on), a cut for the crosswalk at the minor streets (no left turns there), 6 m short of the
+   *  chain ends, and a 10 m mid-block gap in three of five stretches over 140 m (U-turns and driveways). Each end is
+   *  a rounded nose. Built in 150 m pieces into the sidewalk soups (fine and far index), skipped over water and on
+   *  decks. */
+  private buildMedians(): void {
+    for (const chain of this.graph.chains) {
+      if (chain.cls !== 'arterial' || chain.lanes < 4 || chain.lift > 0) continue;
+      if (chain.s1 - chain.s0 < 40) continue;
+      // a full opening where the traffic turns (signals, arterial crossings, the chain's ends); at the minor streets
+      // only the cut for the crosswalk (its far line is 3.8 m outside the box)
+      const cuts: [number, number][] = chain.nodes.map((cn) => {
+        const major = cn.node.signal || cn.s < 1.5 || cn.s > chain.length - 1.5 || cn.node.rays.some((r) => r.chain !== chain && r.chain.cls === 'arterial');
+        const open = major ? MED_OPENING : 4.5;
+        return [cn.s - cn.hMinus - open, cn.s + cn.hPlus + open];
+      });
+      cuts.sort((u, v) => u[0] - v[0]);
+      const free: [number, number][] = [];
+      let s = chain.s0 + 6;
+      for (const [c0, c1] of cuts) { if (c0 > s) free.push([s, c0]); s = Math.max(s, c1); }
+      if (chain.s1 - 6 > s) free.push([s, chain.s1 - 6]);
+      for (const [a, b] of free) {
+        const pieces: [number, number][] = [];
+        if (b - a > 140 && hash2(chain.id, Math.round(a), 51) < 0.6) { const m = (a + b) / 2; pieces.push([a, m - 5], [m + 5, b]); } else pieces.push([a, b]);
+        for (const [p0, p1] of pieces) {
+          if (p1 - p0 < 12) continue;
+          const n = Math.ceil((p1 - p0) / 150);
+          for (let i = 0; i < n; i++) this.buildMedianPiece(chain, p0 + ((p1 - p0) * i) / n, p0 + ((p1 - p0) * (i + 1)) / n, i === 0, i === n - 1);
+        }
+      }
+    }
+  }
+
+  private buildMedianPiece(chain: RoadChain, sa: number, sb: number, noseA: boolean, noseB: boolean): void {
+    const cross = this.crossOf(chain);
+    const mid = frameAt(chain, cross, (sa + sb) / 2);
+    if (this.map.heightAt(mid.x, mid.z) < 0.9) return;
+    const soup = this.soupsAt(mid.x, mid.z).walk;
+    const rows = new Set<number>([sa, sb]);
+    for (const s of chain.rows) if (s > sa + 0.3 && s < sb - 0.3) rows.add(s);
+    // rows every 8 m at least (the strip follows the pavement rows where there are any), and the noses' rings
+    for (let s = sa + 8; s < sb - 4; s += 8) rows.add(s);
+    if (noseA) for (const d of [0.3, 0.8, 1.5]) rows.add(sa + d);
+    if (noseB) for (const d of [0.3, 0.8, 1.5]) rows.add(sb - d);
+    const sorted = [...rows].sort((u, v) => u - v);
+    let prev: number[] | null = null;
+    for (const s of sorted) {
+      const f = frameAt(chain, cross, s);
+      const yRoad = (roadEdgeY(chain, s, -1) + roadEdgeY(chain, s, 1)) * 0.5;
+      // the noses: an elliptical taper over the last 1.5 m
+      let hw = MED_HW;
+      const dEnd = Math.min(noseA ? s - sa : Infinity, noseB ? sb - s : Infinity);
+      if (dEnd < 1.5) hw = Math.max(0.1, MED_HW * Math.sqrt(1 - Math.pow((1.5 - dEnd) / 1.5, 2)));
+      const row = this.medianRow(soup, f.x, f.z, f.cx, f.cz, hw, yRoad, s);
+      if (prev) this.linkMedian(soup, prev, row, f.cx, f.cz);
+      prev = row;
+    }
+    // a palm every 18-24 m along the strip, 4 m in from the noses
+    const pitch = 18 + 6 * hash2(chain.id, Math.round(sa), 52);
+    for (let s = sa + 4 + pitch * 0.5 * hash2(chain.id, Math.round(sa), 53); s < sb - 4; s += pitch) {
+      const f = frameAt(chain, cross, s);
+      const y = (roadEdgeY(chain, s, -1) + roadEdgeY(chain, s, 1)) * 0.5 + CURB_H;
+      this.streetTrees.push({ arche: 4, x: f.x, y, z: f.z, h: 7 + 3 * hash2(Math.round(s), chain.id, 54) });
+      this.counts.medianPalms++;
+    }
+    this.counts.medians++;
+    this.counts.medianLength += sb - sa;
+  }
+
+  /** one row of the median profile: face foot, face top and kerb top on the -across side, the planting strip, and
+   *  the same mirrored on the +across side (10 vertices); the kerb parts use the sidewalk kind with `across` measured
+   *  inward from their own kerb face, the strip the median kind with `across` signed from the centreline */
+  private medianRow(soup: WalkSoup, x: number, z: number, cx: number, cz: number, hw: number, yRoad: number, along: number): number[] {
+    const nl = Math.hypot(cx, cz) || 1;
+    const ux = cx / nl, uz = cz / nl;
+    const yTop = yRoad + CURB_H;
+    const kerbW = Math.min(CURB_TOP, hw * 0.5);
+    const out: number[] = [];
+    const v = (o: number, y: number, nx: number, ny: number, nz: number, across: number, kind: number) => {
+      out.push(soup.vert({ x: x + cx * o, y, z: z + cz * o, nx, ny, nz, across, along, kind, w: 0 }));
+    };
+    v(-(hw + 0.05), yRoad - 0.04, -ux, 0, -uz, -0.05, K_WALK);
+    v(-hw, yTop, -ux, 0, -uz, 0, K_WALK);
+    v(-hw, yTop, 0, 1, 0, 0, K_WALK);
+    v(-(hw - kerbW), yTop, 0, 1, 0, kerbW, K_WALK);
+    v(-(hw - kerbW), yTop - 0.03, 0, 1, 0, -(hw - kerbW), K_MEDIAN);
+    v(hw - kerbW, yTop - 0.03, 0, 1, 0, hw - kerbW, K_MEDIAN);
+    v(hw - kerbW, yTop, 0, 1, 0, kerbW, K_WALK);
+    v(hw, yTop, 0, 1, 0, 0, K_WALK);
+    v(hw, yTop, ux, 0, uz, 0, K_WALK);
+    v(hw + 0.05, yRoad - 0.04, ux, 0, uz, -0.05, K_WALK);
+    return out;
+  }
+
+  private linkMedian(soup: WalkSoup, a: number[], b: number[], cx: number, cz: number): void {
+    soup.quad(a[0], a[1], b[1], b[0], -cx, 0, -cz);
+    soup.quad(a[2], a[3], b[3], b[2], 0, 1, 0);
+    soup.quad(a[4], a[5], b[5], b[4], 0, 1, 0);
+    soup.quad(a[6], a[7], b[7], b[6], 0, 1, 0);
+    soup.quad(a[8], a[9], b[9], b[8], cx, 0, cz);
+    // far LOD: one slab kerb face to kerb face, and the two faces as slants from the foot
+    soup.quad(a[0], a[3], b[3], b[0], -cx, 1, -cz, 1);
+    soup.quad(a[3], a[6], b[6], b[3], 0, 1, 0, 1);
+    soup.quad(a[6], a[9], b[9], b[6], cx, 1, cz, 1);
   }
 
   /** Curb return: the profile extruded along the arc from ta to tb (normals toward the arc centre), dished into a
