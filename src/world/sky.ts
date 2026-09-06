@@ -207,10 +207,13 @@ float densityFull(vec3 q, vec4 n, float e, float hf, float hn, float detFade, ou
   // worley is inverted (holes at the feature points, cloud left along the cell walls): rags, scud and fraying
   // fringes hang under the base instead of round bumps; the dense interior of the base keeps its lumps
   float det = texture(uNoise3D, q * 3.0 + vec3(0.37, 0.11, 0.73)).g;
-  float wisp = texture(uNoise3D, q * 5.0 + vec3(0.61, 0.29, 0.17)).b;
   float baseZone = (1.0 - smoothstep(0.0, 0.12, hf)) * (1.0 - smoothstep(0.3, 0.9, e)) * 0.7;
   det = mix(det, 1.0 - det, baseZone);
-  float er = mix(mix(det, wisp, smoothstep(0.45, 1.0, hn)), 0.5, detFade);
+  // the wisp channel only weighs in over the upper half of the column: skip its fetch below
+  float wk = smoothstep(0.45, 1.0, hn);
+  float er = det;
+  if (wk > 0.0) er = mix(det, texture(uNoise3D, q * 5.0 + vec3(0.61, 0.29, 0.17)).b, wk);
+  er = mix(er, 0.5, detFade);
   // remap (rather than subtract) so eroded edges keep a steep density gradient: crisp cauliflower lobes
   float k = 0.5 * (1.0 - er);
   d = (d - k) / (1.0 - k);
