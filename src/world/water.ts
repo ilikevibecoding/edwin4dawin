@@ -183,7 +183,9 @@ vec3 skyReflection(vec3 R, float mss, vec3 P, float fw) {
   // mirrored as the same soft band the environment probe carries for the IBL, brightest under a closed ceiling
   float deck = smoothstep(0.45, 0.75, uCloudCoverage);
   float cov = (smoothstep(0.2, 0.95, uCloudCoverage) * 0.7 + deck * 0.25) * smoothstep(0.0, 0.3, e0);
-  vec3 cloudCol = vec3(dot(uHorizonColor, vec3(0.2126, 0.7152, 0.0722))) * mix(1.15, 1.9, deck);
+  // a lone cumulus base is a mid grey, a little darker than the horizon haze it hangs over (0.8 of its luminance);
+  // a closed deck's underside is lit through the whole sheet and brighter (1.9)
+  vec3 cloudCol = vec3(dot(uHorizonColor, vec3(0.2126, 0.7152, 0.0722))) * mix(0.8, 1.9, deck);
   if (uCloudCoverage > 0.03 && e0 > 0.04 && fw > 0.06) {
     float dc = (uCloudBase - P.y) / sin(e0); // metres along the reflected ray to the cloud base
     vec2 cs = P.xz + az * (cos(e0) * dc) + uCloudWind;
