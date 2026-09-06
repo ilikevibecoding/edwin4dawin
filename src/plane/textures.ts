@@ -755,12 +755,13 @@ export function floatMaps(): PbrMaps {
   band(actx, 0, 0.105, '#c3c7ca');
   band(actx, 0, 0.066, '#2b2e31');
   band(actx, 0.105, 0.118, '#9aa0a5');
-  // wet band: dull stained aluminium from the scum line (~4 cm above the chine) down over the chine, with a
-  // sharp dark upper edge so the hull reads as sitting in the water rather than on it
+  // scum line: a light stain from ~4 cm above the resting chine down over it (the wet band itself is live: the
+  // float material darkens and glosses the hull below the immersion the flight model reports, model.ts
+  // setWaterline, so a planing float runs dry and a float driven under at touchdown is wet to the deck)
   for (const side of [1, -1]) {
     const V = (v: number) => (side > 0 ? v : 1 - v) * h;
     const g = actx.createLinearGradient(0, V(0.165), 0, V(0.31));
-    g.addColorStop(0, 'rgba(60,72,70,0)'); g.addColorStop(0.08, 'rgba(60,72,70,0.55)'); g.addColorStop(0.35, 'rgba(70,84,80,0.42)'); g.addColorStop(1, 'rgba(70,84,80,0)');
+    g.addColorStop(0, 'rgba(60,72,70,0)'); g.addColorStop(0.08, 'rgba(60,72,70,0.3)'); g.addColorStop(0.35, 'rgba(70,84,80,0.18)'); g.addColorStop(1, 'rgba(70,84,80,0)');
     actx.fillStyle = g;
     actx.fillRect(0, Math.min(V(0.165), V(0.31)), w, Math.abs(V(0.31) - V(0.165)));
   }
@@ -794,11 +795,11 @@ export function floatMaps(): PbrMaps {
   panelVariation(rctx, w, h, frames, [0.118, CHINE, 1 - CHINE, 1 - 0.118], rng, 12, 'all', { seam: 3, seamAmp: 20 });
   mctx.fillStyle = '#000000'; mctx.fillRect(0, 0, w, h);
   cctx.fillStyle = '#ffffff'; cctx.fillRect(0, 0, w, h);
-  // wet band: glossier than the dry paint above it (roughness ~0.28), fading out toward the keel
+  // scum line: a little glossier than the dry paint above it (the live wet band adds the real gloss below the water)
   for (const side of [1, -1]) {
     const V = (v: number) => (side > 0 ? v : 1 - v) * h;
     const g = rctx.createLinearGradient(0, V(0.165), 0, V(0.31));
-    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.08, 'rgba(0,0,0,0.36)'); g.addColorStop(0.5, 'rgba(0,0,0,0.30)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.08, 'rgba(0,0,0,0.16)'); g.addColorStop(0.5, 'rgba(0,0,0,0.12)'); g.addColorStop(1, 'rgba(0,0,0,0)');
     rctx.fillStyle = g;
     rctx.fillRect(0, Math.min(V(0.165), V(0.31)), w, Math.abs(V(0.31) - V(0.165)));
   }

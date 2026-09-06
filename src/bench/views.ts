@@ -88,13 +88,21 @@ export const BENCH_VIEWS: BenchView[] = [
     id: 'water-landing', name: 'Seaplane water approach', description: 'Final approach a few metres above the Garza channel, floats about to touch: foam, wake and spray.',
     time: 13.0, weather: 'clear',
     camera: { mode: 'chase', fov: 48 },
-    // floats ~0.7 m above the water, flaring downwind (5 m/s tailwind on 086): the aircraft balloons a few
-    // decimetres, sinks and touches down about 0.7 s into the clip (frame 7), then runs on the step at ~27 m/s
-    // with spray and float wakes; the old 5.5 m start floated in ground effect through the whole 3 s clip.
-    // The landing line runs 110 m north of the channel's boat lane (z 3300) so the clip does not open on a
-    // boat wake stretching ahead of the aircraft with its boat already behind the camera
-    plane: { pos: [-500, 2.7, 3410], headingDeg: 86, pitchDeg: 3, bankDeg: 0, speed: 28, throttle: 0.12, flaps: 1 },
-    presim: 30, clipInputs: { pitch: 0.15, roll: 0, yaw: 0 },
+    // floats ~0.5 m above the water in the flare, downwind (5 m/s tailwind on 086): the aircraft touches down
+    // at ~1.5 m/s about 0.33 s into the clip (10 fps clip frame 3-4), the steps drive 20 cm under, it rebounds onto
+    // the step (bows out of the water by 0.9 s, nose 7 deg up, settled by ~2.5 s) and runs
+    // on at ~27 m/s nose-up with spray and float wakes; the old 5.5 m start floated in ground effect through the
+    // whole 3 s clip. The landing line runs 110 m north of the channel's boat lane (z 3300) so the clip does not
+    // open on a boat wake stretching ahead of the aircraft with its boat already behind the camera
+    plane: { pos: [-500, 2.45, 3410], headingDeg: 86, pitchDeg: 1, bankDeg: 0, speed: 27, throttle: 0.12, flaps: 1 },
+    presim: 30, clipInputs: { pitch: 0.12, roll: 0, yaw: 0 },
+  },
+  {
+    id: 'water-landing-firm', name: 'Seaplane firm water landing', description: 'Same approach line, arriving nose-down with no flare: the floats hit at 3 m/s (0.3 s, 10 fps clip frame 3-4), drive 40 cm under, throw a splash, and the aircraft skips clear (0.9-1.3 s, clip frames 9-13) before it settles on the step nose-up by 2.5 s.',
+    time: 13.0, weather: 'clear',
+    camera: { mode: 'chase', fov: 48 },
+    plane: { pos: [-500, 3.0, 3410], headingDeg: 86, pitchDeg: -3, bankDeg: 0, speed: 28, throttle: 0.05, flaps: 1 },
+    presim: 30, clipInputs: { pitch: 0.05, roll: 0, yaw: 0 },
   },
   {
     id: 'sunset', name: 'Sunset flight', description: 'Low sun in the west over the bay, downtown silhouetted, warm haze and long water reflections.',
