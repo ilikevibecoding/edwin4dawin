@@ -1,7 +1,7 @@
 {
-  "updated": "2026-09-05T14:06:31.413099Z",
-  "phase": "Star Wars expansion: integration build is live (render pipeline + HD tiles + Coruscant skyline + 5 landmarks); 4 landmark builders running (Works, Opera, 500 Republica, Chancellery); Medcenter, Detention, HoloNet queued; critics and verification next",
-  "summary": "Everything merged so far is in the hosted build: Minecraft 1:1 gameplay (hunger/food, chests with contents that survive disasters, doors, crops, crafting), the space train + hyperlane + two stations (frontier roof-deck spaceport, Coruscant glass concourse), the Coruscant spaceport with landing/take-off ship traffic along boulevard lanes, the Death Star shell + walkable interior (hangar, corridors, throne room, reactor), 421 Coruscant towers with generated interiors, five signature landmarks (CoCo Town market, Jedi Temple, Galactic Senate, Uscru undercity, Monument Plaza), 64x HD tiles with normal/material maps, cascaded sun shadows, HDR bloom + ACES tone mapping, atmospheric sky, a far-skyline impostor layer so Coruscant reads to the horizon, and admin-panel Travel buttons (town, stations, spaceport, Senate, Monument Plaza, skyline, Death Star exterior/hangar). Verified on the merged tree: unit 11/11, textures 11/11, spaceport 15/15, Death Star 8/8, towers 6/6, disaster determinism 40/40; production bundle smoke-tested at the town, station and Death Star hangar with 0 exceptions.",
+  "updated": "2026-09-06T14:47:57.387Z",
+  "phase": "Round 6 - from skeleton to a living city: wave 1 merged and live (towers v2, ships v2, train v2, credits economy, lower city, appearance library, 4,767-citizen population, view distance 32); pass 2 running (30 lines per persistent NPC + 13-anchor cast, economy v2 with shipments, 20 building programs + scorer, Senate sessions); spaceport x4 still building",
+  "summary": "The hosted build now has round-6 wave 1: creative/survival toggle; seven Star Wars crown styles on all 319 tall towers plus spire/spine/needle families; 62 ships over six families with a deterministic port cycle, boardable interiors and low engine hums; a maglev train with emissive strips and sliding doors; Star Wars credits with 75 building purposes, entrance signs, shops, a job board, rent and a ship dealer; the orange sea replaced by a terraced lower city with three walkable vertical routes; 100 faces / 19 species / 53 outfits; 4,767 named citizens with homes, jobs, meals and shifts (138 visible at noon on the Senate plaza, <= 150 live, 0 teleports); view distance up to 32 with a far-LOD layer. Verified on the merged tree: unit 12/12, towers 15/15, spaceport 16/16, farlod 12/12, lowercity 11/11, ships 9/9, appearance 12/12, rooms 7/7, dialog 7/7, disasters ALL PASS; production bundle smoke-tested at the town, Senate plaza and spaceport with 0 exceptions.",
   "links": [
     {
       "label": "Pull request #17",
@@ -182,6 +182,76 @@
       "name": "SW: Coruscant far skyline",
       "status": "merged",
       "detail": "One-draw-call impostor layer (inset tower boxes + ground sheet) with its own long fog and a lit-window lattice at night; the real chunks stream ~10 chunks out, the impostors carry the skyline to ~1000 blocks. Coruscant fog now starts at 0.85x render distance."
+    },
+    {
+      "name": "Round 6 W1: Star Wars tower crowns + spire/spine/needle families",
+      "status": "merged",
+      "detail": "7 crown styles on 319/319 tall towers, lit strips 100%, crown-aware impostors; towers 15/15"
+    },
+    {
+      "name": "Round 6 W2: ships v2 (9 models / 6 families, port cycle, boarding, hums)",
+      "status": "merged",
+      "detail": "62 ships, >= 33 airborne, boarding drift 0, dominant hum 124 Hz, repair berths; ships 9+2, spaceport 16/16"
+    },
+    {
+      "name": "Round 6 W3: train v2 (maglev hull, emissive strips, doors, interior, hum)",
+      "status": "merged",
+      "detail": "52/52 ride checks; +2 draw calls"
+    },
+    {
+      "name": "Round 6 W4: city population + dialog + room functions",
+      "status": "merged",
+      "detail": "4,767 citizens, 53 room functions, <= 150 live instanced (+5 draws), 637 lines, talk box; census 138/135 visible at noon, 0.31% failed trips"
+    },
+    {
+      "name": "Round 6 W5: credits economy, purposes, signs, shops, jobs, ship dealer",
+      "status": "merged",
+      "detail": "75 kinds, wallet, job board, rent, dealer; economy 31 offline + 70 CDP"
+    },
+    {
+      "name": "Round 6 W6: spaceport x4 + train terminus + map growth",
+      "status": "building",
+      "detail": "apron widened to x 2132, grand terminal, terminus undercroft, per-pad fleet types; not yet merged"
+    },
+    {
+      "name": "Round 6 W7: view distance 32 + far LOD",
+      "status": "merged",
+      "detail": "far tiles, town boxes, horizon cone, deck/skybridge impostors; +4 MB, +0..4 draws at rd 32; 0 seam holes; farlod 12/12"
+    },
+    {
+      "name": "Round 6 W8: lower city replaces the orange sea",
+      "status": "merged",
+      "detail": "terraces, trenches, conveyors, 3 vertical routes, fall rule; lowercity 11/11"
+    },
+    {
+      "name": "Round 6 W9: character appearance library",
+      "status": "merged",
+      "detail": "100 faces, 19 species, 53 outfits / 167 colourways; appearance 12+13"
+    },
+    {
+      "name": "Pass 2 P1: 30 lines per persistent NPC, 13-anchor cast, speech + subtitles",
+      "status": "building",
+      "detail": ""
+    },
+    {
+      "name": "Pass 2 P2: economy v2 (chains, atomic transfers, price rule, ledger, physical shipments)",
+      "status": "building",
+      "detail": ""
+    },
+    {
+      "name": "Pass 2 P3: 20 building programs, dossiers, four-differences rule, building scorer",
+      "status": "building",
+      "detail": ""
+    },
+    {
+      "name": "Pass 2 P4: Senate chamber, 12 delegation suites, sessions, 3 policy scenarios",
+      "status": "building",
+      "detail": ""
+    },
+    {
+      "name": "Pass 2 P5/P6: factions + 8 surprises; crowd appearance from the composer",
+      "status": "queued",
+      "detail": ""
     }
   ],
   "metrics": [
@@ -215,44 +285,44 @@
   ],
   "screenshots": [
     {
+      "src": "img/r6_train.jpg",
+      "caption": "Train v2 interior riding over the ocean (14:47 UTC)"
+    },
+    {
+      "src": "img/r6_crown.jpg",
+      "caption": "Tower crown from the reference: tiered spire with lit strips (14:47 UTC)"
+    },
+    {
+      "src": "img/r6_welding.jpg",
+      "caption": "Mechanics welding at the landing gear of a dwelling ship (14:47 UTC)"
+    },
+    {
+      "src": "img/r6_ships.jpg",
+      "caption": "Ships v2: sky traffic over the boulevards (14:47 UTC)"
+    },
+    {
+      "src": "img/r6_lower_city.jpg",
+      "caption": "Lower city freight trench where the orange sea was (14:47 UTC)"
+    },
+    {
+      "src": "img/r6_skyline_rd32.jpg",
+      "caption": "Coruscant skyline at rd 32 (14:47 UTC)"
+    },
+    {
+      "src": "img/r6_rd32_town.jpg",
+      "caption": "Frontier town at view distance 32: far hills and the hyperlane to the horizon (14:47 UTC)"
+    },
+    {
+      "src": "img/r6_plaza_crowd.jpg",
+      "caption": "Senate plaza at noon: the instanced crowd, towers v2 crowns, the dome (merged tree) (14:47 UTC)"
+    },
+    {
       "src": "img/sw_space.png",
       "caption": "The space region: black starfield sky (Death Star goes here) (07:26 UTC)"
     },
     {
       "src": "img/sw_palette.png",
       "caption": "New Star Wars block palette on the Coruscant plateau (07:26 UTC)"
-    },
-    {
-      "src": "img/r4_superlaser.png",
-      "caption": "Round 4: the green superlaser firing into the town (from the recorded demo) (05:29 UTC)"
-    },
-    {
-      "src": "img/r4_station.png",
-      "caption": "Round 4: the battle station over the rooftops while villagers wonder (05:29 UTC)"
-    },
-    {
-      "src": "img/final_beam_impact.png",
-      "caption": "Final beam impact seen from the street (from the recorded demo) (14:29 UTC)"
-    },
-    {
-      "src": "img/final_wave.png",
-      "caption": "Final flood: voxel crest with foam passing under the balcony (14:29 UTC)"
-    },
-    {
-      "src": "img/final_tornado.png",
-      "caption": "Final tornado: stepped pixel funnel, dust skirt, roofs shredded, storm sky (14:29 UTC)"
-    },
-    {
-      "src": "img/storm_sky.png",
-      "caption": "New shared storm-sky override (dome, fog, sun and clouds blend to a deck colour) for the tornado (10:17 UTC)"
-    },
-    {
-      "src": "img/crater_glow_after.png",
-      "caption": "Beam crater after the critic fixes: magma pool lights the bowl at night (10:17 UTC)"
-    },
-    {
-      "src": "img/beam_charge.png",
-      "caption": "Ring station charging above the town (09:08 UTC)"
     }
   ],
   "log": [
@@ -367,11 +437,16 @@
     {
       "time": "2026-09-05 13:31 UTC",
       "text": "Jedi Temple (188 rooms), Galactic Senate (54 rooms, convocation chamber with pod rings), Uscru undercity (46 rooms, 15 neon buildings) merged; landmark modules declare footprints so the tower contract tests keep passing."
+    },
+    {
+      "time": "2026-09-06 14:47 UTC",
+      "text": "Round 6 wave 1 merged and the hosted build rebuilt (towers, ships, train, economy pass 1, lower city, appearance, population, view distance 32). Pass 2 builders launched: dialog/cast, economy v2, building programs, Senate."
     }
   ],
   "issues": [
-    "Eyes: brow/iris contrast and dark-coat horse eyes being fixed (critic round 2 pending).",
-    "Multiplayer: NPCs/animals are client-side ambience (not synchronized); no server persistence; admin token in URL, no TLS.",
-    "Headless benchmark runs on software GL, so FPS/GPU figures are not representative of a real GPU; CPU-side metrics are compared."
+    "Crowd skins still come from the 22x6 archetype atlas; swapping in the 100-face composer (P6) is queued.",
+    "Headless benchmark runs on software GL, so FPS/GPU figures are not representative of a real GPU; CPU-side metrics are compared.",
+    "Multiplayer: NPCs/animals are client-side ambience (not synchronized); no server persistence.",
+    "Reference ledger views are text-only (starwars.com images were not retrievable); look-based decisions are marked in the ledger."
   ]
 }
