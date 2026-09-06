@@ -13,6 +13,53 @@ stacked masses; long horizontal glazing bands and vertical light strips instead 
 metal fields with recessed seams; ring ledges and cap platforms; landing decks that stick out; a grey-white / warm
 sand / dark bronze palette with blue-white light; nothing that looks like brick or a 1930s office block.
 
+## Reference reading
+
+Concrete visual rules extracted from the user's references in `docs/references/` (`user_tower_ref_1..3.png`: the
+500-Republica tiered spire, the blue-spine tower with landing decks, the Zakuul needles; `user_coruscant_plaza_night_andor.png`;
+`user_senate_exterior_day.png`; the three `user_minecraft_coruscant_*.png` voxel renders). Every rule below maps to
+code in `src/coruscant/facade.js`, `src/coruscant/towers/envelope.js`, `towers/*.js`, `crowns.js` or `skyline.js`.
+
+Massing
+1. **Slender, stacked, tapering.** A tower is a stack of 3-6 shells that get narrower as they rise (500 Republica reads as
+   nested organ pipes); the widest part is the podium, the narrowest the tip. Never one straight box with a hat.
+2. **Round or faceted plans.** Footprints are circles, rounded rectangles, ellipses and octagons; where a plan is
+   square its corners are chamfered or carry fins. Curves must be >= 6 blocks in radius to read in voxels.
+3. **Stacked discs on a stalk.** The Andor platform and the Minecraft platform render: a slender core (stalk) with
+   wide horizontal tiers and a cap platform overhanging it; undersides of the discs glow warm.
+4. **Lobes and spines.** Two or three cylinders joined by a flat spine (ref 2 and the Minecraft skyline's paired drums)
+   read as one building with a lit seam between the lobes.
+5. **Fins and buttresses.** Vertical fins run past the roof line as blades; the Zakuul needles are faceted blades whose
+   edges catch the light. Buttresses step down in stairs toward the ground.
+
+Facade
+6. **Vertical light lines.** Continuous unbroken lines of light run the full height of a facade every 4-6 blocks (ref 1
+   warm, ref 2 blue). Lines, never dotted rows of squares.
+7. **Horizontal ribbons.** Glazing is a continuous band per floor (or every other floor) between smooth panel fields;
+   a facade module (fin, strip, band) repeats at one pitch over the whole height - the order is what separates it
+   from "random shit placed". Variation is between towers, never within a facade.
+8. **Panel fields with seams.** Large blank metal fields with recessed seam lines every few blocks; service floors
+   have no windows at all. Seams and fins must still read at 200 blocks.
+9. **Tier lines.** Every shell change is marked by a lit ring ledge (a light line around the tower) or a dark band; the
+   undersides of setbacks and decks carry the light.
+
+Palette
+10. **Grey-black body, warm or blue light.** Body colours are panel black, dark and light durasteel, hull plate; the
+    500-Republica type is warm bronze; plazas and the Senate are sand-grey; chrome only on edges and fins. Light is
+    blue-white (strips, ledges) or warm white (interiors); red/orange only as a rare beacon. No brick, no stone brick,
+    no coloured wool, no wood on a tower.
+11. **District character stays legible.** Senate district grey-white and bronze, financial black panel and chrome with
+    blue light, residential warm sand and durasteel, industrial hull plate, entertainment neon accents, spaceport hangar grey.
+
+Roofs, decks, ground
+12. **No flat roof.** Every top ends in a spire, needle tip, dome, antenna cluster, lit halo or cap disc, and the crown
+    is the narrowest part of the silhouette.
+13. **Landing decks stick out.** Cantilevered platforms on struts at mid height and under the crown with lit rims,
+    touchdown marks and a hangar door (ref 2, the Andor platform); balcony rings on residential drums.
+14. **Bridges are tubes.** Long thin pipe bridges join towers high up; glass tubes with a lit spine.
+15. **Depth and notches.** Facades are layered (recessed glazing between projecting fins, ledges stepping out) so the
+    silhouette has notches and shadows instead of one flat plane.
+
 ## Acceptance criteria (each one measured by `scripts/test-coruscant-towers.mjs` or a listed script)
 
 1. **No window grids.** The `grid` and `punched` rhythms are removed from every tower family; facades use `ribbon`
