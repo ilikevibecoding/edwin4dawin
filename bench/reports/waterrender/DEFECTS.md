@@ -115,3 +115,41 @@ photograph shows: crest segments of 5–15 m waves foreshortened to a few pixels
 near water, and points them at the horizon where the crests run away from the camera. Same 2 px finest octave.
 Why: glitter texture at altitude is set by the wave field (crest-aligned bands), not by the camera; a world axis
 also makes the pattern stable under camera motion (no morphing, glints only move with the water).
+Result (`crops/r3_sun14_r2_vs_r3.jpg`, `crops/r3_high1500_r1_vs_r3.jpg`, `crops/r3_low30_r1_vs_r3.jpg`,
+`crops/r3_sun1730_r1_vs_r3.jpg`): the fan is gone; the high-sun glitter zone is a field of short crest-aligned
+dashes (they slant with the ESE wind in the WSW views, which is right); the 1500 m cotton became crest-aligned
+strokes; the 30 m dabs became clusters of dashes. Accepted. Two texture defects remain and are the next round:
+- **30 m**: the finest cell is 0.7 m, which at 70 m range is 6 × 36 px, so a glint is still a dab, not a point;
+  the footprint there allows 0.2 m cells.
+- **250–1500 m**: the coarse cells (10–50 m, 25–110 m along the crest) carry half the slope variance, so they
+  paint 30–100 px white strokes; real waves longer than the spectral peak (≈ 0.5 U² ≈ 6 m at 3.5 m/s) carry
+  almost none of the slope variance, and the sun path at 17:30 has become an airbrushed column with no
+  structure across it at all (the resolved wind-sea sets are footprint-faded 1 km out, so nothing modulates
+  the lobe there).
+
+## Round 4 — mirror reflection tilted by the sparkle facets (defect 3, night streaks)
+
+Observed (`night`, r0 = r1, crop of the shoreline under the towers): the city's reflection is a row of pale
+grey rounded blobs ("teeth") a few pixels below the waterline, brighter and greyer than the towers themselves
+(the lit windows average to grey through the mip chain, then the streak filter smears them into 3:1 ellipses);
+no vertical streaking of the lights along the waves.
+Change (`sceneReflection`): the wave normal is tilted by the same sparkle slope field the glitter uses
+(`sparkleSlope`, factored out of `sunGlitter`), before the mirror ray is built, so the light of a distant window
+lands on the cells whose facet points at it: a column of glints scattered along the wave slopes over the mirror
+image, moving with the water, instead of one soft blob; the residual (unresolved) variance sets the streak
+filter; the lookup displacement bound goes 0.08 → 0.25 of the image (a light's glints do reach that far).
+Evaluated only where the coarse mip of the reflection shows something within reach (one extra tap), so the cost
+lands on the pixels under reflected objects.
+
+## Round 5 — sparkle octaves follow the slope spectrum; roughness bunched by the wave groups
+
+Change: each octave's share of the slope variance is 0.12 (the equilibrium range puts about the same slope
+variance in every octave from the spectral peak down to the capillaries), tapering to zero for cells longer than
+the spectral peak (0.5 U²: 6 m at 3.5 m/s, 18 m at 6 m/s); the octave floor drops from 0.7 m to 0.175 m; the
+unresolved roughness is modulated ×0.55–1.45 by a wave-group noise (40 m along the wind × 16 m across,
+travelling at the group speed, faded out once a pixel covers 8–20 m).
+Why: from 30 m the 0.2–0.7 m cells now carry a third of the unresolved variance and glint as points; from 1500 m
+the 10–50 m cells carry almost none, so the altitude view is grain and gust mottling; and the group modulation
+is the term that breaks a sun path's margins into streaks across the waves with darker water between them (a
+rough cell reaches the sun from farther off the path than a glassy one), which is what the resolved sets cannot
+do 1 km out.
