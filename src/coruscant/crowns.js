@@ -93,38 +93,79 @@ const W = (e) => e.x1 - e.x0 + 1, D = (e) => e.z1 - e.z0 + 1;
 const centre = (e) => [(e.x0 + e.x1 + 1) / 2, (e.z0 + e.z1 + 1) / 2];
 const inRect = (e, x, z) => x >= e.x0 && x <= e.x1 && z >= e.z0 && z <= e.z1;
 
+// One-high horizontal plate (inclusive rect at level y) written straight into the block array. Blueprint.fill runs
+// one TypedArray.fill per column, which for a single row is a builtin call per cell - a 32x32 floor plate costs
+// 12 us that way and 1 us here, and a tower writes one plate per floor.
+export function slab(bp, x0, z0, x1, z1, y, id) {
+  if (y < 0 || y >= bp.h) return;
+  if (x0 > x1) { const t = x0; x0 = x1; x1 = t; }
+  if (z0 > z1) { const t = z0; z0 = z1; z1 = t; }
+  if (x0 < 0) x0 = 0; if (z0 < 0) z0 = 0; if (x1 >= bp.w) x1 = bp.w - 1; if (z1 >= bp.d) z1 = bp.d - 1;
+  const b = bp.blocks, h = bp.h, d = bp.d;
+  for (let x = x0; x <= x1; x++) { let i = (x * d + z0) * h + y; for (let z = z0; z <= z1; z++, i += h) b[i] = id; }
+}
+
 // Footprint masks are baked into a lookup table over the tier rect once: the mask is queried thousands of times
 // per tier (ring extraction, shell painting, room masks) and Math.pow per query showed up in the fill-time budget.
-function tableMask(ext, fn) {
-  const w = W(ext), d = D(ext), tbl = new Uint8Array(w * d);
-  for (let x = ext.x0; x <= ext.x1; x++) for (let z = ext.z0; z <= ext.z1; z++) if (fn(x, z)) tbl[(x - ext.x0) * d + (z - ext.z0)] = 1;
-  const { x0, x1, z0, z1 } = ext;
-  return (x, z) => x >= x0 && x <= x1 && z >= z0 && z <= z1 && tbl[(x - x0) * d + (z - z0)] === 1;
+// The lookup closure carries its table (`.tbl`, `.ext`, `.d`) so ring extraction and neighbourhood tests can index
+// the table directly instead of calling the closure five times per cell.
+export function tableLookup(ext, tbl) {
+  const { x0, x1, z0, z1 } = ext, d = D(ext);
+  const f = (x, z) => x >= x0 && x <= x1 && z >= z0 && z <= z1 && tbl[(x - x0) * d + (z - z0)] === 1;
+  f.tbl = tbl; f.ext = ext; f.d = d;
+  return f;
 }
-function roundedMask(ext, p) {
-  // superellipse |x/rx|^p + |z/rz|^p <= 1; the two power terms are separable, so they are tabulated per row / column
-  const [cx, cz] = centre(ext), rx = W(ext) / 2, rz = D(ext) / 2;
-  const px = new Float64Array(W(ext)), pz = new Float64Array(D(ext));
-  for (let x = ext.x0; x <= ext.x1; x++) px[x - ext.x0] = Math.pow(Math.abs(x + 0.5 - cx) / rx, p);
-  for (let z = ext.z0; z <= ext.z1; z++) pz[z - ext.z0] = Math.pow(Math.abs(z + 0.5 - cz) / rz, p);
-  return tableMask(ext, (x, z) => px[x - ext.x0] + pz[z - ext.z0] <= 1);
+const sameRect = (a, b) => a === b || (a.x0 === b.x0 && a.x1 === b.x1 && a.z0 === b.z0 && a.z1 === b.z1);
+// the mask's own table when it covers exactly `ext`, else null
+const tableOf = (inside, ext) => (inside && inside.tbl && sameRect(inside.ext, ext) ? inside.tbl : null);
+// Exterior ring of a table mask, same cells / order / fields as facade.maskRing but read off the table.
+export function ringFromTable(e, tbl) {
+  const w = W(e), d = D(e), cells = [];
+  for (let x = e.x0, i = 0; x <= e.x1; x++) for (let z = e.z0; z <= e.z1; z++, i++) {
+    if (tbl[i] !== 1) continue;
+    const ax = x - e.x0, az = z - e.z0;
+    const n = az === 0 || tbl[i - 1] !== 1, s = az === d - 1 || tbl[i + 1] !== 1, wv = ax === 0 || tbl[i - d] !== 1, ev = ax === w - 1 || tbl[i + d] !== 1;
+    const k = (n ? 1 : 0) + (s ? 1 : 0) + (wv ? 1 : 0) + (ev ? 1 : 0);
+    if (!k) continue;
+    if (k >= 2) cells.push({ x, z, along: x + z, corner: (x + z) % 2 === 0, face: 'D' });
+    else cells.push({ x, z, along: (n || s) ? x : z, corner: false, face: n ? 'N' : s ? 'S' : wv ? 'W' : 'E' });
+  }
+  return cells;
 }
-// Filled ellipse (radii rx, rz about cx, cz) at y0..y1, one fill per row (Blueprint.disc fills cell by cell).
-function ellipse(bp, cx, cz, rx, rz, y0, y1, id) {
-  for (let x = Math.floor(cx - rx); x <= Math.ceil(cx + rx); x++) {
+const ringOf = (ext, inside) => { const t = tableOf(inside, ext); return t ? ringFromTable(ext, t) : maskRing(ext, inside); };
+// Superellipse |x/rx|^p + |z/rz|^p <= 1 over the rect. The two power terms are separable, so they are tabulated per
+// row / column first; when `must` cells are given and one of them falls outside, no table is built (returns null).
+function roundedMask(ext, p, must = null) {
+  const [cx, cz] = centre(ext), w = W(ext), d = D(ext), rx = w / 2, rz = d / 2;
+  const px = new Float64Array(w), pz = new Float64Array(d);
+  for (let i = 0; i < w; i++) px[i] = Math.pow(Math.abs(ext.x0 + i + 0.5 - cx) / rx, p);
+  for (let j = 0; j < d; j++) pz[j] = Math.pow(Math.abs(ext.z0 + j + 0.5 - cz) / rz, p);
+  if (must) for (const [x, z] of must) { if (!inRect(ext, x, z) || px[x - ext.x0] + pz[z - ext.z0] > 1) return null; }
+  const tbl = new Uint8Array(w * d);
+  for (let i = 0, k = 0; i < w; i++) { const a = px[i]; for (let j = 0; j < d; j++, k++) if (a + pz[j] <= 1) tbl[k] = 1; }
+  return tableLookup(ext, tbl);
+}
+// Filled ellipse (radii rx, rz about cx, cz) at level y, one strided row write per x (Blueprint.disc fills cell by cell).
+function ellipse(bp, cx, cz, rx, rz, y, id) {
+  if (y < 0 || y >= bp.h) return;
+  const b = bp.blocks, h = bp.h, d = bp.d;
+  const xa = Math.max(0, Math.floor(cx - rx)), xb = Math.min(bp.w - 1, Math.ceil(cx + rx));
+  for (let x = xa; x <= xb; x++) {
     const dx = (x + 0.5 - cx) / rx, q = 1 - dx * dx;
     if (q < 0) continue;
     const hz = rz * Math.sqrt(q);
     // cells whose centre (z + 0.5) lies within cz +- hz
-    const z0 = Math.ceil(cz - hz - 0.5), z1 = Math.floor(cz + hz - 0.5);
-    if (z1 >= z0) bp.fill(x, y0, z0, x, y1, z1, id);
+    const z0 = Math.max(0, Math.ceil(cz - hz - 0.5)), z1 = Math.min(d - 1, Math.floor(cz + hz - 0.5));
+    for (let z = z0, i = (x * d + z0) * h + y; z <= z1; z++, i += h) b[i] = id;
   }
 }
-function chamferMask(ext, c) {
-  return tableMask(ext, (x, z) => {
-    const a = x - ext.x0, b = z - ext.z0, a2 = ext.x1 - x, b2 = ext.z1 - z;
-    return a + b >= c && a2 + b >= c && a + b2 >= c && a2 + b2 >= c;
-  });
+function chamferMask(ext, c, must = null) {
+  const w = W(ext), d = D(ext);
+  const fits = (i, j) => i + j >= c && (w - 1 - i) + j >= c && i + (d - 1 - j) >= c && (w - 1 - i) + (d - 1 - j) >= c;
+  if (must) for (const [x, z] of must) { if (!inRect(ext, x, z) || !fits(x - ext.x0, z - ext.z0)) return null; }
+  const tbl = new Uint8Array(w * d);
+  for (let i = 0, k = 0; i < w; i++) for (let j = 0; j < d; j++, k++) if (fits(i, j)) tbl[k] = 1;
+  return tableLookup(ext, tbl);
 }
 
 // A shell tier k (1-based) above `prev` (the clip of the level below), inset `a` cells per side but never cutting
@@ -161,11 +202,13 @@ function doorCells(plan, t) {
   }
   return out;
 }
-// Cells a shell tier's footprint must keep: the core box with its margins and the door cells.
+// Cells a shell tier's footprint must keep: the core box with its margins and the door cells (cached on the tier).
 function mustCells(plan, t) {
+  if (t.must) return t.must;
   const c = plan.core, F = plan.frame, must = [];
   for (let u = Math.max(t.clip.u0, c.u0 - 1); u <= Math.min(t.clip.u1, c.u1 + 1); u++) for (let v = Math.max(t.clip.v0, c.v0 - 2); v <= Math.min(t.clip.v1, c.v1 + 1); v++) must.push([F.X(u, v), F.Z(u, v)]);
   for (const d of doorCells(plan, t)) { must.push([d.x, d.z]); must.push([d.ix, d.iz]); }
+  t.must = must;
   return must;
 }
 // Rounds / chamfers a shell tier when the core box, its margins and the doors stay inside the mask.
@@ -176,8 +219,8 @@ function shapeTier(plan, t, kind) {
   const tries = kind === 'round' ? [2.4, 3, 4, 6] : [Math.min(3, Math.floor(Math.min(w, d) * 0.3)), 2, 1];
   for (const p of tries) {
     if (kind !== 'round' && p < 1) break;
-    const inside = kind === 'round' ? roundedMask(t.ext, p) : chamferMask(t.ext, p);
-    if (must.every(([x, z]) => inside(x, z))) { t.inside = inside; t.ring = maskRing(t.ext, inside); return; }
+    const inside = kind === 'round' ? roundedMask(t.ext, p, must) : chamferMask(t.ext, p, must);
+    if (inside) { t.inside = inside; t.ring = ringFromTable(t.ext, inside.tbl); return; }
   }
 }
 // Keeps a shell tier on the roof below it when that roof is a masked footprint (octagon / ellipse habitats,
@@ -185,14 +228,19 @@ function shapeTier(plan, t, kind) {
 // at least one cell in from the edge below. Skipped when that would cut the core or a door.
 function constrainTier(plan, t, below) {
   if (!below) return;
-  const inner = (x, z) => below(x, z) && below(x - 1, z) && below(x + 1, z) && below(x, z - 1) && below(x, z + 1);
+  const own = t.inside, e = t.ext, d = D(e), tbl = new Uint8Array(W(e) * d), ownT = tableOf(own, e);
+  // the footprint below as a table: a cell is "inner" when it and its four neighbours are set
+  const bt = below.tbl, be = below.ext, bd = below.d;
+  const inB = bt ? (x, z) => x >= be.x0 && x <= be.x1 && z >= be.z0 && z <= be.z1 && bt[(x - be.x0) * bd + (z - be.z0)] === 1 : below;
   let cut = false;
-  for (let x = t.ext.x0; x <= t.ext.x1 && !cut; x++) for (let z = t.ext.z0; z <= t.ext.z1; z++) if ((!t.inside || t.inside(x, z)) && !inner(x, z)) { cut = true; break; }
+  for (let x = e.x0, i = 0; x <= e.x1; x++) for (let z = e.z0; z <= e.z1; z++, i++) {
+    if (ownT ? ownT[i] !== 1 : (own && !own(x, z))) continue;
+    if (inB(x, z) && inB(x - 1, z) && inB(x + 1, z) && inB(x, z - 1) && inB(x, z + 1)) tbl[i] = 1; else cut = true;
+  }
   if (!cut) return;
-  const own = t.inside;
-  const inside = tableMask(t.ext, (x, z) => (!own || own(x, z)) && inner(x, z));
-  if (!mustCells(plan, t).every(([x, z]) => inside(x, z))) return;
-  t.inside = inside; t.ring = maskRing(t.ext, inside);
+  const inside = tableLookup(e, tbl);
+  for (const [x, z] of mustCells(plan, t)) if (!inside(x, z)) return;
+  t.inside = inside; t.ring = ringFromTable(e, tbl);
 }
 
 // ------------------------------------------------------------------------------------------------ planning
@@ -261,7 +309,7 @@ export function planCrown(bp, o) {
     case 'needle': {
       // the lookout in the base of the tip: same footprint as the top floor, glass all round, no terrace door
       const t = shellTier(plan, o.top.clip, 0, 1, false);
-      if (t) { t.doors = []; t.inside = o.top.inside || null; t.ring = t.inside ? maskRing(t.ext, t.inside) : rectRing(t.ext); plan.tiers.push(t); }
+      if (t) { t.doors = []; t.inside = o.top.inside || null; t.ring = t.inside ? ringOf(t.ext, t.inside) : rectRing(t.ext); plan.tiers.push(t); }
       plan.cap = { kind: 'needle' };
       break;
     }
@@ -305,7 +353,7 @@ export function buildCrown(bp, plan, o) {
 function capCore(bp, plan, yTop, style) {
   const c = plan.core, F = plan.frame;
   const e = F.rect(c.u0, c.v0, c.u1, c.v1);
-  bp.fill(e.x0, yTop, e.z0, e.x1, yTop, e.z1, style.roof);
+  slab(bp, e.x0, e.z0, e.x1, e.z1, yTop, style.roof);
   bp.walls(e.x0, yTop + 1, e.z0, e.x1, yTop + 1, e.z1, style.corner);
   for (const [x, z] of [[e.x0, e.z0], [e.x1, e.z1]]) bp.set(x, yTop + 1, z, B.GLOW_PANEL_BLUE);
 }
@@ -317,19 +365,28 @@ function buildShell(bp, plan, t, style, seed, o, prevExt) {
   // walls (glass drums for the dome / needle lookout / halo lounge), roof + parapet
   paintRing(bp, t.ring, t.f, style, seed, glass ? { lobby: true } : {});
   const deckTop = plan.cap.kind === 'deck' && t.k === 1;      // the landing deck plate replaces this roof + parapet
+  const e = t.ext, ed = D(e), mt = tableOf(t.inside, e);
   if (t.inside) {
-    for (let x = t.ext.x0; x <= t.ext.x1; x++) for (let z = t.ext.z0; z <= t.ext.z1; z++) if (t.inside(x, z)) bp.set(x, yRoof, z, style.roof);
+    if (mt) { if (yRoof < bp.h) { const rf = style.roof, blocks = bp.blocks, h = bp.h; for (let x = e.x0, i = 0; x <= e.x1; x++) for (let z = e.z0; z <= e.z1; z++, i++) if (mt[i] === 1) blocks[(x * bp.d + z) * h + yRoof] = rf; } }
+    else for (let x = e.x0; x <= e.x1; x++) for (let z = e.z0; z <= e.z1; z++) if (t.inside(x, z)) bp.set(x, yRoof, z, style.roof);
     if (!deckTop) for (const cc of t.ring) bp.set(cc.x, yRoof + 1, cc.z, cc.corner ? style.corner : (plan.style === 'spire' ? B.CHROME : B.IRON_BARS));
-  } else if (deckTop) bp.fill(t.ext.x0, yRoof, t.ext.z0, t.ext.x1, yRoof, t.ext.z1, style.roof);
-  else paintRoof(bp, t.ext, yRoof, style, true);
+  } else if (deckTop) slab(bp, e.x0, e.z0, e.x1, e.z1, yRoof, style.roof);
+  else paintRoof(bp, e, yRoof, style, true);
   if (!glass && o.strips && plan.style !== 'deck') o.stripRing(bp, t.ring, t.f, t.f, { ...o.strips, pitch: plan.style === 'tiered' || plan.style === 'spire' ? 2 : 3, faces: null });
   // The tier stands on the roof below (its floor) and nothing but the core has been written in its volume yet, so
   // the interior only needs its ceiling fixtures (a 3-block lattice, white / blue) before the rooms go in.
-  const inner = (x, z) => x > t.ext.x0 && x < t.ext.x1 && z > t.ext.z0 && z < t.ext.z1 && (!t.inside || (t.inside(x, z) && t.inside(x - 1, z) && t.inside(x + 1, z) && t.inside(x, z - 1) && t.inside(x, z + 1)));
+  // interior = cells strictly inside the ring (all four neighbours in the footprint) and outside the core box
   const coreE = F.rect(c.u0, c.v0, c.u1, c.v1);
-  const interior = (x, z) => inner(x, z) && !inRect(coreE, x, z);
-  for (let x = t.ext.x0 + 1; x < t.ext.x1; x++) for (let z = t.ext.z0 + 1; z < t.ext.z1; z++) {
-    if ((x + z) % 3 !== 0 || !interior(x, z)) continue;
+  const itbl = new Uint8Array(W(e) * ed);
+  for (let x = e.x0 + 1, i = ed + 1; x < e.x1; x++, i += 2) for (let z = e.z0 + 1; z < e.z1; z++, i++) {
+    if (inRect(coreE, x, z)) continue;
+    if (mt) { if (mt[i] !== 1 || mt[i - 1] !== 1 || mt[i + 1] !== 1 || mt[i - ed] !== 1 || mt[i + ed] !== 1) continue; }
+    else if (t.inside && !(t.inside(x, z) && t.inside(x - 1, z) && t.inside(x + 1, z) && t.inside(x, z - 1) && t.inside(x, z + 1))) continue;
+    itbl[i] = 1;
+  }
+  const interior = tableLookup(e, itbl);
+  for (let x = e.x0 + 1, i = ed + 1; x < e.x1; x++, i += 2) for (let z = e.z0 + 1; z < e.z1; z++, i++) {
+    if (itbl[i] !== 1 || (x + z) % 3 !== 0) continue;
     bp.set(x, lvl + 3, z, (x % 2 === 0) ? B.GLOW_PANEL : B.GLOW_PANEL_BLUE);
   }
   // rooms beside and behind the core (open to the landing corridor), then the corridor itself
@@ -377,11 +434,17 @@ function furnishTier(bp, plan, t, style, o) {
   ];
   const side = F.sideTowardFront();
   const alongX = side === 'N' || side === 'S';
+  const mt = tableOf(t.inside, t.ext), ed = D(t.ext);
   for (const b of blocks) {
     if (b.u1 - b.u0 + 1 < 3 || b.v1 - b.v0 + 1 < 3) continue;
     const rc = F.rect(b.u0, b.v0, b.u1, b.v1);
     const w = alongX ? W(rc) : D(rc), d = alongX ? D(rc) : W(rc);
-    if (t.inside) { let n = 0; for (let x = rc.x0; x <= rc.x1; x++) for (let z = rc.z0; z <= rc.z1; z++) if (t.inside(x, z)) n++; if (n < 0.6 * W(rc) * D(rc)) continue; }
+    if (t.inside) {
+      let n = 0;
+      if (mt) { for (let x = rc.x0; x <= rc.x1; x++) { const row = (x - t.ext.x0) * ed - t.ext.z0; for (let z = rc.z0; z <= rc.z1; z++) if (mt[row + z] === 1) n++; } }
+      else for (let x = rc.x0; x <= rc.x1; x++) for (let z = rc.z0; z <= rc.z1; z++) if (t.inside(x, z)) n++;
+      if (n < 0.6 * W(rc) * D(rc)) continue;
+    }
     const tpl = pickRoom(pool, w, d, plan.rng, null);
     const doorU = Math.max(0, Math.floor((w - 2) / 2));
     const room = new Room(bp, { ...rc, y: lvl, h: 4, side, doorU, doorW: 2, mask: t.inside }, tpl.name, { isTop: true, floor: t.f, family: plan.family, style });
@@ -406,8 +469,8 @@ function domeCap(bp, e, y0, layers, o = {}) {
     const tt = (k + 0.5) / layers, s = Math.sqrt(Math.max(0, 1 - tt * tt));
     const ax = Math.max(0.8, rx * s), az = Math.max(0.8, rz * s);
     const body = k % 3 === 2 ? B.CHROME : (o.body || B.DURASTEEL);
-    if (k === 0) { ellipse(bp, cx, cz, ax, az, y0, y0, B.GLOW_PANEL); ellipse(bp, cx, cz, Math.max(0.5, ax - 1), Math.max(0.5, az - 1), y0, y0, body); }
-    else ellipse(bp, cx, cz, ax, az, y0 + k, y0 + k, body);
+    if (k === 0) { ellipse(bp, cx, cz, ax, az, y0, B.GLOW_PANEL); ellipse(bp, cx, cz, Math.max(0.5, ax - 1), Math.max(0.5, az - 1), y0, body); }
+    else ellipse(bp, cx, cz, ax, az, y0 + k, body);
   }
   return layers;
 }
@@ -431,7 +494,7 @@ function paintCap(bp, plan, last, y0, style, o) {
       // rounded shoulder (two shrinking discs) and a chrome finial with a blue tip
       const layers = Math.min(3, Math.max(2, H - 4));
       const rx = W(e) / 2, rz = D(e) / 2;
-      for (let k = 0; k < layers; k++) { const s = 1 - (k + 0.5) / (layers + 1); ellipse(bp, cxf, czf, Math.max(1, rx * s), Math.max(1, rz * s), y0 + 1 + k, y0 + 1 + k, k === 0 ? B.CHROME : roofBlock); }
+      for (let k = 0; k < layers; k++) { const s = 1 - (k + 0.5) / (layers + 1); ellipse(bp, cxf, czf, Math.max(1, rx * s), Math.max(1, rz * s), y0 + 1 + k, k === 0 ? B.CHROME : roofBlock); }
       const fh = Math.min(6, H - layers - 2);
       return 1 + layers + finial(bp, cx, y0 + 1 + layers, cz, fh);
     }
@@ -477,7 +540,7 @@ function paintCap(bp, plan, last, y0, style, o) {
         const a0 = Math.round((alongX ? cxf : czf) - len / 2), a1 = a0 + len - 1;
         const b0 = Math.floor((alongX ? czf : cxf) - wid / 2), b1 = b0 + wid - 1;
         const body = j % 4 === 3 ? B.CHROME : B.DURASTEEL_DARK;
-        if (alongX) bp.fill(a0, y0 + 1 + j, b0, a1, y0 + 1 + j, b1, body); else bp.fill(b0, y0 + 1 + j, a0, b1, y0 + 1 + j, a1, body);
+        if (alongX) slab(bp, a0, b0, a1, b1, y0 + 1 + j, body); else slab(bp, b0, a0, b1, a1, y0 + 1 + j, body);
         if (j % 2 === 0) { if (alongX) { bp.set(a0, y0 + 1 + j, b0, B.GLOW_PANEL_BLUE); bp.set(a1, y0 + 1 + j, b1, B.GLOW_PANEL_BLUE); } else { bp.set(b0, y0 + 1 + j, a0, B.GLOW_PANEL_BLUE); bp.set(b1, y0 + 1 + j, a1, B.GLOW_PANEL_BLUE); } }
       }
       bp.set(alongX ? Math.round(cxf - 0.5) : Math.floor(cxf - 0.5), y0 + hb, alongX ? Math.floor(czf - 0.5) : Math.round(czf - 0.5), B.GLOW_PANEL);
@@ -493,7 +556,8 @@ function paintCap(bp, plan, last, y0, style, o) {
       for (let s = 0; s < steps; s++) {
         r = { x0: r.x0 + 2, x1: r.x1 - 2, z0: r.z0 + 2, z1: r.z1 - 2 };
         if (W(r) < 3 || D(r) < 3) break;
-        bp.fill(r.x0, yy, r.z0, r.x1, yy + 1, r.z1, s % 2 ? B.DURASTEEL : B.DURASTEEL_DARK);
+        const stepBlock = s % 2 ? B.DURASTEEL : B.DURASTEEL_DARK;
+        slab(bp, r.x0, r.z0, r.x1, r.z1, yy, stepBlock); slab(bp, r.x0, r.z0, r.x1, r.z1, yy + 1, stepBlock);
         // lit rim on the step's top edge
         for (let x = r.x0; x <= r.x1; x++) { if ((x - r.x0) % 2 === 0) { bp.set(x, yy + 1, r.z0, B.GLOW_PANEL); bp.set(x, yy + 1, r.z1, B.GLOW_PANEL); } }
         for (let z = r.z0; z <= r.z1; z++) { if ((z - r.z0) % 2 === 0) { bp.set(r.x0, yy + 1, z, B.GLOW_PANEL); bp.set(r.x1, yy + 1, z, B.GLOW_PANEL); } }
@@ -514,7 +578,7 @@ function paintCap(bp, plan, last, y0, style, o) {
         const x0 = Math.round(cxf - hx), x1 = Math.round(cxf + hx) - 1, z0 = Math.round(czf - hz), z1 = Math.round(czf + hz) - 1;
         const body = j % 4 === 3 ? B.CHROME : (j % 4 === 1 ? B.PANEL_BLACK : B.DURASTEEL_DARK);
         const yy = y0 + 1 + j;
-        bp.fill(Math.min(x0, x1), yy, Math.min(z0, z1), Math.max(x0, x1), yy, Math.max(z0, z1), body);
+        slab(bp, x0, z0, x1, z1, yy, body);
         if (j % 2 === 0 && x1 > x0 && z1 > z0) { bp.set(x0, yy, z0, B.GLOW_PANEL_BLUE); bp.set(x1, yy, z1, B.GLOW_PANEL_BLUE); bp.set(x0, yy, z1, B.GLOW_PANEL_BLUE); bp.set(x1, yy, z0, B.GLOW_PANEL_BLUE); }
       }
       bp.set(Math.round(cxf - 0.5), y0 + hb, Math.round(czf - 0.5), B.GLOW_PANEL); bp.set(Math.round(cxf - 0.5), y0 + hb + 1, Math.round(czf - 0.5), B.GLOW_PANEL_BLUE);
@@ -550,7 +614,7 @@ function paintDeck(bp, plan, style, o) {
     : { u0: tc.u0, u1: tc.u1, v0: t.clip.v0, v1: tc.v1 };
   const e = F.rect(clip.u0, clip.v0, clip.u1, clip.v1);
   const te = t.ext;
-  bp.fill(e.x0, y, e.z0, e.x1, y, e.z1, B.DECK_PLATE);
+  slab(bp, e.x0, e.z0, e.x1, e.z1, y, B.DECK_PLATE);
   // tapered underside (struts) under the overhang only
   for (let k = 1; k <= 3; k++) {
     for (let x = e.x0; x <= e.x1; x++) for (let z = e.z0; z <= e.z1; z++) {
@@ -600,7 +664,7 @@ function paintDeck(bp, plan, style, o) {
   const head = plan.tiers[1];
   if (head) {
     const he = head.ext, yTop = 5 * head.f + 5;
-    bp.fill(he.x0, yTop, he.z0, he.x1, yTop, he.z1, style.roof);
+    slab(bp, he.x0, he.z0, he.x1, he.z1, yTop, style.roof);
     bp.walls(he.x0, yTop + 1, he.z0, he.x1, yTop + 1, he.z1, B.GLOW_PANEL);
     bp.set(Math.floor((he.x0 + he.x1) / 2), yTop + 1, Math.floor((he.z0 + he.z1) / 2), B.HOLO_SIGN);
     finial(bp, he.x0, yTop + 2, he.z0, 3, B.PANEL_RED);

@@ -4,6 +4,7 @@
 // behind. Shared by the spine family and any family that wants a deck on a facade.
 import { B } from '../../blocks.js';
 import { FORCE_AIR } from '../blueprint.js';
+import { slab } from '../crowns.js';
 
 const OUT = { N: [0, -1], S: [0, 1], W: [-1, 0], E: [1, 0] };
 
@@ -16,7 +17,7 @@ export function paintLandingDeck(bp, rect, y, wall, style, o = {}) {
   const [wx, wz] = OUT[wall];                         // direction from the deck toward the wall
   const onWall = (x, z) => (wall === 'N' && z === z0) || (wall === 'S' && z === z1) || (wall === 'W' && x === x0) || (wall === 'E' && x === x1);
   const depthOf = (x, z) => (wall === 'N' ? z - z0 : wall === 'S' ? z1 - z : wall === 'W' ? x - x0 : x1 - x);   // 0 at the wall
-  bp.fill(x0, y, z0, x1, y, z1, B.DECK_PLATE);
+  slab(bp, x0, z0, x1, z1, y, B.DECK_PLATE);
   // tapered underside: two steps of dark plate under the half of the deck nearest the wall
   const depth = wall === 'N' || wall === 'S' ? D : W;
   for (let k = 1; k <= 2; k++) {

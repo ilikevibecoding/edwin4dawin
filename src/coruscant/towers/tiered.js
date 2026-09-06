@@ -6,9 +6,9 @@ import { B } from '../../blocks.js';
 import { FORCE_AIR } from '../blueprint.js';
 import { PlanFrame, computeLayout, planFloor, cutEntrance, insetLimits } from '../plan.js';
 import { buildCore } from '../core.js';
-import { rectRing, maskRing, paintRing, paintRoof, paintCrown } from '../facade.js';
+import { rectRing, paintRing, paintRoof, paintCrown } from '../facade.js';
 import { hash2 } from '../../rng.js';
-import { planCrown, buildCrown } from '../crowns.js';
+import { planCrown, buildCrown, tableLookup, ringFromTable, slab } from '../crowns.js';
 import { stripPlan, stripRing } from './strips.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -38,27 +38,31 @@ export function buildTiered(bp, spec) {
     const text = frame.rect(clip.u0 - 1, clip.v0 - 1, clip.u1 + 1, clip.v1 + 1);
     // the footprint mask is evaluated once per cell into a table: rings, the planner and every floor's repaint
     // query it thousands of times, and a family's mask may be as costly as a superellipse power
-    let inside = null, cellsIn = null, cellsOut = null;
+    let inside = null, cellsIn = null, cellsOut = null, tbl = null;
+    const td = text.z1 - text.z0 + 1;
     if (spec.mask) {
-      const tw = text.x1 - text.x0 + 1, td = text.z1 - text.z0 + 1, tbl = new Uint8Array(tw * td);
+      tbl = new Uint8Array((text.x1 - text.x0 + 1) * td);
       const cin = [], cout = [];
-      for (let x = text.x0; x <= text.x1; x++) for (let z = text.z0; z <= text.z1; z++) {
+      for (let x = text.x0, k = 0; x <= text.x1; x++) for (let z = text.z0; z <= text.z1; z++, k++) {
         const base = (x * bp.d + z) * bp.h;      // column base in the block array
-        if (spec.mask(x, z, i, text)) { tbl[(x - text.x0) * td + (z - text.z0)] = 1; cin.push(base); } else cout.push(base);
+        if (spec.mask(x, z, i, text)) { tbl[k] = 1; cin.push(base); } else cout.push(base);
       }
       // a rect-shaped mask is no mask at all
-      if (cout.length) { inside = (x, z) => x >= text.x0 && x <= text.x1 && z >= text.z0 && z <= text.z1 && tbl[(x - text.x0) * td + (z - text.z0)] === 1; cellsIn = cin; cellsOut = cout; }
+      if (cout.length) { inside = tableLookup(text, tbl); cellsIn = cin; cellsOut = cout; } else tbl = null;
     }
     let interior = null;
-    if (inside || spec.exclude) {
-      // interior = inside cells that are not exterior wall (ring) cells and not excluded (e.g. a rotunda the
-      // landmark carves afterwards), as a lookup table for the planner
-      const m = new Uint8Array(bp.w * bp.d);
-      const ok = inside ? (x, z) => inside(x, z) && inside(x - 1, z) && inside(x + 1, z) && inside(x, z - 1) && inside(x, z + 1) : () => true;
-      for (let x = text.x0; x <= text.x1; x++) for (let z = text.z0; z <= text.z1; z++) if (ok(x, z) && !(spec.exclude && spec.exclude(x, z))) m[x * bp.d + z] = 1;
+    if (tbl || spec.exclude) {
+      // interior = inside cells that are not exterior wall (ring) cells (all four neighbours inside) and not
+      // excluded (e.g. a rotunda the landmark carves afterwards), as a lookup table for the planner
+      const m = new Uint8Array(bp.w * bp.d), ex = spec.exclude || null;
+      for (let x = text.x0, k = 0; x <= text.x1; x++) for (let z = text.z0; z <= text.z1; z++, k++) {
+        if (tbl && (x === text.x0 || x === text.x1 || z === text.z0 || z === text.z1 || tbl[k] !== 1 || tbl[k - 1] !== 1 || tbl[k + 1] !== 1 || tbl[k - td] !== 1 || tbl[k + td] !== 1)) continue;
+        if (ex && ex(x, z)) continue;
+        m[x * bp.d + z] = 1;
+      }
       interior = (x, z) => x >= 0 && z >= 0 && x < bp.w && z < bp.d && m[x * bp.d + z] === 1;
     }
-    return { f0: t.f0, f1: t.f1, clip, ext: text, inside, cellsIn, cellsOut, interior, ring: inside ? maskRing(text, inside) : rectRing(text), index: i };
+    return { f0: t.f0, f1: t.f1, clip, ext: text, inside, cellsIn, cellsOut, interior, ring: tbl ? ringFromTable(text, tbl) : rectRing(text), index: i };
   });
   const blocks = bp.blocks;
   const nF = tiers[tiers.length - 1].f1 + 1;
@@ -75,7 +79,7 @@ export function buildTiered(bp, spec) {
     for (let f = t.f0; f <= t.f1; f++) {
       const y = 5 * f;
       if (t.inside) { const fl = style.floor; for (const base of t.cellsIn) blocks[base + y] = fl; }
-      else { bp.fill(t.ext.x0, y, t.ext.z0, t.ext.x1, y, t.ext.z1, style.floor); paintRing(bp, t.ring, f, style, seed, floorOpts(f, t)); }
+      else { slab(bp, t.ext.x0, t.ext.z0, t.ext.x1, t.ext.z1, y, style.floor); paintRing(bp, t.ring, f, style, seed, floorOpts(f, t)); }
     }
     const yRoof = 5 * (t.f1 + 1);
     if (t.inside) {
@@ -93,7 +97,7 @@ export function buildTiered(bp, spec) {
     if (t.inside) {
       // masked footprint: drop what the planner wrote outside the mask, then paint the ring over it
       const y0 = f === t.f0 ? 5 * f + 1 : 5 * f, y1 = Math.min(bp.h - 1, 5 * f + 4);
-      for (const base of t.cellsOut) blocks.fill(0, base + y0, base + y1 + 1);
+      for (const base of t.cellsOut) for (let k = base + y0, kEnd = base + y1; k <= kEnd; k++) blocks[k] = 0;
       paintRing(bp, t.ring, f, style, seed, floorOpts(f, t));
     }
   }
