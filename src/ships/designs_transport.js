@@ -2,7 +2,7 @@
 // cruiser, air bus. Every one has a walkable interior inside the exterior envelope, a boarding ramp/door reachable
 // from the pad, a glass cockpit with seats + console, emissive engines, nav lights and animated parts.
 import { B } from '../blocks.js';
-import { ShipBuilder, CH, EMIT, SEAT, BUNK, CONSOLE, STEP } from './builder.js';
+import { ShipBuilder, CH, EMIT, SEAT, BUNK, CONSOLE, STEP, SH, above, below, sideXZ, sideXY, planXZ } from './builder.js';
 
 const D = B.DURASTEEL, DD = B.DURASTEEL_DARK, CHR = B.CHROME, RED = B.PANEL_RED, GL = B.STEEL_GLASS, ENG = B.GLOW_PANEL_BLUE;
 const BLK = B.PANEL_BLACK, HP = B.HULL_PLATE, HT = B.HULL_TRENCH, VENT = B.VENT, LAMP = B.GLOW_PANEL, STR = B.PANEL_STRIPE;
@@ -82,18 +82,28 @@ export function lightFreighter() {
 }
 
 // ------------------------------------------------------------------------------------------------ passenger shuttle
-// Tall narrow fuselage, wrap-around canopy, swept dorsal fin, two big wings that fold UP for landing (authored
-// folded; the flight pose swings them out and down), rear boarding ramp between the engines.
+// Tri-wing shuttle: a tall narrow fuselage with a WEDGE nose (plan taper + 45 degree top slope + chin) carrying the
+// sloped wrap-around canopy, a swept dorsal fin with a chrome leading edge and a lit ridge tip, two big swept wings
+// that fold UP for landing (authored folded; the flight pose swings them out and down), a bevelled engine deck and
+// the rear boarding ramp between the engines.
 export function shuttle() {
   const b = new ShipBuilder('shuttle', 17, 14, 26, { cls: 'shuttle', family: 'passenger shuttle', label: 'Passenger shuttle', primary: D, accent: RED, seam: DD, speed: 30, engineHz: 96, gain: 0.8, capacity: 8 });
-  // fuselage x 6..10, belly y 1, walls y 2..4, roof y 5; cabin x 7..9, feet y 2, z 4..20
+  // fuselage x 6..10, belly y 1, walls y 2..4, roof y 5; cabin x 7..9, feet y 2, z 3..20
   b.fill(6, 1, 2, 10, 1, 21, DD); b.fill(7, 1, 3, 9, 1, 20, PLATE);
   b.fill(6, 2, 2, 10, 4, 21, D); b.fill(7, 2, 3, 9, 4, 20, 0);
   b.fill(6, 5, 2, 10, 5, 21, HP); b.fill(7, 5, 4, 9, 5, 19, D);
   for (const z of [7, 11, 15, 19]) { b.seamRing(z, D, DD); b.seamRing(z, HP, DD); }
-  // nose + canopy (wrap-around glass), two pilot seats and consoles
-  b.fill(7, 2, 0, 9, 3, 1, DD); b.set(8, 1, 1, DD); b.fill(7, 4, 1, 9, 4, 1, GL);
-  b.fill(6, 3, 2, 10, 4, 3, GL); b.fill(7, 5, 2, 9, 5, 3, GL); b.set(8, 4, 1, GL);
+  // roof edges bevelled along the cabin (a hexagonal fuselage section), belly edges chamfered
+  b.bevelTop([6, 5, 4, 10, 21], { XN: true, XP: true }); b.bevelBottom([6, 1, 3, 10, 21], { XN: true, XP: true });
+  // wedge nose: a solid block z 0..1 plus the front wall z 2 and the roof over the cockpit, carved by three planes:
+  // the top slope (z 0, y 2) -> (z 4, y 6), the chin (z 0, y 1.6) -> (z 2, y 1) and the plan taper (z 0, x 7.75) ->
+  // (z 3.5, x 6) mirrored; the canopy glass rides the top slope (windscreen band z 2, sloped panes z 1 and z 3)
+  b.fill(6, 1, 0, 10, 5, 1, DD); b.fill(6, 2, 2, 10, 2, 2, DD);
+  b.fill(6, 3, 2, 10, 4, 2, GL); b.fill(7, 3, 1, 9, 3, 1, GL); b.fill(7, 5, 2, 9, 5, 3, GL);
+  b.cut([6, 1, 0, 10, 5, 3], above(0, 2, 4, 6));
+  b.cut([6, 1, 0, 10, 1, 1], below(0, 1.6, 2, 1));
+  b.scut([6, 1, 0, 7, 5, 3], sideXZ(0, 7.75, 3.5, 6, false));
+  b.paint(8, 2, 0, CHR); b.spaint(7, 1, 0, HT);                                       // sensor tip, chin trenches
   b.set(7, 2, 3, CONSOLE); b.set(9, 2, 3, CONSOLE); b.set(8, 2, 3, HOLO); b.seat(7, 2, 4); b.seat(9, 2, 4);
   b.setCockpit([7, 2, 4], [7, 2, 3], [7, 3, 2]);
   // cabin windows (lit at night), seats along both walls, aisle in the middle, lamps
@@ -102,32 +112,43 @@ export function shuttle() {
   b.set(7, 2, 19, CONSOLE); b.set(9, 2, 19, CONSOLE);
   for (const z of [5, 8, 11, 14, 17, 20]) b.lamp(8, 5, z);
   b.interior(7, 2, 3, 10, 4, 21);
-  // dorsal fin (swept), beacon
-  b.fill(8, 6, 9, 8, 7, 20, D); b.fill(8, 8, 12, 8, 9, 20, D); b.fill(8, 10, 15, 8, 11, 20, D); b.fill(8, 12, 18, 8, 13, 20, D);
-  for (const y of [7, 9, 11]) b.set(8, y, 20, DD); b.set(8, 6, 9, CHR); b.set(8, 8, 12, CHR); b.set(8, 10, 15, CHR); b.set(8, 12, 18, CHR);
-  b.set(8, 13, 20, LAMP); b.set(8, 8, 14, RED); b.set(8, 8, 15, RED);
+  // dorsal fin: a solid blade cut by the leading edge (root z 8, y 6 -> tip z 19, y 14), chrome along the cut edge,
+  // ridge-shaped top with the beacon as a lit ridge, red band
+  b.fill(8, 6, 8, 8, 13, 20, D);
+  b.cut([8, 6, 8, 8, 13, 20], above(8, 6, 19, 14));
+  b.paintClipped([8, 6, 8, 8, 13, 20], CHR);
+  for (const y of [7, 9, 11]) b.set(8, y, 20, DD);
+  b.set(8, 13, 19, D, undefined, SH.RIDGE_Z); b.set(8, 13, 20, LAMP, EMIT.LAMP, SH.RIDGE_Z);
+  b.set(8, 8, 14, RED); b.set(8, 8, 15, RED); b.set(8, 10, 19, VENT); b.set(8, 11, 20, HT);
   // roof greebles between fin and canopy
   b.sset(7, 6, 5, VENT); b.sset(7, 6, 7, CHR); b.set(8, 6, 6, HT); b.set(8, 6, 7, HT);
-  // wings: authored folded UP beside the fuselage (x 5 / x 11, y 5..12), pivot at the wing root, swing out 105 deg
+  // wings: authored folded UP beside the fuselage (x 5 / x 11, y 5..12), pivot at the wing root, swing out 105 deg;
+  // the plate is cut to a swept trapezoid (leading edge root (z 5, y 7) -> tip (z 9, y 13), trailing edge raked
+  // forward toward the tip), chrome on the cut edges, a knife-edged (ridge) tip carrying the nav light
   const wing = b.part('wingL', CH.CLASS, { pivot: [6, 5, 0], axis: [0, 0, 1], angle: -1.85 });
-  for (let z = 5; z <= 20; z++) {
-    const top = z < 8 ? 7 + (z - 5) : z > 17 ? 12 - (z - 17) : 12;
-    for (let y = 5; y <= top; y++) wing.set(5, y, z, y === top ? CHR : (y === 8 || y === 9) && z % 4 === 1 ? DD : (y === 6 && z >= 8 && z <= 17) ? RED : D);
-  }
-  wing.set(5, 9, 12, RED); wing.set(5, 9, 13, RED); wing.set(5, 12, 12, RED, EMIT.NAV);
+  for (let z = 5; z <= 20; z++) for (let y = 5; y <= 12; y++) wing.set(5, y, z, (y === 8 || y === 9) && z % 4 === 1 ? DD : (y === 6 && z >= 8 && z <= 17) ? RED : D);
+  wing.cut(above(5, 7, 9, 13)); wing.cut(above(21, 9, 17, 13));
+  wing.paintClipped(CHR);
+  for (let z = 5; z <= 20; z++) if (wing.get(5, 12, z) && !wing.shapeAt(5, 12, z)) wing.set(5, 12, z, CHR, 0, SH.RIDGE_Z);
+  wing.set(5, 9, 12, RED); wing.set(5, 9, 13, RED); wing.set(5, 12, 12, RED, EMIT.NAV, SH.RIDGE_Z); wing.set(5, 12, 13, RED, EMIT.NAV, SH.RIDGE_Z);
   const wingR = b.mirrorPart(wing);
   for (const c of wingR.cells) if (c[4] === EMIT.NAV) c[3] = B.NEON_GREEN;
   // wing root fairings on the hull
   b.sfill(5, 3, 8, 5, 4, 17, DD); b.sset(5, 4, 12, VENT); b.sset(5, 3, 10, HT); b.sset(5, 3, 15, HT);
+  b.sshape(5, 4, 8, SH.HIP_XN_ZN_UP); b.sshape(5, 4, 17, SH.HIP_XN_ZP_UP); b.sshape(5, 3, 8, SH.HIP_XN_ZN_DOWN); b.sshape(5, 3, 17, SH.HIP_XN_ZP_DOWN);
   // rear ramp bay + engines: the aft wall opening (x 7..9, y 2..4, z 21) leads onto a ramp of half steps running
   // aft (z 22..24) between two side walls (x 6 / x 10) under the engine deck (y 5..7); the raised ramp stands in
-  // the bay. Nozzles: the outer pair in the wall ends, the centre pair on the deck, all facing aft.
+  // the bay. Nozzles: the outer pair in the wall ends, the centre pair on the deck, all facing aft. The deck's cap
+  // row is a ridge (roof slopes fore and aft) with hips at its ends; the side walls' outer bottom edges are chamfered.
   b.fill(7, 2, 21, 9, 4, 21, 0);
   b.fill(6, 1, 22, 6, 4, 23, DD); b.fill(10, 1, 22, 10, 4, 23, DD);
   b.fill(6, 5, 22, 10, 7, 23, DD); b.fill(7, 5, 23, 9, 7, 23, CHR); b.fill(6, 8, 22, 10, 8, 22, HP);
   b.engine(6, 3, 23); b.engine(10, 3, 23); b.engine(8, 6, 23); b.engine(8, 7, 23); b.engine(7, 6, 23); b.engine(9, 6, 23);
   b.set(6, 2, 23, CHR); b.set(10, 2, 23, CHR); b.set(6, 4, 23, VENT); b.set(10, 4, 23, VENT); b.set(7, 5, 23, VENT); b.set(9, 5, 23, VENT);
   b.sset(6, 6, 22, HT); b.sset(6, 7, 22, VENT); b.set(8, 8, 22, LAMP);
+  b.cut([6, 8, 22, 10, 8, 22], above(22, 8.5, 23, 9.5)); b.cut([6, 8, 22, 10, 8, 22], above(23, 8.5, 22, 9.5));
+  b.scut([6, 8, 22, 6, 8, 22], sideXY(8, 6, 9, 7, false));
+  b.sshape(6, 1, 22, SH.WEDGE_XN_DOWN); b.sshape(6, 1, 23, SH.HIP_XN_ZP_DOWN);
   b.ramp('ramp', 7, 22, [0, 1], 2, 3, [1, 0], DD);
   b.setDoor([8, 2, 20], [8, 0, 25], [0, 1], [[7, 2, 21], [8, 2, 21], [9, 2, 21], [7, 3, 21], [8, 3, 21], [9, 3, 21], [7, 4, 21], [8, 4, 21], [9, 4, 21]]);
   b.set(8, 5, 21, LAMP, EMIT.LAMP);
@@ -199,8 +220,10 @@ export function bulkFreighter() {
 }
 
 // ------------------------------------------------------------------------------------------------ diplomatic cruiser
-// Red-hulled Republic cruiser idiom: a hammerhead prow with the bridge, a long spine with the salon, three big
-// engines aft. Port-side airlock with a ramp; interior: bridge, corridor, salon, bunk cabin.
+// Red-hulled Republic cruiser idiom, sculpted as a tapered cigar: a hammerhead prow with plan-chamfered corners
+// (the bridge glass wraps the chamfer), bevelled roof and belly edges and a roof that slopes down onto the spine, a
+// hexagonal-section spine with a hipped dorsal ridge, and an engine block stepped down like a truncated cone with
+// bevelled radiators. Port-side airlock with a ramp; interior: bridge, corridor, salon, bunk cabin.
 export function cruiser() {
   const b = new ShipBuilder('cruiser', 15, 11, 40, { cls: 'yacht', family: 'diplomatic transport', label: 'Republic cruiser', primary: RED, accent: D, seam: DD, speed: 32, engineHz: 84, gain: 1.0, capacity: 8 });
   // hammerhead prow x 2..12, y 1..7, z 0..8 (bridge deck feet y 2)
@@ -214,6 +237,11 @@ export function cruiser() {
   b.seat(4, 2, 2); b.seat(6, 2, 2); b.seat(8, 2, 2); b.seat(10, 2, 2); b.set(7, 2, 4, HOLO); b.set(7, 3, 4, HOLO);
   b.setCockpit([6, 2, 2], [6, 2, 1], [6, 3, 0]);
   for (const z of [3, 6]) { b.lamp(5, 7, z); b.lamp(9, 7, z); }
+  // prow sculpt: roof edges bevelled all round (the aft edge slopes down onto the spine roof), belly edges
+  // chamfered, the front corners cut 45 degrees in plan (x + z >= 5), the aft vertical edges chamfered
+  b.bevelTop([2, 7, 1, 12, 8]); b.bevelBottom([2, 1, 1, 12, 8]);
+  b.scut([2, 1, 0, 4, 7, 2], planXZ(2, 3, 5, 0, [7, 5]));
+  for (let y = 2; y <= 6; y++) b.sshape(2, y, 8, SH.VWEDGE_XN_ZP);
   // spine x 4..10, y 1..6, z 9..32 (belly 1, walls 2..5, roof 6); corridor/salon x 5..9, feet y 2
   b.fill(4, 1, 9, 10, 1, 32, DD); b.deck(5, 1, 9, 9, 32, PLATE);
   b.fill(4, 2, 9, 10, 5, 32, RED); b.fill(5, 2, 9, 9, 5, 32, 0); b.fill(4, 6, 9, 10, 6, 32, D);
@@ -222,9 +250,12 @@ export function cruiser() {
   for (let z = 10; z <= 31; z += 2) b.sset(4, 3, z, z % 4 === 0 ? WIN : (z % 8 === 2 ? VENT : RED));
   for (let z = 11; z <= 31; z += 3) b.sset(4, 5, z, HT);
   for (let z = 9; z <= 32; z += 2) b.sset(4, 2, z, HT);                                                // lower trench line
+  // hexagonal spine section: roof and belly edges bevelled (the belly stays square under the airlock sill)
+  b.bevelTop([4, 6, 9, 10, 32], { XN: true, XP: true });
+  b.bevelBottom([4, 1, 9, 10, 32], { XP: true }); b.bevelBottom([4, 1, 9, 10, 15], { XN: true }); b.bevelBottom([4, 1, 18, 10, 32], { XN: true });
   for (let z = 34; z <= 37; z++) b.sset(1, z % 2 ? 4 : 5, z, VENT);                                    // engine block radiators
   for (let z = 10; z <= 31; z += 3) { b.set(7, 7, z, HT); b.sset(5, 7, z + 1, VENT); }
-  b.fill(6, 7, 14, 8, 7, 26, D); b.set(7, 8, 20, CHR); b.set(7, 9, 20, RED, EMIT.NAV);                  // dorsal spine
+  b.fill(6, 7, 14, 8, 7, 26, D); b.bevelTop([6, 7, 14, 8, 26]); b.set(7, 8, 20, CHR); b.set(7, 9, 20, RED, EMIT.NAV, SH.RIDGE_Z);   // hipped dorsal spine
   // salon (z 14..22): facing seats around holo tables; bunk cabin aft (z 25..31)
   for (const z of [15, 18, 21]) { b.seat(5, 2, z); b.seat(9, 2, z); b.set(5, 2, z + 1, CONSOLE); b.set(9, 2, z + 1, CONSOLE); }
   b.set(7, 2, 18, HOLO); b.set(7, 2, 12, CONSOLE);
@@ -237,12 +268,20 @@ export function cruiser() {
   b.ramp('ramp', 3, 16, [-1, 0], 2, 2, [0, 1], DD);
   b.setDoor([6, 2, 16], [1, 0, 18], [-1, 0], [[4, 2, 16], [4, 3, 16], [4, 4, 16], [4, 2, 17], [4, 3, 17], [4, 4, 17]]);
   b.set(4, 5, 16, LAMP, EMIT.LAMP); b.set(4, 5, 17, LAMP, EMIT.LAMP);
-  // engine section z 33..39: wide dark housing, three chrome shrouds, blue cores, radiator fins
+  // engine section z 33..39: wide dark housing, three chrome shrouds, blue cores, radiator fins; sculpted as a
+  // truncated cone: the housing's top ring and cap ring bevelled, its belly ring chamfered, the front and aft
+  // vertical edges cut 45 degrees in plan, the radiator layers bevelled top and bottom with hips at their ends
   b.fill(2, 1, 33, 12, 7, 38, DD); b.fill(1, 3, 34, 13, 6, 37, DD); b.fill(3, 8, 34, 11, 8, 37, D);
   for (const z of [35, 37]) b.seamRing(z, DD, BLK);
+  for (let z = 34; z <= 37; z++) b.sset(1, z % 2 ? 4 : 5, z, VENT);                                    // radiators
   b.fill(2, 2, 39, 12, 6, 39, CHR);
   for (const [x, y] of [[3, 3], [3, 4], [4, 3], [4, 4], [10, 3], [10, 4], [11, 3], [11, 4], [7, 3], [7, 4], [6, 3], [8, 3], [6, 4], [8, 4], [7, 5], [7, 2]]) b.engine(x, y, 39);
-  b.sset(1, 7, 35, D); b.sset(1, 7, 36, D); b.sset(2, 8, 35, RED); b.set(7, 9, 35, CHR); b.set(7, 9, 36, VENT);
+  b.sset(1, 7, 35, D, undefined, SH.WEDGE_XN_UP); b.sset(1, 7, 36, D, undefined, SH.WEDGE_XN_UP); b.sset(2, 6, 38, RED); b.set(7, 9, 35, CHR); b.set(7, 9, 36, VENT);
+  b.bevelTop([2, 7, 33, 12, 38]); b.bevelBottom([2, 1, 33, 12, 38], { XN: true, XP: true, ZP: true }); b.bevelTop([3, 8, 34, 11, 37]);
+  for (let y = 2; y <= 6; y++) { b.sshape(2, y, 33, SH.VWEDGE_XN_ZN); b.sshape(2, y, 38, SH.VWEDGE_XN_ZP); b.sshape(2, y, 39, SH.VWEDGE_XN_ZP); }
+  for (let z = 34; z <= 37; z++) b.sshape(1, 3, z, z === 34 ? SH.HIP_XN_ZN_DOWN : z === 37 ? SH.HIP_XN_ZP_DOWN : SH.WEDGE_XN_DOWN);
+  b.sshape(1, 6, 34, SH.HIP_XN_ZN_UP); b.sshape(1, 6, 37, SH.HIP_XN_ZP_UP);
+  for (const y of [4, 5]) { b.sshape(1, y, 34, SH.VWEDGE_XN_ZN); b.sshape(1, y, 37, SH.VWEDGE_XN_ZP); }
   b.navPair(1, 6, 35); b.navPair(2, 5, 4);
   b.slandingLight(4, 1, 1); b.slandingLight(5, 1, 31);
   gear(b, [[4, 4], [5, 14], [5, 30]], 1);

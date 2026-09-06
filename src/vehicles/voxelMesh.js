@@ -140,6 +140,14 @@ for (const xs of ['XN', 'XP']) for (const zs of ['ZN', 'ZP']) {
 customShape([[0, 1, 0, 0.5]], 'SLAB_BOTTOM'); customShape([[0, -1, 0, -0.5]], 'SLAB_TOP');
 customShape([[1, 0, 0, 0.5]], 'HALF_XN'); customShape([[-1, 0, 0, -0.5]], 'HALF_XP');
 customShape([[0, 0, 1, 0.5]], 'HALF_ZN'); customShape([[0, 0, -1, -0.5]], 'HALF_ZP');
+// RIDGE_X / RIDGE_Z: a roof ridge running along that axis (two 45 degree slopes meeting at the top centre line: the
+// top of a fin or a wing tip seen end-on); KEEL_X / KEEL_Z the same hanging from the ceiling
+customShape([[0, 1, -1, 0.5], [0, 1, 1, 1.5]], 'RIDGE_X'); customShape([[-1, 1, 0, 0.5], [1, 1, 0, 1.5]], 'RIDGE_Z');
+customShape([[0, -1, -1, -0.5], [0, -1, 1, 0.5]], 'KEEL_X'); customShape([[-1, -1, 0, -0.5], [1, -1, 0, 0.5]], 'KEEL_Z');
+// BLADE_<side>: full thickness at the back, a sharp vertical edge at mid width on <side> (a fin's or a wing's leading
+// edge seen from above: thin in plan, full height)
+customShape([[-1, 0, -0.5, -0.5], [1, 0, -0.5, 0.5]], 'BLADE_ZN'); customShape([[-1, 0, 0.5, 0], [1, 0, 0.5, 1]], 'BLADE_ZP');
+customShape([[-0.5, 0, -1, -0.5], [-0.5, 0, 1, 0.5]], 'BLADE_XN'); customShape([[0.5, 0, -1, 0], [0.5, 0, 1, 1]], 'BLADE_XP');
 export const NAMED_SHAPE_COUNT = SHAPE_DEFS.length - 1;
 // n-cell ramp opening on `side`: codes for k = 0..n-1 (0 = the tip cell)
 export function rampShapes(side, n, down = false) { return Array.from({ length: n }, (_, k) => customShape([rampPlane(side, n, k, down)])); }

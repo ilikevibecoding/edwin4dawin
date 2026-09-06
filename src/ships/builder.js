@@ -40,6 +40,9 @@ export function planeThrough(P, Q, R, keep) {
   if (a * keep[0] + b * keep[1] + c * keep[2] > d) { a = -a; b = -b; c = -c; d = -d; }
   return [a, b, c, d];
 }
+// the vertical plane through the plan points (xa, za) -> (xb, zb), oriented so that plan point `keep` stays (swept
+// wing edges, tapered tails)
+export function planXZ(xa, za, xb, zb, keep) { return planeThrough([xa, 0, za], [xb, 0, zb], [xa, 1, za], [keep[0], 0.5, keep[1]]); }
 // mirror of a grid plane about x = w / 2
 const mirrorPlane = ([a, b, c, d], w) => [-a, b, c, d - a * w];
 // clips one cell's shape by a grid plane: the new shape code, or -1 when the cell is gone
@@ -93,6 +96,10 @@ export class Part {
   }
   get(x, y, z) { const c = this.cells.find((c) => c[0] === x && c[1] === y && c[2] === z); return c ? c[3] : 0; }
   shapeAt(x, y, z) { const c = this.cells.find((c) => c[0] === x && c[1] === y && c[2] === z); return c ? c[5] || 0 : 0; }
+  // changes the block of an existing cell, keeping its shape (chrome on a cut leading edge)
+  paint(x, y, z, id, emit) { const c = this.cells.find((c) => c[0] === x && c[1] === y && c[2] === z); if (c) { c[3] = id; if (emit !== undefined) c[4] = emit; } return this; }
+  // paints every clipped cell of the part (the cells a cut plane crossed)
+  paintClipped(id) { for (const c of this.cells) if (c[5]) c[3] = id; return this; }
   // clips the part's full-cube cells by a grid plane (see ShipBuilder.cut); cells wholly removed disappear
   cut(plane) {
     const keep = [];
@@ -157,6 +164,14 @@ export class ShipBuilder {
   // shape of an existing cell (the block stays)
   shape(x, y, z, code) { if (this.g.get(x, y, z)) this.g.setShape(x, y, z, code); return this; }
   sshape(x, y, z, code) { this.shape(x, y, z, code); this.shape(this.mx(x), y, z, mirrorShapeX(code)); return this; }
+  // block of an existing cell (the shape stays): chrome on a cut edge, glass on a canopy slope
+  paint(x, y, z, id, emit) { if (this.g.get(x, y, z)) this.set(x, y, z, id, emit, this.g.shapeAt(x, y, z)); return this; }
+  spaint(x, y, z, id, emit) { this.paint(x, y, z, id, emit); this.paint(this.mx(x), y, z, id, emit); return this; }
+  // paints every clipped cell of the box whose block is `from` (or any block when `from` is undefined)
+  paintClipped([x0, y0, z0, x1, y1, z1], id, from) {
+    for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) { const cur = this.g.get(x, y, z); if (cur && this.g.shapeAt(x, y, z) && (from === undefined || cur === from)) this.paint(x, y, z, id); }
+    return this;
+  }
   // ---- plane cuts: clip every full-cube cell of the (inclusive) box by a grid plane (see the module comment)
   cut([x0, y0, z0, x1, y1, z1], plane) {
     for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) {

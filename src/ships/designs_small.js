@@ -2,7 +2,7 @@
 // with splitting S-foils, open-top air taxi and an enclosed police speeder. The gunship has a walkable troop bay;
 // the compact craft have a functional cockpit / seat entry from the pad instead of a walkable lounge.
 import { B } from '../blocks.js';
-import { ShipBuilder, CH, EMIT, SEAT, CONSOLE, STEP } from './builder.js';
+import { ShipBuilder, CH, EMIT, SEAT, CONSOLE, STEP, SH, above, below, sideXZ, sideXY, planXZ } from './builder.js';
 
 const D = B.DURASTEEL, DD = B.DURASTEEL_DARK, CHR = B.CHROME, RED = B.PANEL_RED, GL = B.STEEL_GLASS, ENG = B.GLOW_PANEL_BLUE;
 const BLK = B.PANEL_BLACK, HP = B.HULL_PLATE, HT = B.HULL_TRENCH, VENT = B.VENT, LAMP = B.GLOW_PANEL, STR = B.PANEL_STRIPE;
@@ -80,13 +80,16 @@ export function gunship() {
 }
 
 // ------------------------------------------------------------------------------------------------ starfighter
-// Slim fuselage with a rear-sliding canopy, twin engine nacelles and split S-foils (upper foil swings up, lower
-// foil swings down in flight; closed flat when landed). Compact: climb the port foil to the cockpit well.
+// A wedge: the fuselage tapers in plan and elevation to a sharp nose (26 degree top slope running into the sloped
+// windscreen, chin and plan tapers), hexagonal spine and belly, a rear-sliding canopy between sloped glass sides,
+// twin engine nacelles with pointed intakes and bevelled outer edges, and split S-foils cut to swept trapezoids with
+// knife-edged tips (upper foil swings up, lower foil swings down in flight; closed flat when landed). Compact: climb
+// the port foil to the cockpit well.
 export function starfighter() {
   const b = new ShipBuilder('starfighter', 17, 6, 16, { cls: 'starfighter', family: 'starfighter', label: 'Starfighter', primary: D, accent: RED, seam: DD, speed: 44, engineHz: 110, gain: 0.7, compact: true, capacity: 1 });
-  // fuselage x 7..9, y 1..3 (spine behind the cockpit y 1..2)
-  b.fill(7, 1, 2, 9, 3, 7, D); b.fill(7, 1, 8, 9, 2, 15, D); b.fill(8, 1, 0, 8, 2, 1, DD); b.set(8, 3, 2, GL);
-  b.fill(7, 1, 2, 9, 1, 15, DD); b.set(8, 1, 0, CHR);
+  // fuselage x 7..9, y 1..3 (spine behind the cockpit y 1..2); the nose block z 0..1 is carved by the planes below
+  b.fill(7, 1, 0, 9, 3, 7, D); b.fill(7, 1, 8, 9, 2, 15, D); b.fill(7, 1, 0, 9, 2, 1, DD);
+  b.fill(7, 1, 2, 9, 1, 15, DD);
   for (let z = 3; z <= 15; z += 3) b.set(8, 1, z, HT);                              // belly trench line
   for (const z of [4, 10, 13]) { b.seamRing(z, D, DD); }
   // cockpit well (8, 2, 6) with the seat behind it, console in front, instrument lamps, glass sides and windscreen
@@ -95,17 +98,32 @@ export function starfighter() {
   b.set(7, 3, 6, GL); b.set(9, 3, 6, GL); b.set(7, 3, 7, GL); b.set(9, 3, 7, GL); b.set(8, 3, 6, 0); b.set(8, 3, 7, 0);
   b.setCockpit([8, 2, 7], [8, 2, 5], [8, 3, 5]);
   b.interior(8, 2, 6, 9, 4, 8);                                                     // the well + seat (carry volume)
+  // the wedge: top slope (z 0, y 1.5) -> (z 5, y 4) through the windscreen, chin (z 0, y 1.4) -> (z 3, y 1), plan
+  // taper (z 0, x 8.3) -> (z 4, x 7) mirrored; the canopy sides slope up to the canopy rail
+  b.cut([7, 1, 0, 9, 3, 4], above(0, 1.5, 5, 4));
+  b.cut([7, 1, 0, 9, 1, 2], below(0, 1.4, 3, 1));
+  b.scut([7, 1, 0, 8, 3, 4], sideXZ(0, 8.3, 4, 7, false));
+  b.paint(8, 1, 0, CHR); b.spaint(7, 3, 3, DD); b.spaint(7, 2, 1, HT);
+  for (const z of [5, 6, 7]) b.sshape(7, 3, z, SH.WEDGE_XN_UP);
+  // hexagonal spine and belly: the roof and belly edges bevelled along the fuselage, the tail tapered in plan
+  b.bevelTop([7, 2, 8, 9, 15], { XN: true, XP: true }); b.bevelBottom([7, 1, 2, 9, 15], { XN: true, XP: true });
+  b.scut([7, 1, 13, 7, 2, 15], sideXZ(13, 7, 16, 7.75, false));
   // canopy: authored OPEN (slid back over the spine), slides forward 3 to close over the well
   const canopy = b.part('canopy', CH.DOOR, { slide: [0, 0, -3] });
-  canopy.set(8, 3, 9, GL); canopy.set(8, 3, 10, GL); canopy.set(8, 4, 9, CHR);
-  b.setDoor([8, 2, 6], [2, 0, 6], [-1, 0], [[8, 3, 6], [8, 3, 7]]);
-  // spine greebles, sensor fin, aft antenna
-  for (const z of [9, 11, 13]) b.set(8, 3, z, z === 11 ? HT : VENT); b.set(8, 3, 15, CHR); b.set(8, 4, 15, RED, EMIT.NAV);
-  // engine nacelles x 5..6 / 10..11, y 1..2, z 9..14 with chrome intakes and blue exhausts
-  b.sfill(5, 1, 9, 6, 2, 14, DD); b.sset(5, 2, 9, CHR); b.sset(6, 2, 9, CHR); b.sset(5, 1, 9, VENT); b.sset(5, 1, 12, VENT);
+  canopy.set(8, 3, 9, GL); canopy.set(8, 3, 10, GL); canopy.set(8, 4, 9, CHR, 0, SH.RIDGE_X);
+  b.setDoor([8, 2, 6], [3, 0, 6], [-1, 0], [[8, 3, 6], [8, 3, 7]]);
+  // spine greebles, tail fin with the beacon as its sloped tip
+  for (const z of [11, 13]) b.set(8, 3, z, z === 11 ? HT : VENT); b.set(8, 3, 15, CHR); b.set(8, 4, 15, RED, EMIT.NAV, SH.WEDGE_ZN_UP);
+  // engine nacelles x 5..6 / 10..11, y 1..2, z 9..14: pointed chrome intakes (top and bottom wedges, hips at the
+  // outer corner), the outer top and bottom edges bevelled, blue exhausts aft, greebles on the flat inner top
+  b.sfill(5, 1, 9, 6, 2, 14, DD); b.sset(5, 2, 9, CHR); b.sset(6, 2, 9, CHR); b.sset(5, 1, 9, CHR); b.sset(6, 1, 9, CHR); b.sset(5, 1, 12, VENT);
   b.sfill(5, 1, 15, 6, 2, 15, CHR); b.sengine(5, 1, 15); b.sengine(6, 2, 15); b.sengine(6, 1, 15); b.sengine(5, 2, 15);
-  b.sset(5, 3, 11, HT); b.sset(5, 3, 12, HT); b.sset(6, 3, 10, VENT);
-  // S-foils: lower foil y 1 (x 1..4), upper foil y 2 (x 1..4), z 8..12, closed flat when landed
+  b.bevelTop([5, 2, 9, 6, 14], { XN: true, ZN: true }); b.bevelBottom([5, 1, 9, 6, 14], { XN: true, ZN: true });
+  b.bevelTop([10, 2, 9, 11, 14], { XP: true, ZN: true }); b.bevelBottom([10, 1, 9, 11, 14], { XP: true, ZN: true });
+  b.sset(6, 3, 11, HT); b.sset(6, 3, 12, HT); b.sset(6, 3, 10, VENT);
+  // S-foils: lower foil y 1 (x 1..4), upper foil y 2 (x 1..4), z 8..12, closed flat when landed; each plate is cut
+  // to a swept trapezoid (leading edge root (x 5, z 8) -> tip (x 1, z 10), trailing edge raked forward toward the
+  // tip), knife-edged tips, wingtip cannons forward of the lower foil
   const lower = b.part('foilLowL', CH.CLASS, { pivot: [5, 1, 0], axis: [0, 0, 1], angle: 0.42 });
   const upper = b.part('foilHighL', CH.CLASS, { pivot: [5, 3, 0], axis: [0, 0, 1], angle: -0.42 });
   for (let x = 1; x <= 4; x++) for (let z = 8; z <= 12; z++) {
@@ -113,15 +131,20 @@ export function starfighter() {
     lower.set(x, 1, z, edge ? DD : (z === 10 ? RED : D));
     upper.set(x, 2, z, edge ? DD : (z === 10 ? RED : D));
   }
-  lower.set(1, 1, 7, CHR); lower.set(1, 1, 6, CHR); upper.set(1, 2, 13, VENT);
-  lower.set(1, 1, 10, RED, EMIT.NAV);
+  for (const foil of [lower, upper]) {
+    foil.cut(planXZ(5, 8, 1, 10, [3, 12])); foil.cut(planXZ(5, 13, 1, 12, [3, 9]));
+    foil.paintClipped(DD);
+    for (const z of [10, 11]) if (foil.get(1, foil === lower ? 1 : 2, z) && !foil.shapeAt(1, foil === lower ? 1 : 2, z)) foil.set(1, foil === lower ? 1 : 2, z, DD, 0, SH.KNIFE_XN);
+  }
+  for (let z = 6; z <= 9; z++) lower.set(1, 1, z, CHR); upper.set(4, 2, 12, VENT, 0, upper.shapeAt(4, 2, 12));
+  lower.set(1, 1, 10, RED, EMIT.NAV, SH.KNIFE_XN);
   const lowerR = b.mirrorPart(lower); b.mirrorPart(upper);
   for (const c of lowerR.cells) if (c[4] === EMIT.NAV) c[3] = GRN;
-  // boarding ladder on the port side (two steps up to the closed foils) -> along the foil top -> cockpit well; in
-  // flight it tucks into the wing root fairing / fuselage (slid half a block past the fairing skin, no shared faces)
+  // boarding ladder on the port side ahead of the swept foil (two steps up to the closed foils) -> along the foil
+  // top -> cockpit well; in flight it tucks into the fuselage (slid half a block past the skin, no shared faces)
   b.sfill(6, 1, 6, 6, 2, 8, DD); b.sset(6, 2, 7, HT);
   const ladder = b.part('ladder', CH.GEAR, { slide: [4.5, 1, 0] });
-  ladder.set(2, 0, 7, DD); ladder.set(3, 0, 7, DD); ladder.set(3, 1, 7, DD);
+  ladder.set(3, 0, 7, DD); ladder.set(4, 0, 7, DD); ladder.set(4, 1, 7, DD);
   b.slandingLight(7, 1, 1);
   gear(b, [[6, 4], [6, 12]], 1); b.parts[b.parts.length - 1].set(8, 0, 3, DD);
   b.spot(3, 0, 12); b.spot(13, 0, 12); b.spot(8, 0, 0);
