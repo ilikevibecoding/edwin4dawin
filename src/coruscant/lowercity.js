@@ -33,11 +33,13 @@ export function register(gen, game) {
     game.lowerCity = {
       timing: () => { const s = gen.structures.find((st) => st.name === 'lowercity'); return s ? { chunks: s.chunks || 0, msTotal: +(s.msTotal || 0).toFixed(1), msPerChunk: s.chunks ? +(s.msTotal / s.chunks).toFixed(2) : 0 } : null; },
     };
-    // The sky's `lower` look (denser, cooler haze, no clouds over the basin) needs the region mix to carry a `lower`
-    // weight; until game.js computes it natively this shim adds it to whatever regionMix returns (see lowerMix).
+    // The sky's `lower` look (a cooler haze, no clouds over the basin) needs the region mix to carry a `lower` weight,
+    // and the Coruscant smog (whose fog reaches past the streamed chunks) has to hold over the basin instead of fading
+    // out 160 blocks past the plateau edge as game.regionMix measures it against REGIONS.coruscant.half. Until game.js
+    // computes both natively (dC against half + LOWER.reach) this shim patches whatever regionMix returns (lowerMix).
     if (typeof game.regionMix === 'function' && !game.regionMix.__lowerCity) {
       const orig = game.regionMix.bind(game);
-      const wrapped = (x, z) => { const m = orig(x, z); m.lower = lowerMix(x, z); return m; };
+      const wrapped = (x, z) => { const m = orig(x, z), lo = lowerMix(x, z); m.lower = lo; m.coruscant = Math.max(m.coruscant || 0, lo); return m; };
       wrapped.__lowerCity = true;
       game.regionMix = wrapped;
     }
@@ -96,7 +98,8 @@ function paintWall(set, r, v) {
 }
 
 // Freight trench: floor 10 below the terrace (conveyor on one side, container stacks on the other), slab stairs at
-// the terrace steps, railed ledges with flush blue lane lights along both edges.
+// the terrace steps, railed ledges with flush blue lane lights along both edges. The trench walls are the ledge
+// columns' faces below the kerb: dark plating with a conduit run, vent grates and a warm wall light every 16.
 function paintTrench(set, band, r, tv, g, d, v) {
   const tf = trenchFloor(band);
   if (tf === null) { set(g, mod(d, 8) === 0 && (tv === -1 || tv === 0) ? BLUE : PLATE); return; }
@@ -104,7 +107,10 @@ function paintTrench(set, band, r, tv, g, d, v) {
     set(g, mod(d, 8) === 0 ? BLUE : STR);
     set(g + 1, BARS);
     if (mod(d, 16) === 8) { set(g + 2, BARS); set(g + 3, LAMP); }
+    for (let y = tf + 1; y < g; y++) set(y, y === tf + 3 ? CHR : y === g - 1 ? D : DD);
     if (mod(d, 16) === 0) set(g - 3, GLOW);                            // wall light facing the trench
+    else if (mod(d, 16) === 8) { set(tf + 5, VENT); set(tf + 6, VENT); }
+    if (mod(d, 8) === 4) set(tf + 2, GLOW);                            // low light along the conveyor / the stacks
     return;
   }
   // stairs: down to the next band's trench floor at this band's outer end, or the lower half of the stair coming

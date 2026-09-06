@@ -267,8 +267,9 @@ export class Sky {
 
   // Region look (call right after update, before disaster overrides). mix: { space: 0..1, coruscant: 0..1, lower: 0..1 }.
   // Space: black sky, full stars, no clouds, no haze. Coruscant: no low clouds, a warm smoggy horizon, longer fog,
-  // and at night a warm city-glow band on the horizon. Lower city (the terraced basin round the plateau): a slightly
-  // denser, cooler haze and no clouds; `mix.lower` is added to game.regionMix by coruscant/lowercity.js (lowerMix).
+  // and at night a warm city-glow band on the horizon. Lower city (the terraced basin round the plateau): the smog
+  // haze tinted cooler and no clouds, fog distances untouched so the terraces stay readable from the rim;
+  // `mix.lower` is added to game.regionMix by coruscant/lowercity.js (lowerMix).
   applyRegion(mix) {
     if (!mix) return;
     const sp = mix.space || 0, co = mix.coruscant || 0, lo = mix.lower || 0;
@@ -308,11 +309,10 @@ export class Sky {
       this.cloudMat.opacity *= 1 - co;      // the city sits above its cloud deck; towers punch through nothing
     }
     if (lo > 0.001) {
-      // slightly denser and cooler than the plateau's smog: the haze pools in the basin (kept subtle so the terraces
-      // stay readable from the rim at the default render distance)
+      // the basin's air is the plateau's smog gone cooler and greyer (steel, wet plating, blue service light); the fog
+      // distances are the smog's, so the terraces keep their depth from the rim at the default render distance
       const cool = new THREE.Color(0.34, 0.40, 0.50);
       this.fogColor.lerp(cool, lo * 0.3);
-      this.fogNear *= 1 - 0.12 * lo; this.fogFar *= 1 - 0.08 * lo;
       u.uSkyHorizon.value.lerp(cool, lo * 0.15);
       this.cloudMat.opacity *= 1 - lo;
     }
