@@ -1,4 +1,5 @@
-// Far skyline impostors for Coruscant: one merged mesh of slightly-inset boxes, one per tower lot of the layout,
+// Far skyline impostors for Coruscant: one merged mesh of slightly-inset boxes - one per tower lot of the layout, the
+// landmark silhouettes, plus the street lattice (boulevard-deck slabs and skybridge tubes, see latticeBoxes) -
 // drawn with their own long fog so the city reads to the horizon while real chunks only stream ~10 chunks out.
 // Inside the streamed radius each box sits inside its real tower and is hidden by it; beyond it the box is a dark
 // silhouette with a lit-window lattice at night, fading into the haze over several hundred blocks. One draw call,
@@ -40,8 +41,10 @@ void main() {
   float top = step(0.5, abs(N.y));
   float roof = top * step(uGroundY + 1.0, vWorld.y);
   // landmark silhouettes (seed >= 2) are lighter stone without the office-window lattice, so a dome or a spire reads
-  // as a distinct building from across the city
+  // as a distinct building from across the city; street lattice (seed >= 4: boulevard-deck slabs, skybridge tubes)
+  // is plain tinted plating with no windows at all
   float lm = step(1.5, vSeed);
+  float deck = step(3.5, vSeed);
   vec3 base = mix(vec3(0.16, 0.17, 0.20), vec3(0.30, 0.31, 0.34), roof) * (0.7 + 0.6 * uSkyLight);
   base = mix(base, vTint * (roof > 0.5 ? 1.1 : 0.8) * (0.2 + 0.7 * uSkyLight), lm);
   float u = abs(N.x) > 0.5 ? vWorld.z : vWorld.x;
@@ -49,11 +52,13 @@ void main() {
   float win = (1.0 - top) * (1.0 - lm) * step(0.34, fu) * step(fu, 0.66) * step(0.25, fy) * step(fy, 0.65);
   // landmarks: a wider 4 x 6 window pitch so their night faces read as lit buildings, not black masses
   float fu2 = fract(u / 4.0), fy2 = fract(vWorld.y / 6.0);
-  win += (1.0 - top) * lm * step(0.3, fu2) * step(fu2, 0.6) * step(0.3, fy2) * step(fy2, 0.6);
+  win += (1.0 - top) * lm * (1.0 - deck) * step(0.3, fu2) * step(fu2, 0.6) * step(0.3, fy2) * step(fy2, 0.6);
   float lit = step(0.35, hash(vec3(floor(u / 3.0), floor(vWorld.y / 5.0), vSeed)));
   vec3 night = vec3(1.0, 0.85, 0.55) * (1.2 - uSkyLight) * lit;
   vec3 day = vec3(0.55, 0.62, 0.72) * uSkyLight;
   vec3 col = mix(base, mix(day, night + day * 0.3, clamp(1.0 - uSkyLight * 1.2, 0.0, 1.0)), win);
+  // the decks' lane lights and blue under-strips: a faint blue glow on the lattice tops after dark
+  col += deck * top * vec3(0.10, 0.16, 0.30) * (1.0 - uSkyLight);
   // hidden inside the streamed radius (the real tower is there), then fades into the haze far away
   float show = smoothstep(uChunkFar * 0.85, uChunkFar * 1.05, vDist);
   float f = smoothstep(uNear, uFar, vDist);
@@ -106,22 +111,49 @@ export function landmarkBoxes(layout) {
   return out;
 }
 
+// Street lattice impostors (view distances beyond the streamed ring): one slab per mid-level boulevard-deck segment
+// (city.js paints the deck at y 94..95 with kerbs on top) and one box per skybridge (plate at y, glass tube to y + 3).
+// Deck segments run the whole plateau, so they are chopped into <= 64-block pieces: the per-box centre cull in the
+// vertex shader and the distance fade stay meaningful along a 1000-block boulevard. Boxes are inset like the towers
+// so, inside the ring, each sits inside its real deck/tube and never z-fights it.
+const DECK_PIECE = 64;
+const DECK_TINT = [0.42, 0.44, 0.48];      // durasteel sidewalks + chrome lanes read as a mid-grey lattice over the dark ground
+const BRIDGE_TINT = [0.55, 0.62, 0.70];    // steel-glass tubes
+export function latticeBoxes(layout) {
+  const out = [];
+  const yTop = LEVELS.deck + 1 - 0.3, yBot = LEVELS.deck - 1 + 0.3;
+  for (const s of layout.boulevards || []) {
+    if (s.level !== 'mid') continue;
+    const a0 = s.axis === 'x' ? s.x0 : s.z0, a1 = s.axis === 'x' ? s.x1 : s.z1;
+    for (let a = a0; a < a1; a += DECK_PIECE) {
+      const b = Math.min(a1, a + DECK_PIECE);
+      const r = s.axis === 'x' ? { x0: a, x1: b, z0: s.z0, z1: s.z1 } : { x0: s.x0, x1: s.x1, z0: a, z1: b };
+      out.push({ x0: r.x0 + INSET, x1: r.x1 - INSET, z0: r.z0 + INSET, z1: r.z1 - INSET, y0: yBot, y1: yTop, id: 1000 + s.id, deck: true, tint: DECK_TINT });
+    }
+  }
+  for (const br of layout.bridges || []) {
+    out.push({ x0: br.x0 + INSET, x1: br.x1 - INSET, z0: br.z0 + INSET, z1: br.z1 - INSET, y0: br.y + 0.3, y1: br.y + 4 - 0.3, id: 2000 + br.id, deck: true, tint: BRIDGE_TINT });
+  }
+  return out;
+}
+
 export function buildSkyline(layout) {
   const lots = layout.lots.filter((l) => l.kind === 'tower');
   const g0 = LEVELS.ground + 1;
   const boxes = lots.map((l) => ({ x0: l.x0 + INSET, x1: l.x1 - INSET, z0: l.z0 + INSET, z1: l.z1 - INSET, y1: g0 + l.height - 0.5, id: l.id }));
   for (const b of landmarkBoxes(layout)) boxes.push(b);
+  for (const b of latticeBoxes(layout)) boxes.push(b);
   const n = boxes.length;
   const pos = new Float32Array(n * 24 * 3), seed = new Float32Array(n * 24), ctr = new Float32Array(n * 24 * 2), tnt = new Float32Array(n * 24 * 3), idx = new Uint32Array(n * 36);
   let pi = 0, si = 0, ci = 0, ti = 0, ii = 0, vbase = 0;
   for (const l of boxes) {
-    const x0 = l.x0, x1 = l.x1, z0 = l.z0, z1 = l.z1, y0 = g0, y1 = l.y1;
+    const x0 = l.x0, x1 = l.x1, z0 = l.z0, z1 = l.z1, y0 = l.y0 ?? g0, y1 = l.y1;
     const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
     const c = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]];
     // 6 faces x 4 verts (separate verts so derivatives give flat normals)
     const faces = [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [3, 7, 6, 2], [0, 4, 7, 3], [1, 2, 6, 5]];
     for (const f of faces) {
-      for (const k of f) { pos[pi++] = c[k][0]; pos[pi++] = c[k][1]; pos[pi++] = c[k][2]; seed[si++] = (l.id % 97) / 97 + (l.landmark ? 2 : 0); ctr[ci++] = cx; ctr[ci++] = cz; const t = l.tint || [0, 0, 0]; tnt[ti++] = t[0]; tnt[ti++] = t[1]; tnt[ti++] = t[2]; }
+      for (const k of f) { pos[pi++] = c[k][0]; pos[pi++] = c[k][1]; pos[pi++] = c[k][2]; seed[si++] = (l.id % 97) / 97 + (l.landmark ? 2 : 0) + (l.deck ? 4 : 0); ctr[ci++] = cx; ctr[ci++] = cz; const t = l.tint || [0, 0, 0]; tnt[ti++] = t[0]; tnt[ti++] = t[1]; tnt[ti++] = t[2]; }
       idx[ii++] = vbase; idx[ii++] = vbase + 1; idx[ii++] = vbase + 2; idx[ii++] = vbase; idx[ii++] = vbase + 2; idx[ii++] = vbase + 3;
       vbase += 4;
     }

@@ -129,6 +129,15 @@ class TilePool {
     this.aIdx.addUpdateRange(ib, INDICES_PER_TILE); this.aIdx.needsUpdate = true;
     this.free.push(slot);
   }
+  // Copies a finished tile from another pool's slot into this pool's slot (indices rebased to the new vertex range).
+  copyFrom(src, s, d) {
+    const sv = s * VERTS_PER_TILE, dv = d * VERTS_PER_TILE, si = s * INDICES_PER_TILE, di = d * INDICES_PER_TILE;
+    this.pos.set(src.pos.subarray(sv * 3, (sv + VERTS_PER_TILE) * 3), dv * 3);
+    this.col.set(src.col.subarray(sv * 4, (sv + VERTS_PER_TILE) * 4), dv * 4);
+    this.nrm.set(src.nrm.subarray(sv * 3, (sv + VERTS_PER_TILE) * 3), dv * 3);
+    const shift = dv - sv;
+    for (let i = 0; i < INDICES_PER_TILE; i++) this.idx[di + i] = src.idx[si + i] + shift;
+  }
   get bytes() { return this.capacity * TILE_BYTES; }
   dispose() { this.geometry.dispose(); }
 }
@@ -165,12 +174,23 @@ export class FarLOD {
 
   _ensurePool(capacity) {
     if (this.pool && this.pool.capacity >= capacity && this.pool.capacity <= capacity * 2 + 8) return false;
-    // (re)allocate: every built tile is dropped and rebuilt into the new pool over the next frames
+    // (re)allocate (view distance or fog range changed): finished tiles are copied over, nearest first; a tile still
+    // being built restarts in the new pool (its builder wrote into the old arrays)
     const old = this.pool;
-    this.pool = new TilePool(Math.max(capacity, 8));
-    if (this.mesh) this.mesh.geometry = this.pool.geometry;
-    if (old) old.dispose();
-    this.tiles.clear(); this.queue.length = 0;
+    const pool = new TilePool(Math.max(capacity, 8));
+    if (old) {
+      const keep = [...this.tiles.values()].filter((t) => t.slot >= 0 && !t.builder).sort((a, b) => a.dNear - b.dNear);
+      for (const t of keep) {
+        if (!pool.free.length) { this.tiles.delete(t.key); continue; }
+        const ns = pool.free.pop();
+        pool.copyFrom(old, t.slot, ns);
+        t.slot = ns;
+      }
+      for (const t of this.queue) { t.builder = null; t.slot = -1; }
+      old.dispose();
+    }
+    this.pool = pool;
+    if (this.mesh) this.mesh.geometry = pool.geometry;
     this.lastPlan.x = Infinity;
     return true;
   }
@@ -197,7 +217,7 @@ export class FarLOD {
   // Decides which tiles should exist for the player at (px, pz): drops stale ones, queues missing ones nearest first.
   plan(px, pz, farR, nearCull) {
     const needed = tilesNeeded(px, pz, farR, nearCull);
-    this._ensurePool(needed.length + 6);   // a reallocation drops every tile; they are all re-queued below
+    this._ensurePool(needed.length + 6);   // grows/shrinks the pool with the coverage; finished tiles are carried over
     const neededKeys = new Set();
     for (const n of needed) neededKeys.add(n.key);
     this._drop = this._drop || [];
