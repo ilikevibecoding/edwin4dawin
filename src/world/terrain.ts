@@ -406,7 +406,7 @@ Ground groundDetail(vec2 wp, float w, float w2, float foot) {
 // ground under a tree canopy: leaf litter and dark soil with blotches of shaded foliage so that thinned
 // distant planting still reads as a continuous dark-green mass from altitude; the litter carries the soil grain
 vec3 canopyFloor(float n1, float n2, Ground gd) {
-  vec3 litter = vec3(0.048, 0.034, 0.016) * (0.78 + 0.44 * gd.soil);
+  vec3 litter = vec3(0.062, 0.045, 0.022) * (0.78 + 0.44 * gd.soil);
   vec3 shade = vec3(0.017, 0.036, 0.011) * (0.86 + 0.28 * gd.grass);
   vec3 c = mix(litter, shade, smoothstep(0.38, 0.66, n2 + 0.12 * n1));
   return c * (0.85 + 0.3 * n1);
@@ -417,9 +417,11 @@ vec3 openGround(float n2, float n3, float n4, float dryness, Ground gd) {
   vec3 lawn = vec3(0.064, 0.105, 0.038);
   vec3 dry = vec3(0.19, 0.155, 0.064);
   vec3 soil = vec3(0.21, 0.16, 0.105);
-  float dryMix = smoothstep(0.3 - 0.35 * dryness, 0.75 - 0.35 * dryness, n4 + 0.25 * n2 + 0.15 * (gd.mesoTone - 0.5));
+  // n4 + 0.25 n2 averages 0.625: the ramp is centred there so kept lawn and dry yard come in equal measure at
+  // dryness 0.25 (it was centred at 0.44, which made nearly everything dry)
+  float dryMix = smoothstep(0.55 - 0.35 * dryness, 0.85 - 0.35 * dryness, n4 + 0.25 * n2 + 0.15 * (gd.mesoTone - 0.5));
   vec3 c = mix(lawn, dry, dryMix);
-  c *= 0.74 + 0.52 * gd.grass;
+  c *= 0.82 + 0.36 * gd.grass;
   float bare = smoothstep(0.62, 0.74, n3) * 0.7;
   bare = max(bare, gd.mesoBare * (0.35 + 0.45 * dryMix));
   bare = max(bare, gd.bare * (0.3 + 0.6 * max(dryMix, gd.mesoBare)));
@@ -528,7 +530,10 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
   // sandy fringe where the land ramps up from a sandy shore (sheltered lake and canal banks stay grassy); the
   // beach zone ends at about h 1.3-1.9 (map.ts: ramp 0.45), so both sides meet on the scrub at the same height
   float sandy = (1.0 - smoothstep(1.2, 2.3, h)) * smoothstep(0.06, 0.28, expo);
+  // the floor darkens with the square of the cover: under a thin, gappy canopy the ground is still the open
+  // ground with tree shadows on it, the litter floor belongs to the closed hammock
   float canopy = smoothstep(0.30, 0.82, veg);
+  canopy *= canopy;
   if (zone == 0 || zone == 1) {
     // seabed: sand with seagrass patches in the shallows, pale sand flats where it is very shallow. Only the
     // rim above the water plane is ever seen: it is the beach's wet sand, so it takes that colour
@@ -569,7 +574,10 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     // the damp band's upper limit is ragged: the wash runs up further in the low spots of a flat beach
     // (runnels, the hollows between cusps), so its edge is a mottle of tongues 6-15 m across, not a contour
     float runnel = fbm3(wp * 0.07 + 31.0) - 0.5;
-    float damp = 1.0 - smoothstep(swashW * 1.1, swashW * 2.4 + 5.0, sd + 7.0 * runnel * smoothstep(swashW, swashW * 3.0, sd));
+    float damp = 1.0 - smoothstep(swashW * 1.1, swashW * 2.4 + 5.0, sd + 11.0 * runnel * smoothstep(swashW, swashW * 2.2, sd));
+    // .. and within the band the sand dries first on the slight rises: dry islands in the damp, damp
+    // tongues in the dry, both 5-15 m across
+    damp *= 1.0 - 0.7 * smoothstep(0.1, 0.3, runnel) * smoothstep(swashW * 1.4, swashW * 2.4, sd);
     // pools of the last tide lying in the low damp sand: saturated, dark and glossy
     float poolBand = damp * (1.0 - wet) * smoothstep(0.2, 0.5, exposure + 0.25 * (n3 - 0.5));
     float pool = poolBand > 0.01 ? smoothstep(0.62, 0.72, fbm3(wp * 0.05 + 53.0)) * poolBand : 0.0;
@@ -578,11 +586,11 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     Sand sdt = sandDetail(wp, w, foot);
     // albedos sit where the post's tone curve still has slope: the sun-lit ground above ~0.35 all lands
     // within a few output levels of white (dry sand 0.56 renders ~232; damp 0.24 ~200; wet 0.14 ~168)
-    vec3 dry = vec3(0.56, 0.44, 0.28);
+    vec3 dry = vec3(0.47, 0.375, 0.245);
     vec3 dampC = vec3(0.243, 0.188, 0.132);
     vec3 wetC = vec3(0.143, 0.111, 0.081);
     // grain, shell hash and specks; a little darker in the ripple troughs where the heavy grains collect
-    float grainMod = 1.0 + 0.36 * (sdt.alb - 0.5) - 0.10 * (0.5 - sdt.ripple) * (1.0 - damp);
+    float grainMod = 1.0 + 0.36 * (sdt.alb - 0.5) - 0.16 * (0.5 - sdt.ripple) * (1.0 - damp);
     c = dry * (0.92 + 0.16 * n2) * grainMod;
     c = mix(c, dampC * (0.94 + 0.12 * n2) * (1.0 + 0.2 * (sdt.alb - 0.5)), damp);
     c = mix(c, wetC * (0.94 + 0.12 * n2) * (1.0 + 0.12 * (sdt.alb - 0.5)), max(wet, pool * 0.8));
@@ -607,7 +615,8 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     // footprints: everyone walks the firm damp sand, and the trodden ground around the marinas, road ends and
     // hotel frontages (det.r, baked) is printed all over; patches of prints, not an even stipple
     float trample = det.r;
-    float walk = max(trample, 0.18 * damp * (1.0 - wet * 0.7));
+    // the dry sand within ~40 m of the water is walked over too, in patches
+    float walk = max(trample, max(0.18 * damp * (1.0 - wet * 0.7), 0.1 * (1.0 - smoothstep(25.0, 45.0, shoreD))));
     float fpVis = 1.0 - smoothstep(0.2, 0.55, foot);
     if (fpVis * walk > 0.02) {
       mat2 J = ROT_FOOT * (1.0 / 6.0);
