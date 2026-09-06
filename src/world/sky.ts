@@ -459,7 +459,8 @@ void main() {
       // the light march varies slowly along the ray: reuse it for the next 1-2 samples (3-4 once the ray is
       // deep inside, where the samples weigh little, or once it found deep shadow: the base under a column stays
       // in shadow, and the base's texture comes from the ambient terms and the per-pixel surface fetch)
-      int reuse = (level == 2 ? 2 : 1) + (T < 0.5 ? 1 : 0) + (T < 0.2 ? 1 : 0) + (lt < 0.12 ? 2 : 0);
+      // (the surface step is a third of the fine one: three of them span the same distance as one fine step)
+      int reuse = (level == 2 ? 4 : 2) + (T < 0.5 ? 1 : 0) + (T < 0.2 ? 1 : 0) + (lt < 0.12 ? 2 : 0);
       if (sinceLight >= reuse) {
         lt = dot(scatter(lightOD(p, f, L, H, hf), cosSun), ONE3);
         sinceLight = 0;
