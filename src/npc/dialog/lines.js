@@ -295,7 +295,7 @@ export const JOB_LINES = {
 // Time-of-day banks (any archetype). Keys match `periodOf(hour)`.
 export const TIME_LINES = {
   dawn: ['First light on the spires. Best part of the day, and the shortest.', 'Dawn shift. The city looks almost quiet from here. Almost.', 'The caf shops open before the sun clears the towers. Good.', 'Early. Too early. The speeders have not even started shouting yet.', 'Morning haze in the undercity. It clears by noon, mostly.'],
-  morning: ['Rush hour on the boulevards. Mind the couriers.', 'The lifts are full every morning. Every single morning.', 'A whole city late for work at the same time. It is a wonder anything opens.', 'Morning. The skybridges are busy and the caf is strong.', 'Half the Federal District is crossing the plaza right now. The other half is already at a desk.'],
+  morning: ['Rush hour on the boulevards. Mind the couriers.', 'The lifts are full every morning. Every single morning.', 'A whole city late for work at the same time. It is a wonder anything opens.', 'Morning. The skybridges are busy and the caf is strong.', 'Half the Federal District is crossing the plaza. The other half is already at a desk.'],
   noon: ['Lunch rush. Every diner on the level has a queue.', 'Midday sun on the deck. It cooks the durasteel and the tempers.', 'The plaza fills at noon. Aides, clerks, tourists, pigeons if we had them.', 'Noon. The Senate breaks, the cafs fill, the couriers sprint.', 'Everybody eats at the same hour in this city. It is a design flaw.'],
   afternoon: ['Long afternoon. The towers throw their shadows across the plaza.', 'Afternoon session, afternoon shift, afternoon slump. The city yawns.', 'Traffic thickens after three. It never actually thins.', 'The light turns gold on the spires around now. Worth a look up.', 'Afternoon. Two more hours and this level turns into a cantina.'],
   evening: ['Evening shift comes on. The day shift heads for the cantinas.', 'The towers light up one window at a time. Then all at once.', 'Sunset over the Works. Orange smoke, orange sky, same colour.', 'Evening in Uscru. The music starts before the sun is gone.', 'The boulevards glow at dusk. That is the best trick this city has.'],
@@ -328,7 +328,7 @@ export const PLAYER_LINES = {
   flying: ['Is that citizen flying? Without a speeder?', 'No repulsor pack, no wings. How is he doing that?', 'Someone is flying over the boulevard. Traffic control will not like it.', 'Look at that! Flying like a Jedi on holiday!', 'Get down from there before the precinct sees you!'],
   bump: ['Watch it!', 'Hey, mind where you walk!', 'Excuse you.', 'Careful, friend. The deck is crowded enough.', 'Oof. Slow down, this is not a hyperlane.'],
   poke: ['Hands off!', 'Do that again and I call security.', 'What is wrong with you?', 'Easy there. I bruise like a Jogan fruit.', 'Do not touch the uniform.', 'Back off, citizen.'],
-  greet: ['Yes? Make it quick.', 'Can I help you, citizen?', 'You look lost. Everybody does, on this level.', 'Hello there. New to the district?', 'What do you need?', 'Something I can do for you?'],
+  greet: ['Yes? Make it quick.', 'Can I help you, citizen?', 'You look lost. Everybody does, on this level.', 'Afternoon, citizen. New to the district?', 'What do you need?', 'Something I can do for you?'],
   running: ['Somebody is in a hurry.', 'Slow down, the lifts will still be there.', 'Running on the deck. Bold.'],
 };
 
