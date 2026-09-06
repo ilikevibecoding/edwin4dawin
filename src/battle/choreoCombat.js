@@ -75,7 +75,7 @@ export const BOLT_SPECS = {
 export function boltColor(side, rand) {
   if (side === "republic")
     return rand() < 0.55 ? BOLT_COLORS.republic : BOLT_COLORS.republicBlue;
-  return rand() < 0.55 ? BOLT_COLORS.separatistBlue : BOLT_COLORS.separatist;
+  return rand() < 0.62 ? BOLT_COLORS.separatistBlue : BOLT_COLORS.separatist;
 }
 
 export const MISS_RATE = 0.3;

@@ -703,7 +703,10 @@ function step(fixedDt = null) {
       lastShotShown = cinematic.shotName;
       // shot names carry the subject's ship id for the tooling; the HUD shows the shot alone
       hud.setStatus(
-        "Cinematic camera · " + lastShotShown.replace(/\s+\d+$/, ""),
+        "Cinematic camera · " +
+          lastShotShown
+            .replace(/\s+\d+$/, "")
+            .replace(/venatorOpen/g, "venator"),
       );
     }
   } else {

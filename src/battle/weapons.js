@@ -26,8 +26,8 @@ const MIN_LENGTH_PX = 34;
 export const BOLT_COLORS = {
   republic: new THREE.Color(1.0, 0.085, 0.04), // red turbolasers
   republicBlue: new THREE.Color(0.3, 0.55, 1.0), // the Republic's blue turbolasers (mixed with the red)
-  separatist: new THREE.Color(0.16, 1.0, 0.62), // teal-green
-  separatistBlue: new THREE.Color(0.35, 0.6, 1.0), // Separatist blue bolts (mixed with the green)
+  separatist: new THREE.Color(0.2, 1.0, 0.4), // green (kept apart from the blue)
+  separatistBlue: new THREE.Color(0.25, 0.45, 1.0), // Separatist blue bolts (mixed with the green)
   fighterRepublic: new THREE.Color(1.0, 0.16, 0.08),
   fighterSeparatist: new THREE.Color(0.95, 0.24, 0.1),
   jedi: new THREE.Color(0.3, 1.0, 0.35),

@@ -98,10 +98,11 @@ export function hullInfo(model) {
   h = {
     R,
     center,
-    // superellipsoid (power 4) semi-axes: box + margin, slightly inflated so the box corners stay inside
-    ax: (ext.x + HULL_MARGIN) * 1.05,
-    ay: (ext.y + HULL_MARGIN) * 1.05,
-    az: (ext.z + HULL_MARGIN) * 1.03,
+    // superellipsoid (power 4) semi-axes: box + margin, inflated so the box's upper corners (bridge towers,
+    // fins) stay inside the zone — a corner of a box needs 3^(1/4) ≈ 1.32 on the axes it spans
+    ax: (ext.x + HULL_MARGIN) * 1.32,
+    ay: (ext.y + HULL_MARGIN) * 1.32,
+    az: (ext.z + HULL_MARGIN) * 1.1,
     // sphere part keeps every fighter beyond 0.62 R of the hull centre (rounds the middle of the hull)
     sphere: R * 0.62 + 30,
     // broad-phase radius for the nearby-ship cache
@@ -360,8 +361,7 @@ export function startDogfight(f, q, t) {
   if (!q.threat) q.threat = f;
   f.mode = MODE.DOGFIGHT;
   // hunters stay on a quarry twice as long
-  f.modeUntil =
-    t + (f.role === "hunter" ? 12 + f.rng() * 10 : 6 + f.rng() * 6);
+  f.modeUntil = t + (f.role === "hunter" ? 12 + f.rng() * 10 : 6 + f.rng() * 6);
   f.burst = f.def.burst || 3;
 }
 
