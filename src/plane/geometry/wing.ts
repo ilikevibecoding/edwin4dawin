@@ -1,5 +1,17 @@
 import * as THREE from 'three';
 import { mergeVertices } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { flatUv } from './util';
+
+/**
+ * A plain part (horn, rod, bracket) merged into a wing-paint batch next to `wingPanel` geometries: it gets the white
+ * vertex colour the panels carry and samples one texel of the paint at (u, v).
+ */
+export function withPaint<T extends THREE.BufferGeometry>(geo: T, u: number, v: number): T {
+  flatUv(geo, u, v);
+  const n = geo.getAttribute('position').count;
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(n * 3).fill(1), 3));
+  return geo;
+}
 
 // ------------------------------------------------------------------ wings
 
@@ -50,7 +62,13 @@ export function wingUpperY(spec: WingSpec, x: number, z: number): number {
 
 export type WingPart = 'full' | 'front' | 'rear';
 
-interface ProfilePt { x: number; y: number; u: number; /** endpoint of the flat hinge / nose face inside the hinge gap */ flat?: boolean; }
+interface ProfilePt {
+  x: number; y: number; u: number;
+  /** point of the hinge face / control-surface nose inside the hinge gap (plain paint spot, shaded) */
+  flat?: boolean;
+  /** shade of a `flat` point (multiplies the paint; default HINGE_SHADE) */
+  shade?: number;
+}
 
 /**
  * Closed profile loop in chord units (x: 0 leading edge .. 1 trailing edge). Runs from the trailing edge (or hinge)
@@ -58,9 +76,11 @@ interface ProfilePt { x: number; y: number; u: number; /** endpoint of the flat 
  * they shade as hard edges; the loop's last point repeats the first (UV seam).
  *  full  : complete airfoil
  *  front : airfoil ahead of the hinge at chord fraction f, closed by the flat hinge face
- *  rear  : control surface behind chord fraction f, closed by a flat nose face
+ *  rear  : control surface behind chord fraction f, closed by a rounded nose that bulges `noseBulge` (chord) forward
+ *          into the hinge gap (a real aileron / flap / rudder nose is a rolled sheet sitting in the cove, not a plank
+ *          end: from the quarter views the gap reads as a dark slot with a lit curve inside it)
  */
-function profileLoop(part: WingPart, f: number, thickness: number, camber: number, n: number, te = DEFAULT_TE): ProfilePt[] {
+function profileLoop(part: WingPart, f: number, thickness: number, camber: number, n: number, te = DEFAULT_TE, noseBulge = 0): ProfilePt[] {
   const up = (x: number): ProfilePt => ({ x, y: camberY(x, camber) + thicknessY(x, thickness, te), u: 0.5 - 0.5 * x });
   const lo = (x: number): ProfilePt => ({ x, y: camberY(x, camber) - thicknessY(x, thickness, te), u: 0.5 + 0.5 * x });
   const pts: ProfilePt[] = [];
@@ -68,8 +88,14 @@ function profileLoop(part: WingPart, f: number, thickness: number, camber: numbe
     // blunt trailing edge: upper and lower skins end `te` apart and a tiny flat closes them
     pts.push(up(1));
     for (let k = 1; k < n; k++) pts.push(up(f + (1 - f) * (1 - k / n)));
-    pts.push(up(f), { ...up(f), flat: true });      // hard corner at the nose face
-    pts.push({ ...lo(f), flat: true }, lo(f));
+    pts.push(up(f));
+    // nose: a half ellipse from the upper skin edge around to the lower one, darkest where it turns under
+    const yc = camberY(f, camber), yt = thicknessY(f, thickness, te), NOSE = 6;
+    for (let k = 0; k <= NOSE; k++) {
+      const th = (Math.PI * k) / NOSE;
+      pts.push({ x: f - noseBulge * Math.sin(th), y: yc + yt * Math.cos(th), u: 0.02, flat: true, shade: 0.62 - 0.30 * Math.sin(th * 0.5) });
+    }
+    pts.push(lo(f));
     for (let k = 1; k < n; k++) pts.push(lo(f + (1 - f) * (k / n)));
     pts.push(lo(1), { ...up(1), u: 1 });
     return pts;
@@ -137,6 +163,17 @@ export function wingPanel(spec: WingSpec, o: PanelOptions): THREE.BufferGeometry
     const chord = wingChord(spec, z), xle = wingXLE(spec, z);
     return o.hingeX !== undefined ? (xle - o.hingeX) / chord : 0.75;
   };
+  // the profile at span station z for a region: a rear part sits `gap` behind the hinge with its nose rolled
+  // forward into the cove; rings and caps must use the same loop or the cap fans stick out into the gap
+  const loopAt = (z: number, region: WingPart): ProfilePt[] => {
+    const chord = wingChord(spec, z), f = hingeFraction(z);
+    if (region === 'rear' && o.part === 'rear') {
+      const g = (o.gap ?? 0.015) / chord;
+      return profileLoop('rear', f + g, spec.thickness, camber, n, spec.te, g * 0.55);
+    }
+    // (a 'rear' cap on a fixed panel is the notch's end wall: it fills the cove from the hinge face back)
+    return profileLoop(region, f, spec.thickness, camber, n, spec.te);
+  };
   let P = 0;
   const place = (p: ProfilePt, z: number, zPlan: number, scale: number, out: number[]) => {
     const chord = wingChord(spec, zPlan), xle = wingXLE(spec, zPlan);
@@ -151,15 +188,13 @@ export function wingPanel(spec: WingSpec, o: PanelOptions): THREE.BufferGeometry
   const vOf = o.vOf ?? ((z: number) => Math.min(1, z / spec.span));
   for (const r of rings) {
     const zPlan = Math.min(r.z, o.z1);
-    const chord = wingChord(spec, zPlan);
-    const f = hingeFraction(zPlan);
-    const loop = profileLoop(o.part, o.part === 'rear' ? f + (o.gap ?? 0.015) / chord : f, spec.thickness, camber, n, spec.te);
+    const loop = loopAt(zPlan, o.part);
     P = loop.length;
     for (const p of loop) {
       place(p, r.z, zPlan, r.scale, pos);
       const v = vOf(Math.min(r.z, o.z1));
       // flat gap faces sample one plain spot of the paint (their u would otherwise sweep the whole chord)
-      if (p.flat) { uv.push(0.02, v); col.push(HINGE_SHADE, HINGE_SHADE, HINGE_SHADE); }
+      if (p.flat) { const s = p.shade ?? HINGE_SHADE; uv.push(0.02, v); col.push(s, s, s); }
       else { uv.push(p.u, v); col.push(1, 1, 1); }
     }
   }
@@ -171,16 +206,18 @@ export function wingPanel(spec: WingSpec, o: PanelOptions): THREE.BufferGeometry
   }
   // caps: flat fans over a profile region at an end station
   const cap = (z: number, region: WingPart, facingPlusZ: boolean) => {
-    const f = hingeFraction(z);
-    const loop = profileLoop(region, f, spec.thickness, camber, n, spec.te);
+    const loop = loopAt(z, region);
     const base = pos.length / 3;
     const tmp: number[] = [];
     for (const p of loop) place(p, z, z, 1, tmp);
     let cx = 0, cy = 0;
     const m = loop.length - 1;
     for (let k = 0; k < m; k++) { cx += tmp[k * 3]; cy += tmp[k * 3 + 1]; }
-    pos.push(cx / m, cy / m, z); uv.push(0.5, vOf(z)); col.push(1, 1, 1);
-    for (let k = 0; k < m; k++) { pos.push(tmp[k * 3], tmp[k * 3 + 1], tmp[k * 3 + 2]); uv.push(loop[k].u, vOf(z)); col.push(1, 1, 1); }
+    // the end wall of a notch (a cap over the rear region of a fixed panel) is the rib face inside the gap: shaded
+    // like the hinge face so the slot reads dark to its ends
+    const capShade = o.part !== 'rear' && region === 'rear' ? HINGE_SHADE : 1;
+    pos.push(cx / m, cy / m, z); uv.push(0.02, vOf(z)); col.push(capShade, capShade, capShade);
+    for (let k = 0; k < m; k++) { pos.push(tmp[k * 3], tmp[k * 3 + 1], tmp[k * 3 + 2]); uv.push(capShade < 1 ? 0.02 : loop[k].u, vOf(z)); col.push(capShade, capShade, capShade); }
     // the loop runs clockwise seen from +Z (trailing edge -> forward along the top -> back along the bottom)
     for (let k = 0; k < m; k++) {
       const a = base + 1 + k, b = base + 1 + ((k + 1) % m);

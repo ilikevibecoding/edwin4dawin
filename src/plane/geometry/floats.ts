@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { arcSpread, sectionPoint, type Section } from './loft';
+import { arcSpread, sectionAt, sectionPoint, type Section } from './loft';
 
 /** Float hull station: chine height `yc`, half beam `w` at the chine, deck `top` above it, keel `bot` below. */
 export interface FloatStation {
@@ -103,5 +103,52 @@ export function floatHull(stations: FloatStation[], deckSegs = 8, bottomSegs = 5
     const n = new THREE.Vector3(nrm.getX(a) + nrm.getX(b), nrm.getY(a) + nrm.getY(b), nrm.getZ(a) + nrm.getZ(b)).normalize();
     nrm.setXYZ(a, n.x, n.y, n.z); nrm.setXYZ(b, n.x, n.y, n.z);
   }
+  return g;
+}
+
+const asSections = (stations: FloatStation[]): Section[] => stations.map((f) => ({ x: f.x, yc: f.yc, w: f.w, top: f.top, bot: f.bot, n: f.n }));
+
+/**
+ * Deck height of the hull at station x, `dz` off the float's own centreline: the deck is the crowned upper half of
+ * the section, so a fitting 20 cm off centre sits ~1 cm lower than one on the crown line.
+ */
+export function deckHeight(stations: FloatStation[], x: number, dz = 0): number {
+  const s = sectionAt(asSections(stations), x);
+  const n = s.n ?? 3.0, f = Math.min(Math.abs(dz) / s.w, 1);
+  return s.yc + s.top * Math.pow(Math.max(1 - Math.pow(f, n), 0), 1 / n);
+}
+
+/** Chine height and half beam of the hull at station x. */
+export function chineAt(stations: FloatStation[], x: number): { y: number; w: number } {
+  const s = sectionAt(asSections(stations), x);
+  return { y: s.yc, w: s.w };
+}
+
+/**
+ * Spray rail: the flat strip riveted along a float's forebody chine that throws the bow wave down and out. Runs
+ * from x0 (bow end) to x1 (the step) on the float's +Z side, buried 4 mm into the chine, standing `width` out with
+ * its outer edge `droop` lower, `thick` thick; mirror it (scale z -1) for the other side of the hull.
+ */
+export function sprayRailGeometry(stations: FloatStation[], x0: number, x1: number, width: number, droop: number, thick: number, segs = 12): THREE.BufferGeometry {
+  const pos: number[] = [], idx: number[] = [];
+  const quad = (a: number, b: number, c: number, d: number) => idx.push(a, b, c, a, c, d);
+  // per station: inner-top, outer-top, outer-bottom, inner-bottom (4 vertices, the top and bottom faces share none)
+  for (let i = 0; i <= segs; i++) {
+    const x = x0 + (x1 - x0) * (i / segs);
+    const c = chineAt(stations, x);
+    const zi = c.w - 0.004, zo = c.w + width, yi = c.y - 0.002, yo = c.y - droop;
+    pos.push(x, yi, zi, x, yo, zo, x, yo - thick, zo, x, yi - thick, zi);
+  }
+  for (let i = 0; i < segs; i++) {
+    const a = i * 4, b = a + 4; // a: this station (bow side), b: the next one aft
+    quad(a, b, b + 1, a + 1);         // top face (+Y): bow-inner, aft-inner, aft-outer, bow-outer
+    quad(a + 1, b + 1, b + 2, a + 2); // outer edge (+Z)
+    quad(a + 3, a + 2, b + 2, b + 3); // bottom face (-Y)
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Array((segs + 1) * 8).fill(0), 2));
+  g.setIndex(idx);
+  g.computeVertexNormals();
   return g;
 }

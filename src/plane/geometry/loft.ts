@@ -547,6 +547,48 @@ export function humpGeometry(
   return g;
 }
 
+/**
+ * Surface of revolution about a body-space axis parallel to +X at (y, z) = (cy, cz): the profile is a polyline of
+ * (x, r) points (r > 0), the ring has `segments` steps. UV: u fixed or per profile point (`uOf(i)`), v the ring
+ * fraction. Normals are analytic (profile tangent turned around the axis), so the strip shades smoothly; profile
+ * points may be duplicated to make a hard edge. The visible (front) side lies to the right of the direction of travel
+ * in the (x right, r up) plane: an outer skin is traced toward -X, a duct interior toward +X, a forward-facing
+ * annulus from the axis outward; `flip` reverses all of it.
+ */
+export function revolveGeometry(profile: [number, number][], segments: number, o: { cy?: number; cz?: number; uOf?: (i: number) => number; flip?: boolean } = {}): THREE.BufferGeometry {
+  const cy = o.cy ?? 0, cz = o.cz ?? 0, N = profile.length;
+  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], idx: number[] = [];
+  // 2D outward normal of the profile at each point (average of the neighbouring segment normals)
+  const n2: [number, number][] = [];
+  for (let i = 0; i < N; i++) {
+    const a = profile[Math.max(i - 1, 0)], b = profile[Math.min(i + 1, N - 1)];
+    const dx = b[0] - a[0], dr = b[1] - a[1], l = Math.hypot(dx, dr) || 1;
+    // tangent (dx, dr) -> normal pointing to +r when the profile runs toward -X along the outside
+    n2.push([dr / l, -dx / l]);
+  }
+  for (let i = 0; i < N; i++) {
+    const [x, r] = profile[i], [nx, nr] = n2[i], u = o.uOf ? o.uOf(i) : 0;
+    for (let j = 0; j <= segments; j++) {
+      const a = (j / segments) * Math.PI * 2, c = Math.cos(a), s = Math.sin(a);
+      pos.push(x, cy + r * c, cz + r * s);
+      const f = o.flip ? -1 : 1;
+      nrm.push(nx * f, nr * c * f, nr * s * f);
+      uv.push(u, j / segments);
+    }
+  }
+  for (let i = 0; i < N - 1; i++) for (let j = 0; j < segments; j++) {
+    const a = i * (segments + 1) + j, b = a + segments + 1;
+    if (o.flip) idx.push(a, a + 1, b, a + 1, b + 1, b);
+    else idx.push(a, b, a + 1, a + 1, b, b + 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  g.setIndex(idx);
+  return g;
+}
+
 /** Simple closed loft through sections with uniform rings (floats). */
 export function loft(sections: Section[], radial = 28, closeEnds = true): THREE.BufferGeometry {
   const grid = loftGrid(sections, () => uniformRing(radial));

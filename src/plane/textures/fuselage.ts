@@ -1,5 +1,5 @@
 import { Rng } from '../../core/seed';
-import { canvas, CHEAT_LINE, grime, heightToNormal, LIVERY, orangePeelNormal, panels, panelVariation, toTexture, wear, type FuselageLayout, type PbrMaps } from './common';
+import { canvas, CHEAT_LINE, chips, grime, heightToNormal, LIVERY, orangePeelNormal, packRGB, panels, panelVariation, toTexture, wear, type FuselageLayout, type PbrMaps } from './common';
 
 /**
  * Text painted on both sides of the body so it reads left-to-right from outside. The loft's u runs nose -> tail,
@@ -98,12 +98,37 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     actx.closePath();
     actx.fill();
   }
-  // engine cowl ring: dark charcoal nose with a polished lip
+  // nose bowl (u 0 .. the bowl / cowl joint at x 4.22): bare polished aluminium (metalness from the packed map), with
+  // faint circumferential brush marks; the joint itself is a raised lap edge with a ring of Dzus fasteners behind it
   const ringU = lay.uOf(4.22) * w;
-  actx.fillStyle = '#2e3136'; actx.fillRect(0, 0, ringU, h);
-  actx.fillStyle = '#9aa0a6'; actx.fillRect(ringU - 6, 0, 6, h);
-  actx.fillStyle = '#1b1d20';
-  for (let i = 0; i < 12; i++) actx.fillRect(ringU * 0.45, (i / 12) * h + 6, ringU * 0.15, h / 12 - 12);
+  actx.fillStyle = '#c4c8cc'; actx.fillRect(0, 0, ringU, h);
+  for (let i = 0; i < 60; i++) {
+    const y = rng.range(0, h), a = rng.range(0.05, 0.16), light = rng.next() < 0.5;
+    actx.fillStyle = light ? `rgba(255,255,255,${a})` : `rgba(60,64,70,${a})`;
+    actx.fillRect(0, y, ringU, rng.range(1, 3));
+  }
+  hctx.fillStyle = '#5c5c5c'; hctx.fillRect(ringU - 3, 0, 3, h);
+  actx.fillStyle = 'rgba(20,20,25,0.45)'; actx.fillRect(ringU - 2, 0, 2, h);
+  /** Dzus fastener: a 12 mm dished button with a slot, drawn as a dark ring in the albedo and a dimple in the height map */
+  const dzus = (x: number, y: number) => {
+    hctx.fillStyle = '#6a6a6a'; hctx.beginPath(); hctx.arc(x, y, 2.6, 0, 7); hctx.fill();
+    hctx.fillStyle = '#9a9a9a'; hctx.beginPath(); hctx.arc(x, y, 1.2, 0, 7); hctx.fill();
+    actx.fillStyle = 'rgba(25,25,30,0.55)'; actx.beginPath(); actx.arc(x, y, 2.6, 0, 7); actx.fill();
+    actx.fillStyle = 'rgba(200,200,205,0.55)'; actx.beginPath(); actx.arc(x, y, 1.5, 0, 7); actx.fill();
+    actx.fillStyle = 'rgba(25,25,30,0.7)'; actx.fillRect(x - 1.6, y - 0.5, 3.2, 1);
+  };
+  for (let y = 12; y < h; y += 34) dzus(ringU + 9, y);
+  // cowl side panels: the joint lines of the upper and lower panels along each side of the cowl (x 4.22 .. 3.20)
+  // with their fastener rows, so the cowl reads as removable sheet-metal panels and not as one lofted shell
+  const cowlAftU = lay.uOf(3.20) * w;
+  for (const side of [1, -1]) {
+    for (const vv of [0.125, 0.36]) {
+      const y = (side > 0 ? vv : 1 - vv) * h;
+      hctx.strokeStyle = '#5a5a5a'; hctx.lineWidth = 2; hctx.beginPath(); hctx.moveTo(ringU, y); hctx.lineTo(cowlAftU, y); hctx.stroke();
+      actx.strokeStyle = 'rgba(20,20,25,0.35)'; actx.lineWidth = 1.5; actx.beginPath(); actx.moveTo(ringU, y); actx.lineTo(cowlAftU, y); actx.stroke();
+      for (let x = ringU + 26; x < cowlAftU - 8; x += 30) dzus(x, y + (vv < 0.2 ? 6 : -6) * side);
+    }
+  }
   // registration on the white rear fuselage above the cheat line (clear of the float struts from the quarter views)
   // and the operator script under the cabin windows (both sides, readable)
   bodyText(actx, lay, w, h, LIVERY.registration, -3.05, 0.45, 0.15, 'bold', '"Helvetica Neue", Arial, sans-serif', LIVERY.cheat);
@@ -114,19 +139,48 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   const stations = [3.9, 3.2, 2.32, 1.85, 0.0, -0.9, -1.6, -2.6, -3.7, -4.7].map((x) => lay.uOf(x));
   const stringers = [0.12, 0.2, 0.3, 0.42, 0.5, 0.58, 0.7, 0.8, 0.88];
   panels(hctx, actx, w, h, stations, stringers, 26);
-  // door outline under the door window (both sides) with a handle
-  hctx.strokeStyle = '#3a3a3a'; hctx.lineWidth = 3;
-  actx.strokeStyle = 'rgba(20,20,25,0.35)'; actx.lineWidth = 2;
+  // door seam (both sides): the door carries its window, so the seam runs from the door's bottom line up both
+  // window pillars to a header just over the window top. A real door gap is a 4-5 mm dark slot with the door skin's
+  // edge standing a hair proud: a dark line in the albedo, a groove plus a light ridge on the door side in the height
+  // map. The handle recess is a darker plate (the lever itself is geometry, see buildFittings).
   const du0 = lay.uOf(1.77) * w, du1 = lay.uOf(0.95) * w;
   for (const side of [1, -1]) {
-    const v0 = lay.vOf(1.3, 0.40) ?? 0.2, v1 = lay.vOf(1.3, -0.42) ?? 0.4;
-    const y0 = (side > 0 ? v0 : 1 - v0) * h, y1 = (side > 0 ? v1 : 1 - v1) * h;
-    const top = Math.min(y0, y1), hh = Math.abs(y1 - y0);
-    hctx.strokeRect(du0, top, du1 - du0, hh);
-    actx.strokeRect(du0, top, du1 - du0, hh);
+    const V = (v: number) => (side > 0 ? v : 1 - v) * h;
+    const vBot = lay.vOf(1.3, -0.42) ?? 0.4, vTop = lay.vOf(1.3, 1.10) ?? 0.08; // header 3 cm over the window top (1.07)
+    const yBot = V(vBot), yTop = V(vTop);
+    const seam = (ctx: CanvasRenderingContext2D, style: string, lw: number, inset: number) => {
+      ctx.strokeStyle = style; ctx.lineWidth = lw;
+      ctx.beginPath();
+      ctx.moveTo(du0 + inset, yBot - inset * side); ctx.lineTo(du1 - inset, yBot - inset * side);
+      ctx.lineTo(du1 - inset, yTop + inset * side); ctx.lineTo(du0 + inset, yTop + inset * side); ctx.closePath();
+      ctx.stroke();
+    };
+    seam(hctx, '#3c3c3c', 3, 0);
+    seam(hctx, '#a0a0a0', 1.2, 2.2);
+    seam(actx, 'rgba(15,15,20,0.62)', 2.4, 0);
+    seam(actx, 'rgba(255,255,255,0.18)', 1, 2.2);
     const hv = lay.vOf(1.0, 0.05) ?? 0.25;
-    actx.fillStyle = '#8a8f94'; actx.fillRect(du1 - 40, (side > 0 ? hv : 1 - hv) * h - 4, 22, 8);
+    actx.fillStyle = 'rgba(40,42,46,0.55)'; actx.fillRect(du1 - 46, V(hv) - 7, 30, 14);
+    hctx.fillStyle = '#5a5a5a'; hctx.fillRect(du1 - 46, V(hv) - 7, 30, 14);
   }
+  // window seals: every side window sits in a black rubber glazing strip ~3 cm wide, half of it on the skin around
+  // the cut-out (the other half is over the cut-out and never seen). Drawn as the window outline stroked in the
+  // albedo now and matte / uncoated in the packed maps below, with a soft lip in the height map.
+  const windowOutline = (ctx: CanvasRenderingContext2D, style: string, lw: number) => {
+    ctx.strokeStyle = style; ctx.lineWidth = lw; ctx.lineJoin = 'round';
+    for (const side of [1, -1]) {
+      const V = (v: number) => (side > 0 ? v : 1 - v) * h;
+      for (const [xf, xa, top] of lay.windows) {
+        ctx.beginPath();
+        for (let k = 0; k <= 6; k++) { const x = xf + (xa - xf) * (k / 6); ctx[k ? 'lineTo' : 'moveTo'](lay.uOf(x) * w, V(vLow(x, top))); }
+        for (let k = 6; k >= 0; k--) { const x = xf + (xa - xf) * (k / 6); ctx.lineTo(lay.uOf(x) * w, V(vLow(x, lay.windowSill))); }
+        ctx.closePath(); ctx.stroke();
+      }
+    }
+  };
+  windowOutline(hctx, '#6c6c6c', 6);
+  windowOutline(hctx, '#8c8c8c', 2.5);
+  windowOutline(actx, 'rgb(14,14,16)', 6);
   // exhaust staining: a streak trailing aft from the exhaust stubs (starboard side, low), darkest at the stubs and
   // widening as it fades; the roughness map gets the same streak (soot is matte)
   const stubU = lay.uOf(2.75), stubV = vLow(2.75, -0.5), sootEndU = lay.uOf(-0.9);
@@ -178,8 +232,36 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   }
   rctx.fillStyle = 'rgba(255,255,255,0.10)'; rctx.fillRect(0, h * 0.44, w, h * 0.12);   // spray-dulled belly
   rctx.fillStyle = 'rgba(255,255,255,0.05)'; rctx.fillRect(0, 0, w, h * 0.08); rctx.fillRect(0, h * 0.92, w, h * 0.08); // sun-chalked roof
-  rctx.fillStyle = '#7a7a7a'; rctx.fillRect(0, 0, ringU, h);
+  // polished bowl: roughness ~0.30 with the brush marks as streaks of 0.22 .. 0.40 (a hand-polished bowl is never
+  // a mirror; the streaks stretch the sun's highlight around it)
+  rctx.fillStyle = '#4d4d4d'; rctx.fillRect(0, 0, ringU, h);
+  for (let i = 0; i < 90; i++) {
+    const y = rng.range(0, h), a = rng.range(0.10, 0.30), light = rng.next() < 0.5;
+    rctx.fillStyle = light ? `rgba(255,255,255,${a})` : `rgba(0,0,0,${a})`;
+    rctx.fillRect(0, y, ringU, rng.range(1, 4));
+  }
   sootStreak(rctx, '170,170,170', 0.7);
+  // packed clear coat (R) / roughness (G) / metalness (B): the bowl is bare metal with no clear coat, the anti-glare
+  // panel is a flat lacquer with a third of the coat's gloss, everything else is the clear-coated livery
+  const [mc, mctx] = canvas(w, h);
+  const [kc, kctx] = canvas(w, h);
+  mctx.fillStyle = '#000000'; mctx.fillRect(0, 0, w, h);
+  mctx.fillStyle = '#ffffff'; mctx.fillRect(0, 0, ringU - 3, h);
+  kctx.fillStyle = '#ffffff'; kctx.fillRect(0, 0, w, h);
+  kctx.fillStyle = '#000000'; kctx.fillRect(0, 0, ringU - 3, h);
+  kctx.fillStyle = '#555555';
+  for (const side of [1, -1]) {
+    const edge = side > 0 ? 0 : h;
+    kctx.beginPath();
+    kctx.moveTo(glare[0][0], edge);
+    for (const [px, py] of glare) kctx.lineTo(px, side > 0 ? py : h - py);
+    kctx.lineTo(glare[glare.length - 1][0], edge);
+    kctx.closePath();
+    kctx.fill();
+  }
+  // the glazing rubber: matte (0.85) and uncoated
+  windowOutline(rctx, '#d9d9d9', 6);
+  windowOutline(kctx, '#000000', 6);
   grime(rctx, rng, w, h, 160, 0.25, '150,150,150');
   for (let i = 0; i < 400; i++) {
     rctx.strokeStyle = `rgba(120,120,120,${rng.range(0.2, 0.5)})`;
@@ -187,22 +269,43 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     const x = rng.range(0, w), y = rng.range(0, h);
     rctx.beginPath(); rctx.moveTo(x, y); rctx.lineTo(x + rng.range(-40, 40), y + rng.range(-6, 6)); rctx.stroke();
   }
-  // clearcoat roughness (green channel): the engine cowl is polished a little glossier than the cabin/tail paint,
-  // the matte anti-glare panel has no gloss to speak of and the soot streak dulls the coat
+  // Chipped paint down to the metal where the aircraft is handled and hit: the cowl's bowl joint (spray and
+  // stones), the boarding steps and door sills, the cowl fastener rows, the stern post. Metalness 1 / no coat in
+  // the packed map, so the flakes glint where the paint around them shows the coat's soft sheen.
+  chips(actx, mctx, kctx, rng, ringU + 6, h * 0.5, 4, h * 0.5, 140, 1.6);
+  for (const side of [1, -1]) {
+    const V = (v: number) => (side > 0 ? v : 1 - v) * h;
+    chips(actx, mctx, kctx, rng, lay.uOf(1.3) * w, V(vLow(1.3, -0.44)), 60, 22, 40, 1.8);      // boarding step
+    chips(actx, mctx, kctx, rng, lay.uOf(1.35) * w, V(vLow(1.35, 0.38)), 90, 8, 30, 1.5);      // door sill
+    chips(actx, mctx, kctx, rng, lay.uOf(0.98) * w, V(vLow(0.98, 0.05)), 30, 20, 14, 1.6);     // door handle
+    for (const vv of [0.125, 0.36]) chips(actx, mctx, kctx, rng, (ringU + cowlAftU) / 2, V(vv), (cowlAftU - ringU) / 2, 6, 40, 1.3); // cowl panel joints
+  }
+  // clearcoat roughness (green channel): what the eye reads as the finish. Regions first: the roof and the top of
+  // the tail cone are chalked by the sun (0.30), the white sides are waxed (0.11), the yellow belly band chalks
+  // faster and takes the spray (0.22); then every skin panel differs by up to +-0.055 (repainted / polished at
+  // different times), the seams and worn zones are duller, the anti-glare panel is flat, the bowl is bare metal
   const [cc, cctx] = canvas(w / 4, h / 4);
   cctx.scale(0.25, 0.25);
-  cctx.fillStyle = 'rgb(0,36,0)'; cctx.fillRect(0, 0, w, h);
-  // the gloss is what the eye reads: panels differ by up to +-0.035 in clear-coat roughness (0.10 .. 0.18), the
-  // seams and the worn zones are duller, the belly is matted by spray and the roof by the sun
-  panelVariation(cctx, w, h, stations, stringers, rng, 9, 'g', { seam: 8, seamAmp: 16 });
+  const ccFill = (g: number, x0: number, y0: number, x1: number, y1: number) => { cctx.fillStyle = `rgb(0,${g},0)`; cctx.fillRect(x0, y0, x1 - x0, y1 - y0); };
+  ccFill(28, 0, 0, w, h);
+  const sillV = vLow(0.0, lay.sillY(0.0) - CHEAT_LINE.pin);
+  ccFill(56, 0, sillV * h, w, (1 - sillV) * h);
+  ccFill(76, 0, 0, w, h * 0.075); ccFill(76, 0, h * 0.925, w, h);
+  // the roof chalk fades down the shoulder: a soft band under the hard one
+  for (const [a, b] of [[0.075, 0.11], [0.89, 0.925]]) {
+    const gr = cctx.createLinearGradient(0, a * h, 0, b * h);
+    const top = a < 0.5;
+    gr.addColorStop(0, top ? 'rgba(0,255,0,0.19)' : 'rgba(0,255,0,0)'); gr.addColorStop(1, top ? 'rgba(0,255,0,0)' : 'rgba(0,255,0,0.19)');
+    cctx.fillStyle = gr; cctx.fillRect(0, a * h, w, (b - a) * h);
+  }
+  panelVariation(cctx, w, h, stations, stringers, rng, 14, 'g', { seam: 8, seamAmp: 18 });
   for (const side of [1, -1]) {
     const V = (v: number) => (side > 0 ? v : 1 - v) * h;
     wear(cctx, lay.uOf(1.0) * w, V(vLow(1.0, 0.05)), 70, 45, 30, 'g');
     wear(cctx, lay.uOf(1.3) * w, V(vLow(1.3, -0.45)), 90, 40, 36, 'g');
     wear(cctx, lay.uOf(1.35) * w, V(vLow(1.35, 0.30)), 130, 30, 14, 'g');
   }
-  cctx.fillStyle = 'rgba(0,255,0,0.05)'; cctx.fillRect(0, h * 0.44, w, h * 0.12);
-  cctx.fillStyle = 'rgba(0,255,0,0.04)'; cctx.fillRect(0, 0, w, h * 0.08); cctx.fillRect(0, h * 0.92, w, h * 0.08);
+  cctx.fillStyle = 'rgba(0,255,0,0.06)'; cctx.fillRect(0, h * 0.44, w, h * 0.12);
   cctx.fillStyle = 'rgb(0,16,0)'; cctx.fillRect(0, 0, lay.uOf(3.15) * w, h);
   cctx.fillStyle = 'rgb(0,120,0)';
   for (const side of [1, -1]) {
@@ -215,5 +318,6 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
     cctx.fill();
   }
   sootStreak(cctx, '0,110,0', 0.8);
-  return { map: toTexture(ac, true), roughnessMap: toTexture(rc, false), normalMap: toTexture(heightToNormal(hc, 2.4), false), clearcoatRoughnessMap: toTexture(cc, false), clearcoatNormalMap: orangePeelNormal(rng, 64, 32) };
+  const packed = toTexture(packRGB(kc, rc, mc), false);
+  return { map: toTexture(ac, true), roughnessMap: packed, metalnessMap: packed, clearcoatMap: packed, normalMap: toTexture(heightToNormal(hc, 2.4), false), clearcoatRoughnessMap: toTexture(cc, false), clearcoatNormalMap: orangePeelNormal(rng, 64, 32) };
 }

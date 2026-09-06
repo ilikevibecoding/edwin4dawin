@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { Batch, wingXLE, type WingSpec } from '../geometry';
+import { Batch, wingLowerY, wingUpperY, wingXLE, type WingSpec } from '../geometry';
 import { at, LIGHT, N_LIGHTS, V3, WING_POS, type BuildContext } from './context';
 
 export interface LightsBuild {
@@ -48,10 +48,14 @@ export function buildLights(ctx: BuildContext, wingSpec: WingSpec, lightPower: {
     const sgn = Math.sign(tip.z), zOut = sgn * 7.55;
     lightKit.add(lens(0.06, tint, channel), at([tip.x, tip.y, zOut]));
     lightKit.add(lens(0.035, 0xf2f4ff, LIGHT.strobe), at([tip.x - 0.12, tip.y, zOut - sgn * 0.02]));
-    for (const [dy, flipY] of [[0.045, 0], [-0.04, Math.PI]] as const) {
+    // the lit patches lie on the tip's upper and lower skin (the airfoil is thick: a fixed offset from the chord
+    // line buried them inside the wing)
+    const xw = tip.x - 0.05 - WING_POS.x, zw = 7.28;
+    const yUpper = WING_POS.y + wingUpperY(wingSpec, xw, zw) + 0.004, yLower = WING_POS.y + wingLowerY(wingSpec, xw, zw) - 0.004;
+    for (const [y, flipY] of [[yUpper, 0], [yLower, Math.PI]] as const) {
       const patch = new THREE.CircleGeometry(0.22, 12);
       patch.scale(1.6, 1, 1);
-      lightKit.add(lit(patch, tint, channel, 0.22), at([tip.x - 0.05, tip.y + dy, sgn * 7.28], [-Math.PI / 2 + flipY, 0, 0]));
+      lightKit.add(lit(patch, tint, channel, 0.22), at([tip.x - 0.05, y, sgn * 7.28], [-Math.PI / 2 + flipY, 0, 0]));
     }
     glows.push({ p: V3(tip.x, tip.y, zOut), tint, channel, size: 0.7 }, { p: V3(tip.x - 0.12, tip.y, zOut), tint: 0xf2f4ff, channel: LIGHT.strobe, size: 0.6 });
   }

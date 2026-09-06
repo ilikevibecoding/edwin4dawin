@@ -168,6 +168,28 @@ export function wear(ctx: CanvasRenderingContext2D, x: number, y: number, rx: nu
   ctx.restore();
 }
 
+/**
+ * Paint chips: small irregular flakes knocked off down to the bare aluminium, scattered inside an ellipse (rx, ry)
+ * around (x, y). Drawn as light metal in the albedo, white in the metalness canvas and black in the clear-coat canvas
+ * (a chip has no coat), with a dark rim of exposed primer in the albedo so the flake reads as a hole in the paint.
+ */
+export function chips(actx: CanvasRenderingContext2D, mctx: CanvasRenderingContext2D | null, kctx: CanvasRenderingContext2D | null, rng: Rng, x: number, y: number, rx: number, ry: number, count: number, size = 2.2): void {
+  for (let i = 0; i < count; i++) {
+    // denser toward the centre of the patch
+    const a = rng.range(0, Math.PI * 2), d = Math.sqrt(rng.next());
+    const cx = x + Math.cos(a) * d * rx, cy = y + Math.sin(a) * d * ry;
+    const r = size * rng.range(0.5, 1.4), sx = rng.range(0.7, 1.5), sy = rng.range(0.7, 1.5);
+    const flake = (ctx: CanvasRenderingContext2D, style: string, grow: number) => {
+      ctx.fillStyle = style;
+      ctx.beginPath(); ctx.ellipse(cx, cy, r * sx + grow, r * sy + grow, a, 0, Math.PI * 2); ctx.fill();
+    };
+    flake(actx, 'rgba(70,60,45,0.7)', 0.8);
+    flake(actx, '#bcc0c4', 0);
+    if (mctx) flake(mctx, '#ffffff', 0);
+    if (kctx) flake(kctx, '#000000', 0.4);
+  }
+}
+
 export const LIVERY = {
   upper: '#f3f1ea',
   /** wing / stabiliser undersides */
@@ -196,6 +218,9 @@ export interface FuselageLayout {
   perimeter(x: number): number;
   /** height of the livery's sill line (bottom of the white upper body) at station x */
   sillY(x: number): number;
+  /** side window cut-outs [front x, aft x, top height] and their common sill height (the glazing seals follow them) */
+  windows: [number, number, number][];
+  windowSill: number;
 }
 
 /**
@@ -230,7 +255,17 @@ export const SURF = {
   darkMetal: { color: 0x2c2f33, roughness: 0.5, metalness: 0.6 },
   /** polished spinner: picks up a tight sun highlight */
   spinner: { color: 0xc4c8ce, roughness: 0.16, metalness: 0.95 },
+  /** exhaust tailpipe: heat-blued stainless, matte from scale */
   exhaust: { color: 0x5a4a3c, roughness: 0.6, metalness: 0.9 },
+  /** soot-black bore of the exhaust mouth */
+  soot: { color: 0x0a0a0a, roughness: 0.95, metalness: 0.0 },
+  /** engine seen through the inlet: grey-enamelled crankcase / nose case, black finned cylinders */
+  engineCase: { color: 0x5c6064, roughness: 0.55, metalness: 0.75 },
+  cylinder: { color: 0x1e2022, roughness: 0.65, metalness: 0.55 },
+  /** baffle plate behind the cylinders (sheet aluminium in shadow) */
+  baffle: { color: 0x2a2c2e, roughness: 0.7, metalness: 0.4 },
+  /** cowl and scoop interiors: zinc-chromate primed sheet, dull */
+  duct: { color: 0x2f352c, roughness: 0.8, metalness: 0.1 },
   rubber: { color: 0x111214, roughness: 0.92, metalness: 0.0 },
   /** cabin trim: window-band / reveal vinyl, headliner bows, bulkheads (the lining itself is textured, see cabinMaps) */
   bow: { color: 0x9a958c, roughness: 0.6, metalness: 0.0 },
