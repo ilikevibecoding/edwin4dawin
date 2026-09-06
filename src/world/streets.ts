@@ -114,15 +114,17 @@ const SW_MAIN = /* glsl */ `
     col = mix(asph * (1.0 - 0.07 * inBay - 0.35 * drip), vec3(0.8, 0.8, 0.78), paint * 0.85);
     joint = 0.0;
   } else if (kind > 6.5) {
-    // container terminal hardstand (across, along = the port island's u + HW, v + HH): aged concrete 0.36-0.46 in 7.5 m
-    // slabs a tone apart with 30 m staining blotches, the yard slot grid of the north yard blocks (yellow lines at the
+    // container terminal hardstand (across, along = the port island's u + HW, v + HH): aged asphalt-concrete 0.17-0.25
+    // (0.36-0.46 rendered near-white under the sun exposure, lighter than the ground it covers) in 7.5 m slabs a tone
+    // apart with 30 m staining blotches and darker wear fields, the yard slot grid of the north yard blocks (yellow lines at the
     // stacks' 12.6 x 5.25 m pitch, in 9 columns of 175 m from u = -HW + 90 and 4 rows of 58 m from v = -HH + 70),
     // oil stains under the bays, and on the truck lanes (two 7 m lanes about v = 92, an aisle 16 m before every block
     // row) polished wheel tracks, drips and a lane-wide darkening; the lines are box-filtered so from the air the
     // slots read as a faint tone over the block instead of sparkling
     float u = across - ${PORT_ISLAND.hw.toFixed(1)}, v = along - ${PORT_ISLAND.hh.toFixed(1)};
-    vec3 slab = mix(vec3(0.36, 0.355, 0.34), vec3(0.46, 0.45, 0.43), n) * (0.94 + 0.12 * grain);
-    slab *= 0.9 + 0.2 * fbm3(wp * 0.03 + 5.0);
+    vec3 slab = mix(vec3(0.17, 0.17, 0.165), vec3(0.25, 0.245, 0.235), n) * (0.94 + 0.12 * grain);
+    slab *= 0.85 + 0.3 * fbm3(wp * 0.03 + 5.0);
+    slab *= 1.0 - 0.2 * smoothstep(0.5, 0.75, fbm3(wp * 0.08 + 12.0));
     slab *= 1.0 + (0.12 * hash12(floor(vec2(u, v) / 7.5) + 11.0) - 0.06);
     float slabJ = max(swLine((fract(u / 7.5) - 0.5) * 7.5, 0.02, fwA), swLine((fract(v / 7.5) - 0.5) * 7.5, 0.02, fwL)) * (1.0 - smoothstep(0.15, 0.5, fp));
     float bu = u + ${(PORT_ISLAND.hw - 90).toFixed(1)}, bv = v + ${(PORT_ISLAND.hh - 70).toFixed(1)};
@@ -139,7 +141,7 @@ const SW_MAIN = /* glsl */ `
     float laneBand = max(1.0 - smoothstep(6.0, 8.5, abs(v - 92.0)), aisle * (1.0 - smoothstep(6.0, 8.5, dA)));
     float track = exp(-pow(abs(dLane - 0.9) * 3.0, 2.0)) * (0.5 + 0.5 * fbm3(wp * 0.15 + 2.0)) * (1.0 - smoothstep(0.5, 1.5, fp)) * laneBand;
     float drip = exp(-pow(dLane * 2.0, 2.0)) * smoothstep(0.5, 0.8, vnoise(wp * 0.7)) * (1.0 - smoothstep(0.4, 1.2, fp)) * laneBand;
-    slab *= 1.0 - 0.25 * slabJ - 0.08 * laneBand - 0.14 * track - 0.3 * drip - 0.28 * stain;
+    slab *= (1.0 - 0.25 * slabJ - 0.08 * laneBand - 0.3 * drip - 0.28 * stain) * (1.0 + 0.14 * track); // tracks are polished paler
     col = mix(slab, vec3(0.78, 0.64, 0.12), slot * 0.75 * (0.6 + 0.4 * smoothstep(0.3, 0.7, fbm3(wp * 0.4 + 6.0))));
     joint = 0.0;
   } else if (kind > 5.5) {
