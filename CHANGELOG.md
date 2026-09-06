@@ -17,7 +17,7 @@ numbers the targets are about.
 
 ---
 
-## Round 6, second half — the skirt was a material, the far shadows were never on, the stars were dashes — build `2250d88` live
+## Round 6, second half — the skirt was a material, the far shadows were never on, the stars were dashes — build `c2f0b83` live
 
 Six more gated landings on top of `e244efd`. Three of them fixed things no
 critic had named, found by ablation on the way to the thing they were sent for.
@@ -87,6 +87,21 @@ critic had named, found by ablation on the way to the thing they were sent for.
   box). The builder stopped on a usage block before its report; the numbers
   are measured from its before/after sets. The glare profile and the paint
   horizon did not move and are carried.
+- **Lion gait r6 (`c2f0b83`).** The swinging leg folds: hind hock at
+  mid-swing 33° → 80°, stifle lift-to-mid change 21–50° on every leg, paw
+  clearance 6–7 cm. The pad rides 6 mm over the contact with the decal
+  carrying it, which ends the toe re-plant flicker (the probe reads the lift:
+  float 3.8e-5 m, reach 7.2 mm, penetration 0, slide 1e-13). On the 2.2 m
+  strip every planted paw holds its pixel to 0 px across every hold, before
+  and after — the round-5 "sliding paw" is in no render. Head level on a
+  12.5° slope (roll 1.42° → 0). The approach: a lion rises when the truck's
+  nearest collision circle closes inside 6 m on a course past it, trots inside
+  4 m (1.8–2.2 m/s by scale), walks beyond 5.5 m, lashes its tail once, and
+  lies again once the truck is 12 m off. The builder stopped on the same usage
+  block before its report; the numbers are from its before/after probes.
+- **Capture (`2032e81`).** The beam dust flicker and the water hole's ripple
+  read a simulation clock instead of `performance.now()`, so two frozen frames
+  of one view agree on the water and the cones.
 
 ## Round 6 landed — the car's lamps, the lion's walk and face, the night, the fire — build `e244efd` live
 
