@@ -808,11 +808,27 @@ export function buildCarrack(mats) {
         "dark",
         { color: DARK, texel: 1 / 3, lod },
       );
-    for (let d = 112; d < 176; d += 16)
+    // light muzzle ring at the forward end of the tube (reference CG renders) and clamps astride it
+    for (const lod of [0, 1])
       add(
-        new THREE.BoxGeometry(3.4, 3.2, 2).translate(
-          side * 20.8,
-          LEDGE - 1.4,
+        tubeZ(
+          2.7,
+          2.7,
+          2.6,
+          lod ? 6 : 10,
+          side * 20.6,
+          LEDGE - 2.5,
+          Z(107.3),
+          false,
+        ),
+        "hull",
+        { color: HULL_TOP, texel: 1 / 6, lod },
+      );
+    for (let d = 116; d < 176; d += 16)
+      add(
+        new THREE.BoxGeometry(5.4, 5.6, 2).translate(
+          side * 20.6,
+          LEDGE - 2.5,
           Z(d),
         ),
         "dark",
