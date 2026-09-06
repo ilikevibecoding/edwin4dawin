@@ -402,6 +402,14 @@ test('B9 selection: eligibility, no repeat within the last 5, cooldowns, priorit
   a4.update(30);
   const g1 = a4.lineFor('cast:vela_marr', { trigger: 'greet' });
   assert.notEqual(g1.id, g0.id, 'cooldown / recent');
+  // an anchor's handwritten line beats a composed top-up at equal priority and specificity: "What do you do here?"
+  // is answered in their own words first; the trade templates come out once the written lines are recent or cooling
+  const a6 = mk(); a6.update(0);
+  for (const pp of a6.registry.anchors.values()) {
+    const l = a6.lineFor(pp, { cats: ['work'] });
+    assert.ok(l && l.composed === false, `${pp.id}: the first work answer is a composed template (${l && l.id})`);
+    assert.ok(a6.bankFor(pp).some((x) => x.cat === 'work' && x.composed), `${pp.id}: no composed work reserve in the bank`);
+  }
   // priority: with a Senate result on the bus, the event line (priority 4) beats work (2) and personal (1)
   const g = fakeGame({ events: [{ name: 'senate:result', args: [{ scenario: { name: 'the port levy' }, outcome: 'failed' }] }] });
   const a5 = new DialogAPI(g, reg, null);

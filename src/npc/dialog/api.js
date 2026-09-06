@@ -211,8 +211,10 @@ export class DialogAPI {
   // ---------------------------------------------------------------------------------------------------- selection
   // ctx may be a partial: { trigger } | { cats: [...] } | { ambient: true } | { poke: true } plus overrides. Returns
   // the best eligible line: filter by trigger/category, eligibility, cooldown and the last HISTORY heard lines; then
-  // priority, then specificity (a line conditioned on the current state - a Senate result, a shortage, a ship on the
-  // pad - beats one that fits any day), then a deterministic hash of (line id, how many times this person has spoken).
+  // priority, then specificity (a line conditioned on a notable state - a Senate result, a shortage, a ship on the
+  // pad - beats one that fits any day), then an anchor's handwritten line before a composed top-up (the trade
+  // templates are the reserve once the written ones are recent or cooling), then a deterministic hash of (line id,
+  // how many times this person has spoken).
   lineFor(npcOrPp, partial = {}) {
     const pp = this.resolve(npcOrPp);
     if (!pp) return null;
@@ -227,7 +229,7 @@ export class DialogAPI {
     const elig = cands.filter((l) => eligible(l, ctx));
     const step = pp.history.talks * 7 + (pp.saidCount | 0);
     const salt = (l) => hash2(step, l.id.length * 31 + l.id.charCodeAt(l.id.length - 1), pp.seed & 0xffff);
-    const rank = (list) => list.slice().sort((a, b) => b.priority - a.priority || specificity(b) - specificity(a) || salt(a) - salt(b));
+    const rank = (list) => list.slice().sort((a, b) => b.priority - a.priority || specificity(b) - specificity(a) || (a.composed ? 1 : 0) - (b.composed ? 1 : 0) || salt(a) - salt(b));
     const fresh = elig.filter((l) => !pp.recent.includes(l.id) && !this.onCooldown(l));
     if (fresh.length) return rank(fresh)[0];
     const notRecent = elig.filter((l) => !pp.recent.includes(l.id));
@@ -297,4 +299,17 @@ export class DialogAPI {
 function safe(fn) { try { return fn(); } catch (e) { return undefined; } }
 function push(arr, v) { if (!arr.includes(v)) arr.push(v); }
 // how many facts of the current state a line is conditioned on (`role` is a composition-time filter, not state)
-function specificity(line) { const w = line.when; if (!w) return 0; let n = 0; for (const k in w) if (k !== 'role') n++; return n; }
+// Conditions that hold on an ordinary day: a line asking only for these fits any day and gains no specificity over an
+// unconditioned one; a shortage, a Senate result, a disaster, a ship on the pad or a time of day does.
+const BASELINE = { stock: 'ok', waiting: false, senateSitting: false, disaster: false, recovering: false, standing: 'neutral', job: 'none', open: true, quiet: true, trainsOk: true, poke: false };
+function specificity(line) {
+  const w = line.when; if (!w) return 0;
+  let n = 0;
+  for (const k in w) {
+    if (k === 'role') continue;
+    const v = w[k];
+    if (Array.isArray(v) ? k === 'standing' && v.includes('neutral') : BASELINE[k] === v) continue;
+    n++;
+  }
+  return n;
+}
