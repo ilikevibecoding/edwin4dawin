@@ -21,6 +21,8 @@ interface ChunkMesh extends BatchSource {
   mesh: THREE.InstancedMesh; large: number; total: number; mainCount: number; hi: THREE.BufferGeometry; lo: THREE.BufferGeometry | null;
   /** the coarse shape is for beyond SMALL_DISTANCE rather than LOD_DISTANCE, and the mesh casts as the fine one */
   loFar: boolean;
+  /** the camera and mirror leave this mesh's cells out beyond this distance (lamps: their dots take over) */
+  far: number;
   /** camera / mirror batches drawing this mesh's unit shape at each LOD */
   batches: [PropBatches, PropBatches | null];
   /** PROP_CELL-metre cells over the large prefix and over all instances (built on first use): the batches
@@ -75,6 +77,9 @@ const LAMP_KINDS: LampKind[] = ['arterial', 'street', 'ped', 'highway'];
 const LAMP_HEAD: Record<LampKind, [number, number]> = { arterial: [3.3, 10.9], street: [2.0, 8.4], ped: [0, 4.25], highway: [0, 9.05] };
 /** lamp dots fade in where the luminaire geometry falls under a pixel and out toward DOT_FAR */
 const DOT_NEAR = 70, DOT_FULL = 140, DOT_FAR = 4000;
+/** lamp geometry leaves the main pass here (a pole is 0.2 px wide, the luminaire under a pixel; the dots carry the
+ *  night): 38 k lamps drawn to SMALL_DISTANCE cost 300 k triangles in the high views for nothing visible */
+const LAMP_FAR = 600;
 
 /** A unit box without its -Y face (BoxGeometry's fourth group): the far shape of boxes, which sit on the ground
  *  or a deck and are under a pixel wide where it is used. */
@@ -369,7 +374,7 @@ export class Props {
       b.boxes.sort((u, v) => Number(isLarge(v)) - Number(isLarge(u)));
       /** `perVertex`: the unit carries colour / parameters per vertex (lamp) instead of per instance; `loFar`: the
        *  coarse shape is for the far distance (beyond SMALL_DISTANCE) rather than LOD_DISTANCE */
-      const make = (list: Placement[], hi: THREE.BufferGeometry, lo: THREE.BufferGeometry | null, perVertex: boolean, batches: [PropBatches, PropBatches | null], loFar = false) => {
+      const make = (list: Placement[], hi: THREE.BufferGeometry, lo: THREE.BufferGeometry | null, perVertex: boolean, batches: [PropBatches, PropBatches | null], loFar = false, far = Infinity) => {
         if (!list.length) return;
         const geo = hi.clone();
         const params = perVertex ? null : new THREE.InstancedBufferAttribute(new Float32Array(list.length * 2), 2);
@@ -394,7 +399,7 @@ export class Props {
           loGeo = lo.clone();
           if (params) loGeo.setAttribute('aMatParams', params);
         }
-        const entry: ChunkMesh = { mesh, large, total: list.length, mainCount: list.length, hi: geo, lo: loGeo, loFar, batches, cellsLarge: null, cellsAll: null, inCamera: null, cameraCells: null, inMirror: null, mirrorCells: null, inShadow: new Array(MAX_CASCADES).fill(null), shadowCells: new Array(MAX_CASCADES).fill(null), matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: params ? [params.array as Float32Array] : [] };
+        const entry: ChunkMesh = { mesh, large, total: list.length, mainCount: list.length, hi: geo, lo: loGeo, loFar, far, batches, cellsLarge: null, cellsAll: null, inCamera: null, cameraCells: null, inMirror: null, mirrorCells: null, inShadow: new Array(MAX_CASCADES).fill(null), shadowCells: new Array(MAX_CASCADES).fill(null), matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: params ? [params.array as Float32Array] : [] };
         // the coarse cascades only see the large prefix; the fine ones (and any non-CSM light) see all
         mesh.onBeforeShadow = () => { mesh.count = activeShadowPassIsFine() ? entry.total : entry.large; };
         mesh.onAfterShadow = () => { mesh.count = entry.mainCount; };
@@ -408,7 +413,7 @@ export class Props {
       make(b.boxes, unitBox, unitBoxLo, false, [boxBatches, boxLoBatches], true);
       make(b.cylLarge, cylHi, null, false, [cylHiBatches, null]);
       make(b.cylSmall, cylHi, cylLo, false, [cylHiBatches, cylLoBatches]);
-      for (const kind of LAMP_KINDS) make(b.lamps[kind], lampHi[kind], lampLo[kind], true, lampBatches[kind]);
+      for (const kind of LAMP_KINDS) make(b.lamps[kind], lampHi[kind], lampLo[kind], true, lampBatches[kind], false, LAMP_FAR);
       chunk.box.getBoundingSphere(sphere);
       chunk.center.copy(sphere.center); chunk.r = sphere.radius; chunk.height = chunk.box.max.y - chunk.box.min.y;
       this.chunks.push(chunk);
@@ -544,20 +549,26 @@ export class Props {
     let proxyBits = 0;
     for (let i = 0; i < MAX_CASCADES; i++) if (perCascade[i] > PROXY_DRAWS && !cascadeIsFine(i)) proxyBits |= 1 << i;
     const inViewBox = (box: THREE.Box3) => cull.boxInView(box), inMirrorBox = (box: THREE.Box3) => cull.boxInMirror(box);
-    // how much of a cell the mirror draws: everything near, the large prefix to MIRROR_FAR, nothing beyond
+    // how much of a cell the mirror draws: everything near, the large prefix to MIRROR_FAR, nothing beyond (and
+    // nothing of the current mesh beyond its own far distance)
+    let meshFar = Infinity;
     const mirrorCountOf = (c: PropCell): number => {
       const d = c.box.distanceToPoint(camPos);
-      return d > MIRROR_FAR ? 0 : d > MIRROR_SMALL_DISTANCE ? c.nLarge : c.count;
+      return d > MIRROR_FAR || d > meshFar ? 0 : d > MIRROR_SMALL_DISTANCE ? c.nLarge : c.count;
     };
     /** true where a group of props `height` metres tall at distance `d` is under both pixel thresholds */
     const subpixel = (d: number, height: number): boolean => d > propFar && height * pxPerMetre < PROP_TALL_PX * d;
-    const cameraCountOf = (c: PropCell): number => (subpixel(c.box.distanceToPoint(camPos), c.box.max.y - c.box.min.y) ? 0 : c.count);
+    const cameraCountOf = (c: PropCell): number => {
+      const d = c.box.distanceToPoint(camPos);
+      return d > meshFar || subpixel(d, c.box.max.y - c.box.min.y) ? 0 : c.count;
+    };
     for (const c of this.chunks) {
       const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
       const inView = cull.boxInView(c.box);
       const bits = c.bits & ~proxyBits;
-      const far = d > SMALL_DISTANCE;
       for (const e of c.meshes) {
+        meshFar = e.far;
+        const far = d > Math.min(SMALL_DISTANCE, e.far);
         const n = subpixel(d, c.height) ? 0 : far ? e.large : e.total;
         e.mainCount = n;
         e.mesh.count = n;
