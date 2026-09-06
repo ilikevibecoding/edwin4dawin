@@ -26,3 +26,18 @@ using the widest block palette we have.
 - Interior generator: decks every 7 blocks (floor 1 + 5 clear + ceiling 1) from y 40 to y 210 within radius-6; a spine of 3 main corridors per deck (axes at 0°, 120°, 240°) plus ring corridors at r = 30, 60, 85; rooms as rectangles carved between corridors from a seeded template list; turbolift shafts at the corridor junctions; hangar cut into the equatorial trench facing the frontier side; reactor shaft down the centre (r 12, y 40–200) with catwalks every 21 blocks.
 - Blocks: grey/dark grey panels (smooth stone, polished andesite-like, iron block, dark panel variants), light strips (sea lantern), red/black accents, glass panes, iron bars, doors (metal), consoles (custom texture on a table shape), chests for storage rooms.
 - The station's own gravity is the world's gravity; the "top" of the interior is +y.
+
+## Status (independent critic, round 6 kickoff)
+
+Report: `/opt/cursor/artifacts/critic_deathstar_report.md` (38 screenshots, probe logs). Verdicts: exterior PASS WITH
+NITS (reads as the Death Star from the dish side; the far side is mottled plating and the overlook tower dominates the
+silhouette), space sky PASS WITH NITS, hangar PASS WITH NITS (blast doors are painted with a permanent opening; the
+tower stair shaft stands as a 7x7 pillar in the bay), routes PASS WITH NITS with the turbolift clause FAIL (stairs only,
+no lift vehicles; 19 of 75 radial corridor ends are blind), rooms PASS WITH NITS (all 11 types present, 0 floating blocks
+in 3.25 M; medbay/armoury/compactor read weakly), lighting PASS (0 of 3,186 route cells below 6), determinism PASS
+(1.95 ms/chunk cold), physics PASS (60 s walk, stair flights clean), superlaser link PASS WITH NITS, bench PASS
+(110 draw calls, JS 3.9 ms, 405 MB, 1.12x the Coruscant GPU time).
+
+The user has deprioritised the Death Star for round 6 ("don't worry about the Death Star"); the must-fix list
+(turbolift vehicles, blast doors, the stair pillar in the hangar, blind radial ends, weak medbay/armoury/compactor,
+rear-hemisphere plating) is parked here and not scheduled.
