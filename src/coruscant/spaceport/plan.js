@@ -50,21 +50,24 @@ export function pylonZ(x, z) {
 // (floor 103) runs along the west wall over the pads.
 export const TERMINAL = { x0: 2240, x1: 2359, z0: -46, z1: 60, cx: 2300, wallTop: 109, roof: 110 };
 // ground doors (4 wide, feet 97) and the two hump doors (feet 99); side = wall the door is in
+// West: from the two west pads; east: the arrivals door into customs (z -25..-22), the concourse door and the shops'
+// corridor door; north: the corridor between baggage and customs (field A) and the customs' own pad door; south:
+// the two corridors between the caf and the shops (field B).
 export const TERMINAL_DOORS = [
   { side: 'W', x: 2240, z0: -25, z1: -22 }, { side: 'W', x: 2240, z0: 20, z1: 23 },
-  { side: 'E', x: 2359, z0: -25, z1: -22 }, { side: 'E', x: 2359, z0: 20, z1: 23 },
-  { side: 'N', z: -46, x0: 2266, x1: 2269 }, { side: 'N', z: -46, x0: 2328, x1: 2331 },
-  { side: 'S', z: 60, x0: 2266, x1: 2269 }, { side: 'S', z: 60, x0: 2328, x1: 2331 },
+  { side: 'E', x: 2359, z0: -25, z1: -22 }, { side: 'E', x: 2359, z0: 20, z1: 23 }, { side: 'E', x: 2359, z0: 43, z1: 45 },
+  { side: 'N', z: -46, x0: 2301, x1: 2304 }, { side: 'N', z: -46, x0: 2328, x1: 2331 },
+  { side: 'S', z: 60, x0: 2280, x1: 2283 }, { side: 'S', z: 60, x0: 2316, x1: 2319 },
 ];
 export const TERMINAL_HUMP_DOORS = [{ side: 'W', x: 2240 }, { side: 'E', x: 2359 }];
 // gate numbers painted beside the pad-side doors: [door index, first gate, last gate]
-export const DOOR_GATES = [[4, 9, 14], [5, 9, 14], [6, 15, 18], [7, 15, 18], [2, 19, 24], [3, 19, 24], [0, 25, 26], [1, 25, 26]];
+export const DOOR_GATES = [[5, 9, 14], [6, 9, 14], [7, 15, 18], [8, 15, 18], [2, 19, 24], [3, 19, 24], [4, 21, 22], [0, 25, 26], [1, 25, 26]];
 // interior zones (inclusive), all at the hall floor
 export const TZ = {
   baggage: { x0: 2246, x1: 2298, z0: -44, z1: -34 },
   checkIn: { x0: 2248, x1: 2296, z: -30 },                      // counter row facing south, clerks behind at z -31
   waiting: { x0: 2268, x1: 2298, z0: -26, z1: -12 },            // bench rows; x 2246..2266 is the gallery stair's landing
-  kiosk: { x0: 2300, x1: 2302, z0: -21, z1: -19 },                // information kiosk
+  kiosk: { x0: 2300, x1: 2302, z0: -21, z1: -19 },                // information kiosk (at the foot of the north corridor)
   customs: { x0: 2307, x1: 2358, z0: -45, z1: -15 },            // customs hall (arrivals): glass walls on x 2307 / z -15, door z -15 x 2328..2331
   concourse: { x0: 2246, x1: 2354, z0: 10, z1: 30 },            // terminus concourse: stair heads + lift shafts
   cafe: { x0: 2246, x1: 2278, z0: 34, z1: 58 },                  // partition x 2278 with a door at z 45..46
@@ -114,10 +117,10 @@ const FIELD_A = [[2184, -100], [2240, -100], [2296, -100], [2184, -156], [2240, 
 const FIELD_B = [[2176, 120], [2220, 120], [2264, 120], [2308, 120]].map(([x, z]) => ({ x, z, size: 'M', yaw: N }));
 // field C: six S pads east of the terminal (three rows of two; the harbour lane at x >= 2440 stays clear of their
 // approach columns) and two west of it
-const FIELD_C = [[2380, -30, W], [2416, -30, W], [2380, 40, W], [2416, 40, W], [2380, -100, W], [2416, -100, W], [2200, -28, E], [2200, 44, E]].map(([x, z, yaw]) => ({ x, z, size: 'S', yaw }));
+const FIELD_C = [[2380, -30, W], [2416, -30, W], [2380, 40, W], [2416, 40, W], [2380, -100, W], [2416, -100, W], [2200, -28, E], [2200, 26, E]].map(([x, z, yaw]) => ({ x, z, size: 'S', yaw }));
 // security apron: two M pads for gunships (doors toward the guard post); cargo dock: two L bays for the bulk haulers
 // (doors toward the manifest office)
-export const SECURITY_PADS = [[2390, 130], [2440, 130]].map(([x, z]) => ({ x, z, size: 'M', yaw: E, security: true }));
+export const SECURITY_PADS = [[2390, 170], [2440, 170]].map(([x, z]) => ({ x, z, size: 'M', yaw: S, security: true }));
 export const CARGO_BAYS = [[2190, -234], [2256, -234]].map(([x, z]) => ({ x, z, size: 'L', yaw: E, cargo: true }));
 export const NEW_PADS = [...FIELD_A, ...FIELD_B, ...FIELD_C, ...SECURITY_PADS, ...CARGO_BAYS];
 export const PADS = [...OLD_PADS, ...NEW_PADS];              // gate id = index + 1
@@ -146,16 +149,16 @@ export const HANGARS = [
   { id: 'H3', x0: 2300, x1: 2343, z0: 262, z1: 306 },
 ];
 export const HANGAR_ROOF = 113, HANGAR_OPEN_H = 15, HANGAR_OPEN_HALF = 15;
-// [type, x, z, yaw] of the ships under repair inside the hangars (yaw 0: nose toward -z = the open north front)
-export const REPAIR_BERTHS = [[4, 2217, 285, 0], [0, 2269, 287, 0], [1, 2321, 287, 0]];
 // west fuel farm beside the hangars (two chrome tanks + pump house)
 export const WEST_FUEL = { x0: 2150, x1: 2188, z0: 262, z1: 306, tanks: [[2160, 275], [2178, 293]] };
-// Westport control: 8x8 shaft, cab at 145 (48 above the deck), radar mast above the cab
-export const WEST_TOWER = { x0: 2420, x1: 2427, z0: -120, z1: -113, cabY: 145, roofY: 150 };
+// Westport control at the south-west corner of the apron beside the hangar wing: 8x8 shaft, cab at 145 (48 above
+// the deck), radar mast above the cab. Every pad loop leaves and returns through x 2440 / |z| 230..320 or swings
+// west at |z| <= 180, so this corner is the one spot on the apron no lane crosses below y 190.
+export const WEST_TOWER = { x0: 2142, x1: 2149, z0: 330, z1: 337, cabY: 145, roofY: 150 };
 // the original east tower (cab at 151)
 export const EAST_TOWER = { x0: 2688, x1: 2695, z0: -4, z1: 3, cabY: 151, roofY: 156 };
 // emergency stair towers (painter.js switchbackTower, 16 x 6) at the apron edges, deck 97 down to the terrace
-export const EMERGENCY_STAIRS = [{ x0: 2396, z0: -358 }, { x0: 2396, z0: 352 }, { x0: 2138, z0: 20 }, { x0: 2138, z0: -226 }];
+export const EMERGENCY_STAIRS = [{ x0: 2340, z0: -358 }, { x0: 2440, z0: 352 }, { x0: 2133, z0: 20 }, { x0: 2133, z0: -226 }];
 
 // ------------------------------------------------------------------------------------------------ cargo terminal
 // North wing: container yard with two portal cranes, the hauler dock (two L bays + manifest office), the conveyor into
@@ -169,14 +172,14 @@ export const CARGO = {
   yard: { x0: 2150, x1: 2296, z0: -352, z1: -272 },
   cranes: [2200, 2250],
   dock: { x0: 2150, x1: 2296, z0: -262, z1: -206 },
-  office: { x0: 2304, x1: 2330, z0: -262, z1: -244, door: { x: 2304, z: -253 } },
+  office: { x0: 2304, x1: 2330, z0: -246, z1: -222, door: { x: 2304, z: -234 } },   // facing the bays' doors
   conveyor: { z: -300, x0: 2298, x1: 2377, y: 98 },
 };
 
 // ------------------------------------------------------------------------------------------------ security apron
 export const SECURITY = {
-  x0: 2350, x1: 2487, z0: 80, z1: 200,                          // fenced annex east of field B
-  post: { x0: 2456, x1: 2484, z0: 160, z1: 196, roof: 105, door: { x: 2456, z: 178 } },   // Coruscant Guard post
+  x0: 2350, x1: 2487, z0: 80, z1: 244,                          // fenced annex east of field B (the harbour west lane
+  post: { x0: 2408, x1: 2446, z0: 204, z1: 236, roof: 105, door: { x: 2427, z: 204 } },   // passes north-east of the pads)
   gateW: { x: 2350, z0: 118, z1: 123 },                         // checkpoint in the west fence (from field B)
   gateN: { z: 80, x0: 2398, x1: 2403 },                         // checkpoint in the north fence (from the hump)
 };
@@ -218,15 +221,15 @@ export const HALLS = [
   { key: 'shop1', name: 'Concourse Traders', purpose: 'general_store', rect: TZ.shop1, front: 'N', doors: [{ side: 'N', x: 2300, z: 46 }], spots: [[2296, 50], [2306, 50]] },
   { key: 'shop2', name: 'Spaceport Provisions', purpose: 'grocery', rect: TZ.shop2, front: 'N', doors: [{ side: 'N', x: 2338, z: 46 }], spots: [[2332, 50], [2344, 50]] },
   { key: 'terminal', name: 'Westport Grand Terminal', purpose: 'transit_station', rect: TERMINAL, front: 'W',
-    doors: [{ side: 'W', x: 2240, z: -23 }, { side: 'W', x: 2240, z: 22 }, { side: 'E', x: 2359, z: -23 }, { side: 'E', x: 2359, z: 22 }, { side: 'N', x: 2267, z: -46 }, { side: 'N', x: 2329, z: -46 }, { side: 'S', x: 2267, z: 60 }, { side: 'S', x: 2329, z: 60 }],
-    spots: [[2250, -31], [2256, -31], [2264, -31], [2278, -31], [2284, -31], [2292, -31], [2301, -22], [2260, -40], [2286, -40]] },
+    doors: [{ side: 'W', x: 2240, z: -23 }, { side: 'W', x: 2240, z: 22 }, { side: 'E', x: 2359, z: -23 }, { side: 'E', x: 2359, z: 22 }, { side: 'E', x: 2359, z: 44 }, { side: 'N', x: 2302, z: -46 }, { side: 'N', x: 2329, z: -46 }, { side: 'S', x: 2281, z: 60 }, { side: 'S', x: 2317, z: 60 }],
+    spots: [[2250, -31], [2256, -31], [2264, -31], [2278, -31], [2284, -31], [2292, -31], [2303, -22], [2260, -40], [2286, -40]] },
   { key: 'cargo', name: 'Westport Cargo Terminal', purpose: 'depot', rect: CARGO.hall, front: 'S', doors: [{ side: 'S', x: 2409, z: -250 }, { side: 'E', x: 2478, z: -300 }],
-    spots: [[2456, -266], [2466, -266], [2400, -290], [2440, -320]] },
-  { key: 'manifest', name: 'Hauler Dock Manifest Office', purpose: 'depot', rect: CARGO.office, front: 'W', doors: [{ side: 'W', x: 2304, z: -253 }], spots: [[2320, -253], [2326, -248]] },
+    spots: [[2444, -266], [2444, -272], [2400, -290], [2440, -320]] },
+  { key: 'manifest', name: 'Hauler Dock Manifest Office', purpose: 'depot', rect: CARGO.office, front: 'W', doors: [{ side: 'W', x: 2304, z: -234 }], spots: [[2311, -238], [2311, -228]] },
   { key: 'hangar1', name: 'Repair Hangar 1', purpose: 'repair_shop', rect: HANGARS[0], front: 'N', doors: [{ side: 'N', x: 2217, z: 262 }], spots: [[2202, 300], [2233, 300]] },
   { key: 'hangar2', name: 'Repair Hangar 2', purpose: 'repair_shop', rect: HANGARS[1], front: 'N', doors: [{ side: 'N', x: 2269, z: 262 }], spots: [[2254, 300], [2285, 300]] },
   { key: 'hangar3', name: 'Repair Hangar 3', purpose: 'hangar', rect: HANGARS[2], front: 'N', doors: [{ side: 'N', x: 2321, z: 262 }], spots: [[2306, 300], [2337, 300]] },
   { key: 'dealer', name: 'Westport Starship Showroom', purpose: 'ship_dealer', rect: DEALER, front: 'W', doors: [{ side: 'W', x: 2666, z: 122 }, { side: 'N', x: 2687, z: 90 }], spots: [[2688, 122], [2669, 150]] },
-  { key: 'guard', name: 'Coruscant Guard Post - Security Apron', purpose: 'security_station', rect: SECURITY.post, front: 'W', doors: [{ side: 'W', x: 2456, z: 178 }], spots: [[2462, 178], [2476, 168], [2476, 188]] },
+  { key: 'guard', name: 'Coruscant Guard Post - Security Apron', purpose: 'security_station', rect: SECURITY.post, front: 'N', doors: [{ side: 'N', x: 2427, z: 204 }], spots: [[2427, 212], [2416, 226], [2438, 226]] },
   { key: 'east', name: 'East Terminal (domestic)', purpose: 'transit_station', rect: EAST.terminal, front: 'W', doors: [{ side: 'W', x: 2592, z: 0 }, { side: 'E', x: 2650, z: 0 }], spots: [[2606, -31], [2636, -31]] },
 ];

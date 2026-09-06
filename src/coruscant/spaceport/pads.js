@@ -51,10 +51,11 @@ export function paintPad(p, pad, gate, fy, H = padHalf(pad)) {
 
 // blast walls: [x0, x1, z0, z1] inclusive (2 thick), 5 high with a hazard band and a lit cap, crew gaps in the middle
 const BLAST = [
-  [2211, 2212, -180, -77], [2267, 2268, -180, -77], [2160, 2319, -129, -128],       // field A
+  [2211, 2212, -180, -77], [2267, 2268, -180, -77],                                 // field A: between the columns ...
+  [2160, 2207, -129, -128], [2216, 2263, -129, -128], [2272, 2319, -129, -128],     // ... and between the rows (gap per pad)
   [2197, 2198, 102, 137], [2241, 2242, 102, 137], [2285, 2286, 102, 137],           // field B
-  [2397, 2398, -42, -19], [2433, 2434, -42, -19], [2397, 2398, 28, 51], [2433, 2434, 28, 51],   // field C
-  [2414, 2415, 112, 147],                                                            // security apron
+  [2397, 2398, -112, -89], [2433, 2434, -112, -89], [2397, 2398, -42, -19], [2433, 2434, -42, -19], [2397, 2398, 28, 51], [2433, 2434, 28, 51],   // field C
+  [2414, 2415, 152, 187],                                                            // security apron
   [2222, 2223, -258, -211],                                                          // cargo bays
 ];
 function paintBlastWalls(p) {
@@ -70,27 +71,43 @@ function paintBlastWalls(p) {
   }
 }
 
-// walk lines from the pads to their halls: [pad index range, direction, target coordinate]
+// walk lines from the pads toward their halls: [first pad index, last pad index, direction, target coordinate]; the
+// collectors (lit dashed lines along the terminal's walls) join them to the doors.
 const WALKS = [
-  [8, 13, 'S', -47], [14, 17, 'N', 61], [18, 23, 'W', 2360], [24, 25, 'E', 2239], [26, 27, 'N', 81], [28, 29, 'E', 2303],
+  [8, 10, 'S', -50], [11, 13, 'S', -131],                                           // field A front row to the north collector, back row to the blast-wall gaps
+  [14, 17, 'N', 64],                                                                 // field B to the south collector
+  [18, 21, 'W', 2364], [22, 23, 'W', 2364],                                          // field C east to the east collector
+  [24, 25, 'E', 2239],                                                               // field C west straight to the west doors
+  [28, 29, 'E', 2303],                                                               // cargo bays to the manifest office door
+];
+const COLLECTORS = [
+  { z: -50, x0: 2181, x1: 2304 },                                                    // north wall (field A) to the N door at x 2301..2304
+  { z: 64, x0: 2173, x1: 2319 },                                                     // south wall (field B) to the S doors at x 2280..2283 / 2316..2319
+  { x: 2364, z0: -103, z1: 45 },                                                     // east wall (field C) to the E doors
 ];
 function paintWalks(p) {
+  const mark = (x, z, k) => p.set(x, DECK_TOP, z, (k & 3) === 0 ? M.GLOW : LINE);
   for (const [a, b, dir, target] of WALKS) for (let i = a; i <= b; i++) {
     const pad = PADS[i], H = padHalf(pad);
     if (dir === 'S' || dir === 'N') {
-      const from = dir === 'S' ? pad.z + H : pad.z - H - 1, to = dir === 'S' ? Math.min(target, pad.z + H + 40) : Math.max(target, pad.z - H - 40);
+      const from = dir === 'S' ? pad.z + H : pad.z - H - 1, to = dir === 'S' ? Math.min(target, pad.z + H + 60) : Math.max(target, pad.z - H - 60);
       const [za, zb] = [Math.min(from, to), Math.max(from, to)];
       if (!p.overlaps(pad.x - 3, za, pad.x + 3, zb)) continue;
-      for (let z = za; z <= zb; z++) { p.set(pad.x - 3, DECK_TOP, z, (z & 3) === 0 ? M.GLOW : LINE); p.set(pad.x + 3, DECK_TOP, z, (z & 3) === 0 ? M.GLOW : LINE); }
+      for (let z = za; z <= zb; z++) { mark(pad.x - 3, z, z); mark(pad.x + 3, z, z); }
     } else {
-      const from = dir === 'E' ? pad.x + H : pad.x - H - 1, to = dir === 'E' ? Math.min(target, pad.x + H + 40) : Math.max(target, pad.x - H - 40);
+      const from = dir === 'E' ? pad.x + H : pad.x - H - 1, to = dir === 'E' ? Math.min(target, pad.x + H + 60) : Math.max(target, pad.x - H - 60);
       const [xa, xb] = [Math.min(from, to), Math.max(from, to)];
       if (!p.overlaps(xa, pad.z - 3, xb, pad.z + 3)) continue;
-      for (let x = xa; x <= xb; x++) { p.set(x, DECK_TOP, pad.z - 3, (x & 3) === 0 ? M.GLOW : LINE); p.set(x, DECK_TOP, pad.z + 3, (x & 3) === 0 ? M.GLOW : LINE); }
+      for (let x = xa; x <= xb; x++) { mark(x, pad.z - 3, x); mark(x, pad.z + 3, x); }
     }
   }
-  // lamp posts along the field A / B aprons
-  for (const z of [-70, 92]) for (let x = 2160; x <= 2320; x += 20) lampPost(p, x, z, DECK_Y);
+  for (const c of COLLECTORS) {
+    if (c.z !== undefined) { if (p.overlaps(c.x0, c.z, c.x1, c.z)) for (let x = c.x0; x <= c.x1; x++) if ((x & 7) < 5) mark(x, c.z, x); }
+    else if (p.overlaps(c.x, c.z0, c.x, c.z1)) for (let z = c.z0; z <= c.z1; z++) if ((z & 7) < 5) mark(c.x, z, z);
+  }
+  // lamp posts along the field A / B aprons and the east strip
+  for (const z of [-70, 92]) for (let x = 2170; x <= 2290; x += 20) lampPost(p, x, z, DECK_Y);
+  for (const z of [-60, 10, 70]) lampPost(p, 2366, z, DECK_Y);
 }
 
 export function paintPads(p) {
