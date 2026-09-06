@@ -365,3 +365,24 @@ blocking locks), so the round is the last case of the ditching matrix run numeri
    the splat, then clean water to the next (`wakes.ts`, WakeTrail). Boats are untouched (their emitters never
    leave the water). Type-check clean; verification frames to queue on the next build (chase view of the 40
    m/s power-off entry at the second and third touch).
+3. **The ribbon folded over itself on the inside of every turn.** The ribbon quads must span the Kelvin
+   envelope (19.5 deg each side: 23 m half-width 50 m astern of a float, 67 m at 100 m behind a runabout in a
+   turn, with the curvature spread), and `wakeHalf` gave both sides the outer width, so the inner edge of a
+   turning ribbon ran past the turn's centre and every quad there folded over its neighbour. Both materials are
+   double-sided: the fold is drawn twice with its across-coordinate mirrored (lane and arm lines laid over the
+   inner region backwards) and the additive height pass doubles. Ribbon driven round circles in Node
+   (`/tmp/waterphys/turnwake.mjs`, edge segment against track segment per quad): a float at 4 m/s in a 15 m
+   turn, 44 of 80 quads folded from 19 m astern; in a 30 m turn 50 of 79 from 44 m; a runabout at 10 m/s in a
+   40 m turn 64 of 121 from 58 m; hard at 8 m/s in 20 m 42 from 25 m; a yacht at 5 m/s in 60 m 54 of 112 from
+   83 m. This is the inside of every route turn a boat makes and of every taxi turn, unlogged until now: the
+   r3 `turn100` frames were read as churn. Fixed in three parts (`wakes.ts`): each side takes its own width,
+   mirroring the shader's arm asymmetry (inner arm closed on the track by up to 60 %, outer spread by as
+   much), and the inner edge is clamped inside the local radius (0.9 / curvature); the vertex carries its
+   signed across-position (side x half-width interpolates quadratically across a quad once the sides differ,
+   which would have put the lane centre off the track) and both passes read it; and the curvature is measured
+   every frame from the relaxed track (measured once at relaxation, with the newer neighbour still raw, it
+   read 0.045 on a 15 m circle whose true curvature is 0.067, so the clamp landed at 20 m and ten quads still
+   folded). After: 0 folded quads in all five cases; a straight track is unchanged (both sides equal, the same
+   width as before); the stopping-lane (r9) and skip-gap (r10.2) probes unchanged. Verification queued: an
+   overhead of a float's full-rudder taxi circle (34 m radius) at 15 and 28 s, the chase view of it, and the
+   `turn100` boat view.

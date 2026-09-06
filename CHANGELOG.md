@@ -66,6 +66,14 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
   1-3; facade3 round 10; veg5 round 14; terrain5 round 4; acgeo rounds 3-7). Flight harness 23/23, deterministic;
   six sanity stills clean. Subagents stopped at 15:10 on an account billing block (unpaid invoice); uncommitted
   worktree changes were rescued to `cursor/<name>-wip-backup-8213` branches (acgeo, facade3, veg5, boats).
+- Wave 7c (deployed as e13cb89769e2-20260906T225140Z): the terrain/water half-cell fix (map textures sampled at
+  wp + HALF + CELL/2 so the rendered ground matches `heightAt()`; the highway agent's finding), street rounds 3-10
+  (surfaces, plazas and lots with parked cars, lamp diet, FDOT heads; the lamp dots had never depth-tested under the
+  log depth buffer — `logdepthbuf` chunks added, so the first night frame with suburb lamp lines and terminal masts
+  is h13), water physics round 10 (wake ribbon breaks on time off the surface; per-side ribbon widths so turns no
+  longer fold the ribbon over itself). Flight harness 23/23, deterministic. The dead builders' Chrome sessions held
+  both builder slots idle for 7 h (clouds4 since 12:37, terrain5 since 15:52) and 4.8 GB of idle preview servers:
+  killed; builders relaunched at 22:35 on the user's priority list with the h03 critic's named defects.
 
 ## iter09 — wave 5 builders (deployed as aa8b21f9f839-20260905T121546Z)
 - Iteration 08 scored (bench/results/iter08/scores.md): no category regressed; aircraft geometry +1.5,
@@ -263,3 +271,4 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 | b366a423870c-20260906T120411Z | 460ace25e1e376c940320201c66b42346dff6111 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/460ace25e1e376c940320201c66b42346dff6111/play.html | verified: build id matched, loaded in 34 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 146 draw calls / 0.22 M tris at the spawn. Lead + aircraft module split (pixel-identical); the wave-7 builder branches are only in the hourly progress integration so far |
 | 7f95c5ea8c9b-20260906T132622Z | 225d58bf12ed3eeea98682847ac98b63d2a2c869 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/225d58bf12ed3eeea98682847ac98b63d2a2c869/play.html | verified: build id matched, loaded in 30.7 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 153 draw calls / 0.23 M tris at the spawn. Lead + wave 7a (streets, highway, water rendering, water physics) |
 | bc348b0db7c9-20260906T152637Z | d3382d59e665cb537c25c38b5d716d6974ed0dd0 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/d3382d59e665cb537c25c38b5d716d6974ed0dd0/play.html | verified: build id matched, loaded in 29.6 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 153 draw calls / 0.25 M tris at the spawn. Lead + wave 7b (all builder branch tips) |
+| e13cb89769e2-20260906T225140Z | 21df97bf786f08697b426f54d73875dc9f40661d | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/21df97bf786f08697b426f54d73875dc9f40661d/play.html | verified: build id matched, loaded in 38.5 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 153 draw calls / 0.25 M tris at the spawn. Lead + wave 7c (half-cell fix, street rounds 3-10, water physics r10) |
