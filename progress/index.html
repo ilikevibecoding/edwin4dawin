@@ -52,7 +52,7 @@ let data = null, itemSel = 'all', beforeTag = null, afterTag = null;
 // Data and frames come from jsDelivr pinned to the gh-pages commit that holds them (tools/progress-snapshot.sh
 // writes the commit into PIN when it publishes; branch URLs stayed stale for hours despite purges), so this page
 // renders from any host that serves HTML — githack, htmlpreview, a local preview — with no CORS or cache problems.
-const PIN = '__PIN__';
+const PIN = 'dc78aaa0fb84891fe4882d66570cde26b2342607';
 const local = location.protocol === 'file:' || /localhost|127\.0\.0\.1/.test(location.host);
 const BASE = local || PIN.startsWith('__') ? '' : `https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@${PIN}/progress/`;
 
