@@ -194,12 +194,18 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
       float d = vGeom.x, hw = max(vGeom.y, 1e-3);
       vec2 fwd = normalize(vGeom.zw);
       vec2 right = vec2(-fwd.y, fwd.x);           // side +1 of the ribbon
-      float curv = vExt.x, shift = vExt.z, odo = vExt.w;
+      float curv = vExt.x, ageS = vExt.y, shift = vExt.z, odo = vExt.w;
       float strength = vTrail.x, w0 = vTrail.y, lead = vTrail.z;
       float propWash = vTrail2.x, planeV = max(vTrail2.y, 1.0), churn = vTrail2.z;
       float aspd = abs(speed);
       // the churned lane lasts a few tens of seconds of foam, so its length scales with the speed it was laid at
       float laneLen = vTrail.w * clamp(aspd / 8.0, 0.5, 1.6);
+      // the froth is a matter of time, not of track: a point laid ageS seconds ago by a hull then making aspd
+      // would lie aspd * ageS behind a hull that had kept going, and every decay below is written in that
+      // distance. Behind a hull that has slowed or stopped the track distance d falls short of it, so the churn
+      // just astern of a stopped boat kept its transom density (d ~ 0) for the ribbon's whole life instead of
+      // dissolving in the 10-15 s it takes, and its slick never let go of the hull (r9)
+      float dEq = max(d, aspd * ageS);
       float y = side * hw;                         // signed metres across the track
       float ay = abs(y);
       float s = sign(side);
@@ -239,16 +245,16 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         // over the wider band so the streak keeps its brightness seen from altitude
         float laneHalfR = max(laneHalfN, 0.9 * uTexel);
         float laneMask = 1.0 - smoothstep(laneHalfR * 0.4, laneHalfR, ay);
-        float laneFade = 1.0 - smoothstep(0.0, laneLen, d);
+        float laneFade = 1.0 - smoothstep(0.0, laneLen, dEq);
         // fresh churn over the first hull length and a half, but the froth is a matter of seconds, not of hull
         // lengths: a ship's stays dense for 10-15 s of travel, not for 260 m (the r3 ship view showed a solid
         // white band a beam wide for 200 m)
-        float fresh = exp(-d / min(1.5 * lead + 6.0 * w0, 12.0 * aspd + 20.0));
+        float fresh = exp(-dEq / min(1.5 * lead + 6.0 * w0, 12.0 * aspd + 20.0));
         // density falls from the centre to the edges and downstream; the prop wash keeps a bubbly core alive
         // for a couple of hull lengths on the centreline of a powered hull
         float across = 1.0 - 0.55 * smoothstep(0.3, 1.0, ay / laneHalfR);
         // (the froth of the wash dissolves in 20-30 s: a ship's core is ~120 m long, not 2.5 ship lengths)
-        float wash = propWash * exp(-ay * ay / (0.3 * w0 * w0 + 0.02)) * exp(-d / min(2.5 * lead + 4.0, 20.0 * aspd + 10.0)) * smoothstep(0.3, 2.5, aspd);
+        float wash = propWash * exp(-ay * ay / (0.3 * w0 * w0 + 0.02)) * exp(-dEq / min(2.5 * lead + 4.0, 20.0 * aspd + 10.0)) * smoothstep(0.3, 2.5, aspd);
         // streaks along the track (the lane is combed by the flow) in track coordinates, plus world grain
         float nl = vn(vec2(odo * min(ls * 0.25, fl), y * min(ls * 1.6, fl)) + 3.0);
         float pn = 0.55 * nl + 0.2 * n3r + 0.1 * n2 + 0.15 * n4;
@@ -301,7 +307,7 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         // texel averages the glitter of an unbroken crest into a pale line, so the coarse map carries the arm
         // foam further out as a proxy for it
         float fn = aspd * inversesqrt(9.81 * (lead + 1.0));
-        float steep = smoothstep(2.5, 8.5, aspd) * smoothstep(0.25, 0.5, fn) * inversesqrt(1.0 + d / (2.0 * lead + 2.0)) * exp(-d / mix(8.0 * lead + 40.0, 2.5 * lead + 15.0, fine));
+        float steep = smoothstep(2.5, 8.5, aspd) * smoothstep(0.25, 0.5, fn) * inversesqrt(1.0 + dEq / (2.0 * lead + 2.0)) * exp(-dEq / mix(8.0 * lead + 40.0, 2.5 * lead + 15.0, fine));
         float an = vn(vec2(odo * min(0.45, fl), s * 3.0 + dy * min(2.0, fl)) + 7.0);
         float breakM = smoothstep(0.84 - 0.3 * steep, 0.98 - 0.3 * steep, an);
         float arm = armBump * armEnv * breakM * steep * (0.5 + 0.5 * n2) * smoothstep(-lead * 0.5, lead * 0.5, d) * (armW0 / armW);
@@ -314,12 +320,14 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         // transverse stern waves: crests across the track, wavelength 2 pi v^2 / g, decaying down the lane; they
         // travel at their own speed, so once the hull slows they run on ahead of where the track says (shift)
         float lam = max(6.2832 * aspd * aspd / 9.81, 0.5);
-        float tw = smoothstep(2.0 * uTexel, 4.0 * uTexel, lam) * exp(-d / (laneLen * 0.6)) * (1.0 - smoothstep(laneHalf * 1.2, laneHalf * 3.0, ay)) * spd;
+        // (the envelope runs with the train, d + shift, as the height pass has it: it used to sit at the track
+        // distance, so a stopped hull kept a standing stern slope at its transom while the train had run on)
+        float tw = smoothstep(2.0 * uTexel, 4.0 * uTexel, lam) * exp(-(d + shift) / (laneLen * 0.6)) * (1.0 - smoothstep(laneHalf * 1.2, laneHalf * 3.0, ay)) * spd;
         g += -fwd * (0.07 * tw * sin(6.2832 * (d + shift) / lam));
         // coverage (the water shader's slick: the lane's short ripples are wiped): the turbulence outlasts the
         // froth by a good margin, so the smooth road behind a hull runs on past the end of its foam (a taxiing
         // float's for a minute, a ship's toward a kilometre: 4 lane lengths on a 4 m half-beam, ~800 m at 11 kt)
-        float slickFade = 1.0 - smoothstep(0.0, laneLen * mix(2.2, 4.0, smoothstep(1.0, 4.0, w0)), d);
+        float slickFade = 1.0 - smoothstep(0.0, laneLen * mix(2.2, 4.0, smoothstep(1.0, 4.0, w0)), dEq);
         cover = max(max(laneMask * slickFade * 0.9, armBump * armEnv * 0.8), min(foam * 3.0, 1.0)) * 0.9 + 0.1;
       } else {
         // ---- hull zone: ax metres behind the bow (negative ahead of the stem); nothing pushes water on a hull
