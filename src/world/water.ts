@@ -283,21 +283,23 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, f
   float P;
   // the field is only evaluated where the highlight (widened to catch the field's tails) is visible
   if (slopePdf(sh, va, st, mss * 3.0) * mss > 1e-4) {
-    vec2 sa = L.xz;
-    float sl = length(sa);
-    sa = sl > 1e-3 ? sa / sl : va;
-    vec2 sc = vec2(-sa.y, sa.x);
-    // half the foreshortening at the path's centre: dashes out there, round glints on the steeper near path
-    float stretch = sqrt(clamp(1.0 / max(L.y, 0.12), 1.0, 8.0));
-    // pixel footprint along / across the light's azimuth, in the stretched metric of the cells
-    float footEff = max((abs(dot(dx, sa)) + abs(dot(dy, sa))) / stretch, abs(dot(dx, sc)) + abs(dot(dy, sc)));
+    // The cells are stretched along the view azimuth by half the foreshortening of the water in the frame
+    // (sqrt of 1 / sin(depression)): on the flat far water a glint is a short dash toward the horizon, on the
+    // steep near water a round dot, and never the wide across-the-view blob a square cell became once the
+    // frame foreshortened it (the stretch used to follow the sun's elevation, which only matches the view
+    // when the camera looks toward a low sun). The axis turns with the camera, so the pattern morphs a little
+    // in a turn, which glitter may do: it is not a texture on the water.
+    float stretch = sqrt(clamp(1.0 / max(V.y, 0.12), 1.0, 8.0));
+    // pixel footprint along / across the view azimuth, in the stretched metric of the cells
+    float footEff = max((abs(dot(dx, va)) + abs(dot(dy, va))) / stretch, abs(dot(dx, vc)) + abs(dot(dy, vc)));
     vec2 s = vec2(0.0);   // slope offset of the resolved facets
     float resolved = 0.0; // fraction of the variance they carry
     vec2 gp = wp + uWindDir * (0.9 * t);
-    vec2 gq = vec2(dot(gp, sa) / stretch, dot(gp, sc));
-    // octaves of 0.7 m * 2^o (o <= 8): the finest whose cell spans more than 3 px fades in until it spans
-    // 6 px ('u'), the next carries the other half of the share, the third fades out as the first fades in
-    float oF = log2(max(footEff / 0.7, 1e-4)) + 1.585;
+    vec2 gq = vec2(dot(gp, va) / stretch, dot(gp, vc));
+    // octaves of 0.7 m * 2^o (o <= 8): the finest whose cell spans more than 2 px fades in until it spans
+    // 4 px ('u') and carries most of the share (grain, not blobs), the next less, the third fades out as the
+    // first fades in
+    float oF = log2(max(footEff / 0.7, 1e-4)) + 1.0;
     int o0 = int(floor(oF)) + 1;
     float u = float(o0) - oF;
     if (o0 < 0) { o0 = 0; u = 1.0; }
@@ -308,7 +310,7 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, f
       float fo = float(o);
       float cell = 0.7 * exp2(fo);
       float f = SPARK_SHARE * 0.5;
-      float w = i == 0 ? w0 : (i == 2 ? 1.0 - w0 : 1.0);
+      float w = i == 0 ? w0 : (i == 2 ? 0.45 * (1.0 - w0) : 0.75);
       if (w < 0.003) continue;
       vec2 q = gq / cell;
       // two independent value-noise vectors (0.214 rms per component) rotated by a slow phase: a unit-variance
