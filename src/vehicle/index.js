@@ -14,6 +14,60 @@ import { TYRE_SINK, buildAxles, buildWheel } from './wheels.js';
 // suspension travel, body pitch/roll and the lamps.
 // ---------------------------------------------------------------------------
 
+/**
+ * The windscreen's grazing-sky term (`pane('glass')` `bw.graze`), gated to
+ * cameras outside the cab. The term is what puts the sky on the screen from
+ * the front quarter; from the seat the same term at 0.12 cost the glass
+ * gauntlet's `interior` view 0.027 of veil (round 4), and the shader's own
+ * front-facing gate did not keep the seat clean — the screen pieces are
+ * double-sided and the outer face is what a seat camera sees through the
+ * inner one. So the uniform is scaled per frame by how far the rendering
+ * camera stands outside the cab volume: 0 inside, full from 0.6 m out, in the
+ * sprung frame so it follows the body's pitch and roll.
+ *
+ * And by the hour, through the returned setter: the night environment is a
+ * moonlit dome at the night exposure, and the same term on the glass
+ * gauntlet's `night_ext` view laid it over a cab that has nothing behind the
+ * screen but the dark dash — veil 0.024 -> 0.061, see 0.894 -> 0.77 on the
+ * first round-7 after frame, against exterior panes that must hold 0.874. By
+ * day the sky on the screen is what the item asks for; at night it is off.
+ */
+function gateScreenGraze(body, glass, sprung) {
+  const u = glass?.userData?.bw?.uBwGraze;
+  if (!u) return () => {};
+  const full = u.value;
+  let hourName = 'day';
+  const inv = new THREE.Matrix4();
+  const cam = new THREE.Vector3();
+  const gate = (renderer, scene, camera) => {
+    // The hour the page publishes wins over the one `setHour` was last given:
+    // the capture tools render with the simulation frozen (`update` and so
+    // `setHour` do not run between their shots), and the glass gauntlet's
+    // night views are rendered that way straight after its day ones.
+    const hour = globalThis.debugAPI?.timeOfDay ?? hourName;
+    const hourScale = hour === 'night' ? 0 : 1;
+    inv.copy(sprung.matrixWorld).invert();
+    cam.setFromMatrixPosition(camera.matrixWorld).applyMatrix4(inv);
+    const dx = Math.max(0, Math.abs(cam.x) - S.bodyHalfWidth);
+    const dy = Math.max(0, S.floorY - cam.y, cam.y - (S.roofY + 0.05));
+    const dz = Math.max(0, S.cabRearZ - cam.z, cam.z - S.windshieldBottomZ);
+    u.value = full * hourScale * THREE.MathUtils.smoothstep(Math.hypot(dx, dy, dz), 0.05, 0.6);
+  };
+  body.traverse((o) => {
+    if (!o.isMesh || o.material !== glass) return;
+    const prev = Object.hasOwn(o, 'onBeforeRender') ? o.onBeforeRender : null;
+    o.onBeforeRender = prev
+      ? (...a) => {
+          prev(...a);
+          gate(...a);
+        }
+      : gate;
+  });
+  return (hour) => {
+    hourName = hour;
+  };
+}
+
 export function createVehicle({ env = null, terrain = null, quality = pageQuality() } = {}) {
   const materials = vehicleMaterials(env);
 
@@ -32,6 +86,7 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
   const body = buildBody().build(materials);
   sprung.add(body);
   const mirrors = createLiveMirrors(body, materials, { quality });
+  const setScreenGrazeHour = gateScreenGraze(body, materials.glass, sprung);
   sprung.add(buildDetails().build(materials));
   const cabin = buildInterior().build(materials, { castShadow: false });
   sprung.add(cabin);
@@ -103,6 +158,56 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
   barLight.target.position.set(0, S.roofY - 2.6, S.cabFrontZ + 30);
   lamps.add(barLight, barLight.target);
 
+  // Near-field spill (round 7, critics B and C). The low beams above are
+  // aimed at the trail 10 m out and their cone's lower edge reaches the dirt
+  // 2 m ahead of the bumper, so the ground the `front` and `detail` cameras
+  // frame — the first three metres — got nothing from the lamps: `front`
+  // lower third median 0.016 with 0 px over 0.35, under-bumper p95 0.014 in
+  // two rounds. A real headlamp also throws a wide dim spill out of the lens
+  // and off the reflector's rim. One wide spot per side beside the beam
+  // spot: 0.7 rad half-angle, 8 m reach, soft penumbra, aimed 27 degrees down
+  // so the cone's centre lands 2 m ahead and its lower edge on the dirt half a
+  // metre out, at a fraction of the beam's level (`BEAM.*.spill`). Decay 1:
+  // probed live on the night `front` view at 6 units, inverse-square lit the
+  // first metre and nothing past it (near dirt p95 0.091 -> 0.134) and the
+  // beams' 0.4 put 87 px over Y 0.35 on the dirt at the bumper (p95 0.213), a
+  // second pool; 1/r grades the first three metres. The first after frame at
+  // 6 units and 20 degrees had the near dirt (`front` (200,265,420,330))
+  // median 0.023 -> 0.028 against the 0.05 asked for, and the lower third
+  // 0.020 -> 0.025 against 0.03, so the level is 10 and the aim steeper.
+  // They sit in the scene beside the truck rather than under it, placed every
+  // frame from the sprung frame, because `sky.js` draws a beam sprite and a
+  // glare disc for every SpotLight it finds under the truck and a glare disc
+  // on a spill light would be a third lamp ball beside the headlamp's.
+  const spills = [];
+  const spillLocal = [];
+  for (const sx of [-1, 1]) {
+    const spill = new THREE.SpotLight(PALETTE.headlight, 0, 8, 0.7, 0.6, 1.0);
+    spill.name = 'headlampSpill';
+    spills.push(spill);
+    spillLocal.push({
+      pos: new THREE.Vector3(sx * 0.72, headY, headlightZ),
+      target: new THREE.Vector3(sx * 0.72, headY - Math.sin(0.471) * 5, headlightZ + Math.cos(0.471) * 5),
+    });
+  }
+  function placeSpills() {
+    if (!root.parent) return;
+    for (let i = 0; i < spills.length; i++) {
+      const s = spills[i];
+      if (s.parent !== root.parent) root.parent.add(s, s.target);
+      s.position.copy(spillLocal[i].pos).applyMatrix4(sprung.matrixWorld);
+      s.target.position.copy(spillLocal[i].target).applyMatrix4(sprung.matrixWorld);
+    }
+  }
+  // Into the scene the moment the truck is, so the light count every lit
+  // program is compiled against is right from the first frame rather than
+  // changing (and recompiling all of them) on the first update.
+  root.addEventListener('added', placeSpills);
+  root.addEventListener('removed', () => {
+    for (const s of spills) s.removeFromParent();
+    for (const s of spills) s.target.removeFromParent();
+  });
+
   // Lamp levels by hour. Every number here used to be one pair — lit or not —
   // tuned for night, and at dusk's exposure (1.3 against night's 1.15, with the
   // bloom threshold at 0.86 rather than 2.0) the same 9.0 on the headlamp
@@ -123,26 +228,39 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
   // the nine optics invisible (critic B: 1 435 px over Y 0.5 in the hero's bar
   // box against 53 in round 2). At 0.4 with the nine-disc mask the cover
   // scatters a little at each pod; the `headlight` discs behind it sit just
-  // under the bloom threshold (round 6, see details.js `lightBar`).
+  // under the bloom threshold (round 6, see details.js `lightBar`). 0.4 ->
+  // 0.3 (round 7): at 1280 x 720 the critics' bar box in `ultra_night/hero.png`
+  // held 335 px over Y 0.5 against the 300 asked for, nine pods of 31-46 px
+  // each — a 48 mm LED disc is 25 px at that framing, the rest is the cover's
+  // halo round it. The peaks are the discs' (0.72) and do not move with this.
   //
   // Dusk `lens` 0.8 -> 0.3 and `head` 3.6 -> 2.4 (round 5, critic B): the
   // dusk grille box measured p95 Y 0.56 against a sky p95 of 0.45, a lit lamp
   // still a third of a stop over the sky it is seen against. A and C hold the
   // grille to p95 <= sky p95 + 0.1 with 0 % clip.
   //
-  // Dusk `beam` 22 -> 3.5 and `bar` 26 -> 4 (round 6). The dusk `front` view
-  // had 30 % of the ground bottom-right brighter than the sky's p95, and the
-  // lighting builder proved it was these two spots and nothing else: post off
-  // changed no pixel, lamps at 0 took it to 0 %, and the sweep ran x0.5 26 %,
-  // x0.35 20 %, x0.25 11 %, x0.15 3 %. At the dusk exposure the pool from a
-  // 22-unit spot on dirt 10 m out is brighter than a sky still lit by the sun;
-  // a real low beam at that hour is barely visible on the ground and the lens
-  // is what reads. The lens read comes from `head`/`lens`/`cover` and the
-  // bowl glow, none of which move with the spot.
+  // Dusk `beam` 22 -> 3.5 and `bar` 26 -> 4 (round 6), and back to 22 / 26
+  // (round 7). Round 6 measured the dusk `front` view with 30 % of the ground
+  // bottom-right brighter than the sky's p95 and swept the spots down to 3 %
+  // — against a truck the pre-roll had left pitched nose-down, its beams on
+  // the dirt in front of the bumper. The pre-roll cruises now and `setView`
+  // resets the body, and on the level truck the sweep reads the other way:
+  // at 3.5 / 4 the dusk trail pool in `truck_dusk/mainroad.png` (120,150,
+  // 280,200) is mean Y 0.043 (median 0.036), the lamps effectively off,
+  // against the 0.145 the consensus measured at 22 / 26 and called in band;
+  // at 11 / 13 it is 0.083, at 22 / 26 it is 0.149 (median 0.130). Ground over
+  // the sky's p95 at 22 / 26 on the level truck: `front` 0.6 %, `hero` 0.01 %
+  // (the round-5 bar is 3 %). The lens read still comes from `head`/`lens`/
+  // `cover` and the bowl glow, none of which move with the spot.
+  //
+  // `spill` is the near-field spill spots' intensity (round 7): a quarter of
+  // the night beam at decay 1 (the brief's 0.15 was for inverse-square, see
+  // the spill note above), nothing by day or at dusk, where the dirt under
+  // the bumper is lit by the sky.
   const BEAM = {
-    off: { beam: 0, bar: 0, head: 1.6, amber: 1.1, tail: 1.6, lens: 0, cover: 0 },
-    dusk: { beam: 3.5, bar: 4, head: 2.4, amber: 1.9, tail: 2.6, lens: 0.3, cover: 0.15 },
-    night: { beam: 40, bar: 46, head: 9.0, amber: 3.2, tail: 4.0, lens: 2.2, cover: 0.4 },
+    off: { beam: 0, bar: 0, head: 1.6, amber: 1.1, tail: 1.6, lens: 0, cover: 0, spill: 0 },
+    dusk: { beam: 22, bar: 26, head: 2.4, amber: 1.9, tail: 2.6, lens: 0.3, cover: 0.15, spill: 0 },
+    night: { beam: 40, bar: 46, head: 9.0, amber: 3.2, tail: 4.0, lens: 2.2, cover: 0.3, spill: 10 },
   };
   // a lit lamp in daylight or under cloud is a lamp lit against a bright frame
   BEAM.day = BEAM.dusk;
@@ -174,6 +292,7 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
     const lv = on ? BEAM[state.hour] ?? BEAM.night : BEAM.off;
     for (const b of beams) b.intensity = on ? lv.beam : 0;
     barLight.intensity = on ? lv.bar : 0;
+    for (const s of spills) s.intensity = on ? lv.spill : 0;
     materials.headlight.emissiveIntensity = lv.head;
     materials.amber.emissiveIntensity = lv.amber;
     materials.taillight.emissiveIntensity = lv.tail;
@@ -221,6 +340,7 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
     if (!name || name === state.hour) return;
     state.hour = name;
     applyLampLevels();
+    setScreenGrazeHour(name);
   }
   setLights(false);
 
@@ -336,6 +456,7 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
       if (t?.heightAt) heightAt = t.heightAt;
     }
     if (!ground.mesh.parent && root.parent) root.parent.add(ground.mesh);
+    placeSpills();
     ground.update(dt, {
       pos: root.position,
       quat: root.quaternion,

@@ -385,6 +385,13 @@ export function applyBrightwork(
     // 0.1–0.15 of sky on the top third of a door pane seen from beside the
     // truck while leaving the face-on view exactly as clear as it was.
     graze = 0,
+    // Where the grazing term ramps in and where it is full, as 1 - cos of the
+    // incidence: the door glass keeps round 5's 50-degree gate (0.36 -> 0.9);
+    // the windscreen, whose term is gated to exterior cameras by `index.js`,
+    // ramps from 45 degrees so the hero camera at 55-59 degrees sees it while
+    // the glass gauntlet's `ws_mid` at 40-45 does not (round 7).
+    grazeFrom = 0.36,
+    grazeTo = 0.9,
     // Grade the reflection off the clearcoat's roughness rather than the base
     // layer's. On paint the two are a factor of five apart — a 0.34 basecoat
     // under a 0.07 lacquer — and using the basecoat smeared the skyline into a
@@ -434,6 +441,7 @@ export function applyBrightwork(
   };
   if (pane) u.uBwPane = { value: pane };
   if (pane) u.uBwGraze = { value: graze };
+  if (pane) u.uBwGrazeRamp = { value: new THREE.Vector2(grazeFrom, grazeTo) };
   if (flat) u.uBwFlat = { value: flat };
   if (ambient) u.uBwAmbient = { value: ambient };
   // exposed so the values can be swept against a live render rather than guessed
@@ -496,7 +504,7 @@ export function applyBrightwork(
         uniform float uBwLobe;
         ${flat ? 'uniform float uBwFlat;' : ''}
         ${ambient ? 'uniform float uBwAmbient;' : ''}
-        ${pane ? 'uniform float uBwPane;\n        uniform float uBwGraze;\n        vec3 bwPaneRefl = vec3( 0.0 );\n        float bwPaneF = 0.0;\n        float bwPaneOut = 1.0;' : ''}`,
+        ${pane ? 'uniform float uBwPane;\n        uniform float uBwGraze;\n        uniform vec2 uBwGrazeRamp;\n        vec3 bwPaneRefl = vec3( 0.0 );\n        float bwPaneF = 0.0;\n        float bwPaneOut = 1.0;' : ''}`,
       )
       .replace(
         '#include <lights_fragment_maps>',
@@ -687,7 +695,8 @@ export function applyBrightwork(
           // Gated from 50 degrees rather than 39 (round 5): at the old gate the
           // term was already a third on over the middle of a door pane seen
           // from beside the truck, which is the region the eye looks through.
-          float gzG = uBwGraze * smoothstep( 0.36, 0.9, gzE ) * bwPaneOut;
+          // The gate is per pane since round 7 (grazeFrom / grazeTo).
+          float gzG = uBwGraze * smoothstep( uBwGrazeRamp.x, uBwGrazeRamp.y, gzE ) * bwPaneOut;
           float gzA = clamp( diffuseColor.a + ( gzF + gzG ) * ( 1.0 - diffuseColor.a ), 0.02, 1.0 );
           vec3 gzD = totalDiffuse + totalEmissiveRadiance * mix( 0.32, 1.0, bwPaneOut );
           vec3 gzS = max( outgoingLight - totalDiffuse - totalEmissiveRadiance, vec3( 0.0 ) ) + radiance * gzG;
@@ -2055,11 +2064,15 @@ export function glassLayerMap(kind = 'screen') {
           // roughness map and the cabin's film): the clean region is their
           // union, the edge soft over 2 cm.
           const swept = wiperSweep(u, v);
-          // the blade's ridge: a soft band of pushed dust 4 cm wide outside
-          // the arc, heaviest at the top of the sweep and thinning down the
-          // sides. It was 8.5 cm wide; at 640 x 360 that was a smudge round
-          // the sweep rather than a line at its edge.
-          const ridge = clamp(wiperSweep(u, v, 0.028) - swept) * (0.55 + 0.45 * smoothstep(0.3, 0.7, v));
+          // the blade's ridge: a band of pushed dust 3 cm wide outside the
+          // arc, heaviest at the top of the sweep and thinning down the sides.
+          // It was 8.5 cm wide, then 4 cm; at 640 x 360 the wide band was a
+          // smudge round the sweep rather than a line at its edge. Round 7
+          // measured the wiped/unwiped step on `glass/ws_close.png` by
+          // hide-and-diff at 0.015–0.04 of veil against the 0.06 brief, so
+          // the ridge is narrower again and carries full weight (0.45 -> 1.0
+          // below): the rim line is what draws the arc.
+          const ridge = clamp(wiperSweep(u, v, 0.02) - swept) * (0.55 + 0.45 * smoothstep(0.3, 0.7, v));
           // the smear where each blade parks (round 6, critic C): the dust the
           // rubber dragged to a stop, a line a centimetre wide just above the
           // parked blade's edge
@@ -2081,9 +2094,11 @@ export function glassLayerMap(kind = 'screen') {
           // is down to a trace now the floor no longer runs up to it
           const corner = smoothstep(0.3, 0.5, Math.abs(cx)) * 0.2 + smoothstep(0.82, 1.0, v) * 0.12;
           const ledge = (1 - smoothstep(0.0, 0.1, v)) * 0.45;
-          // floor and blotch settled: full weight at the cowl, a quarter of it
-          // over the part of the screen the driver looks through
-          const s = settle(0.25);
+          // floor and blotch settled: full weight at the cowl, an eighth of it
+          // over the part of the screen the driver looks through (a quarter
+          // until round 7: the even film inside the arcs was as much veil as
+          // the unswept film outside them, so the rim had no step to draw)
+          const s = settle(0.12);
           // What the blades never reach keeps its film (round 6): the V at
           // the top between the two rims, the upper corners, the triangle
           // under the parked blades. Nothing wipes it, so it carries the
@@ -2108,7 +2123,7 @@ export function glassLayerMap(kind = 'screen') {
           dust = clamp(
             ((0.1 + blotch * 0.16) * s + corner + ledge * 0.25 + low * 0.15) * (1 - swept * 0.9) +
               unswept +
-              ridge * 0.45 +
+              ridge * 1.0 +
               park * 0.3 +
               grit * 0.14 * s * (1 - swept * 0.6),
           );
@@ -3814,6 +3829,53 @@ export function applyLampGlow(
   });
 }
 
+/**
+ * A clear cover lens over a premultiplied blend (round 7, critic C).
+ *
+ * `lensClear` and `barCover` are `transparent, opacity 0.1`: under a straight
+ * alpha blend everything the lens computes — including its own specular, the
+ * one thing a clear dome shows — reaches the frame at a tenth. The panes
+ * solved this in round 4 (see the `pane` path of `applyBrightwork`): the
+ * surface's reflection is added over the scene at full strength and the alpha
+ * closes by the same amount, so it reads as reflection rather than as a veil.
+ * The lens gets the same close. The emissive (the lit lamp's scatter,
+ * `index.js` `BEAM.*.lens` and `cover`) still lands at the lens's own alpha,
+ * as the night levels were tuned for, so the night pods and the lamp glow are
+ * unchanged.
+ *
+ * What this did not do on its own (ablated, round 7): the headlamp domes on
+ * `ultra_day/hero.png` sat 1.2–1.4 stops under the sky because a tenth of a
+ * near-white *diffuse* was the read, not because the specular was blended
+ * down — `uLensSpec` at 0 or 4 moved the lamp box by 0.001. The colour fix is
+ * in `materials.js` (`lensClear`); this close is what lets the mirror carry
+ * the sky once the diffuse is out of the way.
+ */
+export function applyLensClose(material, { tag = 'lens', gain = 1 } = {}) {
+  material.premultipliedAlpha = true;
+  const u = { uLensSpec: { value: gain } };
+  material.userData.lensClose = u;
+  return extendMaterial(material, `lensClose:${tag}`, (shader) => {
+    Object.assign(shader.uniforms, u);
+    shader.fragmentShader = shader.fragmentShader
+      .replace(
+        '#include <common>',
+        `#include <common>
+        uniform float uLensSpec;`,
+      )
+      .replace(
+        '#include <opaque_fragment>',
+        `{
+          vec3 lcD = totalDiffuse + totalEmissiveRadiance;
+          vec3 lcS = max( outgoingLight - lcD, vec3( 0.0 ) ) * uLensSpec;
+          float lcA = clamp( max( diffuseColor.a, luminance( lcS ) ), 0.02, 1.0 );
+          outgoingLight = lcD + lcS / lcA;
+          diffuseColor.a = lcA;
+        }
+        #include <opaque_fragment>`,
+      );
+  });
+}
+
 /** Prismatic tail-light / reflector lens cells. */
 export function prismNormal() {
   return cached('veh.prism', () => {
@@ -3955,9 +4017,19 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
     // box from 0.529 to 0.506 with the day hero's hue moving 0.8 degrees.
     specularIntensity: 0.2,
     clearcoat: 1.0,
-    clearcoatRoughness: 0.15,
+    // 0.15 -> 0.06 and the peel 0.3 -> 0.15 (round 7, critic C). The graded
+    // reflection blurs its skyline by 0.06 + 0.95 x this (`bwBlur` in
+    // `applyBrightwork`), so at 0.15 the sky term faded in over 0.65 of
+    // elevation — wider than the whole spread of reflected elevations across
+    // a door — and the door lifted as one value instead of grading. Ablated
+    // live on `glass/ws_mid.png`: the bonnet's skyline row over the median
+    // bonnet row +0.19 st at 0.15, +0.35 st at 0.06; paint grain hf 0.129 ->
+    // 0.136 (bar 0.30); dusk grille p95 0.068 -> 0.070. The dirt pass still
+    // adds its own roughness on the flanks (`applyDirt`), which is why a dusty
+    // door does not hand back a hard edge.
+    clearcoatRoughness: 0.06,
     clearcoatNormalMap: paintCoatNormal(),
-    clearcoatNormalScale: new THREE.Vector2(0.3, 0.3),
+    clearcoatNormalScale: new THREE.Vector2(0.15, 0.15),
     // Up from 0.3. All three round-2 critics scored the paint's reflection
     // "a sky gradient only, no environment shapes", and that is what 0.3
     // buys: the graded model below (three bands and a rim streak) was carrying
@@ -3997,7 +4069,16 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
     // Fresnel gain was. A crease highlight is the point of the material.
     band: 0.78,
     trees: 0.9,
-    line: 0.24,
+    // 0.24 -> 0.08 (round 7, critic C). The sky term of the graded reflection
+    // only started at `line`, 14 degrees up, and the comment on the bands
+    // calls the bush wall "a few degrees deep": a vertical panel at hood
+    // height, whose reflected ray runs within a tenth of the horizon, could
+    // only ever mirror the wall colour, which is why the door skin held one
+    // flat value in `glass/ws_mid.png` across two rounds (row medians 0.076 /
+    // 0.075 / 0.078 / 0.080). At 0.08 the skyline sits 4.6 degrees up and the
+    // upper half of a door picks the sky up. The roof key keeps the old
+    // value: it sees the sky over its whole area anyway.
+    line: 0.08,
     // the coat carries the reflection at every angle; the BRDF's own Fresnel is
     // what should be deciding how much of it survives, not a hand-rolled falloff
     clearcoat: 'full',

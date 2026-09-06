@@ -7,6 +7,7 @@ import {
   applyDirt,
   applyGlassFilm,
   applyLampGlow,
+  applyLensClose,
   applyMirrorHorizon,
   bedLinerMaps,
   brushedMaps,
@@ -119,7 +120,9 @@ export function vehicleMaterials(env = null) {
     // curvature gate rather than by refusing to reflect anything.
     // strength tracks the basecoat's — see the sweep table in makePaintMaterial.
     // These panels gain the most from it: 0.331 saturation to 0.374.
-    bw: { strength: 1.8, band: 0.5, flat: 0.5, ambient: 1.6 },
+    // `line` held at the round-6 paint value: the body keys moved to 0.08 in
+    // round 7 so the flanks pick the sky up, and the roof already does.
+    bw: { strength: 1.8, band: 0.5, flat: 0.5, ambient: 1.6, line: 0.24 },
   });
   // Basecoat roughness on every paint key is the map's now (see
   // makePaintMaterial); the coats are one lacquer at 0.15, the roof a shade
@@ -631,11 +634,30 @@ export function vehicleMaterials(env = null) {
     // where the old even film peaked instead of a stop over it. ws_mid had
     // paid see 0.85 -> 0.76 for the heavier band over the dark dash.
     film: { dustAmount: 0.9, dustAlpha: 0.26, band: 0.55, dust: 0x9c8468 },
-    // No grazing sky on the screen. Tried at 0.12 for the raked views: the
-    // gauntlet's `interior` shot paid for it (veil 0.048 to 0.075, see 0.81
-    // to 0.78, measured by toggling the uniform alone) and `ws_close` did not
-    // gain, so the door glass keeps the term and the screen does not.
-    bw: { graze: 0 },
+    // Grazing sky on the screen, for cameras outside the cab only (round 7).
+    // Tried un-gated at 0.12 in round 4: the gauntlet's `interior` shot paid
+    // for it (veil 0.048 to 0.075, see 0.81 to 0.78, measured by toggling the
+    // uniform alone) and the term was pulled, which is why the round-5 screen
+    // returned no sky from the front quarter (`truck_day/hero.png` screen box
+    // hue 53 deg under a sky of 210). `index.js` now scales `uBwGraze` per
+    // frame by the camera's distance outside the cab bounds, so the seat sees
+    // the round-5 pane and the exterior views see the sky.
+    //
+    // The level and the ramp were set from the geometry, then checked on the
+    // frames: the hero camera meets the screen at 55-59 degrees of incidence
+    // (1 - cos 0.43-0.49), `ws_mid`/`moving`/`dusk_ws` at 40-45 (0.24-0.30),
+    // `ws_close` at 28-42. The consensus's 0.10 on the doors' 50-degree ramp
+    // was probed live on the hero and moved the screen box by 11 degrees of
+    // hue (44 -> 55) — at 57 degrees that ramp is 4 per cent on. So the
+    // screen ramps from 45 degrees to full at 66, and the level is what puts
+    // the reflected sky over the cabin seen through the pane at the hero's
+    // angle: 0.6-0.84 of 0.5 on a radiance the hour has already scaled. The
+    // first after frame at 0.35 took the screen box from hue 54 to 165 deg
+    // with 45 % of its pixels blue-leaning against the 60 % asked for, the
+    // cabin still showing through at a comparable level. `ws_mid` sits under
+    // the ramp's foot and keeps its `see`; at night `index.js` turns the term
+    // off (the `night_ext` pane paid 0.037 of veil for it).
+    bw: { graze: 0.5, grazeFrom: 0.3, grazeTo: 0.6 },
   });
   // Door glass: a light grey-green, nothing ever wipes it. `glassDark` used to
   // stand in for both this and the rear glass and the door panes carried the
@@ -805,16 +827,33 @@ export function vehicleMaterials(env = null) {
     sky: 0x93b0cc,
   });
   m.lensClear = new THREE.MeshPhysicalMaterial({
-    color: 0xc3d4de,
+    // Clear glass has no diffuse worth the name; this was 0xc3d4de, a
+    // near-white, and at opacity 0.1 a tenth of a near-white Lambert under
+    // the day sun is Y 0.2-0.3 laid evenly over the dark bowl behind — the
+    // pale grey disc the round-5 critics read as "returns no sky". Ablated
+    // live (round 7, a close camera on the right headlamp): the lens's own
+    // specular at zero or at four times changed the lamp box by 0.001 of
+    // mean luma, the lens hidden took the box from 0.177 to 0.084, and this
+    // colour alone took it to 0.136. Dark, the dome shows what a dome shows:
+    // sky in its upper half, ground in its lower half, split at the horizon.
+    color: 0x14181c,
     metalness: 0,
     roughness: 0.04,
     normalMap: lensNormal(),
     normalScale: new THREE.Vector2(0.35, 0.35),
     transparent: true,
     opacity: 0.1,
-    // At 2.8 the dome took an even white sheen off the sky across its whole
-    // aperture and the reflector behind it stopped reading at all.
-    envMapIntensity: 1.4,
+    // 1.4 -> 5 (round 7) with the diffuse gone and the specular now landing
+    // at full strength through `applyLensClose`: at 1.4 the "sheen" the old
+    // note below blamed was the diffuse, and a glass dome's 4 % Fresnel over
+    // the sky is invisible against the bowl. At 5 the hero's right lens box
+    // (219,172,228,187 at 640) sits half a stop under the sky median with 30
+    // per cent of its pixels blue-leaning (6 % before), and the night lamp
+    // blobs are within 2 per cent of their size — the emissive does not scale
+    // with this. (Old note: at 2.8 the dome took an even white sheen off the
+    // sky across its whole aperture and the reflector behind it stopped
+    // reading at all — true of the near-white diffuse, not of the mirror.)
+    envMapIntensity: 5,
     clearcoat: 1,
     clearcoatRoughness: 0.02,
     depthWrite: false,
@@ -938,6 +977,17 @@ export function vehicleMaterials(env = null) {
   // white centre, which is the reading of a lit lamp.
   applyLampGlow(m.lensClear, { tag: 'lensClear', core: 7.0, bleach: 0.55, coreExp: 2.0 });
   applyLampGlow(m.lensRibbed, { tag: 'lensRibbed', core: 7.0, bleach: 0.55, coreExp: 2.0 });
+  // The dome's own reflection over the scene at full strength, the emissive
+  // still at the lens's alpha (round 7, see `applyLensClose`). The consensus
+  // diagnosed the headlamp lenses' 1.2–1.4 stops under the sky as the
+  // specular blended at a tenth; the ablation found the specular was not the
+  // read either way (see `lensClear` above — the colour was), but the close
+  // is what lets the mirror carry the sky now the diffuse is gone. Same
+  // close on the bar cover, whose colour is left as it was: it is read at
+  // night, where the emissive is the read. `lensRibbed` is left as it was: it
+  // covers the small marker lamps, and the same close there was not measured.
+  applyLensClose(m.lensClear, { tag: 'lensClear' });
+  applyLensClose(m.barCover, { tag: 'barCover' });
   // core 3.0 -> 2.2 (round 6), with the lobe now a disc the size of the optic
   // rather than a stripe the height of the cover: at `cover` 0.4 the disc's
   // centre is 0.4 x 0.86 x 3.2 = 1.1 of radiance at the cover's 0.1 alpha —
