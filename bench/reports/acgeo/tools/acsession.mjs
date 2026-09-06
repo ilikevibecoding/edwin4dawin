@@ -74,6 +74,7 @@ async function runSpec(specPath) {
         const r = window.__game?.renderer;
         return r ? { calls: r.info.render.calls, tris: r.info.render.triangles, programs: r.info.programs?.length, build: window.__build } : null;
       });
+      fs.mkdirSync(path.dirname(out), { recursive: true });
       await page.screenshot({ path: out, type: 'png' });
       fs.writeFileSync(`${out}.log.json`, JSON.stringify({ url, ready, ms: Date.now() - t0, info, logs: logs.slice(0, 40) }, null, 2));
       log(`${ready ? 'ok  ' : 'WARN'} ${out} ${Date.now() - t0} ms calls ${info?.calls} tris ${info?.tris}`);
@@ -85,8 +86,11 @@ async function runSpec(specPath) {
         statsDone.add(port);
       }
     } catch (e) {
-      fs.writeFileSync(`${out}.log.json`, JSON.stringify({ url, ready, error: String(e), logs: logs.slice(0, 40) }, null, 2));
       log(`FAIL ${out}: ${e.message}`);
+      try {
+        fs.mkdirSync(path.dirname(out), { recursive: true });
+        fs.writeFileSync(`${out}.log.json`, JSON.stringify({ url, ready, error: String(e), logs: logs.slice(0, 40) }, null, 2));
+      } catch (e2) { log(`WARN could not write ${out}.log.json: ${e2.message}`); }
     }
     await page.close().catch(() => {});
   }
