@@ -931,7 +931,9 @@ export class Streets {
       const nl = Math.hypot(nx, nz) || 1;
       const ux = nx / nl, uz = nz / nl;
       const g = this.map.heightAt(p.x, p.z);
-      const y = g + 0.12;
+      // the deck is level across its width, so it sits on the highest ground under it (the shore rises inland:
+      // at the seaward height the inland half and its lamps were up to 1.4 m under the terrain)
+      const y = Math.max(g, this.map.heightAt(p.x - ux * 2.25, p.z - uz * 2.25), this.map.heightAt(p.x - ux * 4.5, p.z - uz * 4.5)) + 0.12;
       const row: number[] = [];
       const v = (a: number, yy: number, kind: number, up: boolean) => row.push(soup.vert({ x: p.x + ux * a, y: yy, z: p.z + uz * a, nx: up ? 0 : -ux, ny: up ? 1 : 0, nz: up ? 0 : -uz, across: a + 4.5, along, kind, w: 40 }));
       // parapet on the seaward edge (a = 0 .. -0.45), pavers inland to a = -4.5, apron beyond
