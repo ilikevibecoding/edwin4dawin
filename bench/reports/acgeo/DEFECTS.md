@@ -124,3 +124,39 @@ Strongest giveaways, ranked by what they cost at 20–200 m:
   the wing at 10 % and 63 % chord; black rubber glazing seals ~3 cm wide around the three side windows (albedo,
   matte and uncoated in the packed map, a soft lip in the height map).
 - Result / score: pending stills.
+
+## R8 — bare nav-light spheres off the tips; one door per side; seams that vanish at 30 m
+
+- Wrong: the position and strobe lenses were bare spheres floating 2.5 cm outboard of the tip skin; the fin beacon
+  sat straight on the fin's tip cap; only the pilot's door existed on each side (a DHC-2 has a large rear cabin door
+  behind it, carrying the second window); the station seams were a single 5 mm dark line that averages away at 30 m
+  so the critics saw rivets only in close-up; the lift-strut root fitting overlapped the rear door's front corner.
+- Changed (`parts/lights.ts`, `parts/fuselage.ts`, `parts/floats.ts`, `textures/fuselage.ts`, `textures/common.ts`
+  `DOORS` / `panels`): polished teardrop nav-light housings straddling the tip edge with the position lens at the nose
+  and the strobe at the tail, a base under the beacon; rear cabin doors on both sides (seam groove + ridge, recess
+  plate, paddle handle by the front edge, two hinges at the rear edge, a second boarding step; the wear and chip
+  passes follow both doors); each station seam is now a lap joint — a 4-texel step in the height map so one side is
+  lit and the other shadowed, a hairline highlight next to the dark line in the albedo — with rivet rows 40 %
+  firmer; strut root moved under the doors' bottom line.
+- Result / score: pending stills.
+
+## R9 — no rudder trim tab, a windshield with no frame, a cowl side with no louvres
+
+- Wrong: the rudder had a hinge line and fittings but no tab (the elevators got theirs in R4); the windshield's
+  edges met the paint with no frame or seal; the cowl side panels were plain sheet between the fastener rows.
+- Changed (`parts/tail.ts`, `textures/fuselage.ts`, `textures/common.ts` layout `windshield`): the rudder trim tab is
+  its own airfoil segment (13 cm chord over 40 cm of the rudder's height, a 6 mm slot at its hinge, skins 12 %
+  proud, bent 3 degrees to port — the way a Beaver's fixed tab is set against the R-985's slipstream; the tail band
+  shares its rows with the stabiliser tips so it could not be painted like the elevator tabs); a dark windshield
+  frame along the base line on each side, up the aft edge over the roof line and up the front edge to the cowl;
+  a bank of 3 × 4 pressed cooling louvres on each aft cowl side panel (dark opening under a proud lip).
+- Result / score: pending stills.
+
+## R10 — a float conversion without its ventral fin
+
+- Wrong: the tail cone ended in a bare stern post; a Beaver on floats carries a ventral fin for yaw stability, and
+  it is one of the shapes that identifies the float version at 100 m.
+- Changed (`parts/tail.ts`): a 1.05 × 0.33 m swept ventral fin (10 % section, near-vertical trailing edge, rounded
+  tip) hung from the keel line, tilted to follow the keel's 0.2 m/m rise toward the stern post, root buried 3 cm
+  inside the rounded bottom; tail-band paint.
+- Result / score: pending stills.
