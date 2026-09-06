@@ -639,10 +639,10 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
       vec2 hd = hash22(vec2(cellA, floor(dot(wp, offshore) / 60.0)) + 2.7);
       float u = fract(a) - 0.5 - (hd.x - 0.5) * 0.5;      // along the stick, in 12 m cells
       float halfLen = 0.06 + 0.07 * hd.y;                  // 0.7-1.6 m half-length
-      float across = sd - oldLine - (hd.y - 0.5) * 2.4 - 0.4 * sin(u * 40.0 + hd.x * 6.0) * hd.x; // a slight bend
+      float across = sd - oldLine - (hd.y - 0.5) * 2.4 - 0.25 * sin(u * 12.0 + hd.x * 6.0) * hd.x; // a slight bend
       float thick = max(0.07, foot * 0.6);
       float stick = step(abs(u), halfLen) * (1.0 - smoothstep(thick * 0.6, thick, abs(across))) * step(0.55, hash12(vec2(cellA, 5.0) + hd.y));
-      stick *= driftVis * (0.7 + 0.3 * smoothstep(halfLen, halfLen * 0.6, abs(u)));
+      stick *= driftVis * (1.0 - 0.3 * smoothstep(halfLen * 0.6, halfLen, abs(u)));
       vec3 wood = mix(vec3(0.20, 0.17, 0.13), vec3(0.075, 0.06, 0.045), hd.x); // bleached grey to dark wet bark
       c = mix(c, wood * (0.85 + 0.3 * n1), stick);
       // shadow side: the stick stands 6-10 cm proud of the sand
