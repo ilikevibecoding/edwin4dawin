@@ -16,14 +16,14 @@ import { Bubbles } from './bubbles.js';
 import { TalkBox } from './talk.js';
 import { ambientLine, greetLine, directionsLine, priceLine, workLine, jobLine } from '../dialog/dialog.js';
 import { RNG } from '../../rng.js';
-import { standHeight } from '../pathfinding.js';
+import { standHeight, isPassable } from '../pathfinding.js';
 import * as THREE from 'three';
 
 const TICK = 0.05;
 const _dir = new THREE.Vector3();
 export const SPAWN_R = 96, DESPAWN_R = 128, MAX_LIVE = 150;
 const SPAWN_PER_CYCLE = 10, CYCLE_TICKS = 10;
-const INDOOR_PENALTY = 40, INDOOR_MARGIN = 24, INDOOR_MAX = 20, OWN_LOT_MAX = 110, BEHIND_PENALTY = 30;   // see spawnCycle
+const INDOOR_PENALTY = 40, INDOOR_MARGIN = 24, INDOOR_MAX = 20, OWN_LOT_MAX = 110, BEHIND_PENALTY = 30, LEVEL_PENALTY = 50;   // see spawnCycle
 const RECYCLE_AGE = 160, RECYCLE_PER_CYCLE = 4;                    // out-of-sight recycling: min age (ticks), rate
 const WANDER_MIN = 4, WANDER_MAX = 24, STROLL_P = 0.4;             // idle seconds on a street spot; share of arrivals already strolling
 const SKIP_TICKS = 200;                                            // 10 s before retrying someone who could not be placed
@@ -31,6 +31,7 @@ const RUN_SPEED = 4.2;
 const HOP_S = 0.6, HOP_H = 1.05;                                   // the kerb hop: seconds, rise (clears the railing)
 const LEG_NODES = { street: 1600, lot: 4000, door: 900, spot: 3000, stairs: 7000 };
 const CIVIC = new Set(['senate', 'financial']);
+const AROUND = [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]];
 const VENDOR_JOBS = new Set(['vendor', 'shopkeeper', 'tailor', 'pharmacist', 'bartender', 'barista', 'server', 'cook', 'broker']);
 
 export class CoruscantPopulation {
@@ -49,10 +50,11 @@ export class CoruscantPopulation {
     this.liveByPerson = new Map();
     this.occupied = new Map();     // port spot keys -> citizen id (lot spots are tracked by LotInfo)
     this.skip = new Map();         // person id -> tick before which spawning is not retried
+    this.badCells = new Set();     // 'x,z' cells nobody could walk out of: never a spawn cell again
     this.view = { x: 0, y: 0, z: 1 };   // camera forward at the last spawn cycle: big halls seat their crowd in view
     this.rng = new RNG(0xc0c0);
     this.hour = 12; this.tickCount = 0; this.time = 0; this.enabled = true;
-    this.stats = { spawned: 0, despawned: 0, trips: 0, tripsFailed: 0, legs: 0, legsFailed: 0, legsFailedBy: {}, retargets: 0, stuck: 0, lifts: 0, bubbles: 0, talks: 0, unloadedWaits: 0, unplaceable: 0, errands: 0, arrivals: 0, recycled: 0, stays: 0, tickMs: 0, updateMs: 0 };
+    this.stats = { spawned: 0, despawned: 0, trips: 0, tripsFailed: 0, legs: 0, legsFailed: 0, legsFailedBy: {}, retargets: 0, stuck: 0, lifts: 0, bubbles: 0, talks: 0, unloadedWaits: 0, unplaceable: 0, errands: 0, arrivals: 0, recycled: 0, stays: 0, tickMs: 0, updateMs: 0, teleports: 0 };
     this.disaster = null; this.watching = false;
     this.lastBubbleAt = -10; this.lastChatAt = -10;
     this.playerCtx = { vandalT: 0, bumpT: 0 };
@@ -119,7 +121,14 @@ export class CoruscantPopulation {
     for (let i = this.live.length - 1; i >= 0; i--) {
       const n = this.live[i];
       const d = Math.hypot(n.pos.x - p.x, n.pos.z - p.z);
-      if (leave || d > DESPAWN_R || n.stuckT > 45 || n.waitT > 25) { if (n.stuckT > 45) this.stats.stuck++; this.despawn(n); }
+      if (leave || d > DESPAWN_R || n.stuckT > 45 || n.waitT > 25) { if (n.stuckT > 45) this.stats.stuck++; this.despawn(n); continue; }
+      // stranded (no route out of their cell, trip after trip): gone once out of view or a few blocks off, and not
+      // retried for a minute; the cell itself is remembered so nobody is placed in it again
+      if (n.stranded >= 2 && (d > 24 || n.stranded >= 3 && d > 12 || ((n.pos.x - p.x) * this.view.x + (n.pos.z - p.z) * this.view.z) / (d || 1) < -0.3)) {
+        this.stats.stranded = (this.stats.stranded || 0) + 1;
+        this.skip.set(n.person.id, this.tickCount + 1200);
+        this.despawn(n);
+      }
     }
     if (leave || this.live.length >= MAX_LIVE || !this.enabled) return;
     // Candidates by distance to where they are right now. People inside buildings other than the player's own are
@@ -128,7 +137,8 @@ export class CoruscantPopulation {
     const lotAt = this.playerLot(p);
     if (lotAt != null) { const li = this.lots.get(lotAt); if (li) this.staffFloor(li, p.y); }
     // on a landmark's own street (the undercity strip's main street, a forecourt) the player is outdoors
-    const inLot = lotAt != null && !this.nav.walkable(this.nav.levelAt(p.x, p.y, p.z), p.x, p.z) ? lotAt : null;
+    const playerLevel = this.nav.levelAt(p.x, p.y, p.z);
+    const inLot = lotAt != null && !this.nav.walkable(playerLevel, p.x, p.z) ? lotAt : null;
     const cands = [];
     let indoorLive = 0, ownLive = 0;
     for (const n of this.live) { if (n.lot == null) continue; if (n.lot === inLot) ownLive++; else indoorLive++; }
@@ -154,9 +164,11 @@ export class CoruscantPopulation {
       const indoor = !own && this.isIndoor(person, a);
       if (indoor && d > SPAWN_R - INDOOR_MARGIN) continue;
       // places wholly behind the camera come after the ones in front (the budget fills the view first; they still
-      // spawn when it allows, so turning round is not an empty street)
+      // spawn when it allows, so turning round is not an empty street); from the undercity the plaza decks 35 blocks
+      // overhead are out of sight, so their crowd queues behind the street's own
       const behind = d > 6 && this.behind(a, p);
-      cands.push([d + (indoor ? INDOOR_PENALTY : 0) + (behind ? BEHIND_PENALTY : 0), person, a, indoor, own]);
+      const overhead = playerLevel === 'ground' && a.lot != null && a.lot !== PORT && this.layout.lots[a.lot].kind === 'plaza';
+      cands.push([d + (indoor ? INDOOR_PENALTY : 0) + (behind ? BEHIND_PENALTY : 0) + (overhead ? LEVEL_PENALTY : 0), person, a, indoor, own]);
     }
     cands.sort((a, b) => a[0] - b[0]);
     let n = 0;
@@ -239,9 +251,15 @@ export class CoruscantPopulation {
   // standable feet cell at/near a spot in the live world, or null (also null when the chunk is not loaded)
   placeable(spot) {
     if (!this.world.isLoaded(spot.x, spot.z)) return null;
-    const s = findStand(this.world, spot.x, spot.y, spot.z, 2);
-    if (s) return s;
-    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { const t = findStand(this.world, spot.x + dx, spot.y, spot.z + dz, 2); if (t) return t; }
+    // plain floor at the spot's own height first (not the top of a bench, crate or planter), then anything standable
+    const ok = (t) => t && !this.badCells.has(t.x + ',' + t.z);
+    const own = findStand(this.world, spot.x, spot.y, spot.z, 0);
+    if (ok(own) && own.h === spot.y) return own;
+    // the spot's own column is a wall two blocks high: the cells around it may be the far side of that wall (a sealed
+    // yard, a room), so nobody is placed there
+    if (!isPassable(this.world.getBlock(spot.x, spot.y, spot.z)) && !isPassable(this.world.getBlock(spot.x, spot.y + 1, spot.z))) return null;
+    for (const [dx, dz] of AROUND) { const t = findStand(this.world, spot.x + dx, spot.y, spot.z + dz, 0); if (ok(t) && t.h === spot.y) return t; }
+    for (const [dx, dz] of AROUND) { const t = findStand(this.world, spot.x + dx, spot.y, spot.z + dz, 2); if (ok(t)) return t; }
     return null;
   }
   despawn(npc) {
@@ -305,6 +323,9 @@ export class CoruscantPopulation {
       ft.push({ job: npc.person.job, act: npc.act, from: { x: Math.round(npc.pos.x), y: Math.round(npc.pos.y), z: Math.round(npc.pos.z), lot: npc.lot, level: npc.level }, to: { x: spot.x, y: spot.y, z: spot.z, lot: spot.lot ?? null, level: spot.level || null, kind: spot.kind || null } });
       if (ft.length > 30) ft.shift();
       npc.tripFails = (npc.tripFails || 0) + 1;
+      const cell = Math.floor(npc.pos.x) + ',' + Math.floor(npc.pos.z);
+      npc.stranded = npc.strandCell === cell ? (npc.stranded || 0) + 1 : 1; npc.strandCell = cell;
+      if (npc.stranded >= 2 && npc.lot == null) this.badCells.add(cell);
       if (npc.tripFails < 3) this.retarget(npc, npc.tripFails); else { npc.tripFails = 0; this.settle(npc, 20); }
       return;
     }
@@ -349,6 +370,9 @@ export class CoruscantPopulation {
     this.paths.request(npc, { x: Math.floor(npc.pos.x), y: Math.floor(npc.pos.y + 0.01), z: Math.floor(npc.pos.z) }, goal, LEG_NODES[leg.tag] || 1500, (path) => {
       npc.waitingPath = false;
       if (npc.dead) return;
+      // an empty path: already standing in the goal cell - unless the goal is another floor of this column (a stair
+      // descent the pathfinder could not make), which is a failure like any other
+      if (path && !path.length) { if (Math.abs(npc.pos.y - goal.y) < 1.5) { npc.pathFails = 0; this.nextLeg(npc); } else this.legFailed(npc, leg, goal, 'path'); return; }
       if (path) { npc.path = path; npc.pathIdx = 0; npc.state = 'walk'; npc.pathFails = 0; npc.stuckT = 0; npc.lastProgress = { x: npc.pos.x, z: npc.pos.z, t: this.tickCount }; this.applyWalkMode(npc); return; }
       this.legFailed(npc, leg, goal, 'path');
     }, pr);
@@ -363,9 +387,19 @@ export class CoruscantPopulation {
     const fl = this.stats.failedLegs || (this.stats.failedLegs = []);
     fl.push({ tag, from: [Math.floor(npc.pos.x), Math.floor(npc.pos.y + 0.01), Math.floor(npc.pos.z)], to: [goal.x, goal.y, goal.z], lot: npc.lot, level: npc.level, act: npc.act, job: npc.person.job, nodes: LEG_NODES[leg.tag] || 1500 });
     if (fl.length > 12) fl.shift();
+    // a stair route the blueprint promised but the world does not walk: the lot forgets it, and the next trip from
+    // that floor says 'stay' (confined) instead of failing again
+    if (leg.reach && npc.lot != null) { const li = this.lots.peek(npc.lot); if (li) li.unreach(leg.reach); }
     npc.pathFails++;
-    if (npc.pathFails >= 3) { npc.pathFails = 0; npc.tripFails = (npc.tripFails || 0) + 1; this.retarget(npc, npc.tripFails); }
-    else { npc.state = 'wait'; npc.timer = 0.8 + this.rng.next(); }
+    if (npc.pathFails >= 3) {
+      npc.pathFails = 0; npc.tripFails = (npc.tripFails || 0) + 1;
+      // failing again and again from the same cell means the cell is the problem (a prop top, a sealed corner):
+      // the person is stranded and gives up their slot as soon as the player is not looking (see spawnCycle)
+      const cell = Math.floor(npc.pos.x) + ',' + Math.floor(npc.pos.z);
+      npc.stranded = npc.strandCell === cell ? (npc.stranded || 0) + 1 : 1; npc.strandCell = cell;
+      if (npc.stranded >= 2 && npc.lot == null) this.badCells.add(cell);
+      this.retarget(npc, npc.tripFails);
+    } else { npc.state = 'wait'; npc.timer = 0.8 + this.rng.next(); }
   }
   // The path ended: on the leg's floor, on to the next leg. On another floor (the shared pathfinder accepts a partial
   // path that ends in the goal's column at any height - the floor above a stair bottom) the leg failed.
@@ -396,7 +430,7 @@ export class CoruscantPopulation {
   }
 
   arrive(npc, spot) {
-    npc.legs = null; npc.path = null; npc.state = 'at'; npc.hidden = false;
+    npc.legs = null; npc.path = null; npc.state = 'at'; npc.hidden = false; npc.stranded = 0;
     npc.timer = 0.5 + this.rng.next();
     this.stats.arrivals++;
     if (spot) {
@@ -443,6 +477,9 @@ export class CoruscantPopulation {
         case 'at': n.timer -= TICK; if (n.timer <= 0) this.think(n); break;
         default: n.timer -= TICK; if (n.timer <= 0) { if (n.legs) this.startLeg(n); else if (n.spot) this.beginTrip(n, n.spot); else this.think(n); } break;
       }
+      // row 6 invariant, counted for the census: outside a lift ride nobody moves more than a stride in a tick
+      if (n.state !== 'lift' && n.prev.x !== 0 && (n.pos.x - n.prev.x) ** 2 + (n.pos.z - n.prev.z) ** 2 > 1.5 * 1.5 && !n.justLifted) this.stats.teleports++;
+      n.justLifted = false;
     }
     if (this.tickCount % 4 === 0) this.separate(p);
     if (this.tickCount % CYCLE_TICKS === 5) this.chatter(p);
@@ -545,7 +582,7 @@ export class CoruscantPopulation {
       if (s) npc.setPos(s.x + 0.5, s.h, s.z + 0.5); else npc.setPos(leg.tx + 0.5, leg.ty, leg.tz + 0.5);
       if (npc.lot == null) npc.level = this.nav.levelAt(npc.pos.x, npc.pos.y, npc.pos.z);
     }
-    npc.hidden = false;
+    npc.hidden = false; npc.justLifted = true;
     this.nextLeg(npc);
   }
 
@@ -790,7 +827,7 @@ export class CoruscantPopulation {
       hour: +this.hour.toFixed(2), pool: this.people.length, live: this.live.length, visible, visibleOutdoors, within96, outdoors96, outdoors40, onPlaza, onStreet, inLots, unseenIndoors, otherLevel, walking, droids, stuckNow, states, acts, modes, jobs,
       stuck: s.stuck, trips: s.trips, tripsFailed: s.tripsFailed, legs: s.legs, legsFailed: s.legsFailed, legsFailedBy: s.legsFailedBy, retargets: s.retargets, lifts: s.lifts, hops: s.hops || 0, errands: s.errands,
       failRate: s.trips ? +((s.tripsFailed + s.retargets) / s.trips).toFixed(4) : 0, legFailRate: s.legs ? +(s.legsFailed / s.legs).toFixed(4) : 0,
-      spawned: s.spawned, despawned: s.despawned, recycled: s.recycled, stays: s.stays, bubbles: s.bubbles, talks: s.talks, unloadedWaits: s.unloadedWaits, unplaceable: s.unplaceable,
+      spawned: s.spawned, despawned: s.despawned, recycled: s.recycled, stays: s.stays, teleports: s.teleports, stranded: s.stranded || 0, bubbles: s.bubbles, talks: s.talks, unloadedWaits: s.unloadedWaits, unplaceable: s.unplaceable,
       paths: { ...this.paths.stats, ms: +this.paths.stats.ms.toFixed(1), pending: this.paths.pending }, coarse: { ...this.nav.stats }, drawCalls: this.crowd.drawCalls,
       cpu: { tickMs: +s.tickMs.toFixed(3), updateMs: +s.updateMs.toFixed(3) },
     };

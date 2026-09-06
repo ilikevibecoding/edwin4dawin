@@ -87,6 +87,10 @@ export class CityNav {
       try { li = new LotInfo(lot, L); } catch (e) { continue; }
       this.landmarkCells += this.sampleLot(li, this.ground, GROUND_Y) + this.sampleLot(li, this.deck, DECK_Y);
     }
+    // a landmark's plinths, inner courts, hall aisles and terraces sample as walkable too, but only its doors lead
+    // there: keep the one connected street network per level, so no one is placed (or sent) where no street route
+    // leads (the courts belong to the building - LotInfo places its people there)
+    this.islandsPruned = this.keepMainland(this.ground) + this.keepMainland(this.deck);
     // plazas share the deck level but the boulevard kerb railing runs along their whole edge: routes hop it (kerbHop)
     this.plazas = L.lots.filter((l) => l.kind === 'plaza').map((l) => ({ id: l.id, x0: l.x0, z0: l.z0, x1: l.x1, z1: l.z1 }));
     // the spaceport deck (feet 97): its own level, walkable around the terminal, hangar, fuel farm and tower
@@ -98,24 +102,70 @@ export class CityNav {
   }
 
   // Mark the coarse cells of a landmark lot where one can stand at feet height `y` in the open (six blocks of headroom:
-  // streets, courtyards and decks, not rooms) on `map`. Returns the number of cells marked.
+  // streets, courtyards and decks, not rooms) on `map` - but only the cells one can walk to from the lot's edge (a
+  // block-level flood fill over the blueprint from the perimeter inward), so a walled yard or a lightwell that is
+  // open to the sky but sealed off from the street never becomes a street cell. Returns the number of cells marked.
   sampleLot(li, map, y) {
     const lot = li.lot;
     if (y < li.bp.y0 || y >= li.bp.y0 + li.bp.h) return 0;
-    let n = 0;
-    const open = (x, z) => {
-      if (!li.standable(x, y, z)) return false;
-      for (let k = 2; k <= 6; k++) { const id = li.blockAt(x, y + k, z); if (id !== 0 && id !== 255 && id !== -1) return false; }
+    const open = (x, yy, z) => {
+      if (!li.standable(x, yy, z)) return false;
+      for (let k = 2; k <= 6; k++) { const id = li.blockAt(x, yy + k, z); if (id !== 0 && id !== 255 && id !== -1) return false; }
       return true;
     };
+    // seeds: open cells along the lot's perimeter (the street runs past them); the fill steps up or down one block
+    const W = lot.x1 - lot.x0, D = lot.z1 - lot.z0;
+    const seen = new Uint8Array(W * D), stack = [];
+    const push = (x, z, yy) => { const i = (x - lot.x0) * D + (z - lot.z0); if (seen[i]) return; seen[i] = 1; stack.push([x, z, yy]); };
+    for (let x = lot.x0; x < lot.x1; x++) for (const z of [lot.z0, lot.z1 - 1]) for (const dy of [0, 1, -1]) if (open(x, y + dy, z)) { push(x, z, y + dy); break; }
+    for (let z = lot.z0; z < lot.z1; z++) for (const x of [lot.x0, lot.x1 - 1]) for (const dy of [0, 1, -1]) if (open(x, y + dy, z)) { push(x, z, y + dy); break; }
+    const reach = new Uint8Array(W * D);
+    while (stack.length) {
+      const [x, z, yy] = stack.pop();
+      reach[(x - lot.x0) * D + (z - lot.z0)] = 1;
+      for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, nz = z + dz;
+        if (nx < lot.x0 || nx >= lot.x1 || nz < lot.z0 || nz >= lot.z1) continue;
+        for (const dy of [0, 1, -1]) if (Math.abs(yy + dy - y) <= 1 && open(nx, yy + dy, nz)) { push(nx, nz, yy + dy); break; }
+      }
+    }
+    let n = 0;
     const [a, b] = this.cellOf(lot.x0, lot.z0), [c, e] = this.cellOf(lot.x1 - 1, lot.z1 - 1);
     for (let cx = Math.max(0, a); cx <= Math.min(this.w - 1, c); cx++) for (let cz = Math.max(0, b); cz <= Math.min(this.d - 1, e); cz++) {
       const x = this.x0 + cx * RES, z = this.z0 + cz * RES;
       let k = 0;
-      for (let dx = 0; dx < RES; dx++) for (let dz = 0; dz < RES; dz++) if (open(x + dx, z + dz)) k++;
+      for (let dx = 0; dx < RES; dx++) for (let dz = 0; dz < RES; dz++) { const bx = x + dx, bz = z + dz; if (bx >= lot.x0 && bx < lot.x1 && bz >= lot.z0 && bz < lot.z1 && reach[(bx - lot.x0) * D + (bz - lot.z0)]) k++; }
       if (k >= 2) { map[this.idx(cx, cz)] = 1; n++; }
     }
     return n;
+  }
+
+  // Keep only the largest 4-connected patch of `map` (the street network); returns the number of cells cleared.
+  keepMainland(map) {
+    const n = map.length, comp = new Int32Array(n).fill(-1), sizes = [], stack = [];
+    for (let s = 0; s < n; s++) {
+      if (!map[s] || comp[s] >= 0) continue;
+      const id = sizes.length; let size = 0;
+      comp[s] = id; stack.push(s);
+      while (stack.length) {
+        const i = stack.pop(), cx = Math.floor(i / this.d), cz = i - cx * this.d;
+        size++;
+        for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = cx + dx, nz = cz + dz;
+          if (!this.inGrid(nx, nz)) continue;
+          const j = nx * this.d + nz;
+          if (!map[j] || comp[j] >= 0) continue;
+          comp[j] = id; stack.push(j);
+        }
+      }
+      sizes.push(size);
+    }
+    if (sizes.length < 2) return 0;
+    let main = 0;
+    for (let k = 1; k < sizes.length; k++) if (sizes[k] > sizes[main]) main = k;
+    let cleared = 0;
+    for (let i = 0; i < n; i++) if (map[i] && comp[i] !== main) { map[i] = 0; cleared++; }
+    return cleared;
   }
 
   map(level) { return level === 'deck' ? this.deck : level === 'port' ? this.port : this.ground; }
@@ -345,9 +395,10 @@ export class PathQueue {
     while (this.queue.length && (n === 0 || performance.now() - t0 < this.budgetMs)) {
       const q = this.queue.shift(); n++;
       if (q.npc.dead) continue;
+      // an empty path is a success too: the start cell already is the goal (the callback treats it as arrived)
       const path = findPath(this.world, q.from.x, q.from.y, q.from.z, q.to.x, q.to.y, q.to.z, q.maxNodes);
-      if (path && path.length) this.stats.ok++; else this.stats.fail++;
-      q.cb(path && path.length ? path : null);
+      if (path) this.stats.ok++; else this.stats.fail++;
+      q.cb(path);
     }
     this.stats.ms += performance.now() - t0;
   }

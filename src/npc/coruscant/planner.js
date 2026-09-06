@@ -193,7 +193,7 @@ export class Planner {
           const s = this.stairsTo(li, cur, floorHere, E.in.y);
           if (!s) return 'stay';
           if (dist2(cur, s.top) > 1) legs.push(walk(s.top, 'lot'));
-          legs.push(walk(s.bottom, 'stairs'));
+          legs.push({ ...walk(s.bottom, 'stairs'), reach: s.key });
           cur = s.bottom;
         }
       }
@@ -227,7 +227,7 @@ export class Planner {
           const s = this.stairsTo(lt, cur, floorHere, spot.y);
           if (!s) return null;
           if (dist2(cur, s.top) > 1) legs.push(walk(s.top, 'lot'));
-          legs.push(walk(s.bottom, 'stairs'));
+          legs.push({ ...walk(s.bottom, 'stairs'), reach: s.key });
           cur = s.bottom;
         }
       }

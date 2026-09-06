@@ -60,7 +60,7 @@ for (const t of TIMES) for (const s of SPOTS) {
   page.close();
   rows.push(row);
   const r = row;
-  console.log(`${r.spot.padEnd(16)} ${r.time}  ticks ${String(r.ticks ?? '-').padStart(3)} (${Math.round((r.settleMs || 0) / 1000)} s)  live ${String(r.live ?? '-').padStart(3)}  visible ${String(r.visible ?? '-').padStart(3)} (outdoors ${String(r.visibleOutdoors ?? '-').padStart(3)})  within96 ${String(r.within96 ?? '-').padStart(3)}  unseen indoors/other level ${r.unseenIndoors ?? '-'}/${r.otherLevel ?? '-'}  walking ${String(r.walking ?? '-').padStart(3)}  stuck ${r.stuckNow ?? '-'}/${r.stuck ?? '-'}  trips ${r.trips ?? '-'} failed ${r.tripsFailed ?? '-'} retargets ${r.retargets ?? '-'} (${r.failRate != null ? (r.failRate * 100).toFixed(1) + '%' : '-'})  legs ${r.legs ?? '-'}/${r.legsFailed ?? '-'} failed  lifts ${r.lifts ?? '-'}  unplaceable ${r.unplaceable ?? '-'}  draws ${r.draws ?? '-'} heap ${r.heapMB ?? '-'}MB${r.error ? '  ERROR ' + r.error : ''}${r.exceptions ? '  exceptions ' + r.exceptions : ''}`);
+  console.log(`${r.spot.padEnd(16)} ${r.time}  ticks ${String(r.ticks ?? '-').padStart(3)} (${Math.round((r.settleMs || 0) / 1000)} s)  live ${String(r.live ?? '-').padStart(3)}  visible ${String(r.visible ?? '-').padStart(3)} (outdoors ${String(r.visibleOutdoors ?? '-').padStart(3)})  within96 ${String(r.within96 ?? '-').padStart(3)}  unseen indoors/other level ${r.unseenIndoors ?? '-'}/${r.otherLevel ?? '-'}  walking ${String(r.walking ?? '-').padStart(3)}  stuck ${r.stuckNow ?? '-'}/${r.stuck ?? '-'}  trips ${r.trips ?? '-'} failed ${r.tripsFailed ?? '-'} retargets ${r.retargets ?? '-'} (${r.failRate != null ? (r.failRate * 100).toFixed(1) + '%' : '-'})  legs ${r.legs ?? '-'}/${r.legsFailed ?? '-'} failed  lifts ${r.lifts ?? '-'}  teleports ${r.teleports ?? '-'}  unplaceable ${r.unplaceable ?? '-'}  draws ${r.draws ?? '-'} heap ${r.heapMB ?? '-'}MB${r.error ? '  ERROR ' + r.error : ''}${r.exceptions ? '  exceptions ' + r.exceptions : ''}`);
 }
 
 // rubric checks: <= 150 live objects, >= 120 visible in core districts at midday, < 2% failed transitions overall
@@ -69,18 +69,18 @@ const maxLive = Math.max(...ok.map((r) => r.live || 0));
 const noonCore = ok.filter((r) => r.core && r.t === 0.5);
 const trips = ok.reduce((a, r) => a + (r.trips || 0), 0), failed = ok.reduce((a, r) => a + (r.tripsFailed || 0) + (r.retargets || 0), 0);
 const legs = ok.reduce((a, r) => a + (r.legs || 0), 0), legsFailed = ok.reduce((a, r) => a + (r.legsFailed || 0), 0);
-const stuck = ok.reduce((a, r) => a + (r.stuck || 0), 0);
+const stuck = ok.reduce((a, r) => a + (r.stuck || 0), 0), teleports = ok.reduce((a, r) => a + (r.teleports || 0), 0);
 const summary = {
   views: rows.length, errors: rows.length - ok.length, maxLive, liveOk: maxLive <= 150,
   noonCoreVisible: noonCore.map((r) => ({ spot: r.spot, visible: r.visible, outdoors: r.visibleOutdoors })),
   noonCoreOk: noonCore.some((r) => (r.visible || 0) >= 120),
   trips, failedTransitions: failed, failRate: trips ? +(failed / trips).toFixed(4) : 0, failOk: !trips || failed / trips < 0.02,
-  legs, legsFailed, legFailRate: legs ? +(legsFailed / legs).toFixed(4) : 0, stuckTotal: stuck,
+  legs, legsFailed, legFailRate: legs ? +(legsFailed / legs).toFixed(4) : 0, stuckTotal: stuck, teleports,
   drawsMax: Math.max(...ok.map((r) => r.draws || 0)), heapMBMax: Math.max(...ok.map((r) => r.heapMB || 0)),
 };
 console.log('\nsummary', JSON.stringify(summary));
-console.log(`live <= 150: ${summary.liveOk ? 'PASS' : 'FAIL'} (max ${maxLive}) | >= 120 visible in a core district at noon: ${summary.noonCoreOk ? 'PASS' : 'FAIL'} | failed transitions < 2%: ${summary.failOk ? 'PASS' : 'FAIL'} (${(summary.failRate * 100).toFixed(2)}% of ${trips} trips)`);
+console.log(`live <= 150: ${summary.liveOk ? 'PASS' : 'FAIL'} (max ${maxLive}) | >= 120 visible in a core district at noon: ${summary.noonCoreOk ? 'PASS' : 'FAIL'} | failed transitions < 2%: ${summary.failOk ? 'PASS' : 'FAIL'} (${(summary.failRate * 100).toFixed(2)}% of ${trips} trips) | teleports outside lifts: ${teleports === 0 ? 'PASS' : 'FAIL'} (${teleports}) | stuck > 45 s: ${stuck}`);
 mkdirSync(dirname(out), { recursive: true });
 writeFileSync(out, JSON.stringify({ date: new Date().toISOString(), base, ticks, wait, rd, rows, summary }, null, 1));
 console.log(`wrote ${out}`);
-process.exit(bad || !summary.liveOk || !summary.failOk ? 1 : 0);
+process.exit(bad || !summary.liveOk || !summary.failOk || teleports ? 1 : 0);

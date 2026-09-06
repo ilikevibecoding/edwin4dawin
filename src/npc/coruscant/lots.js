@@ -43,6 +43,7 @@ export class LotInfo {
     this._byRoomKind = null;
     this._landings = new Map();
     this._reach = new Map();
+    this._noStairs = new Set();   // 'fromY>toY' floor pairs whose stairs the live world did not walk
     this.occupied = new Map();   // spot key -> npc id (live occupancy)
     this.stats = { assigned: 0, fallbacks: 0 };
   }
@@ -340,6 +341,7 @@ export class LotInfo {
   reach(from, toY, maxCells = 8000) {
     const sx = Math.floor(from.x), sy = Math.floor(from.y + 0.01), sz = Math.floor(from.z);
     const key = `${sx >> 3},${sy},${sz >> 3}>${toY}`;
+    if (this._noStairs.has(sy + '>' + toY)) return null;
     if (this._reach.has(key)) return this._reach.get(key);
     const startKey = `${sx},${sy},${sz}`;
     const came = new Map([[startKey, null]]);
@@ -367,10 +369,18 @@ export class LotInfo {
       cells.reverse();
       let top = cells[0];
       for (let i = 1; i < cells.length && cells[i].y === sy; i++) top = cells[i];
-      out = { top, bottom: cells[cells.length - 1] };
+      out = { top, bottom: cells[cells.length - 1], key };
     }
     this._reach.set(key, out);
     return out;
+  }
+  // The world did not walk the stairs the blueprint promised (a door, a slab the pathfinder refuses): forget them, so
+  // the next trip from that floor keeps the occupant there instead of failing again
+  unreach(key) {
+    if (!key) return;
+    this._reach.set(key, null);
+    const m = /^-?\d+,(-?\d+),-?\d+>(-?\d+)$/.exec(key);
+    if (m) this._noStairs.add(m[1] + '>' + m[2]);
   }
   // entrances: { level: 'ground'|'deck', out: {x,y,z}, in: {x,y,z} } - `out` on the street, `in` one step inside
   entrances() {
