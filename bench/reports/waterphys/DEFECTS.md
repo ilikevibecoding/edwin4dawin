@@ -139,3 +139,37 @@ only; the sky is too uniform for a 4 deg tilt to show — a foam-free brightness
 boat hulls without a height patch still sit on a flat waterline at boat level.
 
 Self-scores after r3: 11: 7.0, 12: 6.5, 13: 7.5, 14: 7.5.
+
+## Round 4 — ditching matrix: the physics, run numerically
+
+The FlightModel bundled for Node (`esbuild src/plane/physics.ts`, `/tmp/waterphys/ditchnode.mjs`) over deep flat
+water at 30 Hz, 20 s per case, the same set-ups as the `dev` views below (heading east, controls held):
+
+| case | set-up | result before this round | after |
+|---|---|---|---|
+| belly (soft) | 27 m/s, +1 deg, 1.3 m/s sink | touch 0.3 s, no bounce, sink 1.31, planes 5-6 deg nose-up, 27 -> 9.5 m/s in 20 s | same |
+| firm | 28 m/s, -3 deg, 2.5 m/s | one skip of 0.6 s (clears the water 1.1-1.6 s), settles on the second touch | same |
+| wheels down | 30 m/s, +1 deg, gear forced down | wheels bite 0.67 s, wreck 1.13 s, on its back 1.6 s (0.9 s after the bite), rolled back 2.2 s later, stops 3.5 s; floods 0.80 / 0.80 | floods 0.60 / 0.60: sits 17 cm low, level (a nose-over splits both bows) |
+| wing tip | 30 m/s, 32 deg bank | tip in at 0.23 s, slews 110 deg in 1 s (peak 150 deg/s), rolls onto the other wing (-41 deg) at 1.7 s, upright by 5 s, floods 0.80 / 0.80: **level** | floods 0.72 / 0.80: lists 6 deg to the struck side |
+| nose first | 38 m/s, -14 deg, 4 m/s sink | floats 0.73 s, nose ploughs 1.0 s, pitches through vertical 1.0-1.4 s (CG vaults 1.4 m), slams on its back 2.0 s, rolled back 2.2 s later, then floods over 10 s to 0.92 / 0.80, lists 20 deg | 0.92 / 0.60, lists 21 deg, sits 70 cm low |
+| flat, fast | 48 m/s, level, 60 % power | two skips and it is flying again (94 kt with power) | same |
+| slam | 40 m/s, -8 deg from 12 m, 4.5 m/s | wreck at the touch, over on its back 0.6 s later, righted, lists 20 deg | same |
+| taxi stop | 12 m/s, idle | 12 -> 8 m/s in 5.5 s (0.85 m/s^2, consistent with the harness's 318 m landing run) | same |
+
+Defects found and fixed (`physics.ts`):
+
+1. **Every wing strike ended level.** The wreck's flood targets are merged with `max`; the other wing dipping in at
+   14 m/s as the wreck slewed round flooded the second float as hard as the 30 m/s strike. The flooding of a
+   structural strike now scales with the striking part's speed (`smoothstep(10, 26, v)`), so the first blow decides
+   the list.
+2. **A nose-over left the wreck within a few centimetres of its waterline** once the speed-scaling above took the
+   inverted slam's flood away: the kinematic righting (the salvage stand-in) now marks both bows split (flood
+   target >= 0.6) so the righted wreck sits deep and nearly level, as a nosed-over floatplane does when pumped
+   upright.
+
+Judged sound and left alone: the nose-over time (0.9 s from the wheels' bite), the wing strike's slew (a
+cartwheel's first quarter turn at 30 m/s is that violent), the skip of a firm touchdown, the take-off-again of a
+flat fast touch, the reversed heading after a nose-over (it ends on its back pointing the other way; the roll
+back keeps that), the slow flooding (10 s to the final list).
+
+Harness after: see flight_r4.json (queued behind the Chrome slot gate at the time of writing).
