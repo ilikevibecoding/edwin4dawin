@@ -788,6 +788,14 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
   } else {
     c = vec3(0.1, 0.13, 0.06);
   }
+  // Every built zone that meets a beach converges on the same sandy scrub the beach's upper edge turns into
+  // (parks, yards and airfield grass do so in their own branches): the zone boundary is a jittered 10 m cell
+  // lattice, and where the two sides differed (pavement against sand) it showed as a mosaic of squares along
+  // the whole back of the beach (downtown waterfront, hotel frontages, marina lots)
+  if (zone == 6 || zone == 7 || zone == 8 || zone == 9 || zone == 11 || zone == 13 || zone == 14 || zone == 15 || zone == 16 || zone == 18) {
+    c = mix(c, sandyScrub(n1, n2, gd), sandy);
+    rough = mix(rough, 0.9, sandy);
+  }
   return c;
 }
 `;
