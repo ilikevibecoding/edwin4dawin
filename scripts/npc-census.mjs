@@ -15,13 +15,13 @@ const wait = parseInt(args.wait || '90000', 10);
 const ticks = parseInt(args.ticks || '400', 10);
 const out = args.out || '/tmp/npc-census.json';
 const rd = args.rd || '8';
-// the five vantage points: Senate plaza, market plaza, financial plaza (the core districts: boulevard decks, feet 97),
-// the Uscru undercity strip (ground, feet 61) and the spaceport apron looking east over the pads (deck, feet 97;
-// yaw 0 faces -z, yaw -90 faces +x)
+// the five vantage points: Senate plaza, market plaza, financial plaza (the core districts: boulevard decks, feet 97,
+// each from the plaza's south edge looking north across it), the Uscru undercity strip (ground, feet 61) and the
+// spaceport apron looking east over the pads (deck, feet 97; yaw 0 faces -z, yaw -90 faces +x)
 const SPOTS = args.spots ? JSON.parse(args.spots) : [
   { name: 'senate_plaza', x: 2975, z: 120, y: 97.2, yaw: 0, pitch: -2, core: true },
-  { name: 'market_plaza', x: 2806, z: -34, y: 97.2, yaw: 0, pitch: -2, core: true },
-  { name: 'financial_plaza', x: 3352, z: -34, y: 97.2, yaw: 0, pitch: -2, core: true },
+  { name: 'market_plaza', x: 2806, z: -8, y: 97.2, yaw: 0, pitch: -2, core: true },
+  { name: 'financial_plaza', x: 3352, z: -8, y: 97.2, yaw: 0, pitch: -2, core: true },
   { name: 'undercity_strip', x: 2748, z: 386, y: 61.2, yaw: 0, pitch: 3, core: false },
   { name: 'spaceport_apron', x: 2616, z: -62, y: 97.2, yaw: -90, pitch: -4, core: false },
 ];
