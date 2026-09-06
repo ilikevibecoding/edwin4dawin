@@ -745,6 +745,22 @@ function addPaw(b, skel, leg, K, D) {
   });
   if (!D.toes) return;
   const toeGeo = new THREE.SphereGeometry(1, D.sphere[0] * 0.5 | 0 || 6, D.sphere[1] * 0.5 | 0 || 4);
+  {
+    // round 7: a toe is a lobe with a flat sole and flat sides, not a bead —
+    // the sole pressed flat on the ground and the sides pressed against the
+    // neighbouring toes, the top and the tip still round (the round-5
+    // critics read four beads lit from above as "pale cubes"). The extents
+    // are unchanged, so nothing about the contact moves (feet.js reads the
+    // paw bone and spec.js PAD_OFFSET, not this mesh).
+    const tp = toeGeo.attributes.position;
+    for (let i = 0; i < tp.count; i++) {
+      const x = tp.getX(i);
+      const z = tp.getZ(i);
+      tp.setX(i, Math.sign(x) * Math.pow(Math.abs(x), 0.8));
+      if (z < 0) tp.setZ(i, -Math.pow(-z, 0.65));
+    }
+    toeGeo.computeVertexNormals();
+  }
   const clawGeo = D.claws ? new THREE.CylinderGeometry(0.0, 0.0065 * s, 0.026 * s, 6) : null;
   // four toes, the middle pair leading, each its own lobe: the lobes just
   // touch, so the crease between them is a real groove and not a painted one

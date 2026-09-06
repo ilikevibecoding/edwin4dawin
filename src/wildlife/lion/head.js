@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { EYE, EYE_LIDS, HEAD_KINDS, KINDS } from './spec.js';
 import { ATLAS } from './textures.js';
-import { FACE, HEAD_ROWS, HEAD_SPLIT, HEAD_Z0, HEAD_Z1, JAW_ROWS, almondOpen, headBump, rowsAt, topTaper } from './headspec.js';
+import { FACE, HEAD_ROWS, HEAD_SPLIT, HEAD_Z0, HEAD_Z1, JAW_ROWS, almondOpen, headBump, ringAngles, rowsAt, topTaper } from './headspec.js';
 import { clamp, lerp, mulberry32, smoothstep } from '../../textures/core.js';
 
 // ---------------------------------------------------------------------------
@@ -95,8 +95,13 @@ export function addHead(b, alpha, skel, K, D) {
   {
     // the near tier is tessellated finely enough (about 8 mm) to carve a
     // 4 cm socket into the loft; the far tiers keep the silhouette only
+    // (round 7: 72 around at the near tier, placed by headspec.js ringAngles —
+    // dense along the mouth line and over the bridge's crest, where the lip
+    // crease and the ridge are cut — and two more sections over the last two
+    // centimetres, where the front rounds off)
     const fine = D.head >= 2;
-    const around = Math.max(10, Math.round(D.around * (fine ? 1.45 : 1)));
+    const around = Math.max(10, Math.round(D.around * (fine ? 1.64 : 1)));
+    const angles = ringAngles(around);
     const rings = [];
     const zs = [];
     // sections are sparse over the braincase, densest across the brow, eyes
@@ -105,7 +110,7 @@ export function addHead(b, alpha, skel, K, D) {
     const spans = [
       [HEAD_Z0, 0.12, fine ? 10 : 5],
       [0.12, 0.21, fine ? 18 : 4],
-      [0.21, HEAD_Z1, fine ? 14 : 5],
+      [0.21, HEAD_Z1, fine ? 16 : 5],
     ];
     for (const [za, zb, n0] of spans) {
       const n = Math.max(2, Math.round(n0 * (fine ? 1 : Math.pow(D.along / 0.55, 0.8))));
@@ -121,8 +126,7 @@ export function addHead(b, alpha, skel, K, D) {
       const ring = [];
       for (let k = 0; k <= around; k++) {
         // mirrored around: both sides read the same texel column
-        const u = k / around;
-        const a = u * Math.PI * 2;
+        const { a, um } = angles[k];
         const ca = Math.sin(a);
         const sa = -Math.cos(a);
         const ry = sa >= 0 ? ryTop : ryBot;
@@ -180,12 +184,16 @@ export function addHead(b, alpha, skel, K, D) {
           hz = ez + dz * k;
         }
         _a.set(hx * s, hy * s, zOf(hz) * s).applyMatrix4(headFrame);
-        const um = u <= 0.5 ? u * 2 : (1 - u) * 2;
         const uv = region === 'skull' ? ATLAS.skull : ATLAS.muzzle;
-        // skull region: along the head across the region's u, around up its v;
-        // muzzle region: around across u, toward the nose up v
-        const tu = region === 'skull' ? (z - HEAD_Z0) / (HEAD_SPLIT - HEAD_Z0) : um;
-        const tv = region === 'skull' ? um : (z - HEAD_SPLIT) / (HEAD_Z1 - HEAD_SPLIT);
+        // both regions: around the head across u (under the lip 0, crown 1),
+        // along the head up v (skull: occiput to the split; muzzle: split to
+        // the nose). Round 7 turned the skull region this way round — it ran
+        // along the head across u, which put the coat normal map's strands
+        // (long along v) around the skull like hoops, and stretched its
+        // texels 4:1; now the hair grain runs from the nose back over the
+        // skull on both regions and a texel is about a millimetre each way.
+        const tu = um;
+        const tv = region === 'skull' ? (z - HEAD_Z0) / (HEAD_SPLIT - HEAD_Z0) : (z - HEAD_SPLIT) / (HEAD_Z1 - HEAD_SPLIT);
         // a few texels in from the region's edge, so bilinear and mip sampling
         // never pull the neighbouring tile's colour onto the seams (the mirror
         // seam along the crown and under the lip, and the ring at the split)
@@ -212,7 +220,7 @@ export function addHead(b, alpha, skel, K, D) {
       const uv = region === 'skull' ? ATLAS.skull : ATLAS.muzzle;
       const centre = b.vertex(
         _a,
-        region === 'skull' ? [uv[0] + (uv[2] - uv[0]) * UV_INSET, (uv[1] + uv[3]) / 2] : [(uv[0] + uv[2]) / 2, uv[3] - (uv[3] - uv[1]) * UV_INSET],
+        region === 'skull' ? [(uv[0] + uv[2]) / 2, uv[1] + (uv[3] - uv[1]) * UV_INSET] : [(uv[0] + uv[2]) / 2, uv[3] - (uv[3] - uv[1]) * UV_INSET],
         headBones,
         [1, 1, 1],
         0,
@@ -229,12 +237,20 @@ export function addHead(b, alpha, skel, K, D) {
   // --- nose leather ---------------------------------------------------------
   if (D.head >= 1) {
     // broad across the top, the nostril wings flaring, nearly flat on the front
+    // (round 7: a block, not a bead — each coordinate of the sphere is pushed
+    // toward the cube's faces, so the leather has a flat top, a flat front
+    // for the nostrils and rounded edges, and stands on the rounded muzzle
+    // end as a lion's does)
     const nose = new THREE.SphereGeometry(1, Math.max(10, ws * 0.6 | 0), Math.max(6, hs * 0.6 | 0));
     const np = nose.attributes.position;
+    const cube = (c) => Math.sign(c) * Math.pow(Math.abs(c), 0.62);
     for (let i = 0; i < np.count; i++) {
-      const y = np.getY(i);
-      np.setX(i, np.getX(i) * lerp(0.6, 1.0, smoothstep(-1, 0.6, y)));
-      if (np.getZ(i) > 0) np.setZ(i, np.getZ(i) * 0.5);
+      const x = cube(np.getX(i));
+      const y = cube(np.getY(i));
+      const z = cube(np.getZ(i));
+      np.setX(i, x * lerp(0.6, 1.0, smoothstep(-1, 0.6, y)));
+      np.setY(i, y);
+      np.setZ(i, z > 0 ? z * 0.5 : z);
     }
     nose.computeVertexNormals();
     nose.scale(FACE.noseW * 0.5 * s, FACE.noseH * 0.5 * s, 0.022 * s);
@@ -378,15 +394,22 @@ export function addHead(b, alpha, skel, K, D) {
 }
 
 /**
- * One ear: a dish whose rim is a rounded triangle, wider at the base than the
- * tip, cupped toward the front, with the back convex. Built in the ear bone's
- * frame (+Y along the ear, +Z forward, +X lateral). The outer surface carries
- * the dark ear-back; the inner lining is a second surface a few millimetres
- * ahead of it that meets the outer at the rim, so the edge is closed.
+ * One ear: a cupped shell whose rim is a rounded triangle, wider at the base
+ * than the tip, the cup toward the front and the back convex. Built in the
+ * ear bone's frame (+Y along the ear, +Z forward, +X lateral). The outer
+ * surface carries the dark ear-back; the inner lining is a second surface
+ * ahead of it. Round 7: at the near tier the lining is inset from the outer
+ * rim and stands 9 mm ahead of it, and a band of quads joins the two rims,
+ * so the edge has the thickness of a rolled rim (about 8 mm) instead of the
+ * zero-thickness leaf edge every round-5 critic read as a disc; the cup is
+ * a bowl (steep toward the rim, 3 cm deep) and the lining darkens toward
+ * the canal, so the ear reads as a cup from the front. The far tiers keep
+ * the closed leaf (same triangle count as round 6).
  */
 function addEar(b, frame, bones, s, D, sgn) {
   const around = Math.max(8, Math.round(D.around * 0.45));
-  const rings = D.head >= 2 ? 5 : 3;
+  const shell = D.head >= 2;
+  const rings = shell ? 6 : 3;
   // base to tip and across: 0.25 L by 0.2 L on a 0.404 head (round 4 took a
   // fifth off round 3's, which the critics measured at 1.4 times a lion's;
   // round 5's are measured against the head length instead of eyeballed)
@@ -401,46 +424,62 @@ function addEar(b, frame, bones, s, D, sgn) {
   const yaw = sgn * 0.6;
   const cyw = Math.cos(yaw);
   const syw = Math.sin(yaw);
-  const depth = 0.026 * s;
+  const depth = 0.03 * s;
   const cy = H * 0.5;
+  // the lining sits inside the outer rim by this fraction of the radius (a
+  // rim 6.5-8 mm wide) and its rim is lifted by `rimUp`, which — against the
+  // bowl's 11 mm fall at that radius — puts it 2-3 mm ahead of the outer
+  // edge, so the band between them faces forward and outward: a rolled rim
+  // seen from the front and a lip of thickness seen from the side
+  const inset = shell ? 0.84 : 1.0;
+  const rimUp = shell ? 0.014 * s : 0;
+  const point = (rho, a, inner, out) => {
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    // rim: a rounded triangle, broad at the base and two thirds as wide
+    // at the tip (round 5: the ovoid of round 4 was a teddy bear's round
+    // ear from the front; a lion's is a cupped triangle with a soft tip)
+    const tipward = Math.max(0, sa);
+    const w = W * 0.5 * (1 - 0.36 * tipward * tipward) * (1 + 0.08 * Math.max(0, -sa));
+    const h = sa >= 0 ? H * 0.5 : H * 0.46;
+    // the outer edge of the ear is the straighter one: flatten the lateral side
+    const lateral = ca * sgn > 0;
+    const px0 = rho * w * ca * (lateral ? 1.0 : 0.94);
+    const py0 = cy + rho * h * sa;
+    const px1 = px0 * cl - py0 * sl;
+    const py = px0 * sl + py0 * cl;
+    // cupped: the centre sits back, the rim forward — a bowl, shallow over
+    // the middle and steep toward the rim (rho^2.6, where the round-6
+    // paraboloid was steepest at the centre and flat at the edge, which is
+    // a dish seen as a leaf); the tip leans back a little, and the outer
+    // edge folds back on itself along the lower half of the lateral rim —
+    // the marginal pouch a cat's ear has, which thickens the edge and turns
+    // the dark back toward the front
+    let pz1 = -depth * (1 - Math.pow(rho, 2.6)) - 0.12 * H * Math.max(0, sa) * rho;
+    const fold = smoothstep(0.7, 1.0, rho) * (lateral ? 1 : 0.25) * (0.35 + 0.65 * smoothstep(0.6, -0.2, sa)) * Math.abs(ca);
+    pz1 -= 0.012 * s * fold;
+    if (inner) pz1 += 0.0045 * s * (1 - Math.pow(rho, 6)) + rimUp * smoothstep(0.5, 1.0, rho);
+    const px = px1 * cyw + pz1 * syw;
+    const pz = -px1 * syw + pz1 * cyw;
+    return out.set(px, py, pz).applyMatrix4(frame);
+  };
   const surface = (inner) => {
     const grid = [];
     for (let j = 0; j <= rings; j++) {
-      const rho = j / rings; // 0 centre, 1 rim
+      const rho = j / rings; // 0 centre, 1 rim (of this surface)
       const row = [];
       for (let k = 0; k <= around; k++) {
         const a = (k / around) * Math.PI * 2;
-        const ca = Math.cos(a);
-        const sa = Math.sin(a);
-        // rim: a rounded triangle, broad at the base and two thirds as wide
-        // at the tip (round 5: the ovoid of round 4 was a teddy bear's round
-        // ear from the front; a lion's is a cupped triangle with a soft tip)
-        const tipward = Math.max(0, sa);
-        const w = W * 0.5 * (1 - 0.36 * tipward * tipward) * (1 + 0.08 * Math.max(0, -sa));
-        const h = sa >= 0 ? H * 0.5 : H * 0.46;
-        // the outer edge of the ear is the straighter one: flatten the lateral side
-        const lateral = ca * sgn > 0;
-        const px0 = rho * w * ca * (lateral ? 1.0 : 0.94);
-        const py0 = cy + rho * h * sa;
-        const px1 = px0 * cl - py0 * sl;
-        const py = px0 * sl + py0 * cl;
-        // cupped: the centre sits back, the rim forward; the tip leans back a
-        // little, and the outer edge folds back on itself along the lower
-        // half of the lateral rim — the marginal pouch a cat's ear has, which
-        // thickens the edge and turns the dark back toward the front
-        let pz1 = -depth * (1 - rho * rho) - 0.12 * H * Math.max(0, sa) * rho;
-        const fold = smoothstep(0.7, 1.0, rho) * (lateral ? 1 : 0.25) * (0.35 + 0.65 * smoothstep(0.6, -0.2, sa)) * Math.abs(ca);
-        pz1 -= 0.012 * s * fold;
-        if (inner) pz1 += 0.0045 * s * (1 - Math.pow(rho, 6));
-        const px = px1 * cyw + pz1 * syw;
-        const pz = -px1 * syw + pz1 * cyw;
-        _a.set(px, py, pz).applyMatrix4(frame);
+        point(inner ? rho * inset : rho, a, inner, _a);
         // polar UV: v = 1 at the centre of the cup, 0 at the rim; the tip at u = 0.25, the base at 0.75
         const u = ((a / (Math.PI * 2)) + 1) % 1;
         const uv = inner ? ATLAS.earIn : ATLAS.earOut;
-        // the lining is in the cup's own shade; the round-3 near-white tint
-        // was the hot pink ear at dusk
-        row.push(b.vertex(_a, [uv[0] + (uv[2] - uv[0]) * u, uv[1] + (uv[3] - uv[1]) * (1 - rho)], bones, inner ? [0.78, 0.74, 0.7] : [1, 1, 1], 0));
+        // the lining is in the cup's own shade (the round-3 near-white tint
+        // was the hot pink ear at dusk), darkening into the bowl toward the
+        // canal so the cup reads as a hollow and not a pale plate
+        const deep = inner ? smoothstep(0.55, 0.95, 1 - rho) : 0;
+        const col = inner ? [lerp(0.8, 0.42, deep), lerp(0.76, 0.38, deep), lerp(0.72, 0.36, deep)] : [1, 1, 1];
+        row.push(b.vertex(_a, [uv[0] + (uv[2] - uv[0]) * u, uv[1] + (uv[3] - uv[1]) * (1 - rho)], bones, col, 0));
       }
       grid.push(row);
     }
@@ -460,9 +499,29 @@ function addEar(b, frame, bones, s, D, sgn) {
         }
       }
     }
+    return grid;
   };
-  surface(false);
-  if (D.head >= 1) surface(true);
+  const outer = surface(false);
+  if (D.head >= 1) {
+    surface(true);
+    if (shell) {
+      // the rim: a band from the outer surface's edge to the lining's edge,
+      // facing outward, in the ear-back tile's pale rim colour
+      const uv = ATLAS.earOut;
+      const rim = [];
+      for (let k = 0; k <= around; k++) {
+        const a = (k / around) * Math.PI * 2;
+        point(inset, a, true, _a);
+        const u = ((a / (Math.PI * 2)) + 1) % 1;
+        rim.push(b.vertex(_a, [uv[0] + (uv[2] - uv[0]) * u, uv[1] + (uv[3] - uv[1]) * 0.02], bones, [1, 1, 1], 0));
+      }
+      const edge = outer[rings];
+      for (let k = 0; k < around; k++) {
+        b.tri(edge[k], edge[k + 1], rim[k]);
+        b.tri(edge[k + 1], rim[k + 1], rim[k]);
+      }
+    }
+  }
 }
 
 /**

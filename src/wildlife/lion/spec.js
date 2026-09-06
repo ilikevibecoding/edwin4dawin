@@ -141,7 +141,14 @@ export const EYE = { r: 0.0195, lidUp: 0.46, lidDown: 0.46 };
 // (round 5's head: 0.62 / 0.57), inside the 0.60-0.70 the brief holds.
 // (24 degrees with the ball 8 mm back measured 0.46 / 0.39 by the same
 // raycast: the skin ahead of the eye, not the lids, was what hid the iris.)
-export const EYE_LIDS = { up: 0.46, down: 0.62, scale: 1.34, roll: 0.14 };
+// Round 7: 31.5 / 39 degrees with the ball sunk 4 mm further (10 mm in all,
+// HEAD_JOINTS below). At 26 / 36 with the ball 6 mm in, the lid caps' rims
+// lay inside the iris disc and the caps — face-coloured, 2 mm proud of the
+// ball — read as a pale ring round the iris from the face camera (critic A:
+// 78 pale pixels round the left iris at 512); with the rims moved out to the
+// limbus and the ball deeper, what shows between the lids is iris, and the
+// caps sit under the skin. The almond's height is still under the ball's.
+export const EYE_LIDS = { up: 0.55, down: 0.68, scale: 1.34, roll: 0.14 };
 
 /**
  * Head-child joints re-placed for the head in head.js, laid out like JOINTS
@@ -178,8 +185,10 @@ export const HEAD_JOINTS = {
   // (8 mm) put the muzzle root's top corner across the lower half of the
   // iris from the face camera — 0.46 of the disc seen against 0.62 before —
   // so the stop was lowered under the eye instead and the sink held at 6 mm)
-  lidL: { pos: [0.0585, 1.27, 1.072], dir: [0.3, 0.08, 1] },
-  lidR: { pos: [-0.0585, 1.27, 1.072], dir: [-0.3, 0.08, 1] },
+  // (round 7: 4 mm further back, 10 mm in all, with the lids opened to
+  // 0.55 / 0.68 rad — headspec.js FACE.eye follows)
+  lidL: { pos: [0.0585, 1.27, 1.068], dir: [0.3, 0.08, 1] },
+  lidR: { pos: [-0.0585, 1.27, 1.068], dir: [-0.3, 0.08, 1] },
 };
 
 /**

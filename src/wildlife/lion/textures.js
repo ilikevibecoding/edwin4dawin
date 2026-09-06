@@ -159,14 +159,22 @@ function hairStrokes(ctx, rect, S, rnd, { count, len = [6, 14], light = 0.11, di
 }
 
 /** Small dark specks, the ticking of a lion's coat where dark hair tips show. */
-function ticking(ctx, rect, S, rnd, count, color = 'rgba(50,32,18,0.45)', size = 1.2) {
+/**
+ * Ticking: the dark tips of the guard hairs. `elong` stretches each mark along
+ * v (round 7) — on the body, legs, tail and head v runs along the hair, and
+ * a mark the length of a few texels along it is a hair tip, where the
+ * round-6 square dots were the strongest term of the flank's high-pass at
+ * 512 and isotropic, so the coat's grain measured as a mottle whatever the
+ * streak field under it did (16 000 dots of 0.65 px on a 512 atlas).
+ */
+function ticking(ctx, rect, S, rnd, count, color = 'rgba(50,32,18,0.45)', size = 1.2, elong = 1) {
   const r = px(rect, S);
   ctx.fillStyle = color;
   for (let i = 0; i < count; i++) {
     const x = r.x0 + rnd() * r.w;
     const y = r.y0 + rnd() * r.h;
     const s = size * (0.6 + rnd() * 0.8) * (S / 1024);
-    ctx.fillRect(x, y, s, s);
+    ctx.fillRect(x, y, s, s * elong);
   }
 }
 
@@ -198,13 +206,22 @@ function coatShade(u, v, seed, { spots, su = u, sv = v }) {
   // frame; hair on a lion's side lies in short overlapping locks)
   // (noise in the part's own (su, sv): a leg passes its own u around, so the
   // break-up is cells around the limb and not rings up it)
+  // Round 7: the cells and the fine grain are longer along the animal than
+  // across it (cells 4 by 5.5 cm, grain 3 by 4 cm) where round 6 had both
+  // wider than long (6 by 3 cm and 4 by 2 cm — the frequencies were set per
+  // texel on a region that is 1.6 m round and 1.1 m long), which at 512, with
+  // no shells at `fast`, left the flank an isotropic mottle over the streaks
+  // (critic A: high-pass |dY/dy| / |dY/dx| 0.81 in the close frame; 1.6 on
+  // the side frame where the body lies along x). The streaks themselves are
+  // 0.14, from 0.11, still at 6:1 (the 10:1 at 0.18 that read as wood grain
+  // in round 6 is not revisited).
   const m0 = fbm(su * 3 + seed, sv * 4, { octaves: 2, period: 8, seed: 397 + seed });
   const m1 = fbm(su * 6 + seed, sv * 9, { octaves: 3, period: 16, seed: 401 + seed });
-  const m2 = fbm(su * 38, sv * 52 + seed, { octaves: 3, period: 64, seed: 409 + seed });
+  const m2 = fbm(su * 56, sv * 28 + seed, { octaves: 3, period: 56, seed: 409 + seed });
   const streak = fbm(su * 60 + seed, sv * 10, { octaves: 3, period: 60, seed: 419 + seed });
-  const tuft = worley(su * 26 + seed, sv * 34, 34, 131 + seed);
-  const cell = (tuft.id - 0.5) * 0.14 - smoothstep(0.08, 0.0, tuft.f2 - tuft.f1) * 0.07;
-  const light = 1 + (m0 - 0.5) * 0.14 + (m1 - 0.5) * 0.2 + (m2 - 0.5) * 0.05 + (streak - 0.5) * 0.11 + cell;
+  const tuft = worley(su * 40 + seed, sv * 22, 40, 131 + seed);
+  const cell = (tuft.id - 0.5) * 0.12 - smoothstep(0.08, 0.0, tuft.f2 - tuft.f1) * 0.06;
+  const light = 1 + (m0 - 0.5) * 0.14 + (m1 - 0.5) * 0.2 + (m2 - 0.5) * 0.05 + (streak - 0.5) * 0.14 + cell;
   c = [c[0] * light, c[1] * light, c[2] * light];
   if (spots) {
     // cub rosettes: sparse cells, strongest on the belly and flanks, fading
@@ -274,8 +291,12 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
   // (a gradual lightening from the cheek over four centimetres, not a mask edge)
   // (round 5: the pale runs up the side of the muzzle box to the tear line
   // and back under the eye, so the muzzle reads as its own pale block under
-  // the tawny cheeks the way a lioness's does)
-  const muzzleSide = smoothstep(0.16, 0.24, hz) * smoothstep(0.055, 0.02, hy) * smoothstep(0.015, 0.035, hx);
+  // the tawny cheeks the way a lioness's does; round 7: its top 25 mm lower
+  // — the stop and cheek-arch rows turn the skin under the eye to the sun,
+  // and lit buff there tone-maps to sat 0.2, which the face view at 512
+  // counted as pale sclera beside the iris — so the 4 cm under the eye stay
+  // the cheek's tawny and the pale block starts at the whisker pads)
+  const muzzleSide = smoothstep(0.16, 0.24, hz) * smoothstep(0.03, -0.005, hy) * smoothstep(0.015, 0.035, hx);
   c = mixRgb(c, buff, muzzleSide * 0.6);
   const bu = Math.hypot((hx - ex + 0.002) * 1.1, (hy - ey - 0.044) * 1.5, hz - ez + 0.01);
   c = mixRgb(c, buff, smoothstep(0.022, 0.009, bu) * 0.3);
@@ -293,7 +314,16 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
   const R = FACE.eyeSkin;
   if (de < R * 1.7) {
     const near = smoothstep(R * 1.7, R * 1.2, de);
-    const line = almondOpen(hx - ex, hy - ey, hz - ez, 0.07, 0.02);
+    // round 7: the whole of the socket's dip wall is black — the skin that
+    // turns in from the almond's edge down to the ball (head.js SOCKET:
+    // `start` 0.05 past the lid rims and `soft` 0.16 more) is the lid
+    // margin, black on a lion down to the conjunctiva. Round 6 blackened
+    // 0.07 rad of it and the rest of the wall stayed face coloured: from the
+    // face camera, which looks down onto the upper wall, that was a pale
+    // hood between the eyeline and the iris (critic A's "78 pale sclera px
+    // round the left iris" — skin, not sclera), and wider once the lids
+    // opened and the ball went 4 mm deeper.
+    const line = almondOpen(hx - ex, hy - ey, hz - ez, 0.2, 0.02);
     // round 5: the lid margins are black on a lion, and at two metres the
     // caps' own 2.5 mm band is under a pixel — so the skin carries a 4 mm
     // dark margin around the almond (0.05 to 0.2 rad outside the rims), and
@@ -306,6 +336,20 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
     c = mixRgb(c, COAT.lip, ring * near * (0.12 + 0.3 * inner));
     c = mixRgb(c, COAT.black, margin * near * 0.75);
     c = mixRgb(c, COAT.black, line * near * 0.9);
+  }
+  // round 7: under the eye the margin runs on to 0.5 rad past the lower rim
+  // (8 mm more of skin), with its own reach. The loft's cheek puts the skin
+  // just under and inboard of the eye 50-62 mm from the eye's centre (the
+  // brow above tapers in to 35), beyond the `near` gate that scales the
+  // terms above, so no margin reached it; from the truck looking down onto
+  // the face the 4 mm margin foreshortened to under a pixel at 512 and the
+  // lit cheek — the stop and cheek-arch rows turn it to the sun — met the
+  // iris with no lid line between (80 px under the left iris; paint ablation
+  // by distance band: not the lid cap, the ball, the tear stroke, the muzzle
+  // buff, the cornea's sky or the sheen).
+  if (de < R * 2.7) {
+    const under = almondOpen(hx - ex, hy - ey, hz - ez, 0.25, 0.25) * smoothstep(ey + 0.004, ey - 0.012, hy);
+    c = mixRgb(c, COAT.black, under * smoothstep(R * 2.7, R * 2.2, de) * 0.7);
   }
   // the dark line at the outer corner, back toward the temple
   const wing = segDist(hx, hy, hz, [ex + 0.024, ey - 0.001, ez - 0.006], [ex + 0.042, ey + 0.005, ez - 0.03]);
@@ -377,10 +421,18 @@ function faceShade(hx, hy, hz, a, nu, nv, o) {
   const fold = smoothstep(0.014, 0.004, Math.abs(hy + 0.088)) * smoothstep(0.0, 0.03, hz) * smoothstep(0.13, 0.09, hz) * smoothstep(0.05, 0.08, hx);
   c = mixRgb(c, COAT.back, fold * 0.35);
   // the body's mottle and a finer breakup, and (round 6) the short hair's
-  // grain running along the head (nu is along the head in both regions)
+  // grain running along the head (nu is along the head in both regions).
+  // Round 7: the body's streak field as well (coatShade: fbm 60 across by
+  // 10 along at 0.11), at 0.6 of its amplitude and at its scale — locks
+  // 14 mm across and 8 cm long, running along the head, which on this
+  // parametrisation is radiating from the nose, the way the hair on a cat's
+  // face grows. Round 6's grain alone was 6.7 mm across at 0.1 and read as
+  // pores at 1280 (critic B: "forehead and cheek carry pores only; the
+  // flank carries streaks"); it stays, finer and fainter, under the streaks.
   const m = fbm(nu * 4, nv * 4, { octaves: 3, period: 16, seed: 451 });
   const hairGrain = fbm(nu * 2.5, nv * 26, { octaves: 3, period: 64, seed: 461 });
-  const l = 1 + (m0 - 0.5) * 0.14 + (m1 - 0.5) * 0.2 + (m - 0.5) * 0.08 + (hairGrain - 0.5) * 0.1 + cell;
+  const streakH = fbm(nu * 1.2, nv * 12, { octaves: 3, period: 60, seed: 419 });
+  const l = 1 + (m0 - 0.5) * 0.14 + (m1 - 0.5) * 0.2 + (m - 0.5) * 0.08 + (hairGrain - 0.5) * 0.06 + (streakH - 0.5) * 0.066 + cell;
   o[0] = c[0] * l;
   o[1] = c[1] * l;
   o[2] = c[2] * l;
@@ -409,8 +461,8 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
         });
         // short strokes, faint and scattered in direction: the grain of a
         // coat, not a brushed velvet (long parallel strokes read as stripes)
-        hairStrokes(ctx, ATLAS.body, S, rnd, { count: 18000, len: [3, 9], light: 0.085 });
-        ticking(ctx, ATLAS.body, S, rnd, 16000, 'rgba(50,32,18,0.5)', 1.3);
+        hairStrokes(ctx, ATLAS.body, S, rnd, { count: 18000, len: [4, 11], light: 0.085 });
+        ticking(ctx, ATLAS.body, S, rnd, 11000, 'rgba(50,32,18,0.5)', 1.3, 3.5);
 
         // --- legs: u around from the outside, v = 0 at the paw ----------------
         fillRegion(ctx, ATLAS.leg, S, (u, v, o) => {
@@ -428,7 +480,7 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           o[2] = c[2];
         });
         hairStrokes(ctx, ATLAS.leg, S, rnd, { count: 6000, len: [3, 8], light: 0.09 });
-        ticking(ctx, ATLAS.leg, S, rnd, 2500);
+        ticking(ctx, ATLAS.leg, S, rnd, 2000, undefined, 1.2, 3);
 
         // --- tail: v = 0 at the tip, the tuft base goes dark ------------------
         // u runs around from the underside (0 and 1) over the top (0.5): the
@@ -446,18 +498,22 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
         // Both regions are painted through the same head-space shader
         // (faceShade), inverting the mapping head.js gives the head loft, so a
         // mark placed in head metres lands on the animal in head metres and the
-        // two regions meet without a step. Skull: u along the head from the
-        // occiput to the stop, v around from under the lip (0) to the crown (1).
-        // Muzzle: u around the same way, v from the stop to the nose.
+        // two regions meet without a step. Both regions: u around from under
+        // the lip (0) to the crown (1), v along the head — skull from the
+        // occiput to the stop, muzzle from the stop to the nose. (Round 7
+        // turned the skull region this way round, with head.js: along the
+        // head across u it had the coat normal map's strands running around
+        // the skull like hoops and its texels stretched 4:1; now the hair
+        // grain runs from the nose back over the skull on both regions.)
         const hp = [0, 0, 0];
         fillRegion(ctx, ATLAS.skull, S, (u, v, o) => {
-          const z = lerp(HEAD_Z0, HEAD_SPLIT, u);
-          const a = v * Math.PI;
+          const z = lerp(HEAD_Z0, HEAD_SPLIT, v);
+          const a = u * Math.PI;
           headPoint(z, a, hp);
-          faceShade(hp[0], hp[1], hp[2], a, u * 3.1, v * 2.3, o);
+          faceShade(hp[0], hp[1], hp[2], a, v * 3.1, u * 2.3, o);
         });
-        hairStrokes(ctx, ATLAS.skull, S, rnd, { count: 7000, len: [3, 8], light: 0.08, dir: Math.PI / 2 });
-        ticking(ctx, ATLAS.skull, S, rnd, 7000, 'rgba(50,32,18,0.5)', 1.2);
+        hairStrokes(ctx, ATLAS.skull, S, rnd, { count: 7000, len: [3, 8], light: 0.08 });
+        ticking(ctx, ATLAS.skull, S, rnd, 6000, 'rgba(50,32,18,0.5)', 1.2, 2.5);
         fillRegion(ctx, ATLAS.muzzle, S, (u, v, o) => {
           const z = lerp(HEAD_SPLIT, HEAD_Z1, v);
           const a = u * Math.PI;
@@ -465,7 +521,7 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           faceShade(hp[0], hp[1], hp[2], a, 3.1 + v * 1.1, u * 2.3, o);
         });
         hairStrokes(ctx, ATLAS.muzzle, S, rnd, { count: 1600, len: [2, 4], light: 0.06 });
-        ticking(ctx, ATLAS.muzzle, S, rnd, 1400, 'rgba(50,32,18,0.4)', 1.0);
+        ticking(ctx, ATLAS.muzzle, S, rnd, 1400, 'rgba(50,32,18,0.4)', 1.0, 2);
 
         // --- nose leather: front projected, nostrils and philtrum ------------
         fillRegion(ctx, ATLAS.nose, S, (u, v, o) => {
@@ -530,9 +586,14 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           // a wet catchlight high on the cornea, up and a little to the side of
           // the gaze (u = 0.75 is up in the ball's frame): the sky in the eye,
           // there whatever the sun is doing, the way a lens sees it
+          // (round 7: at 24 degrees with a 7-degree radius it ran into the
+          // upper lid, opened to 31 degrees, and the lid cut it into a cream
+          // crescent along the eyeline that read as sclera; now 18 degrees
+          // and a 5-degree radius, a dot inside the iris, and the cornea's
+          // own glint does the rest)
           const cu = Math.abs(((u - 0.72 + 0.5) % 1) - 0.5) * Math.PI * 2 * Math.sin(th);
-          const cd = Math.hypot(cu, ((th * 180) / Math.PI - 24) / 57.3);
-          c = mixRgb(c, [246, 240, 228], smoothstep(0.13, 0.06, cd) * 0.85);
+          const cd = Math.hypot(cu, ((th * 180) / Math.PI - 18) / 57.3);
+          c = mixRgb(c, [246, 240, 228], smoothstep(0.09, 0.04, cd) * 0.8);
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];
@@ -614,16 +675,26 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
           } else {
             // a toe: fur, leather under it, a dark crease down each side where
             // it meets the next toe (u = 0, 0.5 and 1), the skin of the claw
-            // sheath only at the very tip
+            // sheath only at the very tip. Round 7: the toe's fur is 0.85 of
+            // the foot's and carries none of the pale belly mix the top of
+            // the foot has (the round-5 toes were the palest thing on the
+            // animal — the leg's coat with dust and belly over it, lit from
+            // above, "pale cubes"); the toe pad's leather runs forward under
+            // the tip, so from the close camera a dark pad shows under each
+            // toe, and a dark slit sits at the top of the tip where the claw
+            // comes out of its sheath.
             const uu = (u - 0.5) * 2;
-            c = footFur(uu, v, m);
+            c = mixRgb(COAT.side, COAT.dust, 0.2 + 0.15 * m);
+            c = [c[0] * 0.77, c[1] * 0.77, c[2] * 0.77];
             const side = Math.min(Math.abs(uu - 0.5), uu, 1 - uu);
             const crease = smoothstep(0.09, 0.015, side) * smoothstep(0.05, 0.3, v);
             c = mixRgb(c, COAT.lip, crease * 0.6);
-            const under = smoothstep(0.14, 0.05, Math.abs(uu - 0.25)) * smoothstep(0.15, 0.3, v) * smoothstep(0.9, 0.75, v);
+            const under = smoothstep(0.16, 0.06, Math.abs(uu - 0.25)) * smoothstep(0.15, 0.3, v) * smoothstep(0.985, 0.9, v);
             c = mixRgb(c, leather(uu, v, m), under);
             const sheath = smoothstep(0.88, 0.97, v);
             c = mixRgb(c, COAT.lip, sheath * 0.45);
+            const slit = smoothstep(0.9, 0.955, v) * smoothstep(0.1, 0.03, Math.abs(uu - 0.75));
+            c = mixRgb(c, COAT.black, slit * 0.7);
           }
           o[0] = c[0];
           o[1] = c[1];
@@ -660,22 +731,27 @@ export function coatAtlas({ size = 1024, spots = false } = {}) {
         });
         hairStrokes(ctx, ATLAS.jaw, S, rnd, { count: 1200, len: [3, 7], light: 0.08 });
         fillRegion(ctx, ATLAS.lid, S, (u, v, o) => {
-          // Each lid is a cap over the ball: v = 0 at its rim, 1 at its pole
-          // (the skin covers it beyond about 30 degrees from the rim). The
-          // upper lid is the left half of the tile (u < 0.5), the lower the
-          // right. Both are face coloured with the black eyeline along the
-          // rim, 4 mm wide so it reads at two metres; the upper lid is the
-          // brow mask's darker tawny, the lower carries the pale stroke a lion
-          // has under the eye, then goes back to the coat.
-          // (round 4: the rim band is 2.5 mm — v 0.05, five degrees of the
-          // cap — where round 3's 4 mm plus the painted skin line made the eye
-          // a dark ring; the lower lid's pale stroke starts right at the rim)
+          // Each lid is a cap over the ball: v = 0 at its rim, 1 at its pole.
+          // The upper lid is the left half of the tile (u < 0.5), the lower
+          // the right. The cap sits at 1.1 ball radii under skin at 1.12 that
+          // dips to the ball across one facet of the head loft, so how much
+          // cap shows depends on the view: head-on 10-15 degrees past the
+          // rim, but from the truck looking down onto a face the upper cap's
+          // middle faces the camera while its rim zone is foreshortened, and
+          // rounds 4-7's rim bands of 5-27 degrees left a smooth face-coloured
+          // strip between the eyeline and the iris — the "pale sclera" the
+          // critics counted (78 px round the left iris at 512 in round 5;
+          // magenta-paint ablation in round 7: the strip is the cap, not the
+          // ball, the skin, the sheen or the cornea). So the upper cap is
+          // lid-dark over its whole face — a lion's upper lid is black skin to
+          // the brow, and where the skin covers the cap the paint is unseen —
+          // and the lower cap is black to 27 degrees with the pale under-eye
+          // stroke a lion has outside that, so from above the stroke does not
+          // abut the iris as sclera.
           const upper = u < 0.5;
-          // (round 5: the upper lid darker and the black band 3.5 mm, so the
-          // margin reads as a lion's black lid margin at two metres)
           let c = mixRgb(COAT.side, COAT.back, upper ? 0.7 : 0.2);
-          if (!upper) c = mixRgb(c, COAT.cream, smoothstep(0.06, 0.11, v) * smoothstep(0.34, 0.22, v) * 0.9);
-          c = mixRgb(c, COAT.black, smoothstep(0.08, 0.045, v) * 0.95);
+          if (!upper) c = mixRgb(c, COAT.cream, smoothstep(0.34, 0.4, v) * smoothstep(0.58, 0.48, v) * 0.7);
+          c = mixRgb(c, COAT.black, (upper ? 1 : smoothstep(0.36, 0.28, v)) * 0.95);
           o[0] = c[0];
           o[1] = c[1];
           o[2] = c[2];
@@ -711,9 +787,17 @@ export function coatNormal(size = 256) {
         // lining up into the round-2 stripes. (8:1 at 0.62 with the height
         // scaled 0.9 was wood grain in the close frame, together with the
         // colour streaks; the relief is now the shorter of the two.)
+        // Round 7: 30:6 on a tile repeated 4 times, where round 6 ran 48:8
+        // at 5 — 240 strands round the trunk was a strand every 7 mm, under
+        // a pixel in the 512 close frame, so the relief averaged to an
+        // isotropic grain there (flank high-pass |dY/dy| / |dY/dx| 0.82);
+        // 120 is a lock every 13 mm, two pixels, and the grain has a
+        // direction at the range the gauntlet shoots from. (The brief's 32:6
+        // has no lattice period that divides both, and the tile must wrap:
+        // valueNoise's period has to divide each frequency.)
         const wx = (fbm(u * 3, v * 3, { octaves: 2, period: 3, seed: 613 }) - 0.5) * 0.35;
         const wy = (fbm(u * 3 + 0.5, v * 3, { octaves: 2, period: 3, seed: 617 }) - 0.5) * 0.35;
-        const strand = fbm((u + wx) * 48, (v + wy) * 8, { octaves: 3, period: 8, seed: 601 });
+        const strand = fbm((u + wx) * 30, (v + wy) * 6, { octaves: 3, period: 6, seed: 601 });
         const tuft = worley(u * 14, v * 14, 14, 619);
         const cells = smoothstep(0.0, 0.5, tuft.f1) * 0.5 + tuft.id * 0.2;
         const grain = fbm(u * 12, v * 12, { octaves: 2, period: 12, seed: 607 });
@@ -722,7 +806,7 @@ export function coatNormal(size = 256) {
     }
     const tex = normalFromHeight(h, size, size, 0.8);
     tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.repeat.set(5, 5);
+    tex.repeat.set(4, 4);
     return tex;
   });
 }

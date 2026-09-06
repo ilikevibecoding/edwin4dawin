@@ -91,9 +91,15 @@ function shellMaterial(base, { wind = 0.05, rootShade = 0.45, droop = 0 } = {}) 
  * (1 behind, 1/2 beside, 0 in front), times a wrapped N.L so the fringe sits
  * on the sun's side of the outline, in the sun's colour and the coat's own,
  * with the sun's shadow map honoured (an animal in a tree's shade gets none).
- * The sixth power keeps it to the outline: at the third power and 0.45 the
- * term lifted the whole upper flank +0.2-0.4 st at dusk and the outline no
- * more than the flank — a fill, not a fringe. `uRim` is live on
+ * The power keeps it to the outline: at the third power and 0.45 the term
+ * lifted the whole upper flank +0.2-0.4 st at dusk and the outline no more
+ * than the flank — a fill, not a fringe; the sixth (round 6) was a 1 px line
+ * the critics read as specks, so round 7 runs the fourth, 2-3 px wide at 512.
+ * Round 7 also gives the fringe a floor in front light: hair at the outline
+ * forward-scatters the sky behind the animal whatever the sun is doing, so
+ * 0.35 of the sky's horizon colour — the scene fog's colour, `fogColor`,
+ * which sky.js sets to `horizonOf(sky)` — lights the same edge term as the
+ * sun's share falls away, and a rim reads by day. `uRim` is live on
  * `material.userData.rim.value`.
  */
 function furRim(m) {
@@ -107,6 +113,39 @@ function furRim(m) {
         uniform float uRim;`,
       )
       .replace(
+        '#include <lights_physical_fragment>',
+        `#include <lights_physical_fragment>
+        #ifdef USE_MAP
+        {
+          // Skin, not fur (round 7): the lid caps, the ball, the nose leather,
+          // the inner ear and the pads carry no fur sheen. The sheen lobe is
+          // the tan sheenColor at grazing angles whatever the texel under it,
+          // and from the truck looking down onto a face the upper lid cap is
+          // seen at grazing angles between the eyeline and the iris: painted
+          // black, it still rendered as a smooth tan strip — the "pale sclera"
+          // round the iris. The lid's and the ball's grazing reflection (F90)
+          // is held to a third for the same reason: the sliver of dark
+          // sclera the lids show at the eye's corners (they open to 72
+          // degrees laterally, the limbus is at 52) reflected the sky grey
+          // at grazing angles; the cornea cap carries the eye's wet highlight.
+          vec2 tUv = vMapUv;
+          bool lidT = tUv.x >= 0.75 && tUv.y < 0.125;
+          bool eyeT = tUv.x >= 0.375 && tUv.x < 0.5 && tUv.y >= 0.125 && tUv.y < 0.25;
+          bool skinT = tUv.y >= 0.125 && tUv.y < 0.25 && ( ( tUv.x >= 0.25 && tUv.x < 0.5 ) || ( tUv.x >= 0.625 && tUv.x < 0.875 ) );
+          if ( lidT || skinT ) {
+            #ifdef USE_SHEEN
+            material.sheenColor = vec3( 0.0 );
+            #endif
+          }
+          if ( lidT || eyeT ) {
+            material.specularColor *= 0.35;
+            material.specularColorBlended *= 0.35;
+            material.specularF90 *= 0.35;
+          }
+        }
+        #endif`,
+      )
+      .replace(
         '#include <lights_fragment_begin>',
         `#include <lights_fragment_begin>
         #if NUM_DIR_LIGHTS > 0
@@ -116,10 +155,28 @@ function furRim(m) {
           #if defined( USE_SHADOWMAP ) && ( NUM_DIR_LIGHT_SHADOWS > 0 )
           rimLight.color *= ( rimLight.visible && receiveShadow ) ? getShadow( directionalShadowMap[ 0 ], directionalLightShadows[ 0 ].shadowMapSize, directionalLightShadows[ 0 ].shadowIntensity, directionalLightShadows[ 0 ].shadowBias, directionalLightShadows[ 0 ].shadowRadius, vDirectionalShadowCoord[ 0 ] ) : 1.0;
           #endif
-          float rimEdge = pow( 1.0 - saturate( dot( geometryNormal, geometryViewDir ) ), 6.0 );
+          float rimEdge = pow( 1.0 - saturate( dot( geometryNormal, geometryViewDir ) ), 4.0 );
           float rimBehind = saturate( 0.5 - 0.5 * dot( geometryViewDir, rimLight.direction ) );
           float rimWrap = saturate( dot( geometryNormal, rimLight.direction ) * 0.5 + 0.5 );
-          reflectedLight.directDiffuse += rimLight.color * diffuseColor.rgb * ( uRim * rimEdge * rimBehind * rimWrap );
+          #ifdef USE_FOG
+          vec3 rimSky = fogColor;
+          #else
+          vec3 rimSky = rimLight.color * 0.25;
+          #endif
+          vec3 rimIn = rimLight.color * ( rimBehind * rimWrap ) + rimSky * ( 0.35 * ( 1.0 - rimBehind ) );
+          // the fringe is light through the pale tips of the hair, not the
+          // ticked albedo under them: three quarters of the way to the
+          // coat's flat tint (the material colour and the vertex colour,
+          // without the texel), so the line is a line and not the dotted
+          // one the round-5 critics counted as specks
+          // (the tint is the flank's tawny in linear, about the texel mean)
+          #ifdef USE_COLOR
+          vec3 rimTint = diffuse * vColor.rgb * vec3( 0.42, 0.23, 0.10 );
+          #else
+          vec3 rimTint = diffuse * vec3( 0.42, 0.23, 0.10 );
+          #endif
+          vec3 rimAlbedo = mix( diffuseColor.rgb, rimTint, 0.75 );
+          reflectedLight.directDiffuse += rimIn * rimAlbedo * ( uRim * rimEdge );
         }
         #endif`,
       );
@@ -140,9 +197,21 @@ export function lionMaterials({ env, quality }) {
       map: coatAtlas({ size, spots }),
       normalMap: coatNormal(256),
       normalScale: new THREE.Vector2(0.35, 0.35),
-      // round 6: rougher, so the specular lobe is not what lifts the coat —
-      // the sheen is, and only at the rim
-      roughness: 0.84,
+      // round 7: 0.7 (round 6 ran 0.84 so the specular lobe was not what
+      // lifted the coat), with the lobe anisotropic: hair is a field of
+      // fibres lying along the animal, rough across the fibres and smooth
+      // along them, so the highlight is a band across the flank and not a
+      // spot. three.js stretches the lobe along the tangent (alphaT rises
+      // with `anisotropy`; the bitangent keeps `roughness`), and with no
+      // tangent attribute the frame comes from the normal map's UV
+      // derivatives: the tangent is +u. Every coat region has u around the
+      // part and v along it (body: u belly-spine-belly, v tail to head; legs
+      // and tail: u around, v along; head, both regions since round 7: u
+      // around, v nose to occiput), so the tangent is across the fibres and
+      // the rotation is 0.
+      roughness: 0.7,
+      anisotropy: 0.6,
+      anisotropyRotation: 0,
       metalness: 0,
       vertexColors: true,
       envMap: env,
@@ -367,7 +436,14 @@ export class Lion {
     const r = EYE.r * EYE_LIDS.scale * this.s * this.K.head * 1.03;
     for (const side of ['lidL', 'lidR']) {
       const lr = this.skel.rest.get(side);
-      const g = new THREE.SphereGeometry(r, DETAIL[t].sphere[0], DETAIL[t].sphere[1]);
+      // a cap over the iris (the limbus is at 52 degrees), not a whole
+      // sphere: round 7 opened the lids and sank the ball, and the film's
+      // sky reflection at the ball's grazing edge under the upper lid — a
+      // Fresnel arc, bright whatever the sun does — was a grey-white crescent
+      // round the iris of the eye seen from the side in `face` (the last of
+      // the "pale sclera" px at 512 once the cap and the catch-light were
+      // dealt with). The sphere's pole is +Y, the lid frame's gaze.
+      const g = new THREE.SphereGeometry(r, DETAIL[t].sphere[0], DETAIL[t].sphere[1], 0, Math.PI * 2, 0, Math.PI * 0.31);
       b.addGeometry(g, { matrix: new THREE.Matrix4().compose(lr.pos, lr.quat, new THREE.Vector3(1, 1, 1)), uvRect: ATLAS.eye, bones: [[headIdx, 1]] });
     }
     return b.build();
