@@ -4,7 +4,7 @@ import type { RoadSegment } from './roads';
 import { clamp, lerp } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { F_BARRIER_H, F_BARRIER_PROFILE, GLSL_AA_LINE, MIN_WIDTH_VERT, STEEL_ALPHA_FRAG, Soup, lampGlowFor, type Frame, type Rgb } from './bridges';
-import { ALL_CASCADES, ViewCull, layerMask, maskCasts, type CasterClass } from './culling';
+import { ALL_CASCADES, MAX_CASCADES, ViewCull, cascadeIsFine, layerMask, maskCasts, type CasterClass } from './culling';
 
 /**
  * Furniture of the ground highways (`highway` / `causeway` road classes): the concrete median barrier, W-beam
@@ -21,7 +21,7 @@ import { ALL_CASCADES, ViewCull, layerMask, maskCasts, type CasterClass } from '
 
 export interface HighwayBuild {
   group: THREE.Group;
-  counts: { chains: number; chunks: number; meshes: number; poles: number; gantries: number; guardrailM: number; barrierM: number; signs: number; triangles: number };
+  counts: { chains: number; chunks: number; meshes: number; poles: number; gantries: number; guardrailM: number; barrierM: number; vergeM: number; signs: number; triangles: number };
 }
 
 // ------------------------------------------------------------------ constants
@@ -47,6 +47,9 @@ const POST_SPACING = 1.905;
 const POLE_SPACING = 60;
 const POLE_H = 11.4;
 const ARM_REACH = 2.9;
+/** compacted-shell verge beside the pavement edge */
+const VERGE_W = 2.6;
+const _n = new THREE.Vector3(), _d = new THREE.Vector3(), _a = new THREE.Vector3(), _b = new THREE.Vector3();
 
 // ------------------------------------------------------------------ colours (multiply the material colour)
 
@@ -55,6 +58,7 @@ const C_BARRIER_TOP: Rgb = [0.93, 0.93, 0.91];
 const C_PEDESTAL: Rgb = [0.72, 0.72, 0.70];
 const C_APRON: Rgb = [0.62, 0.62, 0.60];
 const C_GRATE: Rgb = [0.16, 0.16, 0.17];
+const C_VERGE: Rgb = [0.84, 0.80, 0.70];
 const S_GALV: Rgb = [0.56, 0.58, 0.60];       // galvanised guardrail, posts, gantry steel (satin, blotchy in the shader)
 const S_POLE: Rgb = [0.60, 0.61, 0.62];
 const S_DARK: Rgb = [0.30, 0.31, 0.33];       // sign backs, brackets
@@ -99,6 +103,17 @@ const CONCRETE_FRAG = /* glsl */ `
     float bar = mix(aaLine((fract(u * 8.0) - 0.5) / 8.0, 0.035, fwU), 0.55, smoothstep(0.02, 0.06, fwU));
     diffuseColor.rgb *= 0.55 + 0.9 * bar;
     roughnessFactor = 0.7;
+  } else if (kind > 2.5 && kind < 3.5) {
+    // compacted shell and gravel verge: fine grain, a darker wheel-off track along the pavement, grass creeping
+    // in from the outer edge; the grain fades to its mean as a pixel grows past it
+    float across = vInfoH.z;
+    float fp = length(fwidth(vWorldPosH.xz));
+    float grain = mix(vnoise(vWorldPosH.xz * 2.6), 0.5, smoothstep(0.2, 0.7, fp));
+    float track = exp(-pow((across - 0.22) * 5.0, 2.0)) * (0.5 + 0.5 * fbm3(vec2(vInfoH.y * 0.05, 3.0)));
+    float creep = smoothstep(0.45, 1.0, across) * smoothstep(0.35, 0.7, fbm3(vWorldPosH.xz * 0.5 + 11.0));
+    diffuseColor.rgb *= (0.86 + 0.28 * n) * (0.9 + 0.2 * grain) * (1.0 - 0.12 * track);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.38, 0.44, 0.24) * (0.85 + 0.3 * grain), creep * 0.85);
+    roughnessFactor = 0.97;
   } else {
     diffuseColor.rgb *= 0.9 + 0.2 * n;
     // run-off streaks down the pedestals
@@ -147,7 +162,7 @@ function createSteelMaterial(pixelScale: THREE.IUniform<number>, atlas: THREE.Te
 // ------------------------------------------------------------------ sign atlas
 
 interface SignFace { u0: number; v0: number; u1: number; v1: number; }
-type Arrow = 'up' | 'left' | 'right' | null;
+type Arrow = 'up' | 'left' | 'right' | 'both' | null;
 
 /** Canvas atlas of the sign faces (guide signs, exit tabs, chevrons, speed limits), packed on demand; the
  *  bottom-left corner stays white for the plain steel. Destinations are the districts and islands of Bahía Vista. */
@@ -192,7 +207,7 @@ class SignAtlas {
     return { u0: (x + 1) / this.width, v0: 1 - (y + h - 1) / this.height, u1: (x + w - 1) / this.width, v1: 1 - (y + 1) / this.height };
   }
 
-  private arrow(cx: number, cy: number, size: number, dir: Exclude<Arrow, null>, color: string): void {
+  private arrow(cx: number, cy: number, size: number, dir: 'up' | 'left' | 'right', color: string): void {
     const c = this.ctx;
     c.save();
     c.translate(cx, cy);
@@ -231,7 +246,8 @@ class SignAtlas {
       const fit = Math.min(px, (px * (textW - h * 0.25)) / Math.max(1, c.measureText(lines[i]).width));
       this.text(lines[i], x + h * 0.12, ly, fit, '#f6f6f2');
     }
-    if (arrow) this.arrow(x + w - h * 0.33, y + h * 0.5, h * 0.5, arrow, '#f6f6f2');
+    if (arrow === 'both') { this.arrow(x + w - h * 0.5, y + h * 0.5, h * 0.4, 'left', '#f6f6f2'); this.arrow(x + w - h * 0.2, y + h * 0.5, h * 0.4, 'right', '#f6f6f2'); }
+    else if (arrow) this.arrow(x + w - h * 0.33, y + h * 0.5, h * 0.5, arrow, '#f6f6f2');
     const f = this.face(x, y, w, h);
     this.cache.set(key, f);
     return f;
@@ -270,18 +286,19 @@ class SignAtlas {
     return f;
   }
 
+  /** Round speed limit (km/h): white disc, red ring, black figure; the corners of the square face take the tone of
+   *  the panel back so the sign reads as a disc. */
   speed(limit: string): SignFace {
     const key = `speed|${limit}`;
     const hit = this.cache.get(key);
     if (hit) return hit;
-    const w = 96, h = 120;
+    const w = 112, h = 112;
     const [x, y] = this.alloc(w, h);
     const c = this.ctx;
-    c.fillStyle = '#f4f4f0'; c.fillRect(x, y, w, h);
-    c.strokeStyle = '#111'; c.lineWidth = 3; c.strokeRect(x + 4, y + 4, w - 8, h - 8);
-    this.text('SPEED', x + w / 2, y + h * 0.2, 17, '#111', 'center');
-    this.text('LIMIT', x + w / 2, y + h * 0.36, 17, '#111', 'center');
-    this.text(limit, x + w / 2, y + h * 0.7, 46, '#111', 'center');
+    c.fillStyle = '#4a4c50'; c.fillRect(x, y, w, h);
+    c.beginPath(); c.arc(x + w / 2, y + h / 2, w * 0.47, 0, Math.PI * 2); c.fillStyle = '#d0281e'; c.fill();
+    c.beginPath(); c.arc(x + w / 2, y + h / 2, w * 0.36, 0, Math.PI * 2); c.fillStyle = '#f6f6f2'; c.fill();
+    this.text(limit, x + w / 2, y + h * 0.52, 46, '#111', 'center');
     const f = this.face(x, y, w, h);
     this.cache.set(key, f);
     return f;
@@ -309,7 +326,9 @@ interface Chain {
   bridgeEnd: BridgeSpec | null;
 }
 
-interface Junction { s: number; major: boolean; }
+/** a road meeting the chain: station, whether it is an arterial / highway, and the side (+1 = toward +cross, i.e.
+ *  the right of the chain's forward direction) it leaves toward (0 when it crosses) */
+interface Junction { s: number; major: boolean; side: -1 | 0 | 1; }
 
 function buildChains(map: WorldMap, segments: RoadSegment[]): Chain[] {
   const chains: RoadSegment[][] = [];
@@ -427,14 +446,24 @@ function findJunctions(c: Chain, segments: RoadSegment[]): Junction[] {
       if (Math.abs(den) > 1e-9) {
         const dx = s.a[0] - ax, dz = s.a[1] - az;
         const t = (dx * q[1] - dz * q[0]) / den, u = (dx * r[1] - dz * r[0]) / den;
-        if (t > -0.001 && t < 1.001 && u > -0.001 && u < 1.001) { js.push({ s: c.cum[i] + t * c.segLen[i], major }); continue; }
+        if (t > -0.001 && t < 1.001 && u > -0.001 && u < 1.001) {
+          // a crossing, unless the other road only starts / ends here (then it leaves toward its far end)
+          const ends = u < 0.02 ? s.b : u > 0.98 ? s.a : null;
+          const side: -1 | 0 | 1 = ends ? (Math.sign(c.cross[i][0] * (ends[0] - ax) + c.cross[i][1] * (ends[1] - az)) as -1 | 0 | 1) : 0;
+          js.push({ s: c.cum[i] + t * c.segLen[i], major, side });
+          continue;
+        }
       }
       // an end point on (or just off) the pavement
       for (const p of [s.a, s.b]) {
         const px = p[0] - ax, pz = p[1] - az;
         const t = clamp((px * r[0] + pz * r[1]) / (c.segLen[i] * c.segLen[i]), 0, 1);
         const d = Math.hypot(px - r[0] * t, pz - r[1] * t);
-        if (d < c.hw + 2.5) js.push({ s: c.cum[i] + t * c.segLen[i], major });
+        if (d < c.hw + 2.5) {
+          const far = p === s.a ? s.b : s.a;
+          const side = Math.sign(c.cross[i][0] * (far[0] - ax) + c.cross[i][1] * (far[1] - az)) as -1 | 0 | 1;
+          js.push({ s: c.cum[i] + t * c.segLen[i], major, side });
+        }
       }
     }
   }
@@ -442,7 +471,7 @@ function findJunctions(c: Chain, segments: RoadSegment[]): Junction[] {
   const out: Junction[] = [];
   for (const j of js) {
     const last = out[out.length - 1];
-    if (last && Math.abs(last.s - j.s) < 20) { last.major ||= j.major; continue; }
+    if (last && Math.abs(last.s - j.s) < 20) { last.major ||= j.major; if (last.side !== j.side) last.side = 0; continue; }
     out.push({ ...j });
   }
   return out;
@@ -542,7 +571,7 @@ function panel(soup: Soup, centre: THREE.Vector3, normal: THREE.Vector3, w: numb
 
 // ------------------------------------------------------------------ per-frame culling
 
-interface ChunkMesh { mesh: THREE.Mesh; cls: CasterClass; box: THREE.Box3; height: number; inView: boolean; cast: number; }
+interface ChunkMesh { mesh: THREE.Mesh; cls: CasterClass; box: THREE.Box3; height: number; inView: boolean; cast: number; shadowOnly?: boolean; }
 interface Chunk {
   meshes: ChunkMesh[];
   steel: THREE.Mesh | null;
@@ -594,12 +623,15 @@ class HighwayCuller {
         }
       }
     }
+    // the coarse cascades (texel >= NEAR_TEXEL) never draw the thin steel: the fat shadow proxies stand in there
+    let coarse = 0;
+    for (let i = 0; i < MAX_CASCADES; i++) if (!cascadeIsFine(i)) coarse |= 1 << i;
     for (const c of this.chunks) {
       for (const m of c.meshes) {
-        const mask = layerMask(m.cls, m.inView, m.cast);
+        const mask = m.shadowOnly ? layerMask('mid', false, m.cast & coarse) : layerMask(m.cls, m.inView, m.cast);
         const cast = maskCasts(mask);
         m.mesh.castShadow = cast;
-        m.mesh.visible = m.inView || cast;
+        m.mesh.visible = m.shadowOnly ? cast : m.inView || cast;
         m.mesh.layers.mask = mask;
       }
       if (c.steel) {
@@ -649,6 +681,8 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
   const concreteMat = createConcreteMaterial(pixelScale);
   const steelMat = createSteelMaterial(pixelScale, atlas.texture);
   registerLit(concreteMat); registerLit(steelMat);
+  // shadow proxies are only ever drawn by the shadow cameras (depth material): the cheapest material will do
+  const proxyMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
   const culler = new HighwayCuller(steelMat);
   const group = new HighwayGroup(culler);
   const _size = new THREE.Vector2();
@@ -658,7 +692,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     const h = rt ? rt.height : renderer.getDrawingBufferSize(_size).y;
     pixelScale.value = 0.5 * h * camera.projectionMatrix.elements[5];
   };
-  const counts: HighwayBuild['counts'] = { chains: 0, chunks: 0, meshes: 0, poles: 0, gantries: 0, guardrailM: 0, barrierM: 0, signs: 0, triangles: 0 };
+  const counts: HighwayBuild['counts'] = { chains: 0, chunks: 0, meshes: 0, poles: 0, gantries: 0, guardrailM: 0, barrierM: 0, vergeM: 0, signs: 0, triangles: 0 };
   const chains = buildChains(map, segments);
   counts.chains = chains.length;
 
@@ -672,7 +706,9 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     const chunkLen = c.total / nChunks;
     const chunkOf = (s: number) => Math.min(nChunks - 1, Math.max(0, Math.floor(s / chunkLen)));
     // steel is accumulated in three soups per chunk so the LOD prefixes can be laid out: heads | thin | posts
-    const parts = Array.from({ length: nChunks }, () => ({ conc: new Soup(3, true), heads: new Soup(3, true), thin: new Soup(3, true), posts: new Soup(3, true), signs: new Soup(3, true) }));
+    // `proxy`: fat stand-ins (poles, gantry trusses, guardrail walls) drawn into the coarse shadow cascades only,
+    // so the furniture keeps its shadow strokes from the air where the thin steel is not worth a shadow pass
+    const parts = Array.from({ length: nChunks }, () => ({ conc: new Soup(3, true), heads: new Soup(3, true), thin: new Soup(3, true), posts: new Soup(3, true), signs: new Soup(3, true), proxy: new Soup(3, false) }));
     const P = (s: number) => parts[chunkOf(s)];
 
     // -------------------------------------------------------- median barrier: continuous, opened at the arterial junctions
@@ -710,6 +746,39 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const f = frameAt(c, s);
         P(s).posts.box(f.x, f.y + BARRIER_H, f.z, 0.1, 0.09, 0.05, yawAt(f), 0, S_AMBER, false, [0, 0, 0], 'point');
       }
+    }
+
+    // -------------------------------------------------------- gravel verges: a compacted-shell strip beside each pavement edge (edge definition from the air; the posts stand on it)
+    for (const side of [-1, 1] as const) {
+      const cuts = new Set<number>(stations(c, 0, c.total));
+      for (let k = 1; k < nChunks; k++) cuts.add(k * chunkLen);
+      const ss = [...cuts].sort((p, q) => p - q);
+      const aIn = side * hw, aOut = side * (hw + VERGE_W);
+      const at2 = (s: number) => {
+        const f = frameAt(c, s);
+        // 5 cm under the pavement edge, draped on the terrain at the same lift the roads use (the clipmap sits under it)
+        const inner = new THREE.Vector3(f.x + f.rx * aIn, surfaceAt(c, s, aIn) - 0.05, f.z + f.rz * aIn);
+        const ox = f.x + f.rx * aOut, oz = f.z + f.rz * aOut;
+        const outer = new THREE.Vector3(ox, clamp(map.heightAt(ox, oz) + ROAD_LIFT - 0.05, inner.y - 1.2, inner.y + 0.4), oz);
+        return { inner, outer };
+      };
+      let prev = at2(ss[0]);
+      for (let i = 1; i < ss.length; i++) {
+        const cur = at2(ss[i]);
+        const soup = P((ss[i - 1] + ss[i]) / 2).conc;
+        const base = soup.vertexCount;
+        _n.subVectors(cur.inner, prev.inner).cross(_d.subVectors(prev.outer, prev.inner)).normalize();
+        if (_n.y < 0) _n.negate();
+        soup.vertex(prev.inner.x, prev.inner.y, prev.inner.z, _n.x, _n.y, _n.z, C_VERGE, [3, ss[i - 1], 0]);
+        soup.vertex(cur.inner.x, cur.inner.y, cur.inner.z, _n.x, _n.y, _n.z, C_VERGE, [3, ss[i], 0]);
+        soup.vertex(cur.outer.x, cur.outer.y, cur.outer.z, _n.x, _n.y, _n.z, C_VERGE, [3, ss[i], 1]);
+        soup.vertex(prev.outer.x, prev.outer.y, prev.outer.z, _n.x, _n.y, _n.z, C_VERGE, [3, ss[i - 1], 1]);
+        _a.subVectors(cur.inner, prev.inner).cross(_b.subVectors(cur.outer, prev.inner));
+        if (_a.y >= 0) soup.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+        else soup.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+        prev = cur;
+      }
+      counts.vergeM += c.total;
     }
 
     // -------------------------------------------------------- guardrail: where the ground beside the shoulder is water or drops away, and on the causeway approaches
@@ -750,6 +819,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
             f.y -= 0.62 * drop * drop;
           }
           loftH(P((cuts[ci] + cuts[ci + 1]) / 2).thin, frames, prof, null, S_GALV, 0, 0.7, () => [0, 0, 0]);
+          loftH(P((cuts[ci] + cuts[ci + 1]) / 2).proxy, frames, [[0.14, 0.12], [0.14, 0.86], [-0.14, 0.86], [-0.14, 0.12]], null, S_GALV, 0, null, () => []);
         }
         // posts every 1.905 m just behind the rail, buried into the verge; a reflector on every sixth
         let n = 0;
@@ -805,8 +875,10 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       // which side the arterial leaves toward: the junction's cross road end point
       const far = FAR_DEST[c.id];
       const ahead = (dir: 1 | -1) => (dir > 0 ? (far?.toEnd ?? dEnd?.lines) : (far?.toStart ?? dStart?.lines)) ?? ['Bahía Vista'];
-      addGantry({ s: j.s - 150, dir: 1, panels: [{ lines: ahead(1), arrow: 'up' }, { lines: jd, arrow: 'left' }] });
-      addGantry({ s: j.s + 150, dir: -1, panels: [{ lines: ahead(-1), arrow: 'up' }, { lines: jd, arrow: 'right' }] });
+      // the cross road's arrow: the side it leaves toward, seen by traffic running in `dir` (a crossing: both ways)
+      const arrowFor = (dir: 1 | -1): Arrow => (j.side === 0 ? 'both' : j.side * dir > 0 ? 'right' : 'left');
+      addGantry({ s: j.s - 150, dir: 1, panels: [{ lines: ahead(1), arrow: 'up' }, { lines: jd, arrow: arrowFor(1) }] });
+      addGantry({ s: j.s + 150, dir: -1, panels: [{ lines: ahead(-1), arrow: 'up' }, { lines: jd, arrow: arrowFor(-1) }] });
     }
     if (c.total > 2500) {
       const far = FAR_DEST[c.id];
@@ -827,8 +899,10 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const ground = Math.min(surfaceAt(c, g.s, side * hw) - ROAD_LIFT, map.heightAt(px, pz));
         part.conc.box(px, ground - 0.4, pz, 1.5, 1.2, 1.5, yaw, 0, C_PEDESTAL, false, [0, 0, 0]);
         part.signs.cylinder(px, ground + 0.8, pz, 0.6, topY - (ground + 0.8), 10, S_GALV, true, [0, 0, 0], true);
+        part.proxy.box(px, ground + 0.8, pz, 0.9, topY - 1.5 - (ground + 0.8), 0.9, yaw, 0, S_GALV, true, []);
       }
       const chordY = [topY - 1.5, topY - 0.1];
+      part.proxy.box(f.x, chordY[0] - 0.1, f.z, colA * 2, 1.6, 1.2, yaw, 0, S_GALV, false, []);
       const left = new THREE.Vector3(f.x - f.rx * colA, 0, f.z - f.rz * colA), right = new THREE.Vector3(f.x + f.rx * colA, 0, f.z + f.rz * colA);
       for (const y of chordY) part.signs.strut(left.clone().setY(y), right.clone().setY(y), 0.19, S_GALV, [0, 0, 0]);
       const span = colA * 2;
@@ -877,6 +951,8 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       part.thin.box(f.x, base, f.z, 0.5, 0.06, 0.5, yaw, 0, S_POLE, false, [0, 0, 0]);
       part.thin.cylinder(f.x, base + 0.06, f.z, 0.27, POLE_H - 0.06, 8, S_POLE, true, [0, 0, 0], true);
       const top = base + POLE_H;
+      part.proxy.box(f.x, base, f.z, 0.55, POLE_H - 0.6, 0.55, yaw, 0, S_POLE, true, []);
+      part.proxy.box(f.x, top - 0.6, f.z, ARM_REACH * 2 + 0.8, 0.6, 0.9, yaw, 0, S_POLE, false, []);
       for (const side of [-1, 1]) {
         const hx = f.x + f.rx * side * ARM_REACH, hz = f.z + f.rz * side * ARM_REACH;
         part.thin.strut(new THREE.Vector3(f.x + f.rx * side * 0.1, top - 0.55, f.z + f.rz * side * 0.1), new THREE.Vector3(hx, top - 0.15, hz), 0.065, S_POLE, [0, 0, 0]);
@@ -901,13 +977,14 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       counts.signs++;
     };
     if (jd) for (const j of majors) {
-      if (j.s > 330 && !nearGantry(j.s - 330, 60)) groundSign(j.s - 330, 1, 3.0, 1.5, atlas.guide([jd[0], '300 m'], 'left', 256, 128), S_DARK);
-      if (j.s < c.total - 330 && !nearGantry(j.s + 330, 60)) groundSign(j.s + 330, -1, 3.0, 1.5, atlas.guide([jd[0], '300 m'], 'right', 256, 128), S_DARK);
+      const arrowFor = (dir: 1 | -1): Arrow => (j.side === 0 ? 'both' : j.side * dir > 0 ? 'right' : 'left');
+      if (j.s > 330 && !nearGantry(j.s - 330, 60)) groundSign(j.s - 330, 1, 3.0, 1.5, atlas.guide([jd[0], '300 m'], arrowFor(1), 256, 128), S_DARK);
+      if (j.s < c.total - 330 && !nearGantry(j.s + 330, 60)) groundSign(j.s + 330, -1, 3.0, 1.5, atlas.guide([jd[0], '300 m'], arrowFor(-1), 256, 128), S_DARK);
     }
     for (const dir of [1, -1] as const) {
       for (let s = dir > 0 ? 140 : c.total - 140; dir > 0 ? s < c.total - 60 : s > 60; s += dir * 900) {
         if (nearGantry(s, 60) || nearJunction(s, 30)) continue;
-        groundSign(s, dir, 0.6, 0.75, atlas.speed('55'), S_DARK, false, 1, 2.0);
+        groundSign(s, dir, 0.75, 0.75, atlas.speed('90'), S_DARK, false, 1, 2.0);
       }
     }
     // chevrons on the outside of any bend sharper than 8 degrees
@@ -998,6 +1075,13 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const m = new THREE.Mesh(steelGeometry(p.signs), steelMat);
         chunk.signs = m;
         attach(m, 'mid', false);
+      }
+      if (p.proxy.idx.length) {
+        const m = new THREE.Mesh(p.proxy.build([]), proxyMat);
+        m.receiveShadow = false;
+        attach(m, 'mid', true);
+        chunk.meshes[chunk.meshes.length - 1].shadowOnly = true;
+        m.visible = false;
       }
       if (!chunk.meshes.length) continue;
       const sphere = chunkBox.getBoundingSphere(new THREE.Sphere());
