@@ -69,8 +69,9 @@ export function animate(model: PlaneModel, pitch: number, roll: number, yaw: num
   model.throttleLever.rotation.z = (0.5 - THREE.MathUtils.clamp(throttle, 0, 1)) * 0.9;
   model.flapLever.rotation.z = -(1.75 + THREE.MathUtils.clamp(flaps, 0, 1) * 1.05) + Math.PI / 2;
   // instrument lighting: the dials, the screen and the panel legends glow after dusk
-  model.panelMat.emissiveIntensity = 0.1 + 1.3 * glow;
-  model.instMat.emissiveIntensity = 0.15 + 1.4 * glow;
+  // by day the dials barely glow (a glowing face reads flat, without the light's shading); the backlight comes up after dusk
+  model.panelMat.emissiveIntensity = 0.04 + 1.36 * glow;
+  model.instMat.emissiveIntensity = 0.05 + 1.5 * glow;
   model.gpsMat.emissiveIntensity = 0.55 + 1.2 * glow;
   model.canvasAcc += dt;
   setInstruments(model, telemetry, rpm, throttle);

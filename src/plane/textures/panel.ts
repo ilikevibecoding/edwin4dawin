@@ -73,6 +73,8 @@ export const PANEL_UV = {
   yoke: uvRect(674, PLACARD_Y + 6, 794, PLACARD_Y + 84),
   nameplate: uvRect(804, PLACARD_Y + 6, 1164, PLACARD_Y + 84),
   domeLens: uvRect(1174, PLACARD_Y + 6, 1254, PLACARD_Y + 84),
+  /** laminated checklist card (portrait) */
+  checklist: uvRect(1264, PLACARD_Y + 6, 1324, PLACARD_Y + 84),
   overhead: uvRect(4, OVERHEAD_Y + 4, 4 + OVERHEAD_PX.w, OVERHEAD_Y + 4 + OVERHEAD_PX.h),
   /** sun visor face: tinted vinyl with a stitched edge */
   visor: uvRect(300, OVERHEAD_Y + 4, 750, OVERHEAD_Y + 4 + 210),
@@ -293,6 +295,14 @@ export function panelTexture(): { map: THREE.CanvasTexture; emissive: THREE.Canv
     label(ctx, x0 + 180, y0 + 24, 'BAHÍA VISTA AIR TAXI', 22, '#1c2d5a', 'bold italic'); label(ctx, x0 + 180, y0 + 56, 'GARZA 7 · FLOATPLANE · N726BV', 14, '#1c2d5a', 'normal'); }
   { const x0 = 1174, y0 = PLACARD_Y + 6; const g = ctx.createRadialGradient(x0 + 40, y0 + 39, 4, x0 + 40, y0 + 39, 40); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#c8cbd0');
     ctx.fillStyle = g; ctx.fillRect(x0, y0, 80, 78); }
+  // checklist card: a cream laminated card with a title band and lines of items with their tick boxes
+  { const x0 = 1264, y0 = PLACARD_Y + 6, cw = 60, chh = 78;
+    ctx.fillStyle = '#efe9d8'; ctx.fillRect(x0, y0, cw, chh);
+    ctx.fillStyle = '#1c2d5a'; ctx.fillRect(x0, y0, cw, 11);
+    label(ctx, x0 + cw / 2, y0 + 6, 'BEFORE TAKEOFF', 5, '#ffffff');
+    const items = ['FUEL SEL  BOTH', 'MIXTURE  RICH', 'PROP  HIGH RPM', 'FLAPS  CLIMB', 'TRIM  SET', 'WATER RUD  UP', 'DOORS  LATCHED', 'BELTS  FASTENED', 'RUN-UP  1700'];
+    items.forEach((t, i) => { const y = y0 + 17 + i * 6.6; ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 0.6; ctx.strokeRect(x0 + 3, y - 2, 3.5, 3.5); label(ctx, x0 + 9, y, t, 3.6, '#22232a', 'normal', 'left'); });
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1; ctx.strokeRect(x0 + 0.5, y0 + 0.5, cw - 1, chh - 1); }
   // ---- overhead console face (seen from below): crinkle paint, fuel selector, cabin switches, trim indicator
   ctx.fillStyle = '#000'; ctx.fillRect(0, OVERHEAD_Y, w, PANEL.OVERHEAD);
   { const x0 = 4, y0 = OVERHEAD_Y + 4, ow = OVERHEAD_PX.w, oh = OVERHEAD_PX.h;
@@ -368,7 +378,7 @@ export const INSTRUMENT_ATLAS = {
   ballRadius: 1.9,
   /** degrees of pitch covered by the ball's radius: 30 deg per aperture radius */
   ballDegPerRadius: 57,
-  patches: { white: [16, 300], black: [80, 300], orange: [144, 300], red: [208, 300], bezel: [272, 300], grey: [336, 300], yellow: [400, 300], glass: [464, 300] } as Record<string, [number, number]>,
+  patches: { white: [16, 300], black: [80, 300], orange: [144, 300], red: [208, 300], bezel: [272, 300], grey: [336, 300], yellow: [400, 300], glass: [464, 300], shadow: [16, 364] } as Record<string, [number, number]>,
 };
 
 export function instrumentAtlas(): THREE.CanvasTexture {
@@ -402,6 +412,8 @@ export function instrumentAtlas(): THREE.CanvasTexture {
   const P = INSTRUMENT_ATLAS.patches;
   const fill = (k: string, col: string) => { const [px, py] = P[k]; ctx.fillStyle = col; ctx.fillRect(px - 16, py - 16, 32, 32); };
   fill('white', '#f4f4f4'); fill('black', '#0b0c0e'); fill('orange', '#ff8a1f'); fill('red', '#d8322e'); fill('bezel', '#2e3136'); fill('grey', '#9a9ea4'); fill('yellow', '#f2c230'); fill('glass', '#0b0c0e');
+  // the needles' shadow: half-transparent black (the patch is cleared first, the atlas is otherwise opaque)
+  { const [px, py] = P.shadow; ctx.clearRect(px - 16, py - 16, 32, 32); ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(px - 16, py - 16, 32, 32); }
   const t = toTexture(c, true, 8);
   t.flipY = true;
   t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
