@@ -3,7 +3,7 @@
 // above the floor walk level (0 = standing level, h = ceiling slab). Templates never touch the walls
 // themselves; they furnish the interior and record NPC spots. Cells in the door zone (two rows in front of the
 // door opening) refuse furniture so every room stays enterable.
-import { B } from '../../blocks.js';
+import { B, BLOCKS, SHAPE } from '../../blocks.js';
 
 export const SEAT = B.STONE_BRICK_SLAB;       // generic chair / bench / stool
 export const COUNTER_TOP = B.STONE_BRICK_SLAB;
@@ -20,6 +20,7 @@ export class Room {
     this.d = alongX ? rect.z1 - rect.z0 + 1 : rect.x1 - rect.x0 + 1;
     this.doorU = rect.doorU ?? -100; this.doorW = rect.doorW ?? 2;
     this.backDoorU = rect.backDoorU ?? -100;   // optional second door in the back wall (deep strips)
+    this.backDoorTight = !!rect.backDoorTight; // back-door zone is just the door columns (a program's service door): the back wall keeps its furniture
     this.extraDoors = rect.extraDoors || null; // further door columns in the door wall (rooms merged by a program)
     this.mask = rect.mask || null;             // optional footprint mask (x, z) -> bool for non-rectangular tiers
     this.cu = Math.floor((this.w - 1) / 2);   // centre column (left-centre for even widths)
@@ -46,7 +47,7 @@ export class Room {
   inside(u, v) { return u >= 0 && v >= 0 && u < this.w && v < this.d && (!this.mask || this.mask(this.X(u, v), this.Z(u, v))); }
   inDoorZone(u, v) {
     if (v <= 1 && u >= this.doorU - 1 && u <= this.doorU + this.doorW) return true;
-    if (v >= this.d - 2 && u >= this.backDoorU - 1 && u <= this.backDoorU + this.doorW) return true;
+    if (v >= this.d - 2 && (this.backDoorTight ? (u >= this.backDoorU && u < this.backDoorU + this.doorW) : (u >= this.backDoorU - 1 && u <= this.backDoorU + this.doorW))) return true;
     if (this.extraDoors && v <= 1) for (const du of this.extraDoors) if (u >= du - 1 && u <= du + this.doorW) return true;
     return false;
   }
@@ -88,8 +89,27 @@ export class Room {
     this._beds = null;
   }
   empty(u, ly, v) { const id = this.get(u, ly, v); return id === 0 || id === 255; }
-  spot(u, v, kind = 'stand') { if (this.inside(u, v)) { this.bp.spot(this.X(u, v), this.y, this.Z(u, v), kind); this.spots++; } }
-  work(u, v, kind = 'work') { if (this.inside(u, v)) { this.bp.work(this.X(u, v), this.y, this.Z(u, v), kind); this.spots++; } }
+  // a cell an NPC can stand on: inside the frame, air or a slab / bed at the feet, air at the head
+  standable(u, v) {
+    if (!this.inside(u, v)) return false;
+    const feet = this.get(u, 0, v), b = feet === 0 || feet === 255 ? null : BLOCKS[feet];
+    if (b && b.solid && b.shape !== SHAPE.SLAB && b.shape !== SHAPE.BED) return false;
+    return this.empty(u, 1, v);
+  }
+  // NPC records: a cell a template asked for that is outside the footprint mask or filled by furniture moves to the
+  // nearest standable cell (masked tiers and pass-through rooms otherwise lose their staff); cells that are fine
+  // stay exactly where the template put them
+  place(u, v) {
+    if (this.standable(u, v)) return [u, v];
+    for (let rad = 1; rad <= 2; rad++) for (let dv = -rad; dv <= rad; dv++) for (let du = -rad; du <= rad; du++) {
+      if (Math.max(Math.abs(du), Math.abs(dv)) !== rad) continue;
+      const uu = u + du, vv = v + dv;
+      if (this.standable(uu, vv) && !this.inDoorZone(uu, vv)) return [uu, vv];
+    }
+    return this.inside(u, v) ? [u, v] : null;
+  }
+  spot(u, v, kind = 'stand') { const p = this.place(u, v); if (p) { this.bp.spot(this.X(p[0], p[1]), this.y, this.Z(p[0], p[1]), kind); this.spots++; } }
+  work(u, v, kind = 'work') { const p = this.place(u, v); if (p) { this.bp.work(this.X(p[0], p[1]), this.y, this.Z(p[0], p[1]), kind); this.spots++; } }
   // seat (slab) with a spot on it
   seat(u, v, id = SEAT) { if (this.put(u, 0, v, id)) this.spot(u, v, 'seat'); }
   table(u, v, id = B.TABLE) { return this.put(u, 0, v, id); }

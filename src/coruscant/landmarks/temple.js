@@ -281,6 +281,8 @@ function greatHall(bp, rng) {
     statue(bp, x0 + 5, y0, z + 4, [1, 0]); statue(bp, x1 - 5, y0, z + 4, [-1, 0]);
     lamp(bp, x0 + 3, y0, z + 4, 3, B.LANTERN); lamp(bp, x1 - 3, y0, z + 4, 3, B.LANTERN);
     bp.spot(x0 + 8, y0, z + 4, 'stand'); bp.spot(x1 - 8, y0, z + 4, 'stand');
+    // visitors' benches against the walls between the columns: the threshold is where petitioners wait to be met
+    for (const x of [x0 + 1, x1 - 1]) for (let k = 1; k <= 3; k++) { bp.set(x, y0, z + k, B.STONE_BRICK_SLAB); bp.spot(x, y0, z + k, 'seat'); }
   }
   // banners (wool) hanging high between the columns
   for (let z = z0 + 9; z <= z1 - 5; z += 8) for (const x of [x0 + 1, x1 - 1]) { bp.fill(x, y0 + 10, z, x, y0 + 16, z, (z >> 3) % 2 ? B.BLUE_WOOL : B.WHITE_WOOL); bp.set(x, y0 + 17, z, TRIM); }
@@ -499,7 +501,9 @@ function dojo(bp, rng, x0, z0, x1, z1, y, side) {
   const cu = r.cu, cv = Math.floor(r.back / 2);
   for (let u = 0; u < r.w; u++) for (let v = 0; v <= r.back; v++) { const d = Math.hypot(u - cu, v - cv); if (d > 2.2 && d <= 3.2) r.putRaw(u, -1, v, B.RED_WOOL); }
   for (let u = 1; u < r.w - 1; u += 2) { r.put(u, 0, r.back, B.SHELF); r.put(u, 1, r.back, B.IRON_BARS); }
-  for (let v = 2; v <= r.back - 1; v += 2) { if (r.put(0, 0, v, B.WHITE_WOOL)) r.spot(0, v, 'seat'); }
+  for (let v = 2; v <= r.back - 1; v += 2) r.seat(0, v, B.STONE_BRICK_SLAB);                             // the kneeling row (cushions an NPC can sit on)
+  // training remotes hovering on their posts along the front row, clear of the sparring circle
+  for (let u = 3; u < r.w - 3; u += 6) if (Math.hypot(u - cu, 2 - cv) > 3.5 && r.put(u, 0, 2, B.IRON_BARS)) r.put(u, 1, 2, B.GLOW_PANEL_BLUE);
   r.put(r.w - 1, 0, 2, B.CONSOLE); r.work(r.w - 2, 2, 'instructor');
   r.lantern(1, 1); r.lantern(r.w - 2, r.back - 1);
   r.ceilingLights(4);

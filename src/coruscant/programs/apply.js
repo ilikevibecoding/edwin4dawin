@@ -96,7 +96,9 @@ function score(spec, c, top, rng, service) {
   if (spec.where !== 'inner' && c.inner) s -= 3;                         // public rooms should open off the corridor
   if (spec.signature || spec.merge) s += Math.min(6, (c.w * c.d) / 8);  // the signature room takes the largest fit
   else if (spec.service) s -= Math.min(4, (c.w * c.d) / 12);            // back of house takes the small rooms
+  if (!spec.signature && !spec.merge) s -= Math.max(0, c.w * c.d - 80) / 16;   // a landmark's hall is no place for a locker room
   if (service && spec.serviceEntry) s += c.exterior ? 8 : 0;
+  if (c.fr.backDoorU >= 0 && !spec.service) s -= 3;                    // a pass-through room loses its back wall to the second door
   return s + rng.next() * 2;
 }
 
@@ -125,11 +127,39 @@ function clearRoom(bp, c, floorId) {
   }
 }
 
+// what hangs over the walkway of a small room when the door zones ate its floor: by template tag
+const OVERHEAD = [['green', B.OAK_LEAVES], ['medical', B.WHITE_WOOL], ['culture', B.RED_WOOL], ['entertainment', B.RED_WOOL], ['industry', B.IRON_BARS], ['tech', B.IRON_BARS], ['freight', B.SHELF], ['service', B.SHELF], ['office', B.PANEL_BLACK], ['civic', B.PANEL_BLACK], ['home', B.SHELF]];
+const DENSITY_BAR = 1 / 6;
+
+// furniture density as the harnesses measure it (blocks in the three layers above the floor over the room's cells)
+function density(room) {
+  let cells = 0, n = 0;
+  for (let u = 0; u < room.w; u++) for (let v = 0; v < room.d; v++) {
+    if (!room.inside(u, v)) continue;
+    cells++;
+    for (let ly = 0; ly <= 2; ly++) if (!isAir(room.get(u, ly, v))) n++;
+  }
+  return cells ? n / cells : 0;
+}
+
+// a room with doors at both ends (or a masked corner) can lose most of its floor to door zones; the overhead
+// racks, ducts and hangings along the side walls at head+1 height bring it to the landmark bar without touching the
+// walkway
+function topUp(room, tpl) {
+  if (density(room) >= DENSITY_BAR + 0.04) return;
+  const tag = OVERHEAD.find(([t]) => tpl.tags.includes(t));
+  const id = tag ? tag[1] : B.SHELF;
+  const cols = room.w > 1 ? [0, room.w - 1] : [0];
+  for (const u of cols) for (let v = 1; v < room.d - 1 && density(room) < DENSITY_BAR + 0.04; v++) if (room.inside(u, v) && isAir(room.get(u, 2, v))) room.putRaw(u, 2, v, id);
+  for (let u = 1; u < room.w - 1 && density(room) < DENSITY_BAR + 0.04; u++) if (room.inside(u, room.back) && isAir(room.get(u, 2, room.back))) room.putRaw(u, 2, room.back, id);
+}
+
 function furnish(bp, c, spec, tpl, ctx, rng, extra = {}) {
   const fr = c.fr;
-  const room = new Room(bp, { ...fr.rect, y: fr.y, h: fr.h, side: fr.side, doorU: fr.doorU, doorW: fr.doorW, backDoorU: extra.backDoorU ?? fr.backDoorU, mask: fr.mask, extraDoors: extra.extraDoors || null }, spec.kind, ctx);
+  const room = new Room(bp, { ...fr.rect, y: fr.y, h: fr.h, side: fr.side, doorU: fr.doorU, doorW: fr.doorW, backDoorU: extra.backDoorU ?? fr.backDoorU, backDoorTight: true, mask: fr.mask, extraDoors: extra.extraDoors || null }, spec.kind, ctx);
   tpl.fn(room, rng, ctx);
   room.finalize();
+  topUp(room, tpl);
   room.putRaw(fr.doorU, fr.h, 0, B.GLOW_PANEL);
   return room;
 }
