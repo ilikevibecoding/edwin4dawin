@@ -183,13 +183,15 @@ export const inVent = (zr) => zr > VENT_Z0 + 0.005 && zr < VENT_Z1 + 0.005;
 // the wings at 0.63 L, its body's sides shaded; under each shaft a steep light "leg" runs from the
 // roof down to the shelf, flaring outboard, so the shaft lines continue to the deck with the body's
 // dark side showing as a triangle between leg and ramp. Shafts 12.4 m wide, 90 m deep, 43 m tall,
-// centred at +-22.5 (a 33 m gap), standing on the roof. Heads: 28 m wide slabs 24 m tall from the shaft
-// top, 136 m long, a light front section overhanging 46 m ahead of the shaft (a round pod under it),
-// dark panelled sides; a dark bridge box joins the shafts behind their fronts; a low sensor body with a
-// light drum and a mast on each head (262 m keel to mast).
+// centred at +-22.5 (a 33 m gap), standing on the roof. Heads: light hammerheads 28 m wide, 24 m tall,
+// 140 m long overhanging the shafts (46 m to the front) with a dark window band and a chin; a low bridge
+// deck between the shafts; a dark sensor block, light drum and mast on each head (262 m keel to mast).
+// Behind the shafts the block steps down aft in terraces (AFT) to the stern hangar; the shelves slope
+// down to the deck behind the block.
 export const PLATFORM = {
   z0: 580, // front step
-  z1: 940, // the block's rear
+  z1: 940, // the shelf top ends here ...
+  tail: 48, // ... and slopes down to the wing deck over this length (the aft shoulders)
   xIn: 21, // inner edge, buried in the band / the block's foot
   xOut: 98,
   drop: 3, // shelf top below the band's top line
@@ -201,8 +203,8 @@ export const BLOCK = {
     z0: 640, // sill front
     zFoot: 642, // ramp foot
     zTop0: 718, // roof front edge
-    z1: 940, // back at the top
-    z1Foot: 935, // back at the foot (the rear face leans forward a little)
+    z1: 896, // back at the top: the aft terraces start right behind the shafts
+    z1Foot: 905, // back at the foot (buried in the aft body)
     yFoot: SILL_Y, // the ramp starts on the band's top
     y1: up(105), // roof
     hxSill: 26.5,
@@ -217,16 +219,28 @@ export const BLOCK = {
     xInFoot: 20,
     xOutFoot: 40,
     zFoot: 835,
-    z1: 940,
+    z1Foot: 940, // the rear face leans forward from the shelf ...
+    z1Top: 900, // ... to the roof, an aft shoulder beside the terraces
   },
   // low light bridge deck joining the shafts behind their fronts, seen through the gap between them,
   // with a dark hood on top (the sky shows through the rest of the gap)
   bridge: { z0: 812, z1: 850, y1: up(118), hx: 15.5, hoodH: 7 },
-  // steps behind the block, down toward the stern
-  steps: [
-    { z0: 940, z1: 985, y1: up(78), hx: 24 },
-    { z0: 985, z1: 1015, y1: up(62), hx: 22 },
+};
+// aft body behind the shafts: one loft of [zr, half-width, top y] sections — three sloped risers with
+// short flat treads between (36 degree risers, 28 degrees overall, widening as it descends) down to a stern shelf, then the aft
+// foot face carrying the dark stern hangar mouth above the engine bank; the wing deck runs on to the
+// stern behind it
+export const AFT = {
+  sections: [
+    [896, 19.5, up(105)],
+    [930, 22.5, up(80)],
+    [948, 24, up(80)],
+    [982, 28, up(56)],
+    [1000, 30, up(56)],
+    [1034, 34, up(32)],
+    [1085, 36, up(32)],
   ],
+  hangar: { hx: 25, y0: up(1.5), y1: up(25), depth: 30 },
 };
 export const TOWER = {
   x: 22.5, // shaft centres at +-x

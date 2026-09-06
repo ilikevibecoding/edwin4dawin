@@ -13,7 +13,7 @@ import {
   surfaceBox,
   quadFacing,
   nozzle,
-  partition,
+  staggered,
   jitterColor,
   mulColor,
   tube,
@@ -57,7 +57,7 @@ import {
 
 export function buildDetail(ctx, secs) {
   const { lod, fine, mid, add, hullTexel, rand } = ctx;
-  const plateTexel = lod === 0 ? 1 / 30 : 1 / 40;
+  const plateTexel = lod === 0 ? 1 / 14 : 1 / 20;
   const soot = (color, z) => {
     const s = sootAt(z);
     return mulColor(color, s[0], s[1], s[2]);
@@ -316,7 +316,9 @@ export function buildDetail(ctx, secs) {
   // -------------------------------------------------------------------------
   if (!mid) return;
   const NOM = 100;
-  // plate field on a loft strip (edge j): cells in (t across, z along), placed on the surface frames
+  // plate field on a loft strip (edge j): staggered courses of raised plates 20-90 m (rows along z of
+  // varying height, each cut across the strip with its own phase so no grid shows), 0.5-1.5 m proud
+  // with dark seam gaps, a few smaller plates and sparse dark hatches on top
   const stripField = (
     j,
     base,
@@ -325,8 +327,8 @@ export function buildDetail(ctx, secs) {
       zr1,
       t0 = 0.05,
       t1 = 0.95,
-      max = 60,
-      keep = 0.22,
+      min = 22,
+      max = 88,
       skip = 0.3,
       mat = "hull",
       grooves = true,
@@ -335,37 +337,29 @@ export function buildDetail(ctx, secs) {
     },
     filter = null,
   ) => {
-    const cells = partition(
-      rand,
-      { u0: t0 * NOM, u1: t1 * NOM, v0: Z(zr0), v1: Z(zr1) },
-      { max, keep },
-    );
-    for (const c of cells) {
-      const cv = (c.v0 + c.v1) / 2;
-      const ta = c.u0 / NOM;
-      const tb = c.u1 / NOM;
-      if (filter && filter(cv, ta, tb)) continue;
+    const cell = (ta, tb, v0, v1) => {
+      const cv = (v0 + v1) / 2;
+      if (filter && filter(cv, ta, tb)) return;
       const len = loftEdgeLength(secs, j, cv);
       const fr = loftFrame(secs, j, (ta + tb) / 2, cv);
       if (grooves) {
-        const fa = loftFrame(secs, j, (ta + tb) / 2, c.v0);
-        add(groove(fa, (tb - ta) * len, 0.7), "dark", {
+        const fa = loftFrame(secs, j, (ta + tb) / 2, v0);
+        add(groove(fa, (tb - ta) * len, 0.5), "dark", {
           color: DARK_SEAM,
           texel: 1 / 4,
         });
         const fb = loftFrame(secs, j, ta, cv);
-        add(groove(fb, 0.7, c.v1 - c.v0), "dark", {
+        add(groove(fb, 0.5, v1 - v0), "dark", {
           color: DARK_SEAM,
           texel: 1 / 4,
         });
       }
-      if (!fine) continue;
-      const r = rand();
-      if (r < skip) continue;
-      const w = (tb - ta) * len - 3;
-      const d = c.v1 - c.v0 - 3;
-      if (w < 4 || d < 4) continue;
-      const th = 0.5 + rand() * 0.9;
+      if (!fine) return;
+      if (rand() < skip) return;
+      const w = (tb - ta) * len - 2.4;
+      const d = v1 - v0 - 2.4;
+      if (w < 5 || d < 5) return;
+      const th = 0.5 + rand() * 1.0;
       add(
         framePlate(fr, w, d, th, 0.7 + rand() * 0.8, {
           texel: plateTexel,
@@ -377,17 +371,18 @@ export function buildDetail(ctx, secs) {
           uv: mat === "hull" ? "keep" : "planar",
         },
       );
-      if (rand() < 0.3)
+      const r = rand();
+      if (r < 0.22)
         add(
           framePlate(
             fr,
-            w * 0.4,
-            d * 0.4,
-            th + 0.5,
+            w * (0.3 + rand() * 0.25),
+            d * (0.3 + rand() * 0.25),
+            th + 0.4,
             0.6,
-            { texel: 1 / 18, sink: 0.4 },
-            (rand() - 0.5) * w * 0.4,
-            (rand() - 0.5) * d * 0.3,
+            { texel: plateTexel, sink: 0.4 },
+            (rand() - 0.5) * w * 0.45,
+            (rand() - 0.5) * d * 0.4,
           ),
           mat,
           {
@@ -399,7 +394,7 @@ export function buildDetail(ctx, secs) {
             uv: mat === "hull" ? "keep" : "planar",
           },
         );
-      else if (boxes && rand() < 0.35)
+      else if (boxes && r < 0.4)
         add(
           surfaceBox(fr, [3.5, th + 0.6, 3.5], {
             du: (rand() - 0.5) * w * 0.5,
@@ -411,6 +406,32 @@ export function buildDetail(ctx, secs) {
             texel: 1 / 4,
           },
         );
+    };
+    const va = Z(zr0);
+    const vb = Z(zr1);
+    const rowMax = min + (max - min) * 0.7;
+    let v = va;
+    while (v < vb - 1) {
+      let h = min + rand() * (rowMax - min);
+      if (vb - v - h < min * 0.6) h = vb - v;
+      h = Math.min(h, vb - v);
+      const len = loftEdgeLength(secs, j, v + h / 2);
+      const ua = t0 * len;
+      const ub = t1 * len;
+      let u = ua;
+      let first = true;
+      while (u < ub - 1) {
+        let w = min + rand() * (max - min);
+        if (first) {
+          w *= 0.3 + rand() * 0.7;
+          first = false;
+        }
+        if (ub - u - w < min * 0.6) w = ub - u;
+        w = Math.min(w, ub - u);
+        cell(u / len, (u + w) / len, v, v + h);
+        u += w;
+      }
+      v += h;
     }
   };
   for (const s of [-1, 1]) {
@@ -420,7 +441,7 @@ export function buildDetail(ctx, secs) {
     stripField(
       R ? EDGE.wingR : EDGE.wingL,
       GREY_WING,
-      { zr0: 270, zr1: 1080, max: 55, keep: 0.25, skip: 0.3 },
+      { zr0: 270, zr1: 1080, min: 24, max: 90, skip: 0.28 },
       (cv, ta, tb) => {
         const zr = cv - Z(0);
         const tm = R ? (ta + tb) / 2 : 1 - (ta + tb) / 2;
@@ -447,8 +468,8 @@ export function buildDetail(ctx, secs) {
       zr1: DOOR_Z1 - 4,
       t0: 0.03,
       t1: 0.97,
-      max: 40,
-      keep: 0.3,
+      min: 18,
+      max: 60,
       skip: 0.5,
       mat: "paint",
       grooves: false,
@@ -459,13 +480,14 @@ export function buildDetail(ctx, secs) {
     stripField(R ? EDGE.lowerR : EDGE.lowerL, GREY_LOWER, {
       zr0: 200,
       zr1: 1120,
-      max: 40,
+      min: 16,
+      max: 60,
       skip: 0.3,
     });
     stripField(
       R ? EDGE.bellyR : EDGE.bellyL,
       GREY_BELLY,
-      { zr0: 350, zr1: 1120, max: 45, skip: 0.34 },
+      { zr0: 350, zr1: 1120, min: 20, max: 70, skip: 0.34 },
       (cv) => {
         const zr = cv - Z(0);
         return BELLY_BAYS.some(([z0, z1]) => zr > z0 - 10 && zr < z1 + 10);
@@ -501,10 +523,10 @@ export function buildDetail(ctx, secs) {
       [TURRET_X + TURRET_R + 5, P.xOut - 4],
     ]) {
       if (u1 - u0 < 6) continue;
-      const cells = partition(
+      const cells = staggered(
         rand,
         { u0, u1, v0: Z(P.z0 + 8), v1: Z(P.z1 - 8) },
-        { max: 26, keep: 0.25 },
+        { min: 12, max: 34 },
       );
       for (const c of cells)
         for (const s of [-1, 1]) {

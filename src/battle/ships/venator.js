@@ -23,8 +23,9 @@ import { VENATOR, L, GREY_LIGHT, GREY_WING, DARK } from "./venatorSpec.js";
 
 export { VENATOR };
 
-// plating scales (tiles per metre) per LOD: fine seams close up, coarser far away
-const HULL_TEXEL = [1 / 40, 1 / 44, 1 / 48];
+// plating scales (tiles per metre) per LOD: the fine armour texture the other classes use (12 m tile up
+// close); the big-panel look comes from the raised plate fields in venatorDetail / venatorTowers
+const HULL_TEXEL = [1 / 12, 1 / 18, 1 / 24];
 
 /**
  * Build the part list for one LOD. `open` parts the deck doors and adds a lit hangar bay.
