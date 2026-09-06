@@ -92,7 +92,7 @@ PROGRESS_VIEWS=(
   "city_500m|Downtown from 500 m|city|dev&cam=-2500,500,-3500&hdg=-30&pch=-35&fov=50&time=14&weather=clear&plane=-1500,400,-2500,300,0,0,55,0.7"
   "city_200m|Downtown and the bayfront from 200 m|city|dev&cam=-2000,180,-3300&hdg=-40&pch=-18&fov=55&time=14&weather=clear&plane=-1500,400,-2500,300,0,0,55,0.7"
   "city_north|Downtown from its southern edge, 200 m|city|dev&cam=-2650,200,-3150&hdg=0&pch=-20&fov=55&time=14&weather=clear&plane=-1500,400,-2500,300,0,0,55,0.7"
-  "street_2m|Street level, downtown avenue|city|dev&cam=-2737,6.9,-3880&hdg=0&pch=-3&fov=50&time=14&weather=clear&plane=-1500,400,-2500,300,0,0,55,0.7"
+  "street_2m|Street level, downtown avenue (camera on the street centreline)|city|dev&cam=-2742,6.9,-3880&hdg=0&pch=-3&fov=50&time=14&weather=clear&plane=-1500,400,-2500,300,0,0,55,0.7"
   "night|Downtown at night|city|night"
   "sunset|Sunset over the bay|sky|sunset"
   "cloudy|Overcast deck|sky|cloudy"
