@@ -532,6 +532,15 @@ Sand sandDetail(vec2 wp, float w, float foot) {
   return s;
 }
 vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, vec4 det, float foot, out Ground gd, out float rough) {
+  // The sea bed and the bars under the water plane (h < 0.05; the rim above it took the land's zone in main):
+  // the water is opaque over them (water.ts shades its own bed and writes alpha 1), so nothing of this is ever
+  // seen and only its cost would be. A depth tint without noise or taps, in case the water is ever hidden.
+  if (zone == 0 || zone == 1 || zone == 17) {
+    gd = groundMeans();
+    rough = mix(0.9, 0.35, smoothstep(-0.4, 0.05, h));
+    vec3 bed = mix(vec3(0.62, 0.56, 0.42), vec3(0.28, 0.32, 0.30), smoothstep(12.0, 30.0, -h));
+    return mix(bed, vec3(0.33, 0.27, 0.18), smoothstep(-0.6, 0.0, h));
+  }
   // the 3 m noise and the 5-11 m octaves of the 22 m one go subpixel at 1-4 m/px: past that they are replaced by
   // their means (what their mip would be), which is a third of the noise work in every aerial view
   float n1 = foot < 2.0 ? mix(vnoise(wp * 0.35), 0.5, smoothstep(1.0, 2.0, foot)) : 0.5;
@@ -541,9 +550,7 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
   float dist = length(cameraPosition - vWorldPos);
   float w = smoothstep(0.42, 0.58, n2); // the anti-tiling blend weight of every detail tap
   float w2 = smoothstep(0.42, 0.58, n3); // .. and of the meso tile, at the meso tile's own scale
-  // the seabed lies under the water plane: it is shaded (the water draws over it) but never seen, so it
-  // takes the channel means instead of the taps
-  if (zone == 0 || zone == 1) gd = groundMeans(); else gd = groundDetail(wp, w, w2, foot);
+  gd = groundDetail(wp, w, w2, foot);
   rough = 0.9;
   vec3 c;
   // sandy fringe where the land ramps up from a sandy shore (sheltered lake and canal banks stay grassy); the
@@ -553,26 +560,7 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
   // ground with tree shadows on it, the litter floor belongs to the closed hammock
   float canopy = smoothstep(0.30, 0.82, veg);
   canopy *= canopy;
-  if (zone == 0 || zone == 1) {
-    // seabed: sand with seagrass patches in the shallows, pale sand flats where it is very shallow. Only the
-    // rim above the water plane is ever seen: it is the beach's wet sand, so it takes that colour
-    vec3 sand = vec3(0.66, 0.60, 0.44);
-    vec3 grass = vec3(0.16, 0.24, 0.13);
-    float depth = -h;
-    float sg = smoothstep(0.55, 0.75, fbm3(wp * 0.012 + 3.0)) * smoothstep(0.6, 1.6, depth) * (1.0 - smoothstep(5.0, 9.0, depth));
-    c = mix(sand, grass, sg) * (0.9 + 0.2 * n2);
-    c = mix(c, vec3(0.28, 0.32, 0.30), smoothstep(12.0, 30.0, depth));
-    c = mix(c, vec3(0.33, 0.27, 0.18) * (0.94 + 0.12 * n2), smoothstep(-0.6, 0.0, h));
-    rough = mix(0.9, 0.35, smoothstep(-0.4, 0.05, h));
-  } else if (zone == 17) {
-    // sand flats / bars: rippled pale sand, darker where it is still awash
-    Sand sd = sandDetail(wp, w, foot);
-    float awash = 1.0 - smoothstep(-0.1, 0.3, h);
-    c = vec3(0.60, 0.46, 0.27) * (0.9 + 0.14 * n2) * (1.0 + 0.3 * (sd.alb - 0.5));
-    c = mix(c, vec3(0.16, 0.126, 0.092) * (1.0 + 0.12 * (sd.alb - 0.5)), awash);
-    gDetailSlope = sd.slope * (1.0 - awash) * 0.7;
-    rough = mix(0.9, 0.4, awash);
-  } else if (zone == 2) {
+  if (zone == 2) {
     // ---- the beach profile in metres from the waterline: the swash band the water shader washes (its
     //      swashW = 4 + 12 * exposure, water.ts), a damp band above it, dry rippled sand to the dune toe.
     //      Near the water the distance is the height along the beach face (exact where it matters), farther
