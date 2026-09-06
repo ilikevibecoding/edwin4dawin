@@ -288,7 +288,7 @@ function laneLoops(layout) {
 function harbourLoops(cx) {
   return [
     { name: 'harbour west', harbour: true, speedMul: 0.8, types: [0, 4, 1, 5, 3, 6, 0, 1, 4, 5, 3, 6],
-      pts: [[2545, 118, -150], [2480, 120, -140], [2445, 122, -70], [2440, 122, 0], [2445, 122, 70], [2480, 120, 140], [2545, 118, 150], [2560, 116, 60], [2560, 116, -60]] },
+      pts: [[2543, 118, -150], [2480, 120, -140], [2445, 122, -70], [2440, 122, 0], [2445, 122, 70], [2480, 120, 140], [2543, 118, 150], [2553, 116, 60], [2553, 116, -60]] },
     { name: 'harbour low', harbour: true, speedMul: 0.7, types: [2, 7, 8, 2, 2, 7, 8, 2, 7, 2], reverse: true,
       pts: rectLanePts(2568, cx, -160, 160, 118, 1.5) },
     { name: 'harbour high', harbour: true, speedMul: 0.9, types: [6, 3, 1, 5, 6, 3, 1, 5, 6, 0],

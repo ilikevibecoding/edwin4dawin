@@ -286,7 +286,7 @@ test('fleet census: >= 30 ships airborne within 300 blocks of the spaceport at e
 
 test('port cycle: reservation -> approach -> landing -> shutdown -> doors -> boarding -> servicing -> closure -> departure, deterministic states', () => {
   for (const sh of ships.filter((s) => s.pad !== null)) {
-    const phases = sh.route.segs.map((s) => s.phase);
+    const phases = sh.route.phases;   // segment phases plus 'reservation' (the tail of the fly segment)
     for (const ph of PORT_PHASES) assert.ok(phases.includes(ph), `${sh.name} has phase ${ph}`);
     const by = (ph) => sh.route.segs.find((s) => s.phase === ph);
     const st = {}, pose = {};
@@ -328,16 +328,22 @@ test('motion: banked turns with roll <= 25 degrees, pitch bounded, lanes clear o
   const lots = layout.lots.filter((l) => l.kind !== 'plaza');
   for (const sh of ships) {
     const path = sh.route.segs[0].path, p = { x: 0, y: 0, z: 0 };
+    if (!path) continue;                                  // repair berths never fly
     for (let d = 0; d < path.length; d += 2) {
       path.at(d, p);
       for (const l of lots) assert.ok(!(p.x >= l.x0 - 3 && p.x < l.x1 + 3 && p.z >= l.z0 - 3 && p.z < l.z1 + 3 && p.y < 60 + l.height + 3), `${sh.name} hits lot ${l.id} at ${Math.round(p.x)},${Math.round(p.y)},${Math.round(p.z)}`);
     }
     if (sh.lanePts && sh.boulevard) assert.ok(lanePathClear(sh.lanePts, layout), `${sh.name} leaves the boulevard corridors`);
   }
-  // harbour circuits over the spaceport keep above the control tower's antenna (y 165) or stay west of the deck
+  // harbour circuits over the spaceport either fly above the control tower's antenna (y 165) or, at low level, stay
+  // above the terminal roof (y 113) and out of the pad approach columns and the tower's block
+  const S = SPACEPORT, ph = S.padHalf;
   for (const sh of ships.filter((s) => s.harbour)) for (let t = 0; t < sh.route.period; t += 1) {
     const q = routePose(sh.route, t, {});
-    if (q.x >= SPACEPORT.x0 - 2 && q.x <= SPACEPORT.x1 + 2 && Math.abs(q.z) <= 182) assert.ok(q.y >= 170, `${sh.name} over the spaceport at y ${q.y}`);
+    if (!(q.x >= S.x0 - 2 && q.x <= S.x1 + 2 && Math.abs(q.z) <= 182) || q.y >= 170) continue;
+    assert.ok(q.y >= 116, `${sh.name} low over the spaceport at y ${q.y.toFixed(1)}`);
+    for (const pad of S.pads) assert.ok(Math.abs(q.x - pad.x) > ph + 8 || Math.abs(q.z - pad.z) > ph + 8, `${sh.name} in the approach column of pad ${pad.x},${pad.z} at ${q.x.toFixed(0)},${q.z.toFixed(0)}`);
+    assert.ok(!(q.x >= S.tower.x0 - 10 && q.x <= S.tower.x1 + 10 && Math.abs(q.z) <= 14), `${sh.name} at the control tower`);
   }
 });
 
@@ -415,7 +421,11 @@ test('ShipVehicle: promoted ship carries a rider inside through flight (position
   game.player.pos.set(sill.x, sill.y, sill.z);
   while (tick / 20 < tClose + 0.3) { step(); v.carry(game.player); }
   const box2 = { x0: game.player.pos.x - 0.3, y0: game.player.pos.y, z0: game.player.pos.z - 0.3, x1: game.player.pos.x + 0.3, y1: game.player.pos.y + 1.8, z1: game.player.pos.z + 0.3 };
+  assert.ok(!v.doorOpen && v.grid === v.model.gridClosed, 'doorway sealed from the start of the closure phase');
   assert.ok(!v.overlapsEntity(box2), 'player nudged clear of the closing door');
+  assert.ok(v.riders.has(game.player) || game.msgs.some((m) => /stepped back/.test(m)), 'nudged aboard (nearer side) or told to step back');
+  const sealedBox = { ...box2 }; sealedBox.x0 = sill.x - 0.3; sealedBox.x1 = sill.x + 0.3; sealedBox.z0 = sill.z - 0.3; sealedBox.z1 = sill.z + 0.3; sealedBox.y0 = sill.y; sealedBox.y1 = sill.y + 1.8;
+  assert.ok(v.overlapsEntity(sealedBox), 'the doorway itself is solid while closed');
 });
 
 test('repair spots: 2-3 docked ships in the repair state with mechanic spots on the deck', () => {
