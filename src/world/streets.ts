@@ -167,12 +167,15 @@ const SW_MAIN = /* glsl */ `
     // planting beds: about a third of the fields, in clusters of two to four (a smooth per-field noise, so the beds
     // form lawns with 2.7 m paved paths between them rather than confetti), each a lawn-and-groundcover bed with a
     // mulch margin inside a 0.45 m concrete kerb — the green patches that make a plaza read as designed ground from
-    // 200-500 m, drawn in the field's own paving (no geometry); the edges are box-filtered like the lines
+    // 200-500 m, drawn in the field's own paving (no geometry); the edges are box-filtered like the lines. The lawn
+    // is the parks' turf (terrain.ts parkGround 0.056-0.078 / 0.108-0.13 / 0.036-0.052) a shade richer for a kept,
+    // watered lawn — at 0.15-0.25 / 0.24-0.34 it rendered lime against the parks in the h10 city_north — and the
+    // mulch is dark bark, well under the terrain's sandy soil (0.21, 0.16, 0.105)
     float fdm = min(fd.x, fd.y), fwF = max(fwA, fwL);
     float isBed = step(0.57, vnoise(fv * 0.55 + 5.0 + kind));
     float kerbIn = clamp((fdm - 1.35) / fwF + 0.5, 0.0, 1.0), bedIn = clamp((fdm - 1.8) / fwF + 0.5, 0.0, 1.0);
-    vec3 mulch = mix(vec3(0.20, 0.15, 0.10), vec3(0.28, 0.22, 0.14), mix(vnoise(wp * 1.7), 0.5, 1.0 - slabFade)) * (0.85 + 0.3 * grain);
-    vec3 lawn = mix(vec3(0.15, 0.24, 0.08), vec3(0.25, 0.34, 0.12), mix(fbm3(wp * 0.9 + 4.0), 0.5, 1.0 - slabFade)) * (0.9 + 0.2 * grain);
+    vec3 mulch = mix(vec3(0.105, 0.075, 0.048), vec3(0.15, 0.11, 0.07), mix(vnoise(wp * 1.7), 0.5, 1.0 - slabFade)) * (0.85 + 0.3 * grain);
+    vec3 lawn = mix(vec3(0.060, 0.104, 0.038), vec3(0.084, 0.136, 0.052), mix(fbm3(wp * 0.9 + 4.0), 0.5, 1.0 - slabFade)) * (0.9 + 0.2 * grain);
     vec3 bed = mix(mulch, lawn, smoothstep(2.3, 2.9, fdm) * smoothstep(0.25, 0.5, fbm3(wp * 0.3 + 1.0)));
     pav = mix(pav, conc * 1.05, isBed * (kerbIn - bedIn));
     pav = mix(pav, bed, isBed * bedIn);
