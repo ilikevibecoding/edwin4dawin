@@ -120,7 +120,8 @@ export class TileBuilder {
     this.h = new Float32Array(S * S);   // vertex height (top face y - drop; water: sea surface)
     this.kind = new Uint8Array(S * S);  // 0 land, 1 water, 2 void
     this.rgb = new Uint8Array(S * S * 3);
-    this.row = 0;
+    this.row = 0;        // sampling phase: next row of the (GRID + 2)^2 sample grid
+    this.emitRow = 0;    // emit phase: next row of grid vertices written to the target
     this.done = false;
     this.stats = { land: 0, water: 0, voidCells: 0, cells: 0, minY: Infinity, maxY: -Infinity, ms: 0 };
   }
@@ -128,13 +129,19 @@ export class TileBuilder {
   // one row of the (GRID + 2)^2 sample grid; row r covers world z = z0 + (r - 1) * CELL
   sampleRow(r) {
     const gen = this.gen, S = this.S, z = this.z0 + (r - 1) * CELL;
-    const cache = gen.heightCache;
+    // Sample through a private scratch cache: the far layer's 4-block-spaced columns must neither evict the near
+    // ring's columns nor push the generator's shared heightCache over its clear threshold (clearing a 200k-entry
+    // Map inside one heightInfo call is a multi-ms stall, the only thing that broke the 2 ms budget in profiles).
+    const shared = this.evictCache ? gen.heightCache : null;
+    if (shared) gen.heightCache = this.scratch || (this.scratch = new Map());
+    try { this._sampleRowInto(r, z, S); } finally { if (shared) { gen.heightCache = shared; this.scratch.clear(); } }
+  }
+
+  _sampleRowInto(r, z, S) {
+    const gen = this.gen;
     for (let c = 0; c < S; c++) {
       const x = this.x0 + (c - 1) * CELL;
-      const key = x * 100003 + z;
-      const had = cache ? cache.has(key) : true;
       const info = gen.heightInfo(x, z);
-      if (this.evictCache && cache && !had) cache.delete(key);   // keep the generator's column cache for the near ring
       const i = r * S + c;
       const sb = surfaceBlockFor(gen, info, x, z);
       if (sb < 0) { this.kind[i] = 2; this.h[i] = SKIRT_Y; continue; }
@@ -160,26 +167,34 @@ export class TileBuilder {
     }
   }
 
+  // Both phases are row-budgeted (sampling ~65 columns per clock check, emitting 65 vertices per check); only the
+  // final skirt + index pass (~0.3 ms) runs whole, so one call never runs much past `budgetMs`.
   step(budgetMs = 2) {
     if (this.done) return true;
     const t0 = performance.now();
+    let over = false;
     while (this.row < this.S) {
       this.sampleRow(this.row++);
-      if (performance.now() - t0 > budgetMs) break;
+      if (performance.now() - t0 > budgetMs) { over = true; break; }
     }
-    if (this.row >= this.S) { this.emit(); this.done = true; }
+    if (!over) {
+      while (this.emitRow < GRID) {
+        this.emitGridRow(this.emitRow++);
+        if (this.emitRow < GRID && performance.now() - t0 > budgetMs) { over = true; break; }
+      }
+      if (!over) { this.emitSkirtAndIndices(); this.done = true; }
+    }
     this.stats.ms += performance.now() - t0;
     return this.done;
   }
 
-  // Writes vertices, normals, colours and indices for the whole tile.
-  emit() {
-    const { pos, col, nrm, idx, vBase = 0, iBase = 0 } = this.target;
+  // Writes the GRID vertices (position, colour, normal) of grid row i (constant x, j along z).
+  emitGridRow(i) {
+    const { pos, col, nrm, vBase = 0 } = this.target;
     const S = this.S, h = this.h, kind = this.kind, rgb = this.rgb, st = this.stats;
     const x0 = this.x0, z0 = this.z0;
-    const V = (i, j) => i * GRID + j;                     // grid vertex (i along x, j along z)
-    let v = vBase;
-    for (let i = 0; i < GRID; i++) for (let j = 0; j < GRID; j++) {
+    let v = vBase + i * GRID;
+    for (let j = 0; j < GRID; j++) {
       const s = (j + 1) * S + (i + 1);
       const y = h[s];
       pos[v * 3] = x0 + i * CELL; pos[v * 3 + 1] = y; pos[v * 3 + 2] = z0 + j * CELL;
@@ -193,6 +208,13 @@ export class TileBuilder {
       if (kind[s] !== 2) { if (y < st.minY) st.minY = y; if (y > st.maxY) st.maxY = y; if (kind[s] === 1) st.water++; else st.land++; }
       v++;
     }
+  }
+
+  // Writes the skirt vertices and every index of the tile (needs all grid rows emitted).
+  emitSkirtAndIndices() {
+    const { pos, col, nrm, idx, vBase = 0, iBase = 0 } = this.target;
+    const S = this.S, kind = this.kind, st = this.stats;
+    const V = (i, j) => i * GRID + j;                     // grid vertex (i along x, j along z)
     // skirt vertices: copies of the edge vertices dropped to SKIRT_Y, darker, with an outward horizontal normal
     const skirtBase = vBase + GRID * GRID;
     const edges = [
@@ -233,7 +255,7 @@ export class TileBuilder {
     // unused index slots (void cells) collapse onto one vertex: degenerate triangles draw nothing
     for (; at < iBase + INDICES_PER_TILE; at++) idx[at] = vBase;
     // release the sampling scratch
-    this.h = null; this.kind = null; this.rgb = null;
+    this.h = null; this.kind = null; this.rgb = null; this.scratch = null;
   }
 }
 
