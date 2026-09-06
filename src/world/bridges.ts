@@ -237,6 +237,14 @@ const CONCRETE_FRAG = /* glsl */ `
     float stain = mix((1.0 - smoothstep(0.5, 0.9, jf)) * smoothstep(0.5, 0.56, jf) * (0.4 + 0.6 * n2), 0.12, smoothstep(1.5, 4.0, fwA));
     conc *= 1.0 - 0.10 * stain * wheel - 0.04 * stain;
     conc *= 1.0 - 0.12 * smoothstep(0.6, 0.75, fbm3(vWorldPosR.xz * 0.03 + 8.0));
+    // the deck drains: a cast-iron inlet grate 0.6 x 0.4 m in the gutter over every scupper (15 k + 7.5 m, the
+    // geometry loop) and the damp ring the run-off leaves round it - the row of dark dots along both edge lines
+    // that marks a bridge deck from 45-120 m
+    float sc = abs(fract((along - 7.5) / 15.0) - 0.5) * 15.0;
+    float gutter = abs(xm) - (width * 0.5 - 0.32);
+    float grate = aaLine(sc, 0.3, fwA) * aaLine(gutter, 0.2, fwX);
+    float damp = exp(-pow(sc / 1.2, 2.0)) * exp(-pow(gutter / 0.7, 2.0));
+    conc *= 1.0 - 0.55 * grate - 0.12 * damp;
     shoulder *= 1.0 - 0.15 * joint - 0.1 * smoothstep(0.6, 0.75, fbm3(vWorldPosR.xz * 0.03 + 8.0));
     conc = mix(conc, shoulder, onShoulder);
     // markings sized to read from a 45 m chase camera: 30 cm white edge lines, 30 cm lane dashes (3 m on / 6 m off),

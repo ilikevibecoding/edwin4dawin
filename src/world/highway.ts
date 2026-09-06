@@ -1003,12 +1003,13 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         barrierLofts.push({ part: P((a + b) / 2), frames, scale });
       }
       counts.barrierM += run.s1 - run.s0;
-      // crash cushions: three yellow sand drums nosing each open terminal
+      // crash cushions: three yellow sand drums in single file nosing each open terminal (the traffic drives the
+      // inner lane 1.5 m off the centre line, a 1.9 m car's flank 0.55 m off it: the drums stay within ±0.4 m)
       for (const [end, dir] of [[run.s0, 1], [run.s1, -1]] as const) {
         if (!(dir > 0 ? taperStart : taperEnd)) continue;
-        for (const [ds, da] of [[1.0, 0], [2.1, -0.55], [2.1, 0.55]] as const) {
+        for (const ds of [1.0, 1.95, 2.9]) {
           const f = frameAt(c, end + dir * ds);
-          P(end + dir * ds).signs.cylinder(f.x + f.rx * da, f.y + 0.02, f.z + f.rz * da, 0.9, 0.95, 8, S_DRUM, true, [0, 0, 0]);
+          P(end + dir * ds).signs.cylinder(f.x, f.y + 0.02, f.z, 0.8, 0.95, 8, S_DRUM, true, [0, 0, 0]);
         }
       }
       // barrier-mounted reflectors every 12 m (amber toward the traffic that sees them, both faces)
@@ -1531,8 +1532,10 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       const clear = 6.0;
       const at2 = (a: number, ds: number) => { const g = frameAt(c, sP + ds); return new THREE.Vector3(g.x + g.rx * a, 0, g.z + g.rz * a); };
       // islands: the median island where the barrier is opened and one between every pair of lanes (lanes 3.2 m
-      // apart from the centre, as the traffic drives them), each with a booth and yellow impact attenuators
-      const islands: { a: number; w: number }[] = [{ a: 0, w: 1.6 }, { a: -3.1, w: 0.9 }, { a: 3.1, w: 0.9 }, { a: -6.35, w: 0.9 }, { a: 6.35, w: 0.9 }];
+      // apart from the centre, as the traffic drives them), each with a booth and yellow impact attenuators. The
+      // inner lanes' vans (2.1 m) pass 0.45 m off the centre line, so the median island is a bare 0.8 m divider
+      // carrying the canopy columns and no booth (the lane islands' booths serve the lanes either side of them)
+      const islands: { a: number; w: number }[] = [{ a: 0, w: 0.8 }, { a: -3.1, w: 0.9 }, { a: 3.1, w: 0.9 }, { a: -6.35, w: 0.9 }, { a: 6.35, w: 0.9 }];
       const C_ISLAND: Rgb = [0.9, 0.9, 0.88];
       const S_GLASS: Rgb = [0.5, 0.58, 0.66];
       for (const isl of islands) {
@@ -1543,10 +1546,12 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
           part.signs.box(q.x, roadY + 0.02, q.z, Math.min(isl.w, 0.9), 0.85, 1.4, yaw, 0, S_DRUM, false, [0, 0, 0]);
         }
         // booth: dark base, glazed cabin (lit at night), galvanised roof with an overhang
-        const bw = Math.min(isl.w, 1.5) - 0.1, bd = isl.w > 1 ? 3.2 : 2.6;
-        part.signs.box(p.x, roadY + 0.22, p.z, bw, 1.1, bd, yaw, 0, S_DARK, false, [0, 0, 0]);
-        part.signs.box(p.x, roadY + 1.32, p.z, bw, 1.2, bd, yaw, 0, S_GLASS, false, [0.35, 0, 0]);
-        part.signs.box(p.x, roadY + 2.52, p.z, bw + 0.5, 0.12, bd + 0.5, yaw, 0, S_GALV, false, [0, 0, 0]);
+        if (isl.a !== 0) {
+          const bw = isl.w - 0.1, bd = 2.6;
+          part.signs.box(p.x, roadY + 0.22, p.z, bw, 1.1, bd, yaw, 0, S_DARK, false, [0, 0, 0]);
+          part.signs.box(p.x, roadY + 1.32, p.z, bw, 1.2, bd, yaw, 0, S_GLASS, false, [0.35, 0, 0]);
+          part.signs.box(p.x, roadY + 2.52, p.z, bw + 0.4, 0.12, bd + 0.5, yaw, 0, S_GALV, false, [0, 0, 0]);
+        }
         // canopy columns at the island ends
         for (const e of [-1, 1]) {
           const q = at2(isl.a, e * (L / 2 - 2.5));
