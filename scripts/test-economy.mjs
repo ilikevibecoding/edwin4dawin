@@ -119,6 +119,7 @@ for (const t of terminals) for (const g of grocers) { const d = dist(doorOut(t.l
 const T = best.t, G = best.g;
 const A = apartments.sort((p, q) => dist(doorOut(p.lot), doorOut(T.lot)) - dist(doorOut(q.lot), doorOut(T.lot)))[0];
 const D = dealers[0];
+const X = all.filter(({ purpose }) => purpose.sells.some((s) => s.item === 'speeder_ride')).sort((p, q) => dist(doorOut(p.lot), doorOut(T.lot)) - dist(doorOut(q.lot), doorOut(T.lot)))[0];   // nearest air-taxi stand
 const y = LEVELS.underWalk;
 log(`\nterminal ${T.purpose.kind} "${T.purpose.name}" #${T.lot.id} at ${JSON.stringify(doorOut(T.lot))}; vendor "${G.purpose.name}" #${G.lot.id} ${Math.round(best.d)} blocks away; apartments "${A.purpose.name}" #${A.lot.id}; dealer "${D.purpose.name}" #${D.lot.id}`);
 
@@ -263,8 +264,11 @@ try {
   await ev('game.input.locked = false');
   const busy = await evj(`(() => { const eco = game.economy, lot = eco.lotById(${T.lot.id}); const ok = eco.jobs.accept(eco.jobs.board(lot)[1], lot); return { ok, kind: eco.jobs.active.job.kind }; })()`);
   check('only one job at a time (a second Accept is refused)', busy.ok === false && busy.kind === 'courier');
-  const done = await evj(`(async () => { const eco = game.economy, j = eco.jobs.active.job, before = game.player.credits; await __t.go(j.to.x, ${y}, j.to.z); __t.ticks(8); return { before, after: game.player.credits, reward: j.reward, active: !!eco.jobs.active, jobsDone: eco.stats.jobsDone, toasts: game.hud.toasts.map((x) => x.text) }; })()`);
-  check('arriving at the destination completes the job and pays the reward', !done.active && done.after === done.before + done.reward && done.jobsDone === 1, `+${done.reward} cr -> ${done.after}; ${JSON.stringify(done.toasts)}`);
+  // the courier loop with the air taxi: the stand lists "Your job: <target>" first, the fare is charged (survival),
+  // the ride drops the player at the door and the hand-in fires on arrival
+  const done = await evj(`(async () => { const eco = game.economy, j = eco.jobs.active.job; game.setMode('survival', { persist: false, announce: false }); const taxi = eco.purposeOfLot(eco.lotById(${X.lot.id})); const dests = eco.destinations(); const fare = eco.priceOf(taxi, taxi.sells.find((s) => s.item === 'speeder_ride')); const before = game.player.credits; const ok = eco.ride(taxi, fare, dests[0]); const p = game.player.pos; const landed = Math.hypot(p.x - j.to.x, p.z - j.to.z); __t.ticks(8); return { first: dests[0], n: dests.length, fare, ok, landed: +landed.toFixed(1), before, after: game.player.credits, reward: j.reward, active: !!eco.jobs.active, jobsDone: eco.stats.jobsDone, toasts: game.hud.toasts.map((x) => x.text) }; })()`);
+  check('the air taxi lists the active job first ("Your job: <target>") after the landmarks', done.first && done.first.job === true && /^Your job: /.test(done.first.name) && done.n >= 2, `${done.first && done.first.name}; ${done.n} destinations`);
+  check('riding to the job charges the fare, lands at the door and the arrival completes the job and pays the reward', done.ok && done.landed < 2 && !done.active && done.after === done.before - done.fare + done.reward && done.jobsDone === 1, `-${done.fare} +${done.reward} cr -> ${done.after}; landed ${done.landed} blocks from the door; ${JSON.stringify(done.toasts)}`);
   // right-click on a HOLO_SIGN inside the terminal opens the board from the world
   await ev(`(async () => { await __t.go(${tout.x}, ${y}, ${tout.z}); await __t.wait(1500); })()`);
   const holo = await evj(`(async () => {

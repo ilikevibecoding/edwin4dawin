@@ -248,7 +248,7 @@ export class Economy {
     if (!this.charge(unit, `the ride to ${dest.name}`)) return false;
     this.game.closeScreen();
     this.game.player.teleport(x, y, z);
-    this.toast(`Air taxi: ${dest.name}`, '#9ad8ff');
+    this.toast(`Air taxi: ${dest.job ? dest.name.replace(/^Your job: /, '') : dest.name}`, '#9ad8ff');
     return true;
   }
 
