@@ -63,7 +63,7 @@ const SW_MAIN = /* glsl */ `
   float fwA = max(fwidth(across), 1e-4), fwL = max(fwidth(along), 1e-4);
   float n = fbm3(wp * 0.21);
   float grain = mix(vnoise(wp * 3.1), 0.5, smoothstep(0.1, 0.4, fp));
-  vec3 conc = mix(vec3(0.50, 0.49, 0.47), vec3(0.60, 0.59, 0.56), n) * (0.94 + 0.12 * grain);
+  vec3 conc = mix(vec3(0.40, 0.39, 0.37), vec3(0.50, 0.49, 0.46), n) * (0.94 + 0.12 * grain);
   bool face = vSwNrm.y < 0.5;
   float fade = 1.0 - smoothstep(0.15, 0.5, fp); // fine detail vanishes from altitude
   float slabFade = 1.0 - smoothstep(0.3, 1.0, fp); // per-slab tones (1.5 m) average out before they can sparkle
