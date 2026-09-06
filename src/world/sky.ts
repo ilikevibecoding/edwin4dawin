@@ -199,20 +199,26 @@ float densityBase(vec3 p, vec4 f) {
  *  lighting can mottle the undersides without another fetch. detFade (0..1) relaxes the erosion toward its
  *  mean where the march step is far longer than the detail noise's ~10-30 m features: sampled that
  *  coarsely the detail only adds grain that re-rolls as the camera moves, not shape. */
-float densityFull(vec3 q, vec4 n, float e, float hf, float hn, float detFade, out float mott) {
-  mott = n.a;
+float densityFull(vec3 q, vec4 n, float e, float hf, float hn, float detFade, float nearK, out float mott) {
   float d = shapeDensity(e, hn, n);
+  mott = n.a;
   if (d <= 0.0) return 0.0;
   // worley erosion: billowy lobes on the sides, wispier toward the top. In the thin part of the base zone the
   // worley is inverted (holes at the feature points, cloud left along the cell walls): rags, scud and fraying
   // fringes hang under the base instead of round bumps; the dense interior of the base keeps its lumps
-  float det = texture(uNoise3D, q * 3.0 + vec3(0.37, 0.11, 0.73)).g;
+  vec4 n3 = texture(uNoise3D, q * 3.0 + vec3(0.37, 0.11, 0.73));
+  float det = n3.g;
   float baseZone = (1.0 - smoothstep(0.0, 0.12, hf)) * (1.0 - smoothstep(0.3, 0.9, e)) * 0.7;
   det = mix(det, 1.0 - det, baseZone);
   // the wisp channel only weighs in over the upper half of the column: skip its fetch below
   float wk = smoothstep(0.45, 1.0, hn);
   float er = det;
   if (wk > 0.0) er = mix(det, texture(uNoise3D, q * 5.0 + vec3(0.61, 0.29, 0.17)).b, wk);
+  // near the camera a base is seen at a scale where 100-300 m lumps alone read as a soft blur: add a finer
+  // worley erosion (130/65 m) to the base zone and a finer lighting mottle (from the fetch above, free)
+  float bzK = (1.0 - smoothstep(0.0, 0.15, hf)) * nearK;
+  if (bzK > 0.0) er = mix(er, texture(uNoise3D, q * 5.0 + vec3(0.19, 0.83, 0.41)).g, 0.4 * bzK);
+  mott = mix(mott, n3.a, 0.5 * nearK);
   er = mix(er, 0.5, detFade);
   // remap (rather than subtract) so eroded edges keep a steep density gradient: crisp cauliflower lobes
   float k = 0.5 * (1.0 - er);
@@ -373,7 +379,9 @@ void main() {
       }
       float mott;
       vec4 n = texture(uNoise3D, q);
-      float dens = densityFull(q, n, e, hf, hn, detFade, mott);
+      // near-field texture only where the step can resolve it
+      float nearK = (1.0 - smoothstep(1500.0, 4000.0, t)) * (1.0 - detFade);
+      float dens = densityFull(q, n, e, hf, hn, detFade, nearK, mott);
       if (dens <= 0.003) {
         empty++;
         if (level == 2 && empty > 1) level = 1;
