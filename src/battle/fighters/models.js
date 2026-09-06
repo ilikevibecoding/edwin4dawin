@@ -534,12 +534,12 @@ function arc170() {
   P.push(
     loft8(
       [
-        { z: -7.25, hw: 0.5, y0: -0.16, y1: 0.16, side: stripe },
-        { z: -5.0, hw: 1.0, y0: -0.48, y1: 0.42, side: stripe },
-        { z: -2.0, hw: 1.12, y0: -0.7, y1: 0.6 },
-        { z: 1.8, hw: 1.02, y0: -0.7, y1: 0.58 },
-        { z: 5.0, hw: 0.7, y0: -0.5, y1: 0.46 },
-        { z: 7.25, hw: 0.3, y0: -0.2, y1: 0.26 },
+        { z: -7.25, hw: 0.72, y0: -0.14, y1: 0.14, side: stripe },
+        { z: -5.0, hw: 1.15, y0: -0.48, y1: 0.42, side: stripe },
+        { z: -2.0, hw: 1.25, y0: -0.7, y1: 0.6 },
+        { z: 1.8, hw: 1.1, y0: -0.7, y1: 0.58 },
+        { z: 5.0, hw: 0.75, y0: -0.5, y1: 0.46 },
+        { z: 7.25, hw: 0.32, y0: -0.2, y1: 0.26 },
       ],
       GREY,
       { capStart: true, capEnd: true, c: 0.4 },
@@ -852,7 +852,7 @@ function vulture() {
       const hinge = [s * 0.7, v * 0.3, 1.3];
       const elbow = [s * 1.6, v * 0.5, -0.4];
       const tip = [s * 3.3, v * 0.62, -4.9];
-      P.push(blade([hinge, elbow, tip], 0.34, 0.16, WHITE, { mask: 1, root: 0.4 }));
+      P.push(blade([hinge, elbow, tip], 0.42, 0.16, WHITE, { mask: 1, root: 0.4 }));
       // laser cannon under the lower blade near the tip
       if (v < 0) P.push(box(s * 2.75, -0.7, -3.6, 0.1, 0.1, 1.2, DROID_DARK));
     }
@@ -881,14 +881,14 @@ function tri() {
           { p: at(1.3, 1.5), w: 0.36, t: 0.1, u: rad },
           { p: at(1.85, 0.4), w: 0.56, t: 0.1, u: rad, color: WHITE, mask: 1 },
           { p: at(1.9, -1.0), w: 0.5, t: 0.09, u: rad, color: WHITE, mask: 1 },
-          { p: at(1.5, -2.3), w: 0.3, t: 0.08, u: rad },
-          { p: at(1.0, -3.2), w: 0.06, t: 0.04, u: rad },
+          { p: at(1.5, -2.3), w: 0.26, t: 0.08, u: rad },
+          { p: at(0.9, -3.5), w: 0.05, t: 0.04, u: rad },
         ],
         DROID_DARK,
       ),
     );
     // cannon at the arm tip
-    P.push(box(ux * 1.05, uy * 1.05, -3.5, 0.1, 0.1, 1.2, GUN));
+    P.push(box(ux * 0.95, uy * 0.95, -3.8, 0.1, 0.1, 1.2, GUN));
     // photoreceptor on the sphere's face between two arms
     const b = a + Math.PI / 3;
     P.push(
@@ -932,13 +932,13 @@ function hyena() {
   );
   // low brow at the front top with the eye slits, and the sensor dome behind it to starboard
   P.push(
-    dome(0, 0.3, -2.6, 0.9, DROID_LIGHT, { ws: 6, hs: 2, sz: 1.4, sy: 0.45 }),
+    dome(0, 0.3, -2.6, 0.9, DROID_MID, { ws: 6, hs: 2, sz: 1.4, sy: 0.45 }),
   );
   for (const s of [-1, 1])
     P.push(
       box(s * 0.22, 0.5, -3.4, 0.1, 0.3, 0.12, RED_EYE, { emis: 0.9, rx: -0.5 }),
     );
-  P.push(dome(1.0, 0.44, -0.4, 0.5, DROID_LIGHT, { ws: 6, hs: 2, sz: 1.3 }));
+  P.push(dome(1.0, 0.44, -0.4, 0.5, DROID_MID, { ws: 6, hs: 2, sz: 1.3 }));
   // twin ion drives at the tail
   for (const s of [-1, 1]) {
     P.push(cyl(s * 0.95, -0.02, 5.5, 0.42, 0.46, 1.0, DROID_DARK, { seg: 6 }));
@@ -947,12 +947,12 @@ function hyena() {
   // bomb rack under the belly
   P.push(box(0, -0.75, 1.2, 1.7, 0.5, 3.0, DROID_DARK));
   for (const s of [-1, 1]) {
-    // hinge block on the rear flank
-    P.push(box(s * 1.8, 0.0, 2.8, 0.7, 0.9, 1.8, DROID_DARK));
+    // hinge block on the flank at 60 % of the length
+    P.push(box(s * 1.8, 0.0, 1.8, 0.7, 0.9, 2.0, DROID_DARK));
     for (const v of [-1, 1]) {
-      const hinge = [s * 2.15, v * 0.45, 2.8];
-      const elbow = [s * 4.3, v * 0.62 + 0.05, 0.4];
-      const tip = [s * 6.0, v * 0.8 - 0.2, -5.8];
+      const hinge = [s * 2.15, v * 0.45, 1.8];
+      const elbow = [s * 4.3, v * 0.62 + 0.05, -0.4];
+      const tip = [s * 6.0, v * 0.8 - 0.2, -6.0];
       P.push(blade([hinge, elbow, tip], 0.9, 0.26, WHITE, { mask: 1, root: 0.75 }));
     }
   }
@@ -1009,24 +1009,25 @@ function hmp() {
     );
   P.push(box(0, -0.85, -5.6, 0.16, 0.16, 2.6, GUN));
   for (const s of [-1, 1]) {
-    // swept arm: thick flat wing from the shell flank forward and outward to the turret pod
+    // swept wing arm: a thick flat wing whose 5 m root chord spans the shell's side, leading edge swept
+    // 37° and trailing edge 63° forward to the 2 m tip chord at the turret pod
     P.push(
-      tube(
+      panel(
         [
-          { p: [s * 2.6, -0.05, 1.2], w: 1.5, t: 0.36 },
-          { p: [s * 4.4, -0.1, -2.0], w: 1.3, t: 0.32 },
-          { p: [s * 5.2, -0.2, -4.6], w: 0.9, t: 0.28 },
+          { p: [s * 2.9, -0.05], lead: -3.5, trail: 1.6, thick: 0.7 },
+          { p: [s * 5.4, -0.15], lead: -5.3, trail: -3.2, thick: 0.5 },
         ],
+        0.6,
         HMP_LIGHT,
       ),
     );
     // ball turret under the arm tip with twin barrels
-    P.push(sphere(s * 5.1, -0.8, -4.4, 0.85, DROID_MID, { ws: 6, hs: 3 }));
-    P.push(box(s * 4.9, -0.8, -6.0, 0.1, 0.1, 2.2, GUN));
-    P.push(box(s * 5.3, -0.8, -6.0, 0.1, 0.1, 2.2, GUN));
+    P.push(sphere(s * 5.2, -0.8, -4.3, 0.85, DROID_MID, { ws: 6, hs: 3 }));
+    P.push(box(s * 5.0, -0.8, -6.0, 0.1, 0.1, 2.2, GUN));
+    P.push(box(s * 5.4, -0.8, -6.0, 0.1, 0.1, 2.2, GUN));
     // missile rack under the arm and the drive at the trailing edge
     P.push(
-      box(s * 4.1, -0.75, -1.3, 1.2, 0.6, 2.6, DROID_DARK, { ry: -s * 0.42 }),
+      box(s * 4.2, -0.7, -1.8, 1.2, 0.6, 2.6, DROID_DARK, { ry: -s * 0.3 }),
     );
     P.push(cyl(s * 1.8, -0.15, 4.9, 0.42, 0.46, 1.0, DROID_DARK, { seg: 6 }));
     P.push(disc(s * 1.8, -0.15, 5.41, 0.4, BLUE_ENGINE, { seg: 6, emis: 2.0 }));
