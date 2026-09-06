@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import type { BridgeSpec, RoadClass, Vec2, WorldMap } from './map';
+import { MAP_N, WORLD_SIZE, type BridgeSpec, type RoadClass, type Vec2, type WorldMap } from './map';
 import type { RoadSegment } from './roads';
 import { clamp, lerp } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
@@ -111,6 +111,11 @@ const CONCRETE_FRAG = /* glsl */ `
     diffuseColor.rgb *= 1.0 + 0.06 * smoothstep(0.72, 0.81, h);
     diffuseColor.rgb *= 0.92 + 0.16 * n;
     roughnessFactor = 0.86 - 0.1 * scuff;
+    // under the lighting poles (vInfoH.w: the station of the nearest, 0 where the run has none) the pale concrete
+    // glows in the lamp pool at night, brightest along the cap, the spray-grimed base in its own shadow
+    float dPoleB = along - vInfoH.w;
+    hwPool = step(0.5, vInfoH.w) * exp(-pow(dPoleB / 12.0, 2.0)) * (0.3 + 0.35 * smoothstep(0.0, 0.7, h));
+    hwPoolTint = diffuseColor.rgb;
   } else if (kind > 1.5 && kind < 2.5) {
     // cast-iron inlet grate: bars across the flow (0.9 m grate, 8 slots)
     float u = vInfoH.y;
@@ -155,7 +160,7 @@ const CONCRETE_FRAG = /* glsl */ `
     float nC = fbm3(vWorldPosH.xz * 0.15);
     float n2 = vnoise(vWorldPosH.xz * 1.7);
     float onShoulder = step(${PAVE_JOINT.toFixed(2)}, xm);
-    vec3 asphalt = mix(vec3(0.11, 0.11, 0.105), vec3(0.17, 0.165, 0.16), nC) * (0.94 + 0.12 * n2);
+    vec3 asphalt = mix(vec3(0.07, 0.07, 0.067), vec3(0.11, 0.107, 0.104), nC) * (0.94 + 0.12 * n2);
     float lane = step(${PAVE_LANE_LINE.toFixed(2)}, xm);
     float secTone = 0.84 + 0.32 * hash11(floor((along + lane * 137.0) / 310.0) * 7.0 + lane + 11.0);
     asphalt *= mix(secTone, 1.0, 0.3);
@@ -183,10 +188,10 @@ const CONCRETE_FRAG = /* glsl */ `
     col *= 1.0 - 0.28 * rumble;
     diffuseColor.rgb = col * vColor.r;
     roughnessFactor = 0.84 - 0.05 * wheel;
-    // the lamp pool of the nearest lighting pole (vColor.b: its station): twin cobra heads 2.9 m either side of the
+    // the lamp pool of the nearest lighting pole (vInfoH.w: its station): twin cobra heads 2.9 m either side of the
     // median, 11.4 m up, so the pool is a broad lozenge across both carriageways that fades over ~25 m along
-    float dPole = along - vColor.b;
-    hwPool = exp(-pow(dPole / 12.0, 2.0)) * exp(-pow(max(abs(xm) - 2.9, 0.0) / 7.5, 2.0));
+    float dPole = along - vInfoH.w;
+    hwPool = 1.4 * step(0.5, vInfoH.w) * exp(-pow(dPole / 12.0, 2.0)) * exp(-pow(max(abs(xm) - 2.9, 0.0) / 7.5, 2.0));
     hwPoolTint = col;
   } else {
     diffuseColor.rgb *= 0.9 + 0.2 * n;
@@ -203,16 +208,17 @@ function createConcreteMaterial(pixelScale: THREE.IUniform<number>, lampGlow: TH
     shader.uniforms.uPixelScale = pixelScale;
     shader.uniforms.uLampGlow = lampGlow;
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec4 aAxis; attribute vec3 aInfo; varying vec3 vInfoH; varying float vCover; varying vec3 vWorldPosH; uniform float uPixelScale;')
+      .replace('#include <common>', '#include <common>\nattribute vec4 aAxis; attribute vec4 aInfo; varying vec4 vInfoH; varying float vCover; varying vec3 vWorldPosH; uniform float uPixelScale;')
       .replace('#include <begin_vertex>', `#include <begin_vertex>\nvInfoH = aInfo;\n${MIN_WIDTH_VERT}\nvWorldPosH = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec3 vInfoH; varying float vCover; varying vec3 vWorldPosH; uniform float uLampGlow;\n${GLSL_NOISE}\n${GLSL_AA_LINE}`)
+      .replace('#include <common>', `#include <common>\nvarying vec4 vInfoH; varying float vCover; varying vec3 vWorldPosH; uniform float uLampGlow;\n${GLSL_NOISE}\n${GLSL_AA_LINE}`)
       .replace('#include <color_fragment>', '#include <color_fragment>\ndiffuseColor.a *= vCover;')
       .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\nfloat hwPool = 0.0; vec3 hwPoolTint = vec3(0.0);\n${CONCRETE_FRAG}`)
-      // the lamp pools: warm sodium-white light reflected by the course (its own tint, so the paint shines brighter)
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.82, 0.55) * hwPoolTint * (hwPool * 0.9 * uLampGlow);');
+      // the lamp pools: warm sodium-white light reflected by the course and the barrier (their own tint, so the paint
+      // and the pale concrete shine brighter than the asphalt)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.82, 0.55) * hwPoolTint * (hwPool * uLampGlow);');
   };
-  mat.customProgramCacheKey = () => 'highway-concrete-v2';
+  mat.customProgramCacheKey = () => 'highway-concrete-v3';
   return mat;
 }
 
@@ -386,7 +392,10 @@ class SignAtlas {
 
 // ------------------------------------------------------------------ chains (the road surface as roads.ts builds it)
 
-interface Row { hL: number; hR: number; }
+/** one roads.ts row: the pavement heights at the two edges, and the course lift over the pavement at the five knots
+ *  across (LIFT_KNOTS, in units of hw) - zero wherever the pavement clears the rendered terrain */
+interface Row { hL: number; hR: number; up: number[]; }
+const LIFT_KNOTS: readonly number[] = [-1, -0.5, 0, 0.5, 1];
 interface Chain {
   id: string;
   cls: RoadClass;
@@ -447,7 +456,7 @@ function buildChains(map: WorldMap, segments: RoadSegment[]): Chain[] {
         const t = k / steps;
         const x = pts[i][0] + (pts[i + 1][0] - pts[i][0]) * t, z = pts[i][1] + (pts[i + 1][1] - pts[i][1]) * t;
         const cx = cross[i][0] + (cross[i + 1][0] - cross[i][0]) * t, cz = cross[i][1] + (cross[i + 1][1] - cross[i][1]) * t;
-        row.push({ hL: map.heightAt(x - cx * hw, z - cz * hw) + ROAD_LIFT, hR: map.heightAt(x + cx * hw, z + cz * hw) + ROAD_LIFT });
+        row.push({ hL: map.heightAt(x - cx * hw, z - cz * hw) + ROAD_LIFT, hR: map.heightAt(x + cx * hw, z + cz * hw) + ROAD_LIFT, up: [0, 0, 0, 0, 0] });
       }
       rows.push({ steps, row });
     }
@@ -455,9 +464,52 @@ function buildChains(map: WorldMap, segments: RoadSegment[]): Chain[] {
     const bridgeAt = (p: Vec2) => map.bridges.find((b) => near(b.pts[0], p) || near(b.pts[b.pts.length - 1], p)) ?? null;
     const first = chain[0];
     const id = map.roads.find((r) => r.pts[0][0] === first.a[0] && r.pts[0][1] === first.a[1] && r.cls === first.cls)?.id ?? `hwy-${out.length}`;
-    out.push({ id, cls: first.cls, pts, hw, lanes: first.lanes, dirs, cross, segLen, cum, total: cum[m - 1], rows, bridgeStart: bridgeAt(pts[0]), bridgeEnd: bridgeAt(pts[m - 1]) });
+    const c: Chain = { id, cls: first.cls, pts, hw, lanes: first.lanes, dirs, cross, segLen, cum, total: cum[m - 1], rows, bridgeStart: bridgeAt(pts[0]), bridgeEnd: bridgeAt(pts[m - 1]) };
+    computeLifts(map, c);
+    out.push(c);
   }
   return out;
+}
+
+/** The ground as the clipmap renders it: terrain.ts samples the height texture without the half-texel offset, so its
+ *  surface is `heightAt` shifted half a cell toward +x, +z; anything draped on the ground clears both readings. */
+function terrainAt(map: WorldMap, x: number, z: number): number {
+  const half = (WORLD_SIZE / MAP_N) * 0.5;
+  return Math.max(map.heightAt(x, z), map.heightAt(x - half, z - half));
+}
+
+/** The roads.ts pavement follows the height field at its two edges only, every 15 m, so where the ground crowns under
+ *  the carriageway - the dune crest the spit highway runs along, a bump under the middle of the road - the rendered
+ *  terrain stands through the pavement in sand-coloured blotches; the clipmap also samples the height texture half a
+ *  texel off `heightAt` (terrain.ts: no half-texel offset in the uv), so on any slope it sits up to a few decimetres
+ *  from the CPU height field. The course and everything standing on the pavement ride over both: per row, at the
+ *  five knots across, the lift is the largest excess of the terrain (heightAt at the point and half a texel back,
+ *  as the clipmap renders it) over the pavement anywhere within a full row along and a full knot across (so the
+ *  bilinear field between the knots is never under a sampled point), plus 6 cm; zero over nearly all the network. */
+function computeLifts(map: WorldMap, c: Chain): void {
+  const terrain = (x: number, z: number) => terrainAt(map, x, z);
+  const N_ALONG = 7, N_ACROSS = 7;
+  const frames: Frame[] = [];
+  for (let i = 0; i < c.rows.length; i++) {
+    const r = c.rows[i];
+    for (let k = 0; k <= r.steps; k++) {
+      if (i > 0 && k === 0) { r.row[0].up = c.rows[i - 1].row[c.rows[i - 1].steps].up; continue; }
+      const s = c.cum[i] + c.segLen[i] * (k / r.steps);
+      frames.length = 0;
+      for (let q = 0; q < N_ALONG; q++) frames.push(frameAt(c, clamp(s + ((q / (N_ALONG - 1)) * 2 - 1) * ROAD_STEP, 0, c.total)));
+      const up = r.row[k].up;
+      for (let j = 0; j < LIFT_KNOTS.length; j++) {
+        let need = 0;
+        for (const f of frames) {
+          for (let q = 0; q < N_ACROSS; q++) {
+            const a = clamp((LIFT_KNOTS[j] + ((q / (N_ACROSS - 1)) * 2 - 1) * 0.5) * c.hw, -c.hw, c.hw);
+            need = Math.max(need, terrain(f.x + f.rx * a, f.z + f.rz * a) + 0.06 - pavementAt(c, f.s, a));
+          }
+        }
+        up[j] = need;
+      }
+    }
+  }
 }
 
 function locate(c: Chain, s: number): { i: number; t: number } {
@@ -467,15 +519,33 @@ function locate(c: Chain, s: number): { i: number; t: number } {
   return { i, t: clamp((s - c.cum[i]) / Math.max(c.segLen[i], 1e-6), 0, 1) };
 }
 
-/** Height of the pavement at `s` along and `a` across (in units of the mitred cross vector; `a = ±hw` is the
- *  pavement edge), interpolated over the same rows roads.ts triangulates. */
-function surfaceAt(c: Chain, s: number, a: number): number {
+/** Height of the roads.ts pavement at `s` along and `a` across (in units of the mitred cross vector; `a = ±hw` is
+ *  the pavement edge), interpolated over the same rows roads.ts triangulates. */
+function pavementAt(c: Chain, s: number, a: number): number {
   const { i, t } = locate(c, s);
   const r = c.rows[i];
   const u = t * r.steps;
   const k = Math.min(r.steps - 1, Math.floor(u)), f = u - k;
   const hL = lerp(r.row[k].hL, r.row[k + 1].hL, f), hR = lerp(r.row[k].hR, r.row[k + 1].hR, f);
   return lerp(hL, hR, clamp((a / c.hw + 1) * 0.5, 0, 1));
+}
+
+/** The course lift over the pavement (computeLifts), bilinear over the rows and the knots across. */
+function liftAt(c: Chain, s: number, a: number): number {
+  const { i, t } = locate(c, s);
+  const r = c.rows[i];
+  const u = t * r.steps;
+  const k = Math.min(r.steps - 1, Math.floor(u)), f = u - k;
+  const w = clamp((a / c.hw + 1) * 2, 0, LIFT_KNOTS.length - 1.001);
+  const j = Math.floor(w), g = w - j;
+  const u0 = r.row[k].up, u1 = r.row[k + 1].up;
+  return lerp(lerp(u0[j], u0[j + 1], g), lerp(u1[j], u1[j + 1], g), f);
+}
+
+/** Height of the surface the furniture stands on and the course lies on: the pavement, lifted where the terrain
+ *  would stand through it. */
+function surfaceAt(c: Chain, s: number, a: number): number {
+  return pavementAt(c, s, a) + liftAt(c, s, a);
 }
 
 function frameAt(c: Chain, s: number): Frame {
@@ -604,7 +674,7 @@ function subtractRuns(base: Run, holes: Run[]): Run[] {
 /** Loft of an open profile along the frames with a per-frame scale and per-vertex extras: `extra` is
  *  [kind, along, height] for the concrete (along and height filled in here), `axisY` the height of the member's
  *  axis over the frame for the minimum width. Profile convention as Soup.loft (counter-clockwise). */
-function loftH(soup: Soup, frames: Frame[], profile: readonly (readonly [number, number])[], scale: number[] | null, colors: readonly Rgb[] | Rgb, extraKind: number, axisY: number | null, extraFor?: (f: Frame, k: number) => readonly number[]): void {
+function loftH(soup: Soup, frames: Frame[], profile: readonly (readonly [number, number])[], scale: number[] | null, colors: readonly Rgb[] | Rgb, extraKind: number, axisY: number | null, extraFor?: (f: Frame, k: number, height: number) => readonly number[]): void {
   const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _c = new THREE.Vector3(), _n = new THREE.Vector3(), _p = new THREE.Vector3(), _ax = new THREE.Vector3();
   for (let i = 0; i < profile.length - 1; i++) {
     const [a0, y0] = profile[i], [a1, y1] = profile[i + 1];
@@ -617,8 +687,8 @@ function loftH(soup: Soup, frames: Frame[], profile: readonly (readonly [number,
       const sc = scale ? scale[k] : 1;
       const nx = f.rx * n2x, ny = n2y, nz = f.rz * n2x;
       const axis = axisY !== null ? _ax.set(f.x, f.y + axisY * sc, f.z) : null;
-      const e0 = extraFor ? extraFor(f, k) : [extraKind, f.s, y0 * sc];
-      const e1 = extraFor ? extraFor(f, k) : [extraKind, f.s, y1 * sc];
+      const e0 = extraFor ? extraFor(f, k, y0 * sc) : [extraKind, f.s, y0 * sc];
+      const e1 = extraFor ? extraFor(f, k, y1 * sc) : [extraKind, f.s, y1 * sc];
       soup.vertex(f.x + f.rx * a0 * sc, f.y + y0 * sc, f.z + f.rz * a0 * sc, nx, ny, nz, c, e0, axis);
       soup.vertex(f.x + f.rx * a1 * sc, f.y + y1 * sc, f.z + f.rz * a1 * sc, nx, ny, nz, c, e1, axis);
     });
@@ -821,7 +891,8 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     // steel is accumulated in three soups per chunk so the LOD prefixes can be laid out: heads | thin | posts
     // `proxy`: fat stand-ins (poles, gantry trusses, guardrail walls) drawn into the coarse shadow cascades only,
     // so the furniture keeps its shadow strokes from the air where the thin steel is not worth a shadow pass
-    const parts = Array.from({ length: nChunks }, () => ({ conc: new Soup(3, true), pave: new Soup(3, true), heads: new Soup(3, true), thin: new Soup(3, true), posts: new Soup(3, true), signs: new Soup(3, true), proxy: new Soup(3, false) }));
+    // the concrete soups carry aInfo = (kind, along, across or height, station of the nearest lighting pole or 0)
+    const parts = Array.from({ length: nChunks }, () => ({ conc: new Soup(4, true), pave: new Soup(4, true), heads: new Soup(3, true), thin: new Soup(3, true), posts: new Soup(3, true), signs: new Soup(3, true), proxy: new Soup(3, false) }));
     const P = (s: number) => parts[chunkOf(s)];
 
     // -------------------------------------------------------- median barrier: continuous, opened at the arterial junctions and through the toll plaza
@@ -834,6 +905,8 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     const endPad = 1.2;
     const barrierRuns = subtractRuns({ s0: endPad, s1: c.total - endPad }, openings);
     const TAPER = 7;
+    /** the barrier lofts wait for the lighting: each vertex names the pole whose lamp pool lights it at night */
+    const barrierLofts: { part: (typeof parts)[number]; frames: Frame[]; scale: number[] }[] = [];
     for (const run of barrierRuns) {
       // a sloped end terminal wherever the barrier does not continue onto a causeway deck
       const taperStart = !(run.s0 <= endPad + 0.01 && c.bridgeStart), taperEnd = !(run.s1 >= c.total - endPad - 0.01 && c.bridgeEnd);
@@ -856,7 +929,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
           if (taperEnd) k = Math.min(k, clamp(0.12 + 0.88 * ((run.s1 - s) / TAPER), 0.12, 1));
           return k;
         });
-        loftH(P((a + b) / 2).conc, frames, BARRIER_PROFILE, scale, [C_BARRIER, C_BARRIER, C_BARRIER, C_BARRIER_TOP, C_BARRIER, C_BARRIER, C_BARRIER], 1, BARRIER_H * 0.45);
+        barrierLofts.push({ part: P((a + b) / 2), frames, scale });
       }
       counts.barrierM += run.s1 - run.s0;
       // crash cushions: three yellow sand drums nosing each open terminal
@@ -889,10 +962,10 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         for (let k = 0; k < VERGE_ROWS.length; k++) {
           const a = side * (hw + VERGE_ROWS[k]);
           const x = f.x + f.rx * a, z = f.z + f.rz * a;
-          const g = map.heightAt(x, z);
+          const g = terrainAt(map, x, z);
           if (k > 0 && g < 0.15) break;
-          // 5 cm under the pavement edge, then on the terrain at the lift the roads use (the clipmap sits under it),
-          // never dropping or climbing faster than a real graded verge would between two rows
+          // 5 cm under the pavement edge, then on the rendered terrain at the lift the roads use (the clipmap sits
+          // under it), never dropping or climbing faster than a real graded verge would between two rows
           const y = k === 0 ? surfaceAt(c, s, a) - 0.05 : clamp(g + ROAD_LIFT - 0.05, yPrev - 0.35 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]), yPrev + 0.12 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]));
           yPrev = y;
           out.push({ p: new THREE.Vector3(x, y, z), tone: map.zoneAt(x, z) === 2 || g < 1.2 ? C_VERGE_SAND : C_VERGE_GRASS });
@@ -1131,6 +1204,14 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       }
       counts.poles++;
     }
+    /** the pole whose lamp pool lights station `s` (course strips are cut halfway between poles so every strip has
+     *  one; a barrier vertex takes the nearest, whose pool has faded to nothing 30 m out anyway) */
+    const poleFor = (s: number): number => {
+      let best = -1e4;
+      for (const p of poleStations) if (Math.abs(p - s) < Math.abs(best - s)) best = p;
+      return best;
+    };
+    for (const { part, frames, scale } of barrierLofts) loftH(part.conc, frames, BARRIER_PROFILE, scale, [C_BARRIER, C_BARRIER, C_BARRIER, C_BARRIER_TOP, C_BARRIER, C_BARRIER, C_BARRIER], 1, BARRIER_H * 0.45, (f, _k, h) => [1, f.s, h, poleFor(f.s)]);
 
     // -------------------------------------------------------- wearing course: dark asphalt over both carriageways, 2 cm up on the pavement.
     // roads.ts shades the whole highway as pale sun-bleached concrete-asphalt - the tone of the barrier, the dry ground
@@ -1161,21 +1242,16 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         for (const b of sideBoxes) k = Math.max(k, 1 - Math.max(0, Math.max(b.s0 - s, s - b.s1)) / 15);
         return 0.06 * k;
       };
-      // the pole whose lamp pool a strip lies in (strips are cut halfway between poles so every strip has one)
+      // strips are cut halfway between poles so every strip lies in one pool
       const midpoints = poleStations.slice(1).map((s, i) => (s + poleStations[i]) / 2);
-      const poleFor = (s: number): number => {
-        let best = -1e4;
-        for (const p of poleStations) if (Math.abs(p - s) < Math.abs(best - s)) best = p;
-        return best;
-      };
-      /** one strip of the course between stations sa and sb, a0..a1 across; the vertex colour carries (wear tone,
-       *  1, station of the nearest lighting pole) for the shader */
+      /** one strip of the course between stations sa and sb, a0..a1 across; the vertex colour carries the wear tone,
+       *  aInfo the station of the nearest lighting pole for the shader */
       const quad = (sa: number, sb: number, a0: number, a1: number, kind: number, tA: number, tB: number, up: (s: number) => number) => {
         const soup = P((sa + sb) / 2).pave;
         const fa = frameAt(c, sa), fb = frameAt(c, sb);
         const base = soup.vertexCount;
         const pole = poleFor((sa + sb) / 2);
-        const v = (f: Frame, s: number, a: number, t: number) => soup.vertex(f.x + f.rx * a, surfaceAt(c, s, a) + PAVE_UP + up(s), f.z + f.rz * a, 0, 1, 0, [t, 1, pole], [kind, s, a]);
+        const v = (f: Frame, s: number, a: number, t: number) => soup.vertex(f.x + f.rx * a, surfaceAt(c, s, a) + PAVE_UP + up(s), f.z + f.rz * a, 0, 1, 0, [t, 1, 1], [kind, s, a, pole]);
         v(fa, sa, a0, tA); v(fb, sb, a0, tB); v(fb, sb, a1, tB); v(fa, sa, a1, tA);
         _a.set(fb.x - fa.x, 0, fb.z - fa.z).cross(_b.set(fb.x + fb.rx * a1 - fa.x - fa.rx * a0, 0, fb.z + fb.rz * a1 - fa.z - fa.rz * a0));
         if (_a.y >= 0) soup.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
@@ -1197,7 +1273,10 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
           const sm = (sa + sb) / 2;
           let flag = 0;
           for (const b of mine) if (sm > b.s0 && sm < b.s1) flag = Math.max(flag, b.flag);
-          quad(sa, sb, side * PAVE_IN, side * (hw - PAVE_EDGE_INSET), 4 + flag * 0.1, tone(sa, side), tone(sb, side), up);
+          // two quads across, split at the mid-carriageway lift knot (the lift field is bilinear between the knots,
+          // so a single quad from the barrier foot to the edge could dip under a crown in the middle of the road)
+          quad(sa, sb, side * PAVE_IN, side * hw * 0.5, 4 + flag * 0.1, tone(sa, side), tone(sb, side), up);
+          quad(sa, sb, side * hw * 0.5, side * (hw - PAVE_EDGE_INSET), 4 + flag * 0.1, tone(sa, side), tone(sb, side), up);
         }
         counts.paveM += c.total;
       }
@@ -1496,14 +1575,14 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       if (p.pave.idx.length) {
         // drawn first of the transparent meshes (before the thin steel it lies under, whose coverage alpha must
         // blend against it, not against the pale pavement below), never a caster, never cut by distance
-        const m = new THREE.Mesh(p.pave.build([['aInfo', 3]]), concreteMat);
+        const m = new THREE.Mesh(p.pave.build([['aInfo', 4]]), concreteMat);
         attach(m, 'mid', false);
         chunk.meshes[chunk.meshes.length - 1].receiveOnly = true;
         m.castShadow = false;
         m.renderOrder = -1;
       }
       if (p.conc.idx.length) {
-        const g = p.conc.build([['aInfo', 3]]);
+        const g = p.conc.build([['aInfo', 4]]);
         const m = new THREE.Mesh(g, concreteMat);
         chunk.concrete = m;
         attach(m, 'mid', false);

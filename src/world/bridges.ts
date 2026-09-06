@@ -190,7 +190,7 @@ const CONCRETE_FRAG = /* glsl */ `
     // concrete kerbs and parapets outside - from the air the deck reads as a dark ribbon with bright edges and a
     // bright median spine over the water, not as one pale slab
     float onShoulder = clamp((abs(xm) - width * 0.5 - 0.005) / fwX + 0.5, 0.0, 1.0);
-    vec3 conc = mix(vec3(0.11, 0.11, 0.105), vec3(0.17, 0.165, 0.16), n) * (0.94 + 0.12 * n2);
+    vec3 conc = mix(vec3(0.07, 0.07, 0.067), vec3(0.11, 0.107, 0.104), n) * (0.94 + 0.12 * n2);
     vec3 shoulder = mix(vec3(0.20, 0.20, 0.19), vec3(0.27, 0.265, 0.25), n) * (0.95 + 0.10 * n2);
     // the deck's 6 m joints reflect through the asphalt as faint transverse cracks; paving-lane seams at the lane edges
     float laneW = width / max(lanes, 1.0);
@@ -385,7 +385,8 @@ export class Soup {
     this.pos.push(x, y, z);
     this.nrm.push(nx, ny, nz);
     this.col.push(c[0], c[1], c[2]);
-    if (this.extraSize) { if (extra) for (let i = 0; i < this.extraSize; i++) this.extra.push(extra[i]); else for (let i = 0; i < this.extraSize; i++) this.extra.push(0); }
+    // extras shorter than the layout are padded with zeros (a soup may carry an optional trailing component)
+    if (this.extraSize) { if (extra) for (let i = 0; i < this.extraSize; i++) this.extra.push(extra[i] ?? 0); else for (let i = 0; i < this.extraSize; i++) this.extra.push(0); }
     if (this.hasAxis) { if (axis) this.extra.push(axis.x, axis.y, axis.z, 1); else this.extra.push(x, y, z, 0); }
     const bb = this.bounds;
     if (x < bb.min.x) bb.min.x = x; if (x > bb.max.x) bb.max.x = x;
