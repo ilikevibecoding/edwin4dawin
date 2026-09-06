@@ -156,7 +156,24 @@ under this renderer's sun, as the walks were in round 1 — and was brought down
   the finest cascade only within their 160 m range (+56.5 k in street_2m, +0 in the aerial views).
 - **High-mast night dots** (321eb1cf): the port's masts were one faint pixel each from the night view's 2.3 km (the
   1.5 px floor of every lamp dot, found by differencing the h07 and h11 night frames over the terminal); mast dots now
-  hold 3 px, so the terminal carries its row of bright points at night.
+  hold 3 px, so the terminal carries its row of bright points at night. *Superseded by round 10: the h12 night frame
+  was unchanged, because the dots were not being drawn at all.*
+
+### Round 10 — the h12 read, and the lamp dots' root cause (DEFECTS 10.1–10.4)
+
+- **The lamp dots never rendered against anything but the sky** (d37ed6d9). The renderer runs a logarithmic depth
+  buffer; the dot `ShaderMaterial` had none of the `logdepthbuf` chunks, so each dot's hardware z (0.9998 at 2.3 km,
+  0.996 at 100 m) was tested against the scene's log z (0.71 for water 200 m behind a mast, 0.42 for a facade at
+  100 m) and lost. Every night frame since round 1 showed the lit head geometry within 600 m and the pools of the lamp
+  map — never a dot: the bench night view's downtown at 3.7 km has windows and no street lamps, the terminal no masts.
+  Rounds 9's 3 px floor and c1db632d's depth write were reasoned from frames without a working dot and changed
+  nothing. With the chunks in (as `plane/parts/lights.ts` has them) the dots test and write the same log depth as
+  everything else, and the sprite moves 0.6 m toward the camera so its own housing box does not hide its centre
+  within LAMP_FAR. h13 will be the first frame with 40 785 lamp dots to 4 km at night; their gain was designed blind
+  and may need a round of tuning.
+- **h12 read** (5d1a1da5, this branch at ac0bb6ad): bed tone, the belted cars with their shadows and the yellow
+  heads on backplates all seen (DEFECTS 10.3); counters in the budget table (DEFECTS 10.2): street_2m +71.5 k for the
+  cars' shadows, near shapes and backplates (estimate +72 k), the aerial views +3.5–7 k, every view under the cap.
 
 ## Counts (node harness over the generated world)
 
@@ -248,6 +265,22 @@ below h07 — before any of this branch's rounds 3–9 — while carrying the lo
 signals and the hardstand. Rounds 8–9's later commits (cars, bed tone, backplates, arterial poles) are estimated by
 the frame harness at +5–8 k a view (street_2m +9 k with the cars' near shapes), to be read in h12.
 
+| view | h11 calls / tris | h12 (rounds 8–9: cars, beds, heads, poles, cars' shadows) | Δ h11→h12 | estimate | Δ h07→h12 |
+|------|-----------------:|----------------------------------------------------------:|----------:|---------:|----------:|
+| city_north | 285 / 1 396 k | 285 / 1 401 k | 0 / +5 k | +5–8 k | +1 / −40 k |
+| city_200m | 262 / 1 357 k | 262 / 1 364 k | 0 / +7 k | +5–8 k | +2 / −16 k |
+| city_500m | 212 / 909 k | 212 / 912 k | 0 / +3.5 k | +3.5 k | −5 / −87 k |
+| street_2m | 273 / 1 285 k | 275 / 1 356 k | +2 / +71.5 k | +72 k (shadows 56.5, cars 9, plates 6.5) | +10 / +106 k |
+| harbor | 287 / 1 068 k | 287 / 1 068.5 k | 0 / +0.1 k | 0 | +10 / +5 k |
+| night | 262 / 1 289 k | 262 / 1 289 k | 0 | 0 | −3 / −20 k |
+| skyline_high | 240 / 1 231 k | 240 / 1 231 k | 0 | 0 | −1 / −12 k |
+| cockpit | 275 / 1 147 k | 275 / 1 147 k | 0 | 0 | −1 / −11 k |
+
+h12 = 5d1a1da5 (21:17, this branch at ac0bb6ad). The frame harness's estimates held to within 3 k in every view.
+Every view is under the 1.5 M cap (city_north by 99 k); street_2m's +71.5 k is the price of the cars' shadows at eye
+level (defect 7.5) and stays 144 k under the cap. Round 10's dot fix (d37ed6d9) adds no triangles: the 40 785 point
+sprites were already drawn (and discarded by the depth test) in every night frame.
+
 ## Rounds
 
 See `DEFECTS.md`. Round 0 = baseline, round 1 = first build (shader compile fix, terrain z-fight, footing validation,
@@ -258,24 +291,26 @@ strip, ghost markings, ironwork, slab grid, kerb stones; thin members, masts, ve
 round 5 = budget trims and the eye-level read; round 6 = the plaza-tree regression and the terminal hardstand; round 7 =
 plaza planting beds, curbside parking with the yard LOD that pays for it, plaza lanterns; round 8 = the h10 budget root
 cause (the lamp diet, measured in h11), cars at eye level, bed tone; round 9 = signal heads from the air, arterial
-pole spacing.
+pole spacing; round 10 = the h12 read and the lamp dots' root cause (no log depth in the dot shader: no dot ever
+rendered against ground or buildings), fixed for h13.
 
-## Self-scores (h03 critic → h11 frames, 0–10; the critic's h03 scores in brackets)
+## Self-scores (h03 critic → h12 frames, 0–10; the critic's h03 scores in brackets)
 
-| frame | 21 street-level detail | 22 lighting infrastructure | seen in h11 (b0850ffa: rounds 3–7 and the lamp diet) |
+| frame | 21 street-level detail | 22 lighting infrastructure | seen in h12 (5d1a1da5: rounds 3–9) |
 |-------|-----------------------:|---------------------------:|-------------|
-| city_north | 7 (5) | 6 (3) | apron lots with cars, plazas with fields, planters and beds (the beds lime until 72a88424, h12), poles along the six-lane avenue as pixel lines unchanged by the diet; signal heads read only as lit red dots — the yellow heads on backplates (8ac38df2) are for h12 |
+| city_north | 7 (5) | 6 (3) | apron lots with cars, plazas with fields, planters and beds in the parks' turf tone, poles along the six-lane avenue as pixel lines 29–40 m apart; the signal heads are yellow points on black tabs at the arm ends — legible at 8× zoom, a 2 × 5 px feature at 200 m |
 | city_200m | 7 (6) | 6 (4) | lots and poles at A5–D8; the lamp line along the bayfront arterial |
 | city_500m | 7 (5) | 5 (4) | plazas read as paved fields with bed groups, planters and the street trees; poles are sub-pixel at 500 m by day |
-| street_2m | 7 (5) | 7 (6) | wheel-path rhythm, oil strip, ghost markings, ironwork, kerb stones; signal mast arms with lit aspects and the lamp arms over the avenue; the kerbside cars still the two-box shapes (380606fc is for h12) |
+| street_2m | 7 (5) | 7 (6) | wheel-path rhythm, oil strip, ghost markings, ironwork, kerb stones; signal mast arms with yellow housings and lit aspects, the lamp arms over the avenue; kerbside cars with sill band, raked cabin and their shadows |
 | harbor | 7 (4) | 6 (3) | masts over the yards; the hardstand at median sRGB 126 with slab tones, truck-lane darkening and the slot grid (was 171 in h09, near-white) |
-| night | — | 6 (5) | the causeway lamp line (highway module) and the city dots at 3 km; the city_north / port300 / street_2m night frames are still queued (own capture, `r102`) |
+| night | — | 5 (5) | the causeway lamp line (the highway module's geometry) and the lit windows; no lamp dot in the frame — none ever rendered (DEFECTS 10.1), fixed for h13; the city_north / port300 / street_2m night frames are still queued (own capture, `r102`) |
 
-Not claimed: a night frame of the downtown grid at 200 m (lamp lines, lanterns, pools, signal aspects) — the branch's
-own night jobs have been queued on the two builder slots since 15:58 (`r100`/`r101`) and 18:39 (`r102`), the slots
-held by other agents' sessions for 4–8 h; the round-2/3 night captures (street2m-night, isect60-night, c500-night at
-15:17) are the last verified night state of the lamps and pools, and nothing since has changed the dots or the lamp
-map except the masts' dot gain and the coarse shape's glowing head box.
+Not claimed: the night read of the lighting infrastructure beyond 600 m. Round 10 found that the lamp dots — the
+"lines of light" from the air — had never rendered against ground or buildings (DEFECTS 10.1, the log depth); every
+night frame to h12 shows the lit heads within 600 m and the lamp map's pools only. The fix (d37ed6d9) is in for h13;
+until that frame is read the score for 22 rests on the pools, the heads at 200 m and the causeway line (the highway
+module's), and the night bench view's 5 (5) stands. The branch's own night jobs (`r100`–`r102`) have been queued on
+the two builder slots since 15:58 / 18:39, the slots held by other agents' sessions for 4–9 h.
 
 ## Requests to other agents
 
