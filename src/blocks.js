@@ -29,6 +29,12 @@ export const B = {
   WHEAT_0: 104, WHEAT_1: 105,
   // undercity neon (ids 106+)
   NEON_PINK: 106, NEON_GREEN: 107,
+  // Coruscant architecture v2 (docs/rubrics/18_architecture_v2.md): smooth panel fields, seams and trim, the
+  // 500-Republica bronze and the residential sand accent, horizontal light strips for ring ledges, and continuous
+  // glazing bands / tall slits that replace the small-square window grids on every tower facade (ids 108+)
+  PANEL_LIGHT: 108, PANEL_GREY: 109, TRIM_DARK: 110, PANEL_BRONZE: 111, PANEL_SAND: 112,
+  LIGHT_STRIP: 113, LIGHT_STRIP_WARM: 114, WINDOW_BAND_LIT: 115, WINDOW_BAND_DARK: 116, WINDOW_SLIT_LIT: 117, WINDOW_SLIT_DARK: 118,
+  PANEL_SEAM: 119,
 };
 
 export const BLOCKS = new Array(256);
@@ -209,6 +215,19 @@ export function initBlocks() {
   def(B.HULL_TRENCH, 'hull_trench', { tex: same('hull_trench'), sound: 'metal', hardness: 4.0 });
   def(B.NEON_PINK, 'neon_pink', { tex: same('neon_pink'), emit: 14, sound: 'glass', hardness: 0.4 });
   def(B.NEON_GREEN, 'neon_green', { tex: same('neon_green'), emit: 14, sound: 'glass', hardness: 0.4 });
+  // --- Coruscant architecture v2: panel fields, trim, light strips, glazing bands and slits
+  def(B.PANEL_LIGHT, 'light_panel', { tex: same('panel_light'), sound: 'metal', hardness: 2.0 });
+  def(B.PANEL_GREY, 'grey_panel', { tex: same('panel_grey'), sound: 'metal', hardness: 2.0 });
+  def(B.TRIM_DARK, 'dark_trim', { tex: same('trim_dark'), sound: 'metal', hardness: 2.0 });
+  def(B.PANEL_BRONZE, 'bronze_panel', { tex: same('panel_bronze'), sound: 'metal', hardness: 2.0 });
+  def(B.PANEL_SAND, 'sand_panel', { tex: same('panel_sand'), sound: 'metal', hardness: 2.0 });
+  def(B.PANEL_SEAM, 'seam_panel', { tex: same('panel_seam'), sound: 'metal', hardness: 2.0 });
+  def(B.LIGHT_STRIP, 'light_strip', { tex: same('light_strip'), emit: 12, sound: 'glass', hardness: 0.5 });
+  def(B.LIGHT_STRIP_WARM, 'warm_light_strip', { tex: same('light_strip_warm'), emit: 12, sound: 'glass', hardness: 0.5 });
+  def(B.WINDOW_BAND_LIT, 'lit_window_band', { tex: same('window_band_lit'), emit: 9, sound: 'glass', hardness: 0.5 });
+  def(B.WINDOW_BAND_DARK, 'dark_window_band', { tex: same('window_band_dark'), sound: 'glass', hardness: 0.5 });
+  def(B.WINDOW_SLIT_LIT, 'lit_slit', { tex: same('window_slit_lit'), emit: 9, sound: 'glass', hardness: 0.5 });
+  def(B.WINDOW_SLIT_DARK, 'dark_slit', { tex: same('window_slit_dark'), sound: 'glass', hardness: 0.5 });
 
   for (let i = 0; i < 256; i++) if (!BLOCKS[i]) BLOCKS[i] = BLOCKS[B.AIR];
 }
@@ -240,4 +259,6 @@ export const PALETTE = [
   B.DURASTEEL, B.DURASTEEL_DARK, B.PANEL_BLACK, B.PANEL_RED, B.PANEL_STRIPE, B.GLOW_PANEL, B.GLOW_PANEL_BLUE, B.HOLO_SIGN, B.CONSOLE,
   B.VENT, B.DECK_PLATE, B.STEEL_GLASS, B.CHROME, B.WINDOW_LIT, B.WINDOW_DARK, B.CITY_LAMP, B.HULL_PLATE, B.HULL_TRENCH,
   B.NEON_PINK, B.NEON_GREEN,
+  B.PANEL_LIGHT, B.PANEL_GREY, B.TRIM_DARK, B.PANEL_BRONZE, B.PANEL_SAND, B.PANEL_SEAM, B.LIGHT_STRIP, B.LIGHT_STRIP_WARM,
+  B.WINDOW_BAND_LIT, B.WINDOW_BAND_DARK, B.WINDOW_SLIT_LIT, B.WINDOW_SLIT_DARK,
 ];
