@@ -2,23 +2,35 @@
 // turbolaser exchange (choreoCombat) and the damage drama with its director (choreoDamage), and wires the
 // fighters and effects into one `battle` object that main.js steps with a fixed dt. Deterministic given
 // the seed: layout and runtime randomness both come from seeded generators.
+//
+// Ship classes: the four original classes plus the Lucrehulk and Consular are imported statically; the
+// classes still being built by other workstreams (Acclamator, Arquitens, Carrack, Dreadnought) are
+// loaded through `import.meta.glob`, Vite's existence check: a missing file leaves the class out of the
+// battle with one warning, a builder that throws does the same, and the layout adapts to the roster.
 import * as THREE from "three";
 import * as venatorMod from "./ships/venator.js";
 import { buildProvidence } from "./ships/providence.js";
 import { buildMunificent } from "./ships/munificent.js";
 import { buildRecusant } from "./ships/recusant.js";
+import { buildLucrehulk } from "./ships/lucrehulk.js";
+import { buildConsular } from "./ships/consular.js";
 import { rng, modelBox, dirFromYawPitch, boxesOverlap } from "./choreoRng.js";
 import {
   FLEET_PLAN,
   CLASS_INFO,
+  WARD_CLASSES,
   classInfo,
+  isAgileRole,
   layoutFleet,
 } from "./choreoLayout.js";
 import {
   updateGroups,
   updateShipMotion,
+  updateAgileMotion,
   avoidPass,
   quatFromYPR,
+  makeEscortPath,
+  makeCourierRun,
 } from "./choreoMotion.js";
 import {
   Heat,
@@ -31,6 +43,46 @@ import {
 import { Director, FIRST_DOOM, roomFor } from "./choreoDamage.js";
 
 export { FLEET_PLAN, CLASS_INFO };
+
+// ---- ship classes arriving from other workstreams: loaded if their module exists in this build
+const ARRIVING = [
+  { id: "acclamator", file: "./ships/acclamator.js", fn: "buildAcclamator" },
+  { id: "arquitens", file: "./ships/arquitens.js", fn: "buildArquitens" },
+  { id: "carrack", file: "./ships/carrack.js", fn: "buildCarrack" },
+  { id: "dreadnought", file: "./ships/dreadnought.js", fn: "buildDreadnought" },
+];
+const arrivingModules = import.meta.glob([
+  "./ships/acclamator.js",
+  "./ships/arquitens.js",
+  "./ships/carrack.js",
+  "./ships/dreadnought.js",
+]);
+const arrivingBuilders = {};
+for (const c of ARRIVING) {
+  const load = arrivingModules[c.file];
+  if (!load) {
+    console.warn(
+      `battle: ${c.id} class not in this build (src/battle/${c.file.slice(2)} missing); left out of the fleet`,
+    );
+    continue;
+  }
+  try {
+    const mod = await load();
+    if (typeof mod[c.fn] === "function") arrivingBuilders[c.id] = mod[c.fn];
+    else
+      console.warn(
+        `battle: ${c.file} does not export ${c.fn}(); ${c.id} left out of the fleet`,
+      );
+  } catch (e) {
+    console.warn(`battle: ${c.id} module failed to load; left out:`, e);
+  }
+}
+// the classes present in this worktree, built defensively as well (a broken builder costs one class)
+const OPTIONAL = {
+  lucrehulk: buildLucrehulk,
+  consular: buildConsular,
+  ...arrivingBuilders,
+};
 
 const _dir = new THREE.Vector3();
 const _p = new THREE.Vector3();
@@ -73,8 +125,18 @@ export function createBattle({
       console.warn("venatorOpen variant unavailable:", e);
     }
   }
+  for (const [id, build] of Object.entries(OPTIONAL)) {
+    try {
+      const m = build(mats);
+      if (m && m.parts && m.id && m.hardpoints && m.bounds) models[m.id] = m;
+      else console.warn(`battle: ${id} builder returned no model; left out`);
+    } catch (e) {
+      console.warn(`battle: ${id} builder failed; class left out:`, e);
+    }
+  }
   const capacity = Math.round(40 * Math.max(0.5, Math.min(1, scale)));
-  for (const m of Object.values(models)) fleet.registerModel(m, capacity);
+  for (const m of Object.values(models))
+    fleet.registerModel(m, m.id === "lucrehulk" ? 4 : capacity);
   fleet.enableInstanceColor();
   const boxes = new Map();
   for (const m of Object.values(models)) boxes.set(m.id, modelBox(m));
@@ -124,13 +186,18 @@ export function createBattle({
     for (let i = 0; i < s.cooldowns.length; i++)
       s.cooldowns[i] = rnd() * HEAVY_RECHARGE[1];
     const n = model.hardpoints.length;
+    const turnK = info.turn || 1;
+    const agileRole = isAgileRole(spec.role);
     const st = {
       ship: s,
       side: model.side,
       cls: model.id,
       role: spec.role,
       group: spec.group || null,
-      slot: new THREE.Vector3(),
+      slot: agileRole ? null : new THREE.Vector3(),
+      // escorts and couriers: the line ship they attach to and their path around it
+      ward: spec.ward || null,
+      path: spec.path || null,
       yawOff: 0,
       pitchOff: 0,
       home: new THREE.Vector3(0, 0, 200),
@@ -138,12 +205,17 @@ export function createBattle({
       headPitch: spec.pitch || 0,
       turn: spec.turn || 0,
       cruise,
+      turnK,
+      accel: info.accel || 0.7,
+      // effect sizes follow the hull: a courier's fires and blasts are a third of a Venator's
+      fxScale: Math.sqrt(THREE.MathUtils.clamp(model.length / 1100, 0.12, 1.6)),
       agile: 0,
       wander: { x: rnd.range(0.01, 0.03), y: rnd.range(0.008, 0.02) },
-      // heading weave of the line ships: amplitude 7-17 degrees over 3.5-7 minute swings
+      // heading weave of the line ships: amplitude 7-17 degrees over 3.5-7 minute swings (a
+      // Lucrehulk's is a third of that)
       weave: {
-        amp: rnd.range(0.12, 0.3),
-        pitchAmp: rnd.range(0.02, 0.05),
+        amp: rnd.range(0.12, 0.3) * Math.min(1, turnK),
+        pitchAmp: rnd.range(0.02, 0.05) * Math.min(1, turnK),
         omega: (Math.PI * 2) / rnd.range(210, 420),
         phase: rnd() * Math.PI * 2,
       },
@@ -156,6 +228,7 @@ export function createBattle({
       nextFire: 0,
       target: null,
       target2: null,
+      targetSmall: null,
       targetedBy: 0,
       retargetT: rnd() * 4,
       salvoLeft: new Uint8Array(n),
@@ -173,14 +246,30 @@ export function createBattle({
       hpFrac() {
         return Math.max(0, 1 - this.hits / this.hp);
       },
-      // reinforcement reached its slot: join the formation (or roam if the lost ship roamed)
+      // reinforcement reached its slot: join the formation (or roam if the lost ship roamed); a lost
+      // escort or courier goes back to work around the line
       arrive() {
         const p = this.pending;
         this.pending = null;
         this.agile = 120;
-        if (p && p.group) {
+        if (p && isAgileRole(p.role)) {
+          this.role = p.role;
+          this.group = p.group;
+          this.slot = null;
+          this.ward =
+            p.ward && !p.ward.dead && p.ward.ship.alive ? p.ward : null;
+          this.path =
+            p.role === "escort" ? makeEscortPath(rrand, this.ship.id) : null;
+          if (this.ward && p.role === "courier")
+            this.path = makeCourierRun(this.ward, rrand, boxes);
+          this.headYaw = Math.atan2(
+            -this.ship.velocity.x,
+            -this.ship.velocity.z,
+          );
+        } else if (p && p.group) {
           this.role = "line";
           this.group = p.group;
+          this.slot = this.slot || new THREE.Vector3();
           this.slot.copy(p.slot);
           this.yawOff = 0;
           this.pitchOff = 0;
@@ -212,6 +301,68 @@ export function createBattle({
   });
   for (const st of states) st.home.copy(melee);
   fighters.deploy(fleet.ships);
+
+  // ---- wards for the small ships: an escort takes the nearest line Venator (any line ship failing
+  // that); a courier finishing a run picks another line ship near by, nearer ones more often
+  function assignWard(st) {
+    let cands = [];
+    for (const o of states) {
+      if (
+        o.side !== st.side ||
+        o === st ||
+        o.dead ||
+        o.dying ||
+        !o.ship.alive ||
+        (o.role !== "line" && o.role !== "melee") ||
+        !WARD_CLASSES.has(o.cls)
+      )
+        continue;
+      cands.push(o);
+    }
+    if (st.role === "escort") {
+      const vens = cands.filter(
+        (o) => o.cls === "venator" || o.cls === "venatorOpen",
+      );
+      if (vens.length) cands = vens;
+    } else if (cands.length > 1 && st.ward)
+      cands = cands.filter((o) => o !== st.ward);
+    if (!cands.length) {
+      st.ward = null;
+      return;
+    }
+    let pick = null;
+    if (st.role === "escort") {
+      let best = Infinity;
+      for (const o of cands) {
+        const d =
+          o.ship.position.distanceTo(st.ship.position) * (0.8 + 0.4 * rrand());
+        if (d < best) {
+          best = d;
+          pick = o;
+        }
+      }
+    } else {
+      let total = 0;
+      const ws = cands.map((o) => {
+        const d = o.ship.position.distanceTo(st.ship.position);
+        const w = d < 4500 ? 1 / (d + 600) : 0.05 / (d + 600);
+        total += w;
+        return w;
+      });
+      let r = rrand() * total;
+      pick = cands[cands.length - 1];
+      for (let i = 0; i < cands.length; i++) {
+        r -= ws[i];
+        if (r <= 0) {
+          pick = cands[i];
+          break;
+        }
+      }
+    }
+    st.ward = pick;
+    if (st.role === "courier") st.path = makeCourierRun(pick, rrand, boxes);
+    else if (!st.path) st.path = makeEscortPath(rrand, st.ship.id);
+  }
 
   // ---- combat plumbing
   const inFlight = { n: 0, heavy: 0 }; // capital bolts in flight (all / heavy turbolasers)
@@ -266,7 +417,7 @@ export function createBattle({
     for (let i = 0; i < nFires; i++) {
       s.randomSurfacePoint(_w, rand);
       _inv.copy(s.matrix).invert();
-      const size = rand.range(45, 110);
+      const size = rand.range(45, 110) * st.fxScale;
       const life = rand.range(120, 330); // old wounds: some burn well into the visible battle
       director.ignite(st, _w.applyMatrix4(_inv), size, life);
     }
@@ -278,12 +429,14 @@ export function createBattle({
       : models.venator;
   }
 
-  // a replacement ship arrives from far above its own line, drifting in at 60 m/s toward the lost slot
+  // a replacement of the lost ship's class arrives from far above its own line, drifting in at 60 m/s
+  // toward the lost slot (or toward the line, for an escort or courier)
   function spawnReinforcement(r) {
     const model =
-      r.side === "republic"
+      r.cls === "venator" || r.cls === "venatorOpen"
         ? venatorModel(rrand)
-        : models[r.cls] || models.munificent;
+        : models[r.cls] ||
+          (r.side === "republic" ? models.venator : models.munificent);
     const entry = fleet.classes.get(model.id);
     if (!entry) return false;
     // the fleet draws only living instances: retired wrecks no longer take a slot
@@ -291,7 +444,13 @@ export function createBattle({
     for (const s of entry.ships) if (s.alive) drawn++;
     if (drawn >= entry.capacity) return false;
     const home = _p;
-    if (r.group && r.slot) {
+    const agileRole = isAgileRole(r.role);
+    const ward = r.ward && !r.ward.dead && r.ward.ship.alive ? r.ward : null;
+    if (agileRole && ward)
+      home.copy(ward.ship.position).add(_w.set(0, -700, 0));
+    else if (agileRole && r.group)
+      home.copy(r.group.pos).add(_w.set(rrand.range(-2500, 2500), -700, 0));
+    else if (r.group && r.slot) {
       const g = r.group;
       const c = Math.cos(g.yaw);
       const sn = Math.sin(g.yaw);
@@ -336,6 +495,8 @@ export function createBattle({
     st.pending = {
       group: r.group || null,
       slot: r.slot ? r.slot.clone() : null,
+      role: r.role || null,
+      ward,
     };
     st.ship.velocity.copy(_dir).multiplyScalar(60);
     st.cruise = rrand.range(
@@ -353,7 +514,7 @@ export function createBattle({
         rrand.range(-0.5, 0.5),
         rrand.range(-1, 1),
         rrand.range(0.5, 0.95) * R,
-        rrand.range(45, 95),
+        rrand.range(45, 95) * st.fxScale,
       ]);
     if (roomFor(explosions, "add", 0.9)) {
       explosions.spawn(st.ship.position, {
@@ -377,6 +538,7 @@ export function createBattle({
   let flakTimer = 0;
   const FIXED_TICK = 1.0;
   const FLAK_PERIOD = 0.16 / fxScale;
+  const nextRun = (st) => assignWard(st);
 
   function update(dt, camPos) {
     const t0 = performance.now();
@@ -394,13 +556,23 @@ export function createBattle({
           st.retargetT = rrand.range(3, 6);
           chooseTargets(st, states, rrand);
         }
+        // escorts and couriers whose ward is gone (or who have none yet) attach to another line ship
+        if (
+          isAgileRole(st.role) &&
+          (!st.ward ||
+            st.ward.dead ||
+            st.ward.dying ||
+            !st.ward.ship.alive ||
+            (st.role === "courier" && !st.path))
+        )
+          assignWard(st);
       }
       avoidPass(states, boxes);
     }
     heat.update(inFlight.heavy, dt);
     updateGroups(groups, dt, time);
     for (const st of states) {
-      if (st.pending && st.pending.group) {
+      if (st.pending && st.pending.group && st.pending.slot) {
         // the slot drifts with its group: keep the reinforcement's destination current
         const g = st.pending.group;
         const c = Math.cos(g.yaw);
@@ -410,9 +582,17 @@ export function createBattle({
           g.pos.y + st.pending.slot.y,
           g.pos.z - st.pending.slot.x * sn + st.pending.slot.z * c,
         );
+      } else if (st.pending && st.pending.ward) {
+        const w = st.pending.ward;
+        if (!w.dead && w.ship.alive) {
+          st.home.copy(w.ship.position);
+          st.home.y -= 700;
+        }
       }
       if (st.agile > 0) st.agile -= dt;
-      updateShipMotion(st, dt, time);
+      if (isAgileRole(st.role))
+        updateAgileMotion(st, dt, time, states, boxes, nextRun);
+      else updateShipMotion(st, dt, time);
       if (!st.dead && !st.dying) {
         updateGuns(st, dt, ctx);
         st.ship.health = Math.max(0.05, st.hpFrac());
@@ -482,6 +662,23 @@ export function createBattle({
     stateOf: ctx.stateOf,
     mostDramatic: () => director.mostDramatic(),
     onFighterDestroyed,
+    // diagnostics: ships per class (alive / dying / dead wrecks still drawn) and per role
+    classCounts() {
+      const out = {};
+      for (const st of states) {
+        const c = (out[st.cls] = out[st.cls] || {
+          alive: 0,
+          dying: 0,
+          dead: 0,
+          roles: {},
+        });
+        if (st.dead) c.dead++;
+        else if (st.dying) c.dying++;
+        else c.alive++;
+        c.roles[st.role] = (c.roles[st.role] || 0) + 1;
+      }
+      return out;
+    },
     // diagnostics: pairs of hulls whose oriented boxes intersect (margin in metres, 0 = touching)
     overlaps(margin = 0) {
       const out = [];
