@@ -11,7 +11,7 @@ import { B } from '../blocks.js';
 import { CHUNK_SIZE as CS, CHUNK_HEIGHT as CH } from '../constants.js';
 import { hash2, hash3 } from '../rng.js';
 import { LOWER, lowerLocal, lowerBand } from '../worldgen.js';
-import { LC, K, envelope, railR0, bandStartD, groundOf, trenchFloor, trenchOf, corridorOf, cellAt, inFoot, stepSurface } from './lowercity/plan.js';
+import { LC, K, railR0, groundOf, trenchFloor, trenchOf, corridorOf, cellAt, inFoot, stepSurface } from './lowercity/plan.js';
 import { paintObjects, wellColumn } from './lowercity/routes.js';
 
 const D = B.DURASTEEL, DD = B.DURASTEEL_DARK, BLK = B.PANEL_BLACK, PLATE = B.DECK_PLATE, STR = B.PANEL_STRIPE, GL = B.STEEL_GLASS;
@@ -237,7 +237,7 @@ function paintMass(set, cell, u, t, w, dd, g, d, v) {
     if (!corner && ((onT && u === cu) || (onV && t === ct))) set(g + 2, BLUE);   // service light mid-face
     return;
   }
-  const env = envelope(bandStartD(cell.band) + cell.fr0);
+  const env = cell.env;
   if (Math.abs(u - cu) <= 1 && Math.abs(t - ct) <= 1 && roof + 2 <= env) { set(roof + 1, DD); set(roof + 2, u === cu && t === ct ? CHR : DD); }
   else if (cell.beacon && u === 2 && t === 2 && roof + 2 <= env) { set(roof + 1, BARS); set(roof + 2, NEON); }
   else if (u === w - 3 && t === 2 && roof + 1 <= env && hash2(cell.seed, 3, 49) < 0.6) set(roof + 1, VENT);
@@ -247,7 +247,7 @@ function paintMass(set, cell, u, t, w, dd, g, d, v) {
 // blocks, consoles along the glass and a furnace row at the back; a doorway on the face side.
 function paintRoom(set, cell, u, t, w, dd, g, d, v) {
   const wall = WALL_BLOCK[cell.style];
-  const env = envelope(bandStartD(cell.band) + cell.fr0);
+  const env = cell.env;
   const roof = Math.min(cell.roof, g + 9);
   const onV = u === 0 || u === w - 1, onT = t === 0 || t === dd - 1;
   const perimeter = onV || onT, corner = onV && onT;

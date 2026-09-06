@@ -47,11 +47,11 @@ export function paintObjects(chunk) {
     const [va, vb] = vRange(chunk, side);
     for (let c = LC.corridorOff + LC.corridorEvery * Math.floor((va - 6 - LC.corridorOff) / LC.corridorEvery); c <= vb + 6; c += LC.corridorEvery) {
       if (corridorCentre(side, c) !== c) continue;
-      if (touches(chunk, side, -2, 3, c - 3, c + 2)) paintTower(frameSetter(chunk, side), { side, c, bottom: 41 });
+      if (touches(chunk, side, -4, 1, c - 3, c + 2)) paintTower(frameSetter(chunk, side), { side, c, bottom: 41 });
     }
   }
   const L = PUBLIC_LIFT;
-  if (touches(chunk, L.side, -2, 3, L.c - 4, L.c + 2)) paintTower(frameSetter(chunk, L.side), L);
+  if (touches(chunk, L.side, -4, 2, L.c - 5, L.c + 2)) paintTower(frameSetter(chunk, L.side), L);
   paintRamp(chunk);
   paintVentRoute(chunk);
 }
@@ -83,8 +83,10 @@ function paintFaceAndMasts(chunk) {
 // ------------------------------------------------------------------------------------------------ helix towers
 // Ring of the 12 cells around a 2 x 2 core in a 4 x 4 footprint (local a, b in 0..3).
 const RING = [[0, 0], [1, 0], [2, 0], [3, 0], [3, 1], [3, 2], [3, 3], [2, 3], [1, 3], [0, 3], [0, 2], [0, 1]];
-// Half-steps from `bottom` to `top` (walking levels), with an optional 5-cell flat landing at `landing`; the last
-// step always lands on RING[11] so the four highest steps sit on the a <= 1 side.
+// Half-steps from `bottom` to `top` (walking levels), with an optional 5-cell flat landing at `landing`. The last
+// step always lands on RING[11], next to the head-house door (cells (0,1) / (0,2) face it), so the eight highest
+// steps sit on the a <= 2 columns inside the plateau; for the public lift (31 -> 61, landing 41) the flat landing
+// falls on RING[3..7]: the four a = 3 cells behind the deck door plus one.
 function helixSteps(bottom, top, landing) {
   const rise = (top - bottom) * 2, landK = landing ? (landing - bottom) * 2 : -1, landLen = landing ? 5 : 0;
   const total = rise + landLen, start = mod(11 - total, 12), out = [];
@@ -100,48 +102,47 @@ function helixSteps(bottom, top, landing) {
 }
 const stepBlock = (F, d, v, s, floorY) => { const L = Math.floor(s), top = s === L ? L - 1 : L; if (top > floorY) F(d, v, top, s === L ? D : SLAB); };
 
-// A 6 x 6 stair tower straddling the plateau face: local a (0..3) -> d = a - 1 (two columns on the rim, two on
-// the deck), b -> v. The deck half stays under y 59; the rim half carries the head house (walls to 63, roof 64)
-// with the exit door onto the promenade. Steps spiral from T.bottom (41, or 31 for the public lift, which also has
-// a flat landing at 41 and a passage into the trench) up to 61.
+// A stair tower let into the plateau face: local a (0..3) -> d = a - 3, so the 4 x 4 shaft sits inside the edge and
+// only its outer wall (d 1) stands in the lower city, where it stops at 59; b -> v (mirrored for the public lift so
+// its first step is nearest the trench). The head house on the promenade (walls to 63, roof 64, footprint d -4..0 of
+// the 6-wide rim) has the exit door on the plateau side. The deck door is in the outer wall: at the flat landing
+// (the public lift: 41, 4 wide) or at the bottom (service towers: 41). The public lift's bottom (31) leaves through
+// a short lit tunnel under the deck into the trench beside the tower.
 function paintTower(F, T) {
   const c = T.c, bottom = T.bottom, top = 61, glass = !!T.glass, mirror = !!T.mirror;
-  const dOf = (a) => a - 1, vOf = (b) => c - 2 + (mirror ? 3 - b : b);
-  const wallTop = (a) => (a <= 1 ? 63 : 59);
+  const dOf = (a) => a - 3, vOf = (b) => c - 2 + (mirror ? 3 - b : b);
+  const wallBlock = (y) => (y === bottom - 1 || y === 59 || y === 63 ? D : glass ? ((y - bottom) % 3 === 2 ? D : GL) : (y % 4 === 2 && y > bottom + 1 ? GL : DD));
   for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) {
     const d = dOf(a), v = vOf(b), core = a >= 1 && a <= 2 && b >= 1 && b <= 2;
     F(d, v, bottom - 1, PLATE);
-    for (let y = bottom; y <= wallTop(a); y++) F(d, v, y, core ? (y % 5 === 0 ? BLUE : (glass ? GL : BLK)) : AIR);
+    // the d 0 column closes the head house above the face (its steps stay below 59)
+    for (let y = bottom; y <= 63; y++) F(d, v, y, core ? (y % 5 === 0 ? BLUE : (glass ? GL : BLK)) : (a === 3 && y >= 60 ? wallBlock(y) : AIR));
   }
   for (let a = -1; a <= 4; a++) for (let b = -1; b <= 4; b++) {
     if (a >= 0 && a <= 3 && b >= 0 && b <= 3) continue;
-    const d = dOf(a), v = vOf(b), wt = wallTop(Math.max(0, a));
-    for (let y = bottom - 1; y <= wt; y++) {
-      let id = glass ? ((y - bottom) % 3 === 2 ? D : GL) : (y % 4 === 2 && y > bottom + 1 ? GL : DD);
-      if (y === bottom - 1 || y === 59 || y === 63) id = D;
-      F(d, v, y, id);
-    }
+    const d = dOf(a), v = vOf(b), wt = a === 4 ? 59 : 63;
+    for (let y = bottom - 1; y <= wt; y++) F(d, v, y, wallBlock(y));
   }
-  for (let a = -1; a <= 1; a++) for (let b = -1; b <= 4; b++) F(dOf(a), vOf(b), 64, D);
+  for (let a = -1; a <= 3; a++) for (let b = -1; b <= 4; b++) F(dOf(a), vOf(b), 64, D);
   for (const st of helixSteps(bottom, top, T.landing)) stepBlock(F, dOf(st.a), vOf(st.b), st.s, bottom - 1);
   // rim exit (head-house door onto the promenade), signage and lights
-  for (const b of [1, 2]) { for (let y = 61; y <= 63; y++) F(dOf(-1), vOf(b), y, AIR); F(dOf(-1), vOf(b), 64, HOLO); }
+  for (const b of [1, 2]) { F(dOf(-1), vOf(b), 60, PLATE); for (let y = 61; y <= 63; y++) F(dOf(-1), vOf(b), y, AIR); F(dOf(-1), vOf(b), 64, HOLO); }
   F(dOf(-1), vOf(0), 62, GLOW); F(dOf(-1), vOf(3), 62, GLOW);
   F(dOf(1), vOf(-1), 62, GLOW); F(dOf(1), vOf(4), 62, GLOW);
-  if (T.landing) {
-    // deck landing: a 4-wide entrance in the outer wall, signs over it
-    for (let b = 0; b < 4; b++) for (let y = T.landing; y <= T.landing + 2; y++) F(dOf(4), vOf(b), y, AIR);
-    F(dOf(4), vOf(0), T.landing + 3, HOLO); F(dOf(4), vOf(3), T.landing + 3, HOLO);
-    F(dOf(4), vOf(1), T.landing + 4, GLOW); F(dOf(4), vOf(2), T.landing + 4, GLOW);
-    // trench exit at the bottom: through the wall next to the first step, then a passage through the trench ledge
-    const eb = mirror ? 4 : -1, pb = mirror ? 5 : -2;
-    for (const a of [2, 3]) for (let y = bottom; y <= bottom + 2; y++) { F(dOf(a), vOf(eb), y, AIR); F(dOf(a), vOf(pb), y, AIR); }
-    F(dOf(2), vOf(eb), bottom + 3, GLOW); F(dOf(3), vOf(pb), bottom - 1, PLATE); F(dOf(2), vOf(pb), bottom - 1, PLATE);
-    for (let a = 0; a < 4; a++) F(dOf(a), vOf(mirror ? -1 : 4), bottom + 4, GLOW);
-  } else {
-    for (const b of [1, 2]) for (let y = bottom; y <= bottom + 2; y++) F(dOf(4), vOf(b), y, AIR);
-    for (const a of [2, 3]) for (const b of [-1, 4]) for (let y = bottom; y <= bottom + 2; y++) F(dOf(a), vOf(b), y, AIR);
-    F(dOf(4), vOf(1), bottom + 3, GLOW); F(dOf(4), vOf(2), bottom + 3, HOLO);
+  // deck door in the outer wall (4 wide at the landing, 2 wide at the bottom), signs and lights over it
+  const deckY = T.landing || bottom, bs = T.landing ? [0, 1, 2, 3] : [1, 2];
+  for (const b of bs) for (let y = deckY; y <= deckY + 2; y++) F(dOf(4), vOf(b), y, AIR);
+  F(dOf(4), vOf(bs[0]), deckY + 3, HOLO); F(dOf(4), vOf(bs[bs.length - 1]), deckY + 3, T.landing ? HOLO : GLOW);
+  if (T.landing) { F(dOf(4), vOf(1), deckY + 4, GLOW); F(dOf(4), vOf(2), deckY + 4, GLOW); }
+  if (T.trench) {
+    // bottom exit: from the floor cell (a 3, b 3) through the outer wall, then a 2-wide tunnel under the deck past
+    // the trench ledge into the trench's edge cell (tv 3 / -4), kept clear of container stacks
+    const vs = mirror ? [c - 2, c - 3, c - 4] : [c + 1, c + 2, c + 3], vT = mirror ? c - 5 : c + 4;
+    for (let d = 1; d <= 2; d++) {
+      for (const v of vs) { F(d, v, bottom - 1, PLATE); for (let y = bottom; y <= bottom + 2; y++) F(d, v, y, AIR); F(d, v, bottom + 3, v === vs[1] ? GLOW : DD); }
+      for (let y = bottom; y <= bottom + 2; y++) F(d, vT, y, AIR);
+    }
+    F(1, vs[0], bottom + 3, HOLO);
   }
 }
 
@@ -158,7 +159,7 @@ function paintRamp(chunk) {
       const L = Math.floor(s), top = s === L ? L - 1 : L;
       for (let z = R.laneZ0; z <= R.laneZ1; z++) {
         S(x, top, z, s === L ? (z === R.laneZ0 + 1 && x % 8 === 0 ? BLUE : PLATE) : SLAB);
-        for (let y = top + 1; y <= 60; y++) S(x, y, z, AIR);
+        for (let y = top + 1; y <= 63; y++) S(x, y, z, AIR);              // also the rim railing over the cut
       }
       for (const z of [R.laneZ0 - 1, R.laneZ1 + 1]) {
         if (cut) for (let y = top; y <= 60; y++) S(x, y, z, y === 60 ? STR : DD);
@@ -183,17 +184,19 @@ function paintRamp(chunk) {
   for (let v = R.turn.v0; v <= R.turn.v1; v++) for (let d = R.turn.d0; d <= R.turn.d1; d++) cell(d, v, R.turn.s);
   for (let v = R.leg2.v0; v <= R.leg2.v1; v++) for (let d = R.leg2.d0; d <= R.leg2.d1; d++) cell(d, v, s2(v));
   for (let v = R.pass.v0; v <= R.pass.v1; v++) for (let d = R.pass.d0; d <= R.pass.d1; d++) cell(d, v, R.pass.s);
-  // parapet between the legs (one above the upper leg), outer parapet / railing along the return leg, end wall
-  for (let v = R.turn.v0; v <= R.head.v1; v++) {
-    const up = v >= R.leg1.v1 && v <= R.leg1.v0 ? s1(v) : v >= R.head.v0 ? R.head.s : R.turn.s;
+  // parapet between the legs (one above the upper leg) from the turn platform to the head; the platform itself
+  // (v turn.v0 .. turn.v1) stays open across d 1..7 so the legs connect
+  for (let v = R.turn.v1 + 1; v <= R.head.v1; v++) {
+    const up = v <= R.leg1.v0 ? s1(v) : R.head.s;
     const top = Math.ceil(up) + 1;
     for (let y = g + 1; y <= top; y++) F(R.parapetD, v, y, y === top ? STR : DD);
     if (mod(v, 16) === 8 && top + 2 <= 59) { F(R.parapetD, v, top + 1, BARS); F(R.parapetD, v, top + 2, LAMP); }
-    if (v <= R.leg2.v1) {
-      const s = v < R.leg2.v0 ? R.turn.s : s2(v), t2 = Math.ceil(s) + 1;
-      if (t2 > g + 1) for (let y = g + 1; y <= t2; y++) F(R.outerD, v, y, y === t2 ? STR : DD);
-      else F(R.outerD, v, g + 1, BARS);
-    }
+  }
+  // outer parapet along the turn platform and the return leg (a railing once the leg has cut below the deck), end wall
+  for (let v = R.turn.v0; v <= R.leg2.v1; v++) {
+    const t2 = Math.ceil(s2(v)) + 1;
+    if (t2 > g + 1) for (let y = g + 1; y <= t2; y++) F(R.outerD, v, y, y === t2 ? STR : DD);
+    else F(R.outerD, v, g + 1, BARS);
   }
   for (let d = 1; d <= R.outerD; d++) for (let y = g + 1; y <= R.turn.s + 1; y++) F(d, R.turn.v0 - 1, y, y === R.turn.s + 1 ? STR : DD);
   F(R.outerD, R.turn.v0 - 1, R.turn.s + 2, BARS); F(R.outerD, R.turn.v0 - 1, R.turn.s + 3, LAMP);

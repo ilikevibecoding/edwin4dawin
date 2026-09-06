@@ -91,12 +91,12 @@ export function cellAt(side, band, row, j) {
   if (kind === K.WELL && (fv1 - fv0 < 8)) kind = K.YARD;
   if ((kind === K.MASS || kind === K.ROOM) && fv1 - fv0 < 8) kind = K.YARD;
   if (kind === K.ROOM && (fv1 - fv0 < 12 || fr1 - fr0 < 12)) kind = K.MASS;
-  const env = envelope(bandStartD(band) + fr0);
+  const env = envelope(bandStartD(band) + fr1 - 1);                    // the envelope at the footprint's far edge
   const roof = Math.max(ground + 6, env - 1 - Math.floor(h(5) * 3));   // parapet at roof + 1 stays under the envelope
   const style = Math.floor(h(6) * WALLS.length);
   const lit = 0.08 + h(7) * 0.1;
-  const beacon = roof + 2 <= LC.envTop && h(8) < 0.35;
-  c = { side, band, row, j, kind, v0, v1, r0, r1, fv0, fv1, fr0, fr1, ground, roof, style, lit, beacon, seed: Math.floor(h(9) * 1e6) };
+  const beacon = roof + 2 <= env && h(8) < 0.35;
+  c = { side, band, row, j, kind, v0, v1, r0, r1, fv0, fv1, fr0, fr1, ground, roof, env, style, lit, beacon, seed: Math.floor(h(9) * 1e6) };
   if (cellCache.size > 4096) cellCache.clear();
   cellCache.set(key, c);
   return c;
@@ -135,7 +135,7 @@ export function lowerFloorAt(x, z) {
 // ------------------------------------------------------------------------------------------------ routes
 // Stair towers to the rim stand at every corridor of every side (the corridor's v is their centre); the public
 // lift (glass tower, cab shaft, landings at 61 / 41 / 31) stands beside the south freight trench near x 3000.
-export const PUBLIC_LIFT = { side: 3, c: 8, mirror: true, glass: true, bottom: 31, landing: 41 };
+export const PUBLIC_LIFT = { side: 3, c: 8, mirror: true, glass: true, bottom: 31, landing: 41, trench: true };
 // Freight route (west side, local frame: d outward = -x, v = z). The lane leaves the spaceport's west edge on the
 // plateau ground (feet 61), descends 1:4 through a cut in the plateau edge to 58, turns onto the first switchback leg
 // along the face (58 -> 43 over 60 blocks), turns, comes back on the second leg (43 -> 31), and a level passage
