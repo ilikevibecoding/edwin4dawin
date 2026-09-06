@@ -41,8 +41,49 @@ dense districts) is sampled by the road and sidewalk materials for the lamp pool
   cascades, within 300 m: drawn into both cascades the kits cost as much again as the street pass), nothing mirrored.
 
 **`src/world/props.ts`** — lamps by kind (arterial 11 m double reach, street 8.5 m single arm, pedestrian lantern,
-highway cobra) with arm yaw, hi/lo instanced LODs, and additive point sprites per chunk for the luminaires from 160 m
-to 4 km at night.
+highway cobra, 30 m high mast with a crown ring of luminaires) with arm yaw, hi/lo instanced LODs, and additive point
+sprites per chunk for the luminaires from 160 m to 4 km at night (per-kind size and gain: a mast is a 3.6 m point at
+2.5× gain). The lamp material is its own batched PBR material carrying `uFocalPx`, so poles, arms and housings are
+inflated to a pixel across at any depth. High masts stand on an 85 × 116 m grid along the container terminal's truck
+lanes (`buildPort`).
+
+### Round 3 — surfaces and lighting infrastructure for the 100–600 m read (h03 defects 9 and 10)
+
+- **Asphalt** (`roads.ts`): pale–dark–pale lane rhythm — wheel paths 26 % paler, an oil-drip strip 12 % darker
+  along each lane centre, both masked to the carriageway and averaged to a stain when a lane falls under 2.5 px;
+  manholes every 26 m in 70 % of the cells plus 15 cm valve covers every 9 m in half of them (all fading with the
+  pixel footprint); ghost markings — a 22 % restripe line 3.55 m off-centre on 60 % of the arterial repaving bands, an
+  18 % blacked-out parking-lane line on half the dense streets; runway concrete in 7.5 m slabs with sealed 6 cm
+  joints and alternate-slab tones.
+- **Kerb stones** (`streets.ts`): 1 m joints on the curb top and face, offset 0.3 m from the 1.5 m slab joints.
+- **Thin members** (`batching.ts`, `streets.ts`, `props.ts`): `THIN_VERTEX_PARS` / `THIN_VERTEX_MAIN` — a vertex
+  attribute `aThin` (offset of the vertex from its member's axis) lets the vertex shader push every pole, arm,
+  housing, signal pole, mast arm, head and lens out to at least `THIN_PX` = 1.2 px across at its depth
+  (`uFocalPx` = pixels per metre at 1 m, set from the camera each frame). Poles and mast arms read as 1 px lines
+  from the air out to the 600 m lamp cull instead of dropping out at ~150 m.
+- **High masts**: the `mast` lamp kind on the terminal grid and in pairs on the verges 12 m in from every highway end
+  on land (the interchanges — the highways share no nodes with the surface grid); 40 m pool at 1.2 peak.
+- **Lamp lines**: arterial verge lamps every 40 m both sides wherever a chain has no sidewalk run (`planVergeLamps`:
+  the causeway approaches through the parks); the highway / causeway poles built here in round 3 passed to the
+  highway furniture module at the merge with the lead (its median twin-arm poles).
+- **Tooling**: `slotwait.sh` (blocking `flock` on both Chrome slots, atomic claim) so the capture browser no longer
+  loses the slot race to the other builders' blocking waiters.
+
+### Round 4 — plazas and surface lots (h03 defect 9: city_500m F5–H6, city_north A8–H8)
+
+`buildPlazas` rates the free ground of every dense block on a 5 m grid (land only; samples within 9 m of a road are
+left out of the ratio because the game marks roads occupied 3 m past their edge in 10 m cells). Blocks over 85 % free
+become striped surface lots (every downtown one, half of the mid-rise ones), downtown blocks 12–85 % free become paved
+plazas, and the downtown apron — the 93 m margin beyond the last block row that `city_north` looks across — is ringed
+with lots (three cells in four, 6 m planted gaps, 3 m to the district edge). Paving (`pave`) is a 10 m quad grid
+refined to 2.5 m along the roads, stopped at the sidewalk back, 8 cm over the ground, drawn in the sidewalk material:
+`K_PLAZA` 0.9 m pavers in two greys (albedo 0.28–0.38) with a dark band every fourth course; `K_LOT` aged asphalt
+(0.11–0.17) with 2.6 m bay lines in double rows of 5 m bays either side of 6.5 m aisles, the bays a shade darker, oil
+drips at the bay heads. Lots carry parked cars (two boxes, 12 paints, 42 % of the bays, nose to the aisle) and a street
+lamp on the bay-row line every 14 bays; plazas carry concrete planters with clipped shrubs and benches along the
+frontages (one cell in three) and in the open (one in twelve), their cells marked occupied for the vegetation. Cars and
+planters live in a `yard` soup per cell (never a caster, never mirrored) drawn to 650 m, with a one-box far shape past
+300 m.
 
 ## Counts (node harness over the generated world)
 
@@ -51,9 +92,12 @@ to 4 km at night.
 | sidewalk runs / curb returns | 23 117 / 22 163 |
 | signalised intersections / mast arms | 601 / 2 250 |
 | stop signs | 9 911 |
-| lamps (arterial / street / ped / highway) | 2 478 / 35 574 / 52 / 123 |
-| sidewalk triangles (fine / far index) | 2.48 M / 0.83 M |
+| lamps (arterial / street / ped / highway) | 2 478 / 35 574 / 52 / 123 (round 2); 39 817 street-planned after round 4 (highway poles now the highway module's, + verge lamps, lot lamps, masts) |
+| sidewalk triangles (fine / far index) | 2.52 M / 0.83 M |
 | kit triangles (large / small) | 0.37 M / 1.09 M |
+| plazas / lots (round 4, merged tree) | 72 / 38 |
+| parked cars / planters | 5 996 / 1 780 |
+| paving triangles / yard triangles (near / far shapes) | 44 k / 217 k / 93 k |
 | street cells | 558 |
 | lamp map | 3449 × 2559 texels, 2.5 m, 8.8 MB |
 
@@ -102,5 +146,9 @@ To be filled from the round captures (21 street-level detail, 22 lighting infras
 - **City agent**: buildings could leave the 0.6 m apron behind the walk (the slab back edge is at
   `hw + 0.3 + walkWidth(zone)` from the centreline); the sidewalk and furniture footprints are reported through
   `markOccupied`.
-- **Highway agent**: highway/causeway lamps are still planned here (`planHighwayLamps`, 123 poles); hand-off ready
-  when `highway.ts` wants them.
+- **Highway agent**: done — the highway furniture module lights the highways and causeways since the merge of
+  7ec36aaa; the streets keep only the interchange masts at the highway ends. If the module wants them too, they are
+  `planHighwayEndMasts` (a pair 12 m in from each end on land, `mast` kind).
+- **Traffic agent**: the lots carry static parked cars (two boxes, `street-yards` soup); if the traffic system grows
+  parked cars of its own, drop `parkCars` in favour of its models — the bay geometry is 2.6 m bays in double rows
+  either side of 6.5 m aisles, 16.5 m period, from the lot corner in the district frame.
