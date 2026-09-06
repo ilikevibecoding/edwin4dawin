@@ -172,6 +172,9 @@ vec3 fogColorDir(vec3 fogBase, vec3 viewDir) {
   // the gradient away from the sun's azimuth (band factor 0.35) is the reference the base fog colour stands for
   vec3 ref = mix(uSkyHorizon, uSunsetColor, 0.35 * uSunsetStrength);
   vec3 ratio = clamp(g / max(ref, vec3(0.002)), vec3(0.7), vec3(2.0));
+  // looking down, the haze between the camera and the ground is lit from above, not by the horizon band: fade the
+  // azimuth warming out with the view's downward angle (an aerial camera at dusk saw a peach sheet where the sea was)
+  ratio = mix(ratio, vec3(1.0), clamp(-viewDir.y * 2.0, 0.0, 1.0));
   return fogBase * ratio;
 }`;
 

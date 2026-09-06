@@ -39,7 +39,7 @@ const VERT = /* glsl */ `
 attribute vec2 aLight;
 attribute float aShade;
 attribute float aFoam;
-varying vec2 vUv; varying vec2 vLight; varying float vShade; varying float vFoam; varying float vDist;
+varying vec2 vUv; varying vec2 vLight; varying float vShade; varying float vFoam; varying float vDist; varying float vFogDist;
 #if FANCY
 varying vec3 vWorldPos;
 #endif
@@ -47,6 +47,9 @@ void main() {
   vUv = uv; vLight = aLight; vShade = aShade; vFoam = aFoam;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = length(mv.xyz);
+  // fog distance: aerial perspective is a horizontal phenomenon - looking down through the thin air column fogs far
+  // less than looking across it - so the vertical offset counts 0.45 (the ground stays visible from the air)
+  { float fdy = dot(mv.xyz, (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz); vFogDist = sqrt(max(dot(mv.xyz, mv.xyz) - fdy * fdy * 0.7975, 0.0)); }
 #if FANCY
   vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
 #endif
@@ -58,7 +61,7 @@ const FRAG = /* glsl */ `
 uniform sampler2D map;
 uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar; uniform float uFlash;
 uniform float uAlpha; uniform vec3 uTint; uniform vec2 uFoamOff;
-varying vec2 vUv; varying vec2 vLight; varying float vShade; varying float vFoam; varying float vDist;
+varying vec2 vUv; varying vec2 vLight; varying float vShade; varying float vFoam; varying float vDist; varying float vFogDist;
 #if FANCY
 varying vec3 vWorldPos;
 #endif
@@ -85,7 +88,7 @@ void main() {
   col += sunSpecular(vWorldPos, N, N, V, 0.2, 0.0, vec3(1.0), lightCurve(vLight.x), vDist) * 0.6;   // sun glint on the crest
 #endif
   float a = mix(0.82, 0.95, vFoam) * uAlpha * smoothstep(0.9, 2.4, vDist);   // columns at the camera fade out
-  col = mix(col, fogC, smoothstep(uFogNear, uFogFar, vDist));
+  col = mix(col, fogC, smoothstep(uFogNear, uFogFar, vFogDist));
   gl_FragColor = vec4(col, a);
 }`;
 

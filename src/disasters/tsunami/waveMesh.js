@@ -9,12 +9,15 @@ import { tileUV, TILES } from '../../textures.js';
 const VERT = /* glsl */ `
 uniform float uTime;
 varying vec2 vLocal;
-varying float vDist;
+varying float vDist; varying float vFogDist;
 void main() {
   vec4 w = modelMatrix * vec4(position, 1.0);
   vLocal = w.xz * 0.5 + vec2(uTime * 0.08, uTime * 0.05);
   vec4 mv = viewMatrix * w;
   vDist = length(mv.xyz);
+  // fog distance: aerial perspective is a horizontal phenomenon - looking down through the thin air column fogs far
+  // less than looking across it - so the vertical offset counts 0.45 (the ground stays visible from the air)
+  { float fdy = dot(mv.xyz, (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz); vFogDist = sqrt(max(dot(mv.xyz, mv.xyz) - fdy * fdy * 0.7975, 0.0)); }
   gl_Position = projectionMatrix * mv;
 }`;
 
@@ -24,13 +27,13 @@ uniform vec3 uTile;         // atlas tile origin (u, v) and size
 uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar; uniform float uFlash;
 uniform float uAlpha;
 uniform vec3 uTint;
-varying vec2 vLocal; varying float vDist;
+varying vec2 vLocal; varying float vDist; varying float vFogDist;
 void main() {
   vec2 t = fract(vLocal) * 0.9 + 0.05;
   vec4 tex = texture2D(map, uTile.xy + t * uTile.z);
   vec3 light = max(vec3(uSkyLight) * uSkyTint, vec3(0.035)) + vec3(uFlash);
   vec3 col = tex.rgb * uTint * light;
-  col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, vDist));
+  col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, vFogDist));
   gl_FragColor = vec4(col, 0.78 * uAlpha);
 }`;
 

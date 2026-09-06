@@ -17,18 +17,21 @@ varying vec4 vUV;
 varying vec3 vColor;
 varying float vAlpha;
 varying vec2 vLight;
-varying float vDist;
+varying float vDist; varying float vFogDist;
 void main() {
   vUV = aUV; vColor = aColor; vAlpha = aAlpha; vLight = aLight;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = length(mv.xyz);
+  // fog distance: aerial perspective is a horizontal phenomenon - looking down through the thin air column fogs far
+  // less than looking across it - so the vertical offset counts 0.45 (the ground stays visible from the air)
+  { float fdy = dot(mv.xyz, (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz); vFogDist = sqrt(max(dot(mv.xyz, mv.xyz) - fdy * fdy * 0.7975, 0.0)); }
   gl_PointSize = aSize * uScale / max(vDist, 0.1);
   gl_Position = projectionMatrix * mv;
 }`;
 const FRAG = /* glsl */ `
 uniform sampler2D map;
 uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar; uniform float uFlash;
-varying vec4 vUV; varying vec3 vColor; varying float vAlpha; varying vec2 vLight; varying float vDist;
+varying vec4 vUV; varying vec3 vColor; varying float vAlpha; varying vec2 vLight; varying float vDist; varying float vFogDist;
 float lightCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.4); }
 float blockCurve(float l) { float c = l / (4.0 - 3.0 * l); return mix(c, l, 0.6); }
 void main() {
@@ -46,7 +49,7 @@ void main() {
   vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
   light = max(light, vec3(0.035)) + vec3(uFlash);
   col *= light;
-  float f = smoothstep(uFogNear, uFogFar, vDist);
+  float f = smoothstep(uFogNear, uFogFar, vFogDist);
   col = mix(col, uFogColor, f);
   gl_FragColor = vec4(col, a);
 }`;

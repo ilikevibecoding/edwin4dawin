@@ -36,7 +36,7 @@ function faceUV(dir, x, y, z, out) {
 
 const VERT = /* glsl */ `
 attribute float aShade;
-varying vec2 vUv; varying float vShade; varying float vDist;
+varying vec2 vUv; varying float vShade; varying float vDist; varying float vFogDist;
 #if FANCY
 varying vec3 vWorldPos;
 #endif
@@ -44,6 +44,9 @@ void main() {
   vUv = uv; vShade = aShade;
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = length(mv.xyz);
+  // fog distance: aerial perspective is a horizontal phenomenon - looking down through the thin air column fogs far
+  // less than looking across it - so the vertical offset counts 0.45 (the ground stays visible from the air)
+  { float fdy = dot(mv.xyz, (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz); vFogDist = sqrt(max(dot(mv.xyz, mv.xyz) - fdy * fdy * 0.7975, 0.0)); }
 #if FANCY
   vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
 #endif
@@ -53,7 +56,7 @@ const FRAG = /* glsl */ `
 uniform sampler2D map;
 uniform vec2 uLight; uniform float uEmissive;
 uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar; uniform float uFlash;
-varying vec2 vUv; varying float vShade; varying float vDist;
+varying vec2 vUv; varying float vShade; varying float vDist; varying float vFogDist;
 #if FANCY
 varying vec3 vWorldPos;
 #endif
@@ -80,7 +83,7 @@ void main() {
 #if FANCY
   col += sunSpecular(vWorldPos, N, N, V, 0.35, 0.8, tex.rgb, lightCurve(uLight.x), vDist) * vShade;   // hull metal
 #endif
-  col = mix(col, fogC, smoothstep(uFogNear, uFogFar, vDist));
+  col = mix(col, fogC, smoothstep(uFogNear, uFogFar, vFogDist));
   gl_FragColor = vec4(col, 1.0);
 }`;
 

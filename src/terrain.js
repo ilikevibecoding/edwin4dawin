@@ -18,7 +18,7 @@ attribute float aFace;
 varying vec2 vUv;
 varying vec2 vLight;
 varying float vShade;
-varying float vDist;
+varying float vDist; varying float vFogDist;
 #if FANCY
 varying vec3 vWorldPos;
 varying float vFace;
@@ -30,6 +30,9 @@ void main() {
   vShade = uShadeTable[int(aShade)];
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = length(mv.xyz);
+  // fog distance: aerial perspective is a horizontal phenomenon - looking down through the thin air column fogs far
+  // less than looking across it - so the vertical offset counts 0.45 (the ground stays visible from the air)
+  { float fdy = dot(mv.xyz, (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz); vFogDist = sqrt(max(dot(mv.xyz, mv.xyz) - fdy * fdy * 0.7975, 0.0)); }
 #if FANCY
   vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
   vFace = mod(aFace, 8.0);
@@ -53,7 +56,7 @@ uniform float uFlash;
 varying vec2 vUv;
 varying vec2 vLight;
 varying float vShade;
-varying float vDist;
+varying float vDist; varying float vFogDist;
 float lightCurve(float l) {
   float c = l / (4.0 - 3.0 * l);
   return mix(c, l, 0.4);
@@ -136,7 +139,7 @@ void main() {
   vec3 col = tex.rgb * light * vShade;
   vec3 fogC = uFogColor;
 #endif
-  float f = smoothstep(uFogNear, uFogFar, vDist);
+  float f = smoothstep(uFogNear, uFogFar, vFogDist);
   col = mix(col, fogC, f);
   gl_FragColor = vec4(col, tex.a * uOpacity);
 }`;
@@ -187,10 +190,15 @@ void main() {
   light = max(light, vec3(0.035)) + vec3(uFlash);
   vec3 col = albedo * light * vShade;
   float ndv = max(dot(N, V), 0.0);
-  float F = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
-  vec3 refl = skyGradient(reflect(-V, N)) * skyCurved * mix(0.6, 1.0, uSkyLight);
-  col = mix(col, refl, F * 0.92);
-  col += sunSpecular(vWorldPos, N, gN, V, 0.10, 0.0, albedo, skyCurved, vDist);
+  // grazing reflections stay water-coloured: the sky term is blended toward the horizon colour and capped so a
+  // sunset never turns the whole sea into a sheet of orange
+  float F = 0.02 + 0.70 * pow(1.0 - ndv, 5.0);
+  vec3 refl = mix(skyGradient(reflect(-V, N)), uSkyHorizon, 0.4) * skyCurved * mix(0.6, 1.0, uSkyLight);
+  col = mix(col, refl, F * 0.85);
+  // the glint is capped and fades at grazing angles: a low sun ahead of an aerial camera lit the whole loaded sea
+  // to a peach sheet (the "orange sea"); now it reads as a bright path under the sun, water elsewhere
+  vec3 glint = sunSpecular(vWorldPos, N, gN, V, 0.10, 0.0, albedo, skyCurved, vDist);
+  col += min(glint, vec3(0.9)) * mix(0.35, 1.0, ndv);
   float alpha = tex.a * mix(0.66, 0.94, clamp((depth - 1.0) / 5.0, 0.0, 1.0));
   alpha = mix(alpha, 1.0, F * 0.8);
   vec3 fogC = fogColorDir(uFogColor, -V);
@@ -201,7 +209,7 @@ void main() {
   float alpha = tex.a * uOpacity;
   vec3 fogC = uFogColor;
 #endif
-  float f = smoothstep(uFogNear, uFogFar, vDist);
+  float f = smoothstep(uFogNear, uFogFar, vFogDist);
   col = mix(col, fogC, f);
   gl_FragColor = vec4(col, alpha);
 }`;

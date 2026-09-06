@@ -18,7 +18,7 @@ export const SHARED = {
 const VERT = /* glsl */ `
 varying vec2 vUv;
 varying float vShade;
-varying float vDist;
+varying float vDist; varying float vFogDist;
 #if FANCY
 varying vec3 vWorldPos;
 varying vec3 vNormal;
@@ -32,6 +32,9 @@ void main() {
   vShade = clamp(0.55 + 0.45 * d * 0.7, 0.0, 1.0);
   vec4 mv = modelViewMatrix * vec4(position, 1.0);
   vDist = length(mv.xyz);
+  // fog distance: aerial perspective is a horizontal phenomenon - looking down through the thin air column fogs far
+  // less than looking across it - so the vertical offset counts 0.45 (the ground stays visible from the air)
+  { float fdy = dot(mv.xyz, (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz); vFogDist = sqrt(max(dot(mv.xyz, mv.xyz) - fdy * fdy * 0.7975, 0.0)); }
 #if FANCY
   vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
   vNormal = n;
@@ -53,7 +56,7 @@ uniform float uOpacity;
 uniform float uHurt;
 varying vec2 vUv;
 varying float vShade;
-varying float vDist;
+varying float vDist; varying float vFogDist;
 #if FANCY
 varying vec3 vWorldPos;
 varying vec3 vNormal;
@@ -80,7 +83,7 @@ void main() {
   light = max(light, vec3(0.035)) + vec3(uFlash);
   vec3 col = tex.rgb * uTint * light * vShade;
   col = mix(col, vec3(1.0, 0.3, 0.3), uHurt * 0.5);
-  float f = smoothstep(uFogNear, uFogFar, vDist);
+  float f = smoothstep(uFogNear, uFogFar, vFogDist);
   col = mix(col, fogC, f);
   gl_FragColor = vec4(col, uOpacity);
 }`;

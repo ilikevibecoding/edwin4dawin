@@ -192,7 +192,7 @@ export function buildShipGeometry(model) {
 // ------------------------------------------------------------------------------------------------ material
 const VERT = /* glsl */ `
 attribute float aShade; attribute float aEmit; attribute vec3 aInst;
-varying vec2 vUv; varying float vShade; varying float vDist; varying float vEmit; varying vec3 vInst;
+varying vec2 vUv; varying float vShade; varying float vDist; varying float vFogDist; varying float vEmit; varying vec3 vInst;
 #if FANCY
 varying vec3 vWorldPos;
 #endif
@@ -208,12 +208,15 @@ void main() {
 #endif
   vec4 mv = viewMatrix * wp;
   vDist = length(mv.xyz);
+  // fog distance: aerial perspective is a horizontal phenomenon - looking down through the thin air column fogs far
+  // less than looking across it - so the vertical offset counts 0.45 (the ground stays visible from the air)
+  { float fdy = dot(mv.xyz, (viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz); vFogDist = sqrt(max(dot(mv.xyz, mv.xyz) - fdy * fdy * 0.7975, 0.0)); }
   gl_Position = projectionMatrix * mv;
 }`;
 const FRAG = /* glsl */ `
 uniform sampler2D map; uniform float uTime;
 uniform float uSkyLight; uniform vec3 uSkyTint; uniform vec3 uFogColor; uniform float uFogNear; uniform float uFogFar; uniform float uFlash;
-varying vec2 vUv; varying float vShade; varying float vDist; varying float vEmit; varying vec3 vInst;
+varying vec2 vUv; varying float vShade; varying float vDist; varying float vFogDist; varying float vEmit; varying vec3 vInst;
 #if FANCY
 varying vec3 vWorldPos;
 #endif
@@ -247,9 +250,9 @@ void main() {
   col = mix(col, hot, glow);
   // lights punch through the haze: distant ships fade to their engine glow before vanishing
 #if FANCY
-  col = mix(col, fogC, smoothstep(uFogNear, uFogFar, vDist) * (1.0 - 0.7 * glow));
+  col = mix(col, fogC, smoothstep(uFogNear, uFogFar, vFogDist) * (1.0 - 0.7 * glow));
 #else
-  col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, vDist) * (1.0 - 0.7 * glow));
+  col = mix(col, uFogColor, smoothstep(uFogNear, uFogFar, vFogDist) * (1.0 - 0.7 * glow));
 #endif
   gl_FragColor = vec4(col, 1.0);
 }`;

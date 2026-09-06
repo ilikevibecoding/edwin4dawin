@@ -258,7 +258,9 @@ export class Sky {
     const cx = this.cloudOffset + Math.floor((camPos.x - this.cloudOffset) / W) * W - W;
     const cz = Math.floor(camPos.z / W) * W - W;
     this.clouds.position.set(cx, CLOUD_HEIGHT, cz);
-    const cloudCol = new THREE.Color(0.08, 0.09, 0.14).lerp(new THREE.Color(1, 1, 1), day).lerp(SUNSET, sunset * 0.5);
+    // sunset warms the clouds to a pale peach, never to the saturated sun colour (a lit deck seen from above used to
+    // read as an orange sea)
+    const cloudCol = new THREE.Color(0.08, 0.09, 0.14).lerp(new THREE.Color(1, 1, 1), day).lerp(new THREE.Color(1.0, 0.78, 0.6), sunset * 0.4);
     this.cloudMat.color.copy(cloudCol);
     this.cloudMat.opacity = 0.85;
   }
