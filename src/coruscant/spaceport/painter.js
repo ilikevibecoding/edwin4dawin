@@ -64,7 +64,7 @@ export const M = {
   GLOW: B.GLOW_PANEL, BLUE: B.GLOW_PANEL_BLUE, LAMP: B.CITY_LAMP, HOLO: B.HOLO_SIGN, CON: B.CONSOLE,
   CHR: B.CHROME, RED: B.PANEL_RED, BLK: B.PANEL_BLACK, VENT: B.VENT, SLAB: B.STONE_BRICK_SLAB, HP: B.HULL_PLATE,
   AIR: B.AIR, BARS: B.IRON_BARS, CRATE: B.CRATE, BARREL: B.BARREL, SHELF: B.SHELF, TABLE: B.TABLE, SIGN: B.WALL_SIGN,
-  ANVIL: B.ANVIL, FURNACE: B.FURNACE,
+  ANVIL: B.ANVIL, FURNACE: B.FURNACE, RAILB: B.RAIL,
 };
 // Floor markings on the dark deck plate: PANEL_STRIPE only shows its stripes on side faces (its top is dark
 // durasteel), so flush markings use light durasteel lines and red hazard cells; PANEL_STRIPE is used for kerbs.
@@ -92,6 +92,23 @@ export function wallNumber(p, n, x, y0, z0, id, back) {
   const s = String(n);
   for (let i = 0; i < s.length; i++) wallDigit(p, +s[i], x, y0, z0 + i * 4, id, back);
   return s.length * 4 - 1;
+}
+// ... and on a wall facing +z or -z (columns along x)
+export function wallDigitX(p, n, x0, y0, z, id, back) {
+  const d = DIGITS[n];
+  for (let r = 0; r < 5; r++) for (let c = 0; c < 3; c++) p.set(x0 + c, y0 + 4 - r, z, d[r * 3 + c] === '1' ? id : back);
+}
+export function wallNumberX(p, n, x0, y0, z, id, back) {
+  const s = String(n);
+  for (let i = 0; i < s.length; i++) wallDigitX(p, +s[i], x0 + i * 4, y0, z, id, back);
+  return s.length * 4 - 1;
+}
+// A lit sign board (dark backing, glow digits) for a number, standing on a post at (x, z): faces +-x when `alongZ`.
+export function numberBoard(p, n, x, z, y, alongZ, h = 3) {
+  const s = String(n), w = s.length * 4 - 1;
+  p.col(x, z, y, y + h - 1, M.DD);
+  if (alongZ) { p.box(x, y + h, z - 1, x, y + h + 6, z + w, M.BLK); wallNumber(p, n, x, y + h + 1, z, M.GLOW, M.BLK); }
+  else { p.box(x - 1, y + h, z, x + w, y + h + 6, z, M.BLK); wallNumberX(p, n, x, y + h + 1, z, M.GLOW, M.BLK); }
 }
 
 // A lamp post: dark post with a city lamp on top (standing on the surface `y`).
