@@ -51,10 +51,9 @@ void main() {
   vec3 wp = (uInvView * vec4(vpos, 1.0)).xyz;
   vec3 col = c.rgb;
   if (!seam) {
-    // clouds shade the ground: only the direct-sun share of the light is removed
+    // clouds shade the ground: only the direct-sun share of the light is removed (uSunShare, atmosphere.ts)
     float cs = cloudShadow(wp);
-    float sunShare = 0.62 * smoothstep(-0.05, 0.2, uSunDir.y);
-    col *= 1.0 - (1.0 - cs) * sunShare * uCloudShadowStrength;
+    col *= 1.0 - (1.0 - cs) * uSunShare * uCloudShadowStrength;
   }
   col = applyAerial(col, uCamPos, wp);
   gl_FragColor = vec4(col, 1.0);

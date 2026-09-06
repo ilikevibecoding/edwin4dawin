@@ -149,6 +149,7 @@ export class Atmosphere {
     /** Aerial perspective reaches full extinction over the last part of the view distance: x start (m), y 1 / ramp
      *  length. Kept in step with the main camera's far plane by PostPipeline.finish. */
     uFarDissolve: { value: new THREE.Vector2(0.55 * 60000, 1 / (0.4 * 60000)) },
+    uSunShare: { value: 0.6 },
   };
   cloudOffset = new THREE.Vector2();
   windDir = new THREE.Vector2(1, 0.35).normalize();
@@ -213,6 +214,14 @@ export class Atmosphere {
     u.uHazeColor.value.copy(hazeL);
     u.uSunHazeColor.value.copy(s.sunHaze).multiplyScalar(lerp(1, 0.5, grey));
     u.uGroundColor.value.copy(s.ground);
+    // what a cloud's shadow takes away: the direct beam's share of the irradiance on a horizontal receiver, from the
+    // same scale the surfaces are lit with (CSM irradiance vs the probe's cos-weighted mean, ~1.4x the luminance of
+    // the mid sky, times the IBL multiplier). 0.86 at clear noon (a cloud shadow as deep as a building's; the old
+    // fixed 0.62 left it a stop lighter), ~0.2 at 17:45 where the sky lights the ground more than the low sun does.
+    const eDirect = s.sunIntensity * Math.max(s.sunDir.y, 0);
+    const midSky = zl.clone().lerp(hl, 0.6);
+    const eSky = s.ambientIntensity * Math.PI * 1.4 * (midSky.r * 0.2126 + midSky.g * 0.7152 + midSky.b * 0.0722);
+    u.uSunShare.value = eDirect / Math.max(eDirect + eSky, 1e-4);
     // humid night air: distant city lights soften into the (city-lit) haze rather than staying pin sharp
     u.uHazeDensity.value = p.hazeDensity * (1 + 0.8 * s.night);
     // light pollution scale of the lit city; Sky.render derives the camera-relative glow from it every frame

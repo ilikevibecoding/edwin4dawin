@@ -43,6 +43,7 @@ uniform float uTime;
 uniform vec4 uCityGlow;      // light pollution footprint: xy world xz of the lit city's centre, z its radius (m), w strength (0 by day)
 uniform vec4 uCityGlowView;  // the same glow seen from the camera: xy horizontal unit direction to the centre, z angular width, w horizon radiance scale
 uniform vec2 uFarDissolve;   // aerial perspective reaches full extinction before the far plane: x start distance (m), y 1 / ramp length
+uniform float uSunShare;     // direct sun's share of the light on a horizontal receiver (what a cloud shadow removes)
 `;
 
 /** 2D cloud coverage field used for both the raymarched clouds' macro shape and the ground shadows.
