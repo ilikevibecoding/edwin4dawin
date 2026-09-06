@@ -66,7 +66,11 @@ the disaster rounds; each has a critic. Phase F is done first because everyone c
   people appear at the same places at the same time of day), capped at ~120 humanoids + 60 droids near the player.
 - **Schedules by building metadata**: every generated building already records `spots`, `beds`, `work`, `door` (same
   record shape as the town). Coruscant buildings add `lobby`, `elevator`, `balcony`, `hangar` spots so an NPC's day is
-  apartment → turbolift → skybridge → office → cantina → home.
+  apartment → turbolift → skybridge → office → cantina → home. Every `room` record also carries a `floor` box
+  (`{x, z, w, d, frac}`: the bounding box of walk-level cells that have a real floor and headroom; `frac` is the share
+  of the registered rectangle that qualifies) — planners pick idle/wander targets inside `floor`, never in the raw
+  rectangle, because raked tiers and rounded facades leave part of the rectangle in the air. Spots, work and bed
+  records are already pruned to standable cells at build time (`buildings.pruneMeta`).
 - **Navigation**: the current A* is per-block; Coruscant needs a two-level graph: a coarse graph of platforms/
   skybridges/lift shafts (precomputed per district from the layout) and local A* inside a building or on a platform.
   Turbolifts are vehicles NPCs can ride (same carry mechanic as the train).
