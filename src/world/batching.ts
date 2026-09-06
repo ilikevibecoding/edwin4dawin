@@ -27,7 +27,7 @@ export function createBatchedPbrMaterial(cacheKey: string, vertexColors: boolean
 }
 
 /** One shape of a composite unit geometry with the material it takes colour and parameters from. */
-export interface UnitPart { geometry: THREE.BufferGeometry; material: THREE.MeshStandardMaterial; emissive?: boolean }
+export interface UnitPart { geometry: THREE.BufferGeometry; material: THREE.MeshStandardMaterial; emissive?: boolean | number }
 
 /** Merges shapes of different materials into one non-indexed unit geometry that carries `color`,
  *  `aMatParams` and `aEmissive` per vertex, so instances of it draw with createBatchedPbrMaterial. */
@@ -42,7 +42,7 @@ export function mergeUnitParts(parts: UnitPart[]): THREE.BufferGeometry {
       nrm.push(n.getX(i), n.getY(i), n.getZ(i));
       col.push(c.r, c.g, c.b);
       par.push(roughness, metalness);
-      em.push(part.emissive ? 1 : 0);
+      em.push(typeof part.emissive === 'number' ? part.emissive : part.emissive ? 1 : 0);
     }
     if (g !== part.geometry) g.dispose();
   }
