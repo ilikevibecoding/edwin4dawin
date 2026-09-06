@@ -251,12 +251,13 @@ float slopePdfPeaked(vec2 sh, vec2 va, float st, float mss) {
 }
 // Sun glitter: the analytic anisotropic slope distribution of the unresolved facets (a smooth streak of
 // highlights toward the sun whose width follows the filtered slope variance) with a sparkle riding on it.
-// The sparkle is a world-anchored random slope field that carries a fixed share (SPARK_SHARE) of the slope
-// variance; the rest stays in the analytic lobe, which is therefore always wide enough that the field only
-// modulates the path (glints a few times brighter than the path around them, never a blown speck) instead
-// of thresholding it into contour worms. Only the two finest octaves the pixel footprint resolves are
-// evaluated (cells of 3-12 px: dots and short dashes that follow the water, a fine grain from altitude), the
-// coarsest fading out as the finer fades in so the texture slides with the distance without popping. The
+// The sparkle is a world-anchored random slope field that carries the share of the slope variance the sea
+// puts in waves of its cell sizes (SPARK_OCTAVE per octave below the spectral peak); the rest stays in the
+// analytic lobe, which is therefore always wide enough that the field only modulates the path (glints a few
+// times brighter than the path around them, never a blown speck) instead of thresholding it into contour
+// worms. Only the finest octaves the pixel footprint resolves are evaluated (cells of 2-8 px: dots and short
+// dashes that follow the water, a fine grain from altitude), the coarsest fading out as the finer fades in so
+// the texture slides with the distance without popping. The
 // field evolves as a slow Gaussian process in time and drifts with the wind, so glints wax and wane rather
 // than flicker, and camera motion only moves them with the water they sit on.
 // The cells are the crest segments of the short wind waves the glints ride on: world-fixed, aligned with the
@@ -269,7 +270,7 @@ float slopePdfPeaked(vec2 sh, vec2 va, float st, float mss) {
 // capped (in units of the sun irradiance) so no pixel outshines the sun path by more than a few times: past
 // 2.5 x E the tonemapper has long gone to white anyway, and the cap only bounds the bloom energy the path and
 // its glints feed (bloom stays a soft halo on the path and never bleeds over geometry next to it).
-const float SPARK_SHARE = 0.5;
+const float SPARK_OCTAVE = 0.12;
 const float GLITTER_CAP = 2.5;
 const float CREST = 2.5;
 // Slope offset (in the shader's slope convention: the facet normal is N.xz / N.y minus the result) of the
@@ -283,22 +284,28 @@ vec2 sparkleSlope(vec2 wp, vec2 dx, vec2 dy, float t, float mss, out float resol
   // the field rides downwind with the short waves (they travel toward -wd)
   vec2 gp = wp + wd * (0.9 * t);
   vec2 gq = vec2(dot(gp, wd), dot(gp, wc) / CREST);
-  // octaves of 0.7 m * 2^o (o <= 8): the finest whose cell spans more than 2 px fades in until it spans
-  // 4 px ('u') and carries most of the share (grain, not blobs), the next less, the third fades out as the
-  // first fades in
+  // octaves of 0.7 m * 2^o (-2 <= o <= 8, cells from 0.175 m): the finest whose cell spans more than 2 px
+  // fades in until it spans 4 px ('u') and carries most of the share (grain, not blobs), the next less, the
+  // third fades out as the first fades in
   float oF = log2(max(footEff / 0.7, 1e-4)) + 1.0;
   int o0 = int(floor(oF)) + 1;
   float u = float(o0) - oF;
-  if (o0 < 0) { o0 = 0; u = 1.0; }
+  if (o0 < -2) { o0 = -2; u = 1.0; }
   float w0 = smoothstep(0.0, 1.0, u);
+  // Each octave holds the share of the slope variance the sea puts in waves of its cell size: about the same
+  // per octave through the equilibrium range (SPARK_OCTAVE), next to nothing in waves longer than the
+  // spectral peak (~0.5 U^2 m). So from 30 m the 0.2-0.7 m cells carry a third of the unresolved variance and
+  // glint hard, from 1500 m the 10-50 m cells carry almost none: the sea from altitude is grain and gust
+  // mottling, not 100 m brush strokes of white.
+  float peakL = clamp(0.5 * uWindSpeed * uWindSpeed, 4.0, 60.0);
   for (int i = 0; i < 3; i++) {
     int o = o0 + i;
     if (o > 8) break;
     float fo = float(o);
     float cell = 0.7 * exp2(fo);
-    float f = SPARK_SHARE * 0.5;
+    float f = SPARK_OCTAVE * (1.0 - smoothstep(0.8 * peakL, 2.5 * peakL, cell));
     float w = i == 0 ? w0 : (i == 2 ? 0.45 * (1.0 - w0) : 0.75);
-    if (w < 0.003) continue;
+    if (w * f < 0.001) continue;
     vec2 q = gq / cell;
     // two independent value-noise vectors (0.214 rms per component) rotated by a slow phase: a unit-variance
     // Gaussian-like process whose rate follows the wave period of the cell size
@@ -554,6 +561,18 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   mss += a3 * a3 * (1.0 - w3 * w3);
   // capillary ripples are never resolved
   mss += 0.002 + 0.003 * windG * mix(0.3, 1.0, open);
+  // The short waves that make up the unresolved variance are bunched by the wave groups: rougher on the crests
+  // and front faces of the groups, glassier in the troughs and between them (hydrodynamic modulation, the same
+  // patchiness a slick shows). Cells a few wavelengths long along the wind and a couple across, travelling at
+  // the group speed. Read through the glitter this breaks the margins of a sun path into streaks across the
+  // waves with darker water between them (a rough cell reaches the sun from farther off the path than a glassy
+  // one); through the roughness of the sky reflection it mottles the far water the same way. Not evaluated
+  // once a pixel covers a whole group.
+  float grpF = 1.0 - smoothstep(8.0, 20.0, foot);
+  if (grpF > 0.001) {
+    float grpR = vnoise(vec2((dot(wp, wd) + 1.5 * t) / 40.0, dot(wp, wc) / 16.0) + 6.1);
+    mss *= mix(1.0, 0.55 + 0.9 * grpR, grpF);
+  }
 
   // ---- wakes: r = foam, gb = normal perturbation, a = coverage
   // the wake map is rendered top-down with screen-up = north (-Z), so v grows toward -Z
@@ -866,7 +885,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v10-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v11-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 
