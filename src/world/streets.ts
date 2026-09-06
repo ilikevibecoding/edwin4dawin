@@ -1031,6 +1031,10 @@ export class Streets {
     }
     const data = new Uint8Array(w * h);
     for (let i = 0; i < acc.length; i++) data[i] = Math.round(255 * Math.sqrt(Math.min(1, acc[i])));
+    // the border ring stays dark: the sampler clamps to the edge, so a lit border texel (a lamp within a pool radius
+    // of the rectangle) would streak along every road beyond it
+    for (let i = 0; i < w; i++) data[i] = data[(h - 1) * w + i] = 0;
+    for (let j = 0; j < h; j++) data[j * w] = data[j * w + w - 1] = 0;
     const tex = new THREE.DataTexture(data, w, h, THREE.RedFormat, THREE.UnsignedByteType);
     tex.minFilter = THREE.LinearFilter; tex.magFilter = THREE.LinearFilter;
     tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
