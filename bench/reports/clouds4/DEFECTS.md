@@ -123,3 +123,34 @@ Rejected / new defects:
 - light march on the smooth base (one fetch per short step; a pouch lit as if at the mean base is close to right);
 - cirrus: hazed with the physical optical depth to 9 km instead of `applyAerial` (D10), fibre octaves fade
   beyond 20–60 km so a 2.6 km fibre does not shimmer at a few pixels wide.
+
+### Round 6 results (stills `/tmp/clouds4/r6`, 1280×720 high, one persistent Chrome; crops `crops/r6_*`)
+Fixed: **D7** (no funnels in `under2`), **D8** (no radial streaks in `baselevel`), **D10** (veil visible in `skyup`,
+`island`, `cockpit`). `under`: the ceiling is a darker grey with 100–300 m relief and a ragged fringe instead of
+the baseline's pale plane with a straight edge. Sunset: bellies shaded, rim brighter next to the sun. Night: no change.
+
+New / remaining:
+- **D11 speckle band along silhouettes** (`under2`, the boundary between a near pouch and the far base): a 2–4 px
+  band of dark dots. The light march is reused for 2–3 samples, so a ray that leaves a lit fringe and enters the
+  dark far base keeps the fringe's `lt` for its first dense samples; whether that happens depends on the sample
+  phase (the per-pixel jitter), hence the dots.
+- **D12 dither hatching on distant clouds — regression** (`baselevel`, cumulus 8–10 km away): the diagonal
+  interleaved-gradient pattern shows through the cloud body. The far fine step is 150–220 m and the shape noise now
+  has 2.5× the contrast (normalised std 0.16 vs 0.063), so its 80–160 m features are point-sampled far below their
+  Nyquist rate and the per-pixel jitter turns the aliasing into structured noise. The baseline (365 m constant
+  steps, low-contrast noise, 286 m ramp) integrated a nearly smooth density and showed none. Same cause: the row
+  of bright beads along the sunset bases (rags lit by the grazing sun, one sample wide), and part of the cloudy
+  clip's frame-to-frame change (deck band mean |Δ| base 4.66, r5 5.58, r6 5.42 on 8-bit values).
+- **D13 cirrus reads as a uniform comb** (`skyup`): straight parallel fibres of even density over the whole upper
+  sky; real cirrus is patchy (clear areas between bands) with gently curved fibres.
+- **D9 remains**: 200 m under the base the relief is soft; the near-field ×5 worley (r3) hardly shows because a
+  36 m fine step point-samples an 8 m texel (pure aliasing), only the 12 m surface steps resolve it.
+- **Cost** (same Chrome, back to back): `under` base 872 ms → r6 1488 ms (+71 %). Attribution builds: without the
+  near-field fetch 1193, without the relief fetch 1213, light march reused one sample longer 1361, original ramp
+  1595 (noise). SwiftShader is fetch-bound: the two extra 3D fetches per base-zone sample and the light march are
+  the regression; aerial-a is unchanged (8465 → 7026, within noise), the bench views see clouds far away.
+
+Round 7 plan (sampling model): mipmapped noise with the fetch LOD set by the step (`textureLod`, the step's own
+box filter replaces `detFade` and removes the far aliasing), relief baked into the macro field (no relief fetch;
+the light march sees it for free), near-field fetch dropped (a finer worley octave in the detail channel instead,
+resolved by the surface steps only where they can), light march recomputed on re-entry and reused longer at depth.
