@@ -137,3 +137,70 @@ pixel there took 3–5 detail taps over the base's two, and the 2× anisotropy d
 
 Round 3 is served on 4602 and round 4 on 4603 so the A/B attributes the perf work; measured together when the
 gate frees a slot.
+
+Measured (the batch ran after the session was cut off): terrain pass B/A, ratio of medians over 6 interleaved
+rounds — round 3 suburb 1.346; round 4 suburb 1.291, beach 1.288 (round 0 was 1.391 / 1.285). The tap work of
+round 4 bought 5 points; the budget is 1.12, so the pass is still 17 points over. Draw calls identical (61 / 47).
+
+## Round 5 — the lead's half-cell change, the critic's coast and suburb findings (commits 1d096ae1 … 209f63fb)
+
+Merged the lead (fast-forward: the tip of round 4 was already in it). The lead's `MAP_HALF_CELL` puts texel i of
+every map texture at x = −HALF + i·CELL (the `heightAt()` convention); the detail bake evaluated its texels at
+(i + 0.5)·CELL, so streets, yard tones and trample were read 4.9 m off the road meshes — the bake now evaluates
+at i·CELL. Shore and dune work re-read against the shifted height: the beach profile is measured from the drawn
+waterline (h − 0.05 along the slope), which moved with the mesh, so nothing else needed to change.
+
+Critic (h03 visual-2 §11, h04 progress views), what is mine and what was done:
+- **Brown mud under the wooded keys (highway_200m, 120 m)** — mine: the canopy floor was the litter colour
+  (0.062, 0.045, 0.022, an orange-brown) over most of the closed hammock, and between the crowns it read as mud.
+  Now mostly shrub and fern understory (dark greens) with grey-brown litter in patches.
+- **Hard sand-to-canopy lines (shore_beach F2-H3, island_pass B3)** — shared: the trees have no trunks or
+  understory at the edge (Vegetation), and the ground under the edge trees was pale sand. The sandy fringe now
+  wanders ±0.4 m in height on the 20–125 m noises, ramps over 1.8 m of height instead of 1.1, and is covered
+  55 % by the litter under the canopy; on the beach zone itself the litter floor comes in under the canopy above
+  h 0.5–1.3. The trunks and the scrub band are requested from Vegetation (see REPORT).
+- **Identical islet rims (highway_aerial A3-H4)** — the rim *width* is the map's beach zone (map.ts, not mine);
+  the *look* was mine: one dry-sand albedo and one scrub line (8–25 m up, h 1–2) on every islet. A 300 m noise
+  now sets, per shore, how far the scrub and the dune grass come down (to 3–9 m and h 0.5–1.1 on the vegetated
+  shores) and the sand's tone (0.47 → 0.39 albedo on the grey shores). The constant-width bright *foam* band is
+  the water's (requested).
+- **Perfectly elliptical lagoon (cloudy C4-D4, highway_aerial D4-D5)** — not mine: the waterline is the height
+  field (map.ts); reported to the lead.
+- **Quay without fenders / bollards / tide stain (harbor A6-D8)** — not mine (quay geometry: city / props);
+  reported.
+- **Flat white port apron (harbor A5-D8)** — mine. The round-1 regrade had already taken the pavement to
+  0.135–0.093; now 6 m panel joints (pixel-widened, gone past 1.5 m/px), tyre-blackened lanes along the yard,
+  oil drips close up.
+- **Suburb lots flat lawns with boxes on them (foliage_suburb, highway_along)** — mine, and the biggest
+  change of the round: the terrain now knows the houses. `city.ts` collects every footprint it places
+  (`CityBuild.footprints`, one line in `place()`), `game.ts` hands them to `terrain.stampLots()` (one line), and
+  the terrain bakes a **lot map**: 2048² RGBA8 (4.9 m texels), each texel the house nearest to it within 21 m —
+  the offset to its centre (quantised on a grid shared by all texels, so every texel of a house decodes the same
+  centre and a hash of it picks the drive's side), its yaw over 2π, its half sizes (4 bits each). The suburb
+  ground reads it with one unfiltered fetch (foot < 2.5 m/px only) and lays, in the house's own frame: the drive
+  (2.8 m, concrete or asphalt by the hash) from the garage end of the front to the kerb, the front path (1 m),
+  a patio behind the back door, mulched beds with shrubs 0.25–1.7 m from the walls and the shade under the
+  eaves, and the lawn worn to soil along the drive. The houses' own placement RNG cannot be replayed on the
+  terrain, so this is the only route to features that line up with the instanced houses. Two one-line hooks
+  in shared files (city.ts, game.ts) — listed for the lead in the REPORT.
+- **Bare sand blotches on the island (cloudy A5-A6)** — mine: the sandy shore fringe was a height band
+  (h < 2.3) and on the low islands (1.5–2.5 m all over) it spread inland as pale blotches; it now also ends
+  30–70 m from the coast. The 125 m bare patches of the open ground belong to the dry ground only now, and the
+  suburb's sandy lots come from the baked per-yard tone (whole yards, on the grid) instead of noise blobs.
+
+A real compile check was added to the loop: the assembled terrain shaders go through glslang (WASM, Vulkan
+GLSL rules; uniforms blocked and bound by a wrapper) after the parser check — it caught a `vec2.z` swizzle in
+the yard code that the parser passed and that would have blanked the terrain in the integration build.
+
+## Round 6 — the pass budget, second pass (commits beeffc51, 2f9e9b4a)
+
+Cost structure first (a variant probe recompiles the shader with one feature stubbed out at a time and measures
+the pass interleaved with the unmodified one; see the measurement below when the gate gives a slot). Two changes
+that are wins whatever the breakdown says:
+- the zone id has its own R8 texture, fetched by texel (`texelFetch`): the id was read through a bilinear tap
+  at a texel centre (4 fetches and the lerps for a value that is one texel), twice near the water;
+- the 300 m patch noise (`fbm3`, three octaves of value noise per pixel for every land pixel) is baked into the
+  channel the id freed in the smooth-field texture and comes with the canopy tap; a 300 m field at 9.8 m
+  texels loses nothing.
+And the suburb's sandy-lot noise (`fbm3Band`, up to three octaves) is gone with the per-yard tone change of
+round 5.
