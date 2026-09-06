@@ -469,6 +469,12 @@ export class Sky {
   private readonly covRT: THREE.WebGLRenderTarget;
   private covBaked = false;
   private readonly covCenter = new THREE.Vector2();
+  /** The baked macro field the raymarch reads (x = raw coverage field, cloud space) with its window (centre in
+   *  cloud space, extent in metres), for shaders that mirror the clouds: the water reads one texel where it
+   *  would evaluate the ten noise octaves of cloudFieldRaw. The value objects are the live ones. */
+  get coverageField(): { texture: THREE.Texture; center: THREE.Vector2; extent: number } {
+    return { texture: this.covRT.texture, center: this.covCenter, extent: COV_EXTENT };
+  }
   private scale: number;
   private readonly envScene = new THREE.Scene();
   private readonly envMat: THREE.ShaderMaterial;

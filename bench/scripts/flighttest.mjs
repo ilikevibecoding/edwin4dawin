@@ -118,8 +118,11 @@ function suite() {
   {
     f.turbulence = ambientTurbulence;
     place(-500, 1.96, 3330, 86, 0, 0, 0, 0, 0);
+    // the datum is measured above the water surface under the aircraft (the same wave field the floats ride, swell
+    // included: FlightModel.surfaceAt), so a swell crest passing during the 2 s window does not move the datum
     let minY = Infinity, maxY = -Infinity; const ys = [], pitches = [];
-    sim('rest', 10, (t, T) => { minY = Math.min(minY, T.altitude); maxY = Math.max(maxY, T.altitude); if (t > 8) { ys.push(T.altitude); pitches.push(T.pitchAngle * R2D); } }, 6);
+    const datum = () => f.position.y - f.surfaceAt(f.position.x, f.position.z);
+    sim('rest', 10, (t, T) => { minY = Math.min(minY, T.altitude); maxY = Math.max(maxY, T.altitude); if (t > 8) { ys.push(datum()); pitches.push(T.pitchAngle * R2D); } }, 6);
     const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
     results.rest = { restY: r3(mean(ys)), restPitchDeg: r2(mean(pitches)), minY: r3(minY), maxY: r3(maxY), settledHeaveMm: r1((Math.max(...ys) - Math.min(...ys)) * 1000) };
   }

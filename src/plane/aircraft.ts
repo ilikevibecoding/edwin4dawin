@@ -32,6 +32,8 @@ export class Aircraft {
     const fwd = new THREE.Vector3(1, 0, 0).applyQuaternion(this.flight.quaternion);
     this.flight.velocity.copy(fwd).multiplyScalar(speed);
     this.flight.omega.set(0, 0, 0);
+    // a re-placed aircraft is sound (a wreck is only ever left behind by re-placing it)
+    this.flight.clearWreck();
     // seed the engine at its steady state for this throttle (idle floor 0.08 = 760 RPM on the tachometer); seeding
     // with the raw throttle made the RPM creep 600 -> 760 over the first second of every moored bench clip
     this.flight.rpm = throttle * 0.92 + 0.08;
