@@ -228,7 +228,7 @@ export class Game {
     await this.tick(progress, 'Paving sidewalks and hanging signals', 0.6);
     // sidewalks, curbs, signals, street furniture and the lamp plan (footings on the curb line) over the road graph;
     // low and unmirrored (the mirror image is far under its texel size for a curb)
-    this.streets = new Streets(this.map, network.graph, roadLights, this.city.markOccupied);
+    this.streets = new Streets(this.map, network.graph, roadLights, this.city.markOccupied, network.blocksByDistrict, this.city.occupied);
     for (const m of this.streets.materials) this.registerLit(m);
     this.streets.group.name = 'streets';
     this.scene.add(this.streets.group);

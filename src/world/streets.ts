@@ -3,7 +3,7 @@ import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { hash2 } from '../core/seed';
 import { clamp } from '../core/noise';
 import { Zone, type Vec2, type WorldMap } from './map';
-import { GLSL_LIGHT_POOLS, chainCross, chainFrame, frameAt, roadEdgeY, rowPositions, type RoadChain, type RoadCorner, type RoadGraph, type RoadLightUniforms, type RoadNode, type RoadRay } from './roads';
+import { GLSL_LIGHT_POOLS, chainCross, chainFrame, frameAt, roadEdgeY, rowPositions, type Block, type RoadChain, type RoadCorner, type RoadGraph, type RoadLightUniforms, type RoadNode, type RoadRay } from './roads';
 import { balanceGroundIbl } from './terrain';
 import { THIN_VERTEX_MAIN, THIN_VERTEX_PARS, cellKey } from './batching';
 import { LAYER_CAMERA, layerMask, maskCasts, type ViewCull } from './culling';
@@ -44,7 +44,11 @@ const SIGNAL_GREEN = 24, SIGNAL_AMBER = 4, SIGNAL_RED = 2;
 const SIGNAL_HALF = SIGNAL_GREEN + SIGNAL_AMBER + SIGNAL_RED;
 
 /** sidewalk kinds carried in `aSw.z` */
-const K_WALK = 0, K_PROMENADE = 1, K_APRON = 3, K_PARAPET = 4;
+const K_WALK = 0, K_PROMENADE = 1, K_APRON = 3, K_PARAPET = 4, K_LOT = 5, K_PLAZA = 6;
+/** parked cars, planters and benches of the plazas and lots are drawn within this range */
+const YARD_FAR = 650;
+/** paving sits this far over the ground (the terrain mesh is coarser than heightAt at distance) */
+const PAVE_CLEAR = 0.08;
 
 // ------------------------------------------------------------------ materials
 
@@ -88,6 +92,32 @@ const SW_MAIN = /* glsl */ `
     // apron: packed earth and worn grass between the slab and the lots
     col = mix(vec3(0.30, 0.29, 0.22), vec3(0.34, 0.40, 0.20), smoothstep(0.35, 0.65, fbm3(wp * 0.6 + 3.0))) * (0.9 + 0.2 * grain);
     joint = 0.0;
+  } else if (kind > 4.5 && kind < 5.5) {
+    // surface parking lot (across = bay direction u, along = row direction v from the lot corner): aged asphalt with
+    // 2.6 m bay lines in double rows of 5 m bays either side of a 6.5 m aisle (16.5 m period), the bays a shade
+    // darker than the driven aisles, oil drips at the bay heads; the lines are box-filtered so from the air the lot
+    // keeps a faint even stripe instead of sparkling
+    vec3 asph = mix(vec3(0.11, 0.11, 0.115), vec3(0.17, 0.168, 0.165), n) * (0.92 + 0.16 * grain);
+    asph *= 0.88 + 0.24 * fbm3(wp * 0.02 + 4.0);
+    float vv = mod(along, 16.5);
+    float inBay = step(vv, 5.0) + step(11.5, vv);
+    float bayLine = swLine((fract(across / 2.6) - 0.5) * 2.6, 0.06, fwA) * inBay;
+    float rowLine = max(swLine(vv - 5.0, 0.06, fwL), swLine(vv - 11.5, 0.06, fwL));
+    float paint = max(bayLine, rowLine) * (0.55 + 0.45 * smoothstep(0.3, 0.7, fbm3(wp * 0.4 + 6.0)));
+    float drip = smoothstep(0.5, 0.8, vnoise(wp * 0.9)) * inBay * (step(vv, 1.6) + step(14.9, vv)) * (1.0 - smoothstep(0.3, 1.0, fp));
+    col = mix(asph * (1.0 - 0.07 * inBay - 0.35 * drip), vec3(0.8, 0.8, 0.78), paint * 0.85);
+    joint = 0.0;
+  } else if (kind > 5.5) {
+    // plaza: 0.9 m concrete pavers in two greys with a darker band every fourth course, albedo 0.28-0.38 (darker than
+    // the walks, so the plazas stop reading as white from the air); paver tones and joints band-limited by footprint
+    vec2 pv = floor(vec2(across, along) / 0.9);
+    float pid = hash12(pv + kind);
+    float bandP = step(mod(pv.y, 4.0), 0.5);
+    vec3 pav = mix(vec3(0.28, 0.275, 0.26), vec3(0.38, 0.37, 0.35), n) * (0.94 + 0.12 * grain);
+    pav *= 1.0 + (0.16 * pid - 0.08) * slabFade;
+    pav = mix(pav, vec3(0.21, 0.21, 0.20), bandP * 0.55);
+    joint = max(swLine((fract(along / 0.9) - 0.5) * 0.9, 0.01, fwL), swLine((fract(across / 0.9) - 0.5) * 0.9, 0.01, fwA)) * fade;
+    col = pav;
   } else if (kind > 3.5) {
     // parapet: cast stone
     col = mix(vec3(0.62, 0.60, 0.56), vec3(0.70, 0.68, 0.63), n) * (0.95 + 0.1 * grain);
@@ -421,7 +451,11 @@ const C = {
   hydrant: new THREE.Color(0xd23a2a),
   cabinet: new THREE.Color(0x8f9a92),
   stone: new THREE.Color(0xa9a49a),
+  shrub: new THREE.Color(0x2f5a22),
+  glassDark: new THREE.Color(0x1c2026),
 };
+/** parked-car paints, weighted toward the whites, silvers and greys of a real lot */
+const CAR_PAINT = [0xe8e8e4, 0xdcdcd8, 0xb9bcc0, 0x9a9da2, 0x5a5d62, 0x2b2d31, 0x1a1a1d, 0xa8241c, 0x27406e, 0x2f5b3a, 0xc9b58a, 0x7a3b2a].map((c) => new THREE.Color(c));
 
 // ------------------------------------------------------------------ the streets system
 
@@ -435,6 +469,8 @@ interface StreetCell {
   walk: THREE.Mesh | null;
   large: THREE.Mesh | null;
   small: THREE.Mesh | null;
+  /** parked cars, planters, benches of the plazas and lots (drawn within YARD_FAR, never cast) */
+  yard: THREE.Mesh | null;
   height: number;
 }
 
@@ -468,8 +504,8 @@ export class Streets {
   readonly kitMaterial: THREE.MeshStandardMaterial;
   readonly uniforms = { uSignalTime: { value: 0 } as THREE.IUniform<number>, uNight: { value: 0 } as THREE.IUniform<number>, uFocalPx: { value: 1000 } as THREE.IUniform<number> };
   private readonly cells: StreetCell[] = [];
-  private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; small: KitSoup }>();
-  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0 };
+  private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; small: KitSoup; yard: KitSoup }>();
+  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0 };
   private readonly roads: RoadIndex;
   /** debug: `?dbg=nopools` turns the lamp pools off */
   poolsEnabled = true;
@@ -478,7 +514,9 @@ export class Streets {
   /** the lamp irradiance map's texture (owned here, sampled through `lights`) */
   private lampMap: THREE.DataTexture | null = null;
 
-  constructor(private readonly map: WorldMap, private readonly graph: RoadGraph, private readonly lights: RoadLightUniforms, private readonly markOccupied: (x: number, z: number, r: number) => void) {
+  /** `blocks`: the district grid blocks (centreline to centreline, district frame) and `occupied`: the city's footprint
+   *  grid, for the plazas and surface lots dressed over the free ground of the dense blocks */
+  constructor(private readonly map: WorldMap, private readonly graph: RoadGraph, private readonly lights: RoadLightUniforms, private readonly markOccupied: (x: number, z: number, r: number) => void, blocks: Map<string, Block[]> = new Map(), occupied: (x: number, z: number) => boolean = () => false) {
     this.walkMaterial = createSidewalkMaterial(lights);
     this.kitMaterial = createKitMaterial(this.uniforms);
     this.materials.push(this.walkMaterial, this.kitMaterial);
@@ -499,6 +537,7 @@ export class Streets {
       this.planInterchangeMasts(node);
     }
     this.buildPromenade();
+    this.buildPlazas(blocks, occupied);
     this.flush();
     this.buildLampMap();
     this.counts.lamps = this.lamps.length;
@@ -559,10 +598,10 @@ export class Streets {
     return c;
   }
 
-  private soupsAt(x: number, z: number): { walk: WalkSoup; large: KitSoup; small: KitSoup } {
+  private soupsAt(x: number, z: number): { walk: WalkSoup; large: KitSoup; small: KitSoup; yard: KitSoup } {
     const key = cellKey(x, z, CELL);
     let b = this.builds.get(key);
-    if (!b) { b = { walk: new WalkSoup(), large: new KitSoup(), small: new KitSoup() }; this.builds.set(key, b); }
+    if (!b) { b = { walk: new WalkSoup(), large: new KitSoup(), small: new KitSoup(), yard: new KitSoup() }; this.builds.set(key, b); }
     return b;
   }
 
@@ -1070,6 +1109,163 @@ export class Streets {
     }
   }
 
+  // ---------------------------------------------------------------- plazas and surface lots
+
+  /** The free ground of the dense districts' blocks: downtown blocks with buildings get paved plazas with planters and
+   *  benches around the free cells, empty blocks (all of them downtown, half of them in the mid-rise rings) become
+   *  striped surface lots with parked cars and their own lamps, and the downtown district's margin beyond its last
+   *  block row (the blank apron the aerial views look across) is ringed with lots. Paving is a 10 m grid of quads
+   *  riding PAVE_CLEAR over the ground, refined to 2.5 m along the roads and stopped at the back of every sidewalk. */
+  private buildPlazas(blocks: Map<string, Block[]>, occupied: (x: number, z: number) => boolean): void {
+    for (const d of this.map.districts) {
+      if (!DENSE.has(d.zone)) continue;
+      const list = blocks.get(d.id);
+      if (!list?.length) continue;
+      const c = Math.cos(d.rot), s = Math.sin(d.rot);
+      const toWorld = (lx: number, lz: number): Vec2 => [d.cx + lx * c - lz * s, d.cz + lx * s + lz * c];
+      type Rect = { x0: number; x1: number; z0: number; z1: number; streetWidth: number; margin: boolean };
+      const rects: Rect[] = list.map((b) => ({ ...b, margin: false }));
+      if (d.zone === Zone.DOWNTOWN) {
+        const zMax = Math.max(...list.map((b) => b.z1)), zMin = Math.min(...list.map((b) => b.z0));
+        const xMax = Math.max(...list.map((b) => b.x1)), xMin = Math.min(...list.map((b) => b.x0));
+        const cols = [...new Map(list.map((b) => [b.x0, b] as const)).values()], rows = [...new Map(list.map((b) => [b.z0, b] as const)).values()];
+        const sw = list[0].streetWidth;
+        if (d.hh - zMax > 45) for (const b of cols) rects.push({ x0: b.x0, x1: b.x1, z0: zMax, z1: d.hh - 6, streetWidth: sw, margin: true });
+        if (zMin + d.hh > 45) for (const b of cols) rects.push({ x0: b.x0, x1: b.x1, z0: -d.hh + 6, z1: zMin, streetWidth: sw, margin: true });
+        if (d.hw - xMax > 45) for (const b of rows) rects.push({ x0: xMax, x1: d.hw - 6, z0: b.z0, z1: b.z1, streetWidth: sw, margin: true });
+        if (xMin + d.hw > 45) for (const b of rows) rects.push({ x0: -d.hw + 6, x1: xMin, z0: b.z0, z1: b.z1, streetWidth: sw, margin: true });
+      }
+      const walkBack = CURB_TOP + walkWidth(d.zone) + 0.6; // the sidewalk profile ends 0.6 m of apron behind the slab
+      for (const r of rects) {
+        // interior of the rect: streets run along its edges (centrelines), the margin strips have one open side
+        const inset = r.streetWidth / 2 + walkBack + 0.1;
+        const u0 = r.x0 + inset, u1 = r.x1 - inset, v0 = r.z0 + inset, v1 = r.z1 - inset;
+        if (u1 - u0 < 14 || v1 - v0 < 14) continue;
+        const h = hash2(Math.round(r.x0 + d.cx), Math.round(r.z0 + d.cz), 17);
+        // free-ground sampling on a 5 m grid (land only): the ratio decides what the block is
+        const nu = Math.ceil((u1 - u0) / 5), nv = Math.ceil((v1 - v0) / 5);
+        const free = new Uint8Array(nu * nv);
+        let land = 0, nFree = 0;
+        for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+          const [wx, wz] = toWorld(u0 + (i + 0.5) * 5, v0 + (j + 0.5) * 5);
+          if (this.map.heightAt(wx, wz) < 1) continue;
+          const isFree = !occupied(wx, wz);
+          if (isFree) free[j * nu + i] = 1;
+          // the ratio ignores the band along the streets: the game marks every road occupied 3 m past its edge in
+          // 10 m cells, which would count a quarter of an empty block as built
+          if (this.roads.distance(wx, wz) < 9) continue;
+          land++;
+          if (isFree) nFree++;
+        }
+        if (land < 0.5 * nu * nv) continue;
+        const ratio = nFree / land;
+        let kind: 'lot' | 'plaza' | null = null;
+        if (r.margin) kind = h < 0.65 ? 'lot' : null;
+        else if (ratio > 0.85) kind = d.zone === Zone.DOWNTOWN || h < 0.5 ? 'lot' : null;
+        else if (d.zone === Zone.DOWNTOWN && ratio > 0.12) kind = 'plaza';
+        if (!kind) continue;
+        this.pave(toWorld, u0, v0, u1, v1, kind === 'lot' ? K_LOT : K_PLAZA, walkBack);
+        if (kind === 'lot') { this.counts.lots++; this.parkCars(toWorld, u0, v0, u1, v1, occupied, h); }
+        else { this.counts.plazas++; this.dressPlaza(toWorld, u0, v0, nu, nv, free, h); }
+      }
+    }
+  }
+
+  /** Paving quads over [u0,u1] x [v0,v1] of the district frame: 10 m cells, split to 2.5 m where a road crosses, no
+   *  quad within `clear` of a carriageway edge (that band is the sidewalk's). aSw carries (u, v, kind, 0). */
+  private pave(toWorld: (u: number, v: number) => Vec2, u0: number, v0: number, u1: number, v1: number, kind: number, clear: number): void {
+    const [cx, cz] = toWorld((u0 + u1) / 2, (v0 + v1) / 2);
+    const soup = this.soupsAt(cx, cz).walk;
+    const lift = PAVE_CLEAR + (kind === K_PLAZA ? 0.01 : 0);
+    const ok = (u: number, v: number) => { const [x, z] = toWorld(u, v); return this.roads.distance(x, z) >= clear + 0.1 && this.map.heightAt(x, z) >= 0.9; };
+    const vert = (u: number, v: number) => {
+      const [x, z] = toWorld(u, v);
+      return soup.vert({ x, y: this.map.heightAt(x, z) + lift, z, nx: 0, ny: 1, nz: 0, across: u - u0, along: v - v0, kind, w: 0 });
+    };
+    let tris = 0;
+    const cell = (ua: number, va: number, size: number): void => {
+      const ub = Math.min(ua + size, u1), vb = Math.min(va + size, v1);
+      if (ub - ua < 0.5 || vb - va < 0.5) return;
+      const um = (ua + ub) / 2, vm = (va + vb) / 2;
+      if (ok(ua, va) && ok(ub, va) && ok(ua, vb) && ok(ub, vb) && ok(um, vm)) {
+        soup.quad(vert(ua, va), vert(ub, va), vert(ub, vb), vert(ua, vb), 0, 1, 0, 2);
+        tris += 2;
+      } else if (size > 2.6) {
+        const half = size / 2;
+        cell(ua, va, half); cell(ua + half, va, half); cell(ua, va + half, half); cell(ua + half, va + half, half);
+      }
+    };
+    for (let v = v0; v < v1; v += 10) for (let u = u0; u < u1; u += 10) cell(u, v, 10);
+    this.counts.paveTriangles += tris;
+  }
+
+  /** Parked cars in the bays of a lot (rows of 5 m bays along u either side of 6.5 m aisles, 16.5 m period along v,
+   *  42 % of the bays taken), with a street lamp on the line between the bay rows every 14 bays. */
+  private parkCars(toWorld: (u: number, v: number) => Vec2, u0: number, v0: number, u1: number, v1: number, occupied: (x: number, z: number) => boolean, h: number): void {
+    const [cx, cz] = toWorld((u0 + u1) / 2, (v0 + v1) / 2);
+    const soup = this.soupsAt(cx, cz).yard;
+    const rot = Math.atan2(toWorld(1, 0)[1] - toWorld(0, 0)[1], toWorld(1, 0)[0] - toWorld(0, 0)[0]); // world yaw of +u
+    const uYaw = -rot; // frame(): +x along (cos yaw, 0, -sin yaw)
+    let n = 0;
+    for (let vs = v0 + 1; vs + 16.5 <= v1 - 1; vs += 16.5) {
+      for (let i = 0; ; i++) {
+        const u = u0 + 1.4 + i * 2.6;
+        if (u + 1.3 > u1 - 1) break;
+        for (const half of [0, 1]) {
+          const k = hash2(Math.round(u * 10), Math.round((vs + half) * 10), 5);
+          if (k < 0.58) continue;
+          const vc = vs + (half ? 14.0 : 2.5);
+          const [x, z] = toWorld(u + (k - 0.7) * 0.3, vc);
+          if (occupied(x, z) || !this.roads.clear(x, z, 1)) continue;
+          const y = this.map.heightAt(x, z) + PAVE_CLEAR;
+          // nose away from the aisle; the body along v, so the frame's +x is turned to v (+u yaw - 90 deg)
+          const f = frame(x, y, z, uYaw - Math.PI / 2 + (hash2(i, half, 9) - 0.5) * 0.06);
+          const paint = CAR_PAINT[Math.floor(hash2(Math.round(u * 3), Math.round(vc * 3), 11) * CAR_PAINT.length) % CAR_PAINT.length];
+          part(soup, UNIT.box, f, 0, 0.55, 0, 4.4, 0.7, 1.8, paint, 0.35, 0.6);
+          part(soup, UNIT.box, f, half ? 0.2 : -0.2, 1.22, 0, 2.5, 0.62, 1.62, C.glassDark, 0.3, 0.5);
+          n++;
+        }
+      }
+      // lamps on the line between the back-to-back bay rows, on a bay boundary every 14 bays
+      for (let m = 4 + Math.floor(h * 6); u0 + 0.1 + m * 2.6 < u1 - 4; m += 14) {
+        const [x, z] = toWorld(u0 + 0.1 + m * 2.6, vs);
+        this.lamp(x, this.map.heightAt(x, z) + PAVE_CLEAR, z, uYaw + Math.PI / 2, 'street');
+      }
+    }
+    this.counts.cars += n;
+  }
+
+  /** Planters (concrete boxes with a clipped shrub) and benches over the free 5 m cells of a plaza: along the building
+   *  frontages in one cell of three, in the open in one of twelve. The planters' cells are marked occupied. */
+  private dressPlaza(toWorld: (u: number, v: number) => Vec2, u0: number, v0: number, nu: number, nv: number, free: Uint8Array, h: number): void {
+    const [cx, cz] = toWorld(u0 + nu * 2.5, v0 + nv * 2.5);
+    const soup = this.soupsAt(cx, cz).yard;
+    const rot = Math.atan2(toWorld(1, 0)[1] - toWorld(0, 0)[1], toWorld(1, 0)[0] - toWorld(0, 0)[0]);
+    const at = (i: number, j: number) => (i < 0 || j < 0 || i >= nu || j >= nv ? 1 : free[j * nu + i]);
+    let n = 0;
+    for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) {
+      if (!free[j * nu + i]) continue;
+      const frontage = !at(i - 1, j) || !at(i + 1, j) || !at(i, j - 1) || !at(i, j + 1);
+      const k = hash2(i, j, Math.round(h * 1000));
+      if (k > (frontage ? 0.33 : 0.08)) continue;
+      const [x, z] = toWorld(u0 + (i + 0.5) * 5, v0 + (j + 0.5) * 5);
+      if (!this.roads.clear(x, z, 2.2)) continue;
+      const y = this.map.heightAt(x, z) + PAVE_CLEAR + 0.01;
+      const f = frame(x, y, z, -rot + (k > 0.15 ? Math.PI / 2 : 0));
+      part(soup, UNIT.box, f, 0, 0.28, 0, 1.6, 0.56, 1.6, C.concrete, 0.9, 0);
+      part(soup, UNIT.box, f, 0, 0.78, 0, 1.4, 0.46, 1.4, C.shrub, 0.95, 0);
+      if (hash2(j, i, 4) < 0.5) {
+        // bench beside the planter, facing the same way
+        part(soup, UNIT.box, f, 1.7, 0.45, 0, 0.45, 0.05, 1.7, C.wood, 0.85, 0);
+        part(soup, UNIT.box, f, 1.7, 0.22, 0.7, 0.4, 0.44, 0.06, C.dark, 0.6, 0.6);
+        part(soup, UNIT.box, f, 1.7, 0.22, -0.7, 0.4, 0.44, 0.06, C.dark, 0.6, 0.6);
+      }
+      this.markOccupied(x, z, 1.2);
+      n++;
+    }
+    this.counts.planters += n;
+  }
+
   // ---------------------------------------------------------------- lamp irradiance map
 
   /** Splat every planned lamp's pool into the ground irradiance map the road / sidewalk shaders sample at night. */
@@ -1128,7 +1324,7 @@ export class Streets {
 
   private flush(): void {
     for (const [key, b] of this.builds) {
-      const cell: StreetCell = { key, box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, walk: null, walkFar: null, large: null, small: null, height: 0 };
+      const cell: StreetCell = { key, box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, walk: null, walkFar: null, large: null, small: null, yard: null, height: 0 };
       const mk = (g: THREE.BufferGeometry | null, mat: THREE.Material, name: string, casts: boolean): THREE.Mesh | null => {
         if (!g) return null;
         const m = new THREE.Mesh(g, mat);
@@ -1149,9 +1345,11 @@ export class Streets {
       // the small soup (visors, pedestrian heads, buttons, name blades, stop signs) never casts: nothing in it is
       // worth a 0.4 m shadow texel, and drawn into two cascades it cost as much again as the whole street pass
       cell.small = mk(b.small.build(), this.kitMaterial, 'street-kits-small', false);
+      cell.yard = mk(b.yard.build(), this.kitMaterial, 'street-yards', false);
       this.counts.walkTriangles += b.walk.triangles;
       this.counts.kitTriangles += b.large.triangles + b.small.triangles;
-      if (!cell.walk && !cell.large && !cell.small) continue;
+      this.counts.yardTriangles += b.yard.triangles;
+      if (!cell.walk && !cell.large && !cell.small && !cell.yard) continue;
       const sphere = cell.box.getBoundingSphere(new THREE.Sphere());
       cell.center.copy(sphere.center); cell.r = sphere.radius; cell.height = cell.box.max.y - cell.box.min.y;
       this.cells.push(cell);
@@ -1192,6 +1390,7 @@ export class Streets {
       };
       set(c.large, inView);
       if (c.small) c.small.visible = inView && d < SMALL_FAR; // camera layer only (see flush)
+      if (c.yard) c.yard.visible = inView && d < YARD_FAR;
     }
     void camPos;
   }
