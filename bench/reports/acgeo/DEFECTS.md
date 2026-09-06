@@ -54,3 +54,73 @@ Strongest giveaways, ranked by what they cost at 20–200 m:
 - Why: every element is on a real R-985 Beaver cowl; the open inlet with the engine visible inside is what makes a
   radial nose read as an engine instead of a cap.
 - Result / score: pending stills.
+
+## R3 — one sheen everywhere (the protocol's hard failure) → finish varies per material and per region
+
+- Wrong: the paint material had a single clear-coat roughness, one base roughness and metalness 0 over the whole
+  body and wing; the wear was a handful of roughness dots. Every surface caught the sun the same way.
+- Changed (`textures/fuselage.ts`, `textures/wing.ts`, `textures/common.ts` `chips`, `parts/materials.ts`):
+  - clear-coat roughness by region: roof and tail-cone top chalked by the sun (0.30) fading down the shoulder, waxed
+    white sides (0.11), yellow belly band chalked and spray-dulled (0.22); wing: chalked upper skins, waxed
+    undersides, its own tail values; every skin panel then differs by up to ±0.055 (repainted / polished at different
+    times) and the rivet seams and worn zones are duller;
+  - base roughness: panel-by-panel variation, rougher seams, spray-dulled belly, scratches, grime;
+  - chipped paint down to bare metal (metalness 1, no clear coat through the packed map) at the bowl joint, the
+    boarding steps and door sills, the door handle, the cowl fastener rows, the wing and tail leading edges;
+  - the bare bowl is metal (R2), the anti-glare panel a flat lacquer at a third of the coat's gloss.
+- Why: a real airframe is many finishes — waxed sides next to a chalked roof, bare metal where hands and stones
+  hit it — and the eye reads the differences in highlight shape as "painted aluminium" long before it reads rivets.
+- Result / score: pending stills.
+
+## R4 — control surfaces hang on nothing; no wicks, no antennas, a bare pitot line
+
+- Wrong: flap / aileron / elevator / rudder gaps with no hinge hardware, no trim tabs, nothing trailing from the
+  tips; the pitot was a lone tube.
+- Changed (`parts/wing.ts`, `parts/tail.ts`, `geometry/wing.ts` `withPaint`): external plate hinge brackets under
+  the trailing edge (three per flap, two per aileron: the DHC-2's slotted flaps and drooping ailerons hang below the
+  wing), hinge fittings bridging the elevator and rudder gaps, elevator trim tabs (hinge lines painted in the tail
+  band) with horn and pushrod actuators, static wicks on the wing, stabiliser and fin tips, a pitot mast under the
+  port wing, the ADF sense-antenna mast and wire to the fin, a VHF blade and GPS puck on the roof.
+- Why: these are the small silhouette breaks a chase camera sees against the sky — the brackets under the flaps
+  and the wire to the fin especially.
+- Result / score: pending stills.
+
+## R5 — a painted door outline, no handle, no filler caps
+
+- Wrong: the door was an outline stroke in the albedo; nothing to grab; no fuel filler anywhere.
+- Changed (`parts/fuselage.ts` `buildFittings`, `textures/fuselage.ts`): the seam is a groove with the door skin's
+  edge standing a hair proud (height map) plus the dark slot in the albedo, running from the door's bottom line up
+  both window pillars to a header over the window; exterior paddle handle in its recess plate, two external hinges
+  on the front edge; three belly-tank filler caps in dark rings on the port lower body (a DHC-2 fuels from the left
+  side into fuselage belly tanks), each turned to the skin's normal.
+- Result / score: pending stills.
+
+## R6 — float rig: box cleats, no hatches, a slab water rudder, no cables, no cross wires
+
+- Wrong: cleats were 14 cm boxes, no deck hatches, the water rudder a 20×30 cm box on a post, no steering cables,
+  the only wires the horizontal X between the spreader bars, no spray rails.
+- Changed (`parts/floats.ts`, `geometry/floats.ts` `deckHeight` / `chineAt` / `sprayRailGeometry`):
+  - spray rails along both forebody chines from the bow to the step (a 4 cm strip drooping 12 mm);
+  - horn cleats (base, stem, bar with upturned tapered tips) at bow and stern and two on each outboard deck edge,
+    each leaning with the deck's crown; six flush pump-out covers per float (rubber seal ring, cap, slot) along
+    the inboard edge of the walkway, one per watertight compartment;
+  - water rudders rebuilt: two transom brackets, a vertical hinge post, a balanced blade (extruded outline) below
+    the keel line, a steering cross-horn above the deck; steering cables from both horn ends forward along the deck
+    to fairleads by the rear strut, the inboard one continuing up alongside the rear main strut to the belly;
+  - transverse cross wires at both strut stations from each belly pad to the opposite float's spreader-bar saddle
+    (the X between the floats seen from ahead and astern), with turnbuckles.
+- Why: every item is on an EDO 4580 installation; the cables and the X wires are what the rig view (astern, low)
+  reads first. Floats and wheels themselves untouched (protected).
+- Result / score: pending stills.
+
+## R7 — wing struts rising from the float decks; windows cut straight into the paint
+
+- Wrong: two struts per side ran from the outboard float deck edge up to the wing: nothing on a production
+  floatplane carries wing loads through the floats; the floats hang on their own struts. Window cut-outs had no
+  glazing rubber — bare paint edges against the glass.
+- Changed (`parts/floats.ts`, `textures/fuselage.ts`, `textures/common.ts` layout `windows`): one 15 × 5.5 cm faired
+  lift strut per side from a hinge block on the lower longeron just behind the door's aft post (x 0.88) to a cuff
+  under the wing's front spar at 40 % span, with end collars and a jury-strut pair from 62 % of its length up to
+  the wing at 10 % and 63 % chord; black rubber glazing seals ~3 cm wide around the three side windows (albedo,
+  matte and uncoated in the packed map, a soft lip in the height map).
+- Result / score: pending stills.
