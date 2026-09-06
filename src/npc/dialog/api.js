@@ -272,10 +272,14 @@ export class DialogAPI {
     if (this.game && this.game.events) this.game.events.emit('npc:talk', { npc: pp.id, lineId: line.id, text, voiced, ambient: !!opts.ambient });
     return { id: line.id, speaker: pp.id, name: pp.name, text, voiced, budgeted, duration: dur, cat: line.cat, trigger: line.trigger };
   }
-  // Is incidental chatter allowed for this live citizen right now? (talk box open within 16 blocks -> no)
+  // Is incidental chatter allowed for this live citizen right now? Not for the person in the talk box (they are in a
+  // conversation, their lines come through it) and not within 16 blocks of an open talk box.
   allowChatter(npc) {
     const tb = this.pop && this.pop.talkBox;
-    if (tb && tb.npc && tb.npc !== npc) { const o = tb.npc.pos; if ((o.x - npc.pos.x) ** 2 + (o.z - npc.pos.z) ** 2 < TALK_QUIET_RADIUS * TALK_QUIET_RADIUS) return false; }
+    if (tb && tb.npc) {
+      if (tb.npc === npc) return false;
+      const o = tb.npc.pos; if ((o.x - npc.pos.x) ** 2 + (o.z - npc.pos.z) ** 2 < TALK_QUIET_RADIUS * TALK_QUIET_RADIUS) return false;
+    }
     return true;
   }
   update(now) { this.now = now; this.registry.now = now; this.speech.update(); }

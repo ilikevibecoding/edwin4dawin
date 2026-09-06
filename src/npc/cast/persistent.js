@@ -68,7 +68,7 @@ export class CastRegistry {
     this.lotOf = new Map(pool.purposed.map(({ lot }) => [lot.id, lot]));
     this.plazas = layout.lots.filter((l) => l.kind === 'plaza');
     this.now = 0;                 // seconds of game time (advanced by the runtime)
-    this.dirty = false; this.persistTimer = null;
+    this.dirty = false; this.persistTimer = null; this.flushHook = null;
     this.stats = { anchors: 0, staff: 0, total: 0, lotsStaffed: 0, relationships: 0, adopted: 0, created: 0 };
     this.bindAnchors();
     this.bindStaff();
@@ -478,6 +478,8 @@ export class CastRegistry {
   // Persist through the save when the integrator's hook exists (save.setCast), else under our own localStorage key
   markDirty() {
     this.dirty = true;
+    // a reload or navigation inside the debounce window must not lose the last conversation
+    if (!this.flushHook && typeof addEventListener === 'function') { this.flushHook = () => this.persist(); addEventListener('pagehide', this.flushHook); }
     if (this.persistTimer || typeof setTimeout !== 'function') return;
     this.persistTimer = setTimeout(() => { this.persistTimer = null; this.persist(); }, 1500);
   }

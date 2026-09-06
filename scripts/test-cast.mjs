@@ -449,7 +449,8 @@ test('B10 local audio budget: one voice within 24 blocks; an open talk box silen
   pop.talkBox.npc = n1;
   assert.equal(a.allowChatter(n2), false, 'talk box 10 blocks away silences chatter');
   assert.equal(a.allowChatter(n3), true, 'talk box 100 blocks away does not');
-  assert.equal(a.allowChatter(n1), true, 'the person in the talk box may speak');
+  assert.equal(a.allowChatter(n1), false, 'the person in the talk box does not chatter: their lines come through the box');
+  pop.talkBox.npc = null; assert.equal(a.allowChatter(n1), true, 'box closed: chatter again');
   assert.equal(VOICE_RADIUS, 24); assert.equal(TALK_QUIET_RADIUS, 16);
   // voice off: text only, nothing reaches the engine, nothing in the manifest either (it was a choice, not a gap)
   a.speech.setSetting('voice', false); a.update(120);
@@ -574,6 +575,8 @@ if (base) {
     sub() { const el = document.getElementById('npc-subtitles'); return el ? { shown: el.style.display !== 'none', name: el.querySelector('#npc-subtitles-name').textContent, text: el.querySelector('#npc-subtitles-text').textContent, mode: el.querySelector('#npc-subtitles-mode').textContent, bottom: el.style.bottom, top: Math.round(el.getBoundingClientRect().top), boxTop: (() => { const b = document.getElementById('npc-talk'); return b && !b.hidden ? Math.round(b.getBoundingClientRect().top) : null; })() } : null; },
     // a software-rendered frame takes seconds here: keep the current subtitle up so the screenshots show it
     pin() { const c = game.dialog.speech.current; if (c) c.until += 120; },
+    // the npc:talk event of a line by its text (ambient chatter from others may follow it on the bus)
+    said(text) { const e = game.events.recent('npc:talk', 30).reverse().find((e) => e.args[0].text === text); return e ? { ...e.args[0], seq: e.seq } : null; },
     talk() { const r = document.getElementById('npc-talk'); return r ? { hidden: r.hidden, name: r.querySelector('.nt-name').textContent, role: r.querySelector('.nt-role').textContent, line: r.querySelector('.nt-line').textContent, opts: [...r.querySelectorAll('button')].map((b) => b.textContent.slice(1)) } : null; },
     // stand next to a live citizen with a clear line to their chest and aim at them
     approach(castId) {
@@ -633,8 +636,8 @@ if (base) {
       assert.ok(s1.shown && s1.name === 'Seli Noor:' && s1.text === t1.line, `subtitle ${JSON.stringify(s1)}`);
       assert.ok(/text only/.test(s1.mode), 'headless: the overlay says text only');
       assert.ok(s1.boxTop != null && s1.top < s1.boxTop && s1.bottom.startsWith('calc(18%'), `the subtitle sits above the talk box: ${JSON.stringify(s1)}`);
-      const ev1 = await evj(`game.events.recent('npc:talk', 3).map((e) => e.args[0])`);
-      assert.ok(ev1.length >= 1 && ev1[ev1.length - 1].lineId.startsWith('cast:seli_noor#greet') && ev1[ev1.length - 1].voiced === false, JSON.stringify(ev1));
+      const ev1 = await evj(`window.__t.said(${JSON.stringify(t1.line)})`);
+      assert.ok(ev1 && ev1.npc === 'cast:seli_noor' && ev1.lineId.startsWith('cast:seli_noor#greet') && ev1.voiced === false, JSON.stringify(ev1));
       first = t1.line;
       await page.screenshot(`${shots}/cast_seli_talk.png`);
       await ev(`window.__t.key('Digit1', '1')`);
@@ -642,19 +645,21 @@ if (base) {
       await ev('window.__t.pin()'); await ev('window.__t.frames(2)');
       assert.ok(!t2.hidden && t2.line !== t1.line && t2.line.length > 20, JSON.stringify(t2));
       assert.equal(s2.text, t2.line, 'subtitle follows the reply');
-      const ev2 = await evj(`game.events.recent('npc:talk', 3).map((e) => e.args[0].lineId)`);
-      assert.ok(ev2[ev2.length - 1].includes('#work'), `reply 1 is a work line: ${ev2}`);
+      const ev2 = await evj(`window.__t.said(${JSON.stringify(t2.line)})`);
+      assert.ok(ev2 && ev2.lineId.includes('#work'), `reply 1 is a work line: ${JSON.stringify(ev2)}`);
       await page.screenshot(`${shots}/cast_seli_reply.png`);
-      await ev(`window.__t.key('Digit2', '2')`); await ev('window.__t.frames(2)');
-      const ev3 = await evj(`game.events.recent('npc:talk', 4).map((e) => e.args[0].lineId)`);
-      assert.ok(/#(task|personal|event)/.test(ev3[ev3.length - 1]), `reply 2 is another category: ${ev3}`);
+      await ev(`window.__t.key('Digit2', '2')`);
+      const t3 = await evj('window.__t.talk()');
+      const ev3 = await evj(`window.__t.said(${JSON.stringify(t3.line)})`);
+      assert.ok(ev3 && /#(task|personal|event)/.test(ev3.lineId), `reply 2 is another category: ${JSON.stringify(ev3)}`);
+      await ev('window.__t.frames(2)');
       await ev(`window.__t.key('Escape', 'Escape')`);
       const t4 = await evj('window.__t.talk()'), s4 = await evj('window.__t.sub()');
       assert.equal(t4.hidden, true, 'closed');
       assert.equal(s4.bottom, '17%', 'no talk box: the subtitle is back at its usual height');
-      const ev4 = await evj(`game.events.recent('npc:talk', 5).map((e) => e.args[0].lineId)`);
-      assert.ok(ev4[ev4.length - 1].includes('#farewell'), `a farewell on leaving: ${ev4}`);
       assert.ok(s4.shown && s4.text.length > 5, 'the farewell is subtitled');
+      const ev4 = await evj(`window.__t.said(${JSON.stringify(s4.text)})`);
+      assert.ok(ev4 && ev4.npc === 'cast:seli_noor' && ev4.lineId.includes('#farewell'), `a farewell on leaving: ${JSON.stringify(ev4)}`);
       const h = await evj(`game.cast.get('cast:seli_noor').history`);
       assert.equal(h.talks, 1); assert.ok(h.firstMet && h.firstMet.hour > 0, JSON.stringify(h)); assert.equal(h.asked.work, 1);
       const rep = await evj('game.dialog.audioReport()');
@@ -669,12 +674,18 @@ if (base) {
     await testAsync('A6 (live) a second talk is a returning greeting, the history persists in storage', async () => {
       await ev(`game.coruscant.population.live.find((n) => n.person.cast === 'seli_noor').talkCooldown = 0`);
       await evj(`window.__t.approach('seli_noor')`); await ev('window.__t.frames(2)');
-      await ev('window.__t.click(2)'); await ev('window.__t.frames(2)');
+      await ev('window.__t.click(2)');
       const t = await evj('window.__t.talk()');
       assert.equal(t.hidden, false); assert.notEqual(t.line, first, 'a different greeting the second time');
-      const ev1 = await evj(`game.events.recent('npc:talk', 1).map((e) => e.args[0].lineId)`);
-      const line = await evj(`game.dialog.bankFor('cast:seli_noor').find((l) => l.id === '${ev1[0]}')`);
-      assert.ok(line.trigger === 'greet' && !(line.when && line.when.met === 'first'), `not a first-meeting line: ${JSON.stringify(line.when)}`);
+      const ev1 = await evj(`window.__t.said(${JSON.stringify(t.line)})`);
+      assert.ok(ev1 && ev1.npc === 'cast:seli_noor', JSON.stringify(ev1));
+      const line = await evj(`game.dialog.bankFor('cast:seli_noor').find((l) => l.id === ${JSON.stringify(ev1.lineId)})`);
+      assert.ok(line && line.trigger === 'greet' && !(line.when && line.when.met === 'first'), `not a first-meeting line: ${JSON.stringify(line && line.when)}`);
+      // the person in the talk box does not chatter: after a while no ambient line of hers follows the greeting
+      await ev('window.__t.frames(3)');
+      const hers = await evj(`game.events.recent('npc:talk', 50).filter((e) => e.seq > ${ev1.seq} && e.args[0].npc === 'cast:seli_noor' && e.args[0].ambient).map((e) => e.args[0].lineId)`);
+      assert.equal(hers.length, 0, `ambient lines from the person in the box: ${JSON.stringify(hers)}`);
+      assert.equal(await evj(`game.coruscant.population.talkBox.npc && game.coruscant.population.talkBox.npc.person.cast`), 'seli_noor', 'still in the box');
       await ev(`window.__t.key('Escape', 'Escape')`); await ev('window.__t.frames(2)');
       await page.sleep(2000);   // the registry persists 1.5 s after a change
       const saved = await evj(`JSON.parse(localStorage.getItem('frontier-craft:cast:' + game.cast.seed) || 'null')`);
