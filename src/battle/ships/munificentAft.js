@@ -919,31 +919,53 @@ export function buildAft(add, rand, engines) {
     }
 
   // ---------------------------------------------------------------------------
-  // bridge tower at the trench end (ICS / WSMI): plinth, short stem, then a stack of pill-shaped decks
-  // of which the second is the widest and overhangs aft, window strips along every deck, the green
-  // glass band round the front of the main deck, masts on the cap
+  // bridge module at the trench end (TCW): a dark plinth and stem, then a wide flat deck — wedge
+  // forward, rounded aft — whose aft end overhangs the stern as a bay of green-lit glass; yellow
+  // window rows along the flanks, a smaller upper deck carrying two tall thin masts
   // ---------------------------------------------------------------------------
   const deck0 = domeTop(Z.towerBase) + RIDGE_H;
-  const tiers = [
-    { w: 26, h: 9, len: 56, y: deck0 + 16.5, z: Z.towerBase + 14 },
-    { w: 32, h: 9, len: 68, y: deck0 + 25.5, z: Z.towerBase + 20 },
-    { w: 24, h: 8, len: 50, y: deck0 + 34, z: Z.towerBase + 18 },
-    { w: 14, h: 5, len: 28, y: deck0 + 40.5, z: Z.towerBase + 14 },
-  ];
-  const pill = (add, t, lod, mat, opts) => {
-    const seg = lod === 0 ? 16 : 8;
-    add(
-      new THREE.BoxGeometry(t.w, t.h, t.len - t.w).translate(0, t.y, t.z),
-      mat,
-      opts,
-    );
-    for (const e of [-1, 1]) {
-      const c = new THREE.CylinderGeometry(t.w / 2, t.w / 2, t.h, seg);
-      c.translate(0, t.y, t.z + (e * (t.len - t.w)) / 2);
-      add(c, mat, opts);
+  const MAIN = {
+    y: deck0 + 17,
+    h: 9,
+    hw: 19,
+    z0: Z.towerBase - 16,
+    z1: Z.towerBase + 76,
+  };
+  const UPPER = {
+    y: MAIN.y + MAIN.h / 2 + 3,
+    h: 6,
+    hw: 8,
+    z0: Z.towerBase,
+    z1: Z.towerBase + 46,
+  };
+  // slab with a pill plan: wedge or rounded front, rounded aft end, built as z stations
+  const slab = (d, seg, wedge) => {
+    const r = d.hw;
+    const st = [];
+    const ring = (z, sx) =>
+      st.push({ z, sx: Math.max(0.6, sx), sy: d.h / 2, y: d.y });
+    if (wedge) {
+      ring(d.z0, r * 0.3);
+      ring(d.z0 + r * 0.9, r * 0.8);
+      ring(d.z0 + r * 1.8, r);
+    } else
+      for (const a of [90, 60, 30, 0]) {
+        const t = a * D2R;
+        ring(d.z0 + r - r * Math.sin(t), r * Math.cos(t));
+      }
+    for (const a of [0, 30, 55, 75, 90]) {
+      const t = a * D2R;
+      ring(d.z1 - r + r * Math.sin(t), r * Math.cos(t));
     }
+    return loftZ(roundedRect(seg, 0.25, 0.25), st, {
+      capStart: true,
+      capEnd: true,
+      flat: true,
+      texel: 1 / 6,
+    });
   };
   for (const lod of [0, 1, 2]) {
+    const seg = lod === 0 ? 3 : 1;
     add(
       new THREE.BoxGeometry(HW.trench * 2 + 2, 14, 30).translate(
         0,
@@ -958,45 +980,60 @@ export function buildAft(add, rand, engines) {
       },
     );
     add(
-      new THREE.BoxGeometry(18, 14, 24).translate(
+      new THREE.BoxGeometry(22, 14, 40).translate(
         0,
         deck0 + 6,
-        Z.towerBase + 6,
+        Z.towerBase + 14,
       ),
-      "hull",
+      "dark",
       {
         texel: 1 / 6,
         lod,
-        color: HULL_DK,
+        color: MACH,
       },
     );
-    for (const [i, t] of tiers.entries())
-      pill(add, t, lod, "hull", {
+    // structure under the overhanging aft half of the deck
+    add(
+      new THREE.BoxGeometry(12, 8, 50).translate(
+        0,
+        MAIN.y - MAIN.h / 2 - 3.5,
+        Z.towerBase + 38,
+      ),
+      "dark",
+      {
         texel: 1 / 6,
         lod,
-        color: i === 3 ? HULL_DK : HULL,
-      });
+        color: MACH_DK,
+      },
+    );
+    add(slab(MAIN, seg, true), "hull", {
+      uv: "keep",
+      lod,
+      tint: (x, y, z, o) =>
+        o.copy(HULL).multiplyScalar(0.94 * plankTone(z / 3 + 7)),
+    });
+    add(slab(UPPER, seg, false), "hull", { uv: "keep", lod, color: HULL_DK });
     if (lod === 2) continue;
-    // green glass band round the front of the main deck, window strips along every deck's flanks
-    const main = tiers[1];
+    // green glass bay round the aft end of the main deck, running on along the flanks
+    const zc1 = MAIN.z1 - MAIN.hw;
     const glass = new THREE.CylinderGeometry(
-      main.w / 2 + 0.4,
-      main.w / 2 + 0.4,
-      3.6,
-      16,
+      MAIN.hw + 0.4,
+      MAIN.hw + 0.4,
+      4.2,
+      lod === 0 ? 20 : 10,
       1,
       true,
-      Math.PI / 2,
+      -Math.PI / 2,
       Math.PI,
     );
-    glass.translate(0, main.y - 0.5, main.z - (main.len - main.w) / 2);
+    glass.translate(0, MAIN.y - 0.6, zc1);
     add(glass, "windows", { lod, color: BRIDGE });
     for (const side of [-1, 1]) {
       add(
-        new THREE.BoxGeometry(0.3, 3.4, main.len - main.w).translate(
-          side * (main.w / 2 + 0.2),
-          main.y - 0.5,
-          main.z,
+        new THREE.BoxGeometry(0.3, 4.0, 22).translate(
+          side * (MAIN.hw + 0.2),
+          MAIN.y - 0.6,
+          zc1 - 11,
         ),
         "windows",
         {
@@ -1004,64 +1041,80 @@ export function buildAft(add, rand, engines) {
           color: BRIDGE,
         },
       );
-      for (const i of [0, 2])
-        add(
-          new THREE.BoxGeometry(
-            0.3,
-            1.4,
-            (tiers[i].len - tiers[i].w) * 0.9,
-          ).translate(side * (tiers[i].w / 2 + 0.2), tiers[i].y, tiers[i].z),
-          "windows",
-          { lod, color: WINDOW },
-        );
+      add(
+        new THREE.BoxGeometry(0.3, 1.3, 40).translate(
+          side * (MAIN.hw + 0.2),
+          MAIN.y + 2.4,
+          MAIN.z0 + 38,
+        ),
+        "windows",
+        {
+          lod,
+          color: WINDOW,
+        },
+      );
+      add(
+        new THREE.BoxGeometry(0.3, 1.2, 30).translate(
+          side * (UPPER.hw + 0.2),
+          UPPER.y,
+          (UPPER.z0 + UPPER.z1) / 2,
+        ),
+        "windows",
+        {
+          lod,
+          color: WINDOW,
+        },
+      );
     }
-    // mullions over the glass, masts and the antenna cluster on the cap
+    // mullions over the glass bay
     if (lod === 0)
-      for (let k = 0; k <= 8; k++) {
-        const a = Math.PI / 2 + (Math.PI * k) / 8;
-        const r = main.w / 2 + 0.6;
-        const zc = main.z - (main.len - main.w) / 2;
+      for (let k = 0; k <= 10; k++) {
+        const a = -Math.PI / 2 + (Math.PI * k) / 10;
+        const r = MAIN.hw + 0.6;
         add(
           bar(
-            [Math.sin(a) * r, main.y - 3, zc + Math.cos(a) * r],
-            [Math.sin(a) * r, main.y + 2, zc + Math.cos(a) * r],
+            [Math.sin(a) * r, MAIN.y - 3.2, zc1 + Math.cos(a) * r],
+            [Math.sin(a) * r, MAIN.y + 1.6, zc1 + Math.cos(a) * r],
             0.6,
             0.6,
           ),
           "dark",
-          {
-            texel: 1 / 3,
-            lod,
-            color: MACH_DK,
-          },
+          { texel: 1 / 3, lod, color: MACH_DK },
         );
       }
-    const cap = tiers[3];
-    add(
-      bar([0, cap.y + 2, cap.z - 6], [0, cap.y + 22, cap.z - 6], 1, 1),
-      "dark",
-      { texel: 1 / 3, lod, color: MACH_DK },
-    );
-    add(
-      bar([0, cap.y + 2, cap.z + 8], [0, cap.y + 14, cap.z + 8], 0.8, 0.8),
-      "dark",
-      { texel: 1 / 3, lod, color: MACH_DK },
-    );
-    if (lod === 0) {
-      add(
-        bar([-5, cap.y + 17, cap.z - 6], [5, cap.y + 17, cap.z - 6], 0.4, 0.4),
-        "dark",
-        { texel: 1 / 3, lod, color: MACH_DK },
-      );
+    // two tall thin masts on the upper deck, a sensor cluster aft of them
+    const topY = UPPER.y + UPPER.h / 2;
+    const masts = [
+      [-3, Z.towerBase + 12, 26],
+      [3.5, Z.towerBase + 20, 19],
+    ];
+    for (const [x, z, h] of masts) {
+      add(bar([x, topY, z], [x, topY + h, z], 1, 1), "dark", {
+        texel: 1 / 3,
+        lod,
+        color: MACH_DK,
+      });
+      if (lod === 0)
+        for (const f of [0.35, 0.7])
+          add(
+            new THREE.BoxGeometry(2.4, 1.2, 1.2).translate(x, topY + h * f, z),
+            "dark",
+            {
+              texel: 1 / 3,
+              lod,
+              color: MACH,
+            },
+          );
+    }
+    if (lod === 0)
       antennaCluster(add, {
-        base: [0, cap.y + 2.5, cap.z + 1],
+        base: [0, topY, Z.towerBase + 36],
         up: [0, 1, 0],
-        scale: 0.7,
+        scale: 0.6,
         lod,
         mast: MACH_DK,
         plate: HULL_DK,
       });
-    }
   }
 
   // ---------------------------------------------------------------------------
