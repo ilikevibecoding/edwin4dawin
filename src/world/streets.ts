@@ -162,7 +162,19 @@ const SW_MAIN = /* glsl */ `
     vec2 fd = abs(fract(vec2(across, along) / 10.8 + 0.5) - 0.5) * 10.8; // distance to the nearest field line
     float strip = max(swLine(fd.x, 0.3, fwA), swLine(fd.y, 0.3, fwL));
     pav = mix(pav, vec3(0.19, 0.19, 0.185), strip * 0.7);
-    joint = max(swLine((fract(along / 0.9) - 0.5) * 0.9, 0.01, fwL), swLine((fract(across / 0.9) - 0.5) * 0.9, 0.01, fwA)) * fade * (1.0 - strip);
+    // planting beds: about a third of the fields, in clusters of two to four (a smooth per-field noise, so the beds
+    // form lawns with 2.7 m paved paths between them rather than confetti), each a lawn-and-groundcover bed with a
+    // mulch margin inside a 0.45 m concrete kerb — the green patches that make a plaza read as designed ground from
+    // 200-500 m, drawn in the field's own paving (no geometry); the edges are box-filtered like the lines
+    float fdm = min(fd.x, fd.y), fwF = max(fwA, fwL);
+    float isBed = step(0.57, vnoise(fv * 0.55 + 5.0 + kind));
+    float kerbIn = clamp((fdm - 1.35) / fwF + 0.5, 0.0, 1.0), bedIn = clamp((fdm - 1.8) / fwF + 0.5, 0.0, 1.0);
+    vec3 mulch = mix(vec3(0.20, 0.15, 0.10), vec3(0.28, 0.22, 0.14), vnoise(wp * 1.7)) * (0.85 + 0.3 * grain);
+    vec3 lawn = mix(vec3(0.15, 0.24, 0.08), vec3(0.25, 0.34, 0.12), fbm3(wp * 0.9 + 4.0)) * (0.9 + 0.2 * grain);
+    vec3 bed = mix(mulch, lawn, smoothstep(2.3, 2.9, fdm) * smoothstep(0.25, 0.5, fbm3(wp * 0.3 + 1.0)));
+    pav = mix(pav, conc * 1.05, isBed * (kerbIn - bedIn));
+    pav = mix(pav, bed, isBed * bedIn);
+    joint = max(swLine((fract(along / 0.9) - 0.5) * 0.9, 0.01, fwL), swLine((fract(across / 0.9) - 0.5) * 0.9, 0.01, fwA)) * fade * (1.0 - strip) * (1.0 - isBed * kerbIn);
     col = pav;
   } else if (kind > 3.5) {
     // parapet: cast stone
