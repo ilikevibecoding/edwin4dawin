@@ -8,6 +8,7 @@ import { purposeFor } from '../../coruscant/purposes.js';
 import { DISTRICT_PROFILE } from '../../coruscant/layout.js';
 import { archetypeOf, DROID_ARCHETYPES, VISITOR_JOBS } from './rooms.js';
 import { personName, droidName } from './names.js';
+import { PORT } from './port.js';
 
 const mix = (seed, a, b) => Math.floor(hash2(a, b, seed) * 0x7fffffff);
 const HOUSING = new Set(['apartments', 'hotel']);
@@ -15,7 +16,7 @@ const FOOD = new Set(['food', 'hospitality']);
 const LEISURE_KINDS = new Set(['holo_arcade', 'cantina', 'archive', 'gym', 'general_store', 'pawn', 'tailor', 'droid_shop', 'temple_annex']);
 
 // Street archetypes per district: [job, weight]. Counts scale with DISTRICT_PROFILE.density (STREET_BASE per unit).
-const STREET_BASE = 26;
+const STREET_BASE = 34;
 const STREET_MIX = {
   senate: [['senate guard', 4], ['protocol droid', 3], ['aide', 3], ['journalist', 3], ['tourist', 4], ['courier', 2], ['jedi', 1], ['security officer', 2]],
   financial: [['clerk', 5], ['executive', 2], ['courier', 5], ['security officer', 2], ['protocol droid', 1], ['sweeper droid', 2], ['tourist', 1], ['journalist', 1]],
@@ -23,8 +24,9 @@ const STREET_MIX = {
   industrial: [['dock worker', 4], ['mechanic', 3], ['astromech', 2], ['foreman', 1], ['courier', 1], ['security officer', 1], ['sweeper droid', 1], ['pilot', 2]],
   entertainment: [['tourist', 5], ['patron', 4], ['musician', 2], ['bouncer', 1], ['bounty hunter', 1], ['courier', 1], ['security officer', 2], ['protocol droid', 1], ['sweeper droid', 1]],
   market: [['vendor', 6], ['shopper', 6], ['astromech', 2], ['courier', 2], ['sweeper droid', 1], ['security officer', 1], ['tourist', 2]],
-  spaceport: [['pilot', 6], ['passenger', 4], ['customs officer', 2], ['astromech', 3], ['mechanic', 5], ['dock worker', 3], ['courier', 1], ['tourist', 1]],
+  spaceport: [['pilot', 6], ['passenger', 5], ['customs officer', 3], ['astromech', 3], ['mechanic', 7], ['dock worker', 4], ['courier', 1], ['tourist', 2], ['bartender', 1], ['vendor', 1], ['sweeper droid', 1]],
 };
+const PORT_CROWD = 64;    // spaceport crews (the port has no lots: pads, terminal and hangar are one structure)
 
 function pickWeighted(list, rng) {
   let total = 0; for (const [, w] of list) total += w;
@@ -60,7 +62,15 @@ export function buildPool(layout, opts = {}) {
   const food = purposed.filter((p) => FOOD.has(p.purpose.category));
   const leisure = purposed.filter((p) => LEISURE_KINDS.has(p.purpose.kind) || p.lot.family === 'opera' || p.lot.family === 'market' || p.lot.family === 'plaza_monument');
   const plazas = layout.lots.filter((l) => l.kind === 'plaza');
-  const plazaOf = (district) => plazas.find((p) => p.district === district) || plazas[0] || null;
+  const plazaOf = (district, near = null) => {
+    const own = plazas.filter((p) => p.district === district);
+    const list = own.length ? own : plazas;
+    if (!list.length) return null;
+    if (!near) return list[0];
+    let best = list[0], bd = Infinity;
+    for (const p of list) { const d = dist(centre(p), near); if (d < bd) { bd = d; best = p; } }
+    return best;
+  };
   const barracks = purposed.filter((p) => p.purpose.kind === 'security_station' || p.lot.family === 'detention');
   const temples = purposed.filter((p) => p.purpose.kind === 'temple_annex' || p.lot.family === 'temple');
 
@@ -92,9 +102,11 @@ export function buildPool(layout, opts = {}) {
     else if ((job === 'acolyte' || job === 'jedi') && temples.length) home = nearest(temples, c, 1)[0].lot.id;
     else if (purpose && (purpose.kind === 'apartments' || purpose.kind === 'hotel') && (job === 'resident' || job === 'guest')) home = workLot.id;
     else if (housing.length) { const near = nearest(housing, c, 6, workLot ? workLot.id : -1); home = near[Math.floor(rng.next() * near.length)].lot.id; }
+    const plaza = plazaOf(district, c);
     let meal = null;
     if (!droid && food.length) { const near = nearest(food, c, 4, workLot ? workLot.id : -1); meal = near[Math.floor(rng.next() * near.length)].lot.id; }
-    const plaza = plazaOf(district);
+    // a third of the workers eat outdoors on the district plaza when it is close (the lunch crowd of rubric row 10)
+    if (!droid && plaza && rng.next() < 0.34 && dist(centre(plaza), c) < 140) meal = plaza.id;
     let leisureLot = plaza ? plaza.id : null;
     if (rng.next() < 0.45 && leisure.length) { const near = nearest(leisure, c, 5, workLot ? workLot.id : -1); leisureLot = near[Math.floor(rng.next() * near.length)].lot.id; }
     return {
@@ -123,9 +135,22 @@ export function buildPool(layout, opts = {}) {
     const prof = DISTRICT_PROFILE[d.kind];
     const mixList = STREET_MIX[d.kind];
     if (!prof || !mixList) continue;
-    // the spaceport has no lots of its own (pads, terminal and hangar are one structure): its crews are all street life
-    const n = d.kind === 'spaceport' ? 44 : Math.max(6, Math.round(STREET_BASE * prof.density));
+    if (d.kind === 'spaceport') {
+      // the spaceport has no lots of its own (pads, terminal and hangar are one structure): its crews live, eat and
+      // work inside the port (port.js supplies the spots), so they never need the city's streets
+      for (let i = 0; i < PORT_CROWD; i++) {
+        const rng = new RNG(mix(seed + 202, d.id, i));
+        const job = pickWeighted(mixList, rng);
+        const p = makePerson(rng, job, d.kind, null, null, i);
+        p.work = PORT; p.home = PORT; p.meal = PORT; p.leisure = PORT; p.plaza = PORT; p.port = true; p.street = false;
+        p.shift = i % 3 === 2 ? 'night' : 'day';
+        add(p);
+      }
+      continue;
+    }
+    // every plaza draws its own regulars on top of the district's density; the Senate plaza is the busiest
     const anchor = plazaOf(d.kind) || usable.find((l) => l.district === d.kind) || null;
+    const n = Math.max(8, Math.round(STREET_BASE * prof.density)) + (anchor && anchor.kind === 'plaza' ? (d.kind === 'senate' ? 56 : 28) : 0);
     const anchorLot = anchor;
     const cands = purposed.filter((p) => p.lot.district === d.kind);
     for (let i = 0; i < n; i++) {
@@ -136,7 +161,7 @@ export function buildPool(layout, opts = {}) {
       if ((job === 'senate guard' || job === 'security officer' || job === 'bouncer') && cands.length) {
         const civic = cands.filter((c) => c.purpose.category === 'government' || c.purpose.category === 'security' || c.lot.kind === 'landmark');
         post = (civic.length ? civic : cands)[Math.floor(rng.next() * (civic.length ? civic.length : cands.length))].lot;
-      } else if (cands.length && rng.next() < 0.5) post = cands[Math.floor(rng.next() * cands.length)].lot;
+      } else if (cands.length && rng.next() < 0.4) post = cands[Math.floor(rng.next() * cands.length)].lot;
       const p = makePerson(rng, job, d.kind, post, null, i);
       p.street = true;
       p.shift = job === 'bounty hunter' || job === 'patron' || job === 'musician' || job === 'bouncer' ? 'evening' : (i % 4 === 3 ? 'night' : 'day');

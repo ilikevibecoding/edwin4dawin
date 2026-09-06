@@ -57,6 +57,24 @@ export class LotInfo {
     return passableId(here) && passableId(above) && (standableId(below) || (here !== 0 && here !== 255 && BLOCKS[here] && BLOCKS[here].shape === SHAPE.SLAB));
   }
   inside(x, z) { return x >= this.lot.x0 && x < this.lot.x1 && z >= this.lot.z0 && z < this.lot.z1; }
+  // Yaw (atan2(dx, dz)) toward the prop a worker at (x, y, z) faces: the adjacent non-passable block at feet or head
+  // height (consoles, counters, tables, beds, anvils), preferring `props` (names in B) when given. null = nothing near.
+  faceOf(x, y, z, props = null) {
+    const ids = props ? props.map((n) => B[n]).filter((v) => v !== undefined) : null;
+    let best = null, bestScore = -1;
+    for (const [dx, dz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      for (const dy of [0, 1, -1]) {
+        const id = this.blockAt(x + dx, y + dy, z + dz);
+        if (id <= 0 || id === 255) continue;
+        const b = BLOCKS[id];
+        if (!b || !b.solid || b.door) continue;
+        if (dy === -1 && b.shape !== SHAPE.SLAB && b.shape !== SHAPE.BED) continue;
+        const score = (ids && ids.includes(id) ? 4 : 0) + (dy === 0 ? 2 : dy === 1 ? 1 : 0.5);
+        if (score > bestScore) { bestScore = score; best = Math.atan2(dx, dz); }
+      }
+    }
+    return best;
+  }
 
   // ---------------------------------------------------------------- rooms
   roomAt(x, y, z) {

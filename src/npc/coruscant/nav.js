@@ -6,10 +6,12 @@
 // tick through `PathQueue`). Level changes happen only at the intersections' lift shafts (`layout.lifts`), modelled
 // as a 2 s ride in the shaft (the shafts are solid blocks; turbolift cabs are not implemented yet).
 import { findPath, findStand } from '../pathfinding.js';
-import { DECK_HALF, MARGIN, RIM } from '../../coruscant/layout.js';
+import { DECK_HALF, MARGIN } from '../../coruscant/layout.js';
+import { portRects, inPort, PORT_Y } from './port.js';
 
 export const RES = 2;
 export const GROUND_Y = 61, DECK_Y = 96;
+export { PORT_Y };
 export const LIFT_RIDE_S = 2;
 export const LEG_MAX = 40;     // longest straight walk leg handed to the block-level A*
 
@@ -63,23 +65,31 @@ export class CityNav {
       const gz0 = side === 'N' ? lot.z0 - MARGIN : side === 'S' ? lot.z1 : dr.z - 1, gz1 = side === 'N' ? lot.z0 : side === 'S' ? lot.z1 + MARGIN : dr.z + 3;
       this.markRect(this.deck, gx0, gz0, gx1, gz1, 1);
     }
-    // intersection lifts: stand cells on both levels beside the 2x2 shaft, facing the intersection centre
+    // intersection lifts: the shaft stands in the margin diagonally off the deck's crossing corner, so the stand cell is
+    // that corner cell (a crossing cell: no kerb railing) - the same column serves both levels (under the deck below)
     this.lifts = [];
     for (const lf of L.lifts) {
-      const sx = lf.sx > 0 ? lf.x0 - 1 : lf.x0 + 2, sz = lf.z0;
-      const alt = { x: lf.x0, z: lf.sz > 0 ? lf.z0 - 1 : lf.z0 + 2 };
-      this.lifts.push({ x: sx, z: sz, alt, shaft: { x0: lf.x0, z0: lf.z0 }, ix: lf.x, iz: lf.z });
+      const sx = lf.x + (lf.sx > 0 ? DECK_HALF - 1 : -DECK_HALF), sz = lf.z + (lf.sz > 0 ? DECK_HALF - 1 : -DECK_HALF);
+      this.lifts.push({ x: sx, z: sz, shaft: { x0: lf.x0, z0: lf.z0 }, ix: lf.x, iz: lf.z });
       // shafts and helix stairs are obstacles on both levels
       this.markRect(this.ground, lf.x0, lf.z0, lf.x0 + 2, lf.z0 + 2, 0);
       this.markRect(this.deck, lf.x0, lf.z0, lf.x0 + 2, lf.z0 + 2, 0);
     }
     for (const st of L.stairs) { this.markRect(this.ground, st.x0, st.z0, st.x0 + 4, st.z0 + 4, 0); this.markRect(this.deck, st.x0, st.z0, st.x0 + 4, st.z0 + 4, 0); }
     this.markRect(this.ground, S.x0, S.z0, S.x1, S.z1, 0);
+    // the spaceport deck (feet 97): its own level, walkable around the terminal, hangar, fuel farm and tower
+    this.port = new Uint8Array(this.w * this.d);
+    const pr = portRects();
+    for (const r of pr.walk) this.markRect(this.port, r.x0, r.z0, r.x1, r.z1, 1);
+    for (const r of pr.block) this.markRect(this.port, r.x0, r.z0, r.x1, r.z1, 0);
+    for (const r of pr.open) this.markRect(this.port, r.x0, r.z0, r.x1, r.z1, 1);
   }
 
-  map(level) { return level === 'deck' ? this.deck : this.ground; }
+  map(level) { return level === 'deck' ? this.deck : level === 'port' ? this.port : this.ground; }
   walkable(level, x, z) { const [cx, cz] = this.cellOf(x, z); return this.inGrid(cx, cz) && this.map(level)[this.idx(cx, cz)] === 1; }
-  yOf(level) { return level === 'deck' ? DECK_Y : GROUND_Y; }
+  yOf(level) { return level === 'deck' ? DECK_Y : level === 'port' ? PORT_Y : GROUND_Y; }
+  // street level of a point (the spaceport deck is its own level; elsewhere height decides)
+  levelAt(x, y, z) { return inPort(x, z) ? 'port' : y >= DECK_Y - 3 ? 'deck' : 'ground'; }
 
   // Nearest walkable cell centre to (x, z) on `level` within `r` blocks, or null
   snap(level, x, z, r = 8) {
@@ -205,6 +215,10 @@ export class CityNav {
       for (const p of pts) legs.push({ kind: 'walk', x: p.x, y, z: p.z, level });
       return true;
     };
+    if (fromLevel === 'port' || toLevel === 'port') {
+      if (fromLevel === toLevel && walk('port', from, to)) return legs;
+      return null;   // the port is an island for the crowd: its crews live inside it
+    }
     if (fromLevel === toLevel) {
       const direct = Math.hypot(to.x - from.x, to.z - from.z);
       if (fromLevel === 'deck' || direct <= 110) { if (walk(fromLevel, from, to)) return legs; legs.length = 0; }
@@ -243,20 +257,25 @@ export class CityNav {
   }
 }
 
-// Block-level path requests, processed a few per tick so a crowd re-planning at once cannot stall a frame.
+// Block-level path requests, processed under a millisecond budget per tick (at least one) so a crowd re-planning at
+// once cannot stall a frame. Requests from NPCs near the player are served first.
 export class PathQueue {
-  constructor(world, budgetPerTick = 3) { this.world = world; this.queue = []; this.budget = budgetPerTick; this.stats = { requests: 0, ok: 0, fail: 0, partial: 0, nodes: 0 }; }
-  request(npc, from, to, maxNodes, cb) { this.stats.requests++; this.queue.push({ npc, from, to, maxNodes, cb }); }
+  constructor(world, budgetMs = 1.5) { this.world = world; this.queue = []; this.budgetMs = budgetMs; this.stats = { requests: 0, ok: 0, fail: 0, ms: 0 }; }
+  request(npc, from, to, maxNodes, cb, priority = 0) { this.stats.requests++; this.queue.push({ npc, from, to, maxNodes, cb, priority }); }
   cancel(npc) { for (let i = this.queue.length - 1; i >= 0; i--) if (this.queue[i].npc === npc) this.queue.splice(i, 1); }
-  process() {
+  process(now = performance.now()) {
+    if (!this.queue.length) return;
+    if (this.queue.length > 1) this.queue.sort((a, b) => a.priority - b.priority);
+    const t0 = now;
     let n = 0;
-    while (this.queue.length && n < this.budget) {
+    while (this.queue.length && (n === 0 || performance.now() - t0 < this.budgetMs)) {
       const q = this.queue.shift(); n++;
       if (q.npc.dead) continue;
       const path = findPath(this.world, q.from.x, q.from.y, q.from.z, q.to.x, q.to.y, q.to.z, q.maxNodes);
       if (path && path.length) this.stats.ok++; else this.stats.fail++;
       q.cb(path && path.length ? path : null);
     }
+    this.stats.ms += performance.now() - t0;
   }
   get pending() { return this.queue.length; }
 }
