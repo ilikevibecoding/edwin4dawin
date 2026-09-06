@@ -43,6 +43,7 @@ uniform float uTime;
 uniform vec4 uCityGlow;      // light pollution footprint: xy world xz of the lit city's centre, z its radius (m), w strength (0 by day)
 uniform vec4 uCityGlowView;  // the same glow seen from the camera: xy horizontal unit direction to the centre, z angular width, w horizon radiance scale
 uniform vec2 uFarDissolve;   // aerial perspective reaches full extinction before the far plane: x start distance (m), y 1 / ramp length
+uniform float uSunShare;     // direct sun's share of the light on a horizontal receiver (what a cloud shadow removes)
 `;
 
 /** 2D cloud coverage field used for both the raymarched clouds' macro shape and the ground shadows.
@@ -134,8 +135,10 @@ vec3 skyRadiance(vec3 dir) {
   float y = clamp(dir.y, -1.0, 1.0);
   float up = max(y, 0.0);
   float sunUp = uSunDir.y;
-  // the horizon glow reaches higher when the sun is low (long paths through lit air all around)
-  float kLow = mix(3.5, 7.0, smoothstep(0.05, 0.35, sunUp));
+  // the horizon glow reaches higher when the sun is low (long paths through lit air all around); 5 rather
+  // than 3.5 at the horizon: with 3.5 the salmon horizon colour still made 40 % of the sky 13 deg up and the
+  // whole frame of a chase camera at sunset was one flat peach wash with no blue above it
+  float kLow = mix(5.0, 7.0, smoothstep(0.05, 0.35, sunUp));
   float lowMix = pow(1.0 - up, kLow);
   float cosSun = dot(dir, uSunDir);
   float lowSun = (1.0 - smoothstep(0.05, 0.3, sunUp)) * smoothstep(-0.1, 0.0, sunUp);
@@ -159,6 +162,11 @@ vec3 skyRadiance(vec3 dir) {
   // a small disc in a flat peach sky
   float cs = max(cosSun, 0.0);
   col += uSunHazeColor * (pow(cs, 45.0) * 0.4 + pow(cs, 400.0) * 0.9) * lowSun;
+  // circumsolar glare at every elevation: the forward-scattering peak of the aerosol right around the disc,
+  // a clipped white core ~1.5 deg out and a wider veil that whitens the blue sky within ~5 deg. Without it
+  // the noon sun was a hard white dot in an even blue field and the golden-hour sun a flat yellow disc pasted
+  // on the haze. In the key colour (already reddened with the airmass), so the glare goes orange as the sun sets.
+  col += uSunColor * (pow(cs, 1000.0) * 1.6 + pow(cs, 120.0) * 0.35) * smoothstep(-0.02, 0.05, sunUp);
   // sunset band
   float band = exp(-abs(y) * 9.0) * pow(cs, 2.0);
   col += uSunHazeColor * band * 0.35 * (1.0 - smoothstep(0.15, 0.5, sunUp)) * smoothstep(-0.12, 0.05, sunUp);
@@ -169,35 +177,35 @@ vec3 skyRadiance(vec3 dir) {
   col = mix(col, uHazeColor * 0.8 + glow * 0.5, smoothstep(0.0, -0.35, y));
   return col;
 }
-/** The disc and its glare. At a low sun the airmass has taken the direct beam down by an order of magnitude
- *  and reddened it far more than the key light (which is what lit surfaces see): the disc's radiance and
- *  colour follow the elevation so the tonemapper keeps it an orange-red limb instead of clipping it to a
- *  white ball. */
-const vec3 SUN_LIMB_TINT = vec3(1.0, 0.13, 0.02);
+/** Radiance of the disc itself. Above ~8 deg the airmass still leaves it hundreds of times brighter than the
+ *  sky, so it clips to white whatever its true colour; only over the last degrees does extinction bring it
+ *  within a decade of the sky, where the tonemapper can show a coloured disc: yellow-orange around 3-4 deg,
+ *  orange-red on the horizon. The old version switched to a dim red limb (9x the key) below 23 deg, so the
+ *  17:45 sun (7.7 deg) was a flat yellow disc dimmer than the sunlit clouds, with no glare. */
+vec3 sunDiscColor() {
+  float el = uSunDir.y;
+  // 1.7 deg (18:20) is low on this ramp (squared: extinction goes as the exponential of the airmass, which
+  // grows fastest over the last degrees): (2.1, 0.48, 0.11) tonemaps to an orange disc, sRGB ~(250,170,60),
+  // over the (215,128,71) horizon band; a linear 0..5 deg ramp had it lemon yellow (250,226,61) there
+  float tl = smoothstep(0.0, 0.09, el);
+  vec3 lowCol = mix(vec3(1.6, 0.24, 0.03), vec3(4.0, 1.7, 0.4), tl * tl);
+  float t = smoothstep(0.0, 0.16, el);
+  return mix(lowCol, uSunColor * 40.0, t * t);
+}
+/** The disc for the environment probe (the glare lives in skyRadiance, so the probe and the water's mirror
+ *  carry the same halo as the visible dome). */
 vec3 sunDisc(vec3 dir) {
   float cosSun = dot(dir, uSunDir);
-  float hi = smoothstep(0.03, 0.35, uSunDir.y);
   float disc = smoothstep(0.99985, 0.99995, cosSun);
-  vec3 col = uSunColor * mix(SUN_LIMB_TINT, vec3(1.0), hi);
-  float glow = pow(max(cosSun, 0.0), 1400.0) * 0.6 + pow(max(cosSun, 0.0), 160.0) * 0.08;
-  return col * (disc * mix(9.0, 40.0, hi) + glow) * smoothstep(-0.05, 0.02, uSunDir.y);
+  return sunDiscColor() * disc * smoothstep(-0.05, 0.02, uSunDir.y);
 }
-/** The disc composited over the sky for the visible dome: the low disc occludes the bright aureole behind it
- *  (only the haze in front of it adds), which is what keeps the limb orange-red; the high disc is additive
- *  glare (it clips to white either way). */
+/** The disc composited over the sky for the visible dome: opaque, it replaces the sky behind it (the aureole
+ *  and glare in front of it are already part of the sky radiance). */
 vec3 sunComposite(vec3 sky, vec3 dir) {
   float cosSun = dot(dir, uSunDir);
-  // the additive glare only takes over well above the horizon: even a tenth of it lifted the low limb to cream
-  float hi = smoothstep(0.12, 0.4, uSunDir.y);
   float vis = smoothstep(-0.05, 0.02, uSunDir.y);
   float disc = smoothstep(0.99985, 0.99995, cosSun);
-  vec3 limbCol = uSunColor * vec3(1.0, 0.13, 0.08) * 9.0;
-  sky = mix(sky, limbCol + sky * 0.45, disc * (1.0 - hi) * vis);
-  // the low limb's own glare: a soft halo of the disc colour two to three disc radii wide (forward scatter in
-  // the aerosol right around the disc), fading into the wider aureole skyRadiance carries
-  sky += limbCol * pow(max(cosSun, 0.0), 600.0) * 0.45 * (1.0 - hi) * vis;
-  float glow = pow(max(cosSun, 0.0), 1400.0) * 0.6 + pow(max(cosSun, 0.0), 160.0) * 0.08;
-  return sky + uSunColor * (disc * 40.0 * hi + glow) * vis;
+  return mix(sky, sunDiscColor(), disc * vis);
 }
 `;
 
