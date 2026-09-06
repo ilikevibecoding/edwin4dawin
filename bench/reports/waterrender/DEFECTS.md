@@ -1,0 +1,81 @@
+# Water rendering — defect log (branch `cursor/waterrender-loop-8213`)
+
+Owner: water rendering agent (categories 9 base ocean, 10 wave physics [hero], 13 foam (compositing), 26 sun and
+reflections [hero]). Files: `src/world/water.ts`, `src/render/reflection.ts`, `src/world/waves.ts` (kept literally
+parallel with the shader's wind-sea / swell sets). The Water Physics Agent's branch (`cursor/waterphys-loop-8213`,
+commit 3f4754b0: swell sets in `waves.ts`, `swellHeight()` in the patch vertex stage) is merged in as the base.
+
+Method per round: OBSERVE (stills at fixed dev cameras, same seed) → DIAGNOSE (offline replica of the compose
+stage where useful: `/tmp` scripts are re-created from the notes below) → IMPLEMENT → STRESS (time-of-day sweep,
+altitude sweep, toward/away from the sun, clips) → COMPARE (same camera before/after) → SCORE.
+
+Dev cameras used throughout (all `?bench=dev&…&freeze=1&seed=20260904`, 1280×720 unless stated):
+
+| id | query | purpose |
+| --- | --- | --- |
+| sun10 | `cam=800,250,1000&hdg=114&pch=-18&fov=50&time=10` | toward the sun, 250 m, high sun (el 57°) |
+| sun14 | `cam=800,250,1000&hdg=246&pch=-18&fov=50&time=14` | toward the sun, 250 m, high sun (el 57°) |
+| sun1630 | `cam=800,250,1000&hdg=270&pch=-14&fov=50&time=16.5` | toward the sun, 250 m, sun el 24.5° |
+| sun1730 | `cam=800,250,1000&hdg=276&pch=-10&fov=50&time=17.5` | toward the sun, 250 m, sun el 11° (the brown case) |
+| chase1730 | `mode=chase&plane=800,250,1000,276,0,0,55,0.7&time=17.5` | the user's view: from the aircraft toward the low sun |
+| low30 | `cam=800,30,1000&hdg=276&pch=-12&fov=50&time=14` | 30 m: wave stack resolved, repetition check |
+| high1500 | `cam=800,1500,1000&hdg=246&pch=-35&fov=50&time=14` | 1500 m: filtered stack, mottling, no lattice |
+| down300 | `cam=800,300,1000&hdg=0&pch=-88&fov=50&time=14` | straight down: body colour, no sky rim |
+| night | `mode=chase&plane=-400,320,-900,318,0,0,55,0.7&time=22` | city-light reflections |
+
+## Round 0 — observation and diagnosis (baseline = merge of lead 6130eae7 + waterphys 3f4754b0)
+
+Baseline stills reviewed: `bench/results/iter09/{sunset,island-pass,water-landing,night,aerial-a}_still.jpg` and
+the dev cameras above on the baseline build (`/tmp/waterrender/r0`).
+
+Observed:
+1. **Brown / beige glaze in the sun path** (`sunset` still, cells E5–F7 and the whole lower-right quarter of
+   `sun1730`): the sun path is a broad, flat beige column with dark specks instead of a white core that
+   fragments into glints; the water beside it toward the horizon is a muddy orange-grey.
+2. **Night light reflections** (`night` still, C4–E4): short blobs a few pixels tall under the city; no vertical
+   streaking toward the camera.
+3. **Wave stack**: from 130–400 m the open water reads smooth (gust mottling only); to be audited at 30 m /
+   300 m / 1500 m once the dev stills are in.
+
+Diagnosis of (1), by replicating the compose stage (`WATER_FRAG_COMPOSE`) and the post grade (`post.ts` lift/gain,
+saturation 1.16, ACES fit, gamma) for a flat-normal pixel, unresolved slope variance mss = 0.02 (the shader's
+own sum of filtered layers at 250 m for 3.5 m/s, which matches Cox–Munk 0.003 + 0.00512 U):
+
+| case | glitter BRDF·NdotL | glitter radiance (linear) | body | result sRGB |
+| --- | --- | --- | --- | --- |
+| 17:30, view depression 3–15° (path core) | 5–6 (cap) | ×0.25 → (4.9, 3.3, 1.9) | (0.007, 0.015, 0.03) | (255, 253, 243) white — fine |
+| 17:30, depression 30° (below the core) | 0.29 | ×0.25 → (0.24, 0.16, 0.09) | (0.007, 0.015, 0.03) | **(158, 127, 103) tan/brown** |
+| same without the 0.25 scale | 0.29 | (0.94, 0.63, 0.37) | | (230, 213, 179) cream |
+| 17:30, 10° off the sun azimuth, depression 3° (horizon water) | 0 | 0 | sky term F=0.6 × whitened probe (0.78, 0.38, 0.22) | **(198, 142, 102) orange-brown** |
+| same, F × the visible dome (1.02, 0.70, 0.54) | | | | (200, 170, 150) pale peach (what the dome shows) |
+
+So the brown is two terms:
+- the **glitter fall-off zone**: the mean glitter radiance a few sigma from the path is 0.1–0.3 × the orange sun
+  irradiance over a near-black body; with the 0.25 scale left over from the pre-x6 light rebalance the whole
+  fall-off zone (25–35° of view depression at 17:30: the lower third of a chase frame) sits in the tan/brown
+  range of the tone curve. The sun path was also never brighter than sunlit white (peak 1.5 E, sunlit white
+  1.9), so the core did not read as the image of the sun.
+- the **sky reflection**: the PMREM probe is blended 65 % toward a haze/ground fill (for the diffuse IBL) and the
+  water then boosted its chroma ×2.4 near the horizon to undo that; on a warm low-sun horizon the boost makes the
+  reflected sky more saturated and darker than the dome it mirrors (orange-brown instead of pale peach), and by
+  day the fill (warm ground bounce) greys the blue.
+Not the cause: the aerial perspective (additive haze of the dome's colour, 2 % at 500 m), the ACES fit itself
+(it maps a bright warm core to white correctly once the core is bright), the body colour (dark navy there).
+
+## Round 1 — sky reflection from the analytic dome; physical glitter radiometry
+
+Change (`water.ts`):
+- `skyReflection(R, mss)`: the sky term is now `skyRadiance()` (the dome's own function, shared through
+  `GLSL_SKY`, atmosphere uniforms attached by `game.ts` in one line) integrated over the reflected lobe with a
+  3-point Gauss–Hermite rule in elevation (rms 2σ_slope = sqrt(2 mss)); rays sent below the horizon are clamped to
+  the sky just above it; the probe's overcast grey band is kept for the `cloudy` preset. No fill, no chroma hack.
+  The sun disc is not in this term (the glitter is its reflection), so the disc is no longer double counted as a
+  broad warm lobe through the PMREM blur.
+- glitter = E × (D F G / 4 NdotV) with no scale; cap 6 → 2.5 E (the cap only bounds bloom energy: everything past
+  ~1.5 E is white after ACES); sparkle share 0.42 → 0.5 so the fall-off zone fragments into glints.
+Why it reduces the defect: the path's core is now brighter than sunlit white (the image of the sun), the
+fall-off zone moves up the tone curve from tan into cream and narrows (a Gaussian's band between two radiance
+levels shrinks as it moves outward), and the horizon water shows the dome's own colours (pale peach at sunset,
+cerulean by day, city glow at night) instead of a re-saturated grey fill.
+Evidence: `/tmp/waterrender/r0` vs `r1` at the dev cameras (crops copied to `crops/` once captured).
+Perf: skyRadiance ×3 per pixel replaces one textureCubeUV lookup; A/B measured in a later round.
