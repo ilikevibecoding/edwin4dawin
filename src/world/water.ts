@@ -119,7 +119,10 @@ const WATER_VERT_MAIN = /* glsl */ `
   float edgeR = max(abs(pg.x), abs(pg.y));
   float edgeF = 1.0 - smoothstep(0.3, 0.5, edgeR);
   float swellEdgeF = 1.0 - smoothstep(0.15, 0.5, edgeR);
-  wp.y = (hh.r - hh.g) * ${WAKE_HEIGHT_SCALE.toFixed(2)} + waveHeight(wp.xz, uWaveTime) * edgeF + swellHeight(wp.xz, uWaveTime) * swellEdgeF;
+  // the hull / splat height fades over the outer 8 % of the region like the fragment's near-map slope (nearW), so
+  // a ring wave or a stern wave reaching the rim ends level with the plane instead of as a step along it
+  float wakeEdgeF = smoothstep(0.0, 0.08, 0.5 - edgeR);
+  wp.y = (hh.r - hh.g) * ${WAKE_HEIGHT_SCALE.toFixed(2)} * wakeEdgeF + waveHeight(wp.xz, uWaveTime) * edgeF + swellHeight(wp.xz, uWaveTime) * swellEdgeF;
 #else
   vec3 wp = position + uWaterOffset;
   wp.y = 0.0;
@@ -132,6 +135,8 @@ uniform sampler2D uHeightTex;
 uniform sampler2D uZoneTex; // r: zone id, g: vegetation, b: 128 + 0.5 * signed distance to the coastline (m)
 uniform sampler2D uWakeTex;
 uniform vec4 uWakeRegion; // center.xy, size, unused
+uniform sampler2D uWakeMidTex;    // mid wake map ahead of the camera (render/wakes.ts)
+uniform vec4 uWakeMidRegion;      // center.xy, size (0 = none), unused
 uniform sampler2D uWakeNearTex;   // fine wake map around the aircraft (render/wakes.ts)
 uniform vec4 uWakeNearRegion;     // center.xy, size, w: 1 while the displaced near patch is drawn over the region
 uniform sampler2D uWakeHeightTex; // signed hull-wave elevation over the near region (R up, G down)
@@ -618,16 +623,25 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   vec2 wuv = vec2(wp.x - uWakeRegion.x, uWakeRegion.y - wp.y) / uWakeRegion.z + 0.5;
   vec4 wakeFar = vec4(0.0);
   if (all(greaterThan(wuv, vec2(0.0))) && all(lessThan(wuv, vec2(1.0)))) wakeFar = texture2D(uWakeTex, wuv);
+  // the mid map (0.4 m texels ahead of the camera) replaces the far one inside its region (soft edge)
+  vec2 muv = vec2(wp.x - uWakeMidRegion.x, uWakeMidRegion.y - wp.y) / max(uWakeMidRegion.z, 1.0) + 0.5;
+  if (uWakeMidRegion.z > 1.0 && all(greaterThan(muv, vec2(0.0))) && all(lessThan(muv, vec2(1.0)))) {
+    vec2 med = min(muv, 1.0 - muv);
+    wakeFar = mix(wakeFar, texture2D(uWakeMidTex, muv), smoothstep(0.0, 0.1, min(med.x, med.y)));
+  }
   // the fine map around the aircraft replaces the coarse one where it is defined (soft edge)
   vec2 nuv = vec2(wp.x - uWakeNearRegion.x, uWakeNearRegion.y - wp.y) / uWakeNearRegion.z + 0.5;
   vec4 wake = wakeFar;
   float nearW = 0.0;
   if (all(greaterThan(nuv, vec2(0.0))) && all(lessThan(nuv, vec2(1.0)))) {
-    #ifndef WATER_PATCH
-      // the displaced patch draws the water inside the near region while it is active
-      if (uWakeNearRegion.w > 0.5) discard;
-    #endif
     vec2 ed = min(nuv, 1.0 - nuv);
+    #ifndef WATER_PATCH
+      // the displaced patch draws the water inside the near region while it is active; the plane keeps a
+      // ~1 m band inside the region's edge under the patch's own (undisplaced) rim: a discard right at the edge
+      // left the pixels straddling it to neither mesh (the plane discards whole pixels whose centre is inside,
+      // the patch only covers the samples inside) and the sky showed through as a row of dashes along the rim
+      if (uWakeNearRegion.w > 0.5 && min(ed.x, ed.y) > 0.015) discard;
+    #endif
     nearW = smoothstep(0.0, 0.08, min(ed.x, ed.y));
     wake = mix(wakeFar, texture2D(uWakeNearTex, nuv), nearW);
   }
@@ -855,12 +869,14 @@ export class Water {
   /** the atmosphere's shared uniforms (sky colours, sun, haze, cloud cover): the sky reflection is the analytic dome */
   private atmosUniforms: Record<string, THREE.IUniform> = {};
 
-  constructor(textures: MapTextures, wakeTex: THREE.Texture, wakeNearTex: THREE.Texture = wakeTex, wakeHeightTex: THREE.Texture = wakeTex, wakeHeightTexel = 0.125) {
+  constructor(textures: MapTextures, wakeTex: THREE.Texture, wakeNearTex: THREE.Texture = wakeTex, wakeHeightTex: THREE.Texture = wakeTex, wakeHeightTexel = 0.125, wakeMidTex: THREE.Texture = wakeTex) {
     this.uniforms = {
       uHeightTex: { value: textures.height },
       uZoneTex: { value: textures.zone },
       uWakeTex: { value: wakeTex },
       uWakeRegion: { value: new THREE.Vector4(0, 0, 3000, 0) },
+      uWakeMidTex: { value: wakeMidTex },
+      uWakeMidRegion: { value: new THREE.Vector4(0, 0, 0, 0) },
       uWakeNearTex: { value: wakeNearTex },
       uWakeHeightTex: { value: wakeHeightTex },
       uWakeHeightTexel: { value: wakeHeightTexel },
@@ -958,7 +974,7 @@ export class Water {
     this.patchMaterial.needsUpdate = true;
   }
 
-  update(camX: number, camZ: number, time: number, windSpeed: number, windDir: THREE.Vector2, sunDir: THREE.Vector3, wakeCenter: THREE.Vector2, wakeSize: number, wakeNearCenter?: THREE.Vector2, wakeNearSize = 0): void {
+  update(camX: number, camZ: number, time: number, windSpeed: number, windDir: THREE.Vector2, sunDir: THREE.Vector3, wakeCenter: THREE.Vector2, wakeSize: number, wakeNearCenter?: THREE.Vector2, wakeNearSize = 0, wakeMidCenter?: THREE.Vector2, wakeMidSize = 0): void {
     this.offset.value.set(Math.round(camX / 50) * 50, 0, Math.round(camZ / 50) * 50);
     this.uniforms.uWaveTime.value = time;
     this.uniforms.uWindSpeed.value = windSpeed;
@@ -966,5 +982,6 @@ export class Water {
     this.uniforms.uSunDirW.value.copy(sunDir);
     this.uniforms.uWakeRegion.value.set(wakeCenter.x, wakeCenter.y, wakeSize, 0);
     if (wakeNearCenter && wakeNearSize > 0) { const r = this.uniforms.uWakeNearRegion.value as THREE.Vector4; r.set(wakeNearCenter.x, wakeNearCenter.y, wakeNearSize, r.w); }
+    if (wakeMidCenter && wakeMidSize > 0) (this.uniforms.uWakeMidRegion.value as THREE.Vector4).set(wakeMidCenter.x, wakeMidCenter.y, wakeMidSize, 0);
   }
 }

@@ -22,9 +22,14 @@ const TILE_SHEET = 0, TILE_DROPS = 1, TILE_MIST = 2;
 const TILES = 3;
 
 /**
- * Spray atlas, three tiles side by side: a ragged sheet (a fan of water torn into streaks, drawn along +x so
- * it can be stretched along the particle's motion), a cluster of droplets, and mist (a soft irregular cloud of
- * the finest drops, no structure to speak of). Alpha in the red channel.
+ * Spray atlas, three tiles side by side, alpha in the red channel:
+ *  - sheet: a fan of thin filaments running from a dense root (left) to a frayed tip (right), drawn along +x so
+ *    the quad can be stretched along the particle's motion. Water torn off a chine is a film that immediately
+ *    breaks into strands; what the eye keys on is the fine parallel streaking with gaps between the strands,
+ *    not a soft blob (soft elongated blobs read as cotton once a few quads overlapped);
+ *  - droplets: a loose cluster of small hard dots, nothing soft behind them;
+ *  - mist: a ragged blotch built from hundreds of faint dots with a clumpy distribution, so no radial gradient
+ *    and no round outline anywhere (the old overlapping soft discs drew as 2-6 m circles in the touchdown clips).
  */
 function sprayTexture(): THREE.CanvasTexture {
   const w = 128 * TILES, h = 128;
@@ -33,55 +38,62 @@ function sprayTexture(): THREE.CanvasTexture {
   const ctx = c.getContext('2d')!;
   ctx.clearRect(0, 0, w, h);
   const rng = new Rng('spray-atlas');
-  // tile 0: sheet - a torn film: many soft blobs, a little elongated along x, densest toward the root (left),
-  // frayed and holed toward the tip (long thin streaks read as brush strokes / airflow lines once the quad was
-  // stretched along its motion)
+  // tile 0: sheet
   ctx.save();
   ctx.beginPath(); ctx.rect(0, 0, 128, 128); ctx.clip();
-  // the blobs stay inside the tile (a blob clipped by the tile edge gave the stretched sheet quad a hard
-  // straight end, and the fan read as stacked rectangles)
-  for (let i = 0; i < 170; i++) {
-    const u = Math.pow(rng.next(), 0.7);
-    const x = 20 + u * 86, y = 64 + rng.gauss() * (9 + 22 * u);
-    const len = 5 + 7 * rng.next(), wid = 2.5 + 4.5 * rng.next() * (1 - 0.3 * u);
-    const a = (0.6 - 0.35 * u) * (0.6 + 0.4 * rng.next());
-    const g = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
-    g.addColorStop(0, `rgba(255,255,255,${a.toFixed(3)})`);
-    g.addColorStop(0.5, `rgba(255,255,255,${(a * 0.45).toFixed(3)})`);
-    g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.save();
-    ctx.translate(x, y); ctx.rotate((rng.next() - 0.5) * 0.5); ctx.scale(len, wid);
-    ctx.fillStyle = g; ctx.fillRect(-1, -1, 2, 2);
-    ctx.restore();
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 90; i++) {
+    // filaments fan out from the root by up to +-22 degrees, the outer ones shorter and fainter
+    const spread = (rng.next() - 0.5) * 2;
+    const ang = spread * 0.38;
+    const len = (58 + 52 * rng.next()) * (1 - 0.35 * spread * spread);
+    const x0 = 6 + rng.next() * 16, y0 = 64 + spread * 9 + rng.gauss() * 2;
+    const a = (0.28 + 0.5 * rng.next()) * (1 - 0.4 * spread * spread);
+    const wid = 0.8 + 1.8 * rng.next();
+    // a filament thins and fades toward the tip: three segments of falling alpha and width
+    for (let s = 0; s < 3; s++) {
+      const t0 = s / 3, t1 = (s + 1) / 3;
+      const sa = a * (1 - 0.7 * t0 * t0);
+      ctx.strokeStyle = `rgba(255,255,255,${sa.toFixed(3)})`;
+      ctx.lineWidth = wid * (1 - 0.5 * t0);
+      ctx.beginPath();
+      ctx.moveTo(x0 + Math.cos(ang) * len * t0, y0 + Math.sin(ang) * len * t0 + 0.7 * Math.sin(t0 * 5.0 + i));
+      ctx.lineTo(x0 + Math.cos(ang) * len * t1, y0 + Math.sin(ang) * len * t1 + 0.7 * Math.sin(t1 * 5.0 + i));
+      ctx.stroke();
+    }
   }
+  // the root is a denser film: a short soft wedge the filaments grow out of
+  const root = ctx.createLinearGradient(4, 0, 46, 0);
+  root.addColorStop(0, 'rgba(255,255,255,0.0)'); root.addColorStop(0.25, 'rgba(255,255,255,0.35)'); root.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = root;
+  ctx.beginPath(); ctx.moveTo(4, 64); ctx.lineTo(46, 42); ctx.lineTo(46, 86); ctx.closePath(); ctx.fill();
   ctx.restore();
-  // tile 1: droplets - a loose cluster of small round dots with a faint mist behind them
+  // tile 1: droplets
   ctx.save();
   ctx.beginPath(); ctx.rect(128, 0, 128, 128); ctx.clip();
-  // (faint: a strong mist disc made every droplet quad a round translucent puff)
-  const mist = ctx.createRadialGradient(192, 64, 0, 192, 64, 44);
-  mist.addColorStop(0, 'rgba(255,255,255,0.1)'); mist.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = mist; ctx.fillRect(128, 0, 128, 128);
-  for (let i = 0; i < 70; i++) {
-    const r = 1.5 + 4.5 * Math.pow(rng.next(), 2);
-    const ang = rng.next() * Math.PI * 2, rad = 46 * Math.sqrt(rng.next());
+  for (let i = 0; i < 34; i++) {
+    const r = 1.2 + 3.0 * Math.pow(rng.next(), 2);
+    const ang = rng.next() * Math.PI * 2, rad = 44 * Math.sqrt(rng.next());
     const x = 192 + Math.cos(ang) * rad, y = 64 + Math.sin(ang) * rad;
-    const a = 0.5 + 0.5 * rng.next();
+    const a = 0.55 + 0.45 * rng.next();
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, `rgba(255,255,255,${a.toFixed(3)})`); g.addColorStop(0.6, `rgba(255,255,255,${(a * 0.7).toFixed(3)})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+    g.addColorStop(0, `rgba(255,255,255,${a.toFixed(3)})`); g.addColorStop(0.7, `rgba(255,255,255,${(a * 0.8).toFixed(3)})`); g.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = g; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
   }
   ctx.restore();
-  // tile 2: mist - a few overlapping soft discs of low alpha, off-centre so the cloud has no round outline
+  // tile 2: mist - dots scattered with a clumpy (multiplicative) density, faint, no envelope
   ctx.save();
   ctx.beginPath(); ctx.rect(256, 0, 128, 128); ctx.clip();
-  for (let i = 0; i < 9; i++) {
-    const ang = rng.next() * Math.PI * 2, rad = 22 * Math.sqrt(rng.next());
-    const x = 320 + Math.cos(ang) * rad, y = 64 + Math.sin(ang) * rad * 0.8;
-    const r = 26 + 18 * rng.next();
-    const a = 0.16 + 0.12 * rng.next();
+  const clumps: [number, number, number][] = [];
+  for (let i = 0; i < 7; i++) clumps.push([320 + (rng.next() - 0.5) * 70, 64 + (rng.next() - 0.5) * 62, 14 + 16 * rng.next()]);
+  for (let i = 0; i < 900; i++) {
+    const cl = clumps[Math.floor(rng.next() * clumps.length)];
+    const x = cl[0] + rng.gauss() * cl[2], y = cl[1] + rng.gauss() * cl[2] * 0.85;
+    if (x < 258 || x > 382 || y < 2 || y > 126) continue;
+    const r = 2.5 + 5 * rng.next();
+    const a = 0.035 + 0.05 * rng.next();
     const g = ctx.createRadialGradient(x, y, 0, x, y, r);
-    g.addColorStop(0, `rgba(255,255,255,${a.toFixed(3)})`); g.addColorStop(0.55, `rgba(255,255,255,${(a * 0.45).toFixed(3)})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+    g.addColorStop(0, `rgba(255,255,255,${a.toFixed(3)})`); g.addColorStop(1, 'rgba(255,255,255,0)');
     ctx.fillStyle = g; ctx.fillRect(x - r, y - r, 2 * r, 2 * r);
   }
   ctx.restore();
@@ -187,26 +199,28 @@ class SprayCloud {
   constructor(readonly capacity: number, tex: THREE.Texture) {
     const geo = new THREE.PlaneGeometry(1, 1);
     this.fx = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4).setUsage(THREE.DynamicDrawUsage) as THREE.InstancedBufferAttribute;
-    this.vel = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3).setUsage(THREE.DynamicDrawUsage) as THREE.InstancedBufferAttribute;
+    this.vel = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 4), 4).setUsage(THREE.DynamicDrawUsage) as THREE.InstancedBufferAttribute;
     geo.setAttribute('aFx', this.fx);   // alpha, tile, length along the motion, width
-    geo.setAttribute('aVel', this.vel); // world velocity (direction of the stretch)
+    geo.setAttribute('aVel', this.vel); // world velocity (direction of the stretch), age fraction
     const mat = new THREE.MeshStandardMaterial({ color: 0xf2f6f8, roughness: 1.0, metalness: 0.0, transparent: true, depthWrite: false, side: THREE.DoubleSide });
     mat.defines = { USE_UV: '' };
     mat.onBeforeCompile = (shader) => {
       shader.uniforms.uSprayTex = { value: tex };
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nattribute vec4 aFx;\nattribute vec3 aVel;\nvarying vec2 vFx;')
+        .replace('#include <common>', '#include <common>\nattribute vec4 aFx;\nattribute vec4 aVel;\nvarying vec4 vFx;')
         // an upward normal: spray is lit like the water surface it was torn from
         .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(0.0, 1.0, 0.0);')
         .replace('#include <project_vertex>', /* glsl */ `
-          vFx = aFx.xy;
+          // alpha, tile, age fraction, per-instance seed (a hash of the instance index: every quad is eroded by
+          // its own piece of the noise, so two sheets never share an outline)
+          vFx = vec4(aFx.xy, aVel.w, fract(float(gl_InstanceID) * 0.6180339887));
           vec4 mvPosition = vec4(0.0, 0.0, 0.0, 1.0);
           #ifdef USE_INSTANCING
             mvPosition = instanceMatrix * mvPosition;
           #endif
           mvPosition = modelViewMatrix * mvPosition;
           // billboard stretched along the view-space direction of the particle's motion
-          vec3 vv = (viewMatrix * vec4(aVel, 0.0)).xyz;
+          vec3 vv = (viewMatrix * vec4(aVel.xyz, 0.0)).xyz;
           vec2 ax = vv.xy;
           float al = length(ax);
           ax = al > 1e-4 ? ax / al : vec2(1.0, 0.0);
@@ -215,23 +229,43 @@ class SprayCloud {
           gl_Position = projectionMatrix * mvPosition;
         `);
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform sampler2D uSprayTex;\nvarying vec2 vFx;')
+        .replace('#include <common>', /* glsl */ `
+          #include <common>
+          uniform sampler2D uSprayTex;
+          varying vec4 vFx;
+          float sprayHash(vec2 q) { vec3 p3 = fract(vec3(q.xyx) * vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+          float sprayNoise(vec2 q) { vec2 i = floor(q), f = fract(q); f = f * f * (3.0 - 2.0 * f);
+            return mix(mix(sprayHash(i), sprayHash(i + vec2(1, 0)), f.x), mix(sprayHash(i + vec2(0, 1)), sprayHash(i + vec2(1, 1)), f.x), f.y); }
+        `)
         .replace('#include <map_fragment>', /* glsl */ `
           #include <map_fragment>
-          float tile = vFx.y;
+          float tile = vFx.y, ageK = vFx.z, seed = vFx.w * 37.0;
           float sprayA = texture2D(uSprayTex, vec2((vUv.x + tile) / ${TILES.toFixed(1)}, vUv.y)).r * vFx.x;
-          // soft window over the quad: nothing drawn by a sheet or droplet cluster may end in a straight edge
-          vec2 win = smoothstep(vec2(0.0), vec2(0.1, 0.16), vUv) * smoothstep(vec2(1.0), vec2(0.86, 0.84), vUv);
-          // streaks along the motion axis with a ragged tip, so a sheet is a torn fan and not a round puff
           float sheetK = 1.0 - clamp(tile, 0.0, 1.0);
-          float streak = mix(1.0, 0.78 + 0.22 * sin(vUv.y * 31.0 + vUv.x * 6.0), sheetK);
-          float tip = mix(1.0, mix(1.0, 0.6 + 0.4 * sin(vUv.y * 23.0 + 1.7), smoothstep(0.55, 1.0, vUv.x)), sheetK);
-          sprayA *= win.x * win.y * streak * tip;
-          if (sprayA < 0.01) discard;
-          diffuseColor.a *= sprayA;
-        `);
+          float mistK = clamp(tile - 1.0, 0.0, 1.0);
+          // erosion: a two-octave noise in the quad's own frame, thresholded higher as the particle ages, so a
+          // sheet frays into strands and a mist patch dissolves into rags instead of fading as one soft shape;
+          // the window keeps the quad's straight edges from ever printing but is itself ragged by the same noise
+          vec2 nq = vUv * vec2(mix(3.0, 6.0, mistK), mix(9.0, 6.0, mistK)) + seed;
+          float n = 0.65 * sprayNoise(nq) + 0.35 * sprayNoise(nq * 2.3 + 7.0);
+          float thr = mix(0.28, 0.62, ageK) + 0.1 * mistK;
+          float erode = smoothstep(thr - 0.22, thr + 0.12, n);
+          vec2 win = smoothstep(vec2(0.0), vec2(0.06, 0.12) + 0.18 * n, vUv) * smoothstep(vec2(1.0), vec2(0.9, 0.86) - 0.18 * n, vUv);
+          // sheets: fine strands along the motion axis that separate as the film breaks up (more contrast with age)
+          float strand = 0.6 + 0.4 * sprayNoise(vec2(vUv.x * 4.0 + seed, vUv.y * 34.0));
+          float streak = mix(1.0, mix(0.85, strand, 0.5 + 0.5 * ageK), sheetK);
+          sprayA *= win.x * win.y * erode * streak;
+          if (sprayA < 0.008) discard;
+          // a fresh sheet is a film of clear water: translucent, tinted by the sea it was torn from and glinting
+          // (roughness below); it whitens as it breaks into drops over its first tenths of a second, so a single
+          // sheet reads glassy while the stacked roots of many at the chine read white
+          float film = sheetK * (1.0 - smoothstep(0.1, 0.45, ageK));
+          diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.62, 0.86, 0.92), 0.55 * film);
+          diffuseColor.a *= sprayA * (1.0 - 0.45 * film);
+        `)
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.3, film);');
     };
-    mat.customProgramCacheKey = () => 'plane-spray-v3';
+    mat.customProgramCacheKey = () => 'plane-spray-v5';
     this.material = mat;
     this.mesh = new THREE.InstancedMesh(geo, mat, capacity);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -268,7 +302,7 @@ class SprayCloud {
         p.vy = -0.35 + (p.vy + 0.35) * d;
         p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
         if (p.y < 0.25) p.y = 0.25;
-        grow = 0.7 + 1.3 * Math.sqrt(k);
+        grow = 0.7 + 0.9 * Math.sqrt(k);
         // billboard axis: mist is not stretched along its motion; keep the quad upright-ish in view (x axis)
         dirX = 1;
       } else {
@@ -291,7 +325,7 @@ class SprayCloud {
       fx[n * 4 + 1] = p.tile;
       fx[n * 4 + 2] = p.len * grow;
       fx[n * 4 + 3] = p.wid * grow;
-      vel[n * 3] = dirX; vel[n * 3 + 1] = dirY; vel[n * 3 + 2] = dirZ;
+      vel[n * 4] = dirX; vel[n * 4 + 1] = dirY; vel[n * 4 + 2] = dirZ; vel[n * 4 + 3] = k;
       n++;
     }
     this.mesh.count = n;
@@ -323,6 +357,7 @@ export class PlaneEffects {
   private tailAcc = 0;
   private exhaustAcc = 0;
   private ploughAcc = 0;
+  private boilAcc = 0;
   /** the impact splats of the wake maps (null when the batch has none) */
   private readonly splats: SplatBatch | null;
 
@@ -334,7 +369,9 @@ export class PlaneEffects {
     for (const w of [this.wakeL, this.wakeR]) { w.propWash = 0; w.planingSpeed = 15; w.churn = 0.85; }
     this.splats = wakes.splats;
     const tex = spriteTexture();
-    this.spray = new SprayCloud(480, sprayTexture());
+    // (640: a level wing slapping down emits its curtain along the whole span in one frame, on top of the
+    // touchdown plume; 480 evicted the planing spray)
+    this.spray = new SprayCloud(640, sprayTexture());
     this.exhaust = new ParticleCloud(120, new THREE.Color(0.25, 0.24, 0.23), tex, 0.22, THREE.NormalBlending);
     scene.add(this.spray.mesh, this.exhaust.points);
     this.vortexL = new WakeTrail(90, 0.5, 2.2, 0.6, CONTRAIL_MATERIAL);
@@ -349,7 +386,7 @@ export class PlaneEffects {
     this.wakeL.reset(); this.wakeR.reset(); this.vortexL.reset(); this.vortexR.reset();
     this.spray.clear(); this.exhaust.clear();
     this.splats?.clear();
-    this.sprayAcc = 0; this.tailAcc = 0; this.exhaustAcc = 0; this.ploughAcc = 0;
+    this.sprayAcc = 0; this.tailAcc = 0; this.exhaustAcc = 0; this.ploughAcc = 0; this.boilAcc = 0;
     this.rng = new Rng('plane-effects');
   }
 
@@ -370,54 +407,80 @@ export class PlaneEffects {
     const spd = imp.speed;
     const ml = Math.hypot(imp.vx, imp.vz);
     const mx = ml > 0.1 ? imp.vx / ml : 1, mz = ml > 0.1 ? imp.vz / ml : 0;   // motion direction (world xz)
-    const px = -mz, pz = mx;                                                    // across it
+    let px = -mz, pz = mx;                                                      // across it
     const structural = imp.part !== 'float' && imp.part !== 'wheel';
     const rng = this.rng;
+    // a line contact (a level wing slapping down along its span, an inverted cabin along its length): the water
+    // leaves along the whole wetted length at once, thrown out to either side of the line and up, so the curtain
+    // is as long as the wing and the splat a band along it (r4: the wing stations are the tips, so an inverted
+    // airframe falling flat onto the water raised two starbursts at the tips and nothing along the 15 m between)
+    const ext = imp.extent;
+    const L = ext ? ext.to - ext.from : 0;
+    if (ext) { px = -ext.dz; pz = ext.dx; }
+    const ex = ext ? ext.dx : 0, ez = ext ? ext.dz : 0;
+    const spread = 1 + L / 5;   // emitter counts grow with the wetted length (a 7.5 m half span: 2.5 x a point)
     // sheets: a curtain either side of the keel for a float (thrown outward and up, leaning forward), a plume for
     // a wing tip / the nose (thrown up and back over the part, as the water it ploughs is flung aft)
-    const nSheet = Math.round((structural ? 10 : 8) + 22 * E);
+    // (r2: the sheets leave the chines at 35-55 degrees from the vertical, not straight up: a float landing at
+    // 3 m/s sink throws two curtains out to the sides that the camera sees as a V behind the hull, with the
+    // fuselage still visible between them; the r1 clips wrapped the tail in one white mass)
+    const nSheet = Math.round(((structural ? 8 : 6) + 16 * E) * spread);
     for (let i = 0; i < nSheet; i++) {
       const s = rng.next() < 0.5 ? -1 : 1;
+      const u = ext ? ext.from + rng.next() * L : 0;
       const along = structural ? -(0.5 + rng.next() * 2.0) * (0.4 + E) : (rng.next() - 0.35) * 1.6;
-      const out = structural ? (0.4 + rng.next() * 1.5) * s : (1.1 + rng.next() * 2.2) * s * (0.6 + 0.8 * E);
-      const up = (2.2 + 5.5 * E) * (0.6 + 0.6 * rng.next()) + (structural ? 0.02 * spd : 0);
-      const carry = structural ? 0.22 : 0.32 + 0.1 * E;
+      // off a line the curtain leaves to both sides at the angle of a float's chine, not as a tip's narrow plume
+      const out = ext ? (1.6 + rng.next() * 2.4) * s * (0.55 + 0.7 * E) : structural ? (0.6 + rng.next() * 1.8) * s : (2.4 + rng.next() * 3.2) * s * (0.55 + 0.7 * E);
+      const up = (1.8 + 4.2 * E) * (0.6 + 0.6 * rng.next()) + (structural ? 0.02 * spd : 0);
+      const carry = structural ? 0.22 : 0.3 + 0.1 * E;
       this.spray.emit({
-        x: imp.x + mx * (rng.next() - 0.5) * 1.2 + px * out * 0.12, y: imp.y + 0.08, z: imp.z + mz * (rng.next() - 0.5) * 1.2 + pz * out * 0.12,
+        x: imp.x + ex * u + mx * (rng.next() - 0.5) * 1.2 + px * out * 0.1, y: imp.y + 0.08, z: imp.z + ez * u + mz * (rng.next() - 0.5) * 1.2 + pz * out * 0.1,
         vx: imp.vx * carry + mx * along + px * out + (rng.next() - 0.5) * 0.6, vy: up, vz: imp.vz * carry + mz * along + pz * out + (rng.next() - 0.5) * 0.6,
-        life: 0.5 + rng.next() * 0.4 + 0.3 * E, age: 0, size: 1, tile: TILE_SHEET,
-        len: (1.2 + rng.next() * 1.4) * (0.8 + 0.9 * E), wid: (0.5 + rng.next() * 0.5) * (0.9 + 0.6 * E),
-        alpha: 0.3 + 0.25 * rng.next() + 0.2 * E,
+        life: 0.45 + rng.next() * 0.35 + 0.3 * E, age: 0, size: 1, tile: TILE_SHEET,
+        len: (1.2 + rng.next() * 1.4) * (0.8 + 0.9 * E), wid: (0.45 + rng.next() * 0.45) * (0.9 + 0.6 * E),
+        alpha: 0.24 + 0.22 * rng.next() + 0.14 * E,
       });
     }
     // droplets: from the sheets' rims, more forward momentum, ballistic
-    const nDrop = Math.round(6 + 20 * E);
+    const nDrop = Math.round((6 + 20 * E) * spread);
     for (let i = 0; i < nDrop; i++) {
       const s = rng.next() < 0.5 ? -1 : 1;
-      const out = (0.8 + rng.next() * 2.6) * s * (0.6 + 0.7 * E);
+      const u = ext ? ext.from + rng.next() * L : 0;
+      const out = (1.2 + rng.next() * 3.2) * s * (0.6 + 0.7 * E);
       const along = structural ? -(rng.next() * 3.0) : rng.next() * 2.5;
       this.spray.emit({
-        x: imp.x + px * out * 0.2, y: imp.y + 0.3 + rng.next() * 0.5, z: imp.z + pz * out * 0.2,
+        x: imp.x + ex * u + px * out * 0.2, y: imp.y + 0.3 + rng.next() * 0.5, z: imp.z + ez * u + pz * out * 0.2,
         vx: imp.vx * (0.4 + 0.2 * E) + mx * along + px * out, vy: 2.0 + 4.5 * E * rng.next() + rng.next() * 1.5, vz: imp.vz * (0.4 + 0.2 * E) + mz * along + pz * out,
         life: 0.6 + rng.next() * 0.5 + 0.2 * E, age: 0, size: 1, tile: TILE_DROPS,
         len: (0.8 + rng.next() * 0.9) * (0.8 + 0.6 * E), wid: (0.35 + rng.next() * 0.4) * (0.8 + 0.5 * E),
         alpha: 0.35 + 0.3 * rng.next() + 0.1 * E,
       });
     }
-    // mist: a few large faint puffs where the sheets break, hanging behind the contact
-    const nMist = Math.round(2 + 6 * E);
+    // mist: faint rags where the sheets break, hanging behind the contact (small: the r1 mist quads grew to
+    // 5-6 m and were the soft white discs that hid everything else)
+    const nMist = Math.round((2 + 6 * E) * spread);
     for (let i = 0; i < nMist; i++) {
       const s = (rng.next() - 0.5) * 2;
+      const u = ext ? ext.from + rng.next() * L : 0;
       this.spray.emit({
-        x: imp.x - mx * (0.5 + rng.next() * 1.5) + px * s * 1.2, y: imp.y + 0.6 + rng.next() * 0.8 + 0.8 * E, z: imp.z - mz * (0.5 + rng.next() * 1.5) + pz * s * 1.2,
-        vx: imp.vx * 0.25 + px * s * 0.8, vy: 1.2 + 1.6 * E + rng.next() * 0.8, vz: imp.vz * 0.25 + pz * s * 0.8,
-        life: 1.4 + rng.next() * 0.9 + 0.7 * E, age: 0, size: 1, tile: TILE_MIST,
-        len: (1.6 + rng.next() * 1.4) * (0.8 + 1.0 * E), wid: (1.3 + rng.next() * 1.0) * (0.8 + 1.0 * E),
-        alpha: 0.12 + 0.12 * rng.next() + 0.16 * E,
+        x: imp.x + ex * u - mx * (0.5 + rng.next() * 1.5) + px * s * 1.6, y: imp.y + 0.5 + rng.next() * 0.7 + 0.6 * E, z: imp.z + ez * u - mz * (0.5 + rng.next() * 1.5) + pz * s * 1.6,
+        vx: imp.vx * 0.25 + px * s * 1.0, vy: 0.9 + 1.4 * E + rng.next() * 0.7, vz: imp.vz * 0.25 + pz * s * 1.0,
+        life: 1.3 + rng.next() * 0.8 + 0.6 * E, age: 0, size: 1, tile: TILE_MIST,
+        len: (1.0 + rng.next() * 0.9) * (0.8 + 0.7 * E), wid: (0.8 + rng.next() * 0.7) * (0.8 + 0.7 * E),
+        alpha: 0.07 + 0.08 * rng.next() + 0.1 * E,
       });
     }
-    // the surface itself: the splat, stretched along the motion by the speed
-    this.splats?.add(imp.x, imp.z, time, E, imp.vx, imp.vz, 1 + Math.min(spd, 30) * 0.05, structural ? 1 : 0);
+    // the surface itself: the splat, stretched along the motion by the speed; off a line contact it is centred on
+    // the wetted length and stretched along it instead (the shader's r0 for this energy and kind sets the stretch)
+    if (this.splats) {
+      if (ext && L > 0.8) {
+        const r0 = (0.6 + 1.3 * E) * (structural ? 1.6 : 1);
+        const mid = 0.5 * (ext.from + ext.to);
+        this.splats.add(imp.x + ex * mid, imp.z + ez * mid, time, E, ex, ez, Math.max(1, (0.5 * L + r0) / r0), structural ? 1 : 0);
+      } else {
+        this.splats.add(imp.x, imp.z, time, E, imp.vx, imp.vz, 1 + Math.min(spd, 30) * 0.05, structural ? 1 : 0);
+      }
+    }
     void flight;
   }
 
@@ -445,8 +508,8 @@ export class PlaneEffects {
         x: imp.x + px * s * 0.5, y: imp.y + 0.15 + (tile === TILE_MIST ? 1.0 : 0), z: imp.z + pz * s * 0.5,
         vx: imp.vx * 0.15 - mx * (1.0 + 3.0 * k) * rng.next() + px * s * (1.0 + 2.0 * k), vy: up, vz: imp.vz * 0.15 - mz * (1.0 + 3.0 * k) * rng.next() + pz * s * (1.0 + 2.0 * k),
         life: tile === TILE_MIST ? 1.2 + rng.next() * 0.8 : 0.5 + rng.next() * 0.5, age: 0, size: 1, tile,
-        len: tile === TILE_MIST ? 1.5 + rng.next() : (0.9 + rng.next() * 1.2) * (0.7 + 0.6 * k), wid: tile === TILE_MIST ? 1.2 + rng.next() * 0.8 : (0.4 + rng.next() * 0.5) * (0.8 + 0.4 * k),
-        alpha: tile === TILE_MIST ? 0.1 + 0.1 * rng.next() : 0.3 + 0.3 * rng.next(),
+        len: tile === TILE_MIST ? 1.0 + rng.next() * 0.8 : (0.9 + rng.next() * 1.2) * (0.7 + 0.6 * k), wid: tile === TILE_MIST ? 0.8 + rng.next() * 0.6 : (0.4 + rng.next() * 0.5) * (0.8 + 0.4 * k),
+        alpha: tile === TILE_MIST ? 0.06 + 0.08 * rng.next() : 0.28 + 0.25 * rng.next(),
       });
     }
     // a splat every ~2 m of travel (the accumulator shares the plume's clock: one splat per ~25 particles)
@@ -482,16 +545,52 @@ export class PlaneEffects {
     for (const imp of flight.impacts) this.splash(flight, imp, time);
     // parts still ploughing through the water at speed (ditching): a continuous plume behind each
     for (const pl of flight.ploughing) this.plough(pl, dt, time);
+    // a flooding hull boils: the air driven out of a split float breaks the surface around it in bursts for as
+    // long as it fills (and the churn of the ditching keeps bubbling up for a while after), so the wreck does not
+    // lie in glassy water seconds after coming to rest (r4b)
+    const w = flight.wreck;
+    if (w && t.onWater && speed < 6) {
+      this.boilAcc += dt;
+      while (this.boilAcc >= 0.3) {
+        this.boilAcc -= 0.3;
+        for (let i = 0; i < 2; i++) {
+          const filling = w.floodTarget[i] - w.flood[i];
+          const boil = Math.max(Math.min(filling * 3, 1), 0.5 * (1 - smoothstep(6, 25, w.age)));
+          if (boil < 0.05 || this.rng.next() > boil) continue;
+          const stern = i === 0 ? model.floatSternL : model.floatSternR;
+          const p = this.tmp.copy(stern).setX(-1.8 + this.rng.next() * 4.0).setZ(stern.z + (this.rng.next() - 0.5) * 0.9).applyQuaternion(q).add(flight.position);
+          const sy = floats[i].surfaceY;
+          this.splats?.add(p.x, p.z, time, 0.04 + 0.12 * boil, 1, 0, 1, 0);
+          const nb = 2 + Math.round(3 * this.rng.next() * boil);
+          for (let k = 0; k < nb; k++) {
+            this.spray.emit({
+              x: p.x + (this.rng.next() - 0.5) * 0.7, y: sy + 0.1, z: p.z + (this.rng.next() - 0.5) * 0.7,
+              vx: (this.rng.next() - 0.5) * 0.9, vy: 0.5 + this.rng.next() * 1.0 * boil, vz: (this.rng.next() - 0.5) * 0.9,
+              life: 0.35 + this.rng.next() * 0.3, age: 0, size: 1, tile: TILE_DROPS,
+              len: 0.25 + this.rng.next() * 0.3, wid: 0.2 + this.rng.next() * 0.2, alpha: 0.28 + 0.2 * this.rng.next(),
+            });
+          }
+        }
+      }
+    } else this.boilAcc = 0;
     // spray: the bow wave tears into sheets from about 5 m/s (the hump), then the chines throw the spray blister
     // sideways and aft from the forebody while planing; dies away once the floats are unloaded. Three fractions:
     // the root sheets (a dense translucent curtain hugging the chine, opening outward and leaning forward),
     // the droplets its rim breaks into (higher, further out, falling), and the mist that hangs behind
     if (t.onWater && speed > 4.5) {
       const hump = smoothstep(4.5, 11, speed);
-      const rate = (26 * hump + 70 * smoothstep(9, 18, speed)) * (1 - 0.55 * smoothstep(28, 40, speed));
-      this.sprayAcc += rate * dt;
       const right = this.right.set(0, 0, 1).applyQuaternion(q);
       const v = flight.velocity;
+      // slip: the water meets a skidding hull on its side (a slewing wreck, a yawed touchdown), so the spray
+      // leaves the upstream side along the hull's whole length and is thrown along the motion and up, like the
+      // wall a hull pushes sliding sideways, instead of off the two chines as if it were running straight
+      const vh = Math.hypot(v.x, v.z) || 1;
+      const wx = v.x / vh, wz = v.z / vh;
+      const slipSin = wx * right.x + wz * right.z;   // + : sliding toward starboard
+      const slip = smoothstep(0.25, 0.7, Math.abs(slipSin));
+      const upSide = slipSin > 0 ? 1 : -1;
+      const rate = (26 * hump + 70 * smoothstep(9, 18, speed)) * (1 - 0.55 * smoothstep(28, 40, speed)) * (1 + 1.5 * slip);
+      this.sprayAcc += rate * dt;
       while (this.sprayAcc >= 1) {
         this.sprayAcc -= 1;
         for (const bow of [model.floatBowL, model.floatBowR]) {
@@ -499,9 +598,10 @@ export class PlaneEffects {
           const fs = floats[side > 0 ? 1 : 0];
           // only a float that is actually running in the water throws spray
           if (fs.step < -0.02 && fs.bow < -0.02) continue;
-          // emission station: at the bow in the hump phase, spread over the forebody chine when planing
-          const ax = lerp(2.3, 0.4 + this.rng.next() * 1.6, planing);
-          const p = this.tmp.copy(bow).setX(ax).setZ(bow.z + side * 0.3).applyQuaternion(q).add(flight.position);
+          // emission station: at the bow in the hump phase, spread over the forebody chine when planing, along
+          // the upstream side in a skid
+          const ax = lerp(lerp(2.3, 0.4 + this.rng.next() * 1.6, planing), -2.0 + this.rng.next() * 4.3, slip);
+          const p = this.tmp.copy(bow).setX(ax).setZ(bow.z + lerp(side * 0.3, upSide * 0.35, slip)).applyQuaternion(q).add(flight.position);
           const u = this.rng.next();
           const tile = u < 0.5 ? TILE_SHEET : u < 0.82 ? TILE_DROPS : TILE_MIST;
           const lat = (tile === TILE_MIST ? 1.5 + this.rng.next() * 1.5 : (1.6 + this.rng.next() * 2.6) * (0.6 + 0.6 * hump) + speed * (tile === TILE_DROPS ? 0.07 : 0.045));
@@ -509,18 +609,19 @@ export class PlaneEffects {
           // the sheets leave the chine nearly still in the water's frame (the float runs on ahead of them); the
           // drops keep a little more of the hull's speed, the mist stays where it was born
           const carry = tile === TILE_SHEET ? 0.16 : tile === TILE_DROPS ? 0.24 : 0.08;
+          const tx = lerp(right.x * side, wx, slip), tz = lerp(right.z * side, wz, slip);
           this.spray.emit({
             x: p.x, y: fs.surfaceY + (tile === TILE_MIST ? 0.9 + this.rng.next() * 0.7 : 0.12), z: p.z,
-            vx: v.x * carry + right.x * side * lat + (this.rng.next() - 0.5) * 1.2,
+            vx: v.x * carry + tx * lat + (this.rng.next() - 0.5) * 1.2,
             vy: up,
-            vz: v.z * carry + right.z * side * lat + (this.rng.next() - 0.5) * 1.2,
+            vz: v.z * carry + tz * lat + (this.rng.next() - 0.5) * 1.2,
             life: tile === TILE_MIST ? 1.1 + this.rng.next() * 0.9 : tile === TILE_SHEET ? 0.35 + this.rng.next() * 0.3 : 0.5 + this.rng.next() * 0.5, age: 0,
             size: 1, tile,
             // sheets are short and wide (a blister of water, not a spike); droplet clusters are stretched along
             // their flight (a round cluster read as a puff); the mist is a soft cloud
-            len: tile === TILE_SHEET ? 0.9 + this.rng.next() * 0.7 + speed * 0.01 : tile === TILE_DROPS ? 0.8 + this.rng.next() * 0.9 : 1.4 + this.rng.next() * 1.2,
-            wid: tile === TILE_SHEET ? 0.8 + this.rng.next() * 0.7 : tile === TILE_DROPS ? 0.35 + this.rng.next() * 0.4 : 1.1 + this.rng.next() * 0.9,
-            alpha: tile === TILE_SHEET ? 0.45 + 0.3 * this.rng.next() : tile === TILE_DROPS ? 0.3 + 0.3 * this.rng.next() : 0.1 + 0.1 * this.rng.next(),
+            len: tile === TILE_SHEET ? 0.9 + this.rng.next() * 0.7 + speed * 0.01 : tile === TILE_DROPS ? 0.8 + this.rng.next() * 0.9 : 1.0 + this.rng.next() * 0.8,
+            wid: tile === TILE_SHEET ? 0.7 + this.rng.next() * 0.6 : tile === TILE_DROPS ? 0.35 + this.rng.next() * 0.4 : 0.8 + this.rng.next() * 0.6,
+            alpha: tile === TILE_SHEET ? 0.3 + 0.22 * this.rng.next() : tile === TILE_DROPS ? 0.3 + 0.3 * this.rng.next() : 0.06 + 0.08 * this.rng.next(),
           });
         }
       }
@@ -528,7 +629,9 @@ export class PlaneEffects {
     // rooster tail: on the step the flow leaves the transom clean and closes behind it in a plume of spray a
     // hull length back, one per float, thrown up and left behind (it hangs nearly still in the water's frame)
     if (t.onWater && planing > 0.05) {
-      this.tailAcc += 44 * planing * dt;
+      // (r4: 30/s, mostly drops and thin sheets, 1.5-2.5 m up: at 44/s with a fifth of them mist rags the two
+      // plumes read as cotton puffs a metre and a half across in the 3 s planing frame of `water-landing`)
+      this.tailAcc += 30 * planing * dt;
       const v = flight.velocity;
       while (this.tailAcc >= 1) {
         this.tailAcc -= 1;
@@ -539,18 +642,18 @@ export class PlaneEffects {
           const back = 1.4 + this.rng.next() * 1.8 + 0.06 * speed;
           const p = this.tmp.copy(stern).setX(-0.35 - back).setZ(stern.z + (this.rng.next() - 0.5) * 0.5).applyQuaternion(q).add(flight.position);
           const u = this.rng.next();
-          const tile = u < 0.45 ? TILE_DROPS : u < 0.8 ? TILE_SHEET : TILE_MIST;
+          const tile = u < 0.45 ? TILE_DROPS : u < 0.9 ? TILE_SHEET : TILE_MIST;
           // the plume: the two flows off the step close behind the transom and shoot up 1.5-2.5 m
           this.spray.emit({
-            x: p.x, y: fs.surfaceY + (tile === TILE_MIST ? 1.2 : 0.15), z: p.z,
-            vx: v.x * 0.1 + (this.rng.next() - 0.5) * 1.4,
-            vy: (tile === TILE_MIST ? 1.2 + this.rng.next() : 2.6 + this.rng.next() * 3.0) * planing,
-            vz: v.z * 0.1 + (this.rng.next() - 0.5) * 1.4,
-            life: tile === TILE_MIST ? 1.0 + this.rng.next() * 0.8 : 0.5 + this.rng.next() * 0.45, age: 0,
+            x: p.x, y: fs.surfaceY + (tile === TILE_MIST ? 0.9 : 0.15), z: p.z,
+            vx: v.x * 0.1 + (this.rng.next() - 0.5) * 1.0,
+            vy: (tile === TILE_MIST ? 0.9 + this.rng.next() * 0.8 : 1.8 + this.rng.next() * 2.2) * planing,
+            vz: v.z * 0.1 + (this.rng.next() - 0.5) * 1.0,
+            life: tile === TILE_MIST ? 0.9 + this.rng.next() * 0.6 : 0.4 + this.rng.next() * 0.35, age: 0,
             size: 1, tile,
-            len: tile === TILE_DROPS ? 0.8 + this.rng.next() * 0.9 : tile === TILE_SHEET ? 0.8 + this.rng.next() * 0.7 : 1.2 + this.rng.next(),
-            wid: tile === TILE_DROPS ? 0.35 + this.rng.next() * 0.35 : tile === TILE_SHEET ? 0.6 + this.rng.next() * 0.5 : 1.0 + this.rng.next() * 0.8,
-            alpha: tile === TILE_MIST ? 0.1 + 0.1 * this.rng.next() : 0.35 + 0.3 * this.rng.next(),
+            len: tile === TILE_DROPS ? 0.7 + this.rng.next() * 0.7 : tile === TILE_SHEET ? 0.7 + this.rng.next() * 0.6 : 0.7 + this.rng.next() * 0.6,
+            wid: tile === TILE_DROPS ? 0.3 + this.rng.next() * 0.3 : tile === TILE_SHEET ? 0.3 + this.rng.next() * 0.3 : 0.5 + this.rng.next() * 0.5,
+            alpha: tile === TILE_MIST ? 0.05 + 0.06 * this.rng.next() : 0.26 + 0.22 * this.rng.next(),
           });
         }
       }

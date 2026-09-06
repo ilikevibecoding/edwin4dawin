@@ -15,24 +15,33 @@ export const WAKE_DRIFT = { x: 0, z: 0 };
  * Top-down render targets holding foam (R) and surface slope (GB, 0.5 = flat) for boat and float wakes.
  * Anything that disturbs the water is a ribbon of the shared WakeBatch (one draw per map):
  *  - the far map covers a few kilometres around the camera at ~1.6 m per texel (boat wakes from altitude),
+ *  - the mid map covers a few hundred metres ahead of the camera at ~0.4 m per texel: a runabout's lane is
+ *    two far-map texels wide and drew as a soft stripe from anywhere near the water; this map carries the
+ *    froth patches, dark windows and arm crests of the boats the player is flying past,
  *  - the near map covers the water around the aircraft at a few centimetres per texel, so the bow wave,
  *    waterline foam and fresh float wake survive the close aircraft views instead of blurring into a smear.
- * The water shader samples the near map where it is defined and the far map elsewhere. A second draw per map
- * holds the impact splats (SplatBatch): the depression, ring waves and whitewater of a hull slapping the water.
+ * The water shader samples the near map where it is defined, the mid map inside its region and the far map
+ * elsewhere. A second draw per map holds the impact splats (SplatBatch): the depression, ring waves and
+ * whitewater of a hull slapping the water.
  */
 export class WakeMap {
   readonly rt: THREE.WebGLRenderTarget;
+  readonly midRt: THREE.WebGLRenderTarget;
   readonly nearRt: THREE.WebGLRenderTarget;
   /** signed surface elevation of the hull wave systems over the near region (R up, G down, metres / HEIGHT_SCALE) */
   readonly heightRt: THREE.WebGLRenderTarget;
   readonly scene = new THREE.Scene();
   readonly camera: THREE.OrthographicCamera;
+  readonly midCamera: THREE.OrthographicCamera;
   readonly nearCamera: THREE.OrthographicCamera;
   readonly center = new THREE.Vector2();
+  readonly midCenter = new THREE.Vector2();
   readonly nearCenter = new THREE.Vector2();
   readonly size: number;
+  readonly midSize: number;
   readonly nearSize: number;
   private readonly texel: number;
+  private readonly midTexel: number;
   private readonly nearTexel: number;
   readonly heightTexel: number;
   /** every wake ribbon (boats, floats) in one draw; trails are created with it as their target */
@@ -40,10 +49,12 @@ export class WakeMap {
   /** impact splats (touchdown slaps, ditching contacts), one instanced draw per map */
   readonly splats: SplatBatch;
 
-  constructor(resolution = 1024, size = 3200, nearResolution = 1024, nearSize = 64, heightResolution = 512) {
+  constructor(resolution = 1024, size = 3200, nearResolution = 1024, nearSize = 64, heightResolution = 512, midResolution = 1024, midSize = 400) {
     this.size = size;
+    this.midSize = midSize;
     this.nearSize = nearSize;
     this.texel = size / resolution;
+    this.midTexel = midSize / midResolution;
     this.nearTexel = nearSize / nearResolution;
     this.heightTexel = nearSize / heightResolution;
     const make = (res: number, mips: boolean) => {
@@ -54,12 +65,16 @@ export class WakeMap {
     // the far map is minified from altitude (a texel-wide arm falls between pixel centres and reads as a dashed
     // line without mipmaps); the near map is only ever magnified
     this.rt = make(resolution, true);
+    // the mid map is minified from altitude too (the region is right under a high camera)
+    this.midRt = make(midResolution, true);
     this.nearRt = make(nearResolution, false);
     // the height field is smooth at the decimetre scale (bow hump, hollow, rooster tail): a quarter of the near
     // map's texels, sampled by the water patch's vertices and finite-differenced for its normal
     this.heightRt = make(heightResolution, false);
     this.camera = new THREE.OrthographicCamera(-size / 2, size / 2, size / 2, -size / 2, 1, 400);
     this.camera.up.set(0, 0, -1);
+    this.midCamera = new THREE.OrthographicCamera(-midSize / 2, midSize / 2, midSize / 2, -midSize / 2, 1, 400);
+    this.midCamera.up.set(0, 0, -1);
     this.nearCamera = new THREE.OrthographicCamera(-nearSize / 2, nearSize / 2, nearSize / 2, -nearSize / 2, 1, 400);
     this.nearCamera.up.set(0, 0, -1);
     this.splats = new SplatBatch();
@@ -68,15 +83,20 @@ export class WakeMap {
   }
 
   get texture(): THREE.Texture { return this.rt.texture; }
+  get midTexture(): THREE.Texture { return this.midRt.texture; }
   get nearTexture(): THREE.Texture { return this.nearRt.texture; }
   get heightTexture(): THREE.Texture { return this.heightRt.texture; }
 
-  /** Render the maps: the far one around the camera, the near foam/slope map and the height field around
-   *  (nearX, nearZ), the aircraft. Three draws of the one batch (plus the splats). */
-  render(renderer: THREE.WebGLRenderer, camX: number, camZ: number, nearX = camX, nearZ = camZ): void {
+  /** Render the maps: the far one around the camera, the mid one ahead of it (along the camera's horizontal
+   *  view direction (fwdX, fwdZ), so the region covers the water in front of the lens rather than behind it),
+   *  the near foam/slope map and the height field around (nearX, nearZ), the aircraft. Four draws of the one
+   *  batch (plus the splats). */
+  render(renderer: THREE.WebGLRenderer, camX: number, camZ: number, nearX = camX, nearZ = camZ, fwdX = 0, fwdZ = 0): void {
     this.batch.upload();
     this.splats.upload();
     this.center.set(Math.round(camX / 8) * 8, Math.round(camZ / 8) * 8);
+    const mt = this.midTexel, ahead = this.midSize * 0.3;
+    this.midCenter.set(Math.round((camX + fwdX * ahead) / mt) * mt, Math.round((camZ + fwdZ * ahead) / mt) * mt);
     const nt = this.nearTexel;
     this.nearCenter.set(Math.round(nearX / nt) * nt, Math.round(nearZ / nt) * nt);
     const prev = renderer.getRenderTarget();
@@ -84,6 +104,7 @@ export class WakeMap {
     const prevAlpha = renderer.getClearAlpha();
     renderer.setClearColor(0x008080, 0);
     this.pass(renderer, this.rt, this.camera, this.center, this.texel);
+    this.pass(renderer, this.midRt, this.midCamera, this.midCenter, mt);
     this.pass(renderer, this.nearRt, this.nearCamera, this.nearCenter, nt);
     renderer.setClearColor(0x000000, 0);
     this.batch.useHeight(true);
@@ -187,7 +208,9 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
       float froth = smoothstep(2.0, 8.0, aspd);
       float planing = smoothstep(planeV * 0.75, planeV * 1.25, aspd);
       float fine = 1.0 - smoothstep(0.25, 1.2, uTexel);   // 1 in the centimetre map, 0 in the metre map
-      float fl = 0.35 / uTexel;                    // finest useful noise frequency: ~3 texels of this map
+      // finest useful noise frequency: a period of 5 texels of this map (thresholded at 3 texels the froth
+      // patches magnified into texel-aligned blocks, r3 100 m view)
+      float fl = 0.2 / uTexel;
       float hullScale = 0.6 + 0.4 * min(w0, 2.0);
       // world-anchored breakup so foam reads as churned patches, never a chalk line
       float n1 = vn(vWp * 0.35), n2 = vn(vWp * min(1.3, fl) + 4.0), n3 = vn(vWp * min(3.1, fl) + 11.0);
@@ -202,7 +225,9 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         // ---- stern turbulence: a beam wide at the transom, spreading like a turbulent wake (with the square
         //      root of the distance) while its froth thins as it spreads
         float laneHalf0 = w0 * 1.05;
-        float laneHalf = laneHalf0 + 0.45 * sqrt(d * max(w0, 0.15));
+        // a planing hull's foam rail spreads less than a displacement hull's turbulent lane (its wake is a pair
+        // of narrow whitewater rails off the step, r4 planing frames)
+        float laneHalf = laneHalf0 + 0.45 * sqrt(d * max(w0, 0.15)) * (1.0 - 0.45 * planing);
         float ls = 1.0 / max(laneHalf, 0.3);
         // each edge wanders by a quarter of the width over a few widths along the track (a fixed-width band
         // read as a painted stripe)
@@ -213,20 +238,25 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         float laneHalfR = max(laneHalfN, 0.9 * uTexel);
         float laneMask = 1.0 - smoothstep(laneHalfR * 0.4, laneHalfR, ay);
         float laneFade = 1.0 - smoothstep(0.0, laneLen, d);
-        // fresh churn over the first hull length and a half
-        float fresh = exp(-d / (1.5 * lead + 6.0 * w0));
+        // fresh churn over the first hull length and a half, but the froth is a matter of seconds, not of hull
+        // lengths: a ship's stays dense for 10-15 s of travel, not for 260 m (the r3 ship view showed a solid
+        // white band a beam wide for 200 m)
+        float fresh = exp(-d / min(1.5 * lead + 6.0 * w0, 12.0 * aspd + 20.0));
         // density falls from the centre to the edges and downstream; the prop wash keeps a bubbly core alive
         // for a couple of hull lengths on the centreline of a powered hull
         float across = 1.0 - 0.55 * smoothstep(0.3, 1.0, ay / laneHalfR);
-        float wash = propWash * exp(-ay * ay / (0.3 * w0 * w0 + 0.02)) * exp(-d / (2.5 * lead + 4.0)) * smoothstep(0.3, 2.5, aspd);
+        // (the froth of the wash dissolves in 20-30 s: a ship's core is ~120 m long, not 2.5 ship lengths)
+        float wash = propWash * exp(-ay * ay / (0.3 * w0 * w0 + 0.02)) * exp(-d / min(2.5 * lead + 4.0, 20.0 * aspd + 10.0)) * smoothstep(0.3, 2.5, aspd);
         // streaks along the track (the lane is combed by the flow) in track coordinates, plus world grain
-        float nl = vn(vec2(odo * min(ls * 0.3, fl), y * min(ls * 1.4, fl)) + 3.0);
-        float pn = 0.45 * nl + 0.25 * n3r + 0.15 * n2 + 0.15 * n4;
+        float nl = vn(vec2(odo * min(ls * 0.25, fl), y * min(ls * 1.6, fl)) + 3.0);
+        float pn = 0.55 * nl + 0.2 * n3r + 0.1 * n2 + 0.15 * n4;
         // a planing hull's chines and step beat air into the water: its rails of whitewater stay dense longer
-        float dens = (0.22 + 0.58 * fresh + 0.22 * planing) * (0.45 + 0.55 * laneFade) * across * churn * (0.1 + 0.9 * froth) + 0.45 * wash;
+        // (r3) a displacement hull's lane is pale turbulence with the prop wash as its only white core: the froth
+        // gate is squared and the churn factor no longer scales the density (it scales the persistence below)
+        float dens = (0.18 + 0.5 * fresh + 0.28 * planing) * (0.45 + 0.55 * laneFade) * across * (0.12 + 0.88 * froth * froth) + 0.45 * wash;
         // remnant patches: sparse, lane-sized, they outlast the froth and fade with the trail's age
         float bigN = vn(vec2(odo * min(0.1 * ls, fl), y * min(0.45 * ls, fl)) + 41.0);
-        float remnant = smoothstep(0.58, 0.78, bigN) * 0.32 * churn * froth * (1.0 - smoothstep(0.3, 1.0, ay / laneHalfR));
+        float remnant = smoothstep(0.58, 0.78, bigN) * 0.28 * churn * froth * (1.0 - smoothstep(0.3, 1.0, ay / laneHalfR));
         dens = max(dens * laneMask, remnant * (0.4 + 0.6 * (1.0 - laneFade)) * (1.0 - smoothstep(0.0, 1.3, ay / laneHalfR)));
         dens = clamp(dens, 0.0, 1.0);
         // nothing where the density has gone to zero (the thresholded noise alone would still fire where it
@@ -236,12 +266,15 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         // noise so the froth covers most of the lane at the transom and only a fraction downstream (the summed
         // noise sits around 0.5 with a spread of ~0.15)
         float thr = 0.5 + (0.5 - dens) * 0.5;
-        float grainFine = smoothstep(thr - 0.13, thr + 0.13, pn) * (0.7 + 0.3 * n3r) * (0.75 + 0.5 * n4) * gate;
+        float grainFine = smoothstep(thr - 0.2, thr + 0.2, pn) * (0.7 + 0.3 * n3r) * (0.75 + 0.5 * n4) * gate;
         // from altitude a texel averages the froth, so the density itself is drawn, broken by lane-sized cells
         float bc = vn(vec2(odo * min(0.25 * ls, fl), y * min(ls, fl)) + 7.0);
-        float grainCoarse = dens * (0.5 + 0.9 * bc) * (0.65 + 0.7 * n1) * (1.0 + 0.6 * fresh) * gate;
-        float grain = mix(grainCoarse, grainFine, fine);
-        float lane = grain * (0.85 + 0.9 * fresh) * (0.25 + 0.75 * spd) * pow(laneHalf0 / laneHalf, 0.15) * (laneHalfN / laneHalfR);
+        // dark windows: beam-sized holes of slick water inside the froth, more of them downstream
+        float win = vn(vec2(odo * min(0.5 * ls, fl), y * min(1.2 * ls, fl)) + 57.0);
+        float windows = 1.0 - (0.55 - 0.3 * fresh) * smoothstep(0.55, 0.75, win);
+        float grainCoarse = dens * (0.5 + 0.9 * bc) * (0.65 + 0.7 * n1) * (1.0 + 0.5 * fresh) * windows * gate;
+        float grain = mix(grainCoarse, grainFine * windows, fine);
+        float lane = grain * (0.7 + 0.6 * fresh) * (0.25 + 0.75 * spd) * pow(laneHalf0 / laneHalf, 0.15) * (laneHalfN / laneHalfR);
         // ---- Kelvin arms: crest lines at 19.5 deg from the track, thickening and fading with distance; in a
         //      turn the arm laid on the inner side crowds the track and the outer one spreads
         float armLen = laneLen * 2.5;
@@ -258,12 +291,20 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         // the arms are glassy crests at taxi speed; foam only where the crest breaks: its steepness falls with
         // the distance from the hull, and a patch noise along the arm decides where it broke (a continuous
         // foam line along the whole arm was the chalk mark seen from altitude)
-        float steep = smoothstep(2.0, 7.5, aspd) * inversesqrt(1.0 + d / (3.0 * lead + 2.0));
+        // (r3) the crest only breaks within a couple of hull lengths of the transom, and only when the hull pushes
+        // hard; further out the arm is a glassy crest carried by the slope alone (the r3 ship view drew the arms
+        // as broad white smears 300 m long)
+        // a crest only breaks near and above hull speed (Froude number > 0.35: a runabout, a planing float, a
+        // yacht pushed hard; never a ship at 11 kt, whose arms are glassy everywhere). From altitude the far map's
+        // texel averages the glitter of an unbroken crest into a pale line, so the coarse map carries the arm
+        // foam further out as a proxy for it
+        float fn = aspd * inversesqrt(9.81 * (lead + 1.0));
+        float steep = smoothstep(2.5, 8.5, aspd) * smoothstep(0.25, 0.5, fn) * inversesqrt(1.0 + d / (2.0 * lead + 2.0)) * exp(-d / mix(8.0 * lead + 40.0, 2.5 * lead + 15.0, fine));
         float an = vn(vec2(odo * min(0.45, fl), s * 3.0 + dy * min(2.0, fl)) + 7.0);
-        float breakM = smoothstep(0.72 - 0.4 * steep, 0.92 - 0.4 * steep, an);
+        float breakM = smoothstep(0.84 - 0.3 * steep, 0.98 - 0.3 * steep, an);
         float arm = armBump * armEnv * breakM * steep * (0.5 + 0.5 * n2) * smoothstep(-lead * 0.5, lead * 0.5, d) * (armW0 / armW);
         // from altitude the arms are mostly glassy lines beside a white lane, so they carry less foam there
-        foam = lane + arm * mix(0.55, 0.9, fine);
+        foam = lane + arm * mix(0.4, 0.8, fine);
         // arm crest slope: a raised crest, outward normal of the arm line
         vec2 armOut = s * right * COSK + fwd * SINK;
         float crestSlope = -2.0 * dy / (armW * armW) * armBump * (0.05 + 0.05 * spd) * armEnv * min(armW / uTexel, 1.0);
@@ -477,7 +518,8 @@ const SPLAT_VERTEX = /* glsl */ `
     vPos = iPos; vDir = iDir;
     float tau = max(uTime - iPos.z, 0.0);
     float E = iPos.w;
-    float r0 = 0.6 + 1.3 * E;
+    // an airframe part (kind 1: a wing tip, the nose) drives a wider cavity than a float's V-bottom
+    float r0 = (0.6 + 1.3 * E) * (1.0 + 0.6 * iDir.w);
     float lam = 1.6 * r0;
     float c = 1.25 * sqrt(lam);   // deep-water phase speed sqrt(g lam / 2 pi)
     // the quad follows the ring outward while the ring lives, else it holds the whitewater patch
@@ -512,25 +554,31 @@ export const SPLAT_MATERIAL = new THREE.ShaderMaterial({
       float tau = max(uTime - vPos.z, 0.0);
       float E = vPos.w;
       float r = length(vLocal);
-      float r0 = 0.6 + 1.3 * E;
+      float r0 = (0.6 + 1.3 * E) * (1.0 + 0.6 * vDir.w);
       float lam = 1.6 * r0;
       float c = 1.25 * sqrt(lam);
       float rc = r0 + c * tau;
-      float fl = 0.35 / uTexel;
+      float fl = 0.2 / uTexel;
       float fine = 1.0 - smoothstep(0.25, 1.2, uTexel);
-      float n1 = vn(vWp * min(1.1, fl) + 5.0), n2 = vn(vWp * min(3.3, fl) + 13.0), n3 = vn(vWp * 0.4 + 2.0);
+      // three octaves on lattices turned against each other, none finer than 5 texels: clamped to one frequency
+      // (the mid map, 0.4 m/texel) n1 and n2 collapsed to a single octave of value noise whose thresholded blobs
+      // sat on its 2 m lattice, and a touchdown's whitewater reached the eye as a row of equal white dashes
+      // where the water plane hands over to the near patch
+      vec2 w1 = mat2(0.94, 0.34, -0.34, 0.94) * vWp;
+      vec2 w2 = mat2(0.64, 0.77, -0.77, 0.64) * vWp;
+      float n1 = vn(vWp * min(1.1, fl) + 5.0), n2 = vn(w1 * min(3.3, 0.61 * fl) + 13.0), n3 = vn(w2 * min(0.4, 0.37 * fl) + 2.0);
       // whitewater patch: grows over the first second, dissolves over a few seconds (longer the harder the hit);
       // its interior is a churned patch field with dark windows, its edge ragged
       float patchR = r0 * (1.0 + 0.9 * (1.0 - exp(-tau / 0.7))) * (0.8 + 0.4 * n3);
       float lifeF = exp(-tau / (1.6 + 4.5 * E));
-      // ('patch' is a reserved word in GLSL ES 3.00)
-      float wwPatch = (1.0 - smoothstep(patchR * 0.45, patchR * 1.1, r)) * lifeF;
-      float dens = wwPatch * (0.5 + 0.5 * E);
+      // (named 'ww', not 'patch': 'patch' is a reserved word in GLSL ES 3.00 and the shader failed to compile)
+      float ww = (1.0 - smoothstep(patchR * 0.45, patchR * 1.1, r)) * lifeF;
+      float dens = ww * (0.5 + 0.5 * E);
       float thr = 0.5 + (0.5 - clamp(dens, 0.0, 1.0)) * 0.5;
       float pn = 0.5 * n1 + 0.3 * n2 + 0.2 * n3;
       float grainFine = smoothstep(thr - 0.14, thr + 0.14, pn) * (0.7 + 0.3 * n2);
       float grainCoarse = dens * (0.6 + 0.8 * n1);
-      float foam = mix(grainCoarse, grainFine, fine) * wwPatch;
+      float foam = mix(grainCoarse, grainFine, fine) * ww;
       // breaking rim on the leading crest for the first second
       float rimW = 0.25 + 0.15 * rc;
       float rim = exp(-(r - rc) * (r - rc) / (rimW * rimW)) * exp(-tau / 0.7) * E * (0.5 + 0.5 * n2) * smoothstep(0.3, 0.6, n1 + 0.3 * E);
@@ -543,7 +591,7 @@ export const SPLAT_MATERIAL = new THREE.ShaderMaterial({
       vec2 dirW = vDir.xy, perpW = vec2(-dirW.y, dirW.x);
       vec2 rWorld = dirW * rdir.x + perpW * rdir.y;
       vec2 g = rWorld * (-ringA * sin(ph) * env * 6.2832 / lam) * (1.0 - fine);
-      float cover = max(wwPatch * 0.9, env * ringA * 8.0);
+      float cover = max(ww * 0.9, env * ringA * 8.0);
       float end = splatEnd(tau);
       foam *= end; g *= end; cover *= end;
       vec2 enc = clamp(g, -0.5, 0.5);
@@ -566,13 +614,13 @@ export const SPLAT_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
       float tau = max(uTime - vPos.z, 0.0);
       float E = vPos.w;
       float r = length(vLocal);
-      float r0 = 0.6 + 1.3 * E;
+      float r0 = (0.6 + 1.3 * E) * (1.0 + 0.6 * vDir.w);
       float lam = 1.6 * r0;
       float c = 1.25 * sqrt(lam);
       float rc = r0 + c * tau;
       // the cavity the body drove: deepest at the impact, collapsing within half a second and rebounding into
       // a central hump that the ring then carries away
-      float D = 0.12 + 0.3 * E;
+      float D = (0.12 + 0.3 * E) * (1.0 + 0.4 * vDir.w);
       float cav = exp(-r * r / (r0 * r0));
       float dep = -D * cav * exp(-tau / 0.35) + 0.45 * D * cav * sin(min(tau / 0.9, 1.0) * 3.1416) * exp(-tau / 0.8);
       // ring wave packet: wavelength ~ the body's size, leaving at the group speed, amplitude falling with the

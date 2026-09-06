@@ -46,7 +46,14 @@ export interface FloatState { bow: number; step: number; stern: number; vy: numb
  * velocity, its sink rate into the surface and an energy 0..1 (mass share x entry speed: a 1 m/s touch of a
  * float ~0.1, a 3 m/s slap ~0.6, a wing or the nose catching the water at flying speed 1).
  */
-export interface ContactImpact { x: number; y: number; z: number; vx: number; vz: number; sink: number; speed: number; part: ImpactPart; side: -1 | 0 | 1; energy: number; }
+export interface ContactImpact {
+  x: number; y: number; z: number; vx: number; vz: number; sink: number; speed: number; part: ImpactPart; side: -1 | 0 | 1; energy: number;
+  /** the wetted extent of the part, when it is a line rather than a point: the surface between `from` and `to`
+   *  metres from (x, z) along the horizontal unit direction (dx, dz) takes the water together (a level wing
+   *  slapping down along its whole span, an inverted fuselage along its length); absent for a float, a wheel,
+   *  the nose, or a wing tip dipping in steeply */
+  extent?: { dx: number; dz: number; from: number; to: number };
+}
 
 /**
  * Wreck on the water: the floats (or the struts holding them) failed, so they flood over a few seconds and the
@@ -105,6 +112,8 @@ export class FlightModel {
   private buffet = 0;
   private crashTimer = 0;
   private wreckedTimer = 0;
+  /** > 0 while an inverted wreck is being rolled back onto its floats (see rightKinematic) */
+  private righting = 0;
   private lastHeading = 0;
   private contactUp = 0;
   private readonly tmpV = new THREE.Vector3();
@@ -172,13 +181,19 @@ export class FlightModel {
     this.clearWreck();
   }
 
-  /** a re-placed aircraft is sound again: floats pumped out, engine live, contact memory cleared */
+  /** a re-placed aircraft is sound again: floats pumped out, engine live, contact memory cleared, and the HUD's
+   *  crash message of the wreck it was gone (the timer used to carry over and flag the fresh aircraft for 5 s) */
   clearWreck(): void {
     this.wreck = null;
     this.impacts.length = 0;
+    this.ploughing.length = 0;
     this.impactAt.clear();
     this.stationWet.fill(false);
+    this.crashTimer = 0;
+    this.wreckedTimer = 0;
+    this.righting = 0;
     this.telemetry.wrecked = false;
+    this.telemetry.crashed = false;
   }
 
   /** Forward axis in world space. */
@@ -197,6 +212,7 @@ export class FlightModel {
   private substep(inp: FlightInputs, dt: number): void {
     this.time += dt;
     this.crashTimer = Math.max(0, this.crashTimer - dt);
+    if (this.righting > 0) { this.rightKinematic(dt); return; }
     // engine lag; a wreck's engine is dead (drowned or torn from its mounts), the propeller windmills to a stop
     const target = this.wreck ? 0 : clamp(inp.throttle, 0, 1);
     const idle = this.wreck ? 0 : 0.08;
@@ -204,8 +220,10 @@ export class FlightModel {
     if (this.wreck) {
       const w = this.wreck;
       w.age += dt;
-      // the hulls flood through their split seams over several seconds
-      for (let i = 0; i < 2; i++) w.flood[i] += (w.floodTarget[i] - w.flood[i]) * clamp(dt / 4, 0, 1);
+      // the hulls flood through their split seams over several seconds (time constant 3 s: the list is well under
+      // way within the first five seconds after the wreck, a real holed float takes longer but the eye needs to
+      // see the settling happen while the splash is still in the air)
+      for (let i = 0; i < 2; i++) w.flood[i] += (w.floodTarget[i] - w.flood[i]) * clamp(dt / 3, 0, 1);
     }
 
     // ---- turbulence: gust velocity (slow large-scale drift plus quicker bumps), stronger in the boundary layer.
@@ -333,7 +351,7 @@ export class FlightModel {
     keelDir.y = 0; keelDir.normalize();
     // ditching bookkeeping for this substep: a wreck decided by a contact is applied after the loop (its response
     // uses the contact velocities), the hardest float slam is what decides it
-    let wreckCause: string | null = null, wreckSide = 0, wreckSink = 0;
+    let wreckCause: string | null = null, wreckSide = 0, wreckSink = 0, wreckSpeed = 0;
     this.ploughing.length = 0;
     for (let si = 0; si < this.stations.length; si++) {
       const st = this.stations[si];
@@ -371,7 +389,10 @@ export class FlightModel {
       let fy: number, fh: number;
       if (isStructure) {
         // airframe on the surface: stiff, heavily damped, high friction; a wing/prop/tail touching at speed is a wreck
-        if (vh > 12) { if (isWater) { if (!wreckCause) { wreckCause = st.part; wreckSide = Math.sign(cp.z); } } else this.crash(); }
+        // (the flooding scales with the airframe's speed, not the part's: the second wing of a slewing wreck
+        // meets the water at 24 m/s of tip speed on 150 deg/s of yaw while the airframe is down to 17 m/s, and
+        // it is the airframe's momentum wrenching the struts that stoves in a hull)
+        if (vh > 12) { if (isWater) { if (!wreckCause) { wreckCause = st.part; wreckSide = Math.sign(cp.z); wreckSpeed = Math.hypot(this.velocity.x, this.velocity.z); } } else this.crash(); }
         if (isWater) {
           onWater = true;
           // the part ploughs water: drag by its frontal area (a wing tip or the nose cowl, ~0.4 m^2 at Cd 1) plus
@@ -381,11 +402,13 @@ export class FlightModel {
         } else { onGround = true; fy = 80000 * Math.min(depth, 0.6) - 8000 * vPoint.y; fh = -0.7 * Math.max(fy, 0) * Math.min(vh, 1); }
       } else if (isWater && isWheel) {
         // wheels down in the water: a tyre and its leg 0.3 m below the keel plough the surface ahead of the floats:
-        // 12 kN per wheel at 30 m/s (0.05 m^2 frontal at Cd 1 plus the spray root) applied 2.5 m below the CG,
+        // ~9 kN per wheel at 30 m/s (0.04 m^2 frontal at Cd 1 plus the spray root) applied 2.5 m below the CG,
         // i.e. a sudden deceleration and a hard nose-down that a fast wheels-down water landing never recovers
+        // (the nose-over takes about a second from the wheels' touch to the tail coming over, as in the films
+        // of amphibians landed gear-down; 12 kN per wheel had it on its back within 0.6 s)
         onWater = true;
         fy = 0;
-        fh = -(100 * vh + 12 * vh * vh) * Math.min(depth / 0.25, 1);
+        fh = -(70 * vh + 8 * vh * vh) * Math.min(depth / 0.25, 1);
       } else if (isWater) {
         onWater = true;
         const planing = smoothstep(8, 22, vh);
@@ -415,9 +438,12 @@ export class FlightModel {
           const dc = isStern || isBow ? 0.15 : 0.2;
           const immersion = depth < dc ? depth * depth / (2 * dc) : depth - dc / 2;
           const fade = isStern ? 1 - 0.9 * planing : isBow ? 1 - 0.6 * planing : 1 - 0.3 * planing;
-          // deck awash: the flared hull resists being driven under (keeps a nose-over from submarining); a flooded
-          // hull keeps only the buoyancy of its dry compartments, so a wreck settles deep and lists
-          fy = K * Math.min(immersion, 0.9) * fade * (1 - 0.7 * flood) + 30000 * Math.max(depth - 0.45, 0) ** 2 * (1 - 0.5 * flood);
+          // deck awash: the flared hull resists being driven under (keeps a nose-over from submarining). A flooded
+          // hull keeps only the buoyancy of its dry compartments (`flood` = the share of its volume full of water),
+          // its awash deck included: a wreck's split float goes under until the wing tip or the tail cone on that side
+          // finds the water, which is the list a holed floatplane really takes (the old 30 % floor kept every wreck
+          // within a few centimetres of its normal waterline)
+          fy = (K * Math.min(immersion, 0.9) * fade + 30000 * Math.max(depth - 0.45, 0) ** 2) * (1 - flood);
           // heave damping 2400 N s/m per station: zeta ~0.28 for the 1.3 Hz heave mode, so a touchdown drives the
           // floats visibly deeper than their waterline, they rebound and settle in two or three swings over ~2.5 s
           // like a hull in water (5500, zeta 0.65, killed every overshoot and the aircraft looked glued to a plane;
@@ -473,7 +499,7 @@ export class FlightModel {
       const sz = this.heightAt(this.position.x, this.position.z + 2) - this.heightAt(this.position.x, this.position.z - 2);
       if (Math.hypot(sx, sz) / 4 > 0.2) this.crash();
     }
-    if (wreckCause !== null && !onGround) this.wreckOnWater(wreckCause, wreckSide, wreckSink);
+    if (wreckCause !== null && !onGround) this.wreckOnWater(wreckCause, wreckSide, wreckSink, wreckSpeed);
 
     // ---- integrate translational motion
     const fWorld = fBody.applyQuaternion(this.quaternion);
@@ -506,7 +532,18 @@ export class FlightModel {
     const nearSurface = anyContact || this.position.y - Math.max(gh, 0) < 3.5;
     if (nearSurface && upY < 0.35) {
       this.wreckedTimer += dt;
-      if (gh <= 0.05) this.rightOnWater(upY, dt);
+      if (gh <= 0.05) {
+        // on its side (a wing tip in the water) the flooded floats' buoyancy rolls it back; squarely on its back it
+        // floats stably on the wing, as a flipped floatplane really does, so after a moment it is rolled back
+        // kinematically (a continuous roll onto its floats instead of the instant reset)
+        if (this.wreckedTimer > 1.5 && upY < -0.2) {
+          this.righting = 1e-3;
+          // a nose-over has split both bows: once righted the wreck sits deep and nearly level (the flood of
+          // the slam alone left it within a few centimetres of its waterline)
+          if (this.wreck) { this.wreck.floodTarget[0] = Math.max(this.wreck.floodTarget[0], 0.6); this.wreck.floodTarget[1] = Math.max(this.wreck.floodTarget[1], 0.6); }
+        }
+        else this.rightOnWater(upY, dt);
+      }
       if (this.wreckedTimer > 2.9) this.crash();
     } else this.wreckedTimer = 0;
     this.telemetry.wrecked = this.wreck !== null;
@@ -549,11 +586,16 @@ export class FlightModel {
    * side's float floods most, so the wreck settles low and lists toward it; the engine is dead; `crashed` is
    * raised for the HUD like a land crash. A second hit on a wreck only floods it further.
    */
-  private wreckOnWater(cause: string, side: number, sink: number): void {
+  private wreckOnWater(cause: string, side: number, sink: number, speed = 30): void {
     const w = this.wreck ?? { flood: [0, 0] as [number, number], floodTarget: [0, 0] as [number, number], cause, age: 0 };
-    // a nose-over splits both bows, a wing strike wrenches its own strut, a slam splits the hull that hit
-    const base = cause === 'float' ? 0.5 + 0.08 * clamp(sink - FlightModel.FLOAT_FAIL_SINK, 0, 5) : cause === 'nose' ? 0.5 : cause === 'wing' ? 0.3 : 0.4;
-    const asym = side === 0 ? 0 : 0.35;
+    // a nose-over splits both bows (both hulls half full, the wreck sits deep and nearly level), a wing strike
+    // wrenches its own strut and stoves in that hull (it goes under to the deck and beyond, the aircraft lists
+    // onto that wing tip), a slam splits the hull that hit. A part striking at speed does the damage: the other
+    // wing dipping in at 14 m/s as the wreck slews round is a lesser blow (it used to flood the second float as
+    // much as the first and the list of every wing strike came out level)
+    const k = cause === 'float' ? 1 : smoothstep(10, 26, speed);
+    const base = (cause === 'float' ? 0.4 + 0.06 * clamp(sink - FlightModel.FLOAT_FAIL_SINK, 0, 5) : cause === 'nose' ? 0.6 : cause === 'wing' ? 0.3 : 0.4) * k;
+    const asym = (side === 0 ? 0 : 0.5) * k;
     w.floodTarget[0] = clamp(Math.max(w.floodTarget[0], base + (side < 0 ? asym : 0)), 0, 0.92);
     w.floodTarget[1] = clamp(Math.max(w.floodTarget[1], base + (side > 0 ? asym : 0)), 0, 0.92);
     if (!this.wreck) w.cause = cause;
@@ -571,8 +613,16 @@ export class FlightModel {
     const up = this.up(this.tmpV);
     // torque axis (world) that turns the body up axis toward the sky, scaled by how far over it is
     const axis = this.tmpV2.set(up.z, 0, -up.x);   // = up x (0,1,0)
-    const l = axis.length();
-    if (l < 1e-4) return;
+    let l = axis.length();
+    if (l < 0.05) {
+      // squarely on its back (a straight nose-over lands it so): the righting axis of a symmetric wreck vanishes
+      // and it used to lie there until the reset teleported it upright. The heavier, flooded side decides which
+      // way it rolls: a torque about the fuselage axis breaks the symmetry and the righting above takes over
+      const side = this.wreck && this.wreck.flood[1] > this.wreck.flood[0] ? 1 : -1;
+      this.forward(axis).multiplyScalar(side);
+      l = axis.length();
+      if (l < 1e-4) return;
+    }
     axis.multiplyScalar(1 / l);
     const torque = 60000 * (1 - upY) * 0.5 + 20000;
     axis.multiplyScalar(torque).applyQuaternion(this.invQ.copy(this.quaternion).invert());
@@ -581,6 +631,35 @@ export class FlightModel {
     this.omega.z += (axis.z / this.inertia.z) * dt;
     this.omega.multiplyScalar(1 - 1.5 * dt);
   }
+
+  /**
+   * Roll an inverted wreck back onto its floats: a steady roll about the fuselage (3.2 rad/s, half a turn in a
+   * second) toward the level attitude on its last heading, the datum lifted to the floats' waterline as it comes
+   * over, everything else (aerodynamics, contacts) suspended meanwhile since the wreck is nearly still. Ends with
+   * the flooded floats settling it low and listing under the hydrostatics. This is a game mechanic standing in
+   * for the salvage crane, kept continuous so the eye sees a roll and not a cut.
+   */
+  private rightKinematic(dt: number): void {
+    this.righting += dt;
+    const target = this.tmpQ.setFromEuler(new THREE.Euler(0, this.headingToYaw(this.lastHeading), 0));
+    const angle = this.quaternion.angleTo(target);
+    const step = Math.min(3.2 * dt, angle);
+    this.quaternion.rotateTowards(target, step);
+    const gh = this.heightAt(this.position.x, this.position.z);
+    const surface = gh <= 0.05 ? this.surfaceAt(this.position.x, this.position.z) : gh;
+    const targetY = surface + FlightModel.FLOAT_REST_Y;
+    const k = angle > 1e-4 ? step / angle : 1;
+    this.position.y += (targetY - this.position.y) * k;
+    this.velocity.x *= 1 - 3 * dt; this.velocity.z *= 1 - 3 * dt; this.velocity.y = 0;
+    this.omega.set(0, 0, 0);
+    this.telemetry.onWater = gh <= 0.05;
+    this.telemetry.onGround = !this.telemetry.onWater;
+    this.telemetry.gForce = 1;
+    this.telemetry.wrecked = this.wreck !== null;
+    if (angle - step < 0.01) { this.righting = 0; this.wreckedTimer = 0; }
+  }
+
+  private readonly tmpQ = new THREE.Quaternion();
 
   /** record a part of the airframe entering the water (once per part and side per touchdown) */
   private reportImpact(st: Station, cpWorld: THREE.Vector3, vPoint: THREE.Vector3, surface: number, vh: number): void {
@@ -595,7 +674,28 @@ export class FlightModel {
     const structural = st.kind === 'structure';
     // energy: a float's 1 m/s touch ~0.1, a 3 m/s slap ~0.6; a wing or the nose taking the water at flying speed 1
     const e = structural ? clamp(0.25 * sink + 0.03 * vh, 0, 1) : clamp(0.22 * (sink - 0.6) + 0.004 * vh, 0, 1);
-    this.impacts.push({ x: cpWorld.x, y: surface, z: cpWorld.z, vx: vPoint.x, vz: vPoint.z, sink, speed: vh, part: st.part, side, energy: e });
+    const imp: ContactImpact = { x: cpWorld.x, y: surface, z: cpWorld.z, vx: vPoint.x, vz: vPoint.z, sink, speed: vh, part: st.part, side, energy: e };
+    if (st.part === 'wing') {
+      // the wing station is the tip; how much of the wing takes the water with it depends on the bank: a level
+      // wing (a belly-flat ditching, the inverted airframe falling back after a nose-over) slaps down along its
+      // whole span, a tip dipping in at 30 degrees of bank wets less than a metre of it
+      const root = this.tmpV.set(st.p.x, st.p.y, 0).applyQuaternion(this.quaternion).add(this.position);
+      const dx = root.x - cpWorld.x, dy = root.y - cpWorld.y, dz = root.z - cpWorld.z;
+      const span = Math.hypot(dx, dy, dz), horiz = Math.hypot(dx, dz);
+      if (span > 1 && horiz > 0.5) {
+        // the part of the wing within `wet` metres of the surface enters within the first tenths of a second
+        const wet = Math.max(0.35, 0.3 * sink);
+        const frac = dy > wet ? wet / dy : 1;
+        const to = frac * horiz;
+        if (to > 0.8) imp.extent = { dx: dx / horiz, dz: dz / horiz, from: 0, to };
+      }
+    } else if (st.part === 'roof') {
+      // the inverted fuselage takes the water along the cabin's length
+      const ax = this.tmpV.set(1, 0, 0).applyQuaternion(this.quaternion);
+      const h = Math.hypot(ax.x, ax.z);
+      if (h > 0.5) imp.extent = { dx: ax.x / h, dz: ax.z / h, from: -2.5, to: 2.5 };
+    }
+    this.impacts.push(imp);
   }
 
   /** yaw angle about +Y that makes body +X point along compass heading `h` (0 = north = -Z, 90 = east = +X) */

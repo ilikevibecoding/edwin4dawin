@@ -61,6 +61,7 @@ export class Game {
   water!: Water;
   sky!: Sky;
   wakes!: WakeMap;
+  private readonly tmpCamFwd = new THREE.Vector3();
   csm!: CSM;
   cascades!: CascadeFitter;
   post!: PostPipeline;
@@ -172,7 +173,7 @@ export class Game {
     this.registerLit(this.terrain.material);
     this.terrain.group.name = 'terrain';
     this.scene.add(this.terrain.group);
-    this.water = new Water(this.textures, this.wakes.texture, this.wakes.nearTexture, this.wakes.heightTexture, this.wakes.heightTexel);
+    this.water = new Water(this.textures, this.wakes.texture, this.wakes.nearTexture, this.wakes.heightTexture, this.wakes.heightTexel, this.wakes.midTexture);
     this.registerLit(this.water.material);
     this.registerLit(this.water.patchMaterial);
     this.water.mesh.name = 'water';
@@ -305,6 +306,8 @@ export class Game {
     if (dbg.has('notraffic')) this.traffic.group.visible = false;
     if (dbg.has('nocloudshadow')) { this.post.cloudShadowStrength = 0; this.reflection.cloudShadowStrength = 0; }
     if (dbg.has('norefl')) this.reflection.enabled = false;
+    // ditching bench: wheels forced down over water (the wheels-first case of the ditching matrix)
+    if (dbg.has('geardown')) this.aircraft.flight.gearOverride = true;
     this.atmos.update(0);
     this.refreshEnvironment();
     await this.tick(progress, 'Compiling shaders', 0.97);
@@ -435,12 +438,15 @@ export class Game {
     const ps = this.passStats;
     const mark = this.markPass;
     this.passCalls0 = info.calls; this.passTriangles0 = info.triangles;
-    this.wakes.render(this.renderer, cx, cz, planePos.x, planePos.z);
+    // the mid wake map sits ahead of the camera along its horizontal view direction
+    const camFwd = cam.getWorldDirection(this.tmpCamFwd);
+    const camFwdL = Math.hypot(camFwd.x, camFwd.z) || 1;
+    this.wakes.render(this.renderer, cx, cz, planePos.x, planePos.z, camFwd.x / camFwdL, camFwd.z / camFwdL);
     mark('wake');
     // the displaced water patch around the aircraft only while it is low enough for its hull waves to exist
     this.water.setPatchActive(airHeight < 45 && this.map.heightAt(planePos.x, planePos.z) < 0.05);
     // after the wake maps are placed: the water samples them at this frame's centres
-    this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size, this.wakes.nearCenter, this.wakes.nearSize);
+    this.water.update(cx, cz, this.time, this.atmos.preset.windSpeed, this.atmos.windDir, this.atmos.state.sunDir, this.wakes.center, this.wakes.size, this.wakes.nearCenter, this.wakes.nearSize, this.wakes.midCenter, this.wakes.midSize);
     this.sky.render(this.renderer, cam, this.post.width, this.post.height);
     mark('sky');
     // the shadow cascades are rendered by the first of the two scene renders below (the mirror pass when it
