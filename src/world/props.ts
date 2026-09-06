@@ -114,7 +114,10 @@ function createLampDotMaterial(): THREE.ShaderMaterial {
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         float d = length(mv.xyz);
         vFade = aDot.y * smoothstep(${DOT_NEAR.toFixed(1)}, ${DOT_FULL.toFixed(1)}, d) * (1.0 - smoothstep(${DOT_FULL_FAR.toFixed(1)}, ${DOT_FAR.toFixed(1)}, d));
-        gl_PointSize = clamp(aDot.x * uFocal / max(d, 1.0), 1.5, 4.5 + 2.5 * step(2.0, aDot.x));
+        // a high mast (aDot.x > 2) never falls under 3 px: at 1.5 px its crown was one faint pixel over the terminal
+        // from the night view's 2.3 km, no brighter than a street lamp (h11)
+        float mast = step(2.0, aDot.x);
+        gl_PointSize = clamp(aDot.x * uFocal / max(d, 1.0), 1.5 + 1.5 * mast, 4.5 + 2.5 * mast);
         gl_Position = projectionMatrix * mv;
       }`,
     fragmentShader: /* glsl */ `
