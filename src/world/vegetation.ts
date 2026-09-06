@@ -179,19 +179,24 @@ function leafClusterTexture(rng: Rng): THREE.CanvasTexture {
     const ox = tx * T, oy = ty * T;
     const tile = ty * N + tx;
     if (tile === 3) {
-      // a few radiating bunches of long thin needles, brighter toward the bunch's tip
-      for (let b = 0; b < 5; b++) {
-        const bx = 0.5 + rng.range(-0.22, 0.22), by = 0.5 + rng.range(-0.22, 0.22);
-        const dir = rng.range(0, Math.PI * 2);
-        for (let i = 0; i < 26; i++) {
-          const a = dir + rng.range(-0.7, 0.7), len = rng.range(0.16, 0.3);
-          const g = Math.round(255 * Math.min(1, 0.55 + 0.5 * rng.next()));
-          ctx.strokeStyle = `rgb(${g}, 0, 0)`;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(ox + bx * T, oy + by * T);
-          ctx.lineTo(ox + (bx + Math.cos(a) * len) * T, oy + (by + Math.sin(a) * len) * T);
-          ctx.stroke();
+      // needle tufts: bottle-brushes of many short fine needles about the twig ends, the twigs radiating
+      // from the tile's centre and each tuft's needles fanned about its twig (five bunches of 26 long 2 px
+      // spokes read as flat starbursts at 5-10 m); the tuft's tip half brighter than its base
+      for (let b = 0; b < 9; b++) {
+        const twig = rng.range(0, Math.PI * 2), reach = rng.range(0.05, 0.26);
+        const bx = 0.5 + Math.cos(twig) * reach, by = 0.5 + Math.sin(twig) * reach;
+        const dir = twig + rng.range(-0.5, 0.5);
+        ctx.lineWidth = 1.2;
+        for (let i = 0; i < 70; i++) {
+          const a = dir + rng.range(-1.3, 1.3), len = rng.range(0.07, 0.16);
+          const x0 = bx + Math.cos(a) * len * 0.15, y0 = by + Math.sin(a) * len * 0.15;
+          const xm = bx + Math.cos(a) * len * 0.55, ym = by + Math.sin(a) * len * 0.55;
+          const x1 = bx + Math.cos(a) * len, y1 = by + Math.sin(a) * len;
+          const g = 0.5 + 0.35 * rng.next();
+          ctx.strokeStyle = `rgb(${Math.round(255 * g * 0.75)}, 0, 0)`;
+          ctx.beginPath(); ctx.moveTo(ox + x0 * T, oy + y0 * T); ctx.lineTo(ox + xm * T, oy + ym * T); ctx.stroke();
+          ctx.strokeStyle = `rgb(${Math.round(255 * Math.min(1, g * 1.15))}, 0, 0)`;
+          ctx.beginPath(); ctx.moveTo(ox + xm * T, oy + ym * T); ctx.lineTo(ox + x1 * T, oy + y1 * T); ctx.stroke();
         }
       }
       continue;
@@ -832,6 +837,8 @@ const CROWN_FRAG = /* glsl */ `
     if (a < 0.04) discard;
     diffuseColor.a = a;
     diffuseColor.rgb = vec3(0.27, 0.22, 0.13) * (0.7 + 0.5 * vnoise(vWP.xz * 5.0)) * mix(0.8, 1.15, vnoise(vWP.xz * 1.1 + 5.0));
+    // the ground under a crown sees the sky through its leaves only, less still among taller neighbours
+    vegAmb = mix(0.55, 0.3, vOcc);
   } else if (vPart < 0.5 || vPart > ${BRANCH_PART - 0.5}) {
     // bark (trunk and limbs): grey-brown, paler on the pines; furrowed along the grain and darker toward the
     // ground, where the crown shades it and the moss sits
@@ -839,6 +846,10 @@ const CROWN_FRAG = /* glsl */ `
     float grain = vnoise(vWP.xz * 3.0 + vWP.y * 2.0);
     float furrow = vnoise(vec2(vWP.x * 7.0 + vWP.z * 5.0, vWP.y * 0.9));
     diffuseColor.rgb = bark * (0.65 + 0.4 * grain + 0.3 * furrow) * mix(0.55, 1.0, smoothstep(0.0, 0.3, vRel.y));
+    // a trunk stands under its own crown: it sees the sky only low around the horizon (half of it at the
+    // base, a fifth up in the crown where the limbs are), and less among taller neighbours; with the full
+    // sky it read as a pale grey post against the lawn its crown shades
+    vegAmb = mix(0.5, 0.22, vOcc) * mix(1.0, 0.45, smoothstep(0.3, 0.9, vRel.y));
   } else {
     vec3 cn = normalize(vCrownN);
     if (vPart > ${FRINGE_PART - 0.5}) {
@@ -850,11 +861,21 @@ const CROWN_FRAG = /* glsl */ `
       diffuseColor.a = a;
       diffuseColor.rgb *= 0.75 + 0.5 * leaf.r;
     } else if (vegNear > 0.0) {
-      // close range: dissolve the outer band of each puff with leaf-cluster noise so the silhouette reads
-      // as ragged foliage instead of a 20-facet ball (a few px of the outline; fades out by 320 m)
+      // close range: the puff is a shell of leaf clusters with hollows between them — the outer band of each
+      // puff dissolves with leaf-cluster noise so the silhouette reads as ragged foliage instead of a
+      // 20-facet ball (a few px of the outline; fades out by 320 m), and inside 150 m holes open over the
+      // whole face through which the far side of the shell shows, dark (a smooth ball of plasticine at 5-50 m
+      // otherwise: the rim alone does not say "leaves"); a soft coverage ramp for the MSAA dither
       float facing = abs(dot(cn, toCam / max(camDist, 1e-3)));
       float clusters = vnoise(vWP.xz * 1.1 + vWP.y * 0.9) * 0.65 + 0.35 * vnoise(vWP.xz * 3.3 - vWP.y * 2.6);
-      if (facing < 0.6 * clusters * vegNear) discard;
+      float close = 1.0 - smoothstep(40.0, 150.0, camDist);
+      // positive where the surface goes: the rim band, and the cluster field's hollows over the whole face
+      float cut = max(0.6 * clusters * vegNear - facing, clusters - mix(1.1, 0.72, close));
+      float a = 1.0 - smoothstep(-0.03, 0.03, cut);
+      if (a < 0.1) discard;
+      diffuseColor.a = a;
+      // the inside of the shell, seen through the holes: the shaded hollow of the crown
+      if (!gl_FrontFacing) diffuseColor.rgb *= 0.45;
     }
     // per-plant hue and value jitter on top of the palette tint: neighbours differ in warmth and depth
     float yellow = hash11(vSeed * 41.7 + 3.0);
@@ -917,11 +938,12 @@ if (vPart > 0.5 && vPart < ${BRANCH_PART - 0.5} && vegNear > 0.0) {
 /** Per-family parameters of the foliage light model. `wrap` is how far past the terminator the diffuse
  *  term reaches (0 = Lambert), `floor` the fraction of the sun a face turned away from it still gets
  *  (light scattered out of the leaf mass), `trans` the strength of the sun seen through the leaves. */
-interface FoliageLight { wrap: number; floor: number; trans: number }
+interface FoliageLight { wrap: number; floor: number; trans: number; rim?: boolean }
 /** Crowns: a low wrap and floor so the puffs keep a real sun side and shade side (0.5 / 0.14 lit every
  *  side of a crown alike and the canopy read as a flat green mass); the crown-space hemisphere and the
- *  neighbour occlusion below carry the rest of the volume shading. */
-const CROWN_LIGHT: FoliageLight = { wrap: 0.22, floor: 0.05, trans: 0.8 };
+ *  neighbour occlusion below carry the rest of the volume shading; the translucency is a rim effect (the
+ *  puff is a leaf mass metres deep, thin only at its outline). */
+const CROWN_LIGHT: FoliageLight = { wrap: 0.22, floor: 0.05, trans: 0.8, rim: true };
 /** Palms: thin fronds are lit through, so they keep the high wrap, floor and translucency (the crown
  *  parameters left every frond that faced away from the sun dead grey). */
 const PALM_LIGHT: FoliageLight = { wrap: 0.6, floor: 0.28, trans: 0.7 };
@@ -943,6 +965,9 @@ const foliageLighting = (isFoliage: string, p: FoliageLight) => /* glsl */ `
 #include <lights_physical_pars_fragment>
 float vegUp = 1.0;
 float vegOcc = 0.0;
+// share of the sky the hard parts see (set by the colour stage): a trunk under its own crown in a dense
+// stand sees a quarter of it, and took the whole of it (a pale grey post against the shaded lawn)
+float vegAmb = 1.0;
 void RE_Direct_Foliage( const in IncidentLight directLight, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
   float foliage = ${isFoliage};
   float ndl = dot( geometryNormal, directLight.direction );
@@ -951,7 +976,12 @@ void RE_Direct_Foliage( const in IncidentLight directLight, const in vec3 geomet
   // so a puff facing away from the sun is lit like the inside of the leaf mass rather than a hard surface
   float dotNL = max( saturate( ( ndl + wrap ) / ( 1.0 + wrap ) ), ${p.floor.toFixed(3)} * foliage );
   float back = saturate( dot( -directLight.direction, geometryViewDir ) );
-  float trans = ${p.trans.toFixed(3)} * foliage * back * back * saturate( 0.7 - 0.7 * ndl );
+  // the sun through the leaves: on a crown only where the leaf mass is thin, at the rim of the puff seen
+  // against the light (a face turned to the camera is metres of leaves deep: the undersides of a canopy
+  // seen from below glowed mustard yellow as if one leaf thick); a frond or a card is one leaf
+  float nv = saturate( dot( geometryNormal, geometryViewDir ) );
+  float thin = ${p.rim ? '( 1.0 - nv ) * ( 1.0 - 0.5 * nv )' : '1.0'};
+  float trans = ${p.trans.toFixed(3)} * foliage * back * back * saturate( 0.7 - 0.7 * ndl ) * thin;
   vec3 irradiance = dotNL * directLight.color;
   reflectedLight.directDiffuse += irradiance * BRDF_Lambert( material.diffuseColor );
   reflectedLight.directDiffuse += ( trans * directLight.color ) * BRDF_Lambert( material.diffuseColor * vec3( 1.05, 1.1, 0.8 ) );
@@ -974,14 +1004,14 @@ void RE_IndirectDiffuse_Foliage( const in vec3 irradiance, const in vec3 geometr
   // the ambient is kept at the level of a plain surface (the old 1.6x boost, on top of the sky term three adds
   // in RE_IndirectSpecular, filled the shade side with blue sky light: no crown could go dark) and tinted
   // by the leaves it has bounced off
-  reflectedLight.indirectDiffuse += irr * BRDF_Lambert( material.diffuseColor ) * mix( vec3( 1.0 ), vec3( 1.0, 0.96, 0.7 ), foliage ) * vegSky( foliage );
+  reflectedLight.indirectDiffuse += irr * BRDF_Lambert( material.diffuseColor ) * mix( vec3( 1.0 ), vec3( 1.0, 0.96, 0.7 ), foliage ) * vegSky( foliage ) * vegAmb;
 }
 void RE_IndirectSpecular_Foliage( const in vec3 radiance, const in vec3 irradiance, const in vec3 clearcoatRadiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
   float foliage = ${isFoliage};
-  float sky = vegSky( foliage );
+  float sky = vegSky( foliage ) * vegAmb;
   // the sky's reflection off the leaf mass is kept low: on the shade side of a crown the 4 % Fresnel of a
   // blue sky was as bright as the leaf itself and every shaded crown went cyan
-  RE_IndirectSpecular_Physical( radiance * mix( 1.0, 0.6 * sky, foliage ), irradiance * sky, clearcoatRadiance, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
+  RE_IndirectSpecular_Physical( radiance * mix( vegAmb, 0.6 * sky, foliage ), irradiance * sky, clearcoatRadiance, geometryPosition, geometryNormal, geometryViewDir, geometryClearcoatNormal, material, reflectedLight );
 }
 #undef RE_Direct
 #define RE_Direct RE_Direct_Foliage
@@ -1262,9 +1292,10 @@ const CARD_FRAG = /* glsl */ `
 `;
 
 function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: THREE.IUniform<number>): THREE.MeshStandardMaterial {
-  // alpha to coverage for the fringe cards' leaf cut-outs (the puffs write alpha 1); single-sided like
-  // before: the cards face the camera, so their front is the only side seen
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88, alphaToCoverage: true });
+  // alpha to coverage for the fringe cards' leaf cut-outs and the puffs' close-range hollows; double-sided
+  // so the far side of a puff's shell shows through its hollows (the trunk and limbs are closed tubes, the
+  // cards face the camera: only the puffs pay for it)
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.88, alphaToCoverage: true, side: THREE.DoubleSide });
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = time;
     shader.uniforms.uWind = wind;
@@ -1281,7 +1312,7 @@ function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: 
       .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-crown-v13';
+  mat.customProgramCacheKey = () => 'veg-crown-v14';
   return mat;
 }
 
@@ -1303,7 +1334,7 @@ function palmMaterial(tex: THREE.Texture, time: THREE.IUniform<number>, wind: TH
       .replace('#include <normal_fragment_begin>', PALM_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-palm-v13';
+  mat.customProgramCacheKey = () => 'veg-palm-v14';
   return mat;
 }
 
@@ -1341,7 +1372,7 @@ function cardMaterial(atlas: THREE.Texture, canopyMean: THREE.Vector3): THREE.Me
       .replace('#include <color_fragment>', CARD_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-card-v14';
+  mat.customProgramCacheKey = () => 'veg-card-v15';
   return mat;
 }
 
