@@ -132,6 +132,24 @@ Frame numbers are 10 fps clip frames (frame n = n/10 s). Change size vs the r1 b
   percent on the contact tests (the gust field is noise of the model's own clock, which the page advances before
   the suite). The page harness remains the authority for `allPass`.
 
+## Verification state (what was seen, what was measured, what is still queued)
+
+- Seen in frames (r1–r7 on dist1–dist6): splats drawing and the spray rebuilt (`crops/r2_wlf_f6_spray_before_after`),
+  the zoned boat lanes at boat level / 100 m and the ship's lane (`crops/r3_wake100…`, `crops/r3_wakeship100…`),
+  the wheels-down nose-over and the wing-tip strike sequences (`crops/r4_*_sequence`), the seam dashes gone, the
+  handover invisible at taxi and on swell, the taxi wake absent (r6, the diagnosis that led to r8).
+- Measured, not yet seen (r8–r10 on dist7–dist9): the slick lane, half-float height map and arm crests (r8); the
+  righted wreck's list and the time-based lane decay (r9, `ditchnode`, `stopnode`); the skip sequence, the lane gaps
+  over the hops and the turning ribbon's folds (r10, `skipnode`, `skipwake`, `turnwake`) — every one of these has a
+  Node probe that drives the real code (flight model, wave field, WakeTrail) and reports the numbers quoted above.
+- Still queued on the machine's Chrome gate (`/tmp/waterphys/queue`, served by `session2.mjs` holding one slot for
+  the whole queue once it gets one): the page flight harness on the final build (`flight_r10.json`; the Node port
+  passes 19 / 19 on this tree), the height-map probes at taxi and hump speed, the r8 taxi / swell chase frames, the
+  r3c boat views (with `turn100`), the r4c ditching frames, the r9 stopping float, the r10 skipping entry and taxi
+  circle (overhead and chase), the r5 sheet frames, the seam views and the mid-map perf A/B. The two builder slots
+  were held for the whole afternoon by other builders' idle servers (one with no idle exit since 12:37), so from
+  13:56 on this branch could only be verified numerically.
+
 ## Perf
 
 Draw calls / triangles (SwiftShader, shared 4-core VM under load 5–12): water-landing 219 / 472 k,
@@ -140,7 +158,11 @@ map adds one 1024² render-target pass of the wake batch per frame and one textu
 it stays within budget. A clean interleaved A/B ratio for that pass is the one perf measurement still owed (see
 next attack).
 
-## Rubric self-scores (honest; a score rises only where a named defect was reduced)
+## Rubric self-scores (honest; a score rises only where a named defect was reduced *and seen reduced*)
+
+The "now" column is the frame-verified state (through r7). The r8–r10 fixes (taxi wake / slick lane, stopping
+lane, skip gaps, turning fold) are measured in Node but not yet seen in frames; if the queued frames confirm them
+as the numbers say, 14 goes to 8.5 (the inside of every turn and every taxi lane were wrong until r10) and 11 to 8.0.
 
 | cat | | r1 | r2 | r3 | now | why |
 |---|---|---|---|---|---|---|
