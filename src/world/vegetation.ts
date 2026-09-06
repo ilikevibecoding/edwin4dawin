@@ -956,8 +956,8 @@ const CROWN_FRAG = /* glsl */ `
     // the sunlit leaf is a pale warm yellow-green, the leaf in the shade of its own crown a deep neutral
     // green (not blue: the sky bounce already cools it): the albedo itself carries the split (the direct
     // light model only decides how much sun each side gets)
-    vec3 sunlit = diffuseColor.rgb * vec3(1.52, 1.36, 1.26);
-    vec3 shade = diffuseColor.rgb * vec3(0.5, 0.49, 0.42);
+    vec3 sunlit = diffuseColor.rgb * vec3(1.58, 1.4, 1.36);
+    vec3 shade = diffuseColor.rgb * vec3(0.56, 0.5, 0.4);
     diffuseColor.rgb = mix(shade, sunlit, cap);
     // sky light: the cap sees the whole sky, the underside a little ground bounce; a plant standing among
     // taller neighbours sees their leaves instead of the sky (its cap too: they overtop it)
@@ -1338,7 +1338,9 @@ const CARD_FRAG = /* glsl */ `
   // (measured r12 against the reference over the island canopy: shade [46, 56, 53] hue 158° vs [53, 60, 54]
   // hue 125° — still cyan, so its red comes up; lit [131, 139, 107] vs [148, 147, 130] — too green, so its
   // red and blue come up)
-  foliage *= mix(mix(vec3(0.35, 0.33, 0.25), vec3(2.15, 1.9, 1.85), lit), vec3(mix(0.42, 2.0, lit)), vFar);
+  // (r17: shade [48, 56, 53] hue 155° vs [53, 60, 54] hue 125°, lit [135, 138, 108] vs [148, 147, 130],
+  // dark fraction 0.19 vs 0.11: the shade warmer and a little lighter, the lit side paler)
+  foliage *= mix(mix(vec3(0.42, 0.36, 0.25), vec3(2.25, 1.96, 2.0), lit), vec3(mix(0.42, 2.0, lit)), vFar);
   // a crown overtopped by its neighbours stands in their shadow (the occlusion packed in aVar.x): the
   // whole card darkens, its base most, so the inside of a dense stand goes dark and the emergent crowns
   // stand out lit
@@ -1373,7 +1375,7 @@ function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: 
       .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-crown-v16';
+  mat.customProgramCacheKey = () => 'veg-crown-v17';
   return mat;
 }
 
@@ -1433,7 +1435,7 @@ function cardMaterial(atlas: THREE.Texture, canopyMean: THREE.Vector3): THREE.Me
       .replace('#include <color_fragment>', CARD_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-card-v15';
+  mat.customProgramCacheKey = () => 'veg-card-v16';
   return mat;
 }
 
