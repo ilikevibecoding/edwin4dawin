@@ -1581,7 +1581,7 @@ export class Streets {
       // the small soup (visors, pedestrian heads, buttons, name blades, stop signs) never casts: nothing in it is
       // worth a 0.4 m shadow texel, and drawn into two cascades it cost as much again as the whole street pass
       cell.small = mk(b.small.build(), this.kitMaterial, 'street-kits-small', false);
-      cell.yard = mk(b.yard.build(), this.kitMaterial, 'street-yards', false);
+      cell.yard = mk(b.yard.build(), this.kitMaterial, 'street-yards', false); // casts into cascade 0 at eye level (updateLod)
       cell.yardFar = mk(b.yardFar.build(), this.kitMaterial, 'street-yards-far', false);
       this.counts.walkTriangles += b.walk.triangles;
       this.counts.kitTriangles += b.large.triangles + b.small.triangles;
@@ -1635,7 +1635,17 @@ export class Streets {
       if (c.small) c.small.visible = inView && d3 < SMALL_FAR; // camera layer only (see flush)
       // the yard's near shapes are for eye level: measured in three dimensions, from 200 m up every car is its far box
       const yardNear = d3 < YARD_NEAR || !c.yardFar;
-      if (c.yard) c.yard.visible = inView && yardNear && d < YARD_FAR;
+      if (c.yard) {
+        const visible = inView && yardNear && d < YARD_FAR;
+        // at eye level the parked cars cast, into the finest cascade only (0.16 m texels; the second cascade's 0.5 m
+        // texel would smear a car to a blot and draw the cell's yard triangles once more) — the far box never casts,
+        // so the aerial views pay nothing (defect 7.5)
+        const mask = layerMask('near', visible, yardNear && d < SHADOW_FAR ? castBits & 1 : 0);
+        const cast = maskCasts(mask);
+        c.yard.castShadow = cast;
+        c.yard.visible = visible || cast;
+        c.yard.layers.mask = mask;
+      }
       if (c.yardFar) c.yardFar.visible = inView && !yardNear && d < YARD_FAR;
     }
   }
