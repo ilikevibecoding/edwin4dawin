@@ -160,3 +160,39 @@ Strongest giveaways, ranked by what they cost at 20–200 m:
   tip) hung from the keel line, tilted to follow the keel's 0.2 m/m rise toward the stern post, root buried 3 cm
   inside the rounded bottom; tail-band paint.
 - Result / score: pending stills.
+
+## R11 — first round driven by stills (R0 + R8 + R9 sets, 26 frames)
+
+Observed in the R8/R9 stills (`front`, `nose` 4 m, `wingtip`, `tail` 6 m, `door` 3 m, `rig`, `chase30`, `below`,
+`tailon`, `noseon`), ranked:
+1. The bare-aluminium nose bowl read as a chrome drum from the bow at 4 m and as a bright ring head-on at 20 m —
+   the whole bowl was metal, when on a Beaver only the rolled inlet lip is ever left polished.
+2. A dark zipper ran along the whole yellow leading-edge stripe at 12 m: a skin joint (with its rivet rows) sat
+   exactly on the leading edge (u 0.5) and 260 dark-rimmed chips lined the edge.
+3. From below and from behind the tips, a dark red / green blotch sat on each wingtip: the lit skin patches (emissive
+   only after dusk) are opaque tinted geometry and showed their base tint by day.
+4. From the rear quarter the fin's full-chord tip cap read as a lid over the rudder with a dark slot under it.
+- Changed (`textures/fuselage.ts`, `textures/wing.ts`, `textures/common.ts`, `parts/lights.ts`, `parts/tail.ts`,
+  `geometry/wing.ts` `roundAbout`): bowl painted in the livery (the cheat line runs to the lip), the front 6 cm lip
+  ring polished with a lap edge behind it; wing skin joints at 0.12 / 0.30 / 0.42 / 0.58 / 0.70 / 0.88 (16 % chord
+  behind the edge on both faces), LE chips 260 → 90 and smaller; patches discard their fragments while their channel
+  is unpowered; the fin's tip is the fixed part only and the rudder runs to the top, both rounding toward the hinge
+  line so the slot runs to the top of one continuous rounded tail.
+- Result: R11 stills (`r11k` set) — see REPORT.md.
+
+## R12 — chip clusters as dirt splatter; black-box scoop mouths; a ball on the stern post
+
+- Wrong (door view 3 m, nose view 4 m, tail view 6 m): the bare-metal chips around the door handles, steps and the
+  bowl joint were dense dark-rimmed flakes that read as dirt splatter, not as chipped paint; the scoop mouths were
+  rectangular dark plates (a black box bolted under the bowl); the tail light was an 8 cm white sphere on the stern.
+- Changed (`textures/common.ts` `chips`, `textures/fuselage.ts`, `parts/fuselage.ts`, `parts/lights.ts`): flake rims
+  at a third of their alpha, counts halved or better (step 40 → 16, sill 30 → 12, handle 14 → 6, bowl joint 140 →
+  70, cowl joints 40 → 18); mouth plates follow the hoods' superellipse section a lip's width inside them and the chin
+  scoop is 25 % smaller; a small teardrop housing with a 5 cm lens for the tail light.
+- Result: R12 stills — see REPORT.md.
+
+## Capture notes
+
+Ports 4561 / 4562 chosen for the R10 / R11 previews were taken by other builders' servers between the free-port check
+and `vite preview` binding, so the first R10 and R11 sets shot other builds and were discarded; later previews go
+through a helper that verifies the served bundle name before shooting.
