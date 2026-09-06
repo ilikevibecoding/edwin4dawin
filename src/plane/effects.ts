@@ -560,7 +560,9 @@ export class PlaneEffects {
     // rooster tail: on the step the flow leaves the transom clean and closes behind it in a plume of spray a
     // hull length back, one per float, thrown up and left behind (it hangs nearly still in the water's frame)
     if (t.onWater && planing > 0.05) {
-      this.tailAcc += 44 * planing * dt;
+      // (r4: 30/s, mostly drops and thin sheets, 1.5-2.5 m up: at 44/s with a fifth of them mist rags the two
+      // plumes read as cotton puffs a metre and a half across in the 3 s planing frame of `water-landing`)
+      this.tailAcc += 30 * planing * dt;
       const v = flight.velocity;
       while (this.tailAcc >= 1) {
         this.tailAcc -= 1;
@@ -571,18 +573,18 @@ export class PlaneEffects {
           const back = 1.4 + this.rng.next() * 1.8 + 0.06 * speed;
           const p = this.tmp.copy(stern).setX(-0.35 - back).setZ(stern.z + (this.rng.next() - 0.5) * 0.5).applyQuaternion(q).add(flight.position);
           const u = this.rng.next();
-          const tile = u < 0.45 ? TILE_DROPS : u < 0.8 ? TILE_SHEET : TILE_MIST;
+          const tile = u < 0.45 ? TILE_DROPS : u < 0.9 ? TILE_SHEET : TILE_MIST;
           // the plume: the two flows off the step close behind the transom and shoot up 1.5-2.5 m
           this.spray.emit({
-            x: p.x, y: fs.surfaceY + (tile === TILE_MIST ? 1.2 : 0.15), z: p.z,
-            vx: v.x * 0.1 + (this.rng.next() - 0.5) * 1.4,
-            vy: (tile === TILE_MIST ? 1.2 + this.rng.next() : 2.6 + this.rng.next() * 3.0) * planing,
-            vz: v.z * 0.1 + (this.rng.next() - 0.5) * 1.4,
-            life: tile === TILE_MIST ? 1.0 + this.rng.next() * 0.8 : 0.5 + this.rng.next() * 0.45, age: 0,
+            x: p.x, y: fs.surfaceY + (tile === TILE_MIST ? 0.9 : 0.15), z: p.z,
+            vx: v.x * 0.1 + (this.rng.next() - 0.5) * 1.0,
+            vy: (tile === TILE_MIST ? 0.9 + this.rng.next() * 0.8 : 1.8 + this.rng.next() * 2.2) * planing,
+            vz: v.z * 0.1 + (this.rng.next() - 0.5) * 1.0,
+            life: tile === TILE_MIST ? 0.9 + this.rng.next() * 0.6 : 0.4 + this.rng.next() * 0.35, age: 0,
             size: 1, tile,
-            len: tile === TILE_DROPS ? 0.8 + this.rng.next() * 0.9 : tile === TILE_SHEET ? 0.8 + this.rng.next() * 0.7 : 0.9 + this.rng.next() * 0.8,
-            wid: tile === TILE_DROPS ? 0.35 + this.rng.next() * 0.35 : tile === TILE_SHEET ? 0.5 + this.rng.next() * 0.45 : 0.7 + this.rng.next() * 0.6,
-            alpha: tile === TILE_MIST ? 0.06 + 0.08 * this.rng.next() : 0.3 + 0.25 * this.rng.next(),
+            len: tile === TILE_DROPS ? 0.7 + this.rng.next() * 0.7 : tile === TILE_SHEET ? 0.7 + this.rng.next() * 0.6 : 0.7 + this.rng.next() * 0.6,
+            wid: tile === TILE_DROPS ? 0.3 + this.rng.next() * 0.3 : tile === TILE_SHEET ? 0.3 + this.rng.next() * 0.3 : 0.5 + this.rng.next() * 0.5,
+            alpha: tile === TILE_MIST ? 0.05 + 0.06 * this.rng.next() : 0.26 + 0.22 * this.rng.next(),
           });
         }
       }

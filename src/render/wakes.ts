@@ -225,7 +225,9 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         // ---- stern turbulence: a beam wide at the transom, spreading like a turbulent wake (with the square
         //      root of the distance) while its froth thins as it spreads
         float laneHalf0 = w0 * 1.05;
-        float laneHalf = laneHalf0 + 0.45 * sqrt(d * max(w0, 0.15));
+        // a planing hull's foam rail spreads less than a displacement hull's turbulent lane (its wake is a pair
+        // of narrow whitewater rails off the step, r4 planing frames)
+        float laneHalf = laneHalf0 + 0.45 * sqrt(d * max(w0, 0.15)) * (1.0 - 0.45 * planing);
         float ls = 1.0 / max(laneHalf, 0.3);
         // each edge wanders by a quarter of the width over a few widths along the track (a fixed-width band
         // read as a painted stripe)
