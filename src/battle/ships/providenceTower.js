@@ -19,6 +19,7 @@ import {
   rng,
 } from "./providenceGeo.js";
 import {
+  AFT_DECK,
   CITADEL_FORE,
   CITADEL_LOWER,
   CITADEL_SLATE,
@@ -33,6 +34,7 @@ import {
   SPINE_BLOCKS,
   TOWER,
   TOWER_HAZARD,
+  TOWER_LEDGE,
   VFIN,
   VFIN_HAZARD,
   VFIN_POD,
@@ -176,17 +178,25 @@ function buildSpine({ add }) {
 }
 
 // ---------------------------------------------------------------------------
-// citadel: forward step block (r 545-612, +70), aft deck (r 600-1000, +60) and the main upper block
-// (r 604-940, +88) the tower rises from; rounded plan corners
+// citadel: forward step block (r 540-604, +70), the broad lower block (r 596-952, +60), the narrower
+// aft deck (r 940-1040, +60) and the main upper block (r 596-940, +88) the tower rises from; rounded
+// plan corners
 // ---------------------------------------------------------------------------
 function buildCitadel({ add }) {
   const blocks = [
     [CITADEL_FORE, 7],
     [CITADEL_LOWER, 9],
+    [AFT_DECK, 8],
+    [CITADEL_UPPER, 7],
+  ];
+  // LOD 2 merges the aft deck into the lower block (one slab instead of two)
+  const blocksFar = [
+    [CITADEL_FORE, 7],
+    [{ ...CITADEL_LOWER, r1: AFT_DECK.r1 }, 9],
     [CITADEL_UPPER, 7],
   ];
   for (const lod of [0, 1, 2]) {
-    for (const [b, rc] of blocks) {
+    for (const [b, rc] of lod === 2 ? blocksFar : blocks) {
       const ring = (y) =>
         roundBoxRing(y, fromRef(b.r0), fromRef(b.r1), b.half, rc);
       const rings = [ring(b.y0), ring(b.y1)];
@@ -249,8 +259,8 @@ function towerRing(y) {
 // even to the pod
 function towerHeights(lod) {
   const y0 = TOWER.yBase - 2;
-  if (lod === 2) return [y0, 96, 130, 170, TOWER.yTop];
-  if (lod === 1) return [y0, 91, 95, 102, 120, 150, 180, TOWER.yTop];
+  if (lod === 2) return [y0, 96, 130, 175, TOWER.yTop];
+  if (lod === 1) return [y0, 91, 95, 102, 120, 150, 185, TOWER.yTop];
   return [
     y0,
     89.5,
@@ -265,6 +275,7 @@ function towerHeights(lod) {
     150,
     170,
     190,
+    205,
     TOWER.yTop,
   ];
 }
@@ -287,7 +298,7 @@ function buildBlade({ add }) {
     );
     // rust trims down the leading and trailing edges (they still read at 10 km)
     const ys =
-      lod === 0 ? [100, 120, 140, 165, 190, 208] : [100, 140, 175, 208];
+      lod === 0 ? [100, 120, 140, 165, 190, 216] : [100, 140, 180, 216];
     add(
       barAlongY(ys, (y) => [0, fromRef(towerLead(y)) - 0.35], 2.6, 1.1, {
         color: rgb(PAL.trim),
@@ -330,6 +341,21 @@ function buildBlade({ add }) {
             },
           );
         }
+      // equipment ledge on the trailing edge just under the pod
+      const lg = TOWER_LEDGE;
+      const yl = (lg.y0 + lg.y1) / 2;
+      add(
+        boxMM(
+          [-lg.half, lg.y0, fromRef(towerTrail(yl)) - 3],
+          [lg.half, lg.y1, fromRef(towerTrail(yl)) + lg.depth],
+        ),
+        "hull",
+        {
+          color: new THREE.Color(PAL.super).multiplyScalar(0.9),
+          texel: PLATE_TEXEL,
+          lod,
+        },
+      );
     }
   }
 }
@@ -765,10 +791,14 @@ function superDetail({ add }) {
         },
       );
   };
+  const ad = AFT_DECK;
+  // side wall the lower tier presents at r (broad lower block, then the narrower aft deck)
+  const lowerHalf = (r) => (r > cl.r1 - 4 ? ad.half : cl.half);
   for (const side of [-1, 1]) {
     row(cu.half + 0.05, 66, 616, 934, 4.2, 0.25, side, PAL.windowWarm);
     row(cu.half + 0.05, 80.5, 640, 900, 4.2, 0.3, side, PAL.windowWarm);
-    row(cl.half + 0.05, 55.5, 606, 994, 4.6, 0.3, side, PAL.windowWarm);
+    row(cl.half + 0.05, 55.5, 606, 940, 4.6, 0.3, side, PAL.windowWarm);
+    row(ad.half + 0.05, 55.5, 960, 1030, 4.6, 0.3, side, PAL.windowWarm);
     row(SPINE.half1 + 0.05, 51.5, 226, 500, 5.0, 0.35, side, PAL.windowCool);
     // dark slate rectangles painted on the lower citadel wall (reference: beside the hangar row)
     for (const [r0, r1, y0, y1] of CITADEL_SLATE)
@@ -794,7 +824,7 @@ function superDetail({ add }) {
       [740, 74, 20, 4],
       [840, 73, 16, 4],
     ]) {
-      const x = (y > cl.y1 ? cu.half : cl.half) + 0.3;
+      const x = (y > cl.y1 ? cu.half : lowerHalf(r)) + 0.3;
       add(box(side * x, y, fromRef(r), 0.6, h + 1.4, w + 1.4), "hull", {
         color: new THREE.Color(PAL.dorsal).multiplyScalar(0.85),
         texel: 1 / 8,
@@ -817,15 +847,20 @@ function superDetail({ add }) {
         );
     }
     // hatch rows along the exposed base of the citadel wall and the spine wall
-    for (let r = 610; r < 990; r += 4.6) {
+    for (let r = 610; r < 1030; r += 4.6) {
       if (hash(Math.round(r), side + 1, 3) < 0.3) continue;
       if (r > 700 && r < 900 && hash(Math.round(r), side + 9, 4) < 0.5)
         continue;
-      add(box(side * (cl.half + 0.2), 58, fromRef(r), 0.5, 1.6, 2.2), "dark", {
-        color: 0x2e3238,
-        texel: 1 / 2,
-        lod: 0,
-      });
+      if (r > cl.r1 - 8 && r < ad.r0 + 8) continue;
+      add(
+        box(side * (lowerHalf(r) + 0.2), 58, fromRef(r), 0.5, 1.6, 2.2),
+        "dark",
+        {
+          color: 0x2e3238,
+          texel: 1 / 2,
+          lod: 0,
+        },
+      );
     }
     for (let r = 200; r < 540; r += 6.2) {
       if (hash(Math.round(r), side + 2, 3) < 0.4) continue;

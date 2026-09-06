@@ -14,7 +14,7 @@ import { clamp01, fromRef, lerp, loftRings, ringCap } from "./providenceGeo.js";
 export const PAL = {
   dorsal: 0x6e7889,
   flank: 0x808c9e,
-  belly: 0x6b7380,
+  belly: 0x5e6673,
   finFace: 0x8592a5,
   super: 0x737d8d,
   dark: 0x363a42,
@@ -37,28 +37,32 @@ export const PLATE_TEXEL = 1 / 36;
 
 // ---------------------------------------------------------------------------
 // Dorsal superstructure (side-view reference, heights above the datum; the aft keel sits at -52): the
-// narrow spine (r 160-545, top +56, blocks to +62) with mast clusters, a forward step block (+70), the
-// wide citadel block (r 604-940, top +88) the tower rises from, and the aft deck behind it (+60 to
-// r 1000). Slabs are [r0, r1, y0, y1, half] (y0 is buried in the hull so nothing shows underneath).
+// spine deck (r 160-545, top +56, blocks to +62) with mast clusters, a forward step block (+70), the
+// broad citadel block (r 604-940, top +88) the tower rises from, and the narrower aft deck behind it
+// (+60 to r 1040). Slabs are [r0, r1, y0, y1, half] (y0 is buried in the hull so nothing shows
+// underneath). Widths come from the ROTS still: the citadel deck spans ~60 % of the beam under the
+// tower (half 36 on a 59 half-beam), the spine deck ~40 % of the beam over the forward body.
 // ---------------------------------------------------------------------------
 export const SPINE = {
   r0: 135,
   r1: 545,
   y0: 24,
   y1: 56,
-  half0: 12,
-  half1: 11,
-  nose: 34,
+  half0: 15,
+  half1: 14,
+  nose: 40,
 };
 export const SPINE_BLOCKS = [
-  [182, 232, 56, 60, 8],
-  [262, 302, 56, 61, 9],
-  [440, 540, 56, 62, 9.5],
+  [182, 232, 56, 60, 10],
+  [262, 302, 56, 61, 11],
+  [440, 540, 56, 62, 12],
 ];
-export const CITADEL_FORE = { r0: 540, r1: 604, y0: 30, y1: 70, half: 25 };
-export const CITADEL_LOWER = { r0: 596, r1: 1040, y0: 30, y1: 60, half: 29 };
-export const CITADEL_UPPER = { r0: 596, r1: 940, y0: 56, y1: 88, half: 29 };
-// masts: [x, r, yBase, yTop, radius]; the tall citadel and spine masts are heavy lattice-like spars
+export const CITADEL_FORE = { r0: 540, r1: 604, y0: 30, y1: 70, half: 30 };
+export const CITADEL_LOWER = { r0: 596, r1: 952, y0: 30, y1: 60, half: 36 };
+export const AFT_DECK = { r0: 940, r1: 1040, y0: 30, y1: 60, half: 27 };
+export const CITADEL_UPPER = { r0: 596, r1: 940, y0: 56, y1: 88, half: 36 };
+// masts: [x, r, yBase, yTop, radius]; the tall citadel and spine masts are heavy lattice-like spars,
+// the bridge pod carries a forward mast and the tall aft lattice mast on its roof deck (+238)
 export const MASTS = [
   [0, 266, 60, 76, 0.9],
   [0, 280, 60, 84, 1.1],
@@ -75,28 +79,31 @@ export const MASTS = [
   [-9, 660, 88, 106, 0.9],
   [9, 682, 88, 108, 0.9],
   [-9, 682, 88, 108, 0.9],
-  [0, 950, 242, 254, 0.8],
-  [0, 966, 242, 250, 0.6],
-  [6, 938, 242, 248, 0.5],
-  [-6, 938, 242, 248, 0.5],
+  [0, 976, 238, 262, 1.1],
+  [0, 986, 238, 254, 0.7],
+  [5, 962, 238, 250, 0.5],
+  [-5, 962, 238, 250, 0.5],
+  [0, 914, 238, 254, 0.6],
 ];
 
 // ---------------------------------------------------------------------------
-// Command tower: a thin blade leaning aft as a whole (leading edge raked 0.62, trailing edge 0.48;
-// measured row by row on the side reference: chord 62 m at +108 narrowing to 50 m at +160..+190),
-// filleted into the citadel top (+88) where the root spans r 825-946; it carries the hammerhead
-// bridge pod at +210..+233 with an upper deck to +243.
+// Command tower: a thin blade leaning aft as a whole (leading edge raked 0.62, trailing edge 0.31;
+// measured row by row on the side reference: chord 62 m at +108 narrowing to 27 m where it meets the
+// pod at +218), filleted into the citadel top (+88) where the root spans r 825-946; it carries the
+// hammerhead bridge pod at +218..+234 with a roof deck to +238.
 // ---------------------------------------------------------------------------
 export const TOWER = {
   yBase: 88,
-  yTop: 206,
+  yTop: 218,
   yRef: 104,
   rLead: 865.5,
   rTrail: 928,
   rakeLead: 0.62,
-  rakeTrail: 0.44,
+  rakeTrail: 0.31,
   fillet: 22,
 };
+// small equipment ledge on the trailing edge just under the pod (side reference)
+export const TOWER_LEDGE = { y0: 197, y1: 203, depth: 5, half: 6 };
 export function towerLead(y) {
   const f = clamp01(1 - (y - TOWER.yBase) / TOWER.fillet);
   return TOWER.rLead + (y - TOWER.yRef) * TOWER.rakeLead - 30 * f * f;
@@ -108,34 +115,34 @@ export function towerTrail(y) {
 export function towerHalf(y) {
   const f = clamp01(1 - (y - TOWER.yBase) / TOWER.fillet);
   return (
-    lerp(15, 11, clamp01((y - TOWER.yBase) / (TOWER.yTop - TOWER.yBase))) +
+    lerp(14, 9, clamp01((y - TOWER.yBase) / (TOWER.yTop - TOWER.yBase))) +
     5 * f * f
   );
 }
-// bridge pod (headRings spec in ref metres, converted where built): a 105 m slab (r 900-1005 at
-// +206..+232, measured) overhanging the tower top ~30 m forward and ~27 m aft, with a 55 m upper
-// deck on it
+// bridge pod (headRings spec in ref metres, converted where built): a flat 96 m hammerhead slab
+// (r 897-993 at +218..+234, measured on the side reference: 16 m tall) overhanging the tower top
+// ~39 m forward and ~30 m aft, with a low roof deck (+234..+238) carrying the masts
 export const POD = {
-  cy: 219,
-  r0: 900,
-  r1: 1005,
+  cy: 226,
+  r0: 897,
+  r1: 993,
   halfW: 20,
-  halfH: 13,
-  r: 5,
-  band: [-6, -2.5],
-  inset: 2.0,
-  nose: 0.25,
-  tail: 0.35,
-  noseK: 0.6,
-  tailK: 0.5,
+  halfH: 8,
+  r: 3,
+  band: [-4.6, -1.4],
+  inset: 1.6,
+  nose: 0.22,
+  tail: 0.3,
+  noseK: 0.7,
+  tailK: 0.62,
 };
-export const POD_DECK = { r0: 920, r1: 975, y0: 232, y1: 242, half: 13 };
+export const POD_DECK = { r0: 907, r1: 987, y0: 234, y1: 238, half: 14 };
 // communications spar projecting forward and up from the pod nose
 export const SPAR = {
-  r0: 916,
-  y0: 235,
-  r1: 840,
-  y1: 260,
+  r0: 905,
+  y0: 236,
+  r1: 858,
+  y1: 258,
   rad0: 0.8,
   rad1: 0.3,
 };
@@ -173,18 +180,19 @@ export function vfinHalf(y) {
 export const VFIN_POD = { r0: 755, r1: 817, cy: -104, rx: 6, ry: 11 };
 
 // ---------------------------------------------------------------------------
-// Stern: one large centre bell (the reference's 60 m engine drum) ringed by six smaller nozzles on the
-// 70 x 76 m stern face at r 1046; the upper ring nozzles reach r 1086, the lower ones are shorter so
-// the side silhouette matches. [x, y, radius, length]
+// Stern: one large centre drum (measured on the side reference: 49 m across, spanning -19..+32 and
+// protruding to r ~1080) ringed by six 14 m nozzles at 33 m from its axis on the 70 x 76 m stern face
+// at r 1046; the ring nozzles reach r ~1075, the lower ones a little less so the side silhouette
+// matches. [x, y, radius, length] (lengths from r 1043)
 // ---------------------------------------------------------------------------
 export const ENGINES = [
-  [0, 8, 19, 16],
-  [0, 36.5, 8.5, 40],
-  [24.5, 22, 8.5, 40],
-  [-24.5, 22, 8.5, 40],
-  [24.5, -6, 8.5, 26],
-  [-24.5, -6, 8.5, 26],
-  [0, -20.5, 8.5, 26],
+  [0, 6.5, 24.5, 37],
+  [0, 39.5, 7, 32],
+  [28.6, 23, 7, 32],
+  [-28.6, 23, 7, 32],
+  [28.6, -10, 7, 26],
+  [-28.6, -10, 7, 26],
+  [0, -25.5, 7, 24],
 ];
 
 // ---------------------------------------------------------------------------
@@ -206,18 +214,28 @@ export const CHIN_GRILLE = { r0: 262, r1: 312, y0: -35, y1: -16 };
 // yellow hazard patches on the forward upper shoulder
 // ---------------------------------------------------------------------------
 export const SLATE_MARKS = [
-  // two pairs on the aft body (reference r 628-681): a shoulder segment above the belt and a lower-hull
-  // segment below it, so each reads as one tall rectangle broken by the dark trough
-  [612, 632, 15, 32],
-  [655, 675, 15, 32],
-  [612, 632, -34, -6],
-  [655, 675, -34, -6],
-  [300, 322, 30, 44],
-  [520, 540, 30, 41],
+  // the aft-body bands (side reference): each is a pair of 8 m stripes running from the citadel wall
+  // down the shoulder to the trough top (r 630-651 and 689-710, continued on the wall by CITADEL_SLATE),
+  // lower-hull pairs under the trough at r 603-619, 645-664 and 870-892, and a single band at r 905
+  [630, 638, 15, 46],
+  [643, 651, 15, 46],
+  [689, 697, 15, 46],
+  [702, 710, 15, 46],
+  [905, 915, 15, 46],
+  [603, 610, -40, -7],
+  [613, 619, -40, -7],
+  [645, 653, -40, -7],
+  [656, 664, -40, -7],
+  [870, 878, -40, -7],
+  [884, 892, -40, -7],
+  // forward shoulder rectangle at r 293-310 (bow reference)
+  [293, 310, 32, 47],
 ];
 export const CITADEL_SLATE = [
-  [628, 648, 44, 56],
-  [672, 694, 44, 56],
+  [630, 638, 45, 74],
+  [643, 651, 45, 74],
+  [689, 697, 45, 74],
+  [702, 710, 45, 74],
 ];
 export const HAZARD_MARKS = [
   [163, 175, 18, 33],
@@ -247,7 +265,7 @@ export function seamCell(z) {
 export const HEAVY_SHOULDER_R = [215, 345, 475];
 export const HEAVY_SHOULDER_SEG = [2, 0.35];
 export const HEAVY_CITADEL_R = [722, 800];
-export const HEAVY_CITADEL_X = 15;
+export const HEAVY_CITADEL_X = 22;
 // baked light emplacements: rows of { r: [...], m: profile segment, t: fraction, scale } on both sides
 export const LIGHT_MOUNTS = [
   { r: [280, 410, 540], m: 3, t: 0.5, scale: 1 }, // dorsal shoulder, between the heavies

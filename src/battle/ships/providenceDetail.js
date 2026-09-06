@@ -338,22 +338,22 @@ function addEngines({ add }) {
         lod: 0,
       });
   };
-  // the gaps in the nozzle ring sit at ±30° / ±90° / ±150° around the centre bell (0, 8)
-  vent(-14, 34, 4, 5);
-  vent(14, 34, 4, 5);
-  vent(-13, -18, 4, 4);
-  vent(13, -18, 4, 4);
+  // the gaps in the nozzle ring sit at ±30° / ±90° / ±150° around the centre drum (0, 6.5)
+  vent(-15, 36, 4, 5);
+  vent(15, 36, 4, 5);
+  vent(-16, -23, 4, 4);
+  vent(16, -23, 4, 4);
   for (const [x, y, w, h, d] of [
-    [-31, 8, 5, 10, 6],
-    [31, 8, 5, 10, 6],
+    [-32, 6.5, 4, 9, 6],
+    [32, 6.5, 4, 9, 6],
   ])
     add(box(x, y, zF + d / 2 - 1, w, h, d), "dark", {
       color: PAL.darkLit,
       texel: 1 / 3,
       lod: 0,
     });
-  for (const x of [-31, 31])
-    add(cylY(0.9, 0.9, 18, 6).translate(x, 8, zF + 3), "dark", {
+  for (const x of [-32, 32])
+    add(cylY(0.9, 0.9, 13, 6).translate(x, 6.5, zF + 3), "dark", {
       color: 0x2e3238,
       texel: 1 / 2,
       lod: 0,
@@ -378,7 +378,7 @@ function addPlating({ add }) {
     // seams on the charcoal beak darken with it (the hull's beak tint is 0.3 forward of r ~285)
     const SEAM = rgb(
       PAL.dorsal,
-      0.78 * lerp(0.35, 1, smoothstep(270, 300, toRef(z))),
+      0.78 * lerp(0.25, 1, smoothstep(275, 310, toRef(z))),
     );
     add(
       loftRings(
@@ -482,7 +482,7 @@ function addGreebles({ add, cuts }) {
     const g = box(0, 0.45, 0, lw, 0.9, lz);
     placeOn(g, f.p, f.n, FWD);
     // plates on the charcoal beak darken with it
-    const beak = lerp(0.35, 1, smoothstep(270, 300, r));
+    const beak = lerp(0.25, 1, smoothstep(275, 310, r));
     add(g, "hull", {
       color: new THREE.Color(colorHex).multiplyScalar(tone * beak),
       texel: 1 / 12,

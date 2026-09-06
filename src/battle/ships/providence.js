@@ -146,13 +146,13 @@ function plateColor(i, j, c, n, st) {
   if (m >= 12) tone *= 0.95;
   // the recessed trough (back wall and its lips) sits in shadow
   if (st.d > 0 && m >= 7 && m <= 10) tone *= m === 8 ? 0.5 : 0.62;
-  // the reference beak is charcoal blue-grey at roughly half the main body's sRGB luminance (a 0.3
-  // linear tint after gamma): the light plating starts abruptly at r ~285 on the upper hull, later
-  // (r ~330-400) on the belt and the chin
-  const beakEnd = m >= 11 ? [330, 400] : m >= 6 ? [285, 330] : [270, 300];
-  // (the lower hull already sits in the belly shadow, so its beak tint stops at 0.5)
+  // the reference beak is charcoal blue-grey: sRGB ~40 against ~110 on the lit shoulder plating aft
+  // of it (a ~0.2 linear tint after gamma); the light plating starts abruptly at r ~280-310 on the
+  // upper hull, later (r ~330-400) on the belt and the chin
+  const beakEnd = m >= 11 ? [330, 400] : m >= 6 ? [275, 310] : [265, 300];
+  // (the lower hull already sits in the belly shadow, so its beak tint stops at 0.4)
   tone *= lerp(
-    m >= 11 ? 0.5 : 0.3,
+    m >= 11 ? 0.4 : 0.2,
     1,
     smoothstep(beakEnd[0], beakEnd[1], st.r),
   );
