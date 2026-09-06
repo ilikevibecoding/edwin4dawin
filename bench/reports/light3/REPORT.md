@@ -15,6 +15,28 @@ Branch `cursor/light3-loop-8213` on top of `6130eae7`. Defect log with per-round
 | `kLow` 3.5 -> 5 | `common.glsl.ts` | 0.5 salmon horizon colour 40 % of the sky 13 deg up | frame top 17:45 (176,137,153): small change, kept for the Belt-of-Venus tone |
 | probe fill x0.35 below ~8 deg sun | `sky.ts` (probe shader only) | 0.6 golden hour as dust: shade and ground lit by the salmon haze at every azimuth | round 3 |
 
+## Method
+
+Baseline `6130eae7` served on port 4550, the work tree on 4551; identical URLs (`?bench=dev&freeze=1&seed=20260904`,
+1280x720) captured in one headless browser per batch (the machine-wide Chrome gate allows two browsers; a batch
+waits its turn). A measurement script inverts the composite's neutral tone curve (exposure 0.92, grade, ACES,
+gamma 2.2) so sRGB patch means read back as pre-exposure scene radiance; the neutral-paint histogram takes the
+low-chroma pixels inside the aircraft's box and reports sunlit (p95) against shaded (p15) white, the same
+statistic taken on the reference photograph. Every round's frames are compared against round 0 at the same pose.
+
+Gauntlet: 06:45, 09:00, 12:00, 15:30, 17:45, 18:20, 19:00, 22:00 in clear (all cameras), scattered / cloudy /
+storm at 09:00 and 15:30 (chase toward the sun) and 12:00 (close-up); cameras: chase toward / away from the sun
+at 300 m, fixed close-up of the taxiing aircraft, cockpit toward the sun, 45 m over the causeway, 900 m skyline,
+400 m straight down, 30 m level horizon, 3 km horizon; dusk sweep 17:30 -> 19:30 in six frames; shadow set at
+09:00 / 15:30 / 17:45 with the cascade debug view.
+
+## Kept (the palette, measured before any change and unchanged after)
+
+Daytime sky gradient and horizon haze band (zenith (41,130,180), reference (55,134,180)); the sunset horizon
+salmon / peach and the water's mirror of it (the water now also carries the away-side violet of the same dome);
+cloud tops at the reference's level (220-224); night city glow, star field, nav-light bloom; the noon water hue
+(the water agent's body brightness is the one palette value the rebalance moved, see requests).
+
 ## Values other agents depend on
 
 Scene radiance scale (pre-exposure; composite exposure 0.92, ACES): sunlit Lambertian white ~1.0, sunlit cloud top
