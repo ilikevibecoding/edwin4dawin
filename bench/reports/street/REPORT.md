@@ -169,8 +169,10 @@ under this renderer's sun, as the walks were in round 1 — and was brought down
   Rounds 9's 3 px floor and c1db632d's depth write were reasoned from frames without a working dot and changed
   nothing. With the chunks in (as `plane/parts/lights.ts` has them) the dots test and write the same log depth as
   everything else, and the sprite moves 0.6 m toward the camera so its own housing box does not hide its centre
-  within LAMP_FAR. h13 will be the first frame with 40 785 lamp dots to 4 km at night; their gain was designed blind
-  and may need a round of tuning.
+  within LAMP_FAR. **Seen in h13** (9719cbd1): the first night frame with the dots — the port's row of masts and yard
+  lamps at 2.3 km, the suburban grid as strings of warm dots along its streets, the shore road to the causeway as a
+  lamp line, the downtown's ground lit between the towers; at 2.3–4 km the dots match the causeway heads' brightness.
+  Counters and day frames unchanged. Not yet seen at 200 m (4.5 px sprites), where the gain could prove strong.
 - **h12 read** (5d1a1da5, this branch at ac0bb6ad): bed tone, the belted cars with their shadows and the yellow
   heads on backplates all seen (DEFECTS 10.3); counters in the budget table (DEFECTS 10.2): street_2m +71.5 k for the
   cars' shadows, near shapes and backplates (estimate +72 k), the aerial views +3.5–7 k, every view under the cap.
@@ -303,14 +305,13 @@ rendered against ground or buildings), fixed for h13.
 | city_500m | 7 (5) | 5 (4) | plazas read as paved fields with bed groups, planters and the street trees; poles are sub-pixel at 500 m by day |
 | street_2m | 7 (5) | 7 (6) | wheel-path rhythm, oil strip, ghost markings, ironwork, kerb stones; signal mast arms with yellow housings and lit aspects, the lamp arms over the avenue; kerbside cars with sill band, raked cabin and their shadows |
 | harbor | 7 (4) | 6 (3) | masts over the yards; the hardstand at median sRGB 126 with slab tones, truck-lane darkening and the slot grid (was 171 in h09, near-white) |
-| night | — | 5 (5) | the causeway lamp line (the highway module's geometry) and the lit windows; no lamp dot in the frame — none ever rendered (DEFECTS 10.1), fixed for h13; the city_north / port300 / street_2m night frames are still queued (own capture, `r102`) |
+| night | — | 7 (5) | h13: the port's masts and yard lamps as a row of bright points at 2.3 km, the suburban grid as lamp lines, the shore road to the causeway as a lamp line, the downtown's ground lit between the towers — the first night frame in which the lamp dots rendered (DEFECTS 10.1); h12 and every frame before it had the causeway line and the windows only. The city_north / port300 / street_2m night frames are still queued (own capture, `r102`) |
 
-Not claimed: the night read of the lighting infrastructure beyond 600 m. Round 10 found that the lamp dots — the
-"lines of light" from the air — had never rendered against ground or buildings (DEFECTS 10.1, the log depth); every
-night frame to h12 shows the lit heads within 600 m and the lamp map's pools only. The fix (d37ed6d9) is in for h13;
-until that frame is read the score for 22 rests on the pools, the heads at 200 m and the causeway line (the highway
-module's), and the night bench view's 5 (5) stands. The branch's own night jobs (`r100`–`r102`) have been queued on
-the two builder slots since 15:58 / 18:39, the slots held by other agents' sessions for 4–9 h.
+Not claimed: the night read at 200 m (lamp lines along the avenues at 4.5 px a sprite, the lanterns, the lot lamps,
+the lit aspects of the yellow heads, the pools under the poles). Round 10 found that the lamp dots — the "lines of
+light" from the air — had never rendered against ground or buildings (DEFECTS 10.1, the log depth); h13 is the first
+frame with them, at 2.3–4 km. The branch's own night jobs (`r100`–`r102`) have been queued on the two builder slots
+since 15:58 / 18:39, the slots held by other agents' sessions for 4–9 h.
 
 ## Requests to other agents
 
