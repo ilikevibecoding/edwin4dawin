@@ -55,7 +55,7 @@ const Z = (d) => d - L / 2;
 const HULL = lin(0.72, 0.69, 0.62); // light warm grey-white
 const HULL_TOP = lin(0.78, 0.75, 0.68);
 const HULL_LOW = lin(0.63, 0.61, 0.56); // lower chamfers (one cream tone in the CG renders, only shading differs)
-const BELLY = lin(0.42, 0.43, 0.47); // undersides, cool grey
+const BELLY = lin(0.5, 0.5, 0.52); // undersides, cool grey (the CG hull is one cream tone; shadow does the rest)
 const KEEL = lin(0.4, 0.41, 0.45); // set-back keel
 const STERN = lin(0.3, 0.28, 0.26); // heat-stained pod tails
 const DARK = 0xb8bcc4; // machinery greebles on the dark texture (reads mid-dark grey)
@@ -342,7 +342,8 @@ export function buildCarrack(mats) {
     seam: ["dark", { color: SEAM, texel: 1 / 4 }],
     belly: ["hull", { tint: shade(BELLY), texel: TEX }],
     low: ["hull", { tint: shade(HULL_LOW), texel: TEX }],
-    steep: ["hull", { tint: shade(HULL, 0.9), texel: TEX }],
+    steep: ["hull", { tint: shade(HULL, 0.97), texel: TEX }],
+    strip: ["hull", { tint: shade(HULL_LOW, 0.95), texel: TEX }],
     top: ["hull", { tint: shade(HULL_TOP), texel: TEX }],
     hull: ["hull", { tint: shade(HULL), texel: TEX }],
     ledge: ["dark", { color: RECESS, texel: 1 / 4 }],
@@ -414,7 +415,7 @@ export function buildCarrack(mats) {
     if (F.bottom(i)) return "belly";
     if (F.chamfer(i)) return "low";
     if (F.steep(i)) return "steep";
-    if (F.strip(i)) return "keel";
+    if (F.strip(i)) return "strip";
     if (F.top(i)) return "top";
     return "hull";
   };
@@ -579,16 +580,15 @@ export function buildCarrack(mats) {
       });
     const q = headAt(56, -17, side);
     const m = profN(-17);
-    hatch(add, {
+    lippedPlate(add, {
       c: q,
       n: [side * m[0], m[1], 0],
       along: [0, 0, 1],
-      w: 9,
-      h: 4,
+      len: 9,
+      wid: 4,
       lod: 0,
       color: HULL_LOW,
-      rimColor: RECESS,
-      big: true,
+      lipColor: RECESS,
     });
   }
 
@@ -796,12 +796,12 @@ export function buildCarrack(mats) {
     for (const lod of [0, 1])
       add(
         tubeZ(
-          1.8,
-          1.8,
+          2.3,
+          2.3,
           Z(176) - Z(106),
           lod ? 6 : 10,
-          side * 20.8,
-          LEDGE - 1.5,
+          side * 20.6,
+          LEDGE - 2.5,
           Z(141),
           false,
         ),
