@@ -812,12 +812,19 @@ ${VEG_SHADOW_PROBE_VARS}
       vec3 right = normalize(vec3(MV[0][0], MV[1][0], MV[2][0]));
       vec3 up = normalize(vec3(MV[0][1], MV[1][1], MV[2][1]));
       float hc = hash11(seed * 13.7 + cardId * 0.37 + puffPart);
-      float fade = 1.0 - smoothstep(${FRINGE_FADE_NEAR}.0, ${FRINGE_FADE_FAR}.0, length(cameraPosition - iw));
+      float camD = length(cameraPosition - iw);
+      float fade = 1.0 - smoothstep(${FRINGE_FADE_NEAR}.0, ${FRINGE_FADE_FAR}.0, camD);
       // the species' leaf: a sea grape's clusters are big round leaves (larger cards), a pine's needle
       // tufts (smaller, more of the outline left to the tiers), a mangrove's small and dense
       bool grape = arche > 5.5 && arche < 6.5;
       float leafScale = grape ? 1.35 : cls > 1.5 ? 0.8 : (arche > 1.5 && arche < 2.5) ? 0.85 : 1.0;
       float sz = ps.x * (0.6 + 0.3 * hc) * fade * leafScale;
+      // a card is sized to break the outline of the puff it sits on — the size of the puff, which from
+      // inside 150 m is a frame-filling smooth cut-out (r19-park: 4-6 m cards on a 6 m crown at 12 m, the
+      // cluster tile magnified to blobs); by 40 m, where the shell's own leaf carpet carries the outline,
+      // the card is a leaf cluster's real size (0.7 m, the sea grape's bigger, the pine's tuft smaller)
+      float closeV = 1.0 - smoothstep(40.0, 150.0, camD);
+      sz = mix(sz, min(sz, 0.7 * leafScale / max(length(instanceMatrix[0].xyz), 0.1)), closeV);
       vec2 corner = uv - 0.5;
       // per-card spin: the same cluster tile reads as different clusters
       float spin = hc * 6.2831;
@@ -854,6 +861,8 @@ varying float vArche;
 varying float vOcc;
 varying vec2 vLeafUv;
 uniform sampler2D uLeaf;
+uniform float uVegDbg; // DEBUG (temporary): 1 = carpet coverage / shade / close, 2 = facing / front / distance
+vec3 vegDbg = vec3(0.0);
 float vegNear; // 1 within ~200 m of the camera, 0 beyond 320 m: gates the close-range leaf detail
 ${GLSL_NOISE}
 `;
@@ -891,6 +900,10 @@ const CROWN_FRAG = /* glsl */ `
     vec3 cn = normalize(vCrownN);
     // inside 40 m the crown is seen leaf by leaf (its carpet, its own leaf tone); by 150 m it is a mass again
     float close = 1.0 - smoothstep(40.0, 150.0, camDist);
+    // the far side of a shell shows through its gaps only, and the gaps close by 150 m: beyond it the back
+    // faces (a second, hidden shell — the double-sided material doubles the puff fragments) go before the
+    // texture and noise work (ab-park r19: the work build 1.48x the base's frame time under the canopy)
+    if (!gl_FrontFacing && close <= 0.0 && vPart < ${FRINGE_PART - 0.5}) discard;
     if (vPart > ${FRINGE_PART - 0.5}) {
       // leaf-cluster card: the cut-out is the coverage (alpha to coverage under MSAA; a soft ramp so the
       // mip-mapped alpha never flips a whole card between frames), per-leaf shading in R — divided by the
@@ -919,9 +932,14 @@ const CROWN_FRAG = /* glsl */ `
       vec2 tileO = vec2(vArche > 6.5 || (vArche > 4.5 && vArche < 5.5) ? 1.0 : 0.0, 2.0);
       vec2 tsc = vec2(${(1 / LEAF_COLS).toFixed(4)}, ${(1 / LEAF_ROWS).toFixed(4)});
       vec2 p0 = vWP.zy * 0.7 + vSeed, p1 = vWP.xz * 0.7 + vSeed * 1.7, p2 = vWP.xy * 0.7 + vSeed * 2.3;
-      vec2 lt = textureGrad(uLeaf, (fract(p0) + tileO) * tsc, dFdx(p0) * tsc, dFdy(p0) * tsc).ra * tw.x
-              + textureGrad(uLeaf, (fract(p1) + tileO) * tsc, dFdx(p1) * tsc, dFdy(p1) * tsc).ra * tw.y
-              + textureGrad(uLeaf, (fract(p2) + tileO) * tsc, dFdx(p2) * tsc, dFdy(p2) * tsc).ra * tw.z;
+      // the gradients before the branches (derivatives inside non-uniform control flow are undefined); a
+      // plane weighted under 3 % (most of a facet: the fourth power leaves one or two planes) is not sampled
+      vec2 g0x = dFdx(p0) * tsc, g0y = dFdy(p0) * tsc, g1x = dFdx(p1) * tsc, g1y = dFdy(p1) * tsc, g2x = dFdx(p2) * tsc, g2y = dFdy(p2) * tsc;
+      vec2 lt = vec2(0.0);
+      if (tw.x > 0.03) lt += textureGrad(uLeaf, (fract(p0) + tileO) * tsc, g0x, g0y).ra * tw.x;
+      if (tw.y > 0.03) lt += textureGrad(uLeaf, (fract(p1) + tileO) * tsc, g1x, g1y).ra * tw.y;
+      if (tw.z > 0.03) lt += textureGrad(uLeaf, (fract(p2) + tileO) * tsc, g2x, g2y).ra * tw.z;
+      lt /= max(dot(step(vec3(0.03), tw), tw), 1e-3);
       // positive where the surface goes: the rim band, and the carpet's gaps (its coverage against a
       // threshold that rises in the cluster hollows and falls to nothing beyond 150 m; the far side of the
       // shell is cut wider, so from under a crown the sky shows through the leaves of its underside instead
@@ -930,7 +948,8 @@ const CROWN_FRAG = /* glsl */ `
       if (!gl_FrontFacing) gapThr += 0.3 * close;
       float cut = max(0.6 * clusters * vegNear - facing, (gapThr - lt.y) * 0.3);
       float a = 1.0 - smoothstep(-0.03, 0.03, cut);
-      if (a < 0.1) discard;
+      vegDbg = uVegDbg > 1.5 ? vec3(facing, gl_FrontFacing ? 1.0 : 0.0, fract(camDist / 10.0)) : vec3(lt.y, lt.x / max(lt.y, 0.05), close);
+      if (uVegDbg < 0.5 && a < 0.1) discard;
       diffuseColor.a = a;
       // the leaves' own shade (R over the coverage: the carpet's clear texels are black, and a mip-blended
       // sample of the sparse needle carpet read 0.2 — the near pines went dark, and teal under the sky's
@@ -984,6 +1003,7 @@ const CROWN_FRAG = /* glsl */ `
     // the cluster field's own shading (peaks pale, hollows dark); gaps between cluster groups darken
     diffuseColor.rgb *= 0.82 + 0.36 * leaf;
     diffuseColor.rgb *= 1.0 - 0.3 * smoothstep(0.62, 0.9, vnoise(vWP.xz * 0.55 + vWP.y * 0.4 + 17.0));
+    if (uVegDbg > 2.5) vegDbg = uVegDbg > 3.5 ? vec3(vegUp * (1.0 - 0.8 * vegOcc), buried, cap) : diffuseColor.rgb * 4.0;
   }
 }
 `;
@@ -991,8 +1011,9 @@ const CROWN_FRAG = /* glsl */ `
  *  rather than smooth facets). */
 const CROWN_NORMAL_FRAG = /* glsl */ `
 #include <normal_fragment_begin>
-if (vPart > 0.5 && vPart < ${BRANCH_PART - 0.5} && vegNear > 0.0) {
+if (vPart > 0.5 && vPart < ${FRINGE_PART - 0.5} && vegNear > 0.0) {
   // leaf clusters ~1.2 m across: the gradient of a value noise field tilts the normal cluster by cluster
+  // (the puffs only: a fringe card is a flat cut-out whose tile carries its own per-leaf shading)
   float e = 0.25;
   vec2 p = vWP.xz * 0.85;
   float py = vWP.y * 0.7;
@@ -1369,7 +1390,7 @@ const CARD_FRAG = /* glsl */ `
 }
 `;
 
-function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: THREE.IUniform<number>): THREE.MeshStandardMaterial {
+function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: THREE.IUniform<number>, dbg: THREE.IUniform<number>): THREE.MeshStandardMaterial {
   // alpha to coverage for the fringe cards' leaf cut-outs and the puffs' close-range hollows; double-sided
   // so the far side of a puff's shell shows through its hollows (the trunk and limbs are closed tubes, the
   // cards face the camera: only the puffs pay for it)
@@ -1387,10 +1408,12 @@ function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: 
       .replace('#include <common>', `#include <common>\n${CROWN_FRAG_PARS}`)
       .replace('#include <lights_physical_pars_fragment>', foliageLighting(`step(0.5, vPart) * step(vPart, ${(BRANCH_PART - 0.5).toFixed(1)})`, CROWN_LIGHT))
       .replace('#include <color_fragment>', CROWN_FRAG)
-      .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG);
+      .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG)
+      .replace('#include <dithering_fragment>', '#include <dithering_fragment>\nif (uVegDbg > 0.5) gl_FragColor = vec4(vegDbg, 1.0);');
+    shader.uniforms.uVegDbg = dbg;
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-crown-v19';
+  mat.customProgramCacheKey = () => 'veg-crown-v19dbg';
   return mat;
 }
 
@@ -1958,6 +1981,8 @@ export class Vegetation {
   readonly atlas: THREE.CanvasTexture;
   /** the leaf-cluster tiles of the near crowns' fringe cards, and the palm frond strip (for inspection too) */
   readonly leaf: THREE.CanvasTexture;
+  /** DEBUG (temporary): crown shader debug output mode */
+  readonly dbg: THREE.IUniform<number> = { value: 0 };
   readonly frond: THREE.CanvasTexture;
   counts = { palms: 0, trees: 0, mangroves: 0, shrubs: 0 };
   /** planted crown heights (metres) per archetype, for the scale checks */
@@ -1995,7 +2020,7 @@ export class Vegetation {
     const leafTex = leafClusterTexture(rng.fork('leaves'));
     this.leaf = leafTex;
     this.frond = frondTex;
-    const crownMat = crownMaterial(leafTex, this.uTime, this.uWind);
+    const crownMat = crownMaterial(leafTex, this.uTime, this.uWind, this.dbg);
     const palmMat = palmMaterial(frondTex, this.uTime, this.uWind);
     const canopyMean = new THREE.Vector3();
     const cardMat = cardMaterial(atlas, canopyMean);
