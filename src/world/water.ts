@@ -174,23 +174,47 @@ ${GLSL_SKY}
 // over the horizon, and the chroma boost that tried to undo that turned every low sun into a brown-orange band.)
 // The unresolved facets tilt the reflected ray by twice their slope; the elevation spread (rms sqrt(2 mss) along
 // the view azimuth) is integrated with a three-point Gauss-Hermite rule, which is what blurs the horizon band
-// into rough water. Rays sent below the horizon meet the next wave and show the sky just above it. The sun disc
-// is not part of this term: the glitter is its reflection.
+// into rough water. The Fresnel factor is inside the integral, per node, for the facet that sends the view ray
+// there: at a grazing view the facets tilted toward the camera meet the ray less obliquely and reflect less, the
+// ones tilted away more, so the ensemble reflectance of rough water falls below the flat surface's (the drop
+// Mobley's sea-surface tables show) while the pale horizon sky gets the larger weight. (Before, one Fresnel of
+// the mean normal times an ad hoc "ensemble" reduction stood outside the integral; on top of the lobe's own
+// look at the darker sky higher up that counted the drop twice, and the near water at a low camera mirrored the
+// dome a quarter too dark.) Rays sent below the horizon meet the next wave and see the sea: mostly the horizon
+// sky mirrored a second time. The sun disc is not part of this term: the glitter is its reflection.
 // Clouds: the reflected lobe's centre ray meets the cloud base plane where the 2D cloud field (the very field the
 // dome's raymarch and the ground shadows use) says whether a cloud hangs there, so a cumulus is mirrored under
 // itself in the colour the dome lights a base with, hazed by the path up to it; the field's edge ramp is widened by the lobe's
 // footprint on the base plane (the reflection of a cloud in a chop is soft). One field evaluation per pixel,
-// skipped where the sky term weighs little (steep view, Fresnel 'fw' small) or the ray is nearly horizontal
-// (the haze band the analytic sky already carries). 'fw' is the Fresnel weight of the sky term.
-vec3 skyReflection(vec3 R, float mss, vec3 P, float fw) {
+// skipped where the sky term weighs little (steep view, Fresnel small) or the ray is nearly horizontal
+// (the haze band the analytic sky already carries).
+// V: view vector (surface to camera). Returns the Fresnel-weighted radiance of the lobe (rgb) and the lobe's
+// mean Fresnel (a), which is also the weight the body colour loses.
+float fresnelNode(vec3 V, vec3 Ri) {
+  // the facet that reflects V into Ri has the normal along V + Ri; its incidence cosine is the Schlick argument
+  vec3 n = normalize(V + Ri);
+  float c = max(dot(n, V), 0.0);
+  float m = 1.0 - c;
+  float m2 = m * m;
+  return 0.02 + 0.98 * m2 * m2 * m;
+}
+vec4 skyReflection(vec3 R, float mss, vec3 P, vec3 V) {
   float hl = length(R.xz);
   vec2 az = hl > 1e-4 ? R.xz / hl : vec2(1.0, 0.0);
   float el = atan(R.y, hl);
   float d = 1.7320508 * sqrt(2.0 * mss);
-  float e0 = max(el, 0.008), e1 = max(el - d, 0.008), e2 = el + d;
-  vec3 c = skyRadiance(vec3(az.x * cos(e0), sin(e0), az.y * cos(e0))) * 0.6667
-         + skyRadiance(vec3(az.x * cos(e1), sin(e1), az.y * cos(e1))) * 0.1667
-         + skyRadiance(vec3(az.x * cos(e2), sin(e2), az.y * cos(e2))) * 0.1667;
+  float e0 = max(el, 0.008), e1 = el - d, e2 = el + d;
+  vec3 R0 = vec3(az.x * cos(e0), sin(e0), az.y * cos(e0));
+  vec3 R1 = vec3(az.x * cos(e1), sin(e1), az.y * cos(e1));
+  vec3 R2 = vec3(az.x * cos(e2), sin(e2), az.y * cos(e2));
+  float F0 = fresnelNode(V, R0), F1 = fresnelNode(V, R1), F2 = fresnelNode(V, R2);
+  vec3 L0 = skyRadiance(R0);
+  // the node under the horizon sees the sea: the horizon sky mirrored again off the next wave at a grazing angle
+  vec3 hor = vec3(az.x * cos(0.008), sin(0.008), az.y * cos(0.008));
+  vec3 L1 = e1 > 0.008 ? skyRadiance(R1) : 0.6 * skyRadiance(hor);
+  vec3 L2 = skyRadiance(R2);
+  float fw = 0.6667 * F0 + 0.1667 * (F1 + F2);
+  vec3 c = (L0 * (0.6667 * F0) + L1 * (0.1667 * F1) + L2 * (0.1667 * F2)) / max(fw, 1e-4);
   // an overcast deck is not in the analytic dome (the visible clouds are raymarched): its grey underside is
   // mirrored as the same soft band the environment probe carries for the IBL, brightest under a closed ceiling
   float deck = smoothstep(0.45, 0.75, uCloudCoverage);
@@ -218,7 +242,7 @@ vec3 skyReflection(vec3 R, float mss, vec3 P, float fw) {
     float cell = smoothstep(thr - wr, thr + 0.09 + wr, f) * exp(-dc * uHazeDensity);
     cov = max(cov, cell);
   }
-  return mix(c, cloudCol, cov);
+  return vec4(mix(c, cloudCol, cov) * fw, fw);
 }
 float terrainHeightW(vec2 wp) {
   vec2 uv = (wp + vec2(uWorldSize * 0.5 + MAP_HALF_CELL)) / uWorldSize;
@@ -868,19 +892,17 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   // sunlight reaches straight down) goes properly dark; the sky irradiance is never shadowed by the aircraft.
   float volumeLeak = 0.45 * (1.0 - exp(-wDbg.x / 2.5));
   vec3 Ebody = reflectedLight.indirectDiffuse + mix(reflectedLight.directDiffuse, unsh, volumeLeak);
-  float rSky = clamp(pow(wMss, 0.25), 0.05, 1.0);
   vec3 Rdir = reflect(-wV, wN);
-  float cosV = clamp(dot(wN, wV), 0.0, 1.0);
-  // ensemble Fresnel of the rough surface: the unresolved facets take the grazing reflectance well below a mirror's
-  float Fg = max(1.0 - 1.6 * rSky * rSky, 0.45);
-  float F = 0.02 + (Fg - 0.02) * pow(1.0 - cosV, 5.0);
-  // the dome's radiance along the reflected lobe (see skyReflection: the analytic sky the dome itself draws)
-  vec3 sky = skyReflection(Rdir, wMss, vWorldPos, F);
+  // the dome's radiance along the reflected lobe, Fresnel-weighted per node (see skyReflection: the analytic sky
+  // the dome itself draws); F is the lobe's mean Fresnel, the share the body colour loses to the surface
+  vec4 skyF = skyReflection(Rdir, wMss, vWorldPos, wV);
+  float F = skyF.a;
+  vec3 sky = skyF.rgb;
   // the mirrored scene (aircraft, shore, piers, city) replaces the sky where the reflected ray meets an object
   vec4 refl = vec4(0.0);
   if (uReflParams.x > 0.5) {
     refl = sceneReflection(vWorldPos, wV, wN, wMss, wDist, wDx, wDy, uWaveTime);
-    sky = sky * (1.0 - refl.a) + refl.rgb;
+    sky = sky * (1.0 - refl.a) + refl.rgb * F;
   }
   vec3 body = wBodyR * Ebody;
   // in shadow the column is lit by the sky alone, whose light is scattered back with less of the blue selectivity
@@ -894,7 +916,7 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   // dark body a mid-tone orange is exactly the brown glaze of every low-sun view.) The glitter is shadowed at the
   // surface, whose shadow is not the wobbling volume shadow looked up above: it only follows it in part
   vec3 glitter = sunCol * mix(1.0, shadow, 0.7) * sunGlitter(wN, wV, uSunDirW, wMss, vWorldPos.xz, wDx, wDy, uWaveTime);
-  vec3 col = mix(body, sky, F) + glitter * (1.0 - wFoam);
+  vec3 col = body * (1.0 - F) + sky + glitter * (1.0 - wFoam);
   vec3 foamCol = vec3(0.9, 0.91, 0.91) * Ediff;
   col = mix(col, foamCol, wFoam);
   outgoingLight = col;
@@ -910,7 +932,7 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
     #elif WATER_DEBUG == 5
       outgoingLight = body;
     #elif WATER_DEBUG == 6
-      outgoingLight = sky * F;
+      outgoingLight = sky;
     #endif
   #endif
 }
@@ -1007,7 +1029,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v18-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v19-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 
