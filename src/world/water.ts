@@ -119,7 +119,10 @@ const WATER_VERT_MAIN = /* glsl */ `
   float edgeR = max(abs(pg.x), abs(pg.y));
   float edgeF = 1.0 - smoothstep(0.3, 0.5, edgeR);
   float swellEdgeF = 1.0 - smoothstep(0.15, 0.5, edgeR);
-  wp.y = (hh.r - hh.g) * ${WAKE_HEIGHT_SCALE.toFixed(2)} + waveHeight(wp.xz, uWaveTime) * edgeF + swellHeight(wp.xz, uWaveTime) * swellEdgeF;
+  // the hull / splat height fades over the outer 8 % of the region like the fragment's near-map slope (nearW), so
+  // a ring wave or a stern wave reaching the rim ends level with the plane instead of as a step along it
+  float wakeEdgeF = smoothstep(0.0, 0.08, 0.5 - edgeR);
+  wp.y = (hh.r - hh.g) * ${WAKE_HEIGHT_SCALE.toFixed(2)} * wakeEdgeF + waveHeight(wp.xz, uWaveTime) * edgeF + swellHeight(wp.xz, uWaveTime) * swellEdgeF;
 #else
   vec3 wp = position + uWaterOffset;
   wp.y = 0.0;

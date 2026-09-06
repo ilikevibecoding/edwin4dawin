@@ -560,7 +560,13 @@ export const SPLAT_MATERIAL = new THREE.ShaderMaterial({
       float rc = r0 + c * tau;
       float fl = 0.2 / uTexel;
       float fine = 1.0 - smoothstep(0.25, 1.2, uTexel);
-      float n1 = vn(vWp * min(1.1, fl) + 5.0), n2 = vn(vWp * min(3.3, fl) + 13.0), n3 = vn(vWp * 0.4 + 2.0);
+      // three octaves on lattices turned against each other, none finer than 5 texels: clamped to one frequency
+      // (the mid map, 0.4 m/texel) n1 and n2 collapsed to a single octave of value noise whose thresholded blobs
+      // sat on its 2 m lattice, and a touchdown's whitewater reached the eye as a row of equal white dashes
+      // where the water plane hands over to the near patch
+      vec2 w1 = mat2(0.94, 0.34, -0.34, 0.94) * vWp;
+      vec2 w2 = mat2(0.64, 0.77, -0.77, 0.64) * vWp;
+      float n1 = vn(vWp * min(1.1, fl) + 5.0), n2 = vn(w1 * min(3.3, 0.61 * fl) + 13.0), n3 = vn(w2 * min(0.4, 0.37 * fl) + 2.0);
       // whitewater patch: grows over the first second, dissolves over a few seconds (longer the harder the hit);
       // its interior is a churned patch field with dark windows, its edge ragged
       float patchR = r0 * (1.0 + 0.9 * (1.0 - exp(-tau / 0.7))) * (0.8 + 0.4 * n3);
