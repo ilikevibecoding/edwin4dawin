@@ -82,3 +82,56 @@ The previous vegetation agent's loop-5 commits were lost with the VM; rounds 1�
 - **Cost**: +26 triangles per level 1–2 crown (≤ 420 level-2 + the level-1 cells inside 420 m).
 - **Remains**: limbs are buried where the lobes overlap the main puff (only the fork shows); the disc is a
   uniform ellipse from the air (R6b: smaller, lighter). Motion to be verified in the island-pass / prq clips.
+- **Measured** (R6b, `366fd5fb` + fork/disc retune): A 187 / 0.89 M (R3 0.86 M: the limbs and discs of the
+  level 1-2 crowns), low pass 186 / 0.90 M; discs and trunks read at 100-150 m (`r4-low`), console clean.
+
+## Round 7 — the aerial canopy: card sun side and contrast
+- **Wrong** (aerial-a vs the reference, same box and mask): p10 69 / p90 116 against the reference's 55 / 133;
+  shade band [62, 71, 61] against [49, 56, 46]; lit band [117, 126, 90] (sat 0.29) against [134, 141, 113]
+  (sat 0.20): the island canopy a flat mid-green mass of balls, the reference a dark canopy with pale
+  yellow-green lit tips and deep gaps. Cause: R3's card sun side was a sphere against the view-space sun,
+  and with the sun behind the camera (the aerial views) ~85 % of every disc came out lit.
+- **Changed**: the sun's screen direction decides the lit side; the terminator sits at `0.25 - 0.4 sunV.z`
+  disc radii toward the sun (40 % lit with the sun beside the camera, ~50 % behind it, 25 % ahead — well past
+  a sphere's terminator, because a crown shades itself), fading when the sun is straight behind the camera;
+  lit ×[1.6, 1.5, 1.28] (paler, yellower), shade ×[0.36, 0.42, 0.48] (deeper); far modulation 0.5–1.4. The
+  3D crowns' sunlit/shade albedo split tilts its hemisphere toward the sun (was straight up) so the tone does
+  not step at the 420 m handover (first cut of R7 — fixed terminator +0.25 R, shade ×0.34 — put the cards a
+  full stop darker than the 3D crowns in front of them at pose A: a visible band at NEAR_DISTANCE; rejected).
+- **Measured**: see the R7b line in the summary (aerial-a mean / p10 / p90 / bands).
+
+## Round 8 — near palms: finned fronds
+- **Wrong** (prq, low passes): inside ~60 m a frond is a flat painted strip — the leaflet comb is texture, so
+  the frond's edge is straight and its cross-section has no depth; palms read as paper cut-outs.
+- **Changed**: a near palm tier (`palmHiBatch`, cells inside `PALM_HI_DISTANCE` 150 m, falling back to the
+  strip palms when full): each frond is two rows of five fins hinged on the rachis, each turned down about it
+  by its own angle (28–42° + 20° of variation, steeper toward the tip) — a V cross-section and a serrated
+  edge — carrying the same texture slice as the strip, so the handover is seamless; the fins quiver about
+  the rachis in the wind (edge moves, hinge does not). 284 triangles a palm against 102, only inside 150 m.
+- **Why**: the leaflet groups of a coconut frond hang at different angles; that is what reads as leaflets at
+  30–60 m, not the comb's gaps (which the mip average closes at that distance).
+- **Cost**: pose A (52 hi palms) +15 k triangles; prq none in range (the marina palms stand 200 m off).
+
+## Round 9 — species
+- **Wrong**: species differed by shape class only: a ficus and a domed broadleaf were one squash range on the
+  same trunk; sea grape, pine and hardwood all wore the same leaf-cluster cards.
+- **Changed**: leaf-cluster tiles per species — hardwood clusters (tiles 0-1), the sea grape's big round
+  leaves with a dark centre (tile 2, cards ×1.35), pine needle tufts (tile 3, cards ×0.8), mangrove cards
+  ×0.85; the spreading (low-squash) broadleaf crown sits on a short, stout trunk (trunk 0.36 → 0.72 with the
+  squash, radius ×1.5 → ×0.9) — a ficus — while the domed crown gets the long slender one; pine bark
+  reddish-brown; mangrove prop roots (R6). Species mixes (map.ts) untouched: pine and mangrove stay rare in
+  the city and bay views — that is planting data the lead owns.
+
+## Round 10 — grass near the camera
+- **Wrong**: at ground level (landing, taxi, the low passes) the lawns, park floors and dune ridges were a
+  flat texture to the horizon; the trees stood on a painted surface.
+- **Changed**: `GrassField`: tufts on a jittered 1.6 m lattice within 60 m of the camera over lawns and
+  parks (patches of lush and worn), the golf course (short, mown), the wetland prairie and airport (tall,
+  seed heads), the upper beach (dune grass where the ground shader draws it: h > 0.95, in noise patches),
+  none on roads, lots, water or building footprints; height 0.12–0.95 m by ground, colour the ground's own
+  lawn/dry-grass mix (linear albedos from `openGround`), stood on the local ground plane (finite differences
+  of the height field), yawed at random; three crossed quads with a blade cut-out texture (three tiles),
+  alpha-to-coverage, lit as a ground surface (normals up, both faces); wind: the tips lean to the crowns'
+  gust field in world space plus a quick flutter; chunk-cached (20 m), frustum-culled by chunk, faded over
+  the last 15 m, and skipped entirely when the camera is more than 72 m above the ground (the aerial views
+  pay nothing). One draw, ≤ 6000 instances (≈ 1300 in a ground view, 8 k triangles).

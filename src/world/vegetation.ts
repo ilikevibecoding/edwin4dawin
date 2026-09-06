@@ -282,7 +282,9 @@ function cardAtlas(rng: Rng): THREE.CanvasTexture {
       const k = dist / rr;
       const leaf = 0.5 + 0.5 * perlin2(u * 26 + seed, v * 26 + seed * 2);
       const lobes = 0.5 + 0.5 * perlin2(u * 9 - seed, v * 9 + seed);
-      put(col, row, x, y, gBase * (0.72 + 0.4 * lobes) * (0.86 + 0.28 * leaf) * (1 - 0.3 * k * k), 0);
+      // lumpy clusters with a flat radial falloff: from the air a crown is a textured clump, not a shaded
+      // ball (the old 0.3 k^2 falloff made every aerial crown a bubble with a dark rim)
+      put(col, row, x, y, gBase * (0.62 + 0.6 * lobes) * (0.86 + 0.28 * leaf) * (1 - 0.14 * k * k), 0);
     }
   };
   const trunk = (col: number, row: number, cx0: number, cx1: number, v0: number, v1: number, halfW: number, g: number) => {
@@ -849,8 +851,17 @@ const CROWN_FRAG = /* glsl */ `
     float value = 0.86 + 0.28 * hash11(vSeed * 19.3 + 5.0);
     diffuseColor.rgb *= value * mix(vec3(0.95, 1.0, 1.05), vec3(1.07, 1.02, 0.9), yellow);
     // crown-space hemisphere: the cap follows the whole crown (position relative to its centre) as much as
-    // the individual puff, so the seams where puffs intersect do not read as hard facets
-    float cap = smoothstep(-0.5, 0.85, 0.5 * cn.y + 0.5 * normalize(vRel).y);
+    // the individual puff, so the seams where puffs intersect do not read as hard facets. The sky cap is
+    // straight up; the sunlit cap tilts toward the sun (its world direction, from the view-space light), so
+    // the side of a crown away from the sun shades itself the way the cards' sun side does, and the
+    // handover from 3D crowns to cards at NEAR_DISTANCE does not change the canopy's tone
+    vec3 crownDir = 0.5 * cn + 0.5 * normalize(vRel);
+    float capUp = smoothstep(-0.5, 0.85, crownDir.y);
+    vec3 sunW = vec3(0.0, 1.0, 0.0);
+    #if NUM_DIR_LIGHTS > 0
+    sunW = normalize((vec4(directionalLights[0].direction, 0.0) * viewMatrix).xyz);
+    #endif
+    float cap = smoothstep(-0.35, 0.8, dot(crownDir, normalize(vec3(0.0, 1.0, 0.0) + 0.9 * sunW)));
     // the sunlit leaf is a warm yellow-green, the leaf in the shade of its own crown a cool blue-grey: the
     // albedo itself carries the split (the direct light model only decides how much sun each side gets)
     vec3 sunlit = diffuseColor.rgb * vec3(1.28, 1.2, 0.96);
@@ -858,8 +869,8 @@ const CROWN_FRAG = /* glsl */ `
     diffuseColor.rgb = mix(shade, sunlit, cap);
     // sky light: the cap sees the whole sky, the underside a little ground bounce; a plant standing among
     // taller neighbours sees their leaves instead of the sky (its cap too: they overtop it)
-    vegUp = mix(0.35, 1.0, cap);
-    vegOcc = vOcc * (1.0 - 0.35 * cap);
+    vegUp = mix(0.35, 1.0, capUp);
+    vegOcc = vOcc * (1.0 - 0.35 * capUp);
     // and a share of the sun: the shadow probe (one lookup per plant) misses the leaves of the neighbours
     // that lean over this crown's lower half; kept milder than the cards' so the handover stays level
     diffuseColor.rgb *= 1.0 - 0.3 * vOcc * (1.0 - 0.4 * cap);
@@ -948,7 +959,7 @@ void RE_IndirectDiffuse_Foliage( const in vec3 irradiance, const in vec3 geometr
   // the ambient is kept at the level of a plain surface (the old 1.6x boost, on top of the sky term three adds
   // in RE_IndirectSpecular, filled the shade side with blue sky light: no crown could go dark) and tinted
   // by the leaves it has bounced off
-  reflectedLight.indirectDiffuse += irr * BRDF_Lambert( material.diffuseColor ) * mix( vec3( 1.0 ), vec3( 1.0, 0.98, 0.82 ), foliage ) * vegSky( foliage );
+  reflectedLight.indirectDiffuse += irr * BRDF_Lambert( material.diffuseColor ) * mix( vec3( 1.0 ), vec3( 1.0, 0.96, 0.7 ), foliage ) * vegSky( foliage );
 }
 void RE_IndirectSpecular_Foliage( const in vec3 radiance, const in vec3 irradiance, const in vec3 clearcoatRadiance, const in vec3 geometryPosition, const in vec3 geometryNormal, const in vec3 geometryViewDir, const in vec3 geometryClearcoatNormal, const in PhysicalMaterial material, inout ReflectedLight reflectedLight ) {
   float foliage = ${isFoliage};
@@ -1101,6 +1112,7 @@ varying vec2 vTile; // atlas column (variant) and row (shape class) of the side 
 varying float vFar; // 0 within ~800 m of the camera, 1 beyond 3 km: the distant-canopy blend
 varying vec2 vDisc; // screen-plane offset from the crown centre in crown radii (x right, y up; not mirrored)
 varying float vCardOcc; // neighbour-density occlusion of the plant
+varying float vCardVar; // per-plant hash: the paler and darker individuals of a distant canopy
 // crown centre (fraction of the tile height) per shape class, from the atlas tile proportions
 const float CARD_VC[4] = float[4](${CARD_CLASSES.map((c) => c.vc.toFixed(4)).join(', ')});
 `;
@@ -1111,6 +1123,7 @@ ${VEG_SHADOW_PROBE_VARS}
   float arche = floor(aVar.x + 0.001);
   float variant = floor(fract(aVar.x) * 16.0 + 0.5);
   vCardOcc = ${GLSL_OCC};
+  vCardVar = fract(aVar.y * 91.7);
   vec4 centre = instanceMatrix * vec4(0.0, aVar.w, 0.0, 1.0);
   vec3 wc = (modelMatrix * centre).xyz;
   float s = length(instanceMatrix[0].xyz);
@@ -1148,6 +1161,7 @@ varying vec2 vTile;
 varying float vFar;
 varying vec2 vDisc;
 varying float vCardOcc;
+varying float vCardVar;
 float vTrunk = 0.0; // trunk mask of the sampled texel (bark is lit as a plain surface, not as foliage)
 vec4 cardSample() {
   // canvas row r (top down) is texture v in [1 - (r + 1) / 8, 1 - r / 8]; the top view sits 4 rows lower
@@ -1174,12 +1188,12 @@ const CARD_FRAG = /* glsl */ `
   float a = smoothstep(thr - w, thr + w, t.a);
   if (a < 0.3) discard;
   diffuseColor.a = a;
-  // sun side: the sun's screen direction decides which side of the disc is lit, and the terminator sits a
-  // quarter radius past the centre toward the sun, so ~40 % of every crown is lit and 60 % shaded whatever
-  // the sun's elevation. A real crown is not a ball: seen from the air only its top clusters catch the sun
-  // and the rest shades itself (the reference canopy is dark with lit tips), which a sphere lit by the
-  // view-space sun cannot give — with the sun behind the camera it lit the whole disc and the canopy went
-  // flat. With the sun straight behind the camera the split fades (nothing decides a side) and the
+  // sun side: the sun's screen direction decides which side of the disc is lit. A real crown is not a
+  // ball: seen from the air only its top clusters catch the sun and the rest shades itself (the reference
+  // canopy is dark with lit tips), so the terminator sits well past where a sphere's would: a quarter
+  // radius toward the sun with the sun beside the camera (~40 % of the disc lit), near the centre with the
+  // sun behind it (a sphere would be lit whole and the canopy went flat), a half radius when the sun is
+  // ahead. With the sun straight behind the camera the split fades (nothing decides a side) and the
   // neighbour occlusion below carries the darks
   vec3 sunV = vec3(0.0, 0.7, 0.7);
   float sunOn = 0.0;
@@ -1189,19 +1203,25 @@ const CARD_FRAG = /* glsl */ `
   #endif
   vec2 sunDir = sunV.xy / max(length(sunV.xy), 1e-3);
   float proj = min(length(sunV.xy) * 4.0, 1.0);
-  float lit = mix(0.5, mix(0.5, smoothstep(0.0, 0.5, dot(vDisc, sunDir)), proj), sunOn);
+  // far away the lit share shrinks to the crown tops (the reference's distant canopy is dark with small
+  // bright tips)
+  float term = 0.25 - 0.4 * sunV.z + 0.15 * vFar;
+  float lit = mix(0.5, mix(0.5, smoothstep(term - 0.25, term + 0.25, dot(vDisc, sunDir)), proj), sunOn);
   // lit leaf mass yellows, shaded parts cool off: matches the 3D crowns' albedo split; the trunk mask
   // paints bark instead of tinted foliage
   float shade = mix(t.r, 0.92, 0.5 * vFar);
   vec3 foliage = diffuseColor.rgb * shade * mix(vec3(0.86, 0.9, 0.95), vec3(1.03, 1.02, 0.96), smoothstep(0.4, 1.05, shade));
-  // distant canopy: the per-plant tints converge on the canopy mean so a far island reads as one wooded
-  // mass, not a brown / green speckle; the lit / shade split stays as a 0.5-1.4 modulation there so the
-  // mass still reads as separate lit and shaded crowns
-  foliage = mix(foliage, uCanopyMean * shade, 0.55 * vFar);
+  // distant canopy: the per-plant tints move toward the canopy mean so a far island reads as one wooded
+  // mass, not a brown / green speckle — but only part way, so the odd paler or darker crown still breaks
+  // the mass up as the reference's does; the lit / shade split stays as a 0.5-1.75 modulation there
+  foliage = mix(foliage, uCanopyMean * shade, 0.35 * vFar);
+  // and the individuals differ: a distant canopy is a mix of paler and darker crowns (species, age, the
+  // odd emergent in full sun), not one tone repeated
+  foliage *= mix(1.0, mix(0.78, 1.28, vCardVar), vFar);
   // the sunlit leaf is a pale yellow-green (the reference's lit band: sRGB [134, 141, 113], saturation 0.2),
-  // the shaded leaf a dark cool green ([49, 56, 46]): the lit side is pushed toward that pale yellow, the
-  // shade side deep
-  foliage *= mix(mix(vec3(0.34, 0.4, 0.46), vec3(1.62, 1.52, 1.3), lit), vec3(mix(0.5, 1.4, lit)), vFar);
+  // the shaded leaf a dark green ([49, 56, 46], not the cyan the sky light alone would leave): the lit side
+  // is pushed toward that pale yellow, the shade side deep and no bluer than the leaf
+  foliage *= mix(mix(vec3(0.36, 0.42, 0.4), vec3(1.6, 1.5, 1.28), lit), vec3(mix(0.5, 1.75, lit)), vFar);
   // a crown overtopped by its neighbours stands in their shadow (the occlusion packed in aVar.x): the
   // whole card darkens, its base most, so the inside of a dense stand goes dark and the emergent crowns
   // stand out lit
@@ -1295,7 +1315,7 @@ function cardMaterial(atlas: THREE.Texture, canopyMean: THREE.Vector3): THREE.Me
       .replace('#include <color_fragment>', CARD_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-card-v11';
+  mat.customProgramCacheKey = () => 'veg-card-v12';
   return mat;
 }
 
