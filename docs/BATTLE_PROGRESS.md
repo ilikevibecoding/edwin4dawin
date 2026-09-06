@@ -172,3 +172,38 @@ Phone (emulated iPhone 13, DPR capped at 1.0, fleet scale 0.6): 27 ships, 222 fi
 - Frame rates on real GPUs were not measured (software GL only); the technical review estimates 60+ fps
   on discrete GPUs, ~20–25 % of an integrated GPU at 1.5 DPR, and main-thread cost as the phone risk.
 - No sound in the battle scene yet (the ISD scene's audio system could drive distant rumbles and bolts).
+
+## Reference-matched roster wave (user feedback: lasers, the "C" ship, every ship compared one-to-one)
+
+- Turbolaser colours: Republic fires red and blue, Separatists blue and green (per shot from the capital
+  RNG stream; point defence follows).
+- Reference material: ~100 Wookieepedia cross-sections, stills and concept images fetched per class (kept
+  outside the repo, used only for side-by-side comparison) plus the user's Venator render and film still.
+- Twelve workstreams in isolated worktrees, each matching top / side / front / 3/4 silhouettes against the
+  references with PIL side-by-side composites (saved as `ref_<class>_<view>.jpg` artifacts):
+
+| class | side | result (LOD 0 / 1 / 2 tris) |
+| --- | --- | --- |
+| Venator | Rep | grey hull, wide dark-red door strips, converging bow stripes, leaning towers on the sloped block with T-heads, 28 tracking turrets, 10 engines (26.1k / 7.9k / 1.6k) |
+| Acclamator (new) | Rep | clean wedge, maroon spine, red wing stripes, roundels, T-head tower, 4-bell bank (14.9k / 5.1k / 1.2k) |
+| Arquitens (new) | Rep | forked bow with trench, kite hull, T-bridge, three nacelles, wine-red stripes (9.9k / 4.9k / 1.1k) |
+| Carrack (new) | Rep | tube hull with the faceted bow head (bridge), proud frames, 2×4 engine block (10.8k / 5.6k / 1.6k) |
+| Dreadnaught (new) | Rep | hammerhead bow, rounded hull, 46 turrets, 3+2 nozzles (21.5k / 9.2k / 1.7k) |
+| Consular c70 (new) | Rep | red courier, salon pod, bridge pod on a pylon, three engine pods in a row (10.9k / 4.5k / 1.5k) |
+| Providence | Sep | tall narrow dagger fitted to the MF75 profile (~10 m), raked tower with hammerhead pod + comms spar, ventral fin, drum + nozzle ring (48.8k / 9.0k / 2.0k) |
+| Munificent | Sep | hooded crescent bow, sensor cross (blades + 426 m wing), machinery neck, elliptical dome with Banking Clan bands and hexagon, bridge module, stern blades (27.2k / 9.9k / 1.9k) |
+| Recusant | Sep | spade bow with dome bands and chevron, bridge pod, hangar module, truss tail, staggered stern pods (16.4k / 6.6k / 1.9k) |
+| Lucrehulk (new) | Sep | 3170 m broken ring, core sphere with bridge dome, spire cluster, 6 engine clusters, 39 turrets (51.6k / 14.9k / 2.7k) |
+| Fighters | both | ARC-170, V-19 Torrent, Eta-2, Vulture, Tri-fighter, Hyena bomber, HMP gunship, all ≤ 380 tris, roles per type, 2 draw calls |
+| Fleet plan | — | 67 ships at scale 1 (41 at 0.6): escorts weaving under the Venators, couriers, Dreadnaught artillery arc, Acclamators behind the line, two Lucrehulk anchors; size-scaled deaths; 4 new shots |
+
+Integrator: turbolaser palette, size-scaled LOD distances, plume capacity, class views with fallback,
+distant turrets slewing at quarter rate, tintGeometry RGB triples. A machine overload (4 cores, ten
+Chrome-rendering agents) killed six agents mid-work; all were resumed from their worktree state.
+
+### Measurements (software GL, 1280×720, 71 ships)
+
+`tools/battle-verify.mjs` **14/14**: max 166 calls / 0.90 M tris over 48 views; 54.3 k bolts in 195 s,
+peak 488 in flight, 1 637 particles; 66/71 alive with 5 staged deaths; 0 fighters inside hulls; 13 cuts in
+80 s, camera clear of hulls; `battle.update` ≤ 0.71 ms per 1/60 step; textures 38 MB; page ready 2.8 s;
+production build OK.
