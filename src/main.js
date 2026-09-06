@@ -549,6 +549,8 @@ async function boot() {
       wheelDust.clear();
       driver.state.auto = true;
       driver.resetAuto(startT);
+      driver.resetDynamics();
+      vehicle.reset();
       // A view can ask to be shot from the other road. Every framing in VIEWS is
       // relative to the truck, so the only way to see the mainline is to put the
       // truck on it first.

@@ -170,6 +170,34 @@ export function createDriver({ terrain, vehicle, collision = null, startT = 0.42
   }
   resetAuto(startT);
 
+  /**
+   * Zero everything the truck carries from one moment to the next: speed,
+   * steer, yaw, the body's three springs and the collision residue. The
+   * capture pre-roll resets the route and position but used to inherit the
+   * previous view's steer and spring state, so two `setView` calls in one page
+   * ended at spots a few centimetres apart and every pixel of the frame moved
+   * with them (lighting r7 measured 7.8 % of pixels between two shots of one
+   * tree). With this, a pre-roll from a given start is the same pre-roll.
+   */
+  function resetDynamics() {
+    state.speed = 0;
+    state.steer = 0;
+    state.accel = 0;
+    state.lateral = 0;
+    state.yawRate = 0;
+    state.spin = 0;
+    state.jolt = 0;
+    state.impact = 0;
+    state.cruise = 0;
+    input.throttle = 0;
+    input.brake = 0;
+    input.steer = 0;
+    heave.x = heave.v = 0;
+    tiltX.x = tiltX.v = 0;
+    tiltZ.x = tiltZ.v = 0;
+    rideInit = false;
+  }
+
   // drop the truck on the road facing along it
   const p0 = terrain.roadPoint(startT);
   const t0 = terrain.roadTangent(startT);
@@ -597,6 +625,7 @@ export function createDriver({ terrain, vehicle, collision = null, startT = 0.42
     input,
     update,
     resetAuto,
+    resetDynamics,
     dispose,
     /** The truck's collision circles, [{ dz, r }] along its axis from the centre. */
     circles,

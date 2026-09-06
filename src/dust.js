@@ -3,6 +3,7 @@ import { FOG, PALETTE } from './palette.js';
 import { sunDirection } from './sky.js';
 import { reportWheelContacts } from './terrain.js';
 import { dustPuff } from './textures/ground.js';
+import { mulberry32 } from './textures/core.js';
 
 /**
  * The puff sprite is a 2x2 atlas. Mipmapping it averages all four cells
@@ -193,7 +194,11 @@ export function createWheelDust({ max = 560 } = {}) {
     return i;
   }
 
-  const rnd = () => Math.random();
+  // A seeded stream, rewound by `clear()`: the capture pre-roll drives the
+  // same 170 steps from the same start, and with Math.random the puffs behind
+  // the wheels were the one thing in the frame that differed between two shots
+  // of one view (about 1 % of pixels over 8/255, all of it dust).
+  let rnd = mulberry32(0xd057);
 
   function spawn(role, c, sp, f, r) {
     const i = alloc();
@@ -270,7 +275,7 @@ export function createWheelDust({ max = 560 } = {}) {
           accum[role] = 0;
           break;
         }
-        spawn(role, contacts[(Math.random() * contacts.length) | 0], sp, _f, _r);
+        spawn(role, contacts[(rnd() * contacts.length) | 0], sp, _f, _r);
       }
     }
 
@@ -321,6 +326,8 @@ export function createWheelDust({ max = 560 } = {}) {
       data[i * 4 + 2] = 0;
     }
     accum[0] = accum[1] = accum[2] = 0;
+    rnd = mulberry32(0xd057);
+    head = 0;
     iData.needsUpdate = true;
   }
 

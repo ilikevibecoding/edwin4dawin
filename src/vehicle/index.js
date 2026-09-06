@@ -357,6 +357,23 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
     });
   }
 
+  /**
+   * Forget everything the truck accumulates as it drives — wheel angle, steer,
+   * suspension, the tyre tracks on the ground — so a capture pre-roll from a
+   * fixed start renders the same pixels every time. Without this, two shots of
+   * one view in one page differed on the wheels (their spin phase is the
+   * distance driven since boot) and on the tracks behind them.
+   */
+  function reset() {
+    state.speed = 0;
+    state.steer = 0;
+    state.wheelAngle = 0;
+    state.suspension.fill(0);
+    state.load.fill(1);
+    for (const w of wheels) w.spin.rotation.x = 0;
+    ground.clear();
+  }
+
   return {
     root,
     sprung,
@@ -369,6 +386,7 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
     setHour,
     setTerrain,
     update,
+    reset,
     spec: S,
   };
 }
