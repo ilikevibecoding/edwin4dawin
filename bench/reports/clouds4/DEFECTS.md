@@ -150,7 +150,26 @@ New / remaining:
   1595 (noise). SwiftShader is fetch-bound: the two extra 3D fetches per base-zone sample and the light march are
   the regression; aerial-a is unchanged (8465 → 7026, within noise), the bench views see clouds far away.
 
-Round 7 plan (sampling model): mipmapped noise with the fetch LOD set by the step (`textureLod`, the step's own
-box filter replaces `detFade` and removes the far aliasing), relief baked into the macro field (no relief fetch;
-the light march sees it for free), near-field fetch dropped (a finer worley octave in the detail channel instead,
-resolved by the surface steps only where they can), light march recomputed on re-entry and reused longer at depth.
+## Round 7 — sampling model (builds r7a `/tmp/clouds4/r7a_mips`, r7b `/tmp/clouds4/r7`)
+
+Changes: relief baked into the macro field (two value-noise octaves 520/260 m packed into the base-variation
+channel of the half-float bake: no relief fetch in the march, the light march sees it for free, the cheap
+rejection is `0 < hf0 < 1`); near-field ×5 fetch dropped, a 16-cell worley octave added to the detail channel
+instead; light march recomputed when the ray re-enters cloud after a gap (D11) and reused 3-4 samples deep
+inside; step grows up to 2× once T < 0.3; shading of the relief by thickness (a lower base is a thicker cloud:
+darker; the hollows and high cells brighter) instead of r6's horizon-openness heuristic.
+
+- **r7a: mipmapped noise + `textureLod` at the step's LOD** (the exact fix for D12). Alias-free — and 2.3× the
+  baseline cost on SwiftShader (`under` 2295 vs 1009 ms, `aerial` 10121 vs 5231 ms): a trilinear mip fetch reads
+  two levels, twice a plain fetch, on the software rasteriser the bench runs on. Rejected for the bench; on a GPU
+  it would be free. Its `under` frame also showed the second finding below.
+- **r7b: analytic fade instead** (`stepFade`: each channel fades toward its mean as the step passes the periods it
+  resolves — shape 70→230 m keeps a quarter, detail 40→130 m, wisps 25→90 m — plus a surface pass that runs to
+  T = 0.15 within 400 m of the camera): `under` 1599 ms vs base 1009 (+58 %), still over.
+- **Finding: the base has no texture because the noise has no leverage on it.** The base iso-surface sits where
+  `1.2·e = (1 − shape)·0.9`; with the 110 m ramp (r6) the whole ±0.27 swing of the normalised shape term moves
+  it by ±10–20 m, and the ×2–2.5 density gain saturates right above it. The baseline (286 m ramp, ±0.07 swing)
+  moved it ±15 m — the same flat plane for the opposite reason. Rounds 1–5 got their ragged bases from the 3D
+  relief warp, which is gone (D7/D8). Hence r7a/r7b `under`: smooth 260–520 m pouches with no finer structure
+  even where the 12 m surface steps resolve the detail channel.
+  Fix for r7c: a longer ramp where the noise can bite (edges longer than cores) with a stronger base erosion term.
