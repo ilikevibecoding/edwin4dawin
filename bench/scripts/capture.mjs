@@ -20,7 +20,9 @@ const opt = (name, def) => { const i = args.indexOf(`--${name}`); return i >= 0 
 const flag = (name) => args.includes(`--${name}`);
 const tag = opt('tag', `run-${Date.now()}`);
 const baseUrl = opt('url', 'http://127.0.0.1:4173/');
-const views = opt('views', 'aerial-a,cockpit-city,bridge-low,skyline-high,island-pass,harbor,water-landing,sunset,cloudy,night').split(',');
+// views are comma-separated; when any entry is an ad-hoc `label@dev&cam=x,y,z...` view the list is ';'-separated
+const viewsRaw = opt('views', 'aerial-a,cockpit-city,bridge-low,skyline-high,island-pass,harbor,water-landing,sunset,cloudy,night');
+const views = viewsRaw.includes('@') ? viewsRaw.split(';') : viewsRaw.split(',');
 const clipFrames = Number(opt('clip-frames', '60'));
 const stillQuality = opt('still-quality', 'high');
 // clips at 'low' had no MSAA (QUALITY.low.samples = 0) while stills had 4x, so every clip carried edge crawl the
@@ -46,7 +48,9 @@ async function openView(view, w, h, quality) {
   const logs = [];
   page.on('console', (m) => { const t = m.text(); if (!t.includes('[vite]')) logs.push(`[${m.type()}] ${t}`); });
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
-  const url = `${baseUrl}?bench=${view}&w=${w}&h=${h}&quality=${quality}&seed=${seed}&freeze=1`;
+  // `label@dev&cam=...&plane=...` = an ad-hoc view (views.ts devView) captured under `label`
+  const query = view.includes('@') ? view.slice(view.indexOf('@') + 1) : view;
+  const url = `${baseUrl}?bench=${query}&w=${w}&h=${h}&quality=${quality}&seed=${seed}&freeze=1`;
   const t0 = Date.now();
   await page.goto(url, { waitUntil: 'load', timeout: 300000 });
   await page.waitForFunction('window.__benchReady === true', { timeout: 1500000, polling: 250 });
@@ -63,14 +67,15 @@ async function renderTimed(page, steps = 0) {
 
 const summary = { tag, build: null, seed, startedAt: new Date().toISOString(), views: {} };
 
-for (const view of views) {
+for (const viewSpec of views) {
+  const view = viewSpec.includes('@') ? viewSpec.slice(0, viewSpec.indexOf('@')) : viewSpec;
   const dir = path.join(outRoot, view);
   fs.mkdirSync(dir, { recursive: true });
   console.log(`\n=== ${view}`);
   const result = { view };
   // ---- stills at full quality
   {
-    const { page, logs, setupMs, url } = await openView(view, 1920, 1080, stillQuality);
+    const { page, logs, setupMs, url } = await openView(viewSpec, 1920, 1080, stillQuality);
     result.stillUrl = url;
     result.setupMs = setupMs;
     // warm-up render (shader compilation) then the measured still
@@ -98,7 +103,7 @@ for (const view of views) {
   }
   // ---- clip at clip quality (fixed 30 Hz simulation, 3 sim frames per captured frame => 10 fps video)
   if (doClip) {
-    const { page } = await openView(view, 1280, 720, clipQuality);
+    const { page } = await openView(viewSpec, 1280, 720, clipQuality);
     const clipDir = path.join(dir, 'clip');
     fs.mkdirSync(clipDir, { recursive: true });
     const frameTimes = [];
