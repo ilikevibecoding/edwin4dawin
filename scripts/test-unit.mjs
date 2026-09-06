@@ -9,6 +9,7 @@ import { initBlocks, B, BLOCKS, DOOR_SETS, WHEAT_STAGES, doorPanelBoxes } from '
 import { Inventory, mergeInto, initItems, I, ITEMS, MAX_STACK, isItem, foodOf, cookedOf } from '../src/items.js';
 import { DoorController, setDoorOpen, doorBottomY } from '../src/doors.js';
 import { isPassable, standHeight } from '../src/npc/pathfinding.js';
+import { EventBus } from '../src/events.js';
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -284,6 +285,30 @@ test('Block entities: kept per position, handed to onBlockEntityLost when the bl
   w.setBlockRaw(4, 60, 4, B.AIR); // a disaster (journal restore path) breaking the crop
   assert.equal(lost.length, 2); assert.equal(w.getBlockEntity(4, 60, 4), null);
   assert.equal(BLOCKS[WHEAT_STAGES[0]].growth, 0); assert.equal(BLOCKS[WHEAT_STAGES[2]].growth, 2); assert.equal(WHEAT_STAGES[2], B.WHEAT);
+});
+
+test('EventBus: on/once/off, unsubscribe handles, throwing listeners are isolated, history is ordered and prefix-filtered', () => {
+  const bus = new EventBus(4);
+  const got = [];
+  const off = bus.on('economy:transfer', (a, b) => got.push(['t', a, b]));
+  bus.once('senate:result', (r) => got.push(['r', r]));
+  bus.on('economy:transfer', () => { throw new Error('boom'); });
+  const origError = console.error; console.error = () => {};
+  try {
+    assert.equal(bus.emit('economy:transfer', 1, 2), 1, 'emit returns listeners that completed; the throwing one is logged, not fatal');
+    assert.equal(bus.emit('senate:result', 'passed'), 1);
+    assert.equal(bus.emit('senate:result', 'again'), 0, 'once listener is gone');
+    off();
+    assert.equal(bus.emit('economy:transfer', 3, 4), 0, 'unsubscribed listener no longer runs; only the throwing one is left');
+    assert.equal(bus.emit('nobody:listens'), 0);
+  } finally { console.error = origError; }
+  assert.deepEqual(got, [['t', 1, 2], ['r', 'passed']]);
+  assert.equal(bus.history.length, 4, 'history is capped at the configured size');
+  assert.deepEqual(bus.recent('economy:').map((h) => h.args), [[3, 4]]);
+  assert.deepEqual(bus.recent().map((h) => h.name), ['senate:result', 'senate:result', 'economy:transfer', 'nobody:listens']);
+  assert.ok(bus.recent().every((h, i, a) => i === 0 || a[i - 1].seq < h.seq), 'sequence numbers increase');
+  assert.throws(() => bus.on('x', null));
+  assert.equal(bus.count('economy:transfer'), 1);
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

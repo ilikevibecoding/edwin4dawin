@@ -54,3 +54,54 @@ Rubrics (acceptance criteria per workstream, each signed off by an independent c
 4. Each builder reports with screenshots (CDP shots via `scripts/shots.mjs` or `/tmp/smoke.mjs`), test output and
    bench numbers; the integrator merges, re-runs the full suite, then launches critics per rubric and fix rounds.
 5. CHANGELOG round-6 entry, rubric status tables, PR body, `dist/` rebuild, CDN link refresh.
+
+## Pass 2 — the overhaul spec (`docs/overhaul/SPEC.md`)
+
+Wave 1 gave the city its scale, purposes, crowd, ships, train, towers, lower city and view distance. Pass 2 turns the
+spec's systems sections into play: persistent people with thirty lines each, a named cast, a real economy with
+physical shipments, building programs with dossiers and scores, a Senate that sits, factions, and surprises. Same
+rules as wave 1: exclusive files, one headless Chrome per builder, a test per workstream, `npm test` green, nothing
+pushed by builders (the integrator merges).
+
+| # | Workstream | Spec | Owner | Files (exclusive unless noted) |
+| --- | --- | --- | --- | --- |
+| P1 | Thirty lines per persistent NPC, the 13-anchor cast, speech + subtitles | 11, 12, 13 | P1 | `src/npc/dialog/**`, `src/npc/cast/**` (new), `src/npc/coruscant/talk.js`, `src/npc/coruscant/bubbles.js`, `src/npc/coruscant/index.js` (cast registration + persistent staff only), `src/ui/adminPanel.js` (a "Dialogue" section only), `scripts/test-dialog.mjs`, `scripts/test-cast.mjs` |
+| P2 | Economy v2: goods chains, business inventories, atomic transfers, price rule, ledger, physical shipments, visible state | 10 | P2 | `src/economy/**`, `src/coruscant/purposes.js` (supplies/consumes fields), `src/ui/shop.*`, `src/hud.js` (economy toasts), `src/ui/adminPanel.js` (an "Economy" section only), `scripts/test-economy.mjs`, `scripts/sim-economy.mjs` |
+| P3 | Twenty building programs, dossiers, four-differences rule, building rubric scorer | 6, 7, 17 | P3 | `src/coruscant/programs/**` (new), `src/coruscant/rooms/**`, `src/coruscant/buildings.js` (program dispatch), `src/coruscant/landmarks/*` except `senate.js`, `scripts/dossiers.mjs`, `scripts/room-similarity.mjs`, `scripts/score-buildings.mjs`, `scripts/programs/*.mjs`, `docs/overhaul/scores/**`, `docs/overhaul/dossiers/**` |
+| P4 | Senate centrepiece: chamber volume, 12 playable delegation suites, sessions, 3 policy scenarios, Jedi liaisons, two routes | 8 | P4 | `src/coruscant/landmarks/senate.js`, `src/senate/**` (new), `src/ui/senate.*` (new), `scripts/test-senate.mjs` |
+| P5 | Factions, reputation/suspicion/warrants, information spread; eight stateful surprises | 14, 15 | P5 (after P1/P2 land) | `src/factions/**` (new), `src/events/**` (new; the surprise state machines), `scripts/test-factions.mjs`, `scripts/test-surprises.mjs` |
+| P6 | Crowd appearance from `composeAppearance` (2x atlas cells, species with head geometry, emissive droid lights), cast models | 11 | P6 (after W4 merge) | `src/npc/coruscant/crowd.js`, `src/npc/skins-sw.js`, `src/npc/appearance/**` |
+| — | Gauntlet + acceptance runs (§18, §19): three world assessments, held-out 25%, failure log | 18, 19 | independent verifiers after P1-P6 | `docs/overhaul/gauntlet.md`, `docs/overhaul/failure_log.md`, `docs/overhaul/acceptance/**` |
+
+### Pass-2 shared contracts (integrator, on the branch before the builders start)
+
+- **Event bus** — `game.events` (`src/events.js`): `on(name, fn) -> off`, `once`, `emit(name, ...args)`, `recent(prefix)`.
+  Names are `<system>:<event>`. Systems never import each other's modules to react; they subscribe. Reserved names:
+  `economy:transfer {from, to, good, qty, credits, reason}`, `economy:stock {business, good, qty, target}`,
+  `economy:shipment {id, state, from, to, goods}`, `senate:session {state, scenario}`, `senate:vote {scenario, tally}`,
+  `senate:result {scenario, outcome, effects}`, `npc:trade`, `npc:talk {npc, lineId}`, `faction:reputation {faction, delta, cause}`,
+  `event:<id> {state}` for surprises. Everything emitted must reflect real state - a listener may read `game.economy`,
+  `game.senate`, `game.factions` for the details.
+- **Economy read API** (P2 keeps these stable; P1/P3/P5 read them): `game.economy.business(lotId)` ->
+  `{ id, name, kind, stock: Map(good -> qty), target: Map, funds, hours, suppliers: [lotId], customers: [lotId], open(hour) }`;
+  `game.economy.quote(lotId, good) -> { buy, sell, stock, factor }` (price rule: base x clamp(target/stock, 0.75, 1.75) +
+  bounded disruption); `game.economy.shipments()` -> live shipment records with a physical position (a crate stack, a
+  hold, a courier); `game.economy.ledger.sources / sinks` (imports, exports, public funds, wages, consumption, maintenance,
+  disposal). Transfers are atomic (`transfer(t)` returns `true` or a reason string, never partial).
+- **Dialog API** (P1): `game.dialog.lineFor(npc, ctx)` selects by eligibility from the NPC's own bank; every line
+  `{ id, speaker, text, delivery, trigger, priority, cooldown, refs, audio }`; `game.dialog.say(npc, line)` shows the
+  subtitle, speaks through Web Speech where a voice exists, otherwise records the line in the unvoiced manifest.
+  State refs read `game.economy`, `game.senate`, `game.factions`, `game.events.recent()` and never invent facts.
+- **Cast API** (P1): `game.cast.get(id)` for the 13 anchors (`vela_marr`, `brin_tal`, `tessa_venn`, `d4lt`, `seli_noor`,
+  `nera_vos`, `ilen_rook`, `asha_merin`, `seran_vale`, `tavi_renn`, `koro_den`, `mira_sol`, `ral_drenn`): identity,
+  home/work lot ids, schedule, relationships, disposition, interaction history (persisted in the save under `cast`).
+  Cast members are full NPC models (W9 `composeAppearance` + `buildAppearanceModel`), never crowd instances.
+- **Senate API** (P4): `game.senate.state` (`recess | convening | session | vote | adjourned`), `schedule` (in game hours),
+  `scenarios[3]` with delegation positions, `delegations[12]` with suite lot/room ids, `vote()` tally, `effects` applied
+  through events only (P2/P5 subscribe); `liaisonSpot()` for the Jedi liaison.
+- **Programs API** (P3): `programFor(lot, purpose)` -> `{ id, name, address, owner, purpose, staff, customers,
+  circulation, roomGraph, materials, interactions, inputs, outputs }`; `scripts/score-buildings.mjs` scores every
+  manifested playable building 0-5 in the ten weighted categories of §17 and writes `docs/overhaul/scores/`.
+- **Budget** — per workstream at the Senate view, Light preset, rd 10: <= +4 ms JS, <= +20 draw calls, <= +40 MB heap.
+- **Save** — new persistent state goes under its own key (`economy`, `cast`, `senate`, `factions`, `events`) with
+  defaults, so old saves load; nothing writes to another system's key.

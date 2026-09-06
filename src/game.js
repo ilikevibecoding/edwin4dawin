@@ -23,6 +23,7 @@ import { Hand } from './hand.js';
 import { SHARED, makeEntityMaterial } from './entityMaterial.js';
 import { TICK_DT, REACH, PLAYER_EYE } from './constants.js';
 import { PerfMonitor } from './perf.js';
+import { EventBus } from './events.js';
 import { Permissions } from './permissions.js';
 import { SaveManager } from './save.js';
 import { DisasterManager } from './disasters/manager.js';
@@ -59,6 +60,7 @@ export class Game {
   constructor() {
     this.canvas = document.getElementById('game');
     this.hudCanvas = document.getElementById('hud');
+    this.events = new EventBus();   // cross-system bus: economy, Senate, population, factions (src/events.js)
     this.loading = true;
     this.viewBobbing = true;
     this.lookingAtName = null;
