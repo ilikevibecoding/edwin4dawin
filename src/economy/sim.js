@@ -62,6 +62,17 @@ const FOOD_CATS = new Set(['food', 'meat', 'produce']);
 export const SHIPMENT_STATES = ['ordered', 'loaded', 'in_transit', 'arrived', 'unloaded', 'delivered', 'detained', 'cancelled'];
 const LIVE_STATES = new Set(['ordered', 'loaded', 'in_transit', 'arrived', 'unloaded', 'detained']);
 
+// A point on a shipment's path at progress u in 0..1: straight in the horizontal, but the cargo keeps its starting
+// height (a pad deck, a walkway) and only climbs / descends over the last 30 % of the route, so crates riding a
+// conveyor or a courier are seen along the way instead of passing through the decks between two levels.
+export function pathPoint(a, b, u, out = { x: 0, y: 0, z: 0 }) {
+  const t = u < 0 ? 0 : u > 1 ? 1 : u;
+  out.x = a.x + (b.x - a.x) * t;
+  out.z = a.z + (b.z - a.z) * t;
+  out.y = a.y + (b.y - a.y) * (t < 0.7 ? 0 : (t - 0.7) / 0.3);
+  return out;
+}
+
 const walkY = (lot) => (lot.midDoor ? LEVELS.midWalk : LEVELS.underWalk);
 const dist2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const round = Math.round;
@@ -728,7 +739,7 @@ export class EconomySim {
     }
     this.emit('economy:shipment', this._shipmentEvent(sh));
   }
-  _lerpPos(sh, u) { const { a, b } = sh.path; sh.position.x = a.x + (b.x - a.x) * u; sh.position.y = a.y + (b.y - a.y) * u; sh.position.z = a.z + (b.z - a.z) * u; }
+  _lerpPos(sh, u) { pathPoint(sh.path.a, sh.path.b, u, sh.position); }
   _shipmentsPass(now) {
     for (const sh of [...this.shipments.values()]) {
       if (sh.state === 'detained' || sh.from === 'offworld') continue;
@@ -838,8 +849,8 @@ export class EconomySim {
     }
     if (sh.held) { sh.held = false; this.holds.delete(C.index); }
     this.pay('offworld', T.id, TUNING.portFee, 'port fee');
-    // crates come off onto the pad-side stack and the conveyor takes them to the terminal
-    const side = C.padPos.x < (this.pads.length ? this.pads.reduce((s, p) => s + p.x, 0) / this.pads.length : C.padPos.x) ? -1 : 1;
+    // crates come off onto the pad-side stack (the side facing the terminal) and the conveyor takes them there
+    const side = T.bay.x >= C.padPos.x ? 1 : -1;
     const stack = { x: C.padPos.x + side * 14, y: C.deckY, z: C.padPos.z };
     sh.path = { a: stack, b: { ...T.bay } };
     sh.position = { ...stack };

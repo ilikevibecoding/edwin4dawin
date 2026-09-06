@@ -12,6 +12,7 @@ import { B, BLOCKS } from '../blocks.js';
 import { tileUV } from '../textures.js';
 import { SHARED } from '../entityMaterial.js';
 import { TICK_RATE, DAY_LENGTH_SECONDS } from '../constants.js';
+import { pathPoint } from './sim.js';
 
 export const CRATE_CAPACITY = 1200;
 export const DRAW_DIST = 260;
@@ -73,6 +74,7 @@ export class CrateLayer {
     this.geometry.setAttribute('aLight', this.light);
     this._m = new THREE.Matrix4(); this._q = new THREE.Quaternion(); this._e = new THREE.Euler(0, 0, 0, 'YXZ'); this._p = new THREE.Vector3(); this._s = new THREE.Vector3(1, 1, 1);
     this._pose = { x: 0, y: 0, z: 0, yaw: 0, pitch: 0, roll: 0 };
+    this._path = { x: 0, y: 0, z: 0 };
     this._cell = { x: 0, y: 0, z: 0 };
     this.stacks = [];            // [{ x, y, z, n, dir }] rebuilt every second from stock
     this.stats = { instances: 0, stacks: 0, holds: 0, couriers: 0, drawCalls: 1 };
@@ -159,7 +161,7 @@ export class CrateLayer {
       else if (sh.state === 'in_transit' && sh.loadedAt != null && sh.eta != null) u = Math.min(1, Math.max(0, (now - sh.loadedAt) / Math.max(1e-6, sh.eta - sh.loadedAt)));
       else if (sh.state === 'loaded') u = 0;
       const { a, b } = sh.path;
-      const x = a.x + (b.x - a.x) * u, y = a.y + (b.y - a.y) * u, z = a.z + (b.z - a.z) * u;
+      const { x, y, z } = pathPoint(a, b, u, this._path);
       if (!near(x, y, z)) continue;
       if (sh.carrier.kind === 'conveyor') {
         const n = Math.min(12, Math.max(1, Math.ceil(sh.qty / STACK_UNITS)));
