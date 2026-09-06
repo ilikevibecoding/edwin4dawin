@@ -109,7 +109,7 @@
     },
     {
      "label": "street_2m",
-     "title": "Street level, downtown avenue",
+     "title": "Street level, downtown avenue (camera on the street centreline)",
      "item": "city",
      "ok": true
     },
@@ -249,9 +249,9 @@
     },
     {
      "label": "street_2m",
-     "title": "Street level, downtown avenue",
+     "title": "Street level, downtown avenue (camera on the street centreline)",
      "item": "city",
-     "ok": true
+     "ok": false
     },
     {
      "label": "night",
@@ -389,7 +389,7 @@
     },
     {
      "label": "street_2m",
-     "title": "Street level, downtown avenue",
+     "title": "Street level, downtown avenue (camera on the street centreline)",
      "item": "city",
      "ok": true
     },
@@ -448,7 +448,7 @@
      "ok": true
     }
    ],
-   "notes": "base: d7b89cf5 (cursor/vice-city-aerial-8213)\nmerged acsplit: 3dce05f4 Aircraft split report: pinned-stamp re-capture \u2014 split build rebuilt with BUILD_ID set t\nmerged waterrender: d9b6f649 Water rendering defect log: rounds 6-8 (footprint fade per wave vector, the r7 streak filt\nmerged waterphys (recorded resolution): f6262d74 Wreck flooding scales with the striking part's speed (the other wing dipping in at 14 m/s \nskip boats: no remote branch\nmerged clouds4: ce5c5a5c Clouds: fine march step grows with distance along the ray (footprint-sized near the camera\nmerged light3: ac49aba9 light3 defect log: round 3 results (seam closed at 30 m, low-sun probe side effects, dusk \nmerged street (recorded resolution): c71cd156 Sidewalk shader: decode the packed slab-width / ramp attribute tolerant of interpolation r\nmerged highway (recorded resolution): 1258a3f4 Highway guardrail opens at the mouths of the roads meeting the highway on its side (crossi\nmerged facade3: 4442382f Facades: rain runs down the masonry from the coping joints and the corners (dark tongues a\nmerged veg5: 2e4c6fb4 Vegetation defect log: rounds 7c-10b verified at r12/r14 (budgets, trunks, near crowns, bl\nmerged terrain5: d9607f28 Terrain: lawn/dry balance recentred (parks and yards were nearly all dry grass), litter fl\nfixup applied: streets-highway-lamps.patch\nbuild: e9db7f93 from /home/ubuntu/wt-integration\n"
+   "notes": "base: d7b89cf5 (cursor/vice-city-aerial-8213)\nmerged acsplit: 3dce05f4 Aircraft split report: pinned-stamp re-capture \u2014 split build rebuilt with BUILD_ID set t\nmerged waterrender: d9b6f649 Water rendering defect log: rounds 6-8 (footprint fade per wave vector, the r7 streak filt\nmerged waterphys (recorded resolution): f6262d74 Wreck flooding scales with the striking part's speed (the other wing dipping in at 14 m/s \nskip boats: no remote branch\nmerged clouds4: ce5c5a5c Clouds: fine march step grows with distance along the ray (footprint-sized near the camera\nmerged light3: ac49aba9 light3 defect log: round 3 results (seam closed at 30 m, low-sun probe side effects, dusk \nmerged street (recorded resolution): c71cd156 Sidewalk shader: decode the packed slab-width / ramp attribute tolerant of interpolation r\nmerged highway (recorded resolution): 1258a3f4 Highway guardrail opens at the mouths of the roads meeting the highway on its side (crossi\nmerged facade3: 4442382f Facades: rain runs down the masonry from the coping joints and the corners (dark tongues a\nmerged veg5: 2e4c6fb4 Vegetation defect log: rounds 7c-10b verified at r12/r14 (budgets, trunks, near crowns, bl\nmerged terrain5: d9607f28 Terrain: lawn/dry balance recentred (parks and yards were nearly all dry grass), litter fl\nfixup applied: streets-highway-lamps.patch\nbuild: e9db7f93 from /home/ubuntu/wt-integration\ncdn: pinned data.json serves h02\n"
   }
  ],
  "updated": "2026-09-06T11:17Z"

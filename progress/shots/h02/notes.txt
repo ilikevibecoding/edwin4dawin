@@ -12,3 +12,4 @@ merged veg5: 2e4c6fb4 Vegetation defect log: rounds 7c-10b verified at r12/r14 (
 merged terrain5: d9607f28 Terrain: lawn/dry balance recentred (parks and yards were nearly all dry grass), litter fl
 fixup applied: streets-highway-lamps.patch
 build: e9db7f93 from /home/ubuntu/wt-integration
+cdn: pinned data.json serves h02
