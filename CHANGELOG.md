@@ -49,6 +49,17 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 - Chrome gate (`tools/chrome-gate.sh`, installed as `/usr/local/bin/google-chrome`): two machine-wide slots for
   builders, slot 3 reserved for the progress snapshot by process ancestry; `CHROME_SLOTS` is ignored after two
   builders found it and held a third browser for an hour each.
+- Wave 7a merged into the lead (deployed as 7f95c5ea8c9b-20260906T132622Z): `street` (sidewalks, curbs, signals,
+  crosswalks, lamp plan in `world/streets.ts`), `highway` (guardrails, barriers, gantries, median twin-arm poles in
+  `world/highway.ts`; streets no longer plan highway lamps), `waterrender` (mirrored base follows the dome, wave
+  field), `waterphys` (three wake maps, ditching matrix, continuous hull displacement). The two cross-branch
+  conflicts (`game.ts` props/highway lamps, `water.ts` update signature) are resolved once here so the hourly
+  integration stops re-conflicting. Flight harness 23/23, deterministic. Budget note from the h03 integration:
+  `city_north` 1.54 M and `foliage_park` 1.67 M triangles exceed the 1.5 M view budget (facade near-detail kinds and
+  street kits); the performance pass after wave 7 owns the trim.
+- Progress snapshot typechecks after each builder merge and drops the branch that breaks the build (the `boats`
+  worktree has been mid-refactor and uncommitted since 07:32; its files are backed up on
+  `cursor/boats-wip-backup-8213`).
 
 ## iter09 — wave 5 builders (deployed as aa8b21f9f839-20260905T121546Z)
 - Iteration 08 scored (bench/results/iter08/scores.md): no category regressed; aircraft geometry +1.5,
@@ -244,3 +255,4 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 | 4642d4630c87-20260904T235001Z | a3c7ba5670942411bf607043d4a14a60dbb8ef81 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/a3c7ba5670942411bf607043d4a14a60dbb8ef81/play.html | verified: build id matched, loaded in 15.5 s, water takeoff to 86 m in 30 s, no console errors; 164 draw calls / 0.49 M tris in the water-landing view. Includes bridges/skyline loop 2, cockpit with live instruments, vegetation loop 2, IBL-hitch and shader warm-up fixes, night exposure, play-feel changes |
 | 6130eae71052-20260906T063811Z | 8b15377fe0b3dd927af87dd6b1e093011e560523 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/8b15377fe0b3dd927af87dd6b1e093011e560523/play.html | verified: build id matched, loaded in 35 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 146 draw calls / 0.22 M tris at the spawn |
 | b366a423870c-20260906T120411Z | 460ace25e1e376c940320201c66b42346dff6111 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/460ace25e1e376c940320201c66b42346dff6111/play.html | verified: build id matched, loaded in 34 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 146 draw calls / 0.22 M tris at the spawn. Lead + aircraft module split (pixel-identical); the wave-7 builder branches are only in the hourly progress integration so far |
+| 7f95c5ea8c9b-20260906T132622Z | 225d58bf12ed3eeea98682847ac98b63d2a2c869 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/225d58bf12ed3eeea98682847ac98b63d2a2c869/play.html | verified: build id matched, loaded in 30.7 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 153 draw calls / 0.23 M tris at the spawn. Lead + wave 7a (streets, highway, water rendering, water physics) |
