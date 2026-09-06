@@ -51,6 +51,10 @@ test('landmark-only room kinds infer a function by keyword; unknown kinds fall b
   assert.equal(roomFunction('open_plan_office').inferred, false);
   assert.deepEqual(roomStaff('stairwell'), []);
   assert.ok(roomStaff('open_plan_office').length >= 1 && roomStaff('open_plan_office').length <= 3);
+  assert.ok(roomStaff('open_plan_office', 20, 0, 16).length >= 8, 'an office with sixteen desks seats its clerks');
+  assert.deepEqual(roomStaff('kitchen', 0, 0, 2), ['cook', 'cook']);
+  assert.ok(roomStaff('clinic_ward', 30, 3).filter((j) => j === 'patient').length <= 3, 'one patient per bed');
+  assert.ok(!roomStaff('workshop', 200).some((j, i) => i >= 5), 'staff-only rooms never fill');
   assert.ok(roomStaff('council_chamber', 600).length >= 40, 'a big chamber seats a session');
   assert.ok(roomStaff('restaurant', 16).length >= 4, 'a restaurant with seats gets patrons');
 });
@@ -74,7 +78,7 @@ test(`${sample.length} sampled lots: jobs hosted per room >= 0.5 and the purpose
     if (!rooms.length) continue;
     // jobs a lot hosts: the room functions' job slots (each room, capped like the runtime staffing) plus the purpose's role slots
     let jobs = 0;
-    for (const r of rooms) jobs += roomStaff(r.kind, li.roomSeats(r).length, li.roomBeds(r)).length;
+    for (const r of rooms) jobs += roomStaff(r.kind, li.roomSeats(r).length, li.roomBeds(r), li.roomWork(r)).length;
     const roles = li.purpose.roles.reduce((a, r) => a + r.count, 0);
     for (const role of li.purpose.roles) {
       // a role has somewhere to work when a room of the lot hosts the job or a work record matches it; visitors
@@ -113,7 +117,7 @@ test('every room\'s own staff resolves to a standable spot inside its room; pick
     const li = infoOf(lot);
     li.meta.rooms.forEach((room, i) => {
       if (room.kind === 'stairwell' || room.kind === 'corridor' || room.kind === 'lift_landing') return;
-      const staff = pool.staffRoom(lot, room, i, li.roomSeats(room).length, li.roomBeds(room));
+      const staff = pool.staffRoom(lot, room, i, li.roomSeats(room).length, li.roomBeds(room), li.roomWork(room));
       if (!staff.length) return;
       rooms++;
       const taken = new Set();

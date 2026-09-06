@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { drawText, measureText } from '../../font.js';
 
-const POOL = 14, SCALE = 2, LINE_W = 46, SHOW_S = 4.5;
+const POOL = 14, SCALE = 2, LINE_W = 46, SHOW_S = 4.5, NEAR = 6;
 
 function wrap(text, max) {
   const words = text.split(' '), lines = [];
@@ -48,6 +48,7 @@ export class Bubbles {
     ctx.fillStyle = 'rgba(120, 160, 220, 0.9)'; ctx.fillRect(0, h - 2, w, 2);
     lines.forEach((l, i) => drawText(ctx, l, 5, 4 + i * 9 * SCALE, SCALE, '#f4f1e6', true));
     it.tex.image = c; it.tex.needsUpdate = true;
+    it.w = w; it.h = h;
     it.sprite.scale.set(w * 0.011, h * 0.011, 1);
     it.sprite.visible = true;
     it.npc = npc; it.until = now + seconds; it.start = now;
@@ -61,8 +62,12 @@ export class Bubbles {
       const n = it.npc;
       if (now > it.until || n.dead || n.hidden) { it.npc = null; it.sprite.visible = false; continue; }
       const d2 = (n.pos.x - camera.position.x) ** 2 + (n.pos.z - camera.position.z) ** 2;
-      if (d2 > 40 * 40) { it.sprite.visible = false; continue; }
+      if (d2 > 40 * 40 || d2 < 1.3 * 1.3) { it.sprite.visible = false; continue; }
       it.sprite.visible = true;
+      // a world-sized sprite fills the screen when the speaker stands next to the camera: shrink it inside NEAR blocks
+      // so its on-screen size stays about constant (the chat line carries the text anyway)
+      const k = Math.min(1, Math.sqrt(d2) / NEAR);
+      it.sprite.scale.set(it.w * 0.011 * k, it.h * 0.011 * k, 1);
       const h = (n.droid && n.archetype !== 'protocol droid' ? 1.5 : 2.3) * n.scale - (n.sitting ? 0.4 : 0);
       it.sprite.position.set(n.rx ?? n.pos.x, (n.ry ?? n.pos.y) + h, n.rz ?? n.pos.z);
       const left = it.until - now;

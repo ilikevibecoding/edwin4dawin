@@ -185,11 +185,11 @@ export function buildPool(layout, opts = {}) {
   // the room's floor (the runtime asks per room; the offline scripts call it directly). Seeded from (layout seed,
   // lot id, room index, k), so the same room always has the same occupants. Returns the new people ([] when done).
   const staffed = new Set();
-  const staffRoom = (lot, room, roomIndex, seats = 0, beds = 0) => {
+  const staffRoom = (lot, room, roomIndex, seats = 0, beds = 0, works = 0) => {
     const key = lot.id + ':' + roomIndex;
     if (staffed.has(key)) return [];
     staffed.add(key);
-    const jobs = roomStaff(room.kind, seats, beds);
+    const jobs = roomStaff(room.kind, seats, beds, works);
     const purpose = purposeFor(lot, layout);
     const out = [];
     for (let k = 0; k < jobs.length; k++) {

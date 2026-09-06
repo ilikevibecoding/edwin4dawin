@@ -148,7 +148,7 @@ export class CoruscantPopulation {
   staffFloor(li, y) {
     for (const [i, room] of li.roomsAtHeight(y)) {
       if (this.pool.staffed.has(li.id + ':' + i)) continue;
-      const added = this.pool.staffRoom(li.lot, room, i, li.roomSeats(room).length, li.roomBeds(room));
+      const added = this.pool.staffRoom(li.lot, room, i, li.roomSeats(room).length, li.roomBeds(room), li.roomWork(room));
       this.stats.roomStaff = (this.stats.roomStaff || 0) + added.length;
     }
   }

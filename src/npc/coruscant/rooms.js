@@ -151,12 +151,15 @@ export function propsFor(kind) { return roomFunction(kind).prop; }
 // galleries) fill up with `fill` (or the visitors' job) so a session, a show or a lunch crowd is actually there.
 // Rooms that host only staff (workshops, kitchens, comms rooms) never fill; wards fill with one patient per bed.
 // Deterministic and pure.
-export const STAFF_CAP = 3, BIG_ROOM_SEATS = 12, BIG_ROOM_MAX = 40;
+export const STAFF_CAP = 3, STAFF_MAX = 12, BIG_ROOM_SEATS = 12, BIG_ROOM_MAX = 40;
 const VISITOR_FILL = { restaurant: 'patron', cafeteria: 'patron', cantina: 'patron', lounge: 'patron', night_club: 'patron', holo_theatre: 'patron', school_room: 'child', observation_deck: 'tourist', museum_hall: 'visitor', gallery: 'visitor', library: 'visitor', arcade: 'patron', market_stalls: 'shopper', shop: 'shopper', medbay: 'patient', clinic_ward: 'patient', garden_terrace: 'visitor', roof_garden: 'visitor', lobby_atrium: 'visitor', meeting_room: 'aide', courtroom: 'visitor', gym: 'patron' };
-export function roomStaff(kind, seats = 0, beds = 0) {
+// `works` is the number of work records (desks, consoles, counters) inside the room: a room with sixteen desks seats
+// the table's counts (four clerks, two aides, ...) up to STAFF_MAX; a room without records takes STAFF_CAP people.
+export function roomStaff(kind, seats = 0, beds = 0, works = 0) {
   const f = roomFunction(kind);
   const out = [];
-  for (const j of f.jobs) { if (out.length >= STAFF_CAP) break; out.push(j.job); }
+  const cap = works > 0 ? Math.min(STAFF_MAX, Math.max(STAFF_CAP, works)) : STAFF_CAP;
+  for (const j of f.jobs) for (let k = 0; k < j.count && out.length < cap; k++) out.push(j.job);
   if (seats >= BIG_ROOM_SEATS) {
     const fill = f.fill || VISITOR_FILL[f.base] || null;
     if (fill) {

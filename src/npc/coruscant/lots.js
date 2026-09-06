@@ -133,6 +133,12 @@ export class LotInfo {
     for (const s of this.meta.spots) if (s.kind === 'seat' && s.x >= room.x && s.x < room.x + room.w && s.z >= room.z && s.z < room.z + room.d && s.y >= room.y && s.y < room.y + 40) out.push({ ...s, room });
     return out;
   }
+  // Work records (desks, consoles, counters) on a room's own floor
+  roomWork(room) {
+    let n = 0;
+    for (const w of this.meta.work) if (w.y === room.y && w.x >= room.x && w.x < room.x + room.w && w.z >= room.z && w.z < room.z + room.d) n++;
+    return n;
+  }
   // Number of beds inside a room's rectangle (its own floor)
   roomBeds(room) {
     let n = 0;
