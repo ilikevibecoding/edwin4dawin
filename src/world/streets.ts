@@ -45,8 +45,10 @@ const SIGNAL_HALF = SIGNAL_GREEN + SIGNAL_AMBER + SIGNAL_RED;
 
 /** sidewalk kinds carried in `aSw.z` */
 const K_WALK = 0, K_PROMENADE = 1, K_APRON = 3, K_PARAPET = 4, K_LOT = 5, K_PLAZA = 6;
-/** parked cars, planters and benches of the plazas and lots are drawn within this range */
+/** parked cars, planters and benches of the plazas and lots are drawn within this range; beyond YARD_NEAR a car is
+ *  its one-box far shape and a planter its shrub, at half the triangles (a car is 2–3 px at 300 m from the air) */
 const YARD_FAR = 650;
+const YARD_NEAR = 300;
 /** paving sits this far over the ground (the terrain mesh is coarser than heightAt at distance) */
 const PAVE_CLEAR = 0.08;
 
@@ -471,6 +473,7 @@ interface StreetCell {
   small: THREE.Mesh | null;
   /** parked cars, planters, benches of the plazas and lots (drawn within YARD_FAR, never cast) */
   yard: THREE.Mesh | null;
+  yardFar: THREE.Mesh | null;
   height: number;
 }
 
@@ -504,8 +507,8 @@ export class Streets {
   readonly kitMaterial: THREE.MeshStandardMaterial;
   readonly uniforms = { uSignalTime: { value: 0 } as THREE.IUniform<number>, uNight: { value: 0 } as THREE.IUniform<number>, uFocalPx: { value: 1000 } as THREE.IUniform<number> };
   private readonly cells: StreetCell[] = [];
-  private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; small: KitSoup; yard: KitSoup }>();
-  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0 };
+  private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup }>();
+  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0 };
   private readonly roads: RoadIndex;
   /** debug: `?dbg=nopools` turns the lamp pools off */
   poolsEnabled = true;
@@ -600,10 +603,10 @@ export class Streets {
     return c;
   }
 
-  private soupsAt(x: number, z: number): { walk: WalkSoup; large: KitSoup; small: KitSoup; yard: KitSoup } {
+  private soupsAt(x: number, z: number): { walk: WalkSoup; large: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup } {
     const key = cellKey(x, z, CELL);
     let b = this.builds.get(key);
-    if (!b) { b = { walk: new WalkSoup(), large: new KitSoup(), small: new KitSoup(), yard: new KitSoup() }; this.builds.set(key, b); }
+    if (!b) { b = { walk: new WalkSoup(), large: new KitSoup(), small: new KitSoup(), yard: new KitSoup(), yardFar: new KitSoup() }; this.builds.set(key, b); }
     return b;
   }
 
@@ -1186,7 +1189,7 @@ export class Streets {
    *  42 % of the bays taken), with a street lamp on the line between the bay rows every 14 bays. */
   private parkCars(toWorld: (u: number, v: number) => Vec2, u0: number, v0: number, u1: number, v1: number, occupied: (x: number, z: number) => boolean, h: number): void {
     const [cx, cz] = toWorld((u0 + u1) / 2, (v0 + v1) / 2);
-    const soup = this.soupsAt(cx, cz).yard;
+    const { yard: soup, yardFar: far } = this.soupsAt(cx, cz);
     const rot = Math.atan2(toWorld(1, 0)[1] - toWorld(0, 0)[1], toWorld(1, 0)[0] - toWorld(0, 0)[0]); // world yaw of +u
     const uYaw = -rot; // frame(): +x along (cos yaw, 0, -sin yaw)
     let n = 0;
@@ -1206,6 +1209,8 @@ export class Streets {
           const paint = CAR_PAINT[Math.floor(hash2(Math.round(u * 3), Math.round(vc * 3), 11) * CAR_PAINT.length) % CAR_PAINT.length];
           part(soup, UNIT.box, f, 0, 0.55, 0, 4.4, 0.7, 1.8, paint, 0.35, 0.6);
           part(soup, UNIT.box, f, half ? 0.2 : -0.2, 1.22, 0, 2.5, 0.62, 1.62, C.glassDark, 0.3, 0.5);
+          // far shape: one box in the paint, roof at cabin height
+          part(far, UNIT.box, f, 0, 0.7, 0, 4.4, 1.3, 1.8, paint, 0.4, 0.5);
           n++;
         }
       }
@@ -1222,7 +1227,7 @@ export class Streets {
    *  frontages in one cell of three, in the open in one of twelve. The planters' cells are marked occupied. */
   private dressPlaza(toWorld: (u: number, v: number) => Vec2, u0: number, v0: number, nu: number, nv: number, free: Uint8Array, h: number): void {
     const [cx, cz] = toWorld(u0 + nu * 2.5, v0 + nv * 2.5);
-    const soup = this.soupsAt(cx, cz).yard;
+    const { yard: soup, yardFar: far } = this.soupsAt(cx, cz);
     const rot = Math.atan2(toWorld(1, 0)[1] - toWorld(0, 0)[1], toWorld(1, 0)[0] - toWorld(0, 0)[0]);
     const at = (i: number, j: number) => (i < 0 || j < 0 || i >= nu || j >= nv ? 1 : free[j * nu + i]);
     let n = 0;
@@ -1237,6 +1242,7 @@ export class Streets {
       const f = frame(x, y, z, -rot + (k > 0.15 ? Math.PI / 2 : 0));
       part(soup, UNIT.box, f, 0, 0.28, 0, 1.6, 0.56, 1.6, C.concrete, 0.9, 0);
       part(soup, UNIT.box, f, 0, 0.78, 0, 1.4, 0.46, 1.4, C.shrub, 0.95, 0);
+      part(far, UNIT.box, f, 0, 0.5, 0, 1.6, 1.0, 1.6, C.shrub, 0.95, 0);
       if (hash2(j, i, 4) < 0.5) {
         // bench beside the planter, facing the same way
         part(soup, UNIT.box, f, 1.7, 0.45, 0, 0.45, 0.05, 1.7, C.wood, 0.85, 0);
@@ -1307,7 +1313,7 @@ export class Streets {
 
   private flush(): void {
     for (const [key, b] of this.builds) {
-      const cell: StreetCell = { key, box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, walk: null, walkFar: null, large: null, small: null, yard: null, height: 0 };
+      const cell: StreetCell = { key, box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, walk: null, walkFar: null, large: null, small: null, yard: null, yardFar: null, height: 0 };
       const mk = (g: THREE.BufferGeometry | null, mat: THREE.Material, name: string, casts: boolean): THREE.Mesh | null => {
         if (!g) return null;
         const m = new THREE.Mesh(g, mat);
@@ -1329,9 +1335,11 @@ export class Streets {
       // worth a 0.4 m shadow texel, and drawn into two cascades it cost as much again as the whole street pass
       cell.small = mk(b.small.build(), this.kitMaterial, 'street-kits-small', false);
       cell.yard = mk(b.yard.build(), this.kitMaterial, 'street-yards', false);
+      cell.yardFar = mk(b.yardFar.build(), this.kitMaterial, 'street-yards-far', false);
       this.counts.walkTriangles += b.walk.triangles;
       this.counts.kitTriangles += b.large.triangles + b.small.triangles;
       this.counts.yardTriangles += b.yard.triangles;
+      this.counts.yardFarTriangles += b.yardFar.triangles;
       if (!cell.walk && !cell.large && !cell.small && !cell.yard) continue;
       const sphere = cell.box.getBoundingSphere(new THREE.Sphere());
       cell.center.copy(sphere.center); cell.r = sphere.radius; cell.height = cell.box.max.y - cell.box.min.y;
@@ -1373,7 +1381,8 @@ export class Streets {
       };
       set(c.large, inView);
       if (c.small) c.small.visible = inView && d < SMALL_FAR; // camera layer only (see flush)
-      if (c.yard) c.yard.visible = inView && d < YARD_FAR;
+      if (c.yard) c.yard.visible = inView && (d < YARD_NEAR || !c.yardFar);
+      if (c.yardFar) c.yardFar.visible = inView && d >= YARD_NEAR && d < YARD_FAR;
     }
     void camPos;
   }
