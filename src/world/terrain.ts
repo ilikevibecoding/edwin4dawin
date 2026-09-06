@@ -552,7 +552,8 @@ vec3 openGround(float n2, float n3, float n4, float dryness, Ground gd) {
   float dryMix = smoothstep(0.55 - 0.35 * dryness, 0.85 - 0.35 * dryness, n4 + 0.25 * n2 + 0.15 * (gd.mesoTone - 0.5));
   vec3 c = mix(lawn, dry, dryMix);
   c *= 0.82 + 0.36 * gd.grass;
-  float bare = smoothstep(0.62, 0.74, n3) * 0.7;
+  // the 125 m bare patches belong to the dry ground: on the lush lawns they read as sand blotches from 300 m
+  float bare = smoothstep(0.64, 0.76, n3) * (0.2 + 0.55 * dryMix);
   bare = max(bare, gd.mesoBare * (0.35 + 0.45 * dryMix));
   bare = max(bare, gd.bare * (0.3 + 0.6 * max(dryMix, gd.mesoBare)));
   vec3 soilC = soil * (0.78 + 0.44 * gd.soil);
@@ -632,18 +633,21 @@ void yardFeatures(inout vec3 c, vec2 wp, float foot, float n1, Ground gd) {
 // block a little greener, drier or paler than its neighbours, so the sprawl keeps its grain out to the
 // haze instead of paling into a beige field.
 vec3 suburbGround(vec2 wp, float n1, float n2, float n3, float n4, float canopy, float sandy, vec4 det, float dist, float foot, Ground gd) {
+  // the yard's own tone (baked per lot): 0-0.3 a watered, mown lawn, the middle the ordinary yard, 0.7-0.85 a dry
+  // one, above 0.85 a sandy, bare lot; so the dry and bare ground comes in yard-shaped pieces on the street
+  // grid (the noise blobs it came in read as bare sand blotches over the whole island from 300 m)
   float tone = det.g;
-  vec3 c = openGround(n2, n3, n4, 0.12 + 0.35 * tone, gd);
+  vec3 c = openGround(n2, n3, n4, 0.1 + 0.5 * smoothstep(0.35, 0.8, tone), gd);
   // mowing stripes on the kept lawns, alternating with the street block, gone once the stripe is under ~3 px
-  float stripeVis = (1.0 - smoothstep(0.3, 0.55, foot)) * smoothstep(0.4, 0.6, tone) * (1.0 - gd.bare);
+  float stripeVis = (1.0 - smoothstep(0.3, 0.55, foot)) * (1.0 - smoothstep(0.25, 0.45, tone)) * (1.0 - gd.bare);
   if (stripeVis > 0.0) {
     float along = fract(tone * 7.3) < 0.5 ? wp.x : wp.y;
     c *= 1.0 + 0.045 * stripeVis * sin(along * 4.4);
   }
   vec3 lot = vec3(0.194, 0.165, 0.125) * (0.84 + 0.32 * gd.soil);
-  c = mix(c, lot, smoothstep(0.55, 0.7, fbm3Band(wp * 0.03 + 5.0, 1.0 - smoothstep(3.0, 6.0, foot))) * 0.6);
-  c *= 0.84 + 0.28 * tone;
-  c = mix(c, c * vec3(0.9, 1.04, 0.86), smoothstep(0.6, 0.9, tone) * 0.5);
+  c = mix(c, lot, smoothstep(0.82, 0.92, tone) * 0.7);
+  c *= 0.88 + 0.2 * tone;
+  c = mix(c, c * vec3(0.88, 1.05, 0.84), (1.0 - smoothstep(0.15, 0.4, tone)) * 0.5);
   yardFeatures(c, wp, foot, n1, gd);
   float farF = smoothstep(1200.0, 3800.0, dist);
   if (farF > 0.0) {
@@ -734,8 +738,11 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
   // Its inland edge wanders +-0.4 m in height on the 20-125 m noises and ramps over 1.8 m instead of 1.1, so it is
   // a ragged band rather than a contour; and under the trees the litter covers the sand, so the canopy edge does
   // not stand on a pale floor (the hard sand-to-canopy lines of shore_beach F2-H3)
+  // It is a shore feature: on the low islands (1.5-2.5 m all over) the height alone spread it inland as pale
+  // blotches (cloudy A5-A6), so it also ends 30-70 m from the coast.
   float fringe = 0.5 * (n3 - 0.5) + 0.3 * (n2 - 0.5);
-  float sandy = (1.0 - smoothstep(1.0 + fringe, 2.8 + fringe, h)) * smoothstep(0.06, 0.28, expo) * (1.0 - 0.55 * canopy);
+  float sandy = (1.0 - smoothstep(1.0 + fringe, 2.8 + fringe, h)) * smoothstep(0.06, 0.28, expo) * (1.0 - 0.55 * canopy)
+              * (1.0 - smoothstep(30.0, 70.0, -coast - 8.0 * (n3 - 0.5)));
   if (zone == 2) {
     // ---- the beach profile in metres from the waterline: the swash band the water shader washes (its
     //      swashW = 4 + 12 * exposure, water.ts), a damp band above it, dry rippled sand to the dune toe.
