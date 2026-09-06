@@ -72,7 +72,12 @@ everything sits on the pavement it was generated from) and lays out, per ~1 km c
   riprap berm around each, splayed **wing walls** capping the slopes; piers no longer stand inside the fill.
 - **F-shape median barrier** on every deck of 4+ lanes and 20 m+ (garza-west, islab-west, tortuga, garza, north-cw).
 - **Scuppers** in both kerbs every 15 m with downpipes under the fascia; deck ends meet the road surface over a 4 cm
-  approach-slab step with a finger joint across each abutment.
+  approach-slab step with a finger joint across each abutment. The deck end height comes from `landingSurface`
+  (exported): the `roads.ts` pavement at the end point, or 8 cm over the highest point of the rendered terrain under
+  the last 30 m of the approach across the road's width where that stands higher; the highway pins its end rows to
+  the same function, so the course arrives flush at the slab (a 2 cm step, checked at every landing with
+  `/tmp/highway/liftcheck.ts`) instead of standing up to half a metre over it where the ground crowns under the
+  approach (garza-west's mainland end, the spit end of garza-bridge).
 - **Deck pavement**: an asphalt wearing course in the highway's tones (lanes 0.07–0.11, an older paler mix on the
   shoulders) between the pale concrete kerbs and parapets, so a causeway reads as dark carriageways between pale
   edges from the air rather than one pale slab, and the carriageway runs unbroken over the abutment joint.
