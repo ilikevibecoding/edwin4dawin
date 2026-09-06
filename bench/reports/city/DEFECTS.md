@@ -266,3 +266,42 @@ What is wrong (OBSERVE / CRITIQUE, `city-close` R9):
   `cam=-2706,6.6,-4046 hdg 91 pch 6` (a 285 m setback tower at 190 m), deco street `cam=-2979,7,-3835 hdg 91`,
   park edge `cam=-2238,5.4,-3928 hdg 271`, 150 m facades from 40 m up `cam=-3108,40,-3838 hdg 91 pch -4 time 16.5`,
   `city-close` at 22:00 for the lit fraction.
+- The first four street stills of this round (`/tmp/facade3/r10c/y2/`) were shot from `y = 2` after all: the
+  poses tool printed its candidates as `cam=x,2,z` and the jobs were written from that line. They show the
+  under-terrain signature once more and, this time, with the numbers to prove it: the near building's entrance
+  door stands directly above a tan slab (the box's underside, `y = ground - 0.4`), the slab's near edge 46 px
+  above the horizon at 39 m puts the box bottom 2.2 m above the eye, i.e. the camera at ~2.0 with the bottom at
+  4.18 (headless `camcheck.ts`: terrain 4.76 there, the URL's y would have been 6.6). The pale plane is the
+  water at y = 0 seen through the single-sided terrain from underneath. The tool prints `ground + 1.8` now and
+  the four poses are re-queued at their true heights.
+- The black stepped block (`r10/street_park`, camera at ground + 2.15 this time, the ground rendered) is a
+  real object, not a soffit: it stands on the pavement and casts a shadow to its right. Pure black with a blocky
+  crown-like outline and camera-facing — consistent with a vegetation impostor card whose atlas had not been
+  rendered when the frame froze; probe job queued (`kind: probe`, ray hits per pixel) to name the mesh.
+
+## Round 11 — what stands behind the glass is seen through the coating twice (facade.ts)
+
+What is wrong (OBSERVE / CRITIQUE, `city-close` R10c, `glass_1km` R10):
+
+- **A sun-facing curtain wall with its blinds down reads as a cream slab**: the blinds at the glass plane were
+  lit as `albedo x T` (T the coating's transmission, 0.5-0.7 for the low-e families). A 0.6 blind behind T 0.6
+  glass gave 0.36, which under the scene's 6.0 sun through ACES sits at 235 — the same value as a sunlit stucco
+  wall, so the tower's sun side lost the dark, sky-mirroring look that says glass and read as painted panels
+  with a grid. Real light goes in through the coating and comes back out through it: `albedo x T^2` = 0.22,
+  mid-grey under the mirrored sky, with the glass body's green tint.
+- **One blind colour per city**: every building drew from the same three blind tones (light grey, a tan on 20 %
+  of panes, dark grey on half the panes of 30 % of buildings), so towers side by side wore the same cream once
+  the sun was on them.
+- **Pale metal spandrels at 0.86** ran to white beside the panes on any sunlit face (noted in R10's report).
+- **Rooms are lightless by day**: through a resolved pane (the parallax rooms, within ~150 m) the ceiling grid
+  shows only at night; by day an office tower's fittings are on and visible as pale bars in the dark rooms, the
+  cue that reads "office" from the street.
+
+- Changed: `pass2 = T^2 x (0.90, 1.0, 0.96)` on the blinds, the rooms' daylight and the spandrel-glass backing;
+  a per-building blind palette (off-white 0.66 / grey 0.50 / charcoal 0.28 / warm fabric, a fifth of tenants their
+  own two tones); pale spandrel panels 0.60; the ceiling fittings emit by day (0.45 x T, 65 % of office floors)
+  through resolved panes only, handing over to the night glow with `nightOn`.
+- Why: the user's priority is the glass at every distance; the sun-facing face at 300 m is where the base's
+  "paint chip" look survived longest, and it is what the blind albedo through one pass of coating produced.
+- Evidence: A/B stills queued (`/tmp/facade3/r11` vs `r10c`: `city-close`, 1 km, 2 km low, 150 m facades,
+  street at ground + 1.8).
