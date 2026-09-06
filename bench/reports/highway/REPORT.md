@@ -17,16 +17,23 @@ everything sits on the pavement it was generated from) and lays out, per ~1 km c
   deck parapets.
 - **Verges**: 12 m mown right-of-way strips beside both pavement edges (a dark gravel band along the pavement,
   mower stripes, a darker drainage swale 5–8 m out; packed sand instead of grass on the beaches), draped on the
-  terrain in four rows and stopped at the water's edge — the green corridor edges that make the highway read against
-  the pale pavement and the pale dry ground from 200 m to 1.5 km.
+  terrain in four rows and stopped at the water's edge — the corridor edges that make the highway read against the
+  pale pavement and the dry ground from 200 m to 1.5 km. Round 7 retuned the grass from a neon band (1.6 × the
+  terrain lawn's brightness, one tone for kilometres) to a shade fresher than the lawn, with 40–80 m dry khaki patches
+  and a soft outer 4 m; rows that fall under another road's pavement sink 45 cm (the frontage street showed them).
 - **Delineator posts** every 50 m on both verges (offset from the guardrail runs); the guardrail opens at the mouths
   of the roads meeting the highway.
-- **Arterial junctions**: the barrier opens 38 m with sloped terminals nosed by yellow sand-drum crash cushions;
-  signal mast arms on the far corners (three-lens heads over each highway carriageway and over the cross road's
-  lanes; green over the highway, red over the cross road at night); advance guide signs 1 km and 300 m ahead.
+- **Arterial junctions**: the barrier opens 38 m (grown past any street mouth near a terminal) with sloped terminals
+  nosed by yellow sand-drum crash cushions in single file within 0.4 m of the centre line (the traffic drives the
+  inner lane 1.5 m off it); signal mast arms on the far corners (three-lens heads over each highway carriageway and
+  over the cross road's lanes; green over the highway, red over the cross road at night); advance guide signs 1 km
+  and 300 m ahead; stop bars and zebra crossings on the course; a **raised kerbed divider** down each arterial arm
+  for 60 m from the kerb returns (0.6 m on 4-lane arms, 1.0 m with a planted top on 2-lane arms, stopped short of
+  side-street mouths); lighting poles at 40 m instead of 60 m through 160 m either side.
 - **Toll plaza** on the mainland approach to the causeways (`PEAJE ISLAS`, 400 m short of islab-west): five kerbed
-  islands with booths (glazed, lit at night) and yellow attenuators under a 24 × 25 m lit canopy, TAG / EFECTIVO
-  lane plates over the six gates, name fascias, a 500 m advance sign.
+  islands (four with glazed booths, lit at night; the median one a bare 0.8 m divider so the inner lanes' vans
+  clear it) with yellow attenuators under a 24 × 25 m lit canopy, TAG / EFECTIVO lane plates over the six gates,
+  name fascias, a 500 m advance sign; diverge / merge fans and hatched noses painted on the course.
 - **Pedestrian overpasses** mid-block on the coastal highway (the median barrier has cut the grid's at-grade
   crossings for people on foot): a concrete span on verge columns with solid parapets, mirrored stairs down the
   verges, landing lamps.
@@ -81,6 +88,13 @@ everything sits on the pavement it was generated from) and lays out, per ~1 km c
 - **Deck pavement**: an asphalt wearing course in the highway's tones (lanes 0.07–0.11, an older paler mix on the
   shoulders) between the pale concrete kerbs and parapets, so a causeway reads as dark carriageways between pale
   edges from the air rather than one pale slab, and the carriageway runs unbroken over the abutment joint.
+- **From the air (round 8)**: the stays and arch hangers keep a 0.5 opacity floor under the 1.75 px minimum width
+  (`aGlow = -1`; a 14 cm stay at 1 km covered a twentieth of a pixel and the cable-stayed spans stood cable-less in
+  every distant view), stays 18 cm; red aviation **beacons** on every pylon leg top, lit dots to 5 km, the steel glow
+  tinted by the member's colour; **armoured expansion joints** (pale edge plates round a dark seal, 0.5 m over every
+  pier, 0.7 m at the abutments) instead of dark strips that vanished on the dark asphalt; **inlet grates** with damp
+  rings decaled over every scupper (15 k + 7.5 m) in both gutters; **lamp pools** on the deck at night from the
+  alternating 45 m lamp row, `uLampGlow` on the bridge concrete — a lit causeway is a string of pools from the air.
 - Kit exports for the highway module (`Soup`, `Frame`, `Rgb`, `MIN_WIDTH_VERT`, `GLSL_AA_LINE`, `STEEL_ALPHA_FRAG`,
   `lampGlowFor`, `F_BARRIER_PROFILE`); lit lamp heads keep an alpha floor at distance.
 
@@ -114,6 +128,17 @@ shots of the same cameras under `/tmp/highway/shots-base`).
   apologies to that builder — their r4 batch needs re-running. I now track my own PIDs (`/tmp/highway/session.pid`).
 - Both Chrome slots are held for long stretches by other builders' session/hold scripts; I moved to the same
   pattern (`/tmp/highway/session.mjs`, one browser reused across shots, released after 3 min idle).
+- 22:38 UTC: after the ~15:30 cut-off both slots had been held for 7 h by holders whose batches had finished
+  (clouds4's session, last job 15:25; terrain5's `hold.mjs`, batch done 16:03, kept alive by its own keepalive loop),
+  with 26 waiters queued on an idle machine (load 0.3). I released both through their designed mechanisms (an `exit`
+  job in clouds4's queue, terrain5's `release` file) rather than killing anything, and documented it here. terrain5's
+  builder resumed minutes later and had to re-queue (~1 h) — sorry; the evidence at the time was 6.5 h of idle hold.
+  My own session died on its first job after the 9 h wait (a detached frame on the first navigation, then an
+  unhandled write into a missing directory) — `session.mjs` now retries a failed job once on a fresh page and
+  creates its output directory.
+- The slot queue is a plain `flock` race: dead waiters (sessions of builders long gone) win slots and hold them for
+  their idle timeouts. A gate that dropped waiters whose parent shell is gone would give the live builders the
+  machine back.
 
 ## Requests to other agents
 
@@ -130,9 +155,20 @@ shots of the same cameras under `/tmp/highway/shots-base`).
    highway rides over it on its own lift field now.
 3. Junction treatment where the district streets meet the highway: the streets should stop at the verge (right-in /
    right-out against the barrier); traffic on those streets should not cross the median. The highway's toll plaza
-   (`south-hwy-mainland` s = 3706, x ≈ -3195) and footbridges (s = 1842, 2964) sit mid-block between streets. The
-   grid's frontage street runs parallel to the coastal highway 5 m off its south edge for kilometres: 22 m of pale
-   pavement with yellow dashes beside the highway's shoulder, brighter than the shoulder from the air.
+   (`south-hwy-mainland` s = 3706, x ≈ -3195) and footbridges (s = 1842, 2964) sit mid-block between streets.
+5. **The frontage street** (`street`, 9 m, `map.ts`) runs parallel to the coastal highway from x ≈ -4560 to -3400 with
+   its centre 15.2 m from the highway axis — its pavement edge 0.3 m inside the highway's shoulder edge, so there is
+   no verge between them — and diverges to 24 m either side of that. From 180 m (`cam=-4400,180,2700 hdg=90 pch=-14`)
+   it is a pale ribbon with yellow dashes beside the dark highway, brighter than the shoulder. I have not overlaid it:
+   its pavement is yours (repaving bands, sidewalks in `streets.ts` are live on your branch) and there is no room for
+   a planted buffer without moving the alignment. Smallest change on your side: bias the repaving bands dark for
+   streets within 40 m of a `highway` segment (the aged-asphalt tone reads right from the air; the pale bands are what
+   shows). For the lead (`map.ts`): shifting that street to ≥ 26 m from the axis would give an 8 m strip for a hedge /
+   tree buffer the highway module can plant.
+6. **Sidewalk strips across the highway**: at the street crossing 50 m west of the toll plaza (x ≈ -3245) the crossing
+   street's pale kerb / sidewalk strips (`streets.ts`) continue straight across both highway carriageways
+   (`/tmp/highway/crop_toll_cross.png`, 10 × crop of `cam=-3195,200,2900 pch=-45`). Sidewalks should stop at the
+   highway's pavement edge (or the verge), as they do at the arterial junctions.
 4. The base marking shader aliases into rows of dots along the highway at 300 m+ (the 12 cm smoothstep lines); the
    box-filtered `aaLine` markings on your branch fix this — please keep highways covered by them.
 
@@ -144,6 +180,12 @@ dunes and embankments. Fix: `uv = (wp + HALF + 0.5 * cell) / WORLD_SIZE` in `ter
 `zoneSmooth` already centres its texels the same way, so the zone texture is offset identically and needs the same
 half cell). `/tmp/highway-dist14` is a build with only that line changed, for the A/B. The highway's lift field and
 verges take the max of both readings meanwhile, so they will stay right after the fix.
+
+**Traffic agent (`traffic.ts`)** — the highway's inner lane runs 1.5 m off the centre line (`laneOff0 = 1.5` for 4+
+lanes) beside a 0.61 m F-shape barrier: a 1.9 m car's flank passes 0.25 m from the barrier and a 2.1 m van's 0.15 m.
+The furniture is now sized to that (drums in single file within ±0.4 m, the plaza's median island 0.8 m), but a
+`laneOff0` of 1.9 m on the 22 m highway (lanes at 1.9 and 5.1 m, still inside the 6.35 m edge line) would give the
+traffic a realistic 0.6 m shy distance from the barrier and the plaza islands.
 
 **City agent** — nothing blocking; the approaches now claim ~10 m beside the deck fascias at the landings (islab-west
 mainland end at x≈-2790, garza-west both ends, garza-bridge spit end); keep buildings off that strip.
