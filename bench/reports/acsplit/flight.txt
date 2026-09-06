@@ -1,0 +1,44 @@
+rest             {"restY":1.968,"restPitchDeg":0.19,"minY":1.933,"maxY":2.006,"settledHeaveMm":72.5}
+takeoffTail      {"timeS":25.2,"liftoffIasMs":32.45,"liftoffPitchDeg":10.9,"runDistanceM":527,"skips":1,"maxRunPitchDeg":13.1,"climbAt8sMs":2.66,"iasAt8sMs":39.1,"headwindMs":-3.21}
+takeoffHead      {"timeS":20.22,"liftoffIasMs":31.77,"liftoffPitchDeg":11.4,"runDistanceM":338,"skips":1,"maxRunPitchDeg":13.3,"climbAt8sMs":2.35,"iasAt8sMs":38.9,"headwindMs":3.5}
+roll             {"steadyRollRateDegS":50.8,"peakRollRateDegS":56.5,"timeTo63PctS":0.1,"initialYawRateDegS":5.93,"betaAt05sDeg":4.64,"adverseYaw":true,"bankAt1sDeg":49.8,"iasMs":55.6,"trimThrottle":0.45}
+elevator         {"peakPitchRateDegS":18.7,"tPeakS":0.33,"steadyPitchRateDegS":11.5,"overshoots":1,"settleS":0.75,"pitchGainDeg":49.9,"maxVsMs":25.7,"maxG":2.14,"entryIasMs":55,"minIasMs":39.6,"altGainM":60.4}
+turn             {"turnRateDegS":8.93,"theoryDegS":9.32,"errorPct":-4.2,"meanBankDeg":45,"meanIasMs":60.4,"altDriftM":0.3,"timeFor360S":40.3}
+stall            {"release":"trim","stallIasMs":28.9,"stallAlphaDeg":15.5,"pitchAtStallDeg":10.9,"releasePitchDeg":9.3,"releaseElevator":0.42,"lowestPitchDeg":3.4,"minIasMs":28.5,"maxSinkMs":-4.7,"altLostM":21.5,"altLostFromStallM":24.2,"recoverS":5.2,"descentArrestedS":6.35,"maxBankDeg":0.2,"maxAlphaDeg":15.9}
+stallNeutral     {"release":"neutral","stallIasMs":28.9,"stallAlphaDeg":15.5,"pitchAtStallDeg":10.9,"releasePitchDeg":9.3,"releaseElevator":0,"lowestPitchDeg":-18.1,"minIasMs":28.5,"maxSinkMs":-19.1,"altLostM":184.5,"altLostFromStallM":187.3,"recoverS":14.48,"descentArrestedS":14.98,"maxBankDeg":0.2,"maxAlphaDeg":15.9}
+phugoid          {"dampingRatio":0.116,"periodS":34.8,"halfCycles":4,"firstAmplitudeMs":15.77,"lastAmplitudeMs":5.11,"trimIasMs":55.7}
+waterLanding     {"touchdownSinkMs":1.26,"touchdownIasMs":28.6,"touchdownGroundSpeedMs":25.4,"touchdownPitchDeg":8.4,"bounces":1,"stopDistanceM":321,"stopTimeS":57.1,"maxPitchRateAfterTdDegS":9.4,"maxAbsPitchDeg":8.4,"maxAbsBankDeg":1.7,"minUpY":0.99,"finalUpY":1,"finalY":2.01,"finalGroundSpeedMs":0.44,"crashedSeen":false,"uprightStopped":true,"steepestApproachVsMs":-3.6}
+runwayLanding    {"touchdownSinkMs":1.18,"touchdownIasMs":27.4,"touchdownGroundSpeedMs":30.7,"touchdownPitchDeg":8.1,"bounces":0,"stopDistanceM":117,"stopTimeS":7.3,"maxPitchRateAfterTdDegS":37.5,"maxAbsPitchDeg":8.1,"maxAbsBankDeg":1.5,"minUpY":0.99,"finalUpY":1,"finalY":6.83,"finalGroundSpeedMs":0.02,"crashedSeen":false,"uprightStopped":true,"steepestApproachVsMs":-4.7,"centerlineOffsetM":17.8}
+invertedReset    {"uprightAfterS":2.92,"crashedSeen":true,"crashedAtS":2.92,"finalUpY":1,"finalY":5.31,"finalSpeedMs":0.09}
+terrainImpact    {"impactVsMs":-35,"crashedSeen":true,"atRestAfterImpactS":0,"finalUpY":1,"finalY":5.31,"finalSpeedMs":0.11,"finalAglM":2.41}
+camera           {"minX":0.485,"maxX":0.501,"minY":0.668,"maxY":0.702,"offscreenFrames":0,"fov":52.8,"samples":[[0.02,0.5,0.67],[0.52,0.5,0.679],[1.02,0.5,0.681],[1.52,0.488,0.694],[2.02,0.488,0.702],[2.52,0.494,0.692],[3.02,0.494,0.684],[3.52,0.49,0.687],[4.02,0.497,0.671],[4.52,0.5,0.671],[5.02,0.495,0.673],[5.52,0.496,0.67]],"maxBankDeg":45}
+
+check                            value   target          result   description
+restY                            1.968   [1.91, 2.01]    PASS     rest datum y
+restPitchDeg                      0.19   [-1.5, 3.5]     PASS     rest pitch
+takeoffHeadTimeS                 20.22   [18, 26]        PASS     takeoff into wind, rest to liftoff
+takeoffHeadLiftoffMs             31.77   [30, 34]        PASS     liftoff IAS into wind
+takeoffTailLiftoffMs             32.45   [29, 35]        PASS     liftoff IAS with tailwind
+rollRateDegS                      50.8   [45, 65]        PASS     steady roll rate, full aileron, 55 m/s
+adverseYaw                        true   true            PASS     aileron yaw is adverse
+elevatorPeakPitchRateDegS         18.7   [12, 20]        PASS     full elevator step peak pitch rate
+elevatorOvershoots                   1   [0, 1]          PASS     pitch-rate overshoots
+elevatorSettleS                   0.75   [0, 4]          PASS     pitch-rate settle time
+turnRateErrorPct                  -4.2   [-15, 15]       PASS     45-degree turn rate vs g tan(phi)/V
+stallRecoverS                      5.2   [0, 6]          PASS     hands-off stall recovery time
+stallAltLostM                     21.5   [0, 60]         PASS     altitude lost in the stall recovery
+phugoidDamping                   0.116   [0.1, 1]        PASS     phugoid damping ratio
+waterTouchdownSinkMs              1.26   [0, 1.5]        PASS     water landing touchdown sink
+waterBounces                         1   [0, 1]          PASS     water landing bounces
+runwayUprightStopped              true   true            PASS     runway landing rolls out upright and stops
+maxInvertedS                       2.9   [0, 3]          PASS     longest inverted-on-surface spell
+cameraMinX                       0.485   [0.45, 0.55]    PASS     chase camera centroid x (min)
+cameraMaxX                       0.501   [0.45, 0.55]    PASS     chase camera centroid x (max)
+cameraMinY                       0.668   [0.5, 0.72]     PASS     chase camera centroid y (min)
+cameraMaxY                       0.702   [0.5, 0.72]     PASS     chase camera centroid y (max)
+nanCount                             0   [0, 0]          PASS     non-finite telemetry samples
+
+deterministic: true   allPass: true   (115 s)
+
+FINAL_SUMMARY {"allPass":true,"deterministic":true,"metrics":{"restY":1.968,"restPitchDeg":0.19,"takeoffTailTimeS":25.2,"takeoffTailLiftoffMs":32.45,"takeoffTailRunM":527,"takeoffHeadTimeS":20.22,"takeoffHeadLiftoffMs":31.77,"takeoffHeadRunM":338,"rollRateDegS":50.8,"rollTimeTo63PctS":0.1,"adverseYaw":true,"initialYawRateDegS":5.93,"elevatorPeakPitchRateDegS":18.7,"elevatorOvershoots":1,"elevatorSettleS":0.75,"elevatorPitchGainDeg":49.9,"elevatorMaxVsMs":25.7,"elevatorMaxG":2.14,"turnRateDegS":8.93,"turnTheoryDegS":9.32,"turnRateErrorPct":-4.2,"stallIasMs":28.9,"stallAlphaDeg":15.5,"stallMinIasMs":28.5,"stallMaxSinkMs":-4.7,"stallAltLostM":21.5,"stallRecoverS":5.2,"stallLowestPitchDeg":3.4,"stallMaxBankDeg":0.2,"stallNeutralAltLostM":184.5,"stallNeutralRecoverS":14.48,"stallNeutralLowestPitchDeg":-18.1,"phugoidDamping":0.116,"phugoidPeriodS":34.8,"waterTouchdownSinkMs":1.26,"waterBounces":1,"waterStopDistanceM":321,"waterTouchdownPitchDeg":8.4,"runwayTouchdownSinkMs":1.18,"runwayRolloutM":117,"runwayMaxAbsPitchDeg":8.1,"runwayMaxAbsBankDeg":1.5,"runwayUprightStopped":true,"invertedUprightAfterS":2.92,"terrainImpactCrashed":true,"maxInvertedS":2.9,"cameraMinX":0.485,"cameraMaxX":0.501,"cameraMinY":0.668,"cameraMaxY":0.702,"nanCount":0}}
+FLIGHT_EXIT:0
