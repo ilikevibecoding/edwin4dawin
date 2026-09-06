@@ -523,13 +523,14 @@ export const SPLAT_MATERIAL = new THREE.ShaderMaterial({
       // its interior is a churned patch field with dark windows, its edge ragged
       float patchR = r0 * (1.0 + 0.9 * (1.0 - exp(-tau / 0.7))) * (0.8 + 0.4 * n3);
       float lifeF = exp(-tau / (1.6 + 4.5 * E));
-      float patch = (1.0 - smoothstep(patchR * 0.45, patchR * 1.1, r)) * lifeF;
-      float dens = patch * (0.5 + 0.5 * E);
+      // (named 'ww', not 'patch': 'patch' is a reserved word in GLSL ES 3.00 and the shader failed to compile)
+      float ww = (1.0 - smoothstep(patchR * 0.45, patchR * 1.1, r)) * lifeF;
+      float dens = ww * (0.5 + 0.5 * E);
       float thr = 0.5 + (0.5 - clamp(dens, 0.0, 1.0)) * 0.5;
       float pn = 0.5 * n1 + 0.3 * n2 + 0.2 * n3;
       float grainFine = smoothstep(thr - 0.14, thr + 0.14, pn) * (0.7 + 0.3 * n2);
       float grainCoarse = dens * (0.6 + 0.8 * n1);
-      float foam = mix(grainCoarse, grainFine, fine) * patch;
+      float foam = mix(grainCoarse, grainFine, fine) * ww;
       // breaking rim on the leading crest for the first second
       float rimW = 0.25 + 0.15 * rc;
       float rim = exp(-(r - rc) * (r - rc) / (rimW * rimW)) * exp(-tau / 0.7) * E * (0.5 + 0.5 * n2) * smoothstep(0.3, 0.6, n1 + 0.3 * E);
@@ -542,7 +543,7 @@ export const SPLAT_MATERIAL = new THREE.ShaderMaterial({
       vec2 dirW = vDir.xy, perpW = vec2(-dirW.y, dirW.x);
       vec2 rWorld = dirW * rdir.x + perpW * rdir.y;
       vec2 g = rWorld * (-ringA * sin(ph) * env * 6.2832 / lam) * (1.0 - fine);
-      float cover = max(patch * 0.9, env * ringA * 8.0);
+      float cover = max(ww * 0.9, env * ringA * 8.0);
       float end = splatEnd(tau);
       foam *= end; g *= end; cover *= end;
       vec2 enc = clamp(g, -0.5, 0.5);

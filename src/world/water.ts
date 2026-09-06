@@ -515,11 +515,14 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   vec4 wake = wakeFar;
   float nearW = 0.0;
   if (all(greaterThan(nuv, vec2(0.0))) && all(lessThan(nuv, vec2(1.0)))) {
-    #ifndef WATER_PATCH
-      // the displaced patch draws the water inside the near region while it is active
-      if (uWakeNearRegion.w > 0.5) discard;
-    #endif
     vec2 ed = min(nuv, 1.0 - nuv);
+    #ifndef WATER_PATCH
+      // the displaced patch draws the water inside the near region while it is active; the plane keeps a
+      // ~1 m band inside the region's edge under the patch's own (undisplaced) rim: a discard right at the edge
+      // left the pixels straddling it to neither mesh (the plane discards whole pixels whose centre is inside,
+      // the patch only covers the samples inside) and the sky showed through as a row of dashes along the rim
+      if (uWakeNearRegion.w > 0.5 && min(ed.x, ed.y) > 0.015) discard;
+    #endif
     nearW = smoothstep(0.0, 0.08, min(ed.x, ed.y));
     wake = mix(wakeFar, texture2D(uWakeNearTex, nuv), nearW);
   }
