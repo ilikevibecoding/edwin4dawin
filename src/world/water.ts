@@ -25,8 +25,10 @@ import type { MapTextures } from './terrain';
  * else without duplicating that machinery.
  */
 
-/** Diagnostic output (0 = off): 1 = depth / irradiance / Fresnel, 2 = sediment / openness / slope variance. */
-const WATER_DEBUG = 0;
+/** Diagnostic output (0 = off): 1 = depth / irradiance / Fresnel, 2 = sediment / openness / slope variance,
+ *  3 = mirrored scene alone (colour, coverage in blue where nothing is mirrored), 4 = sun glitter alone,
+ *  5 = body alone, 6 = sky reflection alone (F applied). Set with the URL query `wdbg=<n>` (bench diagnosis). */
+const WATER_DEBUG = Number(new URLSearchParams(globalThis.location?.search ?? '').get('wdbg') ?? 0) | 0;
 
 const WATER_VERT_PARS = /* glsl */ `
 uniform vec3 uWaterOffset;
@@ -272,6 +274,15 @@ vec2 swellSlopeC(vec2 p, vec2 dir, float L, float A, float t, float phase, float
 // and stays resolved far beyond the range at which the along-view stretch of the pixel would have removed it.
 float setFade(float L, float foot) { return 1.0 - smoothstep(0.1 * L, 0.22 * L, foot); }
 float footAlong(vec2 dir, vec2 dx, vec2 dy) { return abs(dot(dx, dir)) + abs(dot(dy, dir)); }
+// Footprint fade of a noise layer with cells L across the wind and L / stretch along it: its slope varies over
+// about two thirds of a cell, so each axis fades on that feature by the rule of the sets. (The old fades on the
+// pixel's diagonal, set at 5 to 2.3 px per L, let every layer draw on through 1.2-3.5 px per cell, i.e. as
+// aliasing: the fine white speckle of the 60-300 m views was these layers' undersampled slopes mirroring the
+// horizon sky, and their variance was booked as resolved while what they drew was noise.)
+float noiseFade(float L, float stretch, vec2 dx, vec2 dy) {
+  vec2 wd = uWindDir, wc = vec2(-wd.y, wd.x);
+  return setFade(L / (1.5 * stretch), footAlong(wd, dx, dy)) * setFade(L / 1.5, footAlong(wc, dx, dy));
+}
 // Slope variance of a sharpened set: E[c^2 (1 + s)^2] = 5/8 of the squared slope amplitude.
 float setVar(float L, float A) { float S = A * 0.7 * 6.2831853 / L; return 0.625 * S * S; }
 float smithBeckmann(float cosT, float alpha) {
@@ -422,32 +433,45 @@ vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist, vec2 dx, vec
   // keep most of their tails (a pure region of one share is then sampled a little finer than it needs)
   vec3 topS = vec3(textureLod(uReflShare, uv0, uReflParams.w).r, textureLod(uReflShare, uv0 + reach, uReflParams.w).r, textureLod(uReflShare, uv0 - reach, uReflParams.w).r);
   float shareL = min(1.5 * (topS.x + topS.y + topS.z) / (topA.x + topA.y + topA.z), 1.0);
+  // The flat mirror sees the objects in reach at the depth wq the share stands for. The real reflected ray
+  // leaves P tilted by the wave slope and travels about the same path length L, so its hit point is displaced
+  // by (R - R0) L: that is the mirror image displaced by the same vector (clip-space displacement per metre:
+  // dclip). The share of the reach, not of the pixel's own hit, so the field is continuous across silhouettes.
+  vec3 R0 = vec3(-V.x, V.y, -V.z);
+  float wq = wp / max(1.0 - shareL, 0.05);
+  float L = (wq - wp) * dist / wp; // metres along the ray beyond the surface
+  vec3 R = reflect(-V, N);
+  R.y = max(R.y, 0.02);
+  vec4 rc1 = rc * (wq / wp) + (uReflVP * vec4((R - R0) * uReflTune.y, 0.0)) * L;
+  vec2 uv = rc1.xy / max(rc1.w, 1e-3) * 0.5 + 0.5;
+  // (a distant light's glints reach a good part of the image up and down the mirror image: the bound only
+  // keeps a wild tilt from sampling across the whole texture)
+  uv = uv0 + clamp(uv - uv0, vec2(-0.25), vec2(0.25));
+  float sigL = unit * shareL;
+  // Second gate at the kernel's own place and size: the top level's texels are a tenth of the image, so the
+  // first gate passes most of the water around anything mirrored; a cell the size of the whole gather (its
+  // streak plus the tilt the sparkle facets can add, together under 3 rms) holding no coverage means the taps
+  // below would all find nothing. Two thirds of the water of a low view left here instead of running the field
+  // and the taps (the frame cost of the water-landing view was up by half).
+  float lodG = clamp(ceil(log2(max(3.0 * sigL, 1.0))), 0.0, uReflParams.w);
+  if (textureLod(uReflShare, uv, lodG).a < 1e-4) return vec4(0.0);
   // The sparkle facets (the same field the glitter rides on) tilt the mirror too: the light of a distant
   // window lands on the cells whose facet happens to point at it, so a reflection breaks up along the wave
   // slopes and a near one (the aircraft, a hull) shatters at its edges the way a mirror image does in a chop.
   float resolved;
   vec2 s = sparkleSlope(P.xz, dx, dy, t, mss, resolved);
   N = normalize(vec3(N.x / N.y - s.x, 1.0, N.z / N.y - s.y));
-  // The flat mirror sees the objects in reach at the depth wq the share stands for. The real reflected ray
-  // leaves P tilted by the wave slope and travels about the same path length L, so its hit point is displaced
-  // by (R - R0) L: that is the mirror image displaced by the same vector (clip-space displacement per metre:
-  // dclip). The share of the reach, not of the pixel's own hit, so the field is continuous across silhouettes.
-  vec3 R = reflect(-V, N);
+  R = reflect(-V, N);
   R.y = max(R.y, 0.02);
-  vec3 R0 = vec3(-V.x, V.y, -V.z);
-  vec4 dclip = uReflVP * vec4((R - R0) * uReflTune.y, 0.0);
-  float wq = wp / max(1.0 - shareL, 0.05);
-  float L = (wq - wp) * dist / wp; // metres along the ray beyond the surface
-  vec4 rc1 = rc * (wq / wp) + dclip * L;
-  vec2 uv = rc1.xy / max(rc1.w, 1e-3) * 0.5 + 0.5;
-  // (a distant light's glints reach a good part of the image up and down the mirror image: the bound only
-  // keeps a wild tilt from sampling across the whole texture)
+  rc1 = rc * (wq / wp) + (uReflVP * vec4((R - R0) * uReflTune.y, 0.0)) * L;
+  uv = rc1.xy / max(rc1.w, 1e-3) * 0.5 + 0.5;
   uv = uv0 + clamp(uv - uv0, vec2(-0.25), vec2(0.25));
   unit *= sqrt(1.0 - resolved); // the resolved facets tilt the lookup; only the rest streaks it
-  float sigL = unit * shareL;
-  // taps one quarter of the reach's rms apart, six a side (+-1.5 rms); a short reach needs fewer
-  float stepT = max(0.25 * sigL, 1.0);
-  float nT = clamp(ceil(1.5 * sigL / stepT), 1.0, 6.0);
+  sigL = unit * shareL;
+  // taps 0.375 of the reach's rms apart, four a side (+-1.5 rms; a Gaussian summed at that spacing is within
+  // a thousandth of its integral); a short reach needs fewer
+  float stepT = max(0.375 * sigL, 1.0);
+  float nT = clamp(ceil(1.5 * sigL / stepT), 1.0, 4.0);
   float lodS = clamp(log2(stepT), 0.0, uReflParams.w); // the share of a tap's cell
   float vy = clamp(abs(V.y), 0.1, 1.0);
   // a streak longer than a good part of the image carries no more information than the environment map
@@ -455,7 +479,7 @@ vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist, vec2 dx, vec
   float edge = smoothstep(0.0, 0.015, uv.x) * smoothstep(0.0, 0.015, 1.0 - uv.x) * smoothstep(0.0, 0.015, uv.y) * smoothstep(0.0, 0.015, 1.0 - uv.y);
   vec2 dv = vec2(0.0, stepT * uReflTexel.y);
   vec4 c = vec4(0.0);
-  for (float i = -6.0; i <= 6.0; i += 1.0) {
+  for (float i = -4.0; i <= 4.0; i += 1.0) {
     if (abs(i) > nT) continue;
     vec2 uvi = uv + i * dv;
     vec4 sa = textureLod(uReflShare, uvi, lodS);
@@ -533,6 +557,12 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   vec2 gpw = wp + wd * (5.0 * t);
   float gust = 0.74 + 0.52 * fbm2o(vec2(dot(gpw, wd) / 640.0, dot(gpw, wc) / 270.0) + 3.7);
   float windG = wind * gust;
+  // Slope amplitude of the drawn chop (the 0.5-14 m waves). Their slope variance grows with the wind as Cox and
+  // Munk's slick-surface fit (0.008 + 0.00156 U: the waves a slick leaves), i.e. linearly, not as the square of
+  // the wind speed an amplitude proportional to it gave: at 7 m/s that had put three times the measured slope
+  // variance of a whole sea into these layers alone (a sunset path smeared into a broad band, a 10 m/s sea with
+  // 20 degrees of rms slope). Unchanged at the 3.5 m/s of the clear preset; below it the old law stays.
+  float windA = windG < 0.583 ? windG : 0.583 * sqrt((0.008 + 0.00936 * windG) / 0.01346);
   // swell: three long-crested sets of incommensurate wavelength and heading whose crests meander (phase warped
   // by a ~250 m noise) under wave groups travelling at half the phase speed, plus a long low ground swell from
   // another quarter; each set fades on its own wavelength
@@ -551,14 +581,15 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
     g += gs * swellF;
   }
   mss += swellF * (setVar(83.0, 0.4) * (1.0 - fS0 * fS0) + setVar(51.3, 0.3) * (1.0 - fS1 * fS1) + setVar(33.7, 0.18) * (1.0 - fS2 * fS2));
-  float w0 = 1.0 - smoothstep(2.8, 6.0, foot);
-  float a0 = 0.035 * windG * chopF;
-  if (w0 > 0.001) g += chopSlope(wp, rot2(wd, 0.15), 14.0, 2.0, 4.5, t, 1.3, a0, val0, dval0) * w0;
+  float fW0 = setFade(11.6, footAlong(rot2(wd, -0.33), dxw, dyw)), fW1 = setFade(7.1, footAlong(rot2(wd, 0.21), dxw, dyw)),
+        fW2 = setFade(4.7, footAlong(rot2(wd, -0.08), dxw, dyw));
+  float w0 = noiseFade(14.0, 2.0, dxw, dyw);
+  float a0 = 0.035 * windA * chopF;
+  // (the layer's value drives the groups of the wind sea below, so it is evaluated as long as that is drawn)
+  if (w0 > 0.001 || fW0 > 0.001) g += chopSlope(wp, rot2(wd, 0.15), 14.0, 2.0, 4.5, t, 1.3, a0, val0, dval0) * w0;
   mss += a0 * a0 * (1.0 - w0 * w0);
   // wind sea: short-crested directional waves whose height follows the wave groups of the layer above and whose
   // crests are bent by it (the group noise warps their phase)
-  float fW0 = setFade(11.6, footAlong(rot2(wd, -0.33), dxw, dyw)), fW1 = setFade(7.1, footAlong(rot2(wd, 0.21), dxw, dyw)),
-        fW2 = setFade(4.7, footAlong(rot2(wd, -0.08), dxw, dyw));
   if (fW0 > 0.001 && chopF > 0.001) {
     float grp = (0.55 + 0.9 * val0) * chopF * windG;
     float wv = (val0 - 0.5) * 3.0;
@@ -573,21 +604,23 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   // lane has wiped them off the surface, so they are added after the wake maps are read, scaled by the lane
   vec2 gS = vec2(0.0);
   float mssS = 0.0;
-  float w1 = 1.0 - smoothstep(1.0, 2.2, foot);
-  float a1 = 0.12 * windG * mix(chopF, rippleF, 0.4);
-  if (w1 > 0.001) { vec2 g1 = chopSlope(wp, rot2(wd, -0.2), 5.0, 1.8, 2.7, t, 3.7, a1, val1, dval1) * w1; g += 0.5 * g1; gS += 0.5 * g1; }
+  float fC0 = setFade(3.4, footAlong(rot2(wd, -0.35), dxw, dyw)), fC1 = setFade(2.15, footAlong(rot2(wd, 0.25), dxw, dyw)),
+        fC2 = setFade(1.3, footAlong(rot2(wd, 0.05), dxw, dyw));
+  float w1 = noiseFade(5.0, 1.8, dxw, dyw);
+  float a1 = 0.12 * windA * mix(chopF, rippleF, 0.4);
+  // (its value groups and bends the short sets below: evaluated as long as those are drawn)
+  if (w1 > 0.001 || fC0 > 0.001) { vec2 g1 = chopSlope(wp, rot2(wd, -0.2), 5.0, 1.8, 2.7, t, 3.7, a1, val1, dval1) * w1; g += 0.5 * g1; gS += 0.5 * g1; }
   mss += a1 * a1 * (1.0 - w1 * w1) * 0.5;
   mssS += a1 * a1 * (1.0 - w1 * w1) * 0.5;
   // wind streaks: the short waves are bunched into lanes a dozen metres long along the wind and a couple across
-  float streakF = 1.0 - smoothstep(1.5, 4.0, foot);
+  // (value noise varies over two cells: the lanes fade on 2.4 m across the wind)
+  float streakF = setFade(2.4, footAlong(wc, dxw, dyw));
   float lanes = streakF > 0.001 ? mix(0.5, vnoise(vec2(dot(wp, wd) * 0.07 + 0.6 * t, dot(wp, wc) * 0.55) + 5.5), streakF) : 0.5;
   float laneA = 0.55 + 0.9 * lanes;
   // short crested ripples of the local wind sea, bunched by the groups of the layer above; the 0.5-1 m chop is
   // drawn as sharpened crests riding on a softer noise floor (noise alone read as featureless blotches)
-  float w2 = 1.0 - smoothstep(0.35, 0.75, foot);
-  float a2 = 0.10 * windG * rippleF * laneA;
-  float fC0 = setFade(3.4, footAlong(rot2(wd, -0.35), dxw, dyw)), fC1 = setFade(2.15, footAlong(rot2(wd, 0.25), dxw, dyw)),
-        fC2 = setFade(1.3, footAlong(rot2(wd, 0.05), dxw, dyw));
+  float w2 = noiseFade(1.7, 1.4, dxw, dyw);
+  float a2 = 0.10 * windA * rippleF * laneA;
   float crestNet = 0.0; // caustic filaments: the crests of the short sets focus the sun on the bed (zero mean)
   if (w2 > 0.001 || fC0 > 0.001) {
     gS += chopSlope(wp, rot2(wd, 0.3), 1.7, 1.4, 1.6, t, 7.1, a2, val2, dvalT) * w2;
@@ -605,14 +638,21 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
     crestNet = ((pow(max(s0, 0.0), 6.0) - 0.156) * fC0 + (pow(max(s1, 0.0), 6.0) - 0.156) * (0.8 * fC1) + (pow(max(s2, 0.0), 6.0) - 0.156) * (0.5 * fC2)) * min(grp2, 1.5) * seg;
   }
   mssS += a2 * a2 * (1.0 - w2 * w2) + rippleF * windG * laneA * (setVar(3.4, 0.030) * (1.0 - fC0 * fC0) + setVar(2.15, 0.020) * (1.0 - fC1 * fC1) + setVar(1.3, 0.011) * (1.0 - fC2 * fC2)) * 1.2;
-  // capillary-scale ripples: resolved only within a hundred metres or so; laid in wind lanes
-  float w3 = 1.0 - smoothstep(0.1, 0.22, foot);
-  float a3 = 0.12 * windG * rippleF * laneA;
+  // capillary-scale ripples: resolved only within a few tens of metres; laid in wind lanes
+  float w3 = noiseFade(0.5, 1.6, dxw, dyw);
+  float a3 = 0.12 * windA * rippleF * laneA;
   if (w3 > 0.001) gS += chopSlope(wp, rot2(wd, -0.05), 0.5, 1.6, 0.9, t, 11.3, a3, val3, dvalT) * w3;
   mssS += a3 * a3 * (1.0 - w3 * w3);
-  // capillary ripples are never resolved (a floor of micro-roughness stays even on a slick)
+  // a floor of micro-roughness stays even on a slick
   mss += 0.002;
-  mssS += 0.003 * windG * mix(0.3, 1.0, open);
+  // Waves shorter than the finest layer drawn (decimetres down to the capillaries) are never resolved and hold a
+  // good part of the sea's slope variance: Cox and Munk's clean-surface minus slick-surface fits (a slick damps
+  // just those waves) put 0.00356 U - 0.005 in them (U in m/s: a third of the total at 3.5 m/s, half at 7). They
+  // regrow within a hundred metres of fetch, so only the nearest upwind shore calms them. This is the lobe the
+  // glitter keeps where every drawn wave is resolved: with a tenth of it the sun path died wherever the water came
+  // near enough to resolve the chop (the sunset's path ended at the bridge), the resolved slopes being gentle and
+  // the lobe left around them a couple of degrees wide.
+  mssS += max(0.02136 * windG - 0.005, 0.0015) * mix(0.4, 1.0, 0.6 * o1 + 0.4 * open) * smoothstep(0.0, 0.5, depth);
   // The short waves that make up the unresolved variance are bunched by the wave groups: rougher on the crests
   // and front faces of the groups, glassier in the troughs and between them (hydrodynamic modulation, the same
   // patchiness a slick shows). Cells a few wavelengths long along the wind and a couple across, travelling at
@@ -620,7 +660,7 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   // waves with darker water between them (a rough cell reaches the sun from farther off the path than a glassy
   // one); through the roughness of the sky reflection it mottles the far water the same way. Not evaluated
   // once a pixel covers a whole group.
-  float grpF = 1.0 - smoothstep(8.0, 20.0, foot);
+  float grpF = setFade(53.0, footAlong(wd, dxw, dyw)) * setFade(21.0, footAlong(wc, dxw, dyw));
   if (grpF > 0.001) {
     float grpR = vnoise(vec2((dot(wp, wd) + 1.5 * t) / 40.0, dot(wp, wc) / 16.0) + 6.1);
     mss *= mix(1.0, 0.55 + 0.9 * grpR, grpF);
@@ -837,8 +877,9 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   // the dome's radiance along the reflected lobe (see skyReflection: the analytic sky the dome itself draws)
   vec3 sky = skyReflection(Rdir, wMss, vWorldPos, F);
   // the mirrored scene (aircraft, shore, piers, city) replaces the sky where the reflected ray meets an object
+  vec4 refl = vec4(0.0);
   if (uReflParams.x > 0.5) {
-    vec4 refl = sceneReflection(vWorldPos, wV, wN, wMss, wDist, wDx, wDy, uWaveTime);
+    refl = sceneReflection(vWorldPos, wV, wN, wMss, wDist, wDx, wDy, uWaveTime);
     sky = sky * (1.0 - refl.a) + refl.rgb;
   }
   vec3 body = wBodyR * Ebody;
@@ -862,6 +903,14 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
     outgoingLight = vec3(wDbg.x / 16.0, Ediff.g / 2.5, F);
     #if WATER_DEBUG == 2
       outgoingLight = vec3(wDbg.y, wDbg.z, wMss * 20.0);
+    #elif WATER_DEBUG == 3
+      outgoingLight = refl.rgb + vec3(0.0, 0.0, 0.25) * (1.0 - refl.a);
+    #elif WATER_DEBUG == 4
+      outgoingLight = glitter;
+    #elif WATER_DEBUG == 5
+      outgoingLight = body;
+    #elif WATER_DEBUG == 6
+      outgoingLight = sky * F;
     #endif
   #endif
 }
@@ -958,7 +1007,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v17-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v18-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 
