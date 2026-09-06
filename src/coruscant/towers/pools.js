@@ -66,8 +66,14 @@ export const DISTRICT_TYPICAL = {
   senate: ['council_chamber', 'courtroom', 'executive_office', 'meeting_room', 'archive', 'library', 'security_post', 'lounge', 'open_plan_office', 'meditation_chamber', 'gallery', 'restroom'],
 };
 
+// rubric-11 families: the 500-Republica spire is luxury residential, the spine tower twin offices, the needle a
+// corporate blade with hotel floors
+POOLS.spire = { ...POOLS.setback, top: ['penthouse', 'penthouse', 'observation_deck', 'garden_terrace', 'lounge', 'meditation_chamber'] };
+POOLS.spine = { ...POOLS.twin, typical: [...POOLS.twin.typical, 'control_room', 'comms_room'] };
+POOLS.needle = { ...POOLS.slab, typical: ['open_plan_office', 'executive_office', 'meeting_room', 'hotel_room', 'hotel_room', 'lounge', 'server_room', 'restroom', 'comms_room', 'library', 'archive', 'control_room'] };
+
 export function poolsFor(family, district) {
   const base = POOLS[family] || POOLS.slab;
-  if (DISTRICT_TYPICAL[district] && (family === 'slab' || family === 'setback' || family === 'twin' || family === 'habitat')) return { ...base, typical: DISTRICT_TYPICAL[district] };
+  if (DISTRICT_TYPICAL[district] && (family === 'slab' || family === 'setback' || family === 'twin' || family === 'habitat' || family === 'spire' || family === 'spine')) return { ...base, typical: DISTRICT_TYPICAL[district] };
   return base;
 }
