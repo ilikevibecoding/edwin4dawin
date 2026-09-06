@@ -3,9 +3,10 @@
 // north / south of the old port stay where they are), so the port grows the Coruscant way: an ELEVATED APRON at the
 // deck level (top layer 96, feet on 97) cantilevered west over the lower city on pylons down to the terraces.
 //
-//   x 2138 .. 2487  the west apron over the lower city (bands 0..3 of the ring), z -358 .. 357
+//   x 2132 .. 2487  the west apron over the lower city (bands 0..3 of the ring), z -358 .. 357
 //   x 2488 .. 2575  the plateau strip: the Coruscant station sits in an open cut, the freight lane runs underneath
 //   x 2576 .. 2716  the original deck (east terminal, 8 domestic pads, tower, hangar, fuel farm, yards)
+// Deck area 356 x 716 + 229 x 353 = 335,733 cells (the old SPACEPORT rect was 232 x 360 = 83,520: x 4.02).
 //
 // The hyperlane (z -4..3, y 89..95) runs west-east through the apron in an open slot (the TUBE) under a raised glass
 // promenade (the HUMP, cover 98 / walk 99) so a rider on the train's roof clears it; the Westport terminus hangs
@@ -14,8 +15,8 @@ export const DECK_TOP = 96;              // top block layer of the deck
 export const DECK_Y = DECK_TOP + 1;      // walking surface / landing-gear height on the pads
 export const STATION_Y = 90;             // floor layer of the Coruscant train platform bridge
 
-export const RECT = { x0: 2136, z0: -360, x1: 2720, z1: 360 };           // structure AABB (x1, z1 exclusive)
-export const APRON = { x0: 2138, x1: 2487, z0: -358, z1: 357 };          // the west apron deck (inclusive)
+export const RECT = { x0: 2130, z0: -360, x1: 2720, z1: 360 };           // structure AABB (x1, z1 exclusive)
+export const APRON = { x0: 2132, x1: 2487, z0: -358, z1: 357 };          // the west apron deck (inclusive)
 export const PLATEAU_DECK = { x0: 2488, x1: 2716, z0: -176, z1: 176 };   // plateau strip + the original deck
 export const OLD_DECK_X0 = 2576;
 // holes in the plateau deck: the Coruscant station's open cut and the covered bridge / half-step ramp east of it
@@ -100,33 +101,41 @@ export const TERMINUS = {
 // Three sizes: L (half 24 = 48x48: bulk freighter 38, cruiser 40), M (half 18: shuttle 26, gunship, air bus), S (half
 // 12: light freighter 24, taxi, police, starfighter). Gate ids run 1..8 on the old east pads, then 9.. westward.
 export const PAD_SIZES = { L: 24, M: 18, S: 12 };
+// Landed heading (ships/traffic.js: yaw 0 = nose -z, boarding door toward -x; PI = door toward +x; PI/2 = door toward
+// +z; -PI/2 = door toward -z): the door faces the hall the pad serves.
+const E = Math.PI, W = 0, S = Math.PI / 2, N = -Math.PI / 2;
 export const OLD_PADS = [
   { x: 2596, z: -68 }, { x: 2648, z: -68 }, { x: 2596, z: -116 }, { x: 2648, z: -116 },
   { x: 2596, z: 68 }, { x: 2648, z: 68 }, { x: 2596, z: 116 }, { x: 2648, z: 116 },
-].map((p) => ({ ...p, size: 'S' }));
-// field A: six L pads north of the terminal (two rows of three)
-const FIELD_A = [[2184, -100], [2240, -100], [2296, -100], [2184, -156], [2240, -156], [2296, -156]].map(([x, z]) => ({ x, z, size: 'L' }));
+].map((p) => ({ ...p, size: 'S', yaw: p.x < 2622 ? E : W }));    // doors toward the concourse spine
+// field A: six L pads north of the terminal (two rows of three), doors toward the terminal
+const FIELD_A = [[2184, -100], [2240, -100], [2296, -100], [2184, -156], [2240, -156], [2296, -156]].map(([x, z]) => ({ x, z, size: 'L', yaw: S }));
 // field B: four M pads south of the terminal
-const FIELD_B = [[2176, 120], [2220, 120], [2264, 120], [2308, 120]].map(([x, z]) => ({ x, z, size: 'M' }));
-// field C: six S pads east of the terminal (two rows of three) and two west of it
-const FIELD_C = [[2380, -30], [2416, -30], [2452, -30], [2380, 40], [2416, 40], [2452, 40], [2200, -28], [2200, 44]].map(([x, z]) => ({ x, z, size: 'S' }));
-// security apron: two M pads for gunships; cargo dock: two L bays for the bulk haulers
-export const SECURITY_PADS = [[2390, 130], [2440, 130]].map(([x, z]) => ({ x, z, size: 'M', security: true }));
-export const CARGO_BAYS = [[2190, -234], [2256, -234]].map(([x, z]) => ({ x, z, size: 'L', cargo: true }));
+const FIELD_B = [[2176, 120], [2220, 120], [2264, 120], [2308, 120]].map(([x, z]) => ({ x, z, size: 'M', yaw: N }));
+// field C: six S pads east of the terminal (three rows of two; the harbour lane at x >= 2440 stays clear of their
+// approach columns) and two west of it
+const FIELD_C = [[2380, -30, W], [2416, -30, W], [2380, 40, W], [2416, 40, W], [2380, -100, W], [2416, -100, W], [2200, -28, E], [2200, 44, E]].map(([x, z, yaw]) => ({ x, z, size: 'S', yaw }));
+// security apron: two M pads for gunships (doors toward the guard post); cargo dock: two L bays for the bulk haulers
+// (doors toward the manifest office)
+export const SECURITY_PADS = [[2390, 130], [2440, 130]].map(([x, z]) => ({ x, z, size: 'M', yaw: E, security: true }));
+export const CARGO_BAYS = [[2190, -234], [2256, -234]].map(([x, z]) => ({ x, z, size: 'L', yaw: E, cargo: true }));
 export const NEW_PADS = [...FIELD_A, ...FIELD_B, ...FIELD_C, ...SECURITY_PADS, ...CARGO_BAYS];
 export const PADS = [...OLD_PADS, ...NEW_PADS];              // gate id = index + 1
 export const padHalf = (pad) => PAD_SIZES[pad.size];
-// the fleet type per pad (ships/models.js order: 0 light freighter, 1 shuttle, 2 taxi, 3 gunship, 4 bulk freighter,
-// 5 cruiser, 6 starfighter, 7 police, 8 air bus); every hull fits its pad with its blast wall clear
+// the fleet type per pad (ships/models.js order: 0 light freighter 24, 1 shuttle 26, 2 taxi 12, 3 gunship 24, 4 bulk
+// freighter 38, 5 cruiser 40, 6 starfighter 16, 7 police 14, 8 air bus 22 blocks long); every hull fits its pad
 export const PAD_TYPES = [
-  0, 8, 0, 2, 0, 8, 6, 7,                                      // old S pads: light freighters, air buses, taxi, starfighter, police
+  0, 8, 2, 7, 0, 8, 6, 3,                                      // old S pads: light freighters, air buses, taxi, police, starfighter, gunship
   4, 5, 4, 5, 4, 5,                                            // field A (L): bulk freighters and cruisers
   1, 3, 8, 1,                                                  // field B (M): shuttles, gunship, air bus
-  0, 2, 7, 0, 2, 6, 0, 7,                                      // field C (S): light freighters, taxis, police, starfighter
+  0, 2, 7, 0, 6, 2, 0, 7,                                      // field C (S): light freighters, taxis, police, starfighter
   3, 3,                                                        // security apron: gunships
   4, 4,                                                        // cargo dock: bulk haulers
 ];
-export const padsForTraffic = () => PADS.map((p, i) => ({ x: p.x, z: p.z, half: padHalf(p), type: PAD_TYPES[i], yaw: p.x < 2400 ? Math.PI : 0, gate: i + 1 }));
+// the longest hull a pad of each size takes (padsFit in the tests): 2 * half - 4 leaves a 2-block rim
+export const padsForTraffic = () => PADS.map((p, i) => ({ x: p.x, z: p.z, half: padHalf(p), size: p.size, type: PAD_TYPES[i], yaw: p.yaw, gate: i + 1 }));
+// [type, x, z, yaw] of the ships under repair inside the hangars (yaw 0: nose toward -z = the open north front)
+export const REPAIR_BERTHS = [[4, 2217, 285, 0], [0, 2269, 287, 0], [1, 2321, 287, 0]];
 
 // ------------------------------------------------------------------------------------------------ hangars + tower
 // Three repair hangars in the south wing, open fronts facing north onto the repair apron; the repair berths
