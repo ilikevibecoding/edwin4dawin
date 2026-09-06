@@ -447,6 +447,24 @@ function stations(c: Chain, s0: number, s1: number): number[] {
   return out.sort((p, q) => p - q);
 }
 
+/** True when (x, z) lies on the pavement of a road other than the chain's own class (within `margin` of it): the
+ *  grid's frontage streets run right beside the coastal highway, and nothing may stand in them. */
+function makeRoadTest(c: Chain, segments: RoadSegment[]): (x: number, z: number, margin: number) => boolean {
+  const others = segments.filter((s) => s.cls !== c.cls && s.cls !== 'runway' && s.cls !== 'taxiway');
+  return (x, z, margin) => {
+    for (const s of others) {
+      const ax = s.a[0], az = s.a[1], dx = s.b[0] - ax, dz = s.b[1] - az;
+      const l2 = dx * dx + dz * dz;
+      if (l2 < 1e-6) continue;
+      const t = clamp(((x - ax) * dx + (z - az) * dz) / l2, 0, 1);
+      const ex = ax + dx * t - x, ez = az + dz * t - z;
+      const r = s.width * 0.5 + margin;
+      if (ex * ex + ez * ez < r * r) return true;
+    }
+    return false;
+  };
+}
+
 /** Stations of other roads meeting the chain: segment crossings and end points on the pavement. */
 function findJunctions(c: Chain, segments: RoadSegment[]): Junction[] {
   const js: Junction[] = [];
@@ -697,7 +715,7 @@ const TOLL: Record<string, { s: number; name: string }> = {
 /** Pedestrian overpasses (stations): mid-block between two district streets, where the median barrier has cut the
  *  grid's at-grade crossings for people on foot. */
 const FOOTBRIDGES: Record<string, number[]> = {
-  'south-hwy-mainland': [1842, 2964],
+  'south-hwy-mainland': [1688, 2108],
 };
 
 // ------------------------------------------------------------------ build
@@ -726,6 +744,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
   for (const c of chains) {
     const hw = c.hw;
     const junctions = findJunctions(c, segments);
+    const inRoad = makeRoadTest(c, segments);
     const majors = junctions.filter((j) => j.major);
     const nearJunction = (s: number, r: number) => junctions.some((j) => Math.abs(j.s - s) < r);
     const yawAt = (f: Frame) => Math.atan2(f.dx, f.dz);
@@ -741,7 +760,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     // -------------------------------------------------------- median barrier: continuous, opened at the arterial junctions and through the toll plaza
     const toll = TOLL[c.id] && TOLL[c.id].s > 80 && TOLL[c.id].s < c.total - 80 ? TOLL[c.id] : null;
     const nearPlaza = (s: number, r: number) => toll !== null && Math.abs(s - toll.s) < r;
-    const footbridges = (FOOTBRIDGES[c.id] ?? []).filter((s) => s > 60 && s < c.total - 60);
+    const footbridges = (FOOTBRIDGES[c.id] ?? []).filter((s) => s > 60 && s < c.total - 60 && [-1, 1].every((side) => [0, side * 8, side * 14].every((ds) => { const f = frameAt(c, s + ds); const a = side * (hw + 2.4); return !inRoad(f.x + f.rx * a, f.z + f.rz * a, 1.2); })));
     const nearFoot = (s: number, r: number) => footbridges.some((b) => Math.abs(b - s) < r);
     const openings: Run[] = majors.map((j) => ({ s0: j.s - 19, s1: j.s + 19 }));
     if (toll) openings.push({ s0: toll.s - 48, s1: toll.s + 48 });
@@ -908,6 +927,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const f = frameAt(c, s);
         const aP = side * (hw + 0.7);
         const px = f.x + f.rx * aP, pz = f.z + f.rz * aP;
+        if (inRoad(px, pz, 0.6)) continue;
         const ground = Math.min(surfaceAt(c, s, side * hw) - ROAD_LIFT, map.heightAt(px, pz));
         P(s).posts.box(px, ground - 0.2, pz, 0.1, 1.45, 0.035, yawAt(f), 0, S_WHITE, true, [0, 0, 0], true);
         P(s).posts.box(px, ground + 1.05, pz, 0.08, 0.16, 0.05, yawAt(f), 0, S_AMBER, false, [0, 0, 0], 'point');
@@ -915,9 +935,27 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     }
 
     // -------------------------------------------------------- gantries and their sign panels
-    interface Gantry { s: number; dir: 1 | -1; panels: { lines: string[]; arrow: Arrow; tab?: string }[]; }
+    interface Gantry { s: number; dir: 1 | -1; panels: { lines: string[]; arrow: Arrow; tab?: string }[]; cols?: [number, number]; }
     const gantries: Gantry[] = [];
-    const addGantry = (g: Gantry) => { if (g.s > 40 && g.s < c.total - 40 && !nearPlaza(g.s, 110) && !nearFoot(g.s, 100) && !gantries.some((o) => Math.abs(o.s - g.s) < 320)) gantries.push(g); };
+    /** column offset from the centre line on `side` at `s`: just off the verge, or pushed out past a frontage street
+     *  (the truss then spans it, as sign bridges over frontage roads do); null when nothing within 16 m is clear */
+    const columnAt = (s: number, side: -1 | 1): number | null => {
+      const f = frameAt(c, s);
+      for (let a = hw + 1.6; a <= hw + 16; a += 1.0) if (!inRoad(f.x + f.rx * side * a, f.z + f.rz * side * a, 1.2)) return a;
+      return null;
+    };
+    const addGantry = (g: Gantry) => {
+      // slide along the road (up to 60 m either way) if the columns cannot be placed
+      for (const ds of [0, 20, -20, 40, -40, 60, -60]) {
+        const s = g.s + ds;
+        if (s <= 40 || s >= c.total - 40) continue;
+        const cl = columnAt(s, -1), cr = columnAt(s, 1);
+        if (cl === null || cr === null) continue;
+        if (nearPlaza(s, 110) || nearFoot(s, 100) || gantries.some((o) => Math.abs(o.s - s) < 320)) return;
+        gantries.push({ ...g, s, cols: [cl, cr] });
+        return;
+      }
+    };
     const dest = (b: BridgeSpec | null, atEnd: boolean): { lines: string[]; tab: string } | null => {
       if (!b) return null;
       const d = DEST[b.id];
@@ -952,28 +990,30 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       const faceN = fwd.clone().negate();                                       // the faces look back at it
       const roadY = f.y;
       const part = P(g.s);
-      const colA = hw + 1.6;
+      const [colL, colR] = g.cols ?? [hw + 1.6, hw + 1.6];
+      const colA = (colL + colR) / 2, colMid = (colR - colL) / 2;   // truss half-span and the offset of its middle
       const topY = roadY + 8.1;
       // columns on concrete pedestals either side, a two-chord truss between them
       for (const side of [-1, 1]) {
-        const px = f.x + f.rx * side * colA, pz = f.z + f.rz * side * colA;
+        const off = side < 0 ? -colL : colR;
+        const px = f.x + f.rx * off, pz = f.z + f.rz * off;
         const ground = Math.min(surfaceAt(c, g.s, side * hw) - ROAD_LIFT, map.heightAt(px, pz));
         part.conc.box(px, ground - 0.4, pz, 1.5, 1.2, 1.5, yaw, 0, C_PEDESTAL, false, [0, 0, 0]);
         part.signs.cylinder(px, ground + 0.8, pz, 0.6, topY - (ground + 0.8), 10, S_GALV, true, [0, 0, 0], true);
         part.proxy.box(px, ground + 0.8, pz, 0.9, topY - 1.5 - (ground + 0.8), 0.9, yaw, 0, S_GALV, true, []);
       }
       const chordY = [topY - 1.5, topY - 0.1];
-      part.proxy.box(f.x, chordY[0] - 0.1, f.z, colA * 2, 1.6, 1.2, yaw, 0, S_GALV, false, []);
-      const left = new THREE.Vector3(f.x - f.rx * colA, 0, f.z - f.rz * colA), right = new THREE.Vector3(f.x + f.rx * colA, 0, f.z + f.rz * colA);
+      part.proxy.box(f.x + f.rx * colMid, chordY[0] - 0.1, f.z + f.rz * colMid, colA * 2, 1.6, 1.2, yaw, 0, S_GALV, false, []);
+      const left = new THREE.Vector3(f.x - f.rx * colL, 0, f.z - f.rz * colL), right = new THREE.Vector3(f.x + f.rx * colR, 0, f.z + f.rz * colR);
       for (const y of chordY) part.signs.strut(left.clone().setY(y), right.clone().setY(y), 0.19, S_GALV, [0, 0, 0]);
       const span = colA * 2;
       const nBay = Math.round(span / 2.6);
       for (let k = 0; k <= nBay; k++) {
-        const a = -colA + (span * k) / nBay;
+        const a = -colL + (span * k) / nBay;
         const x = f.x + f.rx * a, z = f.z + f.rz * a;
         part.signs.strut(new THREE.Vector3(x, chordY[0], z), new THREE.Vector3(x, chordY[1], z), 0.07, S_GALV, [0, 0, 0]);
         if (k < nBay) {
-          const a2 = -colA + (span * (k + 1)) / nBay;
+          const a2 = -colL + (span * (k + 1)) / nBay;
           const x2 = f.x + f.rx * a2, z2 = f.z + f.rz * a2;
           if (k % 2 === 0) part.signs.strut(new THREE.Vector3(x, chordY[0], z), new THREE.Vector3(x2, chordY[1], z2), 0.06, S_GALV, [0, 0, 0]);
           else part.signs.strut(new THREE.Vector3(x, chordY[1], z), new THREE.Vector3(x2, chordY[0], z2), 0.06, S_GALV, [0, 0, 0]);
@@ -1026,8 +1066,11 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     const groundSign = (s: number, dir: 1 | -1, w: number, h: number, face: SignFace, back: Rgb, twoSided = false, posts = 2, clearance = 2.1) => {
       const f = frameAt(c, s);
       const side = dir;
-      const aS = side * (hw + 3.2);
-      const cx = f.x + f.rx * aS, cz = f.z + f.rz * aS;
+      // on the verge 3.2 m off the shoulder, or the first clear spot past a frontage street (up to 14 m out)
+      let aS = side * (hw + 3.2);
+      let cx = f.x + f.rx * aS, cz = f.z + f.rz * aS;
+      for (let k = 0; k < 11 && inRoad(cx, cz, w * 0.5 + 0.5); k++) { aS += side * 1.0; cx = f.x + f.rx * aS; cz = f.z + f.rz * aS; }
+      if (inRoad(cx, cz, w * 0.5 + 0.5)) return;
       const ground = Math.min(surfaceAt(c, s, side * hw) - ROAD_LIFT, map.heightAt(cx, cz));
       const faceN = new THREE.Vector3(-f.dx * dir, 0, -f.dz * dir);
       const part = P(s);
@@ -1090,6 +1133,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const aP = side * (hw + 1.6);
         const px = f.x + f.rx * aP, pz = f.z + f.rz * aP;
         const ground = Math.min(surfaceAt(c, s, side * hw) - ROAD_LIFT, map.heightAt(px, pz));
+        if (inRoad(px, pz, 0.6)) continue;
         const armDir = new THREE.Vector3(-f.rx * side, 0, -f.rz * side);
         const faceN = new THREE.Vector3(-f.dx * dir, 0, -f.dz * dir);
         // the highway has the green (the frozen bench frame shows the through movement running)
@@ -1102,6 +1146,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const sP = j.s + 9.5;
         const fp = frameAt(c, sP);
         const px = fp.x + fp.rx * aP, pz = fp.z + fp.rz * aP;
+        if (inRoad(px, pz, 0.6)) continue;
         const ground = Math.min(surfaceAt(c, sP, -from * hw) - ROAD_LIFT, map.heightAt(px, pz));
         const armDir = new THREE.Vector3(-f.dx, 0, -f.dz);
         const faceN = new THREE.Vector3(f.rx * from, 0, f.rz * from);
@@ -1235,6 +1280,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const f = frameAt(c, s);
         const aS = outside * (hw + 1.4);
         const cx = f.x + f.rx * aS, cz = f.z + f.rz * aS;
+        if (inRoad(cx, cz, 0.6)) continue;
         const ground = Math.min(surfaceAt(c, s, outside * hw) - ROAD_LIFT, map.heightAt(cx, cz));
         const part = P(s);
         part.posts.box(cx, ground - 0.3, cz, 0.08, 1.75, 0.08, yawAt(f), 0, S_GALV, true, [0, 0, 0], true);
