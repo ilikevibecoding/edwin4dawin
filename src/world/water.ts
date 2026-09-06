@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLSL_ATMOS_UNIFORMS, GLSL_NOISE, GLSL_SKY } from '../render/shaders/common.glsl';
+import { GLSL_ATMOS_UNIFORMS, GLSL_CLOUD_FIELD, GLSL_NOISE, GLSL_SKY } from '../render/shaders/common.glsl';
 import { createReflectionUniforms, type ReflectionUniforms } from '../render/reflection';
 import { WAKE_HEIGHT_SCALE } from '../render/wakes';
 import { SWELL_DISPLACEMENT } from './waves';
@@ -153,6 +153,7 @@ uniform mat4 directionalShadowMatrix[ NUM_DIR_LIGHT_SHADOWS ]; // the vertex sta
 varying vec3 vWorldPos;
 ${GLSL_NOISE}
 ${GLSL_ATMOS_UNIFORMS}
+${GLSL_CLOUD_FIELD}
 ${GLSL_SKY}
 // Radiance of the dome along the reflected lobe. The very function the sky dome and the aerial perspective draw
 // (skyRadiance) is evaluated here, so the water mirrors the sky the player sees: the same blue overhead, the same
@@ -163,7 +164,13 @@ ${GLSL_SKY}
 // the view azimuth) is integrated with a three-point Gauss-Hermite rule, which is what blurs the horizon band
 // into rough water. Rays sent below the horizon meet the next wave and show the sky just above it. The sun disc
 // is not part of this term: the glitter is its reflection.
-vec3 skyReflection(vec3 R, float mss) {
+// Clouds: the reflected lobe's centre ray meets the cloud base plane where the 2D cloud field (the very field the
+// dome's raymarch and the ground shadows use) says whether a cloud hangs there, so a cumulus is mirrored under
+// itself as the grey of a lit base, hazed by the path up to it; the field's edge ramp is widened by the lobe's
+// footprint on the base plane (the reflection of a cloud in a chop is soft). One field evaluation per pixel,
+// skipped where the sky term weighs little (steep view, Fresnel 'fw' small) or the ray is nearly horizontal
+// (the haze band the analytic sky already carries). 'fw' is the Fresnel weight of the sky term.
+vec3 skyReflection(vec3 R, float mss, vec3 P, float fw) {
   float hl = length(R.xz);
   vec2 az = hl > 1e-4 ? R.xz / hl : vec2(1.0, 0.0);
   float el = atan(R.y, hl);
@@ -175,9 +182,18 @@ vec3 skyReflection(vec3 R, float mss) {
   // an overcast deck is not in the analytic dome (the visible clouds are raymarched): its grey underside is
   // mirrored as the same soft band the environment probe carries for the IBL, brightest under a closed ceiling
   float deck = smoothstep(0.45, 0.75, uCloudCoverage);
-  float cov = smoothstep(0.2, 0.95, uCloudCoverage) * 0.7 + deck * 0.25;
+  float cov = (smoothstep(0.2, 0.95, uCloudCoverage) * 0.7 + deck * 0.25) * smoothstep(0.0, 0.3, e0);
   vec3 cloudCol = vec3(dot(uHorizonColor, vec3(0.2126, 0.7152, 0.0722))) * mix(1.15, 1.9, deck);
-  return mix(c, cloudCol, cov * smoothstep(0.0, 0.3, e0));
+  if (uCloudCoverage > 0.03 && e0 > 0.04 && fw > 0.06) {
+    float dc = (uCloudBase - P.y) / sin(e0); // metres along the reflected ray to the cloud base
+    vec2 cs = P.xz + az * (cos(e0) * dc) + uCloudWind;
+    float f = cloudFieldRaw(cs);
+    float thr = cloudThreshold();
+    float wr = clamp(dc * sqrt(2.0 * mss) * 3.3e-5, 0.0, 0.3); // the lobe's footprint on the base, in field units
+    float cell = smoothstep(thr - wr, thr + 0.09 + wr, f) * exp(-dc * uHazeDensity);
+    cov = max(cov, cell);
+  }
+  return mix(c, cloudCol, cov);
 }
 float terrainHeightW(vec2 wp) {
   vec2 uv = (wp + vec2(uWorldSize * 0.5)) / uWorldSize;
@@ -766,17 +782,17 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   vec3 Ebody = reflectedLight.indirectDiffuse + mix(reflectedLight.directDiffuse, unsh, volumeLeak);
   float rSky = clamp(pow(wMss, 0.25), 0.05, 1.0);
   vec3 Rdir = reflect(-wV, wN);
+  float cosV = clamp(dot(wN, wV), 0.0, 1.0);
+  // ensemble Fresnel of the rough surface: the unresolved facets take the grazing reflectance well below a mirror's
+  float Fg = max(1.0 - 1.6 * rSky * rSky, 0.45);
+  float F = 0.02 + (Fg - 0.02) * pow(1.0 - cosV, 5.0);
   // the dome's radiance along the reflected lobe (see skyReflection: the analytic sky the dome itself draws)
-  vec3 sky = skyReflection(Rdir, wMss);
+  vec3 sky = skyReflection(Rdir, wMss, vWorldPos, F);
   // the mirrored scene (aircraft, shore, piers, city) replaces the sky where the reflected ray meets an object
   if (uReflParams.x > 0.5) {
     vec4 refl = sceneReflection(vWorldPos, wV, wN, wMss, wDist, wDx, wDy, uWaveTime);
     sky = sky * (1.0 - refl.a) + refl.rgb;
   }
-  float cosV = clamp(dot(wN, wV), 0.0, 1.0);
-  // ensemble Fresnel of the rough surface: the unresolved facets take the grazing reflectance well below a mirror's
-  float Fg = max(1.0 - 1.6 * rSky * rSky, 0.45);
-  float F = 0.02 + (Fg - 0.02) * pow(1.0 - cosV, 5.0);
   vec3 body = wBodyR * Ebody;
   // in shadow the column is lit by the sky alone, whose light is scattered back with less of the blue selectivity
   // of the long sunlit path: the shadowed water reads blue-grey next to the lit teal, not navy
@@ -888,7 +904,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v14-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v15-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 
