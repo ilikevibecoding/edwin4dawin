@@ -373,10 +373,43 @@ function fringeCards(seed: number, part: number, count: number): { pos: number[]
   }
   return { pos, nrm, uv, part: parts };
 }
-/** aPart values from here up are fringe cards (FRINGE_PART + puff id + card index / 64) */
+/** aPart values in [FRINGE_PART, BRANCH_PART) are fringe cards (FRINGE_PART + puff id + card index / 64) */
 const FRINGE_PART = 10;
+/** aPart values in [BRANCH_PART, DISC_PART) are branches (BRANCH_PART + lobe puff id 2-4): thin prisms the
+ *  vertex shader runs from the trunk top to the lobe's centre, so the lobes hang on visible limbs */
+const BRANCH_PART = 20;
+/** aPart values from DISC_PART up are the root disc at the trunk base (the ground contact) */
+const DISC_PART = 30;
 /** fringe cards per puff (main, lobe) at each tessellation level */
 const FRINGE_COUNT: [number, number][] = [[0, 0], [24, 8], [24, 8]];
+
+/** Branch prisms for the three lobes: `sides`-sided tubes with the position holding (ring x, t along the
+ *  branch 0..1, ring z); the vertex shader places them between the trunk top and the lobe centre of the
+ *  plant's layout and scales the ring by the branch radius. Normals are the ring directions. */
+function branchPrisms(sides: number): { pos: number[]; nrm: number[]; uv: number[]; part: number[] } {
+  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], parts: number[] = [];
+  for (let k = 2; k <= 4; k++) {
+    for (let j = 0; j < sides; j++) {
+      const a0 = (j / sides) * Math.PI * 2, a1 = ((j + 1) / sides) * Math.PI * 2;
+      const x0 = Math.cos(a0), z0 = Math.sin(a0), x1 = Math.cos(a1), z1 = Math.sin(a1);
+      const nx = Math.cos((a0 + a1) / 2), nz = Math.sin((a0 + a1) / 2);
+      const quad = [[x0, 0, z0], [x1, 0, z1], [x1, 1, z1], [x0, 0, z0], [x1, 1, z1], [x0, 1, z0]];
+      for (const [x, t, z] of quad) { pos.push(x, t, z); nrm.push(nx, 0, nz); uv.push(0, t); parts.push(BRANCH_PART + k); }
+    }
+  }
+  return { pos, nrm, uv, part: parts };
+}
+
+/** Root disc: a fan of `segs` triangles in the ground plane (unit radius; the shader sizes it), normal up. */
+function rootDisc(segs: number): { pos: number[]; nrm: number[]; uv: number[]; part: number[] } {
+  const pos: number[] = [], nrm: number[] = [], uv: number[] = [], parts: number[] = [];
+  for (let j = 0; j < segs; j++) {
+    const a0 = (j / segs) * Math.PI * 2, a1 = ((j + 1) / segs) * Math.PI * 2;
+    const tri = [[0, 0], [Math.cos(a1), Math.sin(a1)], [Math.cos(a0), Math.sin(a0)]];
+    for (const [x, z] of tri) { pos.push(x, 0, z); nrm.push(0, 1, 0); uv.push(x, z); parts.push(DISC_PART); }
+  }
+  return { pos, nrm, uv, part: parts };
+}
 
 /** Unit crown tree: trunk (4-sided prism, part 0) + main puff (part 1) + three lobes (parts 2-4) and,
  *  on the two nearer levels, the leaf-cluster fringe cards. The shader places and sizes the lobes per
@@ -401,6 +434,13 @@ function crownGeometry(level = 0): THREE.BufferGeometry {
     for (let i = 0; i < pf.part.length; i++) uv.push(0, 0);
     const fc = FRINGE_COUNT[Math.min(level, 2)][pid === 1 ? 0 : 1];
     if (fc > 0) { const fr = fringeCards(seed, pid, fc); pos.push(...fr.pos); nrm.push(...fr.nrm); uv.push(...fr.uv); part.push(...fr.part); }
+  }
+  if (level >= 1) {
+    // the near levels show the limbs the lobes hang on and the root zone at the base (18 + 8 triangles)
+    const br = branchPrisms(3);
+    pos.push(...br.pos); nrm.push(...br.nrm); uv.push(...br.uv); part.push(...br.part);
+    const rd = rootDisc(8);
+    pos.push(...rd.pos); nrm.push(...rd.nrm); uv.push(...rd.uv); part.push(...rd.part);
   }
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -503,6 +543,25 @@ varying float vOcc; // neighbour-density occlusion of this plant (0 open, 1 buri
 varying vec2 vLeafUv; // fringe cards: leaf-cluster texture coordinates
 ${GLSL_NOISE}
 ${GLSL_LOBES}
+// centre of lobe puff k (2..4) of a crown layout, relative to the crown centre (the same arithmetic as layoutPuffs)
+vec3 lobeCentre(float cls, int variant, int k, float squash) {
+  vec4 L = LOBES[variant * 3 + k - 2];
+  float ca = cos(L.x), sa = sin(L.x);
+  if (cls < 0.5) return vec3(ca * L.y * 0.95, L.w * squash, sa * L.y * 0.95);
+  if (cls < 1.5) return vec3(ca * L.y * 1.3, (L.w * 0.35 - 0.05) * squash, sa * L.y * 1.3);
+  return vec3(ca * L.y * 0.45, (-0.25 - 0.3 * float(k - 2)) * squash, sa * L.y * 0.45);
+}
+// the limb a lobe hangs on: from the trunk top (pines: the trunk at the tier's height) to the lobe centre;
+// a mangrove's limbs are prop roots instead, arching from low on the trunk down to the ground around it
+void branchEnds(float arche, float cls, int variant, int k, float squash, float centreY, out vec3 start, out vec3 end) {
+  end = lobeCentre(cls, variant, k, squash);
+  start = vec3(0.0, cls > 1.5 ? end.y - 0.1 * squash : -0.3 * squash, 0.0);
+  if (arche > 1.5 && arche < 2.5) {
+    vec4 L = LOBES[variant * 3 + k - 2];
+    end = vec3(cos(L.x) * 0.55, -centreY, sin(L.x) * 0.55);
+    start = vec3(0.0, -0.45 * squash, 0.0);
+  }
+}
 `;
 /** the neighbour occlusion packed under the layout variant in aVar.x (see `kind` in the tile builder) */
 const GLSL_OCC = 'fract(fract(aVar.x) * 16.0) * 16.0';
@@ -512,7 +571,17 @@ const CROWN_NORMAL = /* glsl */ `
 vec3 objectNormal = normal;
 // foliage normals lean a little toward the sky so a crown shades as a lit mass of leaves, not a hard ball;
 // kept small so the puffs keep a directional gradient from the sun side to the shade side
-if (aPart > 0.5) objectNormal = normalize(mix(normalize(objectNormal * vec3(1.0, 1.0 / max(aVar.z, 0.3), 1.0)), vec3(0.0, 1.0, 0.0), 0.15));
+if (aPart > 0.5 && aPart < ${BRANCH_PART - 0.5}) objectNormal = normalize(mix(normalize(objectNormal * vec3(1.0, 1.0 / max(aVar.z, 0.3), 1.0)), vec3(0.0, 1.0, 0.0), 0.15));
+if (aPart > ${BRANCH_PART - 0.5} && aPart < ${DISC_PART - 0.5}) {
+  // branch ring normal, turned from the geometry's +y axis onto the branch direction
+  float arche = floor(aVar.x + 0.001);
+  float cls = arche > 6.5 ? 2.0 : arche < 1.5 ? 0.0 : 1.0;
+  vec3 start, end;
+  branchEnds(arche, cls, int(floor(fract(aVar.x) * 16.0 + 0.5)), int(aPart + 0.5) - ${BRANCH_PART}, aVar.z, aVar.w + 0.85 * aVar.z, start, end);
+  vec3 dir = normalize(end - start + vec3(0.0, 1e-4, 0.0));
+  vec3 side = normalize(cross(dir, abs(dir.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+  objectNormal = normalize(side * normal.x + cross(side, dir) * normal.z);
+}
 vCrownN = normalize((modelMatrix * instanceMatrix * vec4(normal, 0.0)).xyz);
 vSeed = aVar.y;
 vArche = floor(aVar.x + 0.001);
@@ -542,7 +611,9 @@ ${VEG_SHADOW_PROBE_VARS}
   float trunkLen = aVar.w;
   float cls = arche > 6.5 ? 2.0 : arche < 1.5 ? 0.0 : 1.0;
   // fringe cards carry the id of the puff they sit on (FRINGE_PART + puff) plus a per-card fraction
-  bool fringe = aPart > ${FRINGE_PART - 0.5};
+  bool fringe = aPart > ${FRINGE_PART - 0.5} && aPart < ${BRANCH_PART - 0.5};
+  bool branch = aPart > ${BRANCH_PART - 0.5} && aPart < ${DISC_PART - 0.5};
+  bool disc = aPart > ${DISC_PART - 0.5};
   float puffPart = fringe ? floor(aPart) - ${FRINGE_PART}.0 : aPart;
   float cardId = fringe ? fract(aPart) * 64.0 : 0.0;
   // per-plant anisotropy and crown height (the instance matrix yaws the whole plant already)
@@ -551,23 +622,50 @@ ${VEG_SHADOW_PROBE_VARS}
   float centreY = trunkLen + 0.85 * squash + 0.12 * (h2 - 0.5) * squash;
   vec3 iw = (modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
   vLeafUv = vec2(0.0);
+  // trunk: thinner on the spreading class and the pines, stouter on emergents; reaches into the main puff
+  float tr = cls > 1.5 ? 0.7 : cls > 0.5 ? 0.6 : arche > 0.5 ? 1.3 : 1.0;
   if (aPart < 0.5) {
-    // trunk: thinner on the spreading class and the pines, stouter on emergents; reaches into the main puff
-    float tr = cls > 1.5 ? 0.7 : cls > 0.5 ? 0.6 : arche > 0.5 ? 1.3 : 1.0;
     transformed.xz *= tr;
     transformed.y *= centreY - 0.3 * squash;
-    vRel = vec3(0.0, -1.0, 0.0);
+    // bark parts carry their height above the ground (crown centre = 1) in vRel.y for the base darkening
+    vRel = vec3(0.0, transformed.y / centreY, 0.0);
+  } else if (branch) {
+    // limb from the trunk to the lobe (a mangrove's prop root to the ground): the ring shrinks toward the
+    // tip and turns onto the limb's direction; a hidden lobe's limb collapses
+    vec3 start, end;
+    branchEnds(arche, cls, variant, int(aPart + 0.5) - ${BRANCH_PART}, squash, centreY, start, end);
+    float size = LOBES[variant * 3 + int(aPart + 0.5) - ${BRANCH_PART} - 2].z;
+    vec3 dir = normalize(end - start + vec3(0.0, 1e-4, 0.0));
+    vec3 side = normalize(cross(dir, abs(dir.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+    float t = position.y;
+    // a grass tussock has no limbs
+    float show = step(0.01, size) * (1.0 - step(4.5, arche) * step(arche, 5.5));
+    float radius = 0.07 * tr * mix(0.75, 0.3, t) * show;
+    transformed = mix(start, end, t) * show + (side * position.x + cross(side, dir) * position.z) * radius;
+    transformed.xz *= stretch;
+    transformed.y += centreY;
+    vRel = vec3(0.0, transformed.y / centreY, 0.0);
+  } else if (disc) {
+    // root zone at the trunk base: a shallow mound (a hand's height at the trunk, the ground at its rim, which
+    // the colour stage fades out) so it does not fight the terrain's depth; none under a mangrove (it stands
+    // in the water) or a tussock
+    float show = 1.0 - step(1.5, arche) * step(arche, 2.5) - step(4.5, arche) * step(arche, 5.5);
+    float r = length(position.xz);
+    transformed = (vec3(position.x, 0.0, position.z) * (0.07 * tr * 4.5) + vec3(0.0, 0.01 + 0.05 * (1.0 - r), 0.0)) * show;
+    vRel = vec3(0.0);
+    vLeafUv = uv;
   } else {
     vegShadowC = (modelMatrix * instanceMatrix * vec4(0.0, centreY, 0.0, 1.0)).xyz;
     vegShadowR = 1.2 * length(instanceMatrix[0].xyz);
     vec3 c = vec3(0.0);
     vec3 ps = vec3(1.15, squash, 1.05);
     if (puffPart > 1.5) {
-      vec4 L = LOBES[variant * 3 + int(puffPart + 0.5) - 2];
-      float ca = cos(L.x), sa = sin(L.x);
-      if (cls < 0.5) { c = vec3(ca * L.y * 0.95, L.w * squash, sa * L.y * 0.95); ps *= L.z; }
-      else if (cls < 1.5) { c = vec3(ca * L.y * 1.3, (L.w * 0.35 - 0.05) * squash, sa * L.y * 1.3); ps *= L.z * 1.15; }
-      else { float k = puffPart - 2.0; c = vec3(ca * L.y * 0.45, (-0.25 - 0.3 * k) * squash, sa * L.y * 0.45); ps *= L.z * 0.55; ps.y *= 0.7; }
+      int k = int(puffPart + 0.5);
+      c = lobeCentre(cls, variant, k, squash);
+      float size = LOBES[variant * 3 + k - 2].z;
+      if (cls < 0.5) ps *= size;
+      else if (cls < 1.5) ps *= size * 1.15;
+      else { ps *= size * 0.55; ps.y *= 0.7; }
     } else if (cls > 1.5) {
       ps.xz *= 0.6;
     } else if (cls < 0.5) {
@@ -579,6 +677,15 @@ ${VEG_SHADOW_PROBE_VARS}
     transformed.xz *= stretch;
     vRel = transformed / max(squash, 0.3);
     transformed.y += centreY;
+    // wind hierarchy, second tier: each lobe rides on its own branch, so it rocks a little against the crown
+    // at its own phase and a higher frequency than the trunk sway below (which moves the whole plant); the
+    // main puff, on the stem, does not
+    if (puffPart > 1.5) {
+      float lp = seed * 17.0 + puffPart * 2.3;
+      float lobeSway = sin(uTime * 2.1 + lp) * 0.7 + sin(uTime * 3.4 + lp * 1.7) * 0.3;
+      transformed.x += lobeSway * uWind * 0.012 * ps.x;
+      transformed.y += sin(uTime * 2.6 + lp * 1.3) * uWind * 0.006 * ps.y;
+    }
     if (fringe) {
       // leaf-cluster card: the seed point is placed like any puff vertex, then the corners spread in the
       // camera's plane (the camera axes brought into instance space: rows of the model-view-instance
@@ -594,6 +701,10 @@ ${VEG_SHADOW_PROBE_VARS}
       float spin = hc * 6.2831;
       corner = mat2(cos(spin), -sin(spin), sin(spin), cos(spin)) * corner;
       transformed += (right * corner.x + up * corner.y) * sz;
+      // third tier: the leaf clusters themselves flutter, small and quick, each at its own phase, so the
+      // outline of a crown shimmers while its mass sways
+      float fp = uTime * (4.2 + 2.0 * hc) + hc * 40.0 + puffPart;
+      transformed += (right * sin(fp) + up * (0.5 * cos(fp * 1.3))) * (uWind * 0.02 * sz);
       float tile = floor(hash11(seed * 7.9 + cardId * 1.13) * 4.0);
       vLeafUv = (uv + vec2(mod(tile, 2.0), floor(tile / 2.0))) * 0.5;
     }
@@ -627,10 +738,22 @@ const CROWN_FRAG = /* glsl */ `
   vec3 toCam = cameraPosition - vWP;
   float camDist = length(toCam);
   vegNear = 1.0 - smoothstep(200.0, 320.0, camDist);
-  if (vPart < 0.5) {
-    // bark: grey-brown, paler on the pines
+  if (vPart > ${DISC_PART - 0.5}) {
+    // root zone: leaf litter and bare earth in a ragged patch about the trunk, fading out toward its rim
+    // (the crown's shadow falls on it too, so the tree stands in a dark ring instead of on untouched lawn)
+    float r = length(vLeafUv);
+    float rim = 0.55 + 0.45 * vnoise(vWP.xz * 1.4 + vSeed);
+    float a = 1.0 - smoothstep(0.3 * rim, rim, r);
+    if (a < 0.04) discard;
+    diffuseColor.a = a;
+    diffuseColor.rgb = vec3(0.2, 0.16, 0.1) * (0.7 + 0.5 * vnoise(vWP.xz * 5.0)) * mix(0.8, 1.15, vnoise(vWP.xz * 1.1 + 5.0));
+  } else if (vPart < 0.5 || vPart > ${BRANCH_PART - 0.5}) {
+    // bark (trunk and limbs): grey-brown, paler on the pines; furrowed along the grain and darker toward the
+    // ground, where the crown shades it and the moss sits
     vec3 bark = vArche > 6.5 ? vec3(0.36, 0.3, 0.24) : vec3(0.3, 0.24, 0.18);
-    diffuseColor.rgb = bark * (0.8 + 0.4 * vnoise(vWP.xz * 3.0 + vWP.y * 2.0));
+    float grain = vnoise(vWP.xz * 3.0 + vWP.y * 2.0);
+    float furrow = vnoise(vec2(vWP.x * 7.0 + vWP.z * 5.0, vWP.y * 0.9));
+    diffuseColor.rgb = bark * (0.65 + 0.4 * grain + 0.3 * furrow) * mix(0.55, 1.0, smoothstep(0.0, 0.3, vRel.y));
   } else {
     vec3 cn = normalize(vCrownN);
     if (vPart > ${FRINGE_PART - 0.5}) {
@@ -678,7 +801,7 @@ const CROWN_FRAG = /* glsl */ `
  *  rather than smooth facets). */
 const CROWN_NORMAL_FRAG = /* glsl */ `
 #include <normal_fragment_begin>
-if (vPart > 0.5 && vegNear > 0.0) {
+if (vPart > 0.5 && vPart < ${BRANCH_PART - 0.5} && vegNear > 0.0) {
   // leaf clusters ~1.2 m across: the gradient of a value noise field tilts the normal cluster by cluster
   float e = 0.25;
   vec2 p = vWP.xz * 0.85;
@@ -802,6 +925,13 @@ ${VEG_SHADOW_PROBE_VARS}
     float dead = step(0.86, hash11(seed * 2.9 + aPart * 1.3));
     rel.y -= aVar.z * t * t * (0.03 + 0.12 * hash11(seed * 2.9 + aPart)) + dead * t * 0.5;
     rel.xz *= 1.0 - dead * 0.35 * t;
+    // wind on the fronds: each bobs on its own petiole at its own phase, the tip more than the base and
+    // lagging it (the wave runs out along the rachis), on top of the trunk sway below that moves the crown
+    // as a whole; the dead fronds hang still
+    float fp = seed * 23.0 + aPart * 2.9;
+    float bob = sin(uTime * 2.3 + fp - t * 1.6) * 0.7 + sin(uTime * 3.7 + fp * 1.3 - t * 2.5) * 0.3;
+    rel.y += bob * uWind * 0.03 * t * t * (1.0 - dead);
+    rel.xz += normalize(rel.xz + 1e-4) * cos(uTime * 1.9 + fp) * uWind * 0.012 * t * t * (1.0 - dead);
     transformed = vec3(0.0, 1.0, 0.0) + rel;
   }
   float bend = lean * transformed.y * transformed.y;
@@ -1019,7 +1149,7 @@ function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: 
       .replace('#include <shadowmap_vertex>', VEG_SHADOWMAP_VERTEX);
     shader.fragmentShader = softenFoliageShadow(shader.fragmentShader)
       .replace('#include <common>', `#include <common>\n${CROWN_FRAG_PARS}`)
-      .replace('#include <lights_physical_pars_fragment>', foliageLighting('step(0.5, vPart)', CROWN_LIGHT))
+      .replace('#include <lights_physical_pars_fragment>', foliageLighting(`step(0.5, vPart) * step(vPart, ${(BRANCH_PART - 0.5).toFixed(1)})`, CROWN_LIGHT))
       .replace('#include <color_fragment>', CROWN_FRAG)
       .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG);
     balanceGroundIbl(shader);
