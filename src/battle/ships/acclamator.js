@@ -96,12 +96,12 @@ const yBot = (zr) =>
   pw(
     [
       [0, -2],
-      [40, -10],
-      [120, -23],
-      [260, -36],
-      [480, -50],
-      [620, -58],
-      [LH, -58],
+      [40, -9],
+      [120, -19],
+      [260, -29],
+      [480, -39],
+      [620, -44],
+      [LH, -44],
     ],
     zr,
   );
@@ -115,8 +115,8 @@ const upperH = (zr) =>
     [
       [40, 0],
       [120, 3],
-      [400, 8],
-      [LH, 14],
+      [400, 7],
+      [LH, 10],
     ],
     zr,
   );
@@ -124,9 +124,9 @@ const trenchH = (zr) =>
   pw(
     [
       [30, 0],
-      [80, 12],
-      [200, 18],
-      [LH, 18],
+      [80, 11],
+      [200, 17],
+      [LH, 17],
     ],
     zr,
   );
@@ -135,7 +135,7 @@ const wallH = (zr) =>
     [
       [30, 0],
       [120, 3],
-      [LH, 5],
+      [LH, 4],
     ],
     zr,
   );
@@ -323,47 +323,47 @@ const lowerFrame = (secs, s, tb, zr) =>
   wallFrame(secs, s, EDGE.lowerR, EDGE.lowerL, tb, zr);
 
 // superstructure tiers, neck and head (zr, metres; hx0/hx1 are the half-widths at the base and the top).
-// Tier 1 is a long low block, 27 % of the stern width (the deck wings stay open outboard of it), with a
-// long shallow (~18 degree) front ramp from the deck at ~50 % of the length; tier 2 is a short pedestal
-// under the neck.
-const RAMP_FOOT = 378;
+// Tier 1 is a long low block (28 m above the deck, 27 % of the stern width, the deck wings staying open
+// outboard of it) from 44 % to 86 % of the length, entered by a long shallow (~17 degree) front ramp;
+// a flat aft deck follows it to the stern. Tier 2 is a short pedestal under the neck.
+const RAMP_FOOT = 330;
 const T1 = {
   y0: 30,
-  y1: 60,
+  y1: 64,
   hx0: 62,
   hx1: 56,
   z0: RAMP_FOOT,
-  z1: 702,
-  zf: 90,
+  z1: 660,
+  zf: 85,
   zb: 12,
 };
 const T2 = {
-  y0: 59,
-  y1: 75,
+  y0: 63,
+  y1: 79,
   hx0: 40,
   hx1: 34,
-  z0: 536,
-  z1: 640,
+  z0: 520,
+  z1: 616,
   zf: 14,
   zb: 10,
 };
-// neck: a thin pylon (32 m fore-aft) rising from the aft half of tier 2 and leaning ~22 degrees toward
-// the bow, so its top sits under the head's crossbar at ~76 % of the length
+// neck: a thin pylon (32 m fore-aft, 34 m tall) rising from the aft half of tier 2 and leaning ~20
+// degrees toward the bow, its centre at 75 % of the length
 const NECK = {
-  y0: 74,
-  y1: 105,
+  y0: 78,
+  y1: 112,
   hx0: 14,
   hx1: 11,
-  z0: 560,
-  z1: 592,
+  z0: 548,
+  z1: 580,
   zf: -12,
   zb: 12,
 };
-// head: a flat 100 m stem (rounded nose forward of the neck) with the athwartships crossbar over the
-// neck's top, reading as a T from above; 14 m thick
-const HEAD = { y0: 104, y1: 118 };
-const STEM = { hx0: 14, hx1: 11, z0: 492, z1: 592 };
-const BAR = { hx0: 36, hx1: 33, z0: 548, z1: 586 };
+// head: a flat 112 m stem (rounded nose 68 m forward of the neck's top) with the 64 m athwartships
+// crossbar over the neck's top, reading as a T from above; 14 m thick, its aft end at 77 % of the length
+const HEAD = { y0: 111, y1: 125 };
+const STEM = { hx0: 14, hx1: 11, z0: 468, z1: 580 };
+const BAR = { hx0: 32, hx1: 29, z0: 536, z1: 574 };
 const Z_DOME = STEM.z0 + 72; // sensor dome and mast on the head's aft top
 const tierBlock = (T, opts) =>
   frustum(T.y0, T.y1, T.hx0, Z(T.z0), Z(T.z1), T.hx1, T.zf, T.zb, opts);
@@ -389,10 +389,11 @@ const keelD = (zr) =>
   );
 
 // engines: [x, y, r, zEnd(zr)] — two large bells in cylindrical pods set low in the stern wall (their
-// bottoms on the belly line) flanking the keel and running ~40 m past the stern, two medium bells higher
-// and outboard, just under the stern's machinery band: a wide bank of four
-const NACELLE = { x: 56, y: -37, r: 21, z0: 630, z1: 775 };
-const MEDIUM = { x: 102, y: -22, r: 11 };
+// bottoms 5 m under the belly line, emerging from the aft belly) flanking the keel and running ~40 m
+// past the stern, two medium bells higher and outboard, just under the stern's machinery band: a wide
+// bank of four
+const NACELLE = { x: 56, y: -28, r: 21, z0: 640, z1: 775 };
+const MEDIUM = { x: 102, y: -14, r: 11 };
 const ENGINES = [
   [-NACELLE.x, NACELLE.y, 19, NACELLE.z1],
   [NACELLE.x, NACELLE.y, 19, NACELLE.z1],
@@ -457,8 +458,9 @@ function buildLod(lod) {
     pw(
       [
         [24, 1.4],
-        [150, 8],
-        [SPINE_END, 0.19 * wDeck(SPINE_END)],
+        [120, 6],
+        [250, 11],
+        [SPINE_END, 0.2 * wDeck(SPINE_END)],
       ],
       zr,
     );
@@ -626,7 +628,7 @@ function buildLod(lod) {
     add(
       frustum(
         HEAD.y1 - 0.2,
-        HEAD.y1 + 3.5,
+        HEAD.y1 + 2.2,
         6,
         Z(STEM.z0 + 10),
         Z(STEM.z0 + 68),
@@ -700,7 +702,7 @@ function buildLod(lod) {
         { color: BRIDGE_BLUE, uv: "keep" },
       );
       // the stem's flank at mid-height runs from x 9.75 at the nose corner to 12.5 at the back
-      const flankX = (dz) => 9.75 + (2.75 * (dz - 5.25)) / 90;
+      const flankX = (dz) => 9.75 + (2.75 * (dz - 5.25)) / 102;
       const flankN = (s) => [s * 0.98, 0.19, -s * 0.038];
       for (const s of [-1, 1]) {
         // 45-degree corner faces of the clipped front
@@ -744,11 +746,11 @@ function buildLod(lod) {
         // crossbar front face outboard of the stem, two rows
         for (const yy of fine ? [HEAD.y0 + 4.5, HEAD.y0 + 9.5] : [yv]) {
           for (const g of windowRow(
-            [s * 25, yy, Z(BAR.z0) + 1],
+            [s * 22.5, yy, Z(BAR.z0) + 1],
             [0, 2, -16],
             [1, 0, 0],
-            fine ? 8 : 4,
-            fine ? 2.6 : 5.2,
+            fine ? 7 : 4,
+            fine ? 2.6 : 4.6,
             1.6,
             1.4,
           ))
@@ -757,7 +759,7 @@ function buildLod(lod) {
       }
       // crossbar back face (skipping the stem's tail, which runs 6 m past the bar)
       {
-        const nB = fine ? 20 : 10;
+        const nB = fine ? 18 : 9;
         const pB = fine ? 3.2 : 6.4;
         for (const g of windowRow(
           [0, yv, Z(BAR.z1) - 1],
@@ -774,8 +776,8 @@ function buildLod(lod) {
       // tier window rows on the sloped side faces
       for (const s of [-1, 1]) {
         for (const [T, ys, z0, z1] of [
-          [T2, fine ? [64, 71] : [68], 552, 628],
-          [T1, fine ? [44, 52] : [48], 440, 690],
+          [T2, fine ? [68, 75] : [72], 536, 604],
+          [T1, fine ? [44, 54] : [49], 400, 648],
         ]) {
           const n = sideNormal(T);
           for (const yy of ys) {
@@ -799,7 +801,7 @@ function buildLod(lod) {
       {
         const n = frontNormal(T2);
         for (const g of windowRow(
-          [0, 70, frontZ(T2, 70)],
+          [0, 73, frontZ(T2, 73)],
           n.toArray(),
           [1, 0, 0],
           fine ? 14 : 7,
@@ -958,8 +960,8 @@ function buildLod(lod) {
         }
       // ledge machinery, sensor domes and a dish on tier 2
       for (const s of [-1, 1]) {
-        for (let zr = 540; zr < 690; zr += fine ? 14 : 28) {
-          if (Math.abs(zr - 640) < 12) continue; // light emplacement
+        for (let zr = 530; zr < 645; zr += fine ? 14 : 28) {
+          if (Math.abs(zr - 636) < 12) continue; // light emplacement
           const w = 3 + rand() * 3;
           const d = 5 + rand() * 6;
           const h = 2 + rand() * 3;
@@ -981,33 +983,33 @@ function buildLod(lod) {
           const d = 3 + rand() * 4;
           add(
             boxMM(
-              [s * x - 3.5, T1.y1 - 0.3, Z(526) - d / 2],
-              [s * x + 3.5, T1.y1 + 1.5 + rand() * 2.5, Z(526) + d / 2],
+              [s * x - 3.5, T1.y1 - 0.3, Z(505) - d / 2],
+              [s * x + 3.5, T1.y1 + 1.5 + rand() * 2.5, Z(505) + d / 2],
             ),
             "dark",
             { color: DARK, texel: 1 / 4 },
           );
         }
         add(
-          facetedDome(5, 3.5, 8, 2).translate(s * 28, T2.y1 - 0.2, Z(618)),
+          facetedDome(5, 3.5, 8, 2).translate(s * 28, T2.y1 - 0.2, Z(598)),
           "hull",
           { color: mulColor(BLOCK, 0.92), texel: 1 / 4 },
         );
         add(
           boxMM(
-            [s * 26 - 4, T2.y1 - 0.3, Z(562)],
-            [s * 26 + 4, T2.y1 + 4, Z(578)],
+            [s * 26 - 4, T2.y1 - 0.3, Z(548)],
+            [s * 26 + 4, T2.y1 + 4, Z(564)],
           ),
           "dark",
           { color: DARK, texel: 1 / 4 },
         );
       }
       if (fine) {
-        add(cylY(0.5, 0.5, 18, 6).translate(-18, T1.y1 + 9, Z(662)), "dark", {
+        add(cylY(0.5, 0.5, 18, 6).translate(-18, T1.y1 + 9, Z(634)), "dark", {
           color: DARK,
           texel: 1 / 3,
         });
-        add(cylY(3.5, 0.6, 1.2, 8).translate(18, T1.y1 + 1.2, Z(662)), "dark", {
+        add(cylY(3.5, 0.6, 1.2, 8).translate(18, T1.y1 + 1.2, Z(634)), "dark", {
           color: DARK,
           texel: 1 / 3,
         });
@@ -1122,7 +1124,7 @@ function buildLod(lod) {
           texel: 1 / 4,
         },
       );
-      for (const yy of [-63, -69])
+      for (const yy of [-49, -55])
         for (const s of [-1, 1])
           add(
             boxMM(
@@ -1136,10 +1138,10 @@ function buildLod(lod) {
             },
           );
     }
-    // large-bell pods: cylinders set into the lower stern wall either side of the keel (their bottoms on
-    // the belly line), running ~40 m past the stern and flaring into a dark collar at the bell
+    // large-bell pods: cylinders set into the lower stern wall either side of the keel, their bottoms
+    // emerging under the aft belly, running ~40 m past the stern and flaring into a dark collar at the bell
     const segN = fine ? 24 : mid ? 14 : 8;
-    const podZ0 = LH - 6;
+    const podZ0 = NACELLE.z0;
     for (const s of [-1, 1]) {
       const x = s * NACELLE.x;
       add(
@@ -1380,22 +1382,22 @@ function buildLod(lod) {
           uv: "keep",
         });
       }
-      // roundel: yellow disc with a red ring (38 m), just ahead of the ramp foot, 0.62 of the way from
-      // the spine to the deck edge
-      const fr = deckFrame(secs, s * wDeck(350) * 0.62, 350);
+      // roundel: yellow disc with a red ring (30 m) level with the ramp's middle, just outboard of the
+      // block's foot (0.74 of the deck half-width)
+      const fr = deckFrame(secs, s * wDeck(365) * 0.74, 365);
       const seg = fine ? 32 : mid ? 18 : 10;
-      add(decalDisc(fr, 0, 16, seg, { lift: 0.14 }), "paint", {
+      add(decalDisc(fr, 0, 12.5, seg, { lift: 0.14 }), "paint", {
         color: YELLOW,
         texel: 1 / 12,
         uv: "keep",
       });
-      add(decalDisc(fr, 16, 19.5, seg, { lift: 0.14 }), "paint", {
+      add(decalDisc(fr, 12.5, 15, seg, { lift: 0.14 }), "paint", {
         color: RED,
         texel: 1 / 12,
         uv: "keep",
       });
       if (mid)
-        add(decalDisc(fr, 5, 7.5, seg, { lift: 0.2 }), "paint", {
+        add(decalDisc(fr, 4.5, 6.5, seg, { lift: 0.2 }), "paint", {
           color: RED,
           texel: 1 / 12,
           uv: "keep",
@@ -1444,7 +1446,7 @@ function buildLod(lod) {
         for (let zr = start; zr < 720; zr += step) {
           if (k1 <= 1 - BAND[1] + 1e-6 && zr > RAMP_FOOT - 4) break; // inner band ends at the ramp
           let kb = k1;
-          if (zr > RAMP_FOOT - 4 && zr < 712) {
+          if (zr > RAMP_FOOT - 4 && zr < T1.z1 + 4) {
             // superstructure footprint: stop the seam short of tier 1's foot
             kb = Math.min(k1, (wDeck(zr) - T1.hx0 - 5) / wDeck(zr));
             if (kb <= k0 + 0.05) continue;
@@ -1474,7 +1476,7 @@ function buildLod(lod) {
             [0.5, 0.66],
           ]) {
             if (rand() < 0.35) continue;
-            if (zr > 300 && zr < 400 && ka < 0.5) continue; // roundel
+            if (zr > 320 && zr < 410 && kb > 0.45) continue; // roundel
             const wd0 = wDeck(zr - 24);
             const w = (kb - ka) * wd0 * 0.8;
             const xc = s * wDeck(zr) * ((ka + kb) / 2);
@@ -1632,29 +1634,43 @@ function buildLod(lod) {
             uv: "keep",
           });
         }
-      // ventral chamfer: bay doors and a long seam
-      for (let zr = 260; zr < 700; zr += fine ? 90 : 180) {
+      // lower slab: a long dark groove at a third of its height from the stern to mid-length, recessed
+      // doors aft, and fine vertical panel seams
+      for (let zr = 340; zr < 720; zr += fine ? 40 : 80) {
         const fr = loftFrame(
           secs,
           s > 0 ? EDGE.chamferR : EDGE.chamferL,
-          0.5,
-          Z(zr),
+          0.34,
+          Z(zr + 20),
         );
-        add(decalQuad(fr, 14, 20, 0, { lift: 0.15 }), "dark", {
+        add(decalQuad(fr, 3.2, 40, 0, { lift: 0.15 }), "dark", {
           color: DARK_RECESS,
-          texel: 1 / 6,
+          texel: 1 / 4,
           uv: "keep",
         });
       }
+      for (const zr of fine ? [430, 560, 690] : [560])
+        add(
+          decalQuad(
+            loftFrame(secs, s > 0 ? EDGE.chamferR : EDGE.chamferL, 0.68, Z(zr)),
+            12,
+            22,
+            0,
+            { lift: 0.15 },
+          ),
+          "hull",
+          { color: mulColor(CHAMFER, 0.86), texel: 1 / 8, uv: "keep" },
+        );
       if (fine)
-        for (let zr = 200; zr < 720; zr += 60) {
+        for (let zr = 180; zr < 720; zr += 45) {
           const fr = loftFrame(
             secs,
             s > 0 ? EDGE.chamferR : EDGE.chamferL,
             0.5,
-            Z(zr + 30),
+            Z(zr),
           );
-          add(decalQuad(fr, 1.0, 58, 0, { lift: 0.12 }), "dark", {
+          const hSlab = yWallBot(zr) - bellyY(wBelly(zr), zr);
+          add(decalQuad(fr, hSlab * 0.9, 1.0, 0, { lift: 0.12 }), "dark", {
             color: DARK_SEAM,
             texel: 1 / 4,
             uv: "keep",
@@ -1726,7 +1742,7 @@ function buildLod(lod) {
     }
   }
   const LIGHT_DECK_ZR = [190, 265, 340, 415];
-  const LIGHT_TIER_ZR = [490, 640];
+  const LIGHT_TIER_ZR = [460, 636];
   if (lod === 0) {
     for (const s of [-1, 1]) {
       // deck edge emplacements
