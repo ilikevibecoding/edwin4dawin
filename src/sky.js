@@ -56,18 +56,43 @@ vec2 octEncode( vec3 d ) {
 // One grid of point stars.
 //
 // A star is a point. At any pitch this renders at its footprint is the pixel,
-// so the footprint is fixed at half a pixel of the octahedral map (taken from
-// the derivative, so it neither crawls nor changes size with the camera) and
-// everything that says "star" is carried by the magnitude and the count.
+// so the footprint is a fixed radius *in screen pixels* and everything that
+// says "star" is carried by the magnitude and the count.
+//
+// Round 6: the footprint used to be an isotropic Gaussian in the octahedral
+// map, half a pixel wide by fwidth( o ). The map's scale is not the same
+// along azimuth and elevation — o moves 1 / L1 as fast up the sky as it does
+// across it, L1 being the octahedral norm, 1.4–1.7 at the elevations a frame
+// holds — so a round blob in map space was a 1 x 3 px vertical dash on
+// screen, on every star, and a sky-dominated frame (the moon view) read as
+// falling snow (measured: blob aspect median 1.5, 82 vertical to 17
+// horizontal). The offset to the star is now taken through the inverse of
+// the map's screen Jacobian ( toPx = inverse( mat2( dFdx( o ), dFdy( o ) ) ) )
+// into pixel units and the Gaussian is evaluated there; the hash and the
+// cell grid are untouched, so every star is where it was.
+//
 // Round 2 measured what happens when the count is authored for a radius and
 // the radius is then floored to a pixel: every one of ten thousand faint
 // stars became a whole lit pixel and 20 % of the sky read as snow. So the
 // grids are thin — a few thousand stars over the whole sphere, which is what
-// the eye gets at a dark site — and the magnitude is a steep power of the
-// hash: the median star is a pixel a few steps over the sky, only the top few
-// per cent read as a point of light at a glance, and the brightest of those
-// stay under the night bloom threshold so they are points and not balls.
-vec3 starGrid( vec2 o, float px, float cells, float fill, float lo, float hi, float steep ) {
+// the eye gets at a dark site — and the magnitudes follow the sky's own
+// count law rather than a floor plus a steep power: the number of stars
+// brighter than a flux F goes as F^-1.25 (half a dex per magnitude), so the
+// flux is lo * h^-slope with slope 0.8 (0.95 on the dense grid: the display
+// puts the sky under every peak and ACES takes the top in, which flattens
+// the measured range by about a third), capped at hi. Most stars sit a step
+// or two over the sky, a tenth read as points at a glance, a few per frame
+// are first magnitude, and the cap stays under the night bloom threshold so
+// they are points and not balls. The old law ( lo + h^8 * hi ) put its floor
+// under every star, so the detected population was all one brightness
+// (p90 / p50 of the peaks 1.8 on the moon frame) — which is the other half of
+// the snow read.
+//
+// STAR_R is the Gaussian's radius in pixels: 0.9 puts about a sixth of the
+// peak on the neighbouring pixel, so a star is a point with a soft edge at
+// every resolution rather than a hard single texel at 640 and a dot at 1280.
+#define STAR_R 0.9
+vec3 starGrid( vec2 o, mat2 toPx, float cells, float fill, float lo, float hi, float slope ) {
   vec2 p = o * cells;
   vec2 c = floor( p );
   float h1 = hash( c + 3.17 );
@@ -76,13 +101,13 @@ vec3 starGrid( vec2 o, float px, float cells, float fill, float lo, float hi, fl
   float h4 = hash( c + 41.03 );
   if ( h3 > fill ) return vec3( 0.0 );
   vec2 pos = c + 0.15 + vec2( h1, h2 ) * 0.7;
-  vec2 dv = p - pos;
-  float r = max( px * cells * 0.5, 1e-5 );
-  float q = dot( dv, dv ) / ( r * r );
+  // offset from the star's centre, in screen pixels
+  vec2 dv = toPx * ( ( p - pos ) / cells );
+  float q = dot( dv, dv ) / ( STAR_R * STAR_R );
   float s = exp( -q * 1.5 );
-  float mag = pow( h4, steep );
+  float flux = lo * min( pow( max( h4, 1e-3 ), -slope ), hi / lo );
   vec3 tint = mix( vec3( 1.0, 0.90, 0.78 ), vec3( 0.74, 0.84, 1.0 ), h1 );
-  return tint * s * ( lo + mag * hi );
+  return tint * s * flux;
 }
 
 // Ordered dither, a fraction of an 8-bit step, applied multiplicatively to
@@ -122,19 +147,23 @@ void main() {
 
   if ( uStars > 0.0 ) {
     vec2 o = octEncode( d );
-    float px = length( fwidth( o ) );
-    // Two grids. The dense one is the background field: about ten thousand
-    // faint points over the sphere, nearly all of them a pixel a few steps
-    // over the sky. The sparse one is the few hundred naked-eye stars, with a
-    // magnitude curve that puts a handful of first-magnitude points in any
-    // framing. Neither has a Milky Way dusting any more — see below.
-    // hi 1.1 -> 0.8 on the sparse grid, and the sum clamped: the brightest
-    // cell of both grids landing in one pixel reached 1.74 before exposure,
-    // which is over the night bloom threshold (2.0 / 1.15), and a star that
-    // blooms is a ball, not a point. The cap is under the threshold at any
-    // exposure the night grade runs.
-    vec3 sf = starGrid( o, px, 230.0, 0.045, 0.012, 0.55, 8.0 )
-            + starGrid( o + 7.3, px, 72.0, 0.05, 0.08, 0.8, 3.0 );
+    // The map's screen Jacobian, inverted: pixels per unit of o. The
+    // derivatives are taken here, in uniform control flow, and passed down.
+    mat2 J = mat2( dFdx( o ), dFdy( o ) );
+    float det = J[ 0 ][ 0 ] * J[ 1 ][ 1 ] - J[ 0 ][ 1 ] * J[ 1 ][ 0 ];
+    det = abs( det ) > 1e-14 ? det : 1e-14;
+    mat2 toPx = mat2( J[ 1 ][ 1 ], -J[ 0 ][ 1 ], -J[ 1 ][ 0 ], J[ 0 ][ 0 ] ) / det;
+    // Two grids. The dense one is the background field: about eight thousand
+    // points over the sphere (a dark site's naked-eye count to magnitude 6.5),
+    // most of them a step or two over the sky. The sparse one is the thousand
+    // brighter stars, and its cap puts a handful of first-magnitude points in
+    // any framing. Neither has a Milky Way dusting any more — see below.
+    // The sum is clamped: the brightest cell of both grids landing in one
+    // pixel is over the night bloom threshold (2.0 / 1.15) otherwise, and a
+    // star that blooms is a ball, not a point. The cap is under the threshold
+    // at any exposure the night grade runs.
+    vec3 sf = starGrid( o, toPx, 230.0, 0.04, 0.016, 0.9, 0.95 )
+            + starGrid( o + 7.3, toPx, 72.0, 0.05, 0.08, 1.3, 0.8 );
     sf = min( sf, vec3( 1.3 ) );
     // The Milky Way is a band, not a dot field: the unresolved stars of the
     // galactic plane are a smooth glow at any pixel this renders at, so that
@@ -335,7 +364,9 @@ const NIGHT_SKY = {
   // which is grey. Critic A's 45/48/60 grey-blue was that. The dome carries
   // its own blue now and the lift sits under it, so the sky is what the
   // palette says it is and the ground can be read against it.
-  zenith: rad(NIGHT.skyTop, 1.0),
+  // Multipliers rescaled with the palette's desaturation (round 6, lighting
+  // r7) so every band keeps its luma: 1.0 -> 0.706, 2.0 -> 1.437, 1.44 -> 1.113.
+  zenith: rad(NIGHT.skyTop, 0.706),
   // The horizon band and the haze under it at twice the palette's value
   // (round 5); the zenith is left where it was. Two things asked for it.
   // The moon's wide glow (`glow`, below) was a third of the horizon band on
@@ -362,15 +393,15 @@ const NIGHT_SKY = {
   // rows do not scale with the multiplier: at 1.8 (haze 1.3) they measured
   // 0.0159, a -0.62 st fall for a -0.42 st dial, so 2.0 is what lands the
   // target. The ground under it is held by the indirect dial (1.4 -> 1.7).
-  horizon: rad(NIGHT.skyHorizon, 2.0),
+  horizon: rad(NIGHT.skyHorizon, 1.437),
   // No brighter than the horizon it sits on. At 1.15 this was the pale band
   // every critic saw: a haze term lighter than the sky above it *and* than the
   // fog the ground went to, so the hills floated on a luminous strip. Held to
   // the horizon's own value the sky darkens smoothly to the ground line and
   // the fog below (`horizonOf` this) meets it there. Scaled with the
   // horizon (0.72 x 2.0).
-  haze: rad(NIGHT.haze, 1.44),
-  anti: rad(NIGHT.haze, 1.44),
+  haze: rad(NIGHT.haze, 1.113),
+  anti: rad(NIGHT.haze, 1.113),
   antiGain: 0.0,
   warm: 0.0,
   ground: rad(NIGHT.ground, 1.0),
@@ -579,7 +610,26 @@ const MODES = {
     // +0.0 %; the day hero's whole frame +0.2 %. farStrength 0.92 -> 1.0 so
     // the far map's total (intensity x farStrength) stays at 0.92 rather
     // than compounding to 0.85.
-    shadow: { radius: 1.2, bias: -0.00012, normalBias: 0.035, intensity: 0.92, farRadius: 3.6, farStrength: 1.0 },
+    //
+    // Round 6 (lighting r7): farRadius had never reached a pixel. The
+    // cascade's `uCascade` uniform was added to ShaderLib behind a guard on
+    // `uniforms.directionalShadowMap`, which three stopped listing in r15x
+    // (the shadow maps are set from the lights state directly), so no
+    // material ever carried the uniform and the shader ran on its fallbacks:
+    // a 1.5 texel far disc and full far strength, every hour. The round-5
+    // critics' "12 px line with a 1 px dither" on the mess awning
+    // (`camp_mess.png` cols 270-342 rows 236-265) is that disc — the mess
+    // stands 38-46 m from where the truck parks for that frame, outside the
+    // +/-22 m near box, so the prescribed near-map `radius` 1.2 -> 2.5 / 4.0
+    // moved 0.01 % of the frame's pixels (ablated live) while the far
+    // cascade off took the shadow with it. With the uniform live, 3.6 texels
+    // on nine taps (SKY_TIERS.farTaps) read 22-29 px 10-90 % at 512 wide on
+    // the awning's edge (was 12-13), and 4.5 (57 cm) reads 24-38 for a
+    // shadow core 0.01 lighter; 5.4 lifts the core a further 0.01 for no
+    // more width, so 4.5 it is. `radius` stays at 1.2: the near map is the
+    // truck's own shadow at 2 cm a texel, and a wider stock PCF there is
+    // three plateaus.
+    shadow: { radius: 1.2, bias: -0.00012, normalBias: 0.035, intensity: 0.92, farRadius: 4.5, farStrength: 1.0 },
     // Columns of lit dust, faint. Under a canopy these were the shot; on a plain
     // at noon they are barely there, which is right.
     shafts: { color: PALETTE.dustLit, gain: 0.28, width: 1.7 },
@@ -744,7 +794,14 @@ const MODES = {
     // +0.0019). Swept 18 / 26 / 34: door 0.0108 / 0.0144 / 0.0183, so 34 is
     // the value that puts the flank back where the round-5 frames had it,
     // with the trail in front +26 % on its median from the spill.
-    fill: { color: 0x9db5d8, intensity: 34, angle: 0.6, throw: 13, az: 48, el: 14 },
+    //
+    // 34 -> 56 (round 6, lighting r7). The round-5 consensus wants the hero's
+    // paint +0.8 st over the upper sky (300,0,640,10); at 34 with the band
+    // at 2.0 it read +0.15 st (paint mask mean 0.0202 linear over a sky of
+    // 0.0183), and the sky cannot come down without losing the `mainroad`
+    // band target. The door skin is 0.00047 a unit of fill (18 / 26 / 34
+    // above), so 56 is what puts the mask at 0.032.
+    fill: { color: 0x9db5d8, intensity: 56, angle: 0.6, throw: 13, az: 48, el: 14 },
     // Thinner than the forest's 0.0082: a moonlit plain has kilometres of
     // visibility, and the fog's job here is only to put the far acacias under
     // the horizon band rather than to close the corridor.
@@ -825,7 +882,33 @@ const MODES = {
     // night sky, see `envGround` on NIGHT_SKY); with the night plain in the
     // environment the trail beyond the lamps measured 1.4 / 1.7 / 2.0 / 2.3 ->
     // 0.0186 / 0.0225 / 0.0268 / 0.0313 (`mainroad` rows 240+, median).
-    groundIndirect: 1.7,
+    //
+    // 1.7 -> 1.2 (round 6, lighting r7). The round-5 consensus's pad rule
+    // (camp approach pad <= 0.7 of the horizon band) read 0.88 at 1.7 with
+    // the band at 2.0, and `mainroad` sat at the top of its 0.02-0.03 band
+    // (0.028). Ablated on the night hero (450,300,640,360): the dial at 1.0
+    // takes the ground 0.0132 -> 0.0097, so it is linear at about 0.005 a
+    // unit here; 1.2 lands the pad under the line and holds `mainroad` at
+    // 0.02. The fill comes up in the same commit (34 -> 56) for the paint.
+    groundIndirect: 1.2,
+    // What the ground's bounce carries at night (terrain.js `uBounceTint`):
+    // ablated on the hero, the albedo-squared bounce was 60 % of the night
+    // ground (uBounceFollow 1 took it 0.0132 -> 0.0054) and its colour was
+    // the day's laterite (hue 5, saturation 0.36, under a sky at 225), and
+    // the moon and the sky between them put irradiance of hue 219 on it
+    // (debug 14). A grey a shade toward the sky (saturation 0.13 authored —
+    // swept 0x6f83a6 / 0x8a97ad / 0xa4aab6 on the hero box: display sat 0.27
+    // / 0.20 / 0.15, hue 230 / 232 / 238; the consensus line is 0.2 and the
+    // grade's dark tint adds blue of its own): the bounce keeps the albedo's
+    // luma, under this, with the warm day bias off (`own` 0). Following the
+    // irradiance instead (uBounceFollow) would be the honest term, and it is
+    // -1.3 st on the ground: the hemisphere and environment reach this
+    // surface through an occlusion stack that leaves a third of them, so the
+    // dial would have to be 20 to hold the level. 0xa4aab6 -> 0xabaeb8 on
+    // the final frames: with the fill at 56 laying its own blue on the same
+    // ground the hero box read 0.18 mean / 0.22 median, so the tint carries
+    // less of the hue itself (authored saturation 0.10 -> 0.07).
+    bounceTint: { color: 0xabaeb8, own: 0 },
     surfaces: { dash: 2.1, film: 0.2, glass: 0.24 },
   },
 
@@ -1028,8 +1111,10 @@ function installPcss(renderer, pcss, extent) {
 // centred on the truck. The far one is a second `DirectionalLight` at zero
 // intensity whose only job is to own a shadow map: +/-130 m, snapped to its
 // own texel grid so the world's shadows do not crawl as the truck drives, and
-// filtered with a plain five-tap disc — at 13 cm a texel a penumbra is not
-// something this map can resolve, so it does not try.
+// filtered with a plain rotated disc (SKY_TIERS.farTaps, 9 at fast and high,
+// 12 at ultra) over the hour's `farRadius` texels — at 13 cm a texel the
+// penumbra it draws is the filter's width, not the sun's, and that is what
+// keeps the camp's shadows from being a hard line with a dither on it.
 //
 // The two are combined in the shader, not by three: the lighting loop's call
 // for directional light 0 is redirected to `getDirShadowCascade`, which takes
@@ -1068,7 +1153,7 @@ function farShadowMode() {
   }
 }
 
-function installCascade(pcss, extent) {
+function installCascade(pcss, extent, farTaps = 5) {
   if (cascadeInstalled) return true;
   const chunk = THREE.ShaderChunk.shadowmap_pars_fragment;
   const decl = chunk.indexOf('float getShadow(');
@@ -1081,10 +1166,21 @@ function installCascade(pcss, extent) {
     return false;
   }
 
+  // Keyed on the shadow struct array, not `directionalShadowMap`: three
+  // stopped listing the sampler in UniformsLib.lights (it is set from the
+  // lights state directly), and keyed on it this loop added the uniform to
+  // no shader at all — cscFar ran on its fallbacks every hour (round 6,
+  // lighting r7).
+  let carried = 0;
   for (const key of Object.keys(THREE.ShaderLib)) {
     const u = THREE.ShaderLib[key].uniforms;
-    if (!u || !u.directionalShadowMap) continue;
+    if (!u || !u.directionalLightShadows) continue;
     u.uCascade = { value: CASCADE.params };
+    carried++;
+  }
+  if (carried === 0) {
+    console.warn('sky: no lit ShaderLib entry to carry uCascade, keeping the single shadow box');
+    return false;
   }
 
   const structDecl = 'uniform DirectionalLightShadow directionalLightShadows[ NUM_DIR_LIGHT_SHADOWS ];';
@@ -1112,7 +1208,8 @@ function installCascade(pcss, extent) {
 			return vec2( cos( theta ), sin( theta ) ) * r;
 		}
 		#if NUM_DIR_LIGHT_SHADOWS > 1
-		// The world's shadow: five taps on a rotated disc over the wide map.
+		// The world's shadow: a rotated disc of taps over the wide map (the
+		// count is the tier's farTaps).
 		float cscFar( vec4 coord, vec2 mapSize, float bias ) {
 			coord.xyz /= coord.w;
 			coord.z += bias;
@@ -1120,15 +1217,15 @@ function installCascade(pcss, extent) {
 			float r = ( uCascade.y > 0.0 ? uCascade.y : 1.5 ) / mapSize.x;
 			float phi = cscNoise( gl_FragCoord.xy ) * PI2;
 			float lit = 0.0;
-			for ( int i = 0; i < 5; i ++ ) {
-				vec2 o = cscDisk( i, 5, phi ) * r;
+			for ( int i = 0; i < ${farTaps}; i ++ ) {
+				vec2 o = cscDisk( i, ${farTaps}, phi ) * r;
 				#if defined( SHADOWMAP_TYPE_PCF )
 					lit += texture( directionalShadowMap[ 1 ], vec3( coord.xy + o, coord.z ) );
 				#else
 					lit += step( coord.z, texture2D( directionalShadowMap[ 1 ], coord.xy + o ).r );
 				#endif
 			}
-			return lit * 0.2;
+			return lit / ${farTaps}.0;
 		}
 		#endif
 		float getDirShadowCascade( int idx, CSC_SAMPLER shadowMap, DirectionalLightShadow s, vec4 coord ) {
@@ -1684,9 +1781,14 @@ function uniformBags(mat, out) {
 // render), so a held frame is a correct frame, just one the truck has driven
 // a few centimetres past. Ultra pays for every frame.
 const SKY_TIERS = {
-  fast: { shadowExtent: 22, farExtent: 130, farSize: 2048, farCadence: 2, envSize: 256, pcss: null, beamSlices: 12 },
-  high: { shadowExtent: 22, farExtent: 130, farSize: 2048, farCadence: 2, envSize: 512, pcss: { blocker: 8, filter: 12 }, beamSlices: 20 },
-  ultra: { shadowExtent: 34, farExtent: 130, farSize: 4096, farCadence: 1, envSize: 1024, pcss: { blocker: 16, filter: 28 }, beamSlices: 44 },
+  // farTaps: the far cascade's disc filter (`cscFar`). 5 -> 9 (round 6,
+  // lighting r7): the world's shadows — the camp awnings, the acacias — are
+  // the far map's, and a five-tap disc at the width a penumbra needs reads
+  // as a stipple; nine at the same width is the same cost class and half
+  // the noise. 12 at ultra, where the map is twice as fine.
+  fast: { shadowExtent: 22, farExtent: 130, farSize: 2048, farCadence: 2, envSize: 256, pcss: null, farTaps: 9, beamSlices: 12 },
+  high: { shadowExtent: 22, farExtent: 130, farSize: 2048, farCadence: 2, envSize: 512, pcss: { blocker: 8, filter: 12 }, farTaps: 9, beamSlices: 20 },
+  ultra: { shadowExtent: 34, farExtent: 130, farSize: 4096, farCadence: 1, envSize: 1024, pcss: { blocker: 16, filter: 28 }, farTaps: 12, beamSlices: 44 },
 };
 
 /**
@@ -1793,7 +1895,7 @@ export function createSky(
 
   const nearExtent = extentOverride(tier.shadowExtent);
   const farMode = farShadowMode();
-  const cascade = farMode !== 'off' && installCascade(tier.pcss, nearExtent);
+  const cascade = farMode !== 'off' && installCascade(tier.pcss, nearExtent, tier.farTaps);
   const softShadows = installPcss(renderer, tier.pcss, nearExtent);
   // Before any material compiles: this is the first thing boot builds.
   installHazeFog();
@@ -2308,6 +2410,19 @@ export function createSky(
         if (mat.userData && mat.userData.uniforms && mat.userData.uniforms.uReliefAmt) {
           patchGroundIndirect(mat);
           mat.userData.__todIndirect.value = target.groundIndirect;
+          // The hue of the ground's bounce for the hour (terrain.js,
+          // `uBounceTint`): the tint at unit luma, so it moves the colour of
+          // the term and not its level. Hours without one keep the albedo.
+          const bt = mat.userData.uniforms.uBounceTint;
+          if (bt) {
+            if (target.bounceTint) {
+              const c = new THREE.Color(target.bounceTint.color);
+              const l = Math.max(c.r * 0.2126 + c.g * 0.7152 + c.b * 0.0722, 1e-4);
+              bt.value.set(c.r / l, c.g / l, c.b / l, target.bounceTint.own ?? 0);
+            } else {
+              bt.value.set(1, 1, 1, 1);
+            }
+          }
         }
         // The instrument backlight is the only warm source left in the cab, so
         // it has to carry the whole read of the interior at night.

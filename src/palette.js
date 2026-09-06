@@ -163,11 +163,20 @@ export const NIGHT = {
   // and with the lamps' bloom veil on top of it a grey-blue. Forty per cent
   // darker in linear puts the zenith at 0.06 and the band under 0.09, which
   // is still a colour and no longer a lit sky.
-  skyTop: 0x080f25,
-  skyHorizon: 0x17223b,
+  //
+  // Round 6 (lighting r7): a quarter less saturated at the same hue, with
+  // the dome's multipliers rescaled so the luma of each is what it was
+  // (sky.js NIGHT_SKY: horizon 2.0 -> 1.437, haze 1.44 -> 1.113, zenith 1.0
+  // -> 0.706). The round-5 critics measured the night sky at saturation
+  // 0.67 – 0.70 display against a 0.45 – 0.55 ask; the grade's dark tint
+  // adds about 0.12 to whatever the dome is authored at (a fifth off read
+  // 0.60 – 0.62 on screen from 0.49 – 0.47 here), so 0.43 – 0.41 is what
+  // puts every night sky box under the 0.6 line.
+  skyTop: 0x0e1428,
+  skyHorizon: 0x212a3a,
   // Air over the plain still scatters moonlight, and that band is the only
   // thing that puts a silhouette on the far acacias.
-  haze: 0x213049,
+  haze: 0x2c374b,
   ground: 0x04060a,
   cloud: 0x2c3a54,
   // Fog has to sit *under* the horizon band or the distance glows and the

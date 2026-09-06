@@ -1709,6 +1709,15 @@ export function createTerrain({ env = null } = {}) {
     // at, read off debug mode 14.
     uBounceFollow: { value: 0 },
     uBounceRef: { value: 1.0 },
+    // The colour the ground's indirect carries, set per hour by sky.js
+    // (`bounceTint` on each MODES entry). rgb: the hue of the light the bounce
+    // stands in for, at unit luma; w: 1 keeps the albedo's own hue and the
+    // warm day bias on the indirect (noon, dusk, overcast — a no-op, the frames
+    // do not move), 0 gives the bounce the albedo's luma under the tint. Round
+    // 6: under a blue moon the albedo-squared bounce was 60 % of the night
+    // ground and it was laterite red — hero (450,300,640,360) hue 5 at
+    // saturation 0.36 under a sky of hue 225.
+    uBounceTint: { value: new THREE.Vector4(1, 1, 1, 1) },
     uRoad: { value: new THREE.Vector4(ROAD_HALF, SHOULDER, RUT_C, RUT_W) },
     // The mainline's cross-section, so the shader places its surfaces off the
     // same numbers the mesh was graded to rather than off a second set that
@@ -1814,6 +1823,7 @@ export function createTerrain({ env = null } = {}) {
         uniform vec3 uGravMean;
         uniform float uMidBreak;
         uniform float uBounceFollow, uBounceRef;
+        uniform vec4 uBounceTint;
         varying float vSide;
         varying float vEdge;
         varying float vAlong;
@@ -3333,7 +3343,9 @@ export function createTerrain({ env = null } = {}) {
         // carrying its albedo twice, so ambient-lit dirt is warmer and more
         // saturated than a single-bounce diffuse term makes it. Without this
         // the shaded ground is lit by sky alone and reads as cool grey.
-        reflectedLight.indirectDiffuse *= ambientOcclusion * vec3( 1.09, 1.0, 0.9 );
+        // The warm bias is the day's: it is gated off with uBounceTint.w at
+        // night, where the only light on the shade is the moon and the sky.
+        reflectedLight.indirectDiffuse *= ambientOcclusion * mix( vec3( 1.0 ), vec3( 1.09, 1.0, 0.9 ), uBounceTint.w );
         // Ground bounce. The canopy shades most of the road, so the only light
         // reaching the dirt there has come off the dirt itself and there is no
         // term in the standard model for it. It used to be 0.42, which on its
@@ -3375,7 +3387,14 @@ export function createTerrain({ env = null } = {}) {
         // very term down, and those two dials would take the fall twice; the
         // hand-off is to flip this on and set both to 1.0 in the same commit.
         float bounceE = mix( 1.0, clamp( dot( irradiance + iblIrradiance, vec3( 0.2126, 0.7152, 0.0722 ) ) / uBounceRef, 0.0, 2.0 ), uBounceFollow );
-        reflectedLight.indirectDiffuse += albedo * mix( 0.5, 0.17, share ) * ambientOcclusion * ( 1.0 - water ) * bounceE;
+        // The bounce's colour. By day (uBounceTint.w = 1) it is the albedo,
+        // as it always was. At night the light it stands in for is the moon
+        // and the sky, and light that has been off red earth twice under a
+        // blue source is a dark blue-grey, not the earth's own red: the
+        // albedo's luma under the hour's tint, at the same level, so the
+        // ground's brightness is untouched and only its hue moves.
+        vec3 bounceCol = mix( vec3( dot( albedo, vec3( 0.2126, 0.7152, 0.0722 ) ) ) * uBounceTint.rgb, albedo, uBounceTint.w );
+        reflectedLight.indirectDiffuse += bounceCol * mix( 0.5, 0.17, share ) * ambientOcclusion * ( 1.0 - water ) * bounceE;
         // Relief self-shadowing. The shadow map is 4 cm a texel over this
         // corridor, so nothing the size of a pebble can ever cast into it — the
         // sun march is the only way a 4 cm stone gets a shadow, and a hard little
