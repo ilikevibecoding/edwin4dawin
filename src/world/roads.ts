@@ -563,12 +563,31 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     // inside the box (a crossing road runs through) the surface is the plain, evenly polished asphalt of the
     // junction: no lines, no lane-locked wear, so the two overlapping carriageways shade identically
     float inBox = fBox * (1.0 - aaStep(0.0, a, fwA));
-    // repaving history along the road: ~100 m stretches laid in different years (2 m transitions), the junction
-    // box left neutral so both carriageways through it shade alike; this is the tone the city reads from the air
+    // repaving history along the road: stretches laid in different years, from fresh black to faded pale grey (two
+    // band systems, ~96 m and ~61 m, so the joins fall irregularly; 2 m transitions), the junction box left neutral
+    // so both carriageways through it shade alike; this is the tone the city reads from the air
     float bandK = (along + 41.0 * cls) / 96.0;
     float bk = floor(bandK), bf = fract(bandK);
     float band = mix(hash11(bk + 7.0 * cls), hash11(bk + 1.0 + 7.0 * cls), aaStep(0.99, bf, max(fwA / 96.0, 0.02)));
-    asphalt *= 1.0 + (0.32 * band - 0.16) * (1.0 - inBox);
+    float bandK2 = (along + 23.0 * cls + 17.0) / 61.0;
+    float bk2 = floor(bandK2), bf2 = fract(bandK2);
+    float band2 = mix(hash11(bk2 * 1.7 + 3.0 * cls), hash11((bk2 + 1.0) * 1.7 + 3.0 * cls), aaStep(0.98, bf2, max(fwA / 61.0, 0.03)));
+    asphalt *= mix(1.0, (0.6 + 0.66 * band) * (0.9 + 0.2 * band2), 1.0 - inBox);
+    // utility trench scars: a 1.1 m strip of fresh (dark) or concrete-filled (pale) trench running 20-55 m along the
+    // road in 40 % of 60 m cells, and a transverse cut across the whole road in 15 % of them
+    float trench = 0.0, trenchTone = 1.0;
+    for (int k = 0; k < 2; k++) {
+      float tc = floor((along + 11.0 * cls) / 60.0) - float(k);
+      vec2 th = hash22(vec2(tc, 2.0 + cls));
+      float th2 = hash11(tc * 2.3 + cls);
+      float ta = (tc + th.x * 0.6) * 60.0 - 11.0 * cls, tl = 20.0 + 35.0 * th2;
+      float tx = (th.y - 0.5) * (width - 3.0);
+      float lon = step(th.x, 0.4) * aaLine(along - ta - 0.5 * tl, 0.5 * tl, fwA) * aaLine(xm - tx, 0.55, fwX);
+      float trn = step(0.85, th.y) * aaLine(along - (tc + th2) * 60.0 + 11.0 * cls, 0.45, fwA);
+      float t = max(lon, trn);
+      if (t > trench) { trench = t; trenchTone = th2 > 0.7 ? 1.35 : 0.62; }
+    }
+    trench *= (1.0 - inBox) * (1.0 - smoothstep(1.2, 3.0, fp));
     // ---- surface: tyre paths, patch repairs, seams, cracks (all band-limited to the pixel footprint)
     // lanes as the traffic drives them (traffic.ts): arterials 1.5 and 4.7 m from the centre at a 3.2 m pitch, streets
     // 1.8 m with a parking lane outside 3.6 m
@@ -577,14 +596,14 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     float wheel = mix(exp(-pow((abs(lp - laneW * 0.5) - 0.8) * 3.2, 2.0)), 0.2, smoothstep(0.6, 2.5, fwX));
     wheel *= lanes >= 3.5 ? step(abs(xm), 6.4) : step(abs(xm), 3.6);
     // the traffic polishes the binder off the aggregate: the wheel paths are the paler bands of a lane
-    float wear = 1.0 + 0.16 * wheel * (1.0 - inBox);
+    float wear = 1.0 + 0.2 * wheel * (1.0 - inBox);
     // patch repairs: 5 x 3 m cells of the road frame, a few percent of them re-laid darker or bleached paler
     vec2 pc = floor(vec2(along / 5.0, (xm + hw) / 3.0));
     vec2 pf = fract(vec2(along / 5.0, (xm + hw) / 3.0));
     float ph = hash12(pc + cls * 13.0);
     float pin = aaStep(0.08, pf.x, fwA / 5.0) * aaStep(pf.x, 0.92, fwA / 5.0) * aaStep(0.1, pf.y, fwX / 3.0) * aaStep(pf.y, 0.9, fwX / 3.0);
     float repair = step(0.955, ph) * pin * (1.0 - smoothstep(0.4, 1.5, fp)) * (1.0 - inBox);
-    float patchTone = ph > 0.98 ? 1.18 : 0.78;
+    float patchTone = ph > 0.98 ? 1.3 : 0.7;
     // longitudinal paving seam at the lane edge and transverse seams every ~27 m
     float seam = mix(aaLine(min(lp, laneW - lp), 0.03, fwX), 0.0, smoothstep(0.3, 1.0, fwX)) * 0.5;
     float tseam = mix(aaLine((fract(along / 27.0) - 0.5) * 27.0, 0.03, fwA), 0.0, smoothstep(0.3, 1.0, fwA)) * step(0.4, hash11(floor(along / 27.0) + cls));
@@ -595,8 +614,10 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     // damp gutter stain along the kerbs
     float gutter = smoothstep(hw - 0.9, hw - 0.2, abs(xm)) * (1.0 - inBox);
     vec3 surf = asphalt * wear;
-    surf = mix(surf, asphalt * patchTone, repair * 0.85);
-    surf *= 1.0 - (0.18 * max(seam, tseam) + 0.35 * crack) * (1.0 - inBox) - 0.2 * gutter;
+    surf = mix(surf, asphalt * patchTone, repair * 0.9);
+    surf = mix(surf, asphalt * trenchTone, trench * 0.9);
+    // a cracked zone is also a shade darker as a whole (the cracks themselves are gone from the air)
+    surf *= 1.0 - (0.18 * max(seam, tseam) + 0.35 * crack + 0.07 * crackZone) * (1.0 - inBox) - 0.2 * gutter;
     surf *= 1.0 - 0.14 * smoothstep(0.6, 0.75, fbm3(wp * 0.04 + 8.0)) * (1.0 - inBox);
     // ---- markings, each box-filtered over the pixel footprint and faded out where they stop at junctions
     float wearM = 0.6 + 0.4 * smoothstep(0.3, 0.7, fbm3(wp * 0.35 + 11.0));
@@ -675,7 +696,7 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     // open aggregate is matte (no sky sheen at grazing angles); the wheel paths are polished, and fresh patches
     // and paint are smoother still
     roughnessFactor -= 0.1 * wheel * (1.0 - inBox);
-    roughnessFactor = mix(roughnessFactor, 0.72, max(whiteC, yellowC) * 0.6 + repair * 0.4);
+    roughnessFactor = mix(roughnessFactor, 0.72, max(whiteC, yellowC) * 0.6 + repair * 0.4 + trench * 0.3);
     roughnessFactor += 0.06 * n2 - 0.03;
   }
 }
