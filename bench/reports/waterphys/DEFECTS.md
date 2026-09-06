@@ -173,3 +173,70 @@ flat fast touch, the reversed heading after a nose-over (it ends on its back poi
 back keeps that), the slow flooding (10 s to the final list).
 
 Harness after: see flight_r4.json (queued behind the Chrome slot gate at the time of writing).
+
+## Round 4b — ditching matrix: the pictures (`/tmp/waterphys/r4`, dev chase view, 1280x720, medium)
+
+Frames at 0.3 s steps through each case (the machine was carrying 14 Chromes on 4 cores at the time: 5-8 s per
+simulated frame, so the matrix ran for an hour and a half in one held browser session).
+
+**wheels down** (30 m/s, gear forced down): the wheels bite at 0.7 s, the nose is under by 1.2 s (pitch -38) and the
+aircraft goes over its nose (pitch -83 at 1.5 s), lands on its back at 2 s pointing the other way, and is rolled
+back upright by 4.5 s among the remnant patches of the touchdown lane. Reads right as a sequence.
+
+1. **Touchdown spray** (f9, f12): two streaky, translucent curtains off the chines and a whitewater lane behind —
+   water now, not the r1 white airflow. The spray's dense root still starts white; a fresh sheet is a clear film
+   (fixed in r5 below).
+2. **Wing shadows read as dark blotches** beside the floats at touchdown (f9): the two curtains hide the inner half
+   of each wing's shadow on the water and what is left looks like a dark moustache. Physically right (the spray
+   does occlude the shadow), not a water defect; left.
+3. **A row of equal white dashes ~30 m ahead of the wreck** (f30, camera looking back over the touchdown point):
+   the near region's rim (the patch is 64 m, so the rim is 32 m out) crossing the touchdown splat's whitewater.
+   Diagnosis by geometry (camera 24.7 m back, 7.5 m up, look pitch -9.8 deg; the row is 35 px above centre, so
+   the ray meets the water 33 m ahead) and by the shader: in the mid map (0.39 m/texel) the splat's noise
+   frequency cap `fl = 0.2 / texel = 0.51` clamps both `n1` and `n2`, so the thresholded froth field was one
+   octave of value noise on a 2 m lattice: equal blobs in rows, which the plane's 5 m handover band toward that
+   map shows along the rim as dashes (the near map's grain is fine, the mid map's is a row of blobs; the
+   discontinuity is the seam). Fixed: three lattices turned against each other (0 / 20 / 50 deg) at three
+   frequencies, none finer than 5 texels (`wakes.ts`); and the patch's wake-height displacement now fades over the
+   outer 8 % of the region like the fragment's near-map slope so a ring or stern wave reaching the rim never
+   stands as a step against the flat plane (`water.ts`, 3 lines).
+4. **The inverted airframe falling flat raised two starbursts at the wing tips and nothing along the 15 m of wing
+   between** (nose f20, wheels f30): the wing stations are the tips, so a level wing slapping down was two point
+   splashes. Fixed: the impact record carries a wetted extent (from the tip toward the root, as far as the wing is
+   within `max(0.35, 0.3 sink)` m of the surface: the whole half span level, under a metre at 30 deg of bank; the
+   inverted cabin 2.5 m either way along the fuselage); the curtain, drops and mist are laid along it and thrown
+   out to either side of the line, and the splat is a band stretched along the wing (`physics.ts`, `effects.ts`).
+5. **The righted wreck sits near its waterline for the first seconds** (f45): the flooding takes ~10 s to reach its
+   target, as intended (a split hull fills over tens of seconds); the frames end at 4.5 s. The 6 s nose frame
+   shows it settling deep. Left.
+
+**wing tip** (30 m/s, 32 deg bank): the tip in at 0.6 s throws a swept-back plume with a whitewater lane (f6, good);
+the aircraft slews 145 deg in 2.5 s, skidding sideways on its floats (f12), rolls onto the other wing (f20-f30),
+stops listing to the left with the left float under (f45).
+
+6. **Skidding floats threw their spray off both chines as if running straight** (f12: the hull is moving at 20 m/s
+   nearly beam-on). Fixed: the bow spray follows the slip — past 15-40 deg of slip the emitters slide along the
+   upstream side of the hull and the water is thrown along the motion and up (the wall a hull pushes sliding
+   sideways), at 2.5 x the rate (`effects.ts`).
+7. **The wreck ended nearly level** (flood 0.64 / 0.60 at 4.5 s, targets 0.72 / 0.80): the numeric probe showed
+   the second wing entering at 24 m/s of *tip* speed (150 deg/s of yaw x 7.5 m on 17 m/s of airframe speed), so
+   the r4 speed scaling still flooded the second float. The flooding now scales with the airframe's CG speed (it
+   is the airframe's momentum through the struts that stoves in a hull): the wing-strike wreck ends 0.49 / 0.80,
+   listing 12 deg onto the struck side, 33 cm low (`physics.ts`).
+
+**nose first** (38 m/s, -14 deg): floats 0.6 s, nose under, through the vertical at 0.9 s, on its back at 1.2 s,
+slams inverted at 2 s (defect 4), rolled back by 4.5 s, settling deep (f60: floats awash, the list building).
+**flat, fast** (48 m/s, 60 %): a kiss at 0.6 s with two streaky fans off the steps and it flies on. Fine.
+
+Remaining, for later rounds: a hull sitting deep has no wet line or foam ring where its geometry cuts the
+surface (compositing / model hooks: see the report); the wreck at rest lies in glassy water within seconds (the
+churn should keep bubbling up around a flooding hull for a while).
+
+## Round 5 — splash vs spray vs mist
+
+1. **Every sheet was born opaque white.** A fresh sheet is a film of clear water: translucent and tinted by the sea
+   behind it, glinting, and it only whitens as it breaks into drops. The sheet fragment now mixes toward a
+   water tint at 55 % and cuts alpha by 45 % while `ageK < 0.1`, fading that film out by `ageK 0.45` (roughness
+   0.3 while it is a film), so a single sheet reads glassy and the stacked roots of many at the chine read white
+   (`effects.ts`, SprayCloud shader v5). Verification frames: `/tmp/waterphys/r5/sheets_f00[5-9]` (a dollying
+   camera 16 m abeam of the firm touchdown) and `water-landing` f25/30/35.
