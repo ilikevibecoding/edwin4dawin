@@ -11,3 +11,4 @@ merged facade3: 36450ce0 WIP City rooftop kit + street level: near-detail kinds 
 merged veg5: 031f8e49 Vegetation loop 6 WIP (round 7b, aerial canopy contrast; runtime verification pending): ca
 merged terrain5: 6e674330 Terrain: beach distance measured from the visible waterline (h = 0.05, where the water pla
 build: 953c687e from /home/ubuntu/wt-integration
+cdn: data.json still stale after 5 purges

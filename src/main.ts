@@ -55,6 +55,7 @@ async function boot(): Promise<void> {
     tag.textContent = `${params.bench} · seed ${params.seed} · ${window.__build}`;
     if (params.noHud) tag.classList.add('hidden');
     // render the frozen frame; the capture script drives further steps through window.__bench
+    if (params.fly > 0) bench.step(Math.round(params.fly / bench.fixedDt));
     const refreshHud = () => hud.update(game.aircraft.flight.telemetry, game.aircraft.inputs.throttle, game.flightCamera.mode, game.atmos.hour, 1 / 30);
     bench.onFrame = refreshHud; // flight stills and clips show live telemetry, not the frozen-frame values
     const frozenLoop = () => {

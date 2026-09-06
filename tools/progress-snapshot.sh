@@ -35,9 +35,26 @@ if [ "$SOURCE" = integration ]; then
     if [ "$(git merge-base "$ref" HEAD)" = "$(git rev-parse "$ref")" ]; then echo "skip $b: nothing new" >> "$NOTES"; continue; fi
     if ( cd "$INTEG" && git merge -q --no-edit "$ref" >/dev/null 2>&1 ); then
       echo "merged $b: $(git rev-parse --short "$ref") $(git log -1 --format=%s "$ref" | cut -c1-90)" >> "$NOTES"
+    elif [ -z "$(cd "$INTEG" && git diff --name-only --diff-filter=U)" ] && ( cd "$INTEG" && git commit -q --no-edit >/dev/null 2>&1 ); then
+      # rerere (enabled repo-wide, autoupdate) replayed a resolution the lead recorded for exactly these conflicts
+      echo "merged $b (recorded resolution): $(git rev-parse --short "$ref") $(git log -1 --format=%s "$ref" | cut -c1-90)" >> "$NOTES"
     else
       ( cd "$INTEG" && git merge --abort 2>/dev/null || true )
-      echo "skip $b: merge conflict" >> "$NOTES"
+      echo "skip $b: merge conflict in $(cd "$INTEG" && git diff --name-only --diff-filter=U 2>/dev/null | tr '\n' ' ')" >> "$NOTES"
+    fi
+  done
+  # cross-branch fixups (tools/integration-fixups/*.patch): semantic reconciliation a hunk merge cannot express,
+  # e.g. two branches both lighting the highway. A sidecar <name>.requires lists paths that must exist first.
+  for p in "$ROOT"/tools/integration-fixups/*.patch; do
+    [ -e "$p" ] || continue
+    ok=1
+    if [ -f "${p%.patch}.requires" ]; then while read -r req; do [ -n "$req" ] && [ ! -e "$INTEG/$req" ] && ok=0; done < "${p%.patch}.requires"; fi
+    [ $ok = 1 ] || { echo "fixup not needed: $(basename "$p")" >> "$NOTES"; continue; }
+    if ( cd "$INTEG" && git apply --3way "$p" >/dev/null 2>&1 && git commit -q -am "fixup: $(basename "$p")" >/dev/null 2>&1 ); then
+      echo "fixup applied: $(basename "$p")" >> "$NOTES"
+    else
+      ( cd "$INTEG" && git reset -q --hard HEAD )
+      echo "fixup skipped (does not apply): $(basename "$p")" >> "$NOTES"
     fi
   done
   ( cd "$INTEG" && [ -d node_modules ] || ln -s "$ROOT/node_modules" "$INTEG/node_modules" )
@@ -67,12 +84,14 @@ PROGRESS_VIEWS=(
   "aircraft_front|Aircraft, front three-quarter (cowl, propeller, floats)|aircraft|plane-front-quarter"
   "cockpit|Cockpit approaching downtown|aircraft|cockpit-city"
   "glass|Cockpit glass in direct sun|aircraft|glass-sun"
-  "water_landing|Firm water landing (float displacement, spray)|water|water-landing-firm"
+  "water_landing|Touchdown: floats 1.0 s after contact (displacement, spray, splash)|water|water-landing-firm&fly=1.0"
+  "water_step|Planing on the step 4 s after touchdown (wake, spray, hull foam)|water|water-landing-firm&fly=4"
   "harbor|Harbour: boats, wakes, marina|water|harbor"
   "island_pass|Low pass over the keys (shore, water colour)|water|island-pass"
   "skyline_high|Skyline from 1.2 km|city|skyline-high"
   "city_500m|Downtown from 500 m|city|dev&cam=-2500,500,-3500&hdg=-30&pch=-35&fov=50&time=14&weather=clear&plane=-1500,400,-2500,300,0,0,55,0.7"
-  "city_200m|Downtown from 200 m|city|dev&cam=-2650,205,-3750&hdg=-20&pch=-35&fov=50&time=14&weather=clear&plane=-1500,400,-2500,300,0,0,55,0.7"
+  "city_200m|Downtown and the bayfront from 200 m|city|dev&cam=-2000,180,-3300&hdg=-40&pch=-18&fov=55&time=14&weather=clear&plane=-1500,400,-2500,300,0,0,55,0.7"
+  "city_north|Downtown from its southern edge, 200 m|city|dev&cam=-2650,200,-3150&hdg=0&pch=-20&fov=55&time=14&weather=clear&plane=-1500,400,-2500,300,0,0,55,0.7"
   "street_2m|Street level, downtown avenue|city|dev&cam=-2737,6.9,-3880&hdg=0&pch=-3&fov=50&time=14&weather=clear&plane=-1500,400,-2500,300,0,0,55,0.7"
   "night|Downtown at night|city|night"
   "sunset|Sunset over the bay|sky|sunset"
@@ -140,19 +159,20 @@ if [ $PUBLISH = 1 ]; then
   git worktree add -q "$WORK" origin/gh-pages --detach
   mkdir -p "$WORK/progress"
   cp -r "$ROOT/progress/." "$WORK/progress/"
-  ( cd "$WORK" && git add -A progress && git -c user.name="$(git -C "$ROOT" config user.name)" -c user.email="$(git -C "$ROOT" config user.email)" commit -q -m "Progress page: snapshot $TAG (build $BUILD_SHA)" && git push -q origin HEAD:gh-pages ) || echo "publish: nothing to commit or push failed" >> "$NOTES"
-  git worktree remove --force "$WORK" 2>/dev/null || true
-  # the page reads data.json and the frames from jsDelivr, which caches branch files for 12 h: purge, then
-  # confirm the new tag is served (GitHub can lag the push by a few seconds)
-  CDN=https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@gh-pages/progress
-  for attempt in 1 2 3 4 5; do
-    curl -s -o /dev/null "https://purge.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@gh-pages/progress/data.json"
-    curl -s -o /dev/null "https://purge.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@gh-pages/progress/index.html"
+  GITC=(git -c "user.name=$(git -C "$ROOT" config user.name)" -c "user.email=$(git -C "$ROOT" config user.email)")
+  # commit 1: data + frames (+ the page template). The page loads data.json and the frames from jsDelivr pinned
+  # to this commit (branch URLs stayed stale for hours despite purges); commit 2 writes that pin into the page.
+  if ( cd "$WORK" && git add -A progress && "${GITC[@]}" commit -q -m "Progress page: snapshot $TAG (build $BUILD_SHA)" ); then
+    PIN="$(cd "$WORK" && git rev-parse HEAD)"
+    sed -i "s|const PIN = '__PIN__';|const PIN = '$PIN';|" "$WORK/progress/index.html"
+    ( cd "$WORK" && git add progress/index.html && "${GITC[@]}" commit -q -m "Progress page: pin data to ${PIN:0:12}" && git push -q origin HEAD:gh-pages ) || echo "publish: push failed" >> "$NOTES"
     sleep 5
-    if curl -s "$CDN/data.json" | grep -q "\"tag\": \"$TAG\""; then echo "cdn: data.json serves $TAG" >> "$NOTES"; break; fi
-    [ $attempt = 5 ] && echo "cdn: data.json still stale after 5 purges" >> "$NOTES"
-    sleep 20
-  done
+    if curl -s "https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@$PIN/progress/data.json" | grep -q "\"tag\": \"$TAG\""; then echo "cdn: pinned data.json serves $TAG" >> "$NOTES"; else echo "cdn: pinned data.json not yet served (GitHub lag?)" >> "$NOTES"; fi
+    curl -s -o /dev/null "https://purge.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@gh-pages/progress/index.html" || true
+  else
+    echo "publish: nothing to commit" >> "$NOTES"
+  fi
+  git worktree remove --force "$WORK" 2>/dev/null || true
   echo "published: https://raw.githack.com/ilikevibecoding/edwin4dawin/gh-pages/progress/index.html"
 fi
 cat "$NOTES"
