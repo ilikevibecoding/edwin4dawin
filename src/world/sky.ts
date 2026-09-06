@@ -250,26 +250,26 @@ float densityFull(vec3 q, vec4 n, float e, float hf, float hn, vec3 fade, float 
  *  would switch on and off as it crosses lobes and terrace the shading), and the rest of the column above the
  *  sample is added analytically (the flat base of a tall tower is shadowed by the whole tower). Seven fetches.
  *  A sample in the base zone under more than 400 m of column is in the shadow of the whole column: the lobes'
- *  self-shadowing is invisible there, so it takes two steps (48 m noised, 192 m smooth) and the remainder. */
+ *  self-shadowing is invisible there, so its short steps take the smooth envelope too (same steps, no noise
+ *  fetch; the first two need no fetch at all). Four fetches. */
 float lightOD(vec3 p, vec4 f0, vec3 L, float H, float hf) {
   float thick = uCloudTop - uCloudBase;
   float od = 0.0;
   float t = 0.0;
+  float s = 24.0;
   float last = 0.0;
   float bottom = slabBottom();
   bool deep = hf < 0.3 && (H - hf) * thick > 400.0;
-  float s = deep ? 48.0 : 24.0;
-  int n = deep ? 2 : 6;
   for (int i = 0; i < 6; i++) {
-    if (i >= n) break;
     vec3 q = p + L * (t + s * 0.5);
     if (q.y > uCloudTop + 1.0 || q.y < bottom) break;
-    if (i == 0 || (i == 1 && !deep)) last = densityBase(q, f0);
-    else if (i == 2 && !deep) last = densityBase(q, macroField(q.xz));
-    else { float qhf, qhn, qH; last = meanDensity(envelope(q, macroField(q.xz), qhf, qhn, qH), qhn); }
+    float qhf, qhn, qH;
+    if (i < 2) last = deep ? meanDensity(envelope(q, f0, qhf, qhn, qH), qhn) : densityBase(q, f0);
+    else if (i == 2) { vec4 fq = macroField(q.xz); last = deep ? meanDensity(envelope(q, fq, qhf, qhn, qH), qhn) : densityBase(q, fq); }
+    else last = meanDensity(envelope(q, macroField(q.xz), qhf, qhn, qH), qhn);
     od += last * s;
     t += s;
-    s *= deep ? 4.0 : 2.0;
+    s *= 2.0;
   }
   float rem = max((H - hf) * thick / max(L.y, 0.25) - t, 0.0);
   od += min(rem, 1200.0) * last * 0.5;
