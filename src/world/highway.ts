@@ -836,7 +836,12 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       }
       if (c.bridgeStart) rows.push({ s0: 0, s1: 62 });
       if (c.bridgeEnd) rows.push({ s0: c.total - 62, s1: c.total });
-      const runs = mergeRuns(rows, 45).map((r) => ({ s0: Math.max(1.0, r.s0), s1: Math.min(c.total - 1.0, r.s1) })).filter((r) => r.s1 - r.s0 > 20);
+      // open at the mouths of the roads that meet the highway on this side (crossings open both sides)
+      const mouths: Run[] = junctions.filter((j) => j.side === 0 || j.side === side).map((j) => ({ s0: j.s - (j.major ? 16 : 9), s1: j.s + (j.major ? 16 : 9) }));
+      const runs = mergeRuns(rows, 45)
+        .map((r) => ({ s0: Math.max(1.0, r.s0), s1: Math.min(c.total - 1.0, r.s1) }))
+        .flatMap((r) => subtractRuns(r, mouths))
+        .filter((r) => r.s1 - r.s0 > 20);
       railRuns.push({ side, runs });
       for (const run of runs) {
         counts.guardrailM += run.s1 - run.s0;
