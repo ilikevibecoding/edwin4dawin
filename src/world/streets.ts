@@ -49,10 +49,12 @@ const SIGNAL_HALF = SIGNAL_GREEN + SIGNAL_AMBER + SIGNAL_RED;
 
 /** sidewalk kinds carried in `aSw.z` */
 const K_WALK = 0, K_PROMENADE = 1, K_APRON = 3, K_PARAPET = 4, K_LOT = 5, K_PLAZA = 6, K_YARD = 7;
-/** parked cars, planters and benches of the plazas and lots are drawn within this range; beyond YARD_NEAR a car is
- *  its one-box far shape and a planter its shrub, at half the triangles (a car is 2–3 px at 300 m from the air) */
+/** parked cars, planters and benches of the plazas, lots and parking lanes are drawn within this range; beyond
+ *  YARD_NEAR (measured in three dimensions, so from 200 m up nothing is near) a car is its one-box far shape and a
+ *  planter its shrub, at half the triangles: a car is 10 x 4 px at 280 m from the air, 19 px long at 160 m from eye
+ *  level, and the cabin box tells nothing at that size */
 const YARD_FAR = 650;
-const YARD_NEAR = 300;
+const YARD_NEAR = 160;
 /** paving sits this far over the ground (the terrain mesh is coarser than heightAt at distance) */
 const PAVE_CLEAR = 0.08;
 
@@ -532,6 +534,21 @@ const C = {
 /** parked-car paints, weighted toward the whites, silvers and greys of a real lot */
 const CAR_PAINT = [0xe8e8e4, 0xdcdcd8, 0xb9bcc0, 0x9a9da2, 0x5a5d62, 0x2b2d31, 0x1a1a1d, 0xa8241c, 0x27406e, 0x2f5b3a, 0xc9b58a, 0x7a3b2a].map((c) => new THREE.Color(c));
 
+/** A parked car — body and cabin as two open boxes (20 triangles), or a van as one taller box with a dark glass band
+ *  (22) — in `soup`, with its far shape (one open box in the paint, 10) in `far`; the frame's +x is the length,
+ *  `cabinX` sets the cabin toward the nose (< 0) or the tail. */
+function parkedCar(soup: KitSoup, far: KitSoup, f: THREE.Matrix4, paint: THREE.Color, van: boolean, cabinX: number): void {
+  if (van) {
+    part(soup, UNIT.boxOpen, f, 0, 1.0, 0, 5.0, 1.6, 1.95, paint, 0.4, 0.5);
+    part(soup, UNIT.box, f, cabinX * 5, 1.2, 0, 1.2, 0.55, 1.97, C.glassDark, 0.3, 0.5);
+    part(far, UNIT.boxOpen, f, 0, 1.0, 0, 5.0, 1.6, 1.95, paint, 0.4, 0.5);
+  } else {
+    part(soup, UNIT.boxOpen, f, 0, 0.55, 0, 4.4, 0.7, 1.8, paint, 0.35, 0.6);
+    part(soup, UNIT.boxOpen, f, cabinX, 1.22, 0, 2.5, 0.62, 1.62, C.glassDark, 0.3, 0.5);
+    part(far, UNIT.boxOpen, f, 0, 0.7, 0, 4.4, 1.3, 1.8, paint, 0.4, 0.5);
+  }
+}
+
 // ------------------------------------------------------------------ the streets system
 
 interface StreetCell {
@@ -582,7 +599,7 @@ export class Streets {
   readonly uniforms = { uSignalTime: { value: 0 } as THREE.IUniform<number>, uNight: { value: 0 } as THREE.IUniform<number>, uFocalPx: { value: 1000 } as THREE.IUniform<number> };
   private readonly cells: StreetCell[] = [];
   private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup }>();
-  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
+  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
   private readonly roads: RoadIndex;
   /** debug: `?dbg=nopools` turns the lamp pools off */
   poolsEnabled = true;
@@ -870,12 +887,16 @@ export class Streets {
     const W = run.w;
     const dir = chainFrame(chain, (sa + sb) / 2);
     const runYaw = Math.atan2(-dir.dz, dir.dx);
+    /** curb lengths (s, half-length) kept free of parked cars: the bus stop at a shelter, a hydrant */
+    const keepClear: [number, number][] = [];
     const put = (kind: 'bench' | 'bin' | 'hydrant' | 'shelter' | 'cabinet', s: number, across: number) => {
       const q = at(s, across);
       if (!this.roads.clear(q.x, q.z, kind === 'shelter' ? 1.2 : 0.4)) { this.counts.rejected++; return; }
       const y = yAt(s);
       const faceYaw = yawToRoad(q.nx, q.nz);
       const soup = kind === 'shelter' ? soups.large : soups.small;
+      if (kind === 'shelter') keepClear.push([s, 10]);
+      if (kind === 'hydrant') keepClear.push([s, 2.8]);
       switch (kind) {
         case 'bench': {
           const f = frame(q.x, y, q.z, faceYaw);
@@ -931,11 +952,44 @@ export class Streets {
       if (hash2(Math.round(sa), chain.id, side + 13) < 0.45) put('hydrant', sa + L * (0.55 + 0.3 * h), 0.7);
       if (L > 60 && W >= 2.3 && hash2(Math.round(sa), chain.id, side + 14) < (arterial ? 0.3 : 0.16)) put('shelter', sa + L * 0.5, back + 0.35);
       if (W >= 2.3 && hash2(Math.round(sa), chain.id, side + 15) < 0.14) put('cabinet', sa + L * 0.85, back);
+      if (!arterial && chain.hw >= 5.5) this.parkCurb(run, keepClear, at);
     } else {
       if (hash2(Math.round(sa), chain.id, side + 13) < 0.3) put('hydrant', sa + L * (0.55 + 0.3 * h), 0.7);
       if (zone === Zone.PARK && h < 0.5) put('bench', sa + L * 0.5, back);
       if (zone === Zone.INDUSTRIAL && hash2(Math.round(sa), chain.id, side + 15) < 0.2) put('cabinet', sa + L * 0.8, back);
     }
+  }
+
+  /** Curbside parking along a dense-district street. The arterials' outer traffic lane runs 4.7 m out on an 8 m
+   *  half-width and leaves no room; a street's traffic drives 1.8 m from the centreline (world/traffic.ts), so a car
+   *  1.2 m in from the curb keeps 1.2-2.2 m clear of it. 6.2 m bays from 8 m past each corner, clear of the bus stops
+   *  and hydrants, three in five taken downtown and nine in twenty in the mid-rise rings, one car in six a van, the
+   *  nose with the traffic of its side. The cars go to the yard soup (drawn to YARD_FAR, one box past YARD_NEAR,
+   *  never a caster): from the air they are what tells a street from a lot's aisle, and at eye level they
+   *  fill the parking lane the ghost line marks. */
+  private parkCurb(run: Run, keepClear: [number, number][], at: (s: number, across: number) => { x: number; z: number; nx: number; nz: number }): void {
+    const { chain, side, sa, sb, zone } = run;
+    const L = sb - sa;
+    const occupancy = zone === Zone.DOWNTOWN ? 0.6 : 0.45;
+    const bays = Math.floor((L - 16) / 6.2);
+    if (bays < 1) return;
+    const s0 = sa + 8 + (L - 16 - bays * 6.2) / 2;
+    let n = 0;
+    for (let i = 0; i < bays; i++) {
+      const s = s0 + (i + 0.5) * 6.2;
+      const k = hash2(Math.round(chain.id * 13 + s * 2), side + 20, 21);
+      if (k > occupancy) continue;
+      if (keepClear.some(([cs, r]) => Math.abs(s - cs) < r + 2.6)) continue;
+      const q = at(s + (k / occupancy - 0.5) * 0.5, -1.2);
+      const { yard, yardFar } = this.soupsAt(q.x, q.z);
+      const y = roadEdgeY(chain, s, side) + 0.02;
+      // the cross vector is the right-hand normal of +s, so with right-hand traffic the nose points +s on side +1
+      const yaw = Math.atan2(q.nx * side, q.nz * side) + (hash2(i, Math.round(sa), side + 23) - 0.5) * 0.04;
+      const paint = CAR_PAINT[Math.floor(hash2(Math.round(s * 3), chain.id, side + 24) * CAR_PAINT.length) % CAR_PAINT.length];
+      parkedCar(yard, yardFar, frame(q.x, y, q.z, yaw), paint, hash2(Math.round(s * 5), chain.id, side + 25) < 0.16, -0.15);
+      n++;
+    }
+    this.counts.curbCars += n;
   }
 
   // ---------------------------------------------------------------- intersections
@@ -1318,10 +1372,7 @@ export class Streets {
           // nose away from the aisle; the body along v, so the frame's +x is turned to v (+u yaw - 90 deg)
           const f = frame(x, y, z, uYaw - Math.PI / 2 + (hash2(i, half, 9) - 0.5) * 0.06);
           const paint = CAR_PAINT[Math.floor(hash2(Math.round(u * 3), Math.round(vc * 3), 11) * CAR_PAINT.length) % CAR_PAINT.length];
-          part(soup, UNIT.boxOpen, f, 0, 0.55, 0, 4.4, 0.7, 1.8, paint, 0.35, 0.6);
-          part(soup, UNIT.boxOpen, f, half ? 0.2 : -0.2, 1.22, 0, 2.5, 0.62, 1.62, C.glassDark, 0.3, 0.5);
-          // far shape: one box in the paint, roof at cabin height
-          part(far, UNIT.boxOpen, f, 0, 0.7, 0, 4.4, 1.3, 1.8, paint, 0.4, 0.5);
+          parkedCar(soup, far, f, paint, hash2(Math.round(u * 5), Math.round(vc * 5), 13) < 0.12, half ? 0.2 : -0.2);
           n++;
         }
       }
@@ -1499,8 +1550,10 @@ export class Streets {
       // the small kit's range is measured in three dimensions: from 200 m up it is gone 220 m out
       const d3 = Math.hypot(d, Math.max(0, camPos.y - c.box.max.y));
       if (c.small) c.small.visible = inView && d3 < SMALL_FAR; // camera layer only (see flush)
-      if (c.yard) c.yard.visible = inView && (d < YARD_NEAR || !c.yardFar);
-      if (c.yardFar) c.yardFar.visible = inView && d >= YARD_NEAR && d < YARD_FAR;
+      // the yard's near shapes are for eye level: measured in three dimensions, from 200 m up every car is its far box
+      const yardNear = d3 < YARD_NEAR || !c.yardFar;
+      if (c.yard) c.yard.visible = inView && yardNear && d < YARD_FAR;
+      if (c.yardFar) c.yardFar.visible = inView && !yardNear && d < YARD_FAR;
     }
   }
 
