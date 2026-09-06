@@ -562,9 +562,12 @@ const ROAD_FRAG_MAIN = /* glsl */ `
     // junction: no lines, no lane-locked wear, so the two overlapping carriageways shade identically
     float inBox = fBox * (1.0 - aaStep(0.0, a, fwA));
     // ---- surface: tyre paths, patch repairs, seams, cracks (all band-limited to the pixel footprint)
-    float laneW = lanes >= 3.5 ? (hw - 0.7) / 2.0 : hw;
-    float lp = lanes >= 3.5 ? mod(abs(xm) - 0.25 + laneW, laneW) : mod(xm + hw, laneW);
-    float wheel = mix(exp(-pow((abs(lp - laneW * 0.5) - laneW * 0.27) * 3.2, 2.0)), 0.2, smoothstep(0.6, 2.5, fwX));
+    // lanes as the traffic drives them (traffic.ts): arterials 1.5 and 4.7 m from the centre at a 3.2 m pitch, streets
+    // 1.8 m with a parking lane outside 3.6 m
+    float laneW = lanes >= 3.5 ? 3.2 : 3.4;
+    float lp = lanes >= 3.5 ? mod(abs(xm) + 0.1, laneW) : mod(abs(xm) - 0.1 + laneW, laneW);
+    float wheel = mix(exp(-pow((abs(lp - laneW * 0.5) - 0.8) * 3.2, 2.0)), 0.2, smoothstep(0.6, 2.5, fwX));
+    wheel *= lanes >= 3.5 ? step(abs(xm), 6.4) : step(abs(xm), 3.6);
     float wear = 1.0 - 0.13 * wheel * (1.0 - inBox);
     // patch repairs: 5 x 3 m cells of the road frame, a few percent of them re-laid darker or bleached paler
     vec2 pc = floor(vec2(along / 5.0, (xm + hw) / 3.0));
@@ -600,13 +603,13 @@ const ROAD_FRAG_MAIN = /* glsl */ `
       // divided arterial: double yellow centre, dashed white lane line, solid white edge line
       float dbl = aaLine(abs(xm) - 0.2, 0.06, fwX);
       yellowC = dbl * lineOK;
-      float laneLine = aaLine(abs(xm) - (0.25 + laneW), 0.06, fwX) * dashPulse * lineOK;
-      float edgeLine = aaLine(abs(xm) - (hw - 0.45), 0.06, fwX) * edgeOK;
+      float laneLine = aaLine(abs(xm) - 3.1, 0.06, fwX) * dashPulse * lineOK;
+      float edgeLine = aaLine(abs(xm) - min(6.35, hw - 0.45), 0.06, fwX) * edgeOK;
       whiteC = max(laneLine, edgeLine);
     } else if (width >= 11.5) {
-      // dense-district street: solid double yellow and a white edge line (parking lane)
+      // dense-district street: solid double yellow and the white line of the parking lane
       yellowC = aaLine(abs(xm) - 0.2, 0.06, fwX) * lineOK;
-      whiteC = aaLine(abs(xm) - (hw - 0.45), 0.06, fwX) * edgeOK;
+      whiteC = aaLine(abs(xm) - 3.6, 0.06, fwX) * edgeOK;
     } else {
       // local street: a dashed yellow centre only
       yellowC = aaLine(xm, 0.07, fwX) * dashPulse * lineOK;
@@ -625,7 +628,7 @@ const ROAD_FRAG_MAIN = /* glsl */ `
       // lane arrows on the approach lanes of arterials, 8-12 m before the stop bar
       if (fArrows > 0.5 && lanes >= 3.5) {
         float u = 11.5 - a;
-        float lane0 = 0.25 + laneW * 0.5, lane1 = 0.25 + laneW * 1.5;
+        float lane0 = 1.5, lane1 = 4.7;
         float v0 = (abs(xm) - lane0), v1 = (abs(xm) - lane1);
         float fwArrow = max(fwX, fwA);
         float arrows = max(arrowLeft(vec2(u, v0), fwArrow), arrowStraight(vec2(u, v1), fwArrow)) * appr * (1.0 - smoothstep(0.25, 0.7, fp));
