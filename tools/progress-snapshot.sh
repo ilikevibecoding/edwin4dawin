@@ -142,6 +142,17 @@ if [ $PUBLISH = 1 ]; then
   cp -r "$ROOT/progress/." "$WORK/progress/"
   ( cd "$WORK" && git add -A progress && git -c user.name="$(git -C "$ROOT" config user.name)" -c user.email="$(git -C "$ROOT" config user.email)" commit -q -m "Progress page: snapshot $TAG (build $BUILD_SHA)" && git push -q origin HEAD:gh-pages ) || echo "publish: nothing to commit or push failed" >> "$NOTES"
   git worktree remove --force "$WORK" 2>/dev/null || true
+  # the page reads data.json and the frames from jsDelivr, which caches branch files for 12 h: purge, then
+  # confirm the new tag is served (GitHub can lag the push by a few seconds)
+  CDN=https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@gh-pages/progress
+  for attempt in 1 2 3 4 5; do
+    curl -s -o /dev/null "https://purge.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@gh-pages/progress/data.json"
+    curl -s -o /dev/null "https://purge.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@gh-pages/progress/index.html"
+    sleep 5
+    if curl -s "$CDN/data.json" | grep -q "\"tag\": \"$TAG\""; then echo "cdn: data.json serves $TAG" >> "$NOTES"; break; fi
+    [ $attempt = 5 ] && echo "cdn: data.json still stale after 5 purges" >> "$NOTES"
+    sleep 20
+  done
   echo "published: https://raw.githack.com/ilikevibecoding/edwin4dawin/gh-pages/progress/index.html"
 fi
 cat "$NOTES"
