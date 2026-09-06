@@ -322,33 +322,35 @@ const upperFrame = (secs, s, tb, zr) =>
 const lowerFrame = (secs, s, tb, zr) =>
   wallFrame(secs, s, EDGE.lowerR, EDGE.lowerL, tb, zr);
 
-// superstructure tiers, neck and head (zr, metres). Tier 1 has a long shallow front ramp from the deck.
-const RAMP_FOOT = 450;
+// superstructure tiers, neck and head (zr, metres; hx0/hx1 are the half-widths at the base and the top).
+// Tier 1 is a long low block, 27 % of the stern width (the deck wings stay open outboard of it), with a
+// shallow front ramp from the deck at ~51 % of the length; tier 2 is a short pedestal under the neck.
+const RAMP_FOOT = 378;
 const T1 = {
   y0: 30,
   y1: 60,
-  hx0: 92,
-  hx1: 78,
+  hx0: 62,
+  hx1: 56,
   z0: RAMP_FOOT,
   z1: 702,
-  zf: 70,
+  zf: 57,
   zb: 12,
 };
 const T2 = {
   y0: 59,
-  y1: 78,
-  hx0: 58,
-  hx1: 50,
-  z0: 532,
-  z1: 672,
-  zf: 16,
+  y1: 75,
+  hx0: 40,
+  hx1: 34,
+  z0: 536,
+  z1: 640,
+  zf: 14,
   zb: 10,
 };
-// neck: a broad slab (38 m fore-aft at the base) leaning ~15 degrees toward the bow; its top sits under
-// the head ~60 % of the way back from the head's nose
+// neck: a slab (38 m fore-aft at the base) leaning ~15 degrees toward the bow; its top sits under the
+// head ~60 % of the way back from the head's nose
 const NECK = {
-  y0: 77,
-  y1: 107,
+  y0: 74,
+  y1: 104,
   hx0: 15,
   hx1: 12,
   z0: 549,
@@ -356,9 +358,21 @@ const NECK = {
   zf: -9,
   zb: 13,
 };
-const HEAD = { y0: 106, y1: 120 };
-const STEM = { hx0: 15, hx1: 12, z0: 492, z1: 600 };
-const BAR = { hx0: 36, hx1: 33, z0: 561, z1: 598 };
+// fairing: the film model's long wedge in front of the neck, from just under the head down to tier 1's
+// top at ~21 degrees (its rear is buried in the neck and tier 2)
+const FAIRING = {
+  y0: 59.5,
+  y1: 100,
+  hx0: 19,
+  hx1: 13,
+  z0: 438,
+  z1: 575,
+  zf: 103,
+  zb: 0,
+};
+const HEAD = { y0: 103, y1: 120 };
+const STEM = { hx0: 15, hx1: 12, z0: 492, z1: 614 };
+const BAR = { hx0: 36, hx1: 33, z0: 566, z1: 610 };
 const Z_DOME = STEM.z0 + 88; // sensor dome and mast on the head's aft top
 const tierBlock = (T, opts) =>
   frustum(T.y0, T.y1, T.hx0, Z(T.z0), Z(T.z1), T.hx1, T.zf, T.zb, opts);
@@ -569,6 +583,7 @@ function buildLod(lod) {
     add(tierBlock(T1), "hull", { color: BLOCK });
     add(tierBlock(T2), "hull", { color: mulColor(BLOCK, 1.03) });
     add(tierBlock(NECK), "hull", { color: mulColor(BLOCK, 0.95) });
+    add(tierBlock(FAIRING), "hull", { color: mulColor(BLOCK, 0.98) });
     // head: long stem (fore-aft, narrowing toward the nose) and the athwartships crossbar over the neck
     {
       const stemPts = (hxN, hxB, z0, z1, c) => [
@@ -640,10 +655,10 @@ function buildLod(lod) {
       "hull",
       { color: mulColor(DECK_LIGHT, 0.95), texel: 1 / 6 },
     );
-    // maroon panel at the foot of the ramp where the spine ends (the spine's width, up a third of the ramp)
+    // maroon panel up the ramp where the spine ends (the spine's width, nearly the full ramp height)
     {
       const yA = yTop(RAMP_FOOT) + 0.4;
-      const yB = yA + 14;
+      const yB = T1.y1 - 1.2;
       const n = frontNormal(T1);
       const c = [0, (yA + yB) / 2, (frontZ(T1, yA) + frontZ(T1, yB)) / 2];
       const h = Math.hypot(yB - yA, frontZ(T1, yB) - frontZ(T1, yA));
