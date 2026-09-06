@@ -995,6 +995,33 @@ export function buildTowers(ctx) {
               texel: 1 / 6,
             },
           );
+      // rear face (visible above the aft terraces): a seam and two dark window slots like the front
+      {
+        const rearFrame = (f, dx = 0) => ({
+          p: new THREE.Vector3(
+            cx + dx,
+            T.y0 + shaftH * f,
+            Z(T.zFront + T.depth + T.lean * f),
+          ),
+          n: new THREE.Vector3(0, -shaftN.y, -shaftN.z),
+          u: new THREE.Vector3(1, 0, 0),
+          v: shaftV,
+        });
+        add(faceBox(rearFrame(0.5), T.hx * 2 - 1.2, 0.7, 0.2, 0.05), "dark", {
+          color: DARK_SEAM,
+          texel: 1 / 4,
+        });
+        if (fine)
+          for (const [f, dx] of [
+            [0.3, -0.35],
+            [0.7, 0.3],
+          ])
+            add(
+              faceBox(rearFrame(f, dx * T.hx), T.hx * 0.8, 2.6, 0.5, -0.55),
+              "hull",
+              { color: GREY_RECESS, texel: 1 / 6 },
+            );
+      }
       // sides (outer and inner): plain, with three dark vertical slots near the top and two subtle
       // horizontal seams — no light stripes
       for (const sx of [-1, 1]) {
