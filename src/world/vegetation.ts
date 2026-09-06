@@ -212,8 +212,8 @@ function leafClusterTexture(rng: Rng): THREE.CanvasTexture {
       // needle tufts: bottle-brushes of many short fine needles about the twig ends, the twigs radiating
       // from the tile's centre and each tuft's needles fanned about its twig (five bunches of 26 long 2 px
       // spokes read as flat starbursts at 5-10 m); the tuft's tip half brighter than its base
-      for (let b = 0; b < 9; b++) {
-        const twig = rng.range(0, Math.PI * 2), reach = rng.range(0.05, 0.26);
+      for (let b = 0; b < 10; b++) {
+        const twig = rng.range(0, Math.PI * 2), reach = b < 2 ? rng.range(0, 0.08) : rng.range(0.1, 0.26);
         const bx = 0.5 + Math.cos(twig) * reach, by = 0.5 + Math.sin(twig) * reach;
         const dir = twig + rng.range(-0.5, 0.5);
         ctx.lineWidth = 1.2;
