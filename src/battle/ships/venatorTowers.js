@@ -714,6 +714,22 @@ export function buildTowers(ctx) {
       n.normalize();
       const top = Math.min(y0, y1);
       const frameAt = (a, b) => ({ p: at(a / len, b), n, u, v });
+      // a lit window row along the wall of each tread, a little above mid-height
+      if (y0 === y1 && len > 14)
+        add(
+          quadFacing(
+            frameAt(len / 2, yDeck + (top - yDeck) * 0.62)
+              .p.addScaledVector(n, 0.3)
+              .toArray(),
+            n.toArray(),
+            v.toArray(),
+            len - 8,
+            1.3,
+          ),
+          "windows",
+          { color: ROW_WARM, uv: "keep" },
+        );
+      if (!fine) return;
       const cells = staggered(
         rand,
         { u0: 2, u1: len - 2, v0: yDeck + 2, v1: top - 1.5 },
@@ -807,7 +823,7 @@ export function buildTowers(ctx) {
       } else if (fine) {
         treadField(z0, z1, Math.min(hx0, hx1), y0, (z0 + z1) / 2);
       }
-      if (fine) for (const sx of [-1, 1]) wallField(seg, sx);
+      for (const sx of [-1, 1]) wallField(seg, sx);
     }
     // foot face relief: seams and raised plates on the lintel and the posts
     if (fine) {
