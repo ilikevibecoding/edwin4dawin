@@ -183,6 +183,7 @@ export class Game {
     this.reflection.exclude(this.water.mesh, this.water.patch, this.sky.dome);
     this.reflection.excludeChildrenWhen(this.terrain.group, (ring) => boundsRadius(ring) > reflRange * 1.2);
     this.water.attachReflection(this.reflection.uniforms);
+    this.water.attachAtmosphere(this.atmos.uniforms);
 
     await this.tick(progress, 'Laying out streets', 0.4);
     const network = buildRoadNetwork(this.map);

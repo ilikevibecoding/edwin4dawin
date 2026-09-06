@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { GLSL_NOISE } from '../render/shaders/common.glsl';
+import { GLSL_ATMOS_UNIFORMS, GLSL_NOISE, GLSL_SKY } from '../render/shaders/common.glsl';
 import { createReflectionUniforms, type ReflectionUniforms } from '../render/reflection';
 import { WAKE_HEIGHT_SCALE } from '../render/wakes';
 import { SWELL_DISPLACEMENT } from './waves';
@@ -152,6 +152,33 @@ uniform mat4 directionalShadowMatrix[ NUM_DIR_LIGHT_SHADOWS ]; // the vertex sta
 #endif
 varying vec3 vWorldPos;
 ${GLSL_NOISE}
+${GLSL_ATMOS_UNIFORMS}
+${GLSL_SKY}
+// Radiance of the dome along the reflected lobe. The very function the sky dome and the aerial perspective draw
+// (skyRadiance) is evaluated here, so the water mirrors the sky the player sees: the same blue overhead, the same
+// horizon band, the same aureole and sunset colours, the same city glow at night. (The environment probe used
+// before is blended toward a neutral haze/ground fill for the diffuse IBL; as a mirror it was a warm grey low
+// over the horizon, and the chroma boost that tried to undo that turned every low sun into a brown-orange band.)
+// The unresolved facets tilt the reflected ray by twice their slope; the elevation spread (rms sqrt(2 mss) along
+// the view azimuth) is integrated with a three-point Gauss-Hermite rule, which is what blurs the horizon band
+// into rough water. Rays sent below the horizon meet the next wave and show the sky just above it. The sun disc
+// is not part of this term: the glitter is its reflection.
+vec3 skyReflection(vec3 R, float mss) {
+  float hl = length(R.xz);
+  vec2 az = hl > 1e-4 ? R.xz / hl : vec2(1.0, 0.0);
+  float el = atan(R.y, hl);
+  float d = 1.7320508 * sqrt(2.0 * mss);
+  float e0 = max(el, 0.008), e1 = max(el - d, 0.008), e2 = el + d;
+  vec3 c = skyRadiance(vec3(az.x * cos(e0), sin(e0), az.y * cos(e0))) * 0.6667
+         + skyRadiance(vec3(az.x * cos(e1), sin(e1), az.y * cos(e1))) * 0.1667
+         + skyRadiance(vec3(az.x * cos(e2), sin(e2), az.y * cos(e2))) * 0.1667;
+  // an overcast deck is not in the analytic dome (the visible clouds are raymarched): its grey underside is
+  // mirrored as the same soft band the environment probe carries for the IBL, brightest under a closed ceiling
+  float deck = smoothstep(0.45, 0.75, uCloudCoverage);
+  float cov = smoothstep(0.2, 0.95, uCloudCoverage) * 0.7 + deck * 0.25;
+  vec3 cloudCol = vec3(dot(uHorizonColor, vec3(0.2126, 0.7152, 0.0722))) * mix(1.15, 1.9, deck);
+  return mix(c, cloudCol, cov * smoothstep(0.0, 0.3, e0));
+}
 float terrainHeightW(vec2 wp) {
   vec2 uv = (wp + vec2(uWorldSize * 0.5)) / uWorldSize;
   return texture2D(uHeightTex, uv).r;
@@ -236,10 +263,11 @@ float slopePdfPeaked(vec2 sh, vec2 va, float st, float mss) {
 // the water along the light's azimuth; the cells are stretched along that (world-fixed) azimuth by the
 // same factor so a glint stays a few pixels in both screen directions instead of a wide horizontal blob.
 // dx, dy: world-space extent of the pixel (screen derivatives of the surface position). The result is
-// capped so no pixel outshines the sun path by more than a few times (bloom stays a soft halo on the path
-// and never bleeds over geometry next to it).
-const float SPARK_SHARE = 0.42;
-const float GLITTER_CAP = 6.0;
+// capped (in units of the sun irradiance) so no pixel outshines the sun path by more than a few times: past
+// 2.5 x E the tonemapper has long gone to white anyway, and the cap only bounds the bloom energy the path and
+// its glints feed (bloom stays a soft halo on the path and never bleeds over geometry next to it).
+const float SPARK_SHARE = 0.5;
+const float GLITTER_CAP = 2.5;
 float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, float t) {
   float NdotL = dot(N, L);
   float NdotV = dot(N, V);
@@ -694,21 +722,8 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   vec3 Ebody = reflectedLight.indirectDiffuse + mix(reflectedLight.directDiffuse, unsh, volumeLeak);
   float rSky = clamp(pow(wMss, 0.25), 0.05, 1.0);
   vec3 Rdir = reflect(-wV, wN);
-  // rays reflected toward the sea are caught by the next wave and end up showing the sky just above the horizon
-  Rdir.y = max(Rdir.y, 0.02 + 0.08 * rSky);
-  Rdir = normalize(Rdir);
-  vec3 sky;
-  #if defined( USE_ENVMAP ) && defined( ENVMAP_TYPE_CUBE_UV )
-    sky = textureCubeUV(envMap, Rdir, rSky).rgb;
-  #else
-    sky = vec3(0.45, 0.6, 0.8);
-  #endif
-  // The environment probe is blended toward a neutral haze/ground fill for the diffuse IBL (sky.ts), so as a
-  // mirror it is greyer and brighter than the visible dome, most of all low above the horizon where the water
-  // reflects it at grazing angles. Restore the dome's chroma and radiance there (nothing at the zenith).
-  float whitening = 0.65 * pow(1.0 - clamp(Rdir.y, 0.0, 1.0), 0.3);
-  float lum = dot(sky, vec3(0.2126, 0.7152, 0.0722));
-  sky = max(lum * (1.0 - 0.18 * whitening) + (sky - lum) * (1.0 + 2.2 * whitening), vec3(0.0));
+  // the dome's radiance along the reflected lobe (see skyReflection: the analytic sky the dome itself draws)
+  vec3 sky = skyReflection(Rdir, wMss);
   // the mirrored scene (aircraft, shore, piers, city) replaces the sky where the reflected ray meets an object
   if (uReflParams.x > 0.5) {
     vec4 refl = sceneReflection(vWorldPos, wV, wN, wMss, wDist);
@@ -724,9 +739,12 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   float shade = 1.0 - shadow;
   float bodyLum = dot(body, vec3(0.2126, 0.7152, 0.0722));
   body = mix(body, vec3(bodyLum) * vec3(0.9, 0.97, 1.08), 0.22 * shade);
-  // the CSM sun now carries physical irradiance (x6); the glitter BRDF was tuned for the old scale. The glitter is
-  // shadowed at the surface, whose shadow is not the wobbling volume shadow looked up above: it only follows it in part
-  vec3 glitter = sunCol * 0.25 * mix(1.0, shadow, 0.7) * sunGlitter(wN, wV, uSunDirW, wMss, vWorldPos.xz, wDx, wDy, uWaveTime);
+  // Sun glitter radiance = irradiance x (microfacet BRDF x NdotL), with the CSM sun's physical irradiance and no
+  // scale factor: the path's core must outshine sunlit white (it is the image of the sun), so the tonemapper takes
+  // it to white and only the outer fall-off keeps the sun's hue. (A 0.25 scale left the path a mid-tone: over the
+  // dark body a mid-tone orange is exactly the brown glaze of every low-sun view.) The glitter is shadowed at the
+  // surface, whose shadow is not the wobbling volume shadow looked up above: it only follows it in part
+  vec3 glitter = sunCol * mix(1.0, shadow, 0.7) * sunGlitter(wN, wV, uSunDirW, wMss, vWorldPos.xz, wDx, wDy, uWaveTime);
   vec3 col = mix(body, sky, F) + glitter * (1.0 - wFoam);
   vec3 foamCol = vec3(0.9, 0.91, 0.91) * Ediff;
   col = mix(col, foamCol, wFoam);
@@ -754,6 +772,8 @@ export class Water {
   readonly patchMaterial: THREE.MeshStandardMaterial;
   private readonly offset = { value: new THREE.Vector3() };
   readonly uniforms: Record<string, THREE.IUniform>;
+  /** the atmosphere's shared uniforms (sky colours, sun, haze, cloud cover): the sky reflection is the analytic dome */
+  private atmosUniforms: Record<string, THREE.IUniform> = {};
 
   constructor(textures: MapTextures, wakeTex: THREE.Texture, wakeNearTex: THREE.Texture = wakeTex, wakeHeightTex: THREE.Texture = wakeTex, wakeHeightTexel = 0.125) {
     this.uniforms = {
@@ -806,7 +826,7 @@ export class Water {
     const prev = mat.onBeforeCompile;
     mat.onBeforeCompile = (shader, renderer) => {
       prev?.(shader, renderer);
-      Object.assign(shader.uniforms, uniforms);
+      Object.assign(shader.uniforms, this.atmosUniforms, uniforms);
       const define = patch ? '#define WATER_PATCH\n' : '';
       shader.vertexShader = define + shader.vertexShader
         .replace('#include <common>', `#include <common>\n${WATER_VERT_PARS}`)
@@ -824,7 +844,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v7-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v8-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 
@@ -838,6 +858,13 @@ export class Water {
    *  objects keeps the material current whether or not it has already been compiled. */
   attachReflection(u: ReflectionUniforms): void {
     for (const k of Object.keys(u) as (keyof ReflectionUniforms)[]) this.uniforms[k].value = u[k].value;
+  }
+
+  /** Share the atmosphere's uniforms (the sky the water mirrors). Must be called before the first render. */
+  attachAtmosphere(u: Record<string, THREE.IUniform>): void {
+    this.atmosUniforms = u;
+    this.material.needsUpdate = true;
+    this.patchMaterial.needsUpdate = true;
   }
 
   update(camX: number, camZ: number, time: number, windSpeed: number, windDir: THREE.Vector2, sunDir: THREE.Vector3, wakeCenter: THREE.Vector2, wakeSize: number, wakeNearCenter?: THREE.Vector2, wakeNearSize = 0): void {
