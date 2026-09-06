@@ -355,6 +355,26 @@ try {
   })()`);
   log('  hop off', JSON.stringify(off));
   check('hop-off: stepped out onto the platform while rolling, alive and off the train', off.left >= 0 && !off.riding && off.z >= ROUTE.platformZ0 - 0.4 && !off.dead, `z ${off.z} y ${off.y} hp ${off.hp}`);
+
+  // ------------------------------------------------------------------ 8. doppler pass-by (standing beside the track)
+  log('\n== Doppler pass-by ==');
+  // hover over the walkway ahead of the accelerating train (its chunks may not be streamed in yet) and listen in
+  // real time while the hull passes: the hum pitch rises on approach, drops after, the whoosh fires at the pass
+  const passby = await ev(`(async () => {
+    const t = __t.train(), p = game.player, a = t.trainAudio;
+    const x = t.state.x0 + ${TRAIN_LENGTH} + 45;
+    p.flying = true; p.teleport(x, ${floorY + 0.5}, ${ROUTE.platformZ0 + 1.5}); p.yaw = 0;
+    game.audio.resume(); __t.play();
+    const w0 = a.stats.whooshes; let maxD = 0, minD = 9, samples = 0; const t0 = performance.now();
+    while (performance.now() - t0 < 20000) {
+      await __t.wait(80); samples++;
+      const d = a.stats.doppler; if (d > maxD) maxD = d; if (d < minD) minD = d;
+      if (t.state.x0 > x + 3) break;   // the whole hull is past
+    }
+    return { whooshes: a.stats.whooshes - w0, maxD: +maxD.toFixed(3), minD: +minD.toFixed(3), samples, v: +t.state.v.toFixed(1), hum: a.stats.hum, listenerX: x, x0: +t.state.x0.toFixed(1) };
+  })()`);
+  log('  pass-by', JSON.stringify(passby));
+  check('doppler: hum pitched up on approach and down after the pass, whoosh on the pass-by', passby.whooshes >= 1 && passby.maxD > 1.05 && passby.minD < 0.95, `whooshes ${passby.whooshes}, doppler ${passby.minD}..${passby.maxD} at v ${passby.v}`);
   const errs = page.exceptions;
   check('no page exceptions during the run', errs.length === 0, errs.slice(0, 2).join(' | '));
 } catch (e) {

@@ -40,17 +40,19 @@ export class TrainAudio {
         audio.loopStart('trainWind', { kind: 'noise', filter: 'lowpass', cutoff: 200, q: 0.6, gain: 0 });
         this.on = true;
       }
-      // doppler for a standing listener: radial speed of the nearest hull point toward the listener
+      // doppler for a standing listener: radial speed of the nearest hull point toward the listener (neutral while
+      // the hull is alongside)
       let doppler = 1;
       const ahead = Math.sign(L.x - n.x);   // +1: listener east of the hull, -1: west, 0: alongside
       if (!riding && ahead !== 0 && Math.abs(v) > 0.5) {
         const vr = v * ahead;               // > 0 approaching
         doppler = Math.max(0.72, Math.min(1.38, SPEED_OF_SOUND / (SPEED_OF_SOUND - vr)));
-        // the hull front just passed the listener at speed: a whoosh sweeping down
-        if (this.lastAhead !== 0 && ahead !== this.lastAhead && Math.abs(v) > 6 && g > 0.15) {
-          audio.noise(0.9, 'bandpass', 700 + 400 * f, 0.9, 0.45 * g, n, RANGE, 0.12, 180);
-          this.stats.whooshes++;
-        }
+      }
+      // the hull front just reached the listener at speed (ahead flips away from its approach sign): a whoosh
+      // sweeping down
+      if (!riding && this.lastAhead !== 0 && ahead !== this.lastAhead && Math.abs(v) > 6 && g > 0.15) {
+        audio.noise(0.9, 'bandpass', 700 + 400 * f, 0.9, 0.45 * g, n, RANGE, 0.12, 180);
+        this.stats.whooshes++;
       }
       this.lastAhead = riding ? 0 : ahead;
       const inside = riding ? 0.65 : 1;    // the hull damps the hum for passengers
