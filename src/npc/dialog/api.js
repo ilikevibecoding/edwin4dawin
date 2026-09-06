@@ -211,7 +211,8 @@ export class DialogAPI {
   // ---------------------------------------------------------------------------------------------------- selection
   // ctx may be a partial: { trigger } | { cats: [...] } | { ambient: true } | { poke: true } plus overrides. Returns
   // the best eligible line: filter by trigger/category, eligibility, cooldown and the last HISTORY heard lines; then
-  // priority, then a deterministic hash of (line id, how many times this person has spoken).
+  // priority, then specificity (a line conditioned on the current state - a Senate result, a shortage, a ship on the
+  // pad - beats one that fits any day), then a deterministic hash of (line id, how many times this person has spoken).
   lineFor(npcOrPp, partial = {}) {
     const pp = this.resolve(npcOrPp);
     if (!pp) return null;
@@ -225,7 +226,8 @@ export class DialogAPI {
     if (partial.poke === undefined) cands = cands.filter((l) => !(l.when && l.when.poke));
     const elig = cands.filter((l) => eligible(l, ctx));
     const step = pp.history.talks * 7 + (pp.saidCount | 0);
-    const rank = (list) => list.slice().sort((a, b) => b.priority - a.priority || hash2(step, a.id.length * 31 + a.id.charCodeAt(a.id.length - 1), pp.seed & 0xffff) - hash2(step, b.id.length * 31 + b.id.charCodeAt(b.id.length - 1), pp.seed & 0xffff));
+    const salt = (l) => hash2(step, l.id.length * 31 + l.id.charCodeAt(l.id.length - 1), pp.seed & 0xffff);
+    const rank = (list) => list.slice().sort((a, b) => b.priority - a.priority || specificity(b) - specificity(a) || salt(a) - salt(b));
     const fresh = elig.filter((l) => !pp.recent.includes(l.id) && !this.onCooldown(l));
     if (fresh.length) return rank(fresh)[0];
     const notRecent = elig.filter((l) => !pp.recent.includes(l.id));
@@ -290,3 +292,5 @@ export class DialogAPI {
 
 function safe(fn) { try { return fn(); } catch (e) { return undefined; } }
 function push(arr, v) { if (!arr.includes(v)) arr.push(v); }
+// how many facts of the current state a line is conditioned on (`role` is a composition-time filter, not state)
+function specificity(line) { const w = line.when; if (!w) return 0; let n = 0; for (const k in w) if (k !== 'role') n++; return n; }

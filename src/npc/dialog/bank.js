@@ -240,7 +240,7 @@ export function buildFills(pp, world) {
 }
 function hourWord(h) { h = ((h % 24) + 24) % 24; if (h === 0) return 'midnight'; if (h === 12) return 'noon'; return h < 12 ? `${h} in the morning` : `${h - 12} in the ${h < 18 ? 'afternoon' : 'evening'}`; }
 
-const LIVE_TOKENS = new Set(['price', 'price2', 'stockQty', 'senateScenario', 'disaster', 'jobTitle', 'shipName', 'shipDest']);
+export const LIVE_TOKENS = new Set(['price', 'price2', 'stockQty', 'senateScenario', 'disaster', 'jobTitle', 'shipName', 'shipDest']);
 export function fillStatic(text, fills) {
   const out = text.replace(/\{(\w+)\}/g, (m, k) => (LIVE_TOKENS.has(k) ? m : (fills[k] != null ? fills[k] : m)));
   return out.charAt(0).toUpperCase() + out.slice(1);   // a fill like 'the Westport deck' may open the sentence
@@ -276,8 +276,12 @@ export function composeBank(pp, world, dist = STAFF_DIST, startIndex = {}) {
   for (const cat of CATEGORIES) {
     const want = dist[cat] || 0;
     if (!want) continue;
+    // only lines the person can ever say: within their knowledge (the Senate result and disaster broadcasts they hear,
+    // whether they know the chamber sits or the pads) and their role
+    const heard = pp.knows.broadcasts || [];
     const pool = T[cat].filter((x) => (pp.droid ? !x.human : !x.droid) && (!x.tone || x.tone.some((t) => tones.includes(t)) || pp.droid) && (!x.needs || x.needs.every((k) => fills[k] != null))
-      && (!x.when || !x.when.role || x.when.role === pp.roleTag) && (!x.when || !x.when.senateSitting || pp.knows.senate) && (!x.when || x.when.shipOnPad === undefined || pp.district === 'spaceport' || pp.knows.port));
+      && (!x.when || !x.when.role || x.when.role === pp.roleTag) && (!x.when || !x.when.senateSitting || pp.knows.senate) && (!x.when || x.when.shipOnPad === undefined || pp.district === 'spaceport' || pp.knows.port)
+      && (!x.when || !x.when.senate || heard.includes('senate:result')) && (!x.when || !(x.when.disaster || x.when.recovering) || heard.includes('disaster')));
     const chosen = [];
     const take = (x) => { if (x && !chosen.includes(x)) chosen.push(x); };
     for (const [match, n] of QUOTAS[cat] || []) {
