@@ -8,6 +8,7 @@
 import { REGIONS } from '../worldgen.js';
 import { RNG, hash2, clamp } from '../rng.js';
 import { SimplexNoise } from '../noise.js';
+import { HALLS as SPACEPORT_HALLS, DECK_Y as SPACEPORT_DECK_Y } from './spaceport/plan.js';
 
 const C = REGIONS.coruscant;
 export const PLATEAU = { x0: C.cx - C.half, z0: C.cz - C.half, x1: C.cx + C.half + 1, z1: C.cz + C.half + 1, cx: C.cx, cz: C.cz };
@@ -287,6 +288,18 @@ function buildLayout(seed) {
     if (valid[1]) { const c = valid[1]; const x0 = c.sx > 0 ? c.x0 : c.x0 + 2, z0 = c.sz > 0 ? c.z0 : c.z0 + 2; it.lift = { x0, z0, sx: c.sx, sz: c.sz, x: X, z: Z }; lifts.push(it.lift); }
     intersections.push(it);
   }));
+
+  // spaceport halls (coruscant/spaceport/plan.js HALLS): the terminal, customs, cargo terminal, hangars, dealer and
+  // guard post are appended as landmark lots with a fixed purpose and name so the economy / signs / toast systems
+  // treat them like any building. They lie inside the SPACEPORT rect or on the apron west of the plateau, so the
+  // city painter never builds them (the spaceport structure does) - height 0 keeps them out of the skyline; they are
+  // appended last so every plateau lot keeps its id, and after the streets so nothing else moves.
+  for (const h of SPACEPORT_HALLS) {
+    const r = h.rect, x0 = r.x0, z0 = r.z0, x1 = r.x1 + 1, z1 = r.z1 + 1;
+    lots.push({ id: lots.length, x0, z0, w: x1 - x0, d: z1 - z0, x1, z1, district: 'spaceport', kind: 'landmark', family: 'spaceport_hall', name: h.name,
+      purpose: h.purpose, spaceport: h.key, height: 0, floorY: SPACEPORT_DECK_Y, seed: mix(seed + 9, x0, z0), block: -1, sides: { W: false, E: false, N: false, S: false },
+      front: h.front, midDoor: false, bridges: [] });
+  }
 
   // spatial index (64-block buckets) ---------------------------------------------------------------------------
   const buckets = new Map();

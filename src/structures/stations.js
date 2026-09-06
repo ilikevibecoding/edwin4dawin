@@ -11,13 +11,17 @@
 //   - frontier: the mini spaceport is a roof deck at the canopy level (walk on 99); a fenced 13-step stair at the
 //     platform's west end (x 243..255, z 8..9, a 2-wide landing at its foot) climbs from the platform through the
 //     canopy onto the deck.
+//   - Westport terminus (ROUTE.terminus, the intermediate stop on the west apron): the undercroft, its four platforms,
+//     yard tracks, spare train, stairs and lifts are painted by coruscant/spaceport/terminus.js; this module owns
+//     platform 1's live edge screen on the hyperlane (the same glass line as the other stations, toggled with the
+//     train's doors), its route boards and the timetable sign text.
 import { B } from '../blocks.js';
 import { CHUNK_SIZE as CS } from '../constants.js';
 import { addSignTiles } from '../textures.js';
 import { World } from '../world.js';
 import { ROUTE, doorWorldXs, PERIOD, TRAIN_LENGTH } from '../vehicles/route.js';
 import { chunkSetter, DECK_Z0 } from './hyperlane.js';
-import { SPACEPORT, STATION_Y, FRONTIER, FRONTIER_DECK_Y, onFrontierDeck } from '../coruscant/spaceport.js';
+import { SPACEPORT, SPACEPORT_TERMINUS, STATION_Y, FRONTIER, FRONTIER_DECK_Y, onFrontierDeck } from '../coruscant/spaceport.js';
 
 const FLOOR = ROUTE.floorY - 1;      // 91: platform / hall floor blocks (walk on 92)
 const PZ0 = ROUTE.platformZ0, PZ1 = ROUTE.platformZ1; // 3..10
@@ -46,7 +50,17 @@ export function stationLayout(S) {
   // structure AABB (x1/z1 exclusive)
   L.x0 = px0 - 1; L.x1 = L.concourse ? L.concourse.x1 + 1 : tx1 + 2;
   L.z0 = L.concourse ? L.concourse.wallN - 2 : DECK_Z0 - 3; L.z1 = HALL_Z1 + 2;
+  L.screenX0 = px0; L.screenX1 = tx1;                     // the edge screen runs along the platform and the tower top
   return L;
+}
+
+// Geometry of the Westport terminus stop: platform 1 of the undercroft (coruscant/spaceport/plan.js TERMINUS), whose
+// live edge screen at z 3 is the only part of the station this module paints.
+export function terminusLayout() {
+  const S = ROUTE.terminus, U = SPACEPORT_TERMINUS;
+  const px0 = U.x0, px1 = U.x1;
+  return { S, px0, px1, tx0: px1 + 1, tx1: px1, screenX0: px0, screenX1: px1, doorXs: doorWorldXs(S.dockX0), concourse: null, roofStair: null, terminus: true,
+    wallX: U.box.x0, x0: px0 - 1, x1: px1 + 2, z0: PZ0 - 1, z1: PZ0 + 2 };
 }
 
 // walking height of step i (0-based) of the roof stair
@@ -228,6 +242,24 @@ function fillStation(chunk, gen, L, edgeMode) {
   if (L.roofStair) fillRoofStair(set, L, cx0, cx1, cz0, cz1);
 }
 
+// The terminus' live edge screen (platform 1, z = 3): glass 92..93 with the door columns open while the train stands
+// there (or rolls through slowly with its doors open), holo boards over the doors, lit panels between them and white
+// boarding pads on the platform floor in front of the doors - the same line the other two stations draw.
+function fillTerminusScreen(chunk, L, edgeMode) {
+  const set = chunkSetter(chunk);
+  const bx = chunk.cx * CS, bz = chunk.cz * CS;
+  if (PZ0 < bz || PZ0 >= bz + CS) return;
+  const xa = Math.max(bx, L.screenX0), xb = Math.min(bx + CS - 1, L.screenX1);
+  for (let x = xa; x <= xb; x++) {
+    const door = L.doorXs.some((dx) => x === dx || x === dx + 1);
+    const open = edgeMode === 'open' || (edgeMode === 'doors' && door);
+    set(x, FLOOR + 1, PZ0, open ? 0 : B.STEEL_GLASS);
+    set(x, FLOOR + 2, PZ0, open ? 0 : B.STEEL_GLASS);
+    set(x, FLOOR + 3, PZ0, door ? B.HOLO_SIGN : (x % 6 === 3 ? B.GLOW_PANEL : B.DURASTEEL_DARK));
+    if (door) set(x, FLOOR, PZ0 + 1, B.GLOW_PANEL);
+  }
+}
+
 // Coruscant: glass-walled concourse continuing the spaceport bridge (floor y 90, walk on 91) west to the tower top
 // (walk on 92): a half-slab step along its west edge for z 3..10, a wall with the "TO TRAINS" sign in front of the
 // buffer stops for z <= 2, lamps in the glass roof, pillars to the ground, and a "TO SPACEPORT" board facing the
@@ -336,7 +368,7 @@ class StationDoors {
     let changed = 0;
     for (const L of this.layouts) {
       const mode = this.edgeMode(L.S);
-      for (let x = L.px0; x <= L.tx1; x++) {
+      for (let x = L.screenX0; x <= L.screenX1; x++) {
         const door = L.doorXs.some((dx) => x === dx || x === dx + 1);
         const open = mode === 'open' || (mode === 'doors' && door);
         for (let y = FLOOR + 1; y <= FLOOR + 2; y++) if (world.setBlock(x, y, PZ0, open ? 0 : B.STEEL_GLASS, true)) changed++;
@@ -348,7 +380,8 @@ class StationDoors {
 
 export function registerStations(gen, game, train) {
   const layouts = [stationLayout(ROUTE.frontier), stationLayout(ROUTE.coruscant)];
-  const doors = new StationDoors(game, layouts, train);
+  const terminus = terminusLayout();
+  const doors = new StationDoors(game, [...layouts, terminus], train);
   for (const L of layouts) {
     gen.addStructure({ name: 'station:' + L.S.name, x0: L.x0, z0: L.z0, x1: L.x1, z1: L.z1, fill: (chunk, g) => fillStation(chunk, g, L, doors.edgeMode(L.S)) });
     // holo boards hanging under the canopy over the platform (drawn by the train on its display canvas): the
@@ -360,10 +393,24 @@ export function registerStations(gen, game, train) {
       train.addStationDisplay({ station: L.S, kind: 'route', x: mid + 12, y, z, w: 5, h: 1.25 });
     }
   }
+  // the terminus: only the live screen line (the undercroft itself belongs to the spaceport structure, painted
+  // earlier); route boards hang under the deck plate over platform 1 - the train's board (next stop, countdown, line
+  // position) is what a passenger there needs, the countdown displays belong to the two end stations
+  gen.addStructure({ name: 'station:' + terminus.S.name, x0: terminus.x0, z0: terminus.z0, x1: terminus.x1, z1: terminus.z1, fill: (chunk) => fillTerminusScreen(chunk, terminus, doors.edgeMode(terminus.S)) });
+  if (train.addStationDisplay) {
+    const mid = (terminus.px0 + terminus.px1 + 1) / 2, y = FLOOR + 4.3, z = PZ0 + 3.5;
+    for (const dx of [-18, 0, 18]) train.addStationDisplay({ station: terminus.S, kind: 'route', x: mid + dx, y, z, w: 5, h: 1.25 });
+  }
   // sign text: tiles are baked into the atlas now (before it is finalised); the positions are registered with the
   // world once it exists. Reading direction: a board facing -x is read looking +x, so its text runs -z -> +z, etc.
   const minutes = (PERIOD / 60).toFixed(1);
   const rows = [];
+  {
+    // terminus: two rows on the undercroft's west wall (facing +x, read looking west: the text runs +z -> -z),
+    // painted as WALL_SIGN blocks by the terminus painter at SPACEPORT_TERMINUS.signs
+    const tiles = [addSignTiles('TO FRONTIER', 4), addSignTiles(`EVERY ${minutes} MIN`, 4)];
+    SPACEPORT_TERMINUS.signs.forEach((s, r) => { for (let k = 0; k < 4; k++) rows.push([s.x, s.y, s.z - k, tiles[r][k]]); });
+  }
   for (const L of layouts) {
     const dest = L.S === ROUTE.frontier ? 'TO CORUSCANT' : 'TO FRONTIER';
     const tiles = [addSignTiles(dest, 4), addSignTiles(`EVERY ${minutes} MIN`, 4)];
@@ -384,5 +431,5 @@ export function registerStations(gen, game, train) {
     else setTimeout(attach, 25);
   };
   attach();
-  return { layouts, doors };
+  return { layouts: [...layouts, terminus], doors };
 }

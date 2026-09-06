@@ -285,10 +285,10 @@ function laneLoops(layout) {
 //   west  - oval over the ocean west of the deck at y 116..122 (under every approach path, above the train station)
 //   low   - rectangle over the concourse spine and the deck's west strip at y 118 (taxis, speeders, buses)
 //   high  - ring over the whole spaceport at y 175..181 (above the tower antenna, below the city's tall lanes)
-function harbourLoops(cx) {
+function harbourLoops(cx = 2622) {
   return [
     { name: 'harbour west', harbour: true, speedMul: 0.8, types: [0, 4, 1, 5, 3, 6, 0, 1, 4, 5, 3, 6],
-      pts: [[2543, 118, -150], [2480, 120, -140], [2445, 122, -70], [2440, 122, 0], [2445, 122, 70], [2480, 120, 140], [2543, 118, 150], [2553, 116, 60], [2553, 116, -60]] },
+      pts: [[2543, 118, -150], [2480, 120, -140], [2445, 122, -70], [2440, 122, 0], [2445, 122, 70], [2480, 120, 140], [2543, 118, 150], [2553, 117, 60], [2553, 117, -60]] },
     { name: 'harbour low', harbour: true, speedMul: 0.7, types: [2, 7, 8, 2, 2, 7, 8, 2, 7, 2], reverse: true,
       pts: rectLanePts(2568, cx, -160, 160, 118, 1.5) },
     { name: 'harbour high', harbour: true, speedMul: 0.9, types: [6, 3, 1, 5, 6, 3, 1, 5, 6, 0],
@@ -296,26 +296,29 @@ function harbourLoops(cx) {
   ];
 }
 
-// Ships parked for repair on the deck: [type, x, z, yaw] (yaw pi/2 = nose toward -x). Freighter and shuttle on the
-// aprons between the outer pads and the container yards, a police speeder beside the north-east pad.
-const REPAIR_BERTHS = [[0, 2596, -140, Math.PI / 2], [7, 2648, -141, Math.PI / 2], [1, 2595, 138, Math.PI / 2]];
-// model type on each spaceport pad (long hulls on the inner pads next to the terminal, shorter ones outside)
+// Ships parked for repair: [type, x, z, yaw] (yaw 0 = nose toward -z). A bulk freighter, a light freighter and a
+// shuttle inside the three repair hangars of the spaceport's south wing (coruscant/spaceport/plan.js REPAIR_BERTHS),
+// noses toward the open north fronts.
+const REPAIR_BERTHS = [[4, 2217, 285, 0], [0, 2269, 287, 0], [1, 2321, 287, 0]];
+// model type on each spaceport pad when the pad carries none (long hulls on the inner pads next to the terminal,
+// shorter ones outside)
 const PAD_TYPES = [5, 4, 3, 1, 0, 8, 1, 0];
 
 // Builds the deterministic ship list (pure data, no THREE):
 //   { type, route, offset, name, pad, padPos, deckY, lanePts, boulevard, harbour, repair, dest }
-// `frontier` (optional) = { pad: {x, z}, deckY } adds one shuttle cycling on the frontier spaceport pad.
-export function buildShips(pads, deckY, frontier = null, layout = null) {
+// `frontier` (optional) = { pad: {x, z}, deckY } adds one shuttle cycling on the frontier spaceport pad. A pad may
+// carry its own fleet `type` and landed `yaw` (the spaceport plan sizes every pad for its hull).
+export function buildShips(pads, deckY, frontier = null, layout = null, repairBerths = REPAIR_BERTHS) {
   layout = layout || getLayout(1337);
   const models = shipModels();
   const ships = [];
   const cx = pads.reduce((s, p) => s + p.x, 0) / pads.length;
   for (let i = 0; i < pads.length; i++) {
-    const pad = pads[i], type = PAD_TYPES[i % PAD_TYPES.length], side = pad.z < 0 ? -1 : 1;
+    const pad = pads[i], type = pad.type ?? PAD_TYPES[i % PAD_TYPES.length], side = pad.z < 0 ? -1 : 1;
     const k = i % 4;
     const boarding = Math.round(10 + hash2(i, 3, 901) * 10), servicing = Math.round(8 + hash2(i, 4, 901) * 8);
     // the boarding door faces the concourse spine: nose +z on the west column, nose -z on the east column
-    const padYaw = pad.x < cx ? Math.PI : 0;
+    const padYaw = pad.yaw ?? (pad.x < cx ? Math.PI : 0);
     const route = padRoute(pad, coruscantLoop(pad, side, k), models[type].speed, deckY, padYaw, boarding, servicing);
     ships.push({ type, route, offset: Math.floor(hash2(i, 5, 902) * route.period), name: `${models[type].name} pad ${i + 1}`, pad: i, padPos: pad, deckY, dest: `a circuit over Coruscant and back to Pad ${i + 1}` });
   }
@@ -332,8 +335,8 @@ export function buildShips(pads, deckY, frontier = null, layout = null) {
     });
   };
   laneLoops(layout).forEach((lane, li) => addLane(lane, li, 903));
-  harbourLoops(Math.round(cx)).forEach((lane, li) => addLane(lane, li + 10, 904));
-  REPAIR_BERTHS.forEach(([type, x, z, yaw], i) => {
+  harbourLoops().forEach((lane, li) => addLane(lane, li + 10, 904));
+  repairBerths.forEach(([type, x, z, yaw], i) => {
     ships.push({ type, route: repairRoute(x, deckY, z, yaw), offset: 0, name: `${models[type].name} repair berth ${i + 1}`, pad: null, padPos: { x, z }, deckY, repair: true });
   });
   return ships;
@@ -422,7 +425,7 @@ export class ShipTraffic {
     this.pads = spec.pads;
     this.deckY = spec.deckY;
     const seed = spec.layout ? spec.layout.seed : (game.world && game.world.gen ? game.world.gen.seed : 1337);
-    this.ships = buildShips(this.pads, this.deckY, spec.frontier || null, spec.layout || getLayout(seed));
+    this.ships = buildShips(this.pads, this.deckY, spec.frontier || null, spec.layout || getLayout(seed), spec.repairBerths || REPAIR_BERTHS);
     this.models = shipModels();
     this.center = spec.center || { x: this.pads.reduce((s, p) => s + p.x, 0) / this.pads.length, y: this.deckY, z: this.pads.reduce((s, p) => s + p.z, 0) / this.pads.length };
     this.tickCount = 0;
