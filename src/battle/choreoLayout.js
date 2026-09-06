@@ -609,10 +609,11 @@ export function layoutFleet({ models, rand, scale, addShip, boxes }) {
     }
     const wards = lineVenators.length ? lineVenators : lineShips;
     const g = groups.repLine;
+    const step = coprimeStep(wards.length);
     escortModels.forEach((model, i) => {
       if (!wards.length) return;
       // wards spread over the line: walk it in steps that visit every ship before repeating
-      const ward = wards[(i * 7) % wards.length];
+      const ward = wards[(i * step) % wards.length];
       const path = makeEscortPath(rand, i);
       escortOffset(path, 0, _p);
       const c = Math.cos(g.yaw);
@@ -647,8 +648,9 @@ export function layoutFleet({ models, rand, scale, addShip, boxes }) {
   {
     const wards = lineShips.length ? lineShips : lineVenators;
     const g = groups.repLine;
+    const step = coprimeStep(wards.length, 5);
     for (let i = 0; i < nCo && wards.length; i++) {
-      const ward = wards[(i * 5 + 2) % wards.length];
+      const ward = wards[(i * step + 2) % wards.length];
       const path = makeCourierRun(ward, rand, boxes);
       // start a little way into the run so the couriers are already moving along the flanks
       path.u = rand.range(0.05, 0.45);
@@ -734,4 +736,14 @@ export function separate(states, boxes, rand, margin = 140, maxIter = 80) {
 // Nose direction of a ship state's spec (for velocities at spawn)
 export function noseDir(yaw, pitch, out) {
   return dirFromYawPitch(yaw, pitch, out);
+}
+
+// a stride coprime with `n` (preferring `want`), so walking a list in strides visits every entry
+// before repeating whatever the list's length
+export function coprimeStep(n, want = 7) {
+  if (n <= 1) return 1;
+  const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+  for (const s of [want, 7, 5, 3, 11, 13, 2])
+    if (s < n && gcd(s, n) === 1) return s;
+  return 1;
 }
