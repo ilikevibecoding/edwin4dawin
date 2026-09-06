@@ -287,6 +287,35 @@ test('Block entities: kept per position, handed to onBlockEntityLost when the bl
   assert.equal(BLOCKS[WHEAT_STAGES[0]].growth, 0); assert.equal(BLOCKS[WHEAT_STAGES[2]].growth, 2); assert.equal(WHEAT_STAGES[2], B.WHEAT);
 });
 
+test('SaveManager pass-2 blobs: cast/senate/factions/events round-trip, dedupe rewrites, unknown keys ignored, old saves load without them', () => {
+  const st = memStorage();
+  const s = new SaveManager(9, st);
+  assert.equal(s.cast, null, 'missing blob reads as null');
+  s.setCast({ history: { 'cast:vela_marr': { talks: 2 } } });
+  assert.equal(s.dirty, true);
+  s.flush();
+  const writes = [];
+  const origSet = st.setItem; st.setItem = (k, v) => { writes.push(k); origSet(k, v); };
+  s.setCast({ history: { 'cast:vela_marr': { talks: 2 } } });   // identical content
+  assert.equal(s.dirty, false, 'identical blob does not schedule a write');
+  s.setBlob('bogus', { a: 1 });
+  assert.equal(s.getBlob('bogus'), null, 'keys outside the contract are ignored');
+  s.setSenate({ results: [{ scenario: 'infrastructure', outcome: 'passed' }] });
+  s.setFactions({ standing: { csf: 3 } });
+  s.flush();
+  const again = new SaveManager(9, st);
+  assert.deepEqual(again.cast, { history: { 'cast:vela_marr': { talks: 2 } } });
+  assert.deepEqual(again.senate.results[0], { scenario: 'infrastructure', outcome: 'passed' });
+  assert.equal(again.factions.standing.csf, 3);
+  assert.equal(again.events, null);
+  again.setCast(null); again.flush();
+  assert.equal(new SaveManager(9, st).cast, null, 'null removes the blob');
+  const legacy = memStorage(); legacy.setItem('frontier-craft:v2:11', JSON.stringify({ version: 2, edits: [], entities: [], player: null, inventory: null, economy: null }));
+  const old = new SaveManager(11, legacy);
+  assert.equal(old.cast, null); assert.equal(old.senate, null);
+  assert.equal(Object.keys(old.serialize()).includes('cast'), false, 'absent blobs are not written');
+});
+
 test('EventBus: on/once/off, unsubscribe handles, throwing listeners are isolated, history is ordered and prefix-filtered', () => {
   const bus = new EventBus(4);
   const got = [];

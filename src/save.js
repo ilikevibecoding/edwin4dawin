@@ -22,6 +22,10 @@ export class SaveManager {
     this.player = null;         // {x,y,z,yaw,pitch,health,food,saturation}
     this.inventory = null;      // {slots: [[id,count]|null], selected}
     this.economy = null;        // {credits, stockDay, sold, ownedShips, apartment, job, stats} (src/economy/economy.js)
+    // pass-2 systems keep their own JSON blob under their own key (ROUND6_PLAN "Save" contract): cast interaction
+    // history, Senate results, faction standing, surprise-event state. Missing keys load as null so old saves work.
+    this.blobs = {};            // key -> plain JSON data
+    this._blobJson = {};        // key -> last serialized string (skip rewrites when nothing changed)
     this.dirty = false;
     this.enabled = true;
     this.disasterCells = new Set(); // cells currently owned by an active disaster journal (excluded from save)
@@ -48,6 +52,7 @@ export class SaveManager {
       this.player = data.player && typeof data.player.x === 'number' ? data.player : null;
       this.inventory = data.inventory && Array.isArray(data.inventory.slots) ? data.inventory : null;
       this.economy = data.economy && typeof data.economy === 'object' ? data.economy : null;
+      for (const k of SaveManager.BLOB_KEYS) if (data[k] && typeof data[k] === 'object') this.blobs[k] = data[k];
       this.dirty = this.migrated; // a migrated save is rewritten in the new format on the next flush
     } catch (e) { console.warn('save load failed', e); }
   }
@@ -132,6 +137,27 @@ export class SaveManager {
     this.scheduleWrite();
   }
 
+  // ---------------------------------------------------------------- pass-2 system blobs (cast, senate, factions, events)
+  static get BLOB_KEYS() { return ['cast', 'senate', 'factions', 'events']; }
+  setBlob(key, data) {
+    if (!this.enabled || !SaveManager.BLOB_KEYS.includes(key)) return;
+    if (data == null) { if (this.blobs[key] !== undefined) { delete this.blobs[key]; delete this._blobJson[key]; this.scheduleWrite(); } return; }
+    const s = JSON.stringify(data);
+    if (this._blobJson[key] === s) return;
+    this._blobJson[key] = s;
+    this.blobs[key] = JSON.parse(s);
+    this.scheduleWrite();
+  }
+  getBlob(key) { return this.blobs[key] ?? null; }
+  get cast() { return this.getBlob('cast'); }
+  setCast(data) { this.setBlob('cast', data); }
+  get senate() { return this.getBlob('senate'); }
+  setSenate(data) { this.setBlob('senate', data); }
+  get factions() { return this.getBlob('factions'); }
+  setFactions(data) { this.setBlob('factions', data); }
+  get events() { return this.getBlob('events'); }
+  setEvents(data) { this.setBlob('events', data); }
+
   scheduleWrite() {
     this.dirty = true;
     if (this.timer) return;
@@ -141,7 +167,9 @@ export class SaveManager {
   serialize() {
     const edits = [];
     for (const m of this.byChunk.values()) for (const e of m.values()) edits.push(e);
-    return { version: VERSION, edits, entities: [...this.entities.values()], player: this.player, inventory: this.inventory, economy: this.economy };
+    const out = { version: VERSION, edits, entities: [...this.entities.values()], player: this.player, inventory: this.inventory, economy: this.economy };
+    for (const k of SaveManager.BLOB_KEYS) if (this.blobs[k] !== undefined) out[k] = this.blobs[k];
+    return out;
   }
 
   flush() {
@@ -151,7 +179,7 @@ export class SaveManager {
   }
 
   clear() {
-    this.byChunk.clear(); this.count = 0; this.entities.clear(); this.player = null; this.inventory = null; this._invJson = null; this.economy = null; this._ecoJson = null; this.dirty = false;
+    this.byChunk.clear(); this.count = 0; this.entities.clear(); this.player = null; this.inventory = null; this._invJson = null; this.economy = null; this._ecoJson = null; this.blobs = {}; this._blobJson = {}; this.dirty = false;
     if (this.storage) { this.storage.removeItem(this.key); this.storage.removeItem(this.legacyKey); }
   }
 }
