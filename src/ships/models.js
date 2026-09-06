@@ -17,6 +17,7 @@ import { BLOCKS, SHAPE } from '../blocks.js';
 import { tileUV } from '../textures.js';
 import { SHARED } from '../entityMaterial.js';
 import { EMIT, emitCodeOf } from './builder.js';
+import { shapeGeometry, shapeCovers, OPPOSITE } from '../vehicles/voxelMesh.js';
 import { lightFreighter, shuttle, bulkFreighter, cruiser, airBus } from './designs_transport.js';
 import { gunship, starfighter, taxi, policeSpeeder } from './designs_small.js';
 
@@ -160,10 +161,27 @@ class Geo {
     this.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
     this.faces++;
   }
+  // one polygon of a clipped cell (see voxelMesh shapeGeometry): a triangle fan with the UVs and flat shade of the
+  // cube face the slope replaces
+  poly(face, bx, by, bz, tile, emit, light, sky, part) {
+    const [tu, tv, ts] = tileUV(tile), base = this.pos.length / 3, pts = face.pts;
+    for (let k = 0; k < pts.length; k++) {
+      const p = pts[k];
+      faceUV(face.uvDir, p[0], p[1], p[2], this.t);
+      this.pos.push(bx + p[0], by + p[1], bz + p[2]);
+      this.uv.push(tu + (this.t[0] * UV_SCALE + INSET) * ts, tv + (this.t[1] * UV_SCALE + INSET) * ts);
+      this.surf.push(face.shade, emit, light, sky);
+      this.part.push(part);
+    }
+    for (let k = 1; k + 1 < pts.length; k++) this.idx.push(base, base + k, base + k + 1);
+    this.faces++;
+  }
 }
 
 // Culled-face geometry of a model: hull cells culled against hull neighbours, part cells culled against their own
-// part only (they move). Origin at the footprint centre on the gear line. Returns { geometry, faces }.
+// part only (they move). Clipped cells (shape codes) are emitted as convex polygons: their boundary faces are culled
+// like cube faces (against a neighbour whose cross-section covers them), the sloped caps always show and take their
+// light from the cells they face. Origin at the footprint centre on the gear line. Returns { geometry, faces }.
 export function buildShipGeometry(model) {
   const g = model.grid, { w, h, d } = g;
   const light = modelLight(model);
@@ -174,22 +192,52 @@ export function buildShipGeometry(model) {
     const i = light.idx(x, y, z);
     return [light.block[i] / 15, light.sky[i] / 15];
   };
-  const emitCells = (cells, at, part) => {
-    for (const [x, y, z, id, emitCode] of cells) {
+  // light of a sloped cap: the brightest of the neighbour cells its normal points into (a nose wedge in the sun is
+  // lit like the roof and the nose face it replaces, not like the solid cell it belongs to)
+  const capLight = (x, y, z, n) => {
+    let bl = 0, sk = 0, any = false;
+    for (let a = 0; a < 3; a++) {
+      if (Math.abs(n[a]) < 1e-6) continue;
+      const s = n[a] > 0 ? 1 : -1, l = lightAt(x + (a === 0 ? s : 0), y + (a === 1 ? s : 0), z + (a === 2 ? s : 0), [0, 1]);
+      bl = Math.max(bl, l[0]); sk = Math.max(sk, l[1]); any = true;
+    }
+    return any ? [bl, sk] : [0, 1];
+  };
+  const emitCells = (cells, at, shapeAt, part) => {
+    for (const [x, y, z, id, emitCode, shape] of cells) {
       const def = BLOCKS[id];
       const opaqueN = (nx, ny, nz) => { const nid = at(nx, ny, nz); return nid !== 0 && (BLOCKS[nid].opaque || nid === id); };
+      // a flush face is hidden by an opaque neighbour whose shape covers it (a full cube always does)
+      const hidden = (f, ownShape) => {
+        const F = FACES[f], nx = x + F.n[0], ny = y + F.n[1], nz = z + F.n[2];
+        if (!opaqueN(nx, ny, nz)) return false;
+        const ns = shapeAt(nx, ny, nz);
+        return ns === 0 ? true : shapeCovers(ns, OPPOSITE[f], ownShape, f);
+      };
+      const ownLight = def.emit > 0 ? 1 : 0;
+      const cube = def.shape === SHAPE.CUBE || def.shape === SHAPE.LIQUID;
+      if (cube && shape) {
+        const G = shapeGeometry(shape);
+        for (const face of G.faces) {
+          let l;
+          if (face.dir >= 0) { if (hidden(face.dir, shape)) continue; const F = FACES[face.dir]; l = lightAt(x + F.n[0], y + F.n[1], z + F.n[2], [0, 1]); }
+          else l = capLight(x, y, z, face.n);
+          buf.poly(face, x, y, z, def.tex[face.uvDir], emitCode, Math.max(l[0], ownLight), l[1], part);
+        }
+        continue;
+      }
       let boxes = null;
-      if (def.shape === SHAPE.CUBE || def.shape === SHAPE.LIQUID) boxes = [[0, 0, 0, 1, 1, 1]];
+      if (cube) boxes = [[0, 0, 0, 1, 1, 1]];
       else if (def.boxes && def.boxes.length) boxes = def.boxes;
       else if (def.shape === SHAPE.PANE) boxes = [[0.4375, 0, 0, 0.5625, 1, 1]];
       else continue;
       for (const bx of boxes) for (let f = 0; f < 6; f++) {
         const F = FACES[f];
         const flush = (f === 0 && bx[3] >= 1) || (f === 1 && bx[0] <= 0) || (f === 2 && bx[4] >= 1) || (f === 3 && bx[1] <= 0) || (f === 4 && bx[5] >= 1) || (f === 5 && bx[2] <= 0);
-        if (flush && opaqueN(x + F.n[0], y + F.n[1], z + F.n[2])) continue;
+        if (flush && hidden(f, 0)) continue;
         // the face looks into its neighbour cell: light it from there (own cell for inset faces)
         const l = flush ? lightAt(x + F.n[0], y + F.n[1], z + F.n[2], [0, 1]) : lightAt(x, y, z, [0, 1]);
-        buf.face(f, x, y, z, bx[0], bx[1], bx[2], bx[3], bx[4], bx[5], def.tex[f], emitCode, Math.max(l[0], def.emit > 0 ? 1 : 0), l[1], part);
+        buf.face(f, x, y, z, bx[0], bx[1], bx[2], bx[3], bx[4], bx[5], def.tex[f], emitCode, Math.max(l[0], ownLight), l[1], part);
       }
     }
   };
@@ -197,14 +245,14 @@ export function buildShipGeometry(model) {
   const hullCells = [];
   for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) for (let z = 0; z < d; z++) {
     const id = hull.get(x, y, z);
-    if (id) hullCells.push([x, y, z, id, emitCodeOf(model, x, y, z, id)]);
+    if (id) hullCells.push([x, y, z, id, emitCodeOf(model, x, y, z, id), hull.shapeAt(x, y, z)]);
   }
-  emitCells(hullCells, (x, y, z) => hull.get(x, y, z), 0);
+  emitCells(hullCells, (x, y, z) => hull.get(x, y, z), (x, y, z) => hull.shapeAt(x, y, z), 0);
   // parts (index 1..)
   model.parts.forEach((p, pi) => {
-    const own = new Map();
-    for (const c of p.cells) own.set((c[0] * 256 + c[1]) * 256 + c[2], c[3]);
-    emitCells(p.cells.map((c) => [c[0], c[1], c[2], c[3], c[4] || (BLOCKS[c[3]].emit > 0 ? EMIT.LAMP : 0)]), (x, y, z) => own.get((x * 256 + y) * 256 + z) || 0, pi + 1);
+    const own = new Map(), ownShape = new Map();
+    for (const c of p.cells) { const k = (c[0] * 256 + c[1]) * 256 + c[2]; own.set(k, c[3]); if (c[5]) ownShape.set(k, c[5]); }
+    emitCells(p.cells.map((c) => [c[0], c[1], c[2], c[3], c[4] || (BLOCKS[c[3]].emit > 0 ? EMIT.LAMP : 0), c[5] || 0]), (x, y, z) => own.get((x * 256 + y) * 256 + z) || 0, (x, y, z) => ownShape.get((x * 256 + y) * 256 + z) || 0, pi + 1);
   });
   const geometry = new THREE.BufferGeometry();
   geometry.setAttribute('position', new THREE.Float32BufferAttribute(buf.pos, 3));
