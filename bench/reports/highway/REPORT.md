@@ -30,8 +30,28 @@ everything sits on the pavement it was generated from) and lays out, per ~1 km c
 - **Pedestrian overpasses** mid-block on the coastal highway (the median barrier has cut the grid's at-grade
   crossings for people on foot): a concrete span on verge columns with solid parapets, mirrored stairs down the
   verges, landing lamps.
+- **Wearing course** (the biggest single lever on the aerial read): `roads.ts` shades the whole highway as pale
+  sun-bleached concrete-asphalt (0.30–0.40, the value of the barrier, the dry ground and the district streets), so with
+  everything above in place the corridor was still a *pale ribbon* at 600 m and no darker than a 10 m street at
+  1.5 km. The course is a strip of dark lane asphalt (0.07–0.11, resurfaced in 300 m contracts, wheel paths rubbed
+  darker, patch repairs, reflective cracks) laid 2 cm over the pavement from the barrier foot to 15 cm short of the
+  pavement edge, with an older paler shoulder mix (0.20–0.27) over the sealed joint at 6.95 m, and its own paint:
+  yellow beside the barrier, dashed lane line, edge line with a rumble band, braking rubber before the junctions,
+  no paint through the junction boxes and the plaza, a double yellow through the median gaps. It ramps 6 cm over the
+  crossing pavements in the junction boxes. From 600 m the highway is a dark ribbon twice a street's width between
+  pale shoulders with a bright spine; at 1.5 km it is the darkest road line in the grid. The decks take the same
+  tones so the carriageway runs unbroken over the abutment joints.
+- **Lift field over the rendered terrain**: `roads.ts` follows the height field at the two pavement edges only, every
+  15 m, and `terrain.ts` samples the height texture half a texel off `heightAt`, so on the spit (and at two other
+  crowned stretches) the ground stood through the pavement in sand blotches. Per row and at five knots across the
+  chain carries the largest excess of the rendered terrain over the pavement within a row along and a knot across
+  (+ 6 cm); the course, barrier, poles, cushions, islands and the verges' inner row ride on it. Zero over ~95 % of the
+  network, up to 0.6 m on the spit.
 - **Median lighting**: twin-arm cobra-head poles (11.4 m) every 60 m on the median barrier; the heads glow at night with
-  the same sun-driven curve as the causeway lamps, with an alpha floor so the lit dots survive to 5 km.
+  the same sun-driven curve as the causeway lamps, with an alpha floor so the lit dots survive to 5 km. Each course
+  strip and each barrier vertex names its nearest pole, and at night the shader lays a warm **lamp pool** across both
+  carriageways under it (a lozenge fading over ~25 m) and lights the barrier's cap: from 300 m the highway is a string
+  of lit pools, from 1.5 km a string of pearls, from 80 m a lit road.
 - **Sign gantries** (truss on two columns) 260 m before each causeway / bridge announcing the map's destinations
   (Isla Garza, Isla Tortuga, Costa Barrera, Bahía Vista, Aeropuerto …) with a `CAUSEWAY 1 KM` / `PUENTE …` tab, and
   150 m before each arterial junction with a side-aware arrow; guide signs 300 m before junctions, round km/h speed
@@ -53,8 +73,9 @@ everything sits on the pavement it was generated from) and lays out, per ~1 km c
 - **F-shape median barrier** on every deck of 4+ lanes and 20 m+ (garza-west, islab-west, tortuga, garza, north-cw).
 - **Scuppers** in both kerbs every 15 m with downpipes under the fascia; deck ends meet the road surface over a 4 cm
   approach-slab step with a finger joint across each abutment.
-- **Deck pavement**: an asphalt wearing course (0.19–0.27) between the pale concrete shoulders, kerbs and parapets,
-  so a causeway reads as carriageways between pale edges from the air rather than one pale slab.
+- **Deck pavement**: an asphalt wearing course in the highway's tones (lanes 0.07–0.11, an older paler mix on the
+  shoulders) between the pale concrete kerbs and parapets, so a causeway reads as dark carriageways between pale
+  edges from the air rather than one pale slab, and the carriageway runs unbroken over the abutment joint.
 - Kit exports for the highway module (`Soup`, `Frame`, `Rgb`, `MIN_WIDTH_VERT`, `GLSL_AA_LINE`, `STEEL_ALPHA_FRAG`,
   `lampGlowFor`, `F_BARRIER_PROFILE`); lit lamp heads keep an alpha floor at distance.
 
@@ -64,7 +85,22 @@ See `DEFECTS.md` for the per-round defect table.
 
 ## Budgets
 
-(filled in from `bench/out/highway-r*/summary.json` below)
+1280 × 720, `quality=high`, base = the branch point's build (`/tmp/highway-dist`, no highway module, old decks) against
+the round-5 build (`/tmp/highway/shots12`, the wearing course included); the highway module itself is 35 meshes /
+57 k triangles for the whole network, of which a view sees a few chunks.
+
+| view | base calls / tris | highway calls / tris | delta | limit |
+|------|------------------:|---------------------:|------:|-------|
+| `bridge-low` | 264 / 747 k | 264 / 840 k | +0 / +93 k | ≤ +20 / ≤ +120 k ✓ |
+| `aerial-a` | 287 / 1 059 k | 305 / 1 109 k | +18 / +50 k | ≤ +20 / ≤ +120 k ✓ |
+| 600 m along the coastal highway | 147 / 673 k | 185 / 737 k | +38 / +63 k | — |
+| 1 500 m | 138 / 736 k | 180 / 789 k | +42 / +53 k | — |
+| `sunset` | — | 312 / 1 040 k | | ≤ 400 / ≤ 1.5 M ✓ |
+
+Console clean in every capture (`console: []` in each shot's json). The low dev shots at the spit and across the grid
+(`hw_spit` 286 / 2.7 M, `hw_200_across` 170 / 1.9 M, `hw_junction_low` 329 / 2.3 M) exceed 1.5 M triangles in the
+main pass, but the highway's share is the same 54 k: those views are the tree cover and the city (compare the base
+shots of the same cameras under `/tmp/highway/shots-base`).
 
 ## Notes for the lead
 
@@ -76,22 +112,33 @@ See `DEFECTS.md` for the per-round defect table.
 
 ## Requests to other agents
 
-**Street Detail agent (`roads.ts`)** — highway / causeway pavement. This is the single biggest lever left on the
-aerial read: the `highway` class is shaded as pale sun-bleached concrete-asphalt (0.30–0.40), the same value as the
-barrier, the dry ground and the district streets, so from 300 m up the corridor is a pale ribbon whatever stands on
-it (see the `nohighway` A/B and the `exp_dark_*` experiment shots under `bench/out/highway-r4/`, where a local,
-uncommitted change to the lane tone alone turns the ribbon into a highway).
-1. Lane tone: dark asphalt lanes (the arterial tone, ~0.16–0.24) out to the edge line, with the paler tone kept for the
-   shoulder only (your lanes at 0–6.35 m, shoulder 6.35–11 m). The decks now do exactly this (`bridges.ts`, asphalt
-   0.19–0.27 between pale concrete shoulders) so the abutment joint will match.
-2. Rumble strips (a 30 cm band of transverse grooves outside the edge line) and surface patches on the shoulder;
-   the median barrier occupies the central 0.61 m — the yellow lines belong 0.45 m either side of it (the decks do
-   this).
+**Street Detail agent (`roads.ts`)**
+1. Highway pavement tone: no longer a request — the highway's **wearing course** (above) now covers the `highway`
+   class's carriageways and shoulders 2 cm over your pavement, paint included, from the barrier foot to 15 cm short
+   of the pavement edge. Your highway markings are under it; only the outer 15 cm and the junction boxes' crossing
+   pavement show. If you darken the highway lanes yourselves, the block is self-contained (`highway.ts`, "wearing
+   course") and can be dropped.
+2. The pavement follows the height field at the two edges only, linear across: where the ground crowns under the
+   middle of a 22 m road (the spit, `garza-hwy-2` around 33,2045; `tortuga-rd` around 980,-400; `garza-hwy` around
+   -1012,2538) the terrain stands up to 0.45 m through it — measured with `/tmp/highway/poke.ts`. Sampling the
+   terrain at 3–5 points across each row and taking the max (+0.15) would fix the streets and arterials too; the
+   highway rides over it on its own lift field now.
 3. Junction treatment where the district streets meet the highway: the streets should stop at the verge (right-in /
    right-out against the barrier); traffic on those streets should not cross the median. The highway's toll plaza
-   (`south-hwy-mainland` s = 3706, x ≈ -3195) and footbridges (s = 1842, 2964) sit mid-block between streets.
+   (`south-hwy-mainland` s = 3706, x ≈ -3195) and footbridges (s = 1842, 2964) sit mid-block between streets. The
+   grid's frontage street runs parallel to the coastal highway 5 m off its south edge for kilometres: 22 m of pale
+   pavement with yellow dashes beside the highway's shoulder, brighter than the shoulder from the air.
 4. The base marking shader aliases into rows of dots along the highway at 300 m+ (the 12 cm smoothstep lines); the
    box-filtered `aaLine` markings on your branch fix this — please keep highways covered by them.
+
+**Terrain agent (`terrain.ts`)** — the clipmap samples the height texture at `uv = (wp + HALF) / WORLD_SIZE`
+(`terrainHeight`), whose texel centres sit at `(i + 0.5) / N`, while `map.heightAt` puts sample `i` at
+`x = -HALF + i * cell`: the rendered ground is `heightAt` shifted half a cell (4.9 m) toward +x, +z, so on any slope
+everything placed with `heightAt` (roads, props, trees, my verges) floats or sinks by slope × 7 m — decimetres on the
+dunes and embankments. Fix: `uv = (wp + HALF + 0.5 * cell) / WORLD_SIZE` in `terrainHeight` (one line;
+`zoneSmooth` already centres its texels the same way, so the zone texture is offset identically and needs the same
+half cell). `/tmp/highway-dist14` is a build with only that line changed, for the A/B. The highway's lift field and
+verges take the max of both readings meanwhile, so they will stay right after the fix.
 
 **City agent** — nothing blocking; the approaches now claim ~10 m beside the deck fascias at the landings (islab-west
 mainland end at x≈-2790, garza-west both ends, garza-bridge spit end); keep buildings off that strip.
