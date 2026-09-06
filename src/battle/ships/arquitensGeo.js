@@ -187,14 +187,14 @@ function mirrored(zr, half) {
   return { z: Z(zr), pts };
 }
 
-// Superstructure (zr 204–272): the spine's pedestal under the bridge (a wedge front rising from the
+// Superstructure (zr 201–272): the spine's pedestal under the bridge (a wedge front rising from the
 // spine to the neck base), flaring to the aft body's width, then the long ramp down to the transom.
 // Chamfered top edges.
 export function blockSections(lod) {
   const zs =
     lod === 0
-      ? [204, 206, 208.5, 220, 226, 232, 245, 258, 272]
-      : [204, 208.5, 220, 232, 272];
+      ? [201, 203, 205.5, 220, 226, 232, 245, 258, 272]
+      : [201, 205.5, 220, 232, 272];
   return zs.map((zr) => {
     const bx = Math.min(
       blockHalfW(zr),
@@ -203,8 +203,8 @@ export function blockSections(lod) {
     const base = zr <= BLOCK.z1 ? deckC(zr) - 1 : wallTop(zr) - 0.8;
     const top = pw(
       [
-        [204, deckC(204) + spineUp(204) + 0.6],
-        [208.5, BLOCK.top],
+        [BLOCK.z0, deckC(BLOCK.z0) + spineUp(BLOCK.z0) + 0.6],
+        [205.5, BLOCK.top],
         [BLOCK.z1, BLOCK.top],
         [272, RAMP_TOP(272)],
       ],

@@ -168,15 +168,16 @@ export function deckDetail(ctx) {
     add(rail.trim, "paint", { color: PAL.red, texel: 1 / 8 });
     if (mid) {
       // Republic chevrons: alternating red/white bands across the crest at the rail's aft end
+      const lip = (RAIL.foot - RAIL.crest) / 2;
       for (let k = 0; k < 5; k++) {
         const zk = 205 + k * 2.6;
-        const { xe, yTop } = railAt(zk + 1.3);
+        const { xe, y, h, yTop } = railAt(zk + 1.3);
         const col = k % 2 ? lin(0.86, 0.85, 0.82) : PAL.red;
         add(
           mbox(
             s,
-            xe - RAIL.foot + (RAIL.foot - RAIL.crest) / 2 - 0.2,
-            xe - (RAIL.foot - RAIL.crest) / 2 + 0.2,
+            xe - RAIL.foot + lip - 0.2,
+            xe - lip + 0.2,
             yTop + 0.02,
             yTop + 0.2,
             zk,
@@ -185,6 +186,16 @@ export function deckDetail(ctx) {
           "paint",
           { color: col, texel: 1 / 8 },
         );
+        // the same band down the rail's outer face, tilted to its slope
+        const len = Math.hypot(lip, h);
+        const face = new THREE.BoxGeometry(0.16, h - 0.5, 2.3);
+        face.rotateZ(s * Math.atan2(lip, h));
+        face.translate(
+          s * (xe - lip / 2 + (h / len) * 0.1),
+          y + h / 2 + (lip / len) * 0.1,
+          Z(zk + 1.15),
+        );
+        add(face, "paint", { color: col, texel: 1 / 8 });
       }
     }
   }
@@ -390,20 +401,26 @@ export function bellyDetail(ctx) {
     // red stripes along the chine (both sides), broken into segments that follow the plan
     for (const s of [-1, 1])
       for (const [z0, z1] of [
-        [70, 105],
-        [112, 150],
-        [156, 186],
-        [192, 224],
+        [66, 100],
+        [108, 182],
+        [190, 228],
       ]) {
         const zc = (z0 + z1) / 2;
         const x0 = 0.6 * wOut(z0) + 3;
         const x1 = 0.6 * wOut(z1) + 3;
+        const xc = (x0 + x1) / 2;
         const ang = Math.atan2(x1 - x0, z1 - z0);
         const len = Math.hypot(x1 - x0, z1 - z0);
+        const y0 = bellyY(z0, x0);
+        const y1 = bellyY(z1, x1);
         const g = new THREE.BoxGeometry(3.4, 0.2, len);
+        // lie on the belly: tilt across the V, pitch along the keel's fall, then swing to the plan
+        g.rotateZ(
+          s * Math.atan2(bellyY(zc, xc + 1.5) - bellyY(zc, xc - 1.5), 3),
+        );
+        g.rotateX(-Math.atan2(y1 - y0, len));
         g.rotateY(ang * s);
-        const xc = (x0 + x1) / 2;
-        g.translate(s * xc, bellyY(zc, xc) - 0.12, Z(zc));
+        g.translate(s * xc, (y0 + y1) / 2 - 0.1, Z(zc));
         add(g, "paint", { color: PAL.red, texel: 1 / 8 });
       }
   }

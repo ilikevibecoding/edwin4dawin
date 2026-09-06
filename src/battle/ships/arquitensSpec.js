@@ -110,7 +110,7 @@ export const keelP = (zr) =>
   );
 
 // ---- aft superstructure, bridge, nacelles -----------------------------------------------------------
-// the spine runs into a 16 m pedestal under the bridge neck (zr 204–220) that flares to the aft body's
+// the spine runs into a 16 m pedestal under the bridge neck (zr 201–220) that flares to the aft body's
 // width by zr 232, where the long ramp down to the transom begins
 export const BLOCK = { z0: 204, z1: 232, top: 24.5 };
 export const blockHalfW = (zr) =>

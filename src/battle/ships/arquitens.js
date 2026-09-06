@@ -456,13 +456,13 @@ function buildLod(lod) {
   }
   // turret pedestals (hex bases) and prong-shoulder platforms
   for (const s of [-1, 1]) {
-    add(mbox(s, wallX(104) - 2, wOut(104) + 4.5, -1.6, 0, 95, 113), "hull", {
+    add(mbox(s, wallX(104) - 2, wOut(104) + 3, -1.6, 0, 97, 111), "hull", {
       color: PAL.ledge,
       texel,
     });
     if (mid) {
       add(
-        new THREE.CylinderGeometry(7, 7.4, 1, 6).translate(
+        new THREE.CylinderGeometry(5.4, 5.8, 1, 6).translate(
           s * 26,
           deckHeightAt(135, 26) + 0.3,
           Z(135),
@@ -471,7 +471,7 @@ function buildLod(lod) {
         { color: mulColor(PAL.deck, 0.9), texel: 1 / 4 },
       );
       add(
-        new THREE.CylinderGeometry(7, 7.4, 0.6, 6).translate(
+        new THREE.CylinderGeometry(5.4, 5.8, 0.6, 6).translate(
           s * (wOut(104) + 0.5),
           0.2,
           Z(104),
