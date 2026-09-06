@@ -566,6 +566,7 @@ export class Streets {
       top(Math.min(1.5, CURB_TOP + W), slabY(Math.min(1.5, CURB_TOP + W)));
       const yBack = slabY(CURB_TOP + W);
       top(CURB_TOP + W, yBack);
+      top(CURB_TOP + W, yBack, K_APRON); // the apron quad is apron on both edges (kinds do not interpolate)
       const ap = at(CURB_TOP + W + 0.6);
       const g = this.map.heightAt(ap.x, ap.z) + 0.03;
       top(CURB_TOP + W + 0.6, Math.min(g, yBack - 0.02), K_APRON);
@@ -576,9 +577,12 @@ export class Streets {
   /** connect two profile rows: face quad, curb top, slab(s), apron */
   private link(soup: WalkSoup, a: number[], b: number[]): void {
     soup.quad(a[0], a[1], b[1], b[0], soup.nrm[a[0] * 3], 0, soup.nrm[a[0] * 3 + 2]);
-    for (let i = 2; i < a.length - 1; i++) soup.quad(a[i], a[i + 1], b[i + 1], b[i], 0, 1, 0);
+    for (let i = 2; i < a.length - 1; i++) {
+      if (soup.sw[a[i] * 4] === soup.sw[a[i + 1] * 4]) continue; // duplicate vertex (kind change), zero width
+      soup.quad(a[i], a[i + 1], b[i + 1], b[i], 0, 1, 0);
+    }
     // far LOD: curb foot to curb top (a slanted face) and one slab quad to the back of the walk (no apron)
-    const back = a.length >= 7 ? 5 : a.length - 1;
+    const back = a.length >= 8 ? 5 : a.length - 1;
     soup.quad(a[0], a[3], b[3], b[0], soup.nrm[a[0] * 3], 1, soup.nrm[a[0] * 3 + 2], 1);
     soup.quad(a[3], a[back], b[back], b[3], 0, 1, 0, 1);
   }
