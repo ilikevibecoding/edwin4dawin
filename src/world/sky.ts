@@ -128,14 +128,20 @@ vec3 noiseCoord(vec3 p, vec4 f) {
   return q + vec3(f.y * 0.8 + f.w * 0.15, f.z * 0.25, f.y * 0.5 + f.w * 0.1);
 }
 
-/** Geometric relief of the base: the height coordinate is displaced by the isotropic perlin channel of the
- *  shape fetch (B: periods 325/162 m, std 0.10, otherwise unused at this coordinate, so the relief costs no
- *  extra fetch), faded out above a third of the slab so the crown keeps its own shape.
+/** Geometric relief of the base: a 2D height field (perlin, periods 325/162/81 m, one sigma 60 m, clipped at
+ *  2.5 sigma) added to the smooth base altitude, faded out above a third of the slab so the crown keeps its own
+ *  shape. The noise is fetched at the column's smooth base altitude, not at the sample: a relief that varied
+ *  with the sample's own height folded the base surface over wherever the noise slope passed 1 m/m, which hung
+ *  pointed funnels from the base and, seen from inside the layer, switched the density on and off along each
+ *  ray (radial streaks). A closed deck undulates by half as much (stratocumulus, not cumulus pouches).
  *  hf0 = height fraction over the smooth base. */
-float baseWarp(vec4 n, float hf0) {
+float baseWarp(vec3 p, vec4 f, float baseAlt, float hf0) {
+  float fade = 1.0 - smoothstep(0.2, 0.35, hf0);
+  if (fade <= 0.0) return 0.0;
   float deck = smoothstep(0.45, 0.7, uCloudCoverage);
-  // clipped at 2.5 sigma (150 m); a closed deck undulates by half as much (stratocumulus, not cumulus pouches)
-  return clamp(n.b - 0.5, -0.25, 0.25) * (BASE_WARP * 1.6) * mix(1.0, 0.5, deck) * (1.0 - smoothstep(0.2, 0.35, hf0));
+  vec3 q = noiseCoord(vec3(p.x, baseAlt, p.z), f) * 2.0 + vec3(0.23, 0.71, 0.47);
+  float n = texture(uNoise3D, q).a;
+  return clamp(n - 0.5, -0.4, 0.4) * BASE_WARP * mix(1.0, 0.5, deck) * fade;
 }
 
 /** Vertical envelope of the layer (before noise): a base whose footprint is exactly cloudCoverage2D
@@ -163,12 +169,12 @@ float envelope(vec3 p, vec4 f, float warp, out float hf, out float hn, out float
   // the turret field alone: give it a wider range so the underside shows thick dark cells and thin bright gaps
   H = clamp(H * mix(mix(0.55, 0.28, deck), 1.1, f.w), 0.05, 1.0);
   hn = hf / H;
-  // the condensation level is sharp: a short ramp (150 m on a 2.2 km slab) that the base warp bends into pouches
+  // the condensation level is sharp: a short ramp (110 m on a 2.2 km slab) that the base warp bends into pouches
   // and the noise rags; the old 290 m ramp read as bases sliced by a plane because its iso-surface was the base.
   // A closed deck gets a softer one carved into hanging cells. The upper two thirds of the column are a soft ramp
   // the shape noise cuts into cauliflower lobes. The ramp is capped at a fraction of the column's own height:
   // a low tuft is otherwise all ramp and the noise shreds it into drifting fragments.
-  float baseRamp = min(mix(0.07, 0.16, deck), 0.35 * H);
+  float baseRamp = min(mix(0.05, 0.16, deck), 0.35 * H);
   float v = smoothstep(0.0, baseRamp, hf) * (1.0 - smoothstep(0.25, 1.0, hn)) * (1.0 - smoothstep(0.9, 1.0, hf));
   // cov^2: the soft footprint fringe thins out for the noise to shred instead of forming a plate
   return cov * cov * v;
@@ -189,16 +195,14 @@ float shapeDensity(float e, float hn, vec4 n) {
  *  envelope alone would count the soft fringe outside the visible surface as cloud. */
 float meanDensity(float e, float hn) { return clamp(e * 1.2 - 0.5 * mix(0.9, 1.3, clamp(hn, 0.0, 1.0)), 0.0, 1.0); }
 
-/** Density without edge detail (used by the light march); the base relief is included so the pouches shade
- *  one another. */
+/** Density without edge detail (used by the light march). The smooth base is used (no relief fetch): a pouch is
+ *  then lit as if it sat at the mean base, which is close to right (it is thinner toward the sun), and the light
+ *  march stays at one noise fetch per short step. */
 float densityBase(vec3 p, vec4 f) {
-  float thick = uCloudTop - uCloudBase;
-  float hf0 = (p.y - baseAltitude(f)) / thick;
-  if (hf0 > 1.0 || hf0 < -BASE_WARP * 0.4 / thick) return 0.0;
-  vec4 n = texture(uNoise3D, noiseCoord(p, f));
   float hf, hn, H;
-  float e = envelope(p, f, baseWarp(n, hf0), hf, hn, H);
+  float e = envelope(p, f, 0.0, hf, hn, H);
   if (e <= 0.002) return 0.0;
+  vec4 n = texture(uNoise3D, noiseCoord(p, f));
   return clamp(shapeDensity(e, hn, n), 0.0, 1.0);
 }
 
@@ -369,17 +373,19 @@ void main() {
       vec4 f = macroField(p.xz);
       // cheap rejection on the smooth envelope before any noise fetch: outside the footprint, above the
       // column or below the deepest possible base (warp included)
-      float hf0 = (p.y - baseAltitude(f)) / thick;
+      float baseAlt = baseAltitude(f);
+      float hf0 = (p.y - baseAlt) / thick;
       float covTest = f.x - cloudThreshold();
       float hf, hn, H;
       float e = 0.0;
+      float warp = 0.0;
       vec3 q = vec3(0.0);
       vec4 n = vec4(0.5);
       if (covTest > 0.0 && hf0 < 1.0 && hf0 > -BASE_WARP * 0.4 / thick) {
-        q = noiseCoord(p, f);
-        n = texture(uNoise3D, q);
-        e = envelope(p, f, baseWarp(n, hf0), hf, hn, H);
+        warp = baseWarp(p, f, baseAlt, hf0);
+        e = envelope(p, f, warp, hf, hn, H);
         e *= 1.0 - smoothstep(0.0, 1.0, (t - farFade0) * farFadeK);
+        if (e > 0.004) { q = noiseCoord(p, f); n = texture(uNoise3D, q); }
       }
       if (e <= 0.004) {
         // clear air: fall back to coarse steps after a couple of empty samples
@@ -429,6 +435,12 @@ void main() {
       float side = (1.0 - 0.7 * e) * smoothstep(0.0, 0.3, hn) * 0.6;
       float aoSky = max(mix(aoFloor, 1.0, exp(-above * 0.0022)), side);
       float aoGnd = max(mix(0.15, 1.0, exp(-below * 0.003)), side);
+      // base relief shading: a pouch hanging below the mean base is open to the bright horizon and the ground
+      // bounce, the hollow between pouches is shadowed by its neighbours (the ambient has no other way to
+      // show the relief; the sun is above the cloud)
+      float relief = clamp(warp / 120.0, -1.0, 1.0) * (1.0 - smoothstep(0.05, 0.2, hf));
+      aoGnd *= 1.0 - 0.3 * relief;
+      aoSky *= 1.0 - 0.2 * relief;
       vec3 gnd = gndAmb;
       if (cityK > 0.0) gnd += CITY_GLOW_COLOR * (cityK * cityGlowAt(p.xz));
       vec3 amb = (skyAmb * aoSky + gnd * aoGnd) * mix(mottRange.x, mottRange.y, mott);
@@ -469,18 +481,22 @@ void main() {
     vec2 cp = uCamPos.xz + dir.xz * tc + uCloudWind * 2.5;
     const vec2 wd = vec2(0.9439, 0.3303);                 // Atmosphere.windDir
     vec2 fc = vec2(dot(cp, wd), dot(cp, vec2(-wd.y, wd.x)));
+    // the fibre octaves fade with distance (at 50 km a 2.6 km fibre is a few pixels wide and would shimmer)
+    float lod = smoothstep(20000.0, 60000.0, tc);
     float mask = texture(uNoise3D, vec3(fc.x / 60000.0, 0.13, fc.y / 22000.0)).a;
     float fib = texture(uNoise3D, vec3(fc.x / 24000.0 + 0.5, 0.67, fc.y / 2600.0)).b;
     float fib2 = texture(uNoise3D, vec3(fc.x / 9000.0 + 0.2, 0.41, fc.y / 900.0)).b;
-    float veil = smoothstep(0.42, 0.85, mask + (fib - 0.5) * 0.9 + (fib2 - 0.5) * 0.5);
+    float veil = smoothstep(0.42, 0.85, mask + (fib - 0.5) * 0.9 * (1.0 - 0.5 * lod) + (fib2 - 0.5) * 0.5 * (1.0 - lod));
     // optically thin (od ~0.1-0.4): ice crystals scatter strongly forward (bright near the sun) plus a diffuse
-    // share; the aerial perspective to 9 km takes the low veil into the horizon haze
+    // share. Hazed with the physical optical depth to 9 km only: applyAerial's far-plane dissolve (33-57 km,
+    // there to hide the terrain far plane) would erase a veil that sits at 30-90 km for any elevation under 17 deg
     float ac = veil * 0.34 * cirrusAmount * smoothstep(0.015, 0.1, dir.y);
     if (ac > 0.001) {
       float cosSun = dot(dir, L);
       vec3 skyAmbC = mix(uZenithColor, uHazeColor, 0.5);
       vec3 cCol = lightCol * (0.07 + 0.09 * min(hgN(cosSun, 0.75), 6.0)) + skyAmbC * 0.6;
-      cCol = applyAerial(cCol, uCamPos, uCamPos + dir * tc);
+      float ext = exp(-opticalDepth(uCamPos.y, 9000.0, tc));
+      cCol = cCol * ext + skyRadiance(dir) * (1.0 - ext);
       col += (1.0 - alpha) * ac * cCol;
       alpha += (1.0 - alpha) * ac;
     }
