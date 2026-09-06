@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createCameraRig, VIEWS, VIEW_NAMES } from './camera.js';
+import { simClock } from './clock.js';
 import { createDriver } from './drive.js';
 import { createWheelDust } from './dust.js';
 import { createForest } from './forest.js';
@@ -430,6 +431,7 @@ async function boot() {
 
   function simulate(dt) {
     simTime += dt;
+    simClock.t = simTime;
     // the lions moved last frame; the truck resolves against where they are now
     collision.updateDynamic();
     driver.update(dt);
@@ -546,6 +548,7 @@ async function boot() {
       frozen = true;
       // reset to a known state
       simTime = 0;
+      simClock.t = 0;
       wheelDust.clear();
       driver.state.auto = true;
       driver.resetAuto(startT);

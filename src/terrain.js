@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { FOG, PALETTE, SUN } from './palette.js';
 import { sunDirection } from './sky.js';
+import { simClock } from './clock.js';
 import { clamp as clamp01, fbm, lerp, mulberry32, smoothstep } from './textures/core.js';
 import { WORLD } from './world.js';
 import {
@@ -5399,7 +5400,7 @@ function buildWater(curve, surfaceInfo, heightAt, sunV) {
   // 0.34/0.55/1.0 of the band. The sheet's gradient reaches this by thirty.
   const zenithK = new THREE.Color(0.34, 0.55, 1.0);
   skipAoPrepass(mesh, () => {
-    mat.uniforms.uTime.value = performance.now() * 0.001;
+    mat.uniforms.uTime.value = simClock.t;
     mat.uniforms.uSunDir.value.copy(sunDirection());
   });
   // The kopje's boulders, read off the scene once it is up. forest.js builds

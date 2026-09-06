@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { DUSK, NIGHT, OVERCAST, PALETTE, SUN } from './palette.js';
+import { simClock } from './clock.js';
 import { motePattern } from './textures/nature.js';
 
 // ---------------------------------------------------------------------------
@@ -3228,7 +3229,7 @@ function createHeadlightBeams(slices = SLICES) {
       }
       group.visible = true;
       while (meshes.length < lamps.length) makeBeam();
-      const t = performance.now() * 0.001;
+      const t = simClock.t;
       let lit = false;
       let strongest = 0;
       for (let i = 0; i < lamps.length; i++) {
