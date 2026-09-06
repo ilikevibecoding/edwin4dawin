@@ -259,15 +259,19 @@ float slopePdfPeaked(vec2 sh, vec2 va, float st, float mss) {
 // coarsest fading out as the finer fades in so the texture slides with the distance without popping. The
 // field evolves as a slow Gaussian process in time and drifts with the wind, so glints wax and wane rather
 // than flicker, and camera motion only moves them with the water they sit on.
-// Glitter is seen looking toward the light at a grazing angle close to its elevation, which foreshortens
-// the water along the light's azimuth; the cells are stretched along that (world-fixed) azimuth by the
-// same factor so a glint stays a few pixels in both screen directions instead of a wide horizontal blob.
+// The cells are the crest segments of the short wind waves the glints ride on: world-fixed, aligned with the
+// wind and CREST times longer along the crests than across (a short-crested sea). The frame's foreshortening
+// then flattens them into the thin horizontal dashes of a sun path seen from altitude, leaves them ovals on
+// the steep near water, and points them toward the horizon where the crests run away from the camera. (A
+// camera-relative axis, the sun's or the view's azimuth, fanned the dashes into arcs around the camera's
+// footprint and morphed the texture in every turn.)
 // dx, dy: world-space extent of the pixel (screen derivatives of the surface position). The result is
 // capped (in units of the sun irradiance) so no pixel outshines the sun path by more than a few times: past
 // 2.5 x E the tonemapper has long gone to white anyway, and the cap only bounds the bloom energy the path and
 // its glints feed (bloom stays a soft halo on the path and never bleeds over geometry next to it).
 const float SPARK_SHARE = 0.5;
 const float GLITTER_CAP = 2.5;
+const float CREST = 2.5;
 float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, float t) {
   float NdotL = dot(N, L);
   float NdotV = dot(N, V);
@@ -283,19 +287,14 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, f
   float P;
   // the field is only evaluated where the highlight (widened to catch the field's tails) is visible
   if (slopePdf(sh, va, st, mss * 3.0) * mss > 1e-4) {
-    // The cells are stretched along the view azimuth by half the foreshortening of the water in the frame
-    // (sqrt of 1 / sin(depression)): on the flat far water a glint is a short dash toward the horizon, on the
-    // steep near water a round dot, and never the wide across-the-view blob a square cell became once the
-    // frame foreshortened it (the stretch used to follow the sun's elevation, which only matches the view
-    // when the camera looks toward a low sun). The axis turns with the camera, so the pattern morphs a little
-    // in a turn, which glitter may do: it is not a texture on the water.
-    float stretch = sqrt(clamp(1.0 / max(V.y, 0.12), 1.0, 8.0));
-    // pixel footprint along / across the view azimuth, in the stretched metric of the cells
-    float footEff = max((abs(dot(dx, va)) + abs(dot(dy, va))) / stretch, abs(dot(dx, vc)) + abs(dot(dy, vc)));
+    vec2 wd = uWindDir, wc = vec2(-wd.y, wd.x);
+    // pixel footprint along the wind / along the crests, in the metric of the cells
+    float footEff = max(abs(dot(dx, wd)) + abs(dot(dy, wd)), (abs(dot(dx, wc)) + abs(dot(dy, wc))) / CREST);
     vec2 s = vec2(0.0);   // slope offset of the resolved facets
     float resolved = 0.0; // fraction of the variance they carry
-    vec2 gp = wp + uWindDir * (0.9 * t);
-    vec2 gq = vec2(dot(gp, va) / stretch, dot(gp, vc));
+    // the field rides downwind with the short waves (they travel toward -wd)
+    vec2 gp = wp + wd * (0.9 * t);
+    vec2 gq = vec2(dot(gp, wd), dot(gp, wc) / CREST);
     // octaves of 0.7 m * 2^o (o <= 8): the finest whose cell spans more than 2 px fades in until it spans
     // 4 px ('u') and carries most of the share (grain, not blobs), the next less, the third fades out as the
     // first fades in
@@ -846,7 +845,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v8-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v9-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 
