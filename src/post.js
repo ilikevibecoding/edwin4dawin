@@ -7,7 +7,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
-import { raysOf, sunDirection } from './sky.js';
+import { moonDiscOf, raysOf, sunDirection } from './sky.js';
 
 // ---------------------------------------------------------------------------
 // Post stack, in the order light actually goes through a camera:
@@ -891,6 +891,23 @@ const GradeShader = {
     // x, y: camera near and far; z: where the horizon crosses the frame in
     // uv. Camera state, packed for the same reason as the rays' uSun.
     uHeatView: { value: new THREE.Vector4(0.1, 900, 0.5, 0) },
+    // The moon (round 6). Drawn here, after the bloom pass, where it cannot
+    // bloom: at any dome radiance that put the disc near 0.8 display the
+    // bloom pass took the part over its threshold and laid it out to ten
+    // pixels past the limb (r = 10 px read 0.51 with the pass on, 0.39 off).
+    // The dome keeps a disc under the threshold for the reflections
+    // (NIGHT_SKY.sunDisc) and this term replaces it in the frame — replaces,
+    // not adds, so the dome's disc never shows through. Camera space:
+    // uMoonDir is the moon's direction, uMoonU / uMoonV the tangent basis the
+    // maria are drawn in (world-fixed, so they do not turn with the camera),
+    // uMoonProj is (tan half-fov x, tan half-fov y, angular radius, 0), and
+    // uMoonCol is the lit surface in display sRGB. uMoon is the switch.
+    uMoon: { value: 0 },
+    uMoonDir: { value: new THREE.Vector3(0, 0, -1) },
+    uMoonU: { value: new THREE.Vector3(1, 0, 0) },
+    uMoonV: { value: new THREE.Vector3(0, 1, 0) },
+    uMoonProj: { value: new THREE.Vector4(1, 1, 0.00775, 0) },
+    uMoonCol: { value: new THREE.Vector3(1, 1, 1) },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -908,6 +925,9 @@ const GradeShader = {
     uniform sampler2D tDepth;
     uniform float uHeat;
     uniform vec4 uHeatView;
+    uniform float uMoon;
+    uniform vec3 uMoonDir, uMoonU, uMoonV, uMoonCol;
+    uniform vec4 uMoonProj;
     varying vec2 vUv;
 
     const vec3 LUMA = vec3( 0.2126, 0.7152, 0.0722 );
@@ -1030,6 +1050,31 @@ const GradeShader = {
       col = mix( grey, col, sat );
       // bleach the top end toward white the way a real sensor does
       col = mix( col, vec3( luma ), smoothstep( 0.72, 1.0, luma ) * uHiDesat );
+
+      // The moon. See the uniform block. The disc is a body, not a white
+      // circle: maria from three octaves of the shimmer's value noise in a
+      // world-fixed tangent frame, and a little limb darkening. Only over
+      // pixels where the depth buffer is still the clear value — the sky —
+      // so the treeline and the terrain occlude it as they occlude the dome.
+      if ( uMoon > 0.0 ) {
+        vec3 ray = normalize( vec3( ( uv - 0.5 ) * 2.0 * uMoonProj.xy, -1.0 ) );
+        float ca = dot( ray, uMoonDir );
+        // sin of the angle off the moon's centre; the disc is half a degree,
+        // where sin is the angle to eight decimals
+        float ang = length( ray - uMoonDir * ca );
+        // one pixel at the frame centre, in radians
+        float pxA = 2.0 * uMoonProj.y / uResolution.y;
+        if ( ca > 0.0 && ang < uMoonProj.z + pxA ) {
+          float disc = 1.0 - smoothstep( uMoonProj.z - pxA * 0.6, uMoonProj.z + pxA * 0.6, ang );
+          float sky = step( 0.99999, texture2D( tDepth, uv ).x );
+          vec2 mp = vec2( dot( ray, uMoonU ), dot( ray, uMoonV ) ) / uMoonProj.z;
+          float m = vnoise( mp * 1.45 + 9.0 ) * 0.5 + vnoise( mp * 2.9 + 21.0 ) * 0.3 + vnoise( mp * 5.8 + 5.0 ) * 0.2;
+          float rr = clamp( dot( mp, mp ), 0.0, 1.0 );
+          vec3 mc = uMoonCol * min( 0.74 + m * 0.5, 1.0 ) * mix( 1.0, 0.9, rr );
+          col = mix( col, mc, disc * sky );
+          luma = dot( col, LUMA );
+        }
+      }
 
       // vignette: smooth, off-centre-safe, never fully black
       float v = smoothstep( 0.95, uVignetteSoft * 0.35, r2 * 2.0 );
@@ -1458,9 +1503,24 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
     u.uMidContrast.value = g.grade.midContrast;
     u.uKnee.value = g.grade.knee;
     u.uShoulder.value = g.grade.shoulder;
+    moon = moonDiscOf(name);
+    u.uMoon.value = moon ? 1 : 0;
+    if (moon) {
+      u.uMoonCol.value.set(moon.color.r, moon.color.g, moon.color.b);
+      u.uMoonProj.value.z = moon.radius;
+      // The maria's frame, world-fixed: the same construction the dome shader
+      // used for them, so they sit where they sat.
+      const ref = Math.abs(moon.dir.y) > 0.94 ? _moonRef.set(1, 0, 0) : _moonRef.set(0, 1, 0);
+      _moonU.crossVectors(ref, moon.dir).normalize();
+      _moonV.crossVectors(moon.dir, _moonU).normalize();
+    }
     return mode;
   }
 
+  let moon = null;
+  const _moonRef = new THREE.Vector3();
+  const _moonU = new THREE.Vector3();
+  const _moonV = new THREE.Vector3();
   setTimeOfDay(mode);
 
   const _fwd = new THREE.Vector3();
@@ -1495,6 +1555,17 @@ export function createPost(renderer, scene, camera, { quality = 'high', timeOfDa
         if (Number.isFinite(_hz.y)) horizon = THREE.MathUtils.clamp(_hz.y * 0.5 + 0.5, -1, 2);
       }
       grade.uniforms.uHeatView.value.set(camera.near, camera.far, horizon, 0);
+      if (moon) {
+        // The moon and its tangent frame into camera space, and the frustum
+        // half-tangents the grade rebuilds each pixel's view ray from.
+        const u = grade.uniforms;
+        u.uMoonDir.value.copy(moon.dir).transformDirection(camera.matrixWorldInverse);
+        u.uMoonU.value.copy(_moonU).transformDirection(camera.matrixWorldInverse);
+        u.uMoonV.value.copy(_moonV).transformDirection(camera.matrixWorldInverse);
+        const e = camera.projectionMatrix.elements;
+        u.uMoonProj.value.x = 1 / e[0];
+        u.uMoonProj.value.y = 1 / e[5];
+      }
       composer.render(dt);
     },
     /** Re-find the reflective surfaces, for anything built after boot. */

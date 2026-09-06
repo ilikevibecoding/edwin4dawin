@@ -23,9 +23,9 @@ void main() {
 }`;
 
 const skyFragment = /* glsl */ `
-uniform vec3 uZenith, uHorizon, uHaze, uGround, uSunColor, uCloudCol, uAnti;
+uniform vec3 uZenith, uHorizon, uHaze, uGround, uGroundNear, uSunColor, uCloudCol, uAnti;
 uniform vec3 uSunDir;
-uniform float uSunDisc, uGlow, uAureole, uHazeFalloff, uCloud, uExposure;
+uniform float uSunDisc, uGlow, uAureole, uHazeFalloff, uCloud, uExposure, uGroundOcc;
 uniform float uZenithPow, uStars, uMoonDetail, uMilkyWay, uAntiGain, uWarm, uHazeAniso;
 uniform vec2 uDisc;
 varying vec3 vDir;
@@ -163,12 +163,16 @@ void main() {
   // The moon's own corona: the pow( cp, 90 ) glow above is ten degrees
   // wide, which is the sun's aureole in dust and is twenty moon diameters.
   // Round 4 read the moon as "a soft blob with no disc". A second, tight
-  // term (half-width 2.7 degrees) carries the glow the eye sees hugging the
-  // limb, so the broad one can be turned down without the disc going bare.
-  // 0.11 puts the rim just outside the limb at about 0.06 linear — ten
-  // times the sky there and a twentieth of the disc — so the limb is an
-  // edge. Display only (uMoonDetail is 0 in the environment render).
-  col += uSunColor * pow( cp, 600.0 ) * 0.11 * uMoonDetail;
+  // term carries the glow the eye sees hugging the limb, so the broad one
+  // can be turned down without the disc going bare. Display only
+  // (uMoonDetail is 0 in the environment render).
+  // pow 600 x 0.11 -> pow 3000 x 0.07 (round 6). The old term had a
+  // half-width of 2.7 degrees — six moon radii — at 0.06 linear just off
+  // the limb, and with the wide glow under it the sky ten pixels out from
+  // the disc centre sat at 0.39 display with the bloom pass *off* (0.50 on).
+  // This one is 1.2 degrees to half and 0.034 linear at the limb: ten pixels
+  // out reads about 0.27, and by two degrees it is the wide glow alone.
+  col += uSunColor * pow( cp, 3000.0 ) * 0.07 * uMoonDetail;
 
   // cirrus, mostly for something interesting in the metal reflections
   if ( h > 0.0 ) {
@@ -179,28 +183,37 @@ void main() {
     col = mix( col, lit * ( 0.7 + uGlow * 0.02 ), cl * uCloud );
   }
 
-  // the disc itself, kept to a sane magnitude on purpose
+  // the disc itself, kept to a sane magnitude on purpose. At night this is
+  // only the radiance the reflections see (SSR, the puddles): the moon the
+  // frame shows — maria, limb darkening — is drawn after the bloom pass by
+  // the grade (post.js, moonDiscOf), where it cannot bloom.
   float disc = smoothstep( uDisc.x, uDisc.y, c );
-  vec3 discCol = uSunColor;
-  if ( uMoonDetail > 0.0 ) {
-    // A moon that is a flat white circle is worse than no moon. Two terms give
-    // it a body: maria, and limb darkening towards the edge of the sphere.
-    vec3 ref = abs( uSunDir.y ) > 0.94 ? vec3( 1.0, 0.0, 0.0 ) : vec3( 0.0, 1.0, 0.0 );
-    vec3 tx = normalize( cross( ref, uSunDir ) + 1e-5 );
-    vec3 ty = cross( uSunDir, tx );
-    // 250 -> 440: the maria and limb scale follow the disc, which is now
-    // 0.44 degrees in radius (NIGHT_SKY.disc) rather than 0.79.
-    vec2 mp = vec2( dot( d, tx ), dot( d, ty ) ) * 440.0;
-    float m = fbm( mp * 0.42 + 9.0 );
-    float rr = clamp( length( mp ) / 3.4, 0.0, 1.0 );
-    discCol *= mix( 1.0, 0.55 + m * 0.62, uMoonDetail );
-    discCol *= mix( 1.0, 0.72, rr * rr * uMoonDetail );
-  }
-  col += discCol * disc * uSunDisc;
+  col += uSunColor * disc * uSunDisc;
 
   // below the horizon the dome reads as the plain, so nothing that peeks under
   // the terrain's edge is sky-blue
-  col = mix( col, uGround, smoothstep( 0.0, -0.10, h ) );
+  float under = smoothstep( 0.0, -0.10, h );
+  vec3 plain = uGround;
+  if ( uGroundOcc > 0.0 ) {
+    // The environment render (round 6). The ground half of the probe used to
+    // be two flat spheres: the lit plain from the horizon down to -32 degrees
+    // and a darker one from there to the nadir, so a bumper's underside
+    // mirrored sunlit ground at full brightness right up to a hard step. This
+    // is the plain as a vehicle sees it from bumper height: sunlit out past
+    // its own shadow, the shadow's edge between about 8 and 40 degrees down
+    // (1.5 m to 4 m out at 0.6 m up), and the ground straight under it both
+    // in shadow and under a body that blocks most of its sky, so the nadir
+    // is half the shadowed value again. th is the sine of the angle below
+    // the horizon: 0.14 = 8, 0.5 = 30, 0.64 = 40 degrees.
+    float th = -h;
+    float shade = smoothstep( 0.14, 0.64, th );
+    float occ = smoothstep( 0.5, 1.0, th );
+    plain = mix( uGround, uGroundNear, shade ) * ( 1.0 - 0.5 * occ );
+    // and a horizon two degrees wide rather than six: the plain meets the
+    // haze band where the old sphere's edge did
+    under = smoothstep( 0.0, -0.035, h );
+  }
+  col = mix( col, plain, under );
 
   col *= 1.0 + skyDither( gl_FragCoord.xy ) * 0.012;
   col = clamp( col * uExposure, vec3( 0.0 ), vec3( 80.0 ) );
@@ -252,6 +265,12 @@ const DAY_SKY = {
   antiGain: 0.0,
   warm: 0.12,
   ground: rad(0x5a3a22, 0.35),
+  // The environment probe's plain (round 6: these were the two flat ground
+  // spheres in `createSky`; the dome shader draws them now, shaded toward the
+  // nadir — see `uGroundOcc`). The lit straw plain out past the vehicle's
+  // shadow, and the earth inside it.
+  envGround: rad(0xa8874e),
+  envGroundNear: rad(0x7e5a36),
   sunColor: rad(0xfff0d8),
   cloudCol: rad(0xf2f0ea, 0.9),
   sunDisc: 46.0,
@@ -284,6 +303,8 @@ const DUSK_SKY = {
   antiGain: 1.1,
   warm: 0.3,
   ground: rad(DUSK.ground, 0.9),
+  envGround: rad(0x3a2416),
+  envGroundNear: rad(0x22150d),
   sunColor: rad(DUSK.sunLow, 1.1),
   cloudCol: rad(DUSK.cloud, 0.7),
   sunDisc: 26.0,
@@ -333,18 +354,36 @@ const NIGHT_SKY = {
   // median needs the dial at 1.3 to reach 0.02, and at 1.3 the camp pad is
   // 0.72 of the band (0.7 is the line). The band is the ceiling, so the band
   // comes up with the ground under it.
-  horizon: rad(NIGHT.skyHorizon, 2.4),
+  //
+  // 2.4 -> 2.0 (round 6, the round-5 consensus s5, which asked for 1.8). The
+  // 2.4 band overshot the trade by half a stop: `mainroad` sky rows 40-58
+  // went 0.0103 -> 0.0245 linear (+1.25 st) against a 0.017-0.020 target,
+  // and the night hero's paint lost 1.3 st of separation from the sky. The
+  // rows do not scale with the multiplier: at 1.8 (haze 1.3) they measured
+  // 0.0159, a -0.62 st fall for a -0.42 st dial, so 2.0 is what lands the
+  // target. The ground under it is held by the indirect dial (1.4 -> 1.7).
+  horizon: rad(NIGHT.skyHorizon, 2.0),
   // No brighter than the horizon it sits on. At 1.15 this was the pale band
   // every critic saw: a haze term lighter than the sky above it *and* than the
   // fog the ground went to, so the hills floated on a luminous strip. Held to
   // the horizon's own value the sky darkens smoothly to the ground line and
   // the fog below (`horizonOf` this) meets it there. Scaled with the
-  // horizon (0.72 x 2.4).
-  haze: rad(NIGHT.haze, 1.73),
-  anti: rad(NIGHT.haze, 1.73),
+  // horizon (0.72 x 2.0).
+  haze: rad(NIGHT.haze, 1.44),
+  anti: rad(NIGHT.haze, 1.44),
   antiGain: 0.0,
   warm: 0.0,
   ground: rad(NIGHT.ground, 1.0),
+  // The plain the environment shows below the horizon, at the ratio the frame
+  // holds it to the band (pad 0.6-0.7 of the horizon band): 0x212630 is
+  // linear luma 0.019 against the band's 0.033 at x2.0. The 0x07080a it had
+  // (0.0024, a sixteenth of the band) was written when the boot-time
+  // environment never showed it: `regenerateEnv` only ran on a change of
+  // hour, so every `?time=night` frame was lit by the *day* plain (0.26)
+  // under the night sky. That is fixed below (the environment is built for
+  // the hour the page boots into), and this is what the night plain is.
+  envGround: rad(0x212630),
+  envGroundNear: rad(0x181c24),
   sunColor: rad(NIGHT.moon),
   cloudCol: rad(NIGHT.cloud, 0.6),
   // Small and hot rather than large and grey: the moon is a quarter of a
@@ -365,8 +404,30 @@ const NIGHT_SKY = {
   // bloom pass takes 0.5 from it rather than 1.3; ACES still shows the disc
   // near 0.8, and the maria and limb darkening below show, because the disc
   // is no longer pinned to the clamp.
-  sunDisc: 4.5,
+  //
+  // 4.5 -> 1.5 (round 6). At 4.5 the disc still bloomed: r = 10 px read 0.51
+  // display with the pass on against 0.39 off, and the limb was only clean
+  // with bloom off. The disc the frame shows is now drawn by the grade pass
+  // *after* bloom (post.js, `moonDiscOf` below), so the dome's own disc only
+  // has to be what the reflections see: 1.5 x the moon's 0.55 luma is 0.8
+  // linear, under the night bloom threshold (2.0), so nothing of it reaches
+  // the bloom input. The stars are not touched (`stars` 1.0).
+  sunDisc: 1.5,
   envDisc: 5.0,
+  // The display-space moon, drawn by the grade after bloom. `radius` is the
+  // angular radius in radians (0.00775 = 0.444 degrees, the outer edge of
+  // `disc` below, so the dome's dim disc sits exactly under this one and
+  // never shows past it). `color` is the display colour of the lit surface
+  // before maria/limb shading; `lift` mixes it toward white so the highlands
+  // read about 0.95 display and the maria 0.75 (a full moon is the brightest
+  // thing in the frame and reads white, not sky-blue). Measured at 640 x 360
+  // and 36 degrees of fov the disc is 4.4 px in radius: at lift 0.7 the
+  // ring means were 0.85 / 0.85 / 0.56 at r = 0 / 2 / 4 px and 0.78 over
+  // r <= 4, so the whole disc is inside the 4 px the brief measures and the
+  // limb ring pulls the mean under 0.8. 0.8 here and a lighter limb in the
+  // grade (0.82 -> 0.9: the real full moon has almost no limb darkening,
+  // the regolith backscatters) put r <= 4 over 0.8 without touching the halo.
+  moonDisc: { radius: 0.00775, color: NIGHT.moon, lift: 0.8 },
   // 2.0 -> 0.035 on the ten-degree glow. The value was the sun's, and on the
   // sun it is dust forward-scatter at a hundredth of the disc; on the moon
   // it was 0.6 linear at the centre against a sky of 0.006, so the moon was
@@ -420,6 +481,8 @@ const OVERCAST_SKY = {
   antiGain: 0.0,
   warm: 0.0,
   ground: rad(OVERCAST.ground, 0.7),
+  envGround: rad(0x6e665a),
+  envGroundNear: rad(0x4a4540),
   sunColor: rad(0xe4e4e2, 0.6),
   // Darker than the sky it sits in, so the fbm deck reads as cloud bases
   // rather than vanishing into a white card.
@@ -473,7 +536,17 @@ const MODES = {
     // sunlit floor, with the sunlit floor itself up 2.2 %), and the far
     // cascade does not reach this framing at all — the truck parks 4 m from
     // the anchor, so the mess is inside the near box.
-    hemi: { sky: 0x93a9c2, ground: 0xc8956a, intensity: 2.5 },
+    //
+    // 2.5 -> 3.25 (round 6), with the near map's `shadow.intensity` at 0.92
+    // below. Ablated on `camp_mess` (HEAD, linear): the shade floor under the
+    // canopy is 62 % hemisphere and 39 % environment (GTAO 0); the pockets
+    // under the tables sit at a fixed 0.61 of the open floor under every
+    // ambient change *and* under the key leak, so their depth is the decal's
+    // own darkening (campWear, campground) and the light can only move the
+    // pockets and the open floor together. x1.5 alone took the pockets
+    // -0.31 st for +4.3 % on the sunlit floor (over the 3 % line); x1.3 with
+    // the 8 % key leak takes them -0.8 st for +2.6 %.
+    hemi: { sky: 0x93a9c2, ground: 0xc8956a, intensity: 3.25 },
     rim: { color: PALETTE.shadowTint, intensity: 0.38 },
     // The bounce card stays. A 58-degree sun leaves a door skin at half the
     // irradiance of the bonnet and open ground does not fill it; the card is
@@ -496,7 +569,17 @@ const MODES = {
     // pockets under the mess tables 2.7–3.7 stops down (round 4, all three
     // critics). The far map has no penumbra of its own, so a shade of the
     // key leaking through it stands in for the sky the awning does not block.
-    shadow: { radius: 1.2, bias: -0.00012, normalBias: 0.035, intensity: 1.0, farRadius: 3.6, farStrength: 0.92 },
+    //
+    // intensity 1.0 -> 0.92 (round 6): the same 8 % of the key the far map
+    // has leaked since round 5, on the near map too, so the world's shadow
+    // no longer changes strength at the cascade seam and the mess — which is
+    // inside the near box — gets the leak the far cascade was tuned for. It
+    // is what a caster does to a receiver: it blocks the sun, not the sky
+    // around it. Measured on `camp_mess`: pockets -0.61 st, sunlit floor
+    // +0.0 %; the day hero's whole frame +0.2 %. farStrength 0.92 -> 1.0 so
+    // the far map's total (intensity x farStrength) stays at 0.92 rather
+    // than compounding to 0.85.
+    shadow: { radius: 1.2, bias: -0.00012, normalBias: 0.035, intensity: 0.92, farRadius: 3.6, farStrength: 1.0 },
     // Columns of lit dust, faint. Under a canopy these were the shot; on a plain
     // at noon they are barely there, which is right.
     shafts: { color: PALETTE.dustLit, gain: 0.28, width: 1.7 },
@@ -652,7 +735,16 @@ const MODES = {
     // critic A's "0.8 stops darker than round 1" door (0.133 then) comes
     // back through the fill: each 8 of intensity is about +0.018 on the
     // skin and +0.006 on the trail in front of it.
-    fill: { color: 0x9db5d8, intensity: 18, angle: 0.6, throw: 13, az: 48, el: 14 },
+    //
+    // 18 -> 34 (round 6). The environment in that ablation was the boot-time
+    // day plain (see `envGround` on NIGHT_SKY): with the night plain under
+    // the truck the door skin fell 0.0182 -> 0.0108 linear on the hero
+    // (-0.75 st, the same framing), and the fill is the only term that
+    // reaches it (hemisphere 0.45 -> 0.7 moved it 0.000, the moon 0.8 -> 1.1
+    // +0.0019). Swept 18 / 26 / 34: door 0.0108 / 0.0144 / 0.0183, so 34 is
+    // the value that puts the flank back where the round-5 frames had it,
+    // with the trail in front +26 % on its median from the spill.
+    fill: { color: 0x9db5d8, intensity: 34, angle: 0.6, throw: 13, az: 48, el: 14 },
     // Thinner than the forest's 0.0082: a moonlit plain has kilometres of
     // visibility, and the fog's job here is only to put the far acacias under
     // the horizon band rather than to close the corridor.
@@ -726,7 +818,14 @@ const MODES = {
     // x2.4, 1.2 / 1.4 / 1.6 gave `mainroad` 0.0187 / 0.0216 / 0.0248 and the
     // pad 0.0135 / 0.0157 / 0.018 against a band of 0.0267 (0.51 / 0.59 /
     // 0.67). 1.4 is the one in the target with a margin under the 0.7 line.
-    groundIndirect: 1.4,
+    //
+    // 1.4 -> 1.7 (round 6, consensus s5): the band came down 2.4 -> 2.0 and
+    // this is what holds the `mainroad` ground at 0.02 under it. The sweep
+    // above was run on the boot-time environment bug (the day plain under the
+    // night sky, see `envGround` on NIGHT_SKY); with the night plain in the
+    // environment the trail beyond the lamps measured 1.4 / 1.7 / 2.0 / 2.3 ->
+    // 0.0186 / 0.0225 / 0.0268 / 0.0313 (`mainroad` rows 240+, median).
+    groundIndirect: 1.7,
     surfaces: { dash: 2.1, film: 0.2, glass: 0.24 },
   },
 
@@ -1086,6 +1185,8 @@ function makeSkyMaterial(cfg, sunDir) {
       uHorizon: { value: cfg.horizon.clone() },
       uHaze: { value: cfg.haze.clone() },
       uGround: { value: cfg.ground.clone() },
+      uGroundNear: { value: cfg.ground.clone() },
+      uGroundOcc: { value: 0 },
       uSunColor: { value: cfg.sunColor.clone() },
       uCloudCol: { value: cfg.cloudCol.clone() },
       uAnti: { value: cfg.anti.clone() },
@@ -1119,7 +1220,13 @@ function applySkyUniforms(material, cfg, sunDir, { env = false } = {}) {
   u.uZenith.value.copy(cfg.zenith);
   u.uHorizon.value.copy(cfg.horizon);
   u.uHaze.value.copy(cfg.haze);
-  u.uGround.value.copy(cfg.ground);
+  // The environment's plain is its own pair of colours (the lit savanna and
+  // the earth in the vehicle's shadow, `envGround` / `envGroundNear`), shaded
+  // toward the nadir by the shader's `uGroundOcc` branch. The display dome
+  // keeps the flat under-horizon colour: the terrain covers it.
+  u.uGround.value.copy(env ? cfg.envGround : cfg.ground);
+  u.uGroundNear.value.copy(env ? cfg.envGroundNear : cfg.ground);
+  u.uGroundOcc.value = env ? 1 : 0;
   u.uSunColor.value.copy(cfg.sunColor);
   u.uCloudCol.value.copy(cfg.cloudCol);
   u.uAnti.value.copy(cfg.anti);
@@ -1389,6 +1496,24 @@ export function sunDirection(mode = currentMode) {
   return dirFrom(k.az, k.el);
 }
 
+/**
+ * The moon the frame shows, for the grade pass (post.js), which draws it
+ * after the bloom pass so the disc can be bright without blooming. World
+ * direction (the dome's own `uSunDir`, so it sits exactly over the dome's
+ * dim disc), angular radius in radians, and the lit colour in *display* sRGB
+ * before the maria and limb shading. Null for an hour without a moon.
+ */
+export function moonDiscOf(mode = currentMode) {
+  const s = modeOf(mode).sky;
+  const md = s.moonDisc;
+  if (!md || !(s.moonDetail > 0)) return null;
+  // `new Color(hex)` lands in linear; the grade runs after the OutputPass, in
+  // display space, so this goes back to the sRGB the hex reads as.
+  const color = new THREE.Color(md.color).convertLinearToSRGB();
+  color.lerp(new THREE.Color(1, 1, 1), md.lift ?? 0);
+  return { dir: sunDirection(mode), radius: md.radius, color };
+}
+
 /** The crepuscular-ray settings for an hour, read by the post chain. */
 export function raysOf(mode = currentMode) {
   return modeOf(mode).rays || { color: 0xffffff, gain: 0 };
@@ -1484,7 +1609,9 @@ const RETUNE = {
   uSunCol: { dusk: { hue: HUE_DUSK, mul: 0.95 }, night: { hue: HUE_NIGHT, mul: 0.14 }, overcast: { hue: HUE_GREY, sat: 0.9, mul: 0.45 } },
   uShadeCol: { dusk: { hue: 0x9a6a4a, mul: 0.8 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.35 }, overcast: { hue: HUE_GREY_DEEP, sat: 0.8, mul: 1.2 } },
   uSkyTop: { dusk: { hue: HUE_DUSK_COOL, mul: 0.75 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.13 }, overcast: { hue: HUE_GREY_DEEP, sat: 0.9, mul: 1.2 } },
-  uSkyLow: { dusk: { hue: HUE_DUSK, mul: 0.85 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.2 }, overcast: { hue: HUE_GREY, sat: 0.9, mul: 1.1 } },
+  // Night 0.2 -> 0.17 with the horizon band (NIGHT_SKY.horizon 2.4 -> 2.0):
+  // this is the band the puddles reflect.
+  uSkyLow: { dusk: { hue: HUE_DUSK, mul: 0.85 }, night: { hue: HUE_NIGHT_DEEP, mul: 0.17 }, overcast: { hue: HUE_GREY, sat: 0.9, mul: 1.1 } },
 };
 
 const _hslA = { h: 0, s: 0, l: 0 };
@@ -1720,24 +1847,24 @@ export function createSky(
   // straw plain now, with a ring of flat-topped acacia silhouettes standing on
   // the horizon so a reflection has a skyline to break on, and a warm dark band
   // just under the horizon where the plain runs out into haze.
-  const envGround = { day: 0xa8874e, dusk: 0x3a2416, night: 0x07080a, overcast: 0x6e665a };
-  const envGroundNear = { day: 0x7e5a36, dusk: 0x22150d, night: 0x040507, overcast: 0x4a4540 };
+  //
+  // The plain itself is drawn by the dome shader (round 6; `envGround` /
+  // `envGroundNear` on each hour's sky, `uGroundOcc` in the shader). It was
+  // two flat BackSide spheres — the lit plain to 32 degrees down and a darker
+  // one from there to the nadir — and a bumper's underside mirrored sunlit
+  // ground at full brightness up to a hard step. The shader shades it toward
+  // the nadir instead, which is the ground in the vehicle's own shadow; one
+  // program fewer in the environment render.
   const envTree = { day: 0x2b2a1c, dusk: 0x140d09, night: 0x040507, overcast: 0x3d3d38 };
-  const groundMat = new THREE.MeshBasicMaterial({ color: envGround.day, side: THREE.BackSide });
-  const groundDisc = new THREE.Mesh(
-    new THREE.SphereGeometry(400, 24, 12, 0, Math.PI * 2, Math.PI * 0.5, Math.PI * 0.5),
-    groundMat,
-  );
-  envScene.add(groundDisc);
-  // The nearer ground, darker: what a bumper sees straight down is earth in
-  // the truck's own shadow, not the lit plain out at the horizon.
-  const groundNearMat = new THREE.MeshBasicMaterial({ color: envGroundNear.day, side: THREE.BackSide });
-  const groundNear = new THREE.Mesh(
-    new THREE.SphereGeometry(390, 24, 8, 0, Math.PI * 2, Math.PI * 0.68, Math.PI * 0.32),
-    groundNearMat,
-  );
-  envScene.add(groundNear);
-  const treeMat = new THREE.MeshBasicMaterial({ color: envTree.day, side: THREE.DoubleSide });
+  // Built for the hour the page boots into, not for day. `regenerateEnv` is
+  // only reached through `setTimeOfDay`, so a page booted with `?time=night`
+  // — every night and dusk capture in this project — rendered its environment
+  // with the *day* plain and trees under the night sky (round 6 finding:
+  // linear 0.26 in the lower hemisphere against a sky of 0.01, and a door
+  // skin at night 24 % brighter than the same hour reached by switching to
+  // it). The plain is the sky material's now and takes the boot hour's colours
+  // through `applySkyUniforms` above; this does the same for the tree cards.
+  const treeMat = new THREE.MeshBasicMaterial({ color: envTree[modeName] ?? envTree.day, side: THREE.DoubleSide });
   const crownGeo = new THREE.CircleGeometry(1, 14);
   const trunkGeo = new THREE.PlaneGeometry(1, 1);
   for (let i = 0; i < 22; i++) {
@@ -2211,8 +2338,6 @@ export function createSky(
 
   function regenerateEnv() {
     applySkyUniforms(envSkyMaterial, cfg.sky, sunDir, { env: true });
-    groundMat.color.set(envGround[modeName] ?? envGround.day);
-    groundNearMat.color.set(envGroundNear[modeName] ?? envGroundNear.day);
     treeMat.color.set(envTree[modeName] ?? envTree.day);
     const next = pmrem.fromScene(envScene, envSigma, 0.1, envFar, { size: envSize });
     const old = envRT;
@@ -2715,14 +2840,41 @@ void main() {
   // 0.85) still had the slices at half weight and the bar's beam began as a
   // row of five blue dots (peak/trough 2.8 on the lights-only frame) before
   // the sheet took over. At 32 degrees they are now at a tenth.
-  float wSlice = smoothstep( 0.80, 0.97, ax );
+  // 0.80 -> 0.85 (round 6): a tenth was still three discs. The rear camera
+  // sits 32.9 degrees off the bar's axis (ax 0.840) *at the lens*, and
+  // slices 3–5 read as cores at 0.09 / 0.16 / 0.13 display over a 0.04
+  // sheet (peak/trough 4.6 along the axis, lights only). Raising the start
+  // halved the first core and did nothing to the far ones (0.067 / 0.096 /
+  // 0.169 -> 0.033 / 0.065 / 0.127, grain off): ax is the view angle to the
+  // *fragment*, and a slice eight metres down the beam is seen from that
+  // camera at fourteen degrees, where the stack has full weight. What is
+  // wrong with those slices is not the angle they are seen at but where the
+  // camera stands — outside the cone, where the sheet is the right picture.
+  // So the slices are also faded by the gate the sheet already uses
+  // (outside, below): a camera inside 1.2 local radii of the axis (front,
+  // interior) sees the stack as before, one beyond 2.5 radii (hero 4 radii,
+  // broadside, rear) sees the sheet alone. The sheet's along-the-beam share
+  // (the fragments the slices used to draw) only comes in past 2.5 radii,
+  // so a camera in the 1.2-2.5 band sees exactly the sheet it saw before
+  // (the angular cross-fade alone, times the gate) while its slices fade:
+  // at that distance the sheet is a plane a metre or two off the lens, and
+  // the angular term (ax about 1 looking along the beam) is what keeps it off.
+  vec3 relC = cameraPosition - uOrigin;
+  float tC = clamp( dot( relC, uDir ), 0.0, uLength );
+  float dAxis = length( relC - uDir * tC );
+  float rC = mix( uNearR, uFarR, tC / uLength );
+  float dR = dAxis / max( rC, 1e-3 );
+  float outside = smoothstep( 1.2, 2.5, dR );
+  float wAng = smoothstep( 0.85, 0.97, ax );
+  float wSlice = wAng * ( 1.0 - outside );
+  float wSheet = ( 1.0 - wAng ) * outside + wAng * smoothstep( 2.5, 4.0, dR );
 
   float f;
   if ( vGlare > 1.5 ) {
     // chord through a soft-shouldered disc, in units of the local radius
     float s = clamp( vRad, 0.0, 1.0 );
     float c2 = 1.0 - s * s;
-    f = c2 * sqrt( c2 ) * ( 1.0 - wSlice ) * uSheet;
+    f = c2 * sqrt( c2 ) * wSheet * uSheet;
     // The cone spreads, so the light in it thins: a ray crossing the beam
     // at twice the radius crosses twice the path through a quarter of the
     // density. Without this the sheet was a flat wedge that was brightest
@@ -2739,15 +2891,11 @@ void main() {
     // sees it as a wall a metre in front of the lens rather than as a cone
     // in the distance — the dusk front framing (camera 5 m ahead, inside the
     // headlamps' spread) took a cream wash over its whole lower half from it.
-    // Gated on the camera's distance from the axis in local cone radii:
-    // nothing inside 1.2 radii, all of it beyond 2.5. The hero (4 radii),
-    // broadside and rear cameras are outside; the front and interior ones
-    // are inside and see the slice stack, which has always handled that view.
-    vec3 relC = cameraPosition - uOrigin;
-    float tC = clamp( dot( relC, uDir ), 0.0, uLength );
-    float dAxis = length( relC - uDir * tC );
-    float rC = mix( uNearR, uFarR, tC / uLength );
-    f *= smoothstep( 1.2, 2.5, dAxis / max( rC, 1e-3 ) );
+    // Gated on the camera's distance from the axis in local cone radii
+    // (wSheet, above): nothing inside 1.2 radii, all of it beyond 2.5. The
+    // hero (4 radii), broadside and rear cameras are outside; the front and
+    // interior ones are inside and see the slice stack, which has always
+    // handled that view.
   } else {
     // Soft-shouldered disc. A gaussian alone leaves a visible ring where the
     // slices overlap; this holds a flat-ish core and rolls off over the outer
