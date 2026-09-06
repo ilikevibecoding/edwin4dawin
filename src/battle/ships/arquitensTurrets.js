@@ -31,7 +31,7 @@ const box = (sx, sy, sz, x, y, z) =>
 
 export const HEAVY = {
   pivotY: 3.7,
-  barrelLen: 14,
+  barrelLen: 10,
   yawLimit: 2.7,
   pitchMin: -0.05,
   pitchMax: 1.2,
@@ -48,31 +48,32 @@ export const LIGHT = {
 };
 
 /**
- * Heavy twin turbolaser (the show's compact deck mounts, ~9 m across): base ring, tapering octagonal
- * armoured body with cheek plates and a rear sensor box; barrel group = mantlet block, two 12 m barrels
- * with recoil sleeves and muzzle collars.
+ * Heavy quad turbolaser (the show's chunky deck mounts flanking the bridge, ~10 m across): base ring,
+ * tapering octagonal armoured body with cheek plates and a rear sensor box; barrel group = a wide
+ * mantlet block and four 9 m barrels in two stacked pairs, with recoil sleeves and muzzle collars.
  */
 export function heavyTurret() {
   const body = [];
-  body.push(new THREE.CylinderGeometry(4.6, 5, 1, 12).translate(0, 0.5, 0));
+  body.push(new THREE.CylinderGeometry(4.8, 5.2, 1, 12).translate(0, 0.5, 0));
   body.push(
     yLoft([
-      { y: 1, pts: oct(4, 3.8, 1.1) },
-      { y: 2.9, pts: oct(3.7, 3.6, 1) },
-      { y: 4.5, pts: oct(2.8, 3, 0.8) },
+      { y: 1, pts: oct(4.3, 4, 1.1) },
+      { y: 2.9, pts: oct(4, 3.8, 1) },
+      { y: 4.6, pts: oct(3, 3.2, 0.8) },
     ]),
   );
-  for (const s of [-1, 1]) body.push(box(1, 1.6, 3.2, s * 2.4, 4.5, -0.3));
-  body.push(box(1.6, 0.8, 1.6, 0, 4.8, 1.6));
-  body.push(box(0.4, 1.5, 0.4, -1.4, 5.3, 2.1));
+  for (const s of [-1, 1]) body.push(box(1, 1.6, 3.4, s * 2.6, 4.6, -0.3));
+  body.push(box(1.6, 0.8, 1.6, 0, 4.9, 1.7));
+  body.push(box(0.4, 1.5, 0.4, -1.4, 5.4, 2.2));
   const barrels = [];
-  barrels.push(box(5, 2.1, 2.6, 0, 0, -1));
-  for (const bx of [-1.35, 1.35]) {
-    barrels.push(cylZ(0.42, 0.6, 12, 8).translate(bx, 0.15, -8));
-    barrels.push(cylZ(0.78, 0.78, 3, 8).translate(bx, 0.15, -3.6));
-    barrels.push(cylZ(0.68, 0.68, 1, 8).translate(bx, 0.15, -13.6));
-  }
-  barrels.push(cylZ(0.32, 0.32, 4, 6).translate(0, 0.75, -4));
+  barrels.push(box(5.6, 3, 2.8, 0, 0.3, -1));
+  for (const bx of [-1.4, 1.4])
+    for (const by of [-0.55, 0.95]) {
+      barrels.push(cylZ(0.36, 0.5, 8.5, 8).translate(bx, by, -6.2));
+      barrels.push(cylZ(0.66, 0.66, 2.4, 8).translate(bx, by, -3.2));
+      barrels.push(cylZ(0.56, 0.56, 0.9, 8).translate(bx, by, -10.1));
+    }
+  barrels.push(cylZ(0.3, 0.3, 3, 6).translate(0, 1.9, -3.4));
   return { body: mergeParts(body), barrels: mergeParts(barrels) };
 }
 

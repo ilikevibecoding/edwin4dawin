@@ -1,13 +1,16 @@
 // Arquitens-class light cruiser (Republic), 325 m. Original procedural geometry matched against the
 // reference stills and orthos: a kite-shaped hull whose bow is cleaved into two long box-section prongs
-// with an open fork between them (13 m slot, closed aft by a red-topped nose block over a dark trench),
-// a broad ledge at mid-height with a tall flank wall above it, a shallow pyramid deck with a raised
-// central spine, a wedge-fronted superstructure block amidships-aft carrying the T-shaped bridge head on
-// its neck, a long ramp down to the small transom, and three big engine nacelles in a horizontal row
-// (rounded red-ringed domes forward, deep nozzles aft) joined by a red bar and swept ledge struts.
-// White-grey plating with deep wine-red Republic stripes along the wall chamfers, ledge faces, nacelle
-// rings, bar and nose. Four tracking heavy twin turbolasers (deck shoulders, prong ledges), light twin
-// emplacements, fixed broadside bays in the walls and forward tubes beside the nose. Three LODs.
+// with a 9 m trench between them (open at the tips, a dark floor 7 m down, closed at zr ~ 100 by the
+// crotch ramp under the red arrowhead wedge that heads the spine), a broad ledge at mid-height with a
+// tall flank wall above it, a shallow pyramid deck with a raised red-flanked central spine and two
+// straight red-flanked rails converging aft into the wedge-fronted superstructure block that carries
+// the T-shaped bridge head on its neck, a long ramp down to the small transom, and three big engine
+// nacelles in a horizontal row (rounded red-ringed domes forward, deep nozzles aft) joined by a red bar
+// and swept ledge struts. White-grey plating with deep wine-red Republic stripes along the wall
+// chamfers, ledge faces, spine and rail flanks, nacelle rings and bar; red/white chevrons on the aft
+// corner decks and struts. Four tracking heavy twin turbolasers (deck pair flanking the bridge, prong
+// shoulder ledges), light twin emplacements (deck, prong tops, ventral), fixed broadside bays in the
+// walls and two pairs of forward launch tubes beside the wedge. Three LODs.
 import * as THREE from "three";
 import { assemble, part } from "./shipKit.js";
 import {
@@ -59,8 +62,8 @@ import {
   AFT_TAGS,
   blockSections,
   BLOCK_TAGS,
-  noseSections,
-  NOSE_TAGS,
+  crotchSections,
+  CROTCH_TAGS,
   fillerSections,
   bridgeNeck,
   headSections,
@@ -165,7 +168,7 @@ function buildLod(lod) {
   addZones(loft(aftSecs, AFT_TAGS, "transom"));
   const blockSecs = blockSections(lod);
   addZones(loft(blockSecs, BLOCK_TAGS, "block"));
-  addZones(loft(noseSections(), NOSE_TAGS, "wall"));
+  addZones(loft(crotchSections(), CROTCH_TAGS, "slot"));
   addZones(
     loft(fillerSections(), ["slot", "slot", "slot", "slot"], "slot", {
       capStart: true,
@@ -448,17 +451,28 @@ function buildLod(lod) {
       range: kind === "heavy" ? 12000 : 6000,
     });
   };
-  // deck turret flanking the bridge (the show's pair of turrets beside the command tower), light
-  // emplacements on the deck ahead of them, and the ventral bow pair under the prongs
-  const DECK_HEAVY = { zr: 188, x: 30 };
-  const DECK_LIGHT = { zr: 135, x: 27 };
+  // deck turrets flanking the bridge between the spine and the rails (the show's pair beside the
+  // command tower), matched by a ventral pair straight below them; light emplacements on the deck
+  // ahead of the rails' mid-length, on the prong tops and under the prongs
+  const DECK_HEAVY = { zr: 186, x: 13.5 };
+  const DECK_LIGHT = { zr: 140, x: 20 };
   const prongBellyY = (zr, x) => {
     // underside of a prong at |x| (between its inner wall and the chine)
     const K = keelP(zr);
     const xc = Math.max(SLOT_X + 2.5, 0.6 * wOut(zr));
     return -K + ((Math.abs(x) - SLOT_X) / (xc - SLOT_X)) * (K - 0.42 * K);
   };
+  const mainBellyY = (zr, x) => {
+    // underside of the main hull at |x| inboard of the chine
+    const K = keel(zr);
+    return -K + (Math.abs(x) / (0.6 * wOut(zr))) * (K - 0.42 * K);
+  };
   const bellySlope = (prongBellyY(80, 15.5) - prongBellyY(80, 12.5)) / 3;
+  const ventralSlope =
+    (mainBellyY(DECK_HEAVY.zr, DECK_HEAVY.x + 1.5) -
+      mainBellyY(DECK_HEAVY.zr, DECK_HEAVY.x - 1.5)) /
+    3;
+  const yVentral = mainBellyY(DECK_HEAVY.zr, DECK_HEAVY.x);
   if (lod === 0) {
     for (const s of [-1, 1]) {
       heavy(
@@ -472,7 +486,7 @@ function buildLod(lod) {
       // ledge platforms at the shoulder jog where the deck begins
       const zp = 104;
       heavy([s * (wOut(zp) + 0.5), 0, Z(zp)], [s * 0.7, 0, -1]);
-      // light emplacements: prong tops, deck, ventral bow
+      // light emplacements: prong tops, deck, the ventral pair under the deck turrets, ventral bow
       light([s * 11.5, wallTop(24) + 0.4, Z(24)], [s * 0.3, 0, -1]);
       light(
         [
@@ -483,11 +497,16 @@ function buildLod(lod) {
         [s * 0.5, 0, -1],
       );
       light(
+        [s * DECK_HEAVY.x, yVentral - 0.3, Z(DECK_HEAVY.zr)],
+        [s * 0.35, 0, -1],
+        [s * ventralSlope, -1, 0],
+      );
+      light(
         [s * 14, prongBellyY(80, 14) - 0.2, Z(80)],
         [s * 0.4, 0, -1],
         [s * bellySlope, -1, 0],
       );
-      // fixed broadside bays in the walls and forward tubes beside the nose block
+      // fixed broadside bays in the walls and forward tubes beside the wedge
       for (const zr of BAY_Z)
         fixed(
           [s * (wallX(zr) + 9.2), wallTop(zr) * 0.52 + 0.2, Z(zr)],
@@ -521,12 +540,16 @@ function buildLod(lod) {
         "hull",
         { color: mulColor(PAL.ledge, 0.9), texel: 1 / 4 },
       );
-      // ventral turret pad under the prong
-      const yv = prongBellyY(80, 14);
-      const pad = new THREE.CylinderGeometry(2.8, 2.6, 0.8, 8);
-      pad.rotateZ(s * Math.atan(bellySlope));
-      pad.translate(s * 14, yv - 0.1, Z(80));
-      add(pad, "hull", { color: mulColor(PAL.belly, 1.1), texel: 1 / 4 });
+      // ventral turret pads: under the deck turrets and under the prong
+      for (const [x, y, zr, slope, r] of [
+        [DECK_HEAVY.x, yVentral, DECK_HEAVY.zr, ventralSlope, 3.4],
+        [14, prongBellyY(80, 14), 80, bellySlope, 2.8],
+      ]) {
+        const pad = new THREE.CylinderGeometry(r, r - 0.2, 0.8, 8);
+        pad.rotateZ(s * Math.atan(slope));
+        pad.translate(s * x, y - 0.1, Z(zr));
+        add(pad, "hull", { color: mulColor(PAL.belly, 1.1), texel: 1 / 4 });
+      }
     }
   }
 

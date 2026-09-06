@@ -17,6 +17,7 @@ import {
   mulColor,
   mixColor,
   lin,
+  pw,
   facetedDome,
 } from "./venatorKit.js";
 import {
@@ -33,6 +34,8 @@ import {
   spineUp,
   keel,
   keelP,
+  TRENCH,
+  floorY,
   BLOCK,
   blockHalfW,
   blockTop,
@@ -53,7 +56,7 @@ const wallXAt = (zr, y) =>
 
 // deck rail at zr: outer foot x, deck height under it, height and crest level
 export function railAt(zr) {
-  const xe = wallX(zr) - chamfer(zr) - RAIL.inset;
+  const xe = pw(RAIL.xOut, zr);
   const y = deckHeightAt(zr, xe - RAIL.foot / 2) - 0.3;
   const h = railH(zr) + 0.3;
   return { xe, y, h, yTop: y + h };
@@ -106,14 +109,20 @@ export function deckDetail(ctx) {
         const zc = Math.min(zr + 10.5, 224);
         const wDeck = wallX(zc) - chamfer(zc) - (SPINE_X + GROOVE_W) - 7;
         if (wDeck < 8) continue;
-        const n = wDeck > 30 ? 2 : 1;
+        const n = wDeck > 30 ? 3 : 2;
+        const xEdge = wallX(zc) - chamfer(zc);
+        const xIn = SPINE_X + GROOVE_W;
+        const { xe } = railAt(zc);
         for (let k = 0; k < n; k++) {
-          // t runs from the chamfer (0) to the groove (1) on starboard, reversed on port; keep the
-          // plates inboard of the rail (t >= 0.2)
-          let t = 0.2 + (0.8 * (k + 0.5)) / n;
+          // t runs from the chamfer (0) to the groove (1) on starboard, reversed on port; skip
+          // plates that would cut through the rail
+          let t = 0.08 + (0.84 * (k + 0.5)) / n;
+          const xc = xEdge - t * (xEdge - xIn);
+          const w = ((xEdge - xIn) / n) * (0.72 + rand() * 0.14);
+          if (xc + w / 2 > xe - RAIL.foot - 0.6 && xc - w / 2 < xe + 0.6)
+            continue;
           if (s < 0) t = 1 - t;
           if (rand() < 0.12) continue;
-          const w = (wDeck / n) * (0.78 + rand() * 0.14);
           plateOn(mainSecs, j, t, zc, w, 14 + rand() * 5, plateTint(PAL.deck));
         }
         grooveOn(mainSecs, j, s > 0 ? 0.6 : 0.4, zr, wDeck * 0.8, 0.5);
@@ -153,49 +162,37 @@ export function deckDetail(ctx) {
       }
     }
   }
-  // raised deck rails (zr 118–226): trapezoid ridges lofted along the deck edge, growing from low
-  // kerbs at the shoulders to tall ridges beside the bridge, red crest, chevrons at the aft end
+  // raised deck rails (zr 112–230): straight trapezoid ridges from the shoulders into the block's
+  // flanks, light crest with red sloped flanks, taller aft; a blunt light nose cap at the forward end
   for (const s of [-1, 1]) {
-    const secs = [RAIL.z0, 150, 182, 190, 206, RAIL.z1].map((zr) =>
+    const secs = [RAIL.z0, 140, 170, 190, 205, 218, RAIL.z1].map((zr) =>
       railSection(zr, s),
     );
     const rail = loftProfile(secs, {
-      tags: ["hull", "hull", "trim", "hull"],
+      tags: ["hull", "trim", "hull", "trim"],
       capTag: "hull",
       uv: 1 / 6,
     });
     add(rail.hull, "hull", { color: mulColor(PAL.deck, 0.96), uv: "keep" });
     add(rail.trim, "paint", { color: PAL.red, texel: 1 / 8 });
-    if (mid) {
-      // Republic chevrons: alternating red/white bands across the crest at the rail's aft end
+    if (fine) {
+      // dark hatches along the crest and a groove along the crest's centreline
       const lip = (RAIL.foot - RAIL.crest) / 2;
-      for (let k = 0; k < 5; k++) {
-        const zk = 205 + k * 2.6;
-        const { xe, y, h, yTop } = railAt(zk + 1.3);
-        const col = k % 2 ? lin(0.86, 0.85, 0.82) : PAL.red;
+      for (const zr of [128, 158, 188]) {
+        const { xe, yTop } = railAt(zr);
         add(
           mbox(
             s,
-            xe - RAIL.foot + lip - 0.2,
-            xe - lip + 0.2,
-            yTop + 0.02,
-            yTop + 0.2,
-            zk,
-            zk + 2.3,
+            xe - RAIL.foot + lip + 0.4,
+            xe - lip - 0.4,
+            yTop,
+            yTop + 0.3,
+            zr - 2,
+            zr + 2,
           ),
-          "paint",
-          { color: col, texel: 1 / 8 },
+          "dark",
+          { color: PAL.dark, texel: 1 / 3 },
         );
-        // the same band down the rail's outer face, tilted to its slope
-        const len = Math.hypot(lip, h);
-        const face = new THREE.BoxGeometry(0.16, h - 0.5, 2.3);
-        face.rotateZ(s * Math.atan2(lip, h));
-        face.translate(
-          s * (xe - lip / 2 + (h / len) * 0.1),
-          y + h / 2 + (lip / len) * 0.1,
-          Z(zk + 1.15),
-        );
-        add(face, "paint", { color: col, texel: 1 / 8 });
       }
     }
   }
@@ -522,30 +519,47 @@ export function tipDetail(ctx) {
           },
         );
       }
+      // paired sensor spikes reaching forward from the tip face: a long one low and inboard, a
+      // shorter one high and outboard, each on a small dark boss
+      for (const [xf, yf, len] of [
+        [SLOT_X + 2.4, -K + 2.6, 6.5],
+        [xo - 2.6, T - 2.4, 4.5],
+      ]) {
+        const x = s * xf;
+        add(
+          new THREE.BoxGeometry(1.1, 1.1, 0.9).translate(x, yf, zf - 0.35),
+          "dark",
+          { color: PAL.dark, texel: 1 / 3 },
+        );
+        add(tube([x, yf, zf], [x, yf, zf - len], 0.14, 4), "dark", {
+          color: PAL.dark,
+        });
+      }
     }
   }
 }
 
 // -------------------------------------------------------------------------------------------------
-// nose block and trench: forward tubes, a dark vent slit, trench-floor machinery
+// wedge and trench: the red arrowhead at the spine's head, forward tubes, trench-floor machinery
 // -------------------------------------------------------------------------------------------------
-// forward ordnance tubes: two pairs lying on the deck either side of the spine's red wedge
-export const TUBES = { x: 11.2, dx: 2.1, y: 12.4, z0: 98, z1: 118 };
+// forward ordnance tubes: two pairs of fat launch tubes lying on the deck either side of the wedge
+export const TUBES = { x: 10.8, dx: 2.7, r: 1.25, y: 12.7, z0: 96, z1: 120 };
 export function noseDetail(ctx) {
   const { add, fine, mid, addZones, loft } = ctx;
   if (!mid) return;
-  // the spine's terminus: a bold red arrowhead wedge rising above the spine (the show's red block at the
-  // head of the trench), lofted from a point at the deck's apex to the spine's width
+  // the spine's terminus: a bold red arrowhead wedge rising 4.6 m above the deck at the head of the
+  // trench (the show's red block), lofted from a point at the deck's apex out past the spine's width
+  // and back into the spine's flanks
   const wedge = [
-    [104, 0.4, 0.5],
-    [109, 3.6, 2.2],
-    [117, 6.4, 4.2],
-    [125, 7.6, 4.2],
-    [129, 7.6, 3.2],
+    [100, 0.5, 0.8],
+    [106, 4.2, 2.8],
+    [114, 7.6, 4.6],
+    [124, 8.2, 4.6],
+    [131, 7.6, 3.8],
   ].map(([zr, hw, up]) => {
     const base = deckC(zr) - 0.4;
     const top = deckC(zr) + up;
-    const ch = Math.min(1.1, hw * 0.3);
+    const ch = Math.min(1.2, hw * 0.3);
     return {
       z: Z(zr),
       pts: [
@@ -562,29 +576,77 @@ export function noseDetail(ctx) {
     loft(wedge, ["trim", "trim", "trim", "block", "trim", "trim"], "trim"),
     1 / 8,
   );
+  if (fine) {
+    // panel seams across the wedge's top and a dark sensor slit on its front slope
+    for (const zr of [112, 120])
+      add(
+        mbox(
+          1,
+          -6.2,
+          6.2,
+          deckC(zr) + 4.6,
+          deckC(zr) + 4.75,
+          zr - 0.2,
+          zr + 0.2,
+        ),
+        "dark",
+        {
+          color: PAL.seam,
+          texel: 1 / 3,
+        },
+      );
+    add(
+      mbox(1, -2.2, 2.2, deckC(106) + 1.6, deckC(106) + 2.3, 105.6, 106.4),
+      "dark",
+      {
+        color: PAL.recess,
+        texel: 1 / 3,
+      },
+    );
+  }
   for (const s of [-1, 1]) {
-    // twin tubes in a low housing on the deck beside the wedge, muzzles reaching forward over the
-    // prong tops
+    // twin fat tubes on a low housing on the deck beside the wedge, muzzles reaching forward over the
+    // crotch to the head of the trench
     for (const dx of [0, TUBES.dx]) {
       const x = s * (TUBES.x + dx);
       add(
-        cylZ(0.6, 0.68, TUBES.z1 - TUBES.z0, 8).translate(
-          x,
-          TUBES.y,
-          Z((TUBES.z0 + TUBES.z1) / 2),
-        ),
+        cylZ(
+          TUBES.r,
+          TUBES.r * 1.06,
+          TUBES.z1 - TUBES.z0,
+          fine ? 10 : 8,
+        ).translate(x, TUBES.y, Z((TUBES.z0 + TUBES.z1) / 2)),
         "dark",
         { color: PAL.dark, texel: 1 / 3 },
       );
+      // muzzle ring and a dark bore
+      if (fine) {
+        add(
+          cylZ(TUBES.r * 1.12, TUBES.r * 1.12, 1.2, 10).translate(
+            x,
+            TUBES.y,
+            Z(TUBES.z0 + 0.6),
+          ),
+          "hull",
+          { color: PAL.ledge, texel: 1 / 3 },
+        );
+        add(
+          new THREE.CircleGeometry(TUBES.r * 0.8, 10)
+            .rotateY(Math.PI)
+            .translate(x, TUBES.y, Z(TUBES.z0) - 0.05),
+          "dark",
+          { color: PAL.recess, texel: 1 / 3 },
+        );
+      }
     }
     add(
       mbox(
         s,
-        TUBES.x - 1.2,
-        TUBES.x + TUBES.dx + 1.2,
+        TUBES.x - TUBES.r - 0.4,
+        TUBES.x + TUBES.dx + TUBES.r + 0.4,
         deckHeightAt(112, TUBES.x) - 0.3,
-        TUBES.y + 0.9,
-        106,
+        TUBES.y + 0.2,
+        104,
         TUBES.z1 + 1,
       ),
       "hull",
@@ -592,20 +654,28 @@ export function noseDetail(ctx) {
     );
   }
   if (!fine) return;
-  // dark slit on the nose wedge and a pair of hatches on the centre deck
-  add(mbox(1, -3.8, 3.8, 5.5, 7.5, 61.2, 61.7), "dark", {
-    color: PAL.recess,
-    texel: 1 / 3,
-  });
-  for (const zr of [70, 80])
+  // trench floor: dark machinery blocks and a pipe run along the floor between the prongs' inner walls
+  for (const zr of [24, 42, 60, 78]) {
+    const y = floorY(zr);
+    add(mbox(1, -3.2, 3.2, y, y + 0.9, zr - 2.2, zr + 2.2), "dark", {
+      color: PAL.dark,
+      texel: 1 / 3,
+    });
+  }
+  for (const s of [-1, 1]) {
+    const z0 = TRENCH.z0 + 4;
+    const z1 = TRENCH.rampZ0 - 2;
     add(
-      mbox(1, -2.5, 2.5, wallTop(zr) + 0.6, wallTop(zr) + 0.95, zr - 2, zr + 2),
+      tube(
+        [s * 3.6, floorY(z0) + 0.5, Z(z0)],
+        [s * 3.6, floorY(z1) + 0.5, Z(z1)],
+        0.3,
+        6,
+      ),
       "dark",
-      {
-        color: PAL.dark,
-        texel: 1 / 3,
-      },
+      { color: PAL.dark },
     );
+  }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -676,6 +746,23 @@ export function blockDetail(ctx) {
       g.rotateY(Math.atan2(bx1 - bx0, z1 - z0) * s);
       g.translate(s * ((bx0 + bx1) / 2 - 0.4), (t0 + t1) / 2 + 0.12, Z(zc));
       add(g, "paint", { color: PAL.red, texel: 1 / 8 });
+    }
+    // Republic chevrons: alternating red/white bands across the flat corner decks outboard of the
+    // ramp block's flanks at the kite's aft corners
+    if (mid) {
+      for (let k = 0; k < 5; k++) {
+        const z0 = 226 + k * 3.3;
+        const z1 = z0 + 2.5;
+        const zc = (z0 + z1) / 2;
+        const x0 = blockHalfW(zc) + 0.3;
+        const x1 = wallX(zc) - chamfer(zc) - 0.3;
+        if (x1 - x0 < 2) continue;
+        const y = zc < 232 ? deckHeightAt(zc, (x0 + x1) / 2) : wallTop(zc);
+        add(mbox(s, x0, x1, y + 0.03, y + 0.22, z0, z1), "paint", {
+          color: k % 2 ? lin(0.86, 0.85, 0.82) : PAL.red,
+          texel: 1 / 8,
+        });
+      }
     }
     // docking ring on each flank of the ramp block behind the bridge (the show's side docking ports)
     if (mid) {

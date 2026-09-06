@@ -1,5 +1,5 @@
 // Structural geometry for the Arquitens: hull cross sections (prongs, kite main body, aft body with the
-// ramped block), the fork's nose block and trench filler, the bridge, the three engine nacelles with
+// ramped block), the fork's trench floor and crotch ramp, the bridge, the three engine nacelles with
 // their connecting bar and the swept ledge struts. Everything is object space (forward -Z, up +Y) with
 // heights on the ledge datum; `Y0` is applied by the assembler in arquitens.js. Lofts are built with
 // venatorKit's tagged `loftProfile`, so each hull zone (deck, wall, belly, trim stripe, dark recess)
@@ -21,6 +21,8 @@ import {
   spineUp,
   keel,
   keelP,
+  TRENCH,
+  floorY,
   BLOCK,
   blockHalfW,
   blockTop,
@@ -125,6 +127,8 @@ export function mainSection(zr) {
   const c = chamfer(zr);
   // the ridge is only proud of the spine once the wedge front has risen
   const ridge = Math.min(RIDGE_H, R * 0.5);
+  // the spine's flanks slope from the groove up to a narrow red shoulder beside the light ridge
+  const shoulder = RIDGE_X + 0.9;
   const half = [
     [0, -K],
     [0.6 * W, -0.42 * K],
@@ -135,7 +139,7 @@ export function mainSection(zr) {
     [xw - c, T],
     [SPINE_X + GROOVE_W, Dc],
     [SPINE_X, Dc - 0.15],
-    [SPINE_X - 0.6, Dc + R],
+    [shoulder + Math.min(0.6, R * 0.3), Dc + R],
     [RIDGE_X, Dc + R],
     [RIDGE_X, Dc + R + ridge],
   ];
@@ -226,50 +230,46 @@ export const BLOCK_TAGS = [
   "block",
 ];
 
-// Nose block closing the fork's crotch: a wedge front (zr 57–62) rising to a centre deck a step above
-// the prong tops that runs aft to the main deck (zr 104), where the spine's red wedge takes over.
-export function noseSections() {
-  const hw = SLOT_X - 0.3;
+// Crotch ramp closing the trench under the red wedge: a dark slope rising from the trench floor
+// (zr 88) to the main deck level (zr 98) and running into the main body's front (zr 103).
+export function crotchSections() {
+  const hw = SLOT_X - 0.15;
+  const deck = deckC(103);
   const top = (zr) =>
-    zr < 62
-      ? pw(
-          [
-            [57, 2],
-            [62, wallTop(62) + 0.6],
-          ],
-          zr,
-        )
-      : wallTop(zr) + 0.6;
-  return [57, 59.5, 62, 82, 104].map((zr) => {
+    pw(
+      [
+        [TRENCH.rampZ0, floorY(TRENCH.rampZ0) + 0.2],
+        [TRENCH.rampZ1, deck],
+      ],
+      zr,
+    );
+  return [TRENCH.rampZ0, TRENCH.rampZ1, 103.5].map((zr) => {
     const t = top(zr);
-    const ch = Math.min(1, (t + 2) * 0.3);
     return {
       z: Z(zr),
       pts: [
-        [-hw, -2],
-        [hw, -2],
-        [hw, t - ch],
-        [hw - ch, t],
-        [-(hw - ch), t],
-        [-hw, t - ch],
+        [-hw, -keelP(Math.min(zr, 107)) + 0.3],
+        [hw, -keelP(Math.min(zr, 107)) + 0.3],
+        [hw, t],
+        [-hw, t],
       ],
     };
   });
 }
-export const NOSE_TAGS = ["wall", "wall", "wall", "block", "wall", "wall"];
+export const CROTCH_TAGS = ["slot", "slot", "slot", "slot"];
 
-// Dark trench floor between the prongs' inner walls from their undersides up to y = -2 (8–10 m below
-// the prong tops), running from just behind the tips to the nose block; the fork is open through only
-// at the very tips (zr < 14).
+// Dark trench floor between the prongs' inner walls from their undersides up to 7 m below the prong
+// tops, running from just behind the tips to the crotch ramp; the fork is open through only at the
+// very tips (zr < 12).
 export function fillerSections() {
   const hw = SLOT_X - 0.1;
-  return [14, 40, 57, 82, 104].map((zr) => ({
+  return [TRENCH.z0, 40, 60, 80, TRENCH.rampZ0 + 0.5].map((zr) => ({
     z: Z(zr),
     pts: [
       [-hw, -keelP(zr) + 0.4],
       [hw, -keelP(zr) + 0.4],
-      [hw, -2],
-      [-hw, -2],
+      [hw, floorY(zr)],
+      [-hw, floorY(zr)],
     ],
   }));
 }

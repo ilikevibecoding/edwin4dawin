@@ -5,8 +5,9 @@
 // near the hull's mid-height. Ship forward is -Z: model z = zr - L / 2.
 //
 // Reference proportions (fan ortho + show stills, metres): kite hull 325 long, 125 wide at the deck
-// shoulders (zr ~ 185), 139 over the nacelles; fork gap 9 m, closed at zr ~ 62; bridge head 28 wide,
-// 12 tall, its top 48 m above the keel line; nacelles r 12.5 at x ±57.5 hanging a little below the keel.
+// shoulders (zr ~ 185), 139 over the nacelles; fork gap 9 m, a trench 7 m deep from the tips to the
+// red wedge at zr ~ 100; bridge head 30 wide, 12.5 tall, its top 48 m above the keel line; nacelles
+// r 12.5 at x ±57.5 hanging a little below the keel.
 import { lin, pw } from "./venatorKit.js";
 
 export const ARQUITENS = { length: 325, width: 140, height: 58 };
@@ -27,9 +28,9 @@ export const wOut = (zr) =>
       [124, 47.5],
       [182, 62.5],
       [190, 60],
-      [230, 26],
-      [238, 24],
-      [272, 21],
+      [230, 29],
+      [238, 27],
+      [272, 24],
     ],
     zr,
   );
@@ -45,8 +46,12 @@ export const ledgeW = (zr) =>
   );
 export const wallX = (zr) => wOut(zr) - ledgeW(zr);
 export const SLOT_X = 4.5; // inner walls of the prongs (the fork is 9 m wide)
-// raised central spine on the deck: 14 m wide with red shoulders, a light 5 m ridge along its crest
-// and a dark groove along its base
+// the trench between the prongs: open through at the tips, then a dark floor 7 m below the prong
+// tops running aft to the crotch ramp under the red wedge (zr 88–103)
+export const TRENCH = { z0: 12, depth: 7, rampZ0: 88, rampZ1: 98 };
+export const floorY = (zr) => wallTop(zr) - TRENCH.depth;
+// raised central spine on the deck: 14 m wide with sloped red flanks, a light 5 m ridge along its
+// crest and a dark groove along its base
 export const SPINE_X = 7;
 export const RIDGE_X = 2.6;
 export const RIDGE_H = 0.8;
@@ -80,14 +85,14 @@ export const deckC = (zr) =>
     ],
     zr,
   );
-// spine raise above the deck: nothing forward of the red wedge block whose ramped front (zr 112–126)
-// is the spine's terminus, then a constant step up to the superstructure block
+// spine raise above the deck: nothing forward of the red wedge block (zr 100–131) that is the
+// spine's terminus, rising inside it to a constant 3.2 m step up to the superstructure block
 export const spineUp = (zr) =>
   pw(
     [
       [112, 0],
-      [126, 2],
-      [232, 2],
+      [128, 3.2],
+      [232, 3.2],
     ],
     zr,
   );
@@ -127,9 +132,9 @@ export const blockHalfW = (zr) =>
     [
       [196, 8],
       [215, 8],
-      [221, 12],
-      [232, 20],
-      [272, 17],
+      [221, 11],
+      [232, 15],
+      [272, 13],
     ],
     zr,
   );
@@ -145,14 +150,24 @@ export const blockTop = (zr) =>
     zr,
   );
 export const RAMP_TOP = blockTop;
-// raised deck rails 6 m inboard of the chamfer stripe, growing from low kerbs at the shoulders to
-// ridges beside the bridge
-export const RAIL = { z0: 118, z1: 226, inset: 6, foot: 5, crest: 2.7 };
+// raised deck rails: straight 8 m wide ridges with a light crest and red flanks running from the
+// shoulders (right inboard of the chamfer where the deck begins) aft and inward into the flanks of
+// the superstructure block, growing taller as they go; `xOut` is the outer foot's plan line
+export const RAIL = {
+  z0: 112,
+  z1: 230,
+  foot: 9,
+  crest: 3,
+  xOut: [
+    [112, 39.5],
+    [230, 22.5],
+  ],
+};
 export const railH = (zr) =>
   pw(
     [
-      [118, 1.2],
-      [226, 3.6],
+      [112, 2.2],
+      [230, 3.6],
     ],
     zr,
   );
@@ -171,11 +186,11 @@ export const HEAD = {
 // quadrant (plan, starboard); y range [y0, y1] on the ledge datum
 export const WING = {
   pts: [
-    [14, 250],
-    [24.5, 236],
+    [18, 250],
+    [26, 236],
     [52, 262],
-    [52, 276],
-    [14, 276],
+    [52, 274],
+    [18, 272],
   ],
   y0: 0.2,
   y1: 5,
