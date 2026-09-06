@@ -595,6 +595,22 @@ if (base) {
       return { x: n.pos.x, y: n.pos.y, z: n.pos.z, state: n.state, actor: !!n.actor, slot: n.slot, me: null };
     },
   }; true`;
+  // right-click the anchor and make sure it is them who answered (a crowd visitor can step into the ray in a busy
+  // lobby: their generic talk box opens instead - close it and try again)
+  const talkTo = async (castId, name, tries = 4) => {
+    for (let i = 0; i < tries; i++) {
+      const ap = await evj(`window.__t.approach('${castId}')`);
+      assert.ok(ap && ap.me, `a standing cell with a clear line to ${name}: ${JSON.stringify(ap)}`);
+      await ev('window.__t.frames(1)');
+      await ev('window.__t.click(2)');
+      const t = await evj('window.__t.talk()');
+      if (t && !t.hidden && t.name === name) return { ap, t };
+      console.log(`   (the ray hit ${t && !t.hidden ? t.name : 'nobody'} instead of ${name}; retrying)`);
+      if (t && !t.hidden) { await ev(`window.__t.key('Escape', 'Escape')`); await ev('window.__t.frames(2)'); }
+      await ev(`game.coruscant.population.live.find((n) => n.person.cast === '${castId}').talkCooldown = 0; true`);
+    }
+    throw new Error(`could not open a conversation with ${name} in ${tries} tries`);
+  };
   const boot = async () => {
     await page.waitForGame(180000);
     await ev(HELPERS);
@@ -624,12 +640,8 @@ if (base) {
 
     let first = null;
     await testAsync('C5 / B12 / D2 / D4 right-click talk: greeting, 3 options, replies from other categories, subtitles, unvoiced manifest', async () => {
-      const ap = await evj(`window.__t.approach('seli_noor')`);
-      assert.ok(ap && ap.me, 'a standing cell with a clear line to Seli: ' + JSON.stringify(ap));
-      await ev('window.__t.frames(3)');
-      await page.screenshot(`${shots}/cast_seli_approach.png`);
-      await ev('window.__t.click(2)');
-      const t1 = await evj('window.__t.talk()'), s1 = await evj('window.__t.sub()');
+      const { t: t1 } = await talkTo('seli_noor', 'Seli Noor');
+      const s1 = await evj('window.__t.sub()');
       await ev('window.__t.pin()'); await ev('window.__t.frames(2)');
       assert.equal(t1.hidden, false, 'talk box open'); assert.equal(t1.name, 'Seli Noor'); assert.ok(/diner owner/i.test(t1.role), t1.role);
       assert.ok(t1.line.length > 20 && t1.opts.length === 3, JSON.stringify(t1));
@@ -673,10 +685,8 @@ if (base) {
 
     await testAsync('A6 (live) a second talk is a returning greeting, the history persists in storage', async () => {
       await ev(`game.coruscant.population.live.find((n) => n.person.cast === 'seli_noor').talkCooldown = 0`);
-      await evj(`window.__t.approach('seli_noor')`); await ev('window.__t.frames(2)');
-      await ev('window.__t.click(2)');
-      const t = await evj('window.__t.talk()');
-      assert.equal(t.hidden, false); assert.notEqual(t.line, first, 'a different greeting the second time');
+      const { t } = await talkTo('seli_noor', 'Seli Noor');
+      assert.notEqual(t.line, first, 'a different greeting the second time');
       const ev1 = await evj(`window.__t.said(${JSON.stringify(t.line)})`);
       assert.ok(ev1 && ev1.npc === 'cast:seli_noor', JSON.stringify(ev1));
       const line = await evj(`game.dialog.bankFor('cast:seli_noor').find((l) => l.id === ${JSON.stringify(ev1.lineId)})`);
