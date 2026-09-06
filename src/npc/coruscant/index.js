@@ -44,6 +44,8 @@ export class CoruscantPopulation {
     this.paths = new PathQueue(game.world, 1.5);
     this.crowd = new CrowdRenderer(game.scene, { humanoids: MAX_LIVE + 10, astromechs: 24, sweepers: 24 });
     this.bubbles = new Bubbles(game.scene);
+    // upload the skin atlas and the bubble textures now (rubric row 11: no first-bubble / first-crowd hitch mid-game)
+    if (game.renderer && game.renderer.initTexture) { try { game.renderer.initTexture(this.crowd.texture); this.bubbles.warm(game.renderer); } catch (e) { /* headless contexts without a GL backend */ } }
     this.planner = new Planner(this);
     this.talkBox = new TalkBox(game, this);
     this.live = [];

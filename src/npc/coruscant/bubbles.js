@@ -34,6 +34,32 @@ export class Bubbles {
       this.items.push({ sprite: sp, canvas: c, tex, npc: null, until: 0, mat });
     }
     this.now = 0;
+    this.warmFrames = 0;
+  }
+
+  // The first sprite the session draws is a hitch: the GL backend builds the pipeline for that shader / blend state on
+  // first use (a few ms on a GPU, most of a second under software GL), measured as an 800 ms frame at the first line of
+  // chatter. Pay it while the world is still loading: upload every pool texture now and, for the first two frames,
+  // draw one fully transparent bubble in front of the camera (see update).
+  warm(renderer) {
+    if (!renderer || !renderer.initTexture) return;
+    const it = this.items[0];
+    const w = measureText('Move along, citizen.', SCALE) + 10, h = 9 * SCALE + 8;
+    it.canvas.width = w; it.canvas.height = h;
+    drawText(it.canvas.getContext('2d'), 'Move along, citizen.', 5, 4, SCALE, '#f4f1e6', true);
+    it.tex.needsUpdate = true;
+    for (const b of this.items) renderer.initTexture(b.tex);
+    this.warmFrames = 3;   // two drawn frames, then hidden again
+  }
+  warmFrame(camera) {
+    const it = this.items[0];
+    if (it.npc) { this.warmFrames = 0; return; }
+    if (this.warmFrames === 1) { it.sprite.visible = false; it.mat.opacity = 1; this.warmFrames = 0; return; }
+    this.warmFrames--;
+    camera.getWorldDirection(it.sprite.position).multiplyScalar(3).add(camera.position);
+    it.sprite.scale.set(0.5, 0.25, 1);
+    it.mat.opacity = 0;
+    it.sprite.visible = true;
   }
 
   // Show `text` over `npc` (its bubble is replaced if it already has one); the oldest bubble is recycled when full.
@@ -57,6 +83,7 @@ export class Bubbles {
 
   update(now, camera) {
     this.now = now;
+    if (this.warmFrames) this.warmFrame(camera);
     for (const it of this.items) {
       if (!it.npc) continue;
       const n = it.npc;
