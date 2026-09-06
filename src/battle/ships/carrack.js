@@ -54,7 +54,7 @@ const Z = (d) => d - L / 2;
 // palette: linear albedo multipliers on the shared plating (mean ~0.62 after the material's x1.4)
 const HULL = lin(0.72, 0.69, 0.62); // light warm grey-white
 const HULL_TOP = lin(0.78, 0.75, 0.68);
-const HULL_LOW = lin(0.52, 0.51, 0.5); // lower chamfers
+const HULL_LOW = lin(0.63, 0.61, 0.56); // lower chamfers (one cream tone in the CG renders, only shading differs)
 const BELLY = lin(0.42, 0.43, 0.47); // undersides, cool grey
 const KEEL = lin(0.4, 0.41, 0.45); // set-back keel
 const STERN = lin(0.3, 0.28, 0.26); // heat-stained pod tails
@@ -62,13 +62,14 @@ const DARK = 0xb8bcc4; // machinery greebles on the dark texture (reads mid-dark
 const RECESS = 0x8a8e96; // deep recesses
 const SEAM = 0x6e7178; // panel seams
 const MAROON = 0x681e1b; // Open Circle maroon
-const GLASS = 0x1c4641; // bridge viewport (unlit dark teal glass)
+const GLASS = 0x1e5a52; // bridge viewport (unlit teal glass)
 const WINDOW = 0xd8bc90;
+const FRAME = 0xd0cdc6; // the four proud white frames (flat paint)
 const SHELL = col(0x6a6560);
 const SHELL_DK = col(0x3a3733);
 const TURRET_DARK = col(0xa0a4ac);
 
-const TEX = 1 / 12; // main plating scale (tiles per metre)
+const TEX = 1 / 34; // main plating scale (tiles per metre; plates 4.5-10 m like the CG hull)
 const DECK = 25; // mid-hull deck height
 const LEDGE = -12.2; // the upper box ends here; the keel is set back below
 const KEEL_BOT = -21.8;
@@ -87,8 +88,8 @@ const SH_BOT = -1.5;
 const BRK = -10; // facet break between the steep facet and the 45 deg lower chamfer
 const STRIP_TOP = -23.6; // vertical bottom strip
 const XW = 37;
-const XB = 32.8;
-const XS = 17.9;
+const XB = 31;
+const XS = 13;
 // master half-profile (full section) and the outward normal of the facet at height y
 function profX(y) {
   if (y >= SH_TOP) return XW - LEAN * (y - SH_TOP);
@@ -276,13 +277,13 @@ const blockBotAt = (d) =>
 // engine pods: two columns of four long rounded pods (y bottom, y top, aft face d, nozzle radius);
 // the rows step further aft going up (raked stern, reference side view and CG renders)
 const POD_X = 13.5;
-const POD_HW = 12;
+const POD_HW = 11.4;
 const POD_D0 = 300; // pod fronts sit inside the block
 const POD_ROWS = [
-  { y0: -27, y1: -16.2, aft: 330, r: 4.2 },
-  { y0: -15.6, y1: -0.6, aft: 335, r: 5.4 },
-  { y0: 0, y1: 14.4, aft: 340, r: 5.4 },
-  { y0: 15, y1: 32.4, aft: 345, r: 5.6 },
+  { y0: -27, y1: -16.6, aft: 330, r: 4.7 },
+  { y0: -15.2, y1: -1.2, aft: 335, r: 6.1 },
+  { y0: 0.2, y1: 13.8, aft: 340, r: 6.1 },
+  { y0: 15.2, y1: 32.4, aft: 345, r: 6.4 },
 ];
 // stern block stations: ramped top, lower block from d = 258, underside sloping to -27.2, then the
 // raked stern face stepping up the pod rows (each step hides behind the pod below it)
@@ -345,7 +346,7 @@ export function buildCarrack(mats) {
     top: ["hull", { tint: shade(HULL_TOP), texel: TEX }],
     hull: ["hull", { tint: shade(HULL), texel: TEX }],
     ledge: ["dark", { color: RECESS, texel: 1 / 4 }],
-    keel: ["hull", { tint: shade(KEEL), texel: 1 / 8 }],
+    keel: ["hull", { tint: shade(KEEL), texel: 1 / 16 }],
     stern: ["dark", { color: 0x9a9088, texel: 1 / 5 }],
   };
   const addBuckets = (map, lod) => {
@@ -438,10 +439,10 @@ export function buildCarrack(mats) {
   const sideBot = (d) =>
     table(
       [
-        [10.4, 4.1],
-        [10.8, 3.7],
-        [11.4, 3.5],
-        [19.5, 3.5],
+        [10.4, 3.4],
+        [10.8, 2.8],
+        [11.4, 2.4],
+        [19.5, 2.4],
         [30.9, 12.3],
       ],
       d,
@@ -469,36 +470,41 @@ export function buildCarrack(mats) {
       "windows",
       { color: GLASS, lod, uv: "keep" },
     );
+    // hull-coloured mullion band along the creases separating the front pane from the side panes
+    // (reference CG renders: a light frame, not a dark channel)
     if (lod < 2)
       for (const side of [-1, 1]) {
         const md = [9.4, 11.4, 14, 18, 22, 27, 28.6];
         add(
           ribbon(
-            md.map((d) => headAt(d, headTop(d) - 1.6, side, 0.1)),
-            md.map((d) => headAt(d, headTop(d), side, 0.1)),
+            md.map((d) => headAt(d, headTop(d) - 1.6, side, 0.3)),
+            md.map((d) => headAt(d, headTop(d), side, 0.3)),
             [side, 0.6, 0],
           ),
-          "dark",
-          { color: RECESS, texel: 1 / 4, lod },
+          "hull",
+          { color: HULL_TOP, texel: 1 / 10, lod },
         );
         add(
           ribbon(
-            md.map((d) => [side * headTopX(d), headTop(d) + 0.1, Z(d)]),
-            md.map((d) => [side * (headTopX(d) - 1.6), headTop(d) + 0.1, Z(d)]),
+            md.map((d) => [side * headTopX(d), headTop(d) + 0.3, Z(d)]),
+            md.map((d) => [side * (headTopX(d) - 1.6), headTop(d) + 0.3, Z(d)]),
             [0, 1, -0.6],
           ),
-          "dark",
-          { color: RECESS, texel: 1 / 4, lod },
+          "hull",
+          { color: HULL_TOP, texel: 1 / 10, lod },
         );
       }
   }
-  // maroon stripe along the port side of the head top (reference CG renders)
+  // maroon stripe across the head top: from the port crease just aft of the glass, diagonally aft to
+  // the centreline at the collar (reference CG renders, both bow views)
   for (const lod of [0, 1]) {
-    const sd = [28.5, 31, 36, 42, 48, 52, 56];
+    const sd = [31, 36, 42, 48, 52, 56, 60, 64, 70, 76, 82, 88];
+    const cx = (d) =>
+      -(headTopX(d) - 1) + ((d - 31) / (88 - 31)) * (headTopX(d) + 3);
     add(
       ribbon(
-        sd.map((d) => [-0.62 * headTopX(d) - 2.5, headTop(d) + 0.12, Z(d)]),
-        sd.map((d) => [-0.62 * headTopX(d) + 2.5, headTop(d) + 0.12, Z(d)]),
+        sd.map((d) => [cx(d) - 2.6, headTop(d) + 0.12, Z(d)]),
+        sd.map((d) => [cx(d) + 2.6, headTop(d) + 0.12, Z(d)]),
         [0, 1, 0],
       ),
       "paint",
@@ -630,23 +636,20 @@ export function buildCarrack(mats) {
       lod,
     );
   }
-  // raised frames wrapping the upper box (white, 1.3 m proud)
-  const ribPts = inflatePts(BOX, 1.3);
-  for (const lod of [0, 1])
+  // raised frames wrapping the upper box (reference CG renders: bright white bands, 3.4 m wide, 2 m
+  // proud, the brightest elements of the hull) — flat paint so they read white against the plating
+  const ribPts = inflatePts(BOX, 2);
+  for (const lod of [0, 1, 2])
     for (const zr of RIB_Z) {
       const m = loftTagged(
         [
-          { z: zr - 1.6, pts: ribPts },
-          { z: zr + 1.6, pts: ribPts },
+          { z: zr - 1.7, pts: ribPts },
+          { z: zr + 1.7, pts: ribPts },
         ],
         () => "rib",
         { capStart: "rib", capEnd: "rib" },
       );
-      add(m.get("rib"), "hull", {
-        color: HULL_TOP.clone().multiplyScalar(1.08),
-        texel: 1 / 6,
-        lod,
-      });
+      add(m.get("rib"), "paint", { color: FRAME, texel: 1 / 8, lod });
     }
   // flank fairing behind the collar: top at the deck chamfer, front edge sloping down to y = 4.2 at
   // d = 138, level to the second frame; two rails along it
@@ -793,8 +796,8 @@ export function buildCarrack(mats) {
     for (const lod of [0, 1])
       add(
         tubeZ(
-          1.3,
-          1.3,
+          1.8,
+          1.8,
           Z(176) - Z(106),
           lod ? 6 : 10,
           side * 20.8,
@@ -956,7 +959,7 @@ export function buildCarrack(mats) {
         Z(155.5),
       ),
       "hull",
-      { tint: shade(KEEL, 0.9), texel: 1 / 8, lod },
+      { tint: shade(KEEL, 0.9), texel: 1 / 16, lod },
     );
     if (lod < 2)
       add(
@@ -1143,7 +1146,7 @@ export function buildCarrack(mats) {
             0.3,
           ),
           "hull",
-          { tint: sootAft(HULL), texel: 1 / 6, lod },
+          { tint: sootAft(HULL), texel: 1 / 14, lod },
         );
         const entry = nozzleBell(add, {
           x: cx,
@@ -1151,7 +1154,7 @@ export function buildCarrack(mats) {
           zMouth: zAft + 0.3,
           r: row.r,
           depth: 14,
-          protrude: 2.4,
+          protrude: 1.6,
           lod,
           shell: SHELL,
           shellDark: SHELL_DK,
