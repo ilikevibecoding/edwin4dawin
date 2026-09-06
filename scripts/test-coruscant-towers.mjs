@@ -14,7 +14,7 @@ import { lotCrown, resolveFamily, DISTRICT_MIX } from '../src/coruscant/towers/i
 import { CROWN_STYLES, CROWN_MIN_HEIGHT, CROWN_OPTIONS } from '../src/coruscant/crowns.js';
 import { STRIP_MIN_HEIGHT } from '../src/coruscant/towers/strips.js';
 import { SPACEPORT, DECK_Y } from '../src/coruscant/spaceport.js';
-import { buildShips } from '../src/ships/traffic.js';
+import { routePose, buildShips } from '../src/ships/traffic.js';
 
 initBlocks();
 let passed = 0, failed = 0;
@@ -386,11 +386,15 @@ test('rubric 11: ship lanes and pad approaches clear the crowns (lot.height + lo
   const tops = TOWERS.map((l) => { const c = lotCrown(l, LEVELS.ground); return { l, top: LEVELS.ground + l.height + c.height - (c.base || 0) }; });
   let samples = 0, maxTop = 0;
   for (const t of tops) maxTop = Math.max(maxTop, t.top);
+  // routes are phase sequences (fly / reservation / approach / ... / repair berths with no flight at all): sample the
+  // pose over the whole period instead of assuming a leading flight segment
   for (const sh of buildShips(SPACEPORT.pads, DECK_Y, null, CITY)) {
-    const path = sh.route.segs[0].path, p = { x: 0, y: 0, z: 0 };
-    for (let d = 0; d < path.length; d += 2) {
-      path.at(d, p); samples++;
-      for (const { l, top } of tops) assert.ok(!(p.x >= l.x0 - 3 && p.x < l.x1 + 3 && p.z >= l.z0 - 3 && p.z < l.z1 + 3 && p.y < top + 3), `${sh.name} hits the crown of ${l.family} lot ${l.id} at ${Math.round(p.x)},${Math.round(p.y)},${Math.round(p.z)} (crown top ${top})`);
+    const p = { x: 0, y: 0, z: 0 };
+    const period = sh.route.period || 0;
+    for (let t = 0; t < period; t += 0.5) {
+      routePose(sh.route, t, p); samples++;
+      if (p.phase && p.phase !== 'fly' && p.phase !== 'reservation' && p.phase !== 'approach' && p.phase !== 'departure' && p.phase !== 'climb') continue;   // on a pad
+      for (const { l, top } of tops) assert.ok(!(p.x >= l.x0 - 3 && p.x < l.x1 + 3 && p.z >= l.z0 - 3 && p.z < l.z1 + 3 && p.y < top + 3), `${sh.name || sh.type} hits the crown of ${l.family} lot ${l.id} at ${Math.round(p.x)},${Math.round(p.y)},${Math.round(p.z)} (crown top ${top})`);
     }
   }
   console.log(`     ${samples} route samples, tallest crown top y ${maxTop}`);
