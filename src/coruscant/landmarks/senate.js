@@ -745,7 +745,10 @@ function bands(bp, P, rng, meta) {
     const y = 6;
     // the liaison alcove sits just south of the east passage: the Jedi come in by the east (press) entry, up the east
     // stairs and through the passage, a few steps along the service ring (SPEC §13 Seran Vale's route from the Temple)
-    const inner = [[0, 0, 2, 'liaison_lounge', 'liaison'], [0, 1, 2, 'hearing_chamber', 'hearing'], [1, 0, 2, 'guard_post', 'security'], [1, 1, 2, 'meeting_room', 'meeting'], [2, 0, 2, 'diplomatic_reception', 'reception'], [2, 1, 2, 'meeting_room', 'meeting'], [3, 0, 2, 'archive', 'archive'], [3, 1, 2, 'server_room', 'server']];
+    // no meeting_room here: an inner-band room's box reaches into the bowl and the tiers, so LotInfo counts the pods'
+    // seats as the room's (the +40 y span that lets the chamber own its pods) and meeting_room's `aide` fill would
+    // staff it like an auditorium with one desk; hearing chambers and press rooms have no visitor fill
+    const inner = [[0, 0, 2, 'liaison_lounge', 'liaison'], [0, 1, 2, 'hearing_chamber', 'hearing'], [1, 0, 2, 'guard_post', 'security'], [1, 1, 2, 'hearing_chamber', 'hearing'], [2, 0, 2, 'diplomatic_reception', 'reception'], [2, 1, 2, 'press_office', 'press'], [3, 0, 2, 'archive', 'archive'], [3, 1, 2, 'server_room', 'server']];
     for (const [q, k, n, kind, role] of inner) {
       const [a0, a1] = sub(quad(q), k, n, 1.6 / ir0);
       const s = new Sector(bp, P, y, ir0, ir1, a0, a1, kind, role === 'liaison' ? B.WHITE_WOOL : STONE);
