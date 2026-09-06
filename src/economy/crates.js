@@ -67,8 +67,13 @@ export class CrateLayer {
     this.material = new THREE.ShaderMaterial({ vertexShader: VERT, fragmentShader: FRAG, uniforms: { map: { value: game.atlas }, uSkyLight: SHARED.uSkyLight, uSkyTint: SHARED.uSkyTint, uFogColor: SHARED.uFogColor, uFogNear: SHARED.uFogNear, uFogFar: SHARED.uFogFar } });
     this.mesh = new THREE.InstancedMesh(this.geometry, this.material, CRATE_CAPACITY);
     this.mesh.name = 'economy-crates';
-    this.mesh.frustumCulled = false;
+    // the renderer culls the whole layer against the bounds of the crates placed this frame (world coordinates,
+    // identity matrixWorld); an empty layer is not drawn at all
+    this.mesh.frustumCulled = true;
+    this.mesh.boundingSphere = new THREE.Sphere();
+    this.mesh.visible = false;
     this.mesh.count = 0;
+    this._bounds = { minX: 0, minY: 0, minZ: 0, maxX: 0, maxY: 0, maxZ: 0 };
     this.light = new THREE.InstancedBufferAttribute(new Float32Array(CRATE_CAPACITY * 2), 2);
     this.light.setUsage(THREE.DynamicDrawUsage);
     this.geometry.setAttribute('aLight', this.light);
@@ -80,7 +85,16 @@ export class CrateLayer {
     this.stats = { instances: 0, stacks: 0, holds: 0, couriers: 0, drawCalls: 1 };
     this.stackTick = -1;
   }
-  onAdd(game) { game.scene.add(this.mesh); }
+  onAdd(game) {
+    game.scene.add(this.mesh);
+    // compile the crate program now: the layer is hidden while it has no crates, so the renderer's own load-time
+    // compile skips it and the first crate in view would otherwise stall the frame on a shader compile
+    if (game.renderer && game.camera) {
+      this.mesh.visible = true;
+      try { game.renderer.compile(this.mesh, game.camera, game.scene); } catch (e) { /* ignore */ }
+      this.mesh.visible = false;
+    }
+  }
   onRemove(game) { game.scene.remove(this.mesh); }
   dispose() { this.geometry.dispose(); this.material.dispose(); }
 
@@ -109,13 +123,16 @@ export class CrateLayer {
     const l = this.game.world.sampleLight(x, y + 1, z);
     this.light.setXY(k, l[0], l[1]);
     this.mesh.count = k + 1;
+    const B = this._bounds;
+    if (k === 0) { B.minX = B.maxX = x; B.minY = B.maxY = y; B.minZ = B.maxZ = z; }
+    else { if (x < B.minX) B.minX = x; else if (x > B.maxX) B.maxX = x; if (y < B.minY) B.minY = y; else if (y > B.maxY) B.maxY = y; if (z < B.minZ) B.minZ = z; else if (z > B.maxZ) B.maxZ = z; }
     return true;
   }
 
   update(dt, alpha, camera) {
     const sim = this.eco.v2;
     this.mesh.count = 0;
-    if (!sim) { this.mesh.instanceMatrix.needsUpdate = true; return; }
+    if (!sim) { this._upload(0); return; }
     const cam = camera.position;
     const near = (x, y, z) => Math.hypot(x - cam.x, y - cam.y, z - cam.z) < DRAW_DIST;
     const vt = this.game.vehicles ? this.game.vehicles.tickCount : 0;
@@ -169,8 +186,21 @@ export class CrateLayer {
         stacks++;
       } else { this._put(x, y + 0.45, z, Math.atan2(b.x - a.x, b.z - a.z), 0, 0); couriers++; }
     }
-    this.mesh.instanceMatrix.needsUpdate = true;
-    this.light.needsUpdate = true;
+    this._upload(this.mesh.count);
     this.stats.instances = this.mesh.count; this.stats.stacks = stacks; this.stats.holds = holds; this.stats.couriers = couriers;
+  }
+  // only the instances in use go to the GPU (not the whole 1200-slot buffers); a frame with no crates uploads nothing
+  // (count 0 draws nothing, whatever the buffers hold)
+  _upload(n) {
+    this._lastCount = n;
+    this.mesh.visible = n > 0;
+    if (n === 0) return;
+    const B = this._bounds, S = this.mesh.boundingSphere;
+    S.center.set((B.minX + B.maxX) / 2, (B.minY + B.maxY) / 2, (B.minZ + B.maxZ) / 2);
+    S.radius = Math.hypot(B.maxX - B.minX, B.maxY - B.minY, B.maxZ - B.minZ) / 2 + 1;   // + a crate's half-diagonal
+    const m = this.mesh.instanceMatrix, l = this.light;
+    m.clearUpdateRanges(); l.clearUpdateRanges();
+    m.addUpdateRange(0, n * 16); l.addUpdateRange(0, n * 2);
+    m.needsUpdate = true; l.needsUpdate = true;
   }
 }
