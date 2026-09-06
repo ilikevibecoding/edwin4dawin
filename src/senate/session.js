@@ -8,9 +8,11 @@
 //   senate:session { state, scenario, session, day, slot }        at every transition
 //   senate:vote    { scenario, tally, session }                    when the vote state is entered
 //   senate:result  { scenario, outcome, effects, headline, tally } when the adjourned state is entered
-//   senate:speaker { scenario, delegation, senator, line }         during the session state (speakers())
+//   senate:speaker { scenario, delegation, senator, world, position, line }   during the session state (speakerLines())
 import { SCENARIOS, vote, resultOf, INFLUENCE_CAPS } from './scenarios.js';
 import { DELEGATION_BY_ID, DELEGATIONS } from './delegations.js';
+
+const STANCE = { for: 'stands for the measure', against: 'stands against the measure', undecided: 'has not decided' };
 
 export const SESSION_SLOTS = [9, 15];   // convening hours; a session runs 3.25 hours from convening to recess
 export const PHASES = [                 // [state, offset from the convening hour in hours]
@@ -97,7 +99,9 @@ export class SenateSim {
   speakerLines(session = this.session) {
     const scenario = this.scenario(session); if (!scenario) return [];
     const ids = Object.keys(scenario.positions).map((id, i) => ({ id, k: hash01(this.seed, session, i) })).sort((a, b) => a.k - b.k).map((o) => o.id);
-    return ids.map((id) => { const d = DELEGATION_BY_ID[id]; const pos = this.positionOf(scenario, id); return { delegation: id, senator: d.senator, world: d.world, position: pos, line: `${d.senator} (${d.world}), ${pos}: ${scenario.positions[id][1]}` }; });
+    // `line` is what the senator says (the speaker's name travels separately, so a dialog box or subtitle that shows
+    // the speaker does not read the name twice)
+    return ids.map((id) => { const d = DELEGATION_BY_ID[id]; const pos = this.positionOf(scenario, id); return { delegation: id, senator: d.senator, world: d.world, position: pos, line: `${d.world} ${STANCE[pos]}. ${scenario.positions[id][1]}` }; });
   }
   // the next speaker due at `t` hours into the session state (one every 10 game minutes), or null
   speakerDue(hour) {

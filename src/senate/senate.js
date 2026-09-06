@@ -110,7 +110,7 @@ export class Senate {
   }
   _say(sp) {
     const ev = this.game.events;
-    if (ev) ev.emit('senate:speaker', { scenario: this.sim.scenario() ? this.sim.scenario().id : null, delegation: sp.delegation, senator: sp.senator, line: sp.line });
+    if (ev) ev.emit('senate:speaker', { scenario: this.sim.scenario() ? this.sim.scenario().id : null, delegation: sp.delegation, senator: sp.senator, world: sp.world, position: sp.position, line: sp.line });
     this.speakerLine = { line: sp.line, until: Date.now() + 7000, speaker: sp.senator };
     const dlg = this.game.dialog;
     if (dlg && typeof dlg.say === 'function') { try { dlg.say(sp.line, { speaker: sp.senator, source: 'senate' }); } catch (e) { /* the dialog system decides */ } }

@@ -156,7 +156,7 @@ export class SenateUI {
     const [main, small] = clockLines(hour, sim);
     this.clockMain.textContent = main; this.clockSmall.textContent = small;
     const sp = s.speakerLine;
-    if (state === 'session' && sp && Date.now() < sp.until && sp.speaker !== 'Clerk of the Senate') this.speakerEl.replaceChildren(h('b', { text: 'Speaking: ' + sp.speaker }), ' ', sp.line);
+    if (state === 'session' && sp && Date.now() < sp.until && sp.speaker !== 'Clerk of the Senate') this.speakerEl.replaceChildren(h('b', { text: 'Speaking: ' + sp.speaker }), ' \u2014 ', sp.line);
     else if (state === 'session') this.speakerEl.replaceChildren(h('b', { text: 'Debate' }), ' the delegations speak in turn, one every ten minutes.');
     else this.speakerEl.replaceChildren();
     const r = sim.lastResult;

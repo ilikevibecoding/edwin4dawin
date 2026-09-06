@@ -109,7 +109,7 @@ Events on `game.events` (the runtime `Senate.tick()` samples `game.sky.time` eve
 | `senate:session` | `{ state, scenario, session, day, slot, title }` | every transition |
 | `senate:vote` | `{ scenario, tally, session }` | entering `vote` |
 | `senate:result` | `{ scenario, outcome: 'pass'|'fail', effects, headline, tally, session }` | entering `adjourned` |
-| `senate:speaker` | `{ scenario, delegation, senator, line }` | during `session` |
+| `senate:speaker` | `{ scenario, delegation, senator, world, position, line }` — `line` is the spoken sentence ("Tyrell Verge stands for the measure. Clinics on level 12 …"), the name travels in `senator` | during `session` |
 | `senate:influence` | `{ scenario, delegation, delta, cause, position }` | `game.senate.influence()` |
 
 `serialize()` / `restore()` carry day, state, session, the influence log (<= 400 entries), the results (<= 30) and the

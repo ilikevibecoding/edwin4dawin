@@ -432,6 +432,10 @@ const fakeGame = (time = 0.5) => ({ coruscant: { layout }, player: { pos: { x: 0
   check('game.events.recent("senate:") holds the chain for tests and screens', g.events.recent('senate:').map((e) => e.name).includes('senate:result'));
   const sp = g.events.recent('senate:speaker');
   check('speaker lines are announced on the bus during the session (subtitle fallback when game.dialog is absent)', sp.length >= 1 && senate.speakerLine && typeof senate.speakerLine.line === 'string');
+  // the payload names the speaker and the line is the spoken sentence (world, stance, reason) — a box or subtitle
+  // that shows the speaker never reads the name twice
+  const spk = sp.map((e) => e.args[0]);
+  check('senate:speaker carries { delegation, senator, world, position, line } and the line does not start with the senator\'s name', spk.length >= 1 && spk.every((e) => e.delegation && e.senator && e.world && /^(for|against|undecided)$/.test(e.position) && typeof e.line === 'string' && e.line.startsWith(e.world) && !e.line.startsWith(e.senator) && /stands for the measure|stands against the measure|has not decided/.test(e.line)), spk.length ? `${spk[0].senator}: "${spk[0].line}"` : 'no speaker events');
   // influence through the runtime, then serialize / restore round trip
   const pos0 = senate.positions('customs').tyrell.position;
   const pos1 = senate.influence('customs', 'tyrell', 1, 'evidence');
