@@ -492,15 +492,22 @@ export class CastRegistry {
   loadSaved() {
     const save = this.game && this.game.save;
     if (save && save.cast) return this.restore(save.cast);
-    try { if (typeof localStorage !== 'undefined') { const s = localStorage.getItem(`${LOCAL_KEY}:${this.seed}`); if (s) return this.restore(JSON.parse(s)); } } catch (e) { /* ignore */ }
+    try {
+      if (typeof localStorage === 'undefined') return false;
+      const key = `${LOCAL_KEY}:${this.seed}`;
+      // ?fresh=1 starts from an empty save (game.js clears the main save the same way)
+      if (typeof location !== 'undefined' && new URLSearchParams(location.search).has('fresh')) { localStorage.removeItem(key); return false; }
+      const s = localStorage.getItem(key);
+      if (s) return this.restore(JSON.parse(s));
+    } catch (e) { /* storage unavailable or corrupt: defaults */ }
     return false;
   }
 
   // ------------------------------------------------------------------------------------------------ descriptions
   describe(pp) {
     const where = pp.lot.work === PORT ? (pp.spot === 'pad' && pp.ship ? `pad ${pp.ship.padNumber}, Westport` : 'Westport control desk') : `${pp.workName}${pp.room ? ', ' + pp.room.kind.replace(/_/g, ' ') : ''}`;
-    const role = pp.kind === 'cast' ? (pp.title ? `${pp.title} - ` : '') + roleWord(pp) : `${pp.job}${pp.roleTag === 'owner' ? ' (runs the place)' : ''}`;
-    return `${role} · ${where}`;
+    const role = pp.kind === 'cast' ? roleWord(pp) : `${pp.job}${pp.roleTag === 'owner' ? ' (runs the place)' : ''}`;   // the title is in the name already
+    return `${role.charAt(0).toUpperCase() + role.slice(1)} · ${where}`;
   }
   summary() {
     const perKind = {};

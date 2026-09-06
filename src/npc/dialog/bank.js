@@ -225,7 +225,8 @@ export function buildFills(pp, world) {
   const hours = purpose && purpose.hours ? (purpose.hours[0] === 0 && purpose.hours[1] >= 24 ? 'we never close' : `we open at ${hourWord(purpose.hours[0])} and close at ${hourWord(purpose.hours[1])}`) : null;
   const shift = pp.shift === 'night' ? 'night-shift' : pp.shift === 'evening' ? 'late-shift' : 'early-shift';
   const f = {
-    name: pp.name, first, place: pp.workName, district: DISTRICT_NAME[pp.district] || pp.district || 'the district', homeDistrict: DISTRICT_NAME[pp.homeDistrict] || DISTRICT_NAME[pp.district] || 'the district',
+    // port crews: the district is Westport too, so their workplace is 'the deck' (never 'Westport ... Westport')
+    name: pp.name, first, place: pp.lot.work === PORT ? 'the Westport deck' : pp.workName, district: DISTRICT_NAME[pp.district] || pp.district || 'the district', homeDistrict: DISTRICT_NAME[pp.homeDistrict] || DISTRICT_NAME[pp.district] || 'the district',
     home: pp.lot.home != null && pp.lot.home !== PORT ? pp.homeName : (pp.lot.home === PORT ? 'the crew bunks at Westport' : null),
     good: good ? itemName(good.item) : null, price: good ? String(good.price) : null, good2: good2 ? itemName(good2.item) : null, price2: good2 ? String(good2.price) : null,
     tool: pick(trade.tools), station: pick(trade.stations), task, task2, trouble, troubleCap: trouble.charAt(0).toUpperCase() + trouble.slice(1), customers: trade.customers, component: trade.component,
@@ -241,7 +242,8 @@ function hourWord(h) { h = ((h % 24) + 24) % 24; if (h === 0) return 'midnight';
 
 const LIVE_TOKENS = new Set(['price', 'price2', 'stockQty', 'senateScenario', 'disaster', 'jobTitle', 'shipName', 'shipDest']);
 export function fillStatic(text, fills) {
-  return text.replace(/\{(\w+)\}/g, (m, k) => (LIVE_TOKENS.has(k) ? m : (fills[k] != null ? fills[k] : m)));
+  const out = text.replace(/\{(\w+)\}/g, (m, k) => (LIVE_TOKENS.has(k) ? m : (fills[k] != null ? fills[k] : m)));
+  return out.charAt(0).toUpperCase() + out.slice(1);   // a fill like 'the Westport deck' may open the sentence
 }
 // Live tokens are filled at say-time from the context (dialog/api.js); the test's scenario contexts provide them too.
 export function fillLive(text, ctx) {
