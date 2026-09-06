@@ -24,6 +24,8 @@ export const JOB_WORK_KINDS = {
   projectionist: ['projectionist'], musician: ['musician', 'performer'], dj: ['dj'], judge: ['judge'], witness: ['witness'], speaker: ['chancellor', 'desk'],
 };
 // room kinds where a job works when no work record matches (from ROOM_FUNCTIONS) - resolved lazily via roomsForJob
+// rooms any job can work from when the building has no room for it (see candidates)
+const FALLBACK_ROOMS = ['lobby_atrium', 'open_plan_office', 'meeting_room', 'executive_office', 'storage', 'lounge', 'security_post'];
 
 const passableId = (id) => { if (id === 0 || id === 255) return true; const b = BLOCKS[id]; return b ? (!b.solid || !!b.door || b.shape === SHAPE.SLAB || b.shape === SHAPE.BED) : false; };
 const standableId = (id) => { if (id === 0 || id === 255) return false; const b = BLOCKS[id]; return b ? (b.solid || b.shape === SHAPE.LIQUID) : true; };
@@ -131,6 +133,12 @@ export class LotInfo {
     for (const s of this.meta.spots) if (s.kind === 'seat' && s.x >= room.x && s.x < room.x + room.w && s.z >= room.z && s.z < room.z + room.d && s.y >= room.y && s.y < room.y + 40) out.push({ ...s, room });
     return out;
   }
+  // Number of beds inside a room's rectangle (its own floor)
+  roomBeds(room) {
+    let n = 0;
+    for (const b of this.meta.beds) if (b.x >= room.x && b.x < room.x + room.w && b.z >= room.z && b.z < room.z + room.d && b.y >= room.y - 1 && b.y <= room.y + 1) n++;
+    return n;
+  }
   // Vertical span of a room: [floor y, highest seat/work/floor y] (for "is the player on this room's floor")
   roomSpan(room) {
     if (room._span) return room._span;
@@ -222,7 +230,12 @@ export class LotInfo {
     if (cells.length) return cells;
     const spots = this.spotsIn(rooms, ['stand', 'seat']);
     if (spots.length) return spots;
+    // no room of this building hosts the job (the purpose says "office", the planner built no office): work from the
+    // lobby counter, a meeting room or the stores rather than at another trade's post
     this.stats.fallbacks++;
+    const generic = this.roomsOfKind(FALLBACK_ROOMS);
+    for (const r of generic.slice(0, 6)) { const f = roomFunction(r.kind); cells.push(...this.roomCells(r, f.prop && f.prop.length ? f.prop : null, 3)); }
+    if (cells.length) return cells;
     if (this.meta.work.length) return this.meta.work;
     return this.anySpots(['stand', 'seat', 'wait']);
   }

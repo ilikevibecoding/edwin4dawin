@@ -9,6 +9,7 @@ import { PORT, portSpots, PORT_Y } from './port.js';
 import { hash2 } from '../../rng.js';
 
 export const LIFT_WAIT = 2;
+const NEAR_R = 44;   // street spots are sampled this close to the player first (see streetSpot)
 
 const walk = (p, tag) => ({ kind: 'walk', x: p.x, y: p.y, z: p.z, tag });
 const lift = (a, b) => ({ kind: 'lift', x: a.x, y: a.y, z: a.z, tx: b.x, ty: b.y, tz: b.z });
@@ -91,6 +92,12 @@ export class Planner {
     if (npc.level === 'ground' && npc.lot == null && rng() < 0.6) level = 'ground';
     if (npc.level === 'port' || (li && li.lot.district === 'spaceport')) level = 'port';
     let pt = null;
+    // the bustle should be where the player can see it: first try cells around the player that are still within the
+    // post's radius (guards stay by their post; the strip's crowd gathers around whoever walks its street)
+    if (within) for (let t = 0; t < 4 && !pt; t++) {
+      const c = this.nav.randomPoint(level, within.x, within.z, Math.min(radius, NEAR_R), { next: rng });
+      if (c && Math.hypot(c.x - anchor.x, c.z - anchor.z) <= radius + 8) pt = c;
+    }
     for (let t = 0; t < 6 && !pt; t++) {
       const c = this.nav.randomPoint(level, anchor.x, anchor.z, radius, { next: rng });
       if (c && (!within || t === 5 || Math.hypot(c.x - within.x, c.z - within.z) <= within.r)) pt = c;

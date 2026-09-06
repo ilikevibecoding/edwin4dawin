@@ -23,7 +23,7 @@ const TICK = 0.05;
 const _dir = new THREE.Vector3();
 export const SPAWN_R = 96, DESPAWN_R = 128, MAX_LIVE = 150;
 const SPAWN_PER_CYCLE = 10, CYCLE_TICKS = 10;
-const INDOOR_PENALTY = 40, INDOOR_MARGIN = 24, INDOOR_MAX = 90, OWN_LOT_MAX = 110;   // see spawnCycle
+const INDOOR_PENALTY = 40, INDOOR_MARGIN = 24, INDOOR_MAX = 60, OWN_LOT_MAX = 110;   // see spawnCycle
 const SKIP_TICKS = 200;                                            // 10 s before retrying someone who could not be placed
 const RUN_SPEED = 4.2;
 const LEG_NODES = { street: 1600, lot: 4000, door: 900, spot: 3000 };
@@ -148,7 +148,7 @@ export class CoruscantPopulation {
   staffFloor(li, y) {
     for (const [i, room] of li.roomsAtHeight(y)) {
       if (this.pool.staffed.has(li.id + ':' + i)) continue;
-      const added = this.pool.staffRoom(li.lot, room, i, li.roomSeats(room).length);
+      const added = this.pool.staffRoom(li.lot, room, i, li.roomSeats(room).length, li.roomBeds(room));
       this.stats.roomStaff = (this.stats.roomStaff || 0) + added.length;
     }
   }

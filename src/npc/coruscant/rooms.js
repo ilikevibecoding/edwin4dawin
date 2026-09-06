@@ -70,37 +70,69 @@ export const ROOM_FUNCTIONS = {
 
 export const ROOM_KINDS = Object.keys(ROOM_FUNCTIONS);
 
-// Landmark modules register their own room kinds (rotunda, ward, bay, hall_of_records, ...): keyword rules pick the
-// closest standard function. Order matters: the first matching keyword wins.
+// Landmark modules register their own room kinds (rotunda, ward, bay_1, hall_of_records, senator_office, ...):
+// keyword rules pick the closest standard function. A keyword matches a word of the kind (split on `_` and spaces):
+// exactly, as its plural, or as a stem of five letters or more ('meditat' -> meditation, 'stair' -> stairwell); a
+// keyword with an underscore matches the whole kind. Order matters: the first entry with a matching keyword wins, so
+// specific words (food, archive, control, cafe) come before generic ones (court, office, hall, room, deck).
 const KEYWORDS = [
-  [['stair', 'ramp'], 'stairwell'], [['lift', 'turbolift'], 'lift_landing'], [['corridor', 'hall_way', 'passage', 'walkway', 'gangway', 'concourse', 'bridge'], 'corridor'],
-  [['lobby', 'atrium', 'foyer', 'vestibule', 'entrance', 'reception', 'arrivals', 'departures', 'terminal', 'platform'], 'lobby_atrium'],
-  [['chamber', 'rotunda', 'senate', 'council', 'assembly', 'pod', 'podium'], 'council_chamber'], [['court', 'tribunal'], 'courtroom'],
-  [['cell', 'detention', 'brig', 'holding'], 'detention_cell'], [['armory', 'armoury', 'weapons'], 'armory'], [['barrack', 'dorm', 'bunk', 'quarters'], 'barracks'],
-  [['ward', 'recovery', 'bacta', 'surgery', 'triage', 'ambulance'], 'clinic_ward'], [['medbay', 'clinic', 'infirmary', 'pharmacy'], 'medbay'],
-  [['kitchen', 'galley'], 'kitchen'], [['cantina', 'bar', 'club', 'tavern'], 'cantina'], [['restaurant', 'diner', 'caf', 'canteen', 'mess'], 'restaurant'],
-  [['office', 'bureau', 'desk', 'accounts', 'admin', 'records', 'archive', 'registry'], 'open_plan_office'], [['vault', 'treasury'], 'bank_vault'],
-  [['server', 'data', 'comms', 'transmit', 'broadcast', 'antenna', 'relay'], 'comms_room'], [['control', 'tower', 'ops', 'operations', 'command', 'bridge_deck'], 'control_room'],
-  [['studio', 'newsroom', 'edit'], 'studio'], [['stage', 'auditorium', 'theatre', 'theater', 'opera', 'orchestra', 'balcony', 'box'], 'holo_theatre'],
-  [['dressing', 'green_room', 'backstage', 'wardrobe'], 'dressing_room'], [['gallery', 'exhibit', 'museum', 'monument', 'memorial', 'statue'], 'museum_hall'],
-  [['library', 'reading', 'study'], 'library'], [['class', 'school', 'lecture', 'training'], 'school_room'],
-  [['meditat', 'temple', 'sanctum', 'shrine', 'contemplat'], 'meditation_chamber'], [['garden', 'terrace', 'green', 'park', 'arboretum'], 'garden_terrace'],
-  [['gym', 'dojo', 'sparring', 'training_hall'], 'gym'], [['observation', 'overlook', 'viewing', 'balcony_deck'], 'observation_deck'],
-  [['hangar', 'bay', 'dock', 'landing'], 'hangar'], [['garage', 'speeder', 'motor_pool'], 'garage'], [['workshop', 'repair', 'machine', 'forge', 'assembly_line', 'line'], 'workshop'],
-  [['reactor', 'power', 'generator', 'furnace', 'smelt', 'foundry', 'works'], 'reactor_room'], [['droid'], 'droid_bay'],
-  [['storage', 'store_room', 'cargo', 'warehouse', 'depot', 'supply', 'stock'], 'storage'], [['shop', 'market', 'stall', 'retail', 'vendor', 'bazaar'], 'shop'],
-  [['apartment', 'flat', 'residence', 'home', 'suite'], 'family_apartment'], [['penthouse', 'chancellor', 'executive_suite'], 'penthouse'], [['hotel', 'guest', 'room'], 'hotel_room'],
-  [['lounge', 'waiting', 'wait', 'salon'], 'lounge'], [['security', 'checkpoint', 'guard', 'customs', 'post'], 'security_post'],
-  [['restroom', 'washroom', 'refresher', 'bath'], 'restroom'], [['laundry', 'utility', 'service'], 'laundry'], [['arcade', 'games', 'dejarik'], 'arcade'],
+  [['stair', 'stairs', 'ramp'], 'stairwell'], [['lift', 'turbolift'], 'lift_landing'],
+  [['corridor', 'hall_way', 'hallway', 'passage', 'walkway', 'gangway', 'concourse', 'bridge', 'catwalk', 'gantry', 'street', 'alley', 'vomitory'], 'corridor'],
+  [['archive', 'archives', 'records', 'registry'], 'archive'], [['kitchen', 'galley'], 'kitchen'],
+  [['food', 'restaurant', 'diner', 'cafe', 'cafeteria', 'canteen', 'mess', 'bistro'], 'restaurant'], [['cantina', 'bar', 'club', 'tavern', 'pub'], 'cantina'],
+  [['control', 'ops', 'operations', 'command', 'bridge_deck', 'watchtower', 'dispatch'], 'control_room'],
+  [['observation', 'observatory', 'observ', 'overlook', 'viewing', 'telescope', 'balcony_deck'], 'observation_deck'],
+  [['medical', 'medic', 'medbay', 'clinic', 'infirmary', 'pharmacy', 'aid', 'treatment'], 'medbay'],
+  [['ward', 'recovery', 'bacta', 'surgery', 'triage', 'ambulance', 'emergency', 'morgue'], 'clinic_ward'],
+  [['chamber', 'rotunda', 'senate', 'council', 'assembly', 'convocation', 'pod', 'podium'], 'council_chamber'],
+  [['cell', 'detention', 'brig', 'holding'], 'detention_cell'], [['armory', 'armoury', 'weapons'], 'armory'],
+  [['barrack', 'dorm', 'dormitory', 'bunk', 'quarters', 'ready'], 'barracks'],
+  [['security', 'checkpoint', 'guard', 'customs', 'post', 'gatehouse', 'gate', 'interrogation'], 'security_post'],
+  [['meeting', 'briefing', 'conference', 'boardroom'], 'meeting_room'],
+  [['office', 'bureau', 'desk', 'accounts', 'admin', 'logistics', 'shipping', 'planning', 'intake'], 'open_plan_office'], [['vault', 'treasury'], 'bank_vault'],
+  [['server', 'data', 'comms', 'transmit', 'transmitter', 'broadcast', 'antenna', 'relay'], 'comms_room'],
+  [['studio', 'newsroom', 'edit'], 'studio'],
+  [['stage', 'auditorium', 'theatre', 'theater', 'opera', 'orchestra', 'balcony', 'box', 'tier', 'circle', 'stalls', 'screen'], 'holo_theatre'],
+  [['dressing', 'green_room', 'backstage', 'wardrobe', 'locker', 'changing'], 'dressing_room'],
+  [['library', 'reading', 'study'], 'library'], [['class', 'classroom', 'school', 'lecture', 'training'], 'school_room'],
+  [['meditat', 'temple', 'sanctum', 'shrine', 'contemplat'], 'meditation_chamber'],
+  [['hangar', 'bay', 'dock', 'landing', 'gunship', 'pad'], 'hangar'], [['garage', 'speeder', 'motor_pool'], 'garage'],
+  [['workshop', 'repair', 'machine', 'forge', 'assembly_line', 'line', 'maintenance', 'scenery'], 'workshop'],
+  [['reactor', 'power', 'generator', 'furnace', 'smelt', 'smelter', 'foundry', 'works', 'casting'], 'reactor_room'], [['droid'], 'droid_bay'],
+  [['storage', 'store', 'stores', 'store_room', 'cargo', 'warehouse', 'depot', 'supply', 'stock', 'spares', 'parts', 'yard', 'property'], 'storage'],
+  [['museum', 'gallery', 'exhibit', 'monument', 'memorial', 'statue'], 'museum_hall'],
+  [['arcade', 'games', 'dejarik', 'gambling', 'casino', 'den', 'pool_hall', 'hologame'], 'arcade'],
+  [['shop', 'market', 'stall', 'retail', 'vendor', 'vendors', 'bazaar', 'kiosk', 'pawn', 'fitting'], 'shop'],
+  [['gym', 'dojo', 'sparring', 'training_hall'], 'gym'],
+  [['garden', 'terrace', 'greenhouse', 'green', 'park', 'arboretum', 'fountain'], 'garden_terrace'],
+  [['antechamber', 'anteroom'], 'lounge'], [['penthouse', 'chancellor', 'executive_suite'], 'penthouse'],
+  [['apartment', 'flat', 'residence', 'home', 'suite', 'living', 'senator_suite'], 'family_apartment'], [['hotel', 'guest'], 'hotel_room'],
+  [['restroom', 'washroom', 'refresher', 'bath', 'shower', 'showers', 'sauna', 'steam'], 'restroom'], [['laundry', 'utility', 'service'], 'laundry'],
+  [['lobby', 'atrium', 'foyer', 'vestibule', 'entrance', 'reception', 'arrival', 'arrivals', 'departures', 'terminal', 'platform', 'forecourt', 'ticket', 'hall'], 'lobby_atrium'],
+  [['court', 'tribunal'], 'courtroom'],
+  [['lounge', 'waiting', 'wait', 'salon', 'antechamber', 'break'], 'lounge'],
+  [['room', 'deck', 'floor'], 'corridor'],
 ];
+const _inferred = new Map();
+const wordMatch = (tok, kw) => tok === kw || tok === kw + 's' || (kw.length >= 5 && tok.startsWith(kw)) || (tok.length >= 5 && kw.startsWith(tok));
+function inferBase(k) {
+  if (_inferred.has(k)) return _inferred.get(k);
+  const toks = k.split(/[_\s]+/).filter(Boolean);
+  let base = 'lounge';
+  outer: for (const [words, b] of KEYWORDS) for (const w of words) {
+    if (w.includes('_') ? k.includes(w) : toks.some((t) => wordMatch(t, w))) { base = b; break outer; }
+  }
+  _inferred.set(k, base);
+  return base;
+}
 
 // Function of a room kind: the table entry, or the closest one by keyword, else a generic public room. `base` is the
 // standard kind the function was taken from (for census/statistics).
 export function roomFunction(kind) {
   const k = String(kind || '').toLowerCase();
   if (ROOM_FUNCTIONS[k]) return { ...ROOM_FUNCTIONS[k], base: k, inferred: false };
-  for (const [words, base] of KEYWORDS) for (const w of words) if (k.includes(w)) return { ...ROOM_FUNCTIONS[base], base, inferred: true };
-  return { ...ROOM_FUNCTIONS.lounge, base: 'lounge', inferred: true };
+  const base = inferBase(k);
+  return { ...ROOM_FUNCTIONS[base], base, inferred: true };
 }
 
 // Room kinds whose jobs include `job`.
@@ -114,18 +146,24 @@ export function roomsForJob(job) {
 export function propsFor(kind) { return roomFunction(kind).prop; }
 
 // Occupants of one concrete room (rubric row 3: "each room is used for something specific"): the jobs to seat there,
-// given the number of seat spots the room has. Small rooms take up to STAFF_CAP of the function's jobs (one of each,
-// in table order); rooms with many seats (the Senate chamber, auditoria, canteens) fill up with `fill` (or the
-// visitors' job) so a session, a show or a lunch crowd is actually there. Deterministic and pure.
+// given the number of seat spots (and beds) the room has. Small rooms take up to STAFF_CAP of the function's jobs
+// (one of each, in table order); rooms with many seats that take visitors (the Senate chamber, auditoria, canteens,
+// galleries) fill up with `fill` (or the visitors' job) so a session, a show or a lunch crowd is actually there.
+// Rooms that host only staff (workshops, kitchens, comms rooms) never fill; wards fill with one patient per bed.
+// Deterministic and pure.
 export const STAFF_CAP = 3, BIG_ROOM_SEATS = 12, BIG_ROOM_MAX = 40;
-const VISITOR_FILL = { restaurant: 'patron', cafeteria: 'patron', cantina: 'patron', lounge: 'patron', night_club: 'patron', holo_theatre: 'patron', school_room: 'child', observation_deck: 'tourist', museum_hall: 'visitor', gallery: 'visitor', library: 'visitor', arcade: 'patron', market_stalls: 'shopper', shop: 'shopper', medbay: 'patient', clinic_ward: 'patient' };
-export function roomStaff(kind, seats = 0) {
+const VISITOR_FILL = { restaurant: 'patron', cafeteria: 'patron', cantina: 'patron', lounge: 'patron', night_club: 'patron', holo_theatre: 'patron', school_room: 'child', observation_deck: 'tourist', museum_hall: 'visitor', gallery: 'visitor', library: 'visitor', arcade: 'patron', market_stalls: 'shopper', shop: 'shopper', medbay: 'patient', clinic_ward: 'patient', garden_terrace: 'visitor', roof_garden: 'visitor', lobby_atrium: 'visitor', meeting_room: 'aide', courtroom: 'visitor', gym: 'patron' };
+export function roomStaff(kind, seats = 0, beds = 0) {
   const f = roomFunction(kind);
   const out = [];
   for (const j of f.jobs) { if (out.length >= STAFF_CAP) break; out.push(j.job); }
   if (seats >= BIG_ROOM_SEATS) {
-    const fill = f.fill || VISITOR_FILL[f.base] || (f.jobs[0] ? f.jobs[0].job : null);
-    if (fill) { const n = Math.min(seats >= 400 ? BIG_ROOM_MAX + 20 : BIG_ROOM_MAX, Math.ceil(seats / 4)); while (out.length < n) out.push(fill); }
+    const fill = f.fill || VISITOR_FILL[f.base] || null;
+    if (fill) {
+      let n = Math.min(seats >= 400 ? BIG_ROOM_MAX + 20 : BIG_ROOM_MAX, Math.ceil(seats / 4));
+      if (f.beds && VISITOR_JOBS.has(fill)) n = Math.min(n, out.length + Math.max(1, beds));
+      while (out.length < n) out.push(fill);
+    }
   }
   return out;
 }
