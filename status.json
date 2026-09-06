@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-06T14:47:57.387Z",
+  "updated": "2026-09-06T15:21:44.440Z",
   "phase": "Round 6 - from skeleton to a living city: wave 1 merged and live (towers v2, ships v2, train v2, credits economy, lower city, appearance library, 4,767-citizen population, view distance 32); pass 2 running (30 lines per persistent NPC + 13-anchor cast, economy v2 with shipments, 20 building programs + scorer, Senate sessions); spaceport x4 still building",
   "summary": "The hosted build now has round-6 wave 1: creative/survival toggle; seven Star Wars crown styles on all 319 tall towers plus spire/spine/needle families; 62 ships over six families with a deterministic port cycle, boardable interiors and low engine hums; a maglev train with emissive strips and sliding doors; Star Wars credits with 75 building purposes, entrance signs, shops, a job board, rent and a ship dealer; the orange sea replaced by a terraced lower city with three walkable vertical routes; 100 faces / 19 species / 53 outfits; 4,767 named citizens with homes, jobs, meals and shifts (138 visible at noon on the Senate plaza, <= 150 live, 0 teleports); view distance up to 32 with a far-LOD layer. Verified on the merged tree: unit 12/12, towers 15/15, spaceport 16/16, farlod 12/12, lowercity 11/11, ships 9/9, appearance 12/12, rooms 7/7, dialog 7/7, disasters ALL PASS; production bundle smoke-tested at the town, Senate plaza and spaceport with 0 exceptions.",
   "links": [
@@ -210,8 +210,8 @@
     },
     {
       "name": "Round 6 W6: spaceport x4 + train terminus + map growth",
-      "status": "building",
-      "detail": "apron widened to x 2132, grand terminal, terminus undercroft, per-pad fleet types; not yet merged"
+      "status": "paused",
+      "detail": "3 commits + WIP preserved; stopped by the usage block"
     },
     {
       "name": "Round 6 W7: view distance 32 + far LOD",
@@ -230,23 +230,23 @@
     },
     {
       "name": "Pass 2 P1: 30 lines per persistent NPC, 13-anchor cast, speech + subtitles",
-      "status": "building",
-      "detail": ""
+      "status": "paused",
+      "detail": "rubric committed; stopped by the usage block, resumable"
     },
     {
       "name": "Pass 2 P2: economy v2 (chains, atomic transfers, price rule, ledger, physical shipments)",
-      "status": "building",
-      "detail": ""
+      "status": "paused",
+      "detail": "rubric committed; stopped by the usage block, resumable"
     },
     {
       "name": "Pass 2 P3: 20 building programs, dossiers, four-differences rule, building scorer",
-      "status": "building",
-      "detail": ""
+      "status": "paused",
+      "detail": "rubric committed; stopped by the usage block, resumable"
     },
     {
       "name": "Pass 2 P4: Senate chamber, 12 delegation suites, sessions, 3 policy scenarios",
-      "status": "building",
-      "detail": ""
+      "status": "paused",
+      "detail": "rubric committed; stopped by the usage block, resumable"
     },
     {
       "name": "Pass 2 P5/P6: factions + 8 surprises; crowd appearance from the composer",
@@ -441,6 +441,10 @@
     {
       "time": "2026-09-06 14:47 UTC",
       "text": "Round 6 wave 1 merged and the hosted build rebuilt (towers, ships, train, economy pass 1, lower city, appearance, population, view distance 32). Pass 2 builders launched: dialog/cast, economy v2, building programs, Senate."
+    },
+    {
+      "time": "2026-09-06 15:21 UTC",
+      "text": "Pass 2 paused: all five builders (W6 spaceport x4, P1 dialog/cast, P2 economy v2, P3 building programs, P4 Senate) were stopped by a usage block (unpaid invoice). Rubrics 14-17 and the in-progress edits are committed on their branches; they resume with their context once billing is cleared."
     }
   ],
   "issues": [
