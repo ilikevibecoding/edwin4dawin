@@ -579,6 +579,15 @@ export class Streets {
     this.counts.lamps = this.lamps.length;
   }
 
+  /** Marks the city's 10 m occupancy cells a footprint of half-size `r` touches (its centre and four corners). The
+   *  city's `markOccupied(r)` rounds the radius up to whole cells, so any r > 0 blanks a 30 m square: the plaza
+   *  planters marked that way took every street tree out of the plazas (round 6). */
+  private occupy(x: number, z: number, r: number): void {
+    this.markOccupied(x, z, 0);
+    if (r <= 0) return;
+    for (const [dx, dz] of [[-r, -r], [r, -r], [-r, r], [r, r]]) this.markOccupied(x + dx, z + dz, 0);
+  }
+
   // ---------------------------------------------------------------- runs (block faces)
 
   /** The sidewalk runs of one side of a chain: the paved range minus the gaps where crossing roads pass (between the
@@ -863,7 +872,7 @@ export class Streets {
           part(soup, UNIT.box, f, 0.65, 1.3, -1.72, 1.1, 2.1, 0.03, C.glass, 0.15, 0.8);
           part(soup, UNIT.box, f, 0.7, 0.5, 0.3, 0.4, 0.06, 1.6, C.dark, 0.7, 0.4);
           part(soup, UNIT.box, f, 0.7, 0.25, 0.3, 0.08, 0.44, 1.5, C.dark, 0.7, 0.4);
-          this.markOccupied(q.x, q.z, 2);
+          this.occupy(q.x, q.z, 1.8);
           break;
         }
       }
@@ -1064,7 +1073,7 @@ export class Streets {
         soup.quad(prev[7], prev[8], row[8], row[7], ux, 0, uz, 2);
       }
       prev = row;
-      this.markOccupied(p.x - ux * 2.5, p.z - uz * 2.5, 5);
+      this.occupy(p.x - ux * 2.5, p.z - uz * 2.5, 4);
       // bollards every second sample on the seaward edge, benches and lamps at longer pitches
       const f = frame(p.x - ux * 0.9, y, p.z - uz * 0.9, Math.atan2(uz, -ux));
       if (i % 2 === 0) part(soups.small, UNIT.cyl6, f, 0, 0.45, 0, 0.18, 0.9, 0.18, C.dark, 0.5, 0.6);
@@ -1110,7 +1119,7 @@ export class Streets {
         const g = this.map.heightAt(x, z);
         if (g < 0.8 || !this.roads.clear(x, z, 2.5)) continue;
         this.lamp(x, g, z, 0, 'mast');
-        this.markOccupied(x, z, 2);
+        this.occupy(x, z, 1);
       }
     }
   }
@@ -1129,7 +1138,7 @@ export class Streets {
       const g = this.map.heightAt(x, z);
       if (g < 0.8 || !this.roads.clear(x, z, 2.5)) continue;
       this.lamp(x, g, z, 0, 'mast');
-      this.markOccupied(x, z, 2);
+      this.occupy(x, z, 1);
       placed++;
     }
   }
@@ -1192,8 +1201,12 @@ export class Streets {
         else if (d.zone === Zone.DOWNTOWN && ratio > 0.12) kind = 'plaza';
         if (!kind) continue;
         this.pave(toWorld, u0, v0, u1, v1, kind === 'lot' ? K_LOT : K_PLAZA, walkBack);
-        if (kind === 'lot') { this.counts.lots++; this.parkCars(toWorld, u0, v0, u1, v1, occupied, h); }
-        else { this.counts.plazas++; this.dressPlaza(toWorld, u0, v0, nu, nv, free, h); }
+        if (kind === 'lot') {
+          this.counts.lots++;
+          this.parkCars(toWorld, u0, v0, u1, v1, occupied, h);
+          // a lot is bays and aisles end to end: no street tree stands in it (the 6 m gaps between lots stay planted)
+          for (let j = 0; j < nv; j++) for (let i = 0; i < nu; i++) { const [wx, wz] = toWorld(u0 + (i + 0.5) * 5, v0 + (j + 0.5) * 5); this.markOccupied(wx, wz, 0); }
+        } else { this.counts.plazas++; this.dressPlaza(toWorld, u0, v0, nu, nv, free, h); }
       }
     }
   }
@@ -1265,7 +1278,9 @@ export class Streets {
   }
 
   /** Planters (concrete boxes with a clipped shrub) and benches over the free 5 m cells of a plaza: along the building
-   *  frontages in one cell of three, in the open in one of twelve. The planters' cells are marked occupied. */
+   *  frontages in one cell of three, in the open in one of twelve. The planters reserve no ground: the downtown street
+   *  trees are planted at 2 % of the 10 m cells, and a trunk through a 1.6 m planter reads as a planted tree, while
+   *  marking the planters' cells took the trees out of the plazas (round 6). */
   private dressPlaza(toWorld: (u: number, v: number) => Vec2, u0: number, v0: number, nu: number, nv: number, free: Uint8Array, h: number): void {
     const [cx, cz] = toWorld(u0 + nu * 2.5, v0 + nv * 2.5);
     const { yard: soup, yardFar: far } = this.soupsAt(cx, cz);
@@ -1290,7 +1305,6 @@ export class Streets {
         part(soup, UNIT.box, f, 1.7, 0.22, 0.7, 0.4, 0.44, 0.06, C.dark, 0.6, 0.6);
         part(soup, UNIT.box, f, 1.7, 0.22, -0.7, 0.4, 0.44, 0.06, C.dark, 0.6, 0.6);
       }
-      this.markOccupied(x, z, 1.2);
       n++;
     }
     this.counts.planters += n;
