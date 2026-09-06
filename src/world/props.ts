@@ -102,11 +102,20 @@ function boxWithoutBottom(): THREE.BufferGeometry {
 
 /** Point sprites for the luminaires at night: a warm dot ~1.2 m across (clamped to 1.5..4.5 px) that fades in between
  *  DOT_NEAR and DOT_FULL, where the head geometry drops under a pixel, and out toward DOT_FAR. Additive, depth-tested
- *  against the buildings, no depth write. `uFocal` is the frame's focal length in pixels. */
+ *  against the buildings. `uFocal` is the frame's focal length in pixels.
+ *
+ *  The renderer uses a logarithmic depth buffer (game.ts), so this raw ShaderMaterial must compute the same log depth
+ *  (the logdepthbuf chunks, as plane/parts/lights.ts does): without them a fragment's hardware z is compared against
+ *  every built-in material's log z and loses behind anything but the sky — a dot 2.3 km out has hardware z 0.9998,
+ *  the water 200 m behind it log z 0.71 — which is why no lamp dot was ever seen against ground or buildings from
+ *  round 1 to round 9 (DEFECTS 10.1: the port's masts "absent" at night, the city's lamp lines missing beyond the
+ *  600 m of lamp geometry). */
 function createLampDotMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: { uNight: { value: 0 }, uFocal: { value: 1000 } },
     vertexShader: /* glsl */ `
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
       uniform float uFocal;
       attribute vec2 aDot; // sprite size (m), gain
       varying float vFade;
@@ -118,22 +127,28 @@ function createLampDotMaterial(): THREE.ShaderMaterial {
         // port at night, and at the 1.5 px floor it was no larger than a street lamp's dot
         float mast = step(2.0, aDot.x);
         gl_PointSize = clamp(aDot.x * uFocal / max(d, 1.0), 1.5 + 1.5 * mast, 4.5 + 2.5 * mast);
+        // 0.6 m toward the camera: the luminaire sits inside its own housing box, which within LAMP_FAR would hide the
+        // sprite's centre (a building 5 m in front still hides it)
+        mv.xyz *= 1.0 - 0.6 / max(d, 1.0);
         gl_Position = projectionMatrix * mv;
+        #include <logdepthbuf_vertex>
       }`,
     fragmentShader: /* glsl */ `
+      #include <common>
+      #include <logdepthbuf_pars_fragment>
       uniform float uNight;
       varying float vFade;
       void main() {
+        #include <logdepthbuf_fragment>
         float r = length(gl_PointCoord - 0.5) * 2.0;
         float a = (1.0 - smoothstep(0.35, 1.0, r)) * vFade * uNight;
         if (a <= 0.02) discard;
         gl_FragColor = vec4(vec3(1.0, 0.82, 0.55) * 5.0 * a, 1.0);
       }`,
     transparent: true,
-    // the dots write depth: the aerial-perspective pass (post.ts) hazes every pixel by the depth buffer's distance,
-    // so a dot that left the background's depth in place was hazed as the background — the port's masts, standing
-    // against the bay and the far shore from the night view's 2.3 km, went out entirely (h11, h12) while the city's
-    // dots survived in front of their own buildings. With its own depth a dot is hazed by its own distance.
+    // the lit core writes its (log) depth: the aerial-perspective pass (post.ts) hazes every pixel by the depth
+    // buffer's distance, so the dot is hazed by its own distance rather than by whatever stands behind it; the soft
+    // edge (a <= 0.02) is discarded and writes nothing, and by day every fragment is discarded
     depthWrite: true,
     depthTest: true,
     blending: THREE.AdditiveBlending,
