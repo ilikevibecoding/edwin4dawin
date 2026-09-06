@@ -120,3 +120,20 @@ Changed:
 
 Remains: captures and perf pending the Chrome gate; no building contact tone (no footprints available to the
 terrain); the h = 0.05 waterline is faceted by the bilinear height read (shared with water.ts).
+
+## Round 4 — the pass budget (commits 7c73e6a7, 0b6f7ee3)
+
+Reasoned from the round-0 measurement (+39 % suburb, +29 % beach) and the pixel budget of the suburb perf view
+(130 m, pitch −25°: the 3 m tiles are live over the lower 60 % of the frame, the 27 m tile over 86 %; each land
+pixel there took 3–5 detail taps over the base's two, and the 2× anisotropy doubled every oblique fetch):
+- ground tile without anisotropy (its clumps and grain are noise-like and forgive the streak blur); the sand
+  tile keeps 2× for its oriented ripples and prints and is only read on beaches;
+- the two-tap anti-tiling seam narrowed from 0.42–0.58 to 0.45–0.55 of the noise (about a fifth of the pixels
+  take both taps, a 2–3 m seam between one-tap fields);
+- micro tiles (3 m ground, 2.5 m sand) fade out over 0.7–1.2 m/px instead of 0.9–1.6 (under three pixels across
+  there);
+- wrack lines and the swash-limit streak widened to the pixel and paled in proportion once thinner than one, so
+  from 150 m up the beach keeps its thin dark lines (they broke into dashes past ~1 m/px).
+
+Round 3 is served on 4602 and round 4 on 4603 so the A/B attributes the perf work; measured together when the
+gate frees a slot.
