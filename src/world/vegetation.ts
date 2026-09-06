@@ -185,21 +185,24 @@ function leafClusterTexture(rng: Rng): THREE.CanvasTexture {
     const tile = ty * N + tx;
     if (tile >= 4) {
       // a carpet: leaves scattered over the whole tile, every one drawn at the eight wrapped offsets too so
-      // the tile repeats without a seam; coverage ~62 % (hardwood) / 55 % (needles), the rest gaps into the
+      // the tile repeats without a seam; coverage ~75 % (hardwood: 170 ellipses of 0.8 % of the tile each)
+      // and ~60 % (needles: 520 strokes 15-26 px long, a slash pine's 20-30 cm needle at 1.4 m a tile — the
+      // 6-14 px needles covered 27 % and the crown dissolved into a haze at 10-60 m), the rest gaps into the
       // crown's interior; the R channel is the per-leaf shade
       const pine = tile === 5;
-      const n = pine ? 420 : 170;
-      ctx.lineWidth = 1.2;
+      const n = pine ? 520 : 170;
+      ctx.lineWidth = pine ? 1.5 : 1.2;
       ctx.save();
       ctx.beginPath(); ctx.rect(ox, oy, T, T); ctx.clip();
       for (let i = 0; i < n; i++) {
         const cx = rng.next(), cy = rng.next(), ang = rng.range(0, Math.PI);
         const g = Math.round(255 * Math.min(1, 0.5 + 0.55 * rng.next()));
-        const len = (pine ? 0.05 + 0.06 * rng.next() : 0.045 + 0.04 * rng.next()) * T, wid = len * (0.45 + 0.3 * rng.next());
+        const len = (pine ? 0.12 + 0.08 * rng.next() : 0.045 + 0.04 * rng.next()) * T, wid = len * (0.45 + 0.3 * rng.next());
         ctx.fillStyle = ctx.strokeStyle = `rgb(${g}, 0, 0)`;
+        const margin = T * (pine ? 0.25 : 0.15);
         for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
           const x = ox + (cx + dx) * T, y = oy + (cy + dy) * T;
-          if (x < ox - T * 0.15 || x > ox + T * 1.15 || y < oy - T * 0.15 || y > oy + T * 1.15) continue;
+          if (x < ox - margin || x > ox + T + margin || y < oy - margin || y > oy + T + margin) continue;
           ctx.beginPath();
           if (pine) { ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len); ctx.stroke(); }
           else { ctx.ellipse(x, y, len, wid, ang, 0, Math.PI * 2); ctx.fill(); }
@@ -825,8 +828,9 @@ ${VEG_SHADOW_PROBE_VARS}
       float fp = uTime * (4.2 + 2.0 * hc) + hc * 40.0 + puffPart;
       transformed += (right * sin(fp) + up * (0.5 * cos(fp * 1.3))) * (uWind * 0.02 * sz);
       // leaf-cluster tile: hardwoods draw from the two cluster tiles, the sea grape its round leaves (2),
-      // the pine its needle tufts (3)
-      float tile = grape ? 2.0 : cls > 1.5 ? 3.0 : floor(hash11(seed * 7.9 + cardId * 1.13) * 2.0);
+      // the pine its needle tufts (3) — and so does a grass tussock (a bottle-brush of blades)
+      bool tussock = arche > 4.5 && arche < 5.5;
+      float tile = grape ? 2.0 : (cls > 1.5 || tussock) ? 3.0 : floor(hash11(seed * 7.9 + cardId * 1.13) * 2.0);
       vLeafUv = (uv + vec2(mod(tile, 2.0), floor(tile / 2.0))) * vec2(${(1 / LEAF_COLS).toFixed(4)}, ${(1 / LEAF_ROWS).toFixed(4)});
     }
   }
@@ -885,14 +889,17 @@ const CROWN_FRAG = /* glsl */ `
     vegAmb = mix(0.5, 0.22, vOcc) * mix(1.0, 0.45, smoothstep(0.3, 0.9, vRel.y));
   } else {
     vec3 cn = normalize(vCrownN);
+    // inside 40 m the crown is seen leaf by leaf (its carpet, its own leaf tone); by 150 m it is a mass again
+    float close = 1.0 - smoothstep(40.0, 150.0, camDist);
     if (vPart > ${FRINGE_PART - 0.5}) {
       // leaf-cluster card: the cut-out is the coverage (alpha to coverage under MSAA; a soft ramp so the
-      // mip-mapped alpha never flips a whole card between frames), per-leaf shading in R
+      // mip-mapped alpha never flips a whole card between frames), per-leaf shading in R — divided by the
+      // coverage: the atlas' clear texels are black, so a mip-blended edge would otherwise darken to a halo
       vec4 leaf = texture2D(uLeaf, vLeafUv);
       float a = smoothstep(0.3, 0.7, leaf.a);
       if (a < 0.2) discard;
       diffuseColor.a = a;
-      diffuseColor.rgb *= 0.75 + 0.5 * leaf.r;
+      diffuseColor.rgb *= 0.75 + 0.5 * leaf.r / max(leaf.a, 0.05);
     } else if (vegNear > 0.0) {
       // close range: the puff is a shell of leaves with gaps between them — the outer band of each puff
       // dissolves with leaf-cluster noise so the silhouette reads as ragged foliage instead of a 20-facet
@@ -903,27 +910,32 @@ const CROWN_FRAG = /* glsl */ `
       // coverage ramp for the MSAA dither
       float facing = abs(dot(cn, toCam / max(camDist, 1e-3)));
       float clusters = vnoise(vWP.xz * 1.1 + vWP.y * 0.9) * 0.65 + 0.35 * vnoise(vWP.xz * 3.3 - vWP.y * 2.6);
-      float close = 1.0 - smoothstep(40.0, 150.0, camDist);
       // triplanar: the carpet sampled on the three world planes and blended by the puff normal (a hard
       // pick of one plane drew straight seams across the puff where its 20 facets change plane, and
       // stretched the leaves into streaks on the oblique ones)
       vec3 tw = pow(abs(cn), vec3(4.0));
       tw /= tw.x + tw.y + tw.z;
-      vec2 tileO = vec2(vArche > 6.5 ? 1.0 : 0.0, 2.0);
+      // the species' carpet: needles for the pine and for a grass tussock (its blades), leaves for the rest
+      vec2 tileO = vec2(vArche > 6.5 || (vArche > 4.5 && vArche < 5.5) ? 1.0 : 0.0, 2.0);
       vec2 tsc = vec2(${(1 / LEAF_COLS).toFixed(4)}, ${(1 / LEAF_ROWS).toFixed(4)});
       vec2 p0 = vWP.zy * 0.7 + vSeed, p1 = vWP.xz * 0.7 + vSeed * 1.7, p2 = vWP.xy * 0.7 + vSeed * 2.3;
       vec2 lt = textureGrad(uLeaf, (fract(p0) + tileO) * tsc, dFdx(p0) * tsc, dFdy(p0) * tsc).ra * tw.x
               + textureGrad(uLeaf, (fract(p1) + tileO) * tsc, dFdx(p1) * tsc, dFdy(p1) * tsc).ra * tw.y
               + textureGrad(uLeaf, (fract(p2) + tileO) * tsc, dFdx(p2) * tsc, dFdy(p2) * tsc).ra * tw.z;
       // positive where the surface goes: the rim band, and the carpet's gaps (its coverage against a
-      // threshold that rises in the cluster hollows and falls to nothing beyond 150 m)
+      // threshold that rises in the cluster hollows and falls to nothing beyond 150 m; the far side of the
+      // shell is cut wider, so from under a crown the sky shows through the leaves of its underside instead
+      // of a second closed shell)
       float gapThr = mix(-0.2, 0.45 + 0.3 * (0.5 - clusters), close);
+      if (!gl_FrontFacing) gapThr += 0.3 * close;
       float cut = max(0.6 * clusters * vegNear - facing, (gapThr - lt.y) * 0.3);
       float a = 1.0 - smoothstep(-0.03, 0.03, cut);
       if (a < 0.1) discard;
       diffuseColor.a = a;
-      // the leaves' own shade, and the inside of the shell seen through the gaps: the shaded hollow of the crown
-      diffuseColor.rgb *= mix(1.0, 0.55 + 0.6 * lt.x, close);
+      // the leaves' own shade (R over the coverage: the carpet's clear texels are black, and a mip-blended
+      // sample of the sparse needle carpet read 0.2 — the near pines went dark, and teal under the sky's
+      // reflection), and the inside of the shell seen through the gaps: the shaded hollow of the crown
+      diffuseColor.rgb *= mix(1.0, 0.55 + 0.6 * lt.x / max(lt.y, 0.05), close);
       if (!gl_FrontFacing) diffuseColor.rgb *= 0.5;
     }
     // per-plant hue and value jitter on top of the palette tint: neighbours differ in warmth and depth
@@ -955,9 +967,12 @@ const CROWN_FRAG = /* glsl */ `
     cap *= 1.0 - 0.7 * buried;
     // the sunlit leaf is a pale warm yellow-green, the leaf in the shade of its own crown a deep neutral
     // green (not blue: the sky bounce already cools it): the albedo itself carries the split (the direct
-    // light model only decides how much sun each side gets)
-    vec3 sunlit = diffuseColor.rgb * vec3(1.58, 1.4, 1.36);
-    vec3 shade = diffuseColor.rgb * vec3(0.56, 0.5, 0.4);
+    // light model only decides how much sun each side gets). The far split is the cards' (the handover at
+    // NEAR_DISTANCE keeps the canopy's tone, and the cards match the reference's hazed aerial canopy); up
+    // close the same split read as dry khaki (r18-low: lit hue 52°, saturation 0.27 at 10-60 m against the
+    // card canopy's 61°), so inside 40 m the leaf is greener and fuller: lit hue ~80°, saturation ~0.45
+    vec3 sunlit = diffuseColor.rgb * mix(vec3(1.58, 1.4, 1.36), vec3(1.5, 1.52, 1.05), close);
+    vec3 shade = diffuseColor.rgb * mix(vec3(0.56, 0.5, 0.4), vec3(0.46, 0.5, 0.36), close);
     diffuseColor.rgb = mix(shade, sunlit, cap);
     // sky light: the cap sees the whole sky, the underside a little ground bounce; a plant standing among
     // taller neighbours sees their leaves instead of the sky (its cap too: they overtop it)
@@ -1375,7 +1390,7 @@ function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: 
       .replace('#include <normal_fragment_begin>', CROWN_NORMAL_FRAG);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'veg-crown-v17';
+  mat.customProgramCacheKey = () => 'veg-crown-v19';
   return mat;
 }
 
@@ -1451,7 +1466,7 @@ const CARD_EXTRAS = [{ name: 'aVar', itemSize: 4 }];
 interface Plant { x: number; y: number; z: number; s: number; rot: number; lean: number; tint: THREE.Color; arche: Archetype; variant: number; seed: number; squash: number; trunk: number; /** neighbour-density occlusion 0..1 (how much taller canopy overlaps this crown), see occludePlants */ occ: number; }
 
 /** Plant families a tile holds: crown trees (3D crowns + cards), palms (3D palms + cards) and the
- *  understory (cards only: shrubs and tussocks under the canopy, never worth a mesh). */
+ *  understory (shrubs and tussocks under the canopy: cards beyond UNDER_3D, 3D crowns inside it). */
 enum Family { CROWN = 0, PALM = 1, UNDER = 2 }
 
 /** Neighbour-density occlusion: for every plant, how much crown of neighbours at least as tall stands
@@ -1554,6 +1569,13 @@ const UNDER_DISTANCE = 1600;
 const UNDER_FULL = 450;
 const UNDER_HALF = 900;
 const UNDER_SHADOW = 350;
+/** understory cells closer than UNDER_3D draw their shrubs from the crown batches (level 2 inside
+ *  UNDER_ULTRA, level 1 beyond): from a ground camera a shrub card at 2-4 m was a blurred billboard — the
+ *  atlas disc's lobes magnified to a frame-filling cluster of smooth balls with soft edges, no leaf, no
+ *  side (`r18-park`). One shrub or tussock stands under every second or third canopy tree, so this is a
+ *  few dozen crowns at most (≤ 20 k triangles in the park) */
+const UNDER_3D = 60;
+const UNDER_ULTRA = 30;
 /** card tiles closer than this (to their bounding sphere) are drawn into the water's mirror image */
 export const MIRROR_DISTANCE = 1500;
 /** culling growth per unit of scale: the widest crown sideways (a spreading-class lobe at radius 1.15 x 1.3
@@ -2021,7 +2043,7 @@ export class Vegetation {
     this.group.add(this.cameraPalms, this.palmHiBatch.mesh, this.mirrorPalms);
 
     const plants: Plant[] = [];
-    /** the understory (cards only), kept apart so it never enters the crown / palm tiles */
+    /** the understory, kept apart so it never enters the crown / palm tiles (its own LOD ranges) */
     const underPlants: Plant[] = [];
     const tints = {} as Record<Archetype, THREE.Color[]>;
     for (const k of [0, 1, 2, 3, 4, 5, 6, 7] as Archetype[]) tints[k] = PALETTE[k].map((c) => new THREE.Color(c));
@@ -2062,7 +2084,7 @@ export class Vegetation {
     /** young-to-old height draw (metres): most trees are mid-sized, a few are large */
     const size = (prng: Rng, min: number, max: number) => min + (max - min) * Math.pow(prng.next(), 1.5);
     /** Understory under a canopy tree at (x, z): a shrub or a grass tussock a few metres off the trunk, so
-     *  the ground under the crowns is not bare lawn. Cards only (UNDER family). `p` is the chance. */
+     *  the ground under the crowns is not bare lawn (UNDER family: cards beyond UNDER_3D). `p` is the chance. */
     const understory = (x: number, z: number, prng: Rng, p: number) => {
       if (!prng.chance(p)) return;
       const a = prng.range(0, Math.PI * 2), d = prng.range(2.5, 6);
@@ -2450,7 +2472,9 @@ export class Vegetation {
     casting.fill(0);
     for (const t of tiles) {
       const under = t.family === Family.UNDER;
-      const near = !under && t.d < (t.family === Family.CROWN ? NEAR_DISTANCE : PALM_NEAR_DISTANCE) && budget >= t.n;
+      // the understory is cards beyond UNDER_3D; inside it the shrubs draw from the crown batches like any
+      // crown (a card at 2-4 m from a ground camera is a blurred billboard the size of the frame)
+      let near = t.d < (under ? UNDER_3D : t.family === Family.CROWN ? NEAR_DISTANCE : PALM_NEAR_DISTANCE) && budget >= t.n;
       if (near) budget -= t.n;
       const inView = cull.boxInView(t.box);
       let bits = t.d < (under ? UNDER_SHADOW : this.shadowDistance) ? cull.casterCascades(t.center, t.r, t.height) : 0;
@@ -2467,7 +2491,7 @@ export class Vegetation {
       let batched3d = false;
       /** near crown tile whose far cells went into the camera card batch this frame */
       let nearCardCells = false;
-      if (t.family === Family.CROWN && (near3d || t.batched3d)) {
+      if ((t.family === Family.CROWN || under) && (near3d || t.batched3d)) {
         const vc = (t.cells ??= Vegetation.cells(t));
         const cells = vc.near;
         const batches = this.crownBatches;
@@ -2488,7 +2512,9 @@ export class Vegetation {
             const i = order[k];
             const c = cells[i];
             const d = dist[i];
-            let level = d < ULTRA_DISTANCE ? 2 : d < HI_DISTANCE ? 1 : d < NEAR_DISTANCE ? 0 : -1;
+            // understory cells: the two fine levels close by (a 2 m shrub is 36 px tall at 60 m: a card's job
+            // from there), never the level-0 crown
+            let level = under ? (d < UNDER_ULTRA ? 2 : d < UNDER_3D ? 1 : -1) : d < ULTRA_DISTANCE ? 2 : d < HI_DISTANCE ? 1 : d < NEAR_DISTANCE ? 0 : -1;
             const count = cull.boxInView(c.box) ? c.count : 0;
             if (level === 2) { if (count <= ultraBudget) ultraBudget -= count; else level = 1; }
             // the level-1 budget is spent nearest first too: the cells beyond it fall to level 0 (a dense park
@@ -2501,6 +2527,8 @@ export class Vegetation {
         }
         if (!batched3d) { for (const c of cells) for (const b of batches) b.set(c, 0); for (const c of vc.cards) this.cameraBatch.set(c, 0); nearCardCells = false; }
         t.batched3d = batched3d;
+        // an understory tile has no mesh of its own to fall back on: a full crown batch leaves it to its cards
+        if (under && !batched3d) near = false;
       }
       // palm tiles (no subdivided mesh): the camera draws the cells in its frustum within PALM_NEAR_DISTANCE
       // from the palm batch and the cells beyond it as cards; the tile's own mesh (every palm) is the
