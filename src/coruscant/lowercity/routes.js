@@ -84,12 +84,13 @@ function paintFaceAndMasts(chunk) {
 // Ring of the 12 cells around a 2 x 2 core in a 4 x 4 footprint (local a, b in 0..3).
 const RING = [[0, 0], [1, 0], [2, 0], [3, 0], [3, 1], [3, 2], [3, 3], [2, 3], [1, 3], [0, 3], [0, 2], [0, 1]];
 // Half-steps from `bottom` to `top` (walking levels), with an optional 5-cell flat landing at `landing`. The last
-// step always lands on RING[11], next to the head-house door (cells (0,1) / (0,2) face it), so the eight highest
-// steps sit on the a <= 2 columns inside the plateau; for the public lift (31 -> 61, landing 41) the flat landing
-// falls on RING[3..7]: the four a = 3 cells behind the deck door plus one.
+// step always lands on RING[0]: the head-house door faces cells (0,1) (a slab half a step under the sill) and (0,2),
+// and the a = 3 column (d 0, walled above 59) carries nothing higher than a full step at 58, so a 1.8 tall player
+// clears its wall. For the public lift (31 -> 61, landing 41) the flat landing covers RING[3..8]: all four a = 3
+// cells behind the deck door.
 function helixSteps(bottom, top, landing) {
   const rise = (top - bottom) * 2, landK = landing ? (landing - bottom) * 2 : -1, landLen = landing ? 5 : 0;
-  const total = rise + landLen, start = mod(11 - total, 12), out = [];
+  const total = rise + landLen, start = mod(-total, 12), out = [];
   for (let k = 0; k <= total; k++) {
     let s;
     if (landK < 0 || k <= landK) s = bottom + 0.5 * k;
@@ -224,9 +225,9 @@ function paintVentRoute(chunk) {
     F(d, v, 60, core ? VENT : AIR);                       // the open grate: the core is the grate, the ring is open
   }
   for (const st of helixSteps(bottom, 61)) stepBlock(F, dOf(st.a), vOf(st.b), st.s, bottom - 1);
-  for (let a = 0; a < 4; a++) { F(dOf(a), vOf(-1), 61, BARS); F(dOf(a), vOf(4), 61, BARS); }   // railing round the hole
-  F(dOf(-1), vOf(0), 61, BARS); F(dOf(-1), vOf(3), 61, BARS);
-  F(dOf(-1), vOf(-1), 61, BARS); F(dOf(-1), vOf(-1), 62, BARS); F(dOf(-1), vOf(-1), 63, LAMP);
+  // railing along the hole's two long sides (the plateau-side promenade column stays open for walking past and in)
+  for (let a = 0; a < 4; a++) { F(dOf(a), vOf(-1), 61, BARS); F(dOf(a), vOf(4), 61, BARS); }
+  F(dOf(0), vOf(-1), 62, BARS); F(dOf(0), vOf(-1), 63, LAMP);
   for (let y = 45; y <= 47; y++) { F(0, vOf(0), y, AIR); F(0, vOf(1), y, AIR); }   // out through the face
   F(0, vOf(2), 46, HOLO); F(0, vOf(-1), 46, GLOW);
   // balcony (floor 44) with posts, railing and a lamp
