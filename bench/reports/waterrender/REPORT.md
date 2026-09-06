@@ -2,10 +2,11 @@
 
 Owner: water rendering agent. Rubric categories genuinely affected: 9 (base ocean), 10 (wave physics, hero),
 13 (foam: compositing only), 26 (water sunlight and reflections, hero). Files changed: `src/world/water.ts`
-(shader: sky reflection, glitter, sparkle field, mirror reflection filter, set fades, roughness modulation),
-`src/render/reflection.ts` (streak tuning), `src/game.ts` (one line: the water receives the atmosphere uniforms),
-`src/render/wakes.ts` (one rename: a reserved GLSL word that broke the splat shader, see below). The wave sets
-and `waves.ts` are unchanged, so the CPU/GPU parity of the flight model holds (no flight-harness run needed).
+(shader: sky reflection with clouds, glitter, sparkle field, mirror reflection kernel, set fades, roughness
+modulation), `src/render/reflection.ts` (share pyramid rendered by the reflection pass, streak tuning),
+`src/game.ts` (one line: the water receives the atmosphere uniforms), `src/render/wakes.ts` (one rename: a
+reserved GLSL word that broke the splat shader, see below). The wave sets and `waves.ts` are unchanged, so the
+CPU/GPU parity of the flight model holds (no flight-harness run needed).
 
 Defect log with per-round evidence: `DEFECTS.md`; crops in `crops/` (labelled r<round>_<view>_<before>_vs_<after>).
 
@@ -47,12 +48,25 @@ Defect log with per-round evidence: `DEFECTS.md`; crops in `crops/` (labelled r<
 - **Roughness bunched by the wave groups**: the unresolved slope variance is modulated ×0.55–1.45 by a
   40 × 16 m noise travelling at the group speed (faded once a pixel covers 8–20 m), which breaks a sun path's
   margins into streaks across the waves with darker water between them and mottles the far sky reflection.
-- **Mirror reflection** (`sceneReflection`): the wave normal is tilted by the sparkle facets before the mirror
-  ray is built (a light lands on the cells whose facet points at it: a column of glints over the mirror image,
-  near reflections shatter at their edges); the residual variance drives a streak filter of physical length
-  (1.2 × rms slope, was 0.38) whose cross blur equals the across-spread instead of half the streak, with as many
-  taps as the streak needs one footprint apart (Gaussian, normalised, up to 13); the image fades only for streaks
-  of 0.35–0.8 of the height so a city's lights keep their columns.
+- **Mirror reflection** (`sceneReflection`, `reflection.ts`): the streak of a mirrored point is 2σ × (the share
+  of its mirror distance beyond the surface) × focal length along the image's vertical and that × |V.y| across
+  (Cox–Munk geometry; a hull on the water has share 0 and stays sharp, the aircraft in a chase view ~0.5, a
+  tower's top higher than the camera → 1). The reflection pass now renders that share per texel (premultiplied,
+  same Gaussian pyramid as the image), and the water's kernel is a *scatter*: it gathers over the reach of the
+  longest streak around (13 taps, Gaussian) and weights each tap by the streak of what *that tap* mirrors (mean
+  share of its cell), reading the colour at the level of that streak's across-spread. The old kernel was a
+  gather set by the pixel's own mirror hit, so every streak stopped at the object's silhouette (hard-edged
+  "teeth" filled with blur under a city at night). The wave normal is tilted by the sparkle facets before the
+  lookup (near reflections shatter, far ones wobble with the waves); the wave-tilt displacement uses the share
+  of the reach so it is continuous across silhouettes; open water leaves after three top-level reads; no per-
+  pixel depth reads remain. Streak per unit rms slope 1.2 (was 0.38), image fade at streaks of 0.35–0.8 of the
+  height.
+- **Clouds in the sky term**: the lobe's centre ray is carried to the cloud base plane and the shared 2D cloud
+  field (the dome's own, with its wind offset) says whether a cloud hangs there; the sky is blended toward the
+  grey of a lit base by that coverage × the haze extinction up to it, with the field's edge ramp widened by the
+  lobe's footprint. One evaluation per pixel, only where the sky term weighs > 6 % of the pixel (Fresnel) and
+  the ray is not near-horizontal; the overcast band of before is kept as the floor. No version of the water
+  had mirrored a cumulus (the probe was "analytic sky only").
 - **Set fades along the wave vector** (`footAlong`): each set leaves on the pixel's extent along its own wave
   vector, so sets whose crests run away from the camera stay resolved across the screen.
 - `wakes.ts`: `patch` → `wwPatch` (compile fix only).
