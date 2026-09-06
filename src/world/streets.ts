@@ -3,7 +3,7 @@ import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { hash2 } from '../core/seed';
 import { clamp } from '../core/noise';
 import { PORT_ISLAND, Zone, type Vec2, type WorldMap } from './map';
-import { GLSL_LIGHT_POOLS, chainCross, chainFrame, frameAt, roadEdgeY, rowPositions, type Block, type RoadChain, type RoadCorner, type RoadGraph, type RoadLightUniforms, type RoadNode, type RoadRay } from './roads';
+import { GLSL_LIGHT_POOLS, chainCross, chainFrame, frameAt, highwayGap, roadEdgeY, rowPositions, type Block, type RoadChain, type RoadCorner, type RoadGraph, type RoadLightUniforms, type RoadNode, type RoadRay } from './roads';
 import { balanceGroundIbl } from './terrain';
 import { THIN_VERTEX_MAIN, THIN_VERTEX_PARS, cellKey } from './batching';
 import { LAYER_CAMERA, layerMask, maskCasts, type ViewCull } from './culling';
@@ -701,7 +701,7 @@ export class Streets {
   readonly uniforms = { uSignalTime: { value: 0 } as THREE.IUniform<number>, uNight: { value: 0 } as THREE.IUniform<number>, uFocalPx: { value: 1000 } as THREE.IUniform<number> };
   private readonly cells: StreetCell[] = [];
   private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup }>();
-  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, trees: 0, medians: 0, medianLength: 0, medianPalms: 0, awnings: 0, signs: 0, newsboxes: 0, mailboxes: 0, racks: 0, cans: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
+  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, trees: 0, medians: 0, medianLength: 0, medianPalms: 0, bufferPlants: 0, awnings: 0, signs: 0, newsboxes: 0, mailboxes: 0, racks: 0, cans: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
   private readonly roads: RoadIndex;
   /** debug: `?dbg=nopools` turns the lamp pools off */
   poolsEnabled = true;
@@ -891,6 +891,47 @@ export class Streets {
     this.counts.runs++;
     // lamps and furniture along the run
     this.dressRun(run, cellSoups);
+    if (chain.cls === 'street') this.plantFrontageBuffer(run);
+  }
+
+  /** The planted buffer between a frontage street and the highway it runs beside (highway agent's request 3: the
+   *  grid's frontage street south of the coastal highway runs for kilometres against its shoulder): where the gap
+   *  between the sidewalk back and the highway's edge leaves 2.2 m, a hedge of sea grapes every 5-7 m down its
+   *  middle and a palm every 24 m; where the street abuts the shoulder there is no room and the darker tone alone
+   *  separates them. */
+  private plantFrontageBuffer(run: Run): void {
+    const { chain, side, sa, sb } = run;
+    if (sb - sa < 20) return;
+    const cross = this.crossOf(chain);
+    const mid = frameAt(chain, cross, (sa + sb) / 2);
+    const dir = chainFrame(chain, (sa + sb) / 2);
+    const nx = mid.cx * side, nz = mid.cz * side;
+    let gap: number | null = null;
+    for (const h of this.graph.chains) {
+      if (h.cls !== 'highway' && h.cls !== 'causeway') continue;
+      const g0 = highwayGap(h, mid.x, mid.z, dir.dx, dir.dz);
+      if (g0 === null || g0 > chain.hw + 30) continue;
+      const g1 = highwayGap(h, mid.x + nx * 5, mid.z + nz * 5, dir.dx, dir.dz);
+      if (g1 === null || g1 >= g0) continue; // the highway is on the other side
+      gap = g0 - chain.hw; // shoulder to this run's kerb face
+      break;
+    }
+    if (gap === null) return;
+    const room = gap - (CURB_TOP + run.w);
+    if (room < 2.2) return;
+    const across = CURB_TOP + run.w + room * 0.5; // from the kerb face, the middle of the strip
+    const pitch = 5 + 2 * hash2(chain.id, side, 61);
+    let k = 0;
+    for (let s = sa + 3 + pitch * hash2(chain.id, side, 62); s < sb - 3; s += pitch, k++) {
+      const f = frameAt(chain, cross, s);
+      const x = f.x + f.cx * side * (chain.hw + across), z = f.z + f.cz * side * (chain.hw + across);
+      const y = this.map.heightAt(x, z);
+      if (y < 0.9) continue;
+      const t = hash2(Math.round(s), chain.id, side + 63);
+      if (k % 4 === 1 && room >= 3.5) this.streetTrees.push({ arche: 4, x, y, z, h: 6 + 3 * t });
+      else this.streetTrees.push({ arche: 6, x, y, z, h: 2.4 + 1.4 * t });
+      this.counts.bufferPlants++;
+    }
   }
 
   /** The kerbed medians of the 4-lane arterials (the gauntlet's "medians with curbs and planting strips", defect

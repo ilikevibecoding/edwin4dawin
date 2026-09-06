@@ -591,6 +591,10 @@ float roadCrown = 0.0; // signed 2 % cross-fall of the carriageway, applied to t
     float bk2 = floor(bandK2), bf2 = fract(bandK2);
     float band2 = mix(hash11(bk2 * 1.7 + 3.0 * cls), hash11((bk2 + 1.0) * 1.7 + 3.0 * cls), aaStep(0.98, bf2, max(fwA / 61.0, 0.03)));
     asphalt *= mix(1.0, (0.6 + 0.66 * band) * (0.9 + 0.2 * band2), 1.0 - inBox);
+    // a frontage street beside a highway (class code + 0.25): the old dark local street the highway was built past —
+    // no bright repaving bands, three quarters of the tone, its dashes worn to a trace
+    float frontage = step(0.2, fract(cls));
+    asphalt *= mix(1.0, 0.74 / max(0.6 + 0.66 * band, 0.6), frontage);
     // utility trench scars: a 1.1 m strip of fresh (dark) or concrete-filled (pale) trench running 20-55 m along the
     // road in 40 % of 60 m cells, and a transverse cut across the whole road in 15 % of them
     float trench = 0.0, trenchTone = 1.0;
@@ -680,7 +684,7 @@ float roadCrown = 0.0; // signed 2 % cross-fall of the carriageway, applied to t
     surf = mix(surf, vec3(0.30, 0.22, 0.10) * (0.8 + 0.4 * n3), litter * 0.85);
     surf = mix(surf, vec3(0.34, 0.32, 0.29), grit * 0.5);
     // ---- markings, each box-filtered over the pixel footprint and faded out where they stop at junctions
-    float wearM = 0.6 + 0.4 * smoothstep(0.3, 0.7, fbm3(wp * 0.35 + 11.0));
+    float wearM = (0.6 + 0.4 * smoothstep(0.3, 0.7, fbm3(wp * 0.35 + 11.0))) * (1.0 - 0.45 * frontage);
     float lineOK = mix(1.0, aaStep(5.0, a, fwA), fBox + fStop + fLadder + fLines > 0.5 ? 1.0 : 0.0);
     float edgeOK = mix(1.0, aaStep(4.0, a, fwA), fBox + fLadder + fLines > 0.5 ? 1.0 : 0.0);
     // T junctions break the edge line on the stem side only
@@ -860,10 +864,23 @@ export function buildRoadMeshes(map: WorldMap, graph: RoadGraph, material: THREE
   let vcount = 0;
   const clsId = (c: RoadClass) => (c === 'highway' || c === 'causeway' ? 3 : c === 'arterial' ? 2 : c === 'runway' ? 5 : c === 'taxiway' ? 6 : c === 'lane' ? 0 : 1);
   const NONE = [-1e5, 0, 0, 0];
+  const highways = graph.chains.filter((c) => c.cls === 'highway' || c.cls === 'causeway');
   for (const chain of graph.chains) {
     if (chain.s1 - chain.s0 < 1) continue;
     const cross = chainCross(chain);
     const hw = chain.hw, cid = clsId(chain.cls), lanes = chain.lanes, lift = chain.lift;
+    // a street running beside a highway (its edge within 8 m of the shoulder, parallel) is a frontage street: the
+    // shader takes the flag from the fraction of the class code (+0.25) and tones it down — beside the pale
+    // highway it read as 22 m of bright pavement from the air (highway agent's request 3)
+    const frontageAt = (s: number): boolean => {
+      if (chain.cls !== 'street') return false;
+      const f = chainFrame(chain, s);
+      for (const h of highways) {
+        const g = highwayGap(h, f.x, f.z, f.dx, f.dz);
+        if (g !== null && g < hw + 8) return true;
+      }
+      return false;
+    };
     // regions of constant nearest-intersection: split at the midpoints between successive nodes
     const regions: { sa: number; sb: number; att: number[] }[] = [];
     const nodes = chain.nodes.filter((cn) => cn.s >= chain.s0 - 60 && cn.s <= chain.s1 + 60);
@@ -881,6 +898,7 @@ export function buildRoadMeshes(map: WorldMap, graph: RoadGraph, material: THREE
       let first = true;
       for (const s of rowPositions(chain, rg.sa, rg.sb, 15)) {
         const f = frameAt(chain, cross, s);
+        const frontage = frontageAt(s);
         chain.rows.push(s);
         for (const side of [-1, 1]) {
           const px = f.x + f.cx * hw * side, pz = f.z + f.cz * hw * side;
@@ -889,7 +907,7 @@ export function buildRoadMeshes(map: WorldMap, graph: RoadGraph, material: THREE
           pos.push(px, h, pz);
           nrm.push(0, 1, 0);
           uv.push(side, s);
-          info.push(lanes, chain.width, cid);
+          info.push(lanes, chain.width, cid + (frontage ? 0.25 : 0));
           isect.push(rg.att[0], rg.att[1], rg.att[2], rg.att[3]);
         }
         vcount += 2;
@@ -962,6 +980,25 @@ export function buildRoadMeshes(map: WorldMap, graph: RoadGraph, material: THREE
     meshes.push(mesh);
   }
   return meshes;
+}
+
+/** Gap (m) between the point (x, z) and the edge of highway chain `h` where the local direction (dx, dz) runs
+ *  parallel to it (|cos| > 0.9) and the point is within 60 m of its centreline; null elsewhere. */
+export function highwayGap(h: RoadChain, x: number, z: number, dx: number, dz: number): number | null {
+  let best: number | null = null;
+  for (let i = 0; i < h.pts.length - 1; i++) {
+    const [ax, az] = h.pts[i], [bx, bz] = h.pts[i + 1];
+    const ex = bx - ax, ez = bz - az, l2 = ex * ex + ez * ez;
+    if (l2 < 1) continue;
+    const t = clamp(((x - ax) * ex + (z - az) * ez) / l2, 0, 1);
+    const d = Math.hypot(x - (ax + ex * t), z - (az + ez * t));
+    if (d > 60) continue;
+    const l = Math.sqrt(l2);
+    if (Math.abs((dx * ex + dz * ez) / l) < 0.9) continue;
+    const gap = d - h.hw;
+    if (best === null || gap < best) best = gap;
+  }
+  return best;
 }
 
 /** Road network chunk size (m): a cell is one draw call when in view. */
