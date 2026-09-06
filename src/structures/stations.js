@@ -1,7 +1,9 @@
 // The two hyperlane stations (frontier, Coruscant west edge): a 60 x 8 platform at track level with glass edge doors
 // that open with the train, a canopy, a waiting hall with benches, kiosks and timetable boards (holo panels + text
 // signs), and a switchback stair tower down to the ground. Lazy per-chunk fills; the edge doors are toggled as world
-// blocks whenever the train's doors change.
+// blocks whenever the train's doors change. Platform dressing: lit edge row (boarding pads at the doors), benches
+// and lamp pylons along the back railing, and holo boards (departure countdown, route maps) registered with the
+// train, which draws them.
 // Junctions with the spaceports (src/coruscant/spaceport.js):
 //   - Coruscant: the track ends (buffer stops) at x 2548, the tower top (platform level, walk on 92) at x 2533..2548;
 //     a glass-walled concourse at the bridge floor level (walk on 91) fills x 2549..2560 between the tower and the
@@ -81,9 +83,13 @@ function fillStation(chunk, gen, L, edgeMode) {
     for (let x = xa; x <= xb; x++) {
       const hall = x >= L.hallX0 && x <= L.hallX1;
       const zEnd = hall ? HALL_Z1 : PZ1;
+      // platform edge lights (floor row behind the screens): white boarding pads in front of the train's doors,
+      // blue markers every 4 blocks, the hazard stripe in between
+      const doorCol = L.doorXs.some((dx) => x === dx || x === dx + 1);
+      const edgeRow = doorCol ? B.GLOW_PANEL : x % 4 === 2 ? B.GLOW_PANEL_BLUE : x % 2 === 0 ? B.PANEL_STRIPE : B.DECK_PLATE;
       for (let z = Math.max(cz0, PZ0); z <= Math.min(cz1, zEnd); z++) {
         for (let y = FLOOR - 3; y < FLOOR; y++) set(x, y, z, B.DURASTEEL_DARK);
-        set(x, FLOOR, z, z === PZ0 ? B.DURASTEEL : (z === PZ0 + 1 && x % 2 === 0 ? B.PANEL_STRIPE : B.DECK_PLATE));
+        set(x, FLOOR, z, z === PZ0 ? B.DURASTEEL : (z === PZ0 + 1 ? edgeRow : B.DECK_PLATE));
       }
       // pillars every 16 blocks (2 x 2) under the platform and the hall, down to terrain / sea floor
       if (x % 16 === 8 || x % 16 === 9) {
@@ -101,6 +107,12 @@ function fillStation(chunk, gen, L, edgeMode) {
       // railings along the open back edge (outside the hall) and the platform's west end
       const openBack = (x < L.hallX0 || x > L.hallX1) && !canopyColumn(x) && !stairX(x);
       if (openBack && PZ1 >= cz0 && PZ1 <= cz1) set(x, RAIL_Y, PZ1, B.IRON_BARS);
+      // benches (3 long) against the back railing, a lamp post beside each
+      if (openBack && x <= px1 && PZ1 - 1 >= cz0 && PZ1 - 1 <= cz1) {
+        const k = (x - px0) % 12;
+        if (k >= 6 && k <= 8) set(x, FLOOR + 1, PZ1 - 1, B.STONE_BRICK_SLAB);
+        if (k === 10) { set(x, FLOOR + 1, PZ1 - 1, B.CHROME); set(x, FLOOR + 2, PZ1 - 1, B.GLOW_PANEL_BLUE); }
+      }
       if (x === px0) for (let z = Math.max(cz0, PZ0 + 1); z <= Math.min(cz1, PZ1 - 1); z++) set(x, RAIL_Y, z, B.IRON_BARS);
     }
   }
@@ -339,6 +351,14 @@ export function registerStations(gen, game, train) {
   const doors = new StationDoors(game, layouts, train);
   for (const L of layouts) {
     gen.addStructure({ name: 'station:' + L.S.name, x0: L.x0, z0: L.z0, x1: L.x1, z1: L.z1, fill: (chunk, g) => fillStation(chunk, g, L, doors.edgeMode(L.S)) });
+    // holo boards hanging under the canopy over the platform (drawn by the train on its display canvas): the
+    // departure display counting down at the platform's middle, live route maps a dozen blocks to either side
+    if (train.addStationDisplay) {
+      const mid = (L.px0 + L.px1 + 1) / 2, y = FLOOR + 4.3, z = PZ0 + 3.5;
+      train.addStationDisplay({ station: L.S, kind: 'departure', x: mid, y, z, w: 6, h: 1.5 });
+      train.addStationDisplay({ station: L.S, kind: 'route', x: mid - 12, y, z, w: 5, h: 1.25 });
+      train.addStationDisplay({ station: L.S, kind: 'route', x: mid + 12, y, z, w: 5, h: 1.25 });
+    }
   }
   // sign text: tiles are baked into the atlas now (before it is finalised); the positions are registered with the
   // world once it exists. Reading direction: a board facing -x is read looking +x, so its text runs -z -> +z, etc.
