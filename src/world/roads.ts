@@ -661,7 +661,8 @@ const ROAD_FRAG_MAIN = /* glsl */ `
       float md = length(vec2(along - ma, xm - mx));
       float manhole = step(0.35, mh) * (1.0 - smoothstep(0.32 - fp, 0.32 + fp, md)) * ironFade * (1.0 - inBox);
       float rim = manhole * smoothstep(0.2, 0.3, md);
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.13, 0.13, 0.135) * (1.0 + 0.5 * rim), manhole);
+      // cast iron polished by the traffic: paler and warmer than the aged asphalt around it, a brighter rim ring
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.21, 0.19, 0.17) * (0.85 + 0.45 * rim), manhole);
       float gc = floor(along / 24.0);
       float ga = (gc + 0.3 + hash11(gc * 1.7 + cls) * 0.4) * 24.0;
       float gx = hw - 0.45;
