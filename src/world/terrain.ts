@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { LAYER_DEFAULT, LAYER_MAIN, LAYER_MIRROR, type ViewCull } from './culling';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
-import { HALF, MAP_N, WORLD_SIZE, Zone, urbanGradient, type WorldMap } from './map';
+import { HALF, MAP_N, WORLD_SIZE, Zone, sdBox, urbanGradient, type WorldMap } from './map';
 import { smoothstep } from '../core/noise';
+import { SAND_TILE, createGroundDetailTextures, type GroundDetailTextures } from './groundDetail';
 
 /**
  * Formerly a per-material white balance of the sky irradiance (the dome's IBL used to deliver ~2.5x the
@@ -18,6 +19,8 @@ export class MapTextures {
   zone: THREE.DataTexture;
   /** baked hinterland detail (streets, block tone, urbanity, corridor strips), see bakeDetail */
   detail: THREE.DataTexture;
+  /** tileable ground-detail textures (grass, soil, sand, footprints), see groundDetail.ts */
+  readonly groundDetail: GroundDetailTextures;
   /** lowest and highest ground height (m) */
   readonly heightMin: number;
   readonly heightMax: number;
@@ -50,8 +53,10 @@ export class MapTextures {
       z[i * 4 + 3] = map.exposure[i];
     }
     this.zone = new THREE.DataTexture(z, MAP_N, MAP_N, THREE.RGBAFormat, THREE.UnsignedByteType);
-    this.zone.minFilter = THREE.NearestFilter;
-    this.zone.magFilter = THREE.NearestFilter;
+    // linearly filtered: the smooth channels (canopy, coast distance, exposure) come out bilinear in one tap;
+    // the zone id is read at texel centres (zoneCell in the terrain shader), where the filter returns the texel
+    this.zone.minFilter = THREE.LinearFilter;
+    this.zone.magFilter = THREE.LinearFilter;
     this.zone.wrapS = this.zone.wrapT = THREE.ClampToEdgeWrapping;
     this.zone.generateMipmaps = false;
     this.zone.needsUpdate = true;
@@ -62,6 +67,8 @@ export class MapTextures {
     this.detail.wrapS = this.detail.wrapT = THREE.ClampToEdgeWrapping;
     this.detail.generateMipmaps = false;
     this.detail.needsUpdate = true;
+
+    this.groundDetail = createGroundDetailTextures(renderer);
   }
 }
 
@@ -164,6 +171,35 @@ function bakeDetail(map: WorldMap): Uint8Array {
       }
     }
   }
+  // beach cells: R = trampling (footprints, trodden sand) around the marinas, where streets and arterials
+  // reach the shore, and along the hotel frontages; the beach branch of the shader reads R as footprint density
+  // (the street band above only marks the causeway landings there)
+  const spots: { x: number; z: number; r0: number; r1: number; w: number }[] = [];
+  for (const ma of map.marinas) spots.push({ x: ma.x, z: ma.z, r0: 50, r1: 170, w: 0.85 });
+  for (const rd of map.roads) {
+    if (rd.cls !== 'street' && rd.cls !== 'arterial') continue;
+    for (const p of [rd.pts[0], rd.pts[rd.pts.length - 1]]) spots.push({ x: p[0], z: p[1], r0: 12, r1: 75, w: 0.75 });
+  }
+  const hotels = map.districts.filter((d) => d.zone === Zone.HOTEL);
+  for (let j = 0; j < n; j++) {
+    const z = -HALF + (j + 0.5) * cell;
+    for (let i = 0; i < n; i++) {
+      const idx = j * n + i;
+      if (map.zone[idx] !== Zone.BEACH) continue;
+      const x = -HALF + (i + 0.5) * cell;
+      let t = 0;
+      for (const s of spots) {
+        const dx = x - s.x, dz = z - s.z;
+        if (Math.abs(dx) > s.r1 || Math.abs(dz) > s.r1) continue;
+        t = Math.max(t, s.w * (1 - smoothstep(s.r0, s.r1, Math.hypot(dx, dz))));
+      }
+      for (const d of hotels) {
+        const sd = sdBox(x, z, d.cx, d.cz, d.hw, d.hh, d.rot);
+        if (sd < 90) t = Math.max(t, 0.6 * (1 - smoothstep(20, 90, sd)));
+      }
+      if (t > 0) out[idx * 4] = Math.max(out[idx * 4], Math.round(255 * t));
+    }
+  }
   return out;
 }
 
@@ -249,6 +285,7 @@ uniform float uWorldSize;
 attribute vec2 aEdge;
 varying vec3 vWorldPos;
 varying float vHeight;
+varying vec2 vSlope;
 float terrainHeight(vec2 wp) {
   vec2 uv = (wp + vec2(uWorldSize * 0.5)) / uWorldSize;
   return texture2D(uHeightTex, uv).r;
@@ -271,64 +308,143 @@ float e = 12.0;
 float hx = terrainHeight(wp.xz + vec2(e, 0.0)) - terrainHeight(wp.xz - vec2(e, 0.0));
 float hz = terrainHeight(wp.xz + vec2(0.0, e)) - terrainHeight(wp.xz - vec2(0.0, e));
 vec3 tnormal = normalize(vec3(-hx, 2.0 * e, -hz));
+// height gradient (m/m): the fragment stage measures the distance to the waterline along the beach face with it
+vSlope = vec2(hx, hz) / (2.0 * e);
 `;
 
 const TERRAIN_FRAG_PARS = /* glsl */ `
 uniform sampler2D uZoneTex;
 uniform sampler2D uDetailTex;
 uniform sampler2D uHeightTex;
+uniform sampler2D uGroundTex; // r grass clumps, g bare-patch mask, b soil grain, a footprints (groundDetail.ts)
+uniform sampler2D uSandTex;   // r sand grain / shells, g ripple height, ba ripple normal xz
+uniform vec4 uGroundMean;     // what each channel averages to once the tile is far below a pixel
+uniform vec4 uSandMean;
 uniform float uWorldSize;
 uniform float uMapN;
 varying vec3 vWorldPos;
 varying float vHeight;
+varying vec2 vSlope;
 ${GLSL_NOISE}
-vec4 zoneSample(vec2 wp) {
-  vec2 uv = (wp + vec2(uWorldSize * 0.5)) / uWorldSize;
-  return texture2D(uZoneTex, uv);
+// The prevailing wind (atmosphere.ts windDir): the sea's wind waves and the sand's wind ripples record the same wind.
+const vec2 WIND_DIR = vec2(0.944, 0.330);
+const vec2 WIND_ACROSS = vec2(-0.330, 0.944);
+const float SAND_TILE = ${SAND_TILE.toFixed(2)};
+// xz slope of the ground detail (sand ripples, footprints): folded into the shading normal after normal_fragment_maps
+vec2 gDetailSlope = vec2(0.0);
+// screen derivatives of the world xz, taken in main (uniform control flow): every detail tap sits inside a zone
+// branch, so its mip level is given explicitly from these instead of the undefined implicit derivative
+vec2 gDwx = vec2(0.0), gDwy = vec2(0.0);
+
+// zone texture: the id (R) is read at a texel centre (the texture is linearly filtered for the sake of the
+// smooth channels, and the filter returns the texel exactly there); canopy (G), coast distance (B) and
+// exposure (A) are read bilinearly in one tap
+vec4 zoneCell(vec2 wp) {
+  vec2 t = (wp + vec2(uWorldSize * 0.5)) / uWorldSize * uMapN;
+  return texture2D(uZoneTex, (floor(t) + 0.5) / uMapN);
 }
-// bilinear canopy density (G) and wave exposure (A) from the nearest-filtered zone texture
-vec2 zoneSmooth(vec2 wp) {
-  vec2 t = (wp + vec2(uWorldSize * 0.5)) / uWorldSize * uMapN - 0.5;
-  vec2 f = fract(t);
-  vec2 b = (floor(t) + 0.5) / uMapN;
-  float px = 1.0 / uMapN;
-  vec2 s00 = texture2D(uZoneTex, b).ga;
-  vec2 s10 = texture2D(uZoneTex, b + vec2(px, 0.0)).ga;
-  vec2 s01 = texture2D(uZoneTex, b + vec2(0.0, px)).ga;
-  vec2 s11 = texture2D(uZoneTex, b + vec2(px, px)).ga;
-  return mix(mix(s00, s10, f.x), mix(s01, s11, f.x), f.y);
+vec3 zoneSmooth(vec2 wp) {
+  return texture2D(uZoneTex, (wp + vec2(uWorldSize * 0.5)) / uWorldSize).gba;
+}
+
+// ---- detail textures. A tap takes the tile's uv as a linear map J of the world xz (uv = J * wp + offset),
+//      so its mip footprint is J applied to the screen derivatives. Anti-tiling: two taps of one tile, the
+//      second rotated / rescaled, blended by a slow noise weight w, so the repeat never lines up with itself;
+//      'restore' gives a zero-mean channel back the variance the mix loses.
+vec4 tapJ(sampler2D t, vec2 wp, mat2 J, vec2 offset) { return textureGrad(t, J * wp + offset, J * gDwx, J * gDwy); }
+const mat2 ROT_B = mat2(0.8, 0.6, -0.6, 0.8) * 1.31;      // the second tap of tapRot: 37 deg, 1.31x
+const mat2 ROT_MESO = mat2(0.96, -0.28, 0.28, 0.96);      // the meso tile, turned against the micro tile
+const mat2 ROT_FOOT = mat2(0.92, -0.39, 0.39, 0.92);      // the footprint tile
+const mat2 WIND_FRAME = mat2(0.944, -0.330, 0.330, 0.944); // world xz -> (along the wind, across it)
+vec4 tapRot(sampler2D t, vec2 wp, float scale, float w) {
+  vec4 a = tapJ(t, wp, mat2(scale, 0.0, 0.0, scale), vec2(0.0));
+  vec4 b = tapJ(t, wp, ROT_B * scale, vec2(0.37, 0.71));
+  return mix(a, b, w);
+}
+vec4 tapShift(sampler2D t, vec2 wp, mat2 J, float w) {
+  vec4 a = tapJ(t, wp, J, vec2(0.0));
+  vec4 b = tapJ(t, wp, J * 1.27, vec2(0.41, 0.63));
+  return mix(a, b, w);
+}
+float restore(float v, float w) { return (v - 0.5) * inversesqrt(1.0 - 2.0 * w + 2.0 * w * w) + 0.5; }
+
+// The open ground's detail: a 3 m micro tile (blade clumps, bare spots, soil grain) and a 27 m meso tile
+// (worn areas and mottle 3-13 m across). Beyond the footprint where a tile has averaged out its taps are
+// skipped and the channel means stand in, so nothing changes with the distance but the cost.
+struct Ground { float grass; float bare; float soil; float mesoBare; float mesoTone; };
+Ground groundMeans() {
+  Ground g;
+  g.grass = uGroundMean.x; g.bare = uGroundMean.y; g.soil = uGroundMean.z; g.mesoBare = uGroundMean.y; g.mesoTone = uGroundMean.z;
+  return g;
+}
+Ground groundDetail(vec2 wp, float w, float foot) {
+  Ground g = groundMeans();
+  float micro = 1.0 - smoothstep(0.9, 1.6, foot);
+  if (micro > 0.0) {
+    vec4 m = tapRot(uGroundTex, wp, 1.0 / 3.0, w);
+    g.grass = mix(g.grass, restore(m.r, w), micro);
+    g.bare = mix(g.bare, m.g, micro);
+    g.soil = mix(g.soil, restore(m.b, w), micro);
+  }
+  float meso = 1.0 - smoothstep(8.0, 14.0, foot);
+  if (meso > 0.0) {
+    vec4 m = tapJ(uGroundTex, wp, ROT_MESO * (1.0 / 27.0), vec2(0.5));
+    g.mesoBare = mix(g.mesoBare, m.g, meso);
+    g.mesoTone = mix(g.mesoTone, m.b, meso);
+  }
+  return g;
 }
 // ground under a tree canopy: leaf litter and dark soil with blotches of shaded foliage so that thinned
-// distant planting still reads as a continuous dark-green mass from altitude
-vec3 canopyFloor(vec2 wp, float n1, float n2) {
-  vec3 litter = vec3(0.19, 0.15, 0.085);
-  vec3 shade = vec3(0.085, 0.16, 0.06);
+// distant planting still reads as a continuous dark-green mass from altitude; the litter carries the soil grain
+vec3 canopyFloor(float n1, float n2, Ground gd) {
+  vec3 litter = vec3(0.19, 0.15, 0.085) * (0.78 + 0.44 * gd.soil);
+  vec3 shade = vec3(0.085, 0.16, 0.06) * (0.86 + 0.28 * gd.grass);
   vec3 c = mix(litter, shade, smoothstep(0.38, 0.66, n2 + 0.12 * n1));
   return c * (0.85 + 0.3 * n1);
 }
-// open ground of the tropical lowland: lawn, dry grass and bare sandy soil in broad patches
-vec3 openGround(vec2 wp, float n1, float n2, float n3, float n4, float dryness) {
+// open ground of the tropical lowland: lawn, dry grass and bare sandy soil in broad patches (n3, n4), worn
+// areas (meso mask) and, close up, the turf's own clumps and bare spots (micro)
+vec3 openGround(float n2, float n3, float n4, float dryness, Ground gd) {
   vec3 lawn = vec3(0.19, 0.33, 0.11);
   vec3 dry = vec3(0.44, 0.40, 0.21);
   vec3 soil = vec3(0.52, 0.46, 0.34);
-  vec3 c = mix(lawn, dry, smoothstep(0.3 - 0.35 * dryness, 0.75 - 0.35 * dryness, n4 + 0.25 * n2));
-  c = mix(c, soil, smoothstep(0.62, 0.74, n3) * 0.7);
-  return c * (0.88 + 0.24 * n1);
+  float dryMix = smoothstep(0.3 - 0.35 * dryness, 0.75 - 0.35 * dryness, n4 + 0.25 * n2 + 0.15 * (gd.mesoTone - 0.5));
+  vec3 c = mix(lawn, dry, dryMix);
+  c *= 0.74 + 0.52 * gd.grass;
+  float bare = smoothstep(0.62, 0.74, n3) * 0.7;
+  bare = max(bare, gd.mesoBare * (0.35 + 0.45 * dryMix));
+  bare = max(bare, gd.bare * (0.3 + 0.6 * max(dryMix, gd.mesoBare)));
+  vec3 soilC = soil * (0.78 + 0.44 * gd.soil);
+  return mix(c, soilC, bare);
+}
+// the strip where a beach becomes land: pale sandy soil under sparse dry tufts. Both the beach's upper edge
+// and the landward zones' sandy fringe converge on it, so the zone boundary carries no texture step
+vec3 sandyScrub(float n1, float n2, Ground gd) {
+  vec3 c = vec3(0.60, 0.53, 0.38) * (0.92 + 0.16 * n2) * (0.82 + 0.36 * gd.soil);
+  float tuft = smoothstep(0.55, 0.8, gd.grass) * (1.0 - gd.bare);
+  return mix(c, vec3(0.42, 0.42, 0.20) * (0.85 + 0.3 * n1), tuft * 0.55);
 }
 // the ground of the mid-rise ring: paved courts, service yards and worn lawns between the blocks
-vec3 midriseGround(float n1, float n2, vec2 wp) {
-  vec3 c = mix(vec3(0.36, 0.35, 0.33), vec3(0.48, 0.46, 0.42), n2) * (0.92 + 0.16 * n1);
-  return mix(c, vec3(0.22, 0.34, 0.14), smoothstep(0.6, 0.75, fbm3(wp * 0.02 + 1.0)) * 0.7);
+vec3 midriseGround(float n1, float n2, vec2 wp, Ground gd) {
+  vec3 c = mix(vec3(0.36, 0.35, 0.33), vec3(0.48, 0.46, 0.42), n2) * (0.92 + 0.16 * n1) * (0.9 + 0.2 * gd.soil);
+  vec3 lawn = vec3(0.22, 0.34, 0.14) * (0.78 + 0.44 * gd.grass);
+  return mix(c, lawn, smoothstep(0.6, 0.75, fbm3(wp * 0.02 + 1.0)) * 0.7 * (1.0 - 0.6 * gd.bare));
 }
 // Suburban ground. Near the camera: lawns, dry yards and sandy lots under the street trees (the houses
 // themselves are instanced). Where the house instances go subpixel a baked mottle takes over: roofs at
 // house scale on their lots, pale commercial roofs and dark car parks along the arterials, each street
 // block a little greener, drier or paler than its neighbours, so the sprawl keeps its grain out to the
 // haze instead of paling into a beige field.
-vec3 suburbGround(vec2 wp, float n1, float n2, float n3, float n4, float canopy, float sandy, vec4 det, float dist) {
+vec3 suburbGround(vec2 wp, float n1, float n2, float n3, float n4, float canopy, float sandy, vec4 det, float dist, float foot, Ground gd) {
   float tone = det.g;
-  vec3 c = openGround(wp, n1, n2, n3, n4, 0.12 + 0.35 * tone);
-  vec3 lot = vec3(0.46, 0.42, 0.35);
+  vec3 c = openGround(n2, n3, n4, 0.12 + 0.35 * tone, gd);
+  // mowing stripes on the kept lawns, alternating with the street block, gone once the stripe is under ~3 px
+  float stripeVis = (1.0 - smoothstep(0.3, 0.55, foot)) * smoothstep(0.4, 0.6, tone) * (1.0 - gd.bare);
+  if (stripeVis > 0.0) {
+    float along = fract(tone * 7.3) < 0.5 ? wp.x : wp.y;
+    c *= 1.0 + 0.045 * stripeVis * sin(along * 4.4);
+  }
+  vec3 lot = vec3(0.46, 0.42, 0.35) * (0.84 + 0.32 * gd.soil);
   c = mix(c, lot, smoothstep(0.55, 0.7, fbm3(wp * 0.03 + 5.0)) * 0.6);
   c *= 0.84 + 0.28 * tone;
   c = mix(c, c * vec3(0.9, 1.04, 0.86), smoothstep(0.6, 0.9, tone) * 0.5);
@@ -355,9 +471,9 @@ vec3 suburbGround(vec2 wp, float n1, float n2, float n3, float n4, float canopy,
   }
   // the outer urban ring: the ground greys toward the mid-rise look where the gradient rises
   float ub = smoothstep(0.45, 0.95, det.b + 0.15 * (n3 - 0.5));
-  c = mix(c, midriseGround(n1, n2, wp), ub * 0.85);
-  c = mix(c, canopyFloor(wp, n1, n2), canopy * (0.85 - 0.4 * ub));
-  return mix(c, vec3(0.64, 0.57, 0.42) * (0.92 + 0.16 * n2), sandy);
+  c = mix(c, midriseGround(n1, n2, wp, gd), ub * 0.85);
+  c = mix(c, canopyFloor(n1, n2, gd), canopy * (0.85 - 0.4 * ub));
+  return mix(c, sandyScrub(n1, n2, gd), sandy);
 }
 // farmland: rectangular fields of crops, fallow and pasture with hedgerows and ditches on their edges
 vec3 farmland(vec2 wp, float n2) {
@@ -372,132 +488,209 @@ vec3 farmland(vec2 wp, float n2) {
   float edge = smoothstep(0.465, 0.5, max(f.x, f.y));
   return mix(crop, vec3(0.12, 0.18, 0.08), edge * 0.8);
 }
-vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, vec4 det, out float rough) {
+// Sand. The wind-aligned tile gives grain, shell hash and heavy-mineral specks (r), the ripple height (g) and
+// the ripple normal (ba); the second tap is shifted, not rotated, so the ripples keep their wind direction.
+struct Sand { float alb; float ripple; vec2 slope; };
+Sand sandDetail(vec2 wp, float w, float foot) {
+  Sand s;
+  float vis = 1.0 - smoothstep(0.9, 1.6, foot);
+  if (vis > 0.0) {
+    vec4 t = tapShift(uSandTex, wp, WIND_FRAME * (1.0 / SAND_TILE), w);
+    s.alb = mix(uSandMean.x, restore(t.r, w), vis);
+    s.ripple = mix(uSandMean.y, t.g, vis);
+    vec2 n = (t.ba * 2.0 - 1.0) * vis;
+    s.slope = n.x * WIND_DIR + n.y * WIND_ACROSS;
+  } else { s.alb = uSandMean.x; s.ripple = uSandMean.y; s.slope = vec2(0.0); }
+  return s;
+}
+vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, vec4 det, float foot, out Ground gd, out float rough) {
   float n1 = vnoise(wp * 0.35);
   float n2 = fbm3(wp * 0.045);
   float n3 = vnoise(wp * 0.008);
   float n4 = fbm3(wp * 0.0032 + 17.0);
   float dist = length(cameraPosition - vWorldPos);
+  float w = smoothstep(0.35, 0.65, n2); // the anti-tiling blend weight of every detail tap
+  // the seabed lies under the water plane: it is shaded (the water draws over it) but never seen, so it
+  // takes the channel means instead of the taps
+  gd = (zone == 0 || zone == 1) ? groundMeans() : groundDetail(wp, w, foot);
   rough = 0.9;
   vec3 c;
-  // sandy fringe where the land ramps up from a sandy shore (sheltered lake and canal banks stay grassy)
-  float sandy = (1.0 - smoothstep(0.9, 1.75, h)) * smoothstep(0.06, 0.28, expo);
+  // sandy fringe where the land ramps up from a sandy shore (sheltered lake and canal banks stay grassy); the
+  // beach zone ends at about h 1.3-1.9 (map.ts: ramp 0.45), so both sides meet on the scrub at the same height
+  float sandy = (1.0 - smoothstep(1.2, 2.3, h)) * smoothstep(0.06, 0.28, expo);
   float canopy = smoothstep(0.30, 0.82, veg);
   if (zone == 0 || zone == 1) {
-    // seabed: sand with seagrass patches in the shallows, pale sand flats where it is very shallow
+    // seabed: sand with seagrass patches in the shallows, pale sand flats where it is very shallow. Only the
+    // rim above the water plane is ever seen: it is the beach's wet sand, so it takes that colour
     vec3 sand = vec3(0.66, 0.60, 0.44);
     vec3 grass = vec3(0.16, 0.24, 0.13);
     float depth = -h;
     float sg = smoothstep(0.55, 0.75, fbm3(wp * 0.012 + 3.0)) * smoothstep(0.6, 1.6, depth) * (1.0 - smoothstep(5.0, 9.0, depth));
     c = mix(sand, grass, sg) * (0.9 + 0.2 * n2);
-    c = mix(c, vec3(0.75, 0.69, 0.52) * (0.94 + 0.12 * n1), (1.0 - smoothstep(0.5, 1.4, depth)) * (1.0 - sg));
     c = mix(c, vec3(0.28, 0.32, 0.30), smoothstep(12.0, 30.0, depth));
+    c = mix(c, vec3(0.33, 0.27, 0.18) * (0.94 + 0.12 * n2), smoothstep(-0.6, 0.0, h));
+    rough = mix(0.9, 0.35, smoothstep(-0.4, 0.05, h));
   } else if (zone == 17) {
     // sand flats / bars: rippled pale sand, darker where it is still awash
-    float ripple = 0.5 + 0.5 * sin(wp.x * 0.9 + wp.y * 0.35 + 3.0 * n2);
-    c = vec3(0.75, 0.69, 0.52) * (0.9 + 0.14 * n2) * (0.96 + 0.06 * ripple);
-    c = mix(c, vec3(0.48, 0.44, 0.34), 1.0 - smoothstep(-0.1, 0.25, h));
-    rough = 0.8;
+    Sand sd = sandDetail(wp, w, foot);
+    float awash = 1.0 - smoothstep(-0.1, 0.3, h);
+    c = vec3(0.75, 0.69, 0.52) * (0.9 + 0.14 * n2) * (1.0 + 0.3 * (sd.alb - 0.5));
+    c = mix(c, vec3(0.44, 0.40, 0.31) * (1.0 + 0.12 * (sd.alb - 0.5)), awash);
+    gDetailSlope = sd.slope * (1.0 - awash) * 0.7;
+    rough = mix(0.9, 0.4, awash);
   } else if (zone == 2) {
-    vec3 dry = vec3(0.68, 0.58, 0.40);
-    vec3 wet = vec3(0.33, 0.27, 0.18);
-    // the bands are keyed to height, so every threshold wanders with a slow along-shore noise: the wet
-    // band, tide lines and dune toe come and go instead of ringing the island as contours
+    // ---- the beach profile in metres from the waterline: the swash band the water shader washes (its
+    //      swashW = 4 + 12 * exposure, water.ts), a damp band above it, dry rippled sand to the dune toe.
+    //      Near the water the distance is the height along the beach face (exact where it matters), farther
+    //      out the map's coastline distance; slow along-shore noises wander every band so none rings the
+    //      island as a contour.
+    float slopeLen = max(length(vSlope), 0.006);
+    vec2 offshore = -vSlope / slopeLen;
+    float dLine = max(h, 0.0) / slopeLen;
+    float shoreD = mix(dLine, max(-coast, 0.0), smoothstep(5.0, 18.0, dLine));
+    float facing = 0.5 + 0.5 * dot(offshore, WIND_DIR);
+    float exposure = expo * (0.3 + 0.7 * facing) * 0.85;
+    float swashW = 4.0 + 12.0 * exposure;
     float wander = fbm3(wp * 0.011 + 23.0) - 0.5;
     float wander2 = vnoise(wp * 0.03 + 41.0) - 0.5;
-    // swash zone widens with wave exposure; a darker saturated band sits right at the waterline
-    float swash = 0.35 + 0.45 * expo + 0.3 * wander;
-    float wetness = 1.0 - smoothstep(0.18, swash + 0.35, h + 0.12 * wander2);
-    c = mix(dry, wet, wetness) * (0.92 + 0.16 * n2) * (0.95 + 0.1 * n1);
-    c = mix(c, vec3(0.26, 0.23, 0.19), (1.0 - smoothstep(0.05, 0.3, h)) * 0.6);
-    // close range: wind ripples in the dry sand, trampled paths and footprints where people walk
-    float closeF = 1.0 - smoothstep(60.0, 220.0, dist);
-    if (closeF > 0.0) {
-      float ripple = 0.5 + 0.5 * sin(dot(wp, vec2(0.83, 0.55)) * 5.5 + 2.5 * vnoise(wp * 0.6));
-      float grain = vnoise(wp * 5.0);
-      float path = smoothstep(0.86, 0.94, vnoise(wp * 0.07 + 7.0 + 0.6 * vec2(n2)));
-      c *= 1.0 + closeF * (1.0 - wetness) * ((0.07 * ripple - 0.035) + 0.06 * (grain - 0.5) - 0.12 * path);
-      c *= 1.0 - closeF * wetness * 0.08 * (grain - 0.5);
-    }
-    // tide marks: thin wrack lines that wander along the beach, strewn with weed and debris
-    float tideH1 = swash + 0.12 + 0.06 * n2 + 0.1 * wander2;
-    float tideH2 = swash + 0.28 + 0.05 * n1 + 0.08 * wander;
-    float tide1 = 1.0 - smoothstep(0.0, 0.05, abs(h - tideH1));
-    float tide2 = 1.0 - smoothstep(0.0, 0.03, abs(h - tideH2));
-    float debris = smoothstep(0.55, 0.75, vnoise(wp * 1.3 + 9.0)) * step(0.35, vnoise(wp * 0.09));
-    c *= 1.0 - 0.16 * tide1 * (0.5 + 0.5 * n1) - 0.08 * tide2;
+    float sd = shoreD + (4.0 * wander + 1.5 * wander2) * (0.35 + 0.65 * smoothstep(1.5, 8.0, shoreD));
+    float wet = 1.0 - smoothstep(swashW * 0.55, swashW * 1.25 + 1.0, sd);
+    float damp = 1.0 - smoothstep(swashW * 1.1, swashW * 2.4 + 5.0, sd);
+    // the film of the last wave: saturated sand right at the line, a mirror at grazing angles
+    float film = 1.0 - smoothstep(0.0, 0.8 + 0.6 * exposure, shoreD + 0.6 * wander2);
+    Sand sdt = sandDetail(wp, w, foot);
+    vec3 dry = vec3(0.68, 0.58, 0.40);
+    vec3 dampC = vec3(0.50, 0.42, 0.29);
+    vec3 wetC = vec3(0.33, 0.27, 0.18);
+    // grain, shell hash and specks; a little darker in the ripple troughs where the heavy grains collect
+    float grainMod = 1.0 + 0.36 * (sdt.alb - 0.5) - 0.10 * (0.5 - sdt.ripple) * (1.0 - damp);
+    c = dry * (0.92 + 0.16 * n2) * grainMod;
+    c = mix(c, dampC * (0.94 + 0.12 * n2) * (1.0 + 0.2 * (sdt.alb - 0.5)), damp);
+    c = mix(c, wetC * (0.94 + 0.12 * n2) * (1.0 + 0.12 * (sdt.alb - 0.5)), wet);
+    c = mix(c, vec3(0.25, 0.22, 0.17), film * 0.7);
+    // heavy-mineral streak the wash leaves at its limit, and the wrack lines: weed and debris at the swash
+    // limit, an older fainter line higher up; the debris grain is filtered out with the footprint
+    float streak = 1.0 - smoothstep(0.0, 0.6, abs(sd - swashW * 0.95));
+    c *= 1.0 - 0.10 * streak * smoothstep(0.25, 0.6, vnoise(wp * 0.4 + 3.0));
+    float wrackD = swashW * 1.3 + 1.0;
+    float tide1 = 1.0 - smoothstep(0.0, 0.7, abs(sd - wrackD));
+    float tide2 = 1.0 - smoothstep(0.0, 0.5, abs(sd - (wrackD * 1.8 + 2.0 - 1.5 * wander2)));
+    float grainVis = 1.0 - smoothstep(0.3, 1.0, foot);
+    float debris = mix(0.3, smoothstep(0.55, 0.75, vnoise(wp * 1.3 + 9.0)) * step(0.35, vnoise(wp * 0.09)), grainVis);
+    c *= 1.0 - 0.14 * tide1 * (0.5 + 0.5 * n1) - 0.07 * tide2;
     c = mix(c, vec3(0.30, 0.25, 0.14), (0.7 * tide1 + 0.4 * tide2) * debris);
+    // wind ripples on the dry sand only (the wash smooths the wet band), stronger on exposed shores
+    float ripStr = (1.0 - damp) * (0.55 + 0.45 * smoothstep(0.3, 0.8, expo));
+    gDetailSlope = sdt.slope * ripStr;
+    // footprints: everyone walks the firm damp sand, and the trodden ground around the marinas, road ends and
+    // hotel frontages (det.r, baked) is printed all over; patches of prints, not an even stipple
+    float trample = det.r;
+    float walk = max(trample, 0.18 * damp * (1.0 - wet * 0.7));
+    float fpVis = 1.0 - smoothstep(0.2, 0.55, foot);
+    if (fpVis * walk > 0.02) {
+      mat2 J = ROT_FOOT * (1.0 / 6.0);
+      float e = max(1.0 / 1024.0, foot * (1.0 / 6.0));
+      float f0 = tapJ(uGroundTex, wp, J, vec2(0.25)).a;
+      float fx = tapJ(uGroundTex, wp, J, vec2(0.25 + e, 0.25)).a;
+      float fy = tapJ(uGroundTex, wp, J, vec2(0.25, 0.25 + e)).a;
+      float gate = smoothstep(0.62 - 0.6 * walk, 0.8 - 0.6 * walk, vnoise(wp * 0.11 + 5.0)) * fpVis;
+      float depthM = 0.05 * gate; // metres over the channel's full range
+      vec2 gt = vec2(fx - f0, fy - f0) / (e * 6.0) * depthM; // height gradient in tile space (u, v)
+      gDetailSlope += -(gt.x * vec2(0.92, 0.39) + gt.y * vec2(-0.39, 0.92)) * 1.4;
+      // the trodden hollows show the damper sand under the surface
+      c *= 1.0 - 0.28 * max(0.5 - f0, 0.0) * gate * (1.0 - wet);
+    }
     // sea oats and dune grass on the upper beach: khaki tussocks in patches, denser where the shore faces the sea
     float grassN = vnoise(wp * 0.05 + 4.0);
-    float tuft = vnoise(wp * 0.9 + 2.0);
-    float dune = smoothstep(0.95 + 0.2 * wander, 1.5, h) * smoothstep(0.5 - 0.15 * expo, 0.68, grassN) * (0.55 + 0.45 * smoothstep(0.35, 0.7, tuft));
+    float dune = smoothstep(0.95 + 0.2 * wander, 1.5, h) * smoothstep(0.5 - 0.15 * expo, 0.68, grassN) * (0.55 + 0.45 * smoothstep(0.35, 0.7, gd.grass));
     c = mix(c, vec3(0.42, 0.42, 0.20) * (0.8 + 0.4 * n1), dune * 0.8);
-    // wet sand is dark and a little glossy (the sun glints off it), dry sand matte
-    rough = mix(0.95, 0.42, wetness * wetness);
+    // the upper beach turns to sandy scrub where the land begins (see sandyScrub)
+    float upper = smoothstep(1.0, 2.0, h) * smoothstep(8.0, 25.0, shoreD);
+    c = mix(c, sandyScrub(n1, n2, gd), upper * 0.85);
+    gDetailSlope *= 1.0 - upper;
+    // wet sand is dark and glossy, the film of the last wave a mirror, dry sand matte
+    rough = mix(0.95, 0.72, damp);
+    rough = mix(rough, 0.42, wet);
+    rough = mix(rough, 0.16, film);
   } else if (zone == 3) {
-    vec3 mud = vec3(0.28, 0.24, 0.16);
+    vec3 mud = vec3(0.28, 0.24, 0.16) * (0.84 + 0.32 * gd.soil);
     vec3 shade = vec3(0.075, 0.15, 0.06);
     c = mix(mud, shade, smoothstep(0.3, 0.6, n2 + 0.15 * n1) * canopy) * (0.9 + 0.2 * n1);
     c = mix(c, vec3(0.2, 0.19, 0.15), 1.0 - smoothstep(0.1, 0.4, h));
     rough = 0.75;
   } else if (zone == 4 || zone == 10) {
-    // parkland / generic forest floor, and airport grass
+    // parkland / generic forest floor, and airport grass; parks carry worn dirt paths (wandering ridges of a
+    // slow noise, 1.5 m wide) and a darker, littered floor under the trees
     float dryness = zone == 10 ? 0.5 : 0.25;
-    c = openGround(wp, n1, n2, n3, n4, dryness);
-    c = mix(c, canopyFloor(wp, n1, n2), canopy * (zone == 10 ? 0.5 : 0.9));
-    c = mix(c, vec3(0.64, 0.57, 0.42) * (0.92 + 0.16 * n2), sandy);
+    c = openGround(n2, n3, n4, dryness, gd);
+    if (zone == 4) {
+      float pathVis = 1.0 - smoothstep(0.6, 1.4, foot);
+      if (pathVis > 0.0) {
+        float pn = vnoise(wp * 0.023 + 0.35 * vec2(n2, -n2) + 8.0);
+        float path = (1.0 - smoothstep(0.0, 0.028, abs(pn - 0.5))) * pathVis * (1.0 - smoothstep(0.65, 0.85, canopy));
+        c = mix(c, vec3(0.50, 0.44, 0.32) * (0.8 + 0.4 * gd.soil), path * 0.85);
+      }
+    }
+    c = mix(c, canopyFloor(n1, n2, gd), canopy * (zone == 10 ? 0.5 : 0.9));
+    c = mix(c, sandyScrub(n1, n2, gd), sandy);
   } else if (zone == 11) {
-    c = mix(vec3(0.20, 0.44, 0.11), vec3(0.30, 0.52, 0.15), n2) * (0.92 + 0.16 * n1);
+    c = mix(vec3(0.20, 0.44, 0.11), vec3(0.30, 0.52, 0.15), n2) * (0.92 + 0.16 * n1) * (0.82 + 0.36 * gd.grass);
     // rough and tree lines between fairways
-    c = mix(c, vec3(0.27, 0.36, 0.14), smoothstep(0.45, 0.6, n3));
-    c = mix(c, canopyFloor(wp, n1, n2), canopy * 0.7 * smoothstep(0.5, 0.62, n3));
+    c = mix(c, vec3(0.27, 0.36, 0.14) * (0.8 + 0.4 * gd.grass), smoothstep(0.45, 0.6, n3));
+    c = mix(c, canopyFloor(n1, n2, gd), canopy * 0.7 * smoothstep(0.5, 0.62, n3));
     // bunkers
     float bunker = smoothstep(0.66, 0.72, fbm3(wp * 0.02 + 9.0));
-    c = mix(c, vec3(0.78, 0.72, 0.55), bunker);
+    c = mix(c, vec3(0.78, 0.72, 0.55) * (0.9 + 0.2 * gd.soil), bunker);
     // fairway stripes
-    c *= 1.0 + 0.05 * sin(wp.x * 0.35 + wp.y * 0.12);
+    c *= 1.0 + 0.05 * sin(wp.x * 0.35 + wp.y * 0.12) * (1.0 - smoothstep(4.0, 9.0, foot));
   } else if (zone == 5) {
-    c = suburbGround(wp, n1, n2, n3, n4, canopy, sandy, det, dist);
+    c = suburbGround(wp, n1, n2, n3, n4, canopy, sandy, det, dist, foot, gd);
   } else if (zone == 19) {
     // sawgrass marsh: tan-green prairie, dark tree islands (hammocks) where the canopy is dense, brown pools,
     // and the darker wet sloughs running with the sheet flow (north-south) between the higher sawgrass ridges
-    vec3 saw = mix(vec3(0.50, 0.49, 0.25), vec3(0.36, 0.41, 0.17), smoothstep(0.35, 0.65, n2));
+    vec3 saw = mix(vec3(0.50, 0.49, 0.25), vec3(0.36, 0.41, 0.17), smoothstep(0.35, 0.65, n2)) * (0.8 + 0.4 * gd.grass);
     c = saw * (0.9 + 0.2 * n1);
     float slough = smoothstep(0.52, 0.68, fbm3(wp * vec2(0.0028, 0.0009) + 6.0));
     c = mix(c, vec3(0.27, 0.30, 0.16), slough * 0.7);
-    c = mix(c, canopyFloor(wp, n1, n2), canopy);
+    c = mix(c, canopyFloor(n1, n2, gd), canopy);
     c = mix(c, vec3(0.16, 0.15, 0.10), 1.0 - smoothstep(-0.05, 0.2, h));
     rough = mix(0.85, 0.6, slough);
   } else if (zone == 6 || zone == 8) {
     // mid-rise ring; at the frayed district edge (low urbanity) the ground is already the suburb's
     float ub = smoothstep(0.3, 0.8, det.b + 0.1 * (n3 - 0.5));
-    c = mix(suburbGround(wp, n1, n2, n3, n4, canopy, sandy, det, dist), midriseGround(n1, n2, wp), zone == 8 ? 1.0 : ub);
+    c = mix(suburbGround(wp, n1, n2, n3, n4, canopy, sandy, det, dist, foot, gd), midriseGround(n1, n2, wp, gd), zone == 8 ? 1.0 : ub);
     rough = 0.8;
   } else if (zone == 7) {
-    c = mix(vec3(0.24, 0.24, 0.24), vec3(0.38, 0.37, 0.35), n2) * (0.92 + 0.16 * n1);
+    c = mix(vec3(0.24, 0.24, 0.24), vec3(0.38, 0.37, 0.35), n2) * (0.92 + 0.16 * n1) * (0.94 + 0.12 * gd.soil);
     rough = 0.75;
-  } else if (zone == 9) {
-    c = mix(vec3(0.40, 0.39, 0.37), vec3(0.30, 0.28, 0.26), n2) * (0.9 + 0.2 * n1);
-    c *= 1.0 - 0.25 * smoothstep(0.6, 0.8, fbm3(wp * 0.05 + 2.0));
-    rough = 0.8;
-  } else if (zone == 10) {
-    c = mix(vec3(0.26, 0.40, 0.16), vec3(0.36, 0.42, 0.20), n2) * (0.92 + 0.16 * n1);
+  } else if (zone == 9 || zone == 14) {
+    // industrial yards and construction sites: paved aprons and packed dirt with margins of crushed-stone
+    // gravel; the soil tile at a 12 m repeat is the stone (pebbles 3-6 cm across)
+    vec3 pave = mix(vec3(0.40, 0.39, 0.37), vec3(0.30, 0.28, 0.26), n2) * (0.9 + 0.2 * n1);
+    pave *= 1.0 - 0.25 * smoothstep(0.6, 0.8, fbm3(wp * 0.05 + 2.0));
+    float gvis = 1.0 - smoothstep(3.0, 7.0, foot);
+    float stone = gvis > 0.0 ? mix(uGroundMean.z, tapJ(uGroundTex, wp, mat2(1.0 / 12.0, 0.0, 0.0, 1.0 / 12.0), vec2(0.3)).b, gvis) : uGroundMean.z;
+    vec3 gravel = vec3(0.56, 0.54, 0.49) * (0.62 + 0.76 * stone) * (0.94 + 0.12 * n2);
+    vec3 dirt = vec3(0.46, 0.40, 0.30) * (0.8 + 0.4 * gd.soil) * (0.92 + 0.16 * n2);
+    float margin = smoothstep(0.08, 0.5, det.r) * (1.0 - smoothstep(0.55, 0.9, det.r));
+    float gravelF = max(smoothstep(0.58, 0.68, n3 + 0.2 * (gd.mesoBare - 0.3)), margin * 0.8);
+    if (zone == 14) { c = mix(dirt, gravel, smoothstep(0.5, 0.7, n2) * 0.6); }
+    else { c = mix(pave, gravel, gravelF); c = mix(c, dirt, smoothstep(0.7, 0.85, gd.mesoBare) * 0.5); }
+    rough = 0.85;
   } else if (zone == 13) {
     c = vec3(0.18, 0.18, 0.19) * (0.9 + 0.2 * n1);
     // parking bays
     float bay = step(0.93, fract(wp.x / 2.7)) * step(fract(wp.y / 11.0), 0.5);
-    c = mix(c, vec3(0.75), bay * 0.8);
+    c = mix(c, vec3(0.75), bay * 0.8 * (1.0 - smoothstep(0.1, 0.3, foot)));
     rough = 0.7;
-  } else if (zone == 14) {
-    c = mix(vec3(0.48, 0.38, 0.27), vec3(0.6, 0.52, 0.4), n2) * (0.9 + 0.2 * n1);
   } else if (zone == 15) {
     c = vec3(0.45, 0.44, 0.42) * (0.92 + 0.16 * n1);
     rough = 0.7;
   } else if (zone == 12) {
     // rocky shore: dark wet limestone, barnacle-pale above the splash line
-    c = mix(vec3(0.40, 0.37, 0.32), vec3(0.20, 0.19, 0.17), smoothstep(0.35, 0.7, n2 + 0.2 * n1)) * (0.8 + 0.4 * n1);
+    c = mix(vec3(0.40, 0.37, 0.32), vec3(0.20, 0.19, 0.17), smoothstep(0.35, 0.7, n2 + 0.2 * n1)) * (0.8 + 0.4 * n1) * (0.88 + 0.24 * gd.soil);
     c = mix(c, vec3(0.14, 0.14, 0.13), 1.0 - smoothstep(0.2, 0.7, h));
-    rough = 0.7;
+    rough = mix(0.7, 0.35, 1.0 - smoothstep(0.1, 0.5, h));
   } else if (zone == 18) {
     c = vec3(0.16, 0.16, 0.16) * (0.9 + 0.2 * n1);
     rough = 0.7;
@@ -513,32 +706,39 @@ const TERRAIN_FRAG_MAIN = /* glsl */ `
   // jittered zone lookup hides the cell grid of the zone map
   float cellSize = uWorldSize / uMapN;
   vec2 jitter = (hash22(floor(vWorldPos.xz * 0.5)) - 0.5) * cellSize * 1.35;
-  vec4 zs = zoneSample(vWorldPos.xz + jitter);
+  vec4 zs = zoneCell(vWorldPos.xz + jitter);
   int zone = int(zs.r * 255.0 + 0.5);
-  vec2 smoothVE = zoneSmooth(vWorldPos.xz);
+  vec3 smoothVE = zoneSmooth(vWorldPos.xz);
   float veg = smoothVE.x;
-  float expo = smoothVE.y;
-  float coast = (zs.b - 0.5) * 512.0;
+  float coast = (smoothVE.y - 0.5) * 512.0;
+  float expo = smoothVE.z;
   float rough;
+  // metres of ground per pixel: every procedural pattern fades before it goes subpixel
+  gDwx = dFdx(vWorldPos.xz); gDwy = dFdy(vWorldPos.xz);
+  float foot = length(abs(gDwx) + abs(gDwy));
   float beyond = smoothstep(uWorldSize * 0.5 - 350.0, uWorldSize * 0.5 + 250.0, max(abs(vWorldPos.x), abs(vWorldPos.z)));
   // the baked detail is clamped at the map edge, so it is faded out where the ground carries on beyond it
   vec4 det = texture2D(uDetailTex, (vWorldPos.xz + vec2(uWorldSize * 0.5)) / uWorldSize) * (1.0 - beyond);
   det.g = mix(0.5, det.g, 1.0 - beyond);
-  vec3 alb = zoneAlbedo(zone, vWorldPos.xz, vHeight, veg, coast, expo, det, rough);
+  Ground gd;
+  vec3 alb = zoneAlbedo(zone, vWorldPos.xz, vHeight, veg, coast, expo, det, foot, gd, rough);
   // streets of the district grids and the arterials, baked so the lattice survives to the horizon where the
-  // road meshes are subpixel; the carriageway is dark, the verge and sidewalks a paler band
+  // road meshes are subpixel; the carriageway is dark, the verge beside it worn to dust and bare soil
   if (zone != 0 && zone != 1 && zone != 2 && zone != 17 && zone != 3 && zone != 12) {
     float carriage = smoothstep(0.55, 0.9, det.r);
     float verge = smoothstep(0.08, 0.5, det.r) * (1.0 - carriage);
     alb = mix(alb, vec3(0.30, 0.30, 0.30) * (0.92 + 0.16 * hash12(floor(vWorldPos.xz * 0.15))), carriage * 0.9);
-    alb = mix(alb, alb * 1.12 + 0.03, verge * 0.6);
+    vec3 dust = vec3(0.50, 0.45, 0.35) * (0.8 + 0.4 * gd.soil);
+    float worn = verge * (0.3 + 0.7 * max(gd.bare, gd.mesoBare * 0.6));
+    alb = mix(alb, dust, worn * 0.7);
+    alb = mix(alb, alb * 1.08 + 0.02, verge * 0.4);
     rough = mix(rough, 0.75, carriage);
   }
   // wet band right at the waterline for every land zone (beaches shade their own swash zone)
   if (zone != 0 && zone != 1 && zone != 2 && zone != 17) {
     float wetBand = 1.0 - smoothstep(0.05, 0.45, vHeight);
     alb = mix(alb, alb * 0.62, wetBand);
-    rough = mix(rough, 0.7, wetBand);
+    rough = mix(rough, 0.55, wetBand);
   }
   // beyond the authored map the ground continues as the same kind of country: the clamped zone
   // texture gives a flat colour, so stamp tree cover and roof/lot patches on it so the sprawl
@@ -570,6 +770,15 @@ const TERRAIN_FRAG_MAIN = /* glsl */ `
 }
 `;
 
+/** After normal_fragment_maps: tilt the shading normal by the ground detail's slope (sand ripples, footprints). */
+const TERRAIN_FRAG_NORMAL = /* glsl */ `
+if (dot(gDetailSlope, gDetailSlope) > 1e-7) {
+  vec3 wN = inverseTransformDirection(normal, viewMatrix);
+  wN = normalize(wN + vec3(gDetailSlope.x, 0.0, gDetailSlope.y));
+  normal = normalize((viewMatrix * vec4(wN, 0.0)).xyz);
+}
+`;
+
 export class Terrain {
   readonly group = new THREE.Group();
   readonly material: THREE.MeshStandardMaterial;
@@ -583,6 +792,10 @@ export class Terrain {
       uHeightTex: { value: textures.height },
       uZoneTex: { value: textures.zone },
       uDetailTex: { value: textures.detail },
+      uGroundTex: { value: textures.groundDetail.ground },
+      uSandTex: { value: textures.groundDetail.sand },
+      uGroundMean: { value: textures.groundDetail.groundMean },
+      uSandMean: { value: textures.groundDetail.sandMean },
       uRingOffset: this.offsetUniform,
       uWorldSize: { value: WORLD_SIZE },
       uMapN: { value: MAP_N },
@@ -597,10 +810,11 @@ export class Terrain {
         .replace('#include <begin_vertex>', 'vec3 transformed = wp;');
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>\n${TERRAIN_FRAG_PARS}`)
-        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${TERRAIN_FRAG_MAIN}`);
+        .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${TERRAIN_FRAG_MAIN}`)
+        .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>\n${TERRAIN_FRAG_NORMAL}`);
       balanceGroundIbl(shader);
     };
-    mat.customProgramCacheKey = () => 'terrain-v5';
+    mat.customProgramCacheKey = () => 'terrain-v6';
     this.material = mat;
     for (let level = 0; level < RINGS; level++) {
       for (const { geometry, box } of buildRing(level, level > 0)) {
