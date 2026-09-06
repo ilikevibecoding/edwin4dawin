@@ -689,6 +689,11 @@ const JUNCTION_DEST: Record<string, string[]> = {
 const FAR_DEST: Record<string, { toEnd: string[]; toStart: string[] }> = {
   'south-hwy-mainland': { toEnd: ['Isla Garza', 'Costa Barrera'], toStart: ['Aeropuerto', 'Bahía Vista'] },
 };
+/** Toll plazas (station along the chain, name): the mainland approach to the island causeways is tolled, as the
+ *  causeways of the reference coast are; the plaza sits between two district streets, 400 m short of the causeway. */
+const TOLL: Record<string, { s: number; name: string }> = {
+  'south-hwy-mainland': { s: 3706, name: 'PEAJE ISLAS' },
+};
 
 // ------------------------------------------------------------------ build
 
@@ -728,8 +733,11 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     const parts = Array.from({ length: nChunks }, () => ({ conc: new Soup(3, true), heads: new Soup(3, true), thin: new Soup(3, true), posts: new Soup(3, true), signs: new Soup(3, true), proxy: new Soup(3, false) }));
     const P = (s: number) => parts[chunkOf(s)];
 
-    // -------------------------------------------------------- median barrier: continuous, opened at the arterial junctions
+    // -------------------------------------------------------- median barrier: continuous, opened at the arterial junctions and through the toll plaza
+    const toll = TOLL[c.id] && TOLL[c.id].s > 80 && TOLL[c.id].s < c.total - 80 ? TOLL[c.id] : null;
+    const nearPlaza = (s: number, r: number) => toll !== null && Math.abs(s - toll.s) < r;
     const openings: Run[] = majors.map((j) => ({ s0: j.s - 19, s1: j.s + 19 }));
+    if (toll) openings.push({ s0: toll.s - 48, s1: toll.s + 48 });
     const endPad = 1.2;
     const barrierRuns = subtractRuns({ s0: endPad, s1: c.total - endPad }, openings);
     const TAPER = 7;
@@ -889,7 +897,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     // -------------------------------------------------------- delineator posts every 50 m on both shoulders (not where the rail carries the reflectors)
     for (const side of [-1, 1] as const) {
       for (let s = 25; s < c.total - 8; s += 50) {
-        if (railedAt(s, side) || nearJunction(s, 14)) continue;
+        if (railedAt(s, side) || nearJunction(s, 14) || nearPlaza(s, 60)) continue;
         const f = frameAt(c, s);
         const aP = side * (hw + 0.7);
         const px = f.x + f.rx * aP, pz = f.z + f.rz * aP;
@@ -902,7 +910,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     // -------------------------------------------------------- gantries and their sign panels
     interface Gantry { s: number; dir: 1 | -1; panels: { lines: string[]; arrow: Arrow; tab?: string }[]; }
     const gantries: Gantry[] = [];
-    const addGantry = (g: Gantry) => { if (g.s > 40 && g.s < c.total - 40 && !gantries.some((o) => Math.abs(o.s - g.s) < 320)) gantries.push(g); };
+    const addGantry = (g: Gantry) => { if (g.s > 40 && g.s < c.total - 40 && !nearPlaza(g.s, 110) && !gantries.some((o) => Math.abs(o.s - g.s) < 320)) gantries.push(g); };
     const dest = (b: BridgeSpec | null, atEnd: boolean): { lines: string[]; tab: string } | null => {
       if (!b) return null;
       const d = DEST[b.id];
@@ -1026,8 +1034,8 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       const arrowFor = (dir: 1 | -1): Arrow => (j.side === 0 ? 'both' : j.side * dir > 0 ? 'right' : 'left');
       // advance direction signs 1 km and 300 m ahead of the junction on both approaches
       for (const [ahead, label] of [[1000, '1 km'], [330, '300 m']] as const) {
-        if (j.s > ahead + 30 && !nearGantry(j.s - ahead, 60) && !nearJunction(j.s - ahead, 14)) groundSign(j.s - ahead, 1, 3.0, 1.5, atlas.guide([jd[0], label], arrowFor(1), 256, 128), S_DARK);
-        if (j.s < c.total - ahead - 30 && !nearGantry(j.s + ahead, 60) && !nearJunction(j.s + ahead, 14)) groundSign(j.s + ahead, -1, 3.0, 1.5, atlas.guide([jd[0], label], arrowFor(-1), 256, 128), S_DARK);
+        if (j.s > ahead + 30 && !nearGantry(j.s - ahead, 60) && !nearJunction(j.s - ahead, 14) && !nearPlaza(j.s - ahead, 80)) groundSign(j.s - ahead, 1, 3.0, 1.5, atlas.guide([jd[0], label], arrowFor(1), 256, 128), S_DARK);
+        if (j.s < c.total - ahead - 30 && !nearGantry(j.s + ahead, 60) && !nearJunction(j.s + ahead, 14) && !nearPlaza(j.s + ahead, 80)) groundSign(j.s + ahead, -1, 3.0, 1.5, atlas.guide([jd[0], label], arrowFor(-1), 256, 128), S_DARK);
       }
     }
 
@@ -1093,9 +1101,74 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         mastArm(P(sP), px, pz, ground, armDir, 13, [6, 9.5, 13], faceN, 0);
       }
     }
+    // -------------------------------------------------------- toll plaza: kerbed islands with booths under a lit canopy, a gate over every lane
+    if (toll) {
+      const sP = toll.s;
+      const f = frameAt(c, sP);
+      const yaw = yawAt(f);
+      const part = P(sP);
+      const roadY = f.y;
+      const L = 30, canopyL = 24, canopyW = 2 * hw + 3;
+      const clear = 6.0;
+      const at2 = (a: number, ds: number) => { const g = frameAt(c, sP + ds); return new THREE.Vector3(g.x + g.rx * a, 0, g.z + g.rz * a); };
+      // islands: the median island where the barrier is opened and one between every pair of lanes (lanes 3.2 m
+      // apart from the centre, as the traffic drives them), each with a booth and yellow impact attenuators
+      const islands: { a: number; w: number }[] = [{ a: 0, w: 1.6 }, { a: -3.1, w: 0.9 }, { a: 3.1, w: 0.9 }, { a: -6.35, w: 0.9 }, { a: 6.35, w: 0.9 }];
+      const C_ISLAND: Rgb = [0.9, 0.9, 0.88];
+      const S_GLASS: Rgb = [0.5, 0.58, 0.66];
+      for (const isl of islands) {
+        const p = at2(isl.a, 0);
+        part.conc.box(p.x, roadY - 0.02, p.z, isl.w, 0.24, L, yaw, 0, C_ISLAND, false, [0, 0, 0]);
+        for (const e of [-1, 1]) {
+          const q = at2(isl.a, e * (L / 2 + 0.7));
+          part.signs.box(q.x, roadY + 0.02, q.z, Math.min(isl.w, 0.9), 0.85, 1.4, yaw, 0, S_DRUM, false, [0, 0, 0]);
+        }
+        // booth: dark base, glazed cabin (lit at night), galvanised roof with an overhang
+        const bw = Math.min(isl.w, 1.5) - 0.1, bd = isl.w > 1 ? 3.2 : 2.6;
+        part.signs.box(p.x, roadY + 0.22, p.z, bw, 1.1, bd, yaw, 0, S_DARK, false, [0, 0, 0]);
+        part.signs.box(p.x, roadY + 1.32, p.z, bw, 1.2, bd, yaw, 0, S_GLASS, false, [0.35, 0, 0]);
+        part.signs.box(p.x, roadY + 2.52, p.z, bw + 0.5, 0.12, bd + 0.5, yaw, 0, S_GALV, false, [0, 0, 0]);
+        // canopy columns at the island ends
+        for (const e of [-1, 1]) {
+          const q = at2(isl.a, e * (L / 2 - 2.5));
+          part.signs.cylinder(q.x, roadY + 0.22, q.z, Math.min(isl.w - 0.2, 0.6), clear - 0.22, 10, S_GALV, true, [0, 0, 0], true);
+          part.proxy.box(q.x, roadY + 0.22, q.z, 0.6, clear - 0.4, 0.6, yaw, 0, S_GALV, true, []);
+        }
+      }
+      // canopy: a pale slab with a white fascia all round, downlights under it (lit at night like the lamps)
+      part.conc.box(f.x, roadY + clear, f.z, canopyW, 0.45, canopyL, yaw, 0, C_BARRIER_TOP, false, [0, 0, 0]);
+      const C_FASCIA: Rgb = [1.02, 1.02, 1.0];
+      for (const e of [-1, 1]) {
+        const q = at2(0, e * (canopyL / 2 - 0.1));
+        part.conc.box(q.x, roadY + clear - 0.6, q.z, canopyW, 1.25, 0.2, yaw, 0, C_FASCIA, false, [0, 0, 0]);
+        const r = at2(e * (canopyW / 2 - 0.1), 0);
+        part.conc.box(r.x, roadY + clear - 0.6, r.z, 0.2, 1.25, canopyL, yaw, 0, C_FASCIA, false, [0, 0, 0]);
+      }
+      for (let a = -hw + 1.6; a <= hw - 1.6 + 0.01; a += 3.2) for (const ds of [-7, 0, 7]) {
+        const q = at2(a, ds);
+        part.heads.box(q.x, roadY + clear - 0.3, q.z, 0.5, 0.12, 0.5, yaw, 0, S_HEAD, false, [1, 0, 0], 'point');
+      }
+      // the plaza's name on both fascias, a lane plate over every gate (TAG for the inner lane, cash for the rest)
+      for (const dir of [1, -1] as const) {
+        const faceN = new THREE.Vector3(-f.dx * dir, 0, -f.dz * dir);
+        // traffic running in `dir` arrives from the -dir side: its gates and the name face that edge
+        const front = at2(0, -dir * (canopyL / 2 + 0.05));
+        panel(part.signs, front.clone().setY(roadY + clear + 0.05), faceN, 6.0, 0.95, atlas.guide([toll.name], null, 384, 64, '#1c3f8a'), S_DARK, 0.12);
+        counts.signs++;
+        for (const [a, label, color] of [[1.55, 'TAG', '#4b2a8a'], [4.7, 'EFECTIVO', '#0b6b3f'], [8.7, 'EFECTIVO', '#0b6b3f']] as const) {
+          const q = at2(dir * a, -dir * (canopyL / 2 - 0.5));
+          panel(part.signs, q.clone().setY(roadY + clear - 0.9 - 0.3), faceN, 1.5, 0.6, atlas.guide([label], null, 160, 64, color), S_DARK, 0.2);
+          counts.signs++;
+        }
+        // advance sign 500 m before the plaza
+        const sA = sP - dir * 500;
+        if (sA > 40 && sA < c.total - 40 && !nearGantry(sA, 60) && !nearJunction(sA, 14)) groundSign(sA, dir, 3.0, 1.5, atlas.guide([toll.name, '500 m'], null, 256, 128, '#1c3f8a'), S_DARK);
+      }
+    }
+
     for (const dir of [1, -1] as const) {
       for (let s = dir > 0 ? 140 : c.total - 140; dir > 0 ? s < c.total - 60 : s > 60; s += dir * 900) {
-        if (nearGantry(s, 60) || nearJunction(s, 30)) continue;
+        if (nearGantry(s, 60) || nearJunction(s, 30) || nearPlaza(s, 120)) continue;
         groundSign(s, dir, 0.75, 0.75, atlas.speed('90'), S_DARK, false, 1, 2.0);
       }
     }
@@ -1123,7 +1196,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     // -------------------------------------------------------- drainage inlets at the shoulder edge every 60 m, staggered by side
     for (const side of [-1, 1] as const) {
       for (let s = side > 0 ? 18 : 48; s < c.total - 10; s += 60) {
-        if (nearJunction(s, 12)) continue;
+        if (nearJunction(s, 12) || nearPlaza(s, 30)) continue;
         const f = frameAt(c, s);
         const aI = side * (hw - 0.75);
         const ix = f.x + f.rx * aI, iz = f.z + f.rz * aI;
