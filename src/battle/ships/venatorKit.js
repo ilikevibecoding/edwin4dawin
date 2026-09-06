@@ -754,6 +754,39 @@ export function partition(
   return out;
 }
 
+// Brick-like partition in metres: rows along v of random height, each row cut along u into cells of
+// random width starting with its own random phase, so the cross seams never line up from row to row
+// (armour courses, not a grid). rect = { u0, v0, u1, v1 }; cells span [min, max] with varied aspect.
+export function staggered(
+  rand,
+  rect,
+  { min = 20, max = 90, rowMax = null } = {},
+) {
+  const out = [];
+  const rm = rowMax ?? min + (max - min) * 0.7;
+  let v = rect.v0;
+  while (v < rect.v1 - 1e-6) {
+    let h = min + rand() * Math.max(0, rm - min);
+    if (rect.v1 - v - h < min * 0.6) h = rect.v1 - v;
+    h = Math.min(h, rect.v1 - v);
+    let u = rect.u0;
+    let first = true;
+    while (u < rect.u1 - 1e-6) {
+      let w = min + rand() * (max - min);
+      if (first) {
+        w *= 0.3 + rand() * 0.7;
+        first = false;
+      }
+      if (rect.u1 - u - w < min * 0.6) w = rect.u1 - u;
+      w = Math.min(w, rect.u1 - u);
+      out.push({ u0: u, v0: v, u1: u + w, v1: v + h });
+      u += w;
+    }
+    v += h;
+  }
+  return out;
+}
+
 // Slightly varied hull tone: luminance +-amount, a touch of warm/cool drift.
 export function jitterColor(rand, base, amount = 0.08, warm = 0.02) {
   const c = new THREE.Color(base);

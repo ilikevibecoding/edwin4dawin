@@ -10,7 +10,18 @@
 // with a light drum and the mast on top over the rear half) and the steps down behind the block.
 // Proportions from venatorSpec (PLATFORM / BLOCK / TOWER); only recesses are dark, as in the reference.
 import * as THREE from "three";
-import { loftProfile, yLoft, quadFacing, tube, lin } from "./venatorKit.js";
+import {
+  loftProfile,
+  yLoft,
+  quadFacing,
+  tube,
+  lin,
+  staggered,
+  framePlate,
+  flipGeometry,
+  facetedDome,
+  mulColor,
+} from "./venatorKit.js";
 import { boxMM } from "./shipKit.js";
 import {
   Z,
@@ -19,6 +30,7 @@ import {
   PLATFORM,
   platY,
   BLOCK,
+  AFT,
   TOWER,
   TURRET_X,
   TURRET_R,
@@ -31,9 +43,12 @@ import {
   GREY_SHELF,
   GREY_RECESS,
   DARK,
+  DARK_RECESS,
   DARK_SEAM,
   ROW_WARM,
   ROW_COOL,
+  HANGAR_WARM,
+  sootAt,
 } from "./venatorSpec.js";
 
 const GREY_HEAD_TOP = lin(0.62, 0.6, 0.53); // head slab tops: lighter than the deck, short of bloom
@@ -87,6 +102,51 @@ export function buildTowers(ctx) {
   const P = PLATFORM;
   const LG = BLOCK.legs;
 
+  // staggered raised plates with dark seam gaps on a planar face: frameAt(y, z) -> face frame (u along
+  // +z, v up the face), rect = { u0, u1 } in z and { v0, v1 } in y (metres), inside(z, y) keeps the
+  // field off the parts of the face the ramp edge or the leg front cut away
+  const plateWall = (
+    frameAt,
+    rect,
+    col,
+    { min = 10, max = 34, skip = 0.32, inside = null } = {},
+  ) => {
+    if (!fine) return;
+    for (const c of staggered(rand, rect, { min, max })) {
+      if (
+        inside &&
+        !(
+          inside(c.u0, c.v0) &&
+          inside(c.u1, c.v0) &&
+          inside(c.u0, c.v1) &&
+          inside(c.u1, c.v1)
+        )
+      )
+        continue;
+      const w = c.u1 - c.u0;
+      const h = c.v1 - c.v0;
+      const zm = (c.u0 + c.u1) / 2;
+      const ym = (c.v0 + c.v1) / 2;
+      add(faceBox(frameAt(c.v0, zm), w, 0.5, 0.2, 0.02), "dark", {
+        color: DARK_SEAM,
+        texel: 1 / 4,
+      });
+      add(faceBox(frameAt(ym, c.u0), 0.5, h, 0.2, 0.02), "dark", {
+        color: DARK_SEAM,
+        texel: 1 / 4,
+      });
+      if (!fine || rand() < skip || w < 6 || h < 6) continue;
+      add(
+        framePlate(frameAt(ym, zm), w - 2.2, h - 2.2, 0.5 + rand() * 0.9, 0.7, {
+          texel: hullTexel,
+          sink: 0.4,
+        }),
+        "hull",
+        { color: col, uv: "keep" },
+      );
+    }
+  };
+
   // ---- turret shelves: one per side from the front step to the block's rear, the top continuing the
   // band's slope; the inner edge is buried in the band / block so only the top and outer wall show
   for (const s of [-1, 1]) {
@@ -99,8 +159,17 @@ export function buildTowers(ctx) {
         [s * P.xIn, platY(zr)],
       ],
     });
+    const tail = {
+      z: Z(P.z1 + P.tail),
+      pts: [
+        [s * P.xIn, DECK_Y - 0.3],
+        [s * P.xOut, DECK_Y - 0.3],
+        [s * P.xOut, DECK_Y + 0.5],
+        [s * P.xIn, DECK_Y + 0.5],
+      ],
+    };
     addPrism(
-      loftProfile([sec(P.z0), sec(P.z1)], {
+      loftProfile([sec(P.z0), sec(P.z1), tail], {
         tags: ["bottom", "side", "top", "inner"],
         capStart: true,
         capEnd: true,
@@ -150,19 +219,20 @@ export function buildTowers(ctx) {
   // ---- legs: under each shaft a steep light buttress from the roof down to the shelf, flaring
   // outboard, its dark sides running back to the block's rear
   const yLegFoot = platY(LG.zFoot);
-  const legFrontZ = (y) =>
-    LG.zFoot + (LG.zTop - LG.zFoot) * ((y - yLegFoot) / (b.y1 - yLegFoot));
+  const legT = (y) => (y - yLegFoot) / (b.y1 - yLegFoot);
+  const legFrontZ = (y) => LG.zFoot + (LG.zTop - LG.zFoot) * legT(y);
+  const legRearZ = (y) => LG.z1Foot + (LG.z1Top - LG.z1Foot) * legT(y);
   for (const s of [-1, 1])
     addPrism(
       yLoft(
         [
           {
             y: yLegFoot - 0.3,
-            pts: sideRect(s, LG.xInFoot, LG.xOutFoot, LG.zFoot, LG.z1),
+            pts: sideRect(s, LG.xInFoot, LG.xOutFoot, LG.zFoot, LG.z1Foot),
           },
           {
             y: b.y1 + 0.2,
-            pts: sideRect(s, LG.xInTop, LG.xOutTop, LG.zTop, LG.z1),
+            pts: sideRect(s, LG.xInTop, LG.xOutTop, LG.zTop, LG.z1Top),
           },
         ],
         PRISM,
@@ -359,7 +429,29 @@ export function buildTowers(ctx) {
         leanFrame(s, LG.xOutFoot, yLegFoot, LG.xOutTop, b.y1),
         yLegFoot,
         b.y1,
-        (y) => [Z(legFrontZ(y)) + 6, Z(LG.z1) - 6],
+        (y) => [Z(legFrontZ(y)) + 6, Z(legRearZ(y)) - 6],
+      );
+      plateWall(
+        leanFrame(s, b.hxFoot, b.yFoot, b.hx1, b.y1),
+        { u0: Z(fz(b.yFoot)), u1: Z(b.z1), v0: b.yFoot + 2, v1: b.y1 - 2 },
+        GREY_BLOCK,
+        {
+          inside: (z, y) =>
+            z > Z(fz(y)) + 2 && z < Z(Math.min(legFrontZ(y), b.z1)) - 2,
+        },
+      );
+      plateWall(
+        leanFrame(s, LG.xOutFoot, yLegFoot, LG.xOutTop, b.y1),
+        {
+          u0: Z(LG.zTop),
+          u1: Z(LG.z1Foot),
+          v0: yLegFoot + 2,
+          v1: b.y1 - 2,
+        },
+        GREY_SIDE,
+        {
+          inside: (z, y) => z > Z(legFrontZ(y)) + 2 && z < Z(legRearZ(y)) - 2,
+        },
       );
       // plate seams across the leg fronts
       if (fine) {
@@ -435,70 +527,412 @@ export function buildTowers(ctx) {
     );
   }
 
-  // ---- steps behind the block, down toward the stern (on the wing deck)
+  // ---- aft body: behind the shafts the block steps down in three terraces (sloped risers, flat
+  // treads, widening as it descends) to a stern shelf, then the aft foot face carrying the dark stern
+  // hangar mouth above the engine bank. One loft, so the shafts' rear faces stand clear above it.
+  const A = AFT;
   const yDeck = DECK_Y;
-  for (const st of BLOCK.steps) {
-    addPrism(
-      yLoft(
-        [
-          { y: yDeck - 0.3, pts: rect(st.hx, st.z0, st.z1) },
-          { y: st.y1, pts: rect(st.hx - 2, st.z0, st.z1 - 2) },
-        ],
-        PRISM,
-      ),
-      {
-        side: GREY_BLOCK,
-        front: GREY_BLOCK,
-        back: GREY_BLOCK,
-        inner: GREY_BLOCK,
-        top: GREY_HULL,
-      },
+  const aftSec = ([zr, hx, y]) => {
+    const hb = hx + A.batter * (y - yDeck);
+    return {
+      z: Z(zr),
+      pts: [
+        [-hb, yDeck - 0.3],
+        [hb, yDeck - 0.3],
+        [hx, y],
+        [-hx, y],
+      ],
+    };
+  };
+  const sooted = (col, zr) => {
+    const k = sootAt(Z(zr));
+    return mulColor(col, k[0], k[1], k[2]);
+  };
+  const aft = loftProfile(A.sections.map(aftSec), {
+    tags: ["bottom", "side", "top", "side"],
+    capStart: false,
+    capEnd: false,
+  });
+  for (const [tag, geo] of Object.entries(aft))
+    if (tag !== "bottom")
+      add(geo, "hull", {
+        color: tag === "top" ? sooted(GREY_HULL, 990) : sooted(GREY_BLOCK, 990),
+        texel: hullTexel,
+      });
+  const last = A.sections[A.sections.length - 1];
+  const zAft = Z(last[0]);
+  const hxAft = last[1];
+  const yAft = last[2];
+  // aft foot face: the battered trapezoid end of the loft with the hangar mouth cut out of it
+  const hg = A.hangar;
+  const faceCol = sooted(GREY_BLOCK, last[0]);
+  const hbAft = hxAft + A.batter * (yAft - yDeck);
+  {
+    const shape = new THREE.Shape([
+      new THREE.Vector2(-hbAft, yDeck - 0.3),
+      new THREE.Vector2(hbAft, yDeck - 0.3),
+      new THREE.Vector2(hxAft, yAft),
+      new THREE.Vector2(-hxAft, yAft),
+    ]);
+    shape.holes.push(
+      new THREE.Path([
+        new THREE.Vector2(-hg.hx, hg.y0),
+        new THREE.Vector2(-hg.hx, hg.y1),
+        new THREE.Vector2(hg.hx, hg.y1),
+        new THREE.Vector2(hg.hx, hg.y0),
+      ]),
     );
-    if (mid) {
-      const h = st.y1 - yDeck;
-      add(
-        boxMM(
-          [-st.hx + 6, yDeck + h * 0.3, Z(st.z1) - 1.5],
-          [st.hx - 6, yDeck + h * 0.7, Z(st.z1) + 0.3],
-        ),
-        "hull",
-        { color: GREY_RECESS, texel: 1 / 8 },
-      );
+    add(new THREE.ShapeGeometry(shape).translate(0, 0, zAft), "hull", {
+      color: faceCol,
+      texel: hullTexel,
+    });
+  }
+  // the hangar: an inward-facing dark box, a lit floor strip along the back wall, a few small lights
+  add(
+    flipGeometry(
+      boxMM([-hg.hx, hg.y0, zAft - hg.depth], [hg.hx, hg.y1, zAft + 0.5]),
+    ),
+    "dark",
+    { color: DARK_RECESS, texel: 1 / 8 },
+  );
+  add(
+    quadFacing(
+      [0, hg.y0 + 0.6, zAft - hg.depth + 2.5],
+      [0, 1, 0],
+      [0, 0, 1],
+      hg.hx * 2 - 4,
+      2.2,
+    ),
+    "windows",
+    { color: HANGAR_WARM, uv: "keep" },
+  );
+  if (mid) {
+    add(
+      quadFacing(
+        [0, (hg.y0 + hg.y1) / 2, zAft - hg.depth + 0.4],
+        [0, 0, 1],
+        [0, 1, 0],
+        hg.hx * 2 - 8,
+        1.2,
+      ),
+      "windows",
+      { color: ROW_WARM, uv: "keep" },
+    );
+    for (const x of fine ? [-14, -7, 0, 7, 14] : [-8, 8])
       add(
         quadFacing(
-          [0, yDeck + h * 0.5, Z(st.z1) + 0.5],
+          [x, hg.y1 - 0.4, zAft - hg.depth * 0.45],
+          [0, -1, 0],
+          [0, 0, 1],
+          1.4,
+          1.4,
+        ),
+        "windows",
+        { color: 0xffffff, uv: "keep" },
+      );
+    // hangar rim: a dark lintel and posts standing a little proud of the face
+    add(
+      boxMM(
+        [-hg.hx - 2, hg.y1 - 0.2, zAft - 1],
+        [hg.hx + 2, hg.y1 + 2.2, zAft + 1.6],
+      ),
+      "dark",
+      { color: DARK, texel: 1 / 4 },
+    );
+    for (const sx of [-1, 1])
+      add(
+        boxMM(
+          [
+            Math.min(sx * (hg.hx + 0.2), sx * (hg.hx + 2)),
+            hg.y0 - 0.5,
+            zAft - 1,
+          ],
+          [Math.max(sx * (hg.hx + 0.2), sx * (hg.hx + 2)), hg.y1, zAft + 1.6],
+        ),
+        "dark",
+        { color: DARK, texel: 1 / 4 },
+      );
+  }
+
+  // relief on the aft body: staggered raised plates with dark seams on the treads, side walls and the
+  // foot face; window rows and dark slots on the risers; dishes, masts and vents on the terraces
+  const aftFrames = [];
+  for (let i = 0; i + 1 < A.sections.length; i++) {
+    const [z0, hx0, y0] = A.sections[i];
+    const [z1, hx1, y1] = A.sections[i + 1];
+    aftFrames.push({ z0, z1, hx0, hx1, y0, y1, riser: y1 < y0 - 1 });
+  }
+  if (mid) {
+    // horizontal-surface plate field (treads, stern shelf)
+    const treadField = (z0, z1, hx, y, zr) => {
+      const cells = staggered(
+        rand,
+        { u0: -hx + 2, u1: hx - 2, v0: Z(z0) + 2, v1: Z(z1) - 2 },
+        { min: 9, max: 30 },
+      );
+      for (const c of cells) {
+        add(
+          boxMM([c.u0 - 0.25, y - 0.2, c.v0], [c.u0 + 0.25, y + 0.06, c.v1]),
+          "dark",
+          { color: DARK_SEAM, texel: 1 / 4 },
+        );
+        add(
+          boxMM([c.u0, y - 0.2, c.v0 - 0.25], [c.u1, y + 0.06, c.v0 + 0.25]),
+          "dark",
+          { color: DARK_SEAM, texel: 1 / 4 },
+        );
+        if (!fine || rand() < 0.3) continue;
+        const w = c.u1 - c.u0 - 2;
+        const d = c.v1 - c.v0 - 2;
+        if (w < 4 || d < 4) continue;
+        add(
+          boxMM(
+            [c.u0 + 1, y - 0.3, c.v0 + 1],
+            [c.u1 - 1, y + 0.4 + rand() * 0.8, c.v1 - 1],
+          ),
+          "hull",
+          { color: sooted(GREY_HULL, zr), texel: hullTexel },
+        );
+      }
+    };
+    // battered side wall of a segment: p(t, y) = (sx (hx(t) + batter (yTop(t) - y)), y, z(t)); frame with
+    // u along the wall, v up the slope, n outward
+    const wallField = (seg, sx) => {
+      const { z0, z1, hx0, hx1, y0, y1 } = seg;
+      const dz = Z(z1) - Z(z0);
+      const at = (t, y) =>
+        new THREE.Vector3(
+          sx * (hx0 + (hx1 - hx0) * t + A.batter * (y0 + (y1 - y0) * t - y)),
+          y,
+          Z(z0) + dz * t,
+        );
+      const len = at(1, yDeck).distanceTo(at(0, yDeck));
+      const u = at(1, yDeck).sub(at(0, yDeck)).normalize();
+      const v = new THREE.Vector3(-sx * A.batter, 1, 0).normalize();
+      const n = new THREE.Vector3().crossVectors(u, v);
+      if (n.x * sx < 0) n.negate();
+      n.normalize();
+      const top = Math.min(y0, y1);
+      const frameAt = (a, b) => ({ p: at(a / len, b), n, u, v });
+      // a lit window row along the wall of each tread, a little above mid-height
+      if (y0 === y1 && len > 14)
+        add(
+          quadFacing(
+            frameAt(len / 2, yDeck + (top - yDeck) * 0.62)
+              .p.addScaledVector(n, 0.3)
+              .toArray(),
+            n.toArray(),
+            v.toArray(),
+            len - 8,
+            1.3,
+          ),
+          "windows",
+          { color: ROW_WARM, uv: "keep" },
+        );
+      if (!fine) return;
+      const cells = staggered(
+        rand,
+        { u0: 2, u1: len - 2, v0: yDeck + 2, v1: top - 1.5 },
+        { min: 9, max: 30 },
+      );
+      for (const c of cells) {
+        const w = c.u1 - c.u0;
+        const h = c.v1 - c.v0;
+        add(
+          faceBox(frameAt((c.u0 + c.u1) / 2, c.v0), w, 0.5, 0.2, 0.02),
+          "dark",
+          { color: DARK_SEAM, texel: 1 / 4 },
+        );
+        add(
+          faceBox(frameAt(c.u0, (c.v0 + c.v1) / 2), 0.5, h, 0.2, 0.02),
+          "dark",
+          { color: DARK_SEAM, texel: 1 / 4 },
+        );
+        if (!fine || rand() < 0.3 || w < 6 || h < 6) continue;
+        add(
+          framePlate(
+            frameAt((c.u0 + c.u1) / 2, (c.v0 + c.v1) / 2),
+            w - 2.2,
+            h - 2.2,
+            0.5 + rand() * 0.9,
+            0.7,
+            { texel: hullTexel, sink: 0.4 },
+          ),
+          "hull",
+          { color: sooted(GREY_BLOCK, (z0 + z1) / 2), uv: "keep" },
+        );
+      }
+    };
+    for (const seg of aftFrames) {
+      const { z0, z1, hx0, hx1, y0, y1 } = seg;
+      if (seg.riser) {
+        // riser frame: n up-aft, v up the slope
+        const dz = Z(z1) - Z(z0);
+        const dy = y0 - y1;
+        const n = new THREE.Vector3(0, dz, dy).normalize();
+        const v = new THREE.Vector3(0, dy, -dz).normalize();
+        const slope = Math.hypot(dz, dy);
+        const frameAt = (x, f) => ({
+          p: new THREE.Vector3(x, y0 - dy * f, Z(z0) + dz * f),
+          n,
+          u: new THREE.Vector3(1, 0, 0),
+          v,
+        });
+        const hx = Math.min(hx0, hx1) - 2;
+        // lit window row a third of the way up, dark slots above it, a seam under the top edge
+        add(
+          quadFacing(
+            frameAt(0, 0.4).p.clone().addScaledVector(n, 0.35).toArray(),
+            n.toArray(),
+            v.toArray(),
+            hx * 2 - 6,
+            1.4,
+          ),
+          "windows",
+          { color: ROW_COOL, uv: "keep" },
+        );
+        // small dark vents in a row above the windows, a seam under the top edge, two short raised
+        // plates offset left and right so the face breaks up without stripes
+        const nSlots = fine ? 5 : 3;
+        for (let i = 0; i < nSlots; i++) {
+          const x = -hx + 5 + ((hx * 2 - 10) * (i + 0.5)) / nSlots;
+          add(faceBox(frameAt(x, 0.66), 2.2, slope * 0.12, 0.3, 0.05), "dark", {
+            color: DARK_RECESS,
+            texel: 1 / 6,
+          });
+        }
+        if (fine) {
+          add(faceBox(frameAt(0, 0.93), hx * 2 - 3, 0.6, 0.2, 0.05), "dark", {
+            color: DARK_SEAM,
+            texel: 1 / 4,
+          });
+          for (const sx of [-1, 1])
+            add(
+              framePlate(
+                frameAt(sx * hx * 0.45, 0.14 + (sx > 0 ? 0.04 : 0)),
+                hx * 0.7,
+                slope * 0.14,
+                0.6,
+                0.6,
+                { texel: hullTexel, sink: 0.3 },
+              ),
+              "hull",
+              { color: sooted(GREY_HULL, z0), uv: "keep" },
+            );
+        }
+      } else if (fine) {
+        treadField(z0, z1, Math.min(hx0, hx1), y0, (z0 + z1) / 2);
+      }
+      for (const sx of [-1, 1]) wallField(seg, sx);
+    }
+    // foot face relief: seams and raised plates on the lintel and the posts
+    if (fine) {
+      const frameAt = (x, y) => ({
+        p: new THREE.Vector3(x, y, zAft + 0.4),
+        n: new THREE.Vector3(0, 0, 1),
+        u: new THREE.Vector3(1, 0, 0),
+        v: new THREE.Vector3(0, 1, 0),
+      });
+      const cells = staggered(
+        rand,
+        { u0: -hxAft + 1.5, u1: hxAft - 1.5, v0: hg.y1 + 3, v1: yAft - 1.5 },
+        { min: 8, max: 26 },
+      );
+      for (const c of cells) {
+        add(
+          faceBox(
+            frameAt(c.u0, (c.v0 + c.v1) / 2),
+            0.5,
+            c.v1 - c.v0,
+            0.2,
+            0.02,
+          ),
+          "dark",
+          { color: DARK_SEAM, texel: 1 / 4 },
+        );
+        if (!fine || rand() < 0.35 || c.u1 - c.u0 < 6 || c.v1 - c.v0 < 5)
+          continue;
+        add(
+          framePlate(
+            frameAt((c.u0 + c.u1) / 2, (c.v0 + c.v1) / 2),
+            c.u1 - c.u0 - 2,
+            c.v1 - c.v0 - 2,
+            0.5 + rand() * 0.8,
+            0.6,
+            { texel: hullTexel, sink: 0.4 },
+          ),
+          "hull",
+          { color: faceCol, uv: "keep" },
+        );
+      }
+      add(
+        quadFacing(
+          [0, yAft - 4, zAft + 0.7],
           [0, 0, 1],
           [0, 1, 0],
-          st.hx * 1.3,
-          1.5,
+          hxAft * 2 - 10,
+          1.2,
         ),
         "windows",
         { color: ROW_WARM, uv: "keep" },
       );
     }
-  }
-  // block rear face: a dark recessed band with windows above the first step
-  if (mid) {
-    const s0 = BLOCK.steps[0];
-    add(
-      boxMM(
-        [-b.hx1 + 4, s0.y1 + 5, Z(b.z1) - 1.5],
-        [b.hx1 - 4, b.y1 - 6, Z(b.z1) + 0.3],
-      ),
-      "hull",
-      { color: GREY_RECESS, texel: 1 / 8 },
-    );
-    add(
-      quadFacing(
-        [0, (s0.y1 + b.y1) / 2, Z(b.z1) + 0.5],
-        [0, 0, 1],
-        [0, 1, 0],
-        b.hx1 * 1.3,
-        1.6,
-      ),
-      "windows",
-      { color: ROW_COOL, uv: "keep" },
-    );
+    // greebles: a dish and a mast on each side of the middle tread, vents and boxes on the stern shelf
+    const mid2 = aftFrames[3];
+    for (const sx of [-1, 1]) {
+      const x = sx * (mid2.hx0 - 6);
+      const zc = Z((mid2.z0 + mid2.z1) / 2);
+      add(
+        facetedDome(3.2, 1.4, 8, 2).translate(x, mid2.y0 + 1.0, zc - 6),
+        "hull",
+        {
+          color: GREY_FLANK,
+          texel: 1 / 6,
+        },
+      );
+      add(
+        new THREE.CylinderGeometry(1.2, 1.6, 1.2, 8).translate(
+          x,
+          mid2.y0 + 0.6,
+          zc - 6,
+        ),
+        "dark",
+        { color: DARK, texel: 1 / 3 },
+      );
+      add(
+        tube([x, mid2.y0, zc + 8], [x, mid2.y0 + 14, zc + 8], 0.5, 6),
+        "dark",
+        {
+          color: DARK,
+          texel: 1 / 3,
+        },
+      );
+      add(
+        boxMM(
+          [x - 2, mid2.y0 + 11, zc + 7.5],
+          [x + 2, mid2.y0 + 11.5, zc + 8.5],
+        ),
+        "dark",
+        { color: DARK, texel: 1 / 3 },
+      );
+    }
+    if (fine) {
+      const shelf = aftFrames[5];
+      for (let i = 0; i < 10; i++) {
+        const x = (rand() - 0.5) * (shelf.hx0 * 2 - 10);
+        const zr = shelf.z0 + 6 + rand() * (shelf.z1 - shelf.z0 - 14);
+        const w = 2.5 + rand() * 4;
+        const d = 2.5 + rand() * 5;
+        add(
+          boxMM(
+            [x - w / 2, shelf.y0 - 0.3, Z(zr) - d / 2],
+            [x + w / 2, shelf.y0 + 0.6 + rand() * 1.6, Z(zr) + d / 2],
+          ),
+          rand() < 0.5 ? "dark" : "hull",
+          { color: rand() < 0.5 ? DARK : sooted(GREY_FLANK, zr), texel: 1 / 4 },
+        );
+      }
+    }
   }
 
   // ---- the two shafts: slender, deep, leaning aft a little, standing on the roof / leg tops
@@ -561,6 +995,33 @@ export function buildTowers(ctx) {
               texel: 1 / 6,
             },
           );
+      // rear face (visible above the aft terraces): a seam and two dark window slots like the front
+      {
+        const rearFrame = (f, dx = 0) => ({
+          p: new THREE.Vector3(
+            cx + dx,
+            T.y0 + shaftH * f,
+            Z(T.zFront + T.depth + T.lean * f),
+          ),
+          n: new THREE.Vector3(0, -shaftN.y, -shaftN.z),
+          u: new THREE.Vector3(1, 0, 0),
+          v: shaftV,
+        });
+        add(faceBox(rearFrame(0.5), T.hx * 2 - 1.2, 0.7, 0.2, 0.05), "dark", {
+          color: DARK_SEAM,
+          texel: 1 / 4,
+        });
+        if (fine)
+          for (const [f, dx] of [
+            [0.3, -0.35],
+            [0.7, 0.3],
+          ])
+            add(
+              faceBox(rearFrame(f, dx * T.hx), T.hx * 0.8, 2.6, 0.5, -0.55),
+              "hull",
+              { color: GREY_RECESS, texel: 1 / 6 },
+            );
+      }
       // sides (outer and inner): plain, with three dark vertical slots near the top and two subtle
       // horizontal seams — no light stripes
       for (const sx of [-1, 1]) {
@@ -591,6 +1052,24 @@ export function buildTowers(ctx) {
               { color: DARK_SEAM, texel: 1 / 4 },
             );
           }
+        // staggered raised plates over the lower two thirds of the side (the shaft leans aft a little,
+        // so the frame follows it)
+        plateWall(
+          (y, z) => ({
+            p: new THREE.Vector3(xf, y, z + (T.lean * (y - T.y0)) / shaftH),
+            n: new THREE.Vector3(sx, 0, 0),
+            u: new THREE.Vector3(0, 0, 1),
+            v: new THREE.Vector3(0, 1, 0),
+          }),
+          {
+            u0: Z(T.zFront) + 2,
+            u1: Z(T.zFront + T.depth) - 2,
+            v0: T.y0 + 2,
+            v1: T.y0 + shaftH * 0.7,
+          },
+          GREY_SIDE,
+          { min: 8, max: 26, skip: 0.3 },
+        );
       }
     }
 
@@ -687,6 +1166,21 @@ export function buildTowers(ctx) {
           color: tag === "bottom" ? GREY_HULL : GREY_LIGHT,
           texel: 1 / 8,
         });
+    if (mid)
+      for (const sx of [-1, 1]) {
+        const xf = sx > 0 ? xhi : xlo;
+        plateWall(
+          (y, z) => ({
+            p: new THREE.Vector3(xf, y, z),
+            n: new THREE.Vector3(sx, 0, 0),
+            u: new THREE.Vector3(0, 0, 1),
+            v: new THREE.Vector3(0, 1, 0),
+          }),
+          { u0: zf0 + 4, u1: z1 - 1.5, v0: yVis + 3.6, v1: T.headY1 - 1.2 },
+          GREY_LIGHT,
+          { min: 7, max: 36, skip: 0.25 },
+        );
+      }
     if (fine) {
       // a seam along the slab's sides where it meets the band's rear, and a hatch on the chin's front
       for (const sx of [-1, 1]) {
