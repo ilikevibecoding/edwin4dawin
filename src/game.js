@@ -329,8 +329,12 @@ export class Game {
   regionMix(x, z) {
     const sp = REGIONS.space, co = REGIONS.coruscant;
     const dS = Math.max(Math.abs(x - sp.cx), Math.abs(z - sp.cz)) - sp.half;        // <0 inside the void box
-    const dC = Math.max(Math.abs(x - co.cx), Math.abs(z - co.cz)) - co.half;
-    return { space: Math.max(0, Math.min(1, (200 - dS) / 400)), coruscant: Math.max(0, Math.min(1, (160 - dC) / 320)) };
+    const dP = Math.max(Math.abs(x - co.cx), Math.abs(z - co.cz)) - co.half;        // <0 on the plateau
+    const dC = dP - (co.reach || 0);                                                // <0 anywhere over the lower city too
+    // the lower-city look (cooler haze, no clouds) is full over the basin, fades in over the last 40 blocks of the rim
+    // and out over 120 blocks of sea beyond the wall; the Coruscant smog holds over the whole basin
+    const lower = dP <= -40 ? 0 : dP <= 0 ? (dP + 40) / 40 : dC <= 0 ? 1 : Math.max(0, 1 - dC / 120);
+    return { space: Math.max(0, Math.min(1, (200 - dS) / 400)), coruscant: Math.max(Math.max(0, Math.min(1, (160 - dC) / 320)), lower), lower };
   }
   // 'creative' | 'survival' (docs/ROUND6_PLAN.md): creative = flight, frozen hunger, no damage, infinite stacks,
   // instant break; survival = the Minecraft rules. Flight granted by ?fly=1 or the admin panel survives a switch.

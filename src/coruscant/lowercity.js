@@ -37,7 +37,9 @@ export function register(gen, game) {
     // and the Coruscant smog (whose fog reaches past the streamed chunks) has to hold over the basin instead of fading
     // out 160 blocks past the plateau edge as game.regionMix measures it against REGIONS.coruscant.half. Until game.js
     // computes both natively (dC against half + LOWER.reach) this shim patches whatever regionMix returns (lowerMix).
-    if (typeof game.regionMix === 'function' && !game.regionMix.__lowerCity) {
+    // game.regionMix computes the `lower` weight natively (docs: docs/overhaul/w8_lower_city_brief.md); the shim only
+    // remains for hosts whose regionMix predates it
+    if (typeof game.regionMix === 'function' && !game.regionMix.__lowerCity && !('lower' in game.regionMix(3000, 0))) {
       const orig = game.regionMix.bind(game);
       const wrapped = (x, z) => { const m = orig(x, z), lo = lowerMix(x, z); m.lower = lo; m.coruscant = Math.max(m.coruscant || 0, lo); return m; };
       wrapped.__lowerCity = true;
