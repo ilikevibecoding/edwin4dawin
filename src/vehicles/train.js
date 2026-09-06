@@ -220,9 +220,11 @@ export function buildTrainGrid() {
   }
   // lit floor guide strip along the aisle from the cab to the rear bench
   box(CARS[0].x0 + 6, 2.0, 2.9, CARS[CARS.length - 1].x0 + 12, 2.02, 3.1, B.GLOW_PANEL_BLUE, { glow: [0.8, 0, 0], stretch: 'cell' });
-  // cabin cells for the mesh's interior / exterior split: the walkable rows between the walls plus the doorways
+  // cabin cells for the mesh's interior / exterior split: the rows between the walls plus the doorways, under a roof
+  // (the open nose deck and the tail's step tops are outside)
   const doorCells = new Set(doors.map(([x, y, z]) => g.idx(x, y, z)));
-  const inside = (x, y, z) => y >= 2 && y <= 4 && ((z >= 1 && z <= 4) || (z === 5 && doorCells.has(g.idx(x, y, z))));
+  const roofed = (x, y, z) => { for (let yy = y + 1; yy < g.h; yy++) if (g.get(x, yy, z) !== 0) return true; return false; };
+  const inside = (x, y, z) => x >= 0 && x < g.w && y >= 2 && y <= 4 && ((z >= 1 && z <= 4) || (z === 5 && doorCells.has(g.idx(x, y, z)))) && roofed(x, y, z);
   return { grid: g, doors, skip, extras, leaves, displays, inside };
 }
 
