@@ -13,6 +13,8 @@ import { FORCE_AIR } from '../src/coruscant/blueprint.js';
 import { lotCrown, resolveFamily, DISTRICT_MIX } from '../src/coruscant/towers/index.js';
 import { CROWN_STYLES, CROWN_MIN_HEIGHT, CROWN_OPTIONS } from '../src/coruscant/crowns.js';
 import { STRIP_MIN_HEIGHT } from '../src/coruscant/towers/strips.js';
+import { SPACEPORT, DECK_Y } from '../src/coruscant/spaceport.js';
+import { buildShips } from '../src/ships/traffic.js';
 
 initBlocks();
 let passed = 0, failed = 0;
@@ -372,6 +374,23 @@ test('rubric 11: exterior palette above the podium - no wood / wool, only chrome
   const top = [...hist].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => `${k} ${v}`);
   console.log(`     exterior census (${TALL.length} towers): ${top.join(', ')}`);
   assert.equal(offenders, 0, `wood / wool on the exterior above the podium: ${sample}`);
+});
+
+test('rubric 11: ship lanes and pad approaches clear the crowns (lot.height + lotCrown height), crown tops stay under the high cross lane', () => {
+  // scripts/test-spaceport.mjs checks the routes against lot.height; crowns add lotCrown(lot).height above it
+  const tops = TOWERS.map((l) => ({ l, top: LEVELS.ground + l.height + lotCrown(l, LEVELS.ground).height }));
+  let samples = 0, maxTop = 0;
+  for (const t of tops) maxTop = Math.max(maxTop, t.top);
+  for (const sh of buildShips(SPACEPORT.pads, DECK_Y, null, CITY)) {
+    const path = sh.route.segs[0].path, p = { x: 0, y: 0, z: 0 };
+    for (let d = 0; d < path.length; d += 2) {
+      path.at(d, p); samples++;
+      for (const { l, top } of tops) assert.ok(!(p.x >= l.x0 - 3 && p.x < l.x1 + 3 && p.z >= l.z0 - 3 && p.z < l.z1 + 3 && p.y < top + 3), `${sh.name} hits the crown of ${l.family} lot ${l.id} at ${Math.round(p.x)},${Math.round(p.y)},${Math.round(p.z)} (crown top ${top})`);
+    }
+  }
+  console.log(`     ${samples} route samples, tallest crown top y ${maxTop}`);
+  assert.ok(samples > 5000);
+  assert.ok(maxTop <= 262, `crown tops reach y ${maxTop}; the high cross lane flies at 266+`);
 });
 
 test('rubric 11: the whole tall skyline is deterministic (two builds hash-equal, metadata equal)', () => {
