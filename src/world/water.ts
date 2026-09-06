@@ -203,15 +203,17 @@ vec4 skyReflection(vec3 R, float mss, vec3 P, vec3 V) {
   vec2 az = hl > 1e-4 ? R.xz / hl : vec2(1.0, 0.0);
   float el = atan(R.y, hl);
   float d = 1.7320508 * sqrt(2.0 * mss);
-  float e0 = max(el, 0.008), e1 = el - d, e2 = el + d;
+  // The low node is held at the horizon: a facet tilted away from the camera by more than the view elevation
+  // faces away and is hidden behind the wave in front (masking), so the visible facets of that side of the lobe
+  // send their rays out along the surface, where they meet the next wave and see the sea — mostly the horizon
+  // sky mirrored a second time at a grazing angle (0.7 of it, fading in over the 3° below the horizon).
+  float e0 = max(el, 0.008), e1 = max(el - d, 0.008), e2 = el + d;
   vec3 R0 = vec3(az.x * cos(e0), sin(e0), az.y * cos(e0));
   vec3 R1 = vec3(az.x * cos(e1), sin(e1), az.y * cos(e1));
   vec3 R2 = vec3(az.x * cos(e2), sin(e2), az.y * cos(e2));
   float F0 = fresnelNode(V, R0), F1 = fresnelNode(V, R1), F2 = fresnelNode(V, R2);
   vec3 L0 = skyRadiance(R0);
-  // the node under the horizon sees the sea: the horizon sky mirrored again off the next wave at a grazing angle
-  vec3 hor = vec3(az.x * cos(0.008), sin(0.008), az.y * cos(0.008));
-  vec3 L1 = e1 > 0.008 ? skyRadiance(R1) : 0.6 * skyRadiance(hor);
+  vec3 L1 = skyRadiance(R1) * mix(0.7, 1.0, smoothstep(-0.05, 0.008, el - d));
   vec3 L2 = skyRadiance(R2);
   float fw = 0.6667 * F0 + 0.1667 * (F1 + F2);
   vec3 c = (L0 * (0.6667 * F0) + L1 * (0.1667 * F1) + L2 * (0.1667 * F2)) / max(fw, 1e-4);
