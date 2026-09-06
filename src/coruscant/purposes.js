@@ -108,6 +108,109 @@ export const CATALOGUE = {
   parking_garage: { category: 'transport', roles: [{ job: 'attendant', count: 2, rooms: ['garage', 'lobby_atrium'] }, { job: 'driver', count: 4, rooms: ['garage', 'corridor'] }, { job: 'security droid', count: 1, rooms: ['garage'] }], sells: [{ item: 'speeder_ride', price: 15, stock: 99 }], hours: [0, 24], names: ['{place} Speeder Park {n}', 'Level {nn} Garage', '{sur} Parking', 'Skydock {n}'], greeting: 'Speeder parking, hourly rates. Rides for hire at the ramp.' },
 };
 
+// ---------------------------------------------------------------------------------------------- trade profiles (v2)
+// What each kind does in the city economy (rubric 15 #2-#4), read by src/economy/sim.js through purposeFor():
+//   role       terminal (the cargo terminal that imports from offworld freighters), wholesale (depots / warehouses
+//              that supply the retail and service businesses), producer, retail, service, housing (household demand)
+//   supplies   bulk goods the business wholesales to its customers (keys of src/economy/prices.js)
+//   consumes   [[good, unitsPerDay]] inputs used while open (water for every staffed building is added by the sim)
+//   produces   [{ good, from, ratio, perDay }] on-site conversion (waste -> salvage, salvage -> parts, water reclaimed)
+//   capacity   units of stock the building can hold (retail items + bulk)
+//   service    what the building serves: meals, treatment, repair, utility, transit, lodging, leisure, domestic
+//   income     credits per staff per day billed to galactic clients (non-trading kinds: offices, ministries...)
+//   households when true the lot houses residents whose daily batches drive demand
+// Retail items in `sells` are cooked / unpacked from the bulk good `bulkOf(item)` (staples, textiles, components,
+// parts), so every kind with a `sells` list implicitly consumes that bulk good.
+const ALL_BULK = ['staples', 'water', 'fuel', 'parts', 'components', 'medical', 'textiles'];
+const TRADE = {
+  apartments: { role: 'housing', households: true, capacity: 120, service: 'lodging' },
+  hostel: { role: 'housing', households: true, capacity: 120, service: 'lodging' },
+  luxury_residences: { role: 'housing', households: true, capacity: 120, service: 'lodging' },
+  hotel: { role: 'housing', households: true, capacity: 160, service: 'lodging', consumes: [['textiles', 2]] },
+  office: { role: 'office', income: 24, capacity: 40, consumes: [['components', 0.5]] },
+  bank: { role: 'office', income: 30, capacity: 40, consumes: [['components', 0.5]] },
+  law_office: { role: 'office', income: 28, capacity: 40 },
+  insurance: { role: 'office', income: 24, capacity: 40, consumes: [['components', 0.5]] },
+  tech_firm: { role: 'office', income: 30, capacity: 80, consumes: [['components', 3]] },
+  trade_house: { role: 'office', income: 28, capacity: 200, consumes: [['components', 1]] },
+  ministry: { role: 'office', income: 26, capacity: 40 },
+  courthouse: { role: 'office', income: 24, capacity: 40 },
+  licensing_office: { role: 'office', income: 22, capacity: 40 },
+  tax_office: { role: 'office', income: 22, capacity: 40 },
+  embassy: { role: 'office', income: 26, capacity: 40 },
+  security_station: { role: 'public', income: 22, capacity: 80, consumes: [['fuel', 2], ['components', 0.5]] },
+  guard_barracks: { role: 'public', income: 22, capacity: 120, consumes: [['staples', 12], ['fuel', 1]] },
+  private_security: { role: 'office', income: 26, capacity: 60, consumes: [['fuel', 1]] },
+  fire_station: { role: 'public', income: 22, capacity: 120, consumes: [['fuel', 3], ['parts', 0.5]] },
+  archive: { role: 'office', income: 20, capacity: 40 },
+  museum: { role: 'leisure', service: 'leisure', capacity: 60 },
+  art_gallery: { role: 'retail', service: 'domestic', capacity: 80 },
+  holo_theatre: { role: 'leisure', service: 'leisure', capacity: 100, consumes: [['components', 1]] },
+  holo_arcade: { role: 'leisure', service: 'leisure', capacity: 60, consumes: [['components', 1]] },
+  gym: { role: 'leisure', service: 'leisure', capacity: 40 },
+  school: { role: 'public', income: 20, capacity: 60, consumes: [['staples', 8]] },
+  university: { role: 'public', income: 22, capacity: 120, consumes: [['components', 1]] },
+  temple_annex: { role: 'public', income: 12, capacity: 40 },
+  shrine: { role: 'retail', capacity: 80 },
+  order_house: { role: 'food', service: 'meals', capacity: 120 },
+  caf: { role: 'food', service: 'meals', capacity: 160 },
+  diner: { role: 'food', service: 'meals', capacity: 200 },
+  restaurant: { role: 'food', service: 'meals', capacity: 160 },
+  bakery: { role: 'food', service: 'meals', capacity: 200 },
+  butcher: { role: 'food', service: 'meals', capacity: 200 },
+  grocery: { role: 'food', service: 'meals', capacity: 300 },
+  noodle_bar: { role: 'food', service: 'meals', capacity: 160 },
+  cantina: { role: 'leisure', service: 'leisure', capacity: 160 },
+  night_club: { role: 'leisure', service: 'leisure', capacity: 100, consumes: [['components', 1]] },
+  casino: { role: 'leisure', service: 'leisure', capacity: 100, consumes: [['components', 1]] },
+  bathhouse: { role: 'service', service: 'treatment', capacity: 80, consumes: [['water', 30], ['fuel', 2]] },
+  general_store: { role: 'retail', service: 'domestic', capacity: 400 },
+  market_stall: { role: 'food', service: 'meals', capacity: 300 },
+  hardware_store: { role: 'retail', service: 'domestic', capacity: 400 },
+  furniture_store: { role: 'retail', service: 'domestic', capacity: 200 },
+  electronics: { role: 'retail', service: 'domestic', capacity: 160 },
+  droid_shop: { role: 'workshop', service: 'repair', capacity: 200, consumes: [['parts', 4], ['components', 2]], produces: [{ good: 'parts', from: 'salvage', ratio: 0.25, perDay: 16 }] },
+  tailor: { role: 'retail', service: 'domestic', capacity: 200 },
+  armorer: { role: 'retail', service: 'domestic', capacity: 160 },
+  jeweler: { role: 'retail', service: 'domestic', capacity: 60 },
+  bookshop: { role: 'retail', service: 'domestic', capacity: 120 },
+  garden_shop: { role: 'retail', service: 'domestic', capacity: 300, consumes: [['water', 10]] },
+  speeder_dealer: { role: 'transit', service: 'transit', capacity: 120, consumes: [['fuel', 6], ['parts', 1]] },
+  pawn: { role: 'retail', service: 'domestic', capacity: 120 },
+  pharmacy: { role: 'medical', service: 'treatment', capacity: 200, consumes: [['medical', 6]] },
+  clinic: { role: 'medical', service: 'treatment', capacity: 300, consumes: [['medical', 10], ['water', 10]] },
+  bacta_ward: { role: 'medical', service: 'treatment', capacity: 300, consumes: [['medical', 12], ['water', 20]] },
+  cybernetics_clinic: { role: 'medical', service: 'treatment', capacity: 200, consumes: [['medical', 6], ['components', 2], ['parts', 1]] },
+  holonet_office: { role: 'office', income: 26, capacity: 80, consumes: [['components', 3]] },
+  holo_studio: { role: 'office', income: 22, capacity: 80, consumes: [['components', 2]] },
+  advertising_agency: { role: 'office', income: 24, capacity: 60, consumes: [['components', 1]] },
+  depot: { role: 'wholesale', supplies: ALL_BULK, capacity: 4000, consumes: [['fuel', 6]] },
+  warehouse: { role: 'wholesale', supplies: ALL_BULK, capacity: 4000, consumes: [['fuel', 3]] },
+  foundry: { role: 'producer', supplies: ['parts'], capacity: 1200, consumes: [['fuel', 12]], produces: [{ good: 'parts', from: 'salvage', ratio: 0.2, perDay: 60 }] },
+  refinery: { role: 'wholesale', supplies: ['fuel'], capacity: 2000, consumes: [['parts', 1]] },
+  power_plant: { role: 'utility', service: 'utility', supplies: ['water'], capacity: 3000, consumes: [['fuel', 40], ['parts', 2]], produces: [{ good: 'water', perDay: 1500 }] },
+  recycling_plant: { role: 'producer', supplies: ['salvage'], capacity: 1500, consumes: [['fuel', 4]], produces: [{ good: 'salvage', from: 'waste', ratio: 0.5, perDay: 200 }] },
+  droid_factory: { role: 'producer', supplies: ['parts'], capacity: 800, consumes: [['fuel', 8], ['components', 6]], produces: [{ good: 'parts', from: 'salvage', ratio: 0.25, perDay: 40 }] },
+  repair_shop: { role: 'workshop', service: 'repair', capacity: 300, consumes: [['parts', 6], ['fuel', 2]] },
+  customs: { role: 'terminal', supplies: ALL_BULK, capacity: 12000, consumes: [['fuel', 10], ['components', 1]] },
+  ship_dealer: { role: 'retail', capacity: 60, consumes: [['fuel', 2], ['parts', 1]] },
+  transit_station: { role: 'transit', service: 'transit', capacity: 200, consumes: [['fuel', 16], ['parts', 1]] },
+  taxi_stand: { role: 'transit', service: 'transit', capacity: 120, consumes: [['fuel', 10], ['parts', 0.5]] },
+  hangar: { role: 'workshop', service: 'repair', capacity: 300, consumes: [['fuel', 12], ['parts', 3]] },
+  parking_garage: { role: 'transit', service: 'transit', capacity: 120, consumes: [['fuel', 4]] },
+};
+// Roles that visit rather than work: they are not staff (no wage) - the rest of a kind's roles are its payroll.
+export const VISITOR_JOBS = new Set(['resident', 'lodger', 'patron', 'shopper', 'visitor', 'guest', 'passenger', 'patient', 'gambler', 'applicant', 'child', 'student', 'pilgrim', 'driver']);
+export function staffCount(kind) {
+  const def = CATALOGUE[kind];
+  if (!def) return 0;
+  return def.roles.reduce((n, r) => n + (VISITOR_JOBS.has(r.job) ? 0 : r.count), 0);
+}
+export function tradeFor(kind) {
+  const t = TRADE[kind] || { role: 'service', capacity: 60 };
+  return { role: t.role, supplies: t.supplies || [], consumes: t.consumes || [], produces: t.produces || [], capacity: t.capacity || 60, service: t.service || null, income: t.income || 0, households: !!t.households, staff: staffCount(kind) };
+}
+
 // district -> [kind, weight] (weights favour what a district is for; every kind appears somewhere)
 const DISTRICT_KINDS = {
   senate: [['ministry', 5], ['office', 3], ['law_office', 2], ['archive', 1], ['security_station', 1], ['hotel', 1], ['caf', 1], ['courthouse', 2], ['embassy', 3], ['tax_office', 1], ['licensing_office', 1], ['guard_barracks', 1], ['restaurant', 1], ['museum', 1], ['luxury_residences', 1]],

@@ -66,8 +66,65 @@ export const GOODS = {
   ship_shuttle: { id: null, base: 14000, cat: 'service', service: 'ship', cls: 'shuttle', label: 'Shuttle', desc: 'Eight seats and a hold. The commuter\u2019s ship.' },
   ship_freighter: { id: null, base: 32000, cat: 'service', service: 'ship', cls: 'freighter', label: 'Light freighter', desc: 'Fifty tons of cargo and a galley. Pays for itself.' },
   ship_yacht: { id: null, base: 60000, cat: 'service', service: 'ship', cls: 'yacht', label: 'Star yacht', desc: 'Chromium hull, senator-grade cabins.' },
+  // wholesale goods (economy v2, rubric 15 #1): the ten categories of spec section 10 as bulk units that move between
+  // businesses in shipments and are turned into retail items / services on site. No inventory item (id null); a unit
+  // is a batch (one meal's ingredients, one canister, one fuel cell, one kit, one bale, one crate of scrap).
+  staples: { id: null, base: 3, cat: 'staple', bulk: true, label: 'Staple ingredients', unit: 'crate' },
+  water: { id: null, base: 2, cat: 'water', bulk: true, label: 'Clean water', unit: 'canister' },
+  fuel: { id: null, base: 12, cat: 'fuel', bulk: true, label: 'Fuel cells', unit: 'cell' },
+  parts: { id: null, base: 25, cat: 'parts', bulk: true, label: 'Machine parts', unit: 'part' },
+  components: { id: null, base: 30, cat: 'electronics', bulk: true, label: 'Electronic components', unit: 'board' },
+  medical: { id: null, base: 20, cat: 'medical', bulk: true, label: 'Medical supplies', unit: 'kit' },
+  textiles: { id: null, base: 8, cat: 'domestic', bulk: true, label: 'Textiles & domestic goods', unit: 'bale' },
+  salvage: { id: null, base: 5, cat: 'salvage', bulk: true, label: 'Reusable salvage', unit: 'crate' },
+  waste: { id: null, base: 0, cat: 'waste', bulk: true, label: 'Waste', unit: 'bin' },
 };
 export const SHIP_CLASSES = ['speeder', 'shuttle', 'freighter', 'yacht'];
+export const BULK_GOODS = Object.keys(GOODS).filter((k) => GOODS[k].bulk);
+// Retail item category -> the wholesale good it is unpacked / cooked from (rubric 15 #1); glow panels, holo signs and
+// consoles are electronics although they place as blocks (cat material), so they carry their own `bulk` below.
+export const BULK_OF_CAT = { food: 'staples', meat: 'staples', produce: 'staples', hide: 'staples', material: 'textiles', ore: 'parts' };
+for (const k of ['glow_panel', 'glow_panel_blue', 'holo_sign', 'console']) GOODS[k].bulk = 'components';
+// The wholesale input of a retail good (null for services and for bulk goods themselves).
+export function bulkOf(key) {
+  const g = GOODS[key];
+  if (!g || g.service) return null;
+  if (g.bulk === true) return null;
+  if (typeof g.bulk === 'string') return g.bulk;
+  return BULK_OF_CAT[g.cat] || null;
+}
+export const isBulk = (key) => !!(GOODS[key] && GOODS[key].bulk === true);
+export const goodLabelOf = (key) => { const g = GOODS[key]; return g && g.label ? g.label : String(key).replace(/^raw_/, 'raw ').replace(/^cooked_/, 'cooked ').replace(/_/g, ' '); };
+
+// ---------------------------------------------------------------------------------------------- price rule (v2)
+// asking price = base x district x (clamp(target / available, FACTOR_MIN, FACTOR_MAX) + disruption)
+//   factor      : scarcity - a full shelf quotes 0.75 of base, an empty one 1.75 (documented in docs/overhaul/economy.md)
+//   disruption  : bounded modifier from the business's supply state (overdue orders, detained shipments, oversupply),
+//                 clamped to [DISRUPTION_MIN, DISRUPTION_MAX]; 0 for a business with nothing going on
+// The vendor's bid for the player's goods is SELL_RATIO x the ask it would quote after taking the unit (so selling
+// into a shortage pays well but every unit sold lowers the next bid: arbitrage loops converge, rubric 15 #9).
+export const FACTOR_MIN = 0.75, FACTOR_MAX = 1.75;
+export const DISRUPTION_MIN = -0.25, DISRUPTION_MAX = 0.35;
+export function scarcityFactor(target, available) {
+  if (!(target > 0)) return 1;
+  if (!(available > 0)) return FACTOR_MAX;
+  const f = target / available;
+  return f < FACTOR_MIN ? FACTOR_MIN : f > FACTOR_MAX ? FACTOR_MAX : f;
+}
+export const clampDisruption = (d) => (!(d > DISRUPTION_MIN) ? DISRUPTION_MIN : d > DISRUPTION_MAX ? DISRUPTION_MAX : d);
+// Asking price of one unit at a business (base already resolved: vendor override or the book).
+export function askPrice(base, district, target, available, disruption = 0) {
+  if (base == null) return null;
+  const v = base * districtMult(district) * (scarcityFactor(target, available) + clampDisruption(disruption));
+  return Math.max(1, Math.round(v));
+}
+// What the business pays for one unit it buys from the player (null below the minimum offer).
+export function bidPrice(base, district, target, available, disruption = 0, pawn = false) {
+  if (base == null) return null;
+  const ask = base * districtMult(district) * (scarcityFactor(target, available + 1) + clampDisruption(disruption));
+  const v = ask * (pawn ? PAWN_RATIO : SELL_RATIO);
+  return v < MIN_OFFER ? null : Math.max(1, Math.round(v));
+}
 export const SHIP_GOODS = { speeder: 'ship_speeder', shuttle: 'ship_shuttle', freighter: 'ship_freighter', yacht: 'ship_yacht' };
 
 // Per-district price multipliers (rubric: undercity 0.8, senate 1.4). The undercity is the entertainment district's
