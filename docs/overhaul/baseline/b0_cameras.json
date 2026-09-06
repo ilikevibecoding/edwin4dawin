@@ -1,0 +1,289 @@
+{
+ "base": "http://localhost:5173",
+ "quality": "cinematic",
+ "rd": "10",
+ "resolution": "1280x720",
+ "seed": 1337,
+ "views": [
+  {
+   "name": "senate_approach_ground",
+   "x": 2974.5,
+   "y": 61.2,
+   "z": 62,
+   "yaw": 0,
+   "pitch": 4,
+   "time": 0.5,
+   "note": "Senate south approach at street level"
+  },
+  {
+   "name": "senate_aerial_se",
+   "x": 3080,
+   "y": 210,
+   "z": 230,
+   "yaw": 45,
+   "pitch": -30,
+   "time": 0.5,
+   "note": "Senate from 200 blocks SE"
+  },
+  {
+   "name": "senate_chamber_pit",
+   "x": 2974.5,
+   "y": 61.2,
+   "z": 6.5,
+   "yaw": 0,
+   "pitch": 6,
+   "time": 0.5,
+   "note": "Convocation chamber from the pit"
+  },
+  {
+   "name": "senate_chamber_gallery",
+   "x": 2974.5,
+   "y": 76.2,
+   "z": -40,
+   "yaw": 180,
+   "pitch": -12,
+   "time": 0.5,
+   "note": "Chamber from the y76 gallery"
+  },
+  {
+   "name": "spaceport_pads_day",
+   "x": 2621,
+   "y": 98,
+   "z": 44,
+   "yaw": 0,
+   "pitch": -6,
+   "time": 0.5,
+   "note": "Westport terminal and pads"
+  },
+  {
+   "name": "spaceport_pads_night",
+   "x": 2621,
+   "y": 98,
+   "z": 44,
+   "yaw": 0,
+   "pitch": -6,
+   "time": 0,
+   "note": "Westport at night"
+  },
+  {
+   "name": "spaceport_pad_ground",
+   "x": 2596,
+   "y": 97.2,
+   "z": -52,
+   "yaw": 180,
+   "pitch": 2,
+   "time": 0.5,
+   "note": "A landed ship from pad level"
+  },
+  {
+   "name": "frontier_station_deck",
+   "x": 262,
+   "y": 100,
+   "z": 8,
+   "yaw": 90,
+   "pitch": -12,
+   "time": 0.5,
+   "note": "Frontier station and mini spaceport"
+  },
+  {
+   "name": "boulevard_senate_district",
+   "x": 2975,
+   "y": 97.2,
+   "z": 120,
+   "yaw": 180,
+   "pitch": 2,
+   "time": 0.5,
+   "note": "Ordinary boulevard, Senate district"
+  },
+  {
+   "name": "boulevard_financial",
+   "x": 3200,
+   "y": 97.2,
+   "z": -300,
+   "yaw": 90,
+   "pitch": 2,
+   "time": 0.45,
+   "note": "Ordinary boulevard, financial district"
+  },
+  {
+   "name": "street_residential_ground",
+   "x": 3300,
+   "y": 61.2,
+   "z": 300,
+   "yaw": 0,
+   "pitch": 2,
+   "time": 0.5,
+   "note": "Residential undercity street"
+  },
+  {
+   "name": "undercity_strip_night",
+   "x": 2748,
+   "y": 61.2,
+   "z": 386,
+   "yaw": 0,
+   "pitch": 3,
+   "time": 0,
+   "note": "Uscru strip at night"
+  },
+  {
+   "name": "undercity_generic_alley",
+   "x": 2900,
+   "y": 61.2,
+   "z": -250,
+   "yaw": 90,
+   "pitch": 0,
+   "time": 0.5,
+   "note": "Generic undercity alley, industrial"
+  },
+  {
+   "name": "interior_office_floor",
+   "x": 3010,
+   "y": 76.2,
+   "z": -40,
+   "yaw": 90,
+   "pitch": 0,
+   "time": 0.45,
+   "note": "A generic office floor"
+  },
+  {
+   "name": "interior_apartment",
+   "x": 3300,
+   "y": 81.2,
+   "z": 320,
+   "yaw": 0,
+   "pitch": 0,
+   "time": 0.6,
+   "note": "A generic apartment floor"
+  },
+  {
+   "name": "interior_market_hall",
+   "x": 2749.5,
+   "y": 61.2,
+   "z": -95.5,
+   "yaw": 0,
+   "pitch": 2,
+   "time": 0.5,
+   "note": "Market hall stalls"
+  },
+  {
+   "name": "interior_diner",
+   "x": 2765,
+   "y": 61.2,
+   "z": 340,
+   "yaw": 0,
+   "pitch": 3,
+   "time": 0.5,
+   "note": "Dex's-style diner"
+  },
+  {
+   "name": "interior_medcenter_bacta",
+   "x": 3281,
+   "y": 61.2,
+   "z": 207,
+   "yaw": 0,
+   "pitch": 8,
+   "time": 0.5,
+   "note": "Bacta hall"
+  },
+  {
+   "name": "interior_opera_house",
+   "x": 2608.5,
+   "y": 81.2,
+   "z": 212,
+   "yaw": 180,
+   "pitch": 6,
+   "time": 0.5,
+   "note": "Opera auditorium from the stage"
+  },
+  {
+   "name": "temple_from_plaza",
+   "x": 3162,
+   "y": 97,
+   "z": -95,
+   "yaw": 0,
+   "pitch": 22,
+   "time": 0.5,
+   "note": "Jedi Temple from the plaza"
+  },
+  {
+   "name": "temple_hangar",
+   "x": 3106.5,
+   "y": 61.2,
+   "z": -200,
+   "yaw": 0,
+   "pitch": 4,
+   "time": 0.5,
+   "note": "Temple hangar"
+  },
+  {
+   "name": "upper_city_skyline_day",
+   "x": 3000,
+   "y": 260,
+   "z": 560,
+   "yaw": 0,
+   "pitch": -14,
+   "time": 0.5,
+   "note": "Skyline from the south, day"
+  },
+  {
+   "name": "upper_city_skyline_night",
+   "x": 3000,
+   "y": 260,
+   "z": 560,
+   "yaw": 0,
+   "pitch": -14,
+   "time": 0,
+   "note": "Skyline from the south, night"
+  },
+  {
+   "name": "plateau_edge_sea_west",
+   "x": 2500,
+   "y": 130,
+   "z": 0,
+   "yaw": 90,
+   "pitch": -12,
+   "time": 0.5,
+   "note": "Plateau edge looking over the sea (orange-sea camera)"
+  },
+  {
+   "name": "hyperlane_sea_sunset",
+   "x": 1500,
+   "y": 150,
+   "z": 0,
+   "yaw": 90,
+   "pitch": -14,
+   "time": 0.71,
+   "note": "Hyperlane over the sea at sunset (orange-sea camera)"
+  },
+  {
+   "name": "hyperlane_sea_down",
+   "x": 1500,
+   "y": 175,
+   "z": 0,
+   "yaw": 90,
+   "pitch": -45,
+   "time": 0.71,
+   "note": "Looking down at the sea at sunset"
+  },
+  {
+   "name": "ship_in_flight_close",
+   "x": 2700,
+   "y": 140,
+   "z": 0,
+   "yaw": -90,
+   "pitch": 5,
+   "time": 0.3,
+   "note": "Ships in flight near the port"
+  },
+  {
+   "name": "monument_plaza_top",
+   "x": 3226,
+   "y": 150,
+   "z": -40,
+   "yaw": 0,
+   "pitch": -80,
+   "time": 0,
+   "note": "Monument Plaza top-down at night"
+  }
+ ]
+}

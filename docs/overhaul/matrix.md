@@ -1,0 +1,35 @@
+# Requirement -> implementation -> test matrix
+
+Every numbered section of `SPEC.md` maps to the workstream(s) that implement it and the test that proves it. Status
+values: `todo`, `running` (a builder has it), `merged` (on the branch, unverified by a critic), `verified` (critic or
+automated evidence recorded), `blocked` (with the blocker). Denominators come from `manifest.md`.
+
+| Spec | Requirement (short) | Implementation | Test / evidence | Status |
+| --- | --- | --- | --- | --- |
+| 1 | Clone Wars era; no era mixing; block identity; three scales; district character | dialog/NPC banks (W4), purposes (W5), towers (W1), critics' era guard | reference ledger era flags; critic pass per district | running |
+| 2 | Inspect + inventory; stable-ID manifest; 24 baseline views; save migration; matrix | `scripts/manifest.mjs` -> `manifest.json/md`; `scripts/baseline-views.mjs` -> `docs/overhaul/baseline/`; this file; save fields are additive (mode, credits) with defaults | manifest counts published; baseline PNGs + camera JSON committed | merged (manifest), running (baseline captures) |
+| 3 | Reference ledger, >= 30 views, decisions | `docs/overhaul/reference_ledger.md` (librarian agent) | ledger present with >= 30 views, each with 3 observations + decision | running |
+| 4 | Remove the orange sea; lower city with depth; 3 vertical connections; fall recovery | round-1 fix: clouds to 192, pale sunset tint, height-aware fog, neutral downward fog, capped glint (merged); lower city = W8 (`src/coruscant/lowercity.js`, worldgen coruscant surroundings) | before/after from the original cameras (`baseline_sunset_cloud_deck_before.png` vs `fix_sunset_clouds_raised_sea_blue_after.png`); W8: lift/freight/unofficial route CDP walks, fall -> respawn on the nearest deck | merged (sea colour), todo (lower city) |
+| 5 | Districts as a system: arrival, 2 destinations, transport, quiet place, dependency | purposes per district (W5), population + schedules (W4), transit (W3/W6), economy chains (W5) | per-district checklist in `districts.md` with coordinates + a walk | running |
+| 6 | Design dossier per building; no repeated occupied interiors; 4 differences per same-family pair | dossiers generated from purpose + rooms + roles (`scripts/dossiers.mjs`, W9); room-graph similarity audit (`scripts/room-similarity.mjs`, W9); tower families vary programs per floor (W1 + rooms) | similarity report: closest pairs listed with their differences; bottom-decile review | todo |
+| 7 | Required building programs (20) with completion tests | Senate (W8-senate), delegation offices, Temple precinct, passenger terminal + cargo terminal + repair hangar (W6 + W2 + W5), droid workshop, diner, cantina, opera, market, clinic, worker/affluent apartments, transit interchange (W3/W6), security station, utility plant, salvage yard, criminal front, community hall (W9 programs wave) | one CDP "prove the purpose" script per program in `scripts/programs/` | todo |
+| 8 | Senate centrepiece: chamber volume, 12 delegation suites, sessions, 3 policy scenarios, Jedi liaisons, two routes | `src/coruscant/landmarks/senate.js` rebuild + `src/senate/` session state machine + policies (W8-senate, after W4/W5 land) | session test (enter, leave, return, vote tally, downstream effects), visitor + service route walks | todo |
+| 9 | Ports operate; 6 vehicle families; volumetric ships; interiors; boarding; port cycle | W2 (fleet, `ShipVehicle`, port cycle states), W6 (spaceport x4, hangars, terminus) | `scripts/test-ships.mjs` scorecards; ride test; port-cycle interlock test | running (W2), todo (W6) |
+| 10 | Economy: goods catalog, businesses with inventory/suppliers/customers, chains, atomic transactions, price rule 0.75-1.75, sources/sinks, visible state | W5 (`src/economy/**`) + follow-up pass for chains/price rule/ledger | `scripts/test-economy.mjs` (conservation, arbitrage loop, restock), multi-day sim | running |
+| 11 | Persistent NPCs with identity, states, stations, relationships, knowledge | W4 population + follow-up pass (relationships, knowledge sources, states) | census, day-follow test, blockage recovery | running |
+| 12 | >= 30 lines per persistent NPC with distribution, IDs, triggers, cooldowns; audio or explicit unvoiced fallback | W4 dialog banks (20 now -> 30 with distribution in pass 2); speech via Web Speech API where voices exist, subtitles + dialogue volume, unvoiced fallback manifest | `scripts/test-dialog.mjs` (distribution, reachability, repeat suppression); audio coverage report | running |
+| 13 | Starting cast of 13 anchors | W4 pass 2: named NPCs bound to specific lots (dockmaster at the port, mechanic at a repair hangar, ...) | manifest `npcs.coruscant` lists the 13 with home/work IDs | todo |
+| 14 | Factions, reputation vs suspicion vs warrants, information spread | `src/factions/` (W9) | faction test: witnessed theft vs favour vs leak effects | todo |
+| 15 | >= 8 stateful surprises | `src/events/` (W9) | per-event state test with interruption/recovery | todo |
+| 16 | Ambience per district, interaction affordances, subtitles/volume, perf declaration | audio zones (W3/W2 hums exist), HUD affordances (W5), settings (integrator) | bench JSON with machine declaration; settings screenshot | todo |
+| 17 | Building rubric scoring for EVERY playable building | `scripts/score-buildings.mjs` (automated categories) + critic scorecards | scorecards under `docs/overhaul/scores/` | todo |
+| 18 | Three world assessments >= 85, gauntlet loop, held-out 25%, failure log | `docs/overhaul/gauntlet.md`, `failure_log.md`, held-out list frozen at baseline | published inputs per assessment | todo |
+| 19 | Acceptance tests that run | scripts listed above + 30-min normal-play session recording | logs in `docs/overhaul/acceptance/` | todo |
+| 20 | Execution order: baseline -> sea -> slice -> Senate/ships -> rollout -> gauntlet | this round's waves (see `ROUND6_PLAN.md`) | this matrix | running |
+
+## Calibration slice (spec 20)
+
+Port (Westport terminal, `port:coruscant`) -> warehouse (a `depot` lot in the industrial district) -> repair hangar
+(`repair_shop` lot next to the pads) / diner (`diner` lot in CoCo Town) -> residences (`apartments` lot, residential
+district) / clinic (`clinic` lot) -> civic connection (Senate petition office). Lot IDs are assigned when W5's purposes
+land (they are deterministic; the slice pins them in `slice.md`).
