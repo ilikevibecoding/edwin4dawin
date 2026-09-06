@@ -6,8 +6,18 @@ import { writeFileSync } from 'node:fs';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let portCounter = 9400 + Math.floor(Math.random() * 400);
 
+// Several worktrees run their own headless Chromes in the same port range; a port that already answers /json
+// belongs to someone else's browser and attaching to it would drive their page instead of ours.
+async function freePort() {
+  for (let tries = 0; tries < 400; tries++) {
+    const port = 9400 + ((portCounter++ - 9400) % 400);
+    try { await fetch(`http://127.0.0.1:${port}/json/version`, { signal: AbortSignal.timeout(300) }); } catch (e) { return port; }
+  }
+  throw new Error('no free CDP port in 9400..9799');
+}
+
 export async function launchPage(url, { width = 1280, height = 800, profile = null, onConsole = null } = {}) {
-  const port = portCounter++;
+  const port = await freePort();
   const dir = profile || `/tmp/chrome-cdp-${port}`;
   const chrome = spawn(process.env.CHROME || 'google-chrome', [
     '--headless=new', '--no-sandbox', '--disable-gpu-sandbox', `--user-data-dir=${dir}`, '--use-gl=angle', '--use-angle=swiftshader',
