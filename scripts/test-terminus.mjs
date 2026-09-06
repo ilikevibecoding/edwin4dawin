@@ -244,9 +244,13 @@ try {
   // show against the timetable
   ride = await ev(`__t.ride(${Math.ceil(LEG_CT * 20)}, () => __t.train().state.phase !== 'launch', ${JSON.stringify(box)}, null)`);
   const launch = { phases: ride.phases, vmax: ride.vmax, viol: ride.viol.length, notRiding: ride.notRiding };
-  await page.sleep(1200);
-  const mid = await ev('(() => { const t = __t.train(), s = t.state; return { phase: s.phase, v: s.v, phaseT: s.phaseT, key: t.display && t.display.lastKey, x0: s.x0 }; })()');
-  const m = /ARRIVING IN (\d+):(\d\d)/.exec(mid.key || '');
+  // the boards redraw on frames (every 0.5 s); the first frames after the ride go to meshing the undercroft chunks
+  let mid = null, m = null;
+  for (let i = 0; i < 10 && !m; i++) {
+    await page.sleep(400);
+    mid = await ev('(() => { const t = __t.train(), s = t.state; return { phase: s.phase, v: s.v, phaseT: s.phaseT, key: t.display && t.display.lastKey, x0: s.x0 }; })()');
+    m = /ARRIVING IN (\d+):(\d\d)/.exec(mid.key || '');
+  }
   const shown = m ? +m[1] * 60 + +m[2] : -1, expected = RIDE_TIME - mid.phaseT;
   check('at the peak of the leg the boards count down to the terminus (ARRIVING IN = time to the dock)', /^(brake|cruise)$/.test(mid.phase) && m && Math.abs(shown - expected) <= 2.5, `shown ${shown} s vs ${expected.toFixed(1)} s at v ${Math.abs(mid.v).toFixed(1)}, ${mid.phase}`);
   await shot('01_leg_to_terminus_interior');
@@ -275,7 +279,7 @@ try {
   const off = await ev(`__t.walk('KeyW', Math.PI, 60, () => { const p = game.player; return !__t.train().isPlayerRiding() && p.pos.z > 4.5; })`);
   log('  step off', JSON.stringify(off));
   check('stepped off through the open door onto platform 1 (feet 92 on the platform floor, alive, not riding)', !off.riding && off.z > 3.5 && Math.abs(off.y - floorY) < 0.01 && !off.dead && /deck|durasteel|plate|glow|slab|stripe/i.test(off.below), `at ${off.x},${off.y},${off.z} on ${off.below}`);
-  await ev(`game.player.teleport(${doorXs[2] + 1}, ${floorY}, 6.5); game.player.yaw = 0; game.player.pitch = 0.05; true`);
+  await ev(`game.player.teleport(${doorXs[1] + 1}, ${floorY}, 8.5); game.player.yaw = 0; game.player.pitch = 0.05; true`);
   await page.sleep(1200);
   await shot('02_terminus_platform1_docked_train');
 
@@ -299,7 +303,7 @@ try {
   const up = await ev(`__t.walk('KeyW', Math.PI / 2, 140, () => game.player.pos.x < ${stair.x0 - 1.5})`);
   log('  up', JSON.stringify(up));
   check('walked west up the ten half steps from platform 1 (92) into the hall (97), no jump, no damage', Math.abs(up.y - DECK_Y) < 0.01 && up.x < stair.x0 - 1 && up.hp === 20 && !up.dead, `at ${up.x},${up.y},${up.z} after ${up.used} ticks`);
-  await ev(`game.player.pitch = -0.35; true`);
+  await ev(`game.player.yaw = -Math.PI / 2; game.player.pitch = -0.3; true`);   // turn round: the flight down to platform 1
   await page.sleep(1000);
   await shot('03_stair_head_in_the_hall');
   const down = await ev(`__t.walk('KeyW', -Math.PI / 2, 140, () => game.player.pos.x > ${stair.x0 + 11.5})`);
