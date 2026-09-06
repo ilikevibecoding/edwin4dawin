@@ -13,6 +13,62 @@ import { SAND_TILE, createGroundDetailTextures, type GroundDetailTextures } from
  */
 export function balanceGroundIbl(_shader: { fragmentShader: string }): void {}
 
+/** A building standing on the ground, as city.ts places it: centre, full width / depth, yaw in the lot convention
+ *  (world x' = x cos - z sin, z' = x sin + z cos; a house's street is on its local -z side). */
+export interface Footprint { x: number; z: number; w: number; d: number; h: number; rot: number; kind: string; style: number }
+
+/** The lot map: one texel per LOT_CELL metres over the world, each holding the house nearest to it (within
+ *  LOT_REACH m of the texel centre) so the ground shader can lay that house's drive, path, patio and the bare
+ *  contact ring at its walls exactly where the instanced house stands. RGBA8: rg = offset from the texel centre to
+ *  the house centre over +-LOT_RANGE m, b = yaw over 2 pi, a = the half sizes, 4 bits each (LOT_HALF_MIN + q *
+ *  LOT_HALF_STEP m); a = 0 marks no house. Houses only (city.ts kind 'house', style S.HOUSE, 7-26 m): they stand
+ *  in their yards, and their neighbours are 16-24 m along the street, so a house's own features (within its half
+ *  width of its centre, to 15 m out on the street side) are always closer to it than to any other. */
+const LOT_N = 2048;
+const LOT_CELL = WORLD_SIZE / LOT_N;
+/** the offset quantum: 24 per texel, so every texel centre lies on one grid of house centres and all the texels
+ *  of a house decode the same centre exactly (a hash of it picks the side of the drive) */
+const LOT_STEP = LOT_CELL / 24;
+const LOT_REACH = 21;
+const LOT_HALF_MIN = 2.5, LOT_HALF_STEP = 0.75;
+const HOUSE_STYLE = 5;
+
+export function bakeLots(footprints: readonly Footprint[]): Uint8Array {
+  const out = new Uint8Array(LOT_N * LOT_N * 4);
+  const best = new Float32Array(LOT_N * LOT_N).fill(Infinity);
+  const reach2 = LOT_REACH * LOT_REACH;
+  const origin = -HALF + 0.5 * LOT_CELL; // texel 0's centre, the grid's anchor
+  for (const f of footprints) {
+    if (f.kind !== 'house' || f.style !== HOUSE_STYLE || f.w < 7 || f.w > 26 || f.d > 26) continue;
+    // the house centre on the offset grid
+    const kx = Math.round((f.x - origin) / LOT_STEP), kz = Math.round((f.z - origin) / LOT_STEP);
+    const hx = origin + kx * LOT_STEP, hz = origin + kz * LOT_STEP;
+    const i0 = Math.max(0, Math.floor((hx - LOT_REACH + HALF) / LOT_CELL)), i1 = Math.min(LOT_N - 1, Math.ceil((hx + LOT_REACH + HALF) / LOT_CELL));
+    const j0 = Math.max(0, Math.floor((hz - LOT_REACH + HALF) / LOT_CELL)), j1 = Math.min(LOT_N - 1, Math.ceil((hz + LOT_REACH + HALF) / LOT_CELL));
+    const yaw = ((f.rot % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+    const qw = Math.min(15, Math.max(0, Math.ceil((f.w * 0.5 - LOT_HALF_MIN) / LOT_HALF_STEP)));
+    const qd = Math.min(15, Math.max(0, Math.ceil((f.d * 0.5 - LOT_HALF_MIN) / LOT_HALF_STEP)));
+    for (let j = j0; j <= j1; j++) {
+      const dz = hz - (origin + j * LOT_CELL);
+      const vz = kz - j * 24 + 128;
+      for (let i = i0; i <= i1; i++) {
+        const dx = hx - (origin + i * LOT_CELL);
+        const d2 = dx * dx + dz * dz;
+        const idx = j * LOT_N + i;
+        if (d2 > reach2 || d2 >= best[idx]) continue;
+        const vx = kx - i * 24 + 128;
+        if (vx < 0 || vx > 255 || vz < 0 || vz > 255) continue;
+        best[idx] = d2;
+        out[idx * 4] = vx;
+        out[idx * 4 + 1] = vz;
+        out[idx * 4 + 2] = Math.round(255 * yaw / (2 * Math.PI)) % 256;
+        out[idx * 4 + 3] = Math.max(1, qw * 16 + qd);
+      }
+    }
+  }
+  return out;
+}
+
 /** GPU textures shared by terrain, water and anything that needs to know the ground height. */
 export class MapTextures {
   height: THREE.DataTexture;
@@ -333,6 +389,8 @@ uniform sampler2D uGroundTex; // r grass clumps, g bare-patch mask, b soil grain
 uniform sampler2D uSandTex;   // r sand grain / shells, g ripple height, ba ripple normal xz
 uniform vec4 uGroundMean;     // what each channel averages to once the tile is far below a pixel
 uniform vec4 uSandMean;
+uniform sampler2D uLotTex;    // the lot map (bakeLots): rg house offset, b yaw, a half sizes, a = 0 no house
+uniform float uLotN;
 uniform float uWorldSize;
 uniform float uMapN;
 varying vec3 vWorldPos;
@@ -428,12 +486,16 @@ Ground groundDetail(vec2 wp, float w, float w2, float foot) {
   }
   return g;
 }
-// ground under a tree canopy: leaf litter and dark soil with blotches of shaded foliage so that thinned
-// distant planting still reads as a continuous dark-green mass from altitude; the litter carries the soil grain
+// ground under a tree canopy, as seen through the gaps between the crowns: mostly the shrub and fern understory
+// in the trees' shade (dark greens), grey-brown leaf litter and humus in patches where nothing grows, so thinned
+// distant planting still reads as a continuous dark-green mass from altitude. The litter alone, in the orange-brown
+// it had, read as "brown mud" under the wooded keys from 120 m (h13 highway_200m).
 vec3 canopyFloor(float n1, float n2, Ground gd) {
-  vec3 litter = vec3(0.062, 0.045, 0.022) * (0.78 + 0.44 * gd.soil);
-  vec3 shade = vec3(0.017, 0.036, 0.011) * (0.86 + 0.28 * gd.grass);
-  vec3 c = mix(litter, shade, smoothstep(0.38, 0.66, n2 + 0.12 * n1));
+  vec3 litter = vec3(0.046, 0.038, 0.025) * (0.78 + 0.44 * gd.soil);
+  vec3 shrub = vec3(0.022, 0.044, 0.014) * (0.8 + 0.4 * gd.grass);
+  vec3 fern = vec3(0.034, 0.062, 0.020);
+  vec3 c = mix(litter, shrub, smoothstep(0.28, 0.56, n2 + 0.12 * n1));
+  c = mix(c, fern, smoothstep(0.6, 0.78, n2) * 0.6);
   return c * (0.85 + 0.3 * n1);
 }
 // open ground of the tropical lowland: lawn, dry grass and bare sandy soil in broad patches (n3, n4), worn
@@ -466,6 +528,61 @@ vec3 midriseGround(float n1, float n2, vec2 wp, Ground gd, float foot) {
   vec3 lawn = vec3(0.072, 0.11, 0.045) * (0.78 + 0.44 * gd.grass);
   return mix(c, lawn, smoothstep(0.6, 0.75, fbm3Band(wp * 0.02 + 1.0, 1.0 - smoothstep(4.0, 8.0, foot))) * 0.7 * (1.0 - 0.6 * gd.bare));
 }
+// The yard of the house nearest this point (the lot map, bakeLots): the drive from the garage end of the front
+// to the street, the front path, a patio behind, mulched beds and shrubs against the walls with the shade under
+// the eaves, and the lawn worn along the drive; the wear and the beds keep the house grounded on its lot and the
+// paving gives the block its grain of lots from 130-180 m up (the h13 suburbs were flat lawns with boxes on them).
+// House-local frame as city.ts places it: x along the front, z toward the back, the street on the -z side.
+void yardFeatures(inout vec3 c, vec2 wp, float foot, float n1, Ground gd) {
+  float vis = 1.0 - smoothstep(1.5, 2.5, foot);
+  if (vis <= 0.0) return;
+  vec2 t = (wp + vec2(uWorldSize * 0.5)) / uWorldSize * uLotN;
+  vec4 lot = texelFetch(uLotTex, ivec2(clamp(t, vec2(0.0), vec2(uLotN - 1.0))), 0);
+  if (lot.a <= 0.0) return;
+  float cell = uWorldSize / uLotN;
+  vec2 texelC = (floor(t) + 0.5) * cell - uWorldSize * 0.5;
+  vec2 v = floor(lot.rg * 255.0 + 0.5);
+  vec2 hc = texelC + (v - 128.0) * (cell / 24.0);
+  float aq = floor(lot.a * 255.0 + 0.5);
+  float qw = floor(aq / 16.0);
+  vec2 hs = vec2(2.5) + 0.75 * vec2(qw, aq - qw * 16.0);
+  float yaw = lot.b * 6.2831853;
+  float cr = cos(yaw), sr = sin(yaw);
+  vec2 rel = wp - hc;
+  vec2 l = vec2(rel.x * cr + rel.y * sr, -rel.x * sr + rel.y * cr);
+  // the house's own hash from its grid index (exact, the same in every texel that points to it)
+  vec2 key = floor((hc + vec2(uWorldSize * 0.5)) / (cell / 24.0) + 0.5);
+  vec2 hh = hash22(key * 0.013 + 3.1);
+  float side = hh.x < 0.5 ? -1.0 : 1.0;
+  float aa = max(0.15, 0.6 * foot);
+  // distance to the walls (negative inside the footprint)
+  vec2 q = abs(l) - hs;
+  float dEdge = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+  // the front yard band the drive and the path cross: the front wall to the kerb, 12-18 m from the centre by
+  // the block's depth (not stored): they run to 19 m, and the sidewalk meshes and the baked carriageway cover
+  // the excess on the shallow lots
+  float front = smoothstep(-19.0 - aa, -19.0, l.y) * (1.0 - smoothstep(-hs.y, -hs.y + aa, l.y));
+  float drive = (1.0 - smoothstep(1.35 - aa, 1.35 + aa, abs(l.x - side * (hs.x - 1.6)))) * front;
+  float path = (1.0 - smoothstep(0.5 - aa, 0.5 + aa, abs(l.x + side * hs.x * 0.35))) * front;
+  // patio behind the back door
+  vec2 pq = abs(l - vec2(-side * hs.x * 0.2, hs.y + 2.0)) - vec2(2.6, 1.7);
+  float patio = 1.0 - smoothstep(-aa, aa, max(pq.x, pq.y));
+  float ring = 1.0 - smoothstep(0.25, 1.7, dEdge);
+  // the lawn is worn to soil along the drive and thin against the beds
+  float wear = (1.0 - smoothstep(1.4, 2.8, abs(l.x - side * (hs.x - 1.6)))) * front * 0.45 + ring * 0.35;
+  vec3 soilC = vec3(0.21, 0.16, 0.105) * (0.78 + 0.44 * gd.soil);
+  c = mix(c, soilC, wear * smoothstep(0.35, 0.65, gd.bare + 0.3 * n1) * vis);
+  vec3 beds = mix(vec3(0.05, 0.042, 0.03), vec3(0.028, 0.052, 0.02), smoothstep(0.4, 0.7, n1 + 0.3 * (hh.y - 0.5)));
+  c = mix(c, beds, ring * 0.8 * vis);
+  c *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.7, dEdge)) * vis; // the eaves' shade
+  // a concrete drive on most lots, asphalt on some; the path concrete, the patio pavers
+  vec3 concrete = vec3(0.28, 0.27, 0.25) * (0.94 + 0.12 * n1);
+  vec3 driveC = hh.y < 0.3 ? vec3(0.055, 0.055, 0.056) * (0.9 + 0.2 * n1) : concrete;
+  vec3 pavers = vec3(0.25, 0.22, 0.19) * (0.94 + 0.12 * n1);
+  vec3 pave = drive >= max(path, patio) ? driveC : (path >= patio ? concrete : pavers);
+  float paved = max(max(drive, path), patio) * vis;
+  c = mix(c, pave, paved * 0.92);
+}
 // Suburban ground. Near the camera: lawns, dry yards and sandy lots under the street trees (the houses
 // themselves are instanced). Where the house instances go subpixel a baked mottle takes over: roofs at
 // house scale on their lots, pale commercial roofs and dark car parks along the arterials, each street
@@ -484,6 +601,7 @@ vec3 suburbGround(vec2 wp, float n1, float n2, float n3, float n4, float canopy,
   c = mix(c, lot, smoothstep(0.55, 0.7, fbm3Band(wp * 0.03 + 5.0, 1.0 - smoothstep(3.0, 6.0, foot))) * 0.6);
   c *= 0.84 + 0.28 * tone;
   c = mix(c, c * vec3(0.9, 1.04, 0.86), smoothstep(0.6, 0.9, tone) * 0.5);
+  yardFeatures(c, wp, foot, n1, gd);
   float farF = smoothstep(1200.0, 3800.0, dist);
   if (farF > 0.0) {
     vec2 cellP = wp / 13.0;
@@ -564,13 +682,17 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
   gd = groundDetail(wp, w, w2, foot);
   rough = 0.9;
   vec3 c;
-  // sandy fringe where the land ramps up from a sandy shore (sheltered lake and canal banks stay grassy); the
-  // beach zone ends at about h 1.3-1.9 (map.ts: ramp 0.45), so both sides meet on the scrub at the same height
-  float sandy = (1.0 - smoothstep(1.2, 2.3, h)) * smoothstep(0.06, 0.28, expo);
   // the floor darkens with the square of the cover: under a thin, gappy canopy the ground is still the open
   // ground with tree shadows on it, the litter floor belongs to the closed hammock
   float canopy = smoothstep(0.30, 0.82, veg);
   canopy *= canopy;
+  // sandy fringe where the land ramps up from a sandy shore (sheltered lake and canal banks stay grassy); the
+  // beach zone ends at about h 1.3-1.9 (map.ts: ramp 0.45), so both sides meet on the scrub at the same height.
+  // Its inland edge wanders +-0.4 m in height on the 20-125 m noises and ramps over 1.8 m instead of 1.1, so it is
+  // a ragged band rather than a contour; and under the trees the litter covers the sand, so the canopy edge does
+  // not stand on a pale floor (the hard sand-to-canopy lines of shore_beach F2-H3)
+  float fringe = 0.5 * (n3 - 0.5) + 0.3 * (n2 - 0.5);
+  float sandy = (1.0 - smoothstep(1.0 + fringe, 2.8 + fringe, h)) * smoothstep(0.06, 0.28, expo) * (1.0 - 0.55 * canopy);
   if (zone == 2) {
     // ---- the beach profile in metres from the waterline: the swash band the water shader washes (its
     //      swashW = 4 + 12 * exposure, water.ts), a damp band above it, dry rippled sand to the dune toe.
@@ -602,9 +724,15 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     // the film of the last wave: saturated sand right at the line, a mirror at grazing angles
     float film = 1.0 - smoothstep(0.0, 0.8 + 0.6 * exposure, shoreD + 0.6 * wander2);
     Sand sdt = sandDetail(wp, w, foot);
+    // one shore is not another: a 300 m noise sets how far the scrub and the dune grass come down the beach and
+    // how pale the sand is, so the islets carry rims of different widths and tones (a mangrove key with a
+    // metre of grey sand, a bar with a wide white beach) instead of the one bright ring of equal width on
+    // every islet (highway_aerial A3-H4)
+    float isle = vnoise(wp * 0.0035 + 61.0);
+    float veget = smoothstep(0.4, 0.75, isle);
     // albedos sit where the post's tone curve still has slope: the sun-lit ground above ~0.35 all lands
     // within a few output levels of white (dry sand 0.56 renders ~232; damp 0.24 ~200; wet 0.14 ~168)
-    vec3 dry = vec3(0.47, 0.375, 0.245);
+    vec3 dry = mix(vec3(0.47, 0.375, 0.245), vec3(0.39, 0.33, 0.235), smoothstep(0.25, 0.6, isle));
     vec3 dampC = vec3(0.243, 0.188, 0.132);
     vec3 wetC = vec3(0.143, 0.111, 0.081);
     // grain, shell hash and specks; a little darker in the ripple troughs where the heavy grains collect
@@ -699,16 +827,20 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
       gDetailSlope += offshore * dh;
     }
     // sea oats and dune grass on the upper beach: khaki tussocks in patches, denser where the shore faces the sea
-    float duneH = smoothstep(0.95 + 0.2 * wander, 1.5, h);
+    // and on the vegetated shores, where they come down to within a metre of the wash
+    float duneH = smoothstep(0.95 + 0.2 * wander - 0.5 * veget, 1.5 - 0.6 * veget, h);
     if (duneH > 0.0) {
       float grassN = vnoise(wp * 0.05 + 4.0);
-      float dune = duneH * smoothstep(0.5 - 0.15 * expo, 0.68, grassN) * (0.55 + 0.45 * smoothstep(0.35, 0.7, gd.grass));
+      float dune = duneH * smoothstep(0.5 - 0.15 * expo - 0.12 * veget, 0.68, grassN) * (0.55 + 0.45 * smoothstep(0.35, 0.7, gd.grass));
       c = mix(c, vec3(0.143, 0.126, 0.043) * (0.8 + 0.4 * n1), dune * 0.8);
     }
-    // the upper beach turns to sandy scrub where the land begins (see sandyScrub)
-    float upper = smoothstep(1.0, 2.0, h) * smoothstep(8.0, 25.0, shoreD);
+    // the upper beach turns to sandy scrub where the land begins (see sandyScrub): 8-25 m up a beach, 3-9 m up a
+    // vegetated shore; and where the hammock stands on the beach zone its litter covers the sand, so the trees
+    // do not stand on a pale floor
+    float upper = smoothstep(1.0 - 0.5 * veget, 2.0 - 0.9 * veget, h) * smoothstep(8.0 - 5.0 * veget, 25.0 - 16.0 * veget, shoreD);
     c = mix(c, sandyScrub(n1, n2, gd), upper * 0.85);
-    gDetailSlope *= 1.0 - upper;
+    c = mix(c, canopyFloor(n1, n2, gd), canopy * 0.65 * smoothstep(0.5, 1.3, h));
+    gDetailSlope *= 1.0 - max(upper, canopy);
     // wet sand is dark and glossy, the film of the last wave a mirror, dry sand matte
     rough = mix(0.95, 0.72, damp);
     rough = mix(rough, 0.42, max(wet, pool));
@@ -774,6 +906,18 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     // gravel; the soil tile at a 12 m repeat is the stone (pebbles 3-6 cm across)
     vec3 pave = mix(vec3(0.135, 0.13, 0.12), vec3(0.093, 0.085, 0.076), n2) * (0.9 + 0.2 * n1);
     pave *= 1.0 - 0.25 * smoothstep(0.6, 0.8, fbm3(wp * 0.05 + 2.0));
+    // the yard's concrete is not a plane (the port apron read as one, harbor A5-D8): 6 m panel joints, widened
+    // to the pixel and paled in proportion once thinner than one and gone past 1.5 m/px; the lanes the trucks
+    // and straddle carriers blacken along the yard's length; oil drips close up
+    float jointVis = 1.0 - smoothstep(0.8, 1.5, foot);
+    if (jointVis > 0.0) {
+      vec2 pj = abs(fract(wp / 6.0 + 0.5) - 0.5) * 6.0;
+      float jw = max(0.06, 0.8 * foot);
+      pave *= 1.0 - 0.35 * (1.0 - smoothstep(jw * 0.5, jw, min(pj.x, pj.y))) * (0.06 / jw) * jointVis;
+    }
+    float lanes = smoothstep(0.55, 0.8, vnoise(vec2(wp.x * 0.018, wp.y * 0.3) + 3.0));
+    pave *= 1.0 - 0.22 * lanes * (1.0 - smoothstep(4.0, 9.0, foot));
+    pave *= 1.0 - 0.3 * smoothstep(0.72, 0.85, n1);
     float gvis = 1.0 - smoothstep(3.0, 7.0, foot);
     float stone = gvis > 0.0 ? mix(uGroundMean.z, tapJ(uGroundTex, wp, mat2(1.0 / 12.0, 0.0, 0.0, 1.0 / 12.0), vec2(0.3)).b, gvis) : uGroundMean.z;
     vec3 gravel = vec3(0.194, 0.185, 0.166) * (0.62 + 0.76 * stone) * (0.94 + 0.12 * n2);
@@ -910,6 +1054,10 @@ export class Terrain {
   private readonly sectors: { mesh: THREE.Mesh; box: THREE.Box3 }[] = [];
   private readonly offsetUniform = { value: new THREE.Vector3() };
 
+  /** the lot map (see bakeLots); a single empty texel until stampLots() is given the city's footprints */
+  private readonly lotUniform = { value: emptyLotTexture() };
+  private readonly lotNUniform = { value: 1 };
+
   constructor(readonly textures: MapTextures) {
     const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9, metalness: 0.0 });
     const uniforms = {
@@ -920,6 +1068,8 @@ export class Terrain {
       uSandTex: { value: textures.groundDetail.sand },
       uGroundMean: { value: textures.groundDetail.groundMean },
       uSandMean: { value: textures.groundDetail.sandMean },
+      uLotTex: this.lotUniform,
+      uLotN: this.lotNUniform,
       uRingOffset: this.offsetUniform,
       uWorldSize: { value: WORLD_SIZE },
       uMapN: { value: MAP_N },
@@ -956,6 +1106,20 @@ export class Terrain {
     }
   }
 
+  /** Give the ground the city's building footprints: the houses among them are baked into the lot map, and the
+   *  suburb ground lays each house's drive, path, patio and contact beds where the instanced house stands. */
+  stampLots(footprints: readonly Footprint[]): void {
+    const tex = new THREE.DataTexture(bakeLots(footprints), LOT_N, LOT_N, THREE.RGBAFormat, THREE.UnsignedByteType);
+    tex.minFilter = THREE.NearestFilter;
+    tex.magFilter = THREE.NearestFilter;
+    tex.wrapS = tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.generateMipmaps = false;
+    tex.needsUpdate = true;
+    this.lotUniform.value.dispose();
+    this.lotUniform.value = tex;
+    this.lotNUniform.value = LOT_N;
+  }
+
   /** Shift the clipmap so it is centred on the camera. All rings share one centre, so their borders
    *  coincide exactly; snapping to two fine cells keeps ring 0 and ring 1 on the same lattice. Sectors
    *  are then drawn for the camera and / or the water's mirror camera as their frustums require. */
@@ -972,6 +1136,15 @@ export class Terrain {
       s.mesh.layers.set(main && mirror ? LAYER_DEFAULT : main ? LAYER_MAIN : LAYER_MIRROR);
     }
   }
+}
+
+function emptyLotTexture(): THREE.DataTexture {
+  const tex = new THREE.DataTexture(new Uint8Array(4), 1, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
+  tex.minFilter = THREE.NearestFilter;
+  tex.magFilter = THREE.NearestFilter;
+  tex.generateMipmaps = false;
+  tex.needsUpdate = true;
+  return tex;
 }
 
 /** Height lookup helper matching the GPU sampling (bilinear on the same texture data). */
