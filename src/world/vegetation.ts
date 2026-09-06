@@ -418,8 +418,10 @@ const FRINGE_PART = 10;
 const BRANCH_PART = 20;
 /** aPart values from DISC_PART up are the root disc at the trunk base (the ground contact) */
 const DISC_PART = 30;
-/** fringe cards per puff (main, lobe) at each tessellation level */
-const FRINGE_COUNT: [number, number][] = [[0, 0], [24, 8], [24, 8]];
+/** fringe cards per puff (main, lobe) at each tessellation level: level 1 (150-420 m, where a crown is
+ *  15-60 px tall) carries three quarters of the level-2 fringe — 36 cards break a silhouette of that size as
+ *  well as 48 did, at 24 fewer triangles a crown */
+const FRINGE_COUNT: [number, number][] = [[0, 0], [18, 6], [24, 8]];
 
 /** Branch prisms for the three lobes: `sides`-sided tubes with the position holding (ring x, t along the
  *  branch 0..1, ring z); the vertex shader places them between the trunk top and the lobe centre of the
@@ -1442,12 +1444,17 @@ const ULTRA_DISTANCE = 170;
 /** level-2 crowns (664 triangles each) drawn per frame at most, nearest cells first; the rest of the cells
  *  inside ULTRA_DISTANCE fall back to level 1 (a dense park clump at 170 m held 1500 of them: 1 M triangles) */
 const ULTRA_BUDGET = 420;
+/** level-1 crowns (268 triangles) drawn per frame at most, nearest cells first; the rest of the cells inside
+ *  HI_DISTANCE fall back to level 0 (88): a dense park clump seen from 130 m up held 890 of them, most of
+ *  them 15-20 px tall, and the view ran 65 k triangles over the 1.5 M budget */
+const HI_BUDGET = 700;
 const NEAR_BUDGET = 60000;
 /** understory cards: drawn to this distance, at full density to UNDER_FULL, half to UNDER_HALF and a
- *  quarter beyond; they cast shadows only inside UNDER_SHADOW (a shrub's shadow is under its own card) */
-const UNDER_DISTANCE = 2500;
-const UNDER_FULL = 600;
-const UNDER_HALF = 1200;
+ *  quarter beyond (a 2 m shrub is 5 px tall at 450 m and under 2 px at 1.5 km); they cast shadows only
+ *  inside UNDER_SHADOW (a shrub's shadow is under its own card) */
+const UNDER_DISTANCE = 1600;
+const UNDER_FULL = 450;
+const UNDER_HALF = 900;
 const UNDER_SHADOW = 350;
 /** card tiles closer than this (to their bounding sphere) are drawn into the water's mirror image */
 export const MIRROR_DISTANCE = 1500;
@@ -2330,6 +2337,7 @@ export class Vegetation {
     }
     let budget = NEAR_BUDGET;
     let ultraBudget = ULTRA_BUDGET;
+    let hiBudget = HI_BUDGET;
     // coarse cascades take the nearest COARSE_SHADOW_TILES casting tiles only (each tile is a draw call per
     // cascade and a crown's shadow there is a couple of texels); the tiles are already sorted nearest-first
     const casting = _casting;
@@ -2377,6 +2385,9 @@ export class Vegetation {
             let level = d < ULTRA_DISTANCE ? 2 : d < HI_DISTANCE ? 1 : d < NEAR_DISTANCE ? 0 : -1;
             const count = cull.boxInView(c.box) ? c.count : 0;
             if (level === 2) { if (count <= ultraBudget) ultraBudget -= count; else level = 1; }
+            // the level-1 budget is spent nearest first too: the cells beyond it fall to level 0 (a dense park
+            // clump under a 130 m aerial held 890 level-1 crowns: the far ones are 15-20 px tall)
+            if (level === 1) { if (count <= hiBudget) hiBudget -= count; else level = 0; }
             // a card cell the card batch cannot take falls back to the level-0 crowns
             if (level < 0) { if (!this.cameraBatch.set(vc.cards[i], count)) level = 0; } else this.cameraBatch.set(vc.cards[i], 0);
             for (let l = 0; l < batches.length; l++) if (!batches[l].set(c, l === level ? count : 0)) batched3d = false;
