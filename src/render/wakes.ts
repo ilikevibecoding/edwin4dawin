@@ -3,6 +3,8 @@ import { clamp, smoothstep } from '../core/noise';
 
 /** tan(19.47 deg): half-angle of the Kelvin wake envelope */
 const TAN_KELVIN = 0.3536;
+/** an emitter off the surface longer than this (s) has skipped: its lane breaks there rather than bridging the hop */
+const GAP_DRY_S = 0.5;
 
 /**
  * Surface drift applied to laid wake foam (m/s, world xz): wind-driven surface current plus Stokes drift, about
@@ -907,6 +909,11 @@ export class WakeTrail {
   private odometer = 0;
   /** points still to emit at reduced strength after a trail start or a gap */
   private ramp = 0;
+  /** the time the emitter left the surface (NaN while it is on it) and, once it is back, the length of that spell
+   *  until the next point is laid: a hull that skips clear for longer than a moment leaves untouched water behind
+   *  the hop, however short the hop was in track (r10) */
+  private dryFrom = NaN;
+  private drySpell = 0;
   /** true until the first update() since construction / reset(): only an emitter that is already under way on
    *  the water at its very first update (a boat spawned on its route, the aircraft set up taxiing) gets a seeded
    *  track behind it; one that has been airborne and touches down starts its wake at the touchdown point */
@@ -1033,12 +1040,19 @@ export class WakeTrail {
         if (k > 0) { p.x += WAKE_DRIFT.x * dt * k; p.z += WAKE_DRIFT.z * dt * k; }
       }
     }
+    if (!active) { if (Number.isNaN(this.dryFrom)) this.dryFrom = time; }
+    else if (!Number.isNaN(this.dryFrom)) { this.drySpell = time - this.dryFrom; this.dryFrom = NaN; }
     if (active && (fresh || dist > Math.max(this.spacing, speed * 0.25))) {
       let pdx = dx, pdz = dz;
       if (!fresh) { const l = dist || 1; pdx = (x - this.lastX) / l; pdz = (z - this.lastZ) / l; }
       // the emitter left the surface (bounce, skip, take-off) and came back: close the old ribbon with a
-      // zero-length invisible quad and start a new one here instead of bridging the gap with foam
-      const gap = !fresh && dist > this.gapDist(speed);
+      // zero-length invisible quad and start a new one here instead of bridging the gap with foam. Judged by
+      // track distance (a jump no motion along the surface could make) and by time off the surface: a float
+      // skipping at 40 m/s is clear for 0.6-1 s over a hop of 25-40 m, less than 1.5 s of track, and its lane
+      // used to bridge water the hull never touched (r10: only the 2 s hops of a 48 m/s entry broke the lane).
+      // The wet flag flickering for a frame over chop is not a skip (0.5 s)
+      const gap = !fresh && (dist > this.gapDist(speed) || this.drySpell > GAP_DRY_S);
+      this.drySpell = 0;
       if (gap) {
         // two invisible markers (at the old end and at the new start) so the bridging quad carries no foam
         const last = this.points[this.points.length - 1];
@@ -1109,7 +1123,7 @@ export class WakeTrail {
       // the head (emitter back on the water this frame) keeps the head from bridging to the old ribbon
       const last = n ? this.points[n - 1] : null;
       const w = this.wakeHalf(0, 0);
-      const bridge = last && (last.fade === 0 || Math.hypot(x - last.x, z - last.z) > this.gapDist(speed));
+      const bridge = last && (last.fade === 0 || Math.hypot(x - last.x, z - last.z) > this.gapDist(speed) || this.drySpell > GAP_DRY_S);
       const odoHead = this.odometer + (last ? Math.hypot(x - last.x, z - last.z) : 0);
       if (bridge && last) {
         // invisible markers at both ends of the bridging quad
@@ -1139,6 +1153,7 @@ export class WakeTrail {
     this.lastX = NaN; this.lastZ = NaN; this.lastTime = NaN;
     this.odometer = 0;
     this.ramp = 0;
+    this.dryFrom = NaN; this.drySpell = 0;
     this.untouched = true;
     this.count = 0;
     this.geo?.setDrawRange(0, 0);
