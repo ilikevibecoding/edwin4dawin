@@ -146,7 +146,7 @@ export class EconomySim {
     this.onEvent = opts.onEvent || null;
     this.batch = opts.batch || TUNING.batch;
     this.journal = new Journal();
-    this.dayTime = null; this.portTime = 0; this.fullPassDue = true;
+    this.dayTime = null; this.portTime = 0; this.fullPassDue = true; this.fullPassSince = 0;
     this.businesses = []; this.byId = new Map(); this.households = []; this.householdById = new Map();
     this.shipments = new Map(); this.recentShipments = []; this.recentImports = []; this.nextShipmentId = 1;
     this.outside = { households: { funds: 0 }, treasury: { funds: TUNING.treasuryStart, allocatedToday: new Map(), bondToday: 0, day: -1 } };
@@ -431,21 +431,27 @@ export class EconomySim {
   // Advance to the given clocks (dayTime in game days, portTime in port seconds). Businesses and households are
   // visited in batches when their two-hour interval is up; shipments and freighter arrivals every call.
   advance(dayTime, portTime = this.portTime) {
-    if (this.dayTime === null) { this.dayTime = dayTime; this.fullPassDue = true; }
+    const initial = this.dayTime === null;
+    if (initial) { this.dayTime = dayTime; this.fullPassDue = true; this.fullPassSince = dayTime; }
     if (this.stats.day < 0) this.stats.day = Math.floor(dayTime);
     if (dayTime < this.dayTime) dayTime = this.dayTime;   // the clock never runs backwards inside the sim
     const dayChanged = Math.floor(dayTime) > Math.floor(this.dayTime);
     this.dayTime = dayTime; this.portTime = portTime;
-    if (dayChanged) { this.fullPassDue = true; this._rollDay(); }
-    const budget = this.fullPassDue ? Infinity : this.batch;
+    if (dayChanged) { this.fullPassDue = true; this.fullPassSince = dayTime; this._rollDay(); }
+    // the first pass (a fresh city) visits everyone at once; a new day's full pass is spread over the batches of the
+    // following advances (it stays due until everyone has been seen since it was called), so no single frame
+    // carries the whole city
+    const budget = initial ? Infinity : this.batch;
+    const since = this.fullPassSince, full = this.fullPassDue;
+    const due = (e) => e.lastVisit === null || (full && e.lastVisit < since) || dayTime - e.lastVisit >= TUNING.visitInterval;
     const dueB = [], dueH = [];
-    for (const b of this.businesses) if (b.lastVisit === null || this.fullPassDue || dayTime - b.lastVisit >= TUNING.visitInterval) dueB.push(b);
-    for (const h of this.households) if (h.lastVisit === null || this.fullPassDue || dayTime - h.lastVisit >= TUNING.visitInterval) dueH.push(h);
+    for (const b of this.businesses) if (due(b)) dueB.push(b);
+    for (const h of this.households) if (due(h)) dueH.push(h);
     if (budget !== Infinity) { dueB.sort((a, c) => (a.lastVisit || 0) - (c.lastVisit || 0)); dueH.sort((a, c) => (a.lastVisit || 0) - (c.lastVisit || 0)); }
     let n = 0;
     for (const b of dueB) { if (n >= budget) break; this._visitBusiness(b, dayTime); n++; }
     for (const h of dueH) { if (n >= budget) break; this._visitHousehold(h, dayTime); n++; }
-    if (n >= dueB.length + dueH.length) this.fullPassDue = false;
+    if (full && n >= dueB.length + dueH.length) this.fullPassDue = false;
     this._shipmentsPass(dayTime);
     this._importsPass(dayTime, portTime);
     this._notePrices();
