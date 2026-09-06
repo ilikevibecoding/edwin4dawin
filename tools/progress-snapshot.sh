@@ -105,15 +105,14 @@ PROGRESS_VIEWS=(
 )
 META="$OUT/meta.json"
 echo "{\"tag\":\"$TAG\",\"build\":\"$BUILD_SHA\",\"time\":\"$(date -u +%Y-%m-%dT%H:%MZ)\",\"views\":[" > "$META"
-# One Chrome for the whole batch. CHROME_SLOTS=3 lets this launch take a third slot the builders (SLOTS=2) never
-# use, so the hourly page is not queued behind their captures; one extra browser for a few minutes an hour is
-# within the machine's budget.
+# One Chrome for the whole batch. The Chrome gate (/usr/local/bin/google-chrome) grants a third slot to launches
+# descending from this script, so the hourly page is not queued behind the builders' captures.
 SPEC="/tmp/progress-$TAG.spec"; : > "$SPEC"
 for spec in "${PROGRESS_VIEWS[@]}"; do
   IFS='|' read -r label title item query <<< "$spec"
   printf '%s\t%s\n' "/tmp/progress-$TAG-$label.png" "http://127.0.0.1:$PORT/?bench=$query&freeze=1&seed=20260904&nohud=1" >> "$SPEC"
 done
-CHROME_SLOTS=3 node "$ROOT/bench/scripts/shots.mjs" "$SPEC" 1280 720 3 > "/tmp/progress-$TAG-shots.log" 2>&1 || true
+node "$ROOT/bench/scripts/shots.mjs" "$SPEC" 1280 720 3 > "/tmp/progress-$TAG-shots.log" 2>&1 || true
 first=1
 for spec in "${PROGRESS_VIEWS[@]}"; do
   IFS='|' read -r label title item query <<< "$spec"
