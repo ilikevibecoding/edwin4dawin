@@ -3,7 +3,7 @@ import { GLSL_ATMOS_UNIFORMS, GLSL_CLOUD_FIELD, GLSL_NOISE, GLSL_SKY } from '../
 import { createReflectionUniforms, type ReflectionUniforms } from '../render/reflection';
 import { WAKE_HEIGHT_SCALE } from '../render/wakes';
 import { SWELL_DISPLACEMENT } from './waves';
-import { WORLD_SIZE } from './map';
+import { MAP_N, WORLD_SIZE } from './map';
 import type { MapTextures } from './terrain';
 
 /**
@@ -34,13 +34,14 @@ varying vec3 vWorldPos;
 #ifdef WATER_PATCH
 uniform sampler2D uHeightTex;
 uniform float uWorldSize;
+#define MAP_HALF_CELL ${(0.5 * WORLD_SIZE / MAP_N).toFixed(6)}
 uniform float uWaveTime;
 uniform float uWindSpeed;
 uniform vec2 uWindDir;
 uniform sampler2D uWakeHeightTex;
 uniform vec4 uWakeNearRegion;
 ${GLSL_NOISE}
-float terrainHeightV(vec2 wp) { return texture2D(uHeightTex, (wp + vec2(uWorldSize * 0.5)) / uWorldSize).r; }
+float terrainHeightV(vec2 wp) { return texture2D(uHeightTex, (wp + vec2(uWorldSize * 0.5 + MAP_HALF_CELL)) / uWorldSize).r; }
 vec2 rot2v(vec2 v, float a) { float c = cos(a), s = sin(a); return vec2(c * v.x - s * v.y, s * v.x + c * v.y); }
 float noisedVal(vec2 p) {
   vec2 i = floor(p); vec2 f = fract(p); vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
@@ -142,6 +143,7 @@ uniform vec4 uWakeNearRegion;     // center.xy, size, w: 1 while the displaced n
 uniform sampler2D uWakeHeightTex; // signed hull-wave elevation over the near region (R up, G down)
 uniform float uWakeHeightTexel;   // metres per texel of it
 uniform float uWorldSize;
+#define MAP_HALF_CELL ${(0.5 * WORLD_SIZE / MAP_N).toFixed(6)}
 uniform float uWaveTime;
 uniform float uWindSpeed;
 uniform vec2 uWindDir;
@@ -217,7 +219,7 @@ vec3 skyReflection(vec3 R, float mss, vec3 P, float fw) {
   return mix(c, cloudCol, cov);
 }
 float terrainHeightW(vec2 wp) {
-  vec2 uv = (wp + vec2(uWorldSize * 0.5)) / uWorldSize;
+  vec2 uv = (wp + vec2(uWorldSize * 0.5 + MAP_HALF_CELL)) / uWorldSize;
   return texture2D(uHeightTex, uv).r;
 }
 float fbm2o(vec2 p) {
@@ -729,7 +731,7 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   // ---- foam: shore wash driven by exposure to the incoming waves, surf lines, whitecaps, wakes
   float foam = 0.0;
   if (depth < 4.0) {
-    vec4 zs = texture2D(uZoneTex, (wp + vec2(uWorldSize * 0.5)) / uWorldSize);
+    vec4 zs = texture2D(uZoneTex, (wp + vec2(uWorldSize * 0.5 + MAP_HALF_CELL)) / uWorldSize);
     // only a real coastline makes wash and surf; submerged sandbars and flats stay foam-free
     float coastD = (zs.b * 255.0 - 128.0) * 2.0;
     float coastGate = 1.0 - smoothstep(150.0, 230.0, coastD);

@@ -285,6 +285,7 @@ const _v = new THREE.Vector3();
 const _box = new THREE.Box3();
 
 export const TERRAIN_VERT_PARS = /* glsl */ `
+#define MAP_HALF_CELL ${(0.5 * WORLD_SIZE / MAP_N).toFixed(6)}
 uniform sampler2D uHeightTex;
 uniform vec3 uRingOffset;
 uniform float uWorldSize;
@@ -293,7 +294,10 @@ varying vec3 vWorldPos;
 varying float vHeight;
 varying vec2 vSlope;
 float terrainHeight(vec2 wp) {
-  vec2 uv = (wp + vec2(uWorldSize * 0.5)) / uWorldSize;
+  // texel i of the map textures holds map sample i, which sits at x = -HALF + i * CELL, while linear filtering
+  // puts texel i's centre at (i + 0.5) / N: sample half a cell further along, or the rendered ground is heightAt()
+  // shifted 4.9 m toward +x, +z and everything placed with heightAt() floats or sinks by slope x 4.9 m
+  vec2 uv = (wp + vec2(uWorldSize * 0.5 + MAP_HALF_CELL)) / uWorldSize;
   return texture2D(uHeightTex, uv).r;
 }
 `;
@@ -319,6 +323,7 @@ vSlope = vec2(hx, hz) / (2.0 * e);
 `;
 
 const TERRAIN_FRAG_PARS = /* glsl */ `
+#define MAP_HALF_CELL ${(0.5 * WORLD_SIZE / MAP_N).toFixed(6)}
 uniform sampler2D uZoneTex;
 uniform sampler2D uDetailTex;
 uniform sampler2D uHeightTex;
@@ -347,10 +352,10 @@ vec2 gDwx = vec2(0.0), gDwy = vec2(0.0);
 // exposure (A) are read bilinearly in one tap
 vec4 zoneCell(vec2 wp) {
   vec2 t = (wp + vec2(uWorldSize * 0.5)) / uWorldSize * uMapN;
-  return texture2D(uZoneTex, (floor(t) + 0.5) / uMapN);
+  return texture2D(uZoneTex, (floor(t + 0.5) + 0.5) / uMapN); // nearest sample, as map.zoneAt() rounds
 }
 vec3 zoneSmooth(vec2 wp) {
-  return texture2D(uZoneTex, (wp + vec2(uWorldSize * 0.5)) / uWorldSize).gba;
+  return texture2D(uZoneTex, (wp + vec2(uWorldSize * 0.5 + MAP_HALF_CELL)) / uWorldSize).gba;
 }
 
 // ---- detail textures. A tap takes the tile's uv as a linear map J of the world xz (uv = J * wp + offset),
@@ -835,7 +840,7 @@ const TERRAIN_FRAG_MAIN = /* glsl */ `
   float foot = length(abs(gDwx) + abs(gDwy));
   float beyond = smoothstep(uWorldSize * 0.5 - 350.0, uWorldSize * 0.5 + 250.0, max(abs(vWorldPos.x), abs(vWorldPos.z)));
   // the baked detail is clamped at the map edge, so it is faded out where the ground carries on beyond it
-  vec4 det = texture2D(uDetailTex, (vWorldPos.xz + vec2(uWorldSize * 0.5)) / uWorldSize) * (1.0 - beyond);
+  vec4 det = texture2D(uDetailTex, (vWorldPos.xz + vec2(uWorldSize * 0.5 + MAP_HALF_CELL)) / uWorldSize) * (1.0 - beyond);
   det.g = mix(0.5, det.g, 1.0 - beyond);
   Ground gd;
   vec3 alb = zoneAlbedo(zone, vWorldPos.xz, vHeight, veg, coast, expo, det, foot, gd, rough);
