@@ -118,7 +118,9 @@ function clearRoom(bp, c, floorId) {
     if (!fr.inside(u, v)) continue;
     const x = fr.X(u, v), z = fr.Z(u, v);
     for (let ly = 0; ly < fr.h; ly++) bp.set(x, fr.y + ly, z, 0);
-    if (floorId && solid(bp.get(x, fr.y - 1, z))) bp.set(x, fr.y - 1, z, floorId);
+    // the floor slab doubles as the ceiling of the room below: its light panels stay
+    const fl = bp.get(x, fr.y - 1, z);
+    if (floorId && solid(fl) && !em.has(fl)) bp.set(x, fr.y - 1, z, floorId);
     if (ceiling && em.has(bp.get(x, fr.y + fr.h, z))) bp.set(x, fr.y + fr.h, z, ceiling.id);
   }
 }

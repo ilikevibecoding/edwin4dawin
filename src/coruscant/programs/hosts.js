@@ -22,6 +22,8 @@ export function assignedHosts(layout) {
   let m = ASSIGNED.get(layout);
   if (m) return m;
   m = new Map();
+  // tests pass bare { seed, levels } layouts: nothing is assigned in a layout without lots
+  if (!Array.isArray(layout.lots) || !Array.isArray(layout.districts)) { ASSIGNED.set(layout, m); return m; }
   // the brokerage sits on the spaceport / industrial edge: the industrial-sector office tower nearest the spaceport
   // centre, and the trade house nearest the spaceport (a trading house is what a freight brokerage calls itself)
   const port = layout.districts.find((d) => d.kind === 'spaceport');
