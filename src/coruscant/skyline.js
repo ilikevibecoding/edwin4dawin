@@ -110,13 +110,15 @@ export function landmarkBoxes(layout) {
 export function buildSkyline(layout) {
   const lots = layout.lots.filter((l) => l.kind === 'tower');
   const g0 = LEVELS.ground + 1;
-  const boxes = lots.map((l) => ({ x0: l.x0 + INSET, x1: l.x1 - INSET, z0: l.z0 + INSET, z1: l.z1 - INSET, y1: g0 + l.height - 0.5, id: l.id }));
   // rubric 11 crowns (towers/index.js lotCrown = the registry's crown profile, no blueprint needed): a frustum on
   // top of the box, its base inset by half the taper and its top by the full taper, so spires and needles read as
-  // tapering silhouettes from afar while halos and decks stay boxy
+  // tapering silhouettes from afar while halos and decks stay boxy; the box ends where the crown starts (c.base
+  // below lot.height when the crown took over the top floors of a tower at the world-height cap)
+  const boxes = [];
   for (const l of lots) {
-    const c = lotCrown(l, LEVELS.ground);
-    if (c.height > 0) boxes.push({ x0: l.x0 + INSET, x1: l.x1 - INSET, z0: l.z0 + INSET, z1: l.z1 - INSET, y0: g0 + l.height - 0.5, y1: g0 + l.height + c.height - 0.5, id: l.id, taper: c.taper });
+    const c = lotCrown(l, LEVELS.ground), yb = g0 + l.height - (c.base || 0) - 0.5;
+    boxes.push({ x0: l.x0 + INSET, x1: l.x1 - INSET, z0: l.z0 + INSET, z1: l.z1 - INSET, y1: yb, id: l.id });
+    if (c.height > 0) boxes.push({ x0: l.x0 + INSET, x1: l.x1 - INSET, z0: l.z0 + INSET, z1: l.z1 - INSET, y0: yb, y1: yb + c.height, id: l.id, taper: c.taper });
   }
   for (const b of landmarkBoxes(layout)) boxes.push(b);
   const n = boxes.length;

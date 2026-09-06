@@ -18,7 +18,7 @@ const BRIDGE_EVERY = 6;
 export function spine(bp, lot, ctx) {
   const { nF, rng, midDoorF, spec } = ctx;
   const style = ctx.style;
-  style.wall = rng.pick([B.PANEL_BLACK, B.DURASTEEL_DARK, B.DURASTEEL]);
+  style.wall = rng.pick([B.PANEL_BLACK, B.DURASTEEL_DARK]);     // dark slabs: the blue spine is the light
   style.corner = B.CHROME; style.mullion = B.CHROME; style.roof = B.DURASTEEL_DARK;
   style.rhythm = rng.pick(['curtain', 'slit']); style.period = 3;
   style.railing = B.IRON_BARS;
@@ -108,17 +108,18 @@ export function spine(bp, lot, ctx) {
   // the spine: a 3x3 GLOW_PANEL_BLUE column behind the door axis (the passage from the front end to the shaft doors
   // stays clear), rising through the canopy and every bridge to a lit tip above both roofs
   const tS = (front === 'S' || front === 'E') ? dc - 4 : dc + 2;
-  const yTop = Math.min(bp.h - 2, 5 * nFA + 14);
+  const yTop = Math.min(bp.h - 3, 5 * nFA + 18);
   for (let t = tS; t <= tS + 2; t++) for (let a = mid - 1; a <= mid + 1; a++) {
     const core = t === tS + 1 && a === mid;
     for (let y = 1; y <= yTop; y++) P(a, y, t, core ? B.PANEL_BLACK : (y % 12 === 0 ? B.CHROME : B.GLOW_PANEL_BLUE));
+    P(a, yTop + 1, t, B.GLOW_PANEL);           // white cap over the blue column
   }
-  P(mid, yTop + 1, tS + 1, B.GLOW_PANEL);
-  const spineTop = yTop + 1;
+  P(mid, yTop + 2, tS + 1, B.GLOW_PANEL_BLUE);
+  const spineTop = yTop + 2;
   // the lot's crown is the spine tip above the taller slab's roof (its fins are the shaft crowns)
   const extra = Math.max(resA.extra, resB.extra, spineTop - 5 * nFA);
   if (resA.crown) {
-    bp.meta.crown = { style: 'spinecap', height: spineTop - 5 * nFA, topY: bp.wy(spineTop), tiers: resA.crown.tiers, cap: 'spine', climbable: true };
+    bp.meta.crown = { style: 'spinecap', height: spineTop - 5 * nFA, base: 0, topY: bp.wy(spineTop), tiers: resA.crown.tiers, cap: 'spine', climbable: true };
     bp.meta.crownHeight = bp.meta.crown.height;
     lot.crownHeight = bp.meta.crown.height;
   }

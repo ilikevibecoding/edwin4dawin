@@ -8,7 +8,7 @@ import { PlanFrame, computeLayout, planFloor, cutEntrance, insetLimits } from '.
 import { buildCore } from '../core.js';
 import { rectRing, paintRing, paintRoof, paintCrown } from '../facade.js';
 import { hash2 } from '../../rng.js';
-import { planCrown, buildCrown, tableLookup, ringFromTable, slab } from '../crowns.js';
+import { planCrown, buildCrown, crownEat, tableLookup, ringFromTable, slab, CROWN_OPTIONS, CROWN_MIN_HEIGHT } from '../crowns.js';
 import { stripPlan, stripRing } from './strips.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
@@ -27,8 +27,14 @@ export function buildTiered(bp, spec) {
   const lim = insetLimits(frame, layout);
   const lot = bp.lot, roomsAt = bp.meta.rooms.length;
   const strips = spec.strips === false ? null : stripPlan(lot, spec.family);
-  if (strips) style.lit = Math.min(style.lit, 0.3);      // the strips carry the night look; fewer random dots
-  const tiers = spec.tiers.map((t, i) => {
+  if (strips) style.lit = Math.min(style.lit, 0.22);     // the strips carry the night look; fewer random dots
+  // the tallest towers hand their top floors to the crown (crownEat): the family's tiers stop `eat` floors lower
+  // and the crown tiers, furnished from the same room library, take their place under a full-size cap
+  const crowned = hooks.crown !== false && CROWN_OPTIONS.enabled && lot && lot.kind === 'tower' && (lot.height ?? 0) >= CROWN_MIN_HEIGHT && spec.family !== 'spine';
+  const nF0 = spec.tiers[spec.tiers.length - 1].f1 + 1;
+  const eat = crowned ? crownEat(nF0, bp.h) : 0;
+  const specTiers = eat ? spec.tiers.filter((t) => t.f0 <= nF0 - 1 - eat).map((t) => ({ ...t, f1: Math.min(t.f1, nF0 - 1 - eat) })) : spec.tiers;
+  const tiers = specTiers.map((t, i) => {
     const ins = t.inset || {};
     const l = clamp(ins.l | 0, 0, lim.l), r = clamp(ins.r | 0, 0, lim.r), fr = clamp(ins.f | 0, 0, lim.f), b = clamp(ins.b | 0, 0, lim.b);
     let v1 = frame.Iv - 1 - b;
@@ -110,7 +116,7 @@ export function buildTiered(bp, spec) {
 
   // 3. crown plan (decides how many extra core floors), core, entrance, sky-lobby door, tier hooks, crown
   const top = tiers[tiers.length - 1];
-  const crown = hooks.crown === false ? null : planCrown(bp, { frame, layout, top, nF, family: spec.family, lot, forceStyle: spec.crownStyle });
+  const crown = hooks.crown === false ? null : planCrown(bp, { frame, layout, top, nF, eat, family: spec.family, lot, forceStyle: spec.crownStyle });
   buildCore(bp, frame, layout.core, 0, nF - 1 + (crown ? crown.K : 0), style);
   cutEntrance(bp, frame, doorU - 2, 4, 1, 3, style.trim);
   if (spec.midDoorF >= 2 && spec.midDoorF < nF) cutEntrance(bp, frame, doorU - 1, 3, 5 * spec.midDoorF + 1, 3, style.trim);

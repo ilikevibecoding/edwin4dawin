@@ -254,8 +254,12 @@ test('rubric 11: every tower >= 60 in layout 1337 ends in a crown (no flat roofs
   for (const l of TALL) {
     const bp = buildBlueprint(l, CITY), c = bp.meta.crown;
     assert.ok(c && c.height >= 5 && c.climbable, `tower ${l.id} (${bp.meta.family}, h ${l.height}) has no crown`);
-    assert.equal(l.crownHeight, c.height, 'lot.crownHeight exposed for lane checks');
-    assert.equal(bp.meta.crownHeight, c.height);
+    // lot.crownHeight = blocks above lot.height (the crown of a tower at the world-height cap took over c.base
+    // blocks of body, so it stands on a lower roof: meta.floors is that reduced body)
+    assert.equal(l.crownHeight, c.height - c.base, 'lot.crownHeight exposed for lane checks');
+    assert.equal(bp.meta.crownHeight, c.height - c.base);
+    assert.equal(c.base, Math.max(0, 5 * (Math.round(l.height / 5) - bp.meta.floors.length)), 'base = body floors handed to the crown');
+    assert.ok(LEVELS.ground + l.height + l.crownHeight <= 255, `${bp.meta.family} ${l.id}: crown top ${LEVELS.ground + l.height + l.crownHeight} over the world`);
     // solid mass well above the roof slab (a parapet alone would be ~2 blocks)
     const R = roofY(bp); let above = 0;
     for (let x = 0; x < bp.w; x++) for (let z = 0; z < bp.d; z++) for (let y = R + 3; y < bp.h; y++) if (!isAir(at(bp, x, y, z))) above++;
@@ -328,7 +332,8 @@ test('rubric 11: lit vertical strips every 4-6 blocks on >= 40% of facades above
     if (!s) continue;
     withStrips++;
     assert.ok(s.pitch >= 4 && s.pitch <= 6, `pitch ${s.pitch}`);
-    assert.ok(s.block === B.WINDOW_LIT || s.block === B.GLOW_PANEL_BLUE);
+    // full-face emissive panels (a WINDOW_LIT column is a dotted line lost among the facade's lit windows)
+    assert.ok(s.block === B.GLOW_PANEL || s.block === B.GLOW_PANEL_BLUE, `strip block ${BLOCKS[s.block]?.name}`);
     if (checked++ % 4) continue;
     // facade columns that are emissive over >= 80% of their visible height read as strips; a column has to run at
     // least two floors (setback / stack towers stack several facades, each with its own strips)
@@ -378,7 +383,7 @@ test('rubric 11: exterior palette above the podium - no wood / wool, only chrome
 
 test('rubric 11: ship lanes and pad approaches clear the crowns (lot.height + lotCrown height), crown tops stay under the high cross lane', () => {
   // scripts/test-spaceport.mjs checks the routes against lot.height; crowns add lotCrown(lot).height above it
-  const tops = TOWERS.map((l) => ({ l, top: LEVELS.ground + l.height + lotCrown(l, LEVELS.ground).height }));
+  const tops = TOWERS.map((l) => { const c = lotCrown(l, LEVELS.ground); return { l, top: LEVELS.ground + l.height + c.height - (c.base || 0) }; });
   let samples = 0, maxTop = 0;
   for (const t of tops) maxTop = Math.max(maxTop, t.top);
   for (const sh of buildShips(SPACEPORT.pads, DECK_Y, null, CITY)) {

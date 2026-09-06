@@ -29,10 +29,19 @@ const AIR = FORCE_AIR;
 
 // ------------------------------------------------------------------------------------------------ selection
 // Height budget above the roof slab: buildings.js sizes a blueprint as 5 * nF + 26 (capped by the world height).
+// Where the world cap squeezes that below CROWN_FULL (a 190-high tower is left 5 blocks), the crown takes over the
+// top floors of the body instead: `eat` floors become crown tiers, so the skyline's tallest towers end in a full
+// crown rather than a parapet ring. `budget` is the effective budget over the reduced body of `nF` floors.
+export const CROWN_FULL = 25;
+export function crownEat(nF, h) {
+  const raw = h - 1 - 5 * nF;
+  return raw >= CROWN_FULL ? 0 : Math.min(Math.max(0, nF - 12), Math.ceil((CROWN_FULL - raw) / 5));
+}
 export function crownBudget(height, ground = GROUND) {
-  const nF = Math.max(2, Math.round(Math.max(10, height) / 5));
-  const h = Math.max(8, Math.min(256 - ground, 5 * nF + 26));
-  return { nF, budget: h - 1 - 5 * nF };
+  const nF0 = Math.max(2, Math.round(Math.max(10, height) / 5));
+  const h = Math.max(8, Math.min(256 - ground, 5 * nF0 + 26));
+  const eat = crownEat(nF0, h);
+  return { nF: nF0 - eat, budget: h - 1 - 5 * (nF0 - eat), eat, base: 5 * eat };
 }
 
 const WEIGHTS = {
@@ -67,10 +76,14 @@ export function pickCrownStyle(lot, family, budget) {
 }
 
 // Approximate crown height and silhouette taper (0 = box, 1 = point) for the far impostors; the real crown is
-// built by planCrown/buildCrown from the same style pick, so the two agree.
+// built by planCrown/buildCrown from the same style pick, so the two agree. `height` is measured from the roof of
+// the body the crown stands on and `base` is how far below lot.height that roof lies (0 unless the crown took
+// over the top floors), so the crown reaches lot.height + height - base and the body box ends at lot.height - base.
 export function crownProfile(lot, family, ground = GROUND) {
-  if (!lot || lot.kind !== 'tower' || (lot.height ?? 0) < CROWN_MIN_HEIGHT || !CROWN_OPTIONS.enabled) return { style: null, height: 0, taper: 0 };
-  const { budget: H } = crownBudget(lot.height, ground);
+  if (!lot || lot.kind !== 'tower' || (lot.height ?? 0) < CROWN_MIN_HEIGHT || !CROWN_OPTIONS.enabled) return { style: null, height: 0, taper: 0, base: 0 };
+  const b = crownBudget(lot.height, ground);
+  // the spine tower's crown is its spine column, which needs no budget: its slabs keep every floor
+  const H = family === 'spine' ? b.budget - b.base : b.budget, base = family === 'spine' ? 0 : b.base;
   const style = pickCrownStyle(lot, family, H);
   const small = Math.min(lot.w, lot.d);
   let height = 5, taper = 0;
@@ -79,16 +92,16 @@ export function crownProfile(lot, family, ground = GROUND) {
     case 'tiered': { const K = Math.min(3, Math.floor((H - 6) / 5)); height = 5 * K + 8; taper = 0.35; break; }
     case 'dome': height = 5 + Math.min(H - 9, Math.max(3, Math.round(small * 0.28))) + 4; taper = 0.3; break;
     case 'antenna': height = 7 + Math.min(H - 1, 16); taper = 0.8; break;     // masts: a thin silhouette
-    case 'halo': height = 5 + Math.min(H - 5, 9); break;
+    case 'halo': { const lantern = small >= 16 && H >= 14; height = 5 + (lantern ? 6 : 4) + Math.min(6, H - (lantern ? 12 : 10)) + 1; taper = 0.2; break; }
     case 'blade': height = 6 + Math.min(H - 1, 18); taper = 0.6; break;
-    case 'deck': height = 18; break;
-    case 'ziggurat': height = 5 + 2 * Math.min(4, Math.floor((H - 8) / 2)) + 3; taper = 0.4; break;
+    case 'deck': height = 19; break;
+    case 'ziggurat': { const steps = Math.max(0, Math.min(4, Math.floor((H - 9) / 3), Math.floor((small - 7) / 4))); height = 5 + 3 * steps + Math.min(6, H - 6 - 3 * steps) + 1; taper = 0.4; break; }
     case 'spire': height = Math.min(H, 13 + Math.max(3, Math.round(small * 0.18)) + 4); taper = 0.45; break;
-    case 'needle': height = Math.min(H, 25); taper = 0.75; break;
-    case 'spinecap': height = Math.min(H - 1, 15); taper = 0.9; break;   // the 3x3 spine column above the slabs
+    case 'needle': height = Math.min(H, 37); taper = 0.75; break;
+    case 'spinecap': height = Math.min(H, 20); taper = 0.9; break;   // the 3x3 spine column above the slabs
     default: height = 5;
   }
-  return { style, height: Math.min(H, height), taper };
+  return { style, height: Math.min(H, height), taper, base };
 }
 
 // ------------------------------------------------------------------------------------------------ geometry
@@ -270,7 +283,8 @@ function constrainTier(plan, t, below) {
 }
 
 // ------------------------------------------------------------------------------------------------ planning
-// o: { frame, layout (plan layout, for .core), top (top-floor tier: clip/ext), nF, style, family, lot, forceStyle }
+// o: { frame, layout (plan layout, for .core), top (top-floor tier: clip/ext), nF, style, family, lot, forceStyle,
+//      eat (top floors of the body handed to the crown, see crownEat) }
 export function planCrown(bp, o) {
   if (!CROWN_OPTIONS.enabled) return null;
   const lot = o.lot;
@@ -280,7 +294,7 @@ export function planCrown(bp, o) {
   const style = o.forceStyle || pickCrownStyle(lot, o.family, H);
   const e = o.top.ext;
   const rng = new RNG((((lot.seed ?? 1) >>> 0) ^ 0xC80A7 ^ (e.x0 * 7919 + e.z0 * 104729)) >>> 0);
-  const plan = { style, H, R, nF: o.nF, K: 0, tiers: [], rng, core: o.layout.core, frame: o.frame, top: o.top, family: o.family, cap: {} };
+  const plan = { style, H, R, nF: o.nF, eat: o.eat | 0, K: 0, tiers: [], rng, core: o.layout.core, frame: o.frame, top: o.top, family: o.family, cap: {} };
   const tiered = (n, a0) => {
     let prev = o.top.clip;
     for (let k = 1; k <= n; k++) {
@@ -370,11 +384,12 @@ export function buildCrown(bp, plan, o) {
   const yCap = 5 * last.f + 5;
   const capH = paintCap(bp, plan, last, yCap, style, o);
   top = Math.max(top, yCap + capH);
-  const height = Math.min(bp.h - 1, top) - R;
-  bp.meta.crown = { style: plan.style, height, topY: bp.wy(R + height), tiers: plan.K, cap: plan.cap.kind, climbable: true };
-  // blocks above lot.height that lane / clearance checks must add (also available without a build via lotCrown)
-  bp.meta.crownHeight = height;
-  if (bp.lot) bp.lot.crownHeight = height;
+  const height = Math.min(bp.h - 1, top) - R, base = 5 * plan.eat;
+  bp.meta.crown = { style: plan.style, height, base, topY: bp.wy(R + height), tiers: plan.K, cap: plan.cap.kind, climbable: true };
+  // blocks above lot.height that lane / clearance checks must add (also available without a build via lotCrown):
+  // the crown's extent over the body roof less the body floors it took over
+  bp.meta.crownHeight = height - base;
+  if (bp.lot) bp.lot.crownHeight = height - base;
   return height;
 }
 
@@ -574,7 +589,8 @@ function paintCap(bp, plan, last, y0, style, o) {
       return best + 1;
     }
     case 'halo': {
-      // lit ring one block outside the tier parapet (or on it when the tier fills the lot), on chrome pylons
+      // lit ring one block outside the tier parapet (or on it when the tier fills the lot), on chrome pylons; over
+      // it a smaller blue lantern ring on the tier's centre and a chrome mast, so the silhouette steps up to a point
       const out = (e.x0 > 0 && e.z0 > 0 && e.x1 < bp.w - 1 && e.z1 < bp.d - 1) ? 1 : 0;
       const r = { x0: e.x0 - out, x1: e.x1 + out, z0: e.z0 - out, z1: e.z1 + out };
       const yr = y0 + 3;
@@ -583,8 +599,17 @@ function paintCap(bp, plan, last, y0, style, o) {
       const pylons = [[e.x0, e.z0], [e.x1, e.z0], [e.x0, e.z1], [e.x1, e.z1], [cx, e.z0], [cx, e.z1], [e.x0, cz], [e.x1, cz]];
       for (const [x, z] of pylons) bp.fill(x, y0 + 1, z, x, yr - 1, z, B.CHROME);
       if (out) for (const [x, z] of pylons.slice(0, 4)) bp.set(x + (x === e.x0 ? -1 : 1), yr - 1, z + (z === e.z0 ? -1 : 1), B.CHROME);
-      const fh = Math.min(4, H - 5);
-      return 4 + finial(bp, cx, yr + 1, cz, fh);
+      let yTop = yr + 1;
+      if (W(e) >= 11 && D(e) >= 11 && H >= 9) {
+        const hr = Math.min(3, Math.floor((Math.min(W(e), D(e)) - 5) / 2));
+        const r2 = { x0: cx - hr, x1: cx + hr, z0: cz - hr, z1: cz + hr };
+        for (const [x, z] of [[r2.x0, r2.z0], [r2.x1, r2.z0], [r2.x0, r2.z1], [r2.x1, r2.z1]]) bp.fill(x, y0 + 1, z, x, yr + 1, z, B.CHROME);
+        bp.walls(r2.x0, yr + 2, r2.z0, r2.x1, yr + 2, r2.z1, B.GLOW_PANEL_BLUE);
+        for (const [x, z] of [[r2.x0, r2.z0], [r2.x1, r2.z0], [r2.x0, r2.z1], [r2.x1, r2.z1]]) bp.set(x, yr + 2, z, B.CHROME);
+        yTop = yr + 3;
+      }
+      const fh = Math.min(6, bp.h - 2 - yTop);
+      return (yTop - y0) + finial(bp, cx, yTop, cz, fh);
     }
     case 'blade': {
       // a thin tapering blade along the longer axis, blue-lit edges, lit apex
@@ -605,43 +630,49 @@ function paintCap(bp, plan, last, y0, style, o) {
       return hb + 1;
     }
     case 'ziggurat': {
-      const steps = Math.min(4, Math.floor((H - 3) / 2));
+      // three-high steps receding two cells a side, a lit rim on every step's top edge, a chrome mast on the last
+      const steps = Math.min(4, Math.floor((H - 4) / 3));
       let r = { ...e };
       let yy = y0 + 1;
       for (let s = 0; s < steps; s++) {
         r = { x0: r.x0 + 2, x1: r.x1 - 2, z0: r.z0 + 2, z1: r.z1 - 2 };
         if (W(r) < 3 || D(r) < 3) break;
         const stepBlock = s % 2 ? B.DURASTEEL : B.DURASTEEL_DARK;
-        slab(bp, r.x0, r.z0, r.x1, r.z1, yy, stepBlock); slab(bp, r.x0, r.z0, r.x1, r.z1, yy + 1, stepBlock);
+        slab(bp, r.x0, r.z0, r.x1, r.z1, yy, stepBlock); slab(bp, r.x0, r.z0, r.x1, r.z1, yy + 1, s % 2 ? B.PANEL_BLACK : B.CHROME); slab(bp, r.x0, r.z0, r.x1, r.z1, yy + 2, stepBlock);
         // lit rim on the step's top edge
-        for (let x = r.x0; x <= r.x1; x++) { if ((x - r.x0) % 2 === 0) { bp.set(x, yy + 1, r.z0, B.GLOW_PANEL); bp.set(x, yy + 1, r.z1, B.GLOW_PANEL); } }
-        for (let z = r.z0; z <= r.z1; z++) { if ((z - r.z0) % 2 === 0) { bp.set(r.x0, yy + 1, z, B.GLOW_PANEL); bp.set(r.x1, yy + 1, z, B.GLOW_PANEL); } }
-        yy += 2;
+        for (let x = r.x0; x <= r.x1; x++) { if ((x - r.x0) % 2 === 0) { bp.set(x, yy + 2, r.z0, B.GLOW_PANEL); bp.set(x, yy + 2, r.z1, B.GLOW_PANEL); } }
+        for (let z = r.z0; z <= r.z1; z++) { if ((z - r.z0) % 2 === 0) { bp.set(r.x0, yy + 2, z, B.GLOW_PANEL); bp.set(r.x1, yy + 2, z, B.GLOW_PANEL); } }
+        yy += 3;
       }
-      const fh = Math.min(4, bp.h - 2 - yy);
+      const fh = Math.min(6, bp.h - 2 - yy);
       const used = yy - y0;
       return used + finial(bp, cx, yy, cz, fh, B.GLOW_PANEL_BLUE);
     }
     case 'deck': return paintDeck(bp, plan, style, o);
     case 'needle': {
-      // solid tapering tip over the lookout, chrome every fourth layer, blue edge lights, lit apex, two fins
-      const hb = Math.min(H - 1, 24);
+      // solid tip over the lookout: a quick shoulder down to half the footprint, then a slender spike to a lit apex
+      // (Zakuul blade); chrome every fourth layer, blue edge lights, and four chrome fins riding the spike's faces
+      // from the shoulder to two thirds of the way up, blue-lit at their tops
+      const hb = Math.min(H - 2, 30), shoulder = Math.min(5, Math.max(2, Math.floor(hb * 0.2)));
       const hx0 = W(e) / 2, hz0 = D(e) / 2;
+      const scale = (j) => (j < shoulder ? 1 - 0.5 * (j + 1) / shoulder : 0.5 * (1 - (j - shoulder + 1) / (hb - shoulder + 1)));
+      const finTop = shoulder + Math.floor((hb - shoulder) * 0.66);
+      const xc = Math.round(cxf - 0.5), zc = Math.round(czf - 0.5);
       for (let j = 0; j < hb; j++) {
-        const s = 1 - (j + 1) / (hb + 1);
+        const s = scale(j);
         const hx = Math.max(0.5, hx0 * s), hz = Math.max(0.5, hz0 * s);
-        const x0 = Math.round(cxf - hx), x1 = Math.round(cxf + hx) - 1, z0 = Math.round(czf - hz), z1 = Math.round(czf + hz) - 1;
+        const x0 = Math.round(cxf - hx), x1 = Math.max(x0, Math.round(cxf + hx) - 1), z0 = Math.round(czf - hz), z1 = Math.max(z0, Math.round(czf + hz) - 1);
         const body = j % 4 === 3 ? B.CHROME : (j % 4 === 1 ? B.PANEL_BLACK : B.DURASTEEL_DARK);
         const yy = y0 + 1 + j;
         slab(bp, x0, z0, x1, z1, yy, body);
         if (j % 2 === 0 && x1 > x0 && z1 > z0) { bp.set(x0, yy, z0, B.GLOW_PANEL_BLUE); bp.set(x1, yy, z1, B.GLOW_PANEL_BLUE); bp.set(x0, yy, z1, B.GLOW_PANEL_BLUE); bp.set(x1, yy, z0, B.GLOW_PANEL_BLUE); }
+        if (j >= shoulder && j <= finTop) {
+          const fin = j === finTop ? B.GLOW_PANEL_BLUE : B.CHROME;
+          if (x0 > e.x0) bp.set(x0 - 1, yy, zc, fin); if (x1 < e.x1) bp.set(x1 + 1, yy, zc, fin);
+          if (z0 > e.z0) bp.set(xc, yy, z0 - 1, fin); if (z1 < e.z1) bp.set(xc, yy, z1 + 1, fin);
+        }
       }
-      bp.set(Math.round(cxf - 0.5), y0 + hb, Math.round(czf - 0.5), B.GLOW_PANEL); bp.set(Math.round(cxf - 0.5), y0 + hb + 1, Math.round(czf - 0.5), B.GLOW_PANEL_BLUE);
-      const alongX = W(e) >= D(e);
-      for (let k = -1; k <= 1; k += 2) {
-        const fx = alongX ? cx + k * Math.max(2, Math.floor(W(e) / 4)) : cx, fz = alongX ? cz : cz + k * Math.max(2, Math.floor(D(e) / 4));
-        bp.fill(fx, y0 + 1, fz, fx, y0 + Math.min(8, hb - 2), fz, B.CHROME); bp.set(fx, y0 + Math.min(9, hb - 1), fz, B.GLOW_PANEL_BLUE);
-      }
+      bp.set(xc, y0 + hb, zc, B.GLOW_PANEL); bp.set(xc, y0 + hb + 1, zc, B.GLOW_PANEL_BLUE);
       return hb + 2;
     }
     case 'fins': {
@@ -724,9 +755,11 @@ function paintDeck(bp, plan, style, o) {
     bp.walls(he.x0, yTop + 1, he.z0, he.x1, yTop + 1, he.z1, B.GLOW_PANEL);
     bp.set(Math.floor((he.x0 + he.x1) / 2), yTop + 1, Math.floor((he.z0 + he.z1) / 2), B.HOLO_SIGN);
     finial(bp, he.x0, yTop + 2, he.z0, 3, B.PANEL_RED);
+    // control mast on the head's far corner: the approach beacon, and the deck's mark in the skyline
+    mast(bp, he.x1, yTop + 1, he.z1, Math.min(8, bp.h - 3 - yTop));
     // the head's stair door opens onto the deck: make sure the cells in front are clear plate
     const ux = F.X(c.u0 + 4, c.v0 - 1), uz = F.Z(c.u0 + 4, c.v0 - 1), vx = F.X(c.u0 + 5, c.v0 - 1), vz = F.Z(c.u0 + 5, c.v0 - 1);
     for (const [x, z] of [[ux, uz], [vx, vz]]) { bp.set(x, y, z, B.DECK_PLATE); bp.set(x, y + 1, z, AIR); bp.set(x, y + 2, z, AIR); }
   }
-  return 8;
+  return 9;
 }

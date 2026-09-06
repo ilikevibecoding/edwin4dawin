@@ -1,7 +1,9 @@
 // Lit vertical window strips (docs/rubrics/11_towers_v2.md row 3): emissive columns every 4-6 blocks running the
 // full height of a facade above the podium, so the night skyline reads as lines of light instead of random dots.
 // The plan is a pure function of the lot (pitch, phase, faces, colour); the painter overwrites the wall / window /
-// slab-band cells of a facade ring column but never openings, glass fronts, signs or corners.
+// slab-band cells of a facade ring column but never openings, glass fronts, signs or corners. The strip block is a
+// full-face panel (white GLOW_PANEL or blue GLOW_PANEL_BLUE): a WINDOW_LIT column is a dotted line of framed panes
+// that vanishes among the facade's ordinary lit windows, a panel column is an unbroken line of light.
 import { B } from '../../blocks.js';
 import { FORCE_AIR } from '../blueprint.js';
 import { hash2 } from '../../rng.js';
@@ -20,8 +22,8 @@ export function stripPlan(lot, family) {
   const phase = Math.floor(h2 * pitch);
   let faces = null;
   if (family === 'stack' || h3 < 0.3) faces = h4 < 0.5 ? new Set(['N', 'S', 'D']) : new Set(['E', 'W', 'D']);
-  const blue = family === 'needle' || family === 'spine' || (lot.district === 'financial' ? h4 < 0.45 : h4 < 0.2);
-  return { pitch, phase, faces, block: blue ? B.GLOW_PANEL_BLUE : B.WINDOW_LIT, f0: STRIP_FROM_FLOOR };
+  const blue = family === 'needle' || family === 'spine' || (lot.district === 'financial' ? h4 < 0.6 : h4 < 0.4);
+  return { pitch, phase, faces, block: blue ? B.GLOW_PANEL_BLUE : B.GLOW_PANEL, f0: STRIP_FROM_FLOOR };
 }
 
 const KEEP_TBL = new Uint8Array(256);

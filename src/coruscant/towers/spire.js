@@ -53,9 +53,9 @@ export function spire(bp, lot, ctx) {
   };
   const hooks = {
     crownKind: 'dome',
-    afterTier: (t, yRoof) => {
+    afterTier: (t, yRoof, fr, layout, all) => {
       // terrace lamps on the setback roofs just inside the railing
-      if (t.index === tiers.length - 1) return;
+      if (t.index === all.length - 1) return;
       for (const c of t.ring) {
         if (c.along % 7 !== 3 || c.corner) continue;
         const [ox, oz] = c.face === 'N' ? [0, 1] : c.face === 'S' ? [0, -1] : c.face === 'W' ? [1, 0] : c.face === 'E' ? [-1, 0] : [0, 0];
