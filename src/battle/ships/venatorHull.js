@@ -30,8 +30,6 @@ import {
   DOOR_Z0,
   DOOR_Z1,
   WEDGE_Z0,
-  TRIM_Z0,
-  TRIM_Z1,
   bandH,
   bandTop,
   doorEdge,
@@ -109,6 +107,9 @@ export function hullProfile(
     xw = doorEdge(zr);
     ro = redOuter(zr);
     ri = centreHalf(zr);
+    // the hairline seam runs on to the nose (the open bay does not)
+    g = open ? 0 : gap;
+    h = g > 0 ? depth : 0;
   }
   const R = [
     [s, yb + hs],
@@ -418,42 +419,30 @@ export function buildHull(ctx) {
     }
   }
 
-  // ---- deck markings (paint material): the red halves and bow stripes are loft strips; here the red
-  // trim segments along the deck edge beside the bow stripes and the gold roundels
+  // ---- deck markings (paint material): the red halves and bow stripes are loft strips; here the gold
+  // roundels and the shoulder stripes (the reference has no red trim along the bow deck edges)
   // the far LOD is drawn from 9 km up: lift the paint further off the deck so it cannot z-fight
   const paintLift = lod === 2 ? 1.2 : 0.15;
-  if (mid)
-    for (const s of [-1, 1])
-      for (let za = TRIM_Z0; za < TRIM_Z1 - 10; za += 34) {
-        const zb = Math.min(za + 22, TRIM_Z1 - 2);
-        add(
-          deckStrip(
-            [za, zb],
-            (zr) => s * (halfW(zr) - 1.5),
-            (zr) => s * (halfW(zr) - 6),
-            yTop,
-            Z,
-            { minW: 2, lift: paintLift },
-          ),
-          "paint",
-          { color: RED, texel: 1 / 8 },
-        );
-      }
-  // gold roundels (Open Circle) on the wings outboard of the band, faded ones on the lower flank
+  // gold roundels (Open Circle) on the wings outboard of the band: a 28 m gold disc in a dark red rim
+  // with a darker centre ring, as the reference shows them; faded ones on the lower flank
   for (const s of [-1, 1]) {
     const zr = ROUNDEL_ZR;
     const xc = s * roundelX(zr);
     const y = yTop(zr) + paintLift;
-    add(ringFacing([xc, y, Z(zr)], [0, 1, 0], [0, 0, -1], 8, 11, 28), "paint", {
-      color: INSIGNIA,
-      texel: 1 / 8,
-    });
     add(
-      new THREE.CircleGeometry(8, 24)
+      ringFacing([xc, y, Z(zr)], [0, 1, 0], [0, 0, -1], 12, 14, 28),
+      "paint",
+      {
+        color: RED,
+        texel: 1 / 8,
+      },
+    );
+    add(
+      new THREE.CircleGeometry(12, 28)
         .rotateX(-Math.PI / 2)
         .translate(xc, y, Z(zr)),
       "paint",
-      { color: mulColor(INSIGNIA, 0.55), texel: 1 / 8 },
+      { color: INSIGNIA, texel: 1 / 8 },
     );
     if (mid)
       add(
@@ -461,13 +450,13 @@ export function buildHull(ctx) {
           [xc, y + 0.05, Z(zr)],
           [0, 1, 0],
           [0, 0, -1],
-          3.6,
-          5.8,
+          4,
+          6.5,
           20,
           1.2,
         ),
         "paint",
-        { color: INSIGNIA, texel: 1 / 8 },
+        { color: mulColor(INSIGNIA, 0.55), texel: 1 / 8 },
       );
     if (mid) {
       const j = s > 0 ? EDGE.lowerR : EDGE.lowerL;

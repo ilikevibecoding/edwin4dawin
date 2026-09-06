@@ -113,9 +113,9 @@ export const NOSE = {
 
 // ---- dorsal deck layout. The red door band is a raised slab down the centre: its half-width grows
 // linearly from 20 m at the nose to 43 m at the block's foot (0.56 L); on the bow deck (zr 20-250) the
-// two stripes lie flat with a grey centre gap that narrows aft; from 0.22 L the band rises on vertical
-// side walls to 19.5 m over the wings at the sill. Both halves are red up to a 1.5 m grey lip along the
-// walls and a narrow dark seam down the middle. The wings outboard stay at deck level.
+// red lies flat as one wedge down to the nose block; from 0.22 L the band rises on vertical side walls
+// to 19.5 m over the wings at the sill. Both halves are red up to a 1.5 m grey lip along the walls and
+// a hairline dark seam down the middle. The wings outboard stay at deck level.
 export const DOOR_Z0 = 250; // the band leaves the flat bow deck here
 export const DOOR_Z1 = 640; // 0.56 L: the sill at the block's foot
 export const BAND_H = 19.5; // band top over the wings at the sill
@@ -127,13 +127,11 @@ export const bandTop = (zr) => yTop(zr) + bandH(zr);
 export const SILL_Y = up(BAND_H); // the band top where it meets the block
 export const WEDGE_Z0 = 20; // bow stripes start over the nose block ...
 export const WEDGE_Z1 = DOOR_Z0; // ... and run straight into the band
-export const TRIM_Z0 = 110; // red trim segments along the deck edge beside the bow stripes
-export const TRIM_Z1 = 250;
 export const doorEdge = bandHalf; // foot of the band's side wall
 export const redOuter = (zr) => bandHalf(zr) - LIP;
-// grey gap between the two red halves: 5 m at the nose narrowing to the seam edge at the band
-export const centreHalf = (zr) =>
-  SEAM_HALF + 0.8 + 3.6 * clamp((DOOR_Z0 - zr) / (DOOR_Z0 - WEDGE_Z0), 0, 1);
+// the two red halves meet at the seam all the way to the nose (the reference's bow wedge is one red
+// field with a hairline down the middle; no grey between the stripes)
+export const centreHalf = () => SEAM_HALF + 0.05;
 export const inDoors = (zr) => zr > DOOR_Z0 + 0.005 && zr < DOOR_Z1 + 0.005;
 export const inWedge = (zr) => zr > WEDGE_Z0 + 0.005 && zr < WEDGE_Z1 + 0.005;
 // deck height at (x, zr): the raised band inside the door zone, the wing level elsewhere
@@ -141,9 +139,9 @@ export function deckY(x, zr) {
   if (inDoors(zr) && Math.abs(x) < bandHalf(zr)) return bandTop(zr);
   return yTop(zr);
 }
-// closed variant: a narrow dark seam between the halves
-export const SEAM_HALF = 1.6;
-export const SEAM_DEPTH = 2.5;
+// closed variant: a thin dark seam between the halves (a hairline in the reference)
+export const SEAM_HALF = 0.6;
+export const SEAM_DEPTH = 1.5;
 // open variant: the doors part over a lit bay this wide (clamped inside the band) / deep
 export const BAY_HALF = 24;
 export const BAY_DEPTH = 50;

@@ -329,6 +329,8 @@ export function buildDetail(ctx, secs) {
       skip = 0.3,
       mat = "hull",
       grooves = true,
+      boxes = true,
+      lift = 0,
     },
     filter = null,
   ) => {
@@ -370,7 +372,7 @@ export function buildDetail(ctx, secs) {
         }),
         mat,
         {
-          color: plateTint(base, cv),
+          color: plateTint(lift ? mulColor(base, lift) : base, cv),
           uv: mat === "hull" ? "keep" : "planar",
         },
       );
@@ -388,11 +390,15 @@ export function buildDetail(ctx, secs) {
           ),
           mat,
           {
-            color: plateTint(base, cv, 0.1),
+            color: plateTint(
+              lift ? mulColor(base, lift * 1.15) : base,
+              cv,
+              0.1,
+            ),
             uv: mat === "hull" ? "keep" : "planar",
           },
         );
-      else if (rand() < 0.35)
+      else if (boxes && rand() < 0.35)
         add(
           surfaceBox(fr, [3.5, th + 0.6, 3.5], {
             du: (rand() - 0.5) * w * 0.5,
@@ -413,7 +419,7 @@ export function buildDetail(ctx, secs) {
     stripField(
       R ? EDGE.wingR : EDGE.wingL,
       GREY_WING,
-      { zr0: 270, zr1: 1080, max: 45, keep: 0.25, skip: 0.3 },
+      { zr0: 270, zr1: 1080, max: 55, keep: 0.25, skip: 0.3 },
       (cv, ta, tb) => {
         const zr = cv - Z(0);
         const tm = R ? (ta + tb) / 2 : 1 - (ta + tb) / 2;
@@ -427,18 +433,21 @@ export function buildDetail(ctx, secs) {
         return roundel || shelf;
       },
     );
-    // door halves: red plating on the red loft strips (edge 10 runs from the red outer edge, t=0, to
-    // the inner edge at the centre strip, t=1; port the other way)
+    // door halves: raised red plates that read a shade lighter than the doors, as in the reference (no
+    // dark hatches on the red). Edge 10 runs from the red outer edge, t=0, to the inner edge at the
+    // centre strip, t=1; port the other way.
     stripField(R ? EDGE.doorR : EDGE.doorL, RED, {
       zr0: DOOR_Z0 + 4,
       zr1: DOOR_Z1 - 4,
       t0: 0.03,
       t1: 0.97,
-      max: 45,
+      max: 40,
       keep: 0.3,
-      skip: 0.45,
+      skip: 0.5,
       mat: "paint",
       grooves: false,
+      boxes: false,
+      lift: 1.5,
     });
     // lower hull slope and the belly halves
     stripField(R ? EDGE.lowerR : EDGE.lowerL, GREY_LOWER, {
@@ -458,21 +467,23 @@ export function buildDetail(ctx, secs) {
     );
   }
   if (fine) {
-    // deck greebles along the wing edge: small hatches and vents
+    // deck greebles along the wing edge: sparse hatches and vents, most of them hull grey so the wings
+    // keep the reference's clean large-panel look
     for (const s of [-1, 1])
-      for (let zr = 320; zr < 1080; zr += 12 + rand() * 20) {
+      for (let zr = 320; zr < 1080; zr += 26 + rand() * 30) {
         const x = s * (halfW(zr) - 8 - rand() * 14);
-        const w = 2.5 + rand() * 4;
-        const d = 2.5 + rand() * 6;
+        const w = 3 + rand() * 5;
+        const d = 3 + rand() * 7;
+        const dark = rand() < 0.35;
         add(
           boxMM(
             [x - w / 2, yTop(zr), Z(zr) - d / 2],
             [x + w / 2, yTop(zr) + 0.5 + rand() * 1.4, Z(zr) + d / 2],
           ),
-          "dark",
+          dark ? "dark" : "hull",
           {
-            color: DARK,
-            texel: 1 / 4,
+            color: dark ? DARK : GREY_FLANK,
+            texel: dark ? 1 / 4 : 1 / 6,
           },
         );
       }
