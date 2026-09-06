@@ -22,6 +22,7 @@ export class TalkBox {
   constructor(game, pop) {
     this.game = game; this.pop = pop;
     this.npc = null; this.options = []; this.turns = 0;
+    this.onClose = null;   // (npc, turns) => void - the cast runtime says a farewell line when a conversation ends
     const style = document.createElement('style'); style.textContent = CSS; document.head.appendChild(style);
     const root = document.createElement('div'); root.id = 'npc-talk'; root.hidden = true;
     root.innerHTML = '<div class="nt-name"></div><div class="nt-role"></div><p class="nt-line"></p><div class="nt-opts"></div><div class="nt-hint">1-3 reply, Esc leave</div>';
@@ -62,18 +63,20 @@ export class TalkBox {
     if (!o || !this.npc) return;
     this.turns++;
     const res = o.act();
-    // the reply is said out loud too (bubble + chat line), not only printed in the box
-    if (res && res.line && this.pop.speak) this.pop.speak(this.npc, res.line, true);
+    // the reply is said out loud too (bubble + chat line), not only printed in the box - unless the option already
+    // delivered it through the dialog API (res.spoken: subtitle + voice + bubble)
+    if (res && res.line && !res.spoken && this.pop.speak) this.pop.speak(this.npc, res.line, true);
     if (!res || this.turns >= 3) { if (res) { this.show(res.line, []); setTimeout(() => this.close(), 2600); } else this.close(); return; }
     this.show(res.line, res.options || []);
     if (!res.options || !res.options.length) setTimeout(() => { if (this.npc) this.close(); }, 2600);
   }
   close() {
     if (!this.npc) return;
-    const n = this.npc;
+    const n = this.npc, turns = this.turns;
     this.npc = null; this.options = [];
     this.root.hidden = true;
     if (this.game.hud && this.game.hud.screen === 'talk') this.game.hud.screen = null;
     if (this.pop.onTalkEnd) this.pop.onTalkEnd(n);
+    if (this.onClose) this.onClose(n, turns);
   }
 }
