@@ -388,19 +388,23 @@ vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist, vec2 dx, vec
   if (rc.w <= 0.0) return vec4(0.0);
   float wp = rc.w; // depth of P for the mirror camera (equals its depth for the real camera)
   vec2 uv0 = rc.xy / wp * 0.5 + 0.5;
-  // anything mirrored within reach? (the top level's footprint is a good part of the image)
-  float topA = textureLod(uReflTex, uv0, uReflParams.w).a;
-  if (topA <= 0.0005) return vec4(0.0);
+  // anything mirrored within reach? The top level is read here and at the reach of the longest streak up and
+  // down the image (the top texel's footprint alone is shorter than a tall object's streak: gating on it alone
+  // cut the streaks of everything higher than the camera at a quarter of their peak)
+  float unit = uReflTune.x * sqrt(mss) * uReflParams.z; // rms texels of streak per unit of share (all the variance)
+  vec2 reach = vec2(0.0, min(1.5 * unit * uReflTexel.y, 0.3));
+  vec3 topA = vec3(textureLod(uReflTex, uv0, uReflParams.w).a, textureLod(uReflTex, uv0 + reach, uReflParams.w).a, textureLod(uReflTex, uv0 - reach, uReflParams.w).a);
+  if (max(topA.x, max(topA.y, topA.z)) <= 0.0005) return vec4(0.0);
   // the kernel's extent: the streak of what is in reach, biased up so the taller objects of a mixed footprint
   // keep most of their tails (a pure region of one share is then sampled a little finer than it needs)
-  float shareL = min(1.5 * textureLod(uReflShare, uv0, uReflParams.w).r / topA, 1.0);
+  vec3 topS = vec3(textureLod(uReflShare, uv0, uReflParams.w).r, textureLod(uReflShare, uv0 + reach, uReflParams.w).r, textureLod(uReflShare, uv0 - reach, uReflParams.w).r);
+  float shareL = min(1.5 * (topS.x + topS.y + topS.z) / (topA.x + topA.y + topA.z), 1.0);
   // The sparkle facets (the same field the glitter rides on) tilt the mirror too: the light of a distant
   // window lands on the cells whose facet happens to point at it, so a reflection breaks up along the wave
   // slopes and a near one (the aircraft, a hull) shatters at its edges the way a mirror image does in a chop.
   float resolved;
   vec2 s = sparkleSlope(P.xz, dx, dy, t, mss, resolved);
   N = normalize(vec3(N.x / N.y - s.x, 1.0, N.z / N.y - s.y));
-  float mssU = mss * (1.0 - resolved);
   // The flat mirror sees the objects in reach at the depth wq the share stands for. The real reflected ray
   // leaves P tilted by the wave slope and travels about the same path length L, so its hit point is displaced
   // by (R - R0) L: that is the mirror image displaced by the same vector (clip-space displacement per metre:
@@ -416,7 +420,7 @@ vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist, vec2 dx, vec
   // (a distant light's glints reach a good part of the image up and down the mirror image: the bound only
   // keeps a wild tilt from sampling across the whole texture)
   uv = uv0 + clamp(uv - uv0, vec2(-0.25), vec2(0.25));
-  float unit = uReflTune.x * sqrt(mssU) * uReflParams.z; // rms texels of streak per unit of share
+  unit *= sqrt(1.0 - resolved); // the resolved facets tilt the lookup; only the rest streaks it
   float sigL = unit * shareL;
   // taps one quarter of the reach's rms apart, six a side (+-1.5 rms); a short reach needs fewer
   float stepT = max(0.25 * sigL, 1.0);
