@@ -196,15 +196,19 @@ function leafClusterTexture(rng: Rng): THREE.CanvasTexture {
       }
       continue;
     }
-    // a few big leaves at the centre, smaller ones toward the edge, leaving gaps between them; the sea
-    // grape's leaves are half as many, round and twice the size
+    // hardwood: many small leaves in a few overlapping bunches (a card spans 2-4 m of crown, so a leaf is
+    // a few per cent of the tile: the old two dozen big ellipses radiating from the centre read as a hand
+    // at close range), the bunches denser and paler at their centres, gaps between them; the sea grape's
+    // leaves are far fewer, round and big (a 20 cm leaf on a 2 m card)
     const grape = tile === 2;
-    const n = grape ? 11 + rng.int(0, 3) : 22 + rng.int(0, 8);
+    const bunches: [number, number][] = grape ? [[0.5, 0.5]] : Array.from({ length: 4 + rng.int(0, 2) }, () => [0.5 + rng.range(-0.2, 0.2), 0.5 + rng.range(-0.2, 0.2)] as [number, number]);
+    const n = grape ? 12 + rng.int(0, 3) : 120 + rng.int(0, 30);
     for (let i = 0; i < n; i++) {
-      const ang = rng.range(0, Math.PI * 2), rad = Math.pow(rng.next(), 0.6) * (grape ? 0.3 : 0.34);
-      const cx = 0.5 + Math.cos(ang) * rad, cy = 0.5 + Math.sin(ang) * rad;
-      const len = (grape ? 0.14 + 0.08 * rng.next() : 0.09 + 0.09 * rng.next()) * (1 - 0.5 * rad), wid = len * (grape ? 0.85 + 0.15 * rng.next() : 0.4 + 0.35 * rng.next());
-      const shade = 0.62 + 0.5 * rng.next() * (1 - 0.6 * rad);
+      const [bx, by] = bunches[i % bunches.length];
+      const ang = rng.range(0, Math.PI * 2), rad = Math.pow(rng.next(), 0.7) * (grape ? 0.3 : 0.19);
+      const cx = bx + Math.cos(ang) * rad, cy = by + Math.sin(ang) * rad;
+      const len = (grape ? 0.09 + 0.06 * rng.next() : 0.035 + 0.035 * rng.next()) * (1 - 0.4 * rad), wid = len * (grape ? 0.85 + 0.15 * rng.next() : 0.4 + 0.3 * rng.next());
+      const shade = 0.6 + 0.5 * rng.next() * (1 - 0.6 * rad / (grape ? 0.3 : 0.19));
       const g = Math.round(255 * Math.min(1, shade));
       ctx.fillStyle = `rgb(${g}, 0, 0)`;
       ctx.beginPath();

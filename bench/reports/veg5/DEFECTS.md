@@ -135,3 +135,37 @@ The previous vegetation agent's loop-5 commits were lost with the VM; rounds 1�
   gust field in world space plus a quick flutter; chunk-cached (20 m), frustum-culled by chunk, faded over
   the last 15 m, and skipped entirely when the camera is more than 72 m above the ground (the aerial views
   pay nothing). One draw, ≤ 6000 instances (≈ 1300 in a ground view, 8 k triangles).
+
+### R7b — measured, and what it missed
+- **Measured** (`r10`/`r11` aerial-a, canopy region mask — every pixel of the box that is neither water nor sand,
+  `tools/canopy3.py`; the old green-dominant mask dropped the darkest crowns and a third of the reference's
+  box was water): reference mean [80, 86, 77], p10 / p50 / p90 52 / 78 / 130, shade band [46, 53, 47]
+  (sat 0.12), lit band [124, 133, 119] (sat 0.10); ours [72, 83, 69], 57 / 75 / 110, shade [48, 59, 56]
+  (sat 0.19, hue 164°: cyan), lit [107, 117, 90] (sat 0.24). The elevation-aware terminator and the warmer
+  ambient moved the numbers by under one unit: the box is cards at `vFar` ≈ 0-0.3 where the multipliers
+  barely changed, and the real fault was in the *shape* of the shading, not its level.
+- **Wrong** (side by side, `cmp-ref-r11-aerial*.png`): every crown a ball — a smooth lit half and a smooth dark
+  half — twice the apparent size of the reference's crowns, no gaps to the ground; the reference canopy is a
+  mottled clump of small lit tips over dark hollows, with sand showing between crowns at the shore.
+
+## Round 7c — mottled terminator, canopy bands, sky reflection
+- **Changed**: the card terminator follows the atlas leaf clusters: `dot(vDisc, sunDir) + (t.r - 0.68)` against
+  a ±0.16 band, so the raised clusters on the sun side are lit and the hollows between them stay in shade
+  (the atlas disc is kept under the channel ceiling — `0.5 + 0.5 lobes` — so the cluster peaks stay separate
+  instead of clipping to one plateau); lit ×[2.0, 1.9, 1.75], shade ×[0.3, 0.32, 0.25] (deep and no bluer
+  than the leaf), far modulation 0.42–2.0, far card growth 25 → 15 % (gaps show); 3D crowns: the sunlit cap
+  gated by the same leaf-cluster noise (`+0.5 (leaf - 0.5)`), sunlit ×[1.45, 1.36, 1.2], shade
+  ×[0.44, 0.48, 0.42]; the foliage families' sky reflection (`RE_IndirectSpecular`) ×0.6 — the 4 % Fresnel of
+  a blue sky was as bright as the shaded leaf's own diffuse, which is where the cyan shade came from.
+- **Measured**: r15 aerial-a (below).
+
+## Round 10b — grass density; Round 6c — hard shadows on bark
+- **Wrong** (`r10-park`, eye level under the park canopy): the tufts a scatter of specks on a 1.6 m lattice
+  (a lawn read as a painted floor with the odd weed); the trunks pale grey under their own crowns — the
+  probe shadow floor of 0.2 and the horizon sky light lit them like concrete posts against the dark lawn.
+- **Changed**: lattice 0.8 m with a per-tuft rank against the camera distance (full inside 18 m, a quarter at
+  60 m; the rank is the lattice hash so the same tufts stand from every camera), tufts 1.6–2.2× wider than
+  tall (a splayed clump), cap 12 000 instances (≤ 72 k triangles, ground views only); the hard parts of a
+  crown (trunk, limbs, root zone: `vegHard`) take the full per-fragment shadow with no leaf floor.
+- **Also**: the hardwood leaf-cluster tiles redrawn as 120–150 small leaves in 4–6 overlapping bunches (the
+  two dozen big ellipses radiating from the tile centre read as hands at 5–10 m).
