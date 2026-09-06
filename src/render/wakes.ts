@@ -314,7 +314,7 @@ export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
       // taxi speed, 35 cm at the hump; the stagnation rise v^2/2g is 70 cm at 7 kt, so this is the sober end),
       // gone once the hull planes with its bow clear
       float sp = min(speed, 7.0);
-      float Hb = min(0.04 + 0.016 * sp * sp, 0.5) * hullScale * (1.0 - planing) * smoothstep(0.4, 2.0, speed);
+      float Hb = min(0.045 + 0.018 * sp * sp, 0.5) * hullScale * (1.0 - planing) * smoothstep(0.4, 2.0, speed);
       // one continuous field over hull and wake (a branch at the transom left a step in the surface that the
       // patch mesh drew as a jagged shelf across the stern): every term is windowed smoothly in d
       float ax = lead + d;                 // metres behind the bow (negative ahead of the stem, > lead behind the transom)
@@ -352,9 +352,9 @@ export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
       float laneHalf = w0 * 1.05 + 0.45 * sqrt(dp * max(w0, 0.15));
       float across = 1.0 - smoothstep(laneHalf * 1.2, laneHalf * 3.0, ay);
       float lam = max(6.2832 * speed * speed / 9.81, 0.5);
-      float twA = 0.045 * hullScale * spd * (1.0 - 0.8 * planing);
+      float twA = 0.08 * hullScale * spd * (1.0 - 0.8 * planing);
       h += twA * exp(-dp / (laneLen * 0.6)) * across * cos(6.2832 * d / lam) * smoothstep(-0.5 * lam, 0.0, d);
-      h += 0.2 * Hb * g1(ax - lead, 0.6 * hullScale) * g1(sideDist, 0.5) * (1.0 - planing);
+      h += 0.3 * Hb * g1(ax - lead, 0.6 * hullScale) * g1(sideDist, 0.5) * (1.0 - planing);
       // ---- planing: the water is thrown out and down along the chines from the forebody to the step, leaves
       //      the step as a hollow and closes behind the transom in a rooster tail a hull length back
       float hl = clamp(0.1 * speed, 0.8, 3.0);
@@ -536,6 +536,10 @@ export class WakeTrail {
   private lastZ = NaN;
   /** points still to emit at reduced strength after a trail start or a gap */
   private ramp = 0;
+  /** true until the first update() since construction / reset(): only an emitter that is already under way on
+   *  the water at its very first update (a boat spawned on its route, the aircraft set up taxiing) gets a seeded
+   *  track behind it; one that has been airborne and touches down starts its wake at the touchdown point */
+  private untouched = true;
   private readonly geo: THREE.BufferGeometry | null = null;
   private readonly wake: boolean;
   /** emission spacing (m); a slow emitter is sampled every spacing metres, a fast one every quarter second */
@@ -626,6 +630,8 @@ export class WakeTrail {
     const dl = Math.hypot(dx, dz);
     if (dl > 1e-6) { dx /= dl; dz /= dl; } else { dx = 1; dz = 0; }
     const fresh = Number.isNaN(this.lastX);
+    const seedable = this.untouched;
+    this.untouched = false;
     const dist = fresh ? 0 : Math.hypot(x - this.lastX, z - this.lastZ);
     if (active && (fresh || dist > Math.max(this.spacing, speed * 0.25))) {
       let pdx = dx, pdz = dz;
@@ -639,9 +645,10 @@ export class WakeTrail {
         if (last) { this.points.push({ ...last, fade: 0 }); this.points.push({ ...last, x, z, dx: pdx, dz: pdz, t: time, fade: 0 }); }
       }
       if (fresh || gap) this.ramp = RAMP;
-      if (fresh && this.wake && speed > 1) {
+      if (fresh && seedable && this.wake && speed > 1) {
         // an emitter placed already under way (a boat spawned on its route, the aircraft set up taxiing) has
-        // been moving for a while: seed the trail it would have left along its track behind it
+        // been moving for a while: seed the trail it would have left along its track behind it (not one that
+        // was airborne first: a landing aircraft used to get a 100 m lane the instant its floats touched)
         const step = Math.max(this.spacing, speed * 0.25);
         const nBack = Math.min(this.capacity - 1, Math.floor(Math.min(this.lifetime * 0.6, 60) * speed / step));
         for (let i = nBack; i >= 1; i--) this.points.push({ x: x - dx * step * i, z: z - dz * step * i, dx, dz, t: time - (step * i) / speed, fade: 1, speed });
@@ -720,6 +727,7 @@ export class WakeTrail {
     this.points.length = 0;
     this.lastX = NaN; this.lastZ = NaN;
     this.ramp = 0;
+    this.untouched = true;
     this.count = 0;
     this.geo?.setDrawRange(0, 0);
   }
