@@ -11,6 +11,10 @@
  *   outJson  detailed logs + summary (default bench/out/flighttest.json)
  *   --single skip the second (determinism) run
  *
+ * BROWSER_WS=<ws endpoint> in the environment reuses a browser that is already running (a capture session that
+ * holds one of the machine's Chrome slots) instead of launching its own; the suite runs in a new page of it and
+ * the script disconnects at the end without closing it.
+ *
  * Tests: rest datum; water takeoff with a 5 m/s tailwind (bench `water-landing` state, heading 086) and
  * into the wind (heading 289); steady roll rate at full aileron at 55 m/s (+ aileron yaw sense); full
  * elevator step (peak pitch rate, overshoots, settle time); steady 45-degree turn rate vs theory;
@@ -118,8 +122,11 @@ function suite() {
   {
     f.turbulence = ambientTurbulence;
     place(-500, 1.96, 3330, 86, 0, 0, 0, 0, 0);
+    // the datum is measured above the water surface under the aircraft (the same wave field the floats ride, swell
+    // included: FlightModel.surfaceAt), so a swell crest passing during the 2 s window does not move the datum
     let minY = Infinity, maxY = -Infinity; const ys = [], pitches = [];
-    sim('rest', 10, (t, T) => { minY = Math.min(minY, T.altitude); maxY = Math.max(maxY, T.altitude); if (t > 8) { ys.push(T.altitude); pitches.push(T.pitchAngle * R2D); } }, 6);
+    const datum = () => f.position.y - f.surfaceAt(f.position.x, f.position.z);
+    sim('rest', 10, (t, T) => { minY = Math.min(minY, T.altitude); maxY = Math.max(maxY, T.altitude); if (t > 8) { ys.push(datum()); pitches.push(T.pitchAngle * R2D); } }, 6);
     const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
     results.rest = { restY: r3(mean(ys)), restPitchDeg: r2(mean(pitches)), minY: r3(minY), maxY: r3(maxY), settledHeaveMm: r1((Math.max(...ys) - Math.min(...ys)) * 1000) };
   }
@@ -452,7 +459,11 @@ async function runOnce(browser) {
   return r;
 }
 
-const browser = await puppeteer.launch({ executablePath: process.env.CHROME_PATH || '/usr/local/bin/google-chrome', headless: true, args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'], defaultViewport: { width: 640, height: 360 }, protocolTimeout: 1800000 });
+const browserWs = process.env.BROWSER_WS;
+const browser = browserWs
+  ? await puppeteer.connect({ browserWSEndpoint: browserWs, defaultViewport: { width: 640, height: 360 }, protocolTimeout: 1800000 })
+  // the machine-wide Chrome slot gate can hold a launch for minutes; never time out on it
+  : await puppeteer.launch({ executablePath: process.env.CHROME_PATH || '/usr/local/bin/google-chrome', headless: true, args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'], defaultViewport: { width: 640, height: 360 }, protocolTimeout: 1800000, timeout: 0 });
 const t0 = Date.now();
 const first = await runOnce(browser);
 let deterministic = null;
@@ -463,7 +474,7 @@ if (runs > 1) {
     for (const k of Object.keys(first.results)) if (JSON.stringify(first.results[k]) !== JSON.stringify(second.results[k])) console.error(`non-deterministic: ${k}\n  run1 ${JSON.stringify(first.results[k])}\n  run2 ${JSON.stringify(second.results[k])}`);
   }
 }
-await browser.close();
+if (browserWs) await browser.disconnect(); else await browser.close();
 
 const flat = flatten(first.results);
 const { checks, allPass } = evaluate(flat);

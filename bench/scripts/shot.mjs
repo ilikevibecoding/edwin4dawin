@@ -6,10 +6,14 @@ const [url, out, w = '1280', h = '720', settle = '3'] = process.argv.slice(2);
 if (!url || !out) { console.error('usage: shot.mjs <url> <out.png> [w] [h] [settleFrames]'); process.exit(2); }
 
 const browser = await puppeteer.launch({
+  // the machine-wide Chrome slot gate can hold a launch for minutes; never time out on it
+  timeout: 1800000,
   executablePath: process.env.CHROME_PATH || '/usr/local/bin/google-chrome',
   headless: true,
   args: ['--no-sandbox', '--disable-gpu-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', `--window-size=${w},${h}`, '--hide-scrollbars'],
   defaultViewport: { width: Number(w), height: Number(h), deviceScaleFactor: 1 },
+  // the machine-wide Chrome gate (/usr/local/bin/google-chrome) blocks the launch until a slot is free
+  timeout: 0,
 });
 const page = await browser.newPage();
 const logs = [];

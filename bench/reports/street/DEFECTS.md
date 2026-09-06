@@ -1,0 +1,49 @@
+# Street detail — defect log
+
+Branch `cursor/street-loop-8213`. Views: the bench set plus ad-hoc `dev` cameras over downtown
+(`street2m` 2 m over the avenue at x=-2737 z=-3880 looking north; `isect60` 60 m over that avenue's signal node
+at z=-3939 (round 1: x=-2715 z=-3895, since built over); `art60` 60 m over the midtown 6-way arterial junction at
+x=-3375 z=-5365; `c100`/`c200`/`c500`/`c1k` the city read from 100 m to 1 km; `-night` variants at 22:00).
+Captures are gated to two Chrome slots machine-wide, so every round batches its views into one browser.
+
+Status: `open` / `fixed (round n)` / `wontfix (reason)` / `request (agent)`.
+
+## Round 0 — baseline (commit 6130eae7, before this branch)
+
+| # | View | Defect | Status |
+|---|------|--------|--------|
+| 0.1 | all city views | Street lamps only on `arterial`/`highway`/`causeway` segments, one 9 m pole every 45 m alternating sides; none on `street`/`lane`, none at intersections; the pole stands at `width/2 + 1` from the centreline, i.e. in the gutter of a road with no curb. | fixed (round 1): lamp plan from `streets.ts` — arterial 36 m staggered both sides, street 48 m, ped 18 m on the promenade, one per intersection corner, footing 0.75 m behind the curb face |
+| 0.2 | night views | Lamp heads glow (`aEmissive`) but throw no light: no pools on the road, so the lamps do not read as street lighting from the air. | fixed (round 1): ground irradiance map (`uLampMap`, 2.5 m texels) sampled by the road and sidewalk materials |
+| 0.3 | night, skyline-high | Lamps vanish beyond the prop LOD distance (~600 m); a city at night has no street grid of lights. | fixed (round 1): additive point sprites per chunk fade in at 160–320 m and out at 4 km |
+| 0.4 | street2m, isect60 | No traffic signals anywhere. | fixed (round 1): mast arms with 3-aspect heads per approach lane, pedestrian heads, street-name blades at every arterial × non-lane intersection, stop signs on the minor legs of arterial T's and street crossings |
+| 0.5 | street2m | No sidewalks or curbs; buildings meet the asphalt directly and roads read as flat grey ribbons. | fixed (round 1): curb + gutter + slab mesh strips per block face (width by zone), curb returns with dished ramps at every corner, a promenade on the hotel/downtown shoreline |
+| 0.6 | isect60 | Markings continue straight through intersections (crossing roads' lines overlap and z-fight); no stop lines, crosswalks or arrows. | fixed (round 1): per-vertex intersection box distance suppresses lines and lays stop bars, ladder crosswalks and lane arrows; intersection strips share one material and depth so the overlap is invisible |
+| 0.7 | c200–c1k | Asphalt is one flat tone with no wear; lane lines alias from altitude (single-sample `step`). | fixed (round 1): `fwidth` box-filtered markings and features, albedo/roughness variation, tyre paths, patch repairs, cracks, seams, manholes and gullies; everything band-limited to the pixel footprint |
+| 0.8 | street2m | Nothing on the sidewalks: no benches, bins, hydrants, shelters, bollards, tree wells, utility covers. | fixed (round 1): kit soup per 500 m cell (two draws: large / small); tree wells and covers in the sidewalk shader; footprints mark the ground occupied |
+
+## Round 1 — first build of the new systems
+
+| # | View | Defect | Status |
+|---|------|--------|--------|
+| 1.1 | all | Road material failed to compile (`patch` is a reserved word in GLSL ES 3.0): every road drew with the fallback program, flat blue-grey. | fixed (round 1): renamed `repair` |
+| 1.2 | street2m | Olive, speckled band on the curb top fading 1.5 m into the slab along every run: the apron (earth/grass) tone appears where the concrete should be. | fixed (round 2): the `swdebug` render showed `ramp` ≈ 1 along every curb — `fract(vSw.w)` of an interpolated 35.99999 — so the tactile pad painted the curb; decoded with `floor(w + 0.005)`. The apron quad also carried the walk kind on one edge, so the earth tone graded into the slab: the slab-back vertex is duplicated with the apron kind |
+| 1.3 | tooling | Bench scripts died at launch with `Timed out after 30000 ms while waiting for the WS endpoint` while the machine-wide Chrome gate held the launch for a free slot. | fixed (round 1): `timeout: 0` on `puppeteer.launch` in `capture.mjs` / `shot.mjs` |
+| 1.4 | street2m | Lamp arm on the near-side street lamps points across the walk, not over the roadway (yaw sign to verify against the right-hand normal). | not a defect (round 2): the isect60 zoom shows every arm over the carriageway; the near lamp in street2m is behind the camera |
+| 1.5 | c100–c500 | Asphalt reads as one flat, light blue-grey ribbon from 60 m up: no wheel paths, no patches, no paving bands; only the yellow centre line separates a road from the pale ground. Base albedo 0.16–0.24 with ±10 % variation is too light and too even for the aerial read. | fixed (round 2): aged asphalt 0.10–0.17, ±12 % world-space paving history plus ±16 % repaving bands per ~100 m of road (neutral through the junction box), wheel paths polish 16 % paler, gutter stain wider and 20 % darker |
+| 1.6 | street2m | Sky sheen: at the 2 m camera the carriageway goes pale blue toward the horizon (roughness 0.78 lets the dielectric specular of the sky through at grazing angles). | fixed (round 2): open aggregate at roughness 0.93 (wheel paths 0.83, paint 0.72), plus an 8 cm aggregate grain that fades under a pixel |
+| 1.7 | street2m, c100 | Sidewalk concrete blows out to white in sun and cannot be told from the (white) downtown ground from 100 m up. | fixed (round 2): concrete 0.32–0.42 (was 0.50–0.60, then 0.40–0.50); the ground itself is 1.14 |
+| 1.8 | isect60, art60 | Yellow tactile band runs round the whole curb return at every corner (the dish covered the middle 60 % of the arc and the pad 1.2 m of slab). | fixed (round 2): one apex ramp per return (1.2 m full dish, 1.3 m flares), pad 0.6 m deep on the fully dished part only |
+| 1.9 | street2m-night | Lamp pools clip: the near pool is one flat tan on asphalt and concrete alike (sRGB ~185 on both), the gain (1.7, then 0.7) far too high under the ×3.5 night exposure. The apparent "hard cutoff 60 m ahead" is not a defect: from 2 m up the ground beyond 20 m compresses into the rows near the horizon, and the profile down the frame shows one pool (the lamp 4 m ahead) lit 6–16 m with the next pools as bright rows at the horizon. | fixed (round 2): gain 0.35, pools broader (`(1-d²)^1.5`, radius 13 / 10.5 / 5 m) |
+| 1.10 | isect60-night, c500-night | Luminaires dark from above at night: only the downward lens is emissive, so a lamp seen from the air is a dark pole beside a pool. | fixed (round 2): housing parts carry a 0.3 emissive (numeric `aEmissive` in `mergeUnitParts`), dots fade in from 70 m (was 160) |
+| 1.11 | skyline-high, cockpit-city | Triangle budget: skyline-high 1.557 M (+369 k over the baseline, over the 1.5 M cap), cockpit-city +289 k, at +6 / +4 draw calls: the 38 k lamps (were 2.6 k) drew their 6-sided coarse shape out to SMALL_DISTANCE (2.5 km), 0.2 px wide. | fixed (round 2): lamp meshes carry a 600 m far distance applied per 250 m cell in the camera and mirror passes; the night dots carry on to 4 km |
+| 1.12 | isect60, c200 | Cameras blocked: a rooftop fills isect60 and a tower fills c200 (the downtown fabric is denser than when the views were posed). | fixed (round 2): isect60 over the avenue's own signal node (1170, x −2741 z −3939) from 60 m over the carriageway; c200 over the midtown arterial (x −3375) where the fabric is mid-rise; c100 / c500 / c1k unchanged |
+| 1.13 | art2m (probe) | Two carriageways overlap for ~130 m: the diagonal arterial (chain 6, w16) and the downtown grid street at x ≈ −2203 (chain 37, w14) run 13 m apart between nodes 51 and 63 — 15 m of half-widths. Sidewalks and lamps of one road stand in the other. | request (city / map agent): drop or end the grid street where it runs within ~20 m of the arterial (`map.ts` district grid vs the arterial polyline) |
+| 1.14 | c100–c500 | The downtown ground is flat white: block interiors, lots and the strips behind the sidewalks all read as one bright plane, so the blocks have no texture from the air and the sidewalk edge only shows against the asphalt. | request (terrain agent): urban ground ~0.25–0.35 albedo with plot / paving variation under DOWNTOWN, RES_MID, HOTEL |
+| 1.15 | art60 | Arterials have no kerbed median: the double yellow is the only separation. | wontfix (traffic): `traffic.ts` drives the inner lane 1.5 m from the centreline (car body from 0.6 m), so a kerb of any width would be hit; a median needs the arterial lanes moved out by ~1 m first |
+
+## Round 2 — surface read, night, budget (found in code review and the node harness while the Chrome slots were held by other builders)
+
+| # | View | Defect | Status |
+|---|------|--------|--------|
+| 2.1 | night views outside the dense districts | Lamp-pool streaks: the irradiance map covers the dense districts' bounding circles + 24 m, but 137 lamps stand within a pool radius of that rectangle, so 514 border texels were lit (up to 255) and the clamp-to-edge sampler repeated each of them as a 2.5 m stripe of pool light across every road beyond the map, at any distance. | fixed (round 2): the one-texel border ring is zeroed after the splat (harness: 0 lit border texels) |
+| 2.2 | street2m, c100, isect60 | Triangle budget at street level: the no-frustum upper bound of the street systems and lamps at the street2m camera is 483 k (sidewalk 151 k, kits 272 k, lamps 59 k), yet the view measured +704 k over the base: the kit soups (caster class `near`) were drawn again into the two fine cascades, up to 3× their 272 k. | fixed (round 2): the small soup (visors, pedestrian heads, buttons, name blades, stop signs) never casts; the large soup casts within 300 m (was 700) — to be measured in the round-2 captures |
