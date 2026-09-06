@@ -30,8 +30,8 @@ export const wOut = (zr) =>
       [182, 62.5],
       [190, 60],
       [230, 29],
-      [238, 27],
-      [272, 24],
+      [240, 21.5],
+      [272, 17.5],
     ],
     zr,
   );
@@ -188,11 +188,11 @@ export const HEAD = {
 // quadrant (plan, starboard); y range [y0, y1] on the ledge datum
 export const WING = {
   pts: [
-    [18, 250],
-    [26, 236],
+    [16, 250],
+    [21, 240],
     [52, 262],
     [52, 274],
-    [18, 272],
+    [16, 272],
   ],
   y0: 0.2,
   y1: 5,
