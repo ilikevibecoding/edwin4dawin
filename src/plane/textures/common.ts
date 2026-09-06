@@ -185,7 +185,8 @@ export function chips(actx: CanvasRenderingContext2D, mctx: CanvasRenderingConte
       ctx.fillStyle = style;
       ctx.beginPath(); ctx.ellipse(cx, cy, r * sx + grow, r * sy + grow, a, 0, Math.PI * 2); ctx.fill();
     };
-    flake(actx, 'rgba(70,60,45,0.45)', 0.5);
+    // (a faint rim only: dense dark-rimmed flakes read as dirt splatter from 3 m, not as bare metal)
+    flake(actx, 'rgba(70,60,45,0.30)', 0.4);
     flake(actx, '#bcc0c4', 0);
     if (mctx) flake(mctx, '#ffffff', 0);
     if (kctx) flake(kctx, '#000000', 0.4);

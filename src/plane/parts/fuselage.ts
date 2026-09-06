@@ -156,7 +156,7 @@ export const COWL_AXIS_Y = 0.02, INLET_R = 0.4225;
 /** station of the engine face (baffle plate) seen through the inlet, and of the cowl's trailing edge (firewall seam) */
 const ENGINE_FACE_X = 4.21, COWL_TE_X = 3.20;
 /** chin (carburettor) scoop under the bowl and the top (oil cooler) scoop behind it: mouth stations and mouth half sizes */
-const CHIN = { x0: 4.48, x1: 3.75, w: 0.19, h: 0.12 }, TOP = { x0: 4.02, x1: 3.36, w: 0.16, h: 0.095 };
+const CHIN = { x0: 4.48, x1: 3.75, w: 0.17, h: 0.09 }, TOP = { x0: 4.02, x1: 3.36, w: 0.15, h: 0.08 };
 /** cowl flaps: hinge station, trailing edge station, angular position about the axis (rad from straight down), half width */
 const COWL_FLAPS = { hingeX: 3.46, teX: 3.22, angles: [-0.48, 0.48], halfW: 0.13, lift: 0.045 };
 
@@ -343,9 +343,20 @@ export function buildFittings(ctx: BuildContext): void {
   }
   fittings.add(new THREE.TorusGeometry(0.265, 0.013, 6, 36), at([4.37, AX, 0], [0, Math.PI / 2, 0]), SURF.rubber);
   // ------------------------------------------------------------ scoop mouths and cowl-flap openings
-  // dark plates a hair ahead of the scoop hoods' front caps: the intakes read as openings, not yellow bumps
-  fittings.add(new THREE.BoxGeometry(0.006, CHIN.h * 0.58, CHIN.w * 1.36), at([CHIN.x0 + 0.002, skinBottomY(sections, CHIN.x0, 0) - CHIN.h * 0.5, 0]), SURF.duct);
-  fittings.add(new THREE.BoxGeometry(0.006, TOP.h * 0.58, TOP.w * 1.36), at([TOP.x0 + 0.002, skinTopY(sections, TOP.x0, 0) + TOP.h * 0.5, 0]), SURF.duct);
+  // dark plates a hair ahead of the scoop hoods' front caps so the intakes read as openings, not yellow bumps: each
+  // plate follows the hood's own section (the superellipse of `hood`) a lip's width inside it, on a flat base along
+  // the skin (a rectangular plate read as a black box bolted under the bowl in the 4 m nose view)
+  const mouthPlate = (sc: { w: number; h: number }, sign: 1 | -1): THREE.BufferGeometry => {
+    const shape = new THREE.Shape(), w = sc.w * 0.9, h = sc.h * 0.84, N = 16;
+    shape.moveTo(-w, 0);
+    for (let i = 0; i <= N; i++) { const z = -w + (2 * w * i) / N; shape.lineTo(z, sign * (hood(z, w, h) + 0.004)); }
+    shape.lineTo(w, 0);
+    const g = new THREE.ShapeGeometry(shape);
+    g.rotateY(Math.PI / 2);
+    return g;
+  };
+  fittings.add(mouthPlate(CHIN, -1), at([CHIN.x0 + 0.002, skinBottomY(sections, CHIN.x0, 0) + 0.002, 0]), SURF.duct);
+  fittings.add(mouthPlate(TOP, 1), at([TOP.x0 + 0.002, skinTopY(sections, TOP.x0, 0) - 0.002, 0]), SURF.duct);
   // the opening a lifted cowl flap uncovers: a dark plate lying on the skin under each flap
   for (const a of COWL_FLAPS.angles) {
     const len = COWL_FLAPS.hingeX - COWL_FLAPS.teX;

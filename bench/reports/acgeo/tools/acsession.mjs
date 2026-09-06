@@ -18,6 +18,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const browser = await puppeteer.launch({
   timeout: 1800000,
+  protocolTimeout: 600000,
   executablePath: process.env.CHROME_PATH || '/usr/local/bin/google-chrome',
   headless: true,
   args: ['--no-sandbox', '--disable-gpu-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', `--window-size=${w},${h}`, '--hide-scrollbars'],
@@ -89,7 +90,8 @@ async function runSpec(specPath) {
     }
     await page.close().catch(() => {});
   }
-  fs.renameSync(specPath, `${specPath}.done`);
+  // (the spec may have been replaced or removed while it was being shot: never let that end the session)
+  try { fs.renameSync(specPath, `${specPath}.done`); } catch (e) { console.log(`WARN could not rename ${specPath}: ${e.message}`); }
 }
 
 let lastWork = Date.now();

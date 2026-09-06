@@ -304,16 +304,16 @@ export function fuselageMaps(lay: FuselageLayout): PbrMaps {
   // Chipped paint down to the metal where the aircraft is handled and hit: the cowl's bowl joint (spray and
   // stones), the boarding steps and door sills, the cowl fastener rows, the stern post. Metalness 1 / no coat in
   // the packed map, so the flakes glint where the paint around them shows the coat's soft sheen.
-  chips(actx, mctx, kctx, rng, ringU + 6, h * 0.5, 4, h * 0.5, 140, 1.6);
+  chips(actx, mctx, kctx, rng, ringU + 6, h * 0.5, 4, h * 0.5, 70, 1.5);
   for (const side of [1, -1]) {
     const V = (v: number) => (side > 0 ? v : 1 - v) * h;
     for (const { x0, x1, handleX, stepX } of DOORS) {
       const xm = (x0 + x1) / 2;
-      chips(actx, mctx, kctx, rng, lay.uOf(stepX) * w, V(vLow(stepX, -0.44)), 60, 22, 40, 1.8);    // boarding step
-      chips(actx, mctx, kctx, rng, lay.uOf(xm) * w, V(vLow(xm, 0.38)), 90, 8, 30, 1.5);            // door sill
-      chips(actx, mctx, kctx, rng, lay.uOf(handleX) * w, V(vLow(handleX, 0.05)), 30, 20, 14, 1.6); // door handle
+      chips(actx, mctx, kctx, rng, lay.uOf(stepX) * w, V(vLow(stepX, -0.44)), 60, 22, 16, 1.7);    // boarding step
+      chips(actx, mctx, kctx, rng, lay.uOf(xm) * w, V(vLow(xm, 0.38)), 90, 8, 12, 1.4);            // door sill
+      chips(actx, mctx, kctx, rng, lay.uOf(handleX) * w, V(vLow(handleX, 0.05)), 30, 20, 6, 1.5); // door handle
     }
-    for (const vv of [0.125, 0.36]) chips(actx, mctx, kctx, rng, (ringU + cowlAftU) / 2, V(vv), (cowlAftU - ringU) / 2, 6, 40, 1.3); // cowl panel joints
+    for (const vv of [0.125, 0.36]) chips(actx, mctx, kctx, rng, (ringU + cowlAftU) / 2, V(vv), (cowlAftU - ringU) / 2, 6, 18, 1.3); // cowl panel joints
   }
   // clearcoat roughness (green channel): what the eye reads as the finish. Regions first: the roof and the top of
   // the tail cone are chalked by the sun (0.30), the white sides are waxed (0.11), the yellow belly band chalks

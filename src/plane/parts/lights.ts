@@ -73,8 +73,13 @@ export function buildLights(ctx: BuildContext, wingSpec: WingSpec, lightPower: {
     }
     glows.push({ p: V3(tip.x + 0.125, tip.y, zOut), tint, channel, size: 0.7 }, { p: V3(tip.x - 0.09, tip.y, zOut), tint: 0xf2f4ff, channel: LIGHT.strobe, size: 0.6 });
   }
-  lightKit.add(lens(0.04, 0xf2f4ff, LIGHT.tail), at([-5.51, 0.33, 0]));
-  glows.push({ p: V3(-5.51, 0.33, 0), tint: 0xf2f4ff, channel: LIGHT.tail, size: 0.55 });
+  // tail position light: a small teardrop housing on the stern post with the white lens at its point (the bare
+  // 8 cm sphere read as a ball stuck on the tail from the rear quarter)
+  const tailHousing = new THREE.SphereGeometry(1, 12, 8);
+  tailHousing.scale(0.075, 0.032, 0.032);
+  ctx.fittings.add(tailHousing, at([-5.49, 0.33, 0]), SURF.spinner);
+  lightKit.add(lens(0.026, 0xf2f4ff, LIGHT.tail), at([-5.55, 0.33, 0]));
+  glows.push({ p: V3(-5.55, 0.33, 0), tint: 0xf2f4ff, channel: LIGHT.tail, size: 0.55 });
   // rotating beacon on the fin tip, and the landing light in the port wing's leading edge inboard of the strut
   lightKit.add(lens(0.05, 0xd81c1c, LIGHT.beacon), at([-4.80, 2.07, 0]));
   ctx.fittings.add(new THREE.CylinderGeometry(0.048, 0.058, 0.045, 10), at([-4.80, 2.015, 0]), SURF.darkMetal);
