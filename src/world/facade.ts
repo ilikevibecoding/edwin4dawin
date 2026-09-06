@@ -214,9 +214,10 @@ if (facadeGlass > 0.0) {
   vec3 sunW = inverseTransformDirection(directionalLights[0].direction, viewMatrix);
   bendW = 1.0 - smoothstep(0.85, 0.985, dot(rv, sunW));
   rb = normalize(vec3(rv.x, rv.y + 0.4 * (facadeHf - 0.4) * bendW, rv.z));
-  // the probe's aureole is tens of times the sky within a few degrees of the disc: mirrored at F0 0.3 it clipped
-  // panes and mullions alike over +-3 deg, so it is graded down within 12 deg (the disc itself is facadeGlint's)
-  sunMask = 1.0 - 0.92 * smoothstep(0.978, 0.9986, dot(rb, sunW));
+  // the probe's own disc (capped at 12x the sky) is graded down within 4 deg of the sun's image: the disc in a pane
+  // is facadeGlint's. The mirrored sky's aureole around it stays: a tower at sunset mirrors the bright sky around
+  // the sun over a soft 50 m, as a real one does (masking it to 12 deg was tried and read no different at 300 m).
+  sunMask = 1.0 - 0.85 * smoothstep(0.994, 0.9995, dot(rb, sunW));
 #else
   rb = normalize(vec3(rv.x, rv.y + 0.4 * (facadeHf - 0.4), rv.z));
 #endif
@@ -603,7 +604,10 @@ if (facadeGlass > 0.0) {
       // horizontal transom line at the head of the spandrel
       float transom = fpulse(fl, y0 - 0.02, y0 + 0.01, pwv) * (1.0 - mull);
       col = mix(col, frame, transom);
-      rough = mix(mix(0.45, 0.35, spandrelGlass), paneRough, max(glass, spandrel * spandrelGlass));
+      // the caps are extruded, rounded profiles (and the panels matte paint), not flat mirrors: at 0.35 their GGX
+      // sun term peaked at 2.5x the sky over +-10 deg, so the whole grid of a sunlit face near the sun's image
+      // clipped to a white lattice over the dark panes at 300 m
+      rough = mix(0.55, paneRough, max(glass, spandrel * spandrelGlass));
       metal = spandrel * (1.0 - spandrelGlass) * 0.3 * step(0.8, hash11(seed * 6.1));   // pale metal panel spandrels
       // spandrel glass joins the glazing: same coating, opaque backing behind it
       float sg = spandrel * spandrelGlass * (1.0 - transom);
@@ -996,6 +1000,6 @@ if (facadeGlass > 0.0) {
   totalEmissiveRadiance += emis;
 }`);
   };
-  mat.customProgramCacheKey = () => 'facade-v12';
+  mat.customProgramCacheKey = () => 'facade-v13';
   return mat;
 }
