@@ -171,8 +171,8 @@ const SW_MAIN = /* glsl */ `
     float fdm = min(fd.x, fd.y), fwF = max(fwA, fwL);
     float isBed = step(0.57, vnoise(fv * 0.55 + 5.0 + kind));
     float kerbIn = clamp((fdm - 1.35) / fwF + 0.5, 0.0, 1.0), bedIn = clamp((fdm - 1.8) / fwF + 0.5, 0.0, 1.0);
-    vec3 mulch = mix(vec3(0.20, 0.15, 0.10), vec3(0.28, 0.22, 0.14), vnoise(wp * 1.7)) * (0.85 + 0.3 * grain);
-    vec3 lawn = mix(vec3(0.15, 0.24, 0.08), vec3(0.25, 0.34, 0.12), fbm3(wp * 0.9 + 4.0)) * (0.9 + 0.2 * grain);
+    vec3 mulch = mix(vec3(0.20, 0.15, 0.10), vec3(0.28, 0.22, 0.14), mix(vnoise(wp * 1.7), 0.5, 1.0 - slabFade)) * (0.85 + 0.3 * grain);
+    vec3 lawn = mix(vec3(0.15, 0.24, 0.08), vec3(0.25, 0.34, 0.12), mix(fbm3(wp * 0.9 + 4.0), 0.5, 1.0 - slabFade)) * (0.9 + 0.2 * grain);
     vec3 bed = mix(mulch, lawn, smoothstep(2.3, 2.9, fdm) * smoothstep(0.25, 0.5, fbm3(wp * 0.3 + 1.0)));
     pav = mix(pav, conc * 1.05, isBed * (kerbIn - bedIn));
     pav = mix(pav, bed, isBed * bedIn);
