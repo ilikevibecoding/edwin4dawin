@@ -120,7 +120,7 @@ export class Household {
     this.pos = { x: (lot.door && lot.door.out ? lot.door.out.x : lot.x0) + 0.5, y: walkY(lot), z: (lot.door && lot.door.out ? lot.door.out.z : lot.z0) + 0.5 };
     this.food = []; this.clinic = null; this.utility = null; this.domestic = null; this.leisure = null; this.transit = null;
     this.acc = { meals: 0, treat: 0, dom: 0, leis: 0, ride: 0, util: 0 };
-    this.lastVisit = null;
+    this.lastVisit = null; this.visits = 0;   // visits drives the rotation over the nearest shops (persisted)
     this.stats = { meals: 0, unmetMeals: 0, treatments: 0, unmetTreatments: 0, spent: 0 };
   }
 }
@@ -943,7 +943,7 @@ export class EconomySim {
     return {
       v: 2, dayTime: this.dayTime, portTime: this.portTime, nextShipmentId: this.nextShipmentId, residents: this.residents, baseline: this.baseline,
       businesses: this.businesses.map((b) => [b.id, b.funds, pairs(b.stock), b.lastVisit, b.lastWageDay, b.lastRestockDay, b.acc, b.flags, [+b.uptime.up.toFixed(4), +b.uptime.total.toFixed(4)], b.serviceCapability.level, [...b.openOrders.entries()]]),
-      households: { funds: this.outside.households.funds, lots: this.households.map((h) => [h.lotId, h.acc, h.lastVisit, h.stats]) },
+      households: { funds: this.outside.households.funds, lots: this.households.map((h) => [h.lotId, h.acc, h.lastVisit, h.stats, h.visits | 0]) },
       treasury: { funds: this.outside.treasury.funds, bondToday: this.outside.treasury.bondToday, day: this.outside.treasury.day, allocatedToday: [...this.outside.treasury.allocatedToday.entries()] },
       shipments: [...this.shipments.values()], recentShipments: this.recentShipments.slice(-12), recentImports: this.recentImports.slice(-6), holds: [...this.holds.entries()],
       notices: [...this.notices.entries()], stats: { ...this.stats, days: this.stats.days.slice(-14) }, journal: this.journal.serialize(),
@@ -966,7 +966,7 @@ export class EconomySim {
       if (typeof row[9] === 'number') b.serviceCapability.level = row[9];
       if (Array.isArray(row[10])) b.openOrders = new Map(row[10]);
     }
-    if (data.households) { this.outside.households.funds = toInt(data.households.funds); if (Array.isArray(data.households.lots)) for (const row of data.households.lots) { const h = this.householdById.get(row[0]); if (!h) continue; h.acc = { meals: 0, treat: 0, dom: 0, leis: 0, ride: 0, util: 0, ...(row[1] || {}) }; h.lastVisit = typeof row[2] === 'number' ? row[2] : null; if (row[3]) h.stats = { ...h.stats, ...row[3] }; } }
+    if (data.households) { this.outside.households.funds = toInt(data.households.funds); if (Array.isArray(data.households.lots)) for (const row of data.households.lots) { const h = this.householdById.get(row[0]); if (!h) continue; h.acc = { meals: 0, treat: 0, dom: 0, leis: 0, ride: 0, util: 0, ...(row[1] || {}) }; h.lastVisit = typeof row[2] === 'number' ? row[2] : null; if (row[3]) h.stats = { ...h.stats, ...row[3] }; h.visits = row[4] | 0; } }
     if (data.treasury) { const T = this.outside.treasury; T.funds = toInt(data.treasury.funds); T.bondToday = toInt(data.treasury.bondToday); T.day = data.treasury.day | 0; T.allocatedToday = new Map(Array.isArray(data.treasury.allocatedToday) ? data.treasury.allocatedToday : []); }
     this.shipments.clear();
     if (Array.isArray(data.shipments)) for (const s of data.shipments) {

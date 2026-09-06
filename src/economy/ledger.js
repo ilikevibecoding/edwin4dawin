@@ -22,7 +22,7 @@ export const valueOf = (good, qty) => { const g = GOODS[good]; return g ? (g.bas
 // Ledger categories (the labels the admin panel and the docs use). A reason names the category of its credit leg and
 // of its goods leg; a leg whose category is missing lands in 'other' so nothing is ever hidden.
 export const SOURCE_CATEGORIES = ['import', 'allocation', 'household', 'fees', 'clients', 'from_player', 'production', 'waste_collection', 'endowment', 'admin', 'export_sale', 'jobs', 'other'];
-export const SINK_CATEGORIES = ['consumption', 'wages', 'maintenance', 'disposal', 'export', 'import_payment', 'retail', 'levy', 'creative', 'processing', 'other'];
+export const SINK_CATEGORIES = ['consumption', 'wages', 'maintenance', 'disposal', 'export', 'import_payment', 'retail', 'levy', 'creative', 'processing', 'fees', 'other'];
 const CATEGORY_OF = {
   // reason: [credits leg category, goods leg category]
   meals: ['household', 'consumption'], treatment: ['household', 'consumption'], domestic: ['household', 'consumption'], utility: ['household', 'consumption'],
