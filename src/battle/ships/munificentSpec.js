@@ -1,17 +1,18 @@
 // Layout, palette and section generators shared by the Munificent-class frigate builders. Everything is
 // measured against the reference stills and the two ICS cutaways; fractions are of the 825 m length,
 // counted from the bow (forward is -z, up +y, origin at the hull centre):
-//   - 0-32.4 %: the hood — a near-semicircular cowl (112 m beam, 50 m tall; TCW: about two thirds of
+//   - 0-33 %: the hood — a near-semicircular cowl (112 m beam, 50 m tall; TCW: about two thirds of
 //     the dome's width) that thins to a wedge lip at the nose (a shallow crescent notch seen from
 //     above) and stays open aft over the transceiver drums on the dark machinery deck;
 //   - 26 %: the sensor cross — the 46 m chord dorsal blade to +132 m, the ventral blade to -108 m
 //     (240 m tip to tip) and the 426 m lateral wing on a dark spar;
-//   - 32.4-51.5 %: the dark machinery neck (84 m wide, 70 m tall) with the row of round reactor ports,
-//     the tall lit bays low on its flanks, deck ledges at wing level and the antenna deck on top;
-//   - 51.5-100 %: the dome — a 164 m arch 66 m tall over a shallow dark lower hull, its shell edge raked
-//     back from the eave to the top over the reactor sphere, the dark spine trench along its top to the
-//     tiered bridge tower at 78-86 %, and the two armour shells thinning past the tower into the long
-//     inward-curving stern blades either side of the thruster block (86.4 %).
+//   - 33-46 %: the dark machinery neck (84 m wide, 70 m tall; WSMI: 110 m long) with the row of five
+//     round reactor ports, the tall lit bays low on its flanks, deck ledges at wing level and the
+//     antenna deck on top;
+//   - 46-100 %: the dome — a 164 m arch 69 m tall over a shallow dark lower hull, its shell edge raked
+//     60 m back from the eave to the top over the reactor sphere, the dark spine ridge along its top to
+//     the tiered bridge tower at 78-86 %, and the two armour shells thinning past the tower into the
+//     long inward-curving stern blades either side of the thruster block (86.4 %).
 import { col, smoothstep } from "./munificentGeo.js";
 import { smoothTable } from "./munificentHull.js";
 
@@ -20,10 +21,10 @@ export const D2R = Math.PI / 180;
 
 export const Z = {
   nose: -412.5,
-  hoodEnd: -145, // hood aft rim; the neck begins
+  hoodEnd: -140, // hood aft rim (33 %); the neck begins
   fin: -200, // fin / wing station (26 % from the bow)
-  neckEnd: 12, // the dome shell's eave edge; the neck core runs on under the raked shell
-  domeFull: 66, // the shell edge reaches the top of the arch; the trench begins
+  neckEnd: -30, // the dome shell's eave edge (46 %); the neck core runs on under the raked shell
+  domeFull: 30, // the shell edge reaches the top of the arch; the spine ridge begins
   split: 226, // trench ends; the shells start narrowing into the stern blades
   towerBase: 232, // bridge tower plinth
   eng: 300, // stern face with the thrusters
@@ -44,6 +45,7 @@ export const Y = {
   lowFinBot: -108,
 };
 export const RIDGE_H = 6; // the spine ridge between the shells stands this far above their rims
+export const LOWER_TURRET_Z = [28, 86, 144, 202, 260]; // light turret stations along the lower hull flanks
 export const HW = {
   dome: 82,
   hood: 56,
@@ -88,7 +90,10 @@ export function plankTone(k0) {
 }
 // blue-grey weathering streaks running down the arches (TCW): a smooth noise of the station z, 0..1
 export function streak(z) {
-  const n = 0.5 + 0.5 * Math.sin(z * 0.37 + 1.3 * Math.sin(z * 0.11) + 0.7 * Math.sin(z * 0.053));
+  const n =
+    0.5 +
+    0.5 *
+      Math.sin(z * 0.37 + 1.3 * Math.sin(z * 0.11) + 0.7 * Math.sin(z * 0.053));
   return smoothstep(0.55, 0.95, n);
 }
 
@@ -147,13 +152,14 @@ const prongT = smoothTable([
   [395, 0.9],
   [Z.tip, 1],
 ]);
-// arch height above the eave: the dome peaks at 52-66 % and its top slopes down all the way to the
-// thin tail (WSMI side view: 11 m lower at the tower, 45 m lower near the tip)
+// arch height above the eave: the dome peaks at 50-60 % and its top slopes down all the way to the
+// thin tail (WSMI side view: 12 m lower at the tower, 45 m lower near the tip)
 const domeH = smoothTable([
   [Z.neckEnd, Y.domeTop - Y.eave],
-  [130, Y.domeTop - Y.eave],
-  [170, 63],
-  [210, 58],
+  [90, Y.domeTop - Y.eave],
+  [130, 66],
+  [170, 62],
+  [210, 57],
   [250, 51],
   [290, 43],
   [330, 34],
@@ -191,7 +197,11 @@ export const DOME_ARC = arcTable(HW.dome, Y.domeTop - Y.eave);
 /** Point on the (starboard, side = 1) dome shell at station z and arch angle a, lifted radially. */
 export function domePoint(z, a, side = 1, lift = 0) {
   const s = domeSection(z);
-  const [px, py] = archPt(a, Math.max(0.3, s.hw + lift), Math.max(0.3, s.h + lift));
+  const [px, py] = archPt(
+    a,
+    Math.max(0.3, s.hw + lift),
+    Math.max(0.3, s.h + lift),
+  );
   return [side * (s.cx + px), s.yE + py, z];
 }
 /** Outward normal of the dome shell at (z, a) on `side` (finite differences on the section). */
