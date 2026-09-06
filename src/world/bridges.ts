@@ -185,11 +185,13 @@ const CONCRETE_FRAG = /* glsl */ `
     float n = fbm3(vWorldPosR.xz * 0.11);
     // 43 cm grain: band-limited (fades to its mean once a pixel spans a good part of its wavelength)
     float n2 = mix(vnoise(vWorldPosR.xz * 2.3), 0.5, smoothstep(0.12, 0.4, fp));
-    // weathered concrete pavement: mid grey, darker than the shoulders so the white lines and the kerbs read
+    // sun-bleached asphalt wearing course over the concrete deck, well darker than the pale concrete shoulders and
+    // kerbs: from the air the deck reads as dark carriageways between pale edges (and the pale median barrier),
+    // not as one pale slab
     float onShoulder = clamp((abs(xm) - width * 0.5 - 0.005) / fwX + 0.5, 0.0, 1.0);
-    vec3 conc = mix(vec3(0.25, 0.25, 0.245), vec3(0.34, 0.335, 0.32), n) * (0.94 + 0.12 * n2);
+    vec3 conc = mix(vec3(0.19, 0.19, 0.185), vec3(0.27, 0.265, 0.255), n) * (0.94 + 0.12 * n2);
     vec3 shoulder = mix(vec3(0.42, 0.42, 0.40), vec3(0.52, 0.51, 0.49), n) * (0.96 + 0.08 * n2);
-    // transverse pavement joints every 6 m, faint longitudinal joints at the lane edges
+    // the deck's 6 m joints reflect through the asphalt as faint transverse cracks; paving-lane seams at the lane edges
     float laneW = width / max(lanes, 1.0);
     float u = xm + width * 0.5;
     float k = floor(u / laneW);
@@ -198,7 +200,7 @@ const CONCRETE_FRAG = /* glsl */ `
     float jf = fract(along / 6.0);
     float joint = mix(aaLine((jf - 0.5) * 6.0, 0.065, fwA), 0.022, smoothstep(1.5, 4.0, fwA));
     float laneJoint = mix(aaLine(edgeDist, 0.05, fwX), 0.1 / laneW, smoothstep(0.8, 2.5, fwX));
-    conc *= 1.0 - 0.20 * joint - 0.08 * laneJoint;
+    conc *= 1.0 - 0.14 * joint - 0.08 * laneJoint;
     // tyre paths, joint staining (the dark smear tyres drag off every transverse joint) and weathering patches
     float wheel = mix(exp(-pow((abs(lp - laneW * 0.5) - laneW * 0.28) * 3.0, 2.0)), 0.18, smoothstep(0.5, 2.0, fwX));
     conc *= 1.0 - 0.17 * wheel;
@@ -710,8 +712,9 @@ const S_PLAIN: Rgb = [1, 1, 1];
 const S_DARK: Rgb = [0.3, 0.3, 0.32];        // expansion joints
 const S_HEAD: Rgb = [0.92, 0.9, 0.84];       // lamp luminaires
 
-/** `_roadMaterial` is kept in the signature for game.ts; the carriageway uses its own pale pavement shading so the
- *  causeways read as light concrete against the water instead of asphalt. */
+/** `_roadMaterial` is kept in the signature for game.ts; the carriageway uses its own pavement shading (asphalt
+ *  lanes between pale concrete shoulders, kerbs and parapets) so the causeways read as structured decks against the
+ *  water at every altitude. */
 export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concrete: THREE.Material, steel: THREE.Material): BridgeBuild {
   const concreteMat = createConcreteMaterial(concrete);
   const { mat: steelMat, pixelScale } = createSteelMaterial(steel);
