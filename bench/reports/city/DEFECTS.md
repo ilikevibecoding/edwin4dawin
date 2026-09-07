@@ -305,3 +305,187 @@ What is wrong (OBSERVE / CRITIQUE, `city-close` R10c, `glass_1km` R10):
   "paint chip" look survived longest, and it is what the blind albedo through one pass of coating produced.
 - Evidence: A/B stills queued (`/tmp/facade3/r11` vs `r10c`: `city-close`, 1 km, 2 km low, 150 m facades,
   street at ground + 1.8).
+
+# Phase 4 — block fill, roofs at 130-500 m, ground floors (rounds 12-19)
+
+Base for this phase: `bench/out`-style stills at 1920x1080 of the R11 build (`/tmp/facade3/r12base`, port 4583,
+`nohud=1`) in three dev poses: `city_500m` (cam -2500,500,-3500 hdg -30 pch -35, the CBD from the SE at ~500 m),
+`city_200m` (cam -2000,180,-3300 hdg -40 pch -18, the east side at 200-400 m), `city_north` (cam -2650,200,-3150
+hdg 0 pch -20, the core from the south at 200 m, the view that was 1.54 M tris). New poses from R14 on:
+`roofs_220m` (cam -2560,220,-3760 hdg 35 pch -48, straight down onto mid-rise roofs and podiums), `ground_a` /
+`ground_b` (ground + 1.8 m in a street wall), R16: `hotel_300m` (cam 2950,300,-3550 hdg -49 pch -33, the
+beachfront slabs from over the sea), `industrial_260m` (cam -2950,260,-2750 hdg -50 pch -35), `suburb_300m`
+(cam -5000,300,-2400 hdg -45 pch -40). All 14:00 clear, seed 20260904, `freeze=1`.
+
+## Round 12 — block fill I: parcels to the street line (city.ts)
+
+What was wrong (OBSERVE / CRITIQUE, `city_200m` and `city_500m` at 100 %; the user's own report):
+
+- **Towers stood alone on uniform grey ground.** A downtown block of 130 x 110 m carried one or two bodies from
+  `fillDowntown`'s "1-3 towers per block" and nothing else; the remaining 60-80 % of every block was the bare
+  pale ground plane. In `city_500m` B3-F6 whole rows of blocks read as isolated slabs on a car-park-grey
+  field; in `city_200m` the space between towers was the dominant surface of the frame.
+- **Mid-rise blocks were the same at lower height**: two or three walk-ups per block, the rest bare.
+- **Nothing met the street line.** Every body was inset from the block edge by its own margin; no two buildings
+  shared a party wall; there was no street wall, so the streets were not rooms.
+
+- Changed: a `BlockPlan` (exact block-local rectangles plus a snapshot of what stood on the block before it: the
+  landmarks and their plazas, earlier districts, authored props, read once per block by `foreignReader`) replaces
+  the 10 m occupancy cells for the block's own placements. `parcelRow` tiles each block edge with frontages of
+  12-30 m that fill the edge exactly (their count from the edge length, the widths jittered), each parcel a body
+  set on the street line (`streetWall`); the downtown blocks first place their towers (unchanged draws, so the
+  skyline the user approved is kept), then a podium liner round the towers (3-8 storeys, the tower rising from
+  it), then the street wall on every free edge, then the interior (`interior`). Parcel buildings: 3-8 storeys
+  downtown / 2-7 on the mid-rise ring, families weighted by the block's neighbourhood (`clusterWeights`), a
+  set-back penthouse storey on some of the taller, coping and a rail on the rest (`infillRoof`), a party wall
+  where two parcels meet (no gap, no margin). Occupancy-aware: the parcel depth stops at the block inset (roads
+  and pavements are the street builder's), and anything the plan reads as foreign vetoes the parcel.
+- Why: density from believable buildings only; the street wall is what an aerial reads as "a city" rather than
+  "towers on a plain", and the parcel rhythm (varied frontages, heights, parapets) is what keeps it from reading as
+  a row of boxes.
+- Evidence (`/tmp/facade3/r12` vs `r12base`, build e2e54edc): `city_500m` the blocks between the towers fill
+  to the street with 3-8 storey bodies of varied frontage and parapet; the pale ground survives only as the
+  streets. Headless lint (`/tmp/facade3/lint.mjs`): box instances 4,255 → 6,092; anomalies unchanged in kind.
+  Tris: `city_500m` 1.08 → 1.17 M, `city_200m` 1.26 → 1.33 M, `city_north` 1.40 → 1.50 M (the budget view).
+- Remains (→ R13): the block interiors behind the street wall are bare; blocks the density roll left empty are
+  bare rectangles; no parking structures; the lots' fill share is low where towers eat the perimeter (`notfree`
+  / `foreign` declines on 30 % of parcels next to landmarks).
+
+## Round 13 — block fill II: designed open space, interiors, parking structures (city.ts, facade.ts)
+
+What was wrong (`r12` stills at 100 %):
+
+- **Bare interiors**: behind a street wall the middle of the block was the ground plane again, seen from any
+  aerial above 30 deg.
+- **Empty blocks were rectangles of nothing** (the density roll), the most artificial surface in the frame.
+- **No parking anywhere** in a city whose every block would have it; no cars off the roads.
+
+- Changed: `fillOpenBlock` turns a block the density roll leaves open into a designed one: a striped surface car
+  park with its cars, attendant's booth and lamp (40 %), a pocket park (lawn, paver paths, hedges, a pool; the
+  trees are the vegetation pass's, told where through `openSpaces`) (35 %), or a paved square with a pattern,
+  planters and a fountain (25 %). `interior` fills what the street wall leaves in the middle: downtown a service
+  alley and the tenants' parking (striped, cars, a ramp hood), residential a courtyard (lawn, pools, hedges);
+  the surface runs under the deeper parcels so no bare strip is left behind the shallower ones. `parkingDeck`
+  places open-deck structures (2-5 decks, precast on a 7.5 m grid, a stair tower, a ramp hood, cars on the roof
+  deck) on some downtown and mid-rise parcels. New shader styles: `PARKING` (slab-and-void bands with the cars'
+  roofs in the voids), `LOT` (asphalt, box-filtered stall stripes, kerb, oil stains), `PLAZA` (paver pattern with
+  a border band), `LAWN` (turf with mottle and a worn path), `CAR` (a parked car as one box: glasshouse band,
+  sill, wheel shadow). `lotCars` lays 4.2-4.9 m cars into the stall grid at the lot's fill share, vetoing stalls
+  under buildings.
+- Why: open space that is designed (a car park is striped, a square is paved, a park is planted) is what says
+  "city block" instead of "unfinished level"; and the cars are the scale cue every aerial photograph of Miami has.
+- Evidence (`/tmp/facade3/r13`, build e2e54edc): `city_500m` the open blocks read as car parks (cars in rows),
+  squares and parks; the block interiors carry alleys and parking. Tris: `city_500m` 1.20 M, `city_200m` 1.37 M,
+  `city_north` 1.51 M (over: the cars were `roofbig` kind, drawn to 1.6 km and casting into two cascades).
+- Remains (→ R14/R15): the lawn tone was park-bright (0.24-0.32 albedo, a green flag from 500 m); a striped
+  lot laid under a landmark's plaza had every stall vetoed and read as an empty striped slab (`roofs_130m`
+  A6-B8); the cars' cost.
+
+## Round 14 — roofs at 130-500 m: material families, parapet shadow, the kit on mid-rise (facade.ts, city.ts)
+
+What was wrong (critic h03 on `city_500m` A5 / C6-D6 / F7 / G7-H7, `island_pass` A2-D2, every suburb box; my
+`r13` stills):
+
+- **Pale blank slab roofs** on the mid-rise, the podiums and the white-walled buildings: a flat roof was its
+  membrane tone (four tones, 0.64 down to 0.12) with nothing on it below 700 m but the RTU boxes, and the pale
+  tones folded to near-white under the 14:00 sun. From 200-500 m every second roof was a white rectangle.
+- **No parapet**: a roof met its wall at a line; a real roof has a coping and the upstand's shadow along the
+  sun-side edges, the strongest cue of "a roof with an edge" from the air.
+- **The infill roofs carried no kit**: the R12 parcels had a rail or a penthouse and nothing else.
+
+- Changed: five roof families per building in the shader (`rfam` from the building's seed, biased by facade
+  style and roof area): pale TPO (0.50 weathered, seams every 2 m, grime into the corners, ponding stains), grey
+  elastomeric coating (0.30, rolled seams, chalky wear), gravel ballast (0.26, the stone's grain while it spans
+  pixels, a paver walkway to the units), dark bitumen / EPDM (0.11, ponding with a sky sheen, pale flashing),
+  standing-seam metal (grey / white / teal panels, ribs every 0.45 m). Each family's marks fade to its mean as they
+  go sub-pixel (`fine`, `midv` from `fwidth`), so a far roof is a tone, never a shimmer. Parapet: the coping
+  (pale metal, or the wall's own stone on the masonry families) round the edge and the upstand's shadow on the
+  roof along the edges the sun stands beyond (reach = upstand height / tan(sun elevation), in the roof's own
+  frame, masking direct light only so it stays sky-lit). A drainage stain fans from a low corner. Beyond 1.5 km
+  the shader's mechanical pads stand in for the kit. `addSmallRoofKit` on every parcel and podium roof (RTUs
+  sized for the air at 1.8-3.2 m, a duct, a solar row on a fifth, a cell mast on some, condensers, vents with
+  caps, a hatch, a TV mast, a skylight); `infillRoof` adds a penthouse box, a stair bulkhead or a water tank on
+  legs to the taller parcels. `roofcyl` reduced to 6 segments.
+- Why: a roof's material and its edge are what 130-500 m sees; the kit is the detail layer at 100-300 m.
+- Evidence (`/tmp/facade3/r14`, build e2e54edc): `roofs_130m` the mid-rise roofs carry seams / ballast grain /
+  ponding, coping and the upstand's shadow, units and vents; `city_500m` the white rectangles are down to the
+  TPO family's share. Tris: `city_500m` 1.23 M, `city_200m` 1.39 M, `city_north` 1.54 M (over, → R15).
+- Remains (→ R15): the TPO share (rfam 0 at 20 %) and the 0.5-0.6 albedos still read pale on the wide podium
+  roofs; glass towers drew standing seam; the lawn tone; the empty striped lot under a landmark.
+
+## Round 15 — ground floors, podium roof programmes, stable streams, the cars' cost (city.ts, facade.ts)
+
+What was wrong (`r14` stills; the user's third point):
+
+- **A mid-rise met the ground as a line**: the shader's lobby / shopfront bands are painted on the wall, so from
+  the air (and from 30 m) the base of a walk-up or a liner was a colour change with nothing standing proud of it.
+- **The largest roofs in the CBD, the podium liners (900-2,000 m2), were still the blank slabs**: a podium roof
+  carried the small kit only, and the pale coating on a 60 x 40 m roof is exactly the white rectangle the aerial
+  views showed.
+- **Every fill tweak reshuffled the skyline**: the district rng fed the towers and the fill in one stream, so a
+  change to the parcel logic changed which blocks got which towers (the user had just approved the skyline).
+- **The cars cost**: `roofbig` kind, drawn to 1.6 km, casting into two cascades: `city_north` 1.54 M tris.
+- **The lawns were park-bright** (a flag from 500 m); **an alley lot under a landmark was a striped slab with
+  every stall vetoed**.
+
+- Changed: `groundFloor` places geometry where a body meets its street face: a shop parade's continuous canopy over
+  the pavement (a `roofbig` slab, its shadow reads from the air) or a run of awnings in the shops' own colours
+  (trims), a tower lobby's entrance canopy, a walk-up's stoop and door hood; the face is chosen by the builder
+  (`PlaceOpts.front`, sent to the shader as `aStyle2.w = 10 + face`, `20 + face` when the ground floor is retail)
+  so the shader's entrance, lobby, shopfronts and loading dock land on the faces the geometry does; the shader's
+  ground floor gains a base course on the walk-ups and a single-storey lobby canopy band. `podiumRoof`: a
+  programme per podium roof from its largest free rectangle (`largestFree`): roof parking (striped deck, cars,
+  ramp hood, lamp masts), an amenity deck (pavers, a pool with coping and loungers, lawn, pergola, cabanas,
+  planters with hedges), a plant yard (the tower's cooling towers and RTUs, the podium tier of `addRoofDetail`),
+  or a green roof with a paver path; a rail round the parapet. Streams: two per block seeded by the block alone
+  (`drng` decides what the block is and places its towers, `frng` fills), and every instance's shader seed is a
+  hash of where it stands and how tall it is (`seedAt`), so a building's look never depends on how many instances
+  were placed before it. Cars: their own `car` kind, drawn to 900 m (`CAR_FAR`, shared with the shader), casting
+  into the finest cascade only; beyond 900 m the `LOT` and `PARKING` shaders draw car-coloured blobs into the
+  stalls at the lot's fill share (`variant`). Lawn albedo to turf values (0.06-0.14); roof families retuned
+  (TPO share 17 %, wide roofs lean to ballast and dark sheet, glass towers never carry standing seam); `interior`
+  skips a block whose middle is mostly foreign (a landmark's plaza).
+- Why: the three things the user named (fill, roofs at 130-500 m, ground floors) meet at the podium: its roof is
+  the biggest blank in the CBD and its foot is where a block meets the street. Stable streams protect the
+  approved skyline through every later round. The cars' LOD buys back the budget the density spent.
+- Evidence: `/tmp/facade3/r15` (build e314eeee, queued behind the machine's Chrome slots: `city_500m`,
+  `city_200m`, `city_north`, `roofs_220m`, `ground_a`, `ground_b`). EVIDENCE_R15.
+- Remains: the hotels' roofs and the suburbs' sheds and houses (→ R16); the budget check on `city_north`.
+
+## Round 16 — the beachfront, the sheds, the flat-roofed houses (city.ts, facade.ts)
+
+What was wrong (critic h03 `island_pass` A2-D2: pale blank roofs on the hotel slabs; "every suburb box"; my
+own reading of `fillHotel` / `fillIndustrial` / `fillCommercial`):
+
+- **A hotel was a slab with a bulkhead and a pool-less wing**: the beachfront's signature (the rooftop pool
+  deck, the pool wing with loungers and cabanas between the tower and the beach) was a 0.4 m pool slab on a
+  punched box for 70 % of the wings and nothing on the tower roof but the kit; the hotel blocks had no parking
+  and no entrance.
+- **The sheds' roofs were a uniform 0.52 grey** with skylight strips, no parapet, no kit (a foreign coping slab
+  of another family covered 50-60 % of them); the big boxes the same; the strip malls' pale slab.
+- **A flat-roofed house painted its block's tile colour on its flat roof** (terracotta and sandy tile at 0.60-0.76
+  albedo on a flat roof, i.e. pale slabs across the sprawl).
+- **`fillHotel` and `fillIndustrial` used the 10 m occupancy cells** for their own placements, so nothing could
+  stand within ~15 m of the body that was just placed (the wing had to be 3 m off and often failed, a dock or a
+  lot beside a shed never could).
+
+- Changed: `amenityDeck` factored out of `podiumRoof` and shared; `RoofOpts.resort` puts the bulkhead at one end
+  of a hotel roof and the pool deck over the rest (pool, loungers both sides, cabanas with awnings, a bar
+  pavilion, rail); `fillHotel` plans its block with a `BlockPlan`: tower (entrance canopy on the avenue, `front`
+  2), pool wing toward the beach (1-2 storeys, glazed to the sea, its whole roof a resort deck), guest parking
+  behind (a striped lot with cars, or a 2-3 deck structure on the taller hotels). Sheds: a sixth roof family,
+  metal decking (galvanised / weathered white / rusting, ribs every 0.3 m, panel laps every 3.6 m, rust bloom and
+  streaks, skylight strips on half), white TPO and grey coating on the rest, the parapet (0.3 m upstand), the
+  drain stain; the foreign slabs removed; `addSmallRoofKit` 'shed' mode (RTUs in rows down the bays, a row of
+  skylight domes, stacks, a tank, a hatch); a loading dock on most long sheds (asphalt yard, apron, canopy,
+  trailers, `TRAILER_C`). Big boxes show their own deck, the strip mall keeps its fascia and gets its canopy and
+  shopfronts on the car-park face (`cpFace`). Houses: the palette index names a roof family for a flat roof
+  (terracotta / sandy blocks: the white coating; dark tile / brown: bitumen; teal: standing seam; gravel: ballast)
+  with the low parapet shadow; pitched bodies keep the tile slopes. `place()` gains `sink` for low bodies on a
+  slope (the wing on the dune).
+- Why: the beachfront's roofs are what `island-pass` and every ocean-side aerial show; the suburbs' roofs are
+  the field the sprawl views are made of.
+- Headless probe (`/tmp/facade3/probe16.mjs`): hotel-south / hotel-mid now carry 32 / 58 lots, 7 / 18 parking
+  decks, 52 / 91 pool decks (0 / 0 / 22-35 before); industrial-river 65 trailers at its docks. tsc clean.
+- Evidence: `/tmp/facade3/r16` (build bf7ea526: `hotel_300m`, `industrial_260m`, `suburb_300m` vs the same
+  poses on the R15 build; `island-pass` bench with metrics; `city_500m`, `roofs_220m`). EVIDENCE_R16.
