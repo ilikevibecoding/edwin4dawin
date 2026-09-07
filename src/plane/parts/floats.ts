@@ -56,11 +56,13 @@ export function buildFloats(ctx: BuildContext, wingSpec: WingSpec): FloatsBuild 
     const slope = (deckAt(x, dz + 0.005) - deckAt(x, dz - 0.005)) / 0.01;
     return new THREE.Matrix4().makeTranslation(x, deckAt(x, dz), zc + dz).multiply(new THREE.Matrix4().makeRotationX(-Math.atan(slope)));
   };
+  // Every plate that sits on the deck is sunk 3 mm into it: the deck is cambered, so a plate whose underside
+  // is exactly on the deck at its centre is coplanar with the skin along a line and z-fights there.
   /** horn cleat on the deck: base plate, stem, horn bar with upturned tapered tips; `alongX` = bar fore-and-aft */
   const cleat = (frame: THREE.Matrix4, alongX: boolean) => {
     const rotY = alongX ? 0 : Math.PI / 2;
     const add = (geo: THREE.BufferGeometry, p: [number, number, number], r?: [number, number, number]) => fittings.add(geo, frame.clone().multiply(at(p, r)), SURF.metal);
-    add(new THREE.BoxGeometry(0.11, 0.012, 0.06), [0, 0.006, 0], [0, rotY, 0]);
+    add(new THREE.BoxGeometry(0.11, 0.015, 0.06), [0, 0.0045, 0], [0, rotY, 0]);
     add(new THREE.CylinderGeometry(0.014, 0.019, 0.036, 8), [0, 0.03, 0]);
     add(new THREE.CylinderGeometry(0.013, 0.013, 0.13, 8), [0, 0.056, 0], [0, rotY, Math.PI / 2]);
     for (const e of [-1, 1]) {
@@ -70,7 +72,7 @@ export function buildFloats(ctx: BuildContext, wingSpec: WingSpec): FloatsBuild 
   };
   /** flush pump-out / inspection cover on the deck: rubber seal ring, aluminium cap with its screwdriver slot */
   const hatch = (frame: THREE.Matrix4) => {
-    fittings.add(new THREE.CylinderGeometry(0.052, 0.052, 0.004, 16), frame.clone().multiply(at([0, 0.002, 0])), SURF.rubber);
+    fittings.add(new THREE.CylinderGeometry(0.052, 0.052, 0.007, 16), frame.clone().multiply(at([0, 0.0005, 0])), SURF.rubber);
     fittings.add(new THREE.CylinderGeometry(0.042, 0.042, 0.007, 16), frame.clone().multiply(at([0, 0.0055, 0])), SURF.metal);
     fittings.add(new THREE.BoxGeometry(0.05, 0.003, 0.007), frame.clone().multiply(at([0, 0.0095, 0], [0, 0.6, 0])), SURF.darkMetal);
   };
@@ -115,7 +117,8 @@ export function buildFloats(ctx: BuildContext, wingSpec: WingSpec): FloatsBuild 
    */
   const deckFitting = (x: number, zc: number): THREE.Vector3 => {
     const y = deckAt(x);
-    fittings.add(new THREE.BoxGeometry(0.38, 0.02, 0.30), at([x, y + 0.008, zc]), FIT);
+    // the plate reaches 15 cm off the crown where the cambered deck is 5 mm lower: 1 cm of it is below the crown
+    fittings.add(new THREE.BoxGeometry(0.38, 0.026, 0.30), at([x, y + 0.003, zc]), FIT);
     fittings.add(new THREE.BoxGeometry(0.34, 0.12, 0.24), at([x, y + 0.07, zc]), FIT);
     for (const dx of [-0.125, 0.125]) for (const dz of [-0.095, 0.095]) fittings.add(new THREE.CylinderGeometry(0.014, 0.014, 0.012, 8), at([x + dx, y + 0.02, zc + dz]), SURF.metal);
     return V3(x, y + 0.12, zc);
@@ -189,7 +192,7 @@ export function buildFloats(ctx: BuildContext, wingSpec: WingSpec): FloatsBuild 
     waterRudders.push(wr);
     // steering cables from both horn ends forward along the deck to fairleads by the rear strut, the inboard one
     // continuing up alongside the rear main strut to the belly (the retract / steering run into the cabin)
-    const fairX = -1.08, fairY = deckAt(fairX, 0.05) + 0.018;
+    const fairX = -1.08, fairY = deckAt(fairX, 0.05) + 0.012;
     for (const e of [-1, 1]) {
       const z = zc + e * 0.05;
       cable(V3(WR.x, WR.y + HORN, z), V3(fairX, fairY + 0.01, z));
@@ -210,7 +213,7 @@ export function buildFloats(ctx: BuildContext, wingSpec: WingSpec): FloatsBuild 
     const LZ = zc - side * 0.20, TZ = side * 0.93, LY0 = deckAt(1.2, -side * 0.20), LY1 = -0.455;
     for (const lx of [1.06, 1.38]) {
       const foot = V3(lx, LY0, LZ), top = V3(lx, LY1, TZ);
-      fittings.add(new THREE.BoxGeometry(0.07, 0.012, 0.07), at([lx, LY0 + 0.006, LZ]), FIT);
+      fittings.add(new THREE.BoxGeometry(0.07, 0.015, 0.07), at([lx, LY0 + 0.0045, LZ]), FIT);
       fittings.add(strutGeometry(foot.clone().setY(LY0 + 0.005), top, 0.017, 8), undefined, RIG);
     }
     for (const f of [0.335, 0.67]) {

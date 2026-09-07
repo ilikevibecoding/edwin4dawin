@@ -122,6 +122,25 @@ export function floatMaps(): PbrMaps {
   };
   for (const x of [2.1, 0.45, -1.05, -2.05]) plate(x, 0.145, 0.22, 0.03);
   plate(-0.30, CHINE + 0.01, 0.14, 0.24); // step doubler on the bottom, just aft of the step
+  // amphibious wheel wells: the door seams around each well on the bottom, split along the keel (main wheels
+  // behind the step, nose wheels in the forefoot); with the gear up the wheel group is hidden, so in flight these
+  // seams are all that says the floats are amphibious. Bottom v runs CHINE at the chine .. 0.5 at the keel.
+  const well = (x0: number, x1: number, halfW: number, beam: number) => {
+    const v0 = CHINE + (0.5 - CHINE) * (1 - halfW / beam);
+    const u0 = uOf(x1) * w, u1 = uOf(x0) * w, y0 = v0 * h, y1 = (1 - v0) * h;
+    actx.fillStyle = 'rgba(0,0,0,0.10)'; actx.fillRect(u0, y0, u1 - u0, y1 - y0);
+    actx.strokeStyle = 'rgba(0,0,0,0.55)'; actx.lineWidth = 1.6;
+    actx.strokeRect(u0, y0, u1 - u0, y1 - y0);
+    actx.beginPath(); actx.moveTo(u0, h / 2); actx.lineTo(u1, h / 2); actx.stroke();
+    hctx.strokeStyle = '#3c3c3c'; hctx.lineWidth = 2.2;
+    hctx.strokeRect(u0, y0, u1 - u0, y1 - y0);
+    hctx.beginPath(); hctx.moveTo(u0, h / 2); hctx.lineTo(u1, h / 2); hctx.stroke();
+    // piano hinges along the outboard seams
+    hctx.strokeStyle = '#9a9a9a'; hctx.lineWidth = 1.2;
+    for (const y of [y0 + 3, y1 - 3]) { hctx.beginPath(); hctx.moveTo(u0 + 4, y); hctx.lineTo(u1 - 4, y); hctx.stroke(); }
+  };
+  well(-1.25, -0.55, 0.15, 0.415);
+  well(2.02, 2.58, 0.10, 0.31);
   // dock rash: light scuffs along the deck edge and the upper sides, densest at the bow and around the step
   for (let i = 0; i < 320; i++) {
     const side = rng.next() < 0.5 ? 1 : -1, nearBow = rng.next() < 0.35;
