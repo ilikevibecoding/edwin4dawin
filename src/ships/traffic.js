@@ -204,7 +204,8 @@ function repairRoute(x, y, z, yaw) {
 // every height. Landmarks cut the boulevards inside their lots, so a lane may only use lines where an unbroken
 // mid-level segment exists (lanes are validated against the layout's segments; see laneRectValid). Skybridges
 // cross the corridors between y 130 and y 193, gangway lamps reach y 99 and the lift shafts y 100, so the low
-// airspeeder lanes fly at y 106..112 and the tall lanes at y 214+ (above every skybridge).
+// airspeeder lanes fly at y 106..112 and the tall lanes at y 221+ (above every skybridge; the outer one at 246+
+// over the edge boulevards' crowns).
 const CORRIDOR = 8;
 const CORNER_APPROACH = 18;
 
@@ -266,9 +267,12 @@ function laneLoops(layout) {
     return r;
   };
   const inside = (a, b) => a.i0 >= b.i0 && a.i1 <= b.i1 && a.j0 >= b.j0 && a.j1 <= b.j1;
-  // tall loops: the largest clear rectangle, then the largest one strictly inside it with at most half its area
+  // tall loops: the largest clear rectangle, then the largest one strictly inside it with at most half its area.
+  // The outer loop runs the edge boulevards, where the setback tower on lot 401 (x 3456+) carries a stepped crown to
+  // y 243 within 12 blocks of the line: the gunship's 21-block wingspan needs the loop at 246+ (ships v3 audit),
+  // under the high cross's hulls at 266
   let outer = null;
-  for (const r of rects) { if (r.w >= 300 && r.d >= 300 && add(r, 216, 4, { name: 'tall outer', types: [0, 1, 3, 4, 0], speedMul: 1 })) { outer = r; break; } }
+  for (const r of rects) { if (r.w >= 300 && r.d >= 300 && add(r, 248, 2, { name: 'tall outer', types: [0, 1, 3, 4, 0], speedMul: 1 })) { outer = r; break; } }
   if (outer) for (const r of rects) { if (r !== outer && inside(r, outer) && r.area <= outer.area * 0.5 && r.w >= 150 && r.d >= 150 && (r.i0 > outer.i0 || r.i1 < outer.i1) && add(r, 224, 3, { name: 'tall inner', types: [1, 3, 5], speedMul: 0.9, reverse: true })) break; }
   // low airspeeder loops: narrow rectangles (two neighbouring boulevards, 2..4 blocks long) on each half of the city
   const narrow = rects.filter((r) => r.i1 - r.i0 === 1 && r.j1 - r.j0 >= 2 && r.j1 - r.j0 <= 4);
@@ -297,9 +301,11 @@ function harbourLoops(cx = 2622) {
 }
 
 // Ships parked for repair: [type, x, z, yaw] (yaw 0 = nose toward -z). A bulk freighter, a light freighter and a
-// shuttle inside the three repair hangars of the spaceport's south wing (coruscant/spaceport/plan.js REPAIR_BERTHS),
-// noses toward the open north fronts.
-const REPAIR_BERTHS = [[4, 2217, 285, 0], [0, 2269, 287, 0], [1, 2321, 287, 0]];
+// shuttle inside the three repair hangars of the spaceport's south wing (coruscant/spaceport/plan.js REPAIR_BERTHS,
+// keep both lists equal), noses toward the open north fronts. Each hangar's gantry hook hangs to y 105 at the bay's
+// centre line 16 blocks in: the bulk freighter stands 4 blocks west of it, the shuttle 2 blocks further back
+// (ships v3 audit: the hook used to hang into the freighter's roof and touch the shuttle's folded wing).
+const REPAIR_BERTHS = [[4, 2213, 285, 0], [0, 2269, 287, 0], [1, 2321, 289, 0]];
 // model type on each spaceport pad when the pad carries none (long hulls on the inner pads next to the terminal,
 // shorter ones outside)
 const PAD_TYPES = [5, 4, 3, 1, 0, 8, 1, 0];

@@ -140,8 +140,10 @@ export const PAD_TYPES = [
 ];
 // the longest hull a pad of each size takes (padsFit in the tests): 2 * half - 4 leaves a 2-block rim
 export const padsForTraffic = () => PADS.map((p, i) => ({ x: p.x, z: p.z, half: padHalf(p), size: p.size, type: PAD_TYPES[i], yaw: p.yaw, gate: i + 1 }));
-// [type, x, z, yaw] of the ships under repair inside the hangars (yaw 0: nose toward -z = the open north front)
-export const REPAIR_BERTHS = [[4, 2217, 285, 0], [0, 2269, 287, 0], [1, 2321, 287, 0]];
+// [type, x, z, yaw] of the ships under repair inside the hangars (yaw 0: nose toward -z = the open north front); the
+// bulk freighter stands 4 west of H1's centre line and the shuttle 2 further back so the gantry hooks (bay centre,
+// z 278, down to y 105) hang beside the hulls (ships v3 collision audit)
+export const REPAIR_BERTHS = [[4, 2213, 285, 0], [0, 2269, 287, 0], [1, 2321, 289, 0]];
 
 // ------------------------------------------------------------------------------------------------ hangars + tower
 // Three repair hangars in the south wing, open fronts facing north onto the repair apron; the repair berths
