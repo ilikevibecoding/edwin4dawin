@@ -457,6 +457,13 @@ export class EconomySim {
     this._notePrices();
     return n;
   }
+  // After a deliberate time skip (sleeping to 06:00): runs the pending full pass to completion so the city is
+  // consistent with the new day at once - the wake-up is a fade, not a frame that has to stay under budget.
+  catchUp(dayTime, portTime = this.portTime) {
+    let n = 0;
+    do { this.advance(dayTime, portTime); } while (this.fullPassDue && ++n < 40);
+    return n;
+  }
   _rollDay() {
     const day = this.day();
     const T = this.outside.treasury; T.allocatedToday.clear(); T.bondToday = 0; T.day = day;

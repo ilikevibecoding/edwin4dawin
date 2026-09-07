@@ -32,8 +32,9 @@ by default and switched off with `?economy=0` (pass-1 behaviour: wallet, book pr
 Time: the sim advances once a game second (`Economy.tick`, `tickCount % TICK_RATE === 0`), never per frame. Each
 advance visits at most `TUNING.batch` (60) due businesses / households (sorted by how long they have waited; a business
 is due every `visitInterval` = 2 game hours), then runs the shipments pass, the imports pass and the price notes. The
-first advance and the first advance of every new day are full passes. Offscreen work is therefore coarse (a business
-is simulated in 2-hour steps) while the player-facing state (quotes, stock, shipments) is exact whenever it is read.
+first advance of a fresh city visits everyone at once; at a day change every business and household is due again and
+is seen within the next nine batches. Offscreen work is therefore coarse (a business is simulated in 2-hour steps)
+while the player-facing state (quotes, stock, shipments) is exact whenever it is read.
 
 ## 2. Goods catalogue
 
@@ -290,7 +291,26 @@ the 1 Hz autosave and always on a flush-now (`game.persistNow()`, page hide / un
   ships module may choose to honour (keep the ship on the pad) by reading `holdFor(index)`.
 - `game.js`: `persistState(force)` / `persistNow()` force the economy blob on a flush-now (two-line change).
 
-## 14. Known gaps
+## 14. Budget (spec: <= +4 ms JS / frame, <= +20 draw calls, <= +40 MB heap against `?economy=0`)
+
+Measured headless at the Senate view (`x=2975 z=120 y=97.2`, `quality=light rd=10`, SwiftShader; the VM is shared with
+other builders' Chrome instances, so absolute frame times are noisy and the attribution below is the reliable part):
+
+| what | cost |
+| --- | --- |
+| `Economy.tick` (once a game second, `tickCount % 20`) | 0.03 ms / frame averaged |
+| `EconomySim.advance` (60 due businesses / households, shipments, imports, price notes) | median 0.01 ms, p95 0.4 ms, p99 1.8 ms, worst 7 ms (a GC pause; 7 us per business visit, 22 us per household, 0.9 ms worst visit = the terminal reordering) - once a game second |
+| first pass of a fresh city (all 494 visited at once, during load) | 12 ms once |
+| `CrateLayer.update` (every frame, ~30 crates in view) | 0.15 ms / frame |
+| save blob (`serialize` + `JSON.stringify`, 155 KB) | 1.4 ms, at most once per 10 s when dirty and on a flush-now |
+| draw calls | +1 (the crate layer, only while crates are in view; culled as one object) |
+| heap | within run-to-run noise (medians 497-500 MB on vs 504-510 MB off; peaks 521-543 vs 519-529) |
+
+`scripts/bench.mjs` 40 s runs, steady-state (after the first 8 s) median JS per frame: off 5.63 / 4.70 / 5.75 ms, on 7.70 /
+4.00 / 3.62 ms over three pairs - the sim is inside the +/-2 ms run-to-run noise of this VM. A 8.7 s single-frame stall
+seen in one early "on" run was the crate program compiling lazily under software GL; the layer now compiles it at load.
+
+## 15. Known gaps
 
 - Holds are economic state only: the freighter's own animation is not stopped (no edits under `src/ships/`); the
   crates in its hold stay while it is `arrived` and disappear when it is unloaded or leaves.

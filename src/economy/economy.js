@@ -428,6 +428,9 @@ export class Economy {
     sky.time = WAKE_TIME;
     const p = this.game.player;
     p.fallDistance = 0;
+    // the city wakes with the player: wages, restocks and reorders of the new day are settled now, not over the
+    // next batches
+    if (this.v2) this.v2.catchUp(this.dayTime(), this.game.vehicles ? this.game.vehicles.tickCount / TICK_RATE : 0);
     this.markDirty();
     this.game.persistState();
     this.toast(`Good morning - day ${sky.day}, 06:00`, '#9ad8ff');

@@ -389,6 +389,30 @@ check('a local ride is 5-15 cr (air taxi base 15, household rides 10), a useful 
 check('a short delivery pays 60-150 cr (cost + 40% on 45-107 cr of goods); courier runs 30-120', REWARD.delivery(45) >= 60 && REWARD.delivery(107) <= 150 && REWARD.courier(100) === 30 && REWARD.courier(600) === 120);
 check('the household rules keep the loop closed: wages 18 cr/staff/day, one meal batch per resident, 0.1 treatments, treatment fee 24, three days of cover, reorder at half', TUNING.wage === 18 && TUNING.mealsPerResident === 1 && TUNING.treatmentsPerResident === 0.1 && TUNING.treatmentFee === 24 && TUNING.daysCover === 3 && TUNING.reorderAt === 0.5);
 
+// -------------------------------------------------------------------- batching (rubric 15 #18): the game's batch size
+log('\n== Batching: no advance visits more than TUNING.batch after the first pass; a day change is spread; catchUp settles it (rubric 15 #18) ==');
+{
+  const arrivals = offlineArrivals(SPACEPORT.pads, DECK_Y, layout);
+  const bs = new EconomySim({ layout, purposes: all, pads: SPACEPORT.pads, deckY: DECK_Y, arrivals, player: { credits: 250 }, batch: TUNING.batch, onEvent: () => {} });
+  const total = bs.businesses.length + bs.households.length;
+  const first = bs.advance(0.5, 0);
+  const step = 1 / DAY_LENGTH_SECONDS, visits = [];
+  let t = 0.5, worst = 0, s = 0;
+  // one advance per game second up to the last second of day 0
+  while (t + step < 1) { t += step; s++; arrivals.set(s); const n = bs.advance(t, s); if (n > worst) worst = n; }
+  // the day changes at t = 1.0: everybody is due again, seen over the next ceil(total / batch) advances
+  const before = t;
+  for (let i = 0; i < Math.ceil(total / TUNING.batch) + 2; i++) { t += step; s++; arrivals.set(s); visits.push(bs.advance(t, s)); }
+  const seen = bs.businesses.filter((b) => b.lastVisit > before).length + bs.households.filter((h) => h.lastVisit > before).length;
+  check(`the first pass visits everyone (${first} of ${total}); afterwards no advance exceeds the batch of ${TUNING.batch} (worst ${worst}); a day change is spread over ${visits.filter((v) => v > 0).length} advances (${visits.join(',')}) and everyone has been seen by the end`, first === total && worst <= TUNING.batch && visits.every((v) => v <= TUNING.batch) && visits.filter((v) => v > 0).length >= Math.ceil(total / TUNING.batch) - 1 && seen === total && !bs.fullPassDue);
+  // a time skip (sleeping at 21:36 to 06:00) settles the new day at once
+  t = Math.max(t, 1.9); s += 1000; arrivals.set(s); bs.advance(t, s);
+  const wake = 2.25; s++; arrivals.set(s);
+  const passes = bs.catchUp(wake, s);
+  const settled = bs.businesses.every((b) => b.lastVisit >= wake) && bs.households.every((h) => h.lastVisit >= wake);
+  check(`catchUp() after a skip to 06:00 runs the pending day pass to completion in ${passes} advances and leaves nothing due`, passes >= 1 && passes <= Math.ceil(total / TUNING.batch) + 1 && settled && !bs.fullPassDue && bs.drift() === 0, `drift ${bs.drift()}`);
+}
+
 if (!base) { log(`\n${passed} passed, ${failed} failed`); process.exit(failed ? 1 : 0); }
 
 // ================================================================================================ CDP
