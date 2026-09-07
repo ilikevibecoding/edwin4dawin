@@ -783,6 +783,7 @@ const S_DARK: Rgb = [0.3, 0.3, 0.32];        // expansion joint seals
 const S_ARMOUR: Rgb = [0.78, 0.78, 0.8];     // joint edge plates, polished by the traffic
 const S_HEAD: Rgb = [0.92, 0.9, 0.84];       // lamp luminaires
 const S_BEACON: Rgb = [0.95, 0.09, 0.06];    // aviation obstruction beacons on the pylon tops (their glow is red)
+const S_NAV_GREEN: Rgb = [0.10, 0.92, 0.30]; // mid-span channel lights
 /** `aGlow` of the stays and hangers: no glow, but the STAY_ALPHA opacity floor (STEEL_ALPHA_FRAG) */
 const STAY_FLAG: readonly number[] = [-1];
 
@@ -1255,6 +1256,17 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         P.arch.addGeometry(tube, S_PLAIN);
         tube.dispose();
       }
+    }
+    if (mainSpan > 0) {
+      // navigation lights of the channel span (lamp heads, so they stay lit dots to the head cut-off): red on the
+      // channel faces of the main-span piers at the clearance level, green on both fascias at mid-span - the
+      // coloured dots under a lit causeway at night from the air, and what a boat steers between
+      for (const [ps, dirS] of [[spanA, 1], [spanB, -1]] as const) {
+        const f = frameAt(ps + dirS * 3.5);
+        for (const side of [-1, 1]) parts[chunkOf(ps)].heads.box(f.x + f.rx * (hw + 0.2) * side, f.y - g - 1.6, f.z + f.rz * (hw + 0.2) * side, 0.35, 0.5, 0.35, yawAt(f), 0, S_BEACON, false, [1], 'point');
+      }
+      const fc = frameAt(centre);
+      for (const side of [-1, 1]) parts[chunkOf(centre)].heads.box(fc.x + fc.rx * (hw + 0.6) * side, fc.y - 0.9, fc.z + fc.rz * (hw + 0.6) * side, 0.35, 0.5, 0.35, yawAt(fc), 0, S_NAV_GREEN, false, [1], 'point');
     }
 
     // ------------------------------------------------------------ chunk meshes
