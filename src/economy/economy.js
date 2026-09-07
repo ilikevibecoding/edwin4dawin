@@ -89,7 +89,9 @@ export class Economy {
     if (changed.detentionRate != null) parts.push(`customs now inspects ${Math.round(changed.detentionRate * 100)}% of imports`);
     if (changed.landingFee != null) parts.push(`landing fee ${changed.landingFee} cr`);
     if (changed.portCapacity) parts.push(`${changed.portCapacity} port-funded repair berth${changed.portCapacity === 1 ? '' : 's'}`);
-    const text = `Senate ${r.outcome === 'passed' ? 'passed' : 'rejected'} ${r.headline || r.scenario}: ${parts.join('; ')}.`;
+    // the Senate's headline already carries the verdict ("Senate funds ...", "Senate defers ...")
+    const head = r.headline || `Senate ${r.outcome === 'pass' || r.outcome === 'passed' ? 'passed' : 'rejected'} ${r.scenario}`;
+    const text = `${head}: ${parts.join('; ')}.`;
     if (this.v2._notice) this.v2._notice('senate', 'policy', text, null);
     const hud = this.game.hud; if (hud && hud.addMessage) hud.addMessage(hudText(text));
     if (this.game.events) this.game.events.emit('economy:policy', { scenario: r.scenario, outcome: r.outcome, changed });
