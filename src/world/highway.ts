@@ -1832,6 +1832,12 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const q = at2(a, ds);
         part.heads.box(q.x, roadY + clear - 0.3, q.z, 0.5, 0.12, 0.5, yaw, 0, S_HEAD, false, [1, 0, 0], 'point');
       }
+      // rooftop plant on the slab (air handlers for the booths, a dark equipment cabinet): from 200 m the canopy
+      // was a bare pale rectangle, the one flat slab on the corridor
+      for (const [a, ds, w, hgt, d, col] of [[-4.2, -6, 1.6, 1.1, 1.2, S_GALV], [3.6, 5, 1.6, 1.1, 1.2, S_GALV], [7.8, -3, 1.0, 1.4, 1.0, S_DARK], [-7.2, 6.5, 2.2, 0.6, 1.4, S_GALV]] as const) {
+        const q = at2(a, ds);
+        part.signs.box(q.x, roadY + clear + 0.45, q.z, w, hgt, d, yaw, 0, col, false, [0, 0, 0]);
+      }
       // the plaza's name on both fascias, a lane plate over every gate (TAG for the inner lane, cash for the rest)
       for (const dir of [1, -1] as const) {
         const faceN = new THREE.Vector3(-f.dx * dir, 0, -f.dz * dir);
