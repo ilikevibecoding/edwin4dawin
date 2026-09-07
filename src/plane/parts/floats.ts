@@ -21,23 +21,27 @@ export function buildFloats(ctx: BuildContext, wingSpec: WingSpec): FloatsBuild 
   const { sections } = ctx.fuselage;
   const waterRudders: THREE.Group[] = [];
   // ------------------------------------------------------------ floats & struts
-  // EDO-style hull: hard chine at yc, V bottom (deadrise) to the keel, near-vertical sides, crowned deck; the
-  // forebody deepens to the step at x -0.35 (a real vertical step: two stations at one x), the afterbody keel
-  // sweeps up to the stern. Keel heights match the physics stations (bow -2.08 at x 2.6, -2.25 ahead of the
-  // step, -1.98 at x -2.3); at the rest datum (y 1.96) the waterline runs ~1-6 cm under the chine along the hull.
+  // EDO 4930-type hull: hard chine at yc, V bottom (deadrise) to the keel, vertical topsides to a rolled deck edge
+  // and a near-flat deck (n 4-5), 0.88 m beam and 0.66 m deep amidships, so about 60 % of the hull stands above the
+  // resting waterline. The forebody deepens to the step at x -0.35 (a real vertical step: two stations at one x),
+  // the afterbody keel sweeps up to a flat transom carrying the water rudder; the bow rounds down from the deck
+  // over a short nose to a bluff stem face with the bumper. Keel and chine heights are the physics datum and are
+  // untouched (bow keel -2.08 at x 2.6, -2.25 ahead of the step, -1.98 at x -2.3; at the rest datum y 1.96 the
+  // waterline runs ~1-6 cm under the chine along the hull, and the spray sheets root on the chine).
   const floatSections: FloatStation[] = [
-    { x: 2.95, yc: -1.86, w: 0.05, top: 0.07, bot: 0.05, n: 2.4, vee: 1.5 },
-    { x: 2.6, yc: -1.90, w: 0.20, top: 0.15, bot: 0.18, n: 2.6, vee: 1.4 },
-    { x: 1.9, yc: -1.95, w: 0.33, top: 0.18, bot: 0.28, n: 3.0, vee: 1.25 },
-    { x: 0.8, yc: -1.95, w: 0.37, top: 0.19, bot: 0.32, n: 3.2, vee: 1.15 },
-    { x: -0.2, yc: -1.95, w: 0.37, top: 0.19, bot: 0.30, n: 3.2, vee: 1.12 },
-    { x: -0.35, yc: -1.95, w: 0.365, top: 0.19, bot: 0.295, n: 3.2, vee: 1.12, split: true }, // step: forebody keel
-    { x: -0.35, yc: -1.95, w: 0.365, top: 0.19, bot: 0.215, n: 3.2, vee: 1.15, split: true }, // step: afterbody keel
-    { x: -1.3, yc: -1.92, w: 0.33, top: 0.18, bot: 0.20, n: 3.0, vee: 1.2 },
-    { x: -2.3, yc: -1.86, w: 0.25, top: 0.15, bot: 0.12, n: 2.8, vee: 1.3 },
-    { x: -2.75, yc: -1.80, w: 0.11, top: 0.09, bot: 0.05, n: 2.4, vee: 1.5 },
+    { x: 2.95, yc: -1.86, w: 0.06, top: 0.16, bot: 0.05, n: 2.6, vee: 1.5 },   // stem face
+    { x: 2.84, yc: -1.875, w: 0.15, top: 0.27, bot: 0.11, n: 2.9, vee: 1.45 }, // bow nose rounding over
+    { x: 2.6, yc: -1.90, w: 0.24, top: 0.32, bot: 0.18, n: 3.4, vee: 1.4 },
+    { x: 1.9, yc: -1.95, w: 0.38, top: 0.34, bot: 0.28, n: 4.4, vee: 1.25 },
+    { x: 0.8, yc: -1.95, w: 0.44, top: 0.345, bot: 0.32, n: 5.0, vee: 1.15 },
+    { x: -0.2, yc: -1.95, w: 0.44, top: 0.345, bot: 0.30, n: 5.0, vee: 1.12 },
+    { x: -0.35, yc: -1.95, w: 0.435, top: 0.34, bot: 0.295, n: 5.0, vee: 1.12, split: true }, // step: forebody keel
+    { x: -0.35, yc: -1.95, w: 0.435, top: 0.34, bot: 0.215, n: 5.0, vee: 1.15, split: true }, // step: afterbody keel
+    { x: -1.3, yc: -1.92, w: 0.40, top: 0.31, bot: 0.20, n: 4.6, vee: 1.2 },
+    { x: -2.3, yc: -1.86, w: 0.29, top: 0.235, bot: 0.12, n: 4.0, vee: 1.3 },
+    { x: -2.75, yc: -1.80, w: 0.15, top: 0.17, bot: 0.05, n: 3.6, vee: 1.5 },  // transom
   ];
-  const floatGeo = floatHull(floatSections, 8, 5);
+  const floatGeo = floatHull(floatSections, 14, 5);
   /** deck height at station x, `dz` off the float's centreline (crown line by default) */
   const deckAt = (x: number, dz = 0) => deckHeight(floatSections, x, dz);
   const floats = new Batch();
@@ -87,8 +91,9 @@ export function buildFloats(ctx: BuildContext, wingSpec: WingSpec): FloatsBuild 
     floats.add(floatGeo, at([0, 0, zc]));
     fittings.add(rail, at([0, 0, zc]), SURF.strut);
     fittings.add(rail, at([0, 0, zc], undefined, [1, 1, -1]), SURF.strut);
-    // rubber bumper at the bow
-    fittings.add(new THREE.SphereGeometry(0.085, 10, 8), at([2.97, -1.85, zc]), SURF.rubber);
+    // rubber bow bumper: a vertical D-block down the stem face (keel -1.91 .. nose -1.70) with a cap over the nose
+    fittings.add(new THREE.CapsuleGeometry(0.048, 0.17, 4, 10), at([2.965, -1.80, zc]), SURF.rubber);
+    fittings.add(new THREE.BoxGeometry(0.06, 0.05, 0.12), at([2.945, -1.685, zc]), SURF.rubber);
     // main struts: front and rear pairs from the deck shoes to pads under the belly, plus diagonal braces
     const fDeck = V3(FX, deckAt(FX), side * 1.25), rDeck = V3(RX, deckAt(RX), side * 1.25);
     const fBelly = V3(1.4, belly, side * 0.55), rBelly = V3(-0.7, belly, side * 0.5);
@@ -121,18 +126,20 @@ export function buildFloats(ctx: BuildContext, wingSpec: WingSpec): FloatsBuild 
     fittings.add(new THREE.BoxGeometry(0.07, 0.06, 0.08), new THREE.Matrix4().compose(jury, new THREE.Quaternion().setFromUnitVectors(V3(0, 1, 0), strutDir), V3(1, 1, 1)), SURF.darkMetal);
     // water rudder hung off the stern on two transom brackets: a vertical hinge post carrying a balanced blade
     // below the keel line and a steering cross-horn above the deck; the whole assembly yaws with the rudder pedals
-    const WR = V3(-2.81, -1.80, zc);
-    for (const [y, len] of [[0.085, 0.13], [-0.045, 0.10]] as const) fittings.add(new THREE.BoxGeometry(len, 0.024, 0.05), at([WR.x + len / 2 - 0.01, WR.y + y, zc]), SURF.darkMetal);
+    // (transom face x -2.75, keel -1.85 .. deck -1.63): the post runs from the lower bracket up past the deck so the
+    // horn and its cables sit 3-4 cm above the afterbody deck, not inside the hull
+    const WR = V3(-2.81, -1.80, zc), HORN = 0.215;
+    for (const [y, len] of [[0.10, 0.13], [-0.04, 0.10]] as const) fittings.add(new THREE.BoxGeometry(len, 0.024, 0.05), at([WR.x + len / 2 - 0.01, WR.y + y, zc]), SURF.darkMetal);
     const blade = new THREE.Shape();
     blade.moveTo(0.045, -0.02); blade.lineTo(0.045, -0.30); blade.lineTo(0.0, -0.36); blade.lineTo(-0.15, -0.35);
     blade.lineTo(-0.19, -0.26); blade.lineTo(-0.17, -0.10); blade.lineTo(-0.12, -0.02); blade.closePath();
     const wr = new THREE.Group();
     wr.position.copy(WR);
     mesh(new Batch()
-      .add(new THREE.CylinderGeometry(0.014, 0.014, 0.26, 8), at([0, 0.0, 0]), SURF.metal)
+      .add(new THREE.CylinderGeometry(0.014, 0.014, 0.44, 8), at([0, 0.05, 0]), SURF.metal)
       .add(new THREE.ExtrudeGeometry(blade, { depth: 0.018, bevelEnabled: false }), at([0, 0, -0.009]), SURF.darkMetal)
       .add(new THREE.BoxGeometry(0.03, 0.03, 0.03), at([0, 0.02, 0]), SURF.darkMetal)
-      .add(new THREE.BoxGeometry(0.022, 0.014, 0.13), at([0, 0.125, 0]), SURF.metal)
+      .add(new THREE.BoxGeometry(0.022, 0.014, 0.13), at([0, HORN, 0]), SURF.metal)
       .build(), parts, { parent: wr, cast: false, receive: false });
     root.add(wr);
     waterRudders.push(wr);
@@ -141,14 +148,14 @@ export function buildFloats(ctx: BuildContext, wingSpec: WingSpec): FloatsBuild 
     const fairX = -1.08, fairY = deckAt(fairX, 0.05) + 0.018;
     for (const e of [-1, 1]) {
       const z = zc + e * 0.05;
-      cable(V3(WR.x, WR.y + 0.125, z), V3(fairX, fairY + 0.01, z));
+      cable(V3(WR.x, WR.y + HORN, z), V3(fairX, fairY + 0.01, z));
       fittings.add(new THREE.BoxGeometry(0.05, 0.03, 0.024), at([fairX, fairY, z]), SURF.darkMetal);
     }
     cable(V3(fairX, fairY + 0.01, zc - side * 0.05), rBelly.clone().add(V3(-0.08, -0.01, -side * 0.02)));
     // deck fittings: horn cleats at the bow and stern (fore-and-aft) and two on the outboard deck edge (athwart)
     cleat(onDeck(2.5, 0, zc), true);
     cleat(onDeck(-2.42, 0, zc), true);
-    for (const cx of [1.1, -1.55]) cleat(onDeck(cx, side * 0.2, zc), false);
+    for (const cx of [1.1, -1.55]) cleat(onDeck(cx, side * 0.3, zc), false);
     // flush pump-out covers, one per watertight compartment, along the inboard edge of the walkway
     for (const hx of [2.2, 0.85, 0.2, -0.55, -1.3, -2.15]) hatch(onDeck(hx, -side * 0.14, zc));
   }
