@@ -181,7 +181,8 @@ class Geo {
 // Culled-face geometry of a model: hull cells culled against hull neighbours, part cells culled against their own
 // part only (they move). Clipped cells (shape codes) are emitted as convex polygons: their boundary faces are culled
 // like cube faces (against a neighbour whose cross-section covers them), the sloped caps always show and take their
-// light from the cells they face. Origin at the footprint centre on the gear line. Returns { geometry, faces }.
+// light from the cells they face. Origin at the footprint centre on the gear line. Returns { geometry, faces, tris }
+// (faces = emitted polygons, tris = triangles actually indexed).
 export function buildShipGeometry(model) {
   const g = model.grid, { w, h, d } = g;
   const light = modelLight(model);
@@ -264,7 +265,7 @@ export function buildShipGeometry(model) {
   // generous bounds: parts swing outside the landed footprint
   geometry.computeBoundingSphere();
   geometry.boundingSphere.radius += Math.max(w, h) * 0.6;
-  return { geometry, faces: buf.faces };
+  return { geometry, faces: buf.faces, tris: buf.idx.length / 3 };
 }
 
 // Part transform table for the shader (pivot translated with the geometry origin).

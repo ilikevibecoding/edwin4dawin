@@ -213,15 +213,18 @@ function grade(m) {
   pt(15, true, 'motion (fleet check below)', 'fleet');
   pt(16, m.engineHz >= 60 && m.engineHz <= 140, `hum f0 ${m.engineHz} Hz`, 'auto+critic');
   pt(17, true, 'shadow caster material', 'auto');
-  const { faces: nf } = buildShipGeometry(m);
-  pt(18, nf * 2 <= 6000 && m.parts.length < MAX_PARTS, `${nf * 2} tris, ${m.parts.length} parts`);
+  const { faces: nf, tris } = buildShipGeometry(m);
+  pt(18, tris <= 6000 && tris <= 2 * TRIS_V2[m.name] && m.parts.length < MAX_PARTS, `${tris} tris (v2 ${TRIS_V2[m.name]}), ${m.parts.length} parts`);
   pt(19, m.interiors.length >= 1 && m.interiors.every((b) => b.x0 >= 0 && b.z0 >= 0 && b.x1 <= m.w && b.z1 <= m.d && b.y1 <= m.h), `interior boxes ${m.interiors.length} (carry test below)`);
   pt(20, true, 'originality (critic)', 'critic');
   const score = pts.filter((p) => p.ok).length;
   const mech = pts.filter((p) => p.kind !== 'critic' && p.kind !== 'fleet'), mechOk = mech.filter((p) => p.ok).length;
   const structural = pts.slice(0, 8).every((p) => p.ok);
-  return { score, pts, notes, structural, faces: nf, mech: `${mechOk}/${mech.length}` };
+  const shaped = m.hull.shapedCount() + m.parts.reduce((n, p) => n + p.cells.filter((c) => c[5]).length, 0);
+  return { score, pts, notes, structural, faces: nf, tris, shaped, cells: m.hull.count() + m.parts.reduce((n, p) => n + p.cells.length, 0), mech: `${mechOk}/${mech.length}` };
 }
+// triangles per model before ships v3 (cube-only hulls): the v3 budget is <= 2x these
+const TRIS_V2 = { light_freighter: 3348, shuttle: 3386, taxi: 606, gunship: 3130, bulk_freighter: 5254, cruiser: 4978, starfighter: 1320, police: 872, air_bus: 2544 };
 
 const models = shipModels();
 const grades = new Map();
@@ -229,7 +232,7 @@ console.log('\n== ship rubric scorecard ==');
 for (const m of models) {
   const r = grade(m);
   grades.set(m.name, r);
-  console.log(`${m.name}: ${r.score}/20 (mechanical ${r.mech}, ${r.faces * 2} tris)${r.structural ? '' : '  STRUCTURAL FAIL'}${r.notes.length ? '   missing: ' + r.notes.join('; ') : ''}`);
+  console.log(`${m.name}: ${r.score}/20 (mechanical ${r.mech}, ${r.tris} tris = ${(100 * r.tris / TRIS_V2[m.name]).toFixed(0)}% of v2, ${r.shaped}/${r.cells} cells sloped)${r.structural ? '' : '  STRUCTURAL FAIL'}${r.notes.length ? '   missing: ' + r.notes.join('; ') : ''}`);
 }
 console.log('(points 2 silhouette, 15 motion, 17 shadow and 20 originality are critic-judged and counted as given here)\n');
 
