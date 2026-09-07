@@ -785,8 +785,13 @@ vec3 wN; vec3 wV; float wFoam; float wMss; vec3 wBodyR; vec2 wDx; vec2 wDy; vec3
   float sunUp = clamp(uSunDirW.y, 0.12, 1.0);
   float cosSunR = sqrt(1.0 - (1.0 - sunUp * sunUp) / 1.77);
   float path = depth * (1.0 / cosSunR + 1.0 / max(cosR, 0.2));
-  // clear tropical shelf water: red is gone within a metre, green within a few, blue reaches the deep bed
-  vec3 K = vec3(0.9, 0.23, 0.18);
+  // Clear tropical shelf water: red is gone within a couple of metres, green within ten, blue reaches the deep bed.
+  // Diffuse attenuation of Jerlov's type III / coastal 1 water (0.42-0.5 at 650 nm, 0.12-0.15 at 550, 0.1-0.15 at
+  // 450); the old (0.9, 0.23, 0.18) was as turbid as coastal type 3 and beyond it in the red, so a 3 m sand bed
+  // seen at a grazing angle (view path 4 m down, sun path 3 m) returned a fifth of its green and the marina read
+  // navy from the aircraft while the same water read turquoise from above (the h03 regression: the grazing colour
+  // is the bed's upwelling light, which clear water carries out at every angle).
+  vec3 K = vec3(0.7, 0.15, 0.11);
   vec3 T = exp(-K * path);
   vec3 refr = refract(-V, N, 0.75);
   vec2 bedP = wp + refr.xz / max(-refr.y, 0.25) * depth;
@@ -921,7 +926,10 @@ const WATER_FRAG_COMPOSE = /* glsl */ `
   // entered, so the sun-lit water around an aircraft-sized shadow keeps lighting the shadowed column from the side
   // and the shadow is a soft mid-tone, not the surface's own shadow. Only the bed of shallow water (which the
   // sunlight reaches straight down) goes properly dark; the sky irradiance is never shadowed by the aircraft.
-  float volumeLeak = 0.45 * (1.0 - exp(-wDbg.x / 2.5));
+  // (The scattering length of clear shelf water is metres: over a 3 m bed the sunlit water around a wing's shadow
+  // carries half of the beam's light in under it, and the bed's grain and its own colour stay readable in the
+  // shadow, which reads as darker turquoise, not as a black cut-out.)
+  float volumeLeak = 0.55 * (1.0 - exp(-wDbg.x / 2.2));
   vec3 Ebody = reflectedLight.indirectDiffuse + mix(reflectedLight.directDiffuse, unsh, volumeLeak);
   vec3 Rdir = reflect(-wV, wN);
   // the dome's radiance along the reflected lobe, Fresnel-weighted per node (see skyReflection: the analytic sky
@@ -1060,7 +1068,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v20-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v21-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 
