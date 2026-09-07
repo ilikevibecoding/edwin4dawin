@@ -1349,3 +1349,118 @@ then the live mirror pane from the seat and lion form r8 (the brow, the
 muzzle head-on, the coat's flow field). Then `shots/round6/` from the landed
 tree — with `moon`, the 2.2 m walk strip and a fleet set that finally carries
 fleet r4 — and three critics against round 5.
+
+## Gauntlet round 6 — verdict
+
+**Pass on all ten families** (`gauntlet/round6/`, 43 evidence frames under
+`frames/`), but not unanimously at the critic level, and the split is the
+round's lesson. Three blind critics on 114 frames of `c2f0b83` against round
+5: A passed; B and C failed the round on one picture, the ground ahead of the
+bumper blown white in `truck_night/front.png` and `truck_dusk/front.png`
+(lower third median 0.016 → 0.493, 0 → 37 535 px over linear 0.5; Hero car
+Visual cleanliness 7 → 5 for both). The round's own categories — Animation,
+Physics / ground contact, Temporal stability — went 6 → 7, 6 → 7, 6 → 6 on
+the walk strip. All 126 cells 6.40 → 6.56; Lions +0.50 and Lion feet +0.50
+are the largest moves, and the lion is still the weakest object by two of
+three.
+
+### The camera changed, not the world
+
+The consensus ran the blown frame down to its cause and it is the capture
+reset. Until `f8c0531`, `tools/shots.mjs` drove the game live for two seconds
+before its per-view `setView`, and the pre-roll inherited that drive's steer,
+yaw rate and springs: round 5's truck was shot wherever the live drive left
+it — mid-corner, rolled and nose-left, plainly visible in `truck_*/forest.png`
+where the camera is world-placed and the ruts are the same in both rounds.
+Round 6's truck is straight and level in the ruts, and the truck-relative
+cameras therefore look at different ground and sky (88–93 % of pixels differ
+in the day hero/front/rear/road frames; 28–41 % in the glass set, whose
+cameras are fixed in the truck's frame). The `front` camera now looks straight
+down the beam, at a pool and a glare sprite that have been in the world since
+before round 5 and were scored at 5 in round 4, whose accidental camera also
+saw them.
+
+Three facts settle the attribution, all from stamped frames rather than
+argument: at `f8c0531` with no round-6 car change the frame is already blown
+(0.435 / 31 158 px); hero car r7's spill on the pre-reset camera does not blow
+it (0.027 / 349); and hero car r8's ablation puts the plateau in the sprite's
+`lens` disc in `sky.js` (`uGlareGain 0`: 801 → 191 px), not the lamp material.
+Rolling back every round-6 car change would leave the frame white; rolling
+back the reset would restore round 5's frame by restoring a random camera. So
+the drop is recorded against the frames, not the world; the four round-5
+must-not-regress lines about the beam pool — "no ground blob ≥ 20 px over sRGB
+0.5 in `front`", "the soft beam pool", "0 px over 0.7 at dusk", "lower third
+median 0.016" — were never true of the world and are rewritten as lighting
+r8's acceptance at the deterministic spot. Hero car r7's spill is a fifth of
+the pool's brightness and the `road` hot patch (0 → 817 px) is real and new;
+that part is the car's.
+
+The process point: round 5 approved a camera. Its consensus recorded a "level"
+truck on the pitch number alone (0.2°) and wrote four gate lines on a frame
+whose camera had turned the beam off. The assert the tool needs is the pose
+itself — spot (−36.6, 2.63, 1.77) ± 0.1 m, heading 11.5° ± 1°, roll ≤ 0.5°,
+`autoT` 0.5032 — read from `vehicle.root` before a truck set is written and
+put in `stats.json` where a critic can see it.
+
+### Investigated rather than averaged
+
+Fifteen splits (`CONSENSUS.md` §1–15). The ones that changed a brief or
+withdrew a finding: the dusk hour did not move — the lamps were on at dusk in
+round 5 too, and the dusk pool numbers are the level truck's; the lion's dusk
+rim is flat within method noise (three critics, three methods, 72 → 34 /
+46 → 33 / 75 → 86 on a lion in a different resting pose since gait r5), so
+round 7 gets one method and the studio pose; the walk strip's holds are real
+pixel-identity clusters at four places, one of C's five-frame holds is the
+body shadow crossing a box, and the contact decal is four rows under each
+planted paw (the 2.2 m camera did what it was raised for); the `night_ext`
+pane's `see` fell 0.962 → 0.876 on a veil change of 0.006 because the moonlit
+background rose, so the tool reports `veil` and `bgLuma` on the row; the mess
+floor lifted twice over (`messLamp.day` 13 and the far cascade's newly live
+day strength) and gets a per-knob acceptance; the fleet pads' +2–3 st over
+their sky cannot be split between the tool's clock and lighting r7's fill
+from any current frame, so a same-clock probe comes first; the day `moon`
+frame aims at the sun by design; B's Vegetation Animation 4 is set aside
+because every set holds the simulation clock, which is right for the gait and
+means wind, ripple, flame and idle cannot be scored on any current frame —
+round 7 needs a clock-running pair.
+
+### Landed after the frames
+
+Car glass r7 `173c55a` (the mirror live from the seat), lion form r9
+`ee3a497` (the mane as clumped locks, and the plank source found under the
+old rings: a clamped `uvIn` had the whole ruff sampling one texel row), hero
+car r8 `0894c56` (a horizon in the paint), perf census r2 `86a4c74`, and the
+rear lamps `6fe9777` — the user's "lights phasing through each other" on the
+back of the truck, which was one `amber` material lighting every orange lens
+over the bloom threshold all night. All five are unscored; round 7 scores them
+on `truck_night/rear.png`, the chase cam and the glass `mirror` frame.
+
+### Measured
+
+| | round 5 (`0dc79bb`) | round 6 (`c2f0b83`) |
+|---|---|---|
+| all 126 cells, consensus median mean | 6.40 | 6.56 |
+| Lions / Lion feet & gait | 5.93 / 5.81 | 6.43 / 6.31 |
+| walk strip: planted-paw hold clusters | 0 (camera 9° off the ground) | 4, holds of 2–3 frames at 0 px |
+| contact under a planted paw, row under the pad | +0.00 st | −3.2 st, 0.00 the frame after lift |
+| `truck_night/front` lower third median / px over 0.5 | 0.016 / 0 (camera off the beam) | 0.493 / 37 535 (looking down it) |
+| `truck_night/hero` moonlit body over the upper sky | +0.10 st | +1.33 st |
+| light bar, hero box over linear 0.5 | 218 px | 91 px, nine pods, troughs 0.13–0.25 |
+| mess awning penumbra | 12–19 px | 25–38 px |
+| mess floor under the sunlit pad | −1.50 st | −0.59 st (regression inside the category) |
+| hero at fast, calls / tris / programs | 488 / 2.18 M / 175 | 486 / 2.18 M / 175 |
+
+### Next
+
+Lighting r8 is running on hand-off 1 (the sprite's `lens` disc peaked and
+1.4 → 0.6, the slice stack gated by the view ray's angle to the lamp axis; the
+car's `BEAM.night.spill` 10 → 2; accept at `front` lower third median
+0.06–0.10 and p95 ≤ 0.35 with the `mainroad` pool and the nine pods held),
+then the fleet pads after the same-clock probe. Then lion gait r7 + form r10
+(a spine and head that move over the walk, the eye ×0.75 in a deeper socket,
+whisker pads, the thigh), campground r6 (the mess floor back to −1.5 st and
+the fire's reach), hero car r9 (the screen at dusk, dust and prints, the rear
+lamps scored), terrain r7, vegetation r7, car glass r8, fleet. Tools: the pose
+assert, both hashes in `SOURCE`, the clock-running pair, `stats.json` for the
+camp, fleet and lion sets. Then `shots/round7/` and three critics against
+round 6.

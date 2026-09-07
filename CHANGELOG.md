@@ -17,6 +17,102 @@ numbers the targets are about.
 
 ---
 
+## Gauntlet round 6 verdict — pass, on a camera that finally looks down the beam — build `6fe9777` live
+
+Three blind critics on 114 frames of `c2f0b83` against round 5
+(`gauntlet/round6/`, 43 evidence frames under `frames/`). A passed the round;
+B and C failed it on one picture — the ground ahead of the bumper blown white
+in `truck_night/front.png` and `truck_dusk/front.png` (lower third median
+0.016 → 0.493, 0 → 37 535 px over linear 0.5). The consensus rules it **a
+capture-exposed pre-existing defect and passes all ten families**: the
+deterministic pre-roll (`f8c0531`) puts the truck level on the straight where
+round 5's live-drive pre-roll had left it mid-corner and rolled, so the
+truck-relative cameras look at different ground and sky (88–93 % of pixels
+differ in the day hero/front/rear/road frames against 28–41 % in the glass
+set, whose cameras are fixed in the truck's frame). The builders' own stamped
+sets settle it: the frame is already blown at `f8c0531` before any round-6 car
+change (0.435 / 31 158 px), and hero car r7's spill without the reset does not
+blow it (0.027 / 349). Rolling back every car change would leave the frame
+white; only rolling back the reset would restore round 5's frame, and that
+would restore a random camera. The four round-5 must-not-regress lines about
+the beam pool rested on that camera and are rewritten as targets for lighting
+r8. Hero car r7's spill does add a fifth on top and a hot patch on `road`
+(0 → 817 px), which is real and new.
+
+Family means of the consensus medians, R5 → R6: Hero car 6.91 → 6.78 (the two
+cells above), Car glass 6.67 → 6.73, Fleet 6.27 → 6.57, Campground 6.64 →
+6.64, Road & terrain 6.47 → 6.53, Vegetation 6.19 → 6.35, Lions 5.93 → 6.43,
+Lion feet & gait 5.81 → 6.31, Lighting & atmosphere 6.75 → 6.70, Performance
+6 → 6; all 126 cells **6.40 → 6.56**. The round's categories: Animation 6 → 7
+and Physics / ground contact 6 → 7 on the walk strip, where all three critics
+and the consensus's own tracker find planted paws holding their pixel for two
+to three frames at four places with a contact darkening under each (−3.2 st
+in the row under the paw, 0.00 the frame after lift-off) — round 5 measured
++0.00 st under every stance foot from its 9° camera. Weakest object: the lion
+for the fourth round by two of three (a box muzzle with a drawn mouth, eyes a
+ball proud of the lid, a rigid spine over a steady walk), and for B the ground
+in front of the truck at night; it is also the round's largest gain (+0.50).
+
+Regressions inside categories, none moving a median: the mess floor lifted
+−1.50 → −0.59 st and the fast-tier table pockets washed 2.91 → 0.96 st since
+the far cascade came alive; the fire lights 6 % of its frame (37 %); fleet
+pads +2.0 to +2.9 st over their sky; the windscreen at the sky's luma from
+the hero camera at dusk. Withdrawn by measurement: the dusk hour did not move
+(the lamps were on at dusk in round 5 too); the lion's dusk rim is flat within
+method noise on a lion in a different pose; the `night_ext` pane's `see` fell
+because the moonlit background rose; the day `moon` frame aims at the sun by
+design. Top hand-offs: lighting r8 (the `lens` disc peaked and 1.4 → 0.6, the
+slice stack gated by the view ray's angle to the lamp axis; car `BEAM.night.
+spill 10 → 2`; accept at `front` lower third median 0.06–0.10, p95 ≤ 0.35,
+`road` 0 px over 0.5, `mainroad` pool 0.18 ± 0.03 held), lion gait r7 + form
+r10, campground r6, the fleet pads with a same-clock tool probe, hero car r9.
+
+### Landed after the frames, unscored until round 7
+
+- **Car glass r7 (`173c55a`).** The door mirror is live from the seat at every
+  tier (120×160 target through the convex cap, the two panes on alternating
+  frames, only for a camera inside the cab within 1.5 m; the painted plate
+  stays for exterior cameras with a (−0.3, −0.9) horizon ramp): treeline, road
+  and flank behind the truck in the pane, straw 0 → 16 % below its skyline;
+  +90 calls from in-cab cameras only, +1 program. The ultra door-glass stipple
+  was the pane SSR march (SSR off: 3.61 → 0.15 %) — side and cabin panes off
+  the reflector path, door pane checkerboard 4.24 → 0.43 %. Tool: `flick /
+  flickBg` on every row (`moving` 0.87), `mirror` eye 140 mm lower and forward
+  with a cabin-trim-in-pane assert.
+- **Lion form r9 (`ee3a497`).** The mane as clumped locks — lock cards
+  scattered on the ruff shell hanging with gravity (radial edges off the throat
+  23 → 4 %, chest band −1.7 st under the cheek locks, saddle strands 27 → 62 %
+  along the hang) — and the plank source found under the old rings too: `uvIn`
+  clamped v, so the whole ruff behind the head sampled one texel row. Temporal
+  fossa 3.9 → 6.8 mm a side, a lateral canthus cap (temporal lid coverage 62 →
+  87 %), chin darkened to the jowl, hair strokes on the flow field. Head ratios
+  held; head +168 tris, mane cards +30 %.
+- **Hero car r8 (`0894c56`).** A horizon in the paint: the brightwork's sky
+  ramp and blur become uniforms (`skyRamp 0.04`, `blurFloor 0.02`, `blurSlope
+  0.5`), so a door panel mirrors sky above the skyline and ground below it —
+  door band over base 0.59 → 1.37 st, `ws_mid` bonnet skyline +1.29 st, dusk
+  grille over the sky held. Light-bar LED radius 0.024 → 0.022 (nine pods
+  331 → 293 px over 0.5 at 1280). Two ablations: `clearcoatRoughness` never
+  blurred the horizon (0.000 at 0.01 — the GLSL constants did), and the
+  headlamp glare plateau is the beam sprite's flat-topped lens disc in
+  `sky.js` (`uGlareGain 0` takes the front blob 801 → 191 px), not the lamp
+  material — handed to lighting.
+- **Perf census r2 (`86a4c74`).** Hero 492 calls / 2.18 M tris at fast,
+  programs 175 at boot / 178 after a full drive, textures 292–313, heap flat
+  over three load loops at fast and +1.7 MB at ultra, first frame 45.0 s in
+  software against 43.0 in r1 (finding the pride 3.1 → 5.5 s). `rear`'s +172
+  calls over the hero are the forest, fleet and camp behind the truck, not the
+  roadside (8). `perfrun` prints the collision world's boot cost (506
+  colliders, 5 ms).
+- **Rear lamps (`6fe9777`).** The user's "lights phasing through each other"
+  on the back of the truck: one `amber` material lit every orange lens (fender
+  and side markers, mirror repeaters, front and rear indicators) at 3.2 all
+  night beside tail cells at 4.0, both over the night bloom threshold of 2.0,
+  so the chase cam saw a row of orange lamps with merging halos that never
+  changed. Indicators are their own material (same program), lit 6.0 only while
+  the relay ticks; marker and tail running levels 1.5 / 1.8 under the
+  threshold; brake 11 and reverse 7 still bloom.
+
 ## Round 6, second half — the skirt was a material, the far shadows were never on, the stars were dashes — build `c2f0b83` live
 
 Six more gated landings on top of `e244efd`. Three of them fixed things no
