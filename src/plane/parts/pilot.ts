@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { Batch, strutGeometry, type Surf } from '../geometry';
 import { SURF } from '../textures';
 import { at, DEG, FLOOR, SEAT_Y, UP, V3, WRIST, YOKE_HUB, type BuildContext } from './context';
@@ -116,6 +117,31 @@ export function handGeometry(gripR: number, wrist: THREE.Vector3, watch = false)
   return b.build();
 }
 
+/** stitched piping along the upholstery seams */
+const PIPING: Surf = { color: 0x3a2716, roughness: 0.72, metalness: 0.0 };
+
+/**
+ * Upholstery over a front seat's plain slabs (the slabs are the cabin's, see buildSeats): a bucket cushion with a
+ * front roll and side bolsters, piping along its seams, and a padded back with three pleats. The cushion top is
+ * 3 mm over the slab (the lap belts lie on it) and the pilot's thighs sink into it a little.
+ */
+export function dressSeat(cabinKit: Batch, x: number, z: number): void {
+  const top = SEAT_Y + 0.063;
+  cabinKit.add(new RoundedBoxGeometry(0.44, 0.075, 0.30, 3, 0.028), at([x + 0.005, top - 0.0375, z]), SURF.leather);
+  for (const s of [-1, 1]) cabinKit.add(new RoundedBoxGeometry(0.40, 0.085, 0.095, 3, 0.032), at([x - 0.02, top - 0.012, z + s * 0.185]), SURF.leather);
+  cabinKit.add(new RoundedBoxGeometry(0.085, 0.085, 0.46, 3, 0.032), at([x + 0.195, top - 0.02, z]), SURF.leather);
+  for (const s of [-1, 1]) cabinKit.add(new THREE.CylinderGeometry(0.0035, 0.0035, 0.36, 6), at([x - 0.02, top + 0.001, z + s * 0.14], [0, 0, Math.PI / 2]), PIPING);
+  cabinKit.add(new THREE.CylinderGeometry(0.0035, 0.0035, 0.28, 6), at([x + 0.143, top + 0.001, z], [Math.PI / 2, 0, 0]), PIPING);
+  // the back: the slab leans aft 0.15 rad about its centre (x - 0.25, SEAT_Y + 0.33); a 3 cm pad on its face with
+  // the pleats' piping standing on the pad
+  const lean = 0.15, cx = x - 0.25, cy = SEAT_Y + 0.33;
+  const n = V3(Math.cos(lean), Math.sin(lean), 0), u = V3(-Math.sin(lean), Math.cos(lean), 0);
+  const onFace = (d: number, along: number): THREE.Vector3 => V3(cx, cy, z).addScaledVector(n, 0.05 + d).addScaledVector(u, along);
+  cabinKit.add(new RoundedBoxGeometry(0.03, 0.48, 0.40, 3, 0.014), at(onFace(0.015, -0.01), [0, 0, lean]), SURF.leather);
+  for (const s of [-1, 1]) cabinKit.add(new RoundedBoxGeometry(0.05, 0.26, 0.07, 3, 0.024), at(onFace(0.025, -0.13), [0, 0, lean]).multiply(at([0, 0, s * 0.205])), SURF.leather);
+  for (const along of [-0.17, -0.04, 0.09]) cabinKit.add(new THREE.CylinderGeometry(0.0035, 0.0035, 0.34, 6), at(onFace(0.031, along), [Math.PI / 2, 0, 0]), PIPING);
+}
+
 /** the pilot's clothes and kit (finishes for the shared parts material) */
 const HAIR: Surf = { color: 0x2a1d13, roughness: 0.75, metalness: 0.0 };
 const LENS: Surf = { color: 0x0b0d12, roughness: 0.12, metalness: 0.55 };
@@ -136,6 +162,9 @@ const CUP_BACK: Surf = { color: 0x35373b, roughness: 0.45, metalness: 0.2 };
 export function buildPilot(ctx: BuildContext, cockpitEye: THREE.Vector3): void {
   const { cabinKit } = ctx;
   const XF = cockpitEye.x, YE = cockpitEye.y, PZ = -0.34;
+  // upholstery on both front seats (their slabs stand at x 1.0, z +-0.34, see buildSeats)
+  dressSeat(cabinKit, 1.0, PZ);
+  dressSeat(cabinKit, 1.0, -PZ);
   // ------------------------------------------------------------ head
   // cranium (an ellipsoid whose front is the brow, 1 cm ahead of the eye) over a narrower jaw ending in the chin
   const C = V3(XF - 0.085, YE + 0.02, PZ);

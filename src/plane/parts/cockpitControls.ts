@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { Batch, strutGeometry, type Surf } from '../geometry';
 import { PANEL_UV, SURF } from '../textures';
 import { at, FLOOR, UP, YOKE_HUB, type BuildContext } from './context';
@@ -19,18 +20,28 @@ export function buildCockpitControls(ctx: BuildContext, inPanel: (px: number, py
   const { mesh, decal, root, interiorMeshes, cabinKit } = ctx;
   const { parts } = ctx.mat;
   // ------------------------------------------------------------ cockpit: controls
-  // pedestal between the seats with the throttle / propeller / mixture quadrant and the flap lever
-  cabinKit.add(new THREE.BoxGeometry(0.7, 0.32, 0.22), at([1.7, FLOOR + 0.16, 0]), SURF.plastic);
-  cabinKit.add(new THREE.BoxGeometry(0.22, 0.02, 0.16), at([1.62, FLOOR + 0.33, 0]), SURF.darkMetal);
-  const lever = (knob: Surf, knobGeo: THREE.BufferGeometry, len: number): THREE.BufferGeometry => new Batch()
-    .add(new THREE.CylinderGeometry(0.009, 0.011, len, 8), at([0, len / 2, 0]), SURF.metal)
+  // pedestal between the seats: a rounded console with the engine quadrant on its top (a raised housing whose
+  // plate carries three slots; the flat lever arms swing about a pivot inside it, so the arm leans in its slot
+  // and the knobs - black ball throttle, blue crown propeller, red ball mixture - fan out at different angles),
+  // the friction lock knob on the pilot's flank and the flap lever on the other
+  const QUAD_TOP = FLOOR + 0.40, QUAD_X = 1.60, PIVOT_DROP = 0.055;
+  cabinKit.add(new RoundedBoxGeometry(0.70, 0.32, 0.22, 3, 0.02), at([1.7, FLOOR + 0.16, 0]), SURF.plastic);
+  cabinKit.add(new RoundedBoxGeometry(0.26, 0.08, 0.17, 3, 0.012), at([QUAD_X, QUAD_TOP - 0.04, 0]), SURF.plastic);
+  cabinKit.add(new THREE.BoxGeometry(0.22, 0.003, 0.13), at([QUAD_X, QUAD_TOP + 0.0015, 0]), SURF.darkMetal);
+  for (const z of [-0.045, 0.0, 0.045]) cabinKit.add(new THREE.BoxGeometry(0.075, 0.002, 0.010), at([QUAD_X, QUAD_TOP + 0.0035, z]), SURF.rubber);
+  cabinKit.add(new THREE.CylinderGeometry(0.014, 0.016, 0.012, 12), at([QUAD_X + 0.02, QUAD_TOP - 0.035, -0.091], [Math.PI / 2, 0, 0]), SURF.throttle);
+  // a quadrant lever: flat metal arm from the pivot (origin) up through the slot to its knob
+  const lever = (knob: Surf, knobGeo: THREE.BufferGeometry, len: number, armW = 0.016): THREE.BufferGeometry => new Batch()
+    .add(new THREE.BoxGeometry(armW, len, 0.006), at([0, len / 2, 0]), SURF.metal)
     .add(knobGeo, at([0, len + 0.012, 0]), knob).build();
-  const knobBall = new THREE.SphereGeometry(0.022, 12, 8);
-  const throttleLever = mesh(lever(SURF.throttle, knobBall, 0.16), parts, { exterior: false, cast: false, receive: false });
-  throttleLever.position.set(1.62, FLOOR + 0.34, -0.05);
-  for (const [z, surf] of [[0.0, SURF.propKnob], [0.05, SURF.mixture]] as [number, Surf][]) cabinKit.add(lever(surf, knobBall, 0.15), at([1.62, FLOOR + 0.34, z], [0, 0, -0.35]), surf);
+  const knobBall = new THREE.SphereGeometry(0.023, 14, 10);
+  const crown = new Batch(SURF.propKnob).add(new THREE.CylinderGeometry(0.016, 0.017, 0.036, 12)).add(new THREE.CylinderGeometry(0.0185, 0.0185, 0.006, 12), at([0, -0.008, 0])).add(new THREE.CylinderGeometry(0.0185, 0.0185, 0.006, 12), at([0, 0.008, 0])).build();
+  const throttleLever = mesh(lever(SURF.throttle, knobBall, PIVOT_DROP + 0.135), parts, { exterior: false, cast: false, receive: false });
+  throttleLever.position.set(QUAD_X, QUAD_TOP - PIVOT_DROP, -0.045);
+  cabinKit.add(lever(SURF.propKnob, crown, PIVOT_DROP + 0.115), at([QUAD_X, QUAD_TOP - PIVOT_DROP, 0.0], [0, 0, -0.28]));
+  cabinKit.add(lever(SURF.mixture, new THREE.SphereGeometry(0.019, 14, 10), PIVOT_DROP + 0.105), at([QUAD_X, QUAD_TOP - PIVOT_DROP, 0.045], [0, 0, -0.40]));
   // flap lever: a bar on the pedestal's right flank, up = flaps retracted, back toward the pilot = full flap
-  const flapLever = mesh(lever(SURF.flapKnob, new THREE.CylinderGeometry(0.014, 0.014, 0.05, 10), 0.26), parts, { exterior: false, cast: false, receive: false });
+  const flapLever = mesh(new Batch().add(new THREE.CylinderGeometry(0.009, 0.011, 0.26, 8), at([0, 0.13, 0]), SURF.metal).add(new THREE.CylinderGeometry(0.014, 0.014, 0.05, 10), at([0, 0.272, 0]), SURF.flapKnob).build(), parts, { exterior: false, cast: false, receive: false });
   flapLever.position.set(1.42, FLOOR + 0.30, 0.10);
   // rudder pedals: two pairs standing on the floor ahead of each front seat; each mesh holds one pedal per seat
   const pedalPair = (dz: number): THREE.BufferGeometry => {
@@ -61,9 +72,12 @@ export function buildCockpitControls(ctx: BuildContext, inPanel: (px: number, py
     yoke.add(strutGeometry(new THREE.Vector3(0, 0, 0), shaftEnd.clone().addScaledVector(shaftDir, 0.16), 0.016), undefined, SURF.metal);
     yoke.add(new THREE.CylinderGeometry(0.03, 0.036, 0.035, 12), at(shaftEnd.clone().addScaledVector(shaftDir, -0.045), shaftRot), SURF.rubber);
     yoke.add(new THREE.CylinderGeometry(0.038, 0.048, 0.03, 12), at(shaftEnd.clone().addScaledVector(shaftDir, -0.015), shaftRot), SURF.rubber);
-    // hub: a rounded-off block with the placard face toward the pilot and a chromed centre bolt
-    yoke.add(new THREE.BoxGeometry(0.05, 0.10, 0.09), undefined, SURF.plastic);
-    yoke.add(new THREE.CylinderGeometry(0.012, 0.012, 0.006, 10), at([-0.027, -0.03, 0], [0, 0, Math.PI / 2]), SURF.metal);
+    // hub: a rounded-off block with the placard face toward the pilot, a chromed centre bolt under the placard and
+    // the map-light / clock switch on its lower edge
+    yoke.add(new RoundedBoxGeometry(0.05, 0.10, 0.09, 3, 0.014), undefined, SURF.plastic);
+    yoke.add(new THREE.CylinderGeometry(0.012, 0.012, 0.006, 12), at([-0.027, -0.03, 0], [0, 0, Math.PI / 2]), SURF.metal);
+    yoke.add(new THREE.CylinderGeometry(0.004, 0.004, 0.008, 8), at([-0.027, -0.03, 0], [0, 0, Math.PI / 2]), SURF.darkMetal);
+    yoke.add(new THREE.BoxGeometry(0.012, 0.006, 0.010), at([-0.022, -0.052, 0.025]), SURF.lightPlastic);
     // ram's-horn: each arm leaves the hub outward and a little down, then sweeps up and back into a near-vertical
     // grip (rubber) whose top leans toward the pilot; the horns are one bent tube with sphere joints
     for (const s of [-1, 1]) {
