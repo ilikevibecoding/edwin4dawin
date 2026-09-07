@@ -590,10 +590,12 @@ test('rubric 18 row 7: 40 sampled towers - every room kind is one W4 staffs, 0 u
     const bp = buildBlueprint(l, CITY);
     const bad = roomAudit(bp, l);
     unreachable.push(...bad.unreachable.map((r) => `${bp.meta.family} ${l.id} ${r}`)); unlit.push(...bad.unlit.map((r) => `${bp.meta.family} ${l.id} ${r}`));
-    for (const r of bp.meta.rooms) { rooms++; kinds.add(r.kind); if (!ROOM_FUNCTIONS[r.kind]) unknown.add(r.kind); }
+    // W4 staffs a room through roomFunction(kind): registered kinds directly, the program rooms (P3) by keyword
+    // inference - a kind is unknown only when neither yields a function
+    for (const r of bp.meta.rooms) { rooms++; kinds.add(r.kind); if (!ROOM_FUNCTIONS[r.kind] && !roomFunction(r.kind)) unknown.add(r.kind); }
     for (const s of bp.meta.spots) { spots++; if (isAir(at(bp, s.x - l.x0, s.y - bp.y0 - 1, s.z - l.z0))) floating++; }
   }
-  console.log(`     ${rooms} rooms of ${kinds.size} kinds, ${spots} spots; unreachable ${unreachable.length}, unlit ${unlit.length}, floating ${floating}, kinds unknown to ROOM_FUNCTIONS: ${unknown.size ? [...unknown].join(', ') : 'none'}`);
+  console.log(`     ${rooms} rooms of ${kinds.size} kinds, ${spots} spots; unreachable ${unreachable.length}, unlit ${unlit.length}, floating ${floating}, kinds W4 cannot staff: ${unknown.size ? [...unknown].join(', ') : 'none'}`);
   assert.equal(unreachable.length, 0, unreachable.slice(0, 4).join('; '));
   assert.equal(unlit.length, 0, unlit.slice(0, 4).join('; '));
   assert.equal(unknown.size, 0, `room kinds W4 does not staff: ${[...unknown].join(', ')}`);
