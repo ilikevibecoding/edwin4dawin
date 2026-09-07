@@ -28,7 +28,7 @@ export const CELLS_PER_GENDER = 12;               // composer seeds per (archety
 export const CHILD_CELLS_PER_GENDER = 8;
 export const DROID_CELLS = 8;                     // astromech / sweeper cells (skins-sw.js painters)
 export const PROTOCOL_CELLS = 16;                 // protocol droid cells (composer; 19 of them stand on the Senate plaza)
-export const MAX_BOXES = 8;                       // geometry boxes carried per cell (species parts first, then hair, hats, capes...)
+export const MAX_BOXES = 12;                      // geometry boxes carried per cell (species parts first, then hair, hats, capes...); Nautolan tendrils (8) + hat + camera fit
 export const TAB_W = 8 + MAX_BOXES * 8;           // texels per cell row of the shader table
 export const T_EYE_A = 0, T_SCALE = 1, T_LID = 2, T_EYE_B = 3, T_BOX0 = 8;   // table texel slots
 export const EMISSIVE_BYTE = Math.round(EMISSIVE_ALPHA * 255);               // 191: alpha the crowd shader reads as "lit"
