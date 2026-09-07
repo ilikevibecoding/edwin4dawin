@@ -140,7 +140,7 @@ export function buildMaterials(layout: FuselageLayout, u: MaterialUniforms, mate
       .replace('#include <common>', '#include <common>\nattribute vec4 aPane;\nvarying vec4 vPane;\nvarying vec2 vPaneUv;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvPane = aPane;\nvPaneUv = uv;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', '#include <common>\nuniform sampler2D uDirt;\nuniform float uEnvGain;\nuniform float uDirtAmount;\nuniform float uCabinGlow;\nvarying vec4 vPane;\nvarying vec2 vPaneUv;')
+      .replace('#include <common>', '#include <common>\nuniform sampler2D uDirt;\nuniform float uEnvGain;\nuniform float uDirtAmount;\nuniform float uCabinGlow;\nvarying vec4 vPane;\nvarying vec2 vPaneUv;\nvec2 glassHash(vec2 p) { vec3 p3 = fract(vec3(p.xyx) * vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.xx + p3.yz) * p3.zy); }')
       // acrylic panes are never optically flat: a gentle low-frequency wobble of the shading normal bends the
       // mirrored sky / sun streak across the pane (the "slight distortion" of real light-aircraft glazing); the
       // windshield (vPane.z) also carries a slow cylindrical bow across its width so the sun's image travels
@@ -194,6 +194,22 @@ export function buildMaterials(layout: FuselageLayout, u: MaterialUniforms, mate
           float toSun = saturate(dot(-glassV, sunL));
           sunHaze = directionalLights[0].color * (pow(toSun, 6.0) * 0.06 + pow(toSun, 40.0) * 0.28) * (0.12 + dirt * 2.8) * backLit;
         #endif
+        // what a windshield shows from the seat on a plain day is what is stuck to it: bug strikes and dried spray
+        // spots on the outer face (seen through from inside), denser low on the pane where the airflow meets it,
+        // 3-6 mm, one per few cells of a 5 cm grid, each a dried translucent smear that blocks part of the sky
+        float splat = 0.0;
+        if (vPane.z > 0.5) {
+          vec2 sp = vPaneUv.yx * vPane.yx * 20.0;
+          vec2 cell = floor(sp), fc = fract(sp);
+          vec2 hh = glassHash(cell);
+          vec2 ctr = 0.25 + 0.5 * hh;
+          float rad = 0.05 + 0.07 * fract(hh.x * 7.31);
+          float on = step(fract(hh.y * 5.17), 0.05 + 0.11 * (1.0 - smoothstep(0.0, 0.8, vPaneUv.x)));
+          splat = (1.0 - smoothstep(rad * 0.55, rad, length(fc - ctr))) * on * 0.6;
+        }
+        // the smudge film itself takes a little of the light through it (the mottled veil of a wiped pane, up to
+        // ~7 % where the film is thickest)
+        float smudge = dirt * 1.6;
         // the film only shows where it scatters light (sun sheen, a little of the sky reflection): as a diffuse
         // haze it would frost the panes and make them glow at night
         vec3 glassSpec = reflectedLight.directSpecular * (1.0 + dirt * 2.0) + filmSheen + sunGlint + sunHaze + skyRefl * (1.0 + dirt * 1.5);
@@ -216,13 +232,17 @@ export function buildMaterials(layout: FuselageLayout, u: MaterialUniforms, mate
         glassCol += inner * wsBottom * (reflectedLight.indirectDiffuse * vec3(0.30, 0.28, 0.26) + vec3(0.9, 0.62, 0.34) * uCabinGlow * 0.10);
         glassCol += (1.0 - inner) * uCabinGlow * (vec3(0.9, 0.62, 0.34) * (0.05 + 0.10 * wsBottom));
         glassA = max(glassA, saturate(uCabinGlow * (0.06 + 0.12 * wsBottom * (1.0 - inner))));
+        // splats and the smudge veil: lit by the sky like any dried film (a warm grey), covering part of the view
+        float grime = max(splat, smudge);
+        glassCol = glassCol * (1.0 - grime) + reflectedLight.indirectDiffuse * vec3(1.35, 1.2, 0.9) * grime;
+        glassA = max(glassA, grime);
         glassCol = mix(glassCol, totalDiffuse * 0.10, seal);
         glassA = mix(glassA, 1.0, seal);
         gl_FragColor = vec4(glassCol, glassA);
       `)
       .replace('#include <premultiplied_alpha_fragment>', '');
   };
-  glass.customProgramCacheKey = () => 'cockpit-glass-v11';
+  glass.customProgramCacheKey = () => 'cockpit-glass-v12';
   const plainPaint = new THREE.MeshPhysicalMaterial({ color: LIVERY.upper, roughness: 0.4, metalness: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.15 });
   const parts = partsMaterial();
   for (const m of [paint, wingPaint, floatPaint, plainPaint, parts]) withWaterBounce(m);

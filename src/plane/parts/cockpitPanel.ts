@@ -3,6 +3,7 @@ import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeom
 import { Batch, glareShieldGeometry, halfWidthAt, quadGeometry, sectionAt, strutGeometry, type Surf } from '../geometry';
 import { GAUGES, GPS_SCREEN, INSTRUMENT_ATLAS, OVERHEAD, PANEL, PANEL_UV, SURF, type GaugeDef, type UvRect } from '../textures';
 import { at, CABIN_FRONT, CH, DEG, PANEL_TILT, PANEL_X, UP, type BuildContext } from './context';
+import { tubeAlong } from './pilot';
 
 /**
  * Builds the geometry of the live instrument parts (needles, cards, symbols) in panel space: x to starboard, y up,
@@ -146,6 +147,66 @@ export function buildCockpitPanel(ctx: BuildContext): CockpitPanelBuild {
   faceUv.u0 += cropU; faceUv.u1 -= cropU;
   const faceGeo = quadGeometry(PANEL_W, PANEL_H, faceUv); faceGeo.applyMatrix4(panelFrame); textured.push(faceGeo);
   textured.push(glareShieldGeometry(innerSections, 0.745, PANEL_X - 0.02, CABIN_FRONT - 0.005, 0.005, 0.02, PANEL_UV.grain));
+  // ------------------------------------------------------------ windshield glazing: what shows the glass from the seat
+  // The panes are bare sheets; from inside, a clean windshield is seen by its edge: the rubber glazing bead where
+  // the acrylic meets the coaming and the screwed retainer strip over it along the base and up both pillars. Laid
+  // along the cabin loft's windshield block, on the cabin face of the glass, so they hug the pane wherever it goes.
+  {
+    const { inner, windshield: ws, R } = ctx.fuselage;
+    const J = (j: number) => (j > R ? j - R : j);
+    const P = (i: number, j: number) => { const k = (i * (R + 1) + J(j)) * 3; return new THREE.Vector3(inner.pos[k], inner.pos[k + 1], inner.pos[k + 2]); };
+    const cabin = new THREE.Vector3(1.0, 0.85, 0);
+    const glazingEdge = (pts: THREE.Vector3[], upGlass: THREE.Vector3[], stripH: number, beadR: number, screwEvery: number) => {
+      const n = pts.length;
+      const inward: THREE.Vector3[] = [];
+      for (let k = 0; k < n; k++) {
+        const t = pts[Math.min(k + 1, n - 1)].clone().sub(pts[Math.max(k - 1, 0)]).normalize();
+        const nn = new THREE.Vector3().crossVectors(t, upGlass[k]).normalize();
+        if (nn.dot(cabin.clone().sub(pts[k])) < 0) nn.negate();
+        inward.push(nn);
+      }
+      // retainer strip: a ribbon 2.5 mm off the glass, `stripH` up it, facing the cabin
+      const pos: number[] = [], nrm: number[] = [], uv: number[] = [], idx: number[] = [];
+      for (let k = 0; k < n; k++) {
+        const a = pts[k].clone().addScaledVector(inward[k], 0.0025), b = a.clone().addScaledVector(upGlass[k], stripH);
+        pos.push(a.x, a.y, a.z, b.x, b.y, b.z); nrm.push(inward[k].x, inward[k].y, inward[k].z, inward[k].x, inward[k].y, inward[k].z); uv.push(k / (n - 1), 0, k / (n - 1), 1);
+      }
+      for (let k = 0; k < n - 1; k++) {
+        const a = 2 * k, b = a + 1, c = a + 2, d = a + 3;
+        const e1 = new THREE.Vector3(pos[c * 3] - pos[a * 3], pos[c * 3 + 1] - pos[a * 3 + 1], pos[c * 3 + 2] - pos[a * 3 + 2]);
+        const e2 = new THREE.Vector3(pos[b * 3] - pos[a * 3], pos[b * 3 + 1] - pos[a * 3 + 1], pos[b * 3 + 2] - pos[a * 3 + 2]);
+        if (new THREE.Vector3().crossVectors(e1, e2).dot(inward[k]) > 0) idx.push(a, c, b, b, c, d); else idx.push(a, b, c, b, d, c);
+      }
+      const strip = new THREE.BufferGeometry();
+      strip.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      strip.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+      strip.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+      strip.setIndex(idx);
+      cabinKit.add(strip, undefined, SURF.darkMetal);
+      // glazing bead along the edge itself, half buried in the coaming / pillar
+      cabinKit.add(tubeAlong(pts.map((p, k) => p.clone().addScaledVector(inward[k], 0.002)), pts.map(() => beadR), undefined, 8, upGlass[0]), undefined, SURF.rubber);
+      // screw heads down the strip's centre line
+      let run = 0;
+      for (let k = 1; k < n - 1; k++) {
+        run += pts[k].distanceTo(pts[k - 1]);
+        if (run < screwEvery) continue;
+        run = 0;
+        const c = pts[k].clone().addScaledVector(inward[k], 0.0035).addScaledVector(upGlass[k], stripH * 0.55);
+        const q = new THREE.Quaternion().setFromUnitVectors(UP, inward[k]);
+        cabinKit.add(new THREE.CylinderGeometry(0.0028, 0.0028, 0.0016, 8), new THREE.Matrix4().compose(c, q, new THREE.Vector3(1, 1, 1)), SURF.metal);
+      }
+    };
+    // base of the windshield (the loft's windshield block starts at the coaming station), up the glass = next row
+    const base: THREE.Vector3[] = [], baseUp: THREE.Vector3[] = [];
+    for (let j = ws.j0; j <= ws.j1; j++) { base.push(P(ws.i0, j)); baseUp.push(P(ws.i0 + 1, j).sub(P(ws.i0, j)).normalize()); }
+    glazingEdge(base, baseUp, 0.020, 0.0055, 0.065);
+    // both side edges up the pillars, "up the glass" = toward the pane's centre column
+    for (const [j, dj] of [[ws.j0, 1], [ws.j1, -1]] as [number, number][]) {
+      const side: THREE.Vector3[] = [], sideUp: THREE.Vector3[] = [];
+      for (let i = ws.i0; i <= ws.i1; i++) { side.push(P(i, j)); sideUp.push(P(i, j + dj).sub(P(i, j)).normalize()); }
+      glazingEdge(side, sideUp, 0.016, 0.0045, 0.075);
+    }
+  }
   // yoke placards on the hubs are part of the yokes (they move); the nameplate sits on the glare shield lip
   decal(PANEL_UV.nameplate, 0.16, 0.035, new THREE.Vector3(PANEL_X - 0.041, 0.725, 0.34), new THREE.Vector3(-1, 0, 0), UP);
   // magnetic compass on the glare shield ahead of the centre post: a rounded bowl housing on a bracket with a base
@@ -211,11 +272,19 @@ export function buildCockpitPanel(ctx: BuildContext): CockpitPanelBuild {
     ring.rotateX(Math.PI / 2); // lathe axis +Y -> +Z (toward the pilot)
     cabinKit.add(ring, inPanelM(g.x, g.y, 0), BEZEL);
     for (const a of [45, 135, 225, 315]) cabinKit.add(new THREE.CylinderGeometry(r * 0.05, r * 0.05, 0.0012, 8), inPanelM(g.x + Math.cos((90 - a) * DEG) * r * 1.11, g.y + Math.sin((90 - a) * DEG) * r * 1.11, 0.0078, [Math.PI / 2, 0, 0]), SURF.metal);
-    lenses.add(new THREE.CircleGeometry(r * 1.03, 32), inPanelM(g.x, g.y, 0.0056));
+    // the lens is a flat disc with the shading normals of a shallow crown (2.5 mm on 30 mm, 11 deg at the rim):
+    // a flat pane mirrors one direction over its whole face and reads as a uniform veil or nothing; the crown
+    // spreads the mirror image, so the bright windows land as an arc along the rim the way they do on real glass
+    const lens = new THREE.CircleGeometry(r * 1.03, 32);
+    const ln = lens.getAttribute('normal') as THREE.BufferAttribute, lp = lens.getAttribute('position') as THREE.BufferAttribute;
+    for (let i = 0; i < ln.count; i++) { const v = new THREE.Vector3(lp.getX(i) / r * 0.20, lp.getY(i) / r * 0.20, 1).normalize(); ln.setXYZ(i, v.x, v.y, v.z); }
+    lenses.add(lens, inPanelM(g.x, g.y, 0.0056));
   }
+  // specular only (black, additive): the sky's Fresnel image and the sun's glint; it receives shadows so the sun
+  // only glints where it really comes in through the glass
   const lensMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.10, metalness: 0.0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
   ctx.materials.push(lensMat);
-  const lensMesh = mesh(lenses.build(), lensMat, { exterior: false, cast: false, receive: false });
+  const lensMesh = mesh(lenses.build(), lensMat, { exterior: false, cast: false, receive: true });
   lensMesh.renderOrder = 11;
   // rocker switches: the paddle leans up (on) or down (off) out of its painted bezel
   const switchesOn = [true, true, true, false, false, true, false, true, false, false, false, false];
