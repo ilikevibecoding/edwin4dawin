@@ -40,6 +40,7 @@ import { RenderPipeline } from './render/pipeline.js';
 import { FarLOD } from './render/farlod.js';
 import { Economy } from './economy/economy.js';
 import { Signs } from './coruscant/signs.js';
+import { Senate } from './senate/senate.js';
 
 const WORLD_SEED = 1337;
 
@@ -247,6 +248,7 @@ export class Game {
     this.adminPanel = new AdminPanel(this);
     this.economy = new Economy(this);   // wallet, vendors, jobs, housing, ships (src/economy/economy.js)
     this.signs = new Signs(this);       // entrance signs + enter/leave toasts (src/coruscant/signs.js)
+    this.senate = new Senate(this);     // sessions, scenarios, votes, the session board (src/senate/senate.js)
     // multiplayer (optional): ?server=ws://host:port
     const params = new URLSearchParams(location.search);
     const serverUrl = params.get('server');
@@ -582,6 +584,7 @@ export class Game {
     if (this.doors && this.npcs) this.doors.update(this.npcs.list, this.player); // NPCs open doors ahead, close behind
     if (this.economy) this.economy.tick();
     if (this.signs) this.signs.update(this.player);
+    if (this.senate) this.senate.tick();
     this.tickCrops();
     this.tickCooking();
     // online, the network client steps the disaster clock against the server tick instead
