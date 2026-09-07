@@ -719,11 +719,13 @@ export class Streets {
   readonly kitMaterial: THREE.MeshStandardMaterial;
   readonly uniforms = { uSignalTime: { value: 0 } as THREE.IUniform<number>, uNight: { value: 0 } as THREE.IUniform<number>, uFocalPx: { value: 1000 } as THREE.IUniform<number> };
   private readonly cells: StreetCell[] = [];
-  private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; yard: KitSoup; yardFar: KitSoup }>();
-  /** the small kit is built per SMALL_CELL (a quarter of a cell) so that its SMALL_FAR range and the frustum cull it
-   *  finely: at eye level the 500 m cells drew three or four whole cells of it, 140 k triangles at street_2m, most
-   *  of them behind the camera or beside it */
-  private readonly smallBuilds = new Map<number, KitSoup>();
+  private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; largeFar: KitSoup }>();
+  /** the small kit and the yards (the parked cars, lot lamps and planters) are built per SMALL_CELL (a quarter of a
+   *  cell) so that their SMALL_FAR / YARD_NEAR ranges and the frustum cull them finely: at eye level the 500 m cells
+   *  drew three or four whole cells of the small kit, 140 k triangles at street_2m, most of them behind the camera or
+   *  beside it, and the yard's near shapes for every car within ~500 m (a thousand cars, 54 k triangles, twice that
+   *  with the finest cascade) where the quarter cells hold the near range to the cars within ~340 m */
+  private readonly smallBuilds = new Map<number, { small: KitSoup; yard: KitSoup; yardFar: KitSoup }>();
   counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, trees: 0, medians: 0, medianLength: 0, medianPalms: 0, bufferPlants: 0, awnings: 0, signs: 0, aboards: 0, shopPlanters: 0, newsboxes: 0, mailboxes: 0, racks: 0, cans: 0, bollards: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
   private readonly roads: RoadIndex;
   /** debug: `?dbg=nopools` turns the lamp pools off */
@@ -839,11 +841,11 @@ export class Streets {
   private soupsAt(x: number, z: number): { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup } {
     const key = cellKey(x, z, CELL);
     let b = this.builds.get(key);
-    if (!b) { b = { walk: new WalkSoup(), large: new KitSoup(), largeFar: new KitSoup(), yard: new KitSoup(), yardFar: new KitSoup() }; this.builds.set(key, b); }
+    if (!b) { b = { walk: new WalkSoup(), large: new KitSoup(), largeFar: new KitSoup() }; this.builds.set(key, b); }
     const sk = cellKey(x, z, SMALL_CELL);
-    let small = this.smallBuilds.get(sk);
-    if (!small) { small = new KitSoup(); this.smallBuilds.set(sk, small); }
-    return { ...b, small };
+    let s = this.smallBuilds.get(sk);
+    if (!s) { s = { small: new KitSoup(), yard: new KitSoup(), yardFar: new KitSoup() }; this.smallBuilds.set(sk, s); }
+    return { ...b, ...s };
   }
 
   /** The sidewalk profile at one point of the curb line: `n` is the unit across vector pointing away from the road
@@ -2004,24 +2006,28 @@ export class Streets {
       cell.walkFar = cell.walk ? mk(cell, b.walk.buildFar(cell.walk.geometry), this.walkMaterial, 'sidewalks-far', false) : null;
       cell.large = mk(cell, b.large.build(), this.kitMaterial, 'street-kits', true);
       cell.largeFar = mk(cell, b.largeFar.build(), this.kitMaterial, 'street-kits-far', false);
-      cell.yard = mk(cell, b.yard.build(), this.kitMaterial, 'street-yards', false); // casts into cascade 0 at eye level (updateLod)
-      cell.yardFar = mk(cell, b.yardFar.build(), this.kitMaterial, 'street-yards-far', false);
       this.counts.walkTriangles += b.walk.triangles;
       this.counts.kitTriangles += b.large.triangles;
       this.counts.kitFarTriangles += b.largeFar.triangles;
-      this.counts.yardTriangles += b.yard.triangles;
-      this.counts.yardFarTriangles += b.yardFar.triangles;
-      if (!cell.walk && !cell.large && !cell.yard) continue;
+      if (!cell.walk && !cell.large) continue;
       close(cell);
     }
     // the small soup (visors, pedestrian heads, buttons, name blades, stop signs, the kerb-side furniture, awnings and
     // signs) never casts: nothing in it is worth a 0.4 m shadow texel, and drawn into two cascades it cost as much
-    // again as the whole street pass; its cells are the quarter cells of SMALL_CELL
-    for (const [key, soup] of this.smallBuilds) {
+    // again as the whole street pass; its cells are the quarter cells of SMALL_CELL, built with the yards (whose
+    // near shapes cast into cascade 0 at eye level, see updateLod) but culled by a cell of their own: one box round
+    // both let a lot at the far side of the quarter pull the kerb-side kit within SMALL_FAR (+11 k at street_2m)
+    for (const [key, s] of this.smallBuilds) {
       const cell = newCell(key);
-      cell.small = mk(cell, soup.build(), this.kitMaterial, 'street-kits-small', false);
-      this.counts.kitTriangles += soup.triangles;
+      cell.small = mk(cell, s.small.build(), this.kitMaterial, 'street-kits-small', false);
+      this.counts.kitTriangles += s.small.triangles;
       if (cell.small) close(cell);
+      const yard = newCell(key);
+      yard.yard = mk(yard, s.yard.build(), this.kitMaterial, 'street-yards', false);
+      yard.yardFar = mk(yard, s.yardFar.build(), this.kitMaterial, 'street-yards-far', false);
+      this.counts.yardTriangles += s.yard.triangles;
+      this.counts.yardFarTriangles += s.yardFar.triangles;
+      if (yard.yard) close(yard);
     }
     this.builds.clear();
     this.smallBuilds.clear();
