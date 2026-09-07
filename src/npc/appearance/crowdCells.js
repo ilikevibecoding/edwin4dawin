@@ -16,6 +16,7 @@
 // the whole atlas and every hidden-face (helmet) cell distinct within its group. No Math.random anywhere.
 import { composeUncached, chooseAppearance, HEAD_HEADGEAR } from './compose.js';
 import { resolveArchetype, ARCHETYPES } from './archetypes.js';
+import { OUTFITS_BY_ID } from './outfits.js';
 import { TEX_W, TEX_H } from './layout.js';
 import { Raster, SoftCanvas, rgb } from './raster.js';
 import { subSeed } from './faces.js';
@@ -27,7 +28,7 @@ export const ATLAS_MAX_ROWS = 32;                 // 32 x 64 = 2048 px tall (the
 export const CELLS_PER_GENDER = 12;               // composer seeds per (archetype, gender)
 export const CHILD_CELLS_PER_GENDER = 8;
 export const DROID_CELLS = 8;                     // astromech / sweeper cells (skins-sw.js painters)
-export const PROTOCOL_CELLS = 16;                 // protocol droid cells (composer; 19 of them stand on the Senate plaza)
+export const PROTOCOL_CELLS = 8;                  // protocol droid cells: the composer outfit's 4 colourways x 2 wear levels, one cell each
 export const MAX_BOXES = 12;                      // geometry boxes carried per cell (species parts first, then hair, hats, capes...); Nautolan tendrils (8) + hat + camera fit
 export const TAB_W = 8 + MAX_BOXES * 8;           // texels per cell row of the shader table
 export const T_EYE_A = 0, T_SCALE = 1, T_LID = 2, T_EYE_B = 3, T_BOX0 = 8;   // table texel slots
@@ -90,21 +91,40 @@ export class CrowdCellTable {
       const seed = CROWD_DROIDS.indexOf(g.archetype) * 100 + variant + 1;   // the seeds the W4 atlas used
       return { index: this.cells.length, archetype: g.archetype, arch: g.arch, gender: 'none', variant, seed, kind: 'sw', group: g, key, faceId: null, species: 'droid', outfit: g.archetype, colourway: 'v' + variant, wear: 'worn', hiddenFace: true };
     }
-    let seed = 0, choice = null, uniq = null;
-    for (let attempt = 0; attempt < 40; attempt++) {
+    // composer droids (protocol droids): one cell per (colourway, wear) of the archetype's single outfit - the only
+    // things that tell two units apart - enumerated so no two cells look alike
+    const opts = { archetype: g.arch, gender: g.gender === 'none' ? undefined : g.gender };
+    if (g.droid) {
+      const outfit = OUTFITS_BY_ID[Object.keys(ARCHETYPES[g.arch].outfits)[0]];
+      const combos = outfit.wear.flatMap((w) => outfit.colourways.map((c) => [c.id, w]));
+      const [colourway, wear] = combos[variant % combos.length];
+      opts.colourway = colourway; opts.wear = wear;
+    }
+    // visible faces: unique trait id (hard rule), and preferably a unique coarse key (species, tone, hair, facial
+    // hair, marking, age) so two faces rarely differ by eye colour or brow shape alone; hidden faces: unique
+    // outfit / colourway / wear / species within the group. The first seed satisfying both wins; failing that the
+    // first satisfying the hard rule; failing that (a group out of distinct looks) the last one tried.
+    let seed = 0, choice = null, uniq = null, coarse = null, fallback = null;
+    for (let attempt = 0; attempt < 60; attempt++) {
       seed = (subSeed(base, 'crowd:' + attempt) | 0) || 1;
-      choice = chooseAppearance(seed, { archetype: g.arch, gender: g.gender === 'none' ? undefined : g.gender });
+      choice = chooseAppearance(seed, opts);
       const hidden = !choice.face || HEAD_HEADGEAR.has(choice.outfit.headgear || 'none');
       uniq = hidden ? `${g.id}|${choice.outfit.id}|${choice.colourway.id}|${choice.wear}|${choice.species}` : 'face|' + faceKey(choice.face);
-      if (!this.seen.has(uniq)) break;
+      coarse = hidden ? null : coarseFaceKey(choice.species, choice.face);
+      if (g.droid || (!this.seen.has(uniq) && (!coarse || !this.seen.has(coarse)))) { fallback = null; break; }
+      if (!fallback && !this.seen.has(uniq)) fallback = { seed, choice, uniq, coarse };
     }
+    if (fallback) ({ seed, choice, uniq, coarse } = fallback);
     this.seen.add(uniq);
+    if (coarse) this.seen.add(coarse);
     const hidden = !choice.face || HEAD_HEADGEAR.has(choice.outfit.headgear || 'none');
     return {
-      index: this.cells.length, archetype: g.archetype, arch: g.arch, gender: choice.gender, variant, seed, kind: 'compose', group: g, key,
+      index: this.cells.length, archetype: g.archetype, arch: g.arch, gender: choice.gender, variant, seed, kind: 'compose', group: g, key, opts,
       faceId: choice.face ? faceKey(choice.face) : null, species: choice.species, outfit: choice.outfit.id, colourway: choice.colourway.id, wear: choice.wear, age: choice.age, hiddenFace: hidden,
     };
   }
+  // distinct looks a composer droid archetype can produce (colourways x wear levels of its outfit)
+  static droidLooks(arch) { const outfit = OUTFITS_BY_ID[Object.keys(ARCHETYPES[arch].outfits)[0]]; return outfit ? outfit.wear.length * outfit.colourways.length : 1; }
 
   groupOf(archetype, female = false, child = false) {
     const droid = DROID_LIKE(archetype);
@@ -146,6 +166,11 @@ export class CrowdCellTable {
 export function faceKey(face) {
   return [face.tone.id, face.eyeColour.id, face.eyeShape, face.brow, face.nose, face.mouth, face.facialHair, face.hairStyle, face.hairColour.id, face.age, face.marking, face.gender[0]].join('/');
 }
+// the traits that read at crowd distance: two faces sharing all of these differ only in eye colour / shape, brow,
+// nose or mouth texels
+export function coarseFaceKey(species, face) {
+  return ['coarse', species, face.tone.id, face.hairStyle, face.hairColour.id, face.facialHair, face.marking, face.age, face.gender[0]].join('/');
+}
 
 let cached = null;
 export function buildCrowdCellTable({ perGender = CELLS_PER_GENDER, childPerGender = CHILD_CELLS_PER_GENDER, droidCells = DROID_CELLS, protocolCells = PROTOCOL_CELLS, fresh = false } = {}) {
@@ -155,7 +180,7 @@ export function buildCrowdCellTable({ perGender = CELLS_PER_GENDER, childPerGend
   for (const a of CROWD_HUMANOIDS) { t.addGroup(a, 'masculine', perGender); t.addGroup(a, 'feminine', perGender); }
   t.addGroup(CHILD_ARCHETYPE, 'masculine', childPerGender, { arch: 'child', child: true });
   t.addGroup(CHILD_ARCHETYPE, 'feminine', childPerGender, { arch: 'child', child: true });
-  for (const d of CROWD_DROIDS) t.addGroup(d, 'none', SW_DROIDS.has(d) ? droidCells : protocolCells);
+  for (const d of CROWD_DROIDS) t.addGroup(d, 'none', SW_DROIDS.has(d) ? droidCells : Math.min(protocolCells, CrowdCellTable.droidLooks(ARCH_OVERRIDE[d] || resolveArchetype(d))));
   if (t.rows > ATLAS_MAX_ROWS) throw new Error(`crowd atlas: ${t.count} cells need ${t.rows} rows (max ${ATLAS_MAX_ROWS})`);
   if (standard) cached = t;
   return t;
@@ -165,7 +190,7 @@ export function buildCrowdCellTable({ perGender = CELLS_PER_GENDER, childPerGend
 // Paints one cell. Returns { raster, boxes, eyes, lid, scale, species, faceId, outfit, description, id, parts }.
 export function composeCrowdCell(cell) {
   if (cell.kind === 'sw') return paintSWCell(cell);
-  const app = composeUncached(cell.seed, { archetype: cell.arch, gender: cell.gender === 'none' ? undefined : cell.gender }, { canvas: false });
+  const app = composeUncached(cell.seed, cell.opts || { archetype: cell.arch, gender: cell.gender === 'none' ? undefined : cell.gender }, { canvas: false });
   const r = app.raster;
   // droid photoreceptors: the lamp centres get the emissive alpha (the composer paints them opaque)
   if (app.debug && app.debug.eyeLamps) for (const [x, y, w, h] of app.debug.eyeLamps) { const cx = x + (w >> 1), cy = y + (h >> 1); const p = r.get(cx, cy); r.px(cx, cy, [p[0], p[1], p[2], EMISSIVE_BYTE]); }
