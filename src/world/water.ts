@@ -135,7 +135,7 @@ vWorldPos = wp;
 
 const WATER_FRAG_PARS = /* glsl */ `
 uniform sampler2D uHeightTex;
-uniform sampler2D uZoneTex; // r: zone id, g: vegetation, b: 128 + 0.5 * signed distance to the coastline (m)
+uniform sampler2D uZoneTex; // r: ground patch noise (terrain.ts), g: vegetation, b: 128 + 0.5 * signed distance to the coastline (m), a: exposure
 uniform sampler2D uWakeTex;
 uniform vec4 uWakeRegion; // center.xy, size, unused
 uniform sampler2D uWakeMidTex;    // mid wake map ahead of the camera (render/wakes.ts)

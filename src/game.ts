@@ -219,6 +219,7 @@ export class Game {
 
     await this.tick(progress, 'Building the city', 0.52);
     this.city = buildCity(this.map, network.blocksByDistrict, this.atmos.uniforms.uNight);
+    this.terrain.stampLots(this.city.footprints);
     this.registerLit(this.city.batches.material);
     this.city.batches.group.name = 'city';
     this.scene.add(this.city.batches.group);
