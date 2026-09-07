@@ -34,10 +34,13 @@ export function wingMaps(): PbrMaps {
   // leading-edge stripe: 5% chord over the top, 1.5% under (u 0.5 is the leading edge), so the wing keeps a thin
   // yellow edge instead of a yellow nose when seen from below
   actx.fillStyle = LIVERY.lower; actx.fillRect(w * 0.475, 0, w * 0.0325, h);
-  // rib lines spanwise every ~0.55 m, spar and hinge lines chordwise
+  // rib lines spanwise every ~0.55 m; chordwise skin joints at the rear spar, mid-bay and the front spar on both
+  // faces (u 0.42 / 0.58 are 16 % chord behind the leading edge: the leading-edge skin itself is one continuous
+  // wrap, so no seam or rivet row sits on the edge, where at 12 m it read as a dark zipper along the yellow stripe)
   const ribs: number[] = [];
   for (let v = 0.04; v < 0.87; v += 0.075) ribs.push(v * W1);
-  panels(hctx, actx, w, h, [0.14, 0.33, 0.5, 0.67, 0.86], ribs, 22, { y1: wy(1) });
+  const spars = [0.12, 0.30, 0.42, 0.58, 0.70, 0.88];
+  panels(hctx, actx, w, h, spars, ribs, 22, { y1: wy(1) });
   // walkway by the root and a fuel cap on the upper surface
   actx.fillStyle = '#2a2d31'; actx.fillRect(w * 0.30, wy(0.12), w * 0.11, wy(0.20) - wy(0.12));
   actx.fillStyle = '#6d7277'; actx.beginPath(); actx.arc(w * 0.40, wy(0.27), 9, 0, 7); actx.fill();
@@ -119,14 +122,14 @@ export function wingMaps(): PbrMaps {
   const [kc, kctx] = canvas(w, h);
   mctx.fillStyle = '#000000'; mctx.fillRect(0, 0, w, h);
   kctx.fillStyle = '#ffffff'; kctx.fillRect(0, 0, w, h);
-  chips(actx, mctx, kctx, rng, w * 0.5, wy(0.5), 7, wy(0.5), 260, 1.4);
-  chips(actx, mctx, kctx, rng, w * 0.5, (T0 + 0.5 * (1 - T0)) * h, 5, 0.5 * (1 - T0) * h, 60, 1.2);
+  // (sparse: 260 flakes with dark rims read as bugs along the whole edge from the front quarter)
+  chips(actx, mctx, kctx, rng, w * 0.5, wy(0.5), 6, wy(0.5), 90, 1.2);
+  chips(actx, mctx, kctx, rng, w * 0.5, (T0 + 0.5 * (1 - T0)) * h, 5, 0.5 * (1 - T0) * h, 30, 1.1);
   for (const f of [0.30, 0.66]) chips(actx, mctx, kctx, rng, w * (0.5 + 0.5 * f), wy(2.9 / 7.3), 26, 18, 18, 1.5);
   chips(actx, mctx, kctx, rng, w * 0.40, wy(0.27), 16, 16, 10, 1.4);
   grime(actx, rng, w, h, 80, 0.06);
   // base coat: ~0.38 varying per skin panel (spar / rib bays), rougher along the rivet seams, chipped and rubbed
   // along the leading edge, the walkway is anti-slip grit, the underside a touch duller than the top coat
-  const spars = [0.14, 0.33, 0.5, 0.67, 0.86];
   rctx.fillStyle = '#606060'; rctx.fillRect(0, 0, w, h);
   panelVariation(rctx, w, h, spars, ribs, rng, 13, 'all', { y1: wy(1), seam: 3, seamAmp: 18 });
   panelVariation(rctx, w, h, [0.3, 0.7], tailRibs, rng, 11, 'all', { y0: T0 * h, seam: 3, seamAmp: 14 });

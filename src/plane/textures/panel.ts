@@ -40,8 +40,11 @@ const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
 
 /** Dial angles in degrees clockwise from 12 o'clock; shared by the painted scales and the live needles. */
 export const DIAL = {
-  /** airspeed: non-linear like a real ASI, 40 kt near 1 o'clock, 200 kt back at 11 o'clock */
-  asi: (kt: number) => piecewise(kt, [[0, 0], [40, 30], [60, 72], [80, 117], [100, 162], [120, 207], [140, 250], [160, 287], [180, 318], [200, 342]]),
+  /**
+   * airspeed: 40 kt at 1 o'clock, 35 deg per 20 kt (a little compressed at the low end like a real ASI) to 200 kt
+   * at 10:30, leaving the top 77 deg of the dial for the legend; the numerals never collide at the top
+   */
+  asi: (kt: number) => piecewise(kt, [[0, 0], [40, 35], [60, 68], [80, 104], [100, 140], [120, 176], [140, 212], [160, 248], [180, 284], [200, 318]]),
   alt100: (ft: number) => (((ft % 1000) + 1000) % 1000) * 0.36,
   alt1000: (ft: number) => (((ft % 10000) + 10000) % 10000) * 0.036,
   /** vertical speed: 0 at 9 o'clock, climb clockwise, compressed beyond 1000 fpm */
@@ -73,6 +76,8 @@ export const PANEL_UV = {
   yoke: uvRect(674, PLACARD_Y + 6, 794, PLACARD_Y + 84),
   nameplate: uvRect(804, PLACARD_Y + 6, 1164, PLACARD_Y + 84),
   domeLens: uvRect(1174, PLACARD_Y + 6, 1254, PLACARD_Y + 84),
+  /** laminated checklist card (portrait) */
+  checklist: uvRect(1264, PLACARD_Y + 6, 1324, PLACARD_Y + 84),
   overhead: uvRect(4, OVERHEAD_Y + 4, 4 + OVERHEAD_PX.w, OVERHEAD_Y + 4 + OVERHEAD_PX.h),
   /** sun visor face: tinted vinyl with a stitched edge */
   visor: uvRect(300, OVERHEAD_Y + 4, 750, OVERHEAD_Y + 4 + 210),
@@ -163,13 +168,14 @@ export function panelTexture(): { map: THREE.CanvasTexture; emissive: THREE.Canv
   const at = (g: GaugeDef) => [PX(g.x), PY(g.y), PR(g.r)] as const;
   // ---- airspeed
   { const [cx, cy, r] = at(G.asi); bezel(ctx, cx, cy, r);
-    arcBand(ctx, cx, cy, r, DIAL.asi(48), DIAL.asi(95), 0.90, r * 0.07, '#f4f4f4');
-    arcBand(ctx, cx, cy, r, DIAL.asi(58), DIAL.asi(140), 0.80, r * 0.07, '#2fbf58');
-    arcBand(ctx, cx, cy, r, DIAL.asi(140), DIAL.asi(180), 0.80, r * 0.07, '#f2c230');
-    tick(ctx, cx, cy, r, DIAL.asi(180), 0.72, 0.94, r * 0.06, '#e0322a');
-    for (let kt = 40; kt <= 200; kt += 10) tick(ctx, cx, cy, r, DIAL.asi(kt), kt % 20 ? 0.68 : 0.62, 0.76, kt % 20 ? r * 0.025 : r * 0.04);
-    for (let kt = 40; kt <= 200; kt += 20) dialText(ctx, cx, cy, r, DIAL.asi(kt), 0.47, String(kt), 0.20);
-    dialText(ctx, cx, cy, r, 180, 0.22, 'KNOTS', 0.10, '#d0d0d0', 'normal'); dialText(ctx, cx, cy, r, 0, 0.28, 'AIRSPEED', 0.10, '#d0d0d0', 'normal'); }
+    arcBand(ctx, cx, cy, r, DIAL.asi(48), DIAL.asi(95), 0.94, r * 0.06, '#f4f4f4');
+    arcBand(ctx, cx, cy, r, DIAL.asi(58), DIAL.asi(140), 0.87, r * 0.06, '#2fbf58');
+    arcBand(ctx, cx, cy, r, DIAL.asi(140), DIAL.asi(180), 0.87, r * 0.06, '#f2c230');
+    tick(ctx, cx, cy, r, DIAL.asi(180), 0.70, 0.97, r * 0.06, '#e0322a');
+    // ticks at the rim inside the arcs, numerals on a ring just inside them (35 deg apart: no collisions)
+    for (let kt = 40; kt <= 200; kt += 5) tick(ctx, cx, cy, r, DIAL.asi(kt), kt % 20 ? 0.75 : 0.70, 0.83, kt % 20 ? (kt % 10 ? r * 0.018 : r * 0.028) : r * 0.045);
+    for (let kt = 40; kt <= 200; kt += 20) dialText(ctx, cx, cy, r, DIAL.asi(kt), 0.56, String(kt), 0.18);
+    dialText(ctx, cx, cy, r, 0, 0.30, 'AIRSPEED', 0.10, '#d0d0d0', 'normal'); dialText(ctx, cx, cy, r, 0, 0.18, 'KNOTS', 0.09, '#d0d0d0', 'normal'); }
   // ---- attitude: only the bezel and the bank scale (the ball is a separate live disc)
   { const [cx, cy, r] = at(G.adi); bezel(ctx, cx, cy, r);
     ctx.fillStyle = '#15171a'; ctx.beginPath(); ctx.arc(cx, cy, r, 0, 7); ctx.fill(); }
@@ -200,7 +206,7 @@ export function panelTexture(): { map: THREE.CanvasTexture; emissive: THREE.Canv
     for (const s of [-1, 1]) for (let v = 0; v <= 2000; v += 100) tick(ctx, cx, cy, r, DIAL.vsi(s * v), v % 500 ? 0.78 : 0.70, 0.88, v % 500 ? r * 0.025 : r * 0.05);
     for (const s of [-1, 1]) for (const v of [500, 1000, 1500, 2000]) dialText(ctx, cx, cy, r, DIAL.vsi(s * v), 0.52, String(v / 100), 0.20);
     dialText(ctx, cx, cy, r, 270, 0.52, '0', 0.20);
-    dialText(ctx, cx, cy, r, 90, 0.30, 'VERTICAL', 0.085, '#d0d0d0', 'normal'); dialText(ctx, cx, cy, r, 90, 0.44, 'SPEED', 0.085, '#d0d0d0', 'normal');
+    dialText(ctx, cx, cy, r, 90, 0.12, 'VERTICAL', 0.08, '#d0d0d0', 'normal'); dialText(ctx, cx, cy, r, 90, 0.25, 'SPEED', 0.08, '#d0d0d0', 'normal');
     dialText(ctx, cx, cy, r, 350, 0.22, 'UP', 0.09, '#d0d0d0', 'normal'); dialText(ctx, cx, cy, r, 190, 0.22, 'DOWN', 0.09, '#d0d0d0', 'normal'); }
   // ---- clock & suction
   { const [cx, cy, r] = at(G.clock); bezel(ctx, cx, cy, r);
@@ -220,6 +226,9 @@ export function panelTexture(): { map: THREE.CanvasTexture; emissive: THREE.Canv
     const ang = (f: number) => (big ? -135 + f * 270 : DIAL.small(f));
     arcBand(ctx, cx, cy, r, ang(greenFrom), ang(greenTo), 0.82, r * 0.07, '#2fbf58');
     if (redAt !== null) tick(ctx, cx, cy, r, ang(redAt), 0.7, 0.92, r * 0.06, '#e0322a');
+    // minor graduations (five per major on the big dials, two on the small ones) then the majors over them
+    const minor = big ? 5 : 2;
+    for (let i = 0; i <= n * minor; i++) if (i % minor) tick(ctx, cx, cy, r, ang(i / (n * minor)), 0.78, 0.86, r * 0.02);
     for (let i = 0; i <= n; i++) tick(ctx, cx, cy, r, ang(i / n), 0.72, 0.86, r * 0.045);
     for (let i = 0; i <= n; i++) dialText(ctx, cx, cy, r, ang(i / n), 0.55, labels(i), big ? 0.17 : 0.2);
     dialText(ctx, cx, cy, r, 180, 0.32, name, big ? 0.12 : 0.14, '#d0d0d0', 'normal');
@@ -236,10 +245,25 @@ export function panelTexture(): { map: THREE.CanvasTexture; emissive: THREE.Canv
   engine(G.cht, 'CHT', '', 4, 0.9, 0.3, 0.75, (i) => String(i * 1));
   // ---- avionics stack: GPS bezel (screen itself is a live mesh), COM/NAV radio, transponder
   { const sx = PX(GPS_SCREEN.x - GPS_SCREEN.w / 2), sy = PY(GPS_SCREEN.y + GPS_SCREEN.h / 2), sw = PR(GPS_SCREEN.w), sh = PR(GPS_SCREEN.h);
-    ctx.fillStyle = '#34383e'; ctx.fillRect(sx - 22, sy - 22, sw + 44, sh + 44);
-    ctx.fillStyle = '#0a0c0f'; ctx.fillRect(sx - 4, sy - 4, sw + 8, sh + 8);
-    for (let i = 0; i < 4; i++) { ctx.fillStyle = '#1b1d21'; ctx.fillRect(sx + 10 + i * (sw / 4), sy + sh + 6, sw / 4 - 20, 12); }
-    for (const [x, y] of [[sx - 11, sy - 11], [sx + sw + 11, sy - 11], [sx - 11, sy + sh + 11], [sx + sw + 11, sy + sh + 11]]) screw(ctx, x, y, 4);
+    // GNS-style unit: a bevelled dark bezel, the screen sunk behind a black surround, a column of small keys on
+    // each side (COM / VLOC flip-flops, D->, MENU, CLR, ENT) and the labelled page keys under the screen (the keys
+    // themselves are parts standing off the face, see cockpitPanel; the legends live here)
+    const bz = ctx.createLinearGradient(0, sy - 22, 0, sy + sh + 22);
+    bz.addColorStop(0, '#41454c'); bz.addColorStop(0.08, '#2e3136'); bz.addColorStop(1, '#1f2226');
+    ctx.fillStyle = bz; ctx.beginPath(); ctx.roundRect(sx - 22, sy - 22, sw + 44, sh + 44, 6); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(sx - 21, sy - 21, sw + 42, sh + 42, 6); ctx.stroke();
+    ctx.fillStyle = '#07080a'; ctx.fillRect(sx - 5, sy - 5, sw + 10, sh + 10);
+    const key = (x: number, y: number, w: number, h: number) => {
+      ctx.fillStyle = '#0d0e10'; ctx.fillRect(x - 1, y - 1, w + 2, h + 2);
+      const kg = ctx.createLinearGradient(0, y, 0, y + h); kg.addColorStop(0, '#3a3d43'); kg.addColorStop(1, '#202226');
+      ctx.fillStyle = kg; ctx.fillRect(x, y, w, h);
+    };
+    for (let i = 0; i < 4; i++) { const kx = PX(0.010 + i * 0.05) - PR(0.014); key(kx, sy + sh + 7, PR(0.028), 10); label(ctx, kx + PR(0.014), sy + sh + 25, ['CDI', 'OBS', 'MSG', 'FPL'][i], 7, '#c8ccd2', 'normal'); }
+    for (let i = 0; i < 3; i++) { key(sx - 17, sy + 14 + i * 26, 11, 16); key(sx + sw + 6, sy + 14 + i * 26, 11, 16); }
+    label(ctx, sx - 11, sy + 8, 'C', 6, '#c8ccd2', 'normal'); label(ctx, sx - 11, sy + 34, 'V', 6, '#c8ccd2', 'normal');
+    label(ctx, sx + sw + 12, sy + 8, 'D', 6, '#c8ccd2', 'normal'); label(ctx, sx + sw + 12, sy + 60, 'ENT', 5, '#c8ccd2', 'normal');
+    // the two concentric tuning knobs in the lower corners of the bezel (painted here, their bodies are parts)
+    for (const kx of [sx - 11, sx + sw + 11]) { ctx.fillStyle = '#4a4e55'; ctx.beginPath(); ctx.arc(kx, sy + sh + 4, 9, 0, 7); ctx.fill(); ctx.fillStyle = '#1c1e22'; ctx.beginPath(); ctx.arc(kx, sy + sh + 4, 5, 0, 7); ctx.fill(); }
     label(ctx, sx + sw / 2, sy - 12, 'GNS 530  ·  BAHÍA VISTA AIR TAXI', 9, '#c8ccd2', 'normal');
     const radio = (y: number, l: string, r: string, title: string) => {
       const x0 = PX(-0.02), x1 = PX(0.19), hh = PR(0.036);
@@ -293,6 +317,14 @@ export function panelTexture(): { map: THREE.CanvasTexture; emissive: THREE.Canv
     label(ctx, x0 + 180, y0 + 24, 'BAHÍA VISTA AIR TAXI', 22, '#1c2d5a', 'bold italic'); label(ctx, x0 + 180, y0 + 56, 'GARZA 7 · FLOATPLANE · N726BV', 14, '#1c2d5a', 'normal'); }
   { const x0 = 1174, y0 = PLACARD_Y + 6; const g = ctx.createRadialGradient(x0 + 40, y0 + 39, 4, x0 + 40, y0 + 39, 40); g.addColorStop(0, '#ffffff'); g.addColorStop(1, '#c8cbd0');
     ctx.fillStyle = g; ctx.fillRect(x0, y0, 80, 78); }
+  // checklist card: a cream laminated card with a title band and lines of items with their tick boxes
+  { const x0 = 1264, y0 = PLACARD_Y + 6, cw = 60, chh = 78;
+    ctx.fillStyle = '#efe9d8'; ctx.fillRect(x0, y0, cw, chh);
+    ctx.fillStyle = '#1c2d5a'; ctx.fillRect(x0, y0, cw, 11);
+    label(ctx, x0 + cw / 2, y0 + 6, 'BEFORE TAKEOFF', 5, '#ffffff');
+    const items = ['FUEL SEL  BOTH', 'MIXTURE  RICH', 'PROP  HIGH RPM', 'FLAPS  CLIMB', 'TRIM  SET', 'WATER RUD  UP', 'DOORS  LATCHED', 'BELTS  FASTENED', 'RUN-UP  1700'];
+    items.forEach((t, i) => { const y = y0 + 17 + i * 6.6; ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 0.6; ctx.strokeRect(x0 + 3, y - 2, 3.5, 3.5); label(ctx, x0 + 9, y, t, 3.6, '#22232a', 'normal', 'left'); });
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1; ctx.strokeRect(x0 + 0.5, y0 + 0.5, cw - 1, chh - 1); }
   // ---- overhead console face (seen from below): crinkle paint, fuel selector, cabin switches, trim indicator
   ctx.fillStyle = '#000'; ctx.fillRect(0, OVERHEAD_Y, w, PANEL.OVERHEAD);
   { const x0 = 4, y0 = OVERHEAD_Y + 4, ow = OVERHEAD_PX.w, oh = OVERHEAD_PX.h;
@@ -368,7 +400,7 @@ export const INSTRUMENT_ATLAS = {
   ballRadius: 1.9,
   /** degrees of pitch covered by the ball's radius: 30 deg per aperture radius */
   ballDegPerRadius: 57,
-  patches: { white: [16, 300], black: [80, 300], orange: [144, 300], red: [208, 300], bezel: [272, 300], grey: [336, 300], yellow: [400, 300], glass: [464, 300] } as Record<string, [number, number]>,
+  patches: { white: [16, 300], black: [80, 300], orange: [144, 300], red: [208, 300], bezel: [272, 300], grey: [336, 300], yellow: [400, 300], glass: [464, 300], shadow: [16, 364] } as Record<string, [number, number]>,
 };
 
 export function instrumentAtlas(): THREE.CanvasTexture {
@@ -402,6 +434,8 @@ export function instrumentAtlas(): THREE.CanvasTexture {
   const P = INSTRUMENT_ATLAS.patches;
   const fill = (k: string, col: string) => { const [px, py] = P[k]; ctx.fillStyle = col; ctx.fillRect(px - 16, py - 16, 32, 32); };
   fill('white', '#f4f4f4'); fill('black', '#0b0c0e'); fill('orange', '#ff8a1f'); fill('red', '#d8322e'); fill('bezel', '#2e3136'); fill('grey', '#9a9ea4'); fill('yellow', '#f2c230'); fill('glass', '#0b0c0e');
+  // the needles' shadow: half-transparent black (the patch is cleared first, the atlas is otherwise opaque)
+  { const [px, py] = P.shadow; ctx.clearRect(px - 16, py - 16, 32, 32); ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(px - 16, py - 16, 32, 32); }
   const t = toTexture(c, true, 8);
   t.flipY = true;
   t.wrapS = THREE.ClampToEdgeWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
@@ -449,17 +483,21 @@ export class GpsScreen {
     ctx.fillStyle = '#ffffff'; ctx.save(); ctx.translate(mapW / 2, h * 0.62);
     ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(3, -2); ctx.lineTo(12, 2); ctx.lineTo(12, 5); ctx.lineTo(3, 3); ctx.lineTo(3, 9); ctx.lineTo(6, 11); ctx.lineTo(-6, 11); ctx.lineTo(-3, 9); ctx.lineTo(-3, 3); ctx.lineTo(-12, 5); ctx.lineTo(-12, 2); ctx.lineTo(-3, -2); ctx.closePath(); ctx.fill(); ctx.restore();
     ctx.font = 'bold 10px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = '#dfe8f2'; ctx.fillText('TRK UP  2NM', 5, 4); ctx.fillText('DTK 090  RWY09', 5, h - 15);
-    // data column: large live numbers the pilot can read from the seat
-    ctx.fillStyle = '#04101c'; ctx.fillRect(mapW, 0, w - mapW, h);
-    ctx.fillStyle = '#20364d'; ctx.fillRect(mapW, 0, 1, h);
+    // data column: large live numbers the pilot can read from the seat, each in its own lit data field (the
+    // column is a visibly lit part of the screen, so the digits sit on a display and not on the panel)
+    ctx.fillStyle = '#0b2035'; ctx.fillRect(mapW, 0, w - mapW, h);
+    ctx.fillStyle = '#3a5f8a'; ctx.fillRect(mapW, 0, 2, h);
     const rows: [string, string, string][] = [['GS', `${gs}`, 'kt'], ['TRK', `${trk.toString().padStart(3, '0')}`, '°'], ['ALT', `${alt}`, 'ft'], ['VS', `${vs > 0 ? '+' : ''}${vs}`, 'fpm']];
     rows.forEach(([k, v, unit], i) => {
       const y0 = i * (h / 4);
-      ctx.fillStyle = '#20364d'; if (i) ctx.fillRect(mapW, y0, w - mapW, 1);
-      ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = '#8fb3d9'; ctx.fillText(k, mapW + 6, y0 + 4);
-      ctx.textAlign = 'right'; ctx.fillText(unit, w - 5, y0 + 4);
-      ctx.font = 'bold 30px monospace'; ctx.textBaseline = 'bottom'; ctx.fillStyle = i === 1 ? '#ff5fb0' : '#f4f4f4'; ctx.fillText(v, w - 5, y0 + h / 4 - 2);
+      ctx.fillStyle = '#132c47'; ctx.fillRect(mapW + 5, y0 + 3, w - mapW - 9, h / 4 - 6);
+      ctx.strokeStyle = '#2f5480'; ctx.lineWidth = 1; ctx.strokeRect(mapW + 5.5, y0 + 3.5, w - mapW - 10, h / 4 - 7);
+      ctx.font = 'bold 11px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top'; ctx.fillStyle = '#9cc4ea'; ctx.fillText(k, mapW + 9, y0 + 6);
+      ctx.textAlign = 'right'; ctx.fillText(unit, w - 8, y0 + 6);
+      ctx.font = 'bold 28px monospace'; ctx.textBaseline = 'bottom'; ctx.fillStyle = i === 1 ? '#ff5fb0' : '#f4f4f4'; ctx.fillText(v, w - 8, y0 + h / 4 - 4);
     });
+    // the display's active-area edge: a thin lit border all round, so the screen reads as one lit rectangle
+    ctx.strokeStyle = '#3a5f8a'; ctx.lineWidth = 2; ctx.strokeRect(1, 1, w - 2, h - 2);
     this.texture.needsUpdate = true;
     return true;
   }

@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { glareShieldGeometry, halfWidthAt, quadGeometry, sectionAt, strutGeometry } from '../geometry';
+import { Batch, glareShieldGeometry, halfWidthAt, quadGeometry, sectionAt, strutGeometry, type Surf } from '../geometry';
 import { GAUGES, GPS_SCREEN, INSTRUMENT_ATLAS, OVERHEAD, PANEL, PANEL_UV, SURF, type GaugeDef, type UvRect } from '../textures';
 import { at, CABIN_FRONT, CH, DEG, PANEL_TILT, PANEL_X, UP, type BuildContext } from './context';
 
@@ -18,9 +18,13 @@ class InstrumentKit {
   private readonly clip: number[] = [];
   private readonly idx: number[] = [];
 
-  /** `clipR` > 0: the fragment shader discards the part outside that radius about the pivot (dial aperture) */
-  private vertex(px: number, py: number, x: number, y: number, z: number, u: number, v: number, ch: number, clipR = 0): number {
-    this.pos.push(x, y, z); this.nrm.push(0, 0, 1); this.uv.push(u, v); this.pivot.push(px, py, 0); this.chan.push(ch); this.clip.push(clipR);
+  /**
+   * `clipR` > 0: the fragment shader discards the part outside that radius about the pivot (dial aperture).
+   * `shadow` marks the vertex as part of a needle's shadow (aPivot.z = 1): the vertex shader slides it down and to
+   * the right by a millimetre after the rotation, so the shadow always falls the same way whatever the needle reads.
+   */
+  private vertex(px: number, py: number, x: number, y: number, z: number, u: number, v: number, ch: number, clipR = 0, shadow = false): number {
+    this.pos.push(x, y, z); this.nrm.push(0, 0, 1); this.uv.push(u, v); this.pivot.push(px, py, shadow ? 1 : 0); this.chan.push(ch); this.clip.push(clipR);
     return this.pos.length / 3 - 1;
   }
 
@@ -37,18 +41,19 @@ class InstrumentKit {
     return [px / INSTRUMENT_ATLAS.size, 1 - py / INSTRUMENT_ATLAS.size];
   }
 
-  /** convex polygon (local coordinates relative to the pivot) in a flat colour */
-  poly(g: GaugeDef, pts: [number, number][], z: number, ch: number, patch: string): void {
+  /** convex polygon (local coordinates relative to the pivot) in a flat colour; `shadow` also lays its shadow under it */
+  poly(g: GaugeDef, pts: [number, number][], z: number, ch: number, patch: string, shadow = false): void {
+    if (shadow) this.poly(g, pts, z - 0.0006, ch, 'shadow');
     const [u, v] = this.patchUv(patch);
     const base = this.pos.length / 3;
-    for (const [x, y] of pts) this.vertex(g.x, g.y, x, y, z, u, v, ch);
+    for (const [x, y] of pts) this.vertex(g.x, g.y, x, y, z, u, v, ch, 0, patch === 'shadow');
     for (let i = 1; i < pts.length - 1; i++) this.idx.push(base, base + i, base + i + 1);
   }
 
-  /** needle pointing at 12 o'clock: `len` from the pivot, a short tail, tapered */
+  /** needle pointing at 12 o'clock: `len` from the pivot, a short tail, tapered, with its shadow on the dial */
   needle(g: GaugeDef, len: number, w: number, z: number, ch: number, patch = 'white', tail = 0.18): void {
     const L = g.r * len, T = g.r * tail;
-    this.poly(g, [[-w / 2, -T], [w / 2, -T], [w * 0.22, L], [-w * 0.22, L]], z, ch, patch);
+    this.poly(g, [[-w / 2, -T], [w / 2, -T], [w * 0.22, L], [-w * 0.22, L]], z, ch, patch, true);
   }
 
   /** hub cap over the needle */
@@ -86,8 +91,8 @@ class InstrumentKit {
   }
 
   /** axis-aligned bar (local centre, size) */
-  bar(g: GaugeDef, cx: number, cy: number, w: number, h: number, z: number, ch: number, patch: string): void {
-    this.poly(g, [[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2], [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]], z, ch, patch);
+  bar(g: GaugeDef, cx: number, cy: number, w: number, h: number, z: number, ch: number, patch: string, shadow = false): void {
+    this.poly(g, [[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2], [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]], z, ch, patch, shadow);
   }
 
   build(): THREE.BufferGeometry {
@@ -181,9 +186,54 @@ export function buildCockpitPanel(ctx: BuildContext): CockpitPanelBuild {
     cabinKit.add(new THREE.CylinderGeometry(0.011, 0.011, 0.16, 8), at([0.90, 0.85, z]), SURF.plastic);
     for (const e of [-1, 1]) cabinKit.add(new THREE.CylinderGeometry(0.008, 0.008, 0.03, 8), at([0.90, 0.85 + e * 0.07, z + s * 0.012], [Math.PI / 2, 0, 0]), SURF.plastic);
   }
+  // ------------------------------------------------------------ cockpit: the panel's relief
+  // Every dial sits in a machined bezel standing 7 mm proud of the face (a lathe ring with a chamfered rim and four
+  // screws), so the dial is recessed behind it and the needles turn inside the well; a glass lens closes each well
+  // (one mesh of all the lenses, specular only: Fresnel of the sky and the sun's glint). The switch row, ignition
+  // key, fuel guard, breakers, rheostats, the radios' knobs and the GPS keys stand out of the face as parts.
+  const BEZEL: Surf = { color: 0x2a2d31, roughness: 0.38, metalness: 0.75 };
+  const KNOB: Surf = { color: 0x23262a, roughness: 0.55, metalness: 0.1 };
+  const inPanelM = (px: number, py: number, pz: number, rot?: [number, number, number]): THREE.Matrix4 => panelFrame.clone().multiply(at([px, py, pz], rot));
+  const G = GAUGES;
+  const lenses = new Batch();
+  for (const g of Object.values(G) as GaugeDef[]) {
+    const r = g.r;
+    const ring = new THREE.LatheGeometry([new THREE.Vector2(r * 1.03, 0), new THREE.Vector2(r * 1.03, 0.0062), new THREE.Vector2(r * 1.09, 0.0078), new THREE.Vector2(r * 1.18, 0.0062), new THREE.Vector2(r * 1.18, 0)], 28);
+    ring.rotateX(Math.PI / 2); // lathe axis +Y -> +Z (toward the pilot)
+    cabinKit.add(ring, inPanelM(g.x, g.y, 0), BEZEL);
+    for (const a of [45, 135, 225, 315]) cabinKit.add(new THREE.CylinderGeometry(r * 0.05, r * 0.05, 0.0012, 8), inPanelM(g.x + Math.cos((90 - a) * DEG) * r * 1.11, g.y + Math.sin((90 - a) * DEG) * r * 1.11, 0.0078, [Math.PI / 2, 0, 0]), SURF.metal);
+    lenses.add(new THREE.CircleGeometry(r * 1.03, 32), inPanelM(g.x, g.y, 0.0056));
+  }
+  const lensMat = new THREE.MeshStandardMaterial({ color: 0x000000, roughness: 0.10, metalness: 0.0, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+  ctx.materials.push(lensMat);
+  const lensMesh = mesh(lenses.build(), lensMat, { exterior: false, cast: false, receive: false });
+  lensMesh.renderOrder = 11;
+  // rocker switches: the paddle leans up (on) or down (off) out of its painted bezel
+  const switchesOn = [true, true, true, false, false, true, false, true, false, false, false, false];
+  switchesOn.forEach((on, i) => cabinKit.add(new THREE.BoxGeometry(0.010, 0.020, 0.005), inPanelM(-0.56 + i * 0.05, -0.13 + (on ? 0.004 : -0.004), 0.0045, [on ? -0.35 : 0.35, 0, 0]), SURF.lightPlastic));
+  // ignition key in its switch, the red fuel cut-off guard, the breakers, the two lighting rheostats
+  cabinKit.add(new THREE.CylinderGeometry(0.0055, 0.0055, 0.006, 10), inPanelM(0.06, -0.13, 0.003, [Math.PI / 2, 0, 0]), SURF.metal);
+  cabinKit.add(new THREE.BoxGeometry(0.0035, 0.024, 0.014), inPanelM(0.06, -0.13, 0.012, [0, 0, 35 * DEG]), SURF.metal);
+  cabinKit.add(new THREE.BoxGeometry(0.018, 0.046, 0.010), inPanelM(0.13, -0.13, 0.005), SURF.mixture);
+  cabinKit.add(new THREE.BoxGeometry(0.008, 0.030, 0.006), inPanelM(0.13, -0.13, 0.013), SURF.darkMetal);
+  for (let i = 0; i < 16; i++) cabinKit.add(new THREE.CylinderGeometry(0.0034, 0.0034, 0.005, 8), inPanelM(0.22 + i * 0.024, -0.125, 0.0025, [Math.PI / 2, 0, 0]), SURF.lightPlastic);
+  for (const x of [0.61, 0.56]) {
+    cabinKit.add(new THREE.CylinderGeometry(0.0085, 0.009, 0.012, 14), inPanelM(x, -0.125, 0.006, [Math.PI / 2, 0, 0]), KNOB);
+    cabinKit.add(new THREE.BoxGeometry(0.0015, 0.006, 0.002), inPanelM(x, -0.125 + 0.005, 0.012), SURF.lightPlastic);
+  }
+  // radio stack: the frequency knobs (a large outer ring and a small inner knob) at both ends of each set
+  for (const y of [-0.006, -0.048]) for (const x of [-0.0133, 0.1833]) {
+    cabinKit.add(new THREE.CylinderGeometry(0.0095, 0.0100, 0.008, 14), inPanelM(x, y, 0.004, [Math.PI / 2, 0, 0]), KNOB);
+    cabinKit.add(new THREE.CylinderGeometry(0.0055, 0.0055, 0.014, 10), inPanelM(x, y, 0.007, [Math.PI / 2, 0, 0]), SURF.darkMetal);
+  }
+  // GPS bezel keys under the screen
+  for (let i = 0; i < 4; i++) cabinKit.add(new THREE.BoxGeometry(0.028, 0.0065, 0.003), inPanelM(0.010 + i * 0.05, 0.0225, 0.0015), KNOB);
+  // checklist card in a binder clip hung from the panel's lower edge, on the pilot's side
+  cabinKit.add(new THREE.BoxGeometry(0.03, 0.014, 0.010), inPanelM(-0.50, -0.20, 0.010), SURF.darkMetal);
+  cabinKit.add(new THREE.BoxGeometry(0.076, 0.104, 0.002), inPanelM(-0.50, -0.253, 0.010), SURF.paper);
+  decal(PANEL_UV.checklist, 0.072, 0.098, inPanel(-0.50, -0.254, 0.0114), inPanel(0, 0, 1).sub(inPanel(0, 0, 0)).normalize(), inPanel(0, 1, 0).sub(inPanel(0, 0, 0)).normalize());
   // live instrument parts on the face (all one mesh, animated in the vertex shader)
   const kit = new InstrumentKit();
-  const G = GAUGES;
   const Z1 = 0.0015, Z2 = 0.0025, Z3 = 0.0035, Z4 = 0.0045;
   kit.needle(G.asi, 0.86, 0.004, Z3, CH.asi); kit.cap(G.asi, 0.005, Z4, CH.asi);
   // attitude: ball (1.3 apertures wide, so it stays behind the bezel when shifted for pitch), bezel mask ring,
@@ -214,6 +264,7 @@ export function buildCockpitPanel(ctx: BuildContext): CockpitPanelBuild {
   for (const g of [G.amp, G.cht]) { kit.needle(g, 0.8, 0.0028, Z3, CH.fixed); kit.cap(g, 0.003, Z4, CH.fixed); }
   // the kit geometry stays in panel space (the shader rotates about `aPivot` there); the mesh transform is the frame
   const instruments = mesh(kit.build(), instMat, { exterior: false, cast: false });
+  instruments.renderOrder = 10;
   panelFrame.decompose(instruments.position, instruments.quaternion, instruments.scale);
   const gpsGeo = quadGeometry(GPS_SCREEN.w, GPS_SCREEN.h, { u0: 0, v0: 0, u1: 1, v1: 1 });
   gpsGeo.translate(GPS_SCREEN.x, GPS_SCREEN.y, 0.0008);

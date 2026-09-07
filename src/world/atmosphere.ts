@@ -51,8 +51,8 @@ const KEYS: Key[] = [
   // the sun-side haze is ~1 : 0.18 : 0.04 (a photographed (255,170,80) sky once the tonemapper has compressed
   // it), the horizon away from the sun a salmon that skyRadiance cools toward violet; `hor` and the aureole
   // sit low enough in G that the sun side stays orange instead of clipping to cream
-  { el: 4, sun: [1.0, 0.42, 0.16], sunI: 0.25, zen: [0.03, 0.09, 0.28], hor: [0.52, 0.21, 0.15], haze: [0.58, 0.30, 0.19], sunHaze: [0.62, 0.11, 0.025], amb: 0.7 },
-  { el: 14, sun: [1.0, 0.74, 0.46], sunI: 0.62, zen: [0.03, 0.11, 0.34], hor: [0.50, 0.43, 0.40], haze: [0.55, 0.50, 0.50], sunHaze: [1.0, 0.66, 0.36], amb: 0.7 },
+  { el: 4, sun: [1.0, 0.42, 0.16], sunI: 0.25, zen: [0.03, 0.09, 0.28], hor: [0.52, 0.21, 0.15], haze: [0.58, 0.30, 0.19], sunHaze: [0.62, 0.11, 0.025], amb: 0.8 },
+  { el: 14, sun: [1.0, 0.74, 0.46], sunI: 0.62, zen: [0.03, 0.11, 0.34], hor: [0.50, 0.43, 0.40], haze: [0.55, 0.50, 0.50], sunHaze: [1.0, 0.66, 0.36], amb: 0.8 },
   // day: `hor` is the saturated blue-cyan of the sky a few degrees above the horizon, `zen` the deep cerulean
   // of the upper sky, `haze` the pale cyan-white the horizon and distant objects fade into (the reference
   // frame's horizon is a cyan-blue (148,181,194), not a neutral grey: the haze keeps R well below B).
@@ -67,8 +67,11 @@ const KEYS: Key[] = [
   // long-shadow contrast at all). The fill is now halved below ~8 deg (sky.ts), which is what restores that
   // contrast; at 0.5 on top of it a white wing top on the side away from the sun fell to sRGB 54, darker
   // than the water mirroring the same sky, so the low-sun keys sit at 0.7.
-  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.006, 0.125, 0.36], hor: [0.11, 0.30, 0.45], haze: [0.40, 0.55, 0.66], sunHaze: [1.0, 0.92, 0.80], amb: 0.5 },
-  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.005, 0.125, 0.36], hor: [0.10, 0.30, 0.45], haze: [0.39, 0.55, 0.67], sunHaze: [0.98, 0.93, 0.84], amb: 0.5 },
+  // Round 5 (merged lead, critic h03): with every builder's albedo tuned under the old 6.0 sun, the shaded side
+  // of things read black on the physical scale (water shadows 0.06 linear, undersides), so the keys rise to
+  // 0.65 / 0.8: shaded white ~0.24 (sunlit : shade ~4.5 : 1, inside the 4-6 : 1 band), sunlit surfaces +5 %.
+  { el: 30, sun: [1.0, 0.94, 0.84], sunI: 0.938, zen: [0.006, 0.125, 0.36], hor: [0.11, 0.30, 0.45], haze: [0.40, 0.55, 0.66], sunHaze: [1.0, 0.92, 0.80], amb: 0.65 },
+  { el: 90, sun: [1.0, 0.97, 0.93], sunI: 1.0, zen: [0.005, 0.125, 0.36], hor: [0.10, 0.30, 0.45], haze: [0.39, 0.55, 0.67], sunHaze: [0.98, 0.93, 0.84], amb: 0.65 },
 ];
 
 function mixKey(el: number): Key {
@@ -91,13 +94,18 @@ export const WEATHER: Record<Weather, WeatherPreset> = {
   // threshold, most cells stay well below it); fair-weather cumulus here reach ~2 km of vertical development
   // hazeDensity: humid subtropical air, ~30-40 km visibility (the reference frame lifts a skyline 9 km away
   // most of the way to the sky colour); the last stretch before the far plane dissolves completely (applyAerial)
-  // sunDim: the direct beam that reaches the ground through the deck; the dome, disc and cloud march see the
-  // undimmed sun (it shines on the top of the clouds regardless)
+  // sunDim: the direct beam that reaches the ground *between* the clouds; what the clouds themselves take away is
+  // the cloud shadow (cloudShadow x uSunShare in post.ts / reflection.ts), local to each cloud's footprint. The
+  // dome, disc and cloud march see the undimmed sun (it shines on the top of the clouds regardless). The cloudy
+  // preset used to dim the whole scene to 0.3 and fade the cast shadows to 0.35 on top of the cloud shadow
+  // (three global attenuations, none of them local): a 65 % cumulus deck then cast no visible shadow pattern
+  // and its gaps were as dull as its shade. A gap in a cumulus deck is full sun with crisp shadows.
   clear: { coverage: 0.27, hazeDensity: 4.0e-5, hazeHeight: 1400, windSpeed: 3.5, turbulence: 0.2, cloudBase: 1500, cloudTop: 3500, rain: 0, sunDim: 1 },
-  scattered: { coverage: 0.37, hazeDensity: 4.6e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 3500, rain: 0, sunDim: 0.97 },
+  scattered: { coverage: 0.37, hazeDensity: 4.6e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 3500, rain: 0, sunDim: 1 },
   // overcast: humid air under the deck (denser, taller haze) so the far end of the ceiling sinks into the horizon
-  // haze; under a 65 % stratocumulus deck the direct sun is mostly scattered (soft, faint shadows in the gaps)
-  cloudy: { coverage: 0.70, hazeDensity: 6.0e-5, hazeHeight: 1300, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2000, rain: 0, sunDim: 0.3 },
+  // haze; the 65 % deck shades 65 % of the ground through the cloud shadow, the gaps keep the sun
+  cloudy: { coverage: 0.70, hazeDensity: 6.0e-5, hazeHeight: 1300, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2000, rain: 0, sunDim: 1 },
+  // storm: a near-closed nimbostratus with rain under it; the few thin spots pass a veiled beam, so the dim stays
   storm: { coverage: 0.92, hazeDensity: 7.0e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 3200, rain: 1, sunDim: 0.18 },
 };
 
