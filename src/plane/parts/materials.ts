@@ -184,16 +184,6 @@ export function buildMaterials(layout: FuselageLayout, u: MaterialUniforms, mate
           filmSheen = directionalLights[0].color * pow(sunNdh, 12.0) * (0.03 + dirt * 0.5) * sunFacing * (1.0 - 0.5 * inner);
           sunGlint = directionalLights[0].color * (pow(sunNdh, 2500.0) * 4.0 + pow(sunNdh, 300.0) * 0.35) * sunFacing * (0.6 + 0.4 * glassFr) * (1.0 - 0.6 * inner);
         #endif
-        // the film seen against the sun from the other side of the pane (the cabin side with the sun ahead, or the
-        // outside with the sun behind the aircraft): dust and scratches scatter the light coming through forward,
-        // a broad smudgy haze around the sun's direction with a brighter core, the thing that makes a windshield
-        // visible from the seat at all on a sun-ahead leg
-        vec3 sunHaze = vec3(0.0);
-        #if NUM_DIR_LIGHTS > 0
-          float backLit = saturate(-dot(glassN, sunL) * 3.0);
-          float toSun = saturate(dot(-glassV, sunL));
-          sunHaze = directionalLights[0].color * (pow(toSun, 6.0) * 0.06 + pow(toSun, 40.0) * 0.28) * (0.12 + dirt * 2.8) * backLit;
-        #endif
         // what a windshield shows from the seat on a plain day is what is stuck to it: bug strikes and dried spray
         // spots on the outer face (seen through from inside), denser low on the pane where the airflow meets it,
         // 3-6 mm, one per few cells of a 5 cm grid, each a dried translucent smear that blocks part of the sky
@@ -207,6 +197,17 @@ export function buildMaterials(layout: FuselageLayout, u: MaterialUniforms, mate
           float on = step(fract(hh.y * 5.17), 0.05 + 0.11 * (1.0 - smoothstep(0.0, 0.8, vPaneUv.x)));
           splat = (1.0 - smoothstep(rad * 0.55, rad, length(fc - ctr))) * on * 0.6;
         }
+        // the film seen against the sun from the other side of the pane (the cabin side with the sun ahead, or the
+        // outside with the sun behind the aircraft): dust and scratches scatter the light coming through forward,
+        // a broad smudgy haze around the sun's direction with a brighter core, the thing that makes a windshield
+        // visible from the seat at all on a sun-ahead leg
+        vec3 sunHaze = vec3(0.0);
+        #if NUM_DIR_LIGHTS > 0
+          float backLit = saturate(-dot(glassN, sunL) * 3.0);
+          float toSun = saturate(dot(-glassV, sunL));
+          // (the splats glow too: a dried smear scatters forward far more than clean acrylic)
+          sunHaze = directionalLights[0].color * (pow(toSun, 5.0) * 0.10 + pow(toSun, 40.0) * 0.45) * (0.15 + dirt * 4.0 + splat * 1.2) * backLit;
+        #endif
         // the smudge film itself takes a little of the light through it (the mottled veil of a wiped pane, up to
         // ~7 % where the film is thickest)
         float smudge = dirt * 1.6;
@@ -242,7 +243,7 @@ export function buildMaterials(layout: FuselageLayout, u: MaterialUniforms, mate
       `)
       .replace('#include <premultiplied_alpha_fragment>', '');
   };
-  glass.customProgramCacheKey = () => 'cockpit-glass-v12';
+  glass.customProgramCacheKey = () => 'cockpit-glass-v13';
   const plainPaint = new THREE.MeshPhysicalMaterial({ color: LIVERY.upper, roughness: 0.4, metalness: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.15 });
   const parts = partsMaterial();
   for (const m of [paint, wingPaint, floatPaint, plainPaint, parts]) withWaterBounce(m);

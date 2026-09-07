@@ -56,6 +56,9 @@ export function cabinMaps(lay: FuselageLayout, cab: CabinLayout): PbrMaps {
       const g = actx.createLinearGradient(0, V(0, side), 0, V(vTop, side));
       g.addColorStop(0, '#a7a39a'); g.addColorStop(0.45, '#bdb9b0'); g.addColorStop(1, '#cbc7be');
       actx.fillStyle = g; actx.fillRect(px, Math.min(V(0, side), V(vTop, side)), 4, Math.abs(V(vTop, side) - V(0, side)));
+      // perforated headliner vinyl is matte (0.9): at the sidewall's 0.55 the grain normals broke a low sun coming
+      // through the windshield into a field of orange sparkles across the whole roof
+      rctx.fillStyle = '#e6e6e6'; rctx.fillRect(px, Math.min(V(0, side), V(vTop, side)), 4, Math.abs(V(vTop, side) - V(0, side)));
     }
   }
   // perforation: a fine stagger of darker dots (reads as texture from the seat, not as a grid)
