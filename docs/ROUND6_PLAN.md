@@ -73,6 +73,46 @@ pushed by builders (the integrator merges).
 | P6 | Crowd appearance from `composeAppearance` (2x atlas cells, species with head geometry, emissive droid lights), cast models | 11 | P6 (after W4 merge) | `src/npc/coruscant/crowd.js`, `src/npc/skins-sw.js`, `src/npc/appearance/**` |
 | — | Gauntlet + acceptance runs (§18, §19): three world assessments, held-out 25%, failure log | 18, 19 | independent verifiers after P1-P6 | `docs/overhaul/gauntlet.md`, `docs/overhaul/failure_log.md`, `docs/overhaul/acceptance/**` |
 
+## Pass 3 — off-world, piloting, the whole city in view (user notes of 7 Sep)
+
+The user's words: "I want to take a ship off world - literally go into space, see the Minecraft planet behind it, then
+fly to another planet with a small desert town, and back. Pilot the ships myself. Stop the ships being glitchy inside:
+they need to be sturdy visually. More detailed, bigger ships, ones I can buy. An actual spaceport system. I want to
+see the whole city no matter where I am on the map. Actual senators in the Senate, security at the gates. Each NPC
+should have one to three personal options: where is the nearest building, buy something. A gun."
+
+| # | Workstream | Owner | Files (exclusive unless noted) |
+| --- | --- | --- | --- |
+| S4a | Piloting: take the controls of an owned or boarded ship (flight model, world collision, landing/take-off, cockpit view), owned ships parked on the player's pad as real vehicles, two bigger purchasable ships with detailed interiors, and the interior stability fix (no jitter for riders) | S4a | `src/vehicles/pilot.js` (new), `src/vehicles/ship.js`, `src/vehicles/vehicle.js` (rider/camera sync only), `src/ships/**`, `src/economy/economy.js` (owned-ship glue only), `src/input.js` (bindings), `src/hud.js` (flight HUD strip only), `scripts/test-pilot.mjs` |
+| S4b | Space and the second world: the space scene (stars, the home planet as a textured globe sampled from worldgen, the far planet), hyperspace jump between orbits, the desert region + town + landing field, re-entry and landing, spaceport boards/tickets for passenger travel | S4b | `src/space/**` (new), `src/worlds.js` (registry - skeleton by the integrator), `src/worldgen.js` (`desert` region only), `src/structures/desert/**` (new), `src/structures/index.js` (register only), `src/sky.js` (desert + space sky), `src/render/farlod*` (desert tiles), `scripts/test-space.mjs` |
+| V2 | The whole city from anywhere: far layers and impostors drawn at any distance (camera far plane, log depth or a far pass), Coruscant and the Death Star on the frontier's horizon, fog that fades but never hides silhouettes | V2 | `src/coruscant/skyline.js`, `src/render/farlod.js` + `farlod/**`, `src/sky.js` (fog model only - coordinate with S4b: S4b owns the desert/space sky entries), `src/quality.js`, `src/game.js` (camera far / render passes only), `scripts/test-farlod.mjs` |
+| G1 | A blaster: item, first-person model, bolt projectile with light and sound, hit detection on animals/NPCs/blocks, reactions (flee, guards respond through `weapon:fired` / `entity:hit` events for the factions) | G1 | `src/weapons/**` (new), `src/items.js` (blaster item), `src/hand.js`, `src/player.js` (fire hook only), `src/hud.js` (crosshair only), `scripts/test-weapons.mjs` |
+| D1 | Personal talk options: every persistent NPC offers 1-3 options that are theirs (buy/sell their trade in the talk box through `economy.transfer`, "where is the nearest ..." from their knowledge with a HUD marker, their task/story) | D1 (after Q1 lands) | `src/npc/dialog/**`, `src/npc/cast/**`, `src/npc/coruscant/talk.js`, `src/hud.js` (marker only) |
+| SL | Senate life: delegations seated in the pods during sessions (P4's cues), Senate Guard at the gates and screening, the Chancellor at the dais, spectators in the gallery, senators walking suite -> pod through the back doors | SL (after Q1 and the P4 fix round land) | `src/npc/coruscant/**` (planner, jobs, rooms, index), `src/npc/cast/roster.js` (Senate anchors' schedules) |
+
+### Pass-3 contracts
+
+- **Worlds** — `src/worlds.js`: `WORLDS.home` / `WORLDS.desert` with `globe` (centre, radius, tints for the space
+  scene), `orbit` (arrival point after a jump), `arrivals` (landing pads); `ORBIT_Y` = 240 (above it the space scene
+  owns rendering), `REENTRY_Y` = 200. S4b may extend records; S4a only reads them.
+- **Piloted ship** — S4a: `game.pilot` with `board(vehicle)`, `release()`, `state` (`grounded | flying | orbit`),
+  `pose` (x, y, z, yaw, pitch, roll, speed), `wantsOrbit` when the ship climbs through `ORBIT_Y`; the traffic stops
+  driving a piloted ship (`ship.piloted = true`), and the pilot module owns its pose. Events: `pilot:takeoff`,
+  `pilot:orbit`, `pilot:reentry {world}`, `pilot:landed {world, pad}`.
+- **Space scene** — S4b: `game.space` with `enter(fromWorldId, pose)`, `exit()`, `jump(toWorldId)` (hyperspace
+  animation, then the destination's `orbit`), `descend()` -> teleports ship + riders to `REENTRY_Y` above the chosen
+  arrival pad and hands the pose back to the pilot. While active it renders instead of the voxel world (terrain,
+  crowd and far layers hidden; the ship, its riders and the HUD stay). Events: `space:enter`, `space:jump`, `space:exit`.
+- **Passenger travel** — S4b: a departures board at Westport lists liner departures to the desert world (and back
+  from Sandhaven); buying passage (`economy.transfer`, good `passage_ticket`) and boarding runs the same climb ->
+  space -> jump -> descend sequence with the player as a passenger.
+- **Visibility** — V2: `game.farLayers` covers every world region at any distance; impostor sets per world; the
+  camera far plane / depth strategy is V2's decision (document it in `docs/rubrics/13_view_distance.md`).
+- **Weapons** — G1: `weapon:fired {who, x, y, z, dir}` and `entity:hit {target, kind, damage, by}` on `game.events`;
+  factions/NPCs subscribe (P5 / SL), the weapon code never imports NPC modules.
+- **Budget** — per workstream at the Senate plaza (Light, rd 8): <= +2 ms JS, <= +15 draw calls, <= +40 MB heap;
+  space scene <= 60 draw calls on its own.
+
 ### User feedback of 6 Sep (top priority for the next slots)
 
 "All the buildings still look like New York, not Star Wars"; "every building is just random shit placed", "I want each
