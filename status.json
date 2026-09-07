@@ -1,7 +1,7 @@
 {
-  "updated": "2026-09-07T02:25:01.145Z",
-  "phase": "Round 6, pass 2: builders running for the spaceport x4, 30-line dialogue + 13-anchor cast, economy v2 with physical shipments, 20 building programs + building scorer, the Senate chamber - and, from your notes tonight, W10 architecture v2 so the towers stop looking like New York. Every build now shows its commit + time in the F4 header and the F3 overlay (current live: ff8673c7).",
-  "summary": "Your notes (6 Sep evening) and what is happening with each: (1) 'buildings look like New York, not Star Wars' -> W10 architecture v2 launched with your reference images: no more window grids (ribbon glazing, slits, panel seams, full-height light strips), rounded / tapered / stacked-disc massing with cap platforms and lit ring ledges on tall towers, Coruscant palette only, impostors follow; rubric 18, before/after cameras will be posted. (2) 'every room needs a purpose you can see' -> P3 is applying the 20 building programs with dossiers and a per-building score; a legibility fix round (name plates, signature furniture, no filler rooms) follows its report. (3) 'Senate pods look nothing like the real ones; bigger, individual circles, back rooms behind them (Andor)' -> P4 is rebuilding the chamber now (tiers of individual round repulsorpods, 12 delegation suites with corridors directly behind the pods, sessions); your Andor note goes into its fix round. (4) 'random ship stuck to the side of the Senate' -> found: two block-built shuttles on the Senate's pads at the lot edge; removed in ff8673c7, live now. (5) 'make your own angular blocks for spaceships' -> ships v3 (rubric 19: sloped voxel cells, re-sculpted hulls, a collision audit against every building) queued for the next free slot. Live now: everything from wave 1 - crowned towers, 62 ships with the port cycle and boarding, the maglev train, credits/shops/jobs, the lower city under the plateau, 4,767 citizens.",
+  "updated": "2026-09-07T03:04:38.964Z",
+  "phase": "Pass 3 (your notes of 7 Sep): pilot ships yourself, fly off-world into space with the planet behind you, hyperspace to a desert world with a small town and back, passenger liners from Westport, the whole city visible from anywhere, a blaster, personal talk options, senators in the pods. Live now (b866d0fd): the Star Wars tower rework, angular ships, the 20 building programs, the crowd with 472 faces, the economy with shipments, the Senate with sessions.",
+  "summary": "What landed since your last look: W10 architecture v2 (no window grids or brick anywhere, 89% of tall towers rounded/octagonal/stacked with tapered tiers, lit ring ledges, cantilevered decks and wedge-bevelled edges in Coruscant palettes; a wedge block shape in the world mesher; impostors follow the new shapes), P3 building programs (20 required + 12 generic programs applied to all 433 buildings with signature rooms, 433 dossiers, a 10-category score per building: mean 97.2, all 430 ordinary buildings >= 85, the Senate/Temple/port >= 90), S3 angular ships with a building-collision audit, P6 the crowd painted from the 100-face composer with 18 species, P2 economy v2, P4 the Senate, P1 the cast. Running now: S4a piloting + owned ships + two bigger purchasable ships + the interior jitter fix; S4b the space scene (the home planet as a globe from orbit), hyperspace, the desert world Sandhaven and passenger liners; V2 whole-city visibility (far layers and impostors from anywhere, a fog floor so the skyline never disappears, the Death Star in the northern sky); Q1 the junk sweep; P4's round-pod rebuild; P5 factions + eight surprises. Queued: G1 blaster, D1 personal talk options (buy/sell, nearest-building directions), SL senators in the pods and guards at the gates, the P3 fix round (Republica/Chancellery facades to the new language, room name plates).",
   "links": [
     {
       "label": "Pull request #17",
@@ -38,6 +38,10 @@
     {
       "label": "Play the exact latest build (commit 4116d27a, immune to CDN caching)",
       "url": "https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/4116d27a/dist/index.html"
+    },
+    {
+      "label": "Play the exact latest build (commit b866d0fd, immune to CDN caching)",
+      "url": "https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/b866d0fd/dist/index.html"
     }
   ],
   "workstreams": [
@@ -268,8 +272,8 @@
     },
     {
       "name": "Pass 2 P3: 20 building programs, dossiers, four-differences rule, building scorer",
-      "status": "building",
-      "detail": "resumed 20:28; committing"
+      "status": "merged",
+      "detail": "32 programs over 433 buildings, 433 dossiers, scorer mean 97.2 (430/430 ordinary >= 85), 0 same-kind pairs under 4 differences; fix round queued (Republica/Chancellery facades, room name plates, spaceport halls, W10 envelope fit)"
     },
     {
       "name": "Pass 2 P4: Senate chamber, 12 delegation suites, sessions, 3 policy scenarios",
@@ -283,8 +287,8 @@
     },
     {
       "name": "Round 6 W10: architecture v2 - Star Wars massing, facades, palette (rubric 18)",
-      "status": "building",
-      "detail": "launched 21:40 with the user's references; before/after cameras due"
+      "status": "merged",
+      "detail": "0 grid facades, 283/319 tall towers non-rectangular, 22 new blocks incl. wedges, impostors follow; towers 23/23; live in b866d0fd"
     },
     {
       "name": "Round 6 S3: ships v3 - sloped voxels, angular hulls, building-collision audit (rubric 19)",
@@ -310,6 +314,26 @@
       "name": "Pass 2 P5: factions (reputation / suspicion / warrants, information spread) + eight stateful surprises",
       "status": "building",
       "detail": "launched 00:33 on top of the cast, economy and Senate"
+    },
+    {
+      "name": "Pass 3 S4a: pilot ships, owned ships on your pad, two bigger purchasable ships, steady interiors",
+      "status": "building",
+      "detail": "launched 03:01"
+    },
+    {
+      "name": "Pass 3 S4b: space scene with the planet globe, hyperspace, desert world Sandhaven, passenger liners",
+      "status": "building",
+      "detail": "launched 03:02"
+    },
+    {
+      "name": "Pass 3 V2: the whole city visible from anywhere (far layers + impostors at any distance, fog floor, Death Star in the sky)",
+      "status": "building",
+      "detail": "launched 03:03"
+    },
+    {
+      "name": "Pass 3 G1 blaster / D1 personal talk options / SL senators in pods + gate guards",
+      "status": "queued",
+      "detail": "next free slots (D1/SL after the sweep and the Senate fix round land)"
     }
   ],
   "metrics": [
@@ -343,6 +367,18 @@
   ],
   "screenshots": [
     {
+      "src": "img/r6_program_hangar.jpg",
+      "caption": "A repair hangar bay after the building programs: hull section on the hoist, mechanic and astromech at work (03:04 UTC)"
+    },
+    {
+      "src": "img/r6_arch_before_after_skyline_night.jpg",
+      "caption": "Skyline from the south rim at night: before and after (03:04 UTC)"
+    },
+    {
+      "src": "img/r6_arch_before_after_financial.jpg",
+      "caption": "Financial district at noon: before (left, brick and window grids) and after (right, chamfered octagonal towers with tapered tiers, ledges, Coruscant palettes) (03:04 UTC)"
+    },
+    {
       "src": "img/r6_crowd_plaza_after.jpg",
       "caption": "Senate plaza at noon with the composer-painted crowd (02:25 UTC)"
     },
@@ -369,18 +405,6 @@
     {
       "src": "img/r6_shop_quotes.jpg",
       "caption": "Shop cards with live stock and ask/bid quotes from the city simulation (00:43 UTC)"
-    },
-    {
-      "src": "img/r6_senate_board.jpg",
-      "caption": "Session board during a sitting: the Lift Restoration Act, tally bar, speaker (00:21 UTC)"
-    },
-    {
-      "src": "img/r6_senate_chamber.jpg",
-      "caption": "The Senate chamber from the public gallery: tiers of pods, bowl rings, the podium column (00:21 UTC)"
-    },
-    {
-      "src": "img/r6_cast_d4lt.jpg",
-      "caption": "D4-LT in the utility plant reactor room answering in its own words (00:07 UTC)"
     }
   ],
   "log": [
@@ -531,6 +555,10 @@
     {
       "time": "2026-09-07 02:25 UTC",
       "text": "P6 merged and live (4116d27a): the plaza crowd now wears the 100-face / 18-species appearance library instead of 22 repeated skins."
+    },
+    {
+      "time": "2026-09-07 03:04 UTC",
+      "text": "W10 + P3 merged and live (b866d0fd). Pass 3 launched from your notes: piloting, space + desert world, whole-city visibility; blaster, talk options and Senate life queued."
     }
   ],
   "issues": [
