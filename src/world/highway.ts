@@ -1151,16 +1151,19 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       }
     }
 
-    // -------------------------------------------------------- cross-road medians: a kerbed island down the centre of every arterial arm of a
-    // signalised junction, from the kerb returns of the box out to 60 m (the approach a mast arm implies), stopped
-    // short of any other road mouth on the arm. The traffic drives the innermost arterial lane 1.5 m off the centre
-    // line (1.8 m on two-lane arterials, traffic.ts), so the island is a raised divider 0.6 m wide there (1.0 m
-    // with a planted top on two-lane arms) - what fits between the wheel tracks. The arm's pavement is the roads.ts
-    // strip - the height field at its two edges, ROAD_LIFT up - so the island is built on that surface row by row,
-    // its kerb footing 8 cm into the pavement to ride out the strip's own rows
+    // -------------------------------------------------------- cross-road medians: a kerbed island down the centre of every two-lane arterial arm
+    // of a signalised junction, from the kerb returns of the box out to 60 m (the approach a mast arm implies),
+    // stopped short of any other road mouth on the arm. The traffic drives the innermost lane 1.8 m off the centre
+    // line (traffic.ts), so the island is a raised divider 1.0 m wide with a planted top - what fits between the
+    // wheel tracks. The four-lane arterials carry streets.ts's own 2 m kerbed median (buildMedians: a planting strip
+    // with palms from 21 m past the junction box, a painted left-turn pocket in the opening; their inner lane drives
+    // 2.6 m off the centre), so those arms are left to it - the 0.6 m divider built here before it existed sat
+    // coplanar inside its planting strip. The arm's pavement is the roads.ts strip - the height field at its two
+    // edges, ROAD_LIFT up - so the island is built on that surface row by row, its kerb footing 8 cm into the
+    // pavement to ride out the strip's own rows
     for (const j of majors) {
       for (const arm of j.arms) {
-        if (arm.seg.cls !== 'arterial') continue;
+        if (arm.seg.cls !== 'arterial' || arm.seg.lanes >= 4) continue;
         const d0 = hw + 4.0;
         let d1 = Math.min(d0 + 60, arm.len - 8);
         for (let d = d0; d <= d1; d += 2) {
@@ -1181,10 +1184,10 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
           const y = Math.max(pav(a), pav(b), pav(m));
           const x = arm.x + arm.dx * m, z = arm.z + arm.dz * m;
           // the nose piece tapers: half width, so the island points at the box
-          const wFull = arm.seg.lanes >= 4 ? 0.6 : 1.0;
+          const wFull = 1.0;
           const w = k === 0 ? wFull * 0.55 : wFull;
           soup.box(x, y - 0.08, z, w, 0.23, b - a + 0.02, yaw, 0, C_BARRIER, false, [0, 0, 0, 0]);
-          if (k > 0 && wFull >= 1.0) soup.box(x, y + 0.15, z, w - 0.4, 0.03, b - a - 0.3, yaw, 0, C_ISLAND_TOP, false, [0, 0, 0, 0]);
+          if (k > 0) soup.box(x, y + 0.15, z, w - 0.4, 0.03, b - a - 0.3, yaw, 0, C_ISLAND_TOP, false, [0, 0, 0, 0]);
         }
         counts.barrierM += d1 - d0;
       }
