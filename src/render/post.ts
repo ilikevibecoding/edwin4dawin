@@ -51,9 +51,14 @@ void main() {
   vec3 wp = (uInvView * vec4(vpos, 1.0)).xyz;
   vec3 col = c.rgb;
   if (!seam) {
-    // clouds shade the ground: only the direct-sun share of the light is removed (uSunShare, atmosphere.ts)
-    float cs = cloudShadow(wp);
-    col *= 1.0 - (1.0 - cs) * uSunShare * uCloudShadowStrength;
+    // Clouds shade the ground: under the cloud's footprint the direct beam is gone (a cumulus is optically thick)
+    // and only the direct-sun share of the light is removed (uSunShare, atmosphere.ts); the sky's share stays.
+    // cloudShadow() returns 1 - 0.72 * footprint (its own cap from when it was the whole shadow factor), so the
+    // footprint is read back out of it here: with the cap left in, a cloud at noon removed 0.72 * 0.86 = 62 % of
+    // the light while the building next to it removed 86 %, and under the cloudy preset (sun already dimmed to
+    // 0.3 by the preset, shadow share 0.38) a cloud took 27 %: no shadow pattern at all under a deck.
+    float cov = clamp((1.0 - cloudShadow(wp)) / 0.72, 0.0, 1.0);
+    col *= 1.0 - cov * uSunShare * uCloudShadowStrength;
   }
   col = applyAerial(col, uCamPos, wp);
   gl_FragColor = vec4(col, 1.0);
@@ -114,8 +119,10 @@ void main() {
   c = c * uGain + uLift * (1.0 - smoothstep(0.0, 0.6, c));
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = mix(vec3(l), c, uSaturation);
-  // gentle contrast around mid grey
-  c = mix(c, c * c * (3.0 - 2.0 * min(c, vec3(1.0))), 0.18);
+  // The former 18 % smoothstep "contrast around mid grey" pivoted at linear 0.5 (sRGB 188): everything below it
+  // was pulled down (0.18 -> 0.163, 0.10 -> 0.087, shadows -13 %) and the highlights barely moved, a shadow
+  // crush on top of the ACES toe (shaded water and undersides read black once the key was on a physical
+  // scale). ACES carries the S-curve on its own.
   c = aces(c);
   vec2 q = vUv - 0.5;
   float vig = 1.0 - uVignette * smoothstep(0.35, 0.95, length(q) * 1.35);
@@ -231,7 +238,13 @@ export class PostPipeline {
     (a.uFarDissolve.value as THREE.Vector2).set(camera.far * 0.55, 1 / (camera.far * 0.4));
     this.blit(this.aerialMat, this.fogRT);
 
+    // night exposure boost: x3.5 keeps 22:00 reading as night (x6 read as blue hour) while city lights stay bright
+    const gain = 1 + 2.5 * (this.aerialMat.uniforms.uNight.value as number);
     if (this.opts.bloom) {
+      // The threshold is a display level (above sunlit white, ~1.3 at the day exposure), so it follows the
+      // night gain: at x3.5 a lamp of radiance 0.6 is already white on screen but sat under the fixed 1.5, and
+      // the nav lights and lamps got no glare at all at 22:00 (their sprites read as flat 40 px discs).
+      this.brightMat.uniforms.uThreshold.value = 1.5 / gain;
       this.brightMat.uniforms.tColor.value = this.fogRT.texture;
       this.blit(this.brightMat, this.bloomRTs[0]);
       for (let i = 0; i < 3; i++) {
@@ -257,8 +270,7 @@ export class PostPipeline {
     c.tBloom1.value = this.bloomRTs[1].texture;
     c.tBloom2.value = this.bloomRTs[2].texture;
     c.uBloom.value = this.opts.bloom ? 0.18 : 0.0;
-    // night exposure boost: x3.5 keeps 22:00 reading as night (x6 read as blue hour) while city lights stay bright
-    c.uExposure.value = this.exposure * (1 + 2.5 * (this.aerialMat.uniforms.uNight.value as number));
+    c.uExposure.value = this.exposure * gain;
     c.uTime.value = time;
     this.blit(this.compositeMat, null);
     r.setRenderTarget(null);
