@@ -41,17 +41,20 @@ export function bladeGeometry(length: number, rootChord: number, tipChord: numbe
       uv.push(j / n, tt);
     }
   }
+  // winding: the section is walked LE -> upper (-z side) -> TE -> lower as `a` grows, so (ring, next-around,
+  // next-ring) is counter-clockwise seen from outside the blade; the other order made an inside-out blade whose
+  // faces were culled and whose normals lit the far surface (seen through it) from the wrong side
   for (let i = 0; i < segs; i++) for (let j = 0; j < n; j++) {
     const j1 = (j + 1) % n;
     const a = i * n + j, b = a + n, a1 = i * n + j1, b1 = a1 + n;
-    idx.push(a, b, a1, a1, b, b1);
+    idx.push(a, a1, b, a1, b1, b);
   }
   // tip cap (the last ring is small but not a point)
   const tipBase = segs * n, centre = pos.length / 3;
   let cx = 0, cz = 0;
   for (let j = 0; j < n; j++) { cx += pos[(tipBase + j) * 3]; cz += pos[(tipBase + j) * 3 + 2]; }
   pos.push(cx / n, length, cz / n); uv.push(0.5, 1);
-  for (let j = 0; j < n; j++) idx.push(centre, tipBase + j, tipBase + ((j + 1) % n));
+  for (let j = 0; j < n; j++) idx.push(centre, tipBase + ((j + 1) % n), tipBase + j);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
