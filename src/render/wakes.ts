@@ -460,6 +460,7 @@ export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
   fragmentShader: /* glsl */ `
     varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; varying vec2 vPt; flat varying vec4 vTrail; flat varying vec4 vTrail2;
     uniform float uTexel;
+    uniform float uTime;
     const float HSCALE = ${WAKE_HEIGHT_SCALE.toFixed(2)};
     ${WAKE_GLSL_COMMON}
     void main() {
@@ -549,6 +550,13 @@ export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
       float ridgeH = (0.04 + 0.2 * dk + 0.05 * sinkK) * hullScale;
       float ridgeW = (0.3 + 0.25 * dk) * hullScale;
       h += ridgeH * g1(sideDist - 0.12 - 0.15 * dk, ridgeW) * wetU * smoothstep(6.0, 12.0, hs) * max(planing, dk);
+      // ---- rest ripples: a hull barely under way still works the surface (it heaves and rolls on the chop, the
+      //      idle wash nudges it) and radiates rings a few millimetres high from its waterline, 0.6 m apart,
+      //      running out at their own 1 m/s and dying within a couple of metres; gone once the hull moves off and
+      //      makes a wake instead (a floatplane at rest used to sit in water as flat as glass)
+      float still = 1.0 - smoothstep(0.5, 2.0, aspd);
+      float ringA = 0.006 * hullScale * exp(-sideDist / 1.6) * inversesqrt(1.0 + 3.0 * sideDist) * (0.7 + 0.3 * vn(vWp * 1.7 + 5.0));
+      h += still * ringA * cos(10.5 * sideDist - 10.1 * uTime + 3.0 * vn(vWp * 0.6 + 9.0));
       // under the hull the surface is hidden; keep it from rising through the deck at the stem
       h = mix(h, min(h, 0.0), smoothstep(0.0, 0.12, inside));
       float edge = 1.0 - smoothstep(0.85, 1.0, abs(side));
@@ -556,7 +564,7 @@ export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
       gl_FragColor = vec4(max(h, 0.0), max(-h, 0.0), 0.0, 1.0);
     }
   `,
-  uniforms: { uTexel: { value: 0.125 } },
+  uniforms: { uTexel: { value: 0.125 }, uTime: { value: 0 } },
   transparent: true,
   depthTest: false,
   depthWrite: false,
@@ -848,6 +856,8 @@ export class WakeBatch {
   }
 
   setTexel(t: number): void { this.material.uniforms.uTexel.value = t; this.heightMaterial.uniforms.uTexel.value = t; }
+  /** the height pass's clock (the rest ripples travel); driven by whoever drives the splat clock */
+  setTime(t: number): void { this.heightMaterial.uniforms.uTime.value = t; }
   /** draw the batch as the signed height field (additive) instead of foam / slope */
   useHeight(on: boolean): void { this.mesh.material = on ? this.heightMaterial : this.material; }
 

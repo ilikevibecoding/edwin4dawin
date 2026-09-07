@@ -591,6 +591,8 @@ export class PlaneEffects {
   private boilAcc = 0;
   /** the impact splats of the wake maps (null when the batch has none) */
   private readonly splats: SplatBatch | null;
+  /** the wake batch the float ribbons belong to (its height pass has a clock: the rest ripples) */
+  private readonly wakes: WakeBatch;
 
   constructor(wakes: WakeBatch, scene: THREE.Scene) {
     // float hull: 5.7 m from stern to stem, 0.37 m half-beam at the chine (see model.ts floatSections); a float
@@ -602,6 +604,7 @@ export class PlaneEffects {
     this.wakeR = new WakeTrail(80, 0.37, 30, 1.1, wakes, 5.7, 1.5);
     for (const w of [this.wakeL, this.wakeR]) { w.propWash = 0; w.planingSpeed = 15; w.churn = 0.85; }
     this.splats = wakes.splats;
+    this.wakes = wakes;
     const tex = spriteTexture();
     // (640: a level wing slapping down emits its curtain along the whole span in one frame, on top of the
     // touchdown plume; 480 evicted the planing spray)
@@ -854,6 +857,7 @@ export class PlaneEffects {
     // laid wake foam drifts with the wind-driven surface current (~3 % of the wind)
     WAKE_DRIFT.x = flight.wind.x * 0.03; WAKE_DRIFT.z = flight.wind.z * 0.03;
     this.splats?.setTime(time);
+    this.wakes.setTime(time);
     for (const [trail, stern, i] of [[this.wakeL, model.floatSternL, 0], [this.wakeR, model.floatSternR, 1]] as const) {
       const p = this.tmp.copy(stern).setX(emitX).applyQuaternion(q).add(flight.position);
       // the head runs from the emitter to the real bow (x 2.95) wherever the emitter sits on the hull
