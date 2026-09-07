@@ -251,15 +251,22 @@ export function formatHost(r) {
 
 // ------------------------------------------------------------------------------------------------------------
 // CDP walk: street -> entry -> signature room in the running game, with a screenshot of the room.
-async function walkHost(programId, lot, layout, url, shotsDir) {
+async function walkHost(programId, lot, layout, url, shotsDir, { time = 0.45, room = null } = {}) {
   const { launchPage } = await import('../cdp.mjs');
   const bp = blueprintFor(lot, layout);
   const rec = bp.meta.program;
   const prog = programFor(lot, purposeFor(lot, layout), layout);
   const an = analyzeBlueprint(bp, lot);
-  // the signature room: the placed one, else a landmark room matched by the signature spec, else the first placed
+  // the room to walk to: the one named with --room (a placed program room, else any reachable room whose kind matches),
+  // otherwise the signature room: the placed one, else a landmark room matched by the signature spec, else the first placed
   const sigSpec = prog.rooms.find((s) => s.signature);
-  let target = rec.rooms.find((r) => r.signature) || null;
+  let target = null;
+  if (room) {
+    const re = new RegExp(room);
+    target = rec.rooms.find((r) => re.test(r.kind)) || an.rooms.filter((r) => re.test(r.kind) && r.reach).sort((p, q) => q.w * q.d - p.w * p.d)[0] || null;
+    if (!target) throw new Error(`no reachable room matching --room ${room} in lot ${lot.id}`);
+  }
+  if (!target) target = rec.rooms.find((r) => r.signature) || null;
   if (!target && sigSpec) { const s = an.rooms.find((r) => sigSpec.accept && sigSpec.accept.test(r.kind) && r.reach); if (s) target = s; }
   if (!target) target = rec.rooms[0];
   if (!target) throw new Error('no program room to walk to');
@@ -279,7 +286,7 @@ async function walkHost(programId, lot, layout, url, shotsDir) {
   const street = { x: out.x + 0.5 + (door.side === 'E' ? 2 : door.side === 'W' ? -2 : 0), y: bp.y0 + 1, z: out.z + 0.5 + (door.side === 'S' ? 2 : door.side === 'N' ? -2 : 0) };
   mkdirSync(shotsDir, { recursive: true });
   const yawDeg = door.side === 'S' ? 0 : door.side === 'N' ? 180 : door.side === 'E' ? 90 : -90;
-  const page = await launchPage(`${url.replace(/\/$/, '')}/?x=${street.x}&z=${street.z}&y=${street.y}&yaw=${yawDeg}&time=0.45&fresh=1&mode=creative&quality=light&rd=4`, { width: 1280, height: 800 });
+  const page = await launchPage(`${url.replace(/\/$/, '')}/?x=${street.x}&z=${street.z}&y=${street.y}&yaw=${yawDeg}&time=${time}&fresh=1&mode=creative&quality=light&rd=4`, { width: 1280, height: 800 });
   const log = [];
   try {
     await page.waitForGame();
@@ -322,7 +329,9 @@ async function walkHost(programId, lot, layout, url, shotsDir) {
 }
 
 /**
- * CLI: node scripts/programs/<program>.mjs [--seed 1337] [--json out.json] [--verbose] [--url http://localhost:PORT/ [--host lotId] [--shots /tmp/p3-shots]]
+ * CLI: node scripts/programs/<program>.mjs [--seed 1337] [--json out.json] [--verbose]
+ *        [--url http://localhost:PORT/ [--host lotId] [--shots /tmp/p3-shots] [--time 0.45] [--room kindPattern]]
+ * (--time is the game clock fraction for the walk, 0.0 midnight, 0.5 noon; --room walks to that room instead of the signature room)
  */
 export async function runProgramTest(programId, argv = process.argv.slice(2)) {
   const a = parseArgs(argv);
@@ -350,7 +359,7 @@ export async function runProgramTest(programId, argv = process.argv.slice(2)) {
     const lot = hostId !== null ? hosts.find((l) => l.id === hostId) : (hosts.filter((l) => rep.results.find((r) => r.lotId === l.id && r.ok)).sort((p, q) => (q.w * q.d) - (p.w * p.d))[0] || hosts[0]);
     if (!lot) { console.log('no host to walk'); process.exit(exit || 1); }
     try {
-      const walk = await walkHost(programId, lot, layout, String(a.url), a.shots || '/tmp/p3-shots');
+      const walk = await walkHost(programId, lot, layout, String(a.url), a.shots || '/tmp/p3-shots', { time: a.time !== undefined ? parseFloat(a.time) : 0.45, room: a.room ? String(a.room) : null });
       console.log(`walk lot ${walk.lotId}: street -> door -> ${walk.room} in ${walk.pathCells} cells, falls ${walk.falls}, page exceptions ${walk.exceptions}`);
       for (const l of walk.log) console.log('  ' + l);
       if (walk.falls > 0) exit = exit || 1;

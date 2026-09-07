@@ -171,6 +171,7 @@ function stall(bp, rng, xc, z0, dx, colour, opts = {}) {
     if (g && !(z === z0 + 2 && rng.chance(0.25))) bp.set(xc, 2, z, g);
     for (let x = Math.min(xc, back); x <= Math.max(xc, back); x++) bp.set(x, 4, z, colour);
   }
+  bp.set(xc, 3, z0 + 2, B.LANTERN);   // the stall's own lamp, hung under the awning over the counter
   bp.set(xc + dx, 3, z0 + 2, B.HOLO_SIGN);
   if (opts.rackX !== undefined) {
     // wall stall: shelving against the wall behind the vendor, a barrel in the post column, ad or lamp over the rack
