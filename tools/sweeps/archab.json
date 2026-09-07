@@ -1,0 +1,15 @@
+[
+  { "name": "after", "patch": {} },
+  {
+    "name": "before",
+    "patch": {
+      "trim": {
+        "uDirtDry": 7429951,
+        "uDirtDust": 10194549,
+        "uDirtWet": 4864038,
+        "uDirtGrain": 0.42,
+        "uDirtLift": 999
+      }
+    }
+  }
+]

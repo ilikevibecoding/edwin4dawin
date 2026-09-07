@@ -1,0 +1,147 @@
+{
+  "iter": "0",
+  "width": 640,
+  "height": 360,
+  "views": {
+    "hero": {
+      "fps": 10,
+      "quality": "fast",
+      "noise": "wasm",
+      "calls": 542,
+      "triangles": 1927580,
+      "programs": 168,
+      "textures": 290,
+      "geometries": 334,
+      "luma": {
+        "mean": 0.4146185008169954,
+        "max": 0.8512164705882352
+      }
+    },
+    "front": {
+      "fps": 13,
+      "quality": "fast",
+      "noise": "wasm",
+      "calls": 558,
+      "triangles": 1981028,
+      "programs": 168,
+      "textures": 290,
+      "geometries": 334,
+      "luma": {
+        "mean": 0.4594335159465019,
+        "max": 0.8551427450980392
+      }
+    },
+    "rear": {
+      "fps": 13,
+      "quality": "fast",
+      "noise": "wasm",
+      "calls": 677,
+      "triangles": 2376574,
+      "programs": 168,
+      "textures": 297,
+      "geometries": 335,
+      "luma": {
+        "mean": 0.35377363834422876,
+        "max": 0.8615341176470589
+      }
+    },
+    "wheel": {
+      "fps": 24,
+      "quality": "fast",
+      "noise": "wasm",
+      "calls": 507,
+      "triangles": 1917784,
+      "programs": 168,
+      "textures": 297,
+      "geometries": 335,
+      "luma": {
+        "mean": 0.18068879553982087,
+        "max": 0.7994470588235294
+      }
+    },
+    "detail": {
+      "fps": 24,
+      "quality": "fast",
+      "noise": "wasm",
+      "calls": 538,
+      "triangles": 1928368,
+      "programs": 168,
+      "textures": 297,
+      "geometries": 335,
+      "luma": {
+        "mean": 0.32013314391188785,
+        "max": 0.8909827450980391
+      }
+    },
+    "interior": {
+      "fps": 24,
+      "quality": "fast",
+      "noise": "wasm",
+      "calls": 597,
+      "triangles": 1945854,
+      "programs": 168,
+      "textures": 297,
+      "geometries": 335,
+      "luma": {
+        "mean": 0.2661760419692565,
+        "max": 0.8468823529411764
+      }
+    },
+    "forest": {
+      "fps": 17,
+      "quality": "fast",
+      "noise": "wasm",
+      "calls": 622,
+      "triangles": 2008670,
+      "programs": 168,
+      "textures": 297,
+      "geometries": 335,
+      "luma": {
+        "mean": 0.4397076163459217,
+        "max": 0.8340156862745098
+      }
+    },
+    "road": {
+      "fps": 17,
+      "quality": "fast",
+      "noise": "wasm",
+      "calls": 551,
+      "triangles": 1974908,
+      "programs": 168,
+      "textures": 297,
+      "geometries": 335,
+      "luma": {
+        "mean": 0.35119764388162966,
+        "max": 0.8468721568627451
+      }
+    },
+    "mainroad": {
+      "fps": 15,
+      "quality": "fast",
+      "noise": "wasm",
+      "calls": 601,
+      "triangles": 2591256,
+      "programs": 169,
+      "textures": 301,
+      "geometries": 341,
+      "luma": {
+        "mean": 0.5027304127329919,
+        "max": 0.8382203921568627
+      }
+    }
+  },
+  "runtime": {
+    "fps": 15,
+    "quality": "fast",
+    "noise": "wasm",
+    "calls": 626,
+    "triangles": 2592434,
+    "programs": 169,
+    "textures": 301,
+    "geometries": 341
+  },
+  "consoleErrors": [
+    "warning: Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently",
+    "warning: Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently"
+  ]
+}
