@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { sectionAt, sectionPoint, type Section } from './loft';
+import { sectionAt, type Section } from './loft';
 
 /** Float hull station: chine height `yc`, half beam `w` at the chine, deck `top` above it, keel `bot` below. */
 export interface FloatStation {
@@ -8,8 +8,6 @@ export interface FloatStation {
   w: number;
   top: number;
   bot: number;
-  /** deck / side roundness (superellipse exponent of the upper half; higher = squarer deck edge) */
-  n?: number;
   /** bottom convexity exponent (1 = straight V from the chine to the keel) */
   vee?: number;
   /** emit this station twice with no quads between the copies: a hard edge across the hull (the step) */
@@ -18,6 +16,42 @@ export interface FloatStation {
 
 /** texture v of the hull's features (starboard side; port is mirrored): deck edge, chine, keel */
 export const FLOAT_V = { edge: 0.12, chine: 0.22, keel: 0.5 } as const;
+
+/** rolled deck edge radius of a full-beam station and the deck's camber (crown line to the start of the edge) */
+const EDGE_R = 0.09, DECK_CAMBER = 0.028, FULL_BEAM = 0.44;
+
+/**
+ * EDO section, upper half: a gently crowned deck, a rolled deck edge of fixed radius and a vertical topside down
+ * to the chine. A superellipse cannot do this (at n 5 the "corner" is still spread over the top half of the
+ * freeboard, so the hull read as a rounded loaf); the fixed radius is what makes the float read as a box. The
+ * edge radius and the camber scale down at the narrow bow / stern stations so the outline stays valid there.
+ */
+function edgeParams(s: { w: number; top: number; yc: number }) {
+  const r = Math.min(EDGE_R, s.w * 0.45, s.top * 0.5);
+  const c = DECK_CAMBER * Math.min(s.w / FULL_BEAM, 1);
+  // deck slope where it meets the arc, one refinement so the arc starts tangent to the parabola's end
+  let th0 = Math.atan(2 * c / Math.max(s.w - r, 1e-6));
+  th0 = Math.atan(2 * c / Math.max(s.w - r + r * Math.sin(th0), 1e-6));
+  const zd = s.w - r + r * Math.sin(th0);                 // deck edge: where the flat deck hands over to the arc
+  const yC = s.yc + s.top - c - r * Math.cos(th0);        // arc centre height = top of the vertical side
+  const lDeck = Math.hypot(zd, c), lArc = r * (Math.PI / 2 - th0), lSide = Math.max(yC - s.yc, 0);
+  return { r, c, th0, zd, yC, lDeck, lArc, lSide, len: lDeck + lArc + lSide };
+}
+
+/** (y, z) on the upper half at arc fraction f (0 crown .. 1 chine), starboard side */
+function upperPoint(s: { w: number; top: number; yc: number }, e: ReturnType<typeof edgeParams>, f: number, out: [number, number]): [number, number] {
+  const a = f * e.len;
+  if (a <= e.lDeck) {
+    const z = e.zd * (a / Math.max(e.lDeck, 1e-9));
+    out[0] = s.yc + s.top - e.c * (z / Math.max(e.zd, 1e-9)) ** 2; out[1] = z;
+  } else if (a <= e.lDeck + e.lArc) {
+    const phi = e.th0 + (a - e.lDeck) / e.r;
+    out[0] = e.yC + e.r * Math.cos(phi); out[1] = s.w - e.r + e.r * Math.sin(phi);
+  } else {
+    out[0] = e.yC - (a - e.lDeck - e.lArc); out[1] = s.w;
+  }
+  return out;
+}
 
 /**
  * Float hull loft with hard chine and keel lines: every station's ring runs deck centre -> rounded deck edge and
@@ -36,17 +70,17 @@ export function floatHull(stations: FloatStation[], deckSegs = 14, bottomSegs = 
   const rows: { pos: number[]; x: number }[] = [];
   const ringOf = (s: FloatStation) => {
     ring.length = 0;
-    const n = s.n ?? 3.0, vee = s.vee ?? 1.15;
+    const vee = s.vee ?? 1.15;
     const half: { y: number; z: number; v: number }[] = [];
-    // deck + side: superellipse upper quarter from the crown (t = 0) to the chine (t = 0.25), sampled finely; the
-    // vertices are then spaced by arc length plus 0.3 m per radian of turning, so the rolled edge gets its share
-    const sec: Section = { x: s.x, yc: s.yc, w: s.w, top: s.top, bot: s.bot, n };
+    // deck + side: the EDO upper half from the crown (f = 0) to the chine (f = 1), sampled finely by arc length;
+    // the vertices are then spaced by arc length plus 0.3 m per radian of turning, so the rolled edge gets its share
+    const e = edgeParams(s);
     const N = 160, TURN = 0.3;
     const sy: number[] = [], sz: number[] = [], arc = [0], wgt = [0];
     const p: [number, number] = [0, 0];
     let edgeArc = -1, prevAng = 0;
     for (let i = 0; i <= N; i++) {
-      sectionPoint(sec, 0.25 * (i / N), p);
+      upperPoint(s, e, i / N, p);
       sy.push(p[0]); sz.push(p[1]);
       if (i > 0) {
         const dy = sy[i] - sy[i - 1], dz = sz[i] - sz[i - 1], ds = Math.hypot(dy, dz);
@@ -146,16 +180,19 @@ export function floatHull(stations: FloatStation[], deckSegs = 14, bottomSegs = 
   return g;
 }
 
-const asSections = (stations: FloatStation[]): Section[] => stations.map((f) => ({ x: f.x, yc: f.yc, w: f.w, top: f.top, bot: f.bot, n: f.n }));
+const asSections = (stations: FloatStation[]): Section[] => stations.map((f) => ({ x: f.x, yc: f.yc, w: f.w, top: f.top, bot: f.bot }));
 
 /**
- * Deck height of the hull at station x, `dz` off the float's own centreline: the deck is the crowned upper half of
- * the section, so a fitting 20 cm off centre sits ~1 cm lower than one on the crown line.
+ * Deck height of the hull at station x, `dz` off the float's own centreline: the cambered deck out to the rolled
+ * edge (a fitting 20 cm off centre sits ~1 cm lower than one on the crown line), then down the edge radius.
  */
 export function deckHeight(stations: FloatStation[], x: number, dz = 0): number {
   const s = sectionAt(asSections(stations), x);
-  const n = s.n ?? 3.0, f = Math.min(Math.abs(dz) / s.w, 1);
-  return s.yc + s.top * Math.pow(Math.max(1 - Math.pow(f, n), 0), 1 / n);
+  const e = edgeParams(s), a = Math.abs(dz);
+  if (a <= e.zd) return s.yc + s.top - e.c * (a / Math.max(e.zd, 1e-9)) ** 2;
+  if (a >= s.w) return e.yC;
+  const sinPhi = Math.min((a - (s.w - e.r)) / Math.max(e.r, 1e-9), 1);
+  return e.yC + e.r * Math.sqrt(Math.max(1 - sinPhi * sinPhi, 0));
 }
 
 /** Chine height and half beam of the hull at station x. */

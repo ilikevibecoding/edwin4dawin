@@ -21,25 +21,26 @@ export function buildFloats(ctx: BuildContext, wingSpec: WingSpec): FloatsBuild 
   const { sections } = ctx.fuselage;
   const waterRudders: THREE.Group[] = [];
   // ------------------------------------------------------------ floats & struts
-  // EDO 4930-type hull: hard chine at yc, V bottom (deadrise) to the keel, vertical topsides to a rolled deck edge
-  // and a near-flat deck (n 4-5), 0.88 m beam and 0.66 m deep amidships, so about 60 % of the hull stands above the
-  // resting waterline. The forebody deepens to the step at x -0.35 (a real vertical step: two stations at one x),
-  // the afterbody keel sweeps up to a flat transom carrying the water rudder; the bow rounds down from the deck
-  // over a short nose to a bluff stem face with the bumper. Keel and chine heights are the physics datum and are
-  // untouched (bow keel -2.08 at x 2.6, -2.25 ahead of the step, -1.98 at x -2.3; at the rest datum y 1.96 the
-  // waterline runs ~1-6 cm under the chine along the hull, and the spray sheets root on the chine).
+  // EDO 4930-type hull: hard chine at yc, V bottom (deadrise) to the keel, vertical topsides to a 9 cm rolled deck
+  // edge and a gently cambered deck (floatHull's EDO section), 0.88 m beam and 0.66 m deep amidships, so about
+  // 60 % of the hull stands above the resting waterline. The forebody deepens to the step at x -0.35 (a real
+  // vertical step: two stations at one x), the afterbody keel sweeps up to a flat transom carrying the water
+  // rudder; the bow rounds down from the deck over a short nose to a bluff stem face with the bumper. Keel and
+  // chine heights are the physics datum and are untouched (bow keel -2.08 at x 2.6, -2.25 ahead of the step,
+  // -1.98 at x -2.3; at the rest datum y 1.96 the waterline runs ~1-6 cm under the chine along the hull, and the
+  // spray sheets root on the chine).
   const floatSections: FloatStation[] = [
-    { x: 2.95, yc: -1.86, w: 0.06, top: 0.16, bot: 0.05, n: 2.6, vee: 1.5 },   // stem face
-    { x: 2.84, yc: -1.875, w: 0.15, top: 0.27, bot: 0.11, n: 2.9, vee: 1.45 }, // bow nose rounding over
-    { x: 2.6, yc: -1.90, w: 0.24, top: 0.32, bot: 0.18, n: 3.4, vee: 1.4 },
-    { x: 1.9, yc: -1.95, w: 0.38, top: 0.34, bot: 0.28, n: 4.4, vee: 1.25 },
-    { x: 0.8, yc: -1.95, w: 0.44, top: 0.345, bot: 0.32, n: 5.0, vee: 1.15 },
-    { x: -0.2, yc: -1.95, w: 0.44, top: 0.345, bot: 0.30, n: 5.0, vee: 1.12 },
-    { x: -0.35, yc: -1.95, w: 0.435, top: 0.34, bot: 0.295, n: 5.0, vee: 1.12, split: true }, // step: forebody keel
-    { x: -0.35, yc: -1.95, w: 0.435, top: 0.34, bot: 0.215, n: 5.0, vee: 1.15, split: true }, // step: afterbody keel
-    { x: -1.3, yc: -1.92, w: 0.40, top: 0.31, bot: 0.20, n: 4.6, vee: 1.2 },
-    { x: -2.3, yc: -1.86, w: 0.29, top: 0.235, bot: 0.12, n: 4.0, vee: 1.3 },
-    { x: -2.75, yc: -1.80, w: 0.15, top: 0.17, bot: 0.05, n: 3.6, vee: 1.5 },  // transom
+    { x: 2.95, yc: -1.86, w: 0.06, top: 0.16, bot: 0.05, vee: 1.5 },   // stem face
+    { x: 2.84, yc: -1.875, w: 0.15, top: 0.27, bot: 0.11, vee: 1.45 }, // bow nose rounding over
+    { x: 2.6, yc: -1.90, w: 0.24, top: 0.32, bot: 0.18, vee: 1.4 },
+    { x: 1.9, yc: -1.95, w: 0.38, top: 0.34, bot: 0.28, vee: 1.25 },
+    { x: 0.8, yc: -1.95, w: 0.44, top: 0.345, bot: 0.32, vee: 1.15 },
+    { x: -0.2, yc: -1.95, w: 0.44, top: 0.345, bot: 0.30, vee: 1.12 },
+    { x: -0.35, yc: -1.95, w: 0.435, top: 0.34, bot: 0.295, vee: 1.12, split: true }, // step: forebody keel
+    { x: -0.35, yc: -1.95, w: 0.435, top: 0.34, bot: 0.215, vee: 1.15, split: true }, // step: afterbody keel
+    { x: -1.3, yc: -1.92, w: 0.40, top: 0.31, bot: 0.20, vee: 1.2 },
+    { x: -2.3, yc: -1.86, w: 0.29, top: 0.235, bot: 0.12, vee: 1.3 },
+    { x: -2.75, yc: -1.80, w: 0.15, top: 0.17, bot: 0.05, vee: 1.5 },  // transom
   ];
   const floatGeo = floatHull(floatSections, 14, 5);
   /** deck height at station x, `dz` off the float's centreline (crown line by default) */
