@@ -6,7 +6,7 @@ Spec 17 weights, ten categories rated 0-5 from automated evidence (`scripts/scor
 - Mean score: **97.2** (ordinary 97.2)
 - Ordinary buildings at the 85 threshold (no category below 3, floor plan / interactions / NPC >= 4): **430/430 (100%)**
 - Special buildings at the 90 threshold (no category below 4): **3/3**
-- Hard failures: **0**; non-deterministic rebuilds: 0; warm builds over budget: 0 (mean 1.01 ms, max 25.2 ms)
+- Hard failures: **0**; non-deterministic rebuilds: 0; warm builds over budget: 0 (mean 1.17 ms, max 38.3 ms)
 - Lighting and sound is capped at 4/5 for every building: district ambience is not implemented (`src/audio.js` carries only the frontier-town ambience). Required audio is listed here as incomplete, not averaged away.
 
 ## Distribution
@@ -116,7 +116,7 @@ Spec 17 weights, ten categories rated 0-5 from automated evidence (`scripts/scor
 none
 ## Every building
 
-| Lot | Name | Purpose | District | Program | ident | plan | inter | inter | npc | econo | story | light | acces | techn | Total | Pass |
+| Lot | Name | Purpose | District | Program | ident | plan | interior | interact | npc | econ | story | light | access | tech | Total | Pass |
 |---:|---|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | 0 | Galactic Senate | ministry | senate | senate | 5 | 4 | 5 | 5 | 5 | 4 | 5 | 4 | 5 | 5 | 92.8 | yes |
 | 1 | Jedi Temple | temple_annex | financial | jedi_temple | 5 | 5 | 5 | 5 | 5 | 4 | 5 | 4 | 5 | 5 | 96.4 | yes |

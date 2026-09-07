@@ -251,7 +251,7 @@ export function formatHost(r) {
 
 // ------------------------------------------------------------------------------------------------------------
 // CDP walk: street -> entry -> signature room in the running game, with a screenshot of the room.
-async function walkHost(programId, lot, layout, url, shotsDir, { time = 0.45, room = null } = {}) {
+async function walkHost(programId, lot, layout, url, shotsDir, { time = 0.45, room = null, rd = 4 } = {}) {
   const { launchPage } = await import('../cdp.mjs');
   const bp = blueprintFor(lot, layout);
   const rec = bp.meta.program;
@@ -272,21 +272,27 @@ async function walkHost(programId, lot, layout, url, shotsDir, { time = 0.45, ro
   if (!target) throw new Error('no program room to walk to');
   const stat = an.rooms.find((s) => s.x === target.x && s.y === target.y && s.z === target.z) || an.rooms.find((s) => s.kind === target.kind);
   if (!stat || !stat.entry) throw new Error(`${target.kind} is not reachable in the offline flood fill`);
-  // the deepest reachable standing cell of the room is where the player ends up; the path is read from the parents
+  // the player ends up in an open corner of the room: the reachable standing cell farthest from the centre among those
+  // with open floor around them (so the camera is not pressed against a counter); the path is read from the parents
   let best = null;
+  const y = stat.y - bp.y0, cx = stat.x - lot.x0 + stat.w / 2, cz = stat.z - lot.z0 + stat.d / 2;
+  const open = (x, z) => { let n = 0; for (let dx = -1; dx <= 1; dx++) for (let dz = -1; dz <= 1; dz++) if ((dx || dz) && an.visited[an.key(x + dx, y, z + dz)]) n++; return n; };
   for (let x = stat.x - lot.x0; x < stat.x - lot.x0 + stat.w; x++) for (let z = stat.z - lot.z0; z < stat.z - lot.z0 + stat.d; z++) {
-    const y = stat.y - bp.y0;
-    if (an.visited[an.key(x, y, z)]) { const cx = stat.x - lot.x0 + stat.w / 2, cz = stat.z - lot.z0 + stat.d / 2, dd = Math.hypot(x + 0.5 - cx, z + 0.5 - cz); if (!best || dd < best.dd) best = { x, y, z, dd }; }
+    if (!an.visited[an.key(x, y, z)]) continue;
+    const o = open(x, z), dd = Math.hypot(x + 0.5 - cx, z + 0.5 - cz) + (o >= 3 ? 100 : 0);
+    if (!best || dd > best.dd) best = { x, y, z, dd };
   }
   const goal = best || stat.entry;
   const path = pathTo(an, goal);
   if (!path) throw new Error('no path from the door to the signature room');
-  const W = (p) => ({ x: lot.x0 + p.x + 0.5, y: bp.y0 + p.y, z: lot.z0 + p.z + 0.5 });
+  // a path cell whose feet block is a slab (a stair step) is stood on at half height, not inside the slab
+  const onSlab = (p) => { const v = an.at(p.x, p.y, p.z); const b = v && v !== FORCE_AIR ? BLOCKS[v] : null; return b && b.shape === SHAPE.SLAB ? 0.5 : 0; };
+  const W = (p) => ({ x: lot.x0 + p.x + 0.5, y: bp.y0 + p.y + onSlab(p), z: lot.z0 + p.z + 0.5 });
   const door = lot.door, out = door.out || { x: door.x + (door.side === 'E' ? 3 : door.side === 'W' ? -3 : 0), z: door.z + (door.side === 'S' ? 3 : door.side === 'N' ? -3 : 0) };
   const street = { x: out.x + 0.5 + (door.side === 'E' ? 2 : door.side === 'W' ? -2 : 0), y: bp.y0 + 1, z: out.z + 0.5 + (door.side === 'S' ? 2 : door.side === 'N' ? -2 : 0) };
   mkdirSync(shotsDir, { recursive: true });
   const yawDeg = door.side === 'S' ? 0 : door.side === 'N' ? 180 : door.side === 'E' ? 90 : -90;
-  const page = await launchPage(`${url.replace(/\/$/, '')}/?x=${street.x}&z=${street.z}&y=${street.y}&yaw=${yawDeg}&time=${time}&fresh=1&mode=creative&quality=light&rd=4`, { width: 1280, height: 800 });
+  const page = await launchPage(`${url.replace(/\/$/, '')}/?x=${street.x}&z=${street.z}&y=${street.y}&yaw=${yawDeg}&time=${time}&fresh=1&mode=creative&quality=light&rd=${rd}`, { width: 1280, height: 800 });
   const log = [];
   try {
     await page.waitForGame();
@@ -314,11 +320,11 @@ async function walkHost(programId, lot, layout, url, shotsDir, { time = 0.45, ro
     const g = W(path[path.length - 1]);
     const pos = await page.evaluate(`__p3.go(${g.x}, ${g.y}, ${g.z}, false)`);
     if (pos && Math.abs(pos[1] - g.y) > 1.6) falls++;
-    // 3. the signature room: look toward its far side from the cell we stand on
-    const cx = stat.x + stat.w / 2, cz = stat.z + stat.d / 2;
-    const dx = cx - g.x, dz = cz - g.z;
-    const look = (Math.abs(dx) + Math.abs(dz) < 1) ? { x: g.x + (stat.w >= stat.d ? 2 : 0), z: g.z + (stat.w >= stat.d ? 0 : 2) } : { x: g.x + dx * 1.5, z: g.z + dz * 1.5 };
-    await page.evaluate(`__p3.aimAt(${look.x}, ${g.y + 1.0}, ${look.z}); 'ok'`);
+    // 3. the room: from the corner, look at its centre a little below eye height so floor and furniture are in frame
+    const wcx = stat.x + stat.w / 2, wcz = stat.z + stat.d / 2;
+    const dx = wcx - g.x, dz = wcz - g.z;
+    const look = (Math.abs(dx) + Math.abs(dz) < 1) ? { x: g.x + (stat.w >= stat.d ? 2 : 0), z: g.z + (stat.w >= stat.d ? 0 : 2) } : { x: wcx, z: wcz };
+    await page.evaluate(`__p3.aimAt(${look.x}, ${g.y + 0.9}, ${look.z}); 'ok'`);
     await page.sleep(2500);
     await page.evaluate('__p3.frames(10)');
     const roomShot = `${shotsDir}/${programId}.png`;
@@ -330,8 +336,9 @@ async function walkHost(programId, lot, layout, url, shotsDir, { time = 0.45, ro
 
 /**
  * CLI: node scripts/programs/<program>.mjs [--seed 1337] [--json out.json] [--verbose]
- *        [--url http://localhost:PORT/ [--host lotId] [--shots /tmp/p3-shots] [--time 0.45] [--room kindPattern]]
- * (--time is the game clock fraction for the walk, 0.0 midnight, 0.5 noon; --room walks to that room instead of the signature room)
+ *        [--url http://localhost:PORT/ [--host lotId] [--shots /tmp/p3-shots] [--time 0.45] [--room kindPattern] [--rd 4]]
+ * (--time is the game clock fraction for the walk, 0.0 midnight, 0.5 noon; --room walks to that room instead of the signature
+ *  room; --rd is the render distance in chunks - landmark halls longer than 64 blocks need 8)
  */
 export async function runProgramTest(programId, argv = process.argv.slice(2)) {
   const a = parseArgs(argv);
@@ -359,7 +366,7 @@ export async function runProgramTest(programId, argv = process.argv.slice(2)) {
     const lot = hostId !== null ? hosts.find((l) => l.id === hostId) : (hosts.filter((l) => rep.results.find((r) => r.lotId === l.id && r.ok)).sort((p, q) => (q.w * q.d) - (p.w * p.d))[0] || hosts[0]);
     if (!lot) { console.log('no host to walk'); process.exit(exit || 1); }
     try {
-      const walk = await walkHost(programId, lot, layout, String(a.url), a.shots || '/tmp/p3-shots', { time: a.time !== undefined ? parseFloat(a.time) : 0.45, room: a.room ? String(a.room) : null });
+      const walk = await walkHost(programId, lot, layout, String(a.url), a.shots || '/tmp/p3-shots', { time: a.time !== undefined ? parseFloat(a.time) : 0.45, room: a.room ? String(a.room) : null, rd: a.rd !== undefined ? parseInt(a.rd, 10) : 4 });
       console.log(`walk lot ${walk.lotId}: street -> door -> ${walk.room} in ${walk.pathCells} cells, falls ${walk.falls}, page exceptions ${walk.exceptions}`);
       for (const l of walk.log) console.log('  ' + l);
       if (walk.falls > 0) exit = exit || 1;

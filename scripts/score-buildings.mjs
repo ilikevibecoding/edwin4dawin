@@ -314,7 +314,8 @@ export function formatScores(rep) {
     if (!b.failing.length && !b.hard.length) L.push(`- total below ${b.threshold}: ${CATEGORIES.filter((k) => b.ratings[k] < 5).map((k) => `${k} ${b.ratings[k]}`).join(', ')}`);
     L.push('');
   }
-  L.push('## Every building', '', '| Lot | Name | Purpose | District | Program | ' + CATEGORIES.map((k) => k.slice(0, 5)).join(' | ') + ' | Total | Pass |', '|---:|---|---|---|---|' + CATEGORIES.map(() => '---:').join('|') + '|---:|---|');
+  const SHORT = { identity: 'ident', plan: 'plan', interior: 'interior', interactions: 'interact', npc: 'npc', economy: 'econ', story: 'story', light: 'light', access: 'access', technical: 'tech' };
+  L.push('## Every building', '', '| Lot | Name | Purpose | District | Program | ' + CATEGORIES.map((k) => SHORT[k] || k).join(' | ') + ' | Total | Pass |', '|---:|---|---|---|---|' + CATEGORIES.map(() => '---:').join('|') + '|---:|---|');
   for (const b of rep.buildings) L.push(`| ${b.id} | ${b.sign || b.name} | ${b.purposeKind || ''} | ${b.district} | ${b.program || ''} | ${CATEGORIES.map((k) => b.ratings[k]).join(' | ')} | ${b.total} | ${b.pass ? 'yes' : (b.hard.length ? 'HARD' : 'no')} |`);
   return L.join('\n') + '\n';
 }

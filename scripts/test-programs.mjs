@@ -101,7 +101,7 @@ test('B6 every program room kind has a template (program registry, library, adap
   const untemplated = specs.filter(({ p, r }) => p.id !== 'senate' && !templateFor(r)).map(({ p, r }) => `${p.id}/${r.kind}`);
   assert.deepEqual(untemplated, [], `program rooms without a template: ${untemplated.join(', ')}`);
   const fallbacks = specs.filter(({ p, r }) => p.id !== 'senate' && !PROGRAM_ROOMS[r.kind] && !ROOMS[r.kind] && !ADAPTATION_BY_KIND[r.kind]).map(({ p, r }) => `${p.id}/${r.kind} -> ${templateFor(r).name}`);
-  const newKinds = [...kinds, ...Object.keys(ADAPTATION_BY_KIND)].filter((k) => !ROOM_FUNCTIONS[k]).sort();
+  const newKinds = [...new Set([...kinds, ...Object.keys(ADAPTATION_BY_KIND)])].filter((k) => !ROOM_FUNCTIONS[k]).sort();
   for (const k of newKinds) { const f = roomFunction(k); assert.ok(f && f.jobs && f.jobs.length, `${k}: no staffing function`); }
   console.log(`     ${newKinds.length} room kinds new to W4's table, all inferring a function; library fallbacks by accept pattern: ${fallbacks.join(', ') || 'none'}`);
 });
