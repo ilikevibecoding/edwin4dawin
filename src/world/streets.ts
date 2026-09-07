@@ -575,6 +575,9 @@ const UNIT = {
   tube: new THREE.CylinderGeometry(0.5, 0.5, 1, 8, 1, true).toNonIndexed(),
   /** octagonal plate of diameter 1 in the y-z plane facing +x */
   plate: new THREE.CircleGeometry(0.5, 8).rotateY(Math.PI / 2).toNonIndexed(),
+  /** hexagonal discs of diameter 1 in the x-y plane facing +z / -z: a car's wheels seen from the kerb (6 triangles each) */
+  wheelP: new THREE.CircleGeometry(0.5, 6).toNonIndexed(),
+  wheelM: new THREE.CircleGeometry(0.5, 6).rotateY(Math.PI).toNonIndexed(),
   sphere: new THREE.SphereGeometry(0.5, 8, 6).toNonIndexed(),
 };
 
@@ -630,15 +633,22 @@ const SILL = { low: C.sill };
  *  glass and whose roof is the paint (28 triangles), or a van as one belted box with a dark glass band (28) — in
  *  `soup`, with its far shape (one open box in the paint, 10) in `far`; the frame's +x is the length, `cabinX` sets the
  *  cabin toward the nose (< 0) or the tail. At eye level (round 7) the two plain boxes read as freight containers
- *  at the kerb: no wheels, no glass line, a dark slab for a cabin. */
+ *  at the kerb: no wheels, no glass line, a dark slab for a cabin. Round 16 (the walk_2m read: a wheel-less white
+ *  box floating 0.2 m over the gutter): four hexagonal wheel discs on the flanks, 0.64 m across, hanging from the
+ *  sill to the road (24 triangles, near shape only). */
 function parkedCar(soup: KitSoup, far: KitSoup, f: THREE.Matrix4, paint: THREE.Color, van: boolean, cabinX: number): void {
+  const wheels = (len: number, wid: number, r: number) => {
+    for (const wx of [-1, 1]) for (const wz of [-1, 1]) part(soup, wz > 0 ? UNIT.wheelP : UNIT.wheelM, f, wx * (len * 0.5 - 0.85), r, wz * (wid * 0.5 + 0.005), 2 * r, 2 * r, 1, C.sill, 0.8, 0);
+  };
   if (van) {
     part(soup, UNIT.carBody, f, 0, 1.0, 0, 5.0, 1.6, 1.95, paint, 0.4, 0.5, EM_NONE, 0, 0, 0, SILL);
     part(soup, UNIT.boxOpen, f, cabinX * 5, 1.2, 0, 1.2, 0.55, 1.97, C.glassDark, 0.3, 0.5);
+    wheels(5.0, 1.95, 0.36);
     part(far, UNIT.boxOpen, f, 0, 1.0, 0, 5.0, 1.6, 1.95, paint, 0.4, 0.5);
   } else {
     part(soup, UNIT.carBody, f, 0, 0.55, 0, 4.4, 0.7, 1.8, paint, 0.35, 0.6, EM_NONE, 0, 0, 0, SILL);
     part(soup, UNIT.cabin, f, cabinX, 1.22, 0, 2.5, 0.62, 1.62, C.glassDark, 0.3, 0.5, EM_NONE, 0, 0, 0, { high: paint });
+    wheels(4.4, 1.8, 0.32);
     part(far, UNIT.boxOpen, f, 0, 0.7, 0, 4.4, 1.3, 1.8, paint, 0.4, 0.5);
   }
 }
@@ -2024,9 +2034,11 @@ export class Streets {
     this.uniforms.uSignalTime.value = time;
     this.uniforms.uNight.value = night;
     // warm high-pressure sodium / warm-white LED mix; the pools scale with the night factor like the lamp heads.
-    // 0.35: under the x3.5 night exposure a 0.7 gain clipped the pool centres to one flat tan on asphalt and
-    // concrete alike (sRGB ~185 on both); at 0.35 the centre of a pool on asphalt sits near sRGB 120 and grades out
-    this.lights.uLampColor.value.set(1.0, 0.78, 0.5).multiplyScalar(0.35 * night * (this.poolsEnabled ? 1 : 0));
+    // 0.48: under the x3.5 night exposure a 0.7 gain clipped the pool centres to one flat tan on asphalt and
+    // concrete alike (sRGB ~185 on both); at 0.35 the centre of a pool on asphalt sat near sRGB 120 but from 200 m
+    // up, under the moon, the pools were a faint warmth between the lamp dots (round 16 night read) — 0.48 keeps
+    // the gradient and lets the lit streets read as lines from the air
+    this.lights.uLampColor.value.set(1.0, 0.78, 0.5).multiplyScalar(0.48 * night * (this.poolsEnabled ? 1 : 0));
   }
 
   /** Per-frame culling: cells in view within FAR (small kits within SMALL_FAR); the large kits cast into the fine

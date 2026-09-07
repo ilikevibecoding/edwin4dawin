@@ -658,8 +658,11 @@ float roadCrown = 0.0; // signed 2 % cross-fall of the carriageway, applied to t
     float patchRim = patchOn * max(pout - pin, 0.0) * (1.0 - smoothstep(0.1, 0.3, fp));
     float patchTone = ph > 0.94 ? 1.32 : 0.62;
     // sealed longitudinal joint at every lane edge (a 4.5 cm tar line, black: under the painted lines where there are
-    // any, in the open between the double yellow) and transverse joints every ~27 m
-    float seam = mix(aaLine(min(lp, laneW - lp), 0.045, fwX), 0.0, smoothstep(0.3, 1.0, fwX));
+    // any, in the open between the double yellow) and transverse joints every ~27 m. On a local street the centre
+    // joint runs under the dashed yellow itself (the lane grid there is offset 0.1 m for the wheel paths: as a seam
+    // it drew a pair of black lines flanking the dashes, a tramline down every residential street)
+    float seamX = width >= 11.5 || lanes >= 3.5 ? min(lp, laneW - lp) : min(abs(xm), abs(abs(xm) - 3.4));
+    float seam = mix(aaLine(seamX, 0.045, fwX), 0.0, smoothstep(0.3, 1.0, fwX));
     float tseam = mix(aaLine((fract(along / 27.0) - 0.5) * 27.0, 0.04, fwA), 0.0, smoothstep(0.3, 1.0, fwA)) * step(0.4, hash11(floor(along / 27.0) + cls));
     // cracking where a low-frequency zone says the pavement is old: thin dark ridges, and at eye level the polygon
     // network of alligator cracking (0.4 m cells) in the worst of it; both gone once a pixel covers 35 cm
@@ -693,7 +696,7 @@ float roadCrown = 0.0; // signed 2 % cross-fall of the carriageway, applied to t
     surf = mix(surf, asphalt * patchTone, repair * 0.92);
     surf = mix(surf, asphalt * trenchTone, trench * 0.9);
     // a cracked zone is also a shade darker as a whole (the cracks themselves are gone from the air)
-    surf *= 1.0 - (0.38 * max(seam, tseam) + 0.45 * mfJoint + 0.42 * max(crack, tcrack) + 0.45 * patchRim + 0.08 * crackZone) * (1.0 - inBox);
+    surf *= 1.0 - (0.3 * max(seam, tseam) + 0.45 * mfJoint + 0.42 * max(crack, tcrack) + 0.45 * patchRim + 0.08 * crackZone) * (1.0 - inBox);
     surf *= 1.0 - 0.14 * smoothstep(0.6, 0.75, fbm3(wp * 0.04 + 8.0)) * (1.0 - inBox);
     surf = mix(surf, surf * vec3(0.7, 0.65, 0.57) * (0.8 + 0.4 * gStreak), gutter);
     surf *= 1.0 - 0.3 * kerbSeam;
@@ -1078,7 +1081,7 @@ export function createRoadMaterial(lights: RoadLightUniforms): THREE.MeshStandar
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * lampPools(vWorldPosR);');
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'road-v7';
+  mat.customProgramCacheKey = () => 'road-v8';
   return mat;
 }
 

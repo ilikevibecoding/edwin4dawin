@@ -23,6 +23,8 @@ interface ChunkMesh extends BatchSource {
   loFar: boolean;
   /** the camera and mirror leave this mesh's cells out beyond this distance (lamps: their dots take over) */
   far: number;
+  /** the mirror alone leaves this mesh's cells out beyond this (street lamps: LAMP_MIRROR_FAR) */
+  mirrorFar: number;
   /** the mirror and the shadow passes draw the coarse shape at every distance (lamps: a 4-gon pole throws the same
    *  shadow and blurs to the same reflection as an 8-gon, at a third of the triangles) */
   coarseAux: boolean;
@@ -70,6 +72,10 @@ export const PROP_TALL_PX = 3;
  *  beyond MIRROR_SMALL_DISTANCE and everything beyond MIRROR_FAR (cell distances) */
 export const MIRROR_SMALL_DISTANCE = 800;
 export const MIRROR_FAR = 3500;
+/** the lamps leave the mirror beyond this: a 0.15 m pole and its head are under a texel of the half-resolution,
+ *  roughness-blurred reflection there (15-18 k triangles a view of coarse poles at 200 m up, nothing visible; the
+ *  high masts, which do read in the water from afar, are not lamps of this kind) */
+const LAMP_MIRROR_FAR = 250;
 /** objects at least this thick make up the shadow proxies drawn by the coarse cascades (a 2 m crate is under a texel there) */
 const PROXY_SIZE = 2.5;
 const _perCascade = new Array<number>(MAX_CASCADES).fill(0);
@@ -450,7 +456,7 @@ export class Props {
       b.boxes.sort((u, v) => Number(isLarge(v)) - Number(isLarge(u)));
       /** `perVertex`: the unit carries colour / parameters per vertex (lamp) instead of per instance; `loFar`: the
        *  coarse shape is for the far distance (beyond SMALL_DISTANCE) rather than LOD_DISTANCE */
-      const make = (list: Placement[], hi: THREE.BufferGeometry, lo: THREE.BufferGeometry | null, perVertex: boolean, batches: [PropBatches, PropBatches | null], loFar = false, far = Infinity, coarseAux = false) => {
+      const make = (list: Placement[], hi: THREE.BufferGeometry, lo: THREE.BufferGeometry | null, perVertex: boolean, batches: [PropBatches, PropBatches | null], loFar = false, far = Infinity, coarseAux = false, mirrorFar = Infinity) => {
         if (!list.length) return;
         const geo = hi.clone();
         const params = perVertex ? null : new THREE.InstancedBufferAttribute(new Float32Array(list.length * 2), 2);
@@ -475,7 +481,7 @@ export class Props {
           loGeo = lo.clone();
           if (params) loGeo.setAttribute('aMatParams', params);
         }
-        const entry: ChunkMesh = { mesh, large, total: list.length, mainCount: list.length, hi: geo, lo: loGeo, loFar, far, coarseAux, batches, cellsLarge: null, cellsAll: null, inCamera: null, cameraCells: null, inMirror: null, mirrorCells: null, inShadow: new Array(MAX_CASCADES).fill(null), shadowCells: new Array(MAX_CASCADES).fill(null), matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: params ? [params.array as Float32Array] : [] };
+        const entry: ChunkMesh = { mesh, large, total: list.length, mainCount: list.length, hi: geo, lo: loGeo, loFar, far, mirrorFar, coarseAux, batches, cellsLarge: null, cellsAll: null, inCamera: null, cameraCells: null, inMirror: null, mirrorCells: null, inShadow: new Array(MAX_CASCADES).fill(null), shadowCells: new Array(MAX_CASCADES).fill(null), matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: params ? [params.array as Float32Array] : [] };
         // the coarse cascades only see the large prefix; the fine ones (and any non-CSM light) see all
         mesh.onBeforeShadow = () => { mesh.count = activeShadowPassIsFine() ? entry.total : entry.large; };
         mesh.onAfterShadow = () => { mesh.count = entry.mainCount; };
@@ -489,7 +495,7 @@ export class Props {
       make(b.boxes, unitBox, unitBoxLo, false, [boxBatches, boxLoBatches], true);
       make(b.cylLarge, cylHi, null, false, [cylHiBatches, null]);
       make(b.cylSmall, cylHi, cylLo, false, [cylHiBatches, cylLoBatches]);
-      for (const kind of LAMP_KINDS) make(b.lamps[kind], lampHi[kind], lampLo[kind], true, lampBatches[kind], false, LAMP_FAR, true);
+      for (const kind of LAMP_KINDS) make(b.lamps[kind], lampHi[kind], lampLo[kind], true, lampBatches[kind], false, LAMP_FAR, true, kind === 'mast' ? Infinity : LAMP_MIRROR_FAR);
       chunk.box.getBoundingSphere(sphere);
       chunk.center.copy(sphere.center); chunk.r = sphere.radius; chunk.height = chunk.box.max.y - chunk.box.min.y;
       this.chunks.push(chunk);
@@ -628,10 +634,10 @@ export class Props {
     const inViewBox = (box: THREE.Box3) => cull.boxInView(box), inMirrorBox = (box: THREE.Box3) => cull.boxInMirror(box);
     // how much of a cell the mirror draws: everything near, the large prefix to MIRROR_FAR, nothing beyond (and
     // nothing of the current mesh beyond its own far distance)
-    let meshFar = Infinity;
+    let meshFar = Infinity, meshMirrorFar = Infinity;
     const mirrorCountOf = (c: PropCell): number => {
       const d = c.box.distanceToPoint(camPos);
-      return d > MIRROR_FAR || d > meshFar ? 0 : d > MIRROR_SMALL_DISTANCE ? c.nLarge : c.count;
+      return d > MIRROR_FAR || d > meshFar || d > meshMirrorFar ? 0 : d > MIRROR_SMALL_DISTANCE ? c.nLarge : c.count;
     };
     /** true where a group of props `height` metres tall at distance `d` is under both pixel thresholds */
     const subpixel = (d: number, height: number): boolean => d > propFar && height * pxPerMetre < PROP_TALL_PX * d;
@@ -645,7 +651,7 @@ export class Props {
       const inView = cull.boxInView(c.box);
       const bits = c.bits & ~proxyBits;
       for (const e of c.meshes) {
-        meshFar = e.far;
+        meshFar = e.far; meshMirrorFar = e.mirrorFar;
         const far = d > Math.min(SMALL_DISTANCE, e.far);
         const n = subpixel(d, c.height) ? 0 : far ? e.large : e.total;
         e.mainCount = n;
@@ -676,7 +682,7 @@ export class Props {
         const cast = maskCasts(mask);
         // the water mirrors the chunk meshes within the reflection range (distance to the mesh's bounding sphere)
         const sphere = e.mesh.boundingSphere!;
-        const mirrored = drawn && Math.max(0, sphere.center.distanceTo(camPos) - sphere.radius) <= Math.min(mirrorRange, MIRROR_FAR);
+        const mirrored = drawn && Math.max(0, sphere.center.distanceTo(camPos) - sphere.radius) <= Math.min(mirrorRange, MIRROR_FAR, e.mirrorFar);
         if (!this.place(e, mirrored ? cells : null, coarsePb.mirror, 'inMirror', inMirrorBox, mirrorCountOf)) mask |= 1 << LAYER_MIRROR;
         e.mesh.visible = mask !== 0;
         e.mesh.castShadow = cast;
