@@ -663,13 +663,16 @@ float roadCrown = 0.0; // signed 2 % cross-fall of the carriageway, applied to t
     float tseam = mix(aaLine((fract(along / 27.0) - 0.5) * 27.0, 0.04, fwA), 0.0, smoothstep(0.3, 1.0, fwA)) * step(0.4, hash11(floor(along / 27.0) + cls));
     // cracking where a low-frequency zone says the pavement is old: thin dark ridges, and at eye level the polygon
     // network of alligator cracking (0.4 m cells) in the worst of it; both gone once a pixel covers 35 cm
-    float crackZone = smoothstep(0.42, 0.62, fbm3(wp * 0.045 + 3.0));
+    float crackZone = smoothstep(0.48, 0.66, fbm3(wp * 0.045 + 3.0));
     float cr = abs(vnoise(wp * 0.7) - 0.5);
     float crackFade = 1.0 - smoothstep(0.08, 0.35, fp);
     float crack = (1.0 - smoothstep(0.0, 0.02 + fp * 0.8, cr)) * crackZone * crackFade;
     if (crackZone > 0.02 && fp < 0.35) {
+      // the alligator network sits in 2-4 m patches (an fbm gate, soft-edged) and mostly in the wheel paths, where
+      // the fatigue is — not as a mesh over the whole carriageway
       float ce = cellEdge(wp * 2.4 + 3.0);
-      float alligator = (1.0 - smoothstep(0.0, 0.035 + fp * 1.2, ce)) * smoothstep(0.3, 0.75, crackZone) * crackFade * step(0.35, fbm3(wp * 0.11 + 6.0));
+      float patchy = smoothstep(0.5, 0.62, fbm3(wp * 0.11 + 6.0)) * (0.3 + 0.7 * wheel);
+      float alligator = (1.0 - smoothstep(0.0, 0.035 + fp * 1.2, ce)) * smoothstep(0.3, 0.75, crackZone) * crackFade * patchy;
       crack = max(crack, alligator);
     }
     // transverse thermal cracks: a wavy line across the lane every 7-13 m in three cells of five, sealed black
@@ -683,19 +686,20 @@ float roadCrown = 0.0; // signed 2 % cross-fall of the carriageway, applied to t
     float kerbSeam = smoothstep(hw - 0.35, hw - 0.08, abs(xm)) * (1.0 - inBox) * (1.0 - smoothstep(0.2, 0.7, fp));
     float gStreak = mix(vnoise(vec2(along * 0.6, xm * 3.0) + 9.0), 0.5, smoothstep(0.3, 1.2, fwA));
     float litterMask = smoothstep(hw - 0.55, hw - 0.3, abs(xm)) * (1.0 - inBox) * (1.0 - smoothstep(0.05, 0.15, fp));
-    float litter = step(0.68, vnoise(wp * 9.0 + 4.0)) * litterMask;
-    float grit = step(0.6, vnoise(wp * 14.0 + 8.0)) * litterMask;
+    float litter = step(0.72, vnoise(wp * 9.0 + 4.0)) * litterMask;
+    float grit = step(0.62, vnoise(wp * 14.0 + 8.0)) * litterMask;
     vec3 surf = asphalt * wear;
     surf = mix(surf, asphalt * mfTone * wear, mfInner);
     surf = mix(surf, asphalt * patchTone, repair * 0.92);
     surf = mix(surf, asphalt * trenchTone, trench * 0.9);
     // a cracked zone is also a shade darker as a whole (the cracks themselves are gone from the air)
-    surf *= 1.0 - (0.38 * max(seam, tseam) + 0.45 * mfJoint + 0.5 * max(crack, tcrack) + 0.45 * patchRim + 0.08 * crackZone) * (1.0 - inBox);
+    surf *= 1.0 - (0.38 * max(seam, tseam) + 0.45 * mfJoint + 0.42 * max(crack, tcrack) + 0.45 * patchRim + 0.08 * crackZone) * (1.0 - inBox);
     surf *= 1.0 - 0.14 * smoothstep(0.6, 0.75, fbm3(wp * 0.04 + 8.0)) * (1.0 - inBox);
     surf = mix(surf, surf * vec3(0.7, 0.65, 0.57) * (0.8 + 0.4 * gStreak), gutter);
     surf *= 1.0 - 0.3 * kerbSeam;
-    surf = mix(surf, vec3(0.30, 0.22, 0.10) * (0.8 + 0.4 * n3), litter * 0.85);
-    surf = mix(surf, vec3(0.34, 0.32, 0.29), grit * 0.5);
+    // the litter is a shade above the asphalt, not a paint splash: dead leaves and mulch at 0.16, grit at 0.24
+    surf = mix(surf, vec3(0.17, 0.13, 0.07) * (0.8 + 0.4 * n3), litter * 0.85);
+    surf = mix(surf, vec3(0.25, 0.24, 0.22), grit * 0.45);
     // ---- markings, each box-filtered over the pixel footprint and faded out where they stop at junctions
     float wearM = (0.6 + 0.4 * smoothstep(0.3, 0.7, fbm3(wp * 0.35 + 11.0))) * (1.0 - 0.45 * frontage);
     float lineOK = mix(1.0, aaStep(5.0, a, fwA), fBox + fStop + fLadder + fLines > 0.5 ? 1.0 : 0.0);
@@ -1074,7 +1078,7 @@ export function createRoadMaterial(lights: RoadLightUniforms): THREE.MeshStandar
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * lampPools(vWorldPosR);');
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'road-v6';
+  mat.customProgramCacheKey = () => 'road-v7';
   return mat;
 }
 
