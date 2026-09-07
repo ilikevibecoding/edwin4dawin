@@ -13,6 +13,8 @@ p=$$
 while [ "$p" -gt 1 ]; do
   # the hourly snapshot owns slot 3 outright (nothing else may take it) so the user-facing page never waits
   if tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q 'tools/progress-snapshot.sh'; then CANDIDATES="3 2 0 1"; break; fi
+  # the lead's verification captures (tools/lead-capture.sh) take slot 2 ahead of the builder queue
+  if tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q 'tools/lead-capture.sh'; then CANDIDATES="2 0 1"; break; fi
   p=$(awk '/^PPid:/{print $2}' "/proc/$p/status" 2>/dev/null) || break
   [ -n "$p" ] || break
 done
