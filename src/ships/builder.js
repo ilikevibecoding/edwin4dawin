@@ -47,7 +47,9 @@ export function planXZ(xa, za, xb, zb, keep) { return planeThrough([xa, 0, za], 
 const mirrorPlane = ([a, b, c, d], w) => [-a, b, c, d - a * w];
 // clips one cell's shape by a grid plane: the new shape code, or -1 when the cell is gone
 function clipCell(shape, [a, b, c, d], x, y, z) { return cutShape(shape, [a, b, c, d - a * x - b * y - c * z]); }
-const isCubeBlock = (id) => { const s = BLOCKS[id].shape; return s === SHAPE.CUBE || s === SHAPE.LIQUID; };
+// node consumers (the economy sim, tests) may build ship models before initBlocks() ran: an unregistered id is
+// treated as a plain cube, which is what every hull material is
+const isCubeBlock = (id) => { const b = BLOCKS[id]; if (!b || b.shape === undefined) return true; return b.shape === SHAPE.CUBE || b.shape === SHAPE.LIQUID; };
 // Animation channels (index into the per-instance state vec4)
 export const CH = { GEAR: 0, CLASS: 1, DOOR: 2, LIGHTS: 3 };
 export const CHANNEL_NAMES = ['gear', 'class', 'door', 'lights'];
