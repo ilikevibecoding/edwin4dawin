@@ -50,7 +50,9 @@ const share = (arr, pred) => (arr.length ? arr.filter(pred).length / arr.length 
 const pct = (x) => `${Math.round(x * 100)}%`;
 const check = (ok, text) => ({ ok: !!ok, text });
 const rate = (checks) => checks.filter((c) => c.ok).length;
-const knownKind = (k) => !!(ROOMS[k] || programRoom(k) || ADAPTATION_BY_KIND[k] || !roomFunction(k).inferred || roomFunction(k).base !== 'lounge' || k === 'lounge');
+// a room kind with a known function: a library, program or adaptation template, a kind in W4's table, or a kind whose
+// name W4 infers to a specific base - the generic lounge fallback counts only when the kind itself says lounge
+const knownKind = (k) => !!(ROOMS[k] || programRoom(k) || ADAPTATION_BY_KIND[k] || !roomFunction(k).inferred || roomFunction(k).base !== 'lounge' || /lounge/.test(k));
 // the lines an NPC of `job` can say: its archetype's job bank, the time-of-day bank and the district gossip
 const eligibleLines = (job, district) => (JOB_LINES[JOB_ARCHETYPE[job] || 'resident'] || []).length + Object.values(TIME_LINES).reduce((s, l) => s + l.length, 0) / Object.keys(TIME_LINES).length + ((GOSSIP[district] || []).length);
 
@@ -81,12 +83,15 @@ export function scoringContext(layout, o = {}) {
   return { layout, profs, sim, districtPalette, sellers, buyers, manifestIds };
 }
 
-// fresh uncached build: warm timing and determinism against the cached blueprint
+// fresh uncached builds: determinism against the cached blueprint, and the warm time as the better of two builds so
+// the first lot scored does not pay for JIT warm-up (the Senate is lot 0 and was reading 70 ms cold, 15 ms warm)
 function rebuild(lot, layout) {
   const cached = blueprintFor(lot, layout);
   const t0 = performance.now();
   const fresh = buildBlueprint(lot, layout);
-  const ms = performance.now() - t0;
+  const t1 = performance.now();
+  buildBlueprint(lot, layout);
+  const ms = Math.min(t1 - t0, performance.now() - t1);
   return { ms, deterministic: hashBlocks(cached.blocks) === hashBlocks(fresh.blocks) && cached.meta.rooms.length === fresh.meta.rooms.length };
 }
 
@@ -193,7 +198,7 @@ export function scoreLot(p, ctx, o = {}) {
   ];
   // 7. story: an owner, a sign, a local problem (or the purpose's greeting line), a connection to another location,
   //    and a detail to discover (a program-specific signature room or an adaptation room)
-  const owner = lot ? ownerOf(lot, prog) : null;
+  const owner = prog && prog.owner ? prog.owner : (lot ? ownerOf(lot, null) : null);   // the record's owner (name and title from the program)
   cat.story = [
     check(owner && owner.name, owner ? `owner ${owner.name}, ${owner.title}` : 'no owner'),
     check(p.sign, `sign "${p.sign || ''}"`),

@@ -5,40 +5,40 @@
 | District | Buildings | Programs | Mean score |
 |---|---:|---:|---:|
 | residential | 149 | 15 | 97.4 |
-| financial | 147 | 15 | 96.6 |
-| industrial | 59 | 11 | 97.3 |
-| entertainment | 47 | 12 | 97.9 |
-| senate | 18 | 6 | 96.0 |
-| market | 13 | 5 | 98.0 |
+| financial | 147 | 15 | 96.7 |
+| industrial | 59 | 11 | 97.5 |
+| entertainment | 47 | 12 | 98.2 |
+| senate | 18 | 6 | 96.3 |
+| market | 13 | 5 | 98.1 |
 
 | Lot | Name | Purpose | District | Program | Owner | Floors | Rooms | Nearest sibling | Score |
 |---:|---|---|---|---|---|---:|---:|---|---:|
-| 0 | [Galactic Senate](0.md) | ministry | senate | senate | Nalo Pelltak | 5 | 47 | [lot 8](8.md), 7/7 axes | 88.4 (below) |
-| 1 | [Jedi Temple](1.md) | temple_annex | financial | jedi_temple | Teyuna Menddar | 31 | 188 | only one of its kind | 90.8 |
+| 0 | [Galactic Senate](0.md) | ministry | senate | senate | Nalo Pelltak | 5 | 47 | [lot 8](8.md), 7/7 axes | 92.8 |
+| 1 | [Jedi Temple](1.md) | temple_annex | financial | jedi_temple | Teyuna Menddar | 31 | 182 | only one of its kind | 96.4 |
 | 2 | [Monument Plaza](2.md) | museum | financial | gallery | Falyn Wexwan | 3 | 19 | [lot 250](250.md), 7/7 axes | 91.2 |
 | 3 | [Uscru undercity strip](3.md) | cantina | entertainment | cantina_club | Greel Davvos | 4 | 46 | [lot 39](39.md), 7/7 axes | 97.6 |
 | 4 | [The Works foundry](4.md) | foundry | industrial | utility_plant | Brenon Essfell | 8 | 103 | [lot 102](102.md), 7/7 axes | 98.4 |
-| 5 | [CoCo Town market halls](5.md) | market_stall | market | market_arcade | Lunik Narrsol | 2 | 54 | [lot 123](123.md), 7/7 axes | 97.6 |
-| 6 | [Galaxies Opera House](6.md) | holo_theatre | entertainment | opera_house | Polum Zellulo | 11 | 148 | [lot 438](438.md), 7/7 axes | 90.4 |
-| 7 | [500 Republica](7.md) | luxury_residences | residential | affluent_apartments | Teyala Mendiss | 38 | 675 | [lot 185](185.md), 6/7 axes | 97.6 |
+| 5 | [CoCo Town market halls](5.md) | market_stall | market | market_arcade | Lunik Narrsol | 2 | 54 | [lot 123](123.md), 7/7 axes | 98.4 |
+| 6 | [Galaxies Opera House](6.md) | holo_theatre | entertainment | opera_house | Polum Zellulo | 11 | 148 | [lot 438](438.md), 7/7 axes | 98.4 |
+| 7 | [500 Republica](7.md) | luxury_residences | residential | affluent_apartments | Teyala Mendiss | 38 | 675 | [lot 185](185.md), 6/7 axes | 98.4 |
 | 8 | [Senate Office Building](8.md) | ministry | market | delegation_office | Yelara Brennkar | 23 | 417 | [lot 200](200.md), 7/7 axes | 96.4 |
-| 9 | [Grand Republic Medical Facility](9.md) | clinic | residential | clinic | Norya Pelldar | 22 | 346 | [lot 175](175.md), 7/7 axes | 97.6 |
-| 10 | [Republic Judiciary Central Detention Center](10.md) | security_station | industrial | security_station | Jorith Yavlor | 13 | 682 | [lot 384](384.md), 7/7 axes | 92 |
-| 11 | [HoloNet broadcast tower](11.md) | holonet_office | financial | broadcast_studio | Ornus Rellison | 31 | 453 | [lot 215](215.md), 7/7 axes | 95.6 |
+| 9 | [Grand Republic Medical Facility](9.md) | clinic | residential | clinic | Norya Pelldar | 22 | 346 | [lot 175](175.md), 7/7 axes | 98.4 |
+| 10 | [Republic Judiciary Central Detention Center](10.md) | security_station | industrial | security_station | Jorith Yavlor | 13 | 682 | [lot 35](35.md), 7/7 axes | 92 |
+| 11 | [HoloNet broadcast tower](11.md) | holonet_office | financial | broadcast_studio | Ornus Rellison | 31 | 453 | [lot 215](215.md), 7/7 axes | 96.4 |
 | 20 | [Kuat Service Bay 490](20.md) | repair_shop | industrial | repair_hangar | Tamac Vandison | 9 | 51 | [lot 87](87.md), 6/7 axes | 98.4 |
 | 21 | [Bespin Power Authority](21.md) | power_plant | industrial | utility_plant | Vexax Corrbex | 13 | 64 | only one of its kind | 96.4 |
-| 22 | [Drev Airspeeder Hire](22.md) | taxi_stand | industrial | transit_interchange | Paxos Prenkar | 10 | 63 | [lot 115](115.md), 5/7 axes | 97.6 |
+| 22 | [Drev Airspeeder Hire](22.md) | taxi_stand | industrial | transit_interchange | Paxos Prenkar | 10 | 63 | [lot 115](115.md), 5/7 axes | 98.4 |
 | 23 | [The Works — Line 730](23.md) | foundry | industrial | utility_plant | Zorir Lorrulo | 7 | 67 | [lot 90](90.md), 5/7 axes | 98.4 |
 | 24 | [The Works Building Supply](24.md) | hardware_store | industrial | retail_shop | Polos Pellulo | 14 | 77 | [lot 378](378.md), 7/7 axes | 98.4 |
 | 25 | [Droid Works 883](25.md) | droid_shop | industrial | droid_workshop | Talis Lorrnar | 14 | 67 | [lot 72](72.md), 6/7 axes | 98.4 |
 | 26 | [The Works Grill](26.md) | diner | industrial | diner | Toro Nermir | 7 | 32 | [lot 118](118.md), 4/7 axes | 96 |
 | 27 | [Nalto Executive Aviation](27.md) | hangar | industrial | repair_hangar | Jaxyn Mendmir | 7 | 32 | [lot 122](122.md), 7/7 axes | 98.4 |
-| 28 | [Bellith Haulage](28.md) | depot | industrial | cargo_terminal | Lununa Lomulo | 14 | 56 | [lot 53](53.md), 6/7 axes | 95.2 |
+| 28 | [Bellith Haulage](28.md) | depot | industrial | cargo_terminal | Lununa Lomulo | 14 | 56 | [lot 53](53.md), 6/7 axes | 96 |
 | 29 | [Motivator Line 633](29.md) | droid_factory | industrial | droid_workshop | Coriri Yavstro | 15 | 72 | [lot 63](63.md), 6/7 axes | 96 |
-| 30 | [Hyperlane Terminus](30.md) | transit_station | industrial | transit_interchange | Greyn Nermir | 7 | 28 | [lot 105](105.md), 6/7 axes | 94 |
+| 30 | [Hyperlane Terminus](30.md) | transit_station | industrial | transit_interchange | Greyn Nermir | 7 | 28 | [lot 105](105.md), 6/7 axes | 94.8 |
 | 31 | [Garrick's Droid Depot](31.md) | droid_shop | industrial | droid_workshop | Anior Lomdar | 7 | 38 | [lot 25](25.md), 7/7 axes | 98.4 |
 | 32 | [Kip's Broth House](32.md) | noodle_bar | industrial | diner | Ryliri Drenbane | 11 | 51 | [lot 187](187.md), 6/7 axes | 98.4 |
-| 33 | [Korrid Bulk Goods](33.md) | warehouse | industrial | cargo_terminal | Nyxani Narrbane | 13 | 62 | [lot 75](75.md), 7/7 axes | 97.6 |
+| 33 | [Korrid Bulk Goods](33.md) | warehouse | industrial | cargo_terminal | Nyxani Narrbane | 13 | 62 | [lot 75](75.md), 7/7 axes | 98.4 |
 | 34 | [Glow & Signal 563](34.md) | electronics | industrial | retail_shop | Calin Tarnine | 7 | 39 | [lot 88](88.md), 6/7 axes | 98.4 |
 | 35 | [CSF Station The Works](35.md) | security_station | industrial | security_station | Corar Ostnar | 11 | 70 | [lot 373](373.md), 5/7 axes | 96.4 |
 | 36 | [Ostrander Components Outlet](36.md) | electronics | industrial | retail_shop | Holik Fennlor | 11 | 319 | [lot 34](34.md), 6/7 axes | 98.4 |
@@ -58,19 +58,19 @@
 | 50 | [Judicial Forces Depot 240](50.md) | guard_barracks | industrial | security_station | Quinani Davmont | 7 | 74 | [lot 89](89.md), 6/7 axes | 96.4 |
 | 51 | [Salvage Yard 911](51.md) | recycling_plant | industrial | salvage_yard | Venen Pellova | 7 | 71 | [lot 119](119.md), 7/7 axes | 98.4 |
 | 52 | [Judicial Forces Depot 341](52.md) | guard_barracks | industrial | security_station | Mekella Rellander | 10 | 94 | [lot 50](50.md), 6/7 axes | 96.4 |
-| 53 | [Osmer Haulage](53.md) | depot | industrial | cargo_terminal | Uldine Ulrzan | 11 | 49 | [lot 28](28.md), 6/7 axes | 97.6 |
+| 53 | [Osmer Haulage](53.md) | depot | industrial | cargo_terminal | Uldine Ulrzan | 11 | 49 | [lot 28](28.md), 6/7 axes | 98.4 |
 | 54 | [Junk Level Recycling](54.md) | recycling_plant | industrial | salvage_yard | Torel Cadkar | 13 | 54 | [lot 119](119.md), 6/7 axes | 98.4 |
 | 55 | [The Works Coaxium Works](55.md) | refinery | industrial | utility_plant | Tala Lorrtak | 10 | 151 | [lot 117](117.md), 7/7 axes | 98.4 |
 | 56 | [Undercity Exchange 672](56.md) | pawn | entertainment | retail_shop | Norine Menddol | 7 | 93 | [lot 82](82.md), 6/7 axes | 98.4 |
 | 57 | [Sabacc Simulators 789](57.md) | holo_arcade | entertainment | gaming_house | Nalee Corrzan | 14 | 83 | [lot 71](71.md), 5/7 axes | 98.4 |
-| 58 | [Bounty Board — Uscru Guild Hall](58.md) | private_security | entertainment | security_station | Miris Pellric | 17 | 139 | [lot 406](406.md), 6/7 axes | 96.4 |
-| 59 | [Skylane Taxis 950](59.md) | taxi_stand | entertainment | transit_interchange | Boora Orline | 13 | 110 | [lot 65](65.md), 6/7 axes | 97.6 |
+| 58 | [Bounty Board — Uscru Guild Hall](58.md) | private_security | entertainment | security_station | Miris Pellric | 17 | 139 | [lot 38](38.md), 6/7 axes | 96.4 |
+| 59 | [Skylane Taxis 950](59.md) | taxi_stand | entertainment | transit_interchange | Boora Orline | 13 | 110 | [lot 65](65.md), 6/7 axes | 98.4 |
 | 60 | [Sabacc Simulators 952](60.md) | holo_arcade | entertainment | gaming_house | Aniani Tharren | 9 | 85 | [lot 71](71.md), 6/7 axes | 98.4 |
 | 61 | [The Glow Pit](61.md) | night_club | entertainment | cantina_club | Holae Corrsol | 13 | 120 | [lot 100](100.md), 6/7 axes | 98.4 |
 | 62 | [Late Shift Diner](62.md) | diner | entertainment | diner | Korik Brenntel | 9 | 85 | [lot 150](150.md), 5/7 axes | 98.4 |
 | 63 | [Chandrilan Droid Assembly 441](63.md) | droid_factory | industrial | droid_workshop | Ossara Yavison | 13 | 124 | [lot 29](29.md), 6/7 axes | 96 |
-| 64 | [Starlane Interstellar](64.md) | office | industrial | criminal_front | Ornara Zellfell | 7 | 75 | [lot 198](198.md), 6/7 axes | 97.6 |
-| 65 | [The Works Air Taxi](65.md) | taxi_stand | industrial | transit_interchange | Senek Corrsol | 7 | 104 | [lot 59](59.md), 6/7 axes | 97.6 |
+| 64 | [Starlane Interstellar](64.md) | office | industrial | criminal_front | Ornara Zellfell | 7 | 75 | [lot 198](198.md), 6/7 axes | 98.4 |
+| 65 | [The Works Air Taxi](65.md) | taxi_stand | industrial | transit_interchange | Senek Corrsol | 7 | 104 | [lot 59](59.md), 6/7 axes | 98.4 |
 | 66 | [The Works Bunkhouse](66.md) | hostel | industrial | hotel | Senus Essander | 14 | 256 | [lot 153](153.md), 7/7 axes | 98.4 |
 | 67 | [Uscru Market Stalls 985](67.md) | market_stall | entertainment | market_arcade | Ornen Holmfell | 7 | 52 | [lot 123](123.md), 6/7 axes | 98.4 |
 | 68 | [Hotel Skyhook 577](68.md) | hotel | entertainment | hotel | Harie Osttak | 10 | 69 | [lot 402](402.md), 6/7 axes | 98.4 |
@@ -80,17 +80,17 @@
 | 72 | [Yorrel's Droid Depot](72.md) | droid_shop | industrial | droid_workshop | Talir Sarrfell | 14 | 78 | [lot 104](104.md), 6/7 axes | 98.4 |
 | 73 | [Hangar 795 Maintenance](73.md) | repair_shop | industrial | repair_hangar | Greise Garrric | 7 | 18 | [lot 87](87.md), 7/7 axes | 94.8 |
 | 74 | [Maldrin Outfitters](74.md) | armorer | industrial | retail_shop | Nalee Garrwan | 14 | 102 | [lot 114](114.md), 6/7 axes | 98.4 |
-| 75 | [Vantrell Bulk Goods](75.md) | warehouse | industrial | cargo_terminal | Corise Yavlor | 7 | 38 | [lot 33](33.md), 7/7 axes | 97.6 |
+| 75 | [Vantrell Bulk Goods](75.md) | warehouse | industrial | cargo_terminal | Corise Yavlor | 7 | 38 | [lot 33](33.md), 7/7 axes | 98.4 |
 | 76 | [Corvane's Armoury](76.md) | armorer | industrial | retail_shop | Kylyra Kestquel | 8 | 51 | [lot 95](95.md), 5/7 axes | 93.6 |
 | 77 | [Judicial Forces Depot 314](77.md) | guard_barracks | industrial | security_station | Ossen Sarriss | 8 | 33 | [lot 52](52.md), 6/7 axes | 94 |
-| 78 | [Dresh Haulage](78.md) | depot | industrial | cargo_terminal | Aniac Orlstro | 8 | 37 | [lot 53](53.md), 6/7 axes | 97.6 |
-| 79 | [The Works Station](79.md) | transit_station | industrial | transit_interchange | Boath Quormont | 15 | 76 | [lot 30](30.md), 6/7 axes | 97.6 |
-| 80 | [Bass Level 710](80.md) | night_club | entertainment | cantina_club | Vinuna Junek | 7 | 134 | [lot 100](100.md), 6/7 axes | 97.6 |
+| 78 | [Dresh Haulage](78.md) | depot | industrial | cargo_terminal | Aniac Orlstro | 8 | 37 | [lot 53](53.md), 6/7 axes | 98.4 |
+| 79 | [The Works Station](79.md) | transit_station | industrial | transit_interchange | Boath Quormont | 15 | 76 | [lot 30](30.md), 6/7 axes | 98.4 |
+| 80 | [Bass Level 710](80.md) | night_club | entertainment | cantina_club | Vinuna Junek | 7 | 134 | [lot 100](100.md), 6/7 axes | 98.4 |
 | 81 | [Ulvann's Cantina](81.md) | cantina | entertainment | cantina_club | Faliri Narrek | 11 | 93 | [lot 130](130.md), 5/7 axes | 98.4 |
 | 82 | [Undercity Exchange 988](82.md) | pawn | entertainment | retail_shop | Elsala Morine | 11 | 90 | [lot 56](56.md), 6/7 axes | 98.4 |
 | 83 | [Uscru Meat Market 291](83.md) | butcher | entertainment | retail_shop | Oriee Mendander | 10 | 84 | [lot 287](287.md), 5/7 axes | 98.4 |
 | 84 | [Quorr Outfitters](84.md) | tailor | entertainment | retail_shop | Aniath Quorkar | 18 | 153 | [lot 382](382.md), 5/7 axes | 98.4 |
-| 85 | [Dockside Cargo 481](85.md) | depot | industrial | cargo_terminal | Eriine Brenndar | 10 | 94 | [lot 121](121.md), 6/7 axes | 97.6 |
+| 85 | [Dockside Cargo 481](85.md) | depot | industrial | cargo_terminal | Eriine Brenndar | 10 | 94 | [lot 121](121.md), 6/7 axes | 98.4 |
 | 86 | [Lower Level Noodles](86.md) | noodle_bar | industrial | diner | Mekess Randlor | 7 | 100 | [lot 41](41.md), 6/7 axes | 98.4 |
 | 87 | [Kuat Service Bay 777](87.md) | repair_shop | industrial | repair_hangar | Dexett Corrbex | 7 | 36 | [lot 106](106.md), 5/7 axes | 98.4 |
 | 88 | [Circuit Row 115](88.md) | electronics | industrial | retail_shop | Tamara Lorrbane | 7 | 72 | [lot 327](327.md), 6/7 axes | 98.4 |
@@ -104,13 +104,13 @@
 | 96 | [Datacron & Dust 294](96.md) | bookshop | market | retail_shop | Luneth Sarrvos | 7 | 52 | [lot 304](304.md), 6/7 axes | 98.4 |
 | 97 | [Uscru Holo-Theatre](97.md) | holo_theatre | entertainment | opera_house | Venek Pellbex | 11 | 67 | [lot 127](127.md), 6/7 axes | 98.4 |
 | 98 | [Sorvann Outfitters](98.md) | tailor | entertainment | retail_shop | Senos Preniss | 13 | 89 | [lot 256](256.md), 5/7 axes | 98.4 |
-| 99 | [Uscru Air Taxi](99.md) | taxi_stand | entertainment | transit_interchange | Mirin Lomtak | 13 | 76 | [lot 22](22.md), 6/7 axes | 97.6 |
+| 99 | [Uscru Air Taxi](99.md) | taxi_stand | entertainment | transit_interchange | Mirin Lomtak | 13 | 76 | [lot 22](22.md), 6/7 axes | 98.4 |
 | 100 | [Club Corvane](100.md) | night_club | entertainment | cantina_club | Mekya Orlsol | 15 | 119 | [lot 61](61.md), 6/7 axes | 98.4 |
 | 101 | [Gallery Vyre](101.md) | art_gallery | entertainment | gallery | Kelor Vandiss | 14 | 97 | [lot 435](435.md), 5/7 axes | 98.4 |
 | 102 | [Kyber Foundry](102.md) | foundry | industrial | utility_plant | Zoria Karrsol | 10 | 99 | [lot 90](90.md), 7/7 axes | 98.4 |
 | 103 | [Coruscant Security — Precinct 787](103.md) | security_station | industrial | security_station | Xanir Pellric | 9 | 67 | [lot 35](35.md), 6/7 axes | 96.4 |
 | 104 | [Droid Works 889](104.md) | droid_shop | industrial | droid_workshop | Eriia Antlor | 8 | 137 | [lot 72](72.md), 6/7 axes | 98.4 |
-| 105 | [Level 2335 Interchange](105.md) | transit_station | industrial | transit_interchange | Silo Tarntel | 8 | 56 | [lot 30](30.md), 6/7 axes | 97.6 |
+| 105 | [Level 2335 Interchange](105.md) | transit_station | industrial | transit_interchange | Silo Tarntel | 8 | 56 | [lot 30](30.md), 6/7 axes | 98.4 |
 | 106 | [Kuat Service Bay 560](106.md) | repair_shop | industrial | repair_hangar | Ilous Corrmont | 9 | 68 | [lot 87](87.md), 5/7 axes | 98.4 |
 | 107 | [Bellith Furnishings](107.md) | furniture_store | market | retail_shop | Ashin Rellstro | 7 | 93 | [lot 242](242.md), 6/7 axes | 98.4 |
 | 108 | [Holo-Arcade 784](108.md) | holo_arcade | entertainment | gaming_house | Poliri Sarrkar | 13 | 131 | [lot 57](57.md), 6/7 axes | 98.4 |
@@ -118,15 +118,15 @@
 | 110 | [Gallery Palluk](110.md) | art_gallery | entertainment | gallery | Koro Ilktel | 11 | 67 | [lot 336](336.md), 5/7 axes | 98.4 |
 | 111 | [The Slider Bar](111.md) | diner | entertainment | diner | Rhoa Ostander | 10 | 70 | [lot 429](429.md), 6/7 axes | 98.4 |
 | 112 | [Quorr Security Contractors](112.md) | private_security | entertainment | security_station | Belon Lomash | 15 | 99 | [lot 38](38.md), 5/7 axes | 96.4 |
-| 113 | [Ionic Freight Depot](113.md) | depot | industrial | cargo_terminal | Rylie Tharison | 9 | 91 | [lot 121](121.md), 5/7 axes | 97.6 |
+| 113 | [Ionic Freight Depot](113.md) | depot | industrial | cargo_terminal | Rylie Tharison | 9 | 91 | [lot 121](121.md), 5/7 axes | 98.4 |
 | 114 | [Juvo's Armoury](114.md) | armorer | industrial | retail_shop | Senya Stellquel | 6 | 42 | [lot 76](76.md), 6/7 axes | 96 |
-| 115 | [Yellow Fin Cabs 900](115.md) | taxi_stand | industrial | transit_interchange | Elsani Wexbane | 8 | 38 | [lot 22](22.md), 5/7 axes | 97.6 |
+| 115 | [Yellow Fin Cabs 900](115.md) | taxi_stand | industrial | transit_interchange | Elsani Wexbane | 8 | 38 | [lot 22](22.md), 5/7 axes | 98.4 |
 | 116 | [Motivator Line 461](116.md) | droid_factory | industrial | droid_workshop | Nalek Cadek | 8 | 67 | [lot 29](29.md), 6/7 axes | 98.4 |
 | 117 | [Tibanna Processing 102](117.md) | refinery | industrial | utility_plant | Teyie Morkar | 8 | 54 | [lot 55](55.md), 7/7 axes | 98.4 |
 | 118 | [Nerf Steaks 502](118.md) | diner | industrial | diner | Oriel Nerek | 8 | 45 | [lot 26](26.md), 4/7 axes | 96 |
 | 119 | [Salvage Yard 703](119.md) | recycling_plant | industrial | salvage_yard | Noris Borbex | 8 | 45 | [lot 54](54.md), 6/7 axes | 98.4 |
 | 120 | [Verpine Droid Assembly 556](120.md) | droid_factory | industrial | droid_workshop | Paxum Lorrulo | 8 | 66 | [lot 63](63.md), 7/7 axes | 96 |
-| 121 | [Yavelle Freight Depot](121.md) | depot | industrial | cargo_terminal | Dexan Ulrash | 8 | 59 | [lot 113](113.md), 5/7 axes | 94 |
+| 121 | [Yavelle Freight Depot](121.md) | depot | industrial | cargo_terminal | Dexan Ulrash | 8 | 59 | [lot 113](113.md), 5/7 axes | 94.8 |
 | 122 | [Mattock Flight Services](122.md) | hangar | industrial | repair_hangar | Dunis Thariss | 9 | 48 | [lot 27](27.md), 7/7 axes | 98.4 |
 | 123 | [Open Market 288](123.md) | market_stall | market | market_arcade | Raliri Ostek | 6 | 42 | [lot 67](67.md), 6/7 axes | 98.4 |
 | 124 | [The Sleep Pod Store](124.md) | furniture_store | market | retail_shop | Ossee Essiss | 6 | 45 | [lot 385](385.md), 6/7 axes | 98.4 |
@@ -148,18 +148,18 @@
 | 140 | [Federal District Mutual Assurance](140.md) | insurance | financial | corporate_office | Belos Ilkzan | 29 | 139 | [lot 398](398.md), 5/7 axes | 96.4 |
 | 141 | [Outer Rim Imports 217](141.md) | trade_house | financial | corporate_office | Ithum Karrbex | 25 | 222 | [lot 409](409.md), 6/7 axes | 96.4 |
 | 142 | [Estrik Legal](142.md) | law_office | financial | corporate_office | Ithala Kestnar | 14 | 104 | [lot 350](350.md), 5/7 axes | 96.4 |
-| 143 | [Outer Rim Imports 729](143.md) | trade_house | financial | criminal_front | Koren Narriss | 13 | 76 | [lot 403](403.md), 6/7 axes | 97.6 |
+| 143 | [Outer Rim Imports 729](143.md) | trade_house | financial | criminal_front | Koren Narriss | 13 | 76 | [lot 403](403.md), 6/7 axes | 98.4 |
 | 144 | [Brannick Components Outlet](144.md) | electronics | financial | retail_shop | Wenum Stellwan | 11 | 81 | [lot 392](392.md), 6/7 axes | 98.4 |
 | 145 | [Senate District District Court](145.md) | courthouse | senate | courthouse | Ossik Cadulo | 11 | 88 | [lot 227](227.md), 6/7 axes | 96.4 |
 | 146 | [CSF Garrison Senate District](146.md) | guard_barracks | senate | security_station | Norine Prenash | 16 | 104 | [lot 52](52.md), 6/7 axes | 96.4 |
 | 147 | [Level 5603 Primary](147.md) | school | residential | school | Zoryra Brennulo | 13 | 77 | [lot 241](241.md), 7/7 axes | 96.4 |
 | 148 | [Renn Towers](148.md) | apartments | residential | worker_apartments | Zebett Sarrven | 21 | 155 | [lot 286](286.md), 5/7 axes | 98.4 |
-| 149 | [Skyline Station](149.md) | transit_station | residential | transit_interchange | Xanon Pellmont | 18 | 86 | [lot 266](266.md), 5/7 axes | 97.6 |
+| 149 | [Skyline Station](149.md) | transit_station | residential | transit_interchange | Xanon Pellmont | 18 | 86 | [lot 266](266.md), 5/7 axes | 98.4 |
 | 150 | [Skyline Grill](150.md) | diner | residential | diner | Ashan Menddar | 11 | 137 | [lot 429](429.md), 5/7 axes | 98.4 |
-| 151 | [Skyline Heights](151.md) | apartments | residential | worker_apartments | Senan Rellwan | 17 | 147 | [lot 148](148.md), 5/7 axes | 97.6 |
+| 151 | [Skyline Heights](151.md) | apartments | residential | worker_apartments | Senan Rellwan | 17 | 147 | [lot 148](148.md), 5/7 axes | 98.4 |
 | 152 | [Skyline Greenhouse Supply](152.md) | garden_shop | residential | retail_shop | Mekac Drenquel | 10 | 111 | [lot 154](154.md), 7/7 axes | 98.4 |
 | 153 | [Dock Row Hostel 885](153.md) | hostel | residential | hotel | Wenath Garrren | 20 | 128 | [lot 66](66.md), 7/7 axes | 98.4 |
-| 154 | [Pell's Garden Shop](154.md) | garden_shop | residential | retail_shop | Talie Junzan | 25 | 176 | [lot 309](309.md), 5/7 axes | 97.6 |
+| 154 | [Pell's Garden Shop](154.md) | garden_shop | residential | retail_shop | Talie Junzan | 25 | 176 | [lot 309](309.md), 5/7 axes | 98.4 |
 | 155 | [Skyline Habitat 5755](155.md) | apartments | residential | worker_apartments | Greona Zelline | 16 | 122 | [lot 260](260.md), 5/7 axes | 98.4 |
 | 156 | [Level 8673 Primary](156.md) | school | residential | school | Orian Vandulo | 18 | 126 | [lot 375](375.md), 5/7 axes | 96.4 |
 | 157 | [Gravwell Components Outlet](157.md) | electronics | financial | retail_shop | Nyxis Orline | 25 | 139 | [lot 253](253.md), 5/7 axes | 98.4 |
@@ -180,7 +180,7 @@
 | 172 | [Teo's Bakery](172.md) | bakery | residential | retail_shop | Mavani Zelline | 17 | 80 | [lot 275](275.md), 5/7 axes | 96 |
 | 173 | [Mox's Diner](173.md) | diner | residential | diner | Wenen Pellric | 18 | 47 | [lot 244](244.md), 5/7 axes | 94.8 |
 | 174 | [Blue Milk Bakehouse 921](174.md) | bakery | residential | retail_shop | Ashath Brennkar | 13 | 102 | [lot 343](343.md), 6/7 axes | 98.4 |
-| 175 | [Skyline Clinic](175.md) | clinic | residential | clinic | Boyra Fennnar | 20 | 398 | [lot 418](418.md), 6/7 axes | 97.6 |
+| 175 | [Skyline Clinic](175.md) | clinic | residential | clinic | Boyra Fennnar | 20 | 398 | [lot 418](418.md), 6/7 axes | 98.4 |
 | 176 | [The Honest Cleaver](176.md) | butcher | residential | retail_shop | Joruna Bordar | 16 | 133 | [lot 427](427.md), 5/7 axes | 98.4 |
 | 177 | [Juvo Outfitters](177.md) | tailor | residential | retail_shop | Uldia Nerbex | 22 | 245 | [lot 382](382.md), 5/7 axes | 98.4 |
 | 178 | [Jorak Airspeeder Hire](178.md) | taxi_stand | residential | transit_interchange | Nalo Essric | 22 | 199 | [lot 368](368.md), 6/7 axes | 98.4 |
@@ -221,24 +221,24 @@
 | 213 | [Federal District Fitness](213.md) | gym | financial | bath_gym | Garona Stellmir | 28 | 128 | [lot 358](358.md), 7/7 axes | 96.4 |
 | 214 | [Corvane Systems Annex](214.md) | office | financial | corporate_office | Ornan Pelltak | 23 | 238 | [lot 169](169.md), 5/7 axes | 96.4 |
 | 215 | [The Federal District Dispatch](215.md) | holonet_office | financial | corporate_office | Lirora Ilkine | 24 | 159 | [lot 252](252.md), 6/7 axes | 96.4 |
-| 216 | [Maldrin & Partners Advertising](216.md) | advertising_agency | financial | corporate_office | Tamir Prenmont | 26 | 294 | [lot 348](348.md), 7/7 axes | 97.6 |
-| 217 | [Federal District Residences 1458](217.md) | apartments | financial | worker_apartments | Belo Ilkric | 35 | 289 | [lot 210](210.md), 5/7 axes | 97.6 |
+| 216 | [Maldrin & Partners Advertising](216.md) | advertising_agency | financial | corporate_office | Tamir Prenmont | 26 | 294 | [lot 348](348.md), 7/7 axes | 98.4 |
+| 217 | [Federal District Residences 1458](217.md) | apartments | financial | worker_apartments | Belo Ilkric | 35 | 289 | [lot 210](210.md), 5/7 axes | 98.4 |
 | 218 | [Federal District Commodities House](218.md) | trade_house | financial | corporate_office | Daror Vandash | 30 | 192 | [lot 298](298.md), 6/7 axes | 96.4 |
 | 219 | [Corellian Credit Union](219.md) | bank | financial | bank | Ilous Essmir | 24 | 97 | [lot 186](186.md), 6/7 axes | 96.4 |
-| 220 | [Kelvane Caf & Pastry](220.md) | caf | financial | diner | Lirie Corrtel | 24 | 163 | [lot 424](424.md), 6/7 axes | 97.6 |
-| 221 | [Brea's Caf](221.md) | caf | senate | diner | Senis Kestander | 11 | 53 | [lot 361](361.md), 5/7 axes | 97.6 |
+| 220 | [Kelvane Caf & Pastry](220.md) | caf | financial | diner | Lirie Corrtel | 24 | 163 | [lot 424](424.md), 6/7 axes | 98.4 |
+| 221 | [Brea's Caf](221.md) | caf | senate | diner | Senis Kestander | 11 | 53 | [lot 361](361.md), 5/7 axes | 98.4 |
 | 222 | [Office of Senator Ghavic](222.md) | ministry | senate | delegation_office | Mekala Morash | 11 | 68 | [lot 200](200.md), 6/7 axes | 96.4 |
 | 223 | [Speeder Registry 355](223.md) | licensing_office | senate | corporate_office | Norie Ilkkar | 15 | 69 | [lot 195](195.md), 6/7 axes | 96.4 |
 | 224 | [Wyllan & Corvane Consultants](224.md) | office | senate | corporate_office | Dexuna Essulo | 15 | 58 | [lot 231](231.md), 5/7 axes | 96.4 |
 | 225 | [Falkren, Corvane & Associates](225.md) | law_office | senate | corporate_office | Venala Tharnar | 11 | 165 | [lot 248](248.md), 7/7 axes | 96.4 |
 | 226 | [Chandrilan Mission](226.md) | embassy | senate | delegation_office | Haron Davric | 13 | 56 | [lot 230](230.md), 7/7 axes | 96.4 |
 | 227 | [Judiciary Annex 675](227.md) | courthouse | senate | courthouse | Erieth Garrsol | 15 | 79 | [lot 145](145.md), 6/7 axes | 96.4 |
-| 228 | [Republic Records Office 985](228.md) | licensing_office | senate | corporate_office | Noros Holmwan | 11 | 176 | [lot 414](414.md), 7/7 axes | 95.6 |
+| 228 | [Republic Records Office 985](228.md) | licensing_office | senate | corporate_office | Noros Holmwan | 11 | 176 | [lot 414](414.md), 7/7 axes | 96.4 |
 | 229 | [CSF Station Senate District](229.md) | security_station | senate | security_station | Senin Garrdol | 11 | 107 | [lot 373](373.md), 6/7 axes | 96.4 |
 | 230 | [Ryloth Delegation House](230.md) | embassy | senate | delegation_office | Holuna Randmont | 11 | 127 | [lot 226](226.md), 7/7 axes | 96.4 |
 | 231 | [Ionne & Vantrell Consultants](231.md) | office | senate | corporate_office | Calise Karrander | 13 | 48 | [lot 191](191.md), 5/7 axes | 96.4 |
 | 232 | [Chez Ollum](232.md) | restaurant | senate | diner | Aniac Garrdar | 23 | 82 | [lot 397](397.md), 7/7 axes | 96 |
-| 233 | [Cold Cuts 858](233.md) | butcher | residential | retail_shop | Iloiri Gortel | 11 | 196 | [lot 48](48.md), 6/7 axes | 97.6 |
+| 233 | [Cold Cuts 858](233.md) | butcher | residential | retail_shop | Iloiri Gortel | 11 | 196 | [lot 48](48.md), 6/7 axes | 98.4 |
 | 234 | [Night Chemist 594](234.md) | pharmacy | residential | retail_shop | Jenara Kestander | 19 | 162 | [lot 202](202.md), 6/7 axes | 98.4 |
 | 235 | [Zhorrin Preparatory](235.md) | school | residential | school | Jenyn Karriss | 19 | 106 | [lot 241](241.md), 6/7 axes | 96.4 |
 | 236 | [Skyline Residences 9777](236.md) | apartments | residential | worker_apartments | Talora Essmont | 20 | 149 | [lot 179](179.md), 6/7 axes | 98.4 |
@@ -267,11 +267,11 @@
 | 259 | [Vaddon's Produce](259.md) | grocery | residential | retail_shop | Ornen Essven | 15 | 68 | [lot 339](339.md), 5/7 axes | 98.4 |
 | 260 | [Block 4022 Habitats](260.md) | apartments | residential | worker_apartments | Haros Falander | 15 | 53 | [lot 204](204.md), 5/7 axes | 94.8 |
 | 261 | [Onnar's Nerf & Bantha](261.md) | butcher | residential | retail_shop | Paxiri Randulo | 20 | 144 | [lot 287](287.md), 6/7 axes | 98.4 |
-| 262 | [Level 3191 Interchange](262.md) | transit_station | residential | transit_interchange | Corara Brennvos | 17 | 95 | [lot 266](266.md), 5/7 axes | 97.6 |
+| 262 | [Level 3191 Interchange](262.md) | transit_station | residential | transit_interchange | Corara Brennvos | 17 | 95 | [lot 266](266.md), 5/7 axes | 98.4 |
 | 263 | [The Flatbread Stand](263.md) | bakery | residential | retail_shop | Sabona Ilkzan | 17 | 84 | [lot 271](271.md), 6/7 axes | 98.4 |
 | 264 | [Skyline Habitat 4724](264.md) | apartments | residential | worker_apartments | Coryn Lomfell | 13 | 76 | [lot 335](335.md), 5/7 axes | 98.4 |
 | 265 | [Bralen General Supply](265.md) | general_store | residential | retail_shop | Ryluna Antwick | 16 | 163 | [lot 314](314.md), 6/7 axes | 98.4 |
-| 266 | [Level 4547 Interchange](266.md) | transit_station | residential | transit_interchange | Corac Pellbex | 16 | 85 | [lot 262](262.md), 5/7 axes | 97.6 |
+| 266 | [Level 4547 Interchange](266.md) | transit_station | residential | transit_interchange | Corac Pellbex | 16 | 85 | [lot 262](262.md), 5/7 axes | 98.4 |
 | 267 | [Skyline Grocer 816](267.md) | grocery | residential | retail_shop | Eriala Junric | 13 | 97 | [lot 282](282.md), 6/7 axes | 98.4 |
 | 268 | [Level 4522 Walk-In Clinic](268.md) | clinic | residential | clinic | Calith Lorrfell | 19 | 50 | [lot 334](334.md), 7/7 axes | 94.8 |
 | 269 | [Order of the Silent Sun](269.md) | order_house | residential | community_hall | Toren Garriss | 20 | 96 | [lot 313](313.md), 6/7 axes | 96 |
@@ -353,7 +353,7 @@
 | 345 | [Lannick & Dresh Consultants](345.md) | office | financial | corporate_office | Ashise Vanddol | 35 | 226 | [lot 251](251.md), 6/7 axes | 96.4 |
 | 346 | [Coaxium Datawork](346.md) | tech_firm | financial | corporate_office | Dunir Wextak | 37 | 182 | [lot 328](328.md), 6/7 axes | 96.4 |
 | 347 | [Ironclad Escorts 560](347.md) | private_security | financial | security_station | Teyac Gorven | 19 | 127 | [lot 112](112.md), 5/7 axes | 96.4 |
-| 348 | [Slogan Works](348.md) | advertising_agency | financial | corporate_office | Elsess Essvos | 24 | 136 | [lot 302](302.md), 6/7 axes | 97.6 |
+| 348 | [Slogan Works](348.md) | advertising_agency | financial | corporate_office | Elsess Essvos | 24 | 136 | [lot 302](302.md), 6/7 axes | 98.4 |
 | 349 | [Blue Screen Pictures](349.md) | holo_studio | financial | broadcast_studio | Jorya Corrfell | 27 | 167 | [lot 365](365.md), 6/7 axes | 96.4 |
 | 350 | [Hasque Legal](350.md) | law_office | financial | corporate_office | Jaxess Narrstro | 21 | 130 | [lot 142](142.md), 5/7 axes | 96.4 |
 | 351 | [Republica Annex 898](351.md) | luxury_residences | financial | affluent_apartments | Vexor Yavmont | 28 | 262 | [lot 133](133.md), 6/7 axes | 98.4 |
@@ -368,22 +368,22 @@
 | 360 | [Republic Records Office 304](360.md) | licensing_office | financial | corporate_office | Rhoel Cadine | 21 | 83 | [lot 326](326.md), 5/7 axes | 96.4 |
 | 361 | [Jawa Juice 897](361.md) | caf | financial | diner | Kelee Lorrvos | 21 | 90 | [lot 243](243.md), 5/7 axes | 98.4 |
 | 362 | [Noodle Bar 925](362.md) | noodle_bar | financial | diner | Nyxya Keststro | 30 | 205 | [lot 288](288.md), 6/7 axes | 98.4 |
-| 363 | [Ironclad Escorts 466](363.md) | private_security | financial | security_station | Darir Tarnren | 25 | 96 | [lot 393](393.md), 6/7 axes | 96.4 |
+| 363 | [Ironclad Escorts 466](363.md) | private_security | financial | security_station | Darir Tarnren | 25 | 96 | [lot 112](112.md), 6/7 axes | 96.4 |
 | 364 | [Galactic Indemnity 937](364.md) | insurance | financial | corporate_office | Mirani Wexek | 25 | 75 | [lot 279](279.md), 5/7 axes | 96.4 |
 | 365 | [Jesk Holo-Productions](365.md) | holo_studio | financial | broadcast_studio | Jenek Halmir | 20 | 158 | [lot 349](349.md), 6/7 axes | 96.4 |
 | 366 | [University of Federal District — Faculty 497](366.md) | university | financial | school | Elsir Lorrmont | 25 | 125 | [lot 212](212.md), 6/7 axes | 98.4 |
 | 367 | [Jawa Juice 724](367.md) | caf | residential | diner | Zorath Lorrzan | 13 | 159 | [lot 184](184.md), 6/7 axes | 98.4 |
-| 368 | [Skyline Air Taxi](368.md) | taxi_stand | residential | transit_interchange | Ossir Narrine | 13 | 127 | [lot 178](178.md), 6/7 axes | 97.6 |
+| 368 | [Skyline Air Taxi](368.md) | taxi_stand | residential | transit_interchange | Ossir Narrine | 13 | 127 | [lot 178](178.md), 6/7 axes | 98.4 |
 | 369 | [Skyline Interiors 258](369.md) | furniture_store | residential | retail_shop | Oriin Narrwan | 16 | 44 | [lot 310](310.md), 6/7 axes | 94.8 |
 | 370 | [Skyline Grocer 202](370.md) | grocery | residential | retail_shop | Elsyra Holmash | 14 | 55 | [lot 282](282.md), 6/7 axes | 94.8 |
 | 371 | [Skyline Bacta Ward](371.md) | bacta_ward | residential | clinic | Orno Morsol | 16 | 79 | [lot 272](272.md), 6/7 axes | 96 |
 | 372 | [Block 2585 Habitats](372.md) | apartments | residential | worker_apartments | Talyra Tarnlor | 17 | 74 | [lot 274](274.md), 4/7 axes | 96 |
 | 373 | [Sector 141 Patrol House](373.md) | security_station | residential | security_station | Uldyra Cadvos | 16 | 92 | [lot 35](35.md), 5/7 axes | 94 |
-| 374 | [Yellow Fin Cabs 494](374.md) | taxi_stand | residential | transit_interchange | Vinan Ulrfell | 14 | 74 | [lot 99](99.md), 6/7 axes | 97.6 |
+| 374 | [Yellow Fin Cabs 494](374.md) | taxi_stand | residential | transit_interchange | Vinan Ulrfell | 14 | 74 | [lot 99](99.md), 6/7 axes | 98.4 |
 | 375 | [Hasque Preparatory](375.md) | school | residential | school | Senan Relline | 18 | 121 | [lot 156](156.md), 5/7 axes | 96.4 |
 | 376 | [Caf Corner 846](376.md) | caf | residential | diner | Nyxara Yavulo | 14 | 46 | [lot 324](324.md), 6/7 axes | 98.4 |
 | 377 | [Skyline Residences 1604](377.md) | apartments | residential | worker_apartments | Brenek Holmzan | 11 | 47 | [lot 204](204.md), 6/7 axes | 98.4 |
-| 378 | [Durasteel Direct 515](378.md) | hardware_store | residential | retail_shop | Dexani Essdol | 14 | 93 | [lot 386](386.md), 6/7 axes | 97.6 |
+| 378 | [Durasteel Direct 515](378.md) | hardware_store | residential | retail_shop | Dexani Essdol | 14 | 93 | [lot 386](386.md), 6/7 axes | 98.4 |
 | 379 | [Starlight Cinema 657](379.md) | holo_theatre | residential | opera_house | Torara Prenven | 18 | 122 | [lot 208](208.md), 6/7 axes | 98.4 |
 | 380 | [Datacron & Dust 663](380.md) | bookshop | residential | retail_shop | Zebona Nerander | 15 | 132 | [lot 439](439.md), 6/7 axes | 98.4 |
 | 381 | [Bacta & Sundries](381.md) | pharmacy | residential | retail_shop | Fenum Tharbex | 16 | 84 | [lot 202](202.md), 5/7 axes | 98.4 |
