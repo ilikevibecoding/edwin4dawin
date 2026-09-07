@@ -449,7 +449,7 @@ Change (`water.ts`, cache key water-v22):
   cells. 8 value-noise reads, only inside the highlight and only where q < 0.995.
 - `sunGlitter`: λ = P · GLINT_PER_M2 · A_px / (V·H · cos³θ_h); q = max(1 − e^−λ, 0.02); gain =
   smoothstep(z − 0.3, z + 0.3, grain) / q with z = probit(q) (Abramowitz–Stegun 26.2.23; the grain process
-  measures within 0.1σ of normal from its 1 % to its 99 % quantile, `r16/grainstat.py`: soft coverage / q =
+  measures within 0.1σ of normal from its 1 % to its 99 % quantile, `tools/grainstat.py`: soft coverage / q =
   1.08 at q 0.02, 1.02 at 0.1, 1.00 above). The mean radiance is the analytic one; the lit pixels carry it.
 - `sparkleSlope` back to slope-only (its grain output removed).
 - Replica (`tools/path.py` bookkeeping, sunset camera 290 m, 7 m/s): along the axis q = 1.000 to 26° depression

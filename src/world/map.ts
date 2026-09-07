@@ -1336,7 +1336,7 @@ export class WorldMap implements WorldMapData {
             const dirX = Math.sin(ma.rot), dirZ = -Math.cos(ma.rot);
             const reach = ma.pierLen * 0.5 + 40;
             const db = sdBox(x, z, ma.x + dirX * reach, ma.z + dirZ * reach, ma.piers * 14 + 40, reach + 10, ma.rot);
-            if (db < 40) depth = Math.max(depth, 2.6 * (1 - smoothstep(-5, 40, db)));
+            if (db < 40) depth = Math.max(depth, 4.5 * (1 - smoothstep(-5, 40, db)));
           }
           // canal mouths keep their dredged depth where they meet shallow shore water
           for (let ci = 0; ci < canals.length; ci++) {
