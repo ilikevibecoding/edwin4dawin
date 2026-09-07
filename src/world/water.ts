@@ -349,12 +349,25 @@ float slopePdfPeaked(vec2 sh, vec2 va, float st, float mss) {
 // capped (in units of the sun irradiance) so no pixel outshines the sun path by more than a few times: past
 // 2.5 x E the tonemapper has long gone to white anyway, and the cap only bounds the bloom energy the path and
 // its glints feed (bloom stays a soft halo on the path and never bleeds over geometry next to it).
+// Glint statistics: the analytic lobe is the mean over infinitely many facets, but a pixel holds a finite number
+// of the centimetre facets that actually mirror the sun's disc (a facet glints when its normal lies within the
+// disc's angular radius / 2 of the half vector: 1.7e-5 of slope space; a facet is a few square centimetres). The
+// expected number that glint, lambda = P x 1.7e-5 / 4e-4 m^2 x pixel area, is a handful at the core of the path
+// seen from altitude and well under one at its margins and everywhere in a near view, and a pixel then either
+// holds a glint or does not: the margins of the path resolve into discrete sparkles (the sun is so much brighter
+// than the sky that one facet in ten thousand saturates a pixel), the core stays a solid band, and a near view is
+// all individual flashes. The mean is kept: the analytic radiance is multiplied by a lognormal gain of mean one
+// whose contrast is 1 / sqrt(lambda), capped, from the finest sparkle cells (world-fixed crest segments, a slow
+// process in time), so the glints ride the water and twinkle instead of flickering per frame.
 const float SPARK_OCTAVE = 0.12;
 const float GLITTER_CAP = 2.5;
 const float CREST = 2.5;
+const float GLINT_PER_M2 = 0.0425; // glinting facets per m^2 of water per unit of slope density
+const float GLINT_CONTRAST_MAX = 1.2;
 // Slope offset (in the shader's slope convention: the facet normal is N.xz / N.y minus the result) of the
-// sparkle facets under the pixel, and the share 'resolved' of the variance 'mss' they carry.
-vec2 sparkleSlope(vec2 wp, vec2 dx, vec2 dy, float t, float mss, out float resolved) {
+// sparkle facets under the pixel, the share 'resolved' of the variance 'mss' they carry, and 'grain': a unit
+// variance zero-mean process of the finest cells drawn (the glint count statistics ride on it).
+vec2 sparkleSlope(vec2 wp, vec2 dx, vec2 dy, float t, float mss, out float resolved, out float grain) {
   vec2 wd = uWindDir, wc = vec2(-wd.y, wd.x);
   // pixel footprint along the wind / along the crests, in the metric of the cells
   float footEff = max(abs(dot(dx, wd)) + abs(dot(dy, wd)), (abs(dot(dx, wc)) + abs(dot(dy, wc))) / CREST);
@@ -377,6 +390,7 @@ vec2 sparkleSlope(vec2 wp, vec2 dx, vec2 dy, float t, float mss, out float resol
   // glint hard, from 1500 m the 10-50 m cells carry almost none: the sea from altitude is grain and gust
   // mottling, not 100 m brush strokes of white.
   float peakL = clamp(0.5 * uWindSpeed * uWindSpeed, 4.0, 60.0);
+  grain = 0.0;
   for (int i = 0; i < 3; i++) {
     int o = o0 + i;
     if (o > 8) break;
@@ -384,11 +398,20 @@ vec2 sparkleSlope(vec2 wp, vec2 dx, vec2 dy, float t, float mss, out float resol
     float cell = 0.7 * exp2(fo);
     float f = SPARK_OCTAVE * (1.0 - smoothstep(0.8 * peakL, 2.5 * peakL, cell));
     float w = i == 0 ? w0 : (i == 2 ? 0.45 * (1.0 - w0) : 0.75);
-    if (w * f < 0.001) continue;
     vec2 q = gq / cell;
     // two independent value-noise vectors (0.214 rms per component) rotated by a slow phase: a unit-variance
     // Gaussian-like process whose rate follows the wave period of the cell size
     float ph = 1.6 * t * inversesqrt(cell) + 0.7 * fo;
+    if (i < 2) {
+      // the glint grain lives on the two finest octaves, the finer fading in as it comes to span 2-4 px (the
+      // weights keep the unit variance through the cross-fade)
+      float gw = sqrt(i == 0 ? w0 : 1.0 - w0);
+      if (gw > 0.03) {
+        float g1 = vnoise(q * 0.97 + 23.3 + 17.0 * fo) - 0.5, g2 = vnoise(q * 1.05 + 29.1 + 17.0 * fo) - 0.5;
+        grain += (g1 * cos(ph) + g2 * sin(ph)) * (4.67 * gw);
+      }
+    }
+    if (w * f < 0.001) continue;
     vec2 n1 = vec2(vnoise(q + 3.1 + 17.0 * fo), vnoise(q * 1.07 + 9.7 + 17.0 * fo)) - 0.5;
     vec2 n2 = vec2(vnoise(q * 0.93 + 5.3 + 17.0 * fo), vnoise(q * 1.11 + 12.9 + 17.0 * fo)) - 0.5;
     vec2 n = (n1 * cos(ph) + n2 * sin(ph)) * 4.67;
@@ -410,13 +433,19 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, f
   vec2 vc = vec2(-va.y, va.x);
   float st = 1.0 + 0.3 * (1.0 - clamp(V.y, 0.0, 1.0));
   float P;
+  float gain = 1.0;
   // the field is only evaluated where the highlight (widened to catch the field's tails) is visible
   if (slopePdf(sh, va, st, mss * 3.0) * mss > 1e-4) {
-    float resolved;
-    vec2 s = sparkleSlope(wp, dx, dy, t, mss, resolved);
+    float resolved, grain;
+    vec2 s = sparkleSlope(wp, dx, dy, t, mss, resolved, grain);
     // the facets share the anisotropy of the analytic distribution
     s = va * (dot(s, va) * sqrt(st)) + vc * (dot(s, vc) * inversesqrt(st));
     P = slopePdfPeaked(sh - s, va, st, mss * (1.0 - resolved));
+    // glint count statistics (see above): the expected number of glinting facets in the pixel sets the contrast
+    // of a lognormal gain of mean one (exp(c g - c^2 / 2) with g of unit variance)
+    float lambda = P * GLINT_PER_M2 * abs(dx.x * dy.y - dx.y * dy.x);
+    float c = min(inversesqrt(max(lambda, 1e-4)), GLINT_CONTRAST_MAX);
+    gain = exp(c * grain - 0.5 * c * c);
   } else {
     P = slopePdfPeaked(sh, va, st, mss);
   }
@@ -425,7 +454,7 @@ float sunGlitter(vec3 N, vec3 V, vec3 L, float mss, vec2 wp, vec2 dx, vec2 dy, f
   float G = smithBeckmann(NdotV, alpha) * smithBeckmann(NdotL, alpha);
   float LdotH = clamp(dot(L, H), 0.0, 1.0);
   float F = 0.02 + 0.98 * pow(1.0 - LdotH, 5.0);
-  return min(D * F * G / (4.0 * NdotV), GLITTER_CAP);
+  return min(D * F * G * gain / (4.0 * NdotV), GLITTER_CAP);
 }
 // Mirror image of the scene along the reflected ray (render/reflection.ts). P: surface point, V: view
 // vector, N: wave normal, mss: unresolved slope variance, dist: camera distance. Returns premultiplied
@@ -484,8 +513,8 @@ vec4 sceneReflection(vec3 P, vec3 V, vec3 N, float mss, float dist, vec2 dx, vec
   // The sparkle facets (the same field the glitter rides on) tilt the mirror too: the light of a distant
   // window lands on the cells whose facet happens to point at it, so a reflection breaks up along the wave
   // slopes and a near one (the aircraft, a hull) shatters at its edges the way a mirror image does in a chop.
-  float resolved;
-  vec2 s = sparkleSlope(P.xz, dx, dy, t, mss, resolved);
+  float resolved, grainUnused;
+  vec2 s = sparkleSlope(P.xz, dx, dy, t, mss, resolved, grainUnused);
   N = normalize(vec3(N.x / N.y - s.x, 1.0, N.z / N.y - s.y));
   R = reflect(-V, N);
   R.y = max(R.y, 0.02);
@@ -1031,7 +1060,7 @@ export class Water {
         .replace('#include <lights_fragment_maps>', WATER_FRAG_MAPS)
         .replace('#include <opaque_fragment>', WATER_FRAG_COMPOSE);
     };
-    mat.customProgramCacheKey = () => `water-v19-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
+    mat.customProgramCacheKey = () => `water-v20-${patch ? 'patch' : 'plane'}-${WATER_DEBUG}`;
     return mat;
   }
 
