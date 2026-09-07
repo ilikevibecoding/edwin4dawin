@@ -553,8 +553,11 @@ P.panel_sand = (t, r) => { panelBase(t, r, [198, 184, 158], 4, [150, 136, 112]);
 P.light_strip = (t, r) => { t.noisy([36, 40, 48], 2, r); t.hline(4, 0, 15, [70, 100, 140]); t.hline(11, 0, 15, [70, 100, 140]); t.rect(0, 5, 16, 6, [150, 200, 255]); t.rect(0, 6, 16, 4, [222, 240, 255]); };
 P.light_strip_warm = (t, r) => { t.noisy([40, 36, 34], 2, r); t.hline(4, 0, 15, [130, 96, 60]); t.hline(11, 0, 15, [130, 96, 60]); t.rect(0, 5, 16, 6, [255, 206, 140]); t.rect(0, 6, 16, 4, [255, 238, 205]); };
 // glazing bands: a 2-texel frame top and bottom only (no vertical frame), so a row of them is one continuous ribbon
-// of glass; the lit band is warm and even (no pane grid), the dark one blue-grey glass with a reflection line
-P.window_band_lit = (t, r) => { t.noisy([250, 216, 156], 6, r); t.rect(0, 0, 16, 2, [34, 38, 48]); t.rect(0, 14, 16, 2, [34, 38, 48]); t.hline(2, 0, 15, [255, 236, 200]); };
+// of glass; the lit band is warm and even (no pane grid), the dark one blue-grey glass with a reflection line.
+// The lit band is a mid amber, not white: its emissive comes from texel luminance (materialMaps.js), and interior
+// light seen through glass has to sit well under the light strips so a tower at night reads as vertical lines over
+// dim floors (references 1, 2 and the Andor plaza), not a lattice of equally bright horizontals and verticals.
+P.window_band_lit = (t, r) => { t.noisy([206, 168, 116], 5, r); t.rect(0, 0, 16, 2, [34, 38, 48]); t.rect(0, 14, 16, 2, [34, 38, 48]); t.hline(2, 0, 15, [226, 192, 140]); t.hline(13, 0, 15, [176, 140, 96]); };
 P.window_band_dark = (t, r) => { t.noisy([46, 64, 94], 5, r); t.rect(0, 0, 16, 2, [34, 38, 48]); t.rect(0, 14, 16, 2, [34, 38, 48]); t.hline(3, 0, 15, [76, 108, 148]); t.hline(4, 0, 15, [62, 88, 126]); };
 // tall slits: a narrow bright bar down the middle with a halo, no top/bottom frame, so a column of them is one
 // unbroken narrow line of light in a dark panel
