@@ -24,6 +24,9 @@ const browser = await puppeteer.launch({
   args: ['--no-sandbox', '--disable-gpu-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--window-size=1280,720', '--hide-scrollbars'],
   defaultViewport: { width: 1280, height: 720, deviceScaleFactor: 1 },
 });
+// the endpoint lets bench/scripts/flighttest.mjs (BROWSER_WS=...) run in this browser instead of waiting for a
+// slot of its own; a `HOLD` file in the queue keeps the session from idling out while such a run is in progress
+fs.writeFileSync(path.join(queueDir, 'ws'), browser.wsEndpoint());
 console.log(`${stamp()} [session] browser up, watching ${queueDir}`);
 
 async function shoot(specPath) {
@@ -73,6 +76,7 @@ for (;;) {
   const pending = fs.readdirSync(queueDir).filter((f) => f.endsWith('.spec') && !fs.existsSync(path.join(queueDir, `${f}.done`)))
     .map((f) => ({ f, t: fs.statSync(path.join(queueDir, f)).mtimeMs })).sort((a, b) => a.t - b.t);
   if (pending.length === 0) {
+    if (fs.existsSync(path.join(queueDir, 'HOLD'))) lastWork = Date.now();
     if (Date.now() - lastWork > idleMs) { console.log(`${stamp()} [session] idle ${idleMs} ms, releasing the slot`); break; }
     await new Promise((r) => setTimeout(r, 2000));
     continue;
@@ -88,4 +92,5 @@ for (;;) {
   fs.writeFileSync(`${specPath}.done`, JSON.stringify({ ms: Date.now() - t0, views: summary }, null, 2));
   lastWork = Date.now();
 }
+fs.rmSync(path.join(queueDir, 'ws'), { force: true });
 await browser.close();
