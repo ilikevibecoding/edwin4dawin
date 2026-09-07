@@ -212,10 +212,18 @@ export class Atmosphere {
     // ground had fallen to p50 67 from 83 at 1.2; the storm keeps its 0.18 beam and lands where it was).
     s.ambientIntensity = lerp(k.amb, 1.6, grey);
     const horLum = s.horizon.r * 0.2126 + s.horizon.g * 0.7152 + s.horizon.b * 0.0722;
-    const overcast = new THREE.Color(horLum, horLum, horLum).lerp(s.horizon, 0.3);
+    // The grey under a deck is the sunlight that reaches the top of the deck, spread as diffuse: it follows the
+    // sun's elevation (extinction included through sunI), normalised to the 45 deg afternoon the overcast level
+    // was set at (0.27, the noon horizon key). It used to take the clear sky's horizon luminance, which peaks
+    // at el 14 (0.44: the golden sun-side horizon), so a cloudy 17:30 rendered brighter than 15:00 (ground
+    // p50 121 against 86) and a cloudy dawn brighter than its afternoon. Floor 0.12: a cloudy dusk is dim,
+    // not black; the night keys are darker than the floor and win through the min.
+    const deckLight = clamp((k.sunI * Math.max(s.sunDir.y, 0)) / 0.67, 0.12, 1.2);
+    const overLum = Math.min(horLum, 0.27 * deckLight);
+    const overcast = new THREE.Color(overLum, overLum, overLum).lerp(s.horizon, 0.3);
     const zl = s.zenith.clone().lerp(overcast, grey * 0.85);
     const hl = s.horizon.clone().lerp(overcast, grey * 0.8).multiplyScalar(lerp(1, 0.72, grey));
-    const hazeL = s.haze.clone().lerp(new THREE.Color(horLum, horLum, horLum), grey * 0.7).multiplyScalar(lerp(1, 0.72, grey));
+    const hazeL = s.haze.clone().lerp(new THREE.Color(overLum, overLum, overLum), grey * 0.7).multiplyScalar(lerp(1, 0.72, grey));
     // bounce light from the world below: sunlit ground plus its share of the sky, scaled by the mean albedo
     const skyIrr = s.zenith.clone().lerp(s.horizon, 0.3);
     s.ground.copy(s.sunColor).multiplyScalar(s.sunIntensity * Math.max(s.sunDir.y, 0) / Math.PI).add(skyIrr).multiply(GROUND_ALBEDO);
