@@ -132,6 +132,8 @@ export interface PanelOptions {
   capEnd?: WingPart;
   /** elliptical tip rounding appended after z1 (length along the span) */
   tipRound?: number;
+  /** chord fraction the tip rounding shrinks the profile toward (default 0.5: mid-chord; a rear part rounding into its own centre uses ~ the middle of its own chord run) */
+  roundAbout?: number;
   /** points per surface */
   n?: number;
   /** texture v of span station z (default z / span) */
@@ -175,10 +177,11 @@ export function wingPanel(spec: WingSpec, o: PanelOptions): THREE.BufferGeometry
     return profileLoop(region, f, spec.thickness, camber, n, spec.te);
   };
   let P = 0;
+  const about = o.roundAbout ?? 0.5;
   const place = (p: ProfilePt, z: number, zPlan: number, scale: number, out: number[]) => {
     const chord = wingChord(spec, zPlan), xle = wingXLE(spec, zPlan);
     const tw = spec.twist * (zPlan / spec.span);
-    const px = 0.5 + (p.x - 0.5) * scale, py = p.y * scale;
+    const px = about + (p.x - about) * scale, py = p.y * scale;
     const lx = (px - 0.3) * chord, ly = py * chord;
     const c = Math.cos(tw), s = Math.sin(tw);
     // positive twist raises the leading edge
