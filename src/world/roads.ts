@@ -628,8 +628,10 @@ float roadCrown = 0.0; // signed 2 % cross-fall of the carriageway, applied to t
     // at eye level (footprint under 5 cm/px) the rhythm is half again as strong and a 2 m mottle of binder bleed and
     // spilt fuel sits on it; both are gone by the time a pixel covers 30 cm, so the aerial tone is untouched
     float nearF = 1.0 - smoothstep(0.05, 0.3, fp);
-    float mottle = (fbm3(wp * 0.45 + 17.0) - 0.5) * 0.16 * nearF;
-    float wear = 1.0 + ((0.26 * wheel - 0.12 * drip) * (1.0 + 0.5 * nearF) + mottle) * (1.0 - inBox);
+    // two mottles: 2 m binder bleed and spilt fuel at eye level, and a 6 m blotching of the weathered binder that
+    // holds to 0.6 m/px, so the surface is a patchwork of greys from the street and from 200 m up alike
+    float mottle = (fbm3(wp * 0.45 + 17.0) - 0.5) * 0.24 * nearF + (fbm3(wp * 0.16 + 23.0) - 0.5) * 0.22 * (1.0 - smoothstep(0.25, 0.6, fp));
+    float wear = 1.0 + ((0.3 * wheel - 0.14 * drip) * (1.0 + 0.5 * nearF) + mottle) * (1.0 - inBox);
     // mill-and-fill: one lane re-laid over 12-40 m in a third of the 48 m cells of every lane — fresh black or
     // bleached pale against its neighbours, inside a sealed 5 cm joint. The tonal patchwork of a maintained street
     // at eye level (the round 11 read: one tone with crisp paint) and the lane-wide patches the aerial read wants;
@@ -639,48 +641,59 @@ float roadCrown = 0.0; // signed 2 % cross-fall of the carriageway, applied to t
     vec2 mfh = hash22(vec2(mfc * 1.3 + laneIdx * 7.1, cls + 3.0));
     float mfLen = 12.0 + 28.0 * hash11(mfc * 2.7 + laneIdx * 3.3 + cls);
     float mfMid = (mfc + mfh.x * 0.6) * 48.0 - 17.0 * laneIdx - 5.0 * cls + 0.5 * mfLen;
-    float mfOn = step(mfh.y, 0.33) * laneMask * (1.0 - inBox);
+    float mfOn = step(mfh.y, 0.5) * laneMask * (1.0 - inBox);
     float mfOuter = aaLine(along - mfMid, 0.5 * mfLen, fwA) * aaLine(lp - laneW * 0.5, laneW * 0.5 - 0.02, fwX) * mfOn;
     float mfInner = aaLine(along - mfMid, 0.5 * mfLen - 0.06, fwA) * aaLine(lp - laneW * 0.5, laneW * 0.5 - 0.08, fwX) * mfOn;
     float mfJoint = max(mfOuter - mfInner, 0.0) * (1.0 - smoothstep(0.15, 0.4, fp));
-    float mfTone = mix(0.72, 1.22, hash11(mfc * 4.1 + laneIdx * 1.7 + 2.0 * cls));
-    // patch repairs: 5 x 3 m cells of the road frame, 7 % of them re-laid darker or bleached paler
+    float mfTone = mix(0.6, 1.32, hash11(mfc * 4.1 + laneIdx * 1.7 + 2.0 * cls));
+    // patch repairs: 5 x 3 m cells of the road frame, 12 % of them re-laid darker or bleached paler inside a dark
+    // sealed rim (the rim gone by 0.3 m/px, the patch by 1.5)
     vec2 pc = floor(vec2(along / 5.0, (xm + hw) / 3.0));
     vec2 pf = fract(vec2(along / 5.0, (xm + hw) / 3.0));
     float ph = hash12(pc + cls * 13.0);
     float pin = aaStep(0.08, pf.x, fwA / 5.0) * aaStep(pf.x, 0.92, fwA / 5.0) * aaStep(0.1, pf.y, fwX / 3.0) * aaStep(pf.y, 0.9, fwX / 3.0);
-    float repair = step(0.93, ph) * pin * (1.0 - smoothstep(0.4, 1.5, fp)) * (1.0 - inBox);
-    float patchTone = ph > 0.965 ? 1.3 : 0.7;
+    float pout = aaStep(0.065, pf.x, fwA / 5.0) * aaStep(pf.x, 0.935, fwA / 5.0) * aaStep(0.075, pf.y, fwX / 3.0) * aaStep(pf.y, 0.925, fwX / 3.0);
+    float patchOn = step(0.88, ph) * (1.0 - inBox);
+    float repair = patchOn * pin * (1.0 - smoothstep(0.4, 1.5, fp));
+    float patchRim = patchOn * max(pout - pin, 0.0) * (1.0 - smoothstep(0.1, 0.3, fp));
+    float patchTone = ph > 0.94 ? 1.32 : 0.62;
     // sealed longitudinal joint at every lane edge (a 4.5 cm tar line, black: under the painted lines where there are
     // any, in the open between the double yellow) and transverse joints every ~27 m
     float seam = mix(aaLine(min(lp, laneW - lp), 0.045, fwX), 0.0, smoothstep(0.3, 1.0, fwX));
     float tseam = mix(aaLine((fract(along / 27.0) - 0.5) * 27.0, 0.04, fwA), 0.0, smoothstep(0.3, 1.0, fwA)) * step(0.4, hash11(floor(along / 27.0) + cls));
     // cracking where a low-frequency zone says the pavement is old: thin dark ridges, and at eye level the polygon
     // network of alligator cracking (0.4 m cells) in the worst of it; both gone once a pixel covers 35 cm
-    float crackZone = smoothstep(0.55, 0.72, fbm3(wp * 0.045 + 3.0));
+    float crackZone = smoothstep(0.42, 0.62, fbm3(wp * 0.045 + 3.0));
     float cr = abs(vnoise(wp * 0.7) - 0.5);
     float crackFade = 1.0 - smoothstep(0.08, 0.35, fp);
-    float crack = (1.0 - smoothstep(0.0, 0.018 + fp * 0.8, cr)) * crackZone * crackFade;
+    float crack = (1.0 - smoothstep(0.0, 0.02 + fp * 0.8, cr)) * crackZone * crackFade;
     if (crackZone > 0.02 && fp < 0.35) {
       float ce = cellEdge(wp * 2.4 + 3.0);
-      float alligator = (1.0 - smoothstep(0.0, 0.03 + fp * 1.2, ce)) * smoothstep(0.35, 0.8, crackZone) * crackFade * step(0.45, fbm3(wp * 0.11 + 6.0));
+      float alligator = (1.0 - smoothstep(0.0, 0.035 + fp * 1.2, ce)) * smoothstep(0.3, 0.75, crackZone) * crackFade * step(0.35, fbm3(wp * 0.11 + 6.0));
       crack = max(crack, alligator);
     }
+    // transverse thermal cracks: a wavy line across the lane every 7-13 m in three cells of five, sealed black
+    float tcc = floor((along + 3.0 * cls) / 10.0);
+    float tca = (tcc + 0.15 + 0.7 * hash11(tcc * 1.9 + cls)) * 10.0 - 3.0 * cls + 0.5 * (vnoise(vec2(xm * 0.9, tcc)) - 0.5);
+    float tcrack = step(0.4, hash11(tcc * 3.3 + 2.0 * cls)) * aaLine(along - tca, 0.025 + fp * 0.6, fwA) * (1.0 - smoothstep(0.1, 0.4, fp)) * (1.0 - inBox) * (0.4 + 0.6 * crackZone);
     // the gutter: 0.9 m of grime graded to the kerb — silt and rubber dust streaked along by the run-off, browner
     // than the asphalt — with leaf litter and grit in the last 0.5 m (warm 5-15 cm flecks, gone by 0.15 m/px)
+    // and the damp dark seam in the last 0.25 m against the kerb face
     float gutter = smoothstep(hw - 0.9, hw - 0.2, abs(xm)) * (1.0 - inBox);
+    float kerbSeam = smoothstep(hw - 0.35, hw - 0.08, abs(xm)) * (1.0 - inBox) * (1.0 - smoothstep(0.2, 0.7, fp));
     float gStreak = mix(vnoise(vec2(along * 0.6, xm * 3.0) + 9.0), 0.5, smoothstep(0.3, 1.2, fwA));
     float litterMask = smoothstep(hw - 0.55, hw - 0.3, abs(xm)) * (1.0 - inBox) * (1.0 - smoothstep(0.05, 0.15, fp));
-    float litter = step(0.74, vnoise(wp * 9.0 + 4.0)) * litterMask;
-    float grit = step(0.62, vnoise(wp * 14.0 + 8.0)) * litterMask;
+    float litter = step(0.68, vnoise(wp * 9.0 + 4.0)) * litterMask;
+    float grit = step(0.6, vnoise(wp * 14.0 + 8.0)) * litterMask;
     vec3 surf = asphalt * wear;
-    surf = mix(surf, asphalt * mfTone * wear, mfInner * 0.85);
-    surf = mix(surf, asphalt * patchTone, repair * 0.9);
+    surf = mix(surf, asphalt * mfTone * wear, mfInner);
+    surf = mix(surf, asphalt * patchTone, repair * 0.92);
     surf = mix(surf, asphalt * trenchTone, trench * 0.9);
     // a cracked zone is also a shade darker as a whole (the cracks themselves are gone from the air)
-    surf *= 1.0 - (0.38 * max(seam, tseam) + 0.45 * mfJoint + 0.35 * crack + 0.07 * crackZone) * (1.0 - inBox);
+    surf *= 1.0 - (0.38 * max(seam, tseam) + 0.45 * mfJoint + 0.5 * max(crack, tcrack) + 0.45 * patchRim + 0.08 * crackZone) * (1.0 - inBox);
     surf *= 1.0 - 0.14 * smoothstep(0.6, 0.75, fbm3(wp * 0.04 + 8.0)) * (1.0 - inBox);
-    surf = mix(surf, surf * vec3(0.78, 0.74, 0.68) * (0.85 + 0.3 * gStreak), gutter);
+    surf = mix(surf, surf * vec3(0.7, 0.65, 0.57) * (0.8 + 0.4 * gStreak), gutter);
+    surf *= 1.0 - 0.3 * kerbSeam;
     surf = mix(surf, vec3(0.30, 0.22, 0.10) * (0.8 + 0.4 * n3), litter * 0.85);
     surf = mix(surf, vec3(0.34, 0.32, 0.29), grit * 0.5);
     // ---- markings, each box-filtered over the pixel footprint and faded out where they stop at junctions
@@ -741,13 +754,17 @@ float roadCrown = 0.0; // signed 2 % cross-fall of the carriageway, applied to t
     // paint ages: worn thin along the wheel paths, and the whole marking fades to a stain from the air. On a third
     // of the repaving bands the stripes are the old coat — half as bright and, at eye level, flaked away in 0.8 m
     // bites — where the fresh bands carry crisp new paint: the re-striped and the not-yet-re-striped side by side
-    float oldPaint = step(0.66, hash11(bk * 5.3 + 11.0 + cls));
-    float flake = mix(1.0, 0.25 + 0.75 * step(0.42, vnoise(wp * 1.3 + 21.0)), oldPaint * (1.0 - smoothstep(0.1, 0.4, fp)));
-    wearM *= mix(1.0, 0.55, oldPaint) * flake;
-    whiteC *= wearM * (1.0 - 0.35 * wheel);
-    yellowC *= wearM * (1.0 - 0.3 * wheel);
-    diffuseColor.rgb = mix(surf, white, whiteC * 0.92);
-    diffuseColor.rgb = mix(diffuseColor.rgb, yellow, yellowC * 0.92);
+    float oldPaint = step(0.5, hash11(bk * 5.3 + 11.0 + cls));
+    float flake = mix(1.0, 0.2 + 0.8 * step(0.4, vnoise(wp * 1.3 + 21.0)), oldPaint * (1.0 - smoothstep(0.1, 0.4, fp)));
+    // even the fresh coat wears in 1 m streaks where the tyres cross it and greys with the dust in its pores, so no
+    // line is a uniform stripe at eye level; both are gone by 0.5 m/px, leaving the aerial fade
+    float streak = mix(0.55 + 0.45 * smoothstep(0.3, 0.7, vnoise(wp * vec2(0.9, 2.2) + 31.0)), 1.0, smoothstep(0.15, 0.5, fp));
+    wearM *= mix(1.0, 0.5, oldPaint) * flake * streak;
+    whiteC *= wearM * (1.0 - 0.4 * wheel);
+    yellowC *= wearM * (1.0 - 0.35 * wheel);
+    float paintDust = 0.1 * (1.0 - smoothstep(0.15, 0.5, fp)) * (0.5 + n3);
+    diffuseColor.rgb = mix(surf, white * (1.0 - paintDust), whiteC * 0.92);
+    diffuseColor.rgb = mix(diffuseColor.rgb, yellow * (1.0 - paintDust), yellowC * 0.92);
     // ---- ironwork: manhole covers in the lanes, gully gratings along the kerbs (gone once they are a pixel)
     float ironFade = 1.0 - smoothstep(0.22, 0.6, fp);
     if (ironFade > 0.0 && cls < 2.5) {
@@ -1057,7 +1074,7 @@ export function createRoadMaterial(lights: RoadLightUniforms): THREE.MeshStandar
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * lampPools(vWorldPosR);');
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'road-v5';
+  mat.customProgramCacheKey = () => 'road-v6';
   return mat;
 }
 
