@@ -1,17 +1,18 @@
 import * as THREE from 'three';
 import type { Atmosphere } from '../world/atmosphere';
-import { GLSL_AERIAL, GLSL_ATMOS_UNIFORMS, GLSL_CLOUD_FIELD, GLSL_NOISE, GLSL_SKY } from './shaders/common.glsl';
+import { GLSL_AERIAL, GLSL_ATMOS_UNIFORMS, GLSL_SKY } from './shaders/common.glsl';
 
 const FULLSCREEN_VERT = /* glsl */ `
 varying vec2 vUv;
 void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
 `;
 
-/** Aerial perspective + cloud shadows, applied in screen space using the depth buffer. */
+/** Aerial perspective, applied in screen space using the depth buffer. (The cloud shadows were applied here
+ *  until round 7; they are on the key light of every lit material now, see CloudShadowMap in shadows.ts: a
+ *  multiplier on the finished pixel took the same share out of the water's sky mirror, of surfaces already in a
+ *  cast shadow and of the lamps at night.) */
 const AERIAL_FRAG = /* glsl */ `
 ${GLSL_ATMOS_UNIFORMS}
-${GLSL_NOISE}
-${GLSL_CLOUD_FIELD}
 ${GLSL_SKY}
 ${GLSL_AERIAL}
 uniform sampler2D tColor;
@@ -20,14 +21,12 @@ uniform mat4 uInvProj;
 uniform mat4 uInvView;
 uniform vec3 uCamPos;
 uniform float uLogDepthFC;
-uniform float uCloudShadowStrength;
 uniform vec2 uTexel;
 varying vec2 vUv;
 float geomDepth(vec2 uv) { float d = texture2D(tDepth, uv).r; return d < 0.99999 ? d : 0.0; }
 void main() {
   vec4 c = texture2D(tColor, vUv);
   float depth = texture2D(tDepth, vUv).r;
-  bool seam = false;
   if (depth >= 0.99999) {
     // The horizon row: MSAA resolves those pixels to a mix of the dome and the *unhazed* far water (the haze is
     // applied here from the resolved depth, which took the dome's sample), leaving a one-pixel dark seam along
@@ -40,7 +39,6 @@ void main() {
                    max(geomDepth(vUv + vec2(0.0, uTexel.y)), geomDepth(vUv - vec2(0.0, uTexel.y))));
     if (dn == 0.0) { gl_FragColor = c; return; }
     depth = dn;
-    seam = true;
   }
   vec2 ndc = vUv * 2.0 - 1.0;
   vec4 vdir4 = uInvProj * vec4(ndc, 1.0, 1.0);
@@ -49,18 +47,7 @@ void main() {
   float w = exp2(depth * 2.0 / uLogDepthFC) - 1.0;
   vec3 vpos = vdir * w;
   vec3 wp = (uInvView * vec4(vpos, 1.0)).xyz;
-  vec3 col = c.rgb;
-  if (!seam) {
-    // Clouds shade the ground: under the cloud's footprint the direct beam is gone (a cumulus is optically thick)
-    // and only the direct-sun share of the light is removed (uSunShare, atmosphere.ts); the sky's share stays.
-    // cloudShadow() returns 1 - 0.72 * footprint (its own cap from when it was the whole shadow factor), so the
-    // footprint is read back out of it here: with the cap left in, a cloud at noon removed 0.72 * 0.86 = 62 % of
-    // the light while the building next to it removed 86 %, and under the cloudy preset (sun already dimmed to
-    // 0.3 by the preset, shadow share 0.38) a cloud took 27 %: no shadow pattern at all under a deck.
-    float cov = clamp((1.0 - cloudShadow(wp)) / 0.72, 0.0, 1.0);
-    col *= 1.0 - cov * uSunShare * uCloudShadowStrength;
-  }
-  col = applyAerial(col, uCamPos, wp);
+  vec3 col = applyAerial(c.rgb, uCamPos, wp);
   gl_FragColor = vec4(col, 1.0);
 }
 `;
@@ -154,7 +141,6 @@ export class PostPipeline {
   width = 1;
   height = 1;
   exposure = 1.0;
-  cloudShadowStrength = 1.0;
 
   constructor(private renderer: THREE.WebGLRenderer, atmos: Atmosphere, private opts: PostOptions) {
     const depthTexture = new THREE.DepthTexture(1, 1, THREE.UnsignedIntType);
@@ -175,7 +161,6 @@ export class PostPipeline {
         uInvView: { value: new THREE.Matrix4() },
         uCamPos: { value: new THREE.Vector3() },
         uLogDepthFC: { value: 1 },
-        uCloudShadowStrength: { value: 1 },
         uTexel: { value: new THREE.Vector2(1 / 1280, 1 / 720) },
       },
       depthTest: false,
@@ -232,7 +217,6 @@ export class PostPipeline {
     a.uInvView.value.copy(camera.matrixWorld);
     a.uCamPos.value.copy(camera.position);
     a.uLogDepthFC.value = 2.0 / (Math.log(camera.far + 1.0) / Math.LN2);
-    a.uCloudShadowStrength.value = this.cloudShadowStrength;
     // shared atmosphere uniform: the sea and far terrain dissolve into the sky over the last 45 % of the view
     // distance, so the far-plane cut never shows against the dome's horizon
     (a.uFarDissolve.value as THREE.Vector2).set(camera.far * 0.55, 1 / (camera.far * 0.4));

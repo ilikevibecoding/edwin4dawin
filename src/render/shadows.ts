@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import type { CSM } from 'three/examples/jsm/csm/CSM.js';
 import { setCascades } from '../world/culling';
+import type { Atmosphere } from '../world/atmosphere';
+import { GLSL_ATMOS_UNIFORMS, GLSL_CLOUD_FIELD, GLSL_NOISE } from './shaders/common.glsl';
 
 /**
  * Cascade placement for the CSM.
@@ -200,5 +202,139 @@ export class CascadeFitter {
       out++;
     }
     return out;
+  }
+}
+
+/**
+ * Cloud shadows on the direct light.
+ *
+ * A cloud's shadow is the direct beam missing under its footprint, so it belongs where the cast shadows are
+ * applied: on the key light, before the surface's BRDF, in every lit material. Until round 7 the post pass
+ * multiplied the finished pixel by the footprint instead, which took the same share out of everything the
+ * pixel held: the sky mirrored by the water (never in a cloud's shadow), the sky light on a surface already
+ * inside a cast shadow (no beam left to remove: the two shadows compounded), and the lamps and lit windows at
+ * night. A cumulus shadow on water then read as a black, structureless patch (critic h03).
+ *
+ * The footprint is rendered once per frame into a small map over the cloud-base plane (`cloudFieldCS`, the
+ * field the raymarch and the old post term share, in cloud space = world xz + wind), on a tile that follows
+ * the camera's ground point projected up the key light. Every lit material samples it at its own fragment's
+ * projection onto the cloud base (a texture read where the post pass evaluated the noise per pixel; the same
+ * map serves the mirror pass, whose objects therefore carry the shadow already). What the map stores is the
+ * share of the beam the cloud removes: a cloud base is not opaque, a stratocumulus 300-600 m thick passes
+ * 30-40 % of the sunlight as diffuse and a fair-weather cumulus 20-30 % (two-stream, T = 2 / (2 + tau (1 - g)),
+ * tau 25-45, g 0.85), which is why an overcast noon is a bright 10-20 klux and not a cave; the preset gives
+ * the transmittance under a cell's core, the fringe passes more (`interior`, the field's second channel).
+ */
+const CLOUD_MAP_SIZE = 1024;
+
+const CLOUD_MAP_FRAG = /* glsl */ `
+${GLSL_ATMOS_UNIFORMS}
+${GLSL_NOISE}
+${GLSL_CLOUD_FIELD}
+uniform vec4 uTile;      // xy origin of the tile in cloud-plane world xz, z its size (m)
+uniform vec2 uTransmit;  // x transmittance under a cell's core, y under its fringe
+varying vec2 vUv;
+void main() {
+  vec3 f = cloudFieldCS(uTile.xy + vUv * uTile.z + uCloudWind);
+  // the raymarched cloud's footprint is cov^2 (sky.ts envelope), as cloudShadow() uses
+  float foot = f.x * f.x;
+  float T = mix(uTransmit.y, uTransmit.x, f.y);
+  gl_FragColor = vec4(foot * (1.0 - T), 0.0, 0.0, 1.0);
+}
+`;
+
+/** Sampler + uniforms for the lit materials (guarded: only materials registered with the game define it). */
+const CLOUD_SHADOW_PARS = /* glsl */ `
+#ifdef USE_CLOUD_SHADOW
+uniform sampler2D uCloudShadowMap;
+uniform vec4 uCloudShadowTile;  // xy tile origin (cloud-plane world xz), z 1 / tile size, w strength
+uniform vec4 uCloudShadowKey;   // xyz key light direction (toward the light), w cloud base height (m)
+float cloudShadowAt(vec3 wp) {
+  float k = max(uCloudShadowKey.w - wp.y, 0.0) / max(uCloudShadowKey.y, 0.15);
+  vec2 uv = (wp.xz + uCloudShadowKey.xz * k - uCloudShadowTile.xy) * uCloudShadowTile.z;
+  // unshaded past the tile (a soft edge over its outer 4 %): the clouds there are beyond the resolved range
+  vec2 e = smoothstep(vec2(0.0), vec2(0.04), uv) * smoothstep(vec2(0.0), vec2(0.04), 1.0 - uv);
+  float removed = texture2D(uCloudShadowMap, clamp(uv, 0.0, 1.0)).r * e.x * e.y;
+  return 1.0 - removed * uCloudShadowTile.w;
+}
+#endif
+`;
+
+/**
+ * Patch the lighting chunk so the key light is attenuated by the cloud footprint before the BRDF and the CSM
+ * shadow (the same place the cast shadow multiplies in). Must run after the CSM is constructed (it installs
+ * its own copy of the chunk) and before the materials compile. The fragment's world position is rebuilt from
+ * the view position with the camera of the pass being rendered, so the mirror pass shades its objects with the
+ * mirror camera and no per-camera uniform is needed.
+ */
+export function installCloudShadowChunk(): void {
+  const dl = 'getDirectionalLightInfo( directionalLight, directLight );';
+  THREE.ShaderChunk.lights_pars_begin = CLOUD_SHADOW_PARS + THREE.ShaderChunk.lights_pars_begin;
+  THREE.ShaderChunk.lights_fragment_begin = `
+#ifdef USE_CLOUD_SHADOW
+	float cloudLit = cloudShadowAt( cameraPosition + transpose( mat3( viewMatrix ) ) * ( - vViewPosition ) );
+#else
+	float cloudLit = 1.0;
+#endif
+` + THREE.ShaderChunk.lights_fragment_begin.split(dl).join(`${dl}\n\t\t\tdirectLight.color *= cloudLit;`);
+}
+
+export class CloudShadowMap {
+  /** Multiplies the darkening (0 disables: `dbg=nocloudshadow`). */
+  strength = 1.0;
+  /** Shared by every lit material (registerLit) */
+  readonly uniforms = {
+    uCloudShadowMap: { value: null as THREE.Texture | null },
+    uCloudShadowTile: { value: new THREE.Vector4(0, 0, 1, 0) },
+    uCloudShadowKey: { value: new THREE.Vector4(0, 1, 0, 1500) },
+  };
+  private readonly rt: THREE.WebGLRenderTarget;
+  private readonly mat: THREE.ShaderMaterial;
+  private readonly quad: THREE.Mesh;
+  private readonly scene = new THREE.Scene();
+  private readonly cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+  constructor(atmos: Atmosphere) {
+    this.rt = new THREE.WebGLRenderTarget(CLOUD_MAP_SIZE, CLOUD_MAP_SIZE, { format: THREE.RedFormat, type: THREE.UnsignedByteType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: false });
+    this.rt.texture.wrapS = this.rt.texture.wrapT = THREE.ClampToEdgeWrapping;
+    this.uniforms.uCloudShadowMap.value = this.rt.texture;
+    this.mat = new THREE.ShaderMaterial({
+      vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+      fragmentShader: CLOUD_MAP_FRAG,
+      uniforms: { ...atmos.uniforms, uTile: { value: new THREE.Vector4() }, uTransmit: { value: new THREE.Vector2(0.2, 0.55) } },
+      depthTest: false, depthWrite: false,
+    });
+    this.quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.mat);
+    this.quad.frustumCulled = false;
+    this.scene.add(this.quad);
+  }
+
+  /**
+   * Render this frame's footprint tile. The tile is centred on the camera's ground point carried up the key
+   * light to the cloud base (where that ground's shadows come from), sized with the altitude (6 km half-width
+   * at the surface, 16 km from 1.25 km up: 12-31 m texels against 1-4 km cells), quantised and texel-snapped so
+   * it does not swim as the camera moves. `groundY`: terrain / water height under the camera.
+   */
+  render(renderer: THREE.WebGLRenderer, camera: THREE.Camera, atmos: Atmosphere, groundY: number): void {
+    const s = atmos.state, p = atmos.preset;
+    const key = s.sunDir;
+    const ky = Math.max(key.y, 0.15);
+    const k = Math.max(p.cloudBase - groundY, 0) / ky;
+    const cx = camera.position.x + key.x * k, cz = camera.position.z + key.z * k;
+    const half = quant(clamp(6000 + 8 * (camera.position.y - groundY), 6000, 16000), 1.15);
+    const texel = (2 * half) / CLOUD_MAP_SIZE;
+    const ox = Math.floor((cx - half) / texel) * texel, oz = Math.floor((cz - half) / texel) * texel;
+    (this.mat.uniforms.uTile.value as THREE.Vector4).set(ox, oz, 2 * half, 0);
+    (this.mat.uniforms.uTransmit.value as THREE.Vector2).set(p.cloudTransmit, Math.min(1, p.cloudTransmit + 0.35));
+    // the footprint fades out below ~14 deg of key elevation as cloudShadow() did (the projection to the base
+    // runs kilometres at grazing angles); the night key (moon) sits above that
+    const fade = THREE.MathUtils.smoothstep(key.y, 0.0, 0.25);
+    this.uniforms.uCloudShadowTile.value.set(ox, oz, 1 / (2 * half), this.strength * fade);
+    this.uniforms.uCloudShadowKey.value.set(key.x, key.y, key.z, p.cloudBase);
+    if (this.strength * fade <= 0) return;
+    const prev = renderer.getRenderTarget();
+    renderer.setRenderTarget(this.rt);
+    renderer.render(this.scene, this.cam);
+    renderer.setRenderTarget(prev);
   }
 }

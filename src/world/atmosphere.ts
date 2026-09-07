@@ -84,7 +84,11 @@ function mixKey(el: number): Key {
   return { el, sun: m3(a.sun, b.sun), sunI: lerp(a.sunI, b.sunI, t), zen: m3(a.zen, b.zen), hor: m3(a.hor, b.hor), haze: m3(a.haze, b.haze), sunHaze: m3(a.sunHaze, b.sunHaze), amb: lerp(a.amb, b.amb, t) };
 }
 
-export interface WeatherPreset { coverage: number; hazeDensity: number; hazeHeight: number; windSpeed: number; turbulence: number; cloudBase: number; cloudTop: number; rain: number; sunDim: number; }
+export interface WeatherPreset {
+  coverage: number; hazeDensity: number; hazeHeight: number; windSpeed: number; turbulence: number; cloudBase: number; cloudTop: number; rain: number; sunDim: number;
+  /** Share of the direct beam that still reaches the ground under a cell's core, as diffuse (CloudShadowMap). */
+  cloudTransmit: number;
+}
 
 export const WEATHER: Record<Weather, WeatherPreset> = {
   // coverage is the macro-field threshold (see cloudFieldCS): 0.27 ~ 8 % ground cover of sparse fair-weather
@@ -95,18 +99,24 @@ export const WEATHER: Record<Weather, WeatherPreset> = {
   // hazeDensity: humid subtropical air, ~30-40 km visibility (the reference frame lifts a skyline 9 km away
   // most of the way to the sky colour); the last stretch before the far plane dissolves completely (applyAerial)
   // sunDim: the direct beam that reaches the ground *between* the clouds; what the clouds themselves take away is
-  // the cloud shadow (cloudShadow x uSunShare in post.ts / reflection.ts), local to each cloud's footprint. The
-  // dome, disc and cloud march see the undimmed sun (it shines on the top of the clouds regardless). The cloudy
-  // preset used to dim the whole scene to 0.3 and fade the cast shadows to 0.35 on top of the cloud shadow
-  // (three global attenuations, none of them local): a 65 % cumulus deck then cast no visible shadow pattern
-  // and its gaps were as dull as its shade. A gap in a cumulus deck is full sun with crisp shadows.
-  clear: { coverage: 0.27, hazeDensity: 4.0e-5, hazeHeight: 1400, windSpeed: 3.5, turbulence: 0.2, cloudBase: 1500, cloudTop: 3500, rain: 0, sunDim: 1 },
-  scattered: { coverage: 0.37, hazeDensity: 4.6e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 3500, rain: 0, sunDim: 1 },
+  // the cloud shadow (CloudShadowMap in shadows.ts, on the key light of every lit material), local to each
+  // cloud's footprint. The dome, disc and cloud march see the undimmed sun (it shines on the top of the clouds
+  // regardless). The cloudy preset used to dim the whole scene to 0.3 and fade the cast shadows to 0.35 on top of
+  // the cloud shadow (three global attenuations, none of them local): a 65 % cumulus deck then cast no visible
+  // shadow pattern and its gaps were as dull as its shade. A gap in a cumulus deck is full sun with crisp shadows.
+  // cloudTransmit: the share of the beam a cell's core still passes to the ground as diffuse light from its base
+  // (two-stream through the cell: T = 2 / (2 + tau (1 - g)), g 0.85, tau ~ 0.045 / m x the cell's depth). Fair-weather
+  // cumulus 1-1.5 km deep pass ~0.2 (a shadow 1.7-2 EV down on the direct share), the 300-600 m stratocumulus of
+  // the cloudy deck ~0.3 (an overcast noon is 10-20 klux, a fifth of full sun, not a cave), the storm's
+  // nimbostratus ~0.15 under its 0.18 veil. Round 6 had the base opaque: a frame under a cumulus lost 86 % of its
+  // light at noon and read as an exposure error rather than a shadow.
+  clear: { coverage: 0.27, hazeDensity: 4.0e-5, hazeHeight: 1400, windSpeed: 3.5, turbulence: 0.2, cloudBase: 1500, cloudTop: 3500, rain: 0, sunDim: 1, cloudTransmit: 0.20 },
+  scattered: { coverage: 0.37, hazeDensity: 4.6e-5, hazeHeight: 1300, windSpeed: 7, turbulence: 0.4, cloudBase: 1300, cloudTop: 3500, rain: 0, sunDim: 1, cloudTransmit: 0.18 },
   // overcast: humid air under the deck (denser, taller haze) so the far end of the ceiling sinks into the horizon
   // haze; the 65 % deck shades 65 % of the ground through the cloud shadow, the gaps keep the sun
-  cloudy: { coverage: 0.70, hazeDensity: 6.0e-5, hazeHeight: 1300, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2000, rain: 0, sunDim: 1 },
+  cloudy: { coverage: 0.70, hazeDensity: 6.0e-5, hazeHeight: 1300, windSpeed: 10, turbulence: 0.7, cloudBase: 900, cloudTop: 2000, rain: 0, sunDim: 1, cloudTransmit: 0.30 },
   // storm: a near-closed nimbostratus with rain under it; the few thin spots pass a veiled beam, so the dim stays
-  storm: { coverage: 0.92, hazeDensity: 7.0e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 3200, rain: 1, sunDim: 0.18 },
+  storm: { coverage: 0.92, hazeDensity: 7.0e-5, hazeHeight: 900, windSpeed: 15, turbulence: 1.0, cloudBase: 700, cloudTop: 3200, rain: 1, sunDim: 0.18, cloudTransmit: 0.15 },
 };
 
 /** Sun position for Bahía Vista (latitude 25.8N, declination +10). */
@@ -206,11 +216,13 @@ export class Atmosphere {
     // 1.15-1.9x the horizon luminance (sky.ts); with the clear-sky keys halved for the fill (see `amb`) the
     // overcast level is set on its own: 1.2 puts a white horizontal at ~0.85x the sky band (lin 0.38 under a
     // 0.45 sky), where 0.5 x 1.5 left it at 0.26 — a white wing darker than the grey overcast above it.
-    // Round 5: the cloud shadow now removes the whole direct beam under the deck's footprint (the cloudy
-    // preset's 0.3 dim used to leave it everywhere), so the diffuse alone has to carry the overcast level:
-    // 1.6, i.e. 2.5x the clear-sky diffuse, the measured ratio for a 60-70 % stratocumulus sky (the cloudy
-    // ground had fallen to p50 67 from 83 at 1.2; the storm keeps its 0.18 beam and lands where it was).
-    s.ambientIntensity = lerp(k.amb, 1.6, grey);
+    // Round 5: the cloud shadow now removes the direct beam under the deck's footprint (the cloudy preset's 0.3
+    // dim used to leave it everywhere), so the diffuse alone has to carry the overcast level: 2.5x the clear-sky
+    // diffuse (1.6 on the 0.65 day key), the measured ratio for a 60-70 % stratocumulus sky (the cloudy ground
+    // had fallen to p50 67 from 83 at 1.2; the storm keeps its 0.18 beam and lands where it was). Round 7: as a
+    // ratio of the key, not an absolute: the absolute 1.6 lifted the night key from 0.15 to 1.37 under a deck (x9),
+    // and a cloudy 22:00 had brighter, teal water than the clear night (L 29 against 20).
+    s.ambientIntensity = k.amb * lerp(1, 2.46, grey);
     const horLum = s.horizon.r * 0.2126 + s.horizon.g * 0.7152 + s.horizon.b * 0.0722;
     // The grey under a deck is the sunlight that reaches the top of the deck, spread as diffuse: it follows the
     // sun's elevation (extinction included through sunI), normalised to the 45 deg afternoon the overcast level
@@ -236,10 +248,11 @@ export class Atmosphere {
     u.uHazeColor.value.copy(hazeL);
     u.uSunHazeColor.value.copy(s.sunHaze).multiplyScalar(lerp(1, 0.5, grey));
     u.uGroundColor.value.copy(s.ground);
-    // what a cloud's shadow takes away: the direct beam's share of the irradiance on a horizontal receiver, from the
-    // same scale the surfaces are lit with (CSM irradiance vs the probe's cos-weighted mean, ~1.4x the luminance of
-    // the mid sky, times the IBL multiplier). 0.86 at clear noon (a cloud shadow as deep as a building's; the old
-    // fixed 0.62 left it a stop lighter), ~0.2 at 17:45 where the sky lights the ground more than the low sun does.
+    // The direct beam's share of the irradiance on a horizontal receiver, from the same scale the surfaces are lit
+    // with (CSM irradiance vs the probe's cos-weighted mean, ~1.4x the luminance of the mid sky, times the IBL
+    // multiplier): 0.86 at clear noon, ~0.2 at 17:45 where the sky lights the ground more than the low sun does.
+    // What a shadow applied to a finished pixel may remove (the mirror resolve in reflection.ts); the cloud shadow
+    // itself is on the key light since round 7 (CloudShadowMap) and no longer needs it.
     const eDirect = s.sunIntensity * Math.max(s.sunDir.y, 0);
     const midSky = zl.clone().lerp(hl, 0.6);
     const eSky = s.ambientIntensity * Math.PI * 1.4 * (midSky.r * 0.2126 + midSky.g * 0.7152 + midSky.b * 0.0722);

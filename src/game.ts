@@ -9,7 +9,7 @@ import { Water } from './world/water';
 import { WakeMap } from './render/wakes';
 import { PostPipeline } from './render/post';
 import { PlanarReflection, boundsRadius, distanceToBounds, trianglesOf } from './render/reflection';
-import { CascadeFitter, installCascadeDebug } from './render/shadows';
+import { CascadeFitter, CloudShadowMap, installCascadeDebug, installCloudShadowChunk } from './render/shadows';
 import { buildRoadMeshes, buildRoadNetwork, createRoadLightUniforms, createRoadMaterial, type RoadSegment } from './world/roads';
 import { SW_DEBUG, Streets } from './world/streets';
 import { buildBridges, type BridgeBuild } from './world/bridges';
@@ -63,6 +63,7 @@ export class Game {
   private readonly tmpCamFwd = new THREE.Vector3();
   csm!: CSM;
   cascades!: CascadeFitter;
+  cloudShadow!: CloudShadowMap;
   post!: PostPipeline;
   reflection!: PlanarReflection;
   roads!: RoadSegment[];
@@ -122,9 +123,12 @@ export class Game {
     this.litMaterials.add(mat);
     const own = mat.onBeforeCompile;
     this.csm.setupMaterial(mat);
+    // the cloud footprint attenuates the key light next to the CSM shadow (shadows.ts); the uniforms are shared
+    mat.defines!.USE_CLOUD_SHADOW = 1;
     const csmHook = mat.onBeforeCompile;
     mat.onBeforeCompile = (shader, renderer) => {
       csmHook.call(mat, shader, renderer);
+      Object.assign(shader.uniforms, this.cloudShadow.uniforms);
       own?.call(mat, shader, renderer);
     };
     mat.needsUpdate = true;
@@ -161,6 +165,8 @@ export class Game {
     this.cascades.attach(this.csm);
     this.csm.fade = true;
     if (this.params.dbg.has('cascades')) installCascadeDebug();
+    installCloudShadowChunk();
+    this.cloudShadow = new CloudShadowMap(this.atmos);
     // route casters per cascade: thin / small objects only reach the near cascades (see culling.ts)
     installCascadeRouting(this.renderer, (l) => this.csm.lights.indexOf(l as THREE.DirectionalLight));
 
@@ -304,7 +310,10 @@ export class Game {
     if (dbg.has('nopools')) this.streets.poolsEnabled = false;
     if (dbg.has('nohighway')) this.highway.group.visible = false;
     if (dbg.has('notraffic')) this.traffic.group.visible = false;
-    if (dbg.has('nocloudshadow')) { this.post.cloudShadowStrength = 0; this.reflection.cloudShadowStrength = 0; }
+    if (dbg.has('nocloudshadow')) this.cloudShadow.strength = 0;
+    // the mirrored objects carry their cloud shadow from their own materials (CloudShadowMap): the resolve's
+    // multiplier on the finished mirror image would count it twice (request to the water builder: drop the hunk)
+    this.reflection.cloudShadowStrength = 0;
     if (dbg.has('norefl')) this.reflection.enabled = false;
     // ditching bench: wheels forced down over water (the wheels-first case of the ditching matrix)
     if (dbg.has('geardown')) this.aircraft.flight.gearOverride = true;
@@ -409,6 +418,8 @@ export class Game {
     // fit the cascades (replaces CSM.update: slab-clipped extents, depth range following the slice, biases per
     // texel); the culling below routes casters by the cascade slices and texels this produces
     this.cascades.fit(planePos.y + 5);
+    // this frame's cloud footprint over the visible ground, sampled by every lit material with the CSM shadow
+    this.cloudShadow.render(this.renderer, cam, this.atmos, groundY);
     // view / shadow-caster culling shared by the chunked world systems
     this.cull.update(cam, this.csm.maxFar, this.atmos.state.sunDir);
     // the fitted shadow cameras: casters outside one are culled by the shadow pass, so cells / tiles outside it
