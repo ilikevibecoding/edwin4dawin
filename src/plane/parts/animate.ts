@@ -3,6 +3,7 @@ import { DIAL, GAUGES } from '../textures';
 import type { FlightTelemetry, FloatState } from '../physics';
 import type { PlaneModel } from '../model';
 import { CANVAS_PERIOD, CH, DEG, LIGHT, YOKE_HUB_X } from './context';
+import { animatePropeller } from './propeller';
 
 // Per-frame animation of the model: `PlaneModel.setWaterline` / `animate` / `setInstruments` delegate here.
 
@@ -39,21 +40,10 @@ export function animate(model: PlaneModel, pitch: number, roll: number, yaw: num
   model.elevator.rotation.z = pitch * 0.4;
   model.rudder.rotation.y = -yaw * 0.45;
   for (const wr of model.waterRudders) wr.rotation.y = -yaw * 0.5;
-  // the engine idles at 600 RPM (the tachometer's reading, setInstruments) and the prop turns at that speed too
+  // the engine idles at 600 RPM (the tachometer's reading, setInstruments) and the prop turns at that speed too;
+  // blades / streaks / disc states live with the propeller part
   const rpmVal = 600 + rpm * 2000;
-  model.propeller.rotation.x += rpmVal * (Math.PI * 2 / 60) * dt;
-  model.propDiscPivot.rotation.x += 1.7 * dt;
-  // cross-fade from crisp blades to the blur disc between ~500 and ~1200 RPM (at idle the blades are already a
-  // third of the way to a smear: 10 turns a second); above that only the disc and the spinner remain
-  const blend = Math.pow(THREE.MathUtils.clamp((rpmVal - 500) / 700, 0, 1), 0.6);
-  const disc = model.propDisc.material as THREE.MeshBasicMaterial;
-  // a spinning prop is mostly see-through: the disc only tints, the tip arc is a faint ring (from the seat the
-  // old 0.6 read as a bright double ring with spokes over the windshield)
-  disc.opacity = 0.42 * blend;
-  const bladeMat = model.propBlades.material as THREE.MeshStandardMaterial;
-  bladeMat.opacity = 1 - blend;
-  model.propBlades.visible = blend < 0.999;
-  model.propBlades.castShadow = blend < 0.5;
+  animatePropeller(model.propeller, rpmVal, dt);
   // position lights, rotating beacon and strobes: only emissive after dusk (`night` 0 by day .. 1 at night).
   // Beacon: a rotating red lamp, ~1 Hz, a sharp flash on a dim floor so the lens always reads red; strobes: a
   // double flash (50 ms, 100 ms apart) every 1.5 s; the landing light is on while on the water (taxiing lamp)
@@ -79,8 +69,9 @@ export function animate(model: PlaneModel, pitch: number, roll: number, yaw: num
   model.throttleLever.rotation.z = (0.5 - THREE.MathUtils.clamp(throttle, 0, 1)) * 0.9;
   model.flapLever.rotation.z = -(1.75 + THREE.MathUtils.clamp(flaps, 0, 1) * 1.05) + Math.PI / 2;
   // instrument lighting: the dials, the screen and the panel legends glow after dusk
-  model.panelMat.emissiveIntensity = 0.1 + 1.3 * glow;
-  model.instMat.emissiveIntensity = 0.15 + 1.4 * glow;
+  // by day the dials barely glow (a glowing face reads flat, without the light's shading); the backlight comes up after dusk
+  model.panelMat.emissiveIntensity = 0.04 + 1.36 * glow;
+  model.instMat.emissiveIntensity = 0.05 + 1.5 * glow;
   model.gpsMat.emissiveIntensity = 0.55 + 1.2 * glow;
   model.canvasAcc += dt;
   setInstruments(model, telemetry, rpm, throttle);

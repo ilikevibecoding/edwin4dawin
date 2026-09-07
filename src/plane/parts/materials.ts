@@ -184,9 +184,19 @@ export function buildMaterials(layout: FuselageLayout, u: MaterialUniforms, mate
           filmSheen = directionalLights[0].color * pow(sunNdh, 12.0) * (0.03 + dirt * 0.5) * sunFacing * (1.0 - 0.5 * inner);
           sunGlint = directionalLights[0].color * (pow(sunNdh, 2500.0) * 4.0 + pow(sunNdh, 300.0) * 0.35) * sunFacing * (0.6 + 0.4 * glassFr) * (1.0 - 0.6 * inner);
         #endif
+        // the film seen against the sun from the other side of the pane (the cabin side with the sun ahead, or the
+        // outside with the sun behind the aircraft): dust and scratches scatter the light coming through forward,
+        // a broad smudgy haze around the sun's direction with a brighter core, the thing that makes a windshield
+        // visible from the seat at all on a sun-ahead leg
+        vec3 sunHaze = vec3(0.0);
+        #if NUM_DIR_LIGHTS > 0
+          float backLit = saturate(-dot(glassN, sunL) * 3.0);
+          float toSun = saturate(dot(-glassV, sunL));
+          sunHaze = directionalLights[0].color * (pow(toSun, 6.0) * 0.06 + pow(toSun, 40.0) * 0.28) * (0.12 + dirt * 2.8) * backLit;
+        #endif
         // the film only shows where it scatters light (sun sheen, a little of the sky reflection): as a diffuse
         // haze it would frost the panes and make them glow at night
-        vec3 glassSpec = reflectedLight.directSpecular * (1.0 + dirt * 2.0) + filmSheen + sunGlint + skyRefl * (1.0 + dirt * 1.5);
+        vec3 glassSpec = reflectedLight.directSpecular * (1.0 + dirt * 2.0) + filmSheen + sunGlint + sunHaze + skyRefl * (1.0 + dirt * 1.5);
         // soft knee: the sun's mirror image stays bright but never clips to white
         glassSpec = 1.0 - exp(-glassSpec);
         float glassA = clamp(diffuseColor.a + glassF * 0.85 + vig * 0.10 + dirt * 0.06, 0.0, 1.0);
@@ -194,6 +204,8 @@ export function buildMaterials(layout: FuselageLayout, u: MaterialUniforms, mate
         // highlight to a grey smear over the cabin interior)
         float glintL = 1.0 - exp(-max(sunGlint.r, max(sunGlint.g, sunGlint.b)));
         glassA = max(glassA, glintL * 0.9);
+        float hazeL = 1.0 - exp(-max(sunHaze.r, max(sunHaze.g, sunHaze.b)));
+        glassA = max(glassA, hazeL * 0.8);
         // the tint veil is lit by the sky only: sun on the pane must not fill it with a bright diffuse haze; the
         // dirt film scatters a little skylight (the veil the cabin side shows against the bright bay)
         vec3 glassCol = reflectedLight.indirectDiffuse * 1.5 * (diffuseColor.a + dirt * 0.22) + glassSpec * (1.0 - 0.5 * vig);
@@ -210,7 +222,7 @@ export function buildMaterials(layout: FuselageLayout, u: MaterialUniforms, mate
       `)
       .replace('#include <premultiplied_alpha_fragment>', '');
   };
-  glass.customProgramCacheKey = () => 'cockpit-glass-v10';
+  glass.customProgramCacheKey = () => 'cockpit-glass-v11';
   const plainPaint = new THREE.MeshPhysicalMaterial({ color: LIVERY.upper, roughness: 0.4, metalness: 0.0, clearcoat: 0.6, clearcoatRoughness: 0.15 });
   const parts = partsMaterial();
   for (const m of [paint, wingPaint, floatPaint, plainPaint, parts]) withWaterBounce(m);
@@ -223,7 +235,8 @@ export function buildMaterials(layout: FuselageLayout, u: MaterialUniforms, mate
   // live instrument parts: the atlas gives the ball / card art and flat colours, the vertex shader rotates each
   // channel about its gauge centre (uInstAngle, radians CCW) after an optional shift (uInstShift, attitude pitch)
   const atlas = instrumentAtlas();
-  const instMat = new THREE.MeshStandardMaterial({ map: atlas, emissiveMap: atlas, emissive: 0xffffff, emissiveIntensity: 0.15, roughness: 0.6, metalness: 0.0 });
+  // transparent for the needles' shadows (a half-transparent black patch of the atlas laid under each needle)
+  const instMat = new THREE.MeshStandardMaterial({ map: atlas, emissiveMap: atlas, emissive: 0xffffff, emissiveIntensity: 0.15, roughness: 0.6, metalness: 0.0, transparent: true });
   instMat.onBeforeCompile = (shader) => {
     shader.uniforms.uInstAngle = u.instAngle;
     shader.uniforms.uInstShift = u.instShift;
@@ -233,7 +246,9 @@ export function buildMaterials(layout: FuselageLayout, u: MaterialUniforms, mate
         int instCh = int(aChan + 0.5);
         float instC = cos(uInstAngle[instCh]), instS = sin(uInstAngle[instCh]);
         vec2 instQ = position.xy + uInstShift[instCh];
-        vec3 transformed = vec3(aPivot.x + instC * instQ.x - instS * instQ.y, aPivot.y + instS * instQ.x + instC * instQ.y, aPivot.z + position.z);
+        // aPivot.z flags a shadow copy of the part: after the rotation it slides down and to the right by a
+        // millimetre, the way the light through the windshield throws a needle's shadow on the dial
+        vec3 transformed = vec3(aPivot.x + instC * instQ.x - instS * instQ.y + aPivot.z * 0.0009, aPivot.y + instS * instQ.x + instC * instQ.y - aPivot.z * 0.0013, position.z);
         vInstLocal = transformed.xy - aPivot.xy;
         vInstClip = aClip;
       `);
@@ -242,7 +257,7 @@ export function buildMaterials(layout: FuselageLayout, u: MaterialUniforms, mate
       .replace('#include <common>', '#include <common>\nvarying vec2 vInstLocal;\nvarying float vInstClip;')
       .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\nif (vInstClip > 0.0 && dot(vInstLocal, vInstLocal) > vInstClip * vInstClip) discard;');
   };
-  instMat.customProgramCacheKey = () => 'cockpit-instruments-v2';
+  instMat.customProgramCacheKey = () => 'cockpit-instruments-v3';
   const gpsMat = new THREE.MeshStandardMaterial({ map: u.gpsTexture, emissiveMap: u.gpsTexture, emissive: 0xffffff, emissiveIntensity: 0.55, roughness: 0.25, metalness: 0.0 });
   materials.push(paint, wingPaint, floatPaint, glass, plainPaint, parts, cabinMat, panelMat, instMat, gpsMat);
   return { paint, wingPaint, floatPaint, glass, glassUniforms, plainPaint, parts, cabinMat, panelMat, instMat, gpsMat };
