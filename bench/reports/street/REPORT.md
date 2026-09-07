@@ -275,8 +275,11 @@ alter nothing visible, each verified in the harness:
 | plazas / lots (round 4, merged tree) | 72 / 38 (round 7 tree: 71 / 40) |
 | parked cars (lots / curbside) / planters | 5 018 / 11 283 / 1 773 (round 7; the lots held 5 996 at 42 % occupancy in round 4) |
 | paving triangles (plazas + lots 47 k, port yard 26 k) / yard triangles (near / far shapes) | 70 k / 396 k / 181 k (round 7, with the parking lanes; 203 k / 85 k in round 5) |
-| street cells | 558 (566 in round 7) |
+| street cells | 558 (566 in round 7; 578 + 1 860 quarter-cells of the small kit in round 15) |
 | lamp map | 3449 × 2559 texels, 2.5 m, 8.8 MB |
+| street trees / median palms / frontage buffer plants (rounds 12–14, through the vegetation list) | 6 004 / 1 871 / 175 |
+| medians (pieces / length) | 449 / 40.2 km |
+| awnings / blade signs / newspaper boxes / mailboxes / bike racks / litter cans (round 12) | 1 482 / 879 / 1 955 / 277 / 1 302 / 740 |
 
 Per-view upper bounds within the cull radii (no frustum): `bridge-low` 253 k tris / 46 draws, `street2m` 424 k / 66,
 `c500` 350 k / 59, `cockpit-city` 6 k / 4, `skyline-high` 0.
@@ -368,6 +371,24 @@ Every view is under the 1.5 M cap (city_north by 99 k); street_2m's +71.5 k is t
 level (defect 7.5) and stays 144 k under the cap. Round 10's dot fix (d37ed6d9) adds no triangles: the 40 785 point
 sprites were already drawn (and discarded by the depth test) in every night frame.
 
+### Rounds 11–15: the frame harness through the sidewalk-life rounds and the budget round
+
+The harness tallies the four street-side systems (streets, props, city, vegetation) per pass; the rest of the frame
+(terrain, water, sky, aircraft, traffic, highway furniture) is the measured total less the harness, 519 k in
+city_north, 340 k in city_200m, 329 k in street_2m by h13 / h14 (h14 = 32a7f260 at 23:18: 287 / 1 402 k, 264 /
+1 365 k, 212 / 912 k, the lead with at most round 11 of this branch).
+
+| view | harness round 9 | round 12 (trees, kit, awnings) | round 13 (medians) | round 14 | round 15 (budget) | Δ 14→15 | predicted frame |
+|------|----------------:|-------------------------------:|-------------------:|---------:|------------------:|--------:|----------------:|
+| city_north | 883 k | 972 k | 979 k | 979 k | 891 k | −88 k | ≈ 1 410 k |
+| city_200m | 1 024 k | 1 127 k | 1 139 k | 1 139 k | 1 058 k | −81 k | ≈ 1 398 k |
+| city_500m | 672 k | 711 k | 718 k | 718 k | 672 k | −46 k | ≈ 866 k |
+| street_2m | 1 027 k | 1 211 k | 1 218 k | 1 218 k | 1 061 k | −157 k | ≈ 1 390 k |
+
+Round 15 by change (city_north / city_200m / street_2m): the small kit's quarter-cells −24 / −32 / −91 k; the walk
+LOD in 3D −19 / 0 / −6 k; the lamp LOD in 3D 0 / 0 / −5 k (city_500m −24 k); lamps and the large kit casting into
+the finest cascade only −48 / −68 / −57 k. Draw calls ±1. The measured frames are in the round 16 table below.
+
 ## Rounds
 
 See `DEFECTS.md`. Round 0 = baseline, round 1 = first build (shader compile fix, terrain z-fight, footing validation,
@@ -379,7 +400,15 @@ round 5 = budget trims and the eye-level read; round 6 = the plaza-tree regressi
 plaza planting beds, curbside parking with the yard LOD that pays for it, plaza lanterns; round 8 = the h10 budget root
 cause (the lamp diet, measured in h11), cars at eye level, bed tone; round 9 = signal heads from the air, arterial
 pole spacing; round 10 = the h12 read and the lamp dots' root cause (no log depth in the dot shader: no dot ever
-rendered against ground or buildings), fixed for h13.
+rendered against ground or buildings), fixed for h13; round 11 = the street_2m surface (mill-and-fill patchwork,
+joints, alligator cracking, gutter grime and litter, aged paint, manholes in the lane centres, tyre polish, the
+crown); round 12 = sidewalk life downtown (street trees in grates through the vegetation system, newspaper boxes,
+mailboxes, bike racks, litter cans, awnings and blade signs on the retail bases); round 13 = the kerbed arterial
+medians with the traffic's inner lane moved to 2.6 m; round 14 = the frontage street beside the coastal highway
+(darker, worn, a planted buffer); round 15 = the budget round (the small kit in quarter-cells, walk and lamp LODs
+in three dimensions, finest-cascade-only shadows for lamps and the large kit: −88 / −81 / −157 k in city_north /
+city_200m / street_2m); round 16 = downtown corner bollards, the capture reads (night at 200 m, the kerbs on the
+10 % grades after the terrain fix, rounds 11–15 before / after, the measured budget).
 
 ## Self-scores (h03 critic → h12 frames, 0–10; the critic's h03 scores in brackets)
 
@@ -420,6 +449,11 @@ since 15:58 / 18:39, the slots held by other agents' sessions for 4–9 h.
   either side of 6.5 m aisles, 16.5 m period, from the lot corner in the district frame. The curbside cars
   (`parkCurb`, round 7) stand 1.2 m in from the curb of the 12–14 m grid streets, i.e. 4.8–5.8 m from the centreline,
   assuming the street traffic keeps to `laneOff0` = 1.8 m; if that offset grows past ~2.6 m the parking lane must go.
-  Conversely, a kerbed median on the arterials (the gauntlet's "medians with curbs and planting strips", defect 1.15)
-  needs the arterial `laneOff0` moved from 1.5 m to ~2.6 m first: with the inner lane at 1.5 m a car body starts
-  0.6 m from the centreline and no median wider than paint fits.
+  The arterial `laneOff0` is now 2.6 m on the 4-lane arterials (round 13, this branch's own edit of `traffic.ts`) and
+  the kerbed medians stand between the inner lanes with openings 21 m past every signalised junction, arterial
+  crossing and chain end for the left turns; if the traffic grows a turn pocket it has those 21 m.
+- **Vegetation agent**: the street trees, median palms and the frontage hedge are planted through `Vegetation`'s
+  optional street-tree list (`StreetTree { arche, x, y, z, h }`, `Streets.streetTrees`), archetypes 0 (shade tree),
+  4 (palm) and 6 (sea grape). They take the system's tiers, cards and budgets unchanged; a cheaper "kerb tree" tier
+  (say cards from 250 m instead of 420 m for the list's trees) would give the aerial views back most of the 79–87 k
+  the trees cost there.
