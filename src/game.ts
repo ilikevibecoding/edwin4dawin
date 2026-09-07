@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { CSM } from 'three/examples/jsm/csm/CSM.js';
 import { REFLECTION_RANGE, REFLECTION_SCALE, type Params, type Quality } from './core/params';
-import { smoothstep } from './core/noise';
 import { Atmosphere } from './world/atmosphere';
 import { WorldMap } from './world/map';
 import { Sky } from './world/sky';
@@ -213,7 +212,7 @@ export class Game {
     this.reflection.excludeChildrenWhen(this.bridges.group, (m) => (m as THREE.InstancedMesh).isInstancedMesh === true && !m.castShadow);
     // highway furniture (barriers, guardrail, lighting, gantries and signs along the highway / causeway classes);
     // its thin steel (userData.noMirror) is far below a texel of the mirror image
-    this.highway = buildHighway(this.map, this.roads, (m) => this.registerLit(m));
+    this.highway = buildHighway(this.map, this.roads, (m) => this.registerLit(m), network.graph);
     this.highway.group.name = 'highway';
     this.scene.add(this.highway.group);
     this.reflection.excludeChildrenWhen(this.highway.group, (m) => m.userData.noMirror === true);
@@ -240,7 +239,7 @@ export class Game {
     await this.tick(progress, 'Paving sidewalks and hanging signals', 0.6);
     // sidewalks, curbs, signals, street furniture and the lamp plan (footings on the curb line) over the road graph;
     // low and unmirrored (the mirror image is far under its texel size for a curb)
-    this.streets = new Streets(this.map, network.graph, roadLights, this.city.markOccupied, network.blocksByDistrict, this.city.occupied);
+    this.streets = new Streets(this.map, network.graph, roadLights, this.city.markOccupied, network.blocksByDistrict, this.city.occupied, this.city.batches.groundBoxes((x, z) => this.map.heightAt(x, z)));
     for (const m of this.streets.materials) this.registerLit(m);
     this.streets.group.name = 'streets';
     this.scene.add(this.streets.group);
@@ -256,7 +255,7 @@ export class Game {
     this.reflection.excludeChildrenWhen(props.group, (o, cam) => props.cameraMeshes.has(o) || (!props.mirrorMeshes.has(o) && beyondRange(o, cam)));
 
     await this.tick(progress, 'Planting palms and mangroves', 0.74);
-    this.vegetation = new Vegetation(this.map, this.city.occupied);
+    this.vegetation = new Vegetation(this.map, this.city.occupied, this.streets.streetTrees);
     for (const m of this.vegetation.materials) this.registerLit(m);
     this.vegetation.group.name = 'vegetation';
     this.scene.add(this.vegetation.group);
@@ -376,11 +375,11 @@ export class Game {
     this.atmos.update(dt);
     const s = this.atmos.state;
     this.csm.lightDirection.copy(s.sunDir).negate();
-    // under a broken / overcast deck most of the direct beam arrives scattered from the whole ceiling: cast
-    // shadows fade to a faint, low-contrast darkening with the coverage (the key light itself is already
-    // dimmed by the weather preset), leaving the sun's direction only just readable under a 0.7 deck
-    const shadowStrength = 1 - 0.65 * smoothstep(0.4, 0.75, this.atmos.preset.coverage);
-    for (const l of this.csm.lights) { l.intensity = s.sunIntensity; l.color.copy(s.sunColor); l.shadow.intensity = shadowStrength; }
+    // A cast shadow blocks the whole direct beam whatever the weather; under a deck it is faint because the beam
+    // is small next to the sky's light (the preset's sunDim and the overcast IBL carry that), not because it
+    // leaks. The old 0.35 strength under a 0.7 deck, on top of the preset's dim and the cloud shadow, left the
+    // gaps in a cumulus deck without readable shadows.
+    for (const l of this.csm.lights) { l.intensity = s.sunIntensity; l.color.copy(s.sunColor); l.shadow.intensity = 1; }
     this.envTimer += dt;
     // the IBL probe only depends on the sun position and weather (no clouds in the probe), so refresh it on
     // a time-of-day change; the old 5 s timer re-ran the PMREM (a multi-pass cubemap convolution) as a

@@ -14,6 +14,8 @@
   header label { color: var(--muted); font-size: 13px; display: flex; gap: 6px; align-items: center; }
   select { background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-size: 14px; }
   .status { margin-left: auto; color: var(--muted); font-size: 13px; text-align: right; }
+  .play { background: #f2c230; color: #1a1400; font-weight: 600; font-size: 13px; padding: 7px 12px; border-radius: 6px; text-decoration: none; white-space: nowrap; }
+  .play:hover { background: #ffd65a; }
   main { max-width: 1680px; margin: 0 auto; padding: 18px 20px 60px; }
   .item { margin: 0 0 34px; }
   .item h2 { font-size: 18px; margin: 18px 0 8px; font-weight: 600; }
@@ -43,6 +45,7 @@
   <label>Before <select id="before"></select></label>
   <label>After <select id="after"></select></label>
   <div class="status" id="status">loading…</div>
+  <a class="play" id="play" href="#" target="_blank" rel="noopener" hidden>Play the latest build</a>
 </header>
 <main id="main"></main>
 <div class="lightbox" id="lightbox"><img alt=""></div>
@@ -70,6 +73,24 @@ async function load() {
   if (!afterTag || afterTag === hadLatest || !tags.includes(afterTag)) afterTag = tags[tags.length - 1];
   fillSelects();
   render();
+  loadLive();
+}
+// the latest deployed build (tools/publish-pages.sh writes progress/live.json on gh-pages and purges it from
+// jsDelivr); the branch URL is fine here because it is purged at every deploy and only carries one link
+async function loadLive() {
+  const urls = local ? ['live.json'] : ['https://cdn.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@gh-pages/progress/live.json', 'live.json'];
+  for (const u of urls) {
+    try {
+      const live = await (await fetch(u + '?ts=' + Date.now(), { cache: 'no-store' })).json();
+      if (live && live.url) {
+        const a = $('#play');
+        a.href = live.url;
+        a.textContent = `Play the latest build (${live.build.split('-')[0]}, ${live.time.replace('T', ' ').slice(0, 16)} UTC)`;
+        a.hidden = false;
+        return;
+      }
+    } catch (e) { /* try the next source */ }
+  }
 }
 function snap(tag) { return data.snapshots.find((s) => s.tag === tag); }
 function fmt(s) { return `${s.tag} · ${s.time.replace('T', ' ')} · build ${s.build}`; }

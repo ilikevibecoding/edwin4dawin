@@ -177,6 +177,91 @@ under this renderer's sun, as the walks were in round 1 — and was brought down
   heads on backplates all seen (DEFECTS 10.3); counters in the budget table (DEFECTS 10.2): street_2m +71.5 k for the
   cars' shadows, near shapes and backplates (estimate +72 k), the aerial views +3.5–7 k, every view under the cap.
 
+### Round 11 — street-level surface realism at the street_2m camera (DEFECTS 11.1–11.7)
+
+The lead merged first (762b199d: the half-cell terrain fix — `heightAt()` and the rendered ground agree, so the
+kerbs and footings placed on the CPU height field now meet the ground they were computed for; re-checked on the 10 %
+grades of the suburban grid in round 15). Then the road shader's eye-level layer (9894f05d): the asphalt at 2 m read
+as one tone with crisp paint because every wear term of rounds 2–3 was sized for the aerial footprint and faded within
+25 m of the camera.
+
+- **Tonal patchwork**: mill-and-fill lane rectangles 12–40 m long in a third of the 48 m cells of every lane (tone
+  0.72–1.22 with a sealed 5 cm joint), patches 4.5 → 7 %, black 4.5 cm longitudinal joints at every lane edge and
+  27 m transverse joints, the utility trench scars kept; **alligator cracking** (a Worley F2−F1 cell network at
+  0.4 m cells) in the worst of the crack zones, at eye level only.
+- **Gutter**: grime graded to the kerb with run-off streaks, leaf litter and grit in the last half metre.
+- **Paint age**: a third of the repaving bands carry the old coat at half brightness, flaked away in 0.8 m bites; the
+  round-3 ghost markings kept. **Manholes** on the centreline or the lane centres, the gullies at the kerb.
+- **Tyre polish**: roughness −0.24 in the wheel paths at eye level (−0.10 from the air), so the sky's sheen sits in
+  the wheel paths; and a **2 % crown** applied to the shading normal after `normal_fragment_maps` (the across vector
+  from the screen-space derivatives of the uv), which shifts the sheen band across the road without touching the mesh.
+- Every term is box-filtered or fades with the pixel footprint: from the air the tone changes only by the lane-wide
+  patches. Before / after served from their own ports (`r103b` on the pre-round build, `r104` on round 11).
+
+### Round 12 — sidewalk life downtown (DEFECTS 12.1–12.5)
+
+- **Street trees in grates** (0f4113f1): a 1.2 m cast-iron pit grate 1.05 m from the kerb every 12–16 m on three
+  downtown faces in four and half the mid-rise ring's, a street of palms or of shade trees per chain, planted
+  through the vegetation system — `Vegetation` takes an optional street-tree list (`Streets.streetTrees`: archetype,
+  position, height), so the trees take its species, crown tiers, cards, wind and shadows and the palette needs no
+  coordination. 6 004 trees. The tree pits keep clear of every lamp, shelter and rank placed on the walk.
+- **Kerb-side furniture**: newspaper-box ranks (1–3 coin boxes in publisher colours with dark windows) and blue
+  mailboxes near the corners, inverted-U bike racks at the back of the walk, black litter cans mid-block downtown:
+  1 955 / 277 / 1 302 / 740, on top of the benches, bins, hydrants, shelters, cabinets and bollards of round 1.
+- **Awnings and blade signs at the retail bases**: `city.ts` exposes the ground massings (`BuildingBatches.groundBoxes`,
+  additive); `dressRetail` finds every retail-style box whose face looks at the run from 2.3–9 m behind the kerb, cuts
+  it into 5–8 m shopfronts and hangs an awning (1.3 m out at 18°, valance, six canvases) over 55 % of them and a blade
+  sign (lit at night, `EM_SIGN`) at one end of 35 %: 1 482 awnings, 879 signs.
+- Pedestrian impostors skipped: a flat card at 2 m reads as a cut-out.
+- Cost as first built (frame harness): street_2m +184 k (113 k of it the trees' 3D crowns, 58 k the small kit),
+  city_north +88 k (69 k the crowns) — paid back in round 15.
+
+### Round 13 — the kerbed arterial medians (DEFECTS 13.1–13.2)
+
+- `traffic.ts` now editable: the 4-lane arterials' inner lane moves from 1.5 to 2.6 m off the centreline (other 4-lane
+  roads unchanged), the offset the round-7 report had asked for. The road shader lays those arterials' lanes from
+  1.0 m (edges 1.0 / 4.2 / 7.4 m: lane line, ghost, edge line, arrows, wheel paths, mill-and-fill and manholes all
+  follow `laneO`).
+- **The median** (574ef15b): a 2 m raised strip — 0.3 m kerb tops, 0.15 m faces, a 1.4 m planting strip of the plaza
+  beds' turf with a mulched bed (`K_MEDIAN` in the sidewalk shader) and a palm every 18–24 m through the vegetation
+  list — with rounded noses, between **openings 21 m past the box of every signalised junction, arterial crossing and
+  chain end** (the painted left-turn pocket the traffic uses), a crosswalk cut at the minor streets, and 10 m
+  mid-block gaps in three stretches of five over 140 m. 449 pieces, 40.2 km, 1 871 palms, +94 k walk triangles
+  world-wide (+4–12 k per bench view).
+
+### Round 14 — the frontage street beside the coastal highway (DEFECTS 14.1; highway agent's request 3)
+
+- A street whose edge runs within 8 m of a highway or causeway shoulder, parallel to it, is flagged per row in the
+  road info buffer (class code + 0.25; `highwayGap` / `frontageAt` in `roads.ts`) and the shader tones it down to
+  three quarters of the asphalt with no bright repaving bands and its dashes worn to a trace (c194f415): from the
+  air it stops reading as 22 m of pale pavement with yellow dashes beside the highway. The grid's southernmost
+  street runs 2.5 km against the shoulder (edge gap −0.3 m over 1.2 km, opening to 23 m at the ends).
+- **The planted buffer**: where the strip between the walk and the shoulder leaves 2.2 m, a sea-grape hedge every
+  5–7 m down its middle and a palm every fourth where 3.5 m remain (`plantFrontageBuffer`, through the vegetation
+  list): 175 plants, 0.6–9.9 m clear of every road edge. Where the street abuts the shoulder the tone alone
+  separates them. No change in the four bench views (frame harness).
+
+### Round 15 — the budget round (DEFECTS 15.1–15.3)
+
+Rounds 12–13 had put the frame harness at street_2m 1 218 k / city_north 979 k for the four street-side systems,
+which with h13–h14's other systems (329 / 519 k) is 1 547 k / 1 497 k: over and at the cap. Four changes that
+alter nothing visible, each verified in the harness:
+
+- **The small kit in 250 m cells** (`SMALL_CELL`): it was built per 500 m cell with the cell's box as its only cull,
+  so at eye level three or four whole cells of it drew — 140 k at street_2m, most of it behind or beside the
+  camera. Its own quarter-cells: 140 → 49 k (street_2m), 32 → 8 k (city_north), 58 → 26 k (city_200m); +1 draw.
+- **Walk LOD in three dimensions** (`WALK_NEAR` 400 → 250 m, measured to the cell box in 3D): the 0.15 m kerb face
+  the far index drops is 0.8 px at 250 m from eye level and a pixel straight down from 200 m up. city_north's fine
+  walk rows 58 → 14 k, city_500m −22 k.
+- **Lamp LOD in three dimensions** (`LAMP_LOD` 150 m): a 0.15 m pole is 1.4 px at 150 m and the thin-member
+  inflation holds its silhouette either way; from the air every pole is the 4-gon. city_500m −24 k.
+- **Lamps and the large kit cast into the finest cascade only**: in the second cascade's 0.5 m texels a pole or a
+  mast arm is under a texel and a shelter roof a 3 × 7 texel blot seen at a grazing angle. city_north −48 k,
+  city_200m −68 k, street_2m −57 k of shadow triangles.
+- Tried and dropped: more palm streets (a palm costs a third of a crown at eye level but keeps 3D fronds to 650 m
+  against a crown's 420 m: −11 k at street_2m, +4–11 k from the air) and a thinner tree row (the aerial vegetation
+  pass is bound by its own tier budgets, so the street trees displace park trees rather than add: −7 / +1 k).
+
 ## Counts (node harness over the generated world)
 
 | item | count |

@@ -4,7 +4,7 @@ import {
   arcFraction, deckGeometry, flatUv, gridGeometry, halfWidthAt, humpGeometry, inBlock, insetSections, keyedRing, loftGrid, paneGeometry, revealGeometry, revolveGeometry, sectionAt, sectionPerimeter, sectionPoint, smoothStations, strutGeometry, tOfHeight, withStations,
   type LoftGrid, type QuadBlock, type Section,
 } from '../geometry';
-import { CHEAT_LINE, SURF, type FuselageLayout } from '../textures';
+import { CHEAT_LINE, DOORS, SURF, type FuselageLayout } from '../textures';
 import { at, CABIN_FRONT, CABIN_REAR, FLOOR, SILL, SKIN, WIN_TOP, WS_BASE, type BuildContext } from './context';
 
 /**
@@ -145,6 +145,7 @@ export function buildFuselageFrame(): FuselageFrame {
     sillY,
     windows: sideWindows,
     windowSill: SILL,
+    windshield: [CABIN_FRONT, 1.85, WS_BASE],
   };
   return { sections, innerSections, ring, outer, inner, R, jA, jB, jC, si, sideWindows, blocks, windshield, isWindow, iFront, iRear, innerHalfAt, layout };
 }
@@ -155,7 +156,7 @@ export const COWL_AXIS_Y = 0.02, INLET_R = 0.4225;
 /** station of the engine face (baffle plate) seen through the inlet, and of the cowl's trailing edge (firewall seam) */
 const ENGINE_FACE_X = 4.21, COWL_TE_X = 3.20;
 /** chin (carburettor) scoop under the bowl and the top (oil cooler) scoop behind it: mouth stations and mouth half sizes */
-const CHIN = { x0: 4.48, x1: 3.75, w: 0.19, h: 0.12 }, TOP = { x0: 4.02, x1: 3.36, w: 0.16, h: 0.095 };
+const CHIN = { x0: 4.48, x1: 3.75, w: 0.17, h: 0.09 }, TOP = { x0: 4.02, x1: 3.36, w: 0.15, h: 0.08 };
 /** cowl flaps: hinge station, trailing edge station, angular position about the axis (rad from straight down), half width */
 const COWL_FLAPS = { hingeX: 3.46, teX: 3.22, angles: [-0.48, 0.48], halfW: 0.13, lift: 0.045 };
 
@@ -342,9 +343,20 @@ export function buildFittings(ctx: BuildContext): void {
   }
   fittings.add(new THREE.TorusGeometry(0.265, 0.013, 6, 36), at([4.37, AX, 0], [0, Math.PI / 2, 0]), SURF.rubber);
   // ------------------------------------------------------------ scoop mouths and cowl-flap openings
-  // dark plates a hair ahead of the scoop hoods' front caps: the intakes read as openings, not yellow bumps
-  fittings.add(new THREE.BoxGeometry(0.006, CHIN.h * 0.58, CHIN.w * 1.36), at([CHIN.x0 + 0.002, skinBottomY(sections, CHIN.x0, 0) - CHIN.h * 0.5, 0]), SURF.duct);
-  fittings.add(new THREE.BoxGeometry(0.006, TOP.h * 0.58, TOP.w * 1.36), at([TOP.x0 + 0.002, skinTopY(sections, TOP.x0, 0) + TOP.h * 0.5, 0]), SURF.duct);
+  // dark plates a hair ahead of the scoop hoods' front caps so the intakes read as openings, not yellow bumps: each
+  // plate follows the hood's own section (the superellipse of `hood`) a lip's width inside it, on a flat base along
+  // the skin (a rectangular plate read as a black box bolted under the bowl in the 4 m nose view)
+  const mouthPlate = (sc: { w: number; h: number }, sign: 1 | -1): THREE.BufferGeometry => {
+    const shape = new THREE.Shape(), w = sc.w * 0.9, h = sc.h * 0.84, N = 16;
+    shape.moveTo(-w, 0);
+    for (let i = 0; i <= N; i++) { const z = -w + (2 * w * i) / N; shape.lineTo(z, sign * (hood(z, w, h) + 0.004)); }
+    shape.lineTo(w, 0);
+    const g = new THREE.ShapeGeometry(shape);
+    g.rotateY(Math.PI / 2);
+    return g;
+  };
+  fittings.add(mouthPlate(CHIN, -1), at([CHIN.x0 + 0.002, skinBottomY(sections, CHIN.x0, 0) + 0.002, 0]), SURF.duct);
+  fittings.add(mouthPlate(TOP, 1), at([TOP.x0 + 0.002, skinTopY(sections, TOP.x0, 0) - 0.002, 0]), SURF.duct);
   // the opening a lifted cowl flap uncovers: a dark plate lying on the skin under each flap
   for (const a of COWL_FLAPS.angles) {
     const len = COWL_FLAPS.hingeX - COWL_FLAPS.teX;
@@ -380,13 +392,15 @@ export function buildFittings(ctx: BuildContext): void {
   // decal / a glass ghost by the iter08 critics).
   const skinAt = (x: number, y: number) => halfWidthAt(sectionAt(sections, x), y);
   for (const side of [-1, 1]) {
-    const skinZ = skinAt(1.3, -0.45);
-    fittings.add(new THREE.BoxGeometry(0.3, 0.03, 0.2), at([1.3, -0.45, side * (skinZ + 0.11)]), SURF.darkMetal);
-    for (const dx of [-0.11, 0.11]) fittings.add(new THREE.BoxGeometry(0.03, 0.1, 0.18), at([1.3 + dx, -0.40, side * (skinZ + 0.085)], [0, 0, 0]), SURF.darkMetal);
-    // exterior door handle: a paddle lever lying in its recess (the recess plate is painted), and the two external
-    // hinges on the door's front edge (the seam itself is painted, see fuselageMaps)
-    fittings.add(new THREE.BoxGeometry(0.11, 0.024, 0.014), at([1.04, 0.05, side * (skinAt(1.04, 0.05) + 0.006)], [0, 0, 0.06]), SURF.metal);
-    for (const y of [0.62, -0.18]) fittings.add(new THREE.BoxGeometry(0.03, 0.09, 0.012), at([1.81, y, side * (skinAt(1.81, y) + 0.005)]), SURF.metal);
+    for (const { handleX, hingeX, stepX } of DOORS) {
+      const skinZ = skinAt(stepX, -0.45);
+      fittings.add(new THREE.BoxGeometry(0.3, 0.03, 0.2), at([stepX, -0.45, side * (skinZ + 0.11)]), SURF.darkMetal);
+      for (const dx of [-0.11, 0.11]) fittings.add(new THREE.BoxGeometry(0.03, 0.1, 0.18), at([stepX + dx, -0.40, side * (skinZ + 0.085)], [0, 0, 0]), SURF.darkMetal);
+      // exterior door handle: a paddle lever lying in its recess (the recess plate is painted), and the two external
+      // hinges on the door's hinged edge (the seam itself is painted, see fuselageMaps)
+      fittings.add(new THREE.BoxGeometry(0.11, 0.024, 0.014), at([handleX - 0.02, 0.05, side * (skinAt(handleX, 0.05) + 0.006)], [0, 0, 0.06]), SURF.metal);
+      for (const y of [0.62, -0.18]) fittings.add(new THREE.BoxGeometry(0.03, 0.09, 0.012), at([hingeX, y, side * (skinAt(hingeX, y) + 0.005)]), SURF.metal);
+    }
   }
   // belly-tank filler caps in a row on the port side under the cabin (a DHC-2 carries its fuel in fuselage belly
   // tanks, filled from the left side): a flush cap in a dark ring, each turned to the skin's normal where the lower

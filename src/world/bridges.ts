@@ -237,6 +237,14 @@ const CONCRETE_FRAG = /* glsl */ `
     float stain = mix((1.0 - smoothstep(0.5, 0.9, jf)) * smoothstep(0.5, 0.56, jf) * (0.4 + 0.6 * n2), 0.12, smoothstep(1.5, 4.0, fwA));
     conc *= 1.0 - 0.10 * stain * wheel - 0.04 * stain;
     conc *= 1.0 - 0.12 * smoothstep(0.6, 0.75, fbm3(vWorldPosR.xz * 0.03 + 8.0));
+    // the deck drains: a cast-iron inlet grate 0.6 x 0.4 m in the gutter over every scupper (15 k + 7.5 m, the
+    // geometry loop) and the damp ring the run-off leaves round it - the row of dark dots along both edge lines
+    // that marks a bridge deck from 45-120 m
+    float sc = abs(fract((along - 7.5) / 15.0) - 0.5) * 15.0;
+    float gutter = abs(xm) - (width * 0.5 - 0.32);
+    float grate = aaLine(sc, 0.3, fwA) * aaLine(gutter, 0.2, fwX);
+    float damp = exp(-pow(sc / 1.2, 2.0)) * exp(-pow(gutter / 0.7, 2.0));
+    conc *= 1.0 - 0.55 * grate - 0.12 * damp;
     shoulder *= 1.0 - 0.15 * joint - 0.1 * smoothstep(0.6, 0.75, fbm3(vWorldPosR.xz * 0.03 + 8.0));
     conc = mix(conc, shoulder, onShoulder);
     // markings sized to read from a 45 m chase camera: 30 cm white edge lines, 30 cm lane dashes (3 m on / 6 m off),
@@ -252,6 +260,14 @@ const CONCRETE_FRAG = /* glsl */ `
     diffuseColor.rgb = mix(conc, vec3(0.92), max(edgeLine, dashes) * 0.92);
     diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.88, 0.66, 0.14), centre * 0.94);
     roughnessFactor = 0.82;
+    // the lamp pools at night: the deck lamps stand at 22 + 45 j m, alternating sides (the geometry loop below),
+    // their heads 2 m inside the parapet, so each pool is a lozenge over the near carriageway fading over ~25 m
+    // along - from the air a lit causeway is a string of pools, not a dark ribbon between lit dots
+    float lj = floor((along - 22.0) / 45.0 + 0.5);
+    float lampS = 22.0 + 45.0 * lj;
+    float lampSide = mod(lj, 2.0) < 0.5 ? -1.0 : 1.0;
+    deckPool = 1.3 * exp(-pow((along - lampS) / 12.0, 2.0)) * exp(-pow(max(abs(xm - lampSide * (width * 0.5 + 0.8)) - 2.0, 0.0) / 7.0, 2.0));
+    deckPoolTint = diffuseColor.rgb;
   } else if (vRoadInfo.y > 2.5) {
     // riprap: quarried rock 0.5-1 m, every stone its own tone (fading to the mean once a stone is a pixel),
     // wet and dark below the splash line
@@ -264,9 +280,13 @@ const CONCRETE_FRAG = /* glsl */ `
     diffuseColor.rgb *= 1.0 - 0.4 * (1.0 - smoothstep(-0.2, 1.1, vWorldPosR.y));
     roughnessFactor = 0.96;
   } else if (vRoadInfo.y > 1.5) {
-    // embankment fill: mottled earth or sand, a little darker where the slope meets the ground
+    // embankment fill: mown grass (the highway verge's tone and its 40-80 m dry khaki patches, highway.ts, so the
+    // slopes and the verge they continue read as one strip) or beach sand; mottled, a little darker at the toe
     float m = fbm3(vWorldPosR.xz * 0.35);
     float m2 = mix(vnoise(vWorldPosR.xz * 1.9), 0.5, smoothstep(0.15, 0.6, length(fwidth(vWorldPosR.xz))));
+    float isGrass = step(diffuseColor.r, diffuseColor.g);
+    float dryPatch = smoothstep(0.5, 0.64, fbm3(vWorldPosR.xz * 0.017 + 4.0));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.40, 0.34, 0.16), isGrass * 0.8 * dryPatch);
     diffuseColor.rgb *= (0.84 + 0.3 * m) * (0.92 + 0.16 * m2);
     roughnessFactor = 0.97;
   } else {
@@ -294,20 +314,23 @@ const CONCRETE_FRAG = /* glsl */ `
 /** The bridge concrete: pavement + structure in one material so a chunk of causeway is a single draw call. The
  *  material is derived from the shared bridge concrete game.ts registered with the CSM (defines + compile hook)
  *  and it is that material's only consumer, so the CSM keeps its uniforms current. */
-function createConcreteMaterial(concrete: THREE.Material): THREE.MeshStandardMaterial {
+function createConcreteMaterial(concrete: THREE.Material, lampGlow: THREE.IUniform<number>): THREE.MeshStandardMaterial {
   const src = concrete as THREE.MeshStandardMaterial;
   const mat = new THREE.MeshStandardMaterial({ color: src.color.clone(), roughness: src.roughness, metalness: 0.0, vertexColors: true });
   if (src.defines) mat.defines = { ...src.defines };
   mat.onBeforeCompile = (shader, renderer) => {
     src.onBeforeCompile.call(src, shader, renderer);
+    shader.uniforms.uLampGlow = lampGlow;
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 aRoadUv; attribute vec3 aRoadInfo; varying vec2 vRoadUv; varying vec3 vRoadInfo; varying vec3 vWorldPosR;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvRoadUv = aRoadUv; vRoadInfo = aRoadInfo; vWorldPosR = (modelMatrix * vec4(position, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec2 vRoadUv; varying vec3 vRoadInfo; varying vec3 vWorldPosR;\n${GLSL_NOISE}\n${GLSL_AA_LINE}`)
-      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\n${CONCRETE_FRAG}`);
+      .replace('#include <common>', `#include <common>\nvarying vec2 vRoadUv; varying vec3 vRoadInfo; varying vec3 vWorldPosR; uniform float uLampGlow;\n${GLSL_NOISE}\n${GLSL_AA_LINE}`)
+      .replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>\nfloat deckPool = 0.0; vec3 deckPoolTint = vec3(0.0);\n${CONCRETE_FRAG}`)
+      // the lamp pools on the deck (the warm tint of the highway's pools, highway.ts), only while the lamps are lit
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.82, 0.55) * deckPoolTint * (deckPool * uLampGlow);');
   };
-  mat.customProgramCacheKey = () => 'bridge-concrete-v5';
+  mat.customProgramCacheKey = () => 'bridge-concrete-v7';
   return mat;
 }
 
@@ -348,8 +371,13 @@ ${MIN_WIDTH_VERT}
  *  the head cut-off distance instead of fading with its sub-pixel coverage: a street light at 4 km is far brighter
  *  than anything its pixel averages with). Applied through `emissive`, so only while the lamps are on. */
 export const LIT_DOT_ALPHA = 0.55;
+/** Stay cables and arch hangers (`aGlow` = -1) keep at least this much opacity: the fan of a cable-stayed bridge is
+ *  the structure's read from 1-3 km, where a 20 cm stay covers a twentieth of a pixel and would otherwise vanish
+ *  (the critic's "cable-less bridges"). The inflated 1.75 px line at this opacity is what a sheathed stay looks like
+ *  against the sky at that range: a faint, continuous hairline. */
+export const STAY_ALPHA = 0.5;
 export const STEEL_ALPHA_FRAG = /* glsl */ `
-diffuseColor.a *= max(vCover, vGlow * ${LIT_DOT_ALPHA.toFixed(2)} * smoothstep(0.3, 1.5, length(emissive)));
+diffuseColor.a *= max(max(vCover, step(vGlow, -0.5) * ${STAY_ALPHA.toFixed(2)}), max(vGlow, 0.0) * ${LIT_DOT_ALPHA.toFixed(2)} * smoothstep(0.3, 1.5, length(emissive)));
 `;
 
 /** Bridge steel (railings, cables, lamp posts, arches): vertex-coloured, with a per-vertex `aGlow` mask that turns the
@@ -372,10 +400,19 @@ function createSteelMaterial(steel: THREE.Material): { mat: THREE.MeshStandardMa
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', '#include <common>\nvarying float vGlow; varying float vCover;')
       .replace('#include <color_fragment>', `#include <color_fragment>\n${STEEL_ALPHA_FRAG}`)
-      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= vGlow;');
+      // the glow takes the member's own tint (the warm lamp heads stay warm; the pylons' obstruction beacons glow red)
+      .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance *= max(vGlow, 0.0) * vColor.rgb / max(max(vColor.r, vColor.g), max(vColor.b, 1e-3));');
   };
-  mat.customProgramCacheKey = () => 'bridge-steel-v3';
+  mat.customProgramCacheKey = () => 'bridge-steel-v4';
   return { mat, pixelScale };
+}
+
+/** Armoured expansion joint across a carriageway: two steel edge plates `w` wide in all, polished pale by the traffic,
+ *  with the dark elastomer seal down the middle - from 45-120 m up a pale line with a dark core across the dark
+ *  asphalt at every pier, the rhythm that tells a bridge deck from a road. */
+function armouredJoint(steel: Soup, f: Frame, cw: number, yaw: number, w: number): void {
+  steel.box(f.x, f.y + 0.03, f.z, cw, 0.035, w, yaw, 0, S_ARMOUR, false);
+  steel.box(f.x, f.y + 0.03, f.z, cw, 0.045, w * 0.28, yaw, 0, S_DARK, false);
 }
 
 /** Lamp glow 0..1 for the key light: on through dusk (sun under ~10 deg) and whenever the key light is the moon. */
@@ -661,7 +698,7 @@ class BridgeCuller {
   private readonly seen = new Set<THREE.PerspectiveCamera>();
   private cameras: THREE.PerspectiveCamera[] = [];
 
-  constructor(private readonly steel: THREE.MeshStandardMaterial) {}
+  constructor(private readonly steel: THREE.MeshStandardMaterial, private readonly lampGlow: THREE.IUniform<number>) {}
 
   observe(camera: THREE.Camera): void {
     if ((camera as THREE.PerspectiveCamera).isPerspectiveCamera) this.seen.add(camera as THREE.PerspectiveCamera);
@@ -675,7 +712,9 @@ class BridgeCuller {
       if (this.sunDir.lengthSq() > 1e-6) this.sunDir.normalize(); else this.sunDir.set(0, 1, 0);
       keyIntensity = this.sun.intensity;
     }
-    this.steel.emissiveIntensity = LAMP_GLOW * lampGlowFor(this.sunDir, keyIntensity);
+    const glow = lampGlowFor(this.sunDir, keyIntensity);
+    this.steel.emissiveIntensity = LAMP_GLOW * glow;
+    this.lampGlow.value = glow;
 
     if (this.seen.size) { this.cameras = [...this.seen]; this.seen.clear(); }
     if (!this.cameras.length) return; // until a chunk has been drawn the renderer's frustum test alone applies
@@ -740,16 +779,22 @@ const C_FOAM: Rgb = [1.85, 1.9, 1.92];       // wash around the footings (albedo
 const C_DECK: Rgb = [1, 1, 1];
 /** Steel tints. */
 const S_PLAIN: Rgb = [1, 1, 1];
-const S_DARK: Rgb = [0.3, 0.3, 0.32];        // expansion joints
+const S_DARK: Rgb = [0.3, 0.3, 0.32];        // expansion joint seals
+const S_ARMOUR: Rgb = [0.78, 0.78, 0.8];     // joint edge plates, polished by the traffic
 const S_HEAD: Rgb = [0.92, 0.9, 0.84];       // lamp luminaires
+const S_BEACON: Rgb = [0.95, 0.09, 0.06];    // aviation obstruction beacons on the pylon tops (their glow is red)
+const S_NAV_GREEN: Rgb = [0.10, 0.92, 0.30]; // mid-span channel lights
+/** `aGlow` of the stays and hangers: no glow, but the STAY_ALPHA opacity floor (STEEL_ALPHA_FRAG) */
+const STAY_FLAG: readonly number[] = [-1];
 
 /** `_roadMaterial` is kept in the signature for game.ts; the carriageway uses its own pavement shading (asphalt
  *  lanes between pale concrete shoulders, kerbs and parapets) so the causeways read as structured decks against the
  *  water at every altitude. */
 export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concrete: THREE.Material, steel: THREE.Material): BridgeBuild {
-  const concreteMat = createConcreteMaterial(concrete);
+  const lampGlow: THREE.IUniform<number> = { value: 0 };
+  const concreteMat = createConcreteMaterial(concrete, lampGlow);
   const { mat: steelMat, pixelScale } = createSteelMaterial(steel);
-  const culler = new BridgeCuller(steelMat);
+  const culler = new BridgeCuller(steelMat, lampGlow);
   const _size = new THREE.Vector2();
   /** pixels per metre at 1 m of view depth for the pass about to draw (main frame, mirror or any other target) */
   const observeSteel = (renderer: THREE.WebGLRenderer, camera: THREE.Camera) => {
@@ -839,7 +884,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
     const RIPRAP_INFO = [0, 0, 0, 3, 0];
     const sandy = (x: number, z: number) => map.zoneAt(x, z) === 2;
     const C_FILL_SAND: Rgb = [0.92, 0.84, 0.66];
-    const C_FILL_GRASS: Rgb = [0.60, 0.68, 0.40];
+    const C_FILL_GRASS: Rgb = [0.21, 0.33, 0.13];   // the highway verge's mown grass (highway.ts C_VERGE_GRASS, a shade fresher)
     const C_RIPRAP: Rgb = [0.60, 0.585, 0.55];
     const SLOPE_TOP = -0.45;      // the fill meets the fascia's lower edge
     const RIPRAP_TOP = 1.7;       // rock armour from the toe up to the splash zone
@@ -1093,13 +1138,13 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         P.proxy.box(fm.x, fm.y - g - 1.7, fm.z, W * 0.94, 1.5, s1 - s - 1.5, yawAt(fm), 0, C_PROXY_SOFFIT, false, NO_ROAD);
       }
       // expansion joint across the carriageway over every pier
-      P.steel.box(f.x, f.y + 0.03, f.z, cw, 0.04, 0.3, yaw, 0, S_DARK, false);
+      armouredJoint(P.steel, f, cw, yaw, 0.5);
     }
     // abutment joints: the approach-slab finger joint where the road runs onto each end of the deck
     for (const s of [0.45, total - 0.45]) {
       const P = parts[chunkOf(s)];
       const f = frameAt(s);
-      P.steel.box(f.x, f.y + 0.03, f.z, cw, 0.04, 0.5, yawAt(f), 0, S_DARK, false);
+      armouredJoint(P.steel, f, cw, yawAt(f), 0.7);
     }
 
     // ------------------------------------------------------------ main span structure
@@ -1162,6 +1207,10 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
           const l0 = at(f.y + 1.3), l1 = at(topY - 6.5);
           const inner = (p: { x: number; z: number }, y: number) => new THREE.Vector3(p.x - f.rx * (legW(y) * 0.5 + 0.25) * side, y, p.z - f.rz * (legW(y) * 0.5 + 0.25) * side);
           P.arch.strut(inner(l0, f.y + 1.3), inner(l1, topY - 6.5), 0.22, S_DARK);
+          // aviation obstruction beacon on every leg top: a red lit dot at night (a lamp head, so it keeps its dot
+          // to the head cut-off distance), the mark of a tall structure over water seen from the air
+          const bt = at(topY);
+          P.heads.box(bt.x, topY + 0.35, bt.z, 0.5, 0.7, 0.5, yaw, 0, S_BEACON, false, [1], 'point');
         }
         P.struct.box(f.x, f.y - g - 2.2, f.z, 2 * legA(f.y) + legW(f.y), 2.2, legD(f.y), yaw, 0, C_PYLON, false, PIER_INFO);            // cross beam under the deck
         // slim portal beam flush with the leg tops (a deep one read as a suspension tower saddle)
@@ -1178,7 +1227,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
               parts[chunkOf(sa)].struct.box(ax, fa.y + KERB, az, 1.0, 1.3, 1.9, yawAt(fa), 0, C_UNDER, false, NO_ROAD);
               const anchor = new THREE.Vector3(ax, fa.y + KERB + 1.3, az);
               const head = new THREE.Vector3(f.x + f.rx * (legA(hy) - legW(hy) * 0.5 + 0.1) * side, hy, f.z + f.rz * (legA(hy) - legW(hy) * 0.5 + 0.1) * side);
-              P.arch.strut(anchor, head, 0.14, S_PLAIN);
+              P.arch.strut(anchor, head, 0.18, S_PLAIN, STAY_FLAG);
             }
           }
         }
@@ -1197,7 +1246,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
           const p = new THREE.Vector3(f.x + f.rx * ribA * side, y, f.z + f.rz * ribA * side);
           ribs[side < 0 ? 0 : 1].push(p);
           // hangers from the rib down to the parapet
-          if (i % 2 === 1 && i > 1 && i < segs - 1) P.arch.strut(new THREE.Vector3(p.x, f.y + ph + 0.2, p.z), p, 0.11, S_PLAIN);
+          if (i % 2 === 1 && i > 1 && i < segs - 1) P.arch.strut(new THREE.Vector3(p.x, f.y + ph + 0.2, p.z), p, 0.11, S_PLAIN, STAY_FLAG);
         }
         // cross bracing between the ribs near the crown
         if (i === 8 || i === 14 || i === 20) P.arch.box(f.x, y - 0.7, f.z, 2 * ribA, 1.2, 1.2, yawAt(f), 0, S_PLAIN, false);
@@ -1207,6 +1256,17 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         P.arch.addGeometry(tube, S_PLAIN);
         tube.dispose();
       }
+    }
+    if (mainSpan > 0) {
+      // navigation lights of the channel span (lamp heads, so they stay lit dots to the head cut-off): red on the
+      // channel faces of the main-span piers at the clearance level, green on both fascias at mid-span - the
+      // coloured dots under a lit causeway at night from the air, and what a boat steers between
+      for (const [ps, dirS] of [[spanA, 1], [spanB, -1]] as const) {
+        const f = frameAt(ps + dirS * 3.5);
+        for (const side of [-1, 1]) parts[chunkOf(ps)].heads.box(f.x + f.rx * (hw + 0.2) * side, f.y - g - 1.6, f.z + f.rz * (hw + 0.2) * side, 0.35, 0.5, 0.35, yawAt(f), 0, S_BEACON, false, [1], 'point');
+      }
+      const fc = frameAt(centre);
+      for (const side of [-1, 1]) parts[chunkOf(centre)].heads.box(fc.x + fc.rx * (hw + 0.6) * side, fc.y - 0.9, fc.z + fc.rz * (hw + 0.6) * side, 0.35, 0.5, 0.35, yawAt(fc), 0, S_NAV_GREEN, false, [1], 'point');
     }
 
     // ------------------------------------------------------------ chunk meshes

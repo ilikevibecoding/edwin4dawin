@@ -56,6 +56,10 @@ const CHUNK = 2500;
 const SMALL = 1.0;
 /** thin cylinders and lamp poles use a 6-sided prism beyond this (a 30 cm piling is ~1 px there) */
 const LOD_DISTANCE = 350;
+/** the lamps swap to their coarse shape (4-gon pole, one head box) beyond this, measured in three dimensions: a
+ *  0.15 m pole is 1.4 px wide at 150 m from eye level, where the thin-member inflation holds the silhouette either
+ *  way, and from 200 m up every pole is coarse (the fine shapes cost city_north 10 k for nothing visible) */
+const LAMP_LOD = 150;
 /** objects thinner than SMALL are well under a pixel wide beyond this and leave the main pass */
 const SMALL_DISTANCE = 2500;
 /** props leave the main pass where a PROXY_SIZE-thick object (a container) projects under PROP_MIN_PX pixels wide,
@@ -637,6 +641,7 @@ export class Props {
     };
     for (const c of this.chunks) {
       const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
+      const d3 = Math.hypot(d, Math.max(0, camPos.y - c.box.max.y));
       const inView = cull.boxInView(c.box);
       const bits = c.bits & ~proxyBits;
       for (const e of c.meshes) {
@@ -646,7 +651,7 @@ export class Props {
         e.mainCount = n;
         e.mesh.count = n;
         const drawn = inView && n > 0;
-        const lo = e.lo !== null && d > (e.loFar ? SMALL_DISTANCE : LOD_DISTANCE);
+        const lo = e.lo !== null && (e.coarseAux ? d3 > LAMP_LOD : d > (e.loFar ? SMALL_DISTANCE : LOD_DISTANCE));
         // the far-only coarse shape is for the camera and mirror; the mesh (a shadow fallback) keeps the fine one
         if (e.lo && !e.loFar) e.mesh.geometry = lo ? e.lo : e.hi;
         // the camera draws the mesh's prefix from the batch of its unit shape at this LOD; the mesh itself is
@@ -662,7 +667,9 @@ export class Props {
         let own = 0;
         for (let i = 0; i < MAX_CASCADES; i++) {
           let cast: PropCell[] | null = null;
-          if (bits & (1 << i)) { const nc = cascadeIsFine(i) ? e.total : e.large; if (nc > 0) cast = this.cellsOf(e, nc); }
+          // the lamps cast into the finest cascade only: in the second cascade's 0.5 m texels a 0.15 m pole is under a
+          // texel and the head a one-texel blot (29–51 k triangles a view in the 200 m frames, nothing visible)
+          if (bits & (1 << i) && (!e.coarseAux || i === 0)) { const nc = cascadeIsFine(i) ? e.total : e.large; if (nc > 0) cast = this.cellsOf(e, nc); }
           if (!this.placeShadow(e, i, cast, shadowPb.shadow[i], cull)) own |= 1 << i;
         }
         let mask = layerMask(e.large > 0 ? 'all' : 'near', drawn && !batched, own);

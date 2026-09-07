@@ -279,3 +279,47 @@ The previous vegetation agent's loop-5 commits were lost with the VM; rounds 1�
   p90 133 — the shade moved a third of the way; the lit band is dimmer (p90 133 vs 155) and greener than the
   reference's hazed pinkish-beige tips. The remaining gap is the atmosphere's (haze and exposure over 4 km),
   not the leaf's: left here.
+
+## Round 14 / 15 — the understory in 3D, the fringe cards' size, the shader's cost (commits 25446639, 44b2e73c)
+- **Defects** (`r18`/`r19`, see round 13): the understory's cards at 2–4 m were frame-filling blurred
+  billboards (the 'smooth balls', one cluster black); the near crowns khaki; the near pine teal.
+- **Changed (R14, 25446639)**: understory tiles draw their shrubs from the crown batches inside `UNDER_3D`
+  (60 m; level 2 inside 30 m), cards beyond; inside 40 m the crown's split is greener and fuller (lit ×[1.5,
+  1.52, 1.05], shade ×[0.46, 0.5, 0.36], blended back to the far split by 150 m); the carpet's and the fringe
+  cards' per-leaf shade divided by the coverage (the atlas' clear texels are black: a mip-blended sample of the
+  27 % needle carpet read 0.2); the pine carpet 520 needles of 15–26 px (coverage 27 → 60 %); the back faces of
+  the shell cut 0.3 wider (sky through the underside); a tussock wears the needle carpet.
+- **Measured (`r19`, dist12)**: the 3D understory draws (`dg-data` probe: the shrub at 11.5 m `batched3d`), but
+  `r19-park` still showed 4–6 m *smooth blobs* and a black cluster at 3–12 m. Bisection with the debug output
+  (`dbg1`/`dbg2` sweeps: coverage / shade / close, facing / front / distance): the blobs were the **fringe
+  cards** — sized to break a puff's outline (0.6–0.9 of the puff), a 6 m crown's cards are 4–5 m flat cut-outs
+  at 12 m, and the cluster tile magnified to the frame; the black cluster was the understory shrub's cards under
+  the canopy's shadow × occlusion × the buried term. A/B render cost (`ab-park`, interleaved, 5 × 6 frames):
+  the work build 1.48× the base's frame time under the canopy (aerial 0.98×).
+- **Changed (R15, 44b2e73c)**: the fringe cards shrink inside 150 m to a leaf cluster's real size (0.7 m; sea
+  grape 0.95, pine 0.56) — by 40 m the shell's own carpet carries the outline; the back faces of a shell
+  discarded before the texture and noise work beyond 150 m (where the gaps are closed); the triplanar carpet
+  samples only the planes weighted over 3 %; no normal-noise perturbation on the cards; the grass tussocks in
+  cards-only tiles of their own (as squashed 3D puffs in the needle carpet they were tan sandbags on the lawn:
+  `r20-park`, crop `r20-park-lump`).
+- **Measured (`r20`, dist13)**: the blobs and the black cluster are gone; `r20-park` at 12 m is a leaf mass
+  with sky through the gaps and trunks under it (crop `r20-park-canopy`); `r20-beach`: leafy sea grape masses
+  under the palm trunks. park 264 / 1 248 711, low 185 / 1 163 039, beach 167 / 697 712, pose C 243 /
+  1 485 754, mid 254 / 1 394 757, palm 176 / 1 319 860, aerial-a 290 / 1 094 024; console clean.
+- **Still wrong**: the tone (see round 16); the shell at 12 m is a uniform stamp of leaves (no depth between
+  leaf layers) — accepted for a flight sim whose read is aerial.
+
+## Round 16 — the tint regression (h03 critic: 'dry yellow-olive', regression (d)4)
+- **Measured** against the progress frames (`hue.py`, the park canopy A–D 5–8 of `foliage_park`, 1280×720):
+  h00 all [77, 93, 71] hue 113° sat 0.28, lit [123, 135, 99] hue 81°, shade [42, 59, 49] hue 147°; h13 (my tip
+  merged) all [46, 50, 38] hue 86° sat 0.24, lit [75, 78, 57] hue 71°, shade [22, 27, 22] hue 132°. The h13
+  canopy has G − R = 4 (h00: 16): neutral khaki, and 0.55× the luminance. `foliage_suburb`: h00 all hue 96°,
+  h13 74°; `highway_aerial`: 120° → 96°.
+- **Cause**: round 12b matched the *leaf* to a 4 km hazed reference photo (the pinkish-beige lit tips and the
+  grey shade are the atmosphere's), and the pipeline compounds it: `CANOPY_GAIN` (0.92, 0.72, 0.72) cuts the
+  palette's green under its red, `CANOPY_DESAT` 0.48 greys what is left, the cards' lit split ×[2.25, 1.96, 2.0]
+  is red/blue-heavy (beige), the shade ×[0.42, 0.36, 0.25] warm brown. The palette entry #4f6236 ends as sRGB
+  [77, 81, 65] before the split.
+- **Method**: the split terms and a global gain as temporary uniforms (`vegetation.tune`), swept in one browser
+  session at the `foliage_park` camera (`tint1` sweep), measured with `hue.py` against the h00 numbers; the
+  winner baked as constants, the uniforms removed.

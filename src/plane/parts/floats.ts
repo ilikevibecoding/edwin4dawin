@@ -102,7 +102,8 @@ export function buildFloats(ctx: BuildContext, wingSpec: WingSpec): FloatsBuild 
     // wing's front-spar fitting at 40 % span, braced by a jury-strut pair (a shallow V in side view) from the strut's
     // upper third to the wing. The earlier pair of struts rose from the float decks: nothing on a production
     // floatplane carries wing loads through the floats, the floats hang on their own struts.
-    const rootFit = V3(0.88, -0.43, side * (halfWidthAt(sectionAt(sections, 0.88), -0.43) - 0.01));
+    // (the fitting sits under the doors' bottom line, y -0.42, on the post between the pilot's and the rear door)
+    const rootFit = V3(0.90, -0.51, side * (halfWidthAt(sectionAt(sections, 0.90), -0.51) - 0.01));
     const topFit = strutTop(0.0).setZ(side * strutZ); // 24 % chord at z 2.9: the front spar
     fittings.add(fairedStrutGeometry(rootFit, topFit, 0.15, 0.055), undefined, SURF.strut);
     const strutDir = topFit.clone().sub(rootFit).normalize();
