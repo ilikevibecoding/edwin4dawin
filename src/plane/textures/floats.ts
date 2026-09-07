@@ -1,102 +1,177 @@
 import { Rng } from '../../core/seed';
-import { canvas, grime, heightToNormal, LIVERY, packRGB, panels, panelVariation, toTexture, wear, type PbrMaps } from './common';
+import { FLOAT_V } from '../geometry/floats';
+import { canvas, chips, grime, heightToNormal, LIVERY, packRGB, panels, panelVariation, toTexture, wear, type PbrMaps } from './common';
 
 /**
- * Floats: u bow..stern, v around the hull as laid out by `floatHull` (deck 0-0.12, side 0.12-0.22, chine 0.22,
- * keel 0.5, port mirrored). Aluminium with a dark anti-slip deck, a navy boot-top along the chine (the resting
- * waterline runs just under it), a darker wet / stained band either side of the waterline and a yellow keel.
+ * Floats: u bow..stern, v around the hull as laid out by `floatHull` (deck 0-0.12 to the rolled edge, side
+ * 0.12-0.22 to the chine, bottom 0.22-0.5 to the keel, port mirrored). A working EDO finish rather than the
+ * fuselage's livery: dark olive-grey topsides chalked by the sun toward the deck edge, near-black bottom paint
+ * scuffed grey along the keel and the step, a pale grey boot-top just above the chine with the algae / scum line
+ * over it (heavier aft), a dark anti-slip walkway edged in the livery yellow, riveted frames every half metre,
+ * inspection plates on the sides, dock rash at the bow and the deck edge, paint chipped to bare metal at the stem.
+ * The wet band below the waterline is live (floatPaint's wet-line shader), the painted band is only the stain.
  */
 export function floatMaps(): PbrMaps {
   const w = 1024, h = 512;
-  const rng = new Rng('float-paint');
+  const rng = new Rng('float-paint-dark');
   const [ac, actx] = canvas(w, h);
   const [hc, hctx] = canvas(w, h);
   const [rc, rctx] = canvas(w, h);
-  hctx.fillStyle = '#808080'; hctx.fillRect(0, 0, w, h);
-  actx.fillStyle = '#cfd3d6'; actx.fillRect(0, 0, w, h);
-  const CHINE = 0.22;
-  /** fill a v band on both sides of the hull */
+  const [mc, mctx] = canvas(w, h);
+  const [cc, cctx] = canvas(w, h);
+  const { edge: EDGE, chine: CHINE } = FLOAT_V;
+  const WALK = 0.085;   // walkway edge (v): the anti-slip covers the flat of the deck, the rolled edge is hull paint
+  const BOOT0 = CHINE - 0.026, BOOT1 = CHINE + 0.012; // boot-top: ~8 cm above the chine, wrapping a little under it
+  /** row of hull-side v (0 = crown .. 0.5 = keel) on the starboard (top) or port (bottom) half */
+  const V = (side: number, v: number) => (side > 0 ? v : 1 - v) * h;
+  /** fill a v band on both halves */
   const band = (ctx: CanvasRenderingContext2D, v0: number, v1: number, style: string | CanvasGradient) => {
     ctx.fillStyle = style;
     ctx.fillRect(0, v0 * h, w, (v1 - v0) * h);
     ctx.fillRect(0, (1 - v1) * h, w, (v1 - v0) * h);
   };
-  // bottom: slightly darker grey than the sides, yellow keel band
-  band(actx, CHINE, 0.5, '#b9bec2');
-  band(actx, 0.445, 0.5, LIVERY.lower);
-  // deck: a dark anti-slip walkway down the middle on bare aluminium, lighter rolled edge
-  band(actx, 0, 0.105, '#c3c7ca');
-  band(actx, 0, 0.066, '#2b2e31');
-  band(actx, 0.105, 0.118, '#9aa0a5');
-  // scum line: a light stain from ~4 cm above the resting chine down over it (the wet band itself is live: the
-  // float material darkens and glosses the hull below the immersion the flight model reports, model.ts
-  // setWaterline, so a planing float runs dry and a float driven under at touchdown is wet to the deck)
-  for (const side of [1, -1]) {
-    const V = (v: number) => (side > 0 ? v : 1 - v) * h;
-    const g = actx.createLinearGradient(0, V(0.165), 0, V(0.31));
-    g.addColorStop(0, 'rgba(60,72,70,0)'); g.addColorStop(0.08, 'rgba(60,72,70,0.3)'); g.addColorStop(0.35, 'rgba(70,84,80,0.18)'); g.addColorStop(1, 'rgba(70,84,80,0)');
-    actx.fillStyle = g;
-    actx.fillRect(0, Math.min(V(0.165), V(0.31)), w, Math.abs(V(0.31) - V(0.165)));
+  /** vertical gradient between two v values, drawn on both halves (colour stops as [offset, rgba]) */
+  const vGrad = (ctx: CanvasRenderingContext2D, v0: number, v1: number, stops: [number, string][]) => {
+    for (const side of [1, -1]) {
+      const g = ctx.createLinearGradient(0, V(side, v0), 0, V(side, v1));
+      for (const [o, c] of stops) g.addColorStop(o, c);
+      ctx.fillStyle = g;
+      ctx.fillRect(0, Math.min(V(side, v0), V(side, v1)), w, Math.abs(V(side, v1) - V(side, v0)));
+    }
+  };
+  // hull length 5.7 m (x 2.95 .. -2.75): u of a body station
+  const uOf = (x: number) => (2.95 - x) / 5.7;
+
+  // ------------------------------------------------------------ albedo
+  hctx.fillStyle = '#808080'; hctx.fillRect(0, 0, w, h);
+  actx.fillStyle = '#3a3e3a'; actx.fillRect(0, 0, w, h);                      // topsides: dark olive-grey
+  vGrad(actx, EDGE, CHINE, [[0, 'rgba(96,101,94,0.55)'], [0.35, 'rgba(96,101,94,0.12)'], [1, 'rgba(96,101,94,0)']]); // sun-chalked toward the deck edge
+  band(actx, CHINE, 0.5, '#1d1f1e');                                          // bottom: near-black antifouling
+  vGrad(actx, 0.44, 0.5, [[0, 'rgba(90,88,82,0)'], [0.6, 'rgba(90,88,82,0.35)'], [1, 'rgba(120,118,110,0.6)']]); // keel scuffed grey
+  band(actx, BOOT0, BOOT1, '#9c9e92');                                         // pale boot-top
+  band(actx, WALK, EDGE, '#3f433f');                                           // deck outside the walkway: hull paint, a shade lighter
+  band(actx, 0, WALK, '#4a4d4f');                                              // anti-slip walkway: dark grey grit
+  band(actx, WALK - 0.006, WALK, LIVERY.lower);                                // yellow edge stripe along the walkway
+  // step-here bands across the walkway at the strut stations
+  for (const x of [1.6, -0.9]) {
+    actx.fillStyle = LIVERY.lower;
+    for (const side of [1, -1]) actx.fillRect(uOf(x + 0.20) * w, Math.min(V(side, 0), V(side, WALK)), (0.06 / 5.7) * w, Math.abs(V(side, WALK) - V(side, 0)));
+    for (const side of [1, -1]) actx.fillRect(uOf(x - 0.14) * w, Math.min(V(side, 0), V(side, WALK)), (0.06 / 5.7) * w, Math.abs(V(side, WALK) - V(side, 0)));
   }
-  // navy boot-top along the chine
-  band(actx, CHINE - 0.012, CHINE + 0.012, LIVERY.cheat);
-  // frames every ~0.6 m along the hull, deck-edge and chine seams, keel strip; rivets at ~6 cm pitch
-  panels(hctx, actx, w, h, [0.1, 0.2, 0.3, 0.4, 0.5, 0.58, 0.66, 0.76, 0.86, 0.94], [0.118, 0.5], 24, { strength: 0.8 });
+  // anti-slip grit: a dense speckle of lighter and darker grains on the walkway (albedo and height)
+  for (let i = 0; i < 26000; i++) {
+    const side = rng.next() < 0.5 ? 1 : -1, v = rng.range(0, WALK - 0.006), x = rng.range(0, w), y = V(side, v);
+    const l = rng.next() < 0.5;
+    actx.fillStyle = l ? `rgba(150,152,150,${rng.range(0.10, 0.3)})` : `rgba(10,10,12,${rng.range(0.15, 0.4)})`;
+    actx.fillRect(x, y, 1.2, 1.2);
+    hctx.fillStyle = l ? 'rgba(255,255,255,0.35)' : 'rgba(0,0,0,0.25)';
+    hctx.fillRect(x, y, 1.2, 1.2);
+  }
+  // algae / scum line: a green-brown stain over the boot-top and a little below the chine, heavier toward the stern
+  for (const side of [1, -1]) {
+    const g = actx.createLinearGradient(0, V(side, CHINE - 0.032), 0, V(side, CHINE + 0.03));
+    g.addColorStop(0, 'rgba(70,84,60,0)'); g.addColorStop(0.35, 'rgba(70,84,60,0.28)'); g.addColorStop(0.6, 'rgba(60,70,50,0.35)'); g.addColorStop(1, 'rgba(60,70,50,0)');
+    actx.fillStyle = g;
+    actx.fillRect(0, Math.min(V(side, CHINE - 0.032), V(side, CHINE + 0.03)), w, Math.abs(V(side, CHINE + 0.03) - V(side, CHINE - 0.032)));
+    const along = actx.createLinearGradient(0, 0, w, 0);
+    along.addColorStop(0, 'rgba(58,70,48,0)'); along.addColorStop(0.5, 'rgba(58,70,48,0.10)'); along.addColorStop(1, 'rgba(58,70,48,0.30)');
+    actx.fillStyle = along;
+    actx.fillRect(0, Math.min(V(side, CHINE - 0.026), V(side, CHINE + 0.02)), w, Math.abs(V(side, CHINE + 0.02) - V(side, CHINE - 0.026)));
+  }
+  // drips and streaks hanging from the scum line, rust weeps under the deck-edge fittings
+  for (let i = 0; i < 160; i++) {
+    const side = rng.next() < 0.5 ? 1 : -1;
+    const x = rng.range(0, w), y0 = V(side, rng.range(CHINE - 0.03, CHINE - 0.02)), len = rng.range(6, 30) * -side;
+    actx.strokeStyle = `rgba(52,64,44,${rng.range(0.08, 0.28)})`;
+    actx.lineWidth = rng.range(1, 3);
+    actx.beginPath(); actx.moveTo(x, y0); actx.lineTo(x + rng.range(-3, 3), y0 + len); actx.stroke();
+  }
+  for (let i = 0; i < 24; i++) {
+    const side = rng.next() < 0.5 ? 1 : -1;
+    const x = rng.range(0, w), y0 = V(side, rng.range(EDGE, EDGE + 0.01)), len = rng.range(8, 36) * side;
+    actx.strokeStyle = `rgba(120,70,35,${rng.range(0.10, 0.28)})`;
+    actx.lineWidth = rng.range(1, 2.5);
+    actx.beginPath(); actx.moveTo(x, y0); actx.lineTo(x + rng.range(-2, 2), y0 + len); actx.stroke();
+  }
+  // frames every ~0.5 m along the hull, stringer seams at the deck edge, mid-side, chine and mid-bottom; rivets
+  const frames = [2.6, 2.1, 1.6, 1.1, 0.6, 0.1, -0.35, -0.85, -1.35, -1.85, -2.35].map(uOf);
+  panels(hctx, actx, w, h, frames, [EDGE, 0.17, 1 - 0.17, 1 - EDGE, 0.36, 1 - 0.36], 12, { strength: 0.9 });
+  // rivets read as light catching the heads on a dark hull: a white dot above each seam's dark shadow
+  for (const u of frames) for (const off of [-7, 7]) for (let y = 6; y < h; y += 12) {
+    actx.fillStyle = 'rgba(210,214,210,0.16)'; actx.beginPath(); actx.arc(u * w + off, y - 0.8, 1.1, 0, Math.PI * 2); actx.fill();
+  }
   hctx.strokeStyle = '#4a4a4a'; hctx.lineWidth = 2.5;
   for (const v of [CHINE, 1 - CHINE]) { hctx.beginPath(); hctx.moveTo(0, v * h); hctx.lineTo(w, v * h); hctx.stroke(); }
-  // algae streaks and drips hanging from the scum line, scuffs on the deck
-  for (let i = 0; i < 140; i++) {
-    const side = rng.next() < 0.5 ? 1 : -1;
-    const V = (v: number) => (side > 0 ? v : 1 - v) * h;
-    actx.strokeStyle = `rgba(62,80,72,${rng.range(0.08, 0.3)})`;
-    actx.lineWidth = rng.range(1, 3);
-    const x = rng.range(0, w), y0 = V(rng.range(0.17, 0.2)), len = rng.range(8, 40) * side;
-    actx.beginPath(); actx.moveTo(x, y0); actx.lineTo(x + rng.range(-4, 4), y0 + len); actx.stroke();
+  // the boot-top's paint edge stands a hair proud; the walkway's edge too
+  hctx.strokeStyle = '#6a6a6a'; hctx.lineWidth = 1.2;
+  for (const v of [BOOT0, 1 - BOOT0, WALK, 1 - WALK]) { hctx.beginPath(); hctx.moveTo(0, v * h); hctx.lineTo(w, v * h); hctx.stroke(); }
+  // inspection plates on the sides (22 x 14 cm, eight screws) and the step's reinforcing plate
+  const plate = (x: number, v0: number, lenM: number, vh: number) => {
+    const pw = (lenM / 5.7) * w, ph = vh * h;
+    for (const side of [1, -1]) {
+      const x0 = uOf(x) * w, y0 = Math.min(V(side, v0), V(side, v0 + vh));
+      actx.fillStyle = 'rgba(0,0,0,0.18)'; actx.fillRect(x0 - 1, y0 - 1, pw + 2, ph + 2);
+      actx.fillStyle = 'rgba(120,124,118,0.10)'; actx.fillRect(x0, y0, pw, ph);
+      hctx.strokeStyle = '#5c5c5c'; hctx.lineWidth = 1.6; hctx.strokeRect(x0, y0, pw, ph);
+      for (let k = 0; k < 8; k++) {
+        const t = k / 8, sx = k < 4 ? x0 + 3 + (pw - 6) * (t * 2) : x0 + 3 + (pw - 6) * ((t - 0.5) * 2), sy = k < 4 ? y0 + 3 : y0 + ph - 3;
+        hctx.fillStyle = '#a0a0a0'; hctx.beginPath(); hctx.arc(sx, sy, 1.3, 0, Math.PI * 2); hctx.fill();
+        actx.fillStyle = 'rgba(200,200,200,0.25)'; actx.beginPath(); actx.arc(sx, sy, 1.1, 0, Math.PI * 2); actx.fill();
+      }
+    }
+  };
+  for (const x of [2.1, 0.45, -1.05, -2.05]) plate(x, 0.145, 0.22, 0.03);
+  plate(-0.30, CHINE + 0.01, 0.14, 0.24); // step doubler on the bottom, just aft of the step
+  // dock rash: light scuffs along the deck edge and the upper sides, densest at the bow and around the step
+  for (let i = 0; i < 320; i++) {
+    const side = rng.next() < 0.5 ? 1 : -1, nearBow = rng.next() < 0.35;
+    const u = nearBow ? rng.range(0, 0.12) : rng.next() < 0.3 ? rng.range(0.55, 0.62) : rng.range(0, 1);
+    const v = rng.range(EDGE - 0.01, EDGE + 0.05), x = u * w, y = V(side, v), len = rng.range(4, 30), a = rng.range(0.10, 0.4);
+    actx.strokeStyle = `rgba(150,152,146,${a})`; actx.lineWidth = rng.range(0.6, 1.8);
+    actx.beginPath(); actx.moveTo(x, y); actx.lineTo(x + len, y + rng.range(-3, 3)); actx.stroke();
   }
-  grime(actx, rng, w, h, 90, 0.08, '60,60,55');
-  // Three material families on one hull, packed into one texture (clear coat R / roughness G / metalness B):
-  //  - hull sides and bottom: painted aluminium (no metalness, clear-coated), base roughness ~0.42 varying panel by
-  //    panel and rougher along the frame seams, the bottom a little duller (0.48) from spray and beaching;
-  //  - the wet band around the waterline is glossier and darker (water in the pores), not duller;
-  //  - the deck is bare anodised aluminium (metal, satin 0.6, no clear coat) and the walkway anti-slip grit
-  //    (near-matte 0.85, barely metallic).
-  const [mc, mctx] = canvas(w, h);
-  const [cc, cctx] = canvas(w, h);
-  const frames = [0.1, 0.2, 0.3, 0.4, 0.5, 0.58, 0.66, 0.76, 0.86, 0.94];
-  rctx.fillStyle = '#6b6b6b'; rctx.fillRect(0, 0, w, h);
-  band(rctx, CHINE, 0.5, '#7a7a7a');
-  panelVariation(rctx, w, h, frames, [0.118, CHINE, 1 - CHINE, 1 - 0.118], rng, 12, 'all', { seam: 3, seamAmp: 20 });
+  // bare metal where the paint is knocked off: the stem, the deck-edge corners at the bow, the step's edge
+  chips(actx, mctx, cctx, rng, 6, V(1, 0.15), 6, 40, 40, 2.0);
+  chips(actx, mctx, cctx, rng, 6, V(-1, 0.15), 6, 40, 40, 2.0);
+  for (const side of [1, -1]) chips(actx, mctx, cctx, rng, rng.range(20, 90), V(side, EDGE), 40, 5, 22, 1.8);
+  for (const side of [1, -1]) chips(actx, mctx, cctx, rng, uOf(-0.35) * w, V(side, 0.36), 4, 40, 18, 1.6);
+  grime(actx, rng, w, h, 110, 0.10, '40,40,36');
+  grime(actx, rng, w, h, 40, 0.08, '110,112,104');
+
+  // ------------------------------------------------------------ roughness (G) / metalness (B) / clear coat (R)
+  // matte working finishes: topsides 0.62 varying panel by panel, bottom 0.72, boot-top 0.55, walkway grit 0.86;
+  // no metal anywhere but the chips; a faint sheen of old enamel on the topsides only
+  rctx.fillStyle = '#9e9e9e'; rctx.fillRect(0, 0, w, h);
+  band(rctx, CHINE, 0.5, '#b8b8b8');
+  band(rctx, BOOT0, BOOT1, '#8c8c8c');
+  panelVariation(rctx, w, h, frames, [EDGE, CHINE, 1 - CHINE, 1 - EDGE, 0.36, 1 - 0.36], rng, 11, 'all', { seam: 3, seamAmp: 18 });
   mctx.fillStyle = '#000000'; mctx.fillRect(0, 0, w, h);
-  cctx.fillStyle = '#ffffff'; cctx.fillRect(0, 0, w, h);
-  // scum line: a little glossier than the dry paint above it (the live wet band adds the real gloss below the water)
+  cctx.fillStyle = '#000000'; cctx.fillRect(0, 0, w, h);
+  band(cctx, EDGE, CHINE, '#262626');
+  band(cctx, BOOT0, BOOT1, '#303030');
+  // the scum band is slightly glossier than the dry paint (the live wet band adds the real gloss below the water)
   for (const side of [1, -1]) {
-    const V = (v: number) => (side > 0 ? v : 1 - v) * h;
-    const g = rctx.createLinearGradient(0, V(0.165), 0, V(0.31));
-    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.08, 'rgba(0,0,0,0.16)'); g.addColorStop(0.5, 'rgba(0,0,0,0.12)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    const g = rctx.createLinearGradient(0, V(side, CHINE - 0.03), 0, V(side, CHINE + 0.03));
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(0.4, 'rgba(0,0,0,0.14)'); g.addColorStop(1, 'rgba(0,0,0,0)');
     rctx.fillStyle = g;
-    rctx.fillRect(0, Math.min(V(0.165), V(0.31)), w, Math.abs(V(0.31) - V(0.165)));
+    rctx.fillRect(0, Math.min(V(side, CHINE - 0.03), V(side, CHINE + 0.03)), w, Math.abs(V(side, CHINE + 0.03) - V(side, CHINE - 0.03)));
   }
-  grime(rctx, rng, w, h, 100, 0.22, '160,160,160');
-  // scuffs: dock rash along the sides at deck height and boot marks on the walkways (dull, slightly lighter)
-  for (let i = 0; i < 260; i++) {
-    const side = rng.next() < 0.5 ? 1 : -1, onDeck = rng.next() < 0.45;
-    const v = onDeck ? rng.range(0.005, 0.06) : rng.range(0.10, 0.19), y = (side > 0 ? v : 1 - v) * h;
-    const x = rng.range(0, w), len = rng.range(6, 40), a = rng.range(0.15, 0.45);
-    rctx.strokeStyle = `rgba(200,200,200,${a})`; rctx.lineWidth = rng.range(0.8, 2.5);
-    rctx.beginPath(); rctx.moveTo(x, y); rctx.lineTo(x + len, y + rng.range(-4, 4)); rctx.stroke();
-    actx.strokeStyle = `rgba(${onDeck ? '120,118,112' : '225,228,230'},${a * 0.5})`; actx.lineWidth = rng.range(0.6, 1.6);
-    actx.beginPath(); actx.moveTo(x, y); actx.lineTo(x + len, y + rng.range(-4, 4)); actx.stroke();
+  grime(rctx, rng, w, h, 90, 0.2, '170,170,170');
+  // scuffs are duller than the paint around them
+  for (let i = 0; i < 200; i++) {
+    const side = rng.next() < 0.5 ? 1 : -1, v = rng.range(EDGE - 0.01, EDGE + 0.05), y = V(side, v);
+    const x = rng.range(0, w), len = rng.range(6, 36), a = rng.range(0.15, 0.4);
+    rctx.strokeStyle = `rgba(220,220,220,${a})`; rctx.lineWidth = rng.range(0.8, 2.2);
+    rctx.beginPath(); rctx.moveTo(x, y); rctx.lineTo(x + len, y + rng.range(-3, 3)); rctx.stroke();
   }
-  // bare deck and anti-slip walkway: drawn last so nothing painted bleeds onto them
-  band(rctx, 0, 0.118, '#9c9c9c');
-  band(rctx, 0, 0.066, '#dadada');
-  band(mctx, 0, 0.118, '#e6e6e6');
-  band(mctx, 0, 0.066, '#1f1f1f');
-  band(cctx, 0, 0.118, '#000000');
-  // oxidised patches and boot scuffs on the deck vary its satin finish
-  for (let i = 0; i < 120; i++) {
-    const side = rng.next() < 0.5 ? 1 : -1, v = rng.range(0.0, 0.115), y = (side > 0 ? v : 1 - v) * h;
-    wear(rctx, rng.range(0, w), y, rng.range(10, 40), rng.range(3, 8), rng.range(-30, 30));
+  // chips are bare, uncoated metal (drawn into mctx / cctx above); redraw them on the roughness too
+  // walkway and its yellow stripe last so nothing painted bleeds onto them
+  band(rctx, 0, WALK, '#dcdcdc');
+  band(rctx, WALK - 0.006, WALK, '#a8a8a8');
+  band(cctx, 0, WALK, '#000000');
+  for (let i = 0; i < 140; i++) {
+    const side = rng.next() < 0.5 ? 1 : -1, v = rng.range(0.0, WALK - 0.01), y = V(side, v);
+    wear(rctx, rng.range(0, w), y, rng.range(10, 40), rng.range(3, 8), rng.range(-40, 25));
   }
   const packed = toTexture(packRGB(cc, rc, mc), false);
   return { map: toTexture(ac, true), roughnessMap: packed, metalnessMap: packed, clearcoatMap: packed, normalMap: toTexture(heightToNormal(hc, 2.2), false) };
