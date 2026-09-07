@@ -191,6 +191,14 @@ const CONCRETE_FRAG = /* glsl */ `
     asphalt *= 1.0 - 0.14 * smoothstep(0.62, 0.72, fbm3(vWorldPosH.xz * 0.04 + 8.0));
     float crack = aaLine((fract(along / 13.7) - 0.5) * 13.7, 0.02, fwA) * step(0.45, hash11(floor(along / 13.7) + 5.0)) * (1.0 - smoothstep(0.3, 1.0, fwA));
     asphalt *= 1.0 - 0.3 * crack;
+    // patch repairs: 5 x 3 m cells of the lane frame, 4 % of them re-laid darker (fresh) or bleached paler, the cell
+    // edges box-filtered; gone by the time a pixel covers a metre so the aerial tone is untouched
+    vec2 pc = floor(vec2(along / 5.0, xm / 3.0)), pf = fract(vec2(along / 5.0, xm / 3.0));
+    float ph = hash12(pc + 29.0);
+    float fpP = max(fwA, fwX);
+    float pin = clamp((pf.x - 0.08) / (fwA / 5.0) + 0.5, 0.0, 1.0) * clamp((0.92 - pf.x) / (fwA / 5.0) + 0.5, 0.0, 1.0) * clamp((pf.y - 0.1) / (fwX / 3.0) + 0.5, 0.0, 1.0) * clamp((0.9 - pf.y) / (fwX / 3.0) + 0.5, 0.0, 1.0);
+    float repair = step(0.96, ph) * pin * (1.0 - smoothstep(0.4, 1.2, fpP)) * (1.0 - onShoulder);
+    asphalt = mix(asphalt, asphalt * (ph > 0.985 ? 1.35 : 0.72), repair * 0.9);
     asphalt *= 1.0 - 0.35 * aaLine(xm - ${PAVE_JOINT.toFixed(2)}, 0.035, fwX);
     float noPaint = step(1.5, flag) * (1.0 - step(2.5, flag));
     float gap = step(2.5, flag);
@@ -292,7 +300,7 @@ function createConcreteMaterial(pixelScale: THREE.IUniform<number>, lampGlow: TH
       // and the pale concrete shine brighter than the asphalt)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.82, 0.55) * hwPoolTint * (hwPool * uLampGlow);');
   };
-  mat.customProgramCacheKey = () => 'highway-concrete-v4';
+  mat.customProgramCacheKey = () => 'highway-concrete-v5';
   return mat;
 }
 
