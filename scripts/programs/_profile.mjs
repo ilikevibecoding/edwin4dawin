@@ -260,16 +260,17 @@ export function profileLot(lot, layout) {
     if (st) signature = { kind: st.kind, f: st.f, area: st.area, program: true };
   }
   if (!signature && occupied.length) { const st = occupied.slice().sort((a, b) => b.area - a.area)[0]; signature = { kind: st.kind, f: st.f, area: st.area, program: false }; }
-  // floating blocks: solid cells above the ground with nothing solid in the 6-neighbourhood (technical integrity);
-  // a projected holo sign, a hung lamp and a light panel are fixtures that float by design, and a block on y = 1
-  // over a plateau cell the blueprint leaves in place (0, not FORCE_AIR) stands on the plateau
+  // floating blocks: solid cells above the ground with no support in the 6-neighbourhood (technical integrity).
+  // Support is a solid block, a cell the blueprint leaves to the terrain (0, not FORCE_AIR: the plateau, the rock a
+  // landmark is cut into) or a liquid (a fountain spout stands in its pool); a projected holo sign, a hung lamp and a
+  // light panel are fixtures that float by design.
   let floating = 0;
   const { w, h, d } = bp;
   const at = an.at;
+  const support = (v) => v === 0 || solid(v) || (BLOCKS[v] && BLOCKS[v].shape === SHAPE.LIQUID);
   for (let x = 0; x < w; x++) for (let z = 0; z < d; z++) for (let y = 1; y < h - 1; y++) {
     const v = at(x, y, z); if (!solid(v) || HANGS.has(v) || emissive(v)) continue;
-    if (solid(at(x, y - 1, z)) || solid(at(x, y + 1, z)) || solid(at(x - 1, y, z)) || solid(at(x + 1, y, z)) || solid(at(x, y, z - 1)) || solid(at(x, y, z + 1))) continue;
-    if (y === 1 && at(x, 0, z) === 0) continue;
+    if (support(at(x, y - 1, z)) || support(at(x, y + 1, z)) || support(at(x - 1, y, z)) || support(at(x + 1, y, z)) || support(at(x, y, z - 1)) || support(at(x, y, z + 1))) continue;
     floating++;
   }
   const n = rooms.length || 1;

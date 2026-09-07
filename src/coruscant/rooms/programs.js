@@ -162,6 +162,24 @@ defProgramRoom('envoy_private_office', { minW: 4, minD: 4, tags: ['office', 'pri
   lights(r, 5, P.light);
 });
 
+// ================================================================================================ jedi temple annex
+// The Temple itself is hand-built (landmarks/temple.js); its precinct program also reaches a temple annex tower in a
+// residential district, where this threshold is the one room the library has no stand-in for: the vestibule where
+// visitors are met - guardian pillars either side of the way in, the bench where you leave your weapons, an acolyte
+// at the lectern, the Order's white hangings on the far wall
+defProgramRoom('temple_threshold', { minW: 4, minD: 4, tags: ['public', 'civic'] }, (r, rng, ctx) => {
+  const P = pal(ctx), c = r.cu;
+  for (const u of [0, r.w - 1]) { r.fill(u, 0, 2, u, 2, 2, B.SMOOTH_STONE); r.put(u, 3, 2, B.GOLD_BLOCK); }   // the guardian pillars
+  r.put(c, 0, r.back - 1, B.SANDSTONE); r.put(c, 1, r.back - 1, B.BOOKSHELF);                                // the lectern with the visitors' book
+  r.work(c, r.back - 2 >= 2 ? r.back - 2 : r.back, 'acolyte');
+  for (let u = 0; u < r.w; u++) if (u !== c) r.put(u, 1, r.back, u % 2 ? B.WHITE_WOOL : P.accent);         // the Order's hangings
+  board(r, c, 1, 1);                                                                                         // the notice of the day
+  r.seat(0, r.back - 1, P.seatSlab); if (r.w > 4) r.seat(r.w - 1, r.back - 1, P.seatSlab);                  // the weapons bench either side
+  r.put(1 < r.w - 1 ? 1 : 0, 0, r.back, B.CHEST);                                                            // where the weapons wait
+  r.lantern(c, 2); r.lantern(c, r.back - 1);
+  lights(r, 5, P.light);
+});
+
 // ================================================================================================ passenger terminal
 defProgramRoom('ticket_counter', { minW: 4, minD: 4, tags: ['public', 'transport'] }, (r, rng, ctx) => {
   const P = pal(ctx);

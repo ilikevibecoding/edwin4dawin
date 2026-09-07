@@ -163,7 +163,8 @@ function curvedStair(bp, cx, cz, r, a0, a1, y0, y1) {
     // railing on the outer side of the arc
     const ox = x + Math.sign(x + 0.5 - cx), oz = z + Math.sign(z + 0.5 - cz);
     const far = Math.abs(x + 0.5 - cx) > Math.abs(z + 0.5 - cz) ? [ox, z] : [x, oz];
-    if (bp.isAir(far[0], base + 1, far[1]) && !cells.some(([a, b]) => a === far[0] && b === far[1])) { bp.set(far[0], base + 1, far[1], slab ? BARS : TRIM); }
+    // the post stands beside the step, from the step's own height up (a post at base + 1 alone touched the step only diagonally)
+    if (bp.isAir(far[0], base + 1, far[1]) && !cells.some(([a, b]) => a === far[0] && b === far[1])) { if (bp.isAir(far[0], base, far[1])) bp.set(far[0], base, far[1], TRIM); bp.set(far[0], base + 1, far[1], slab ? BARS : TRIM); }
   });
   return cells;
 }

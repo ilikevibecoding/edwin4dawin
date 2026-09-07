@@ -83,9 +83,24 @@ export function storyFor(lot, prog, variant, layout) {
   return { problem, connection, place, resolutions: st.resolutions || null, connectsTo: st.connectsTo || [] };
 }
 
+// records remembered per layout and lot (the record is a pure function of both; callers read it, never write it)
+const RECORDS = new WeakMap();
+
 export function programFor(lot, purpose = null, layout = null) {
   if (!lot) return null;
   const p = purpose || (layout ? purposeFor(lot, layout) : null);
+  let cache = null, key = null;
+  if (layout && typeof layout === 'object' && lot.id != null) {
+    cache = RECORDS.get(layout); if (!cache) RECORDS.set(layout, cache = new Map());
+    key = `${lot.id}|${p ? p.kind : ''}`;
+    const hit = cache.get(key); if (hit !== undefined) return hit;
+  }
+  const rec = buildRecord(lot, p, layout);
+  if (cache) cache.set(key, rec);
+  return rec;
+}
+
+function buildRecord(lot, p, layout) {
   const id = programIdFor(lot, p, layout);
   if (!id) return null;
   const prog = PROGRAM_BY_ID[id];

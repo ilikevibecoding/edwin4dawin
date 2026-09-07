@@ -151,17 +151,33 @@ function finishMeta(bp, lot, fam, res, ground, front, ldoor, midDoorF) {
   pruneMeta(bp);
 }
 
+// Block classes for pruneMeta, tabulated once per block set: PASS[id] = an NPC can occupy the cell (air, force-air,
+// a non-solid block, a slab or a bed), STAND[id] = the cell carries an NPC standing on it (a solid block or liquid;
+// an unknown id counts as solid, air and force-air do not).
+let PASS = null, STAND = null;
+function blockClasses() {
+  if (PASS && BLOCKS[1]) return;   // tabulated after initBlocks() filled the block set
+  PASS = new Uint8Array(256); STAND = new Uint8Array(256);
+  for (let id = 0; id < 256; id++) {
+    const b = BLOCKS[id];
+    if (id === 0 || id === 255) { PASS[id] = 1; STAND[id] = 0; continue; }
+    PASS[id] = b ? (!b.solid || b.shape === SHAPE.SLAB || b.shape === SHAPE.BED ? 1 : 0) : 0;
+    STAND[id] = b ? (b.solid || b.shape === SHAPE.LIQUID ? 1 : 0) : 1;
+  }
+}
+
 // Drops NPC spots that ended up inside walls or over air (masked corners, rotunda cuts, vestibules).
 function pruneMeta(bp) {
-  const m = bp.meta;
-  const passable = (id) => { if (id === 0 || id === 255) return true; const b = BLOCKS[id]; return b ? (!b.solid || b.shape === SHAPE.SLAB || b.shape === SHAPE.BED) : false; };
-  const standable = (id) => { if (id === 0 || id === 255) return false; const b = BLOCKS[id]; return b ? (b.solid || b.shape === SHAPE.LIQUID) : true; };
+  blockClasses();
+  const m = bp.meta, blocks = bp.blocks, W = bp.w, H = bp.h, D = bp.d, lx0 = bp.lot.x0, lz0 = bp.lot.z0, y0 = bp.y0;
+  // blocks are indexed (x*d + z)*h + y: a column's y run is contiguous, so here/above/below are neighbours
   const ok = (p) => {
-    const x = p.x - bp.lot.x0, y = p.y - bp.y0, z = p.z - bp.lot.z0;
-    if (!bp.inside(x, y, z)) return false;
-    const here = bp.get(x, y, z), above = bp.get(x, y + 1, z), below = bp.get(x, y - 1, z);
-    if (!passable(here) || !passable(above)) return false;
-    return standable(below) || (here !== 0 && here !== 255);
+    const x = p.x - lx0, y = p.y - y0, z = p.z - lz0;
+    if (x < 0 || y < 0 || z < 0 || x >= W || y >= H || z >= D) return false;
+    const i = (x * D + z) * H + y;
+    const here = blocks[i], above = y + 1 < H ? blocks[i + 1] : 0, below = y > 0 ? blocks[i - 1] : 0;
+    if (!PASS[here] || !PASS[above]) return false;
+    return STAND[below] === 1 || (here !== 0 && here !== 255);
   };
   m.spots = m.spots.filter(ok);
   m.work = m.work.filter(ok);
@@ -172,16 +188,22 @@ function pruneMeta(bp) {
   // includes the walls, which is what the lighting/furnishing harness measures).
   const rooms = [];
   for (const r of m.rooms) {
-    const y = r.y - bp.y0;
-    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, n = 0, total = 0;
-    for (let wx = r.x; wx < r.x + r.w; wx++) for (let wz = r.z; wz < r.z + r.d; wz++) {
-      const x = wx - bp.lot.x0, z = wz - bp.lot.z0;
-      total++;
-      if (!bp.inside(x, y, z) || !passable(bp.get(x, y, z)) || !passable(bp.get(x, y + 1, z)) || !standable(bp.get(x, y - 1, z))) continue;
-      n++; if (wx < x0) x0 = wx; if (wx > x1) x1 = wx; if (wz < z0) z0 = wz; if (wz > z1) z1 = wz;
+    const y = r.y - y0, total = r.w * r.d;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, n = 0;
+    if (y >= 1 && y < H) {   // y = 0 has no slab below it; above the top layer reads as air
+      const xa = Math.max(r.x, lx0), xb = Math.min(r.x + r.w - 1, lx0 + W - 1), za = Math.max(r.z, lz0), zb = Math.min(r.z + r.d - 1, lz0 + D - 1);
+      const hasAbove = y + 1 < H;
+      for (let wx = xa; wx <= xb; wx++) {
+        const col = (wx - lx0) * D;
+        for (let wz = za; wz <= zb; wz++) {
+          const i = (col + (wz - lz0)) * H + y;
+          if (!PASS[blocks[i]] || (hasAbove && !PASS[blocks[i + 1]]) || !STAND[blocks[i - 1]]) continue;
+          n++; if (wx < x0) x0 = wx; if (wx > x1) x1 = wx; if (wz < z0) z0 = wz; if (wz > z1) z1 = wz;
+        }
+      }
     }
     if (!n) continue;
-    rooms.push({ ...r, floor: { x: x0, z: z0, w: x1 - x0 + 1, d: z1 - z0 + 1, frac: +(n / Math.max(1, total)).toFixed(2) } });
+    rooms.push({ ...r, floor: { x: x0, z: z0, w: x1 - x0 + 1, d: z1 - z0 + 1, frac: Math.round((100 * n) / Math.max(1, total)) / 100 } });   // the share of the rectangle with a floor, to two decimals
   }
   m.rooms = rooms;
 }
