@@ -1,0 +1,63 @@
+{
+  "version": 2,
+  "scale": {
+    "0": "missing, broken, invisible or unusable",
+    "1-2": "placeholder, primitive, obvious duplicate, or so incorrect it destroys the illusion",
+    "3-4": "exists but has incorrect proportions, flat materials, weak lighting, obvious repetition, incorrect animation or another problem visible in ordinary play",
+    "5-6": "functional and acceptable for a prototype; a viewer immediately sees it is below a shipped AAA title",
+    "7-8": "polished and convincing in normal play; focused comparison still reveals meaningful differences in geometry, material response, scale, detail, animation or integration",
+    "9": "extremely close to a production asset; only a specialist inspecting stills finds differences, and the critic must name what those are",
+    "10": "indistinguishable from a production asset under every listed test; the critic must explain why every named test passes"
+  },
+  "gates": {
+    "overallMin": 9.0,
+    "categoryMin": 8.0,
+    "heroMin": 9.25,
+    "note": "A pass does not pass because the average rose. Every score increase must name the specific visible or physical defect that was reduced. No credit for brighter lighting, more saturation, more bloom, more particles, higher texture resolution, higher polygon counts, scattered objects, camera shake or motion blur."
+  },
+  "targets": { "critical": 9.25, "ordinary": 8.0 },
+  "groups": {
+    "aircraft": [1, 2, 3, 4, 5, 6, 7, 8],
+    "water": [9, 10, 11, 12, 13, 14, 26],
+    "boats": [15, 16],
+    "city": [17, 18, 19, 20, 21, 22, 23],
+    "atmosphere": [24, 25],
+    "world": [27, 28, 29],
+    "performance": [30]
+  },
+  "categories": [
+    { "id": 1, "name": "Aircraft silhouette", "critical": true, "desc": "Proportions and overall readability from every angle, including ugly ones (straight below, tail-on, nose-on)." },
+    { "id": 2, "name": "Aircraft geometry", "critical": true, "desc": "Model complexity and structural credibility: panel lines, fasteners, access panels, hinges, control-surface gaps, struts, fittings." },
+    { "id": 3, "name": "Aircraft nose and cowling", "critical": false, "desc": "Cowling curvature, panel separations, intakes, cooling vents, exhaust, hub integration, heat and wear where physically plausible." },
+    { "id": 4, "name": "Propeller", "critical": true, "desc": "Blade profile, twist, thickness, hub and hardware; RPM-linked states (crisp at idle, directional blur at mid RPM, disc at high RPM) without aliasing or strobing." },
+    { "id": 5, "name": "Wings and control surfaces", "critical": false, "desc": "Airfoil, leading-edge curvature, trailing-edge thinness, root and tip, ailerons/flaps/elevator/rudder that move with the controls, seams, rivets, nav lights." },
+    { "id": 6, "name": "Cockpit and pilot", "critical": true, "desc": "Interior density, live instruments, controls, glass with Fresnel and controlled transparency, a pilot with anatomy, posture and hands on the controls, restrained animation." },
+    { "id": 7, "name": "Aircraft materials", "critical": true, "desc": "Painted metal with micro-variation, bare metal, rubber, glass, fabric; weathering that follows use, not uniform scratching." },
+    { "id": 8, "name": "Aircraft animation and physics", "critical": false, "desc": "Control response, suspension/float compression, believable mass, stall and recovery, landing and bounce, crash momentum, propeller response." },
+    { "id": 9, "name": "Base ocean appearance", "critical": false, "desc": "Colour, depth response, surface structure at every distance; the existing coloration is a strength to preserve." },
+    { "id": 10, "name": "Water wave physics", "critical": true, "desc": "Multi-frequency motion (swell, wind sea, capillary), directional bias, no visible repetition, wave-following of everything on the surface." },
+    { "id": 11, "name": "Object-water interaction", "critical": true, "desc": "Displacement and response to moving bodies: hull humps, hollows, stern waves, buoyancy response of floats and hulls." },
+    { "id": 12, "name": "Water impact and crash response", "critical": true, "desc": "Contact, depression, splash sheet, directional spray, whitewater, expanding waves, persistence and dissipation, all scaled by mass, speed and angle." },
+    { "id": 13, "name": "Foam quality", "critical": false, "desc": "Variable density, broken edges, transparency, turbulence-driven appearance, lifetime and wave-following; never an opaque white streak." },
+    { "id": 14, "name": "Boat wakes", "critical": true, "desc": "Bow wave, Kelvin arms, stern turbulence, prop wash, persistence after passage, width and length scaling with speed." },
+    { "id": 15, "name": "Boat geometry", "critical": false, "desc": "Hull, deck, railings, windshield, cabin, outboards, cleats, antennas, seating; fiberglass, painted metal, chrome, wet surfaces." },
+    { "id": 16, "name": "Boat physics", "critical": false, "desc": "Buoyancy from multiple hull points, roll, pitch, heave, drag and wave response; never a rigid object sliding on a shader." },
+    { "id": 17, "name": "City skyline", "critical": true, "desc": "Height distribution, silhouette variation, hierarchy, landmarks, rooflines, masts and mechanical floors; not differently sized rectangles." },
+    { "id": 18, "name": "Building geometry", "critical": true, "desc": "Facade depth or convincing parallax, frames, ledges, balconies, vents, awnings, signs, doors, loading bays; no visible copy-paste." },
+    { "id": 19, "name": "Building materials", "critical": false, "desc": "Glass, concrete, metal, brick and stone with correct reflectance and weathering; windows that are not identically lit squares." },
+    { "id": 20, "name": "Rooftop density", "critical": false, "desc": "HVAC, vents, ducting, antennas, dishes, solar, rails, stair access, tanks, piping, skylights; every roof reads as designed." },
+    { "id": 21, "name": "Street-level detail", "critical": false, "desc": "Curbs, gutters, sidewalks, crosswalks, stop lines, lane arrows, manholes, drains, tree wells, bollards, street furniture." },
+    { "id": 22, "name": "Lighting infrastructure", "critical": false, "desc": "Streetlights with correct spacing that follow roads, highway and city variants, traffic signals at intersections, emissive at night with local light." },
+    { "id": 23, "name": "Highway realism", "critical": false, "desc": "Guardrails, barriers, reflectors, shoulder markings, joints, drainage, gantries and signs, columns, chevrons, merges; believable complexity from flying altitude." },
+    { "id": 24, "name": "Cloud realism", "critical": false, "desc": "Internal volume, multi-scale erosion, ragged bases that are level without being a flat slab, self-shadowing, silver lining, atmospheric blending." },
+    { "id": 25, "name": "Lighting and exposure", "critical": true, "desc": "Sunlight, shadows, HDR and tone mapping at sunrise/noon/golden hour/dusk/night; no blown highlights, crushed blacks, plastic materials or excess bloom." },
+    { "id": 26, "name": "Water sunlight and reflections", "critical": true, "desc": "A narrow high-intensity specular path on calm water that fragments across waves; Fresnel; no brown glaze; correct reflections of sky, shore and aircraft." },
+    { "id": 27, "name": "Sand and shoreline", "critical": false, "desc": "Deep to shallow to disturbed shoreline water to wet sand to dry sand to sparse vegetation to grass, with no hard texture boundary; wetness gradient, debris." },
+    { "id": 28, "name": "Vegetation", "critical": false, "desc": "Leaf geometry, branch hierarchy, species and size variation, trunks and bark, translucency, grounding, wind that propagates (large branches move less)." },
+    { "id": 29, "name": "World density and environmental storytelling", "critical": false, "desc": "Does the world appear inhabited and intentionally constructed at macro, meso and micro scale?" },
+    { "id": 30, "name": "Performance and stability", "critical": false, "desc": "Frame pacing, 1 % lows, memory, LOD, culling, shader cost, loading, browser stability; presets Ultra/High/Medium never degrade the hero aircraft or ocean silently." }
+  ],
+  "grid": "8x8, columns A-H left to right, rows 1-8 top to bottom; cell A1 is the top-left corner",
+  "views": ["aerial-a", "cockpit-city", "bridge-low", "skyline-high", "island-pass", "harbor", "water-landing", "water-landing-firm", "sunset", "cloudy", "night", "plane-rear-quarter", "plane-front-quarter", "glass-sun"],
+  "budgets": { "drawCalls": 400, "triangles": 1500000, "frameMsSoftware1280x720": null }
+}

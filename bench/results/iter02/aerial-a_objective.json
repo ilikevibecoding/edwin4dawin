@@ -1,0 +1,215 @@
+{
+  "tag": "iter02",
+  "view": "aerial-a",
+  "build": "b0bbb50dc068-2026-09-04T0950",
+  "rows": [
+    {
+      "metric": "horizon displacement (frac of height)",
+      "value": 0.4122,
+      "score": 5,
+      "note": "ref 0.250 vs 0.662"
+    },
+    {
+      "metric": "aircraft centroid displacement",
+      "value": 0.0329,
+      "score": 8,
+      "note": "ref [0.8126144578313252, 0.7518395008605853] vs [0.787, 0.732]"
+    },
+    {
+      "metric": "aircraft bbox width difference",
+      "value": 0.0725,
+      "score": 5,
+      "note": "projected span as fraction of frame width"
+    },
+    {
+      "metric": "aircraft bbox IoU",
+      "value": 0.393,
+      "score": 4,
+      "note": ""
+    },
+    {
+      "metric": "bridge start displacement",
+      "value": 0.0439,
+      "score": 7,
+      "note": "proj [0.418, 0.512] vs ann [0.395, 0.475]"
+    },
+    {
+      "metric": "bridge end displacement",
+      "value": 0.0575,
+      "score": 7,
+      "note": "proj [0.681, 0.345] vs ann [0.735, 0.325]"
+    },
+    {
+      "metric": "skyline tallest-tower displacement",
+      "value": 0.0158,
+      "score": 9,
+      "note": "proj [0.311, 0.223] vs ann [0.325, 0.215]"
+    },
+    {
+      "metric": "largest island bbox IoU",
+      "value": 0.031,
+      "score": 4,
+      "note": "ref [0.1825, 0.5491071428571429, 0.5575, 0.9151785714285714] vs [0.47, 0.6577777777777778, 0.8475, 0.7111111111111111]"
+    },
+    {
+      "metric": "cloud cover above horizon difference",
+      "value": 0.21,
+      "score": 6,
+      "note": "ref 0.39 vs 0.18"
+    },
+    {
+      "metric": "water area fraction difference",
+      "value": 0.004,
+      "score": 10,
+      "note": "ref 0.31 vs 0.31"
+    },
+    {
+      "metric": "colour dE skyTop",
+      "value": 25.1,
+      "score": 6,
+      "note": "ref [55, 134, 180] vs [150, 184, 209]"
+    },
+    {
+      "metric": "colour dE skyHorizon",
+      "value": 32.5,
+      "score": 6,
+      "note": "ref [107, 160, 184] vs [77, 141, 113]"
+    },
+    {
+      "metric": "colour dE waterNear",
+      "value": 14.7,
+      "score": 8,
+      "note": "ref [80, 148, 171] vs [12, 147, 194]"
+    },
+    {
+      "metric": "colour dE waterFar",
+      "value": null,
+      "score": 0,
+      "note": "ref [118, 153, 185] vs None"
+    },
+    {
+      "metric": "colour dE vegetation",
+      "value": 27.4,
+      "score": 6,
+      "note": "ref [81, 85, 74] vs [58, 126, 100]"
+    },
+    {
+      "metric": "colour dE sand",
+      "value": 19.6,
+      "score": 7,
+      "note": "ref [184, 167, 148] vs [188, 173, 117]"
+    },
+    {
+      "metric": "colour dE clouds",
+      "value": 8.2,
+      "score": 9,
+      "note": "ref [219, 218, 216] vs [199, 209, 219]"
+    },
+    {
+      "metric": "colour dE aircraftYellow",
+      "value": 23.5,
+      "score": 7,
+      "note": "ref [239, 199, 90] vs [187, 163, 92]"
+    }
+  ],
+  "current": {
+    "source": "/workspace/bench/out/iter02/aerial-a/still.png",
+    "resolution": [
+      1920,
+      1080
+    ],
+    "aspect": 1.7777777777777777,
+    "analysisResolution": [
+      400,
+      225
+    ],
+    "horizonY": 0.6622222222222223,
+    "skyToWaterRatio": 1.9605263157894741,
+    "aircraft": {
+      "bbox": [
+        0.65,
+        0.6844444444444444,
+        0.855,
+        0.8044444444444444
+      ],
+      "centroid": [
+        0.7866033755274262,
+        0.7316924519456165
+      ],
+      "widthFraction": 0.20499999999999996
+    },
+    "skyline": {
+      "bbox": [
+        0.0325,
+        0.5422222222222223,
+        0.7075,
+        0.6622222222222223
+      ]
+    },
+    "largestIsland": {
+      "bbox": [
+        0.47,
+        0.6577777777777778,
+        0.8475,
+        0.7111111111111111
+      ],
+      "areaFraction": 0.013866666666666666
+    },
+    "clouds": [
+      {
+        "bbox": [
+          0.0,
+          0.057777777777777775,
+          0.9975,
+          0.23555555555555555
+        ],
+        "centroid": [
+          0.5123596556886227,
+          0.16155314371257484
+        ],
+        "area": 0.11875555555555556
+      }
+    ],
+    "cloudCoverAboveHorizon": 0.1825,
+    "waterAreaFraction": 0.31185555555555555,
+    "sandAreaFraction": 1.1111111111111112e-05,
+    "dominantColors": {
+      "skyTop": [
+        150,
+        184,
+        209
+      ],
+      "skyHorizon": [
+        77,
+        141,
+        113
+      ],
+      "waterNear": [
+        12,
+        147,
+        194
+      ],
+      "waterFar": null,
+      "vegetation": [
+        58,
+        126,
+        100
+      ],
+      "sand": [
+        188,
+        173,
+        117
+      ],
+      "clouds": [
+        199,
+        209,
+        219
+      ],
+      "aircraftYellow": [
+        187,
+        163,
+        92
+      ]
+    }
+  }
+}

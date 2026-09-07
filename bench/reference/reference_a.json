@@ -1,0 +1,178 @@
+{
+ "source": "bench/reference/reference_a.png",
+ "resolution": [
+  1483,
+  832
+ ],
+ "aspect": 1.7824519230769231,
+ "analysisResolution": [
+  400,
+  224
+ ],
+ "horizonY": 0.25,
+ "skyToWaterRatio": 0.3333333333333333,
+ "aircraft": {
+  "bbox": [
+   0.7475,
+   0.6964285714285714,
+   0.88,
+   0.8214285714285714
+  ],
+  "centroid": [
+   0.8126144578313252,
+   0.7518395008605853
+  ],
+  "widthFraction": 0.13249999999999995
+ },
+ "skyline": {
+  "bbox": [
+   0.0,
+   0.13392857142857142,
+   0.835,
+   0.25
+  ]
+ },
+ "largestIsland": {
+  "bbox": [
+   0.1825,
+   0.5491071428571429,
+   0.5575,
+   0.9151785714285714
+  ],
+  "areaFraction": 0.052109375
+ },
+ "clouds": [
+  {
+   "bbox": [
+    0.4875,
+    0.0,
+    0.9975,
+    0.24553571428571427
+   ],
+   "centroid": [
+    0.7682069986836332,
+    0.1490912759355607
+   ],
+   "area": 0.050870535714285715
+  },
+  {
+   "bbox": [
+    0.0,
+    0.10714285714285714,
+    0.575,
+    0.24553571428571427
+   ],
+   "centroid": [
+    0.2559646074646075,
+    0.1998414230557088
+   ],
+   "area": 0.043359375
+  }
+ ],
+ "cloudCoverAboveHorizon": 0.3929910714285714,
+ "waterAreaFraction": 0.3082924107142857,
+ "sandAreaFraction": 0.06748883928571428,
+ "dominantColors": {
+  "skyTop": [
+   55,
+   134,
+   180
+  ],
+  "skyHorizon": [
+   107,
+   160,
+   184
+  ],
+  "waterNear": [
+   80,
+   148,
+   171
+  ],
+  "waterFar": [
+   118,
+   153,
+   185
+  ],
+  "vegetation": [
+   81,
+   85,
+   74
+  ],
+  "sand": [
+   184,
+   167,
+   148
+  ],
+  "clouds": [
+   219,
+   218,
+   216
+  ],
+  "aircraftYellow": [
+   239,
+   199,
+   90
+  ]
+ },
+ "annotations": {
+  "bridgeStart": [
+   0.395,
+   0.475
+  ],
+  "bridgeEnd": [
+   0.735,
+   0.325
+  ],
+  "bridgeArchTop": [
+   0.545,
+   0.395
+  ],
+  "skylineTallest": [
+   0.325,
+   0.215
+  ],
+  "lagoonCentre": [
+   0.615,
+   0.53
+  ],
+  "nearBoatWakes": [
+   [
+    0.455,
+    0.93
+   ],
+   [
+    0.52,
+    0.935
+   ],
+   [
+    0.9,
+    0.53
+   ]
+  ],
+  "sunDirection": "high, from behind-left of the camera (afternoon, camera looking north; sun in the south-west)",
+  "camera": {
+   "altitudeM": 380,
+   "pitchDeg": -12,
+   "verticalFovDeg": 42,
+   "headingDeg": -6,
+   "note": "inferred from horizon placement (26% from top) and island scale"
+  },
+  "aircraftPose": "high-wing floatplane seen from behind-left-above, banking ~8-10 deg left, climbing slightly, heading away toward upper-left"
+ },
+ "role": "Reference A \u2014 visual reference only; never loaded by the game; copyrighted screenshot used for composition measurement.",
+ "aircraftFull": {
+  "bbox": [
+   0.653,
+   0.595,
+   0.885,
+   0.885
+  ],
+  "centroid": [
+   0.77,
+   0.74
+  ],
+  "widthFraction": 0.232,
+  "note": "manual measurement of the whole aircraft including the white wing; `aircraft` is the automated yellow-body-only mask",
+  "attitude": "flying toward the camera and to its left, seen from above the starboard bow; near (port) wing lower"
+ }
+}

@@ -1,0 +1,15 @@
+base: 7ec36aaa (cursor/vice-city-aerial-8213)
+skip acsplit: nothing new
+skip waterrender: nothing new
+merged waterphys: 80e763b2 Report: verification state (seen / measured / queued) and the self-score caption tied to f
+skip boats: no remote branch
+skip clouds4: nothing new
+skip light3: nothing new
+merged street: feaf5ba8 Lamp triangle diet (the h10 read: city_north 1.503 M, 3 k over the cap; street_2m +103 k):
+skip highway: nothing new
+skip facade3: nothing new
+skip veg5: nothing new
+skip terrain5: nothing new
+skip acgeo: nothing new
+build: b0850ffa from /home/ubuntu/wt-integration
+cdn: pinned data.json serves h11

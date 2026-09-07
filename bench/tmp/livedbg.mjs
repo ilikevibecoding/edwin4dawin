@@ -1,0 +1,13 @@
+import puppeteer from 'puppeteer-core';
+const browser = await puppeteer.launch({ executablePath: '/usr/local/bin/google-chrome', headless: true, args: ['--no-sandbox', '--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'], defaultViewport: { width: 800, height: 450 }, protocolTimeout: 600000 });
+const page = await browser.newPage();
+await page.setUserAgent('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36');
+page.on('console', (m) => console.log('[console]', m.type(), m.text().slice(0, 200)));
+page.on('pageerror', (e) => console.log('[pageerror]', e.message));
+page.on('response', (r) => { if (!r.url().includes('ethicalads')) console.log('[response]', r.status(), r.headers()['content-type'], r.url().slice(0, 120)); });
+await page.goto(process.argv[2], { waitUntil: 'networkidle2', timeout: 120000 });
+await new Promise((r) => setTimeout(r, 15000));
+const state = await page.evaluate(() => ({ build: window.__build, ready: window.__ready, benchReady: window.__benchReady, status: document.getElementById('start-status')?.textContent, title: document.title, bodyLen: document.body.innerHTML.length }));
+console.log(JSON.stringify(state));
+await page.screenshot({ path: '/tmp/shots/live_dbg.png' });
+await browser.close();
