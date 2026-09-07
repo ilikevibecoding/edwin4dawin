@@ -35,8 +35,9 @@ export const MODE = {
 export const BODY = { HUMANOID: 0, ASTROMECH: 1, SWEEPER: 2 };
 export const SPREAD_R = 20;        // blocks: a newcomer never takes a cell somebody this close already wears (rubric: 12)
 export const PAIR_R = 13;          // blocks: two people this close wearing one cell get repaired (the farther one from the camera re-spreads)
-export const REPAIR_NEAR = 8;      // blocks: nobody this close to the camera ever changes appearance
-export const REPAIR_EVERY = 0.5;   // seconds between repair passes (one swap per pass)
+export const REPAIR_NEAR = 8;      // blocks: nobody this close to the camera and in front of it ever changes appearance
+export const REPAIR_EVERY = 0.5;   // seconds between repair passes
+export const REPAIR_SWAPS = 3;     // at most this many people change per pass
 export const CHILD_SCALE_MAX = 0.85; // instances scaled below this are children (census.js scales them to 0.72)
 const ACC_EPS = 0.0005;            // rest-pose half size of an accessory box: the depth pass renders raw positions
 const SWEEP_DELAY_MS = 1500;       // idle painting of the not-yet-worn cells starts this long after construction
@@ -435,9 +436,12 @@ export class CrowdRenderer {
       new InstancePool(buildParts(ASTROMECH_PARTS), this.material, astromechs, 'crowd-astromech'),
       new InstancePool(buildParts(SWEEPER_PARTS), this.material, sweepers, 'crowd-sweeper'),
     ];
-    const before = (renderer, scene, camera) => { this.flushUploads(renderer); if (camera && !scene.overrideMaterial) { this.cameraPos.setFromMatrixPosition(camera.matrixWorld); this.hasCamera = true; } };
+    const before = (renderer, scene, camera) => {
+      this.flushUploads(renderer);
+      if (camera && !scene.overrideMaterial) { this.cameraPos.setFromMatrixPosition(camera.matrixWorld); camera.getWorldDirection(this.cameraFwd); this.hasCamera = true; }
+    };
     for (const p of this.pools) { p.mesh.onBeforeRender = before; this.group.add(p.mesh); }
-    this.cameraPos = new THREE.Vector3(); this.hasCamera = false;   // main camera of the last frame (repair pass)
+    this.cameraPos = new THREE.Vector3(); this.cameraFwd = new THREE.Vector3(0, 0, -1); this.hasCamera = false;   // main camera of the last frame (repair pass)
     this.lastRepair = -1e9; this.repairs = 0;
     this.live = 0;
     this.disposed = false;
@@ -583,29 +587,33 @@ export class CrowdRenderer {
     if (this.renderer) this.flushUploads(this.renderer);
   }
 
-  // People walk into each other's company after they were assigned: once per pass, the first pair of shown
-  // humanoids within PAIR_R blocks wearing one cell loses it on the member farther from the camera, who re-spreads
-  // over their group (nobody within REPAIR_NEAR blocks of the camera changes; when the group is exhausted the pair
-  // stays). Returns true when somebody changed.
+  // People walk into each other's company after they were assigned: per pass, up to REPAIR_SWAPS pairs of shown
+  // humanoids within PAIR_R blocks wearing one cell lose it on the member farther from the camera, who re-spreads
+  // over their group. Nobody within REPAIR_NEAR blocks of the camera and in front of it changes (a swap the player
+  // would watch); when the group is exhausted the pair stays. Returns the number of people changed.
   repair() {
-    if (!this.hasCamera) return false;
+    if (!this.hasCamera) return 0;
     const pool = this.pools[BODY.HUMANOID], n = pool.capacity, cells = pool.cell, px = pool.px, pz = pool.pz, hidden = pool.hidden;
-    const cx = this.cameraPos.x, cz = this.cameraPos.z, r2 = PAIR_R * PAIR_R, near2 = REPAIR_NEAR * REPAIR_NEAR;
-    for (let i = 0; i < n; i++) {
+    const cx = this.cameraPos.x, cz = this.cameraPos.z, fx = this.cameraFwd.x, fz = this.cameraFwd.z, r2 = PAIR_R * PAIR_R, near2 = REPAIR_NEAR * REPAIR_NEAR;
+    // in the player's face: close and in front (or so close that any turn shows them)
+    const watched = (k) => { const dx = px[k] - cx, dz = pz[k] - cz, d2 = dx * dx + dz * dz; return d2 < near2 && (d2 < 36 || dx * fx + dz * fz > -0.2 * Math.sqrt(d2)); };
+    let swapped = 0;
+    for (let i = 0; i < n && swapped < REPAIR_SWAPS; i++) {
       if (cells[i] < 0 || hidden[i]) continue;
-      for (let j = i + 1; j < n; j++) {
+      for (let j = i + 1; j < n && swapped < REPAIR_SWAPS; j++) {
         if (cells[j] !== cells[i] || hidden[j]) continue;
         const dx = px[i] - px[j], dz = pz[i] - pz[j];
         if (dx * dx + dz * dz > r2) continue;
+        const wi = watched(i), wj = watched(j);
+        if (wi && wj) continue;
         const di = (px[i] - cx) ** 2 + (pz[i] - cz) ** 2, dj = (px[j] - cx) ** 2 + (pz[j] - cz) ** 2;
-        const k = di >= dj ? i : j;
-        if (Math.max(di, dj) < near2) continue;
+        const k = wi ? j : wj ? i : di >= dj ? i : j;
         const was = cells[k];
         this.assign(pool, k, pool.base[k], pool.child[k], px[k], pz[k]);
-        if (cells[k] !== was) { this.repairs++; pool.dirty = true; return true; }
+        if (cells[k] !== was) { pool.attr.iSkin.array[k] = cells[k]; this.repairs++; swapped++; pool.dirty = true; }
       }
     }
-    return false;
+    return swapped;
   }
 
   get drawCalls() { return this.pools.length; }
