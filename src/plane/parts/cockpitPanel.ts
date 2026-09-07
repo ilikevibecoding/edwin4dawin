@@ -198,7 +198,9 @@ export function buildCockpitPanel(ctx: BuildContext): CockpitPanelBuild {
   const lenses = new Batch();
   for (const g of Object.values(G) as GaugeDef[]) {
     const r = g.r;
-    const ring = new THREE.LatheGeometry([new THREE.Vector2(r * 1.03, 0), new THREE.Vector2(r * 1.03, 0.0062), new THREE.Vector2(r * 1.09, 0.0078), new THREE.Vector2(r * 1.18, 0.0062), new THREE.Vector2(r * 1.18, 0)], 28);
+    // profile from the outer foot up the outer wall, over the crest and down the inner wall: a lathe profile that
+    // climbs has its normals facing away from the axis, so this order puts every face of the ring outside
+    const ring = new THREE.LatheGeometry([new THREE.Vector2(r * 1.18, 0), new THREE.Vector2(r * 1.18, 0.0062), new THREE.Vector2(r * 1.09, 0.0078), new THREE.Vector2(r * 1.03, 0.0062), new THREE.Vector2(r * 1.03, 0)], 28);
     ring.rotateX(Math.PI / 2); // lathe axis +Y -> +Z (toward the pilot)
     cabinKit.add(ring, inPanelM(g.x, g.y, 0), BEZEL);
     for (const a of [45, 135, 225, 315]) cabinKit.add(new THREE.CylinderGeometry(r * 0.05, r * 0.05, 0.0012, 8), inPanelM(g.x + Math.cos((90 - a) * DEG) * r * 1.11, g.y + Math.sin((90 - a) * DEG) * r * 1.11, 0.0078, [Math.PI / 2, 0, 0]), SURF.metal);
