@@ -747,6 +747,20 @@ function findFrontage(c: Chain, graph: RoadGraph): FrontageRun[] {
   return runs;
 }
 
+/** Nearest station of a graph chain to (x, z) and the distance to its centre line. */
+function nearestOnRoadChain(g: RoadChain, x: number, z: number): { s: number; d: number } {
+  let best = { s: 0, d: Infinity };
+  for (let i = 0; i < g.pts.length - 1; i++) {
+    const [ax, az] = g.pts[i], [bx, bz] = g.pts[i + 1];
+    const dx = bx - ax, dz = bz - az, l2 = dx * dx + dz * dz;
+    if (l2 < 1e-6) continue;
+    const t = clamp(((x - ax) * dx + (z - az) * dz) / l2, 0, 1);
+    const d = Math.hypot(ax + dx * t - x, az + dz * t - z);
+    if (d < best.d) best = { s: g.cum[i] + t * Math.sqrt(l2), d };
+  }
+  return best;
+}
+
 /** The roads.ts pavement surface of a graph chain at station s, `a` across (its rows' edge heights, bilinear). */
 function streetSurface(g: RoadChain, s: number, a: number): number {
   const rows = g.rows;
@@ -1543,6 +1557,10 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     // boxes) on the roads.ts rows of its own chain, and its edge nearest the highway becomes a planted buffer: a
     // kerbed 1.05 m strip with a clipped hedge, broken at the mouths of the roads meeting the street on the highway's
     // side. The traffic keeps its lanes (1.8 m off the centre): the kerb face stands 3.3 m off it.
+    /** a footing for the junction furniture on a frontage buffer near (x, z), where the standard spot falls on the
+     *  frontage street's pavement: the buffer's centre at the nearest clear station, and the kerb-top height there */
+    const frontageSpots: ((x: number, z: number) => { x: number; z: number; y: number } | null)[] = [];
+    const frontageSpot = (x: number, z: number) => { for (const f of frontageSpots) { const p = f(x, z); if (p) return p; } return null; };
     if (graph) {
       for (const run of findFrontage(c, graph)) {
         const { g, cross, side: sd } = run;
@@ -1619,6 +1637,17 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         }
         if (open >= 0 && run.s1 - open >= 4) loftBuffer(open, run.s1);
         counts.frontageM += run.s1 - run.s0;
+        frontageSpots.push((x, z) => {
+          const p = nearestOnRoadChain(g, x, z);
+          if (p.d > ghw + 1) return null;
+          for (const ds of [0, 2, -2, 4, -4, 6, -6]) {
+            const s = p.s + ds;
+            if (s < run.s0 + 2 || s > run.s1 - 2 || blocked(s)) continue;
+            const [bx, bz] = gAt(s, aBuf);
+            return { x: bx, z: bz, y: streetSurface(g, s, aBuf) + 0.15 };
+          }
+          return null;
+        });
       }
     }
 
@@ -1691,9 +1720,11 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const f = frameAt(c, s);
         const side = dir;
         const aP = side * (hw + 1.6);
-        const px = f.x + f.rx * aP, pz = f.z + f.rz * aP;
-        const ground = Math.min(surfaceAt(c, s, side * hw) - ROAD_LIFT, map.heightAt(px, pz));
-        if (inRoad(px, pz, 0.6)) continue;
+        let px = f.x + f.rx * aP, pz = f.z + f.rz * aP;
+        let ground = Math.min(surfaceAt(c, s, side * hw) - ROAD_LIFT, map.heightAt(px, pz));
+        // on the frontage street's pavement the pole stands in the hedge buffer instead (nothing else may stand
+        // on another road); the arm reaches the same lanes from a metre nearer
+        if (inRoad(px, pz, 0.6)) { const alt = frontageSpot(px, pz); if (!alt) continue; px = alt.x; pz = alt.z; ground = alt.y; }
         const armDir = new THREE.Vector3(-f.rx * side, 0, -f.rz * side);
         const faceN = new THREE.Vector3(-f.dx * dir, 0, -f.dz * dir);
         // the highway has the green (the frozen bench frame shows the through movement running)
@@ -1705,9 +1736,9 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         const aP = -from * (hw + 1.6);
         const sP = j.s + 9.5;
         const fp = frameAt(c, sP);
-        const px = fp.x + fp.rx * aP, pz = fp.z + fp.rz * aP;
-        if (inRoad(px, pz, 0.6)) continue;
-        const ground = Math.min(surfaceAt(c, sP, -from * hw) - ROAD_LIFT, map.heightAt(px, pz));
+        let px = fp.x + fp.rx * aP, pz = fp.z + fp.rz * aP;
+        let ground = Math.min(surfaceAt(c, sP, -from * hw) - ROAD_LIFT, map.heightAt(px, pz));
+        if (inRoad(px, pz, 0.6)) { const alt = frontageSpot(px, pz); if (!alt) continue; px = alt.x; pz = alt.z; ground = alt.y; }
         const armDir = new THREE.Vector3(-f.dx, 0, -f.dz);
         const faceN = new THREE.Vector3(f.rx * from, 0, f.rz * from);
         mastArm(P(sP), px, pz, ground, armDir, 13, [6, 9.5, 13], faceN, 0);
