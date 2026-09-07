@@ -3,10 +3,11 @@ import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { hash2 } from '../core/seed';
 import { clamp } from '../core/noise';
 import { PORT_ISLAND, Zone, type Vec2, type WorldMap } from './map';
-import { GLSL_LIGHT_POOLS, chainCross, chainFrame, frameAt, roadEdgeY, rowPositions, type Block, type RoadChain, type RoadCorner, type RoadGraph, type RoadLightUniforms, type RoadNode, type RoadRay } from './roads';
+import { GLSL_LIGHT_POOLS, chainCross, chainFrame, frameAt, highwayGap, roadEdgeY, rowPositions, type Block, type RoadChain, type RoadCorner, type RoadGraph, type RoadLightUniforms, type RoadNode, type RoadRay } from './roads';
 import { balanceGroundIbl } from './terrain';
 import { THIN_VERTEX_MAIN, THIN_VERTEX_PARS, cellKey } from './batching';
 import { LAYER_CAMERA, layerMask, maskCasts, type ViewCull } from './culling';
+import type { StreetTree } from './vegetation';
 
 /**
  * Street-level detail over the road graph: raised sidewalks with curb and gutter along every developed block
@@ -23,6 +24,8 @@ export type LampKind = 'arterial' | 'street' | 'ped' | 'highway' | 'mast';
 export interface LampPlan { x: number; y: number; z: number; yaw: number; kind: LampKind }
 
 const CELL = 500;
+/** the small kit's own cell (see `smallBuilds`) */
+const SMALL_CELL = 250;
 /** sidewalks, signals and shelters are drawn within this range (from 200 m up a 3.6 m walk is two pixels at 1.2 km) */
 const FAR = 1200;
 /** signals and shelters switch to their far shapes (no base, cap, bracket, seat or end glass; square lenses) beyond
@@ -31,9 +34,12 @@ const LARGE_NEAR = 300;
 /** benches, bins, hydrants, bollards, cabinets, stop signs, visors, pedestrian heads: under a pixel beyond this —
  *  measured in three dimensions, so from the air the small kit goes as soon as it would from the street */
 const SMALL_FAR = 300;
-/** sidewalks switch to their four-triangle-a-row far index beyond this (a curb face is a quarter pixel there) */
-const WALK_NEAR = 400;
-/** the large furniture (poles, mast arms, shelters, benches) casts shadows, into the fine cascades only, within this
+/** sidewalks switch to their four-triangle-a-row far index beyond this, measured in three dimensions: the 0.15 m
+ *  kerb face the far index drops is 0.8 px at 250 m from eye level and a pixel straight down from 200 m up, so the
+ *  aerial views draw the far index over everything but the ground under the camera (city_north drew 58 k of fine
+ *  walk rows within the old 400 m) */
+const WALK_NEAR = 250;
+/** the large furniture (poles, mast arms, shelters, benches) casts shadows, into the finest cascade only, within this
  *  range: a shelter roof is a pixel or two of shadow at 300 m and a mast arm nothing at all */
 const SHADOW_FAR = 300;
 const CURB_H = 0.15;
@@ -48,7 +54,12 @@ const SIGNAL_GREEN = 24, SIGNAL_AMBER = 4, SIGNAL_RED = 2;
 const SIGNAL_HALF = SIGNAL_GREEN + SIGNAL_AMBER + SIGNAL_RED;
 
 /** sidewalk kinds carried in `aSw.z` */
-const K_WALK = 0, K_PROMENADE = 1, K_APRON = 3, K_PARAPET = 4, K_LOT = 5, K_PLAZA = 6, K_YARD = 7;
+const K_WALK = 0, K_PROMENADE = 1, K_APRON = 3, K_PARAPET = 4, K_LOT = 5, K_PLAZA = 6, K_YARD = 7, K_MEDIAN = 8;
+/** the 4-lane arterials' kerbed median: half-width (kerb face to centreline); the traffic's inner lane drives 2.6 m
+ *  out (world/traffic.ts) and the road shader lays the lanes from 1.0 m (world/roads.ts) */
+const MED_HW = 1.0;
+/** the median ends this far past a junction's box: the crosswalk (4 m) and a painted left-turn pocket */
+const MED_OPENING = 21;
 /** parked cars, planters and benches of the plazas, lots and parking lanes are drawn within this range; beyond
  *  YARD_NEAR (measured in three dimensions, so from 200 m up nothing is near) a car is its one-box far shape and a
  *  planter its shrub, at half the triangles: a car is 10 x 4 px at 280 m from the air, 19 px long at 160 m from eye
@@ -114,6 +125,15 @@ const SW_MAIN = /* glsl */ `
     float paint = max(bayLine, rowLine) * (0.55 + 0.45 * smoothstep(0.3, 0.7, fbm3(wp * 0.4 + 6.0)));
     float drip = smoothstep(0.5, 0.8, vnoise(wp * 0.9)) * inBay * (step(vv, 1.6) + step(14.9, vv)) * (1.0 - smoothstep(0.3, 1.0, fp));
     col = mix(asph * (1.0 - 0.07 * inBay - 0.35 * drip), vec3(0.8, 0.8, 0.78), paint * 0.85);
+    joint = 0.0;
+  } else if (kind > 7.5) {
+    // arterial median planting strip (across = signed metres from the centreline): the plaza beds' kept lawn with a
+    // mulched bed down the middle where the palms stand, worn patches; no joints
+    vec3 lawn = mix(vec3(0.060, 0.104, 0.038), vec3(0.084, 0.136, 0.052), mix(fbm3(wp * 0.9 + 4.0), 0.5, 1.0 - slabFade)) * (0.9 + 0.2 * grain);
+    vec3 mulch = mix(vec3(0.105, 0.075, 0.048), vec3(0.15, 0.11, 0.07), mix(vnoise(wp * 1.7), 0.5, 1.0 - slabFade)) * (0.85 + 0.3 * grain);
+    float bed = (1.0 - smoothstep(0.22, 0.38, abs(across))) * smoothstep(0.35, 0.55, fbm3(vec2(along * 0.08, 3.0)));
+    col = mix(lawn, mulch, bed);
+    col *= 1.0 - 0.15 * smoothstep(0.6, 0.8, fbm3(wp * 0.35 + 7.0));
     joint = 0.0;
   } else if (kind > 6.5) {
     // container terminal hardstand (across, along = the port island's u + HW, v + HH): aged asphalt-concrete 0.17-0.25
@@ -251,12 +271,12 @@ function createSidewalkMaterial(lights: RoadLightUniforms): THREE.MeshStandardMa
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += diffuseColor.rgb * lampPools(vWorldPosS);');
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'sidewalk-v1';
+  mat.customProgramCacheKey = () => 'sidewalk-v2';
   return mat;
 }
 
 /** emissive codes carried per vertex of the furniture soup (`aEmissive`) */
-const EM_NONE = 0, EM_RED = 2, EM_AMBER = 3, EM_GREEN = 4, EM_HAND = 5, EM_WALK = 6;
+const EM_NONE = 0, EM_SIGN = 1, EM_RED = 2, EM_AMBER = 3, EM_GREEN = 4, EM_HAND = 5, EM_WALK = 6;
 
 /** Vertex-coloured PBR material for the furniture soups: `aMatParams` roughness / metalness, `aEmissive` codes the
  *  signal aspect a vertex belongs to and `aPhase` its node's cycle offset (+100 for the cross direction); the
@@ -278,6 +298,8 @@ function createKitMaterial(uniforms: { uSignalTime: THREE.IUniform<number>; uNig
         {
           float code = vSig.x;
           vec3 em = vec3(0.0);
+          // a shop's blade sign is internally lit after dark: its own colour, brightened
+          if (code > 0.5 && code < 1.5) em = diffuseColor.rgb * 2.4 * uNight;
           if (code > 1.5) {
             float parity = step(99.5, vSig.y);
             float t = mod(uSignalTime + vSig.y - parity * 100.0 + parity * ${SIGNAL_HALF.toFixed(1)}, ${(SIGNAL_HALF * 2).toFixed(1)});
@@ -296,7 +318,7 @@ function createKitMaterial(uniforms: { uSignalTime: THREE.IUniform<number>; uNig
         }`);
     balanceGroundIbl(shader);
   };
-  mat.customProgramCacheKey = () => 'street-kit-v2';
+  mat.customProgramCacheKey = () => 'street-kit-v3';
   return mat;
 }
 
@@ -571,6 +593,8 @@ function part(soup: KitSoup, unit: THREE.BufferGeometry, f: THREE.Matrix4, cx: n
 }
 const _e = new THREE.Euler();
 
+/** newspaper box liveries */
+const NEWS_COLORS = [new THREE.Color(0xb32a20), new THREE.Color(0x1f4f9a), new THREE.Color(0xe0b020), new THREE.Color(0x1a1a1c), new THREE.Color(0x2f7a3a)];
 const C = {
   galv: new THREE.Color(0x8d949a),
   dark: new THREE.Color(0x2a2c2e),
@@ -588,6 +612,8 @@ const C = {
   glass: new THREE.Color(0x9fc4d6),
   concrete: new THREE.Color(0xb3b0a8),
   hydrant: new THREE.Color(0xd23a2a),
+  mailbox: new THREE.Color(0x24457a),
+  iron: new THREE.Color(0x35373a),
   cabinet: new THREE.Color(0x8f9a92),
   stone: new THREE.Color(0xa9a49a),
   shrub: new THREE.Color(0x2f5a22),
@@ -637,6 +663,17 @@ interface StreetCell {
 
 interface Run { chain: RoadChain; side: 1 | -1; sa: number; sb: number; zone: Zone | null; w: number; light: boolean }
 
+/** a building massing standing on the ground (world/city.ts `groundBoxes`): footprint w x d about (x, z) turned by
+ *  `rot`, height h, facade style id */
+export interface Facade { x: number; y: number; z: number; w: number; h: number; d: number; rot: number; style: number }
+/** facade lookup grid (m) */
+const FACADE_G = 60;
+/** facade styles whose ground floor is a retail base (city.ts S): punched, balcony, deco, concrete, stone, brick, grid */
+const RETAIL_STYLES = new Set([1, 2, 3, 6, 9, 10, 11]);
+/** awning canvas and blade-sign liveries */
+const AWNING_COLORS = [new THREE.Color(0x2f5a3a), new THREE.Color(0x7a2430), new THREE.Color(0x243b63), new THREE.Color(0xd9c9a3), new THREE.Color(0x8a3c22), new THREE.Color(0x1e1e22)];
+const SIGN_COLORS = [new THREE.Color(0xd8352a), new THREE.Color(0xf2efe6), new THREE.Color(0x1a1a1c), new THREE.Color(0xe8b923), new THREE.Color(0x2a6fb5), new THREE.Color(0x2f8a4a)];
+
 function unitDir(a: Vec2, b: Vec2): Vec2 {
   const dx = b[0] - a[0], dz = b[1] - a[1];
   const l = Math.hypot(dx, dz) || 1;
@@ -661,12 +698,19 @@ export class Streets {
   readonly group = new THREE.Group();
   readonly materials: THREE.Material[] = [];
   readonly lamps: LampPlan[] = [];
+  /** the sidewalk trees (in their pits downtown and in the mid-rise rings), planted by the vegetation system */
+  readonly streetTrees: StreetTree[] = [];
+  private readonly facadeCells = new Map<number, Facade[]>();
   readonly walkMaterial: THREE.MeshStandardMaterial;
   readonly kitMaterial: THREE.MeshStandardMaterial;
   readonly uniforms = { uSignalTime: { value: 0 } as THREE.IUniform<number>, uNight: { value: 0 } as THREE.IUniform<number>, uFocalPx: { value: 1000 } as THREE.IUniform<number> };
   private readonly cells: StreetCell[] = [];
-  private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup }>();
-  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
+  private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; yard: KitSoup; yardFar: KitSoup }>();
+  /** the small kit is built per SMALL_CELL (a quarter of a cell) so that its SMALL_FAR range and the frustum cull it
+   *  finely: at eye level the 500 m cells drew three or four whole cells of it, 140 k triangles at street_2m, most
+   *  of them behind the camera or beside it */
+  private readonly smallBuilds = new Map<number, KitSoup>();
+  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, trees: 0, medians: 0, medianLength: 0, medianPalms: 0, bufferPlants: 0, awnings: 0, signs: 0, newsboxes: 0, mailboxes: 0, racks: 0, cans: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
   private readonly roads: RoadIndex;
   /** debug: `?dbg=nopools` turns the lamp pools off */
   poolsEnabled = true;
@@ -677,11 +721,17 @@ export class Streets {
 
   /** `blocks`: the district grid blocks (centreline to centreline, district frame) and `occupied`: the city's footprint
    *  grid, for the plazas and surface lots dressed over the free ground of the dense blocks */
-  constructor(private readonly map: WorldMap, private readonly graph: RoadGraph, private readonly lights: RoadLightUniforms, private readonly markOccupied: (x: number, z: number, r: number) => void, blocks: Map<string, Block[]> = new Map(), occupied: (x: number, z: number) => boolean = () => false) {
+  constructor(private readonly map: WorldMap, private readonly graph: RoadGraph, private readonly lights: RoadLightUniforms, private readonly markOccupied: (x: number, z: number, r: number) => void, blocks: Map<string, Block[]> = new Map(), occupied: (x: number, z: number) => boolean = () => false, facades: Facade[] = []) {
     this.walkMaterial = createSidewalkMaterial(lights);
     this.kitMaterial = createKitMaterial(this.uniforms);
     this.materials.push(this.walkMaterial, this.kitMaterial);
     this.roads = new RoadIndex(graph.chains);
+    for (const f of facades) {
+      const k = cellKey(f.x, f.z, FACADE_G);
+      let l = this.facadeCells.get(k);
+      if (!l) { l = []; this.facadeCells.set(k, l); }
+      l.push(f);
+    }
     const signalPoles = this.signalPoles;
     for (const chain of graph.chains) {
       // highway and causeway lighting is built with the highway furniture (world/highway.ts): median twin-arm poles;
@@ -699,6 +749,7 @@ export class Streets {
       for (const k of node.corners) this.buildCorner(k, signalPoles.get(node) ?? []);
       this.planInterchangeMasts(node);
     }
+    this.buildMedians();
     this.buildPromenade();
     this.buildPlazas(blocks, occupied);
     this.buildPortYard();
@@ -774,8 +825,11 @@ export class Streets {
   private soupsAt(x: number, z: number): { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup } {
     const key = cellKey(x, z, CELL);
     let b = this.builds.get(key);
-    if (!b) { b = { walk: new WalkSoup(), large: new KitSoup(), largeFar: new KitSoup(), small: new KitSoup(), yard: new KitSoup(), yardFar: new KitSoup() }; this.builds.set(key, b); }
-    return b;
+    if (!b) { b = { walk: new WalkSoup(), large: new KitSoup(), largeFar: new KitSoup(), yard: new KitSoup(), yardFar: new KitSoup() }; this.builds.set(key, b); }
+    const sk = cellKey(x, z, SMALL_CELL);
+    let small = this.smallBuilds.get(sk);
+    if (!small) { small = new KitSoup(); this.smallBuilds.set(sk, small); }
+    return { ...b, small };
   }
 
   /** The sidewalk profile at one point of the curb line: `n` is the unit across vector pointing away from the road
@@ -849,6 +903,156 @@ export class Streets {
     this.counts.runs++;
     // lamps and furniture along the run
     this.dressRun(run, cellSoups);
+    if (chain.cls === 'street') this.plantFrontageBuffer(run);
+  }
+
+  /** The planted buffer between a frontage street and the highway it runs beside (highway agent's request 3: the
+   *  grid's frontage street south of the coastal highway runs for kilometres against its shoulder): where the gap
+   *  between the sidewalk back and the highway's edge leaves 2.2 m, a hedge of sea grapes every 5-7 m down its
+   *  middle and a palm every 24 m; where the street abuts the shoulder there is no room and the darker tone alone
+   *  separates them. */
+  private plantFrontageBuffer(run: Run): void {
+    const { chain, side, sa, sb } = run;
+    if (sb - sa < 20) return;
+    const cross = this.crossOf(chain);
+    const mid = frameAt(chain, cross, (sa + sb) / 2);
+    const dir = chainFrame(chain, (sa + sb) / 2);
+    const nx = mid.cx * side, nz = mid.cz * side;
+    let gap: number | null = null;
+    for (const h of this.graph.chains) {
+      if (h.cls !== 'highway' && h.cls !== 'causeway') continue;
+      const g0 = highwayGap(h, mid.x, mid.z, dir.dx, dir.dz);
+      if (g0 === null || g0 > chain.hw + 30) continue;
+      const g1 = highwayGap(h, mid.x + nx * 5, mid.z + nz * 5, dir.dx, dir.dz);
+      if (g1 === null || g1 >= g0) continue; // the highway is on the other side
+      gap = g0 - chain.hw; // shoulder to this run's kerb face
+      break;
+    }
+    if (gap === null) return;
+    const room = gap - (CURB_TOP + run.w);
+    if (room < 2.2) return;
+    const across = CURB_TOP + run.w + room * 0.5; // from the kerb face, the middle of the strip
+    const pitch = 5 + 2 * hash2(chain.id, side, 61);
+    let k = 0;
+    for (let s = sa + 3 + pitch * hash2(chain.id, side, 62); s < sb - 3; s += pitch, k++) {
+      const f = frameAt(chain, cross, s);
+      const x = f.x + f.cx * side * (chain.hw + across), z = f.z + f.cz * side * (chain.hw + across);
+      const y = this.map.heightAt(x, z);
+      if (y < 0.9) continue;
+      const t = hash2(Math.round(s), chain.id, side + 63);
+      if (k % 4 === 1 && room >= 3.5) this.streetTrees.push({ arche: 4, x, y, z, h: 6 + 3 * t });
+      else this.streetTrees.push({ arche: 6, x, y, z, h: 2.4 + 1.4 * t });
+      this.counts.bufferPlants++;
+    }
+  }
+
+  /** The kerbed medians of the 4-lane arterials (the gauntlet's "medians with curbs and planting strips", defect
+   *  1.15): a 2 m raised strip down the centreline — 0.3 m concrete kerb tops over 0.15 m kerb faces either side of
+   *  a 1.4 m planting strip with a palm every 18-24 m — between the openings: MED_OPENING past the box of every
+   *  signalised junction, arterial crossing and chain end (the crosswalk and a painted left-turn pocket where the
+   *  double yellow runs on), a cut for the crosswalk at the minor streets (no left turns there), 6 m short of the
+   *  chain ends, and a 10 m mid-block gap in three of five stretches over 140 m (U-turns and driveways). Each end is
+   *  a rounded nose. Built in 150 m pieces into the sidewalk soups (fine and far index), skipped over water and on
+   *  decks. */
+  private buildMedians(): void {
+    for (const chain of this.graph.chains) {
+      if (chain.cls !== 'arterial' || chain.lanes < 4 || chain.lift > 0) continue;
+      if (chain.s1 - chain.s0 < 40) continue;
+      // a full opening where the traffic turns (signals, arterial crossings, the chain's ends); at the minor streets
+      // only the cut for the crosswalk (its far line is 3.8 m outside the box)
+      const cuts: [number, number][] = chain.nodes.map((cn) => {
+        const major = cn.node.signal || cn.s < 1.5 || cn.s > chain.length - 1.5 || cn.node.rays.some((r) => r.chain !== chain && r.chain.cls === 'arterial');
+        const open = major ? MED_OPENING : 4.5;
+        return [cn.s - cn.hMinus - open, cn.s + cn.hPlus + open];
+      });
+      cuts.sort((u, v) => u[0] - v[0]);
+      const free: [number, number][] = [];
+      let s = chain.s0 + 6;
+      for (const [c0, c1] of cuts) { if (c0 > s) free.push([s, c0]); s = Math.max(s, c1); }
+      if (chain.s1 - 6 > s) free.push([s, chain.s1 - 6]);
+      for (const [a, b] of free) {
+        const pieces: [number, number][] = [];
+        if (b - a > 140 && hash2(chain.id, Math.round(a), 51) < 0.6) { const m = (a + b) / 2; pieces.push([a, m - 5], [m + 5, b]); } else pieces.push([a, b]);
+        for (const [p0, p1] of pieces) {
+          if (p1 - p0 < 12) continue;
+          const n = Math.ceil((p1 - p0) / 150);
+          for (let i = 0; i < n; i++) this.buildMedianPiece(chain, p0 + ((p1 - p0) * i) / n, p0 + ((p1 - p0) * (i + 1)) / n, i === 0, i === n - 1);
+        }
+      }
+    }
+  }
+
+  private buildMedianPiece(chain: RoadChain, sa: number, sb: number, noseA: boolean, noseB: boolean): void {
+    const cross = this.crossOf(chain);
+    const mid = frameAt(chain, cross, (sa + sb) / 2);
+    if (this.map.heightAt(mid.x, mid.z) < 0.9) return;
+    const soup = this.soupsAt(mid.x, mid.z).walk;
+    const rows = new Set<number>([sa, sb]);
+    for (const s of chain.rows) if (s > sa + 0.3 && s < sb - 0.3) rows.add(s);
+    // rows every 8 m at least (the strip follows the pavement rows where there are any), and the noses' rings
+    for (let s = sa + 8; s < sb - 4; s += 8) rows.add(s);
+    if (noseA) for (const d of [0.3, 0.8, 1.5]) rows.add(sa + d);
+    if (noseB) for (const d of [0.3, 0.8, 1.5]) rows.add(sb - d);
+    const sorted = [...rows].sort((u, v) => u - v);
+    let prev: number[] | null = null;
+    for (const s of sorted) {
+      const f = frameAt(chain, cross, s);
+      const yRoad = (roadEdgeY(chain, s, -1) + roadEdgeY(chain, s, 1)) * 0.5;
+      // the noses: an elliptical taper over the last 1.5 m
+      let hw = MED_HW;
+      const dEnd = Math.min(noseA ? s - sa : Infinity, noseB ? sb - s : Infinity);
+      if (dEnd < 1.5) hw = Math.max(0.1, MED_HW * Math.sqrt(1 - Math.pow((1.5 - dEnd) / 1.5, 2)));
+      const row = this.medianRow(soup, f.x, f.z, f.cx, f.cz, hw, yRoad, s);
+      if (prev) this.linkMedian(soup, prev, row, f.cx, f.cz);
+      prev = row;
+    }
+    // a palm every 18-24 m along the strip, 4 m in from the noses
+    const pitch = 18 + 6 * hash2(chain.id, Math.round(sa), 52);
+    for (let s = sa + 4 + pitch * 0.5 * hash2(chain.id, Math.round(sa), 53); s < sb - 4; s += pitch) {
+      const f = frameAt(chain, cross, s);
+      const y = (roadEdgeY(chain, s, -1) + roadEdgeY(chain, s, 1)) * 0.5 + CURB_H;
+      this.streetTrees.push({ arche: 4, x: f.x, y, z: f.z, h: 7 + 3 * hash2(Math.round(s), chain.id, 54) });
+      this.counts.medianPalms++;
+    }
+    this.counts.medians++;
+    this.counts.medianLength += sb - sa;
+  }
+
+  /** one row of the median profile: face foot, face top and kerb top on the -across side, the planting strip, and
+   *  the same mirrored on the +across side (10 vertices); the kerb parts use the sidewalk kind with `across` measured
+   *  inward from their own kerb face, the strip the median kind with `across` signed from the centreline */
+  private medianRow(soup: WalkSoup, x: number, z: number, cx: number, cz: number, hw: number, yRoad: number, along: number): number[] {
+    const nl = Math.hypot(cx, cz) || 1;
+    const ux = cx / nl, uz = cz / nl;
+    const yTop = yRoad + CURB_H;
+    const kerbW = Math.min(CURB_TOP, hw * 0.5);
+    const out: number[] = [];
+    const v = (o: number, y: number, nx: number, ny: number, nz: number, across: number, kind: number) => {
+      out.push(soup.vert({ x: x + cx * o, y, z: z + cz * o, nx, ny, nz, across, along, kind, w: 0 }));
+    };
+    v(-(hw + 0.05), yRoad - 0.04, -ux, 0, -uz, -0.05, K_WALK);
+    v(-hw, yTop, -ux, 0, -uz, 0, K_WALK);
+    v(-hw, yTop, 0, 1, 0, 0, K_WALK);
+    v(-(hw - kerbW), yTop, 0, 1, 0, kerbW, K_WALK);
+    v(-(hw - kerbW), yTop - 0.03, 0, 1, 0, -(hw - kerbW), K_MEDIAN);
+    v(hw - kerbW, yTop - 0.03, 0, 1, 0, hw - kerbW, K_MEDIAN);
+    v(hw - kerbW, yTop, 0, 1, 0, kerbW, K_WALK);
+    v(hw, yTop, 0, 1, 0, 0, K_WALK);
+    v(hw, yTop, ux, 0, uz, 0, K_WALK);
+    v(hw + 0.05, yRoad - 0.04, ux, 0, uz, -0.05, K_WALK);
+    return out;
+  }
+
+  private linkMedian(soup: WalkSoup, a: number[], b: number[], cx: number, cz: number): void {
+    soup.quad(a[0], a[1], b[1], b[0], -cx, 0, -cz);
+    soup.quad(a[2], a[3], b[3], b[2], 0, 1, 0);
+    soup.quad(a[4], a[5], b[5], b[4], 0, 1, 0);
+    soup.quad(a[6], a[7], b[7], b[6], 0, 1, 0);
+    soup.quad(a[8], a[9], b[9], b[8], cx, 0, cz);
+    // far LOD: one slab kerb face to kerb face, and the two faces as slants from the foot
+    soup.quad(a[0], a[3], b[3], b[0], -cx, 1, -cz, 1);
+    soup.quad(a[3], a[6], b[6], b[3], 0, 1, 0, 1);
+    soup.quad(a[6], a[9], b[9], b[6], cx, 1, cz, 1);
   }
 
   /** Curb return: the profile extruded along the arc from ta to tb (normals toward the arc centre), dished into a
@@ -936,11 +1140,14 @@ export class Streets {
     const yawToRoad = (nx: number, nz: number) => Math.atan2(nz, -nx); // +x of the unit toward -n (the roadway)
     // low-density suburbs light one side of the street only (the side alternates per chain)
     const lit = zone !== Zone.RES_LOW || side === (chain.id % 2 === 0 ? 1 : -1);
+    /** along-positions of this run's lamps (the tree pits and the kerb-side kit keep clear of them) */
+    const lampS: number[] = [];
     if (lit && L >= 30) {
       const n = arterial ? Math.ceil((L - 12) / pitch) : Math.floor((L - 12) / pitch);
       if (n === 0) {
         const s = (sa + sb) / 2, q = at(s, 0.65);
         this.lamp(q.x, yAt(s), q.z, yawToRoad(q.nx, q.nz), arterial ? 'arterial' : 'street');
+        lampS.push(s);
       } else {
         const p = (L - 12) / n;
         const stagger = arterial ? 0 : side > 0 ? 0 : p / 2;
@@ -949,6 +1156,7 @@ export class Streets {
           if (s > sb - 6) continue;
           const q = at(s, 0.65);
           this.lamp(q.x, yAt(s), q.z, yawToRoad(q.nx, q.nz), arterial ? 'arterial' : 'street');
+          lampS.push(s);
         }
       }
     }
@@ -959,7 +1167,9 @@ export class Streets {
     const runYaw = Math.atan2(-dir.dz, dir.dx);
     /** curb lengths (s, half-length) kept free of parked cars: the bus stop at a shelter, a hydrant */
     const keepClear: [number, number][] = [];
-    const put = (kind: 'bench' | 'bin' | 'hydrant' | 'shelter' | 'cabinet', s: number, across: number) => {
+    /** along-positions and half-lengths of everything placed on the walk (the tree pits keep clear of them) */
+    const taken: [number, number][] = lampS.map((s) => [s, 2.5]);
+    const put = (kind: 'bench' | 'bin' | 'hydrant' | 'shelter' | 'cabinet' | 'newsbox' | 'mailbox' | 'bikerack' | 'can', s: number, across: number, n = 1) => {
       const q = at(s, across);
       if (!this.roads.clear(q.x, q.z, kind === 'shelter' ? 1.2 : 0.4)) { this.counts.rejected++; return; }
       const y = yAt(s);
@@ -967,7 +1177,48 @@ export class Streets {
       const soup = kind === 'shelter' ? soups.large : soups.small;
       if (kind === 'shelter') keepClear.push([s, 10]);
       if (kind === 'hydrant') keepClear.push([s, 2.8]);
+      taken.push([s, kind === 'shelter' ? 4 : kind === 'bikerack' ? 1.6 : kind === 'newsbox' ? 0.5 * n + 0.6 : 1.2]);
       switch (kind) {
+        case 'newsbox': {
+          // a rank of 1-3 coin boxes along the kerb line, each its publisher's colour with a dark window
+          this.counts.newsboxes += n;
+          const f = frame(q.x, y, q.z, faceYaw);
+          for (let i = 0; i < n; i++) {
+            const cz = (i - (n - 1) * 0.5) * 0.52;
+            const col = NEWS_COLORS[Math.floor(hash2(Math.round(s * 3), chain.id, i + 60) * NEWS_COLORS.length)];
+            part(soup, UNIT.box, f, 0, 0.55, cz, 0.42, 1.06, 0.46, col, 0.55, 0.3);
+            part(soup, UNIT.box, f, 0.215, 0.8, cz, 0.02, 0.36, 0.36, C.glassDark, 0.2, 0.6);
+          }
+          break;
+        }
+        case 'mailbox': {
+          // the blue collection box: a legged body with the rounded top and the pull-down door toward the walk
+          this.counts.mailboxes++;
+          const f = frame(q.x, y, q.z, faceYaw);
+          part(soup, UNIT.box, f, 0, 0.62, 0, 0.62, 0.62, 0.52, C.mailbox, 0.5, 0.35);
+          part(soup, UNIT.cyl, f, 0, 0.93, 0, 0.52, 0.62, 0.52, C.mailbox, 0.5, 0.35, EM_NONE, 0, Math.PI / 2);
+          part(soup, UNIT.box, f, 0, 0.16, 0, 0.5, 0.32, 0.4, C.dark, 0.6, 0.5);
+          part(soup, UNIT.box, f, -0.27, 0.72, 0, 0.02, 0.3, 0.42, C.white, 0.6, 0.1);
+          break;
+        }
+        case 'bikerack': {
+          // inverted-U racks 0.9 m apart across the walk, their plane along the kerb
+          this.counts.racks += n;
+          const f = frame(q.x, y, q.z, faceYaw);
+          for (let i = 0; i < n; i++) {
+            const cz = (i - (n - 1) * 0.5) * 0.9;
+            part(soup, UNIT.box, f, -0.35, 0.4, cz, 0.05, 0.8, 0.05, C.galv, 0.4, 0.8, EM_NONE, 0, 0, 1);
+            part(soup, UNIT.box, f, 0.35, 0.4, cz, 0.05, 0.8, 0.05, C.galv, 0.4, 0.8, EM_NONE, 0, 0, 1);
+            part(soup, UNIT.box, f, 0, 0.8, cz, 0.75, 0.05, 0.05, C.galv, 0.4, 0.8, EM_NONE, 0, 0, 3);
+          }
+          break;
+        }
+        case 'can':
+          // the downtown litter can: black mesh drum with a flat lid and a ring at the top
+          this.counts.cans++;
+          part(soup, UNIT.cyl, frame(q.x, y, q.z, 0), 0, 0.5, 0, 0.62, 1.0, 0.62, C.black, 0.75, 0.4);
+          part(soup, UNIT.cyl6, frame(q.x, y, q.z, 0), 0, 1.06, 0, 0.66, 0.12, 0.66, C.dark, 0.5, 0.6);
+          break;
         case 'bench': {
           const f = frame(q.x, y, q.z, faceYaw);
           part(soup, UNIT.box, f, 0, 0.45, 0, 0.45, 0.05, 1.7, C.wood, 0.85, 0);
@@ -1015,18 +1266,129 @@ export class Streets {
     if (L < 24) return;
     const back = CURB_TOP + W - 0.55;
     if (dense) {
+      const downtown = zone === Zone.DOWNTOWN;
       if (h < 0.6) put('bench', sa + L * (0.3 + 0.2 * h), back);
       if (h > 0.45 && L > 70) put('bench', sa + L * 0.72, back);
-      if (hash2(Math.round(sa), chain.id, side + 11) < 0.7) put('bin', sa + 4.5, 0.75);
-      if (hash2(Math.round(sb), chain.id, side + 12) < 0.45) put('bin', sb - 4.5, 0.75);
+      if (hash2(Math.round(sa), chain.id, side + 11) < 0.7) put(downtown ? 'can' : 'bin', sa + 4.5, 0.75);
+      if (hash2(Math.round(sb), chain.id, side + 12) < 0.45) put(downtown ? 'can' : 'bin', sb - 4.5, 0.75);
+      if (L > 50 && hash2(Math.round(sa), chain.id, side + 16) < 0.6) put(downtown ? 'can' : 'bin', sa + L * (0.45 + 0.1 * h), 0.75);
       if (hash2(Math.round(sa), chain.id, side + 13) < 0.45) put('hydrant', sa + L * (0.55 + 0.3 * h), 0.7);
       if (L > 60 && W >= 2.3 && hash2(Math.round(sa), chain.id, side + 14) < (arterial ? 0.3 : 0.16)) put('shelter', sa + L * 0.5, back + 0.35);
       if (W >= 2.3 && hash2(Math.round(sa), chain.id, side + 15) < 0.14) put('cabinet', sa + L * 0.85, back);
+      // the kerb-side rank near the corners: newspaper boxes, the mailbox; bike racks at the back of the walk
+      const hn = hash2(Math.round(sa), chain.id, side + 17);
+      if (hn < (downtown ? 0.55 : 0.3)) put('newsbox', sa + 7.5 + 2.0 * hn, 0.62, 1 + Math.floor(hn * 5.4) % 3);
+      if (hash2(Math.round(sb), chain.id, side + 18) < (downtown ? 0.3 : 0.15)) put('newsbox', sb - 8.0, 0.62, 2);
+      if (hash2(Math.round(sa), chain.id, side + 19) < (downtown ? 0.22 : 0.12)) put('mailbox', sa + 10.5 + 3.0 * h, 0.68);
+      if (W >= 2.3 && hash2(Math.round(sa), chain.id, side + 20) < (downtown ? 0.4 : 0.22)) put('bikerack', sa + L * (0.36 + 0.12 * h), back + 0.1, 2 + Math.floor(h * 2));
+      if (W >= 2.3) this.plantTreePits(run, at, yAt, taken, soups.small);
+      this.dressRetail(run, yAt, soups.small);
       if (!arterial && chain.hw >= 5.5) this.parkCurb(run, keepClear, at);
     } else {
       if (hash2(Math.round(sa), chain.id, side + 13) < 0.3) put('hydrant', sa + L * (0.55 + 0.3 * h), 0.7);
       if (zone === Zone.PARK && h < 0.5) put('bench', sa + L * 0.5, back);
       if (zone === Zone.INDUSTRIAL && hash2(Math.round(sa), chain.id, side + 15) < 0.2) put('cabinet', sa + L * 0.8, back);
+    }
+  }
+
+  /** Awnings and blade signs on the retail bases along a dense block face. The mid-rise street wall (city.ts
+   *  fillEdge) stands with its front face 3 m behind the carriageway edge, at the back of the sidewalk, and the
+   *  tower podiums a forecourt further back; any ground box whose face looks at this run from 2.3-9 m behind the
+   *  kerb face is a frontage, cut into 5-8 m shopfronts:
+   *  a canvas awning over 55 % of them (1.3 m out at 3.05 m, an 18 deg pitch and a valance) and a blade sign at
+   *  one end of 35 % (lit at night). Glass, hotel and industrial styles keep bare bases. */
+  private dressRetail(run: Run, yAt: (s: number) => number, soup: KitSoup): void {
+    const { chain, side, sa, sb } = run;
+    const L = sb - sa;
+    if (L < 20) return;
+    const cross = this.crossOf(chain);
+    const mid = frameAt(chain, cross, (sa + sb) / 2);
+    const dir = chainFrame(chain, (sa + sb) / 2);
+    const nx = mid.cx * side, nz = mid.cz * side; // outward, road to sidewalk back
+    const reach = L * 0.5 + 60;
+    const seen = new Set<Facade>();
+    for (let wx = mid.x - reach; wx <= mid.x + reach + FACADE_G; wx += FACADE_G) for (let wz = mid.z - reach; wz <= mid.z + reach + FACADE_G; wz += FACADE_G) {
+      const list = this.facadeCells.get(cellKey(wx, wz, FACADE_G));
+      if (!list) continue;
+      for (const b of list) {
+        if (seen.has(b) || !RETAIL_STYLES.has(b.style) || b.h < 8) continue;
+        seen.add(b);
+        const c = Math.cos(b.rot), sn = Math.sin(b.rot);
+        // the four faces: outward normal, centre, length along the face
+        const faces: { fx: number; fz: number; cx: number; cz: number; len: number }[] = [
+          { fx: c, fz: sn, cx: b.x + c * b.w * 0.5, cz: b.z + sn * b.w * 0.5, len: b.d },
+          { fx: -c, fz: -sn, cx: b.x - c * b.w * 0.5, cz: b.z - sn * b.w * 0.5, len: b.d },
+          { fx: -sn, fz: c, cx: b.x - sn * b.d * 0.5, cz: b.z + c * b.d * 0.5, len: b.w },
+          { fx: sn, fz: -c, cx: b.x + sn * b.d * 0.5, cz: b.z - c * b.d * 0.5, len: b.w },
+        ];
+        for (const f of faces) {
+          if (f.fx * nx + f.fz * nz > -0.95) continue; // must look at the road
+          const sF = (sa + sb) / 2 + (f.cx - mid.x) * dir.dx + (f.cz - mid.z) * dir.dz;
+          const across = (f.cx - mid.x) * nx + (f.cz - mid.z) * nz - chain.hw; // behind the kerb face
+          if (across < 2.3 || across > 9.0) continue;
+          const s0 = Math.max(sa + 1.5, sF - f.len * 0.5 + 0.6), s1 = Math.min(sb - 1.5, sF + f.len * 0.5 - 0.6);
+          if (s1 - s0 < 4) continue;
+          // shopfronts of 5-8 m from the face's own start, so a facade shared by two runs keeps one rhythm
+          const seed = Math.round(f.cx * 3 + f.cz * 7);
+          let s = s0;
+          for (let k = 0; s < s1 - 3.5 && k < 40; k++) {
+            const front = Math.min(5 + 3 * hash2(seed, k, 71), s1 - s);
+            const sm = s + front * 0.5;
+            const yaw = Math.atan2(nz, nx) + Math.PI; // +x toward the road
+            const pt = frameAt(chain, cross, sm);
+            const px = pt.x + pt.cx * side * (chain.hw + across), pz = pt.z + pt.cz * side * (chain.hw + across);
+            const y = yAt(sm);
+            const roll = hash2(seed, k, 72);
+            if (roll < 0.55 && front >= 3.5) {
+              this.counts.awnings++;
+              const fr = frame(px, y, pz, yaw);
+              const col = AWNING_COLORS[Math.floor(hash2(seed, k, 73) * AWNING_COLORS.length)];
+              part(soup, UNIT.box, fr, 0.62, 3.25, 0, 1.3, 0.05, front - 0.8, col, 0.85, 0, EM_NONE, 0, -0.32);
+              part(soup, UNIT.box, fr, 1.23, 2.92, 0, 0.03, 0.26, front - 0.8, col, 0.85, 0);
+            }
+            if (hash2(seed, k, 74) < 0.35) {
+              this.counts.signs++;
+              const end = hash2(seed, k, 75) < 0.5 ? -1 : 1;
+              const fr = frame(px, y, pz, yaw);
+              const col = SIGN_COLORS[Math.floor(hash2(seed, k, 76) * SIGN_COLORS.length)];
+              const sz = end * (front * 0.5 - 0.6);
+              part(soup, UNIT.box, fr, 0.5, 3.95, sz, 0.8, 0.55, 0.05, col, 0.5, 0.1, EM_SIGN);
+              part(soup, UNIT.box, fr, 0.4, 4.3, sz, 0.8, 0.03, 0.03, C.dark, 0.5, 0.6, EM_NONE, 0, 0, 3);
+            }
+            s += front;
+          }
+        }
+      }
+    }
+  }
+
+  /** Street trees in their pits along a dense block face: a 1.2 m cast-iron grate 1.05 m from the kerb face every
+   *  12-16 m, clear of the lamps, shelters and the rest of the kit, on three downtown faces in four and half the
+   *  mid-rise ring's (a street of palms or a street of shade trees per chain); the trees themselves go to the
+   *  vegetation system's planting list so they share its species, crown tiers and shadows. */
+  private plantTreePits(run: Run, at: (s: number, across: number) => { x: number; z: number; nx: number; nz: number }, yAt: (s: number) => number, taken: [number, number][], soup: KitSoup): void {
+    const { chain, side, sa, sb, zone } = run;
+    const L = sb - sa;
+    if (L < 30) return;
+    const row = hash2(chain.id, side, 41);
+    if (row > (zone === Zone.DOWNTOWN ? 0.75 : 0.5)) return;
+    // (round 15 tried more palm streets for the budget: a palm costs the vegetation pass a third of a lobed crown at
+    // eye level, but keeps its 3D fronds to 650 m against a crown's 420 m, so the aerial views paid 4–11 k more)
+    const palms = hash2(chain.id, 0, 42) < (zone === Zone.DOWNTOWN ? 0.35 : 0.6);
+    const pitch = 12 + 4 * hash2(chain.id, side, 43);
+    for (let s = sa + 7.5 + pitch * 0.4 * row; s <= sb - 7.5; s += pitch) {
+      if (taken.some(([ts, tr]) => Math.abs(s - ts) < tr + 1.0)) continue;
+      const q = at(s, CURB_TOP + 0.75);
+      if (!this.roads.clear(q.x, q.z, 0.7)) { this.counts.rejected++; continue; }
+      const y = yAt(s);
+      const yaw = Math.atan2(q.nz, -q.nx);
+      part(soup, UNIT.box, frame(q.x, y, q.z, yaw), 0, 0.012, 0, 1.2, 0.024, 1.2, C.iron, 0.6, 0.5);
+      const t = hash2(Math.round(s * 2), chain.id, side + 44);
+      const arche = palms ? 4 : t < 0.25 ? 6 : 0;
+      const h = arche === 4 ? 7 + 3 * t : arche === 6 ? 3.5 + 2 * t : 6 + 3 * t;
+      this.streetTrees.push({ arche, x: q.x, y, z: q.z, h });
+      this.counts.trees++;
+      taken.push([s, 1.2]);
     }
   }
 
@@ -1558,42 +1920,53 @@ export class Streets {
   // ---------------------------------------------------------------- meshes
 
   private flush(): void {
-    for (const [key, b] of this.builds) {
-      const cell: StreetCell = { key, box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, walk: null, walkFar: null, large: null, largeFar: null, small: null, yard: null, yardFar: null, height: 0 };
-      const mk = (g: THREE.BufferGeometry | null, mat: THREE.Material, name: string, casts: boolean): THREE.Mesh | null => {
-        if (!g) return null;
-        const m = new THREE.Mesh(g, mat);
-        m.name = name;
-        m.frustumCulled = false;
-        m.matrixAutoUpdate = false;
-        m.receiveShadow = true;
-        m.castShadow = casts;
-        m.visible = false;
-        m.layers.set(LAYER_CAMERA);
-        cell.box.union(g.boundingBox!);
-        this.group.add(m);
-        return m;
-      };
-      cell.walk = mk(b.walk.build(), this.walkMaterial, 'sidewalks', false);
-      cell.walkFar = cell.walk ? mk(b.walk.buildFar(cell.walk.geometry), this.walkMaterial, 'sidewalks-far', false) : null;
-      cell.large = mk(b.large.build(), this.kitMaterial, 'street-kits', true);
-      cell.largeFar = mk(b.largeFar.build(), this.kitMaterial, 'street-kits-far', false);
-      // the small soup (visors, pedestrian heads, buttons, name blades, stop signs) never casts: nothing in it is
-      // worth a 0.4 m shadow texel, and drawn into two cascades it cost as much again as the whole street pass
-      cell.small = mk(b.small.build(), this.kitMaterial, 'street-kits-small', false);
-      cell.yard = mk(b.yard.build(), this.kitMaterial, 'street-yards', false); // casts into cascade 0 at eye level (updateLod)
-      cell.yardFar = mk(b.yardFar.build(), this.kitMaterial, 'street-yards-far', false);
-      this.counts.walkTriangles += b.walk.triangles;
-      this.counts.kitTriangles += b.large.triangles + b.small.triangles;
-      this.counts.kitFarTriangles += b.largeFar.triangles;
-      this.counts.yardTriangles += b.yard.triangles;
-      this.counts.yardFarTriangles += b.yardFar.triangles;
-      if (!cell.walk && !cell.large && !cell.small && !cell.yard) continue;
+    const newCell = (key: number): StreetCell => ({ key, box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, walk: null, walkFar: null, large: null, largeFar: null, small: null, yard: null, yardFar: null, height: 0 });
+    const mk = (cell: StreetCell, g: THREE.BufferGeometry | null, mat: THREE.Material, name: string, casts: boolean): THREE.Mesh | null => {
+      if (!g) return null;
+      const m = new THREE.Mesh(g, mat);
+      m.name = name;
+      m.frustumCulled = false;
+      m.matrixAutoUpdate = false;
+      m.receiveShadow = true;
+      m.castShadow = casts;
+      m.visible = false;
+      m.layers.set(LAYER_CAMERA);
+      cell.box.union(g.boundingBox!);
+      this.group.add(m);
+      return m;
+    };
+    const close = (cell: StreetCell): void => {
       const sphere = cell.box.getBoundingSphere(new THREE.Sphere());
       cell.center.copy(sphere.center); cell.r = sphere.radius; cell.height = cell.box.max.y - cell.box.min.y;
       this.cells.push(cell);
+    };
+    for (const [key, b] of this.builds) {
+      const cell = newCell(key);
+      cell.walk = mk(cell, b.walk.build(), this.walkMaterial, 'sidewalks', false);
+      cell.walkFar = cell.walk ? mk(cell, b.walk.buildFar(cell.walk.geometry), this.walkMaterial, 'sidewalks-far', false) : null;
+      cell.large = mk(cell, b.large.build(), this.kitMaterial, 'street-kits', true);
+      cell.largeFar = mk(cell, b.largeFar.build(), this.kitMaterial, 'street-kits-far', false);
+      cell.yard = mk(cell, b.yard.build(), this.kitMaterial, 'street-yards', false); // casts into cascade 0 at eye level (updateLod)
+      cell.yardFar = mk(cell, b.yardFar.build(), this.kitMaterial, 'street-yards-far', false);
+      this.counts.walkTriangles += b.walk.triangles;
+      this.counts.kitTriangles += b.large.triangles;
+      this.counts.kitFarTriangles += b.largeFar.triangles;
+      this.counts.yardTriangles += b.yard.triangles;
+      this.counts.yardFarTriangles += b.yardFar.triangles;
+      if (!cell.walk && !cell.large && !cell.yard) continue;
+      close(cell);
+    }
+    // the small soup (visors, pedestrian heads, buttons, name blades, stop signs, the kerb-side furniture, awnings and
+    // signs) never casts: nothing in it is worth a 0.4 m shadow texel, and drawn into two cascades it cost as much
+    // again as the whole street pass; its cells are the quarter cells of SMALL_CELL
+    for (const [key, soup] of this.smallBuilds) {
+      const cell = newCell(key);
+      cell.small = mk(cell, soup.build(), this.kitMaterial, 'street-kits-small', false);
+      this.counts.kitTriangles += soup.triangles;
+      if (cell.small) close(cell);
     }
     this.builds.clear();
+    this.smallBuilds.clear();
     this.crossCache.clear();
     this.counts.cells = this.cells.length;
   }
@@ -1616,9 +1989,15 @@ export class Streets {
     for (const c of this.cells) {
       const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
       const inView = d < FAR && cull.boxInView(c.box);
-      if (c.walk) c.walk.visible = inView && (d < WALK_NEAR || !c.walkFar);
-      if (c.walkFar) c.walkFar.visible = inView && d >= WALK_NEAR;
-      const castBits = d < SHADOW_FAR ? cull.boxCasterCascades(c.box, c.height) : 0;
+      // the small kit's and the walks' near ranges are measured in three dimensions: from 200 m up the kerb faces
+      // are gone 150 m out and the small kit 220 m out
+      const d3 = Math.hypot(d, Math.max(0, camPos.y - c.box.max.y));
+      if (c.walk) c.walk.visible = inView && (d3 < WALK_NEAR || !c.walkFar);
+      if (c.walkFar) c.walkFar.visible = inView && d3 >= WALK_NEAR;
+      // the large kit casts into the finest cascade only (0.16 m texels, the first ~200 m): in the second cascade's
+      // 0.5 m texels a mast arm or a shelter post is under a texel and a shelter roof a 3 x 7 texel blot seen at a
+      // grazing angle — 19–36 k triangles a view for nothing visible (frame harness, round 15)
+      const castBits = d < SHADOW_FAR ? cull.boxCasterCascades(c.box, c.height) & 1 : 0;
       const set = (m: THREE.Mesh | null, visible: boolean) => {
         if (!m) return;
         const mask = layerMask('near', visible, visible || d < SHADOW_FAR ? castBits : 0);
@@ -1630,8 +2009,6 @@ export class Streets {
       const largeNear = d < LARGE_NEAR || !c.largeFar;
       set(c.large, inView && largeNear);
       if (c.largeFar) c.largeFar.visible = inView && !largeNear;
-      // the small kit's range is measured in three dimensions: from 200 m up it is gone 220 m out
-      const d3 = Math.hypot(d, Math.max(0, camPos.y - c.box.max.y));
       if (c.small) c.small.visible = inView && d3 < SMALL_FAR; // camera layer only (see flush)
       // the yard's near shapes are for eye level: measured in three dimensions, from 200 m up every car is its far box
       const yardNear = d3 < YARD_NEAR || !c.yardFar;

@@ -427,7 +427,10 @@ export class Traffic {
     const routeDensity: number[] = [];
     for (const [id, pts] of byId) {
       const spec = map.roads.find((r) => r.id === id)!;
-      this.carRoutes.push({ pts, length: this.len3(pts), lanes: spec.lanes, width: spec.width, laneOff0: spec.lanes >= 4 ? 1.5 : 1.8, laneW: 3.2 });
+      // the 4-lane arterials carry a 2 m kerbed median (world/streets.ts buildMedians): their inner lane drives 2.6 m
+      // from the centreline (lanes 1.0-4.2 and 4.2-7.4 m, the road shader's lane layout), a car body 1.6 m off the kerb
+      const median = spec.cls === 'arterial' && spec.lanes >= 4;
+      this.carRoutes.push({ pts, length: this.len3(pts), lanes: spec.lanes, width: spec.width, laneOff0: median ? 2.6 : spec.lanes >= 4 ? 1.5 : 1.8, laneW: 3.2 });
       routeDensity.push(spec.traffic);
     }
     for (const b of bridges) {

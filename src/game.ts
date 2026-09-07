@@ -238,7 +238,7 @@ export class Game {
     await this.tick(progress, 'Paving sidewalks and hanging signals', 0.6);
     // sidewalks, curbs, signals, street furniture and the lamp plan (footings on the curb line) over the road graph;
     // low and unmirrored (the mirror image is far under its texel size for a curb)
-    this.streets = new Streets(this.map, network.graph, roadLights, this.city.markOccupied, network.blocksByDistrict, this.city.occupied);
+    this.streets = new Streets(this.map, network.graph, roadLights, this.city.markOccupied, network.blocksByDistrict, this.city.occupied, this.city.batches.groundBoxes((x, z) => this.map.heightAt(x, z)));
     for (const m of this.streets.materials) this.registerLit(m);
     this.streets.group.name = 'streets';
     this.scene.add(this.streets.group);
@@ -254,7 +254,7 @@ export class Game {
     this.reflection.excludeChildrenWhen(props.group, (o, cam) => props.cameraMeshes.has(o) || (!props.mirrorMeshes.has(o) && beyondRange(o, cam)));
 
     await this.tick(progress, 'Planting palms and mangroves', 0.74);
-    this.vegetation = new Vegetation(this.map, this.city.occupied);
+    this.vegetation = new Vegetation(this.map, this.city.occupied, this.streets.streetTrees);
     for (const m of this.vegetation.materials) this.registerLit(m);
     this.vegetation.group.name = 'vegetation';
     this.scene.add(this.vegetation.group);

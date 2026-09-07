@@ -195,6 +195,18 @@ export class BuildingBatches {
     this.geos = { box: unitBox(), cyl: unitPrism(16, 0), oct: unitPrism(8, Math.PI / 8), frustum: unitFrustum(0.3), shear: unitShear(), house: unitHouse(), trim: unitBox(), roof: unitBox(), roofcyl: unitPrism(10, 0), roofbig: unitBox() };
   }
 
+  /** The box massings standing on the ground (their base within a metre of the terrain; the rooftop kit sits far
+   *  above it), as footprints for the street dressing: awnings and blade signs hang on the facades that meet the
+   *  sidewalk. `style` is the facade style id, `y` the base height. */
+  groundBoxes(heightAt: (x: number, z: number) => number): { x: number; y: number; z: number; w: number; h: number; d: number; rot: number; style: number }[] {
+    const out: { x: number; y: number; z: number; w: number; h: number; d: number; rot: number; style: number }[] = [];
+    for (const [key, list] of this.lists) {
+      if (!key.startsWith('box|')) continue;
+      for (const b of list) if (b.y < heightAt(b.x, b.z) + 1.0) out.push({ x: b.x, y: b.y + 0.4, z: b.z, w: b.w, h: b.h - 0.4, d: b.d, rot: b.rot, style: b.style });
+    }
+    return out;
+  }
+
   add(kind: Kind, inst: Instance): void {
     const tx = Math.floor((inst.x - this.tileOx) / this.tileSize), tz = Math.floor((inst.z - this.tileOz) / this.tileSize);
     const key = `${kind}|${tx}|${tz}`;

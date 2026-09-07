@@ -42,6 +42,9 @@ import { LAYER_CAMERA, LAYER_DEFAULT, LAYER_MAIN, LAYER_MIRROR, MAX_CASCADES, ca
 
 /** 0 broadleaf, 1 emergent, 2 mangrove, 3 shrub, 4 palm, 5 dune grass tussock, 6 sea grape, 7 slash pine */
 type Archetype = 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7;
+/** a tree planted by another system (the street dressing's sidewalk pits): broadleaf (0), sea grape (6) or
+ *  coconut palm (4), `y` the ground it stands on and `h` its height in metres */
+export interface StreetTree { arche: 0 | 4 | 6; x: number; y: number; z: number; h: number }
 /** shape class: 0 round (broadleaf, emergent), 1 spreading (mangrove, shrub, grass, sea grape), 2 conical (pine), 3 palm */
 function shapeClass(a: Archetype): number { return a === 4 ? 3 : a === 7 ? 2 : a <= 1 ? 0 : 1; }
 
@@ -1987,7 +1990,7 @@ export class Vegetation {
   /** the grass tufts within GRASS_RADIUS of the camera */
   private readonly grass: GrassField;
 
-  constructor(map: WorldMap, occupied: (x: number, z: number) => boolean) {
+  constructor(map: WorldMap, occupied: (x: number, z: number) => boolean, streetTrees: readonly StreetTree[] = []) {
     const rng = new Rng('vegetation');
     const frondTex = frondTexture(rng.fork('fronds'));
     const atlas = cardAtlas(rng.fork('atlas'));
@@ -2300,6 +2303,14 @@ export class Vegetation {
         if (marinaRng.chance(0.8)) palm(x, z, y, marinaRng, 6, 13);
         else add(6, x, z, y - 0.15, size(marinaRng, 3, 7), marinaRng);
       }
+    }
+    // street trees planted by the street dressing (world/streets.ts): in the sidewalk tree pits downtown, so
+    // they take the city palette, the crown / card tiers and the shadows of every other tree here. `y` is the
+    // slab top; the trunk base sinks the same 0.15-0.3 m as elsewhere
+    const streetRng = new Rng('street-trees');
+    for (const t of streetTrees) {
+      if (t.arche === 4) palm(t.x, t.z, t.y, streetRng, t.h, t.h + 0.01);
+      else add(t.arche, t.x, t.z, t.y - (t.arche === 6 ? 0.15 : 0.3), t.h, streetRng);
     }
     if (canopyN > 0) canopyMean.copy(canopySum).divideScalar(canopyN);
     for (const p of plants) {
