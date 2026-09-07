@@ -510,8 +510,8 @@ Ground groundMeans() {
 }
 Ground groundDetail(vec2 wp, float w, float w2, float foot) {
   Ground g = groundMeans();
-  // the 3 m tile is under three pixels across past 1 m/px: only its mean is left in it there
-  float micro = 1.0 - smoothstep(0.7, 1.2, foot);
+  // the 3 m tile is 3-6 px across at 0.5-0.9 m/px and its clumps long gone: only its mean is left in it there
+  float micro = 1.0 - smoothstep(0.5, 0.9, foot);
   if (micro > 0.0) {
     vec4 m = tapRot(uGroundTex, wp, 1.0 / 3.0, w);
     g.grass = mix(g.grass, restore(m.r, w), micro);
@@ -748,10 +748,10 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     vec3 bed = mix(vec3(0.62, 0.56, 0.42), vec3(0.28, 0.32, 0.30), smoothstep(12.0, 30.0, -h));
     return mix(bed, vec3(0.33, 0.27, 0.18), smoothstep(-0.6, 0.0, h));
   }
-  // the 3 m noise and the 5-11 m octaves of the 22 m one go subpixel at 1-4 m/px: past that they are replaced by
-  // their means (what their mip would be), which is a third of the noise work in every aerial view
-  float n1 = foot < 2.0 ? mix(vnoise(wp * 0.35), 0.5, smoothstep(1.0, 2.0, foot)) : 0.5;
-  float n2 = fbm3Band(wp * 0.045, 1.0 - smoothstep(2.0, 4.0, foot));
+  // the 3 m noise and the 5-11 m octaves of the 22 m one are 2-5 px across at 0.6-1.2 and 1.2-2.5 m/px: past that
+  // they are replaced by their means (what their mip would be), which is a third of the noise work in every aerial view
+  float n1 = foot < 1.2 ? mix(vnoise(wp * 0.35), 0.5, smoothstep(0.6, 1.2, foot)) : 0.5;
+  float n2 = fbm3Band(wp * 0.045, 1.0 - smoothstep(1.2, 2.5, foot));
   float n3 = vnoise(wp * 0.008);
   float n4 = macroN; // the 300 m fbm, baked per map cell (MapTextures) and read with the canopy
   float dist = length(cameraPosition - vWorldPos);
@@ -955,6 +955,32 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
         float path = (1.0 - smoothstep(hw * 0.5, hw, abs(pn - 0.5))) * pathVis * (0.028 / hw) * (1.0 - smoothstep(0.65, 0.85, canopy));
         c = mix(c, vec3(0.21, 0.16, 0.10) * (0.8 + 0.4 * gd.soil), path * 0.85);
       }
+      // sports pitches: a mown rectangle (104 x 68 or 72 x 48 m) in about half of the 200 m park cells where the
+      // trees leave room, with its white lines close up. The pitch is the flattest, most even green in a park
+      // and the thing that says 'park' from 500 m, where the paths and the turf's mottle have gone
+      vec2 pc = floor(wp / 200.0);
+      vec2 ph = hash22(pc + 13.7);
+      if (ph.x < 0.5) {
+        vec2 ph2 = hash22(pc + 27.1);
+        vec2 centre = (pc + 0.5 + (ph2 - 0.5) * 0.3) * 200.0;
+        float ca = cos(ph.y * 3.14159), sa = sin(ph.y * 3.14159);
+        vec2 pr = wp - centre;
+        vec2 pl = vec2(pr.x * ca + pr.y * sa, -pr.x * sa + pr.y * ca);
+        vec2 phalf = ph2.x < 0.5 ? vec2(52.0, 34.0) : vec2(36.0, 24.0);
+        vec2 pq = abs(pl) - phalf;
+        float paa = max(0.5, foot);
+        float pitch = (1.0 - smoothstep(-paa, paa, max(pq.x, pq.y))) * (1.0 - smoothstep(0.15, 0.4, canopy));
+        if (pitch > 0.0) {
+          c = mix(c, vec3(0.075, 0.118, 0.042) * (0.9 + 0.2 * gd.grass), pitch * 0.85);
+          float lineVis = 1.0 - smoothstep(0.5, 1.0, foot);
+          if (lineVis > 0.0) {
+            float lw = max(0.06, 0.7 * foot);
+            float dLine = min(min(max(-max(pq.x, pq.y), 0.0), abs(pl.x)), abs(length(pl) - 9.15));
+            float line = (1.0 - smoothstep(lw * 0.5, lw, dLine)) * (0.06 / lw) * lineVis * pitch;
+            c = mix(c, vec3(0.5), line * 0.8);
+          }
+        }
+      }
     }
     c = mix(c, canopyFloor(n1, n2, gd), canopy * (zone == 10 ? 0.5 : 0.9));
     c = mix(c, sandyScrub(n1, n2, gd), sandy);
@@ -988,6 +1014,13 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     rough = 0.8;
   } else if (zone == 7) {
     c = mix(vec3(0.066, 0.066, 0.066), vec3(0.126, 0.122, 0.112), n2) * (0.92 + 0.16 * n1) * (0.94 + 0.12 * gd.soil);
+    // the downtown ground between the street meshes is paving: 3 m slab joints close up (a plane otherwise)
+    float jointVis = 1.0 - smoothstep(0.6, 1.2, foot);
+    if (jointVis > 0.0) {
+      vec2 pj = abs(fract(wp / 3.0 + 0.5) - 0.5) * 3.0;
+      float jw = max(0.04, 0.8 * foot);
+      c *= 1.0 - 0.3 * (1.0 - smoothstep(jw * 0.5, jw, min(pj.x, pj.y))) * (0.04 / jw) * jointVis;
+    }
     rough = 0.75;
   } else if (zone == 9 || zone == 14) {
     // industrial yards and construction sites: paved aprons and packed dirt with margins of crushed-stone
