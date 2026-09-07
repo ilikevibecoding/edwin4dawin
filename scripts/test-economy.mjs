@@ -68,7 +68,9 @@ const layout = getLayout(seed);
 const all = allPurposes(layout);
 const centre = (lot) => ({ x: lot.door ? lot.door.out.x + 0.5 : (lot.x0 + lot.x1) / 2, z: lot.door ? lot.door.out.z + 0.5 : (lot.z0 + lot.z1) / 2 });
 const ctx = { lots: all.map(({ lot, purpose }) => ({ id: lot.id, ...centre(lot), kind: purpose.kind, name: purpose.name, category: purpose.category, district: purpose.district, sells: purpose.sells })), pads: [{ x: 2600, z: 60 }, { x: 2600, z: 100 }, { x: 2600, z: 140 }, { x: 2640, z: 60 }, { x: 2640, z: 100 }, { x: 2640, z: 140 }], deckY: 97 };
-const terminals = lotsOfKind(layout, TERMINAL_KINDS);
+// the spaceport's hall lots (W6: customs hall, depot ... on the elevated apron, `floorY` set) are excluded: the CDP
+// walk below is written for a street-level terminal and its neighbours at LEVELS.underWalk
+const terminals = lotsOfKind(layout, TERMINAL_KINDS).filter((t) => t.lot.floorY == null);
 check(`job terminals exist in the layout (${TERMINAL_KINDS.join('/')})`, terminals.length >= 6, `${terminals.length} terminals`);
 const termLot = ({ lot, purpose }) => ({ ...lot, purposeKind: purpose.kind, purposeName: purpose.name });
 let sizes = [], firstCourier = true, kindsSeen = new Set(), badJobs = [];
