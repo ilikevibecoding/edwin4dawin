@@ -567,10 +567,12 @@ vec3 sandyScrub(float n1, float n2, Ground gd) {
   return mix(c, vec3(0.143, 0.126, 0.043) * (0.85 + 0.3 * n1), tuft * 0.55);
 }
 // the ground of the mid-rise ring: paved courts, service yards and worn lawns between the blocks
-vec3 midriseGround(float n1, float n2, vec2 wp, Ground gd, float foot) {
+vec3 midriseGround(float n1, float n2, float n3, Ground gd) {
   vec3 c = mix(vec3(0.108, 0.105, 0.095), vec3(0.165, 0.16, 0.145), n2) * (0.92 + 0.16 * n1) * (0.9 + 0.2 * gd.soil);
   vec3 lawn = vec3(0.072, 0.11, 0.045) * (0.78 + 0.44 * gd.grass);
-  return mix(c, lawn, smoothstep(0.6, 0.75, fbm3Band(wp * 0.02 + 1.0, 1.0 - smoothstep(4.0, 8.0, foot))) * 0.7 * (1.0 - 0.6 * gd.bare));
+  // the lawns between the blocks, 20-60 m across, from the 125 m and 22 m noises already in hand (this was a
+  // three-octave fbm of its own per pixel over the whole urban ring)
+  return mix(c, lawn, smoothstep(0.56, 0.68, 0.55 * n3 + 0.45 * n2 + 0.02) * 0.7 * (1.0 - 0.6 * gd.bare));
 }
 // The yard of the house nearest this point (the lot map, bakeLots): the drive from the garage end of the front
 // to the street, the front path, a patio behind, mulched beds and shrubs against the walls with the shade under
@@ -619,6 +621,38 @@ void yardFeatures(inout vec3 c, vec2 wp, float foot, float n1, Ground gd) {
   vec3 beds = mix(vec3(0.05, 0.042, 0.03), vec3(0.028, 0.052, 0.02), smoothstep(0.4, 0.7, n1 + 0.3 * (hh.y - 0.5)));
   c = mix(c, beds, ring * 0.8 * vis);
   c *= 1.0 - 0.3 * (1.0 - smoothstep(0.0, 0.7, dEdge)) * vis; // the eaves' shade
+  // The lot line to the neighbour along the street: the perpendicular bisector of the two centres (which is where
+  // the lot map itself changes house), carried as a hedge or a fence from the front wall line to the back yard,
+  // so the block divides into lots from 130-180 m up (the h13 suburbs were lawns with boxes on them). The
+  // neighbour is read from the texel 18 m along the front (neighbours stand 14-30 m apart, so that texel is the
+  // neighbour's); both sides of the line see the same pair and draw the same line.
+  if (abs(l.x) > hs.x * 0.5) {
+    vec2 probe = hc + sign(l.x) * 18.0 * vec2(cr, sr);
+    vec2 tp = (probe + vec2(uWorldSize * 0.5)) / uWorldSize * uLotN;
+    vec4 nb = texelFetch(uLotTex, ivec2(clamp(tp, vec2(0.0), vec2(uLotN - 1.0))), 0);
+    vec2 hn = (floor(tp) + 0.5) * cell - uWorldSize * 0.5 + (floor(nb.rg * 255.0 + 0.5) - 128.0) * (cell / 24.0);
+    vec2 toN = hn - hc;
+    float dN = length(toN);
+    // along the front (not the house behind), a real neighbour, not this house again
+    if (nb.a > 0.0 && dN > 8.0 && dN < 40.0 && abs(dot(toN, vec2(-sr, cr))) < 0.5 * abs(dot(toN, vec2(cr, sr)))) {
+      vec2 dir = toN / dN;
+      vec2 mid = 0.5 * (hc + hn);
+      float dLine = dot(wp - mid, dir);
+      vec2 perp = vec2(-dir.y, dir.x);
+      if (dot(perp, vec2(-sr, cr)) < 0.0) perp = -perp;      // toward the back of the lots
+      float t = dot(wp - mid, perp);
+      float aqN = floor(nb.a * 255.0 + 0.5);
+      float hsy = 0.5 * (hs.y + 2.5 + 0.75 * (aqN - floor(aqN / 16.0) * 16.0));
+      float ext = smoothstep(-hsy - 3.0 - aa, -hsy - 3.0, t) * (1.0 - smoothstep(hsy + 7.0, hsy + 10.0, t));
+      float pairH = hash12(floor(mid * 2.0 + 0.5) + 7.0);
+      // a hedge on some lot lines, a fence (its weathered boards and shadow one dark line from the air) on others
+      float halfW = pairH < 0.42 ? 0.55 : 0.2;
+      float hwL = max(halfW, 0.7 * foot);
+      float line = (1.0 - smoothstep(hwL * 0.5, hwL, abs(dLine))) * (halfW / hwL) * ext * step(pairH, 0.74) * vis;
+      vec3 lineC = pairH < 0.42 ? vec3(0.02, 0.042, 0.012) * (0.85 + 0.3 * n1) : vec3(0.06, 0.05, 0.04);
+      c = mix(c, lineC, line * 0.85);
+    }
+  }
   // a concrete drive on most lots, asphalt on some; the path concrete, the patio pavers
   vec3 concrete = vec3(0.28, 0.27, 0.25) * (0.94 + 0.12 * n1);
   vec3 driveC = hh.y < 0.3 ? vec3(0.055, 0.055, 0.056) * (0.9 + 0.2 * n1) : concrete;
@@ -672,7 +706,7 @@ vec3 suburbGround(vec2 wp, float n1, float n2, float n3, float n4, float canopy,
   }
   // the outer urban ring: the ground greys toward the mid-rise look where the gradient rises
   float ub = smoothstep(0.45, 0.95, det.b + 0.15 * (n3 - 0.5));
-  if (ub > 0.0) c = mix(c, midriseGround(n1, n2, wp, gd, foot), ub * 0.85);
+  if (ub > 0.0) c = mix(c, midriseGround(n1, n2, n3, gd), ub * 0.85);
   c = mix(c, canopyFloor(n1, n2, gd), canopy * (0.85 - 0.4 * ub));
   return mix(c, sandyScrub(n1, n2, gd), sandy);
 }
@@ -757,13 +791,16 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     float facing = 0.5 + 0.5 * dot(offshore, WIND_DIR);
     float exposure = expo * (0.3 + 0.7 * facing) * 0.85;
     float swashW = 4.0 + 12.0 * exposure;
-    float wander = fbm3(wp * 0.011 + 23.0) - 0.5;
+    // the along-shore meander of every band: the 125 m and 22 m noises already in hand (a three-octave fbm of
+    // its own per beach pixel bought nothing over them), and a 33 m one for the film and the old wrack line
+    float wander = 0.9 * (n3 - 0.5) + 0.55 * (n2 - 0.4375);
     float wander2 = vnoise(wp * 0.03 + 41.0) - 0.5;
     float sd = shoreD + (4.0 * wander + 1.5 * wander2) * (0.35 + 0.65 * smoothstep(1.5, 8.0, shoreD));
     float wet = 1.0 - smoothstep(swashW * 0.55, swashW * 1.25 + 1.0, sd);
     // the damp band's upper limit is ragged: the wash runs up further in the low spots of a flat beach
-    // (runnels, the hollows between cusps), so its edge is a mottle of tongues 6-15 m across, not a contour
-    float runnel = fbm3(wp * 0.07 + 31.0) - 0.5;
+    // (runnels, the hollows between cusps), so its edge is a mottle of tongues 6-15 m across, not a contour;
+    // its 7 and 3.5 m octaves are subpixel past ~2 m/px and give way to their means there
+    float runnel = fbm3Band(wp * 0.07 + 31.0, 1.0 - smoothstep(1.5, 3.0, foot)) - 0.5;
     float damp = 1.0 - smoothstep(swashW * 1.1, swashW * 2.4 + 5.0, sd + 11.0 * runnel * smoothstep(swashW, swashW * 2.2, sd));
     // .. and within the band the sand dries first on the slight rises: dry islands in the damp, damp
     // tongues in the dry, both 5-15 m across
@@ -778,7 +815,8 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     // how pale the sand is, so the islets carry rims of different widths and tones (a mangrove key with a
     // metre of grey sand, a bar with a wide white beach) instead of the one bright ring of equal width on
     // every islet (highway_aerial A3-H4)
-    float isle = vnoise(wp * 0.0035 + 61.0);
+    // (the baked 300 m field, spread over 0..1; it was a 285 m noise of its own per beach pixel)
+    float isle = smoothstep(0.22, 0.66, n4);
     float veget = smoothstep(0.4, 0.75, isle);
     // albedos sit where the post's tone curve still has slope: the sun-lit ground above ~0.35 all lands
     // within a few output levels of white (dry sand 0.56 renders ~232; damp 0.24 ~200; wet 0.14 ~168)
@@ -945,7 +983,7 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
   } else if (zone == 6 || zone == 8) {
     // mid-rise ring; at the frayed district edge (low urbanity) the ground is already the suburb's
     float ub = zone == 8 ? 1.0 : smoothstep(0.3, 0.8, det.b + 0.1 * (n3 - 0.5));
-    c = midriseGround(n1, n2, wp, gd, foot);
+    c = midriseGround(n1, n2, n3, gd);
     if (ub < 1.0) c = mix(suburbGround(wp, n1, n2, n3, n4, canopy, sandy, det, dist, foot, gd), c, ub);
     rough = 0.8;
   } else if (zone == 7) {
@@ -968,6 +1006,17 @@ vec3 zoneAlbedo(int zone, vec2 wp, float h, float veg, float coast, float expo, 
     float lanes = smoothstep(0.55, 0.8, vnoise(vec2(wp.x * 0.018, wp.y * 0.3) + 3.0));
     pave *= 1.0 - 0.22 * lanes * (1.0 - smoothstep(4.0, 9.0, foot));
     pave *= 1.0 - 0.3 * smoothstep(0.72, 0.85, n1);
+    // the yard's painted striping (the critic's ask for the port apron): container-bay lines every 2.6 m across
+    // the lanes in bands of 45 m with gaps, a lane line along every 13 m; 0.12 m paint, widened to the pixel and
+    // paled in proportion once thinner than one, gone past 0.8 m/px, worn away where the tyres run
+    float paintVis = 1.0 - smoothstep(0.4, 0.8, foot);
+    if (paintVis > 0.0 && zone == 9) {
+      float band = step(0.25, fract(wp.x / 60.0)) * step(0.45, hash12(floor(wp / vec2(60.0, 13.0)) + 4.0));
+      float sw = max(0.06, 0.6 * foot);
+      float bay = (1.0 - smoothstep(sw * 0.5, sw, abs(fract(wp.x / 2.6 + 0.5) - 0.5) * 2.6)) * (0.06 / sw) * band;
+      float laneLine = (1.0 - smoothstep(sw * 0.5, sw, abs(fract(wp.y / 13.0 + 0.5) - 0.5) * 13.0)) * (0.06 / sw);
+      pave = mix(pave, vec3(0.42, 0.38, 0.16), max(bay, laneLine) * 0.85 * paintVis * (1.0 - 0.7 * lanes));
+    }
     float gvis = 1.0 - smoothstep(3.0, 7.0, foot);
     float stone = gvis > 0.0 ? mix(uGroundMean.z, tapJ(uGroundTex, wp, mat2(1.0 / 12.0, 0.0, 0.0, 1.0 / 12.0), vec2(0.3)).b, gvis) : uGroundMean.z;
     vec3 gravel = vec3(0.194, 0.185, 0.166) * (0.62 + 0.76 * stone) * (0.94 + 0.12 * n2);
@@ -1045,7 +1094,7 @@ const TERRAIN_FRAG_MAIN = /* glsl */ `
   if (zone != 0 && zone != 1 && zone != 2 && zone != 17 && zone != 3 && zone != 12) {
     float carriage = smoothstep(0.55, 0.9, det.r);
     float verge = smoothstep(0.08, 0.5, det.r) * (1.0 - carriage);
-    alb = mix(alb, vec3(0.048, 0.048, 0.048) * (0.92 + 0.16 * hash12(floor(vWorldPos.xz * 0.15))), carriage * 0.9);
+    if (carriage > 0.0) alb = mix(alb, vec3(0.048, 0.048, 0.048) * (0.92 + 0.16 * hash12(floor(vWorldPos.xz * 0.15))), carriage * 0.9);
     vec3 dust = vec3(0.21, 0.17, 0.105) * (0.8 + 0.4 * gd.soil);
     float worn = verge * (0.3 + 0.7 * max(gd.bare, gd.mesoBare * 0.6));
     alb = mix(alb, dust, worn * 0.7);
