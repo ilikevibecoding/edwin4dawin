@@ -174,7 +174,7 @@ Critic (h03 visual-2 §11, h04 progress views), what is mine and what was done:
 - **Suburb lots flat lawns with boxes on them (foliage_suburb, highway_along)** — mine, and the biggest
   change of the round: the terrain now knows the houses. `city.ts` collects every footprint it places
   (`CityBuild.footprints`, one line in `place()`), `game.ts` hands them to `terrain.stampLots()` (one line), and
-  the terrain bakes a **lot map**: 2048² RGBA8 (4.9 m texels), each texel the house nearest to it within 21 m —
+  the terrain bakes a **lot map**: 2048² RGBA8 (9.8 m texels), each texel the house nearest to it within 21 m —
   the offset to its centre (quantised on a grid shared by all texels, so every texel of a house decodes the same
   centre and a hash of it picks the drive's side), its yaw over 2π, its half sizes (4 bits each). The suburb
   ground reads it with one unfiltered fetch (foot < 2.5 m/px only) and lays, in the house's own frame: the drive
@@ -204,3 +204,41 @@ that are wins whatever the breakdown says:
   texels loses nothing.
 And the suburb's sandy-lot noise (`fbm3Band`, up to three octaves) is gone with the per-yard tone change of
 round 5.
+
+The round-5 breakdown run was lost: the slot holder closed the browser under it. Its idle test read the clients'
+keepalive file, a client's truncate-then-write left the file empty for an instant, `Number('') = 0` read as idle
+since 1970. The keepalive is now written to a temp file and renamed, the holder ignores unparseable values and
+counts a client's open page as activity (capped at 45 min per page so a killed client cannot pin the slot).
+
+## Round 7 — lot lines, yard striping, four noises fewer (commit 8a7650d7)
+
+Merged the lead again (street and waterphys merges; `game.ts` touched on both sides, no conflict; tsc clean).
+
+Visibly wrong / asked for (h03/h04, still open after round 5):
+- **Hedges / fences at the lot lines** (the critic's list for the suburbs): the lots had paving, beds and wear
+  but nothing divided one from the next, so a block still read as one lawn with houses on it from 150 m.
+- **Yard striping on the port apron** (asked with the joints and tyre marks): the apron had joints, lanes and
+  drips but no paint.
+- Cost: `midriseGround` ran a three-octave fbm of its own per pixel over the whole urban ring and the suburb's
+  urban edge; the beach ran a three-octave fbm for the bands' along-shore meander and a 285 m noise for the
+  islet field, per beach pixel, when the 125 m, 22 m and baked 300 m noises were already in hand; the runnel
+  fbm kept its 7 and 3.5 m octaves at any distance; the carriageway tint hashed every land pixel.
+
+Changed:
+- **Lot lines from the lot map.** The lot map gives every point its nearest house; the boundary between two
+  houses' regions is the perpendicular bisector of their centres — the lot line. A yard pixel reads the texel
+  18 m along the front (neighbours stand 14-30 m apart, so it is the neighbour's), decodes that house, and if it
+  is a real neighbour along the street (8-40 m, not the house behind) draws the bisector from 3 m in front of the
+  wall line to 7-10 m behind the houses as a hedge (1.1 m, dark green) on 42 % of the lines, a fence (0.4 m, the
+  weathered boards and their shadow one dark line from the air) on 32 %, nothing on the rest. The two sides of a
+  line are drawn by two different houses' pixels, so everything about it — position, extent, style — is computed
+  from the pair (the midpoint, the mean half depth from both texels, a hash of the midpoint), never from one
+  house. Widened to the pixel and paled once thinner, gone with the yard at 2.5 m/px.
+- **Painted striping** on the industrial aprons: container-bay lines every 2.6 m across the lanes in 45 m bands
+  with gaps, a lane line every 13 m along, 0.12 m of yellow paint worn away where the tyre lanes run;
+  pixel-widened, gone past 0.8 m/px.
+- Cost: `midriseGround`'s lawns from `0.55 n3 + 0.45 n2`; the beach's `wander` from `n3` and `n2`, `isle` from
+  the baked 300 m field; `runnel` through `fbm3Band` (its fine octaves stop at 2 m/px); the carriageway hash
+  under `if (carriage > 0.0)`. Four to seven value-noise octaves fewer per urban-ring / beach pixel.
+
+Measured on the round-8 chain (captures, A/B and the CPU-tick variant breakdown all on this build, 4607).
