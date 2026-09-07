@@ -6,7 +6,7 @@
 // doors), lit strips on >= 40% of the tall facades, lit / glass skybridge stubs, the exterior palette census,
 // determinism of the whole layout, ship lanes clearing the crowns, and the fill-time budget.
 import assert from 'node:assert/strict';
-import { initBlocks, B, BLOCKS, SHAPE } from '../src/blocks.js';
+import { initBlocks, B, BLOCKS, SHAPE, WEDGE_DIRS } from '../src/blocks.js';
 import { blueprintFor, buildBlueprint, blueprintCacheSize, clearBlueprintCache, roomList, FAMILIES } from '../src/coruscant/buildings.js';
 import { getLayout, LEVELS } from '../src/coruscant/layout.js';
 import { FORCE_AIR } from '../src/coruscant/blueprint.js';
@@ -558,6 +558,27 @@ test('rubric 18 row 5: a lit ring ledge or a shell change at least every 20 floo
   console.log(`     ${ledgeFloors} lit ring floors over ${TALL.length} towers, longest run without a ledge / shell change ${maxGap} floors (${worst}); ${withDeck}/${tall80} towers >= 80 carry decks or balcony rings (${decks} landing decks)`);
   assert.ok(maxGap <= 20, `${worst}: ${maxGap} floors without a lit ledge or a shell change`);
   assert.ok(withDeck >= tall80 * 0.5, `${withDeck} of ${tall80} towers >= 80 have decks or balcony rings (< 50%)`);
+});
+
+test('rubric 18 row 6: angular blocks - wedge skirts / fin caps / buttress treads on >= 80% of multi-shell tall towers; every wedge stands on a block and slopes into open air', () => {
+  let withWedges = 0, multi = 0, total = 0, floating = 0, blocked = 0, whereF = null, whereB = null;
+  for (const l of TALL) {
+    const { bp, a } = ARCH(l);
+    if (a.tiers.length > 1) { multi++; if (a.wedges > 0) withWedges++; }
+    total += a.wedges;
+    for (let x = 0; x < bp.w; x++) for (let z = 0; z < bp.d; z++) for (let y = 1; y < bp.h; y++) {
+      const v = at(bp, x, y, z), def = BLOCKS[v];
+      if (!def || def.shape !== SHAPE.WEDGE) continue;
+      if (isAir(at(bp, x, y - 1, z))) { floating++; whereF = whereF || `${bp.meta.family} ${l.id} floating wedge ${def.name} at ${x},${y},${z}`; }
+      const { dx, dz } = WEDGE_DIRS[def.wedge];
+      const fx = x + dx, fz = z + dz;
+      if (fx >= 0 && fz >= 0 && fx < bp.w && fz < bp.d) { const front = at(bp, fx, y, fz); if (!isAir(front) && BLOCKS[front] && BLOCKS[front].opaque) { blocked++; whereB = whereB || `${bp.meta.family} ${l.id} wedge ${def.name} at ${x},${y},${z} slopes into ${BLOCKS[front].name}`; } }
+    }
+  }
+  console.log(`     ${total} wedges on ${TALL.length} tall towers; ${withWedges}/${multi} multi-shell towers wear them; ${floating} floating, ${blocked} slope into a wall`);
+  assert.ok(withWedges >= multi * 0.8, `${withWedges} of ${multi} multi-shell towers carry wedges (< 80%)`);
+  assert.equal(floating, 0, whereF);
+  assert.equal(blocked, 0, whereB);
 });
 
 test('rubric 18 row 7: 40 sampled towers - every room kind is one W4 staffs, 0 unreachable, 0 unlit, every spot stands on a block', () => {

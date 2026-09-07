@@ -13,7 +13,7 @@
 //             towers >= 60, the painter draws them itself on low towers)
 //   industrial hull plates, a trench band, vents and one tall slit per 6 cells (the stack family)
 // Windows are never a grid of squares: a lit band is lit for the whole floor, a slit for its whole height.
-import { B } from '../blocks.js';
+import { B, WEDGE_FACING } from '../blocks.js';
 import { hash2, hash3 } from '../rng.js';
 
 // ---------------------------------------------------------------------------------------------------- palettes
@@ -107,6 +107,8 @@ export function applyPalette(style, name) {
   const dark = p.wall === B.DURASTEEL_DARK || p.wall === B.PANEL_BLACK || p.wall === B.HULL_TRENCH || p.wall === B.PANEL_BRONZE || p.wall === B.PANEL_GREY;
   style.coreWall = dark ? B.DURASTEEL : B.DURASTEEL_DARK;
   style.dark = dark;
+  // the wedge blocks of the tier skirts, fin caps and buttress treads (rule 5): trim-toned against the wall
+  style.wedges = WEDGE_FACING[dark ? 'grey' : 'dark'];
   return style;
 }
 
@@ -252,13 +254,31 @@ function paintWallCell(bp, c, y, f, style, seed, o) {
 }
 
 // Roof slab + parapet for a rect. The rim of the roof slab (its ring cells, the top of the wall) is the lit ring
-// ledge, so every shell change is a light line around the tower (rule 9); above it a corner-block parapet, or an
-// IRON_BARS terrace rail where railing = true (open terraces the parapet would wall in).
-export function paintRoof(bp, ext, yRoof, style, railing = false) {
+// ledge, so every shell change is a light line around the tower (rule 9); above it the coping: outward-sloping
+// wedges (style.wedges, rule 5: every shell's top edge is a bevel, so the tiers read as chamfered steps of a taper),
+// corner posts with lamps, or an IRON_BARS terrace rail where railing = true (open terraces the parapet would wall in).
+// covered(x, z): cells of the rim the next shell stands over (a disc over its stalk) get no coping - that roof is a floor.
+export function paintRoof(bp, ext, yRoof, style, railing = false, covered = null) {
   bp.fill(ext.x0, yRoof, ext.z0, ext.x1, yRoof, ext.z1, style.roof);
   bp.walls(ext.x0, yRoof, ext.z0, ext.x1, yRoof, ext.z1, style.ledge || style.band);
-  bp.walls(ext.x0, yRoof + 1, ext.z0, ext.x1, yRoof + 1, ext.z1, railing ? B.IRON_BARS : style.corner);
-  for (const [x, z] of [[ext.x0, ext.z0], [ext.x1, ext.z0], [ext.x0, ext.z1], [ext.x1, ext.z1]]) { bp.set(x, yRoof + 1, z, style.corner); bp.set(x, yRoof + 2, z, B.CITY_LAMP); }
+  const ring = rectRing(ext);
+  if (railing || !style.wedges) { for (const c of ring) if (!(covered && covered(c.x, c.z))) bp.set(c.x, yRoof + 1, c.z, railing && !c.corner ? B.IRON_BARS : style.corner); }
+  else paintCoping(bp, ring, yRoof + 1, style, covered);
+  for (const [x, z] of [[ext.x0, ext.z0], [ext.x1, ext.z0], [ext.x0, ext.z1], [ext.x1, ext.z1]]) if (!(covered && covered(x, z))) { bp.set(x, yRoof + 1, z, style.corner); bp.set(x, yRoof + 2, z, B.CITY_LAMP); }
+}
+
+// The bevelled coping of a roof ring at y: a wedge whose slope faces out on every straight-face cell, a corner block
+// on the corners and on chamfer facets (a facet has no single outward side); nothing where covered(x, z) says the
+// next shell stands on this roof. Returns the wedge count.
+export function paintCoping(bp, ring, y, style, covered = null) {
+  const w = style.wedges;
+  let n = 0;
+  for (const c of ring) {
+    if (covered && covered(c.x, c.z)) continue;
+    if (c.corner || c.face === 'D' || !w) { bp.set(c.x, y, c.z, style.corner); continue; }
+    bp.set(c.x, y, c.z, w[c.face]); n++;
+  }
+  return n;
 }
 
 // Crown ornaments on the top roof (low towers; towers >= 60 get crowns.js). Returns the extra height used above yRoof.
