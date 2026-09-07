@@ -389,7 +389,7 @@ export class Game {
     const p = this.atmos.preset;
     this.windVec.set(this.atmos.windDir.x, 0, this.atmos.windDir.y).multiplyScalar(p.windSpeed);
     this.vegetation.update(this.time, p.windSpeed);
-    this.traffic.update(dt, this.time, s.night);
+    this.traffic.update(dt, this.time, s.night, this.windVec);
     this.props.setNight(s.night);
     this.streets.update(this.time, s.night);
     this.aircraft.update(dt, this.time, s.night, this.windVec, p.turbulence, this.height, simulatePlane);

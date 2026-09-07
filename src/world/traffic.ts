@@ -5,222 +5,57 @@ import type { WorldMap, Vec2 } from './map';
 import type { RoadSegment } from './roads';
 import type { BridgeRoute } from './bridges';
 import { CONTRAIL_MATERIAL, WakeTrail, type WakeBatch } from '../render/wakes';
-import { PbrSoup, cellKey, createBatchedPbrMaterial } from './batching';
-import { layerMask, maskCasts, setCasterClass, type ViewCull } from './culling';
+import { cellKey } from './batching';
+import { LAYER_MIRROR, layerMask, maskCasts, setCasterClass, type ViewCull } from './culling';
+import { BoatMotion, bakeGroupLocal, buildBoatModel, createBoatMaterial, drawVariant, hullTintColor, lodDistances, mirrorZ, scaledSpec, type BoatModel, type BoatSpec, type HullKind, type MooredBoat } from './boats';
+import { WaveField } from './waves';
 
 // ------------------------------------------------------------------ boats
 
-export type HullKind = 'speed' | 'yacht' | 'sail' | 'console' | 'cargo' | 'ferry' | 'cruise';
+export type { HullKind, MooredBoat } from './boats';
 
-/** A vessel tied up somewhere (marina slips, the cruise berth): position, heading, the length the berth was laid
- *  out for and, for the special berths, the kind of vessel. */
-export interface MooredBoat { x: number; z: number; rot: number; len: number; kind?: HullKind; }
-
-function hullGeometry(len: number, beam: number, height: number): THREE.BufferGeometry {
-  // pointed bow, flat transom; simple 8-vertex hull with a deck
-  const l = len / 2, b = beam / 2;
-  const v = [
-    // keel line
-    [-l, -height * 0.55, 0], [l * 0.55, -height * 0.55, 0],
-    // chine
-    [-l, -height * 0.1, -b * 0.95], [-l, -height * 0.1, b * 0.95], [l * 0.35, -height * 0.15, -b], [l * 0.35, -height * 0.15, b], [l, 0.05, 0],
-    // deck
-    [-l, height * 0.45, -b], [-l, height * 0.45, b], [l * 0.4, height * 0.45, -b * 0.95], [l * 0.4, height * 0.45, b * 0.95], [l, height * 0.55, 0],
-  ];
-  const f = [
-    // bottom
-    [0, 2, 4], [0, 4, 1], [0, 1, 5], [0, 5, 3], [1, 4, 6], [1, 6, 5],
-    // sides
-    [2, 7, 9], [2, 9, 4], [4, 9, 11], [4, 11, 6], [3, 5, 10], [3, 10, 8], [5, 6, 11], [5, 11, 10],
-    // transom
-    [0, 3, 8], [0, 8, 7], [0, 7, 2],
-    // deck
-    [7, 8, 10], [7, 10, 9], [9, 10, 11],
-  ];
-  const pos: number[] = [];
-  for (const tri of f) for (const i of tri) pos.push(v[i][0], v[i][1], v[i][2]);
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.computeVertexNormals();
-  return g;
-}
-
-export class BoatFactory {
-  readonly mats = {
-    white: new THREE.MeshStandardMaterial({ color: 0xf4f4f0, roughness: 0.35, metalness: 0.05 }),
-    hullDark: new THREE.MeshStandardMaterial({ color: 0x1f2a38, roughness: 0.5 }),
-    hullRed: new THREE.MeshStandardMaterial({ color: 0x9a2f2a, roughness: 0.55 }),
-    hullBlue: new THREE.MeshStandardMaterial({ color: 0x1f4f8a, roughness: 0.5 }),
-    hullGreen: new THREE.MeshStandardMaterial({ color: 0x2f5a3c, roughness: 0.55 }),
-    hullCream: new THREE.MeshStandardMaterial({ color: 0xe6dcc4, roughness: 0.4 }),
-    hullGrey: new THREE.MeshStandardMaterial({ color: 0x6d7378, roughness: 0.5 }),
-    teak: new THREE.MeshStandardMaterial({ color: 0xb08a5a, roughness: 0.8 }),
-    glass: new THREE.MeshStandardMaterial({ color: 0x223344, roughness: 0.1, metalness: 0.9 }),
-    sail: new THREE.MeshStandardMaterial({ color: 0xf8f6ee, roughness: 0.9, side: THREE.DoubleSide }),
-    cover: new THREE.MeshStandardMaterial({ color: 0x2a4a78, roughness: 0.85 }),
-    steel: new THREE.MeshStandardMaterial({ color: 0x8c949c, roughness: 0.5, metalness: 0.6 }),
-    orange: new THREE.MeshStandardMaterial({ color: 0xe0762a, roughness: 0.6 }),
-    containerWhite: new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7 }),
-  };
-  get materials(): THREE.Material[] { return Object.values(this.mats); }
-
-  /** `moored`: sails down (boom cover, bare mast) and a wider spread of hull colours than the boats under way. */
-  build(kind: HullKind, rng: Rng, moored = false): { group: THREE.Group; len: number; beam: number; draft: number; wakeWidth: number } {
-    const g = new THREE.Group();
-    const add = (geo: THREE.BufferGeometry, mat: THREE.Material, x: number, y: number, z: number, rx = 0, ry = 0, rz = 0) => {
-      const m = new THREE.Mesh(geo, mat);
-      m.position.set(x, y, z); m.rotation.set(rx, ry, rz);
-      m.castShadow = true; m.receiveShadow = true;
-      g.add(m);
-      return m;
-    };
-    const hullMat = moored
-      ? rng.pick([this.mats.white, this.mats.white, this.mats.hullDark, this.mats.hullBlue, this.mats.hullRed, this.mats.hullGreen, this.mats.hullCream, this.mats.hullGrey])
-      : rng.pick([this.mats.white, this.mats.white, this.mats.hullDark, this.mats.hullBlue, this.mats.hullRed]);
-    switch (kind) {
-      case 'speed': {
-        const len = rng.range(7, 10), beam = len * 0.3;
-        add(hullGeometry(len, beam, 1.4), hullMat, 0, 0.3, 0);
-        add(new THREE.BoxGeometry(len * 0.25, 0.5, beam * 0.8), this.mats.glass, len * 0.05, 1.05, 0, 0, 0, -0.35);
-        add(new THREE.BoxGeometry(len * 0.35, 0.35, beam * 0.75), this.mats.teak, -len * 0.2, 0.8, 0);
-        add(new THREE.BoxGeometry(0.6, 0.6, 0.8), this.mats.steel, -len * 0.45, 0.6, 0);
-        return { group: g, len, beam, draft: 0.5, wakeWidth: beam * 1.4 };
-      }
-      case 'console': {
-        const len = rng.range(6, 8), beam = len * 0.32;
-        add(hullGeometry(len, beam, 1.3), this.mats.white, 0, 0.3, 0);
-        add(new THREE.BoxGeometry(1.2, 1.4, 1.0), this.mats.white, 0, 1.2, 0);
-        add(new THREE.BoxGeometry(1.6, 0.15, 1.6), this.mats.hullDark, 0, 2.3, 0);
-        for (const s of [-1, 1]) add(new THREE.CylinderGeometry(0.04, 0.04, 1.6, 6), this.mats.steel, 0.6 * s, 1.5, 0.7 * s);
-        add(new THREE.BoxGeometry(0.5, 0.7, 0.5), this.mats.hullDark, -len * 0.45, 0.7, 0);
-        return { group: g, len, beam, draft: 0.45, wakeWidth: beam * 1.3 };
-      }
-      case 'yacht': {
-        const len = rng.range(18, 32), beam = len * 0.25;
-        add(hullGeometry(len, beam, len * 0.16), this.mats.white, 0, len * 0.04, 0);
-        add(new THREE.BoxGeometry(len * 0.5, len * 0.09, beam * 0.8), this.mats.white, -len * 0.05, len * 0.13, 0);
-        add(new THREE.BoxGeometry(len * 0.48, len * 0.04, beam * 0.82), this.mats.glass, -len * 0.05, len * 0.135, 0);
-        add(new THREE.BoxGeometry(len * 0.28, len * 0.07, beam * 0.6), this.mats.white, -len * 0.12, len * 0.21, 0);
-        add(new THREE.BoxGeometry(len * 0.26, len * 0.03, beam * 0.62), this.mats.glass, -len * 0.12, len * 0.215, 0);
-        add(new THREE.BoxGeometry(len * 0.06, len * 0.09, beam * 0.5), this.mats.white, -len * 0.2, len * 0.29, 0, 0, 0, 0.3); // radar arch
-        add(new THREE.CylinderGeometry(0.15, 0.15, 1.2, 8), this.mats.steel, -len * 0.2, len * 0.34, 0);
-        return { group: g, len, beam, draft: len * 0.06, wakeWidth: beam * 1.5 };
-      }
-      case 'sail': {
-        const len = moored ? rng.range(8, 15) : rng.range(9, 14), beam = len * 0.31;
-        add(hullGeometry(len, beam, len * 0.14), hullMat, 0, len * 0.03, 0);
-        // cabin trunk, cockpit coaming
-        add(new THREE.BoxGeometry(len * 0.3, 0.7, beam * 0.6), rng.chance(0.75) ? this.mats.white : this.mats.hullCream, -len * 0.05, len * 0.09 + 0.3, 0);
-        const mastH = len * 1.25;
-        add(new THREE.CylinderGeometry(0.06, 0.09, mastH, 6), this.mats.steel, len * 0.05, mastH / 2 + len * 0.08, 0);
-        if (moored) {
-          // sails down: boom with its cover along the centreline, spreaders, a furled headsail on the forestay
-          add(new THREE.BoxGeometry(len * 0.42, 0.42, 0.34), rng.pick([this.mats.cover, this.mats.cover, this.mats.hullRed, this.mats.hullGreen, this.mats.hullCream]), -len * 0.16, len * 0.13 + 0.55, 0);
-          add(new THREE.BoxGeometry(0.08, 0.08, beam * 0.7), this.mats.steel, len * 0.05, mastH * 0.5 + len * 0.08, 0);
-          const stay = new THREE.CylinderGeometry(0.07, 0.11, mastH * 0.86, 5);
-          add(stay, this.mats.sail, len * 0.05 + len * 0.22, len * 0.12 + mastH * 0.43, 0, 0, 0, Math.atan2(len * 0.44, mastH * 0.86));
-          add(new THREE.BoxGeometry(0.25, 1.0, 0.25), this.mats.white, len * 0.05, mastH + len * 0.08 - 0.5, 0); // masthead
-          if (rng.chance(0.5)) add(new THREE.BoxGeometry(0.8, 0.9, 0.8), this.mats.hullDark, -len * 0.4, len * 0.1 + 0.2, 0); // outboard / lazarette
-        } else {
-          // main sail (triangle) + jib
-          const sail = new THREE.BufferGeometry();
-          sail.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, mastH * 0.9, 0, -len * 0.42, 0, 0], 3));
-          sail.computeVertexNormals();
-          add(sail, this.mats.sail, len * 0.05, len * 0.13, 0, 0, 0, 0);
-          const jib = new THREE.BufferGeometry();
-          jib.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 0, mastH * 0.75, 0, len * 0.4, 0, 0], 3));
-          jib.computeVertexNormals();
-          add(jib, this.mats.sail, len * 0.05, len * 0.13, 0.05, 0, 0, 0);
-          g.rotation.z = 0.12;
-        }
-        return { group: g, len, beam, draft: 1.5, wakeWidth: beam * 0.9 };
-      }
-      case 'cruise': {
-        // cruise liner: dark boot top under a white hull with a raked bow, three superstructure tiers with window
-        // bands, forward wheelhouse with bridge wings, lifeboats hung along the promenade deck, raked funnel, mast
-        const len = 290, beam = 36, hullH = 16;
-        add(hullGeometry(len, beam, hullH), this.mats.hullDark, 0, hullH * 0.15, 0);
-        add(hullGeometry(len * 0.99, beam * 1.02, hullH * 0.6), this.mats.white, 0, hullH * 0.15 + hullH * 0.3, 0);
-        const deckY = hullH * 0.15 + hullH * 0.55; // top of the hull
-        const tier = (x: number, y: number, l: number, h: number, b: number, bands: number) => {
-          add(new THREE.BoxGeometry(l, h, b), this.mats.white, x, y + h / 2, 0);
-          for (let i = 0; i < bands; i++) add(new THREE.BoxGeometry(l * 0.98, 1.0, b + 0.3), this.mats.glass, x, y + 1.6 + i * (h / bands), 0);
-        };
-        tier(-len * 0.03, deckY, len * 0.8, 9.0, beam * 0.9, 3);
-        tier(-len * 0.06, deckY + 9.0, len * 0.66, 8.0, beam * 0.82, 3);
-        tier(-len * 0.1, deckY + 17.0, len * 0.42, 5.0, beam * 0.62, 2);
-        // wheelhouse at the forward end of the second tier, wings past the beam
-        add(new THREE.BoxGeometry(len * 0.05, 3.6, beam * 1.06), this.mats.white, len * 0.29, deckY + 9.0 + 1.8, 0);
-        add(new THREE.BoxGeometry(len * 0.05 + 0.3, 1.2, beam * 1.08), this.mats.glass, len * 0.29, deckY + 9.0 + 2.5, 0);
-        // lifeboats on davits along the promenade deck, both sides
-        for (let i = 0; i < 9; i++) for (const s of [-1, 1]) {
-          add(new THREE.BoxGeometry(8.5, 2.6, 3.4), i % 3 === 1 ? this.mats.white : this.mats.orange, -len * 0.22 + i * len * 0.055, deckY + 5.2, s * (beam * 0.45 + 1.6));
-        }
-        // funnel (raked), mast, some deck furniture on the top tier
-        add(new THREE.CylinderGeometry(3.0, 3.6, 10, 12), this.mats.hullDark, -len * 0.2, deckY + 22.0 + 4.5, 0, 0, 0, 0.28);
-        add(new THREE.CylinderGeometry(2.2, 2.2, 2.0, 10), this.mats.orange, -len * 0.2 - 1.6, deckY + 32.0, 0, 0, 0, 0.28);
-        add(new THREE.CylinderGeometry(0.35, 0.5, 12, 6), this.mats.steel, len * 0.2, deckY + 17.0 + 6, 0);
-        add(new THREE.BoxGeometry(len * 0.12, 2.6, beam * 0.3), this.mats.white, len * 0.02, deckY + 22.0, 0);
-        add(new THREE.BoxGeometry(len * 0.08, 0.6, beam * 0.24), this.mats.glass, -len * 0.04, deckY + 22.0, 0); // pool
-        return { group: g, len, beam, draft: hullH * 0.4, wakeWidth: beam * 1.4 };
-      }
-      case 'ferry': {
-        const len = 42, beam = 12;
-        add(hullGeometry(len, beam, 5), this.mats.hullBlue, 0, 1.5, 0);
-        add(new THREE.BoxGeometry(len * 0.8, 3.2, beam * 0.9), this.mats.white, -1, 4.9, 0);
-        add(new THREE.BoxGeometry(len * 0.78, 1.2, beam * 0.92), this.mats.glass, -1, 5.2, 0);
-        add(new THREE.BoxGeometry(len * 0.4, 2.8, beam * 0.6), this.mats.white, -4, 7.8, 0);
-        add(new THREE.CylinderGeometry(0.6, 0.7, 3, 10), this.mats.hullDark, -12, 10.5, 0);
-        return { group: g, len, beam, draft: 2.2, wakeWidth: beam * 1.3 };
-      }
-      case 'cargo': {
-        const len = rng.range(120, 180), beam = len * 0.16, hullH = len * 0.075;
-        add(hullGeometry(len, beam, hullH), this.mats.hullDark, 0, hullH * 0.15, 0);
-        add(new THREE.BoxGeometry(len * 0.9, 0.8, beam * 0.98), this.mats.hullRed, 0, hullH * 0.6, 0);
-        // stern bridge
-        add(new THREE.BoxGeometry(len * 0.09, hullH * 1.6, beam * 0.9), this.mats.white, -len * 0.38, hullH * 0.6 + hullH * 0.8, 0);
-        add(new THREE.BoxGeometry(len * 0.1, 2, beam * 0.95), this.mats.glass, -len * 0.38, hullH * 0.6 + hullH * 1.55, 0);
-        add(new THREE.CylinderGeometry(1.2, 1.5, hullH * 0.9, 10), this.mats.hullDark, -len * 0.44, hullH * 0.6 + hullH * 1.9, 0);
-        // container stacks as one instanced mesh per ship
-        const rows = Math.floor(len * 0.6 / 6.4), cols = Math.max(3, Math.floor(beam / 2.6));
-        const boxes: { x: number; y: number; z: number; c: number }[] = [];
-        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-          const stack = rng.int(1, 4);
-          for (let k = 0; k < stack; k++) boxes.push({ x: len * 0.3 - r * 6.4, y: hullH * 0.6 + 0.8 + 1.3 + k * 2.6, z: (c - (cols - 1) / 2) * 2.5, c: rng.int(0, 5) });
-        }
-        const inst = new THREE.InstancedMesh(new THREE.BoxGeometry(6.1, 2.6, 2.44), this.mats.containerWhite, boxes.length);
-        const m = new THREE.Matrix4();
-        const palette = [0xc0392b, 0x2e86c1, 0x27ae60, 0xd68910, 0x7d8b93, 0xecf0f1].map((c) => new THREE.Color(c));
-        boxes.forEach((b, i) => { inst.setMatrixAt(i, m.makeTranslation(b.x, b.y, b.z)); inst.setColorAt(i, palette[b.c]); });
-        inst.castShadow = true; inst.receiveShadow = true;
-        g.add(inst);
-        return { group: g, len, beam, draft: hullH * 0.5, wakeWidth: beam * 1.4 };
-      }
-    }
-  }
-}
-
-interface MovingBoat {
-  /** instance in the movers batch */
+/** A hull in the batch: its instance, LOD geometries and switch distances, world pose and floating state. */
+interface BoatInstance {
   id: number;
+  geoms: number[];
+  /** mirrored geometry set (sails set on the other side), used while the wind is over the starboard side */
+  geomsMirror: number[] | null;
+  lodDist: [number, number, number];
+  lod: number;
+  mirror: boolean;
+  x: number; z: number; hx: number; hz: number;
+  scale: number;
+  spec: BoatSpec;
+  motion: BoatMotion;
+  phase: number;
+  kind: HullKind;
+  /** moored boats sit at a fixed berth and only ride the water */
+  moored: boolean;
+  /** the hull's own view of the wave field (its site cache stays valid while the hull moves a few metres) */
+  waves: WaveField;
+  waveAt: (x: number, z: number) => number;
+}
+
+interface MovingBoat extends BoatInstance {
   route: Vec2[];
   routeLen: number;
   s: number;
   dir: 1 | -1;
+  /** current speed and the speed the boat returns to after a turn */
   speed: number;
-  len: number;
-  draft: number;
+  cruise: number;
   wake: WakeTrail;
-  phase: number;
   /** U-turn at a route end: the boat swings round a semicircle instead of reversing on the spot (which left
    *  its wake running ahead of the bow); afterwards `lateral` (its offset from the route) decays as it steers back */
-  turn: { cx: number; cz: number; r: number; a0: number; sweep: number; t: number; dur: number } | null;
+  turn: { cx: number; cz: number; r: number; a: number; a0: number; sign: number } | null;
   lateral: number;
-  /** last world position / heading, for the heading of the wake and hull while turning */
+  /** last world position, for the travel direction */
   px: number;
   pz: number;
-  hx: number;
-  hz: number;
+  /** smoothed compass heading (rad, 0 = -z, clockwise) and its rate: the hull swings round at a finite yaw rate */
+  hdg: number;
+  yawRate: number;
+  sailing: boolean;
 }
 
 function routeLength(pts: Vec2[]): number {
@@ -242,34 +77,67 @@ function routePoint(pts: Vec2[], s: number, out: { x: number; z: number; dx: num
   }
 }
 
-/**
- * Bake the meshes of a vehicle group into one vertex-coloured geometry in the group's local frame,
- * with each part's roughness / metalness carried per vertex (see createBatchedPbrMaterial). Instanced
- * children (container stacks) are expanded with their instance colours. The source geometries are freed.
- */
-function bakeLocal(g: THREE.Group): THREE.BufferGeometry {
-  g.updateMatrixWorld(true);
-  const inv = g.matrixWorld.clone().invert();
-  const soup = new PbrSoup();
-  const local = new THREE.Matrix4(), inst = new THREE.Matrix4(), col = new THREE.Color();
-  g.traverse((o) => {
-    const m = o as THREE.Mesh;
-    if (!m.isMesh) return;
-    local.multiplyMatrices(inv, m.matrixWorld);
-    const mat = m.material as THREE.MeshStandardMaterial;
-    const im = o as THREE.InstancedMesh;
-    if (im.isInstancedMesh) {
-      for (let i = 0; i < im.count; i++) {
-        im.getMatrixAt(i, inst);
-        if (im.instanceColor) im.getColorAt(i, col);
-        soup.add(m.geometry, inst.premultiply(local), mat, im.instanceColor ? col : undefined);
-      }
-    } else {
-      soup.add(m.geometry, local, mat);
+/** Round the corners of a polyline with arcs of radius up to `r` so hulls swing through them at a finite yaw rate. */
+function smoothRoute(pts: Vec2[], r: number): Vec2[] {
+  if (pts.length < 3) return pts;
+  const out: Vec2[] = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const p = pts[i], a = pts[i - 1], b = pts[i + 1];
+    const l0 = Math.hypot(p[0] - a[0], p[1] - a[1]), l1 = Math.hypot(b[0] - p[0], b[1] - p[1]);
+    const d0x = (p[0] - a[0]) / l0, d0z = (p[1] - a[1]) / l0, d1x = (b[0] - p[0]) / l1, d1z = (b[1] - p[1]) / l1;
+    const cosT = clamp(d0x * d1x + d0z * d1z, -1, 1);
+    const theta = Math.acos(cosT);
+    if (theta < 0.02) { out.push(p); continue; }
+    let tl = r * Math.tan(theta / 2);
+    const maxTl = Math.min(l0, l1) * 0.45;
+    if (tl > maxTl) tl = maxTl;
+    const start: Vec2 = [p[0] - d0x * tl, p[1] - d0z * tl], endP: Vec2 = [p[0] + d1x * tl, p[1] + d1z * tl];
+    // quadratic Bezier through the corner approximates the arc closely enough for a boat
+    const n = Math.max(3, Math.ceil(theta / 0.12));
+    for (let k = 0; k <= n; k++) {
+      const t = k / n, u = 1 - t;
+      out.push([u * u * start[0] + 2 * u * t * p[0] + t * t * endP[0], u * u * start[1] + 2 * u * t * p[1] + t * t * endP[1]]);
     }
-    m.geometry.dispose();
-  });
-  return soup.build();
+  }
+  out.push(pts[pts.length - 1]);
+  return out;
+}
+
+/** The hull of a pool that fits a berth of `len` metres in `depth` metres of water best (closest length among the
+ *  hulls that float there), or null when none floats. */
+function fitBerth(pool: BoatModel[], len: number, depth: number): BoatModel | null {
+  let best: BoatModel | null = null, bestErr = Infinity;
+  for (const m of pool) {
+    if (m.spec.draft > depth - 0.15) continue;
+    const err = Math.abs(Math.log(m.spec.len / len));
+    if (err < bestErr) { bestErr = err; best = m; }
+  }
+  return best;
+}
+
+/** The vehicle batch with per-camera level of detail: the main camera picks a level by distance, the shadow and
+ *  mirror passes draw every hull at its mid level (their texels cannot resolve rails and cleats). */
+class MoverBatch extends THREE.BatchedMesh {
+  boats: BoatInstance[] = [];
+  /** the main camera's position on its last pass */
+  readonly camPos = new THREE.Vector3(0, 1e9, 0);
+  camSeen = false;
+
+  onBeforeRender(renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, geometry: THREE.BufferGeometry, material: THREE.Material, group: THREE.Group): void {
+    const reduced = scene === null || camera.layers.isEnabled(LAYER_MIRROR);
+    const cp = camera.position;
+    if (!reduced) { this.camPos.copy(cp); this.camSeen = true; }
+    for (const b of this.boats) {
+      let lod: number;
+      if (reduced) lod = 2;
+      else {
+        const d = Math.hypot(cp.x - b.x, cp.z - b.z, cp.y) ;
+        lod = d < b.lodDist[0] ? 0 : d < b.lodDist[1] ? 1 : d < b.lodDist[2] ? 2 : 3;
+      }
+      if (lod !== b.lod) { b.lod = lod; this.setGeometryIdAt(b.id, (b.mirror && b.geomsMirror ? b.geomsMirror : b.geoms)[lod]); }
+    }
+    super.onBeforeRender(renderer, scene, camera, geometry, material, group);
+  }
 }
 
 // ------------------------------------------------------------------ cars
@@ -371,8 +239,17 @@ export class Traffic {
   /** catches vehicles whose lane offset pushed them out of every registered cell (never culled), per kind */
   private readonly carOverflow: [CarChunk, CarChunk];
   private readonly carMat: THREE.MeshStandardMaterial;
-  /** every moving boat and airliner: one batched draw, per-vehicle matrices and frustum culling */
-  private readonly movers: THREE.BatchedMesh;
+  private readonly boatMat: THREE.MeshStandardMaterial;
+  /** every boat (under way or berthed) and airliner: one batched draw, per-vehicle matrices, LOD and frustum culling */
+  private readonly movers: MoverBatch;
+  /** boats tied up in the marinas and at the cruise berth: fixed position, riding the water */
+  private readonly moored: BoatInstance[] = [];
+  /** wave time of the last update (the water shader's clock) for the per-boat wave lookups */
+  private waveTime = 0;
+  private readonly waves: WaveField;
+  private windX = 0.94;
+  private windZ = 0.34;
+  private windSpeed = 6;
   private aircraft: DistantAircraft[] = [];
   private readonly tmp = { x: 0, z: 0, dx: 1, dz: 0 };
   private readonly tmpM = new THREE.Matrix4();
@@ -390,36 +267,133 @@ export class Traffic {
 
   constructor(private map: WorldMap, roads: RoadSegment[], bridges: BridgeRoute[], wakes: WakeBatch, seed: number, moored: MooredBoat[]) {
     const rng = new Rng(`traffic-${seed}`);
-    const factory = new BoatFactory();
-    // moving boats along channels: baked in their local frame, batched below
-    const moverGeos: THREE.BufferGeometry[] = [];
+    // the boats draw from their own stream so a change to the fleet never reshuffles the cars
+    const brng = new Rng(`boats-${seed}`);
+    const terrain = (x: number, z: number) => map.heightAt(x, z);
+    this.waves = new WaveField(terrain);
+    const waveAt = (x: number, z: number) => this.waves.heightAt(x, z, this.waveTime);
+    // a handful of hull variants per kind, shared by the instances (each instance carries its own hull tint);
+    // berthed variants carry fenders, covers, tilted outboards and no crew
+    const pool = (kind: HullKind, n: number, moored: boolean): BoatModel[] => {
+      const out: BoatModel[] = [];
+      for (let i = 0; i < n; i++) out.push(buildBoatModel(drawVariant(kind, brng, moored)));
+      return out;
+    };
+    const under: Partial<Record<HullKind, BoatModel[]>> = { speed: pool('speed', 5, false), console: pool('console', 3, false), yacht: pool('yacht', 3, false), sail: pool('sail', 4, false), cargo: pool('cargo', 2, false), ferry: pool('ferry', 1, false) };
+    const berthed: Partial<Record<HullKind, BoatModel[]>> = { speed: pool('speed', 5, true), console: pool('console', 4, true), yacht: pool('yacht', 4, true), sail: pool('sail', 6, true), cruise: pool('cruise', 1, true) };
+    // pass 1: choose a hull for every instance
+    interface Pick { model: BoatModel; mirror: boolean; tint: THREE.Color; }
+    const picks: Pick[] = [];
+    const mooredPicks: (Pick & { mb: MooredBoat; scale: number; flip: boolean })[] = [];
+    const movingSpecs: { pick: Pick; ch: (typeof map.channels)[number]; kind: HullKind }[] = [];
+    let lastTint: THREE.Color | null = null;
+    const tintFor = (kind: HullKind): THREE.Color => {
+      if (kind === 'cruise') return new THREE.Color(0xf4f4f0);
+      if (kind === 'ferry') return new THREE.Color(0xf2f2ee);
+      if (kind === 'cargo') return new THREE.Color(brng.pick([0x16284a, 0x1c1e22, 0x5a6168, 0x9a2f2a, 0x2f5a3c]));
+      const c = hullTintColor(brng, lastTint);
+      lastTint = c;
+      return c;
+    };
     for (const ch of map.channels) {
-      const len = routeLength(ch.pts);
       for (let i = 0; i < ch.boats; i++) {
-        const kind: HullKind = ch.id === 'ocean-route' || ch.id === 'ship-channel' ? (rng.chance(0.6) ? 'cargo' : 'ferry') : rng.pick(['speed', 'speed', 'console', 'yacht', 'sail', 'speed']);
-        const b = factory.build(kind, rng);
-        const speed = kind === 'cargo' ? rng.range(4, 6) : kind === 'ferry' ? 7 : kind === 'sail' ? rng.range(2.5, 4) : kind === 'yacht' ? rng.range(5, 9) : rng.range(9, 16);
-        // the ribbon carries the hull's half-beam and transom-to-bow length (bow wave, waterline, Kelvin arms);
-        // points are spaced by hull size so a ship's wake reaches a kilometre and a runabout's a few hundred metres
-        const big = kind === 'cargo' || kind === 'ferry';
-        const wake = new WakeTrail(100, b.beam * 0.5, big ? 150 : kind === 'sail' ? 30 : 60, kind === 'sail' ? 0.5 : 1.3, wakes, b.len * 0.95, clamp(b.len * 0.5, 3, 12));
-        moverGeos.push(bakeLocal(b.group));
-        this.boats.push({ id: moverGeos.length - 1, route: ch.pts, routeLen: len, s: rng.range(0, len), dir: rng.chance(0.5) ? 1 : -1, speed, len: b.len, draft: b.draft, wake, phase: rng.range(0, 100), turn: null, lateral: 0, px: NaN, pz: NaN, hx: 1, hz: 0 });
+        const kind: HullKind = ch.id === 'ocean-route' || ch.id === 'ship-channel' ? (brng.chance(0.6) ? 'cargo' : 'ferry') : brng.pick(['speed', 'speed', 'console', 'yacht', 'sail', 'speed']);
+        const model = brng.pick(under[kind]!);
+        const pick: Pick = { model, mirror: kind === 'sail' && model.variant.sailsUp, tint: tintFor(kind) };
+        picks.push(pick);
+        movingSpecs.push({ pick, ch, kind });
       }
     }
-    // moored boats (static, no wake) join the same batch with a fixed matrix
-    const mooredInst: { idx: number; m: THREE.Matrix4 }[] = [];
     for (const mb of moored) {
-      const kind: HullKind = mb.kind ?? (rng.chance(0.4) ? 'sail' : rng.chance(0.5) ? 'speed' : rng.chance(0.5) ? 'console' : 'yacht');
-      const b = factory.build(kind, rng, true);
-      const scale = kind === 'cruise' ? 1 : clamp(mb.len / b.len, 0.6, 1.4);
-      b.group.scale.setScalar(scale);
-      b.group.position.set(mb.x, 0.05, mb.z);
-      b.group.rotation.y = mb.rot + (rng.chance(0.5) ? Math.PI : 0);
-      moverGeos.push(bakeLocal(b.group));
-      mooredInst.push({ idx: moverGeos.length - 1, m: b.group.matrixWorld.clone() });
+      const depth = -map.heightAt(mb.x, mb.z);
+      let model: BoatModel | null = null;
+      if (mb.kind) model = berthed[mb.kind]![0];
+      else {
+        // the berth length picks the class: T-heads take the yachts and big sloops, slips the runabouts and
+        // day boats, and only a hull that floats in the berth's water is taken
+        const order: HullKind[] = mb.len >= 13 ? (brng.chance(0.55) ? ['yacht', 'sail', 'console'] : ['sail', 'yacht', 'console'])
+          : mb.len >= 9 ? (brng.chance(0.45) ? ['sail', 'speed', 'console'] : brng.chance(0.5) ? ['speed', 'console', 'sail'] : ['console', 'speed', 'sail'])
+          : brng.chance(0.5) ? ['speed', 'console', 'sail'] : ['console', 'speed', 'sail'];
+        for (const k of order) { model = fitBerth(berthed[k]!, mb.len, depth); if (model) break; }
+      }
+      if (!model) continue;
+      const scale = mb.kind === 'cruise' ? 1 : clamp(mb.len / model.spec.len, 0.8, 1.2);
+      const pick: Pick = { model, mirror: false, tint: tintFor(model.spec.kind) };
+      picks.push(pick);
+      mooredPicks.push({ ...pick, mb, scale, flip: mb.kind ? false : brng.chance(0.5) });
     }
-    this.boatCount = this.boats.length + moored.length;
+    // pass 2: size the batch for the geometries in use (every LOD, the mirrored sail sets, the airliners)
+    const used = new Set<BoatModel>();
+    for (const p of picks) used.add(p.model);
+    const mirrored = new Map<BoatModel, THREE.BufferGeometry[]>();
+    for (const p of picks) if (p.mirror && !mirrored.has(p.model)) mirrored.set(p.model, p.model.lods.map((g) => mirrorZ(g)));
+    let vertexCount = 0;
+    for (const m of used) for (const g of m.lods) vertexCount += g.getAttribute('position').count;
+    for (const gs of mirrored.values()) for (const g of gs) vertexCount += g.getAttribute('position').count;
+    const airlinerGeos: THREE.BufferGeometry[] = this.buildAirliners();
+    for (const g of airlinerGeos) vertexCount += g.getAttribute('position').count;
+    this.boatMat = createBoatMaterial();
+    this.materials.push(this.boatMat);
+    this.movers = new MoverBatch(picks.length + airlinerGeos.length, vertexCount, vertexCount, this.boatMat);
+    const geoId = new Map<THREE.BufferGeometry, number>();
+    const idsOf = (gs: THREE.BufferGeometry[]): number[] => gs.map((g) => {
+      let id = geoId.get(g);
+      if (id === undefined) { id = this.movers.addGeometry(g); geoId.set(g, id); }
+      return id;
+    });
+    const instance = (p: Pick, x: number, z: number, hx: number, hz: number, scale: number, moored: boolean, phase: number): BoatInstance => {
+      const geoms = idsOf(p.model.lods);
+      const geomsMirror = p.mirror ? idsOf(mirrored.get(p.model)!) : null;
+      const id = this.movers.addInstance(geoms[2]);
+      this.movers.setColorAt(id, p.tint);
+      const spec = scaledSpec(p.model.spec, scale);
+      // a berthed hull rides the water at its centre only (the harbour swell is longer than any hull; one wave
+      // lookup per step instead of five)
+      const motionSpec = moored ? { ...spec, samples: spec.samples.map(() => [0, 0] as [number, number]) } : spec;
+      const b: BoatInstance = { id, geoms, geomsMirror, lodDist: lodDistances(spec.len), lod: 2, mirror: false, x, z, hx, hz, scale, spec, motion: new BoatMotion(motionSpec), phase, kind: p.model.spec.kind, moored, waves: new WaveField(terrain), waveAt: () => 0 };
+      b.waveAt = (px: number, pz: number) => b.waves.heightAt(px, pz, this.waveTime);
+      return b;
+    };
+    // moving boats along the channels (their corners rounded so the hulls swing through them)
+    const routes = new Map<string, Vec2[]>();
+    for (const { pick, ch, kind } of movingSpecs) {
+      let route = routes.get(ch.id);
+      if (!route) { route = smoothRoute(ch.pts, clamp(ch.width * 0.8, 40, 220)); routes.set(ch.id, route); }
+      const len = routeLength(route);
+      const spec = pick.model.spec;
+      const speed = kind === 'cargo' ? brng.range(4, 6) : kind === 'ferry' ? 7 : kind === 'sail' ? brng.range(2.5, 4) : kind === 'yacht' ? brng.range(5, 9) : brng.range(9, 16);
+      // the ribbon carries the hull's half-beam and transom-to-bow length (bow wave, waterline, Kelvin arms);
+      // points are spaced by hull size so a ship's wake reaches a kilometre and a runabout's a few hundred metres
+      const big = kind === 'cargo' || kind === 'ferry';
+      const sailing = kind === 'sail' && pick.model.variant.sailsUp;
+      const wake = new WakeTrail(100, spec.beam * 0.5, big ? 150 : kind === 'sail' ? 30 : 60, kind === 'sail' ? 0.5 : 1.3, wakes, spec.lwl * 0.95, clamp(spec.len * 0.5, 3, 12));
+      // per hull: a sailing hull leaves no prop wash, a displacement hull never planes
+      if (sailing) wake.propWash = 0.1;
+      if (!spec.planing) wake.planingSpeed = kind === 'yacht' ? 0.85 * Math.sqrt(9.81 * spec.lwl) : 1e3;
+      const s = brng.range(0, len), dir: 1 | -1 = brng.chance(0.5) ? 1 : -1;
+      routePoint(route, s, this.tmp);
+      const hx = this.tmp.dx * dir, hz = this.tmp.dz * dir;
+      const inst = instance(pick, this.tmp.x, this.tmp.z, hx, hz, 1, false, brng.range(0, 100));
+      const mb: MovingBoat = { ...inst, route, routeLen: len, s, dir, speed, cruise: speed, wake, turn: null, lateral: 0, px: NaN, pz: NaN, hdg: Math.atan2(hx, hz), yawRate: 0, sailing };
+      mb.waveAt = (px: number, pz: number) => mb.waves.heightAt(px, pz, this.waveTime);
+      mb.motion.settle(mb.x, mb.z, hx, hz, mb.waveAt, speed);
+      this.boats.push(mb);
+    }
+    // berthed boats: fixed at their berth, bow in or out, riding the water
+    for (const mp of mooredPicks) {
+      const rot = mp.mb.rot + (mp.flip ? Math.PI : 0);
+      const hx = Math.cos(rot), hz = -Math.sin(rot);
+      const b = instance(mp, mp.mb.x, mp.mb.z, hx, hz, mp.scale, true, brng.range(0, 100));
+      b.motion.settle(b.x, b.z, hx, hz, b.waveAt, 0);
+      this.moored.push(b);
+    }
+    this.movers.boats = [...this.boats, ...this.moored];
+    this.boatCount = this.movers.boats.length;
+    this.aircraft = this.placeAirliners(airlinerGeos.map((g) => this.movers.addInstance(this.movers.addGeometry(g))), map);
+    for (const g of airlinerGeos) g.dispose();
+    this.movers.frustumCulled = false;
+    this.movers.castShadow = true; this.movers.receiveShadow = true;
+    this.group.add(this.movers);
 
     // car routes: authored road polylines + generated streets + bridge decks
     const byId = new Map<string, THREE.Vector3[]>();
@@ -543,10 +517,13 @@ export class Traffic {
     this.carOverflow = [makeChunk(0, Math.max(1, carsPerRoute.reduce((a, c) => a + c[0], 0)), false), makeChunk(1, Math.max(1, carsPerRoute.reduce((a, c) => a + c[1], 0)), false)];
     this.carChunks.push(...this.carOverflow);
 
-    // distant aircraft: two airliners on approach / departure, one high cruiser with a contrail
+  }
+
+  /** Distant airliner geometries (baked with the boat batch's attributes): two on approach, one departing, one cruising. */
+  private buildAirliners(): THREE.BufferGeometry[] {
     const airMat = new THREE.MeshStandardMaterial({ color: 0xf4f6f8, roughness: 0.35, metalness: 0.2 });
     const tailMat = new THREE.MeshStandardMaterial({ color: 0x2a6fbf, roughness: 0.4 });
-    const airliner = (scale: number): number => {
+    const airliner = (scale: number): THREE.BufferGeometry => {
       const g = new THREE.Group();
       const fus = new THREE.Mesh(new THREE.CylinderGeometry(1.9, 1.9, 38, 12), airMat); fus.rotation.z = Math.PI / 2; g.add(fus);
       const nose = new THREE.Mesh(new THREE.SphereGeometry(1.9, 12, 8), airMat); nose.position.x = 19; nose.scale.set(1.6, 1, 1); g.add(nose);
@@ -557,9 +534,15 @@ export class Traffic {
       const hstab = new THREE.Mesh(new THREE.BoxGeometry(4, 0.3, 12), airMat); hstab.position.set(-17, 1, 0); g.add(hstab);
       for (const s of [-1, 1]) { const eng = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 1.0, 4.5, 10), airMat); eng.rotation.z = Math.PI / 2; eng.position.set(3, -2.4, s * 7); g.add(eng); }
       g.scale.setScalar(scale);
-      moverGeos.push(bakeLocal(g));
-      return moverGeos.length - 1;
+      return bakeGroupLocal(g);
     };
+    const out = [airliner(1.0), airliner(0.9), airliner(1.0), airliner(1.0)];
+    airMat.dispose(); tailMat.dispose();
+    return out;
+  }
+
+  /** The airliners' paths, in the order of buildAirliners(): approach x 2, departure, high cruiser with a contrail. */
+  private placeAirliners(ids: number[], map: WorldMap): DistantAircraft[] {
     const rwy = map.runways[0];
     // approach to runway 09 from the east over the bay: descend from 900 m at x=+3000 to the threshold
     const approach = (t: number, out: THREE.Vector3) => {
@@ -567,37 +550,19 @@ export class Traffic {
       const y = lerp(900, 12, Math.pow(t, 0.9));
       return out.set(x, y, z);
     };
-    this.aircraft.push({ id: airliner(1.0), path: approach, period: 240, offset: 0, contrail: null });
-    this.aircraft.push({ id: airliner(0.9), path: approach, period: 240, offset: 0.5, contrail: null });
     // departure climbing west then turning north
     const departure = (t: number, out: THREE.Vector3) => {
       const x = lerp(rwy.b[0], -9000, t), z = rwy.b[1] - 3500 * t * t;
       return out.set(x, 12 + 2200 * Math.pow(t, 0.8), z);
     };
-    this.aircraft.push({ id: airliner(1.0), path: departure, period: 200, offset: 0.2, contrail: null });
-    // high cruiser with contrail
     const cruise = (t: number, out: THREE.Vector3) => out.set(lerp(-14000, 14000, t), 9500, lerp(-9000, 6000, t));
     const contrail = new WakeTrail(180, 25, 90, 0.6, CONTRAIL_MATERIAL);
-    this.aircraft.push({ id: airliner(1.0), path: cruise, period: 260, offset: 0.4, contrail });
-
-    // the movers batch: one geometry + instance per vehicle, drawn in a single (multi-draw) call with
-    // per-vehicle frustum culling; the whole-mesh bound is meaningless for vehicles spread over the map
-    let vertexCount = 0;
-    for (const g of moverGeos) vertexCount += g.getAttribute('position').count;
-    const moverMat = createBatchedPbrMaterial('traffic-movers-v1', true);
-    this.materials.push(moverMat);
-    this.movers = new THREE.BatchedMesh(moverGeos.length, vertexCount, vertexCount, moverMat);
-    const ids = moverGeos.map((g) => {
-      const id = this.movers.addInstance(this.movers.addGeometry(g));
-      g.dispose();
-      return id;
-    });
-    for (const b of this.boats) b.id = ids[b.id];
-    for (const a of this.aircraft) a.id = ids[a.id];
-    for (const mi of mooredInst) this.movers.setMatrixAt(ids[mi.idx], mi.m);
-    this.movers.frustumCulled = false;
-    this.movers.castShadow = true; this.movers.receiveShadow = true;
-    this.group.add(this.movers);
+    return [
+      { id: ids[0], path: approach, period: 240, offset: 0, contrail: null },
+      { id: ids[1], path: approach, period: 240, offset: 0.5, contrail: null },
+      { id: ids[2], path: departure, period: 200, offset: 0.2, contrail: null },
+      { id: ids[3], path: cruise, period: 260, offset: 0.4, contrail },
+    ];
   }
 
   private len3(pts: THREE.Vector3[]): number {
@@ -623,22 +588,48 @@ export class Traffic {
   /** Contrail meshes live in the main scene (they are drawn in the air, not on the water). */
   get contrailMeshes(): THREE.Mesh[] { return this.aircraft.filter((a) => a.contrail).map((a) => a.contrail!.mesh!); }
 
-  update(dt: number, time: number, night: number): void {
+  /** Wind over the water (direction the air moves toward, m/s): the boats' wave lookups and the sails follow it. */
+  setWind(dirX: number, dirZ: number, speed: number): void {
+    const l = Math.hypot(dirX, dirZ);
+    if (l < 1e-6 || speed < 0.01) return;
+    const wx = dirX / l, wz = dirZ / l;
+    if (wx === this.windX && wz === this.windZ && speed === this.windSpeed) return;
+    this.windX = wx; this.windZ = wz; this.windSpeed = speed;
+    this.waves.setWind(wx, wz, speed);
+    for (const b of this.movers.boats) b.waves.setWind(wx, wz, speed);
+  }
+
+  /** Pose a hull: heading (hx, hz) with the motion model's heave, roll (starboard down +) and pitch (bow up +). */
+  private poseBoat(b: BoatInstance): void {
     const { tmpM, tmpQ, tmpP, tmpS, tmpE, movers } = this;
-    tmpS.set(1, 1, 1);
-    // boats
+    const m = b.motion;
+    tmpS.setScalar(b.scale);
+    tmpP.set(b.x, m.heave, b.z);
+    // hull axis is +x: yaw about the world up, then roll about the hull axis and pitch about its beam axis
+    tmpE.set(m.roll, Math.atan2(b.hx, b.hz) - Math.PI / 2, m.pitch, 'YXZ');
+    movers.setMatrixAt(b.id, tmpM.compose(tmpP, tmpQ.setFromEuler(tmpE), tmpS));
+  }
+
+  update(dt: number, time: number, night: number, wind?: THREE.Vector3): void {
+    const { tmpM, tmpQ, tmpP, tmpS, tmpE, movers } = this;
+    if (wind) this.setWind(wind.x, wind.z, Math.hypot(wind.x, wind.z));
+    this.waveTime = time;
+    const windK = clamp(this.windSpeed / 6, 0.4, 1.5);
+    // boats under way
     for (const b of this.boats) {
       const len = b.routeLen;
+      const L = b.spec.lwl;
       let x: number, z: number, hx: number, hz: number;
+      // a planing hull comes off the plane for the turn at a route end and runs back up to its cruise afterwards
+      const target = b.turn ? b.cruise * (b.spec.planing ? 0.5 : 0.8) : b.cruise;
+      const accel = b.spec.planing ? 1.2 : b.spec.len > 40 ? 0.08 : 0.35;
+      b.speed += clamp(target - b.speed, -accel * dt, accel * dt);
       if (b.turn) {
         const T = b.turn;
-        T.t += dt;
-        const k = Math.min(T.t / T.dur, 1);
-        const a = T.a0 + T.sweep * k;
-        x = T.cx + T.r * Math.cos(a); z = T.cz + T.r * Math.sin(a);
-        const sg = Math.sign(T.sweep);
-        hx = -Math.sin(a) * sg; hz = Math.cos(a) * sg;
-        if (k >= 1) {
+        T.a += T.sign * (b.speed / T.r) * dt;
+        x = T.cx + T.r * Math.cos(T.a); z = T.cz + T.r * Math.sin(T.a);
+        hx = -Math.sin(T.a) * T.sign; hz = Math.cos(T.a) * T.sign;
+        if (Math.abs(T.a - T.a0) >= Math.PI) {
           // back on the reversed route, 2 r to one side of it; the offset decays as the boat steers back
           b.turn = null;
           b.dir = b.dir === 1 ? -1 : 1;
@@ -653,7 +644,7 @@ export class Traffic {
         const fdx = this.tmp.dx * b.dir, fdz = this.tmp.dz * b.dir;
         const rx = -fdz, rz = fdx; // right of travel
         if (b.lateral !== 0) {
-          b.lateral *= Math.exp(-dt * b.speed / (b.len * 6));
+          b.lateral *= Math.exp(-dt * b.speed / (L * 6));
           if (Math.abs(b.lateral) < 0.05) b.lateral = 0;
         }
         x = this.tmp.x + rx * b.lateral; z = this.tmp.z + rz * b.lateral;
@@ -661,22 +652,46 @@ export class Traffic {
         if (Number.isFinite(ml) && ml > 1e-4) { hx = mx / ml; hz = mz / ml; } else { hx = fdx; hz = fdz; }
         if ((b.dir === 1 && b.s >= len - 5) || (b.dir === -1 && b.s <= 5)) {
           // route end: swing round a semicircle (turning circle ~1.6 hull lengths, capped for ships)
-          const r = clamp(b.len * 1.6, 10, 120);
+          const r = clamp(L * 1.6, 10, 120);
           const side = b.phase > 50 ? 1 : -1;
           const cx = x + rx * side * r, cz = z + rz * side * r;
-          const px = x - cx, pz = z - cz;
-          b.turn = { cx, cz, r, a0: Math.atan2(pz, px), sweep: Math.PI * Math.sign(px * hz - pz * hx || 1), t: 0, dur: (Math.PI * r) / b.speed };
+          const a0 = Math.atan2(z - cz, x - cx);
+          // the circle is traced with the angle increasing when its tangent (-sin a, cos a) runs with the heading
+          const sign = Math.sign(-Math.sin(a0) * hx + Math.cos(a0) * hz) || 1;
+          b.turn = { cx, cz, r, a: a0, a0, sign };
         }
       }
-      const yaw = Math.atan2(hx, hz);
-      tmpP.set(x, -b.draft * 0.15 + 0.12 * Math.sin(time * 1.3 + b.phase) * (b.len < 20 ? 1 : 0.2), z);
-      // hull axis is +x, rotate so +x points along travel direction; a little roll and pitch with the swell
-      tmpE.set(0.02 * Math.sin(time * 1.7 + b.phase), yaw - Math.PI / 2, 0.03 * Math.sin(time * 1.1 + b.phase) + (b.speed > 8 ? -0.03 : 0), 'XYZ');
-      movers.setMatrixAt(b.id, tmpM.compose(tmpP, tmpQ.setFromEuler(tmpE), tmpS));
+      // yaw rate from the heading change (low-passed): the lean into a turn follows it
+      const hdg = Math.atan2(hx, hz);
+      let dh = hdg - b.hdg;
+      if (dh > Math.PI) dh -= 2 * Math.PI; else if (dh < -Math.PI) dh += 2 * Math.PI;
+      const rawRate = dt > 1e-4 && Number.isFinite(dh) ? clamp(dh / dt, -1.5, 1.5) : 0;
+      b.yawRate += (rawRate - b.yawRate) * Math.min(1, dt * 3);
+      b.hdg = hdg;
+      // sails: set to leeward, heeled by the beam component of the wind
+      let heel = 0;
+      if (b.sailing) {
+        const across = this.windX * -hz + this.windZ * hx; // wind toward starboard (from port) > 0
+        b.mirror = across < 0;
+        heel = 0.24 * across * windK;
+      }
+      b.x = x; b.z = z; b.hx = hx; b.hz = hz;
+      b.motion.step(dt, x, z, hx, hz, b.waveAt, b.speed, b.yawRate, heel, b.spec.len < 20 ? 1 : 0.2, b.phase, time);
+      this.poseBoat(b);
       // the wake ribbon starts at the transom and runs forward over the hull to the bow (bow wave, waterline)
-      b.wake.update(x - hx * b.len * 0.5, z - hz * b.len * 0.5, hx, hz, time, true, b.speed);
-      b.px = x; b.pz = z; b.hx = hx; b.hz = hz;
+      b.wake.update(x - hx * L * 0.5, z - hz * L * 0.5, hx, hz, time, true, b.speed);
+      b.px = x; b.pz = z;
     }
+    // berthed boats ride the water where the camera can see it move (centimetres, invisible beyond ~800 m)
+    const cp = movers.camPos;
+    for (const b of this.moored) {
+      const near = !movers.camSeen || Math.hypot(cp.x - b.x, cp.z - b.z, cp.y) < 800;
+      if (!near) continue;
+      b.motion.step(dt, b.x, b.z, b.hx, b.hz, b.waveAt, 0, 0, 0, 1, b.phase, time);
+      this.poseBoat(b);
+    }
+    this.boatMat.emissiveIntensity = 4 * night;
+    tmpS.set(1, 1, 1);
     // cars: advance, then refill the chunk of the cell each car is in
     const { pos, dir, side, up } = this;
     for (const ch of this.carChunks) { ch.n = 0; ch.box.makeEmpty(); }
