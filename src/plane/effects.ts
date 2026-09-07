@@ -331,6 +331,30 @@ class SprayCloud {
 /** emission columns kept per sheet (one every SHEET_DT while the chine runs in the water) and stations along the root */
 const SHEET_COLS = 40, SHEET_ROWS = 7, SHEET_DT = 1 / 30;
 
+/** a float hull section: chine height, half-beam at the chine, keel depth below the chine (parts/floats.ts) */
+interface FloatSec { yc: number; w: number; bot: number }
+/**
+ * The forebody sections of the float hull, stem to step (x, chine yc, half-beam w, keel below the chine bot), as
+ * lofted by parts/floats.ts; the bottom between the chine and the keel is y = yc - bot (1 - (z / w)^VEE), a deep
+ * V of ~38 deg. The spray sheets need the hull's real bottom to leave from.
+ */
+const FLOAT_FORE: [number, number, number, number][] = [[2.95, -1.86, 0.05, 0.05], [2.6, -1.9, 0.2, 0.18], [1.9, -1.95, 0.33, 0.28], [0.8, -1.95, 0.37, 0.32], [-0.2, -1.95, 0.37, 0.3], [-0.35, -1.95, 0.365, 0.295]];
+const FLOAT_VEE = 1.12;
+function foreSection(x: number, out: FloatSec): FloatSec {
+  const F = FLOAT_FORE;
+  if (x >= F[0][0]) { out.yc = F[0][1]; out.w = F[0][2]; out.bot = F[0][3]; return out; }
+  for (let i = 1; i < F.length; i++) {
+    if (x >= F[i][0]) {
+      const a = F[i - 1], b = F[i], f = (a[0] - x) / (a[0] - b[0]);
+      out.yc = lerp(a[1], b[1], f); out.w = lerp(a[2], b[2], f); out.bot = lerp(a[3], b[3], f);
+      return out;
+    }
+  }
+  const l = F[F.length - 1];
+  out.yc = l[1]; out.w = l[2]; out.bot = l[3];
+  return out;
+}
+
 /** GLSL shared by the sheet's lit material and its shadow-pass depth material: the film's coverage. */
 const SHEET_GLSL = /* glsl */ `
   varying vec4 vSh;   // alpha, age (s), column seed, root parameter u (0 front .. 1 aft)
@@ -559,6 +583,7 @@ export class PlaneEffects {
   private rng = new Rng('plane-effects');
   private readonly tmp2 = new THREE.Vector3();
   private readonly right = new THREE.Vector3();
+  private readonly tmpSec: FloatSec = { yc: 0, w: 0, bot: 0 };
   private sprayAcc = 0;
   private tailAcc = 0;
   private exhaustAcc = 0;
@@ -746,18 +771,26 @@ export class PlaneEffects {
     right.y = 0;
     if (right.lengthSq() < 1e-6) right.set(-fdz, 0, fdx); else right.normalize();
     const rx = right.x, rz = right.z;
+    const sec = this.tmpSec;
     for (let i = 0; i < 2; i++) {
       const fs = flight.floats[i];
       const fz = i === 0 ? -1.25 : 1.25;
       const onStep = fs.step > -0.02, onBow = fs.bow > -0.02;
       const running = t.onWater && !flight.wreck && V > 3.5 && (onStep || onBow);
       const sink = clamp(-fs.vy, 0, 4);
+      const sinkK = clamp(sink / 3, 0, 1);
       const draft = clamp(Math.max(fs.step, fs.bow * 0.7), 0, 0.6);
       const kd = clamp(draft / 0.12, 0, 1);
       // strength: how much water the chine throws (the running blister ~1, a firm touchdown several times that)
       const k = smoothstep(3.5, 8, V) * (0.25 + 0.75 * kd) * (1 + 1.1 * sink);
-      const xFront = onStep ? clamp(0.5 + 3.0 * draft + 0.5 * sink, 0.5, 2.5) : 2.5;
-      const xAft = onStep ? -0.4 : 1.2;
+      // keel draft along the forebody from the two keel stations (x -0.2 step, x 2.6 bow): the root runs from the
+      // stagnation point, where the keel meets the surface (or the stem, when the bows are in too: a touchdown),
+      // back to the step; a hull still sinking wets ahead of its waterline (the wedge jet runs up the bow)
+      const dStep = fs.step, dBow = fs.bow;
+      const keelDraft = (x: number) => dStep + (dBow - dStep) * (x + 0.2) / 2.8;
+      let xFront = dBow > 0 ? 2.9 : dStep > 0 ? -0.2 + 2.8 * dStep / (dStep - dBow) : 0.5;
+      xFront = clamp(xFront + 0.6 * sinkK, 0.4, 2.9);
+      const xAft = -0.35;
       const surf = fs.surfaceY;
       for (let sd = 0; sd < 2; sd++) {
         // sd 0: outboard chine, 1: inboard (the inboard sheets meet between the floats: shorter, lower)
@@ -765,14 +798,36 @@ export class PlaneEffects {
         const sheet = this.sheets[i * 2 + sd];
         if (running) {
           const inK = sd === 1 ? 0.65 : 1;
+          // the spray root sits on the hull bottom where the piled-up water leaves it: on the V-bottom above the
+          // still waterline (Wagner's pile-up widens the wetted bottom by about half again, more for a hull
+          // driven in fast), at the chine once that reaches it (the running hull's blister leaves the chine and
+          // the spray rail; the rail also throws it flatter than the deep V's own 38 deg)
+          const rootAt = (u: number) => {
+            const x = lerp(xFront, xAft, u);
+            foreSection(x, sec);
+            const d = Math.max(keelDraft(x), 0.005);
+            const z0 = sec.w * Math.pow(clamp(d / sec.bot, 0, 1), 1 / FLOAT_VEE);
+            const zr = Math.min(sec.w, z0 * (1.4 + 0.5 * sinkK));
+            const hr = sec.bot * Math.pow(zr / sec.w, FLOAT_VEE);
+            const atChine = zr > sec.w - 0.01;
+            const slope = sec.bot * FLOAT_VEE * Math.pow(Math.max(zr / sec.w, 0.05), FLOAT_VEE - 1) / sec.w;
+            const theta = atChine ? 0.32 : clamp(Math.atan(slope), 0.3, 0.75);
+            return { x, y: sec.yc - sec.bot + hr, z: fz + s * zr, theta };
+          };
           const root = (u: number, out: THREE.Vector3): THREE.Vector3 => {
-            out.set(lerp(xFront, xAft, u), -1.95, fz + s * 0.37).applyQuaternion(q).add(flight.position);
-            out.y = surf + 0.03;
+            const r = rootAt(u);
+            out.set(r.x, r.y, r.z).applyQuaternion(q).add(flight.position);
+            // never below the water it is leaving (the hull point is above the still surface by the pile-up)
+            out.y = Math.max(out.y, surf + 0.01);
             return out;
           };
           const launch = (u: number, out: THREE.Vector3): THREE.Vector3 => {
-            const lat = (0.17 * V * kd + 1.2 * sink) * (0.85 + 0.35 * u) * inK * s;
-            const up = Math.min((0.16 * V * kd + 1.6 * sink) * (1.15 - 0.4 * u) * (0.8 + 0.2 * inK), 8.5);
+            const r = rootAt(u);
+            // the film leaves along the bottom's tangent, out and up, at about a fifth of the hull's speed in the
+            // water's frame (the whisker spray of a planing hull) plus the wedge jet of a sinking hull
+            const vs = (0.24 * V * kd + 1.9 * sink) * (0.85 + 0.35 * u) * inK;
+            const lat = Math.min(vs * Math.cos(r.theta), 9) * s;
+            const up = Math.min(vs * Math.sin(r.theta) * (1.15 - 0.4 * u), 8.5);
             const fwd = 0.05 * V + 0.07 * V * (1 - u);
             return out.set(rx * lat + fdx * fwd, up, rz * lat + fdz * fwd);
           };
