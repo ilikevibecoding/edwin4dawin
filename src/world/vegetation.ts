@@ -818,7 +818,9 @@ ${VEG_SHADOW_PROBE_VARS}
       // tufts (smaller, more of the outline left to the tiers), a mangrove's small and dense
       bool grape = arche > 5.5 && arche < 6.5;
       float leafScale = grape ? 1.35 : cls > 1.5 ? 0.8 : (arche > 1.5 && arche < 2.5) ? 0.85 : 1.0;
-      float sz = ps.x * (0.6 + 0.3 * hc) * fade * leafScale;
+      // 0.5-0.75 of the puff: enough to hide the 20 facets at 150-420 m without the puff-sized flat
+      // cut-outs the 130 m aerial read at the crown edges (h03 critic, foliage_park C5-D6)
+      float sz = ps.x * (0.5 + 0.25 * hc) * fade * leafScale;
       // a card is sized to break the outline of the puff it sits on — the size of the puff, which from
       // inside 150 m is a frame-filling smooth cut-out (r19-park: 4-6 m cards on a 6 m crown at 12 m, the
       // cluster tile magnified to blobs); by 40 m, where the shell's own leaf carpet carries the outline,
@@ -861,8 +863,15 @@ varying float vArche;
 varying float vOcc;
 varying vec2 vLeafUv;
 uniform sampler2D uLeaf;
+uniform vec3 uTuneCrownLit, uTuneCrownShade, uTuneGain; // TUNE (temporary)
 float vegNear; // 1 within ~200 m of the camera, 0 beyond 320 m: gates the close-range leaf detail
 ${GLSL_NOISE}
+// value noise over a volume from two 2D slices blended along y: the 2D noise of (xz + k y) sheared with
+// height drew diagonal streaks on every vertical face of a crown (the 'brushed' puffs of the 130 m aerial)
+float vnoise3(vec3 p) {
+  float fy = floor(p.y);
+  return mix(vnoise(p.xz + fy * 17.3), vnoise(p.xz + (fy + 1.0) * 17.3), smoothstep(0.0, 1.0, fract(p.y)));
+}
 `;
 const CROWN_FRAG = /* glsl */ `
 #include <color_fragment>
@@ -886,7 +895,10 @@ const CROWN_FRAG = /* glsl */ `
   } else if (vPart < 0.5 || vPart > ${BRANCH_PART - 0.5}) {
     // bark (trunk and limbs): grey-brown, paler on the pines; furrowed along the grain and darker toward the
     // ground, where the crown shades it and the moss sits
-    vec3 bark = vArche > 6.5 ? vec3(0.4, 0.29, 0.21) : vec3(0.3, 0.24, 0.18);
+    // a pale grey-brown on the hardwoods (the reference's live oak and mahogany bark: a trunk lit at the
+    // edge of a grove is a light post against the shaded ground, not a black line lost in it), the pines'
+    // plated bark redder
+    vec3 bark = vArche > 6.5 ? vec3(0.4, 0.29, 0.21) : vec3(0.38, 0.32, 0.26);
     float grain = vnoise(vWP.xz * 3.0 + vWP.y * 2.0);
     float furrow = vnoise(vec2(vWP.x * 7.0 + vWP.z * 5.0, vWP.y * 0.9));
     diffuseColor.rgb = bark * (0.65 + 0.4 * grain + 0.3 * furrow) * mix(0.55, 1.0, smoothstep(0.0, 0.3, vRel.y));
@@ -920,7 +932,10 @@ const CROWN_FRAG = /* glsl */ `
       // dark (a smooth ball of plasticine at 5-50 m otherwise: the rim alone does not say "leaves"); a soft
       // coverage ramp for the MSAA dither
       float facing = abs(dot(cn, toCam / max(camDist, 1e-3)));
-      float clusters = vnoise(vWP.xz * 1.1 + vWP.y * 0.9) * 0.65 + 0.35 * vnoise(vWP.xz * 3.3 - vWP.y * 2.6);
+      float clusters = vnoise3(vec3(vWP.x * 1.1, vWP.y * 0.9, vWP.z * 1.1)) * 0.65 + 0.35 * vnoise(vWP.xz * 3.3 - vWP.y * 2.6);
+      // the rim band dissolves the outline by a few px only while the facets show (a 10 m crown is 55 px at
+      // 260 m); beyond that the ragged rim under alpha-to-coverage read as jagged cut-outs from the air
+      float rimK = 1.0 - smoothstep(150.0, 300.0, camDist);
       // triplanar: the carpet sampled on the three world planes and blended by the puff normal (a hard
       // pick of one plane drew straight seams across the puff where its 20 facets change plane, and
       // stretched the leaves into streaks on the oblique ones)
@@ -944,7 +959,7 @@ const CROWN_FRAG = /* glsl */ `
       // of a second closed shell)
       float gapThr = mix(-0.2, 0.45 + 0.3 * (0.5 - clusters), close);
       if (!gl_FrontFacing) gapThr += 0.3 * close;
-      float cut = max(0.6 * clusters * vegNear - facing, (gapThr - lt.y) * 0.3);
+      float cut = max(0.6 * clusters * rimK - facing, (gapThr - lt.y) * 0.3);
       float a = 1.0 - smoothstep(-0.03, 0.03, cut);
       if (a < 0.1) discard;
       diffuseColor.a = a;
@@ -973,7 +988,7 @@ const CROWN_FRAG = /* glsl */ `
     // it — the raised clusters catch the sun, the hollows between them stay in shade — so a crown reads as
     // a mottled clump of lit tips rather than a shaded ball (the cards' terminator follows their atlas
     // clusters the same way)
-    float leaf = vnoise(vWP.xz * 1.7 + vWP.y * 1.3);
+    float leaf = vnoise3(vec3(vWP.x * 1.7, vWP.y * 1.3, vWP.z * 1.7));
     float cap = smoothstep(-0.35, 0.8, dot(crownDir, normalize(vec3(0.0, 1.0, 0.0) + 0.9 * sunW)) + 0.5 * (leaf - 0.5));
     // how far this point stands under the neighbours' canopy: the lower crown of a plant in a dense stand
     // (its underside and sides most, its cap least) — the pale sunlit leaf belongs to the crown top and the
@@ -987,9 +1002,9 @@ const CROWN_FRAG = /* glsl */ `
     // NEAR_DISTANCE keeps the canopy's tone, and the cards match the reference's hazed aerial canopy); up
     // close the same split read as dry khaki (r18-low: lit hue 52°, saturation 0.27 at 10-60 m against the
     // card canopy's 61°), so inside 40 m the leaf is greener and fuller: lit hue ~80°, saturation ~0.45
-    vec3 sunlit = diffuseColor.rgb * mix(vec3(1.58, 1.4, 1.36), vec3(1.5, 1.52, 1.05), close);
-    vec3 shade = diffuseColor.rgb * mix(vec3(0.56, 0.5, 0.4), vec3(0.46, 0.5, 0.36), close);
-    diffuseColor.rgb = mix(shade, sunlit, cap);
+    vec3 sunlit = diffuseColor.rgb * mix(uTuneCrownLit, vec3(1.5, 1.52, 1.05), close);
+    vec3 shade = diffuseColor.rgb * mix(uTuneCrownShade, vec3(0.46, 0.5, 0.36), close);
+    diffuseColor.rgb = mix(shade, sunlit, cap) * uTuneGain; // TUNE (temporary)
     // sky light: the cap sees the whole sky, the underside a little ground bounce; a plant standing among
     // taller neighbours sees their leaves instead of the sky (its cap too: they overtop it)
     vegUp = mix(0.35, 1.0, capUp);
@@ -999,7 +1014,7 @@ const CROWN_FRAG = /* glsl */ `
     diffuseColor.rgb *= 1.0 - 0.5 * buried;
     // the cluster field's own shading (peaks pale, hollows dark); gaps between cluster groups darken
     diffuseColor.rgb *= 0.82 + 0.36 * leaf;
-    diffuseColor.rgb *= 1.0 - 0.3 * smoothstep(0.62, 0.9, vnoise(vWP.xz * 0.55 + vWP.y * 0.4 + 17.0));
+    diffuseColor.rgb *= 1.0 - 0.3 * smoothstep(0.62, 0.9, vnoise3(vec3(vWP.x * 0.55 + 17.0, vWP.y * 0.4, vWP.z * 0.55 + 17.0)));
   }
 }
 `;
@@ -1137,12 +1152,18 @@ ${VEG_SHADOW_PROBE_VARS}
     float c = cos(rot), s = sin(rot);
     vec3 rel = transformed - vec3(0.0, 1.0, 0.0);
     rel.xz = mat2(c, -s, s, c) * rel.xz;
+    // no two crowns alike (h03 critic: 'clone palms', city_north): each plant keeps 9-13 of its 13 fronds
+    // (the missing ones collapse to the crown top), spreads them 0.85-1.15 wide and droops them by its own
+    // factor, so from 200 m the stars differ in fullness, size and hang
+    float keep = 0.7 + 0.3 * hash11(seed * 4.7 + 0.5);
+    rel *= step(hash11(seed * 6.1 + aPart * 1.7), keep) * (0.85 + 0.3 * hash11(seed * 8.3 + 0.2));
+    float droopK = 0.6 + 0.8 * hash11(seed * 5.9 + 0.7);
     // a little extra per-frond droop toward the tip (uv.y = 1 at the base, 0 at the tip) on top of the
     // geometry's arc, kept small so the crown stays the compact coconut star the atlas card draws (the
     // old 0.6-1.4 x squash hung the tips a trunk length down: "weeping willow" palms); some fronds hang dead
     float t = 1.0 - uv.y;
     float dead = step(0.86, hash11(seed * 2.9 + aPart * 1.3));
-    rel.y -= aVar.z * t * t * (0.03 + 0.12 * hash11(seed * 2.9 + aPart)) + dead * t * 0.5;
+    rel.y -= aVar.z * droopK * t * t * (0.03 + 0.12 * hash11(seed * 2.9 + aPart)) + dead * t * 0.5;
     rel.xz *= 1.0 - dead * 0.35 * t;
     // wind on the fronds: each bobs on its own petiole at its own phase, the tip more than the base and
     // lagging it (the wave runs out along the rachis), on top of the trunk sway below that moves the crown
@@ -1295,6 +1316,7 @@ ${VEG_SHADOW_PROBE_VARS}
 `;
 const CARD_FRAG_PARS = /* glsl */ `
 uniform sampler2D uAtlas;
+uniform vec3 uTuneCardLit, uTuneCardShade, uTuneGain; // TUNE (temporary)
 uniform vec3 uCanopyMean; // linear albedo the far cards converge on (the mean of the planted tints)
 varying vec2 vCardUv;
 varying float vElev;
@@ -1372,7 +1394,8 @@ const CARD_FRAG = /* glsl */ `
   // red and blue come up)
   // (r17: shade [48, 56, 53] hue 155° vs [53, 60, 54] hue 125°, lit [135, 138, 108] vs [148, 147, 130],
   // dark fraction 0.19 vs 0.11: the shade warmer and a little lighter, the lit side paler)
-  foliage *= mix(mix(vec3(0.42, 0.36, 0.25), vec3(2.25, 1.96, 2.0), lit), vec3(mix(0.42, 2.0, lit)), vFar);
+  foliage *= mix(mix(uTuneCardShade, uTuneCardLit, lit), vec3(mix(0.42, 2.0, lit)), vFar);
+  foliage *= uTuneGain; // TUNE (temporary)
   // a crown overtopped by its neighbours stands in their shadow (the occlusion packed in aVar.x): the
   // whole card darkens, its base most, so the inside of a dense stand goes dark and the emergent crowns
   // stand out lit
@@ -1395,6 +1418,7 @@ function crownMaterial(leaf: THREE.Texture, time: THREE.IUniform<number>, wind: 
     shader.uniforms.uTime = time;
     shader.uniforms.uWind = wind;
     shader.uniforms.uLeaf = { value: leaf };
+    Object.assign(shader.uniforms, TUNE); // TUNE (temporary)
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${COMMON_VERT}`)
       .replace('#include <beginnormal_vertex>', CROWN_NORMAL)
@@ -1457,6 +1481,7 @@ function cardMaterial(atlas: THREE.Texture, canopyMean: THREE.Vector3): THREE.Me
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uAtlas = { value: atlas };
     shader.uniforms.uCanopyMean = { value: canopyMean };
+    Object.assign(shader.uniforms, TUNE); // TUNE (temporary)
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', `#include <common>\n${CARD_VERT_PARS}`)
       .replace('#include <project_vertex>', CARD_PROJECT)
@@ -1666,6 +1691,14 @@ const CANOPY_GAIN = new THREE.Color(0.92, 0.72, 0.72);
 /** how far every tint is pulled toward its own luminance (linear) after the gain: the reference canopy is
  *  a grey olive, and desaturating this way keeps the hue instead of flipping low-saturation tints purple */
 const CANOPY_DESAT = 0.48;
+// TUNE (temporary): the tint split terms as uniforms so a capture session can sweep candidates without a rebuild
+const TUNE = {
+  uTuneCardLit: { value: new THREE.Vector3(2.25, 1.96, 2.0) },
+  uTuneCardShade: { value: new THREE.Vector3(0.42, 0.36, 0.25) },
+  uTuneCrownLit: { value: new THREE.Vector3(1.58, 1.4, 1.36) },
+  uTuneCrownShade: { value: new THREE.Vector3(0.56, 0.5, 0.4) },
+  uTuneGain: { value: new THREE.Vector3(1, 1, 1) },
+};
 const _hsl = { h: 0, s: 0, l: 0 };
 const _grey = new THREE.Color();
 
@@ -1976,6 +2009,8 @@ export class Vegetation {
   /** the leaf-cluster tiles of the near crowns' fringe cards, and the palm frond strip (for inspection too) */
   readonly leaf: THREE.CanvasTexture;
   readonly frond: THREE.CanvasTexture;
+  /** TUNE (temporary): the tint split uniforms */
+  readonly tune = TUNE;
   counts = { palms: 0, trees: 0, mangroves: 0, shrubs: 0 };
   /** planted crown heights (metres) per archetype, for the scale checks */
   readonly heightStats: HeightStats[] = Array.from({ length: 8 }, () => ({ n: 0, sum: 0, min: Infinity, max: 0, hist: new Uint32Array(160) }));
@@ -2124,15 +2159,28 @@ export class Vegetation {
         else add(3, x, z, y - 0.1, size(prng, 1.5, 2.6), prng);
         return;
       }
-      const edge = cls === Canopy.SHORE ? -30 : -16;
-      if (coast > edge && roll < (cls === Canopy.SHORE ? 0.7 : 0.55)) { add(2, x, z, y - 0.2, size(prng, 2.6, 5.0), prng); return; }
+      // the mangrove edge: its width wanders along the coast (16-46 m on the shore class, 9-25 m elsewhere)
+      // and a third of it is sea grape and palm, so from the air the shore is not one hedge of even width
+      // (h03 critic: 'far shores are hedge bands', aircraft_rear A3-H3)
+      const bandN = 0.5 + 0.5 * perlin2(x / 90 + 2.7, z / 90 - 5.1);
+      const edge = (cls === Canopy.SHORE ? -30 : -16) * (0.55 + 0.9 * bandN);
+      if (coast > edge && roll < (cls === Canopy.SHORE ? 0.7 : 0.55)) {
+        const inBand = prng.next();
+        if (inBand < 0.18) add(6, x, z, y - 0.15, size(prng, 3.0, 5.5), prng);
+        else if (inBand < 0.3) palm(x, z, y, prng, 8, 13);
+        else add(2, x, z, y - 0.2, size(prng, 2.6, 5.0), prng);
+        return;
+      }
       const key = cls === Canopy.KEY;
       let t = prng.next();
-      if ((t -= key ? 0.05 : 0.07) < 0) palm(x, z, y, prng, 7, 11);
+      // emergents break the top line: a third of the hammock's palms stand clear of the 7-15 m hardwoods
+      // (the reference's royal palms over the keys), and the tall emergent crowns reach 15-21 m; the
+      // hardwoods themselves span 7-15 m (h03 critic: 'a single-species mat of same-size lobes, no emergents')
+      if ((t -= key ? 0.06 : 0.08) < 0) { if (prng.chance(0.35)) palm(x, z, y, prng, 13, 17); else palm(x, z, y, prng, 7, 11); }
       else if ((t -= 0.08) < 0) add(6, x, z, y - 0.15, size(prng, 3.0, 6.0), prng);
-      else if ((t -= key ? 0.08 : cls === Canopy.SHORE ? 0.1 : 0.14) < 0) add(1, x, z, y - 0.3, key ? size(prng, 14, 17) : size(prng, 14, 18), prng);
+      else if ((t -= key ? 0.1 : cls === Canopy.SHORE ? 0.11 : 0.15) < 0) add(1, x, z, y - 0.3, key ? size(prng, 15, 19) : size(prng, 15, 21), prng);
       else if (key && (t -= 0.25) < 0) add(2, x, z, y - 0.2, size(prng, 3, 5.5), prng);
-      else add(0, x, z, y - 0.3, key ? size(prng, 8, 12) : size(prng, 8, 13.5), prng);
+      else add(0, x, z, y - 0.3, key ? size(prng, 7, 13) : size(prng, 7, 15), prng);
       // a thin understory in the hammock (the belt is a closed canopy: little grows under it)
       understory(x, z, prng, 0.3);
     };
@@ -2166,13 +2214,20 @@ export class Vegetation {
           case Zone.RES_LOW: p = 0.05 + 0.75 * smoothstep(0.25, 0.95, v) + 0.05 * clump; candidates = v > 0.42 ? 2 : 1; break;
           case Zone.GOLF: p = 0.03 + 0.22 * smoothstep(0.1, 0.6, clump); break;
           case Zone.WETLAND_FLAT: p = 0.85 * smoothstep(0.55, 0.9, v); candidates = 2; break;
-          case Zone.HOTEL: case Zone.RES_MID: p = 0.05; break;
-          case Zone.DOWNTOWN: p = 0.02; break;
+          case Zone.HOTEL: case Zone.RES_MID: p = 0.06; break;
+          case Zone.DOWNTOWN: p = 0.026; break;
           case Zone.AIRPORT: p = 0.012; break;
           case Zone.INDUSTRIAL: p = 0.006; break;
           default: p = 0;
         }
         if (p <= 0) continue;
+        // the lot trees gather: a 45 m cluster field groups the suburb's trees along some property lines and
+        // leaves other lots open, and downtown's palms stand in plaza groups rather than one to a block
+        // (h03 critic: 'single spheres at even spacing', 'evenly scattered' city_north)
+        if (zn === Zone.RES_LOW || zn === Zone.HOTEL || zn === Zone.RES_MID || zn === Zone.DOWNTOWN) {
+          const cluster = 0.5 + 0.5 * perlin2(cx / 45 + 1.1, cz / 45 + 6.6);
+          p *= zn === Zone.RES_LOW ? 0.45 + 1.1 * smoothstep(0.35, 0.7, cluster) : 0.25 + 1.6 * smoothstep(0.5, 0.8, cluster);
+        }
         // clearings: the densest zones lose ~40 % of their candidates where the clearing field is low
         if (canopyCls === Canopy.NONE && (zn === Zone.PARK || zn === Zone.RES_LOW || zn === Zone.WETLAND_FLAT)) p *= 0.6 + 0.4 * smoothstep(0.25, 0.6, clearing);
         for (let c = 0; c < candidates; c++) {
@@ -2206,7 +2261,17 @@ export class Vegetation {
             const groveN = 0.5 + 0.5 * perlin2(jx / 75 + 3.3, jz / 75 - 6.1);
             const clumpN = 0.5 + 0.5 * perlin2(jx / 28 + 8.8, jz / 28 + 1.2);
             const palmP = upper * (0.1 + 0.6 * smoothstep(0.35, 0.75, groveN));
-            if (roll < palmP) palm(jx, jz, y, prng, 6, 14);
+            // where the sand meets a canopy belt (a forest cell within two cells), a scrub band of sea grape
+            // and shrubs softens the line (h03 critic: 'canopy meets sand as a hard line', shore_beach F2-H3)
+            let scrub = false;
+            for (let dj = -2; dj <= 2 && !scrub; dj++) for (let di = -2; di <= 2 && !scrub; di++) {
+              const ni = i + di, nj = j + dj;
+              if (ni < 0 || nj < 0 || ni >= n || nj >= n) continue;
+              const nidx = nj * n + ni;
+              scrub = (zone[nidx] === Zone.PARK && canopy[nidx] !== Canopy.NONE) || zone[nidx] === Zone.MANGROVE;
+            }
+            if (scrub && y > 0.45 && prng.chance(0.55)) { const grape = prng.chance(0.65); add(grape ? 6 : 3, jx, jz, y - 0.15, grape ? size(prng, 2.0, 4.5) : size(prng, 1.2, 2.8), prng); }
+            else if (roll < palmP) palm(jx, jz, y, prng, 6, 14);
             else if (y > 0.6 && clumpN > 0.6 && prng.chance(0.75)) { const grape = prng.chance(0.6); add(grape ? 6 : 3, jx, jz, y - 0.15, grape ? size(prng, 2.5, 5.5) : size(prng, 1.5, 3.5), prng); }
             else if (y > 0.45 && y < 1.35 && map.exposureAt(jx, jz) > 0.45 && prng.chance(0.22 * smoothstep(0.42, 0.6, 0.5 + 0.5 * perlin2(jx / 40 - 2.2, jz / 40 + 9.4)))) add(5, jx, jz, y - 0.1, prng.range(1.0, 2.0), prng);
           } else if (zn === Zone.WETLAND_FLAT) {
