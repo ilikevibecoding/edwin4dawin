@@ -12,10 +12,14 @@ DEV = {
     'hands': 'dev&cam=419.24,2.91,1905.78&hdg=240&pch=-35&fov=40&time=14&follow=1&plane=420,1.96,1905,240,0,0,0,0.12',
     # the pilot through the windshield from ahead-left
     'pilot': 'dev&cam=415.84,3.26,1908.79&hdg=48.7&pch=-4.4&fov=20&time=14&follow=1&plane=420,1.96,1905,240,0,0,0,0',
-    # the pilot's head in profile through the left door window
-    'head': 'dev&cam=420.13,2.96,1907.12&hdg=330&pch=-3&fov=25&time=14&follow=1&plane=420,1.96,1905,240,0,0,0,0',
+    # the pilot's head through the windshield from ahead-left, 2.3 m away (the head sits at the door's rear post,
+    # so a profile through the door window is half hidden)
+    'head': 'dev&cam=418.0,3.06,1907.54&hdg=37.6&pch=-3.8&fov=12&time=14&follow=1&plane=420,1.96,1905,240,0,0,0,0',
     # the nose from ahead-right, engine idling (throttle 0.12 -> ~980 RPM)
     'prop': 'dev&cam=415.19,2.26,1910.67&hdg=13.8&pch=-4.6&fov=30&time=14&follow=1&plane=420,1.96,1905,240,0,0,0,0.12',
+    # the same nose at the idle floor (throttle 0 -> 760 RPM) and stopped (the engine floor is 760: stopped is
+    # not reachable from the URL, the blades at rest are the 760 state with the shortest smear)
+    'prop-idle': 'dev&cam=415.19,2.26,1910.67&hdg=13.8&pch=-4.6&fov=30&time=14&follow=1&plane=420,1.96,1905,240,0,0,0,0',
     # the same nose at cruise power in the air (~2200 RPM): the blur disc
     'propfast': 'dev&cam=415.19,150.30,1910.67&hdg=13.8&pch=-4.6&fov=30&time=14&follow=1&presim=3&plane=420,150,1905,240,0,0,50,0.8',
     # idle from the seat: throttle 0 (760 RPM) with the panel and the prop through the windshield

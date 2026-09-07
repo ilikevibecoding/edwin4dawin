@@ -56,14 +56,18 @@ function propBlurMaterial(maps: ReturnType<typeof propBlurMaps>, u: BlurUniforms
         #include <alphamap_fragment>
         // the map's alpha is one blade's share of the circumference; over a sweep of uSweep radians a point is
         // covered for coverage * 2 pi / uSweep of the time (the disc: uSweep = blade spacing, all blades pass)
-        float smear = min(diffuseColor.a * 6.2831853 / max(uSweep, 1e-3), 0.92);
-        // a streak fades out behind the blade over the swept fraction of its sector (the eye's fading persistence)
+        float dwell = min(diffuseColor.a * 6.2831853 / max(uSweep, 1e-3), 1.0);
+        // a black blade flicking through a point reads darker than its dwell fraction: the eye integrates over
+        // ~1/20 s, three to four times the 1/60 s the sweep is computed for, so it sees ~3 passes where the
+        // camera sees one (1 - (1 - dwell)^3). Without this the idle smear is a 7 % veil and the prop reads stopped.
+        float smear = min(1.0 - pow(1.0 - dwell, 3.0), 0.92);
+        // a streak fades out behind the blade over the swept fraction of its sector (persistence of vision)
         float tail = clamp(vMapUv.x / uSpan, 0.0, 1.0);
-        smear *= pow(1.0 - tail, 0.8);
+        smear *= pow(1.0 - tail, 0.55);
         diffuseColor.a = smear * uOpacity;
       `);
   };
-  mat.customProgramCacheKey = () => 'prop-blur-v1';
+  mat.customProgramCacheKey = () => 'prop-blur-v2';
   return mat;
 }
 
