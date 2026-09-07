@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { Batch, glareShieldGeometry, halfWidthAt, quadGeometry, sectionAt, strutGeometry, type Surf } from '../geometry';
 import { GAUGES, GPS_SCREEN, INSTRUMENT_ATLAS, OVERHEAD, PANEL, PANEL_UV, SURF, type GaugeDef, type UvRect } from '../textures';
 import { at, CABIN_FRONT, CH, DEG, PANEL_TILT, PANEL_X, UP, type BuildContext } from './context';
@@ -147,10 +148,16 @@ export function buildCockpitPanel(ctx: BuildContext): CockpitPanelBuild {
   textured.push(glareShieldGeometry(innerSections, 0.745, PANEL_X - 0.02, CABIN_FRONT - 0.005, 0.005, 0.02, PANEL_UV.grain));
   // yoke placards on the hubs are part of the yokes (they move); the nameplate sits on the glare shield lip
   decal(PANEL_UV.nameplate, 0.16, 0.035, new THREE.Vector3(PANEL_X - 0.041, 0.725, 0.34), new THREE.Vector3(-1, 0, 0), UP);
-  // magnetic compass on the glare shield ahead of the centre post: housing, bracket and the card window
-  cabinKit.add(new THREE.BoxGeometry(0.075, 0.055, 0.07), at([PANEL_X + 0.09, 0.80, 0]), SURF.plastic);
-  cabinKit.add(new THREE.BoxGeometry(0.02, 0.035, 0.024), at([PANEL_X + 0.09, 0.762, 0]), SURF.darkMetal);
-  decal(PANEL_UV.compass, 0.05, 0.024, new THREE.Vector3(PANEL_X + 0.052, 0.80, 0), new THREE.Vector3(-1, 0, 0), UP);
+  // magnetic compass on the glare shield ahead of the centre post: a rounded bowl housing on a bracket with a base
+  // plate, the card window in a metal frame with the two compensator screws under it, a light hood over the window
+  const CX = PANEL_X + 0.09, CY = 0.80;
+  cabinKit.add(new RoundedBoxGeometry(0.075, 0.055, 0.07, 3, 0.011), at([CX, CY, 0]), SURF.plastic);
+  cabinKit.add(new THREE.BoxGeometry(0.02, 0.035, 0.024), at([CX, CY - 0.038, 0]), SURF.darkMetal);
+  cabinKit.add(new THREE.BoxGeometry(0.05, 0.004, 0.05), at([CX, 0.747, 0]), SURF.darkMetal);
+  for (const [dy, h, dz, w] of [[0.015, 0.004, 0, 0.060], [-0.015, 0.004, 0, 0.060], [0, 0.034, 0.028, 0.004], [0, 0.034, -0.028, 0.004]]) cabinKit.add(new THREE.BoxGeometry(0.004, h, w), at([CX - 0.0375, CY + dy, dz]), SURF.darkMetal);
+  for (const dz of [-0.012, 0.012]) cabinKit.add(new THREE.CylinderGeometry(0.003, 0.003, 0.003, 8), at([CX - 0.0385, CY - 0.0225, dz], [0, 0, Math.PI / 2]), SURF.metal);
+  cabinKit.add(new THREE.BoxGeometry(0.034, 0.008, 0.040), at([CX - 0.045, CY + 0.031, 0], [0, 0, 0.25]), SURF.darkMetal);
+  decal(PANEL_UV.compass, 0.05, 0.024, new THREE.Vector3(CX - 0.0378, CY, 0), new THREE.Vector3(-1, 0, 0), UP);
   // dome light in the headliner over the front seats
   cabinKit.add(new THREE.BoxGeometry(0.12, 0.024, 0.10), at([0.30, 1.117, 0]), SURF.lightPlastic);
   decal(PANEL_UV.domeLens, 0.075, 0.06, new THREE.Vector3(0.30, 1.1045, 0), new THREE.Vector3(0, -1, 0), new THREE.Vector3(1, 0, 0));
