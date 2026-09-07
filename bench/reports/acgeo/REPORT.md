@@ -32,7 +32,20 @@ Per-round observations and reasoning are in `DEFECTS.md`; this file is the summa
 | R9 | no rudder tab; frameless windshield; plain cowl sides | rudder trim tab as its own slotted airfoil segment, bent 3° to port; windshield frame; 3 × 4 louvre bank per cowl side | 8.5 / 8 / 7.5 / 8 / 7.5 |
 | R10 | float conversion without its ventral fin | 1.05 × 0.33 m ventral fin following the keel line | 9 / 8 / 7.5 / 8 / 7.5 |
 | R11 | (first stills) chrome-drum bowl; dark zipper along the wing LE; dark-red nav patches on the tips by day; tip cap as a lid over the rudder | bowl painted in the livery with a polished lip; skin joints off the LE and LE chips thinned; patches drawn only while powered; rudder to the fin top, both tips rounding toward the hinge line | 9 / 8.5 / 8 / 8.5 / 8 |
-| R12 | see below | | |
+| R12 | chip clusters as dirt splatter; black-box scoop mouths; a ball on the stern post | sparse faint-rimmed flakes; mouth plates follow the hoods' section, chin scoop 25 % smaller; tail light in a teardrop housing | 9 / 8.5 / 8 / 8.5 / 8.5 |
+
+Self-scores are against the hero target of 9.25. What still holds each category back (residual defects):
+- Silhouette (9): the wing tip planform is a plain round-off; the stern post ends in a point rather than the
+  Beaver's rounded tail-cone end.
+- Geometry (8.5): the cabin's roof has no skylights (the wing root fairing occupies the roof directly behind the
+  windshield in this loft, so they cannot be cut without moving the wing); the stabiliser tips are fixed full-chord
+  caps outboard of the elevators.
+- Nose / cowling (8): the engine seen through the inlet is dark at all times of day (no interior light bounce);
+  the cowl flaps are two plates, not a ring of gills.
+- Wings / control surfaces (8.5): no aileron gap seals or balance horns; the flap tracks are plate brackets rather
+  than the DHC-2's external hinge arms.
+- Materials (8.5): no oil streaks on the wing struts or the floats' strut roots; the wing walkway is a painted
+  rectangle rather than grit; the bare-metal chips are flat (no relief in the normal map).
 
 ## Triangle and draw-call budget (PlaneModel, LOD0, everything the model owns)
 
@@ -41,10 +54,19 @@ Per-round observations and reasoning are in `DEFECTS.md`; this file is the summa
 | R0 baseline `3478c067` | 32 (31 visible) | 34 709 | 21 734 |
 | R8 `f86e66e1` | 32 (31 visible) | 44 793 | 31 818 |
 | R9 `19f880ea` | 32 (31 visible) | 44 941 | 31 966 |
-| R12 | (filled below) | | |
+| R11 `a4bdea96` (Node smoke test, exterior only) | 32 (31 visible) | ≈ 44.3 k | 29 630 without lights / glass |
+| R12 `6885e16c` (Node smoke test, exterior only) | 32 (31 visible) | ≈ 44.3 k | 29 640 without lights / glass |
 
 Budget: ≤ 260 k triangles, ≤ 40 draw calls. Every added element batches into an existing mesh (the fittings
 batch carries the rig, hinges, handles, wicks and antennas as one draw call), so the draw-call count did not move.
+
+## Before / after pairs
+
+`crops/*.jpg` (left: R0 baseline, right: the latest round shot from the same camera): `front_quarter`,
+`rear_quarter`, `nose_4m`, `wingtip_below`, `tail_6m`, `rig_astern`, `door_3m`, `chase_30m`, `glass_sun`. The
+right-hand frames are R9 (front, nose, tail, door, glass) and R8 (rear, wingtip, rig, chase); R10–R12 stills are
+queued behind the Chrome slot (see `DEFECTS.md`, capture notes) and the pairs are regenerated when they land.
+The six best are copied to `/opt/cursor/artifacts/acgeo_*.jpg`.
 
 ## Files touched (all within the acgeo ownership list)
 
