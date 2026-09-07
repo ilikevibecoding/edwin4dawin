@@ -19,6 +19,9 @@ while [ "$p" -gt 1 ]; do
   [ -n "$p" ] || break
 done
 while :; do
+  # never add a browser to a machine that is already thrashing (a 1-minute load past 24 on 4 cores: the h14
+  # snapshot lost seven views to protocol timeouts when the load passed 100); the slot poll waits it out
+  if [ "$(awk '{print int($1)}' /proc/loadavg)" -gt 24 ]; then sleep 5; continue; fi
   for i in $CANDIDATES; do
     exec {fd}>"/tmp/chrome-slot-$i.lock"
     if flock -n "$fd"; then
