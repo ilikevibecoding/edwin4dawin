@@ -617,16 +617,20 @@ function tier2(bp, rng) {
 function tier3(bp, rng) {
   const floors = [56, 51, 46];   // top-down (see wings)
   const c0 = CENTRAL.x0 - 5, c1 = CENTRAL.x1 + 5;
+  // the N and S arms of the ring run the full width of the north and south room bands (a0..a1), so the bands' corner
+  // rooms open onto a corridor too; the W and E bands start below the arms (c0 + 5 .. c1 - 5) so no room of theirs
+  // stands where a corner room's door opens (the walls of a later room used to seal six rooms per tier)
+  const a0 = c0 - 10, a1 = c1 + 10;
   for (const fy of floors) {
     // ring corridor around the central spire
-    for (const [ax0, az0, ax1, az1] of [[c0, c0, c1, c0 + 3], [c0, c1 - 3, c1, c1], [c0, c0, c0 + 3, c1], [c1 - 3, c0, c1, c1]]) {
+    for (const [ax0, az0, ax1, az1] of [[a0, c0, a1, c0 + 3], [a0, c1 - 3, a1, c1], [c0, c0, c0 + 3, c1], [c1 - 3, c0, c1, c1]]) {
       bp.fill(ax0, fy - 1, az0, ax1, fy - 1, az1, PLATE); bp.fill(ax0, fy, az0, ax1, fy + 3, az1, AIR); bp.fill(ax0, fy + 4, az0, ax1, fy + 4, az1, STONE2);
       for (let x = ax0 + 2; x <= ax1; x += 4) for (let z = az0 + 2; z <= az1; z += 4) bp.set(x, fy + 4, z, GLOW);
     }
     // rooms in the four blocks around the corridor
     const blocks = [
       [T3.x0 + 2, T3.z0 + 2, T3.x1 - 2, c0, 'S'], [T3.x0 + 2, c1, T3.x1 - 2, T3.z1 - 2, 'N'],
-      [T3.x0 + 2, c0, c0, c1, 'E'], [c1, c0, T3.x1 - 2, c1, 'W'],
+      [T3.x0 + 2, c0 + 5, c0, c1 - 5, 'E'], [c1, c0 + 5, T3.x1 - 2, c1 - 5, 'W'],
     ];
     const blocked = (rx0, rz0, rx1, rz1) => CORNERS.some(([cx, cz]) => rx1 >= cx - 1 && rx0 <= cx + SPIRE && rz1 >= cz - 1 && rz0 <= cz + SPIRE)
       || (rz1 > c1 && ((rx1 >= 73 && rx0 <= 80) || (rx1 >= 87 && rx0 <= 94)));

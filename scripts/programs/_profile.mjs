@@ -195,8 +195,10 @@ export function profileLot(lot, layout) {
           else if (!seen3[an.key(nx, ny, nz)]) { seen3[an.key(nx, ny, nz)] = 1; st.push([nx, ny, nz]); }
         }
       }
-      const t = [...touched];
-      for (let i = 1; i < t.length; i++) join(t[0], t[i]);
+      // one continuous flight joins the levels it touches in order (f0-f1, f1-f2, ...), not every level to the first
+      const floorOf = (n) => (n < rooms.length ? rooms[n].y : corridorNodes[n - rooms.length].y);
+      const t = [...touched].sort((a, b) => floorOf(a) - floorOf(b) || a - b);
+      for (let i = 1; i < t.length; i++) join(t[i - 1], t[i]);
     }
     // floor cells that step straight onto a cell of another floor level (a change of level without a flight)
     for (let x = 0; x < an.w; x++) for (let z = 0; z < an.d; z++) for (const ly of levels) {
@@ -275,7 +277,7 @@ export function profileLot(lot, layout) {
     id: lot.id, kind: lot.kind, family: m.family, district: lot.district, purpose: purpose ? { kind: purpose.kind, category: purpose.category, name: purpose.name, roles: purpose.roles, sells: purpose.sells || [], buys: purpose.buys || [], hours: purpose.hours } : null,
     program: program ? program.id : null, programInfo: program, programRecord: m.program || null, sign: purpose ? purpose.name : m.name, name: m.name,
     floors: ys.length, height: bp.h, w: lot.w, d: lot.d, area: lot.w * lot.d, perFloorArea, rooms,
-    graph: { nodes: rooms.length + planCorridors, roomNodes: rooms.length, corridorNodes: planCorridors, edges: planEdges, edgeList: edgeList.filter(([a, b]) => inPlan(a) && inPlan(b)), degHist: degHist.map((v) => +(v / n).toFixed(3)), deadEnds, deadEndRatio: +(occupied.length ? deadEnds / occupied.length : 0).toFixed(3), corridorShare: +(corridorArea / totalArea).toFixed(3), components, connected: components <= 1, isolatedRooms: rooms.filter((r) => r.deg === 0).length },
+    graph: { nodes: rooms.length + planCorridors, roomNodes: rooms.length, corridorNodes: planCorridors, corridors: corridorNodes.map((c) => ({ f: c.f, cells: c.cells })), edges: planEdges, edgeList: edgeList.filter(([a, b]) => inPlan(a) && inPlan(b)), degHist: degHist.map((v) => +(v / n).toFixed(3)), deadEnds, deadEndRatio: +(occupied.length ? deadEnds / occupied.length : 0).toFixed(3), corridorShare: +(corridorArea / totalArea).toFixed(3), components, connected: components <= 1, isolatedRooms: rooms.filter((r) => r.deg === 0).length },
     palette, emissiveKinds: emissiveKinds.size, staff: { kinds: staff, total: m.work.length }, interactions, verbs: new Set(Object.keys(interactions)), entry, signature,
     reachShare: +(rooms.filter((r) => r.reach).length / n).toFixed(3), litShare: +(rooms.filter((r) => r.lit).length / n).toFixed(3), denseShare: +(rooms.filter((r) => r.dense).length / n).toFixed(3),
     varietyMean: +(rooms.reduce((s, r) => s + r.variety, 0) / n).toFixed(2), floating, spots: m.spots.length, beds: m.beds.length, reachCount: an.reachCount,

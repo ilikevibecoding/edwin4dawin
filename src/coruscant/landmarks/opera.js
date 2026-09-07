@@ -58,6 +58,9 @@ function patternFloor(bp, x0, z0, x1, z1, y, a = PLATE, b = STRIPE, period = 6) 
 }
 function doorway(bp, x0, z0, x1, z1, y, h = 3, frame = TRIM, lintel = GLOW) {
   bp.fill(x0, y, z0, x1, y + h - 1, z1, AIR);
+  // the threshold: a wall line between two carved rooms has no floor plate of its own (the stage-house rooms over
+  // the scenery workshop), so the door cells get one wherever nothing stands under them
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) if (bp.isAir(x, y - 1, z)) bp.set(x, y - 1, z, frame);
   if (z0 === z1) { bp.fill(x0 - 1, y, z0, x0 - 1, y + h, z0, frame); bp.fill(x1 + 1, y, z0, x1 + 1, y + h, z0, frame); bp.fill(x0, y + h, z0, x1, y + h, z0, lintel); }
   else { bp.fill(x0, y, z0 - 1, x0, y + h, z0 - 1, frame); bp.fill(x0, y, z1 + 1, x0, y + h, z1 + 1, frame); bp.fill(x0, y + h, z0, x0, y + h, z1, lintel); }
 }
@@ -133,7 +136,7 @@ function lowerFoyer(bp, rng, x0, z0, x1, z1, y) {
   for (let x = x0 + 5; x <= x1 - 5; x += 8) { bp.set(x, y + 1, z1 + 1, HOLO); bp.set(x, y + 2, z1 + 1, HOLO); bp.set(x + 1, y + 1, z1 + 1, HOLO); bp.set(x + 1, y + 2, z1 + 1, HOLO); }
   for (const x of [x0 + 8, cx - 6, cx + 7, x1 - 8]) { bp.fill(x, y, z0 + 6, x, y + 2, z0 + 6, TRIM); bp.set(x, y + 3, z0 + 6, GLOW); }
   for (let x = x0 + 1; x <= x1 - 1; x += 4) for (let z = z0 + 1; z <= z1 - 1; z += 4) bp.set(x, y + 4, z, (x + z) % 3 ? GLOW : RED);
-  bp.room('lower_foyer', x0 - 1, y, z0 - 1, x1 + 1, z1 + 1);
+  bp.room('lobby_atrium', x0 - 1, y, z0 - 1, x1 + 1, z1 + 1);   // the entrance foyer is the house's lobby (the ushers' room)
 }
 // a 4-connected curved stair from (x0, z0) at height y0 to height y1 along an arc around (cx, cz) with radius r
 // between angles a0 and a1; half steps alternate slab / full block, chrome railing posts on the outer side
