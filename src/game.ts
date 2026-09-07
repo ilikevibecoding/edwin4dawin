@@ -213,7 +213,7 @@ export class Game {
     this.reflection.excludeChildrenWhen(this.bridges.group, (m) => (m as THREE.InstancedMesh).isInstancedMesh === true && !m.castShadow);
     // highway furniture (barriers, guardrail, lighting, gantries and signs along the highway / causeway classes);
     // its thin steel (userData.noMirror) is far below a texel of the mirror image
-    this.highway = buildHighway(this.map, this.roads, (m) => this.registerLit(m));
+    this.highway = buildHighway(this.map, this.roads, (m) => this.registerLit(m), network.graph);
     this.highway.group.name = 'highway';
     this.scene.add(this.highway.group);
     this.reflection.excludeChildrenWhen(this.highway.group, (m) => m.userData.noMirror === true);
