@@ -65,6 +65,8 @@ export function createDriver({ terrain, vehicle, collision = null, startT = 0.42
     // > 0: auto-drive holds this speed with the throttle balancing drag (the
     // capture pre-roll); 0: the caps below set the pace
     cruise: 0,
+    // the indicator relay: 1 while the lamp is lit on this tick
+    indicator: 0,
     // collision: the normal-velocity change this frame (m/s) and where it
     // happened, held for one frame for the audio and the camera; whether the
     // truck is resting against something; the yaw kick still working out
@@ -182,6 +184,7 @@ export function createDriver({ terrain, vehicle, collision = null, startT = 0.42
   function resetDynamics() {
     state.speed = 0;
     state.steer = 0;
+    state.indicator = 0;
     state.accel = 0;
     state.lateral = 0;
     state.yawRate = 0;
@@ -609,6 +612,9 @@ export function createDriver({ terrain, vehicle, collision = null, startT = 0.42
       lateral: state.lateral,
       throttle: input.throttle,
       brake: input.brake,
+      // the indicator relay's tick (main.js runs the relay; 1 while the lamp
+      // is on, 0 between ticks and when the relay is off)
+      indicator: state.indicator,
       rpm: state.rpm,
       maxSpeed,
       contacts,

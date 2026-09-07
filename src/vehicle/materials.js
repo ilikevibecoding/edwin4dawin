@@ -989,6 +989,16 @@ export function vehicleMaterials(env = null) {
   applyLampGlow(m.headlight, { tag: 'headlight', core: 2.5, bleach: 0.6, coreExp: 1.0 });
   applyLampGlow(m.taillight, { tag: 'taillight', core: 2.0, bleach: 0.25, coreExp: 2.2 });
   applyLampGlow(m.amber, { tag: 'amber', core: 2.5, bleach: 0.35, coreExp: 2.2 });
+  // The indicators: the same lens as the marker lamps on their own material,
+  // because they light only while the relay ticks. On the shared `amber`
+  // key the rear indicator cells glowed all night beside the tail cells at
+  // 3.2 - over the night bloom threshold - and the back of the truck read as
+  // a row of orange lamps that never changed.
+  m.indicator = m.amber.clone();
+  m.indicator.name = 'indicator';
+  // same tag as the marker lamps: the tag keys the program cache, so the two
+  // share one program (their levels are uniforms)
+  applyLampGlow(m.indicator, { tag: 'amber', core: 2.5, bleach: 0.35, coreExp: 2.2 });
   applyLampGlow(m.reverseLamp, { tag: 'reverseLamp', core: 2.5, bleach: 0.4, coreExp: 2.0 });
   // The covers carry most of their light in the core term rather than the flat
   // base: at base 4 and core 5 the whole disc saturated after bloom and the

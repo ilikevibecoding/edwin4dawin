@@ -488,8 +488,10 @@ async function boot() {
         indicatorTock = !indicatorTock;
         audio.cue('indicator', { tock: indicatorTock });
       }
+      driver.state.indicator = indicatorTock ? 1 : 0;
     } else {
       indicatorT = 0.42;
+      driver.state.indicator = 0;
     }
 
     skyRig.follow(vehicle.root.position);

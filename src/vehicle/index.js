@@ -258,9 +258,14 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
   // the spill note above), nothing by day or at dusk, where the dirt under
   // the bumper is lit by the sky.
   const BEAM = {
-    off: { beam: 0, bar: 0, head: 1.6, amber: 1.1, tail: 1.6, lens: 0, cover: 0, spill: 0 },
-    dusk: { beam: 22, bar: 26, head: 2.4, amber: 1.9, tail: 2.6, lens: 0.3, cover: 0.15, spill: 0 },
-    night: { beam: 40, bar: 46, head: 9.0, amber: 3.2, tail: 4.0, lens: 2.2, cover: 0.3, spill: 10 },
+    // `amber` (the marker lamps) and `tail` are running levels and stay under
+    // the night bloom threshold (2.0): at 3.2 and 4.0 every rear cell wore a
+    // bloom halo all night and the halos merged into one orange smear on the
+    // back of the truck. The brake lamp (11) and a ticking indicator (`blink`)
+    // are the ones meant to bloom.
+    off: { beam: 0, bar: 0, head: 1.6, amber: 1.1, tail: 1.6, blink: 5.0, lens: 0, cover: 0, spill: 0 },
+    dusk: { beam: 22, bar: 26, head: 2.4, amber: 1.3, tail: 1.7, blink: 6.0, lens: 0.3, cover: 0.15, spill: 0 },
+    night: { beam: 40, bar: 46, head: 9.0, amber: 1.5, tail: 1.8, blink: 6.0, lens: 2.2, cover: 0.3, spill: 10 },
   };
   // a lit lamp in daylight or under cloud is a lamp lit against a bright frame
   BEAM.day = BEAM.dusk;
@@ -278,7 +283,7 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
 
   // Every lamp material carries the lit-lamp shaping from `applyLampGlow`
   // (hot core, bleached centre, glowing dish); `uLampOn` is the switch for it.
-  const lampKeys = ['headlight', 'taillight', 'amber', 'reverseLamp', 'lensClear', 'lensRibbed', 'barCover', 'reflector', 'barReflector'];
+  const lampKeys = ['headlight', 'taillight', 'amber', 'indicator', 'reverseLamp', 'lensClear', 'lensRibbed', 'barCover', 'reflector', 'barReflector'];
   function setLampGlow(on) {
     for (const key of lampKeys) {
       const u = materials[key]?.userData?.lamp;
@@ -377,6 +382,16 @@ export function createVehicle({ env = null, terrain = null, quality = pageQualit
       materials.reverseLamp.emissiveIntensity = reversing ? 7.0 : state.lightsOn ? 0 : 0.9;
       const g = materials.reverseLamp.userData.lamp;
       if (g) g.uLampOn.value = reversing ? 1 : 0;
+    }
+    // Indicators light with the relay (`drive.indicator`: 0 off, 1 on this
+    // tick) and are otherwise a dead orange lens - dimmer still with the
+    // lamps on, where the unlit cell beside a lit tail cell would read lit.
+    if (materials.indicator) {
+      const blink = drive.indicator > 0;
+      const lv = state.lightsOn ? BEAM[state.hour] ?? BEAM.night : BEAM.off;
+      materials.indicator.emissiveIntensity = blink ? lv.blink : state.lightsOn ? 0.15 : 0.5;
+      const g = materials.indicator.userData.lamp;
+      if (g) g.uLampOn.value = blink ? 1 : 0;
     }
 
     state.wheelAngle += (speed / S.wheelRadius) * dt;

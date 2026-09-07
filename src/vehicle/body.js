@@ -61,6 +61,7 @@ const UV_SCALE = {
   headlight: 'keep',
   taillight: 'keep',
   amber: 'keep',
+  indicator: 'keep',
   reverseLamp: 'keep',
   reflectorRed: 'keep',
   decalName: 'keep',
@@ -79,7 +80,7 @@ const KEEP_ATTRS = ['position', 'normal', 'uv', 'lampHot'];
  * get it written automatically as they are added, in the part's own frame
  * before placement; a bulb (`headlight`) is the source and is hot all over.
  */
-export const LAMP_HOT = { headlight: 1, taillight: 'z', amber: 'z', reverseLamp: 'z', lensClear: 'z', lensRibbed: 'z' };
+export const LAMP_HOT = { headlight: 1, taillight: 'z', amber: 'z', indicator: 'z', reverseLamp: 'z', lensClear: 'z', lensRibbed: 'z' };
 
 export function hotSpot(geo, mode = 'z') {
   const pos = geo.attributes.position;
@@ -116,7 +117,7 @@ export function lampReady(key, geo, mode = LAMP_HOT[key]) {
 // The panes too: a depth pass has no alpha, so a 26 per cent windscreen would
 // throw a *solid* shadow across the whole dash and the cabin daylight model is
 // built on the sun coming through it.
-const UNSHADOWED = new Set(['reflector', 'barReflector', 'headlight', 'lensClear', 'lensRibbed', 'amber', 'taillight', 'reverseLamp', 'glass', 'glassSide', 'glassDark']);
+const UNSHADOWED = new Set(['reflector', 'barReflector', 'headlight', 'lensClear', 'lensRibbed', 'amber', 'indicator', 'taillight', 'reverseLamp', 'glass', 'glassSide', 'glassDark']);
 
 /**
  * `Kit.emit` with the per-piece recentring done right.
@@ -1951,8 +1952,10 @@ function fascia(k) {
     k.add('lensClear', lensDome(0.085), { pos: [mainX, LAMP_Y, FZ + 0.03] });
     k.add('chrome', new THREE.TorusGeometry(0.087, 0.008, 8, 24), { pos: [mainX, LAMP_Y, FZ + 0.032] });
 
-    // inboard stack: amber indicator over a clear driving lamp
-    for (const [dy, lens] of [[0.062, 'amber'], [-0.062, 'lensClear']]) {
+    // inboard stack: amber indicator over a clear driving lamp. The indicator
+    // is its own material: it lights only while the relay ticks, where the
+    // marker lamps on the `amber` key run all night.
+    for (const [dy, lens] of [[0.062, 'indicator'], [-0.062, 'lensClear']]) {
       const sy = LAMP_Y + dy;
       reflectorBowl(k, { cx: stackX, cy: sy, cz: FZ + 0.026, r: 0.046, depth: 0.016, steps: 2, seg: 16 });
       if (lens === 'lensClear') {
@@ -2458,7 +2461,7 @@ function doorMirror(k, sd, beltY) {
   // points up the road, outboard of the knuckle boss.
   k.add('trim', gbox(0.03, 0.062, 0.05, 0.01), { pos: put(-0.084, 0.03, 0.03), quat: BOX });
   k.add('gap', gbox(0.012, 0.048, 0.038, 0.002), { pos: put(-0.094, 0.03, 0.03), quat: BOX });
-  k.add('amber', gbox(0.01, 0.038, 0.028, 0.003), { pos: put(-0.0955, 0.03, 0.03), quat: BOX });
+  k.add('indicator', gbox(0.01, 0.038, 0.028, 0.003), { pos: put(-0.0955, 0.03, 0.03), quat: BOX });
   for (const dw of [-0.026, 0.026]) {
     k.add('chrome', gbox(0.012, 0.006, 0.034, 0.002), { pos: put(-0.094, 0.03, 0.03 + dw), quat: BOX });
   }
@@ -3019,7 +3022,7 @@ function bed(k) {
     // way of showing it was backing up
     for (const [dy, h, key] of [
       [0.14, 0.14, 'taillight'],
-      [0.02, 0.085, 'amber'],
+      [0.02, 0.085, 'indicator'],
       [-0.075, 0.085, 'reverseLamp'],
       [-0.16, 0.05, 'reflectorRed'],
     ]) {
