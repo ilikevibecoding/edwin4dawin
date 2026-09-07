@@ -515,7 +515,8 @@ if (facadeGlass > 0.0) {
       rough = 0.42; metal = 0.55;
     }
   } else if (isTop) {
-    if (style == 5.0) {
+    if (style == 5.0 && vStyle2.w < 1.5) {
+      // the flat cap of a pitched house body (a hip's ridge plate)
       col = roofPalette(vStyle.w) * (0.9 + 0.2 * vnoise(vWorldPosF.xz * 1.5));
       rough = 0.85;
     } else if (style == 12.0) {
@@ -531,12 +532,6 @@ if (facadeGlass > 0.0) {
       float hLegs = step(abs(c.y), vDims.x * 0.28) * step(abs(abs(c.x) - vDims.x * 0.2), vDims.x * 0.045);
       col = mix(vec3(0.24, 0.25, 0.26), vec3(0.9), clamp(ring + hBar + hLegs, 0.0, 1.0) * 0.85);
       rough = 0.8;
-    } else if (style == 4.0) {
-      col = vec3(0.52, 0.53, 0.54) * (0.9 + 0.2 * vnoise(vWorldPosF.xz * 0.4));
-      // skylight strips on warehouses
-      float sky = step(0.8, fract(meters.z / 12.0)) * step(2.0, meters.x) * step(meters.x, vDims.x - 2.0);
-      col = mix(col, vec3(0.75, 0.8, 0.85), sky * 0.7);
-      rough = 0.7;
     } else {
       // Flat roofs: one of five roof families per building, at weathered albedos. Glass and stone towers lean
       // to ballast and dark sheet, stucco and precast to the pale coating, brick to bitumen. Each has the marks
@@ -547,13 +542,34 @@ if (facadeGlass > 0.0) {
       float wide = smoothstep(600.0, 1400.0, vDims.x * vDims.z);
       float mk = hash11(seed * 4.7 + 1.9) + (glassy || style == 9.0 ? 0.25 : style == 10.0 ? 0.15 : style == 3.0 || style == 6.0 ? -0.1 : 0.0) + 0.15 * wide;
       int rfam = mk < 0.17 ? 0 : mk < 0.38 ? 1 : mk < 0.7 ? 2 : mk < 0.95 ? 3 : (glassy ? 3 : 4);
+      // the sheds and big boxes: metal decking on most (family 5), white TPO on the newer boxes, grey coating on a few
+      if (style == 4.0) { float ik = hash11(seed * 4.7 + 1.9); rfam = ik < 0.5 ? 5 : ik < 0.82 ? 0 : 1; }
+      // a flat-roofed house or garage: its block's roof colour (city.ts roofPalette index) names the family, the
+      // tile colours standing for what a flat roof of that block would carry (terracotta blocks: the white coating
+      // of a Miami flat roof; the dark tile blocks: bitumen; teal: standing seam)
+      if (style == 5.0) { float k = vStyle.w; rfam = k < 0.5 ? 0 : k < 1.5 ? 1 : k < 2.5 ? 0 : k < 3.5 ? 3 : k < 4.5 ? 4 : k < 5.5 ? 2 : k < 6.5 ? 0 : 3; }
       float roofPx = fwidth(vWorldPosF.x) + fwidth(vWorldPosF.z);
       float fine = 1.0 - smoothstep(0.15, 0.6, roofPx);   // sub-metre marks
       float midv = 1.0 - smoothstep(0.6, 2.5, roofPx);    // metre-scale marks
       float n1 = vnoise(vWorldPosF.xz * 0.6), n2 = vnoise(vWorldPosF.xz * 0.25 + seed);
       float longX = step(vDims.z, vDims.x);
       float across = mix(meters.x, meters.z, longX), acrossW = mix(vDims.x, vDims.z, longX);
-      if (rfam == 0) {
+      float along = mix(meters.z, meters.x, longX);
+      if (rfam == 5) {
+        // industrial metal decking: galvanised grey (a third of it weathered white, a few sheds rusting), the
+        // ribs every 0.3 m across the roof, the panel laps every 3.6 m along it, a rust bloom where the water
+        // sits and streaks down-slope from the fixings; skylight strips on half the sheds every 12 m bay
+        float mh = hash11(seed * 6.6);
+        vec3 mc = mh < 0.55 ? vec3(0.34, 0.35, 0.36) : mh < 0.85 ? vec3(0.46, 0.46, 0.44) : vec3(0.30, 0.27, 0.24);
+        col = mc * (0.9 + 0.2 * n1);
+        col *= 1.0 - 0.16 * fpulse(across / 0.3, 0.0, 0.12, fwidth(across) / 0.3) * fine;
+        col *= 1.0 - 0.1 * fpulse(along / 3.6, 0.0, 0.03, fwidth(along) / 3.6) * midv;
+        float rust = smoothstep(0.55, 0.8, vnoise(vWorldPosF.xz * 0.35 + seed * 3.0)) * (mh > 0.85 ? 0.8 : 0.25 * step(0.6, hash11(seed * 2.2)));
+        col = mix(col, vec3(0.30, 0.16, 0.09), rust * (0.6 + 0.4 * vnoise(vWorldPosF.xz * 2.0)));
+        float sky = fpulse(along / 12.0, 0.3, 0.38, fwidth(along) / 12.0) * step(2.0, across) * step(across, acrossW - 2.0) * step(0.5, hash11(seed * 8.1));
+        col = mix(col, vec3(0.62, 0.68, 0.72), sky * 0.75);
+        rough = mix(0.55, 0.85, rust); metal = 0.35 * (1.0 - rust);
+      } else if (rfam == 0) {
         // pale TPO / PVC sheet, weathered to 0.5 (0.6 rendered near white beside the 0.55 concrete coping):
         // seams every 2 m, grime drifting into the corners and patches, the ponding stains darker
         col = vec3(0.50, 0.50, 0.48) * (0.88 + 0.24 * n1);
@@ -601,7 +617,7 @@ if (facadeGlass > 0.0) {
       // in for the rooftop kit only beyond its draw distance (city.ts ROOF_BIG_FAR).
       float edgeD = min(min(meters.x, vDims.x - meters.x), min(meters.z, vDims.z - meters.z));
       float wm = fwidth(edgeD);
-      float pH = (style < 0.5 || style == 8.0 || style == 11.0) ? 0.45 : 0.55 + 0.6 * hash11(seed * 7.7);
+      float pH = (style < 0.5 || style == 8.0 || style == 11.0) ? 0.45 : (style == 4.0 || style == 5.0) ? 0.3 : 0.55 + 0.6 * hash11(seed * 7.7);
       vec3 copeC = (style == 10.0 || style == 1.0 || style == 3.0) ? mix(wall, vec3(0.8), 0.5) : vec3(0.78, 0.78, 0.76);
       col = mix(col, copeC, (1.0 - fstep(0.45, edgeD, wm)) * (style == 5.0 ? 0.0 : 0.85));
 #if NUM_DIR_LIGHTS > 0
@@ -1234,6 +1250,6 @@ if (facadeGlass > 0.0) {
   totalEmissiveRadiance += emis;
 }`);
   };
-  mat.customProgramCacheKey = () => 'facade-v16';
+  mat.customProgramCacheKey = () => 'facade-v17';
   return mat;
 }

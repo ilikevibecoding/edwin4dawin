@@ -523,6 +523,8 @@ interface PlaceOpts {
    *  and shopfronts on it and the loading dock on its pair (aStyle2.w = 10 + face); the ground-floor geometry
    *  (canopies, awnings, stoops) goes on the same face. Unset: the shader picks by hash. */
   front?: number;
+  /** sit on the lowest ground corner and grow by the drop (a low body on a slope is buried, never afloat) */
+  sink?: boolean;
 }
 
 export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>, nightUniform: THREE.IUniform<number>): CityBuild {
@@ -578,8 +580,9 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
 
   /** Places one instance sitting on the highest ground corner (so nothing floats). Returns the roof height or null. */
   const place = (kind: Kind, x: number, z: number, w: number, h: number, d: number, rot: number, color: string | THREE.Color, style: number, floorH: number, o: PlaceOpts = {}): number | null => {
-    let y = -Infinity;
-    for (const [px, pz] of corners(x, z, w, d, rot)) y = Math.max(y, map.heightAt(px, pz));
+    let y = -Infinity, yLow = Infinity;
+    for (const [px, pz] of corners(x, z, w, d, rot)) { const g = map.heightAt(px, pz); y = Math.max(y, g); yLow = Math.min(yLow, g); }
+    if (o.sink && yLow < y) { h += y - yLow; y = yLow; }
     if (o.yBase !== undefined) y = o.yBase;
     if (y < 0.9) return null;
     const col = color instanceof THREE.Color ? color : new THREE.Color(color);
@@ -676,6 +679,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     batches.add(kind, { x, y, z, w, h, d, rot, color: col, style, floorH: 3, seed: seedAt(x, z, y + h), roof: -1, lit: 0, warm: 0.5, variant: 0.5, form: 0 });
 
   const CAR_C = ['#e8e8e6', '#c9cccf', '#8f9397', '#2a2b2e', '#1d2a44', '#7a1e1e', '#b8342a', '#c9b79a', '#3b4a5a', '#5a6b4a', '#f1f1ef', '#151618', '#d8d5cc', '#6d6f73'].map((c) => new THREE.Color(c));
+  /** semi-trailers at the loading docks: white and silver boxes, the odd dark or branded one */
+  const TRAILER_C = ['#eeeeea', '#e4e4e0', '#d9dadb', '#c3c6c9', '#f2f2ee', '#8a8d90', '#2f4f7a', '#b8382c'].map((c) => new THREE.Color(c));
   const HEDGE_C = new THREE.Color('#2f4a22'), PLANTER_C = new THREE.Color('#6e6a62'), PATH_C = new THREE.Color('#8f8a80'), ASPHALT_C = new THREE.Color('#1c1c1e'), LAWN_C = new THREE.Color('#3a5a22');
   /** Parked cars on a lot or deck of `w` x `d` m (centre x, z, yaw rot, surface height `y`) on the stall layout the
    *  LOT / PARKING shader stripes (5 m rows either side of a 6.5 m aisle at a 17.1 m period across the lot, 2.6 m
@@ -783,7 +788,9 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
    *  rails, solar), `podium` a base that carries the building's heavy plant (cooling towers, RTUs, a screen wall)
    *  and skylights over the retail below. `block` lists what already stands on it (the upper tier, a lantern, fins)
    *  as (lx, lz, w, d) in the roof frame. Neither gets a penthouse, tank, helipad or spire of its own. */
-  type RoofOpts = { tier?: 'terrace' | 'podium'; block?: readonly (readonly [number, number, number, number])[]; round?: boolean };
+  type RoofOpts = { tier?: 'terrace' | 'podium'; block?: readonly (readonly [number, number, number, number])[]; round?: boolean;
+    /** a beachfront hotel: the main roof is a pool deck (amenityDeck) beside the bulkhead, with a light kit */
+    resort?: boolean };
   const addRoofDetail = (r0: Rng, x: number, z: number, tw: number, td: number, top: number, rot: number, h: number, fam: Family, opts: RoofOpts = {}) => {
     // one draw of the caller's rng seeds the roof's own, so the kit's item count never reshuffles the lots after it
     const r = new Rng(Math.floor(r0.next() * 4294967296));
@@ -796,6 +803,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     const grey = r.pick(GREYS);
     const area = tw * td;
     const round = opts.round === true;
+    const resort = opts.resort === true && main && !round && area > 250;
     const pk = new RoofPacker(tw / 2 - 1.2, td / 2 - 1.2, round);
     if (opts.block) for (const [bx, bz, bw, bd] of opts.block) pk.block(bx, bz, bw + 1.2, bd + 1.2);
     const y = top - 0.05;
@@ -807,21 +815,33 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
 
     // ---- coarse masses (seen from any distance)
     let pent: [number, number, number, number] | null = null;   // lx, lz, w, d
-    if (main && r.chance(0.7) && tw > 9 && td > 9) {
-      // mechanical penthouse / stair and lift bulkhead (centred on a drum so its corners stay inside the roof)
-      const pw = tw * r.range(0.25, round ? 0.4 : 0.45), pd = td * r.range(0.3, round ? 0.4 : 0.5);
-      const lx = round ? 0 : r.range(-tw * 0.22, tw * 0.22), lz = round ? 0 : r.range(-td * 0.2, td * 0.2);
+    if (main && (resort || r.chance(0.7)) && tw > 9 && td > 9) {
+      // mechanical penthouse / stair and lift bulkhead (centred on a drum so its corners stay inside the roof; at
+      // one end of a resort roof so the pool deck gets the rest)
+      const pw = tw * r.range(0.25, round ? 0.4 : resort ? 0.3 : 0.45), pd = td * r.range(0.3, round ? 0.4 : resort ? 0.4 : 0.5);
+      const alongX = tw >= td;
+      const lx = round ? 0 : resort ? (alongX ? (r.chance(0.5) ? 1 : -1) * (tw / 2 - pw / 2 - 1.2) : r.range(-tw * 0.1, tw * 0.1)) : r.range(-tw * 0.22, tw * 0.22);
+      const lz = round ? 0 : resort ? (alongX ? r.range(-td * 0.1, td * 0.1) : (r.chance(0.5) ? 1 : -1) * (td / 2 - pd / 2 - 1.2)) : r.range(-td * 0.2, td * 0.2);
       const [px, pz] = at(lx, lz);
       place('box', px, pz, pw, r.range(3, 6), pd, rot, glassy ? '#8d9296' : grey, S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
       pk.block(lx, lz, pw, pd);
       pent = [lx, lz, pw, pd];
     }
-    if (main && h > 40 && r.chance(0.35) && tw > 12) {
+    if (resort) {
+      // the rooftop pool deck of a beachfront hotel: over what the bulkhead leaves, behind the parapet rail
+      const deck = largestFree(tw - 2.4, td - 2.4, pent ? [pent] : [], 10);
+      if (deck) {
+        amenityDeck(r, at, deck[0], deck[1], deck[2] - 0.6, deck[3] - 0.6, top, rot, true);
+        pk.block(deck[0], deck[1], deck[2], deck[3]);
+      }
+      for (const [lx, lz, w, dd] of [[0, -td / 2 + 0.5, tw - 1.0, 0.06], [0, td / 2 - 0.5, tw - 1.0, 0.06], [-tw / 2 + 0.5, 0, 0.06, td - 1.0], [tw / 2 - 0.5, 0, 0.06, td - 1.0]] as const) item('roof', lx, lz, w, 1.1, dd, r.pick(RAIL_C), S.RAIL);
+    }
+    if (main && !resort && h > 40 && r.chance(0.35) && tw > 12) {
       // a second, smaller bulkhead (lift overrun) toward a corner
       const lx = tw * r.range(0.15, 0.32), lz = -td * r.range(0.1, 0.3);
       if (pk.free(lx, lz, 4, 4)) { const [px, pz] = at(lx, lz); place('box', px, pz, 3.2, 3.5, 3.2, rot, grey, S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 }); pk.block(lx, lz, 3.2, 3.2); }
     }
-    if (main && !glassy && h > 18 && r.chance(0.3) && tw > 9) {
+    if (main && !resort && !glassy && h > 18 && r.chance(0.3) && tw > 9) {
       // water tank on the older masonry blocks: a drum on four legs
       const dia = r.range(2.6, 4.4);
       const p = pk.find(r, dia, dia, 0.6, 8, [-tw * 0.34, -td * 0.3, -tw * 0.1, td * 0.3]);
@@ -844,7 +864,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         place('oct', px, pz, 2.6, r.range(2.2, 3.2), 2.6, yaw, r.pick(PLANT_COLS), S.PLANT, 3, { yBase: top - 0.2, margin: -1, roof: -1 });
       }
     }
-    if (!terrace && !round && h > 50 && r.chance(podium ? 0.4 : 0.28) && td > 12) {
+    if (!terrace && !round && !resort && h > 50 && r.chance(podium ? 0.4 : 0.28) && td > 12) {
       // louvred screen wall hiding the plant along one side
       const side = r.chance(0.5) ? 1 : -1;
       const lx = side * tw * 0.36, lz = r.range(-td * 0.15, td * 0.15), sd = td * r.range(0.45, 0.7);
@@ -960,7 +980,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     // railing along the parapet where the facade has no coping (the masonry families' coping is a trim); a
     // terrace or podium roof is walked on and railed more often than not
     const coping = !glassy && fam.style !== S.INDUSTRIAL && fam.style !== S.CONCRETE;
-    if (!round && (!coping || opts.tier) && r.chance(opts.tier ? 0.8 : 0.65) && tw > 8 && td > 8) {
+    if (!round && !resort && (!coping || opts.tier) && r.chance(opts.tier ? 0.8 : 0.65) && tw > 8 && td > 8) {
       const inset = coping ? 0.7 : 0.25;   // inside the coping trim where there is one
       item('roof', 0, -td / 2 + inset, tw - inset * 2, 1.1, 0.06, railCol, S.RAIL);
       item('roof', 0, td / 2 - inset, tw - inset * 2, 1.1, 0.06, railCol, S.RAIL);
@@ -973,7 +993,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
    *  boxes (roofbig, drawn to 1.6 km) in a count that follows the roof area, a solar row or a cell-antenna cluster
    *  on some, then the near layer (condensers, vents with rain caps, a hatch, a TV mast, the odd skylight). `block`
    *  lists what already stands on the roof (a bulkhead, a penthouse, a tank) in the roof's frame. */
-  const addSmallRoofKit = (r: Rng, x: number, z: number, tw: number, td: number, top: number, rot: number, block: readonly (readonly [number, number, number, number])[] = []) => {
+  const addSmallRoofKit = (r: Rng, x: number, z: number, tw: number, td: number, top: number, rot: number, block: readonly (readonly [number, number, number, number])[] = [], mode: 'flat' | 'shed' = 'flat') => {
     const cr = Math.cos(rot), sr = Math.sin(rot);
     const at = (ox: number, oz: number): [number, number] => [x + ox * cr - oz * sr, z + ox * sr + oz * cr];
     const pk = new RoofPacker(tw / 2 - 1.0, td / 2 - 1.0);
@@ -985,6 +1005,39 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     };
     const plantCol = r.pick(PLANT_C), ductCol = r.pick(DUCT_C);
     const area = tw * td;
+    const shed = mode === 'shed';
+    if (shed) {
+      // a warehouse or big box: its units in rows down the bays (one per 400-600 m2 of floor), a run of skylight
+      // domes along a bay on some, exhaust stacks and a wall-hung condenser set, a roof-access hatch by the office
+      const alongX = tw >= td, L = Math.max(tw, td), W = Math.min(tw, td);
+      const nRows = clamp(Math.round(W / 14), 1, 3), per = clamp(Math.round(L / 16), 1, 6);
+      const pc2 = r.pick(PLANT_C);
+      for (let k = 0; k < nRows; k++) {
+        const off = (k - (nRows - 1) / 2) * (W / (nRows + 0.3));
+        for (let i = 0; i < per; i++) {
+          if (r.chance(0.2)) continue;
+          const a = (i - (per - 1) / 2) * (L / (per + 0.4)) + r.range(-1.5, 1.5);
+          const w = r.range(2.2, 3.8), d = r.range(1.6, 2.6);
+          const lx = alongX ? a : off, lz = alongX ? off : a;
+          if (!pk.free(lx, lz, w + 1.2, d + 1.2)) continue;
+          pk.block(lx, lz, w, d);
+          item('roofbig', lx, lz, w, r.range(1.1, 1.9), d, r.chance(0.7) ? plantCol : pc2, S.PLANT);
+        }
+      }
+      if (r.chance(0.5)) {
+        // a row of skylight domes down one bay
+        const n = clamp(Math.floor(L / 6), 2, 10), off = (r.chance(0.5) ? 1 : -1) * W * r.range(0.12, 0.3);
+        for (let i = 0; i < n; i++) {
+          const a = (i - (n - 1) / 2) * 6;
+          const lx = alongX ? a : off, lz = alongX ? off : a;
+          if (pk.free(lx, lz, 2.4, 2.4)) { pk.block(lx, lz, 2.0, 2.0); item('roofbig', lx, lz, 1.9, 0.6, 1.9, SKY_C, S.SKYLIGHT); }
+        }
+      }
+      for (let i = 0, n = r.int(1, 4); i < n; i++) { const dia = r.range(0.5, 1.1); const p = pk.find(r, dia, dia, 0.4, 6); if (p) item('roofcyl', p[0], p[1], dia, r.range(2.5, 6), dia, ductCol, S.DUCT); }
+      if (r.chance(0.35)) { const p = pk.find(r, 3.0, 3.0, 0.6, 6); if (p) { item('roofcyl', p[0], p[1], 2.8, 2.4, 2.8, r.pick(GREY_C), S.CONCRETE, y + 1.2); for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) item('roof', p[0] + sx * 0.9, p[1] + sz * 0.9, 0.18, 1.2, 0.18, TANK_LEG_C, S.DUCT); } }
+      if (r.chance(0.6)) { const p = pk.find(r, 0.9, 0.9, 0.3, 6, [-tw / 2 + 1, -td / 2 + 1, -tw / 2 + 8, td / 2 - 1]); if (p) item('roof', p[0], p[1], 0.9, 0.5, 0.9, r.pick(GREY_C), S.CONCRETE); }
+      return;
+    }
     // rooftop units with a short duct to the nearest bulkhead side
     const nRtu = area > 180 ? clamp(Math.round(area / 260 + r.range(-0.5, 1.0)), 1, 5) : r.chance(0.5) ? 1 : 0;
     for (let i = 0; i < nRtu; i++) {
@@ -1104,6 +1157,77 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     return best;
   };
 
+  /** An amenity deck over the rectangle (fx, fz) x (fw, fd) of a roof (roof frame; `at` maps to world): pavers, a
+   *  pool with its coping and a row of sun loungers, a lawn, a pergola on posts, cabanas, planters with hedges. A
+   *  `resort` deck (a beachfront hotel's roof or pool wing) gets the bigger pool, loungers on both sides, a run of
+   *  cabanas and a bar pavilion instead of the lawn: the deck is the building's programme, not an afterthought. */
+  const amenityDeck = (r: Rng, at: (ox: number, oz: number) => [number, number], fx: number, fz: number, fw: number, fd: number, top: number, rot: number, resort = false) => {
+    const [dx, dz] = at(fx, fz);
+    const dtop = place('box', dx, dz, fw, 0.14, fd, rot, r.pick(resort ? ['#e2dccd', '#d9d3c4', '#cfc9bb'] : ['#d9d3c4', '#cfc9bb', '#c8c2b6']), S.PLAZA, 3, { yBase: top - 0.02, margin: -1 });
+    if (dtop === null) return;
+    const pk = new RoofPacker(fw / 2 - 1.0, fd / 2 - 1.0);
+    const pwd = Math.min(fw * (resort ? 0.6 : 0.5), r.range(resort ? 14 : 10, resort ? 26 : 18)), pdd = Math.min(fd * 0.5, r.range(resort ? 7 : 5, resort ? 12 : 9));
+    const pool = pk.find(r, pwd + 2.0, pdd + 2.0, 1.0, 8);
+    if (pool) {
+      const [qx, qz] = at(fx + pool[0], fz + pool[1]);
+      place('house', qx, qz, pwd, 0.3, pdd, rot, '#3fc4de', S.POOL, 3, { yBase: dtop - 0.05, form: 2, margin: -1 });
+      pk.block(pool[0], pool[1], pwd + 2.0, pdd + 2.0);
+      // sun loungers along one long side (both on a resort), in twos with a gap
+      const sides = resort ? [1, -1] : [r.chance(0.5) ? 1 : -1];
+      for (const side of sides) {
+        const lc = r.pick(LOUNGER_C);
+        for (let i = 0, n = Math.floor(pwd / 1.6); i < n; i++) {
+          if (i % 3 === 2) continue;
+          const [lx, lz] = at(fx + pool[0] - pwd / 2 + 0.8 + i * 1.6, fz + pool[1] + side * (pdd / 2 + 1.6));
+          kit('trim', lx, dtop, lz, 0.7, 0.35, 1.9, rot, i % 5 === 4 ? r.pick(LOUNGER_C) : lc, S.CONCRETE);
+        }
+        pk.block(pool[0], pool[1] + side * (pdd / 2 + 1.6), pwd, 2.2);
+      }
+    }
+    if (resort) {
+      // the bar pavilion: a flat canopy on posts with its counter under it; a row of cabanas along one edge
+      const bar = pk.find(r, 8, 6, 0.8, 8);
+      if (bar) {
+        const [gx, gz] = at(fx + bar[0], fz + bar[1]);
+        kit('roofbig', gx, dtop + 3.2, gz, 7.6, 0.3, 5.6, rot, r.pick(CANOPY_C), S.CONCRETE);
+        for (const [sx, sz] of [[-3.5, -2.5], [3.5, -2.5], [3.5, 2.5], [-3.5, 2.5]]) { const [ux, uz] = at(fx + bar[0] + sx, fz + bar[1] + sz); kit('roof', ux, dtop, uz, 0.25, 3.2, 0.25, rot, TRIM_LIGHT, S.CONCRETE); }
+        kit('roof', gx, dtop, gz, 4.5, 1.1, 0.8, rot, r.pick(GREY_C), S.CONCRETE);
+        pk.block(bar[0], bar[1], 8, 6);
+      }
+      const along = fw >= fd;
+      for (let i = 0, n = r.int(2, 5); i < n; i++) {
+        const p = pk.find(r, 3.4, 3.4, 0.5, 6, along ? [-fw / 2 + 1, fd / 2 - 4.5, fw / 2 - 1, fd / 2 - 1] : [fw / 2 - 4.5, -fd / 2 + 1, fw / 2 - 1, fd / 2 - 1]);
+        if (!p) break;
+        const [cx, cz] = at(fx + p[0], fz + p[1]);
+        place('box', cx, cz, 3.0, 2.6, 3.0, rot, r.pick(['#f1eee6', '#e9e2d4', '#dfe6e3']), S.CONCRETE, 3, { yBase: dtop - 0.1, margin: -1 });
+        kit('roof', cx, dtop + 2.5, cz, 3.6, 0.2, 3.6, rot, r.pick(AWNING_C), S.CONCRETE);
+      }
+    } else {
+      // lawn
+      const lw = Math.min(fw * 0.4, r.range(7, 14)), ld = Math.min(fd * 0.4, r.range(5, 10));
+      const lawn = pk.find(r, lw + 0.6, ld + 0.6, 0.8, 8);
+      if (lawn) { const [lx, lz] = at(fx + lawn[0], fz + lawn[1]); place('box', lx, lz, lw, 0.16, ld, rot, LAWN_C, S.LAWN, 3, { yBase: dtop - 0.06, margin: -1 }); pk.block(lawn[0], lawn[1], lw + 0.6, ld + 0.6); }
+    }
+    // pergola: a slatted roof on four posts
+    const perg = pk.find(r, 6, 4.5, 0.8, 8);
+    if (perg) {
+      const [gx, gz] = at(fx + perg[0], fz + perg[1]);
+      kit('roof', gx, dtop + 2.8, gz, 5.6, 0.25, 4.1, rot, CANOPY_PALE_C, S.RAIL);
+      for (const [sx, sz] of [[-2.6, -1.85], [2.6, -1.85], [2.6, 1.85], [-2.6, 1.85]]) { const [ux, uz] = at(fx + perg[0] + sx, fz + perg[1] + sz); kit('roof', ux, dtop, uz, 0.2, 2.8, 0.2, rot, TRIM_LIGHT, S.CONCRETE); }
+      pk.block(perg[0], perg[1], 6, 4.5);
+    }
+    // cabanas, planters with hedges
+    if (!resort) for (let i = 0, n = r.int(0, 2); i < n; i++) { const p = pk.find(r, 3.2, 3.2, 0.6, 6); if (p) { const [cx, cz] = at(fx + p[0], fz + p[1]); place('box', cx, cz, 3.0, 2.7, 3.0, rot, '#f1eee6', S.CONCRETE, 3, { yBase: dtop - 0.1, margin: -1 }); pk.block(p[0], p[1], 3.2, 3.2); } }
+    for (let i = 0, n = r.int(3, 8); i < n; i++) {
+      const along = r.chance(0.5), len = r.range(3, 8);
+      const p = pk.find(r, along ? len : 1.0, along ? 1.0 : len, 0.5, 6);
+      if (!p) continue;
+      const [hx, hz] = at(fx + p[0], fz + p[1]);
+      kit('roof', hx, dtop - 0.02, hz, along ? len : 0.9, 0.5, along ? 0.9 : len, rot, PLANTER_C, S.CONCRETE);
+      kit('roof', hx, dtop + 0.45, hz, along ? len - 0.2 : 0.7, r.range(0.7, 1.3), along ? 0.7 : len - 0.2, rot, HEDGE_C, S.LAWN);
+    }
+  };
+
   /** The roof of a podium (the 3-8 storey base a tower rises from), the largest roof surfaces in the CBD and the
    *  ones that read blank from 200-500 m when left to the membrane: a parking deck (striped, its cars, ramp hood,
    *  light masts), an amenity deck (pavers, a pool and its deck, lawn, planters, a pergola, cabanas) on the
@@ -1138,47 +1262,9 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       }
       used.push([fx, fz, fw, fd]);
     } else if (prog === 1 && free) {
-      // amenity deck: pavers over the free rectangle, a pool with its coping, a lawn, planters with hedges,
-      // a pergola on posts and two cabana boxes; the residents' side of a Miami podium
+      // amenity deck over the free rectangle; the residents' side of a Miami podium
       const [fx, fz, fw, fd] = [free[0], free[1], free[2] - 2.0, free[3] - 2.0];
-      const [dx, dz] = at(fx, fz);
-      const dtop = place('box', dx, dz, fw, 0.14, fd, rot, r.pick(['#d9d3c4', '#cfc9bb', '#c8c2b6']), S.PLAZA, 3, { yBase: top - 0.02, margin: -1 });
-      if (dtop !== null) {
-        const pk = new RoofPacker(fw / 2 - 1.0, fd / 2 - 1.0);
-        const pwd = Math.min(fw * 0.5, r.range(10, 18)), pdd = Math.min(fd * 0.5, r.range(5, 9));
-        const pool = pk.find(r, pwd + 2.0, pdd + 2.0, 1.0, 8);
-        if (pool) {
-          const [qx, qz] = at(fx + pool[0], fz + pool[1]);
-          place('house', qx, qz, pwd, 0.3, pdd, rot, '#3fc4de', S.POOL, 3, { yBase: dtop - 0.05, form: 2, margin: -1 });
-          pk.block(pool[0], pool[1], pwd + 2.0, pdd + 2.0);
-          // sun loungers along one long side
-          const side = r.chance(0.5) ? 1 : -1;
-          for (let i = 0, n = Math.floor(pwd / 1.6); i < n; i++) { const [lx, lz] = at(fx + pool[0] - pwd / 2 + 0.8 + i * 1.6, fz + pool[1] + side * (pdd / 2 + 1.6)); kit('trim', lx, dtop, lz, 0.7, 0.35, 1.9, rot, r.pick(LOUNGER_C), S.CONCRETE); }
-          pk.block(pool[0], pool[1] + side * (pdd / 2 + 1.6), pwd, 2.2);
-        }
-        // lawn
-        const lw = Math.min(fw * 0.4, r.range(7, 14)), ld = Math.min(fd * 0.4, r.range(5, 10));
-        const lawn = pk.find(r, lw + 0.6, ld + 0.6, 0.8, 8);
-        if (lawn) { const [lx, lz] = at(fx + lawn[0], fz + lawn[1]); place('box', lx, lz, lw, 0.16, ld, rot, LAWN_C, S.LAWN, 3, { yBase: dtop - 0.06, margin: -1 }); pk.block(lawn[0], lawn[1], lw + 0.6, ld + 0.6); }
-        // pergola: a slatted roof on four posts
-        const perg = pk.find(r, 6, 4.5, 0.8, 8);
-        if (perg) {
-          const [gx, gz] = at(fx + perg[0], fz + perg[1]);
-          kit('roof', gx, dtop + 2.8, gz, 5.6, 0.25, 4.1, rot, CANOPY_PALE_C, S.RAIL);
-          for (const [sx, sz] of [[-2.6, -1.85], [2.6, -1.85], [2.6, 1.85], [-2.6, 1.85]]) { const [ux, uz] = at(fx + perg[0] + sx, fz + perg[1] + sz); kit('roof', ux, dtop, uz, 0.2, 2.8, 0.2, rot, TRIM_LIGHT, S.CONCRETE); }
-          pk.block(perg[0], perg[1], 6, 4.5);
-        }
-        // cabanas, planters with hedges
-        for (let i = 0, n = r.int(0, 2); i < n; i++) { const p = pk.find(r, 3.2, 3.2, 0.6, 6); if (p) { const [cx, cz] = at(fx + p[0], fz + p[1]); place('box', cx, cz, 3.0, 2.7, 3.0, rot, '#f1eee6', S.CONCRETE, 3, { yBase: dtop - 0.1, margin: -1 }); pk.block(p[0], p[1], 3.2, 3.2); } }
-        for (let i = 0, n = r.int(3, 8); i < n; i++) {
-          const along = r.chance(0.5), len = r.range(3, 8);
-          const p = pk.find(r, along ? len : 1.0, along ? 1.0 : len, 0.5, 6);
-          if (!p) continue;
-          const [hx, hz] = at(fx + p[0], fz + p[1]);
-          kit('roof', hx, dtop - 0.02, hz, along ? len : 0.9, 0.5, along ? 0.9 : len, rot, PLANTER_C, S.CONCRETE);
-          kit('roof', hx, dtop + 0.45, hz, along ? len - 0.2 : 0.7, r.range(0.7, 1.3), along ? 0.7 : len - 0.2, rot, HEDGE_C, S.LAWN);
-        }
-      }
+      amenityDeck(r, at, fx, fz, fw, fd, top, rot);
       used.push([fx, fz, fw, fd]);
     } else if (prog === 3 && free) {
       // green roof: sedum / turf over the free rectangle with a paver path across it
@@ -1194,7 +1280,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
   };
 
   /** Massing recipes for towers. Returns the roof height of the main body. */
-  const buildTower = (r: Rng, x: number, z: number, rot: number, fw: number, fd: number, h: number, fam: Family, recipe: number, detail = true, pastel = -1, front?: number): number | null => {
+  const buildTower = (r: Rng, x: number, z: number, rot: number, fw: number, fd: number, h: number, fam: Family, recipe: number, detail = true, pastel = -1, front?: number, resort = false): number | null => {
     const lk = look(fam, r, pastel);
     const o: PlaceOpts = { lit: lk.lit, warm: lk.warm, variant: lk.variant, front };
     const cr = Math.cos(rot), sr = Math.sin(rot);
@@ -1380,7 +1466,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     }
     if (top !== null && detail) {
       const [dx, dz] = recipe === 3 ? at(-fw * 0.2, 0) : recipe === 4 ? at((fw * 0.41 + fw * 0.18) / 2, 0) : [x, z];
-      addRoofDetail(r, dx, dz, tw, td, top, rot, h, fam, { round: recipe === 7 });
+      addRoofDetail(r, dx, dz, tw, td, top, rot, h, fam, { round: recipe === 7, resort });
     }
     return top;
   };
@@ -2105,26 +2191,67 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         interior(plan, frng, 13, frng.chance(0.75));
       }
 
+      /** A beachfront hotel block (district local +x is the ocean side, -x the avenue): the tower (a slab parallel
+       *  to the beach or a point block), its entrance on the avenue, a rooftop pool deck on most of the flat-roofed
+       *  slabs, the pool wing toward the beach (a low podium whose whole roof is the resort deck: pool, loungers,
+       *  cabanas, bar), and the guests' parking behind it on the avenue: a striped lot or a deck structure. */
       function fillHotel(): void {
-        // slabs parallel to the beach (district local x is across the island)
         const slab = drng.chance(0.65);
         const fw = slab ? drng.range(18, 30) : drng.range(24, 40);
         const fd = slab ? Math.min(bd * 0.85, drng.range(50, 95)) : drng.range(24, 40);
-        const [x, z] = toWorld((bx0 + bx1) / 2 + drng.range(-6, 6), (bz0 + bz1) / 2);
+        const lx = (bx0 + bx1) / 2 + drng.range(-6, 6), lz = (bz0 + bz1) / 2;
+        const [x, z] = toWorld(lx, lz);
         if (!landOK(x, z, fw, fd, d.rot) || !areaFree(x, z, fw + 4, fd + 4, d.rot)) return;
+        // the block's own bookkeeping (exact rectangles): the wing and the parking stand a few metres from the
+        // tower, inside the 10 m cells its footprint marks
+        const plan = new BlockPlan(bx0, bz0, bx1, bz1, foreignReader());
+        plan.take(lx, lz, fw, fd);
         const h = lerp(d.hMin, d.hMax, Math.pow(drng.next(), 1.5));
         const fam = slab
           ? pickWeighted(drng, [[FAM.hotel, 0.55], [FAM.balcony, 0.25], [FAM.deco, 0.2]] as const)
           : pickWeighted(drng, [[FAM.glassGreen, 0.3], [FAM.balcony, 0.25], [FAM.deco, 0.2], [FAM.glassBlue, 0.15], [FAM.punched, 0.1]] as const);
         const rr = drng.next();
         const recipe = slab ? 0 : rr < 0.3 ? 7 : rr < 0.5 ? 1 : rr < 0.6 ? 8 : 0;
-        buildTower(drng, x, z, d.rot, fw, fd, h, fam, recipe);
-        // pool deck / low wing toward the beach
-        const [px, pz] = toWorld((bx0 + bx1) / 2 + fw * 0.5 + 12, (bz0 + bz1) / 2);
-        if (landOK(px, pz, 18, fd * 0.7, d.rot) && areaFree(px, pz, 18, fd * 0.7, d.rot)) {
-          const lk = look(FAM.punched, drng);
-          const top = place('box', px, pz, 18, drng.range(4, 9), fd * 0.7, d.rot, lk.tint, S.PUNCHED, 3.2, { lit: lk.lit, warm: lk.warm });
-          if (top !== null && drng.chance(0.7)) place('house', px, pz, drng.range(6, 10), 0.4, Math.min(fd * 0.4, drng.range(12, 24)), d.rot, '#3fc4de', S.POOL, 3, { yBase: top, form: 2, margin: -1 });
+        // the roof: a pool deck on most slabs and flat point blocks (a resort's top floor is its terrace), the
+        // bulkhead-and-kit roof on the rest
+        const resort = (recipe === 0 || recipe === 1) && drng.chance(slab ? 0.65 : 0.5);
+        const top = buildTower(drng, x, z, d.rot, fw, fd, h, fam, recipe, true, -1, 2, resort);
+        if (top === null) return;
+        groundFloor(frng, x, z, fw, fd, d.rot, 2, fam, h, false);
+        // the pool wing toward the beach: a 1-2 storey podium whose roof is the resort deck; its beach face is
+        // glazed (the restaurant and the spa look at the sea)
+        const ww = Math.min(bx1 - (lx + fw / 2) - 4, frng.range(16, 26)), wd = Math.min(fd * frng.range(0.7, 0.95), bd - 6);
+        if (ww >= 12) {
+          const wx = lx + fw / 2 + ww / 2 + 1.0;
+          const [px, pz] = toWorld(wx, lz);
+          if (landOK(px, pz, ww, wd, d.rot) && plan.free(wx, lz, ww, wd)) {
+            const wfam = frng.chance(0.5) ? FAM.concrete : FAM.grid;
+            const lk = look(wfam, frng);
+            const wh = frng.chance(0.6) ? 4.6 : 8.2;
+            const wtop = place('box', px, pz, ww, wh, wd, d.rot, lk.tint, wfam.style, wfam === FAM.grid ? 3.8 : 3.2, { lit: 0.5, warm: lk.warm, variant: lk.variant, front: 3, margin: 0, sink: true });
+            plan.take(wx, lz, ww, wd);
+            if (wtop !== null) {
+              const cr = Math.cos(d.rot), sr = Math.sin(d.rot);
+              const at = (ox: number, oz: number): [number, number] => [px + ox * cr - oz * sr, pz + ox * sr + oz * cr];
+              amenityDeck(frng, at, 0, 0, ww - 2.4, wd - 2.4, wtop, d.rot, true);
+              for (const [ox, oz, w, dd] of [[0, -wd / 2 + 0.5, ww - 1.0, 0.06], [0, wd / 2 - 0.5, ww - 1.0, 0.06], [-ww / 2 + 0.5, 0, 0.06, wd - 1.0], [ww / 2 - 0.5, 0, 0.06, wd - 1.0]] as const) {
+                const [rx, rz] = at(ox, oz);
+                kit('roof', rx, wtop - 0.05, rz, w, 1.1, dd, d.rot, frng.pick(RAIL_C), S.RAIL);
+              }
+            }
+          }
+        }
+        // the guests' parking on the avenue side: a striped lot (its cars) or, on the taller hotels, a 2-3 deck
+        // structure the width of the tower
+        const pw = lx - fw / 2 - bx0 - 4;
+        if (pw >= 14) {
+          const pcx = bx0 + pw / 2 + 1.0, pd = Math.min(bd - 4, fd + frng.range(0, 20));
+          const [qx, qz] = toWorld(pcx, lz);
+          if (landOK(qx, qz, pw, pd, d.rot) && plan.free(pcx, lz, pw, pd)) {
+            if (h > 60 && pw >= 18 && frng.chance(0.45)) parkingDeck(frng, pcx, lz, Math.min(pw, 34), Math.min(pd, 48), frng.int(2, 3));
+            else { const ltop = surfaceLot(frng, pcx, lz, pw, pd, 0.12, frng.range(0.5, 0.8)); if (ltop !== null) openSpaces.push({ kind: 'lot', x: qx, z: qz, w: pw, d: pd, rot: d.rot }); }
+            plan.take(pcx, lz, pw, pd);
+          }
         }
       }
 
@@ -2262,19 +2389,22 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         const lx = along === 'x' ? cx + drng.range(-L * 0.08, L * 0.08) : cx + back * (W / 2 - fd / 2 - 3);
         const lz = along === 'x' ? cz + back * (W / 2 - fd / 2 - 3) : cz + drng.range(-L * 0.08, L * 0.08);
         const rot = d.rot + (along === 'x' ? 0 : Math.PI / 2);
+        // the face toward the car park (block local -back): the box frame is the district's, turned a quarter
+        // when the block runs along z (box +z is then district -x)
+        const cpFace = along === 'x' ? (back > 0 ? 0 : 1) : (back > 0 ? 1 : 0);
         const [x, z] = toWorld(lx, lz);
         if (!landOK(x, z, fw, fd, rot) || !areaFree(x, z, fw + 3, fd + 3, rot)) { fillHouses(); return; }
         const fam = big ? FAM.industrial : pickWeighted(drng, [[FAM.punched, 0.35], [FAM.deco, 0.3], [FAM.industrial, 0.2], [FAM.concrete, 0.15]] as const);
         const lk = look(fam, drng, nb.pastel);
         const h = big ? drng.range(8, 12) : drng.range(4.5, 7);
-        const top = place('box', x, z, fw, h, fd, rot, lk.tint, fam.style, fam.floorH, { lit: 0.35, warm: 0.7, variant: lk.variant, margin: 1 });
+        const top = place('box', x, z, fw, h, fd, rot, lk.tint, fam.style, fam.floorH, { lit: 0.35, warm: 0.7, variant: lk.variant, margin: 1, front: cpFace });
         if (top === null) return;
-        // pale roof membrane with a few RTUs
-        place('box', x, z, fw + 0.4, 0.4, fd + 0.4, rot, drng.pick(['#e9e7e0', '#dfdcd3', '#d6d2c8', '#c9c7c0']), S.CONCRETE, 3, { yBase: top - 0.1, margin: -1 });
-        const nRtu = drng.int(1, big ? 6 : 3);
-        for (let i = 0; i < nRtu; i++) place('box', x + drng.range(-fw * 0.4, fw * 0.4), z + drng.range(-fd * 0.35, fd * 0.35), drng.range(1.8, 3.2), drng.range(1.0, 1.8), drng.range(1.8, 2.8), rot + drng.range(-0.1, 0.1), drng.pick(PLANT_COLS), S.PLANT, 3, { yBase: top + 0.2, margin: -1, roof: -1 });
-        addSmallRoofKit(drng, x, z, fw, fd, top + 0.3, rot);
+        // the strip mall's fascia (a coping slab a hand proud of the walls); the big box shows its own deck roof
+        if (!big) place('box', x, z, fw + 0.4, 0.4, fd + 0.4, rot, drng.pick(['#e9e7e0', '#dfdcd3', '#d6d2c8', '#c9c7c0']), S.CONCRETE, 3, { yBase: top - 0.1, margin: -1 });
+        addSmallRoofKit(drng, x, z, fw, fd, top + (big ? 0.0 : 0.3), rot, [], big ? 'shed' : 'flat');
         if (!big && drng.chance(0.5)) place('box', x, z, fw * drng.range(0.2, 0.4), 2.2, 1.0, rot, lk.tint, S.CONCRETE, 3, { yBase: top - 0.1, margin: -1 }); // parapet sign band
+        // the shop parade's canopy along the car-park face
+        groundFloor(drng, x, z, fw, fd, rot, cpFace, fam, h, !big);
         // outparcel at one end: petrol canopy (flat slab on posts) or a drive-through box
         const endSide = drng.chance(0.5) ? 1 : -1;
         const ox = along === 'x' ? cx + endSide * (L / 2 - 16) : cx - back * (W / 2 - 12);
@@ -2317,9 +2447,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           const h = drng.range(5.5, 9.5);
           const top = place('box', x, z, fw, h, fd, rot, lk.tint, S.INDUSTRIAL, 4.0, { lit: lk.lit, warm: lk.warm, variant: lk.variant, margin: 2 });
           if (top === null) continue;
-          if (drng.chance(0.6)) place('box', x, z, fw + 0.6, 0.5, fd + 0.6, rot, drng.pick(['#8f9599', '#b8bab6', '#7d8489', '#a2836a']), S.CONCRETE, 3, { yBase: top - 0.05, margin: -1 });
-          const nv = drng.int(0, 3);
-          for (let k = 0; k < nv; k++) place('cyl', x + drng.range(-fw * 0.35, fw * 0.35), z + drng.range(-fd * 0.3, fd * 0.3), 1.2, drng.range(0.8, 1.6), 1.2, 0, '#c4c7c9', S.CONCRETE, 3, { yBase: top + 0.3, margin: -1 });
+          // the shed shows its own deck roof (metal, TPO or coating: the shader's industrial families) under its kit
+          addSmallRoofKit(drng, x, z, fw, fd, top, rot, [], 'shed');
           if (drng.chance(0.4)) {
             const [tx, tz] = toWorld(lx + fw / 2 + 7, lz + drng.range(-fd * 0.3, fd * 0.3));
             if (landOK(tx, tz, 8, 8, 0) && !occupied(tx, tz)) place('cyl', tx, tz, drng.range(4, 7), drng.range(5, 9), drng.range(4, 7), 0, drng.pick(['#dcdcd4', '#cfd6dd', '#b7b9b3']), S.CONCRETE, 3);
@@ -2327,27 +2456,57 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         }
       }
 
+      /** An industrial block: sheds on their yards (exact block-local bookkeeping, so the docks and yards stand
+       *  against them), each with its deck roof and kit, a loading dock with its canopy and the trailers backed to it
+       *  on most of the long ones, an office block or a tank on some. */
       function fillIndustrial(): void {
+        const plan = new BlockPlan(bx0, bz0, bx1, bz1, foreignReader());
         const n = Math.max(1, Math.round((bw * bd) / 3600));
         for (let i = 0, placed = 0; i < n * 3 && placed < n; i++) {
           const fw = drng.range(28, Math.min(80, bw * 0.85)), fd = drng.range(22, Math.min(60, bd * 0.85));
           const lx = drng.range(bx0 + fw / 2, bx1 - fw / 2), lz = drng.range(bz0 + fd / 2, bz1 - fd / 2);
           const [x, z] = toWorld(lx, lz);
-          if (!landOK(x, z, fw, fd, d.rot) || !areaFree(x, z, fw, fd, d.rot)) continue;
+          if (!landOK(x, z, fw, fd, d.rot) || !plan.free(lx, lz, fw, fd, 6)) continue;
           placed++;
           const lk = look(FAM.industrial, drng);
           const h = drng.range(8, 15);
           const top = place('box', x, z, fw, h, fd, d.rot, lk.tint, S.INDUSTRIAL, 4.0, { lit: lk.lit, warm: lk.warm, variant: lk.variant });
           if (top === null) continue;
-          if (drng.chance(0.5)) place('box', x, z, fw + 0.6, 0.5, fd + 0.6, d.rot, '#8f9599', S.CONCRETE, 3, { yBase: top - 0.05, margin: -1 });
-          if (drng.chance(0.3)) {
-            // office block at the front and a couple of storage tanks
-            const [ox, oz] = toWorld(lx - fw / 2 + 8, lz + fd / 2 + 8);
-            if (landOK(ox, oz, 14, 10, d.rot)) place('box', ox, oz, 14, drng.range(6, 10), 10, d.rot, drng.pick(WHITES), S.PUNCHED, 3.2, { lit: 0.3, warm: 0.6 });
+          plan.take(lx, lz, fw, fd);
+          addSmallRoofKit(drng, x, z, fw, fd, top, d.rot, [], 'shed');
+          // the loading dock along one long side: the yard's asphalt, a raised apron with its canopy, trailers
+          // backed to the doors
+          if (drng.chance(0.65) && fw > 30) {
+            const side = drng.chance(0.5) ? 1 : -1;
+            const yw = fw * 0.85, yd = 22;
+            const ycz = lz + side * (fd / 2 + yd / 2);
+            const [yx, yz] = toWorld(lx, ycz);
+            if (landOK(yx, yz, yw, yd, d.rot) && plan.free(lx, ycz, yw, yd)) {
+              plan.take(lx, ycz, yw, yd);
+              const ytop = place('box', yx, yz, yw, 0.1, yd, d.rot, ASPHALT_C, S.CONCRETE, 3, { margin: 0 });
+              if (ytop !== null) {
+                const [ax, az] = toWorld(lx, lz + side * (fd / 2 + 2.1));
+                place('box', ax, az, fw * 0.8, 1.2, 4.2, d.rot, '#9a9a95', S.CONCRETE, 3, { yBase: ytop - 0.1, margin: -1 });
+                const [cx2, cz2] = toWorld(lx, lz + side * (fd / 2 + 1.6));
+                kit('roofbig', cx2, ytop + 4.4, cz2, fw * 0.8, 0.3, 3.2, d.rot, CANOPY_DARK_C, S.CONCRETE);
+                for (let k = 0, nt = Math.floor(fw * 0.8 / 4.5); k < nt; k++) {
+                  if (drng.chance(0.45)) continue;
+                  const [tx, tz] = toWorld(lx - fw * 0.4 + 2.25 + k * 4.5, lz + side * (fd / 2 + 4.2 + 7.6));
+                  kit('car', tx, ytop, tz, 2.6, 3.9, 14.6, d.rot, drng.pick(TRAILER_C), S.CONCRETE);
+                }
+              }
+            }
           }
           if (drng.chance(0.3)) {
-            const [tx, tz] = toWorld(lx + fw / 2 + 9, lz - fd / 2 + 8);
-            if (landOK(tx, tz, 12, 12, d.rot)) place('cyl', tx, tz, drng.range(7, 12), drng.range(7, 13), drng.range(7, 12), 0, '#dcdcd4', S.CONCRETE, 3);
+            // office block at the front and a couple of storage tanks
+            const ocx = lx - fw / 2 + 8, ocz = lz + fd / 2 + 8;
+            const [ox, oz] = toWorld(ocx, ocz);
+            if (landOK(ox, oz, 14, 10, d.rot) && plan.free(ocx, ocz, 14, 10, 1)) { place('box', ox, oz, 14, drng.range(6, 10), 10, d.rot, drng.pick(WHITES), S.PUNCHED, 3.2, { lit: 0.3, warm: 0.6 }); plan.take(ocx, ocz, 14, 10); }
+          }
+          if (drng.chance(0.3)) {
+            const tcx = lx + fw / 2 + 9, tcz = lz - fd / 2 + 8;
+            const [tx, tz] = toWorld(tcx, tcz);
+            if (landOK(tx, tz, 12, 12, d.rot) && plan.free(tcx, tcz, 12, 12, 1)) { place('cyl', tx, tz, drng.range(7, 12), drng.range(7, 13), drng.range(7, 12), 0, '#dcdcd4', S.CONCRETE, 3); plan.take(tcx, tcz, 12, 12); }
           }
         }
       }
