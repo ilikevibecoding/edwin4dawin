@@ -106,6 +106,15 @@ interface Instance {
   lit: number; warm: number; variant: number; form: number;
 }
 
+/** a ground-standing box massing as the street dressing sees it (BuildingBatches.groundBoxes) */
+export interface GroundBox {
+  x: number; y: number; z: number; w: number; h: number; d: number; rot: number; style: number; floorH: number;
+  /** the named street face (0 -z, 1 +z, 2 -x, 3 +x in the box's frame), -1 when the shader picks by hash */
+  front: number;
+  /** the ground floor is drawn as shopfronts (on the front and side faces) */
+  shops: boolean;
+}
+
 /** buildings shorter than this (houses, sheds) are left out of the far shadow proxies: their shadows are under a texel there */
 const PROXY_MIN_HEIGHT = 14;
 const CITY_EXTRAS = [{ name: 'aDims', itemSize: 3 }, { name: 'aStyle', itemSize: 4 }, { name: 'aStyle2', itemSize: 4 }];
@@ -199,13 +208,21 @@ export class BuildingBatches {
   }
 
   /** The box massings standing on the ground (their base within a metre of the terrain; the rooftop kit sits far
-   *  above it), as footprints for the street dressing: awnings and blade signs hang on the facades that meet the
-   *  sidewalk. `style` is the facade style id, `y` the base height. */
-  groundBoxes(heightAt: (x: number, z: number) => number): { x: number; y: number; z: number; w: number; h: number; d: number; rot: number; style: number }[] {
-    const out: { x: number; y: number; z: number; w: number; h: number; d: number; rot: number; style: number }[] = [];
+   *  above it), as footprints for the street dressing: blade signs, A-boards, planters and awnings go on the
+   *  facades that meet the sidewalk. `style` is the facade style id, `y` the base height, `floorH` the storey
+   *  height the shader lays the ground floor out with. `front` is the street face named at placement (PlaceOpts
+   *  front: 0 -z, 1 +z, 2 -x, 3 +x in the box's own frame; -1 when the shader picks it by hash) and `shops`
+   *  whether that ground floor is drawn as shopfronts (form 20 + face: on the front and both side faces, the back
+   *  face being the loading dock); the facade builder's own canopies, awnings and stoops stand on the front face. */
+  groundBoxes(heightAt: (x: number, z: number) => number): GroundBox[] {
+    const out: GroundBox[] = [];
     for (const [key, list] of this.lists) {
       if (!key.startsWith('box|')) continue;
-      for (const b of list) if (b.y < heightAt(b.x, b.z) + 1.0) out.push({ x: b.x, y: b.y + 0.4, z: b.z, w: b.w, h: b.h - 0.4, d: b.d, rot: b.rot, style: b.style });
+      for (const b of list) {
+        if (b.y >= heightAt(b.x, b.z) + 1.0) continue;
+        const form = b.form ?? 0;
+        out.push({ x: b.x, y: b.y + 0.4, z: b.z, w: b.w, h: b.h - 0.4, d: b.d, rot: b.rot, style: b.style, floorH: b.floorH, front: form >= 10 ? (form - 10) % 10 : -1, shops: form >= 20 });
+      }
     }
     return out;
   }

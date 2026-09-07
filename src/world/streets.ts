@@ -8,6 +8,7 @@ import { balanceGroundIbl } from './terrain';
 import { THIN_VERTEX_MAIN, THIN_VERTEX_PARS, cellKey } from './batching';
 import { LAYER_CAMERA, layerMask, maskCasts, type ViewCull } from './culling';
 import type { StreetTree } from './vegetation';
+import type { GroundBox } from './city';
 
 /**
  * Street-level detail over the road graph: raised sidewalks with curb and gutter along every developed block
@@ -664,14 +665,17 @@ interface StreetCell {
 interface Run { chain: RoadChain; side: 1 | -1; sa: number; sb: number; zone: Zone | null; w: number; light: boolean }
 
 /** a building massing standing on the ground (world/city.ts `groundBoxes`): footprint w x d about (x, z) turned by
- *  `rot`, height h, facade style id */
-export interface Facade { x: number; y: number; z: number; w: number; h: number; d: number; rot: number; style: number }
+ *  `rot`, height h, facade style id and storey height, the named street face and whether its ground floor is shops */
+export type Facade = GroundBox;
 /** facade lookup grid (m) */
 const FACADE_G = 60;
-/** facade styles whose ground floor is a retail base (city.ts S): punched, balcony, deco, concrete, stone, brick, grid */
-const RETAIL_STYLES = new Set([1, 2, 3, 6, 9, 10, 11]);
+/** the facade styles the shader lays shopfronts on (facade.ts `walkup`, city.ts S): punched, balcony, deco, hotel,
+ *  brick, grid; a shopfront flag on any other style draws nothing at street level */
+const SHOP_STYLES = new Set([1, 2, 3, 7, 10, 11]);
 /** awning canvas and blade-sign liveries */
 const AWNING_COLORS = [new THREE.Color(0x2f5a3a), new THREE.Color(0x7a2430), new THREE.Color(0x243b63), new THREE.Color(0xd9c9a3), new THREE.Color(0x8a3c22), new THREE.Color(0x1e1e22)];
+/** A-board liveries: chalkboard black, dark green, cream, a red */
+const ABOARD_COLORS = [new THREE.Color(0x1c1c1e), new THREE.Color(0x2b4a33), new THREE.Color(0xe6dfcf), new THREE.Color(0x8e2a24)];
 const SIGN_COLORS = [new THREE.Color(0xd8352a), new THREE.Color(0xf2efe6), new THREE.Color(0x1a1a1c), new THREE.Color(0xe8b923), new THREE.Color(0x2a6fb5), new THREE.Color(0x2f8a4a)];
 
 function unitDir(a: Vec2, b: Vec2): Vec2 {
@@ -710,7 +714,7 @@ export class Streets {
    *  finely: at eye level the 500 m cells drew three or four whole cells of it, 140 k triangles at street_2m, most
    *  of them behind the camera or beside it */
   private readonly smallBuilds = new Map<number, KitSoup>();
-  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, trees: 0, medians: 0, medianLength: 0, medianPalms: 0, bufferPlants: 0, awnings: 0, signs: 0, newsboxes: 0, mailboxes: 0, racks: 0, cans: 0, bollards: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
+  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, trees: 0, medians: 0, medianLength: 0, medianPalms: 0, bufferPlants: 0, awnings: 0, signs: 0, aboards: 0, shopPlanters: 0, newsboxes: 0, mailboxes: 0, racks: 0, cans: 0, bollards: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
   private readonly roads: RoadIndex;
   /** debug: `?dbg=nopools` turns the lamp pools off */
   poolsEnabled = true;
@@ -1295,7 +1299,7 @@ export class Streets {
       if (hash2(Math.round(sa), chain.id, side + 19) < (downtown ? 0.22 : 0.12)) put('mailbox', sa + 10.5 + 3.0 * h, 0.68);
       if (W >= 2.3 && hash2(Math.round(sa), chain.id, side + 20) < (downtown ? 0.4 : 0.22)) put('bikerack', sa + L * (0.36 + 0.12 * h), back + 0.1, 2 + Math.floor(h * 2));
       if (W >= 2.3) this.plantTreePits(run, at, yAt, taken, soups.small);
-      this.dressRetail(run, yAt, soups.small);
+      this.dressRetail(run, yAt, taken, soups.small);
       if (!arterial && chain.hw >= 5.5) this.parkCurb(run, keepClear, at);
     } else {
       if (hash2(Math.round(sa), chain.id, side + 13) < 0.3) put('hydrant', sa + L * (0.55 + 0.3 * h), 0.7);
@@ -1304,13 +1308,16 @@ export class Streets {
     }
   }
 
-  /** Awnings and blade signs on the retail bases along a dense block face. The mid-rise street wall (city.ts
-   *  fillEdge) stands with its front face 3 m behind the carriageway edge, at the back of the sidewalk, and the
-   *  tower podiums a forecourt further back; any ground box whose face looks at this run from 2.3-9 m behind the
-   *  kerb face is a frontage, cut into 5-8 m shopfronts:
-   *  a canvas awning over 55 % of them (1.3 m out at 3.05 m, an 18 deg pitch and a valance) and a blade sign at
-   *  one end of 35 % (lit at night). Glass, hotel and industrial styles keep bare bases. */
-  private dressRetail(run: Run, yAt: (s: number) => number, soup: KitSoup): void {
+  /** The shopfront dressing along a dense block face. The facade builder (city.ts) names the street face of every
+   *  building it lays out to a street and flags the ones whose ground floor is shops; the shader draws the
+   *  shopfronts (glazing, stall riser, fascia band) on that face and both sides, the loading dock on the back, and
+   *  the builder's own canopies, awnings and stoops stand on the front face. Any shopfront face that looks at
+   *  this run from 2.3-9 m behind the kerb face is cut into 5-8 m shopfronts: a blade sign at the fascia band at
+   *  one end of 35 % (lit at night), an A-board on the walk before 30 %, a planter by 25 %, and on the side faces
+   *  (a corner shop's second street, which the builder leaves bare) a canvas awning over 55 % just under the
+   *  glazing head. Buildings with a residential front (a door and a stoop) and the ones whose front the shader
+   *  picks by hash get nothing: an awning over apartment windows was the round 12 error. */
+  private dressRetail(run: Run, yAt: (s: number) => number, taken: [number, number][], soup: KitSoup): void {
     const { chain, side, sa, sb } = run;
     const L = sb - sa;
     if (L < 20) return;
@@ -1324,18 +1331,24 @@ export class Streets {
       const list = this.facadeCells.get(cellKey(wx, wz, FACADE_G));
       if (!list) continue;
       for (const b of list) {
-        if (seen.has(b) || !RETAIL_STYLES.has(b.style) || b.h < 8) continue;
+        if (seen.has(b) || !b.shops || !SHOP_STYLES.has(b.style) || b.h < 8) continue;
         seen.add(b);
         const c = Math.cos(b.rot), sn = Math.sin(b.rot);
-        // the four faces: outward normal, centre, length along the face
-        const faces: { fx: number; fz: number; cx: number; cz: number; len: number }[] = [
-          { fx: c, fz: sn, cx: b.x + c * b.w * 0.5, cz: b.z + sn * b.w * 0.5, len: b.d },
-          { fx: -c, fz: -sn, cx: b.x - c * b.w * 0.5, cz: b.z - sn * b.w * 0.5, len: b.d },
-          { fx: -sn, fz: c, cx: b.x - sn * b.d * 0.5, cz: b.z + c * b.d * 0.5, len: b.w },
-          { fx: sn, fz: -c, cx: b.x + sn * b.d * 0.5, cz: b.z - c * b.d * 0.5, len: b.w },
+        const back = b.front ^ 1; // the loading dock: the front's pair (0-1, 2-3)
+        // the four faces (city.ts ids: 0 -z, 1 +z, 2 -x, 3 +x in the box's frame): outward normal, centre, length
+        const faces: { id: number; fx: number; fz: number; cx: number; cz: number; len: number }[] = [
+          { id: 3, fx: c, fz: sn, cx: b.x + c * b.w * 0.5, cz: b.z + sn * b.w * 0.5, len: b.d },
+          { id: 2, fx: -c, fz: -sn, cx: b.x - c * b.w * 0.5, cz: b.z - sn * b.w * 0.5, len: b.d },
+          { id: 1, fx: -sn, fz: c, cx: b.x - sn * b.d * 0.5, cz: b.z + c * b.d * 0.5, len: b.w },
+          { id: 0, fx: sn, fz: -c, cx: b.x + sn * b.d * 0.5, cz: b.z - c * b.d * 0.5, len: b.w },
         ];
+        // the shader's ground floor starts 0.4 m below the visible base (the massing is sunk that far): the shop
+        // glazing runs to 0.74 of the storey, the fascia band 0.77-0.94
+        const glazingTop = b.floorH * 0.74 - 0.4, fascia = b.floorH * 0.855 - 0.4, fasciaH = Math.min(0.6, b.floorH * 0.15);
         for (const f of faces) {
+          if (f.id === back) continue;
           if (f.fx * nx + f.fz * nz > -0.95) continue; // must look at the road
+          const isFront = f.id === b.front;
           const sF = (sa + sb) / 2 + (f.cx - mid.x) * dir.dx + (f.cz - mid.z) * dir.dz;
           const across = (f.cx - mid.x) * nx + (f.cz - mid.z) * nz - chain.hw; // behind the kerb face
           if (across < 2.3 || across > 9.0) continue;
@@ -1351,22 +1364,44 @@ export class Streets {
             const pt = frameAt(chain, cross, sm);
             const px = pt.x + pt.cx * side * (chain.hw + across), pz = pt.z + pt.cz * side * (chain.hw + across);
             const y = yAt(sm);
-            const roll = hash2(seed, k, 72);
-            if (roll < 0.55 && front >= 3.5) {
+            const fr = frame(px, y, pz, yaw);
+            if (!isFront && hash2(seed, k, 72) < 0.55 && front >= 3.5) {
+              // the awning bar just under the glazing head, never below 2.15 m: 1.3 m out at an 18 deg pitch, a valance
               this.counts.awnings++;
-              const fr = frame(px, y, pz, yaw);
+              const bar = Math.max(2.15, glazingTop);
               const col = AWNING_COLORS[Math.floor(hash2(seed, k, 73) * AWNING_COLORS.length)];
-              part(soup, UNIT.box, fr, 0.62, 3.25, 0, 1.3, 0.05, front - 0.8, col, 0.85, 0, EM_NONE, 0, -0.32);
-              part(soup, UNIT.box, fr, 1.23, 2.92, 0, 0.03, 0.26, front - 0.8, col, 0.85, 0);
+              part(soup, UNIT.box, fr, 0.62, bar + 0.2, 0, 1.3, 0.05, front - 0.8, col, 0.85, 0, EM_NONE, 0, -0.32);
+              part(soup, UNIT.box, fr, 1.23, bar - 0.13, 0, 0.03, 0.26, front - 0.8, col, 0.85, 0);
             }
             if (hash2(seed, k, 74) < 0.35) {
+              // the blade sign at the fascia band, its bracket above it
               this.counts.signs++;
               const end = hash2(seed, k, 75) < 0.5 ? -1 : 1;
-              const fr = frame(px, y, pz, yaw);
               const col = SIGN_COLORS[Math.floor(hash2(seed, k, 76) * SIGN_COLORS.length)];
               const sz = end * (front * 0.5 - 0.6);
-              part(soup, UNIT.box, fr, 0.5, 3.95, sz, 0.8, 0.55, 0.05, col, 0.5, 0.1, EM_SIGN);
-              part(soup, UNIT.box, fr, 0.4, 4.3, sz, 0.8, 0.03, 0.03, C.dark, 0.5, 0.6, EM_NONE, 0, 0, 3);
+              part(soup, UNIT.box, fr, 0.5, fascia, sz, 0.8, fasciaH, 0.05, col, 0.5, 0.1, EM_SIGN);
+              part(soup, UNIT.box, fr, 0.4, fascia + fasciaH * 0.5 + 0.03, sz, 0.8, 0.03, 0.03, C.dark, 0.5, 0.6, EM_NONE, 0, 0, 3);
+            }
+            // on the walk before the shop, 0.9 m out from the face: an A-board (two boards leaning together) by
+            // three shops in ten, a planter by a quarter; not where the walk kit or a tree pit already stands
+            const ra = hash2(seed, k, 77);
+            if (ra < 0.3 || ra > 0.75) {
+              const so = sm + (hash2(seed, k, 78) - 0.5) * Math.max(0, front - 2.4);
+              if (!taken.some(([ts, tr]) => Math.abs(so - ts) < tr + 0.6)) {
+                const q = frameAt(chain, cross, so);
+                const fq = frame(q.x + q.cx * side * (chain.hw + across - 0.9), yAt(so), q.z + q.cz * side * (chain.hw + across - 0.9), yaw);
+                if (ra < 0.3) {
+                  this.counts.aboards++;
+                  const col = ABOARD_COLORS[Math.floor(hash2(seed, k, 79) * ABOARD_COLORS.length)];
+                  part(soup, UNIT.box, fq, -0.12, 0.45, 0, 0.03, 0.9, 0.6, col, 0.6, 0, EM_NONE, 0, -0.26);
+                  part(soup, UNIT.box, fq, 0.12, 0.45, 0, 0.03, 0.9, 0.6, col, 0.6, 0, EM_NONE, 0, 0.26);
+                } else {
+                  this.counts.shopPlanters++;
+                  part(soup, UNIT.box, fq, 0, 0.25, 0, 0.45, 0.5, 0.9, hash2(seed, k, 79) < 0.5 ? C.concrete : C.dark, 0.8, 0);
+                  part(soup, UNIT.box, fq, 0, 0.62, 0, 0.42, 0.26, 0.84, C.shrub, 0.9, 0);
+                }
+                taken.push([so, 0.6]);
+              }
             }
             s += front;
           }
