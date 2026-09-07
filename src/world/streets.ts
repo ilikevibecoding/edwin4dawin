@@ -24,6 +24,8 @@ export type LampKind = 'arterial' | 'street' | 'ped' | 'highway' | 'mast';
 export interface LampPlan { x: number; y: number; z: number; yaw: number; kind: LampKind }
 
 const CELL = 500;
+/** the small kit's own cell (see `smallBuilds`) */
+const SMALL_CELL = 250;
 /** sidewalks, signals and shelters are drawn within this range (from 200 m up a 3.6 m walk is two pixels at 1.2 km) */
 const FAR = 1200;
 /** signals and shelters switch to their far shapes (no base, cap, bracket, seat or end glass; square lenses) beyond
@@ -32,9 +34,12 @@ const LARGE_NEAR = 300;
 /** benches, bins, hydrants, bollards, cabinets, stop signs, visors, pedestrian heads: under a pixel beyond this —
  *  measured in three dimensions, so from the air the small kit goes as soon as it would from the street */
 const SMALL_FAR = 300;
-/** sidewalks switch to their four-triangle-a-row far index beyond this (a curb face is a quarter pixel there) */
-const WALK_NEAR = 400;
-/** the large furniture (poles, mast arms, shelters, benches) casts shadows, into the fine cascades only, within this
+/** sidewalks switch to their four-triangle-a-row far index beyond this, measured in three dimensions: the 0.15 m
+ *  kerb face the far index drops is 0.8 px at 250 m from eye level and a pixel straight down from 200 m up, so the
+ *  aerial views draw the far index over everything but the ground under the camera (city_north drew 58 k of fine
+ *  walk rows within the old 400 m) */
+const WALK_NEAR = 250;
+/** the large furniture (poles, mast arms, shelters, benches) casts shadows, into the finest cascade only, within this
  *  range: a shelter roof is a pixel or two of shadow at 300 m and a mast arm nothing at all */
 const SHADOW_FAR = 300;
 const CURB_H = 0.15;
@@ -700,7 +705,11 @@ export class Streets {
   readonly kitMaterial: THREE.MeshStandardMaterial;
   readonly uniforms = { uSignalTime: { value: 0 } as THREE.IUniform<number>, uNight: { value: 0 } as THREE.IUniform<number>, uFocalPx: { value: 1000 } as THREE.IUniform<number> };
   private readonly cells: StreetCell[] = [];
-  private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup }>();
+  private readonly builds = new Map<number, { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; yard: KitSoup; yardFar: KitSoup }>();
+  /** the small kit is built per SMALL_CELL (a quarter of a cell) so that its SMALL_FAR range and the frustum cull it
+   *  finely: at eye level the 500 m cells drew three or four whole cells of it, 140 k triangles at street_2m, most
+   *  of them behind the camera or beside it */
+  private readonly smallBuilds = new Map<number, KitSoup>();
   counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, trees: 0, medians: 0, medianLength: 0, medianPalms: 0, bufferPlants: 0, awnings: 0, signs: 0, newsboxes: 0, mailboxes: 0, racks: 0, cans: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
   private readonly roads: RoadIndex;
   /** debug: `?dbg=nopools` turns the lamp pools off */
@@ -816,8 +825,11 @@ export class Streets {
   private soupsAt(x: number, z: number): { walk: WalkSoup; large: KitSoup; largeFar: KitSoup; small: KitSoup; yard: KitSoup; yardFar: KitSoup } {
     const key = cellKey(x, z, CELL);
     let b = this.builds.get(key);
-    if (!b) { b = { walk: new WalkSoup(), large: new KitSoup(), largeFar: new KitSoup(), small: new KitSoup(), yard: new KitSoup(), yardFar: new KitSoup() }; this.builds.set(key, b); }
-    return b;
+    if (!b) { b = { walk: new WalkSoup(), large: new KitSoup(), largeFar: new KitSoup(), yard: new KitSoup(), yardFar: new KitSoup() }; this.builds.set(key, b); }
+    const sk = cellKey(x, z, SMALL_CELL);
+    let small = this.smallBuilds.get(sk);
+    if (!small) { small = new KitSoup(); this.smallBuilds.set(sk, small); }
+    return { ...b, small };
   }
 
   /** The sidewalk profile at one point of the curb line: `n` is the unit across vector pointing away from the road
@@ -1360,6 +1372,8 @@ export class Streets {
     if (L < 30) return;
     const row = hash2(chain.id, side, 41);
     if (row > (zone === Zone.DOWNTOWN ? 0.75 : 0.5)) return;
+    // (round 15 tried more palm streets for the budget: a palm costs the vegetation pass a third of a lobed crown at
+    // eye level, but keeps its 3D fronds to 650 m against a crown's 420 m, so the aerial views paid 4–11 k more)
     const palms = hash2(chain.id, 0, 42) < (zone === Zone.DOWNTOWN ? 0.35 : 0.6);
     const pitch = 12 + 4 * hash2(chain.id, side, 43);
     for (let s = sa + 7.5 + pitch * 0.4 * row; s <= sb - 7.5; s += pitch) {
@@ -1906,42 +1920,53 @@ export class Streets {
   // ---------------------------------------------------------------- meshes
 
   private flush(): void {
-    for (const [key, b] of this.builds) {
-      const cell: StreetCell = { key, box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, walk: null, walkFar: null, large: null, largeFar: null, small: null, yard: null, yardFar: null, height: 0 };
-      const mk = (g: THREE.BufferGeometry | null, mat: THREE.Material, name: string, casts: boolean): THREE.Mesh | null => {
-        if (!g) return null;
-        const m = new THREE.Mesh(g, mat);
-        m.name = name;
-        m.frustumCulled = false;
-        m.matrixAutoUpdate = false;
-        m.receiveShadow = true;
-        m.castShadow = casts;
-        m.visible = false;
-        m.layers.set(LAYER_CAMERA);
-        cell.box.union(g.boundingBox!);
-        this.group.add(m);
-        return m;
-      };
-      cell.walk = mk(b.walk.build(), this.walkMaterial, 'sidewalks', false);
-      cell.walkFar = cell.walk ? mk(b.walk.buildFar(cell.walk.geometry), this.walkMaterial, 'sidewalks-far', false) : null;
-      cell.large = mk(b.large.build(), this.kitMaterial, 'street-kits', true);
-      cell.largeFar = mk(b.largeFar.build(), this.kitMaterial, 'street-kits-far', false);
-      // the small soup (visors, pedestrian heads, buttons, name blades, stop signs) never casts: nothing in it is
-      // worth a 0.4 m shadow texel, and drawn into two cascades it cost as much again as the whole street pass
-      cell.small = mk(b.small.build(), this.kitMaterial, 'street-kits-small', false);
-      cell.yard = mk(b.yard.build(), this.kitMaterial, 'street-yards', false); // casts into cascade 0 at eye level (updateLod)
-      cell.yardFar = mk(b.yardFar.build(), this.kitMaterial, 'street-yards-far', false);
-      this.counts.walkTriangles += b.walk.triangles;
-      this.counts.kitTriangles += b.large.triangles + b.small.triangles;
-      this.counts.kitFarTriangles += b.largeFar.triangles;
-      this.counts.yardTriangles += b.yard.triangles;
-      this.counts.yardFarTriangles += b.yardFar.triangles;
-      if (!cell.walk && !cell.large && !cell.small && !cell.yard) continue;
+    const newCell = (key: number): StreetCell => ({ key, box: new THREE.Box3(), center: new THREE.Vector3(), r: 0, walk: null, walkFar: null, large: null, largeFar: null, small: null, yard: null, yardFar: null, height: 0 });
+    const mk = (cell: StreetCell, g: THREE.BufferGeometry | null, mat: THREE.Material, name: string, casts: boolean): THREE.Mesh | null => {
+      if (!g) return null;
+      const m = new THREE.Mesh(g, mat);
+      m.name = name;
+      m.frustumCulled = false;
+      m.matrixAutoUpdate = false;
+      m.receiveShadow = true;
+      m.castShadow = casts;
+      m.visible = false;
+      m.layers.set(LAYER_CAMERA);
+      cell.box.union(g.boundingBox!);
+      this.group.add(m);
+      return m;
+    };
+    const close = (cell: StreetCell): void => {
       const sphere = cell.box.getBoundingSphere(new THREE.Sphere());
       cell.center.copy(sphere.center); cell.r = sphere.radius; cell.height = cell.box.max.y - cell.box.min.y;
       this.cells.push(cell);
+    };
+    for (const [key, b] of this.builds) {
+      const cell = newCell(key);
+      cell.walk = mk(cell, b.walk.build(), this.walkMaterial, 'sidewalks', false);
+      cell.walkFar = cell.walk ? mk(cell, b.walk.buildFar(cell.walk.geometry), this.walkMaterial, 'sidewalks-far', false) : null;
+      cell.large = mk(cell, b.large.build(), this.kitMaterial, 'street-kits', true);
+      cell.largeFar = mk(cell, b.largeFar.build(), this.kitMaterial, 'street-kits-far', false);
+      cell.yard = mk(cell, b.yard.build(), this.kitMaterial, 'street-yards', false); // casts into cascade 0 at eye level (updateLod)
+      cell.yardFar = mk(cell, b.yardFar.build(), this.kitMaterial, 'street-yards-far', false);
+      this.counts.walkTriangles += b.walk.triangles;
+      this.counts.kitTriangles += b.large.triangles;
+      this.counts.kitFarTriangles += b.largeFar.triangles;
+      this.counts.yardTriangles += b.yard.triangles;
+      this.counts.yardFarTriangles += b.yardFar.triangles;
+      if (!cell.walk && !cell.large && !cell.yard) continue;
+      close(cell);
+    }
+    // the small soup (visors, pedestrian heads, buttons, name blades, stop signs, the kerb-side furniture, awnings and
+    // signs) never casts: nothing in it is worth a 0.4 m shadow texel, and drawn into two cascades it cost as much
+    // again as the whole street pass; its cells are the quarter cells of SMALL_CELL
+    for (const [key, soup] of this.smallBuilds) {
+      const cell = newCell(key);
+      cell.small = mk(cell, soup.build(), this.kitMaterial, 'street-kits-small', false);
+      this.counts.kitTriangles += soup.triangles;
+      if (cell.small) close(cell);
     }
     this.builds.clear();
+    this.smallBuilds.clear();
     this.crossCache.clear();
     this.counts.cells = this.cells.length;
   }
@@ -1964,9 +1989,15 @@ export class Streets {
     for (const c of this.cells) {
       const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
       const inView = d < FAR && cull.boxInView(c.box);
-      if (c.walk) c.walk.visible = inView && (d < WALK_NEAR || !c.walkFar);
-      if (c.walkFar) c.walkFar.visible = inView && d >= WALK_NEAR;
-      const castBits = d < SHADOW_FAR ? cull.boxCasterCascades(c.box, c.height) : 0;
+      // the small kit's and the walks' near ranges are measured in three dimensions: from 200 m up the kerb faces
+      // are gone 150 m out and the small kit 220 m out
+      const d3 = Math.hypot(d, Math.max(0, camPos.y - c.box.max.y));
+      if (c.walk) c.walk.visible = inView && (d3 < WALK_NEAR || !c.walkFar);
+      if (c.walkFar) c.walkFar.visible = inView && d3 >= WALK_NEAR;
+      // the large kit casts into the finest cascade only (0.16 m texels, the first ~200 m): in the second cascade's
+      // 0.5 m texels a mast arm or a shelter post is under a texel and a shelter roof a 3 x 7 texel blot seen at a
+      // grazing angle — 19–36 k triangles a view for nothing visible (frame harness, round 15)
+      const castBits = d < SHADOW_FAR ? cull.boxCasterCascades(c.box, c.height) & 1 : 0;
       const set = (m: THREE.Mesh | null, visible: boolean) => {
         if (!m) return;
         const mask = layerMask('near', visible, visible || d < SHADOW_FAR ? castBits : 0);
@@ -1978,8 +2009,6 @@ export class Streets {
       const largeNear = d < LARGE_NEAR || !c.largeFar;
       set(c.large, inView && largeNear);
       if (c.largeFar) c.largeFar.visible = inView && !largeNear;
-      // the small kit's range is measured in three dimensions: from 200 m up it is gone 220 m out
-      const d3 = Math.hypot(d, Math.max(0, camPos.y - c.box.max.y));
       if (c.small) c.small.visible = inView && d3 < SMALL_FAR; // camera layer only (see flush)
       // the yard's near shapes are for eye level: measured in three dimensions, from 200 m up every car is its far box
       const yardNear = d3 < YARD_NEAR || !c.yardFar;
