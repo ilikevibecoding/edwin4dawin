@@ -156,9 +156,9 @@ const WAKE_VERTEX = /* glsl */ `
   attribute vec4 aExt;    // path curvature (1/m, + turning toward +right), age (s), stern-wave advance (m), odometer (m along the track)
   attribute vec4 aTrail;  // strength, hull half-beam (m), transom-to-bow length (m), lane length (m)
   attribute vec4 aTrail2; // prop wash (0..1), planing speed (m/s), churn (foam persistence), immersion (0 at the hull's waterline .. 1 decks awash)
-  attribute vec4 aTrail3; // running draft of the forebody keel (m), sink rate into the surface (m/s), unused
-  varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; flat varying vec4 vTrail; flat varying vec4 vTrail2; flat varying vec4 vTrail3;
-  void main() { vA = aA; vGeom = aGeom; vExt = aExt; vTrail = aTrail; vTrail2 = aTrail2; vTrail3 = aTrail3; vWp = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+  attribute vec4 aTrail3; // live: running draft of the forebody keel (m), sink rate into the surface (m/s); per vertex: the same two when this point was laid
+  varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; varying vec2 vPt; flat varying vec4 vTrail; flat varying vec4 vTrail2;
+  void main() { vA = aA; vGeom = aGeom; vExt = aExt; vTrail = aTrail; vTrail2 = aTrail2; vPt = aTrail3.zw; vWp = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
 `;
 
 /**
@@ -188,7 +188,7 @@ const WAKE_VERTEX = /* glsl */ `
 export const WAKE_MATERIAL = new THREE.ShaderMaterial({
   vertexShader: WAKE_VERTEX,
   fragmentShader: /* glsl */ `
-    varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; flat varying vec4 vTrail; flat varying vec4 vTrail2; flat varying vec4 vTrail3;
+    varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; varying vec2 vPt; flat varying vec4 vTrail; flat varying vec4 vTrail2;
     uniform float uTexel;   // metres per texel of the map being rendered
     const float COSK = 0.9428, SINK = 0.3333;
     ${WAKE_GLSL_COMMON}
@@ -200,9 +200,10 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
       float curv = vExt.x, ageS = vExt.y, shift = vExt.z, odo = vExt.w;
       float strength = vTrail.x, w0 = vTrail.y, lead = vTrail.z;
       float propWash = vTrail2.x, planeV = max(vTrail2.y, 1.0), churn = vTrail2.z;
-      // how far the hull runs below its planing draft: 0 riding at ~8 cm, 1 driven 40 cm under (a touchdown)
-      float dk = smoothstep(0.08, 0.4, vTrail3.x);
-      float sinkK = clamp(vTrail3.y / 3.0, 0.0, 1.0);
+      // how far the hull ran below its planing draft where this water was laid (the head carries the live
+      // values): 0 riding at ~8 cm, 1 driven 40 cm under (a touchdown)
+      float dk = smoothstep(0.08, 0.4, vPt.x);
+      float sinkK = clamp(vPt.y / 3.0, 0.0, 1.0);
       float aspd = abs(speed);
       // the churned lane lasts a few tens of seconds of foam, so its length scales with the speed it was laid at
       float laneLen = vTrail.w * clamp(aspd / 8.0, 0.5, 1.6);
@@ -457,7 +458,7 @@ export const WAKE_HEIGHT_SCALE = 1.0;
 export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
   vertexShader: WAKE_VERTEX,
   fragmentShader: /* glsl */ `
-    varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; flat varying vec4 vTrail; flat varying vec4 vTrail2; flat varying vec4 vTrail3;
+    varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; varying vec2 vPt; flat varying vec4 vTrail; flat varying vec4 vTrail2;
     uniform float uTexel;
     const float HSCALE = ${WAKE_HEIGHT_SCALE.toFixed(2)};
     ${WAKE_GLSL_COMMON}
@@ -467,8 +468,8 @@ export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
       float w0 = vTrail.y, lead = vTrail.z;
       float curv = vExt.x, shift = vExt.z;
       float planeV = max(vTrail2.y, 1.0);
-      float dk = smoothstep(0.08, 0.4, vTrail3.x);
-      float sinkK = clamp(vTrail3.y / 3.0, 0.0, 1.0);
+      float dk = smoothstep(0.08, 0.4, vPt.x);
+      float sinkK = clamp(vPt.y / 3.0, 0.0, 1.0);
       float aspd = abs(speed);
       float hs = max(speed, 0.0);
       float laneLen = vTrail.w * clamp(aspd / 8.0, 0.5, 1.6);
@@ -868,10 +869,10 @@ export class WakeBatch {
       a.set(t.a.subarray(0, verts * 4), v * 4);
       geom.set(t.geom.subarray(0, verts * 4), v * 4);
       ext.set(t.ext.subarray(0, verts * 4), v * 4);
-      for (let i = v; i < v + verts; i++) {
+      for (let i = v, j = 0; i < v + verts; i++, j++) {
         trail[i * 4] = t.strength; trail[i * 4 + 1] = t.halfWidth; trail[i * 4 + 2] = t.lead; trail[i * 4 + 3] = t.laneLen;
         trail2[i * 4] = t.propWash; trail2[i * 4 + 1] = t.planingSpeed; trail2[i * 4 + 2] = t.churn; trail2[i * 4 + 3] = t.immersion;
-        trail3[i * 4] = t.draft; trail3[i * 4 + 1] = t.sink; trail3[i * 4 + 2] = 0; trail3[i * 4 + 3] = 0;
+        trail3[i * 4] = t.draft; trail3[i * 4 + 1] = t.sink; trail3[i * 4 + 2] = t.ext2[j * 2]; trail3[i * 4 + 3] = t.ext2[j * 2 + 1];
       }
       for (let i = 0; i < pts - 1; i++) {
         const q = v + i * 2, b = q + 1, c = q + 2, e = q + 3;
@@ -916,7 +917,7 @@ export class WakeBatch {
   }
 }
 
-interface TrailPoint { x: number; z: number; dx: number; dz: number; t: number; fade: number; speed: number; odo: number; curv: number; }
+interface TrailPoint { x: number; z: number; dx: number; dz: number; t: number; fade: number; speed: number; odo: number; curv: number; draft: number; sink: number; }
 
 /**
  * Fixed-capacity ribbon following an emitter. Positions are in world space. Standalone trails (contrails,
@@ -957,6 +958,9 @@ export class WakeTrail {
   readonly a: Float32Array;
   readonly geom: Float32Array;
   readonly ext: Float32Array;
+  /** per vertex: the hull's draft and sink rate when this point was laid (the head carries the live values), so a
+   *  lane laid by a hull driven deep at touchdown keeps its marks after the hull has risen onto the step */
+  readonly ext2: Float32Array;
   /** live points (vertices = 2 * count, quads = count - 1) */
   count = 0;
   private readonly points: TrailPoint[] = [];
@@ -998,6 +1002,7 @@ export class WakeTrail {
     this.a = new Float32Array(slots * 2 * 4);
     this.geom = new Float32Array(slots * 2 * 4);
     this.ext = new Float32Array(slots * 2 * 4);
+    this.ext2 = new Float32Array(slots * 2 * 2);
     if (target instanceof WakeBatch) { target.add(this); return; }
     const idx: number[] = [];
     for (let i = 0; i < slots - 1; i++) {
@@ -1060,9 +1065,9 @@ export class WakeTrail {
     }
   }
 
-  private writeVertexPair(i: number, x: number, z: number, dx: number, dz: number, w: number, age: number, fade: number, speed: number, dist: number, curv: number, ageS: number, shift: number, odo: number): void {
+  private writeVertexPair(i: number, x: number, z: number, dx: number, dz: number, w: number, age: number, fade: number, speed: number, dist: number, curv: number, ageS: number, shift: number, odo: number, draft = this.draft, sink = this.sink): void {
     const nx = -dz * w, nz = dx * w;
-    const p = this.positions, a = this.a, g = this.geom, e = this.ext;
+    const p = this.positions, a = this.a, g = this.geom, e = this.ext, e2 = this.ext2;
     p[i * 6] = x - nx; p[i * 6 + 1] = 0.05; p[i * 6 + 2] = z - nz;
     p[i * 6 + 3] = x + nx; p[i * 6 + 4] = 0.05; p[i * 6 + 5] = z + nz;
     for (let k = 0; k < 2; k++) {
@@ -1070,6 +1075,7 @@ export class WakeTrail {
       a[v] = age; a[v + 1] = k === 0 ? -1 : 1; a[v + 2] = fade; a[v + 3] = speed;
       g[v] = dist; g[v + 1] = w; g[v + 2] = dx; g[v + 3] = dz;
       e[v] = curv; e[v + 1] = ageS; e[v + 2] = shift; e[v + 3] = odo;
+      e2[(i * 2 + k) * 2] = draft; e2[(i * 2 + k) * 2 + 1] = sink;
     }
   }
 
@@ -1125,7 +1131,7 @@ export class WakeTrail {
         const step = Math.max(this.spacing, speed * 0.25);
         const nBack = Math.min(this.capacity - 1, Math.floor(Math.min(this.lifetime * 0.6, 60) * speed / step));
         this.odometer = nBack * step;
-        for (let i = nBack; i >= 1; i--) this.points.push({ x: x - dx * step * i, z: z - dz * step * i, dx, dz, t: time - (step * i) / speed, fade: 1, speed, odo: (nBack - i) * step, curv: 0 });
+        for (let i = nBack; i >= 1; i--) this.points.push({ x: x - dx * step * i, z: z - dz * step * i, dx, dz, t: time - (step * i) / speed, fade: 1, speed, odo: (nBack - i) * step, curv: 0, draft: this.draft, sink: 0 });
         this.ramp = 0;
       }
       const fade = this.ramp > 0 ? 1 - this.ramp-- / (RAMP + 1) : 1;
@@ -1135,7 +1141,7 @@ export class WakeTrail {
         const before = this.points[this.points.length - 2];
         if (!before || before.fade === 0) { prev.dx = pdx; prev.dz = pdz; }
       }
-      this.points.push({ x, z, dx: pdx, dz: pdz, t: time, fade, speed, odo: this.odometer, curv: 0 });
+      this.points.push({ x, z, dx: pdx, dz: pdz, t: time, fade, speed, odo: this.odometer, curv: 0, draft: this.draft, sink: this.sink });
       if (this.wake) this.relax(this.points.length - 2);
       while (this.points.length > this.capacity) this.points.shift();
       this.lastX = x; this.lastZ = z;
@@ -1173,7 +1179,7 @@ export class WakeTrail {
       // stern waves laid at this point have travelled speed * ageS since; the hull has moved d: the surplus is
       // how far the train has run on past where a steadily moving hull would have it
       const shift = Math.max(0, Math.min(p.speed * ageS - d, 4 * this.lead + 40));
-      this.writeVertexPair(i, p.x, p.z, p.dx, p.dz, this.wakeHalf(d, p.curv), age, p.fade, p.speed, d, p.curv, ageS, shift, p.odo);
+      this.writeVertexPair(i, p.x, p.z, p.dx, p.dz, this.wakeHalf(d, p.curv), age, p.fade, p.speed, d, p.curv, ageS, shift, p.odo, p.draft, p.sink);
     }
     let count = n;
     if (head) {
