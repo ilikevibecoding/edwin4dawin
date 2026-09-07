@@ -1,0 +1,200 @@
+/* Shop / jobs screen (src/ui/shop.js): the admin panel's dark-wood frontier look (same tokens as adminPanel.css),
+   centred like a Minecraft container screen. Crisp 1-2 px borders, bevelled buttons, monospace text with a hard
+   shadow, nothing smaller than 12 px. */
+#shop-panel {
+  --sh-bg: rgba(33, 24, 17, 0.97);
+  --sh-bg-solid: #211811;
+  --sh-well: rgba(0, 0, 0, 0.32);
+  --sh-edge: #120b06;
+  --sh-edge-hi: rgba(255, 220, 170, 0.14);
+  --sh-wood-hi: #8a6242;
+  --sh-wood-lo: #2a1a10;
+  --sh-text: #f3e9d8;
+  --sh-dim: #bda98f;
+  --sh-gold: #ffd080;
+  --sh-green: #7ad43b;
+  --sh-red: #e0564f;
+  --sh-blue: #6c9cf0;
+  --sh-cyan: #4fd8ff;
+  --sh-font: 'Lucida Console', 'Courier New', ui-monospace, Menlo, Consolas, monospace;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(760px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  background: var(--sh-bg);
+  color: var(--sh-text);
+  font: 13px/1.45 var(--sh-font);
+  border: 2px solid var(--sh-edge);
+  box-shadow: inset 2px 2px 0 var(--sh-edge-hi), inset -2px -2px 0 rgba(0, 0, 0, 0.6), 0 10px 28px rgba(0, 0, 0, 0.55);
+  text-shadow: 1px 1px 0 rgba(0, 0, 0, 0.85);
+  user-select: none;
+}
+#shop-panel[hidden] { display: none; }
+#shop-panel [hidden] { display: none !important; }
+#shop-panel:focus { outline: none; }
+#shop-panel *, #shop-panel *::before, #shop-panel *::after { box-sizing: border-box; }
+#shop-panel button { font: inherit; color: inherit; }
+#shop-panel :focus-visible { outline: 2px solid var(--sh-gold); outline-offset: 2px; }
+#shop-panel p, #shop-panel h2, #shop-panel h3 { margin: 0; }
+
+/* ------------------------------------------------------------------ header */
+.sh-header {
+  flex: none; display: flex; align-items: center; gap: 12px; padding: 8px 12px;
+  background: linear-gradient(#4a3323, #382518); border-bottom: 2px solid var(--sh-edge); box-shadow: 0 1px 0 var(--sh-edge-hi);
+}
+.sh-title { flex: 1 1 auto; min-width: 0; }
+.sh-title h2 { font-size: 15px; line-height: 1.2; letter-spacing: 1.5px; text-transform: uppercase; color: var(--sh-gold); text-shadow: 2px 2px 0 #1a0f08; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sh-title small { display: block; margin-top: 2px; font-size: 12px; line-height: 1.25; color: var(--sh-dim); }
+.sh-wallet {
+  flex: none; display: flex; align-items: center; gap: 6px; padding: 5px 10px; font-size: 14px; color: var(--sh-gold);
+  background: var(--sh-well); border: 1px solid var(--sh-edge); box-shadow: inset 1px 1px 0 rgba(0, 0, 0, 0.6), inset -1px -1px 0 var(--sh-edge-hi);
+}
+.sh-wallet b { font-size: 16px; }
+.sh-wallet-note { font-size: 12px; color: var(--sh-dim); margin-left: 6px; }
+.sh-wallet-note:empty { display: none; }
+/* the credit chip: gold edge, blue face, a gold contact strip (matches the canvas HUD icon) */
+.sh-chip {
+  display: inline-block; flex: none; width: 18px; height: 12px; background: #2e6fd8; border: 2px solid #e8b640; position: relative;
+  box-shadow: 1px 1px 0 rgba(0, 0, 0, 0.6);
+}
+.sh-chip::after { content: ''; position: absolute; left: 3px; top: 2px; width: 4px; height: 4px; background: #ffd866; box-shadow: 6px 1px 0 -1px #ffd866; }
+.sh-chip-sm { width: 14px; height: 9px; border-width: 1px; }
+.sh-chip-sm::after { left: 2px; top: 1px; width: 3px; height: 3px; box-shadow: 5px 1px 0 -1px #ffd866; }
+.sh-close {
+  flex: none; width: 36px; height: 36px; padding: 0; cursor: pointer; font-size: 22px; line-height: 1; font-weight: bold;
+  color: var(--sh-text); background: linear-gradient(#6a4c36, #55392a); border: 2px solid; border-color: var(--sh-wood-hi) var(--sh-wood-lo) var(--sh-wood-lo) var(--sh-wood-hi);
+  box-shadow: 0 0 0 2px var(--sh-edge); text-shadow: 1px 1px 0 #000;
+}
+.sh-close:hover { background: linear-gradient(#9a3a3a, #7a2a2a); color: #fff; border-color: #d08080 #4a1414 #4a1414 #d08080; }
+
+/* ------------------------------------------------------------------ body */
+.sh-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 12px; display: flex; flex-direction: column; gap: 12px; scrollbar-width: thin; scrollbar-color: #7a5a3a #1c1410; }
+.sh-body::-webkit-scrollbar { width: 10px; }
+.sh-body::-webkit-scrollbar-track { background: #1c1410; border-left: 1px solid var(--sh-edge); }
+.sh-body::-webkit-scrollbar-thumb { background: #7a5a3a; border: 1px solid var(--sh-edge); box-shadow: inset 1px 1px 0 #a98460, inset -1px -1px 0 #4a3222; }
+.sh-greeting { font-size: 13px; line-height: 1.45; color: var(--sh-text); font-style: italic; padding: 8px 10px; background: var(--sh-well); border-left: 3px solid var(--sh-gold); }
+.sh-section h3, .sh-sec-head h3 { font-size: 12px; font-weight: bold; line-height: 1.2; letter-spacing: 2px; text-transform: uppercase; color: var(--sh-gold); padding-bottom: 4px; margin-bottom: 8px; border-bottom: 1px solid rgba(255, 208, 128, 0.22); }
+.sh-sec-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.sh-sec-head h3 { flex: 1 1 auto; }
+.sh-sub-hint { font-size: 12px; color: var(--sh-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 60%; }
+.sh-empty { font-size: 12px; color: var(--sh-dim); padding: 6px 0; grid-column: 1 / -1; }
+
+/* wallet summary (ships, apartment, job) */
+.sh-owned { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 6px 10px; font-size: 12px; color: var(--sh-dim); background: var(--sh-well); border: 1px solid var(--sh-edge); }
+.sh-owned:empty { display: none; }
+.sh-owned-title { color: var(--sh-gold); letter-spacing: 1px; text-transform: uppercase; }
+.sh-owned-item { color: var(--sh-text); }
+
+/* ------------------------------------------------------------------ goods grid */
+.sh-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.sh-card {
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 8px 8px; min-height: 108px; cursor: pointer; text-align: center;
+  color: var(--sh-text); background: linear-gradient(#4a3526, #382819);
+  border: 2px solid; border-color: var(--sh-wood-hi) var(--sh-wood-lo) var(--sh-wood-lo) var(--sh-wood-hi); box-shadow: 0 0 0 2px var(--sh-edge);
+  text-shadow: 1px 1px 0 #000; transition: background 80ms linear;
+}
+.sh-card:hover:not(:disabled) { background: linear-gradient(#5b4230, #46332a); color: #fff2c8; }
+.sh-card:active:not(:disabled) { border-color: var(--sh-wood-lo) var(--sh-wood-hi) var(--sh-wood-hi) var(--sh-wood-lo); transform: translateY(1px); }
+.sh-card:disabled { cursor: default; opacity: 0.75; }
+.sh-icon { width: 32px; height: 32px; image-rendering: pixelated; filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.7)); }
+.sh-name { font-size: 13px; font-weight: bold; line-height: 1.2; }
+.sh-price { display: inline-flex; align-items: center; gap: 5px; font-size: 13px; color: var(--sh-gold); }
+.sh-stock { font-size: 12px; color: var(--sh-dim); }
+.sh-desc { font-size: 12px; line-height: 1.35; color: var(--sh-dim); margin-top: 2px; }
+.sh-soldout { opacity: 0.55; }
+.sh-soldout .sh-stock { color: var(--sh-red); }
+.sh-poor .sh-price { color: var(--sh-red); }
+.sh-service { min-height: 128px; }
+.sh-service .sh-icon { width: 32px; height: 32px; }
+.sh-owned-ship { border-color: var(--sh-gold) #8a5f22 #8a5f22 var(--sh-gold); box-shadow: 0 0 0 2px var(--sh-edge), inset 0 0 22px rgba(255, 208, 128, 0.12); }
+.sh-owned-ship .sh-stock { color: var(--sh-green); }
+.sh-dest { min-height: 88px; }
+.sh-dest-job { border-color: var(--sh-gold) #5a3a10 #5a3a10 var(--sh-gold); box-shadow: inset 0 0 0 1px rgba(255, 216, 102, 0.35); }
+.sh-dest-job .sh-name { color: var(--sh-gold); }
+
+/* ------------------------------------------------------------------ your inventory (9 x 4 slots) */
+.sh-slots { display: grid; grid-template-columns: repeat(9, 46px); gap: 4px; justify-content: start; }
+.sh-slot {
+  position: relative; width: 46px; height: 46px; padding: 0; display: flex; align-items: center; justify-content: center;
+  background: #8b8b8b; border: 2px solid; border-color: #373737 #ffffff #ffffff #373737; box-shadow: 0 0 0 1px var(--sh-edge); cursor: default;
+}
+.sh-slot.sh-hotbar { background: #9a9a9a; }
+.sh-slot .sh-icon { width: 32px; height: 32px; filter: none; }
+.sh-slot:disabled .sh-icon { opacity: 0.45; }
+.sh-slot.sh-sellable { cursor: pointer; }
+.sh-slot.sh-sellable:hover { background: #b8b8b8; }
+.sh-slot.sh-sellable::before { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 2px rgba(122, 212, 59, 0.55); pointer-events: none; }
+.sh-count { position: absolute; right: 3px; bottom: 1px; font-size: 13px; font-weight: bold; color: #fff; text-shadow: 1px 1px 0 #3f3f3f; }
+.sh-offer { position: absolute; left: 3px; top: 1px; font-size: 12px; color: #d8ffc0; text-shadow: 1px 1px 0 #1a3a10; }
+/* inventory slots 0-8 are the hotbar: pinned to the last row (the 27 main slots auto-fill rows 1-3), like Minecraft */
+.sh-slots .sh-slot:nth-child(-n + 9) { grid-row: 4; margin-top: 6px; }
+
+/* ------------------------------------------------------------------ jobs */
+.sh-active { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding: 8px 10px; background: rgba(60, 100, 160, 0.18); border: 1px solid var(--sh-blue); }
+.sh-active-title { color: var(--sh-blue); letter-spacing: 1px; text-transform: uppercase; font-size: 12px; }
+.sh-active-text { flex: 1 1 260px; }
+.sh-active-reward { color: var(--sh-gold); font-size: 12px; }
+.sh-jobs { display: flex; flex-direction: column; gap: 8px; }
+.sh-job { padding: 8px 10px; background: var(--sh-well); border: 1px solid var(--sh-edge); box-shadow: inset 1px 1px 0 rgba(0, 0, 0, 0.5), inset -1px -1px 0 var(--sh-edge-hi); }
+.sh-job-active { border-color: var(--sh-blue); }
+.sh-job-off { opacity: 0.6; }
+.sh-job-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.sh-job-kind { font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--sh-cyan); }
+.sh-job[data-kind='courier'] .sh-job-kind { color: var(--sh-cyan); }
+.sh-job[data-kind='delivery'] .sh-job-kind { color: var(--sh-green); }
+.sh-job[data-kind='ship_repair'] .sh-job-kind { color: #ff9a4a; }
+.sh-job[data-kind='cleanup'] .sh-job-kind { color: #d0a0ff; }
+.sh-job[data-kind='harvest'] .sh-job-kind { color: #e8e070; }
+.sh-job-reward { display: inline-flex; align-items: center; gap: 5px; color: var(--sh-gold); font-weight: bold; }
+.sh-job-title { margin-top: 2px; font-size: 13px; font-weight: bold; }
+.sh-job-desc { margin-top: 4px; font-size: 12px; line-height: 1.4; color: var(--sh-dim); }
+.sh-job-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+.sh-job-meta { font-size: 12px; color: var(--sh-dim); }
+.sh-job-tag { font-size: 12px; color: var(--sh-green); letter-spacing: 1px; text-transform: uppercase; }
+.sh-job-off .sh-job-tag { color: var(--sh-dim); }
+
+/* ------------------------------------------------------------------ buttons */
+.sh-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 30px; padding: 4px 12px; cursor: pointer; white-space: nowrap;
+  font-size: 13px; line-height: 1.2; color: var(--sh-text); background: linear-gradient(#6a4c36, #55392a);
+  border: 2px solid; border-color: #9a7250 var(--sh-wood-lo) var(--sh-wood-lo) #9a7250; box-shadow: 0 0 0 2px var(--sh-edge); text-shadow: 1px 1px 0 #000;
+}
+.sh-btn:hover:not(:disabled) { background: linear-gradient(#7f5c42, #66463a); color: #fff2c8; }
+.sh-btn:active:not(:disabled) { border-color: var(--sh-wood-lo) #9a7250 #9a7250 var(--sh-wood-lo); transform: translateY(1px); }
+.sh-btn:disabled { cursor: default; opacity: 0.55; }
+.sh-btn-danger { background: linear-gradient(#8a2a24, #6a1a14); border-color: #d08080 #4a1414 #4a1414 #d08080; }
+.sh-btn-danger:hover:not(:disabled) { background: linear-gradient(#a03a34, #7a2a24); }
+
+/* ------------------------------------------------------------------ footer */
+.sh-footer {
+  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 12px; min-height: 32px;
+  background: var(--sh-bg-solid); border-top: 2px solid var(--sh-edge); box-shadow: 0 -1px 0 var(--sh-edge-hi); font-size: 12px;
+}
+.sh-flash { flex: 1 1 auto; min-width: 0; color: var(--sh-gold); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sh-flash-on { animation: sh-flash 1.6s ease-out; }
+@keyframes sh-flash { 0% { color: #fff; } 100% { color: var(--sh-gold); } }
+.sh-hint { flex: none; color: var(--sh-dim); white-space: nowrap; }
+
+@media (max-height: 760px) {
+  .sh-card { min-height: 96px; padding: 8px 6px 6px; }
+  .sh-service { min-height: 112px; }
+  .sh-slots { grid-template-columns: repeat(9, 40px); }
+  .sh-slot { width: 40px; height: 40px; }
+}
+@media (max-width: 640px) {
+  .sh-hint { display: none; }
+  .sh-grid { grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); }
+}
+
+/* economy v2: visible state (menu, waiting-for, district noticeboard, the till) and the buy-back quote on cards */
+.sh-market { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; line-height: 1.4; color: var(--sh-dim); padding: 6px 10px; background: var(--sh-well); border-left: 3px solid var(--sh-dim); margin: 0; }
+.sh-market-menu { color: var(--sh-text); }
+.sh-market-wait { color: var(--sh-red); }
+.sh-market-notice { color: var(--sh-gold); }
+.sh-quote { font-size: 11px; color: var(--sh-green); }

@@ -1,0 +1,480 @@
+// Blueprint overlay for the building programs (rubric 16 B6-B8). After the family builder (towers) or the landmark
+// module has run, applyProgram() picks planned rooms that fit the program's room specs - by floor preference, size
+// and door arrangement - and refurnishes them in place with the program templates (rooms/programs.js): same walls,
+// same door, same footprint mask, new furniture, new NPC spots, new room kind. Two adjacent rooms can be merged into
+// one bay for rooms that need width (repair bay, auditorium). Programs with a service circulation get a service door
+// cut in the exterior back wall of a ground-floor back-of-house room when the wall really is exterior.
+// Everything is seeded from the lot; no Math.random.
+import { B, BLOCKS } from '../../blocks.js';
+import { RNG } from '../../rng.js';
+import { FORCE_AIR } from '../blueprint.js';
+import { Room } from '../rooms/room.js';
+import { ROOMS } from '../rooms/index.js';
+import { programRoom, ADAPTATIONS } from '../rooms/programs.js';
+import { purposeFor } from '../purposes.js';
+import { programFor, variantOf, EXTENDED_MIN_ROOMS } from './index.js';
+
+// measurement switch for the harnesses (scripts/test-programs.mjs B10): the overlay's own cost per tower
+export const PROGRAM_OPTIONS = { enabled: true };
+
+const PROTECTED = new Set(['lobby_atrium', 'lift_landing', 'corridor', 'stairwell']);
+const OPPOSITE = { N: 'S', S: 'N', E: 'W', W: 'E' };
+let EM = null;   // block ids are fixed once initBlocks() has run; the set is built on first use
+const EMISSIVE = () => EM || (EM = new Set([B.GLOW_PANEL, B.GLOW_PANEL_BLUE, B.LANTERN, B.NEON_PINK, B.NEON_GREEN, B.CITY_LAMP].filter((x) => x !== undefined)));
+const isAir = (id) => id === 0 || id === FORCE_AIR;
+const solid = (id) => { if (isAir(id)) return false; const b = BLOCKS[id]; return b ? b.solid : true; };
+
+function floorIndexer(meta) {
+  const ys = [...new Set(meta.rooms.map((r) => r.y))].sort((a, b) => a - b);
+  const idx = new Map(ys.map((y, i) => [y, i]));
+  return { of: (y) => idx.get(y) ?? 0, top: ys.length - 1 };
+}
+
+// a room rectangle as one number (world coordinates offset so a lot on the world edge stays positive)
+const rectKey = (x, y, z, w, d) => ((((x + 64) * 8192 + (z + 64)) * 512 + (y + 64)) * 256 + w) * 256 + d;
+
+// candidate rooms: planned rooms with a door whose frame was recorded, fully inside the footprint mask
+function collectCandidates(bp, frames, floors) {
+  const meta = bp.meta, rooms = meta.rooms;
+  let byKey = null;   // rect -> room index, built only when a frame's index hint does not hold (landmark modules)
+  const out = [];
+  for (const fr of frames) {
+    if (fr.doorU < 0 || fr.doorU === -100) continue;
+    const rc = fr.rect, w = rc.x1 - rc.x0 + 1, d = rc.z1 - rc.z0 + 1, wy = bp.wy(fr.y), wx0 = bp.wx(rc.x0), wz0 = bp.wz(rc.z0);
+    // the planner registers each room right after furnishing it: the frame's hint is its index, checked
+    let i = fr.roomIndexHint;
+    if (!(i >= 0 && i < rooms.length && rooms[i].x === wx0 && rooms[i].y === wy && rooms[i].z === wz0 && rooms[i].w === w && rooms[i].d === d)) {
+      if (!byKey) { byKey = new Map(); for (let k = 0; k < rooms.length; k++) { const r = rooms[k]; byKey.set(rectKey(r.x, r.y, r.z, r.w, r.d), k); } }
+      // planner rooms are registered as their interior; landmark modules register the rect including the walls
+      i = byKey.get(rectKey(wx0, wy, wz0, w, d));
+      if (i === undefined) i = byKey.get(rectKey(wx0 - 1, wy, wz0 - 1, w + 2, d + 2));
+      if (i === undefined) continue;
+    }
+    const r = rooms[i];
+    if (PROTECTED.has(r.kind)) continue;
+    // rooms drawn past a rounded or masked facade: the templates only write inside the mask, so a room is a candidate
+    // when most of it is really there (the planner itself accepts rooms that are half inside)
+    if (fr.mask) {
+      const mask = fr.mask;
+      let inN = 0;
+      for (let x = rc.x0; x <= rc.x1; x++) for (let z = rc.z0; z <= rc.z1; z++) if (mask(x, z)) inN++;
+      if (inN < 0.75 * w * d) continue;
+    }
+    out.push({ fr, i, r, f: floors.of(r.y), used: false, w: fr.w, d: fr.d, inner: false });
+  }
+  // a room whose door opens into another candidate room (not a corridor) is an inner room: checked against the
+  // candidates of its own floor only
+  const byY = new Map();
+  for (const c of out) { let a = byY.get(c.fr.y); if (!a) byY.set(c.fr.y, a = []); a.push(c); }
+  for (const c of out) {
+    const bx = c.fr.X(c.fr.doorU, -2), bz = c.fr.Z(c.fr.doorU, -2);
+    for (const o of byY.get(c.fr.y)) if (o !== c && bx >= o.fr.rect.x0 && bx <= o.fr.rect.x1 && bz >= o.fr.rect.z0 && bz <= o.fr.rect.z1) { c.inner = true; break; }
+  }
+  return out;
+}
+
+// every pair of candidates side by side in one strip (same floor, same door wall, same depth, one partition wall
+// between them, same facade mask), left/lower one first - computed once per building, filtered per spec
+function adjacentPairs(cands) {
+  const strips = new Map();
+  for (const c of cands) {
+    const rc = c.fr.rect, alongX = c.fr.side === 'N' || c.fr.side === 'S';
+    const k = `${c.fr.y}|${c.fr.side}|${alongX ? rc.z0 + ',' + rc.z1 : rc.x0 + ',' + rc.x1}`;
+    let s = strips.get(k); if (!s) strips.set(k, s = { alongX, list: [] });
+    s.list.push(c);
+  }
+  const pairs = [];
+  for (const { alongX, list } of strips.values()) {
+    if (list.length < 2) continue;
+    list.sort((a, b) => (alongX ? a.fr.rect.x0 - b.fr.rect.x0 : a.fr.rect.z0 - b.fr.rect.z0));
+    for (let i = 0; i + 1 < list.length; i++) {
+      const a = list[i], b = list[i + 1];
+      if (a.fr.mask !== b.fr.mask) continue;
+      if (alongX ? b.fr.rect.x0 === a.fr.rect.x1 + 2 : b.fr.rect.z0 === a.fr.rect.z1 + 2) pairs.push([a, b]);
+    }
+  }
+  return pairs;
+}
+
+// the room's back wall is an exterior wall: solid at walk and head height, open air beyond it (three high), and not
+// the building's front
+function exteriorBack(bp, c, front, lot) {
+  const fr = c.fr, backSide = OPPOSITE[fr.side];
+  if (backSide === front) return null;
+  const du = Math.floor((fr.w - 2) / 2);
+  for (let k = 0; k < 2; k++) {
+    const wx = fr.X(du + k, fr.d), wz = fr.Z(du + k, fr.d), ox = fr.X(du + k, fr.d + 1), oz = fr.Z(du + k, fr.d + 1);
+    if (!solid(bp.get(wx, fr.y, wz)) || !solid(bp.get(wx, fr.y + 1, wz))) return null;
+    for (let ly = 0; ly < 3; ly++) if (!isAir(bp.get(ox, fr.y + ly, oz))) return null;
+    if (ox >= 0 && ox < bp.w && oz >= 0 && oz < bp.d && bp.get(ox, fr.y - 1, oz) === FORCE_AIR) return null;   // carved away: nothing to step onto (0 = the plateau is left in place)
+  }
+  return { du, side: backSide, alley: !(lot.sides && lot.sides[backSide]) };
+}
+
+// the template that builds a program room in a tower host: the program registry's, else the first library room whose
+// kind the spec accepts (a temple annex tower gets the library gym as its training hall, the meditation chamber as
+// its meditation space); null when neither exists (the Senate's rooms, built by their own module only)
+const TEMPLATE_CACHE = new Map();
+export function templateFor(spec) {
+  const key = spec.accept ? `${spec.kind}|${spec.accept.source}` : spec.kind;
+  let t = TEMPLATE_CACHE.get(key);
+  if (t !== undefined) return t;
+  t = programRoom(spec.kind) || null;
+  if (!t && spec.accept) for (const name of Object.keys(ROOMS)) if (spec.accept.test(name) && !ROOMS[name].special) { t = ROOMS[name]; break; }
+  TEMPLATE_CACHE.set(key, t);
+  return t;
+}
+
+const whereOk = (spec, c, top) => {
+  switch (spec.where) {
+    case 'ground': return c.f === 0;
+    case 'first': return c.f === 1;
+    case 'low': return c.f <= 2;
+    case 'upper': return c.f >= 1;
+    case 'top': return c.f === top || (top >= 1 && c.f === top - 1);
+    case 'inner': return c.inner;
+    default: return true;
+  }
+};
+const fits = (tpl, w, d) => w >= tpl.minW && d >= tpl.minD && w <= tpl.maxW && d <= tpl.maxD;
+
+// the floor an upper-floor program room heads for: seeded per lot and per room kind, so the three flats of an
+// apartment tower land on different floors and two hosts of the same program put the same room on different floors
+// (a spatial difference the player walks: which floor the night-shift flat is on)
+function targetFloor(spec, seed, top) {
+  if (top < 2) return top;
+  let h = (seed ^ 0x9e3779b9) >>> 0;
+  for (let i = 0; i < spec.kind.length; i++) h = (Math.imul(h ^ spec.kind.charCodeAt(i), 0x01000193)) >>> 0;
+  return 1 + (h % top);
+}
+
+// role: 'entry' for the room that takes the service door, 'street' for the public ground-floor room a variant-1 host
+// opens to the street; both want an exterior ground-floor bay above everything else. `target` is the spec's target
+// floor (targetFloor), computed once per spec.
+function score(spec, c, top, rng, service, target, variant = 1, role = null) {
+  let s = whereOk(spec, c, top) ? 10 : 0;
+  if (role === 'entry' && service) s += c.exterior ? 20 : 0;
+  if (role === 'street') s += c.exterior ? 12 : 0;
+  if (spec.where === 'upper' && (spec.signature || spec.core)) { const dt = Math.abs(c.f - target); s += dt === 0 ? 4 : dt === 1 ? 2 : 0; }
+  if (spec.where === 'inner' && c.inner) s += 6;
+  if (spec.where !== 'inner' && c.inner) s -= 3;                         // public rooms should open off the corridor
+  const size = Math.min(6, (c.w * c.d) / 8);
+  // the signature room takes the largest fit - except an upper-floor one of variant 0, which takes the smallest
+  // room that fits (a bedsit rather than a corner flat: the size class of the home is a household difference
+  // between two hosts; the small-room bonus falls to nothing at 48 cells, where the large-room bonus saturates)
+  if (spec.signature || spec.merge) s += (spec.signature && spec.where === 'upper' && variant === 0) ? Math.max(0, 8 - (c.w * c.d) / 6) : size;
+  else if (spec.service) s -= Math.min(4, (c.w * c.d) / 12);            // back of house takes the small rooms
+  if (!spec.signature && !spec.merge) s -= Math.max(0, c.w * c.d - 80) / 16;   // a landmark's hall is no place for a locker room
+  if (c.fr.backDoorU >= 0 && !spec.service) s -= 3;                    // a pass-through room loses its back wall to the second door
+  return s + rng.next() * 2;
+}
+
+// strip the old templates' NPC records inside the rooms about to be refurnished: one pass over the records, the
+// room rectangles indexed by floor (world coordinates)
+function stripRecords(bp, list) {
+  if (!list.length) return;
+  const m = bp.meta, byY = new Map();
+  for (const c of list) {
+    const fr = c.fr, wy = bp.wy(fr.y), rect = { x0: bp.wx(fr.rect.x0), x1: bp.wx(fr.rect.x1), z0: bp.wz(fr.rect.z0), z1: bp.wz(fr.rect.z1) };
+    let a = byY.get(wy); if (!a) byY.set(wy, a = []); a.push(rect);
+  }
+  const keep = (p) => {
+    const rects = byY.get(p.y); if (!rects) return true;
+    for (const r of rects) if (p.x >= r.x0 && p.x <= r.x1 && p.z >= r.z0 && p.z <= r.z1) return false;
+    return true;
+  };
+  m.spots = m.spots.filter(keep); m.work = m.work.filter(keep); m.beds = m.beds.filter(keep);
+}
+
+// clear a room's interior volume (the records were stripped by stripRecords): one pass over the room's cells in
+// world order; the old template's ceiling lights become plain ceiling (the most common ceiling block) so the new
+// template lights the room its own way, and the floor slab - the ceiling of the room below - keeps its light panels
+function clearRoom(bp, c, floorId) {
+  const { fr } = c, rc = fr.rect, mask = fr.mask, em = EMISSIVE(), top = fr.y + fr.h, below = fr.y - 1;
+  const counts = new Map();
+  let lit = null;
+  for (let x = rc.x0; x <= rc.x1; x++) for (let z = rc.z0; z <= rc.z1; z++) {
+    if (mask && !mask(x, z)) continue;
+    const id = bp.get(x, top, z);
+    if (em.has(id)) (lit || (lit = [])).push(x, z);
+    else if (!isAir(id)) counts.set(id, (counts.get(id) || 0) + 1);
+    for (let y = fr.y; y < top; y++) bp.set(x, y, z, 0);
+    if (floorId) { const fl = bp.get(x, below, z); if (solid(fl) && !em.has(fl)) bp.set(x, below, z, floorId); }
+  }
+  if (!lit) return;
+  let ceiling = null;
+  for (const [id, n] of counts) if (!ceiling || n > ceiling.n || (n === ceiling.n && id < ceiling.id)) ceiling = { id, n };
+  if (ceiling) for (let i = 0; i < lit.length; i += 2) bp.set(lit[i], top, lit[i + 1], ceiling.id);
+}
+
+// what hangs over the walkway of a small room when the door zones ate its floor: by template tag
+const OVERHEAD = [['green', B.OAK_LEAVES], ['medical', B.WHITE_WOOL], ['culture', B.RED_WOOL], ['entertainment', B.RED_WOOL], ['industry', B.IRON_BARS], ['tech', B.IRON_BARS], ['freight', B.SHELF], ['service', B.SHELF], ['office', B.PANEL_BLACK], ['civic', B.PANEL_BLACK], ['home', B.SHELF]];
+const DENSITY_BAR = 1 / 6;
+
+// furniture density as the harnesses measure it (blocks in the three layers above the floor over the room's cells)
+function density(room) {
+  const rc = room.rect, mask = room.mask, bp = room.bp, y = room.y;
+  let cells = 0, n = 0;
+  for (let x = rc.x0; x <= rc.x1; x++) for (let z = rc.z0; z <= rc.z1; z++) {
+    if (mask && !mask(x, z)) continue;
+    cells++;
+    if (!isAir(bp.get(x, y, z))) n++;
+    if (!isAir(bp.get(x, y + 1, z))) n++;
+    if (!isAir(bp.get(x, y + 2, z))) n++;
+  }
+  return { cells, n };
+}
+
+// a room with doors at both ends (or a masked corner) can lose most of its floor to door zones; the overhead
+// racks, ducts and hangings along the side walls at head+1 height bring it to the landmark bar without touching the
+// walkway. The density is counted once and kept up to date as blocks go in.
+function topUp(room, tpl) {
+  const { cells, n } = density(room);
+  const want = (DENSITY_BAR + 0.04) * cells;
+  let have = n;
+  if (!cells || have >= want) return;
+  const tag = OVERHEAD.find(([t]) => tpl.tags.includes(t));
+  const id = tag ? tag[1] : B.SHELF;
+  const cols = room.w > 1 ? [0, room.w - 1] : [0];
+  for (const u of cols) for (let v = 1; v < room.d - 1 && have < want; v++) if (room.inside(u, v) && isAir(room.get(u, 2, v))) { room.putRaw(u, 2, v, id); have++; }
+  for (let u = 1; u < room.w - 1 && have < want; u++) if (room.inside(u, room.back) && isAir(room.get(u, 2, room.back))) { room.putRaw(u, 2, room.back, id); have++; }
+}
+
+function furnish(bp, c, spec, tpl, ctx, rng, extra = {}) {
+  const fr = c.fr;
+  const room = new Room(bp, { ...fr.rect, y: fr.y, h: fr.h, side: fr.side, doorU: fr.doorU, doorW: fr.doorW, backDoorU: extra.backDoorU ?? fr.backDoorU, backDoorTight: true, mask: fr.mask, extraDoors: extra.extraDoors || null, extraBackDoors: fr.extraBackDoors || null }, spec.kind, ctx);
+  tpl.fn(room, rng, ctx);
+  room.finalize();
+  topUp(room, tpl);
+  room.putRaw(fr.doorU, fr.h, 0, B.GLOW_PANEL);
+  return room;
+}
+
+// cut a two-wide service door through the back wall of a ground-floor room; returns the door record (world coords)
+function cutServiceDoor(bp, c, ext, trim) {
+  const fr = c.fr;
+  for (let k = 0; k < 2; k++) {
+    const wx = fr.X(ext.du + k, fr.d), wz = fr.Z(ext.du + k, fr.d);
+    bp.set(wx, fr.y, wz, FORCE_AIR); bp.set(wx, fr.y + 1, wz, FORCE_AIR);
+    if (trim) bp.set(wx, fr.y + 2, wz, trim);
+    bp.set(wx, fr.y + 3, wz, B.GLOW_PANEL);
+  }
+  const wx = fr.X(ext.du, fr.d), wz = fr.Z(ext.du, fr.d);
+  return { x: bp.wx(wx), y: bp.wy(fr.y), z: bp.wz(wz), side: 'service', in: { x: bp.wx(fr.X(ext.du, fr.d - 1)), y: bp.wy(fr.y), z: bp.wz(fr.Z(ext.du, fr.d - 1)) } };
+}
+
+/**
+ * Apply the lot's program to a built blueprint. o = { style?, front, landmark?, lot }
+ * Records bp.meta.program = { id, variant, compact, rooms, satisfied, missing, serviceDoor } for the harnesses.
+ */
+export function applyProgram(bp, lot, layout, o = {}) {
+  if (!PROGRAM_OPTIONS.enabled) { bp.roomFrames = []; return null; }
+  const purpose = layout ? purposeFor(lot, layout) : null;
+  const prog = programFor(lot, purpose, layout);
+  const frames = bp.roomFrames || [];
+  bp.roomFrames = [];   // the frames the overlay itself creates from here on are not candidates
+  if (!prog && o.landmark) return null;   // a hand-built landmark outside the twenty programs is left as its module made it
+  const meta = bp.meta, floors = floorIndexer(meta);
+  const cands = collectCandidates(bp, frames, floors);
+  const front = o.front || lot.front || 'S';
+  for (const c of cands) c.exterior = c.f === 0 ? exteriorBack(bp, c, front, lot) : null;
+  const rng = new RNG(((lot.seed ?? 1) ^ 0x7a3c9e1d) >>> 0);
+  const planned = meta.rooms.filter((r) => !PROTECTED.has(r.kind)).length;
+  const compact = planned < EXTENDED_MIN_ROOMS;
+  const variant = prog ? prog.variant : variantOf(lot);
+  // the three arrangements of a program's street-level signature room (spec.upstairs): variant 0 puts it on the
+  // first floor up the stair from the lobby (the upstairs showroom), variant 1 gives it its own street door,
+  // variant 2 a double bay
+  const specs = prog ? prog.rooms.filter((s) => s.core || !compact).map((s) => (s.upstairs && variant === 0 && !compact && !o.landmark ? { ...s, where: 'first' } : s)) : [];
+  const ctx = { program: prog, palette: prog ? prog.materialIds : null, variant, style: o.style || null, rng, district: lot.district };
+  const wantsService = !!(prog && prog.circulation && prog.circulation.service);
+  const record = { id: prog ? prog.id : null, variant, compact, rooms: [], satisfied: [], missing: [], serviceDoor: null, streetDoor: null, adaptations: [] };
+  const existing = o.landmark || o.noBuild ? meta.rooms.map((r) => r.kind) : null;   // a landmark's hand-built room kinds
+  const placements = [];
+  // the room that takes the service door: the program's service-entry room, else its first back-of-house room (a
+  // records dock, a guard post at the goods door) - service circulation gets a real door wherever the shell allows
+  const entrySpec = wantsService ? (specs.find((s) => s.serviceEntry) || specs.find((s) => s.service) || null) : null;
+  // variant 1 is the street-connected host: its public ground-floor program room (the shop, the tellers' hall, the
+  // diner counter) opens to the street with its own door beside the tower lobby - the entry arrangement of the
+  // building differs from a sibling whose same room is reached through the lobby alone
+  const groundPublic = (s) => !s.service && (s.where === 'ground' || s.where === 'low');
+  const streetSpec = variant === 1 && !o.landmark && !compact ? (specs.find((s) => s.signature && groundPublic(s)) || specs.find((s) => s.core && groundPublic(s)) || null) : null;
+  const roleOf = (s) => (s === entrySpec ? 'entry' : s === streetSpec ? 'street' : null);
+  // record only (the Senate: another builder's blueprint, checked by kind pattern, never refurnished)
+  if (o.noBuild) {
+    for (const spec of specs) {
+      const by = spec.accept ? existing.find((k) => spec.accept.test(k)) : null;
+      if (by) record.satisfied.push({ kind: spec.kind, by }); else record.missing.push(spec.kind);
+    }
+    meta.program = record;
+    return record;
+  }
+
+  const seed = (lot.seed ?? 1) >>> 0;
+  let adjacent = null;   // side-by-side candidate pairs, built on first merge request
+  for (const spec of [...specs.filter((s) => s.core), ...specs.filter((s) => !s.core)]) {
+    // a landmark's own hand-built rooms satisfy a spec by kind pattern
+    if (o.landmark && spec.accept && existing.some((k) => spec.accept.test(k))) {
+      record.satisfied.push({ kind: spec.kind, by: existing.filter((k) => spec.accept.test(k))[0] });
+      for (const c of cands) if (spec.accept.test(c.r.kind)) c.used = true;   // the rooms that satisfy a spec are not refurnished for another
+      continue;
+    }
+    const tpl = templateFor(spec);
+    if (!tpl) { record.missing.push(spec.kind); continue; }
+    // landmarks: only generic library rooms are refurnished, never a signature room of the module
+    const pool = [];
+    let anyWhere = false;
+    for (const c of cands) if (!c.used && fits(tpl, c.w, c.d) && (!o.landmark || ROOMS[c.r.kind])) { pool.push(c); if (!anyWhere && whereOk(spec, c, floors.top)) anyWhere = true; }
+    let merge = null;
+    // a bay that needs width is always merged; an extended host of variant 2 also gives its signature room a double
+    // bay (a duty hall instead of a desk, a wide counter instead of a nook) - the massing of the plan differs
+    if (spec.merge || (spec.signature && !compact && variant === 2 && !o.landmark)) {
+      // prefer a merged pair: two adjacent unused rooms become one bay; the largest pair, then the first in plan order
+      if (!adjacent) adjacent = adjacentPairs(cands);
+      const mergedFits = (a, b) => { const alongX = a.fr.side === 'N' || a.fr.side === 'S'; return fits(tpl, alongX ? a.w + b.w + 1 : a.w, alongX ? a.d : a.d + b.d + 1); };
+      const pairs = adjacent.filter(([a, b]) => !a.used && !b.used && whereOk(spec, a, floors.top) && mergedFits(a, b));
+      if (pairs.length) { pairs.sort((p, q) => (q[0].w * q[0].d + q[1].w * q[1].d) - (p[0].w * p[0].d + p[1].w * p[1].d) || p[0].i - q[0].i); merge = pairs[0]; }
+    }
+    if (merge) { placements.push({ spec, tpl, merge }); merge[0].used = merge[1].used = true; continue; }
+    if (!pool.length) { record.missing.push(spec.kind); continue; }
+    // the best-scoring room on the wanted floors (any floor when none fits there); ties go to plan order
+    const target = targetFloor(spec, seed, floors.top), role = roleOf(spec);
+    let pick = null, bestS = -Infinity;
+    for (const c of pool) {
+      if (anyWhere && !whereOk(spec, c, floors.top)) continue;
+      const s = score(spec, c, floors.top, rng, wantsService, target, variant, role);
+      if (s > bestS || (s === bestS && c.i < pick.i)) { pick = c; bestS = s; }
+    }
+    pick.used = true;
+    placements.push({ spec, tpl, c: pick });
+  }
+
+  // the service door: the entry room if it sits on the ground floor against an exterior wall, else any placed
+  // back-of-house ground-floor room with one
+  let serviceAt = null;
+  if (wantsService) {
+    const withExt = placements.filter((p) => p.c && p.c.exterior);
+    serviceAt = withExt.find((p) => p.spec === entrySpec) || withExt.find((p) => p.spec.service) || null;
+  }
+  // the street door of a variant-1 host: its public ground-floor room, when it landed against an exterior wall
+  let streetAt = null;
+  if (streetSpec) { const p = placements.find((q) => q.spec === streetSpec); if (p && p.c && p.c.exterior && p !== serviceAt) streetAt = p; }
+
+  // build: the old NPC records of every room about to change go in one pass, then merged bays (they rewrite
+  // meta.rooms), then single rooms
+  const trim = o.style ? o.style.trim : B.CHROME;
+  stripRecords(bp, placements.flatMap((p) => (p.merge ? p.merge : [p.c])));
+  for (const p of placements) {
+    if (p.merge) {
+      const [a, b] = p.merge, alongX = a.fr.side === 'N' || a.fr.side === 'S';
+      const left = alongX ? (a.fr.rect.x0 < b.fr.rect.x0 ? a : b) : (a.fr.rect.z0 < b.fr.rect.z0 ? a : b), right = left === a ? b : a;
+      clearRoom(bp, a, o.style && o.style.floor); clearRoom(bp, b, o.style && o.style.floor);
+      const L = left.fr.rect, Rr = right.fr.rect;
+      if (alongX) { const wx = L.x1 + 1; for (let z = L.z0; z <= L.z1; z++) for (let ly = 0; ly < a.fr.h; ly++) bp.set(wx, a.fr.y + ly, z, 0); }
+      else { const wz = L.z1 + 1; for (let x = L.x0; x <= L.x1; x++) for (let ly = 0; ly < a.fr.h; ly++) bp.set(x, a.fr.y + ly, wz, 0); }
+      const rect = { x0: Math.min(L.x0, Rr.x0), z0: Math.min(L.z0, Rr.z0), x1: Math.max(L.x1, Rr.x1), z1: Math.max(L.z1, Rr.z1) };
+      const shift = alongX ? (Rr.x0 - L.x0) : (Rr.z0 - L.z0);
+      // u runs with +x for N/S and +z for W; for E it runs with +z as well (Z(u) = z0 + u), so the shift holds
+      const doorU = left.fr.doorU, extraDoors = [right.fr.doorU + shift];
+      // inner rooms opening into either half keep their doors: every back door of both frames is carried over
+      const backDoors = [left.fr.backDoorU, right.fr.backDoorU >= 0 && right.fr.backDoorU !== -100 ? right.fr.backDoorU + shift : -100].filter((u) => u >= 0 && u !== -100);
+      const fr = new Room(null, { ...rect, y: a.fr.y, h: a.fr.h, side: a.fr.side, doorU, doorW: a.fr.doorW, mask: a.fr.mask, extraDoors, backDoorU: backDoors.length ? backDoors[0] : -100, extraBackDoors: backDoors.length > 1 ? backDoors.slice(1) : null }, p.spec.kind, ctx);
+      const c = { fr, f: a.f, w: fr.w, d: fr.d, inner: false, exterior: null, r: null, i: -1 };
+      const room = furnish(bp, c, p.spec, p.tpl, ctx, rng, { extraDoors });
+      room.putRaw(extraDoors[0], fr.h, 0, B.GLOW_PANEL);
+      const drop = new Set([a.i, b.i]);
+      const merged = { kind: p.spec.kind, x: bp.wx(rect.x0), y: bp.wy(fr.y), z: bp.wz(rect.z0), w: rect.x1 - rect.x0 + 1, d: rect.z1 - rect.z0 + 1 };
+      meta.rooms = meta.rooms.filter((r, i) => !drop.has(i)).concat([merged]);
+      // candidate indices shifted: rebuild the index map for the remaining candidates
+      const byKey = new Map(); meta.rooms.forEach((r, i) => byKey.set(rectKey(r.x, r.y, r.z, r.w, r.d), i));
+      for (const cc of cands) if (cc.r) cc.i = byKey.get(rectKey(cc.r.x, cc.r.y, cc.r.z, cc.r.w, cc.r.d));
+      record.rooms.push({ ...merged, spec: p.spec.kind, core: p.spec.core, merged: true, floor: a.f, signature: p.spec.signature });
+      continue;
+    }
+    const c = p.c;
+    clearRoom(bp, c, o.style && o.style.floor);
+    const isService = serviceAt === p, isStreet = streetAt === p;
+    const room = furnish(bp, c, p.spec, p.tpl, ctx, rng, isService || isStreet ? { backDoorU: c.exterior.du } : {});
+    if (isService) record.serviceDoor = cutServiceDoor(bp, c, c.exterior, trim);
+    if (isStreet) { record.streetDoor = { ...cutServiceDoor(bp, c, c.exterior, trim), side: c.exterior.side, room: p.spec.kind }; room.putRaw(c.exterior.du, c.fr.h - 1, c.fr.d - 1, B.HOLO_SIGN); }   // the unit's own sign inside its street door
+    meta.rooms[c.i].kind = p.spec.kind;
+    record.rooms.push({ kind: p.spec.kind, x: c.r.x, y: c.r.y, z: c.r.z, w: c.r.w, d: c.r.d, spec: p.spec.kind, core: p.spec.core, floor: c.f, signature: p.spec.signature, serviceDoor: isService, streetDoor: isStreet });
+  }
+  if (record.serviceDoor && o.landmark) meta.doors.push({ x: record.serviceDoor.x, y: record.serviceDoor.y, z: record.serviceDoor.z, side: 'service' });
+  if (!o.landmark) applyAdaptations(bp, lot, cands, compact, ctx, rng, record, o);
+  meta.program = record;
+  return record;
+}
+
+/**
+ * Adaptations (spec 6): one (compact) or two (extended) seed-chosen amenity rooms the building does not already
+ * have - a hydroponics garden, a shrine, a music studio, a droid pool... - refurnished into small unused rooms up the
+ * tower. Each brings its own member of staff and its own activity, so two same-kind buildings that share a shell
+ * still house different households and workplaces. Recorded in meta.program.adaptations.
+ */
+// which adaptations a room kind rules out, as a bit mask over ADAPTATIONS, remembered across buildings (a few
+// hundred distinct kinds in a city)
+const AVOID_MASK = new Map();
+function avoidMask(kind) {
+  let m = AVOID_MASK.get(kind);
+  if (m === undefined) {
+    if (ADAPTATIONS.length > 31) throw new Error('applyAdaptations: more than 31 adaptations, widen the mask');
+    m = 0; for (let i = 0; i < ADAPTATIONS.length; i++) if (ADAPTATIONS[i].avoid.test(kind)) m |= 1 << i;
+    AVOID_MASK.set(kind, m);
+  }
+  return m;
+}
+
+function applyAdaptations(bp, lot, cands, compact, ctx, rng, record, o) {
+  const meta = bp.meta;
+  const arng = new RNG(((lot.seed ?? 1) ^ 0x5bd1e995) >>> 0);
+  const order = ADAPTATIONS.map((ad, i) => ({ ad, bit: 1 << i }));
+  for (let i = order.length - 1; i > 0; i--) { const j = arng.int(0, i); [order[i], order[j]] = [order[j], order[i]]; }
+  // amenities follow the size of the building: a small block has one, a tower two, a giant three
+  let planned = 0; const kinds = new Map();   // room kind -> how many rooms carry it right now
+  for (const r of meta.rooms) { kinds.set(r.kind, (kinds.get(r.kind) || 0) + 1); if (!PROTECTED.has(r.kind)) planned++; }
+  const want = planned < 24 ? 1 : planned < 100 ? 2 : 3;
+  void compact;
+  // the adaptations the building's present room kinds rule out (a garden tower gets no hydroponics)
+  const blockedMask = () => { let m = 0; for (const [k, n] of kinds) if (n > 0) m |= avoidMask(k); return m; };
+  let blocked = blockedMask();
+  // the small rooms by floor, highest floor first; within a floor smallest first, then plan order - the amenity
+  // sits up the tower, the program keeps the big rooms below. Floors are sorted only when an adaptation reaches them.
+  const byFloor = new Map();
+  for (const c of cands) if (c.w * c.d <= 60) { let g = byFloor.get(c.f); if (!g) byFloor.set(c.f, g = { list: [], sorted: false }); g.list.push(c); }
+  const floorsDesc = [...byFloor.keys()].sort((a, b) => b - a);
+  // the first three unused rooms that fit, in that order (the pick is among the first three)
+  const firstThree = (tpl) => {
+    const out = [];
+    for (const f of floorsDesc) {
+      const g = byFloor.get(f);
+      if (!g.sorted) { g.list.sort((a, b) => (a.w * a.d - b.w * b.d) || (a.i - b.i)); g.sorted = true; }
+      for (const c of g.list) if (!c.used && fits(tpl, c.w, c.d)) { out.push(c); if (out.length === 3) return out; }
+    }
+    return out;
+  };
+  const chosen = [];
+  for (const { ad, bit } of order) {
+    if (chosen.length >= want) break;
+    if (blocked & bit) continue;
+    const tpl = programRoom(ad.kind);
+    if (!tpl) continue;
+    const pool = firstThree(tpl);
+    if (!pool.length) continue;
+    const c = pool[arng.int(0, pool.length - 1)];
+    c.used = true;
+    // the room changes kind: its old kind may be gone from the building, the new one is present
+    const left = kinds.get(c.r.kind) - 1;
+    kinds.set(c.r.kind, left);
+    kinds.set(ad.kind, (kinds.get(ad.kind) || 0) + 1);
+    blocked = left > 0 ? blocked | avoidMask(ad.kind) : blockedMask();
+    chosen.push({ ad, tpl, c });
+  }
+  stripRecords(bp, chosen.map((x) => x.c));
+  for (const { ad, tpl, c } of chosen) {
+    clearRoom(bp, c, o.style && o.style.floor);
+    furnish(bp, c, { kind: ad.kind }, tpl, ctx, rng);
+    meta.rooms[c.i].kind = ad.kind;
+    record.adaptations.push({ kind: ad.kind, x: c.r.x, y: c.r.y, z: c.r.z, w: c.r.w, d: c.r.d, floor: c.f, verbs: ad.verbs, staff: ad.staff });
+  }
+}

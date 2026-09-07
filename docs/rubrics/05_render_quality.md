@@ -1,0 +1,302 @@
+# Rubric 5 — Render quality: the "4K Minecraft with shaders" look
+
+The user's words: "up the quality of your blocks, up the quality of how the Minecraft blocks look, the lighting, the
+shade, everything needs to look increasingly like 4K." The reference look is Minecraft running a high-resolution
+resource pack (Faithful 64x / Patrix style: still pixel art, still readable at block scale, but with real material
+detail) under a shader pack (SEUS / BSL style: sun shadows, bloom on emissive blocks, filmic tone mapping, specular
+on glass, metal and water, atmospheric sky). It must stay Minecraft: crisp texels, no smooth "realistic" textures, no
+photo textures, cube faces still read as cube faces.
+
+## Acceptance criteria
+
+| # | Criterion | Measure |
+| --- | --- | --- |
+| 1 | HD block textures: every tile is authored at 64x64 (4x the old 16x16) with material-class detail (wood grain, stone chips, brushed metal, panel seams and bevels, glass reflections, fabric weave, leaf clusters); the 16x16 pixel layout stays recognisable (a Minecraft player still identifies each block instantly); NearestFilter preserved, per-tile mipmaps regenerated | Contact-sheet PNG of all tiles at 16 vs 64; critic verdict |
+| 2 | Per-pixel material response: normal map (from a height field per tile) and material map (roughness, metalness, emissive) drive lighting; sun/moon direction gives a visible directional bump on stone/wood/plating; chrome/durasteel/steel glass/water show a specular highlight that moves with the camera; emissive blocks (glow panels, lamps, magma, holo signs, lit windows, torch flames) glow without depending on the light map | Screenshots at three times of day; shader compiles on WebGL2 without warnings |
+| 3 | Sun shadows: cascaded shadow maps from the sun/moon (2 cascades: 0-48 blocks sharp, 48-160 blocks soft) with PCF filtering; towers cast long shadows across the Coruscant boulevards, the saloon porch shades the boardwalk, NPC/animals/vehicles cast and receive; no acne, no peter-panning larger than 0.15 blocks, no visible cascade seam in motion; shadow strength blends with the sky light so caves and interiors do not double-darken | Recording of a day cycle at 8x speed; critic verdict |
+| 4 | HDR post: render to a half-float target; bloom (threshold on emissive/specular highlights, 5 mip blur, max +0.35 brightness contribution); ACES filmic tone mapping with exposure keyed to time of day (night exposure raised so Coruscant reads as a lit city, not black); subtle vignette; optional FXAA when antialias is off. Bloom must not haze the whole screen: a daytime frontier screenshot has < 2% of pixels changed by more than 8/255 outside emissive/specular regions | Screenshot pairs with post on/off; pixel diff numbers |
+| 5 | Sky and atmosphere: physically-flavoured gradient (Rayleigh-ish blue at zenith, Mie-ish warm horizon at low sun), sun disc with glow, moon with phase, stars with twinkle, aerial perspective fog tinted toward the sun at dawn/dusk; Coruscant keeps its cloudless haze with a warm city-glow horizon band at night; space stays black | Screenshots at dawn, noon, dusk, midnight in the frontier and in Coruscant |
+| 6 | Water: animated normals (two scrolling wave layers), Fresnel-weighted sky reflection, specular sun glint, depth-tinted transparency; the tsunami crest mesh keeps its own look but picks up the same specular | Recording of the shoreline and a flood |
+| 7 | Quality presets scale the whole stack: Cinematic = everything on (shadows 2048px per cascade, bloom, HD textures, normal/material maps, FXAA); Balanced = shadows 1024px single cascade, bloom on, HD textures, no FXAA; Light = no shadows, no bloom, HD colour atlas only. Presets switch live without reload; a SwiftShader/llvmpipe renderer string auto-selects Light on first run | Panel toggle recording; `?quality=` URL param |
+| 8 | Performance: on a real GPU (not SwiftShader) Cinematic at view distance 10 in the western town holds >= 60 fps at 1080p and >= 45 fps at 1440p; on SwiftShader the Light preset is within 15% of the pre-rubric frame time (measured by `scripts/bench.mjs`); GPU memory added by shadows + HDR + HD atlases <= 160 MB; the shadow pass draws only chunks inside the cascade frusta | Bench JSON before/after per preset committed under `bench/` |
+| 9 | No visual regressions: block edits, cracks, selection box, hand item, particles, debris, speech bubbles, HUD, admin panel, F3 overlay all render exactly as before in the Light preset; disasters' sky/fog/flash overrides still work under the new sky and tone mapping | Existing screenshot tests + a critic pass on all three disasters |
+| 10 | Determinism/multiplayer untouched: none of this touches the simulation, block data, light propagation results, or the network protocol | `npm test` green; mp-test green |
+
+## Design notes
+
+- Vertex layout in `src/mesher.js` is tight (uint8 light pairs + shade index). Add a face-direction (3 bits) where
+  needed for tangent frames rather than full normals; everything else can be derived in the fragment shader.
+- Shadow sampling belongs in a shared GLSL chunk used by the world material, water material, entity material,
+  voxel-vehicle material and the debris instanced material so every surface agrees on where the shadow falls.
+- The light map stays authoritative for interiors: shadow = mix(1, shadowSample, skyLightAtVertex) so a room lit only
+  by lamps is not darkened again by the sun's shadow map.
+- Emissive: material map B channel. Emissive tiles are not affected by shadows or the sky light, but are still fogged.
+- Colored block light (RGB propagation) is explicitly out of scope for this round; note it as a follow-up.
+- Everything is procedural and generated at load; no image assets are added to the repo.
+
+## Status / decisions (R2): HD tiles + normal / material atlases (criterion 1, texture half of criterion 2)
+
+### What exists
+
+- `src/constants.js`: `BASE_PX = 16` (painter resolution, unchanged), `HD_SCALE = 4`, `TILE_PX = 64`. The atlas is
+  `ATLAS_TILES * TILE_PX` = 1024 px. `tileUV()` is normalised, so every consumer (mesher, HUD icons, hand, particles,
+  crack overlay, debris, wave meshes, remote players) works unchanged; `tilePixels()` now returns the 64x64 tile.
+- `src/render/hdTiles.js`: `refineTile(base16, name, rng?, opts?) -> { color: ImageData(64), height: Float32Array(4096),
+  material: Uint8ClampedArray(4096*4) }`, `normalFromHeight(height, strength)`, `buildMipChain(rgba, mode)`,
+  `buildTileMaps(base16, name)` (everything the atlas needs for one tile), `blockMeanError()` (test helper).
+- `src/render/materials.js`: `classify(name) -> { cls, roughness, metalness, emissive, relief, ...refiner params }`
+  from an explicit per-tile table, then keyword rules (dynamic tiles: `sign:*`, `destroy_*`, names other builders
+  add), then a flagged `stone` fallback. `npm run material-table` prints the whole table and exits non-zero if any
+  tile is on the fallback.
+- `src/render/materialMaps.js`: `getMaterialMaps()` / `setMaterialMaps(normal, material)` registry with 1x1
+  placeholders (normal (128,128,255), material (230,0,0,255)) until the atlases exist. R1's shaders sample from here.
+- `src/textures.js` (atlas end of the file only): `finalizeAtlas()` refines every registered tile once (cached, so a
+  rebuild after `addSignTiles` only refines the new tiles), assembles the colour, normal and material atlases with
+  per-tile 7-level mip chains (64 -> 1), builds `atlasTexture` / `atlasNormalTexture` / `atlasMaterialTexture`
+  (+ `atlasCanvas` / `atlasNormalCanvas` / `atlasMaterialCanvas`), calls `setMaterialMaps()`, and logs the build
+  time once with `console.info` (`atlasBuildStats` keeps the numbers). `?hd=0` keeps the plain 16px look
+  (nearest-neighbour upsample, flat normals) for before/after comparisons and as a fallback.
+- Tooling: `scripts/tile-sheet.mjs` (`sheets` = contact sheets + raw atlases, `zoom` = a few tiles at 3-4x,
+  `shots` = in-game views before/after via `--hd 0|1`), `scripts/material-table.mjs`, `scripts/test-textures.mjs`
+  (in `npm test`).
+
+### Refinement rules (all enforced by `scripts/test-textures.mjs`)
+
+1. Layout preservation: every opaque 4x4 block of HD texels averages back to its base texel (mean error <= 0.5/255,
+   max <= 3/255 over all tiles; measured worst: `holo_sign` 2.3, a clipping artefact of a fully saturated neon).
+   The correction is applied as a smooth interpolated field plus a per-block residual, so block means are exact
+   without visible block edges. Consequence: the 16px mip level of the 64px chain equals the old atlas (within 4/255)
+   and the tile reads identically at distance.
+2. Alpha is inherited from the base texel (no new holes, no filled holes). The only exception is silhouette
+   rounding for `roundAlpha` classes (leaf clusters), which may cut the corner texel of an opaque block next to a hole.
+3. Determinism: the per-tile RNG is seeded from an FNV-1a hash of the tile name; the shared noise banks have fixed
+   seeds. Two runs are byte-identical; a different name with identical pixels gives different detail.
+4. Base upsample is edge-aware: neighbouring base texels of the same structure code (face / groove / dot / hole)
+   whose colours are within the class `blend` tolerance are interpolated smoothly, everything else stays a crisp
+   step. This is what removed the 4x4 grid that showed through the first noisy versions (stone, dirt, sand) while
+   keeping grooves, rivets, mortar and glass frames sharp.
+5. Detail is composed from small layer primitives (noise banks sampled through a per-tile transform, grain with
+   fading streaks and knots, cracks/scratches/blades, chips/lumps/leaves, basket weave, ripples, ore facets, glass
+   streaks, neon tubes / LED glow / halo for emissive texels) followed by a structure pass (domes on isolated dots,
+   1-texel bevels along face/groove borders lit from the top-left), silhouette rounding (dots, cobble stones, leaf
+   holes) and, for rounded classes, mild shading baked from the base relief into the colour.
+6. Normal map: Sobel on the wrapped 64x64 height field, OpenGL convention (R = +u right, G = toward the top of the
+   tile canvas, B = out), slope scaled by 3 * class `relief`; flat height -> exactly (128,128,255). Mip levels of the
+   normal atlas are renormalised per level; the colour atlas keeps the old alpha-aware downsample rule.
+7. Material atlas: R roughness, G metalness, B emissive, A 255, per base texel (grooves +0.12 roughness, ore
+   nuggets metallic, emissive masked per texel from luminance/saturation thresholds so frames and dark panels never
+   glow).
+
+### Material class table
+
+| class | tiles | rough | metal | emis | relief | notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| wood | oak/spruce/white/charred planks, logs (bark), log tops (rings), barrel, crate, shelf, bookshelf, doors, saloon door, sign, dead bush, chests, trough, stripped oak, `sign:*` | 0.72 (bark 0.85, birch 0.7) | 0 | 0 | 0.6 (bark 0.8) | grain h/v/rings, knots, bark furrows, `nearMedian` keeps books/handles clean |
+| stone | stone, bedrock, stone_bricks, sandstone top/side, gravestone, smooth_stone, scorched_stone | 0.7-0.92 | 0 | scorched 0.5 | 0.3-0.9 | chips, cracks, specks; bevelled joints on stone_bricks/sandstone |
+| brick | bricks | 0.82 | 0 | 0 | 0.75 | mortar = light grooves (recessed), brick face speckle |
+| cobble | cobblestone, furnace side/front | 0.84 | 0 | furnace 0.9 | 0.9 | rounded stones (dome heights, corner chamfer, baked shading) |
+| dirt | dirt, grass_side, dirt_path top/side, mud, coarse_dirt, farmland, ash | 0.55-0.94 | 0 | 0 | 0.3-0.6 | lumps + dots as pebbles |
+| sand | sand | 0.9 | 0 | 0 | 0.25 | ripples, specks |
+| gravel | gravel | 0.88 | 0 | 0 | 0.65 | blobs -> rounded pebbles |
+| plaster | plaster, snow | 0.76 / 0.6 | 0 | 0 | 0.3 / 0.25 | coarse undulation; snow sparkles |
+| metal | durasteel, durasteel_dark, deck_plate, hull_plate, iron_block, gold_block, anvil, anvil_top, rail, iron_bars | 0.35-0.62 | 0.8-1 | 0 | 0.5 | brushed streaks, scratches with shadow, rivet domes, seam bevels |
+| chrome | chrome | 0.12 | 1 | 0 | 0.3 | long soft streaks |
+| panel | panel_black/red/stripe, piano (0.22 rough), console top/side (emissive LEDs), vent, hull_trench (lit strip) | 0.22-0.5 | 0.15-0.55 | consoles/trench 1 | 0.25-0.5 | seam bevels, light scuffs |
+| glass | glass, steel_glass, window_lit (emissive panes), window_dark | 0.06-0.1 | 0 | window_lit 1 | 0.25 | streak core, lit frame edge, alpha-aware bevel |
+| fabric | beds, wool white/red/blue/green | 0.95 | 0 | 0 | 0.35 | basket weave per base texel |
+| foliage | grass_top (blades), oak/spruce/birch leaves (clusters, hole rounding), tall_grass, wheat, dandelion, poppy, cactus (ridges) | 0.6-0.7 | 0 | 0 | 0.45-0.7 | |
+| liquid | water | 0.1 | 0 | 0 | 0.15 | soft undulation only (R1 animates the surface) |
+| glow | lantern (metal detail), torch (wood detail), glow_panel, glow_panel_blue, holo_sign, city_lamp (panel detail), magma (stone detail) | 0.3-0.8 | 0-0.4 | 1 | 0.35-0.6 | emissive mask per texel; frames/borders are not emissive |
+| ore | coal_ore, iron_ore (metal 0.55 nuggets), gold_ore (0.8) | 0.82 | nuggets only | 0 | 0.8 | faceted nuggets, stone elsewhere |
+| organic | hay side/top (straw), pumpkin side/top (ribs) | 0.55-0.9 | 0 | 0 | 0.6 | |
+| plain | missing, destroy_0..9 | 0.9 | 0 | 0 | 0 | nearest-neighbour, no relief (crack overlay must stay identical) |
+
+Every painted tile is in the explicit table; only `destroy_*` and `sign:*` use keyword rules (by design). Nothing is on
+the fallback (`npm run material-table` and the unit test both check this).
+
+### Performance
+
+- Measured in headless Chrome (SwiftShader) on this 4-core VM while ~20 other builders' processes were running (load
+  average 24-28, i.e. 6-7x oversubscribed): full build of the three 1024x1024 atlases with 7 mip levels for 118 tiles,
+  10 consecutive page loads = 194 / 265 / 268 / 302 / 309 / 309 / 331 / 340 / 359 / 424 ms wall (median 309; the 424
+  had a 147 ms canvas upload stall, normally 20-30 ms). Split: refine 170-320 ms, mip assembly 7-13 ms, canvas +
+  texture creation 20-30 ms. Node (`scripts/test-textures.mjs`): the same work cold 180-400 ms wall; warm (JIT
+  compiled) 40 ms. Log: `/opt/cursor/artifacts/r2_atlas_build_time.log`.
+- The cold cost is V8 tier-up, not the algorithm: fully unoptimised (`node --no-opt --no-maglev`) one pass takes
+  ~900 ms and ~800 scavenges, warm optimised 40 ms and 1 scavenge; the cold pass sits in between (~60 scavenges: the
+  boxed doubles of the loops that run before their TurboFan code lands, which on a loaded machine is late). What
+  helped: shared noise banks + per-tile index transforms instead of per-tile noise, scratch buffers and slab-allocated
+  outputs, precomputed pair similarities for the edge-aware weights, fused colour-channel and noise passes, hoisting
+  material reads out of hot loops, one fixed object shape for material descriptors. On an idle machine the build is
+  well under the 350 ms budget; under this VM's load 7 of 10 samples are under it.
+
+### Known imperfections / follow-ups
+
+- Nothing samples the normal / material atlases yet in this branch: they are built, registered through
+  `setMaterialMaps()` and exported next to `atlasTexture`, but the bump/specular/emissive response only appears once
+  R1's shaders read them (`getMaterialMaps()`).
+- Near-white tiles (snow, wool_white, iron_block) show little colour detail because there is no headroom above 255;
+  their relief lives in the normal map. Fully saturated neons (holo_sign) clip slightly (block error 2.3/255).
+- Detail is per base texel and mean-preserving, so an HD tile can never introduce shapes larger than a base texel
+  (no long diagonal cracks across a whole stone block); this is the price of keeping the 16px layout identical.
+- `plain` tiles (crack overlay) are nearest-neighbour upsampled: the destroy stages stay pixel-identical to before.
+- Material values are per base texel (16x16 resolution inside a tile), not per HD texel, except the emissive mask
+  which is also per base texel; per-HD-texel roughness variation (wet spots, polished scratches) is a follow-up.
+- Cold build time depends on JIT warm-up; a fixed-point (Int32) version of the noise/compose loops would remove the
+  interpreter's double boxing if the budget ever needs to hold on much slower machines.
+
+## Status / decisions (R1)
+
+Branch `cursor/render-shaders-54d6`. R1 owns criteria 2 (shader side), 3-10; criterion 1 (64x tiles) and the
+normal/material atlases come from R2 through `setMaterialMaps()` in `src/render/materialMaps.js`. Everything below
+was measured on the SwiftShader VM with `scripts/render-measure.mjs`, `scripts/bench.mjs` and `scripts/shots.mjs`.
+
+### Where things live
+
+| Piece | File | Notes |
+| --- | --- | --- |
+| Face direction attribute | `src/mesher.js` | `aFace` uint8 on every quad path (cube faces, special shapes; cross/diagonal quads pick the nearest axis). Water top faces pack the column depth in bits 3-7 (`dir | depth << 3`, depth 0..31); geometry without the attribute gets 255 in the shadow pass (no alpha test). |
+| Shared shading chunk | `src/render/shading.js` | `SHADING_UNIFORMS` (one instance of every uniform), `SKY_GLSL` (`skyGradient`), `SHADING_PARS` (`sunShadow`, `sunLight`, `shadingLight`, `sunSpecular`, `fogColorDir`), `bindShading(material)`, `setShadingDefines()`, `SHADOW_LAYER` / `SHADOW_LAYER_NEAR`. |
+| Material maps contract | `src/render/materialMaps.js` | `getMaterialMaps()`, `setMaterialMaps(normal, material)`, `onMaterialMaps(fn)`, `bindMaterialMaps(material)`; 1x1 placeholders (normal 128/128/255, material 230/0/0/255). Dev aids: `?normaltest=1` (raised-square normal atlas for the sign check), `?matdebug=1` (maps derived from the colour atlas + block names). |
+| World / water shaders | `src/terrain.js` | `FANCY` define = per-pixel path (tangent frame from `aFace`, material maps, sun + shadows, GGX-lite specular, Schlick Fresnel, sky reflection, emissive `albedo * B * 2.2`, directional fog); `FANCY 0` = the pre-rubric shader byte for byte. Water: two procedural wave layers, Fresnel sky reflection, sun glint, depth tint from `aFace`. |
+| Cascaded shadows | `src/render/shadows.js` | Two texel-snapped ortho cascades (48 / 160 blocks; single 64-block cascade on Balanced), depth-only override material alpha-tested through the atlas, exact chunk AABB culling against the view slice swept toward the light, entity casters (near cascade only) discovered every frame from `castShadow` / `userData.shadowCaster` / `material.userData.shadowCaster`. |
+| HDR post | `src/render/post.js` | Half-float scene target with a sampleable depth texture, 5-level bloom (bright pass with knee, capped at +0.35), ACES + exposure in linear light (`pow(c, 2.2)` in, `pow(1/2.2)` out so the LinearSRGB-tuned shaders keep their mid-tones), vignette 0.14, depth-gated FXAA. |
+| Pipeline | `src/render/pipeline.js` | Per-frame sun/moon/ambient uniforms, cascades, post; `applyPreset(q)`, `setQuality(name)`, `readback()` for the scripts. `game.pipeline` is created after `setupEntities()`; `game.js` only constructs it, calls `render()`, and forwards `setSize()` (6 lines changed). |
+| Sky | `src/sky.js` | Rayleigh/Mie-flavoured gradient shared with fog and reflections, HDR sun disc + glow, moon with phase, twinkling stars, 22 degree orbit tilt; `applyRegion` / `applyOverride` kept. |
+| Presets | `src/quality.js` | `post`, `shadows`, `shadowRes`, `bloom`, `fxaa`, `materialMaps` per preset; `isSoftwareRenderer()`; `applyQuality()` switches the render stack live through `game.pipeline.applyPreset`. |
+| Scripts | `scripts/render-measure.mjs`, `scripts/shots.mjs`, `scripts/bench.mjs` | Luminance ratios / exposure bisection / bloom guard / memory; verification screenshots with console capture; frame bench. |
+
+### Criterion status
+
+| # | Status | Evidence / notes |
+| --- | --- | --- |
+| 2 | Done (shader side) | Sign convention verified with `?normaltest=1` (sun-facing edge of the raised square lit). With the flat placeholders the world renders with the geometric normal and roughness 0.9, so bumps/specular/emissive appear as soon as R2 calls `setMaterialMaps`. `?matdebug=1` shows the full path today (metal/glass/water highlights, lamp emissive). Shader compiles clean on WebGL2 (0 console warnings in every `shots.mjs` run). |
+| 3 | Done | Both cascades verified with a raw-shadow-factor probe; PCF 3x3 soft edges; NPC/animal casters into the near cascade; no acne at noon or at 0.25 / 0.74 (slope-scaled bias + normal offset); cascade blend 80-96 % of each radius. Interiors: `sunLight` is gated by the vertex sky light so lamp-lit rooms are never darkened twice. Not done: an 8x day-cycle recording (SwiftShader runs 2-8 fps; verified from stills at four times instead). |
+| 4 | Done | Bloom guard at noon: 0.000 % of pixels outside the dilated (24 px) source regions change by > 8/255 (3 of 805 771; max diff 10). Mean luminance noon Cinematic / Light = 0.989 (sky 1.001, sunlit ground 1.011). Night exposure 1.75 vs day 1.2. FXAA is gated by the depth buffer (see decisions): 2.9 % of pixels change when toggled, all on geometric edges; texels inside a face are untouched. |
+| 5 | Done | Frontier at 0.25 / 0.5 / 0.74 / 0.0 and Coruscant noon / night shots; space stays black (`applyRegion` untouched); Coruscant keeps its grey-brown haze with a sodium band on the horizon at night; tornado storm deck, tsunami storm + underwater fog and beam flash verified by forcing `effects.setEnvironment` / `effects.flash` values (the simulation is too slow on SwiftShader for the 10 s shots to show much), and again live: tornado and tsunami started through `game.disasters.command` and left running 90 s (storm deck over the town; player submerged in the flood with the underwater fog, swept NPCs floating). |
+| 6 | Done (water) | Wave normals, Fresnel reflection, glint and depth tint in `WATER_FRAG`. The tsunami crest keeps its own shader; the recipe to give it the same specular is below (integrator). |
+| 7 | Done | Live switching cinematic -> light -> balanced -> cinematic -> light in one page: 0 exceptions, cascades/res/bloom/FXAA/material maps follow the preset, frame mean within 1 % across presets. Fresh profile on SwiftShader starts on Light (`?quality=` and localStorage still win). Admin panel unchanged (it reads `QUALITY` labels). |
+| 8 | Measured (see table) | Light preset draws the same calls as before (146 vs 146) through the legacy path; interleaved A/B numbers below. GPU memory added on Cinematic: 58.6 MB (shadows 40 MB, post 18.6 MB at 1280x713) - the HD atlases are R2's. Shadow pass draws only chunks whose AABB intersects the swept view slice (Cinematic 144 chunk + 59 object draws for 374 loaded chunks). Real-GPU fps could not be measured on this VM. |
+| 9 | Done | Light preset is the untouched direct path (`FANCY 0`, no HDR target, HUD drawn after); on Balanced/Cinematic the HUD is still drawn by `game.js` after the pipeline. Disaster overrides verified (criterion 5). |
+| 10 | Done | `npm test` green; no changes to block data, light propagation, simulation or network. |
+
+### Measurements
+
+Frame bench (`scripts/bench.mjs`, town `x=-8 z=2 time=0.45`, 25 s, SwiftShader - GPU-side numbers are not
+representative, "js" includes the driver stalls of the software rasterizer):
+
+| Preset | Before: frame / js / draw calls | After: frame / js / draw calls |
+| --- | --- | --- |
+| Light | 224 ms / 6.3 ms / 146 | 134 ms / 3.8 ms / 146 |
+| Balanced | 239 ms / 9.0 ms / 175 | 573 ms / 47.8 ms / 327 |
+| Cinematic | 256 ms / 15.5 ms / 198 | 574 ms / 13.5 ms / 408 |
+
+The "before" column was taken hours earlier under a different machine load, so the Light row was re-measured as an
+interleaved A/B in one session (`bench/r1_ab_light.json`: pre-rubric tree on :5217 vs this branch on :5207, two
+rounds each): before 105.3 ms frame / 3.75 ms js / 146.2 draw calls, after 93.5 ms / 3.35 ms / 146.2 - ratio 0.89 /
+0.89 / 1.00, i.e. within the run-to-run noise (criterion 8's 15 % bound holds; the Light path is the untouched direct
+render). Balanced/Cinematic frame times double on SwiftShader because the shadow pass and the post chain run on the
+CPU rasterizer; the comparable figure is the draw-call count (+150 / +210 for the shadow pass and post passes).
+
+Luminance (`bench/r1_measure.json`, ratio Cinematic / Light of the same frame): noon mean 0.989 (sky 1.001, ground
+1.011); dawn 0.25 mean 1.09 (sky 1.16, ground patch 0.80 - long shadows); dusk 0.74 mean 1.07. The rubric fixes the
+noon figure; dawn/dusk are the deliberate filmic look (brighter sky, longer shadows).
+
+### Decisions
+
+- Lighting budget: the lightmap's sky light is split into an ambient share `uAmbientK` and a directional share
+  (`SUN_STRENGTH 0.44`, wrapped N.L with `SUN_WRAP 0.7`). Noon lands on `AMBIENT_K 0.52`; as the directional light
+  weakens (low sun, moon at 0.10, storm deck: `skyLightMul * (1 - skyMix)`) the pipeline moves `uAmbientK` toward 1 so
+  the frame never darkens twice. Shade is tinted slightly cool (`SHADE_TINT`) against a warm noon sun; the sum stays
+  neutral. The vanilla per-face shade is lifted 40 % of the way toward flat on the fancy path (`FACE_FLATTEN`) because
+  the sun now does that job per pixel; AO stays.
+- Exposure: `dayExposure 1.2` was bisected so the noon town frame matches the pre-rubric mean; `nightExposure 1.75`
+  so lit cities read as lit. The sky dome, fog and reflections are pre-divided by the lift (`uSkyGain`) so authored
+  night/dusk sky colours come out as authored while the ground gets the full lift.
+- Tone mapping runs in linear light on the gamma-shaped shader values (`pow(c, 2.2)`, ACES, `pow(1/2.2)`) and the
+  renderer stays on `LinearSRGBColorSpace`: mid-tones keep the old look, only highlights roll off filmically.
+- FXAA only touches geometric edges: the scene depth (a `DepthTexture` on the HDR target) gates the filter through its
+  second difference, which is ~0 across a flat face and jumps at silhouettes and creases. To keep the world depth for
+  that mask the hand is drawn through `gl.depthRange(0, 0.05)` instead of a depth clear (three.js never sets the depth
+  range itself); a world pixel would have to be closer than 0.053 blocks (near plane 0.05) to occlude the hand.
+- Entities cast only into the near cascade; the far cascade is chunk geometry only (their far shadows are a few texels
+  and they are most of the draw calls).
+- Coruscant night glow is a band (`exp(-7|y|)`) on the horizon plus a light fog tint; the haze itself stays the old
+  grey-brown (ACES already warms it a little).
+- Light preset = the exact pre-rubric render path (direct to canvas, `FANCY 0`), so weak machines and the regression
+  guarantee of criterion 9 share one code path.
+
+### Integrator wiring (materials R1 could not edit)
+
+Merging this branch onto the base (which already carries R2's `cursor/render-hd-textures-54d6`) conflicts in two
+files, both checked with a read-only `git merge-tree` of the two heads and a smoke run of the resolved tree:
+
+- `src/render/materialMaps.js` (add/add): take R1's file. It is a superset of R2's (same `getMaterialMaps()` /
+  `setMaterialMaps(normal, material)` semantics and placeholder values, plus `onMaterialMaps`, `bindMaterialMaps`,
+  the shared uniforms and the dev generators); R2's `src/textures.js` (`buildAtlas` -> `setMaterialMaps`) and
+  `scripts/test-textures.mjs` (Node import, "material-map hook called") run unchanged against it.
+- `docs/rubrics/05_render_quality.md`: keep both status sections (R2's, then this one).
+
+On the resolved tree `test-unit`, `test-textures`, `test-coruscant-towers`, `test-spaceport` and `test-deathstar`
+pass, and the town at four times, Coruscant noon/night and the coast render with 0 exceptions and no shader warnings;
+R2's normal convention (`normalFromHeight`: R = +u, G = toward the tile top) is the one the tangent frame expects,
+and all three atlases are sampled with the colour atlas's `vUv`, so the 1024 px maps line up texel for texel. With
+the real maps the noon town frame measures Cinematic / Light = 1.024 in the mean (sky 1.028, sunlit ground patch
+1.115 from the bump and specular response; the +-5 % bound is on the mean) and the bloom guard reads 0.166 % (more
+emissive sources than the placeholders; bound 2 %).
+
+All three materials already share `SHARED.uSkyLight / uSkyTint / uFogColor / uFogNear / uFogFar / uFlash` from
+`src/entityMaterial.js`; the recipe adds the sun, its shadows and (optionally) specular through the shared chunk.
+`src/entityMaterial.js` is the worked example (`#if FANCY` blocks, `bindShading`, `userData.shadowCaster`).
+
+1. `src/disasters/debris.js` (`DebrisSystem.material`, InstancedMesh):
+   - vertex shader: add `#if FANCY varying vec3 vWorldPos; varying vec3 vNormal; #endif`; inside `main()` after `n`
+     is computed: `#if FANCY vWorldPos = (modelMatrix * instanceMatrix * vec4(position, 1.0)).xyz; vNormal = n; #endif`.
+   - fragment shader: declare the same varyings under `#if FANCY` and paste `${SHADING_PARS}` (import
+     `SHADING_PARS, bindShading` from `../render/shading.js`) above `main()`; replace
+     `vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));` by
+     ```glsl
+     #if FANCY
+       vec3 light = shadingLight(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72), vWorldPos, normalize(vNormal), lightCurve(vLight.x), vDist);
+       vec3 fogC = fogColorDir(uFogColor, normalize(vWorldPos - uCamPos));
+     #else
+       vec3 light = max(vec3(sky) * uSkyTint, vec3(blk) * vec3(1.0, 0.9, 0.72));
+       vec3 fogC = uFogColor;
+     #endif
+     ```
+     and fog with `fogC` instead of `uFogColor`.
+   - material: `defines: { FANCY: 0 }` in the `ShaderMaterial` options, then `bindShading(this.material)`. The pipeline
+     already registers `game.disasters.debris.mesh` as a shadow caster (`shadows.addCaster`), so debris cast as soon
+     as the material is bound; nothing else to do. Casting works today even without the shader change.
+2. `src/vehicles/voxelMesh.js` (`voxelMaterial(atlas)`): same recipe (no `instanceMatrix`:
+   `vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz`). The geometry has no normal attribute; either emit one in
+   `buildVoxelGeometry` from `FACES[].n` or derive it per pixel with
+   `vec3 N = normalize(cross(dFdx(vWorldPos), dFdy(vWorldPos)));` (flat cube faces, WebGL2 has derivatives). Use
+   `lightCurve(uLight.x)` as the `skyVis` argument. Mark every vehicle mesh `mesh.castShadow = true` (or set
+   `material.userData.shadowCaster = true` once) - the shadow pass picks the flag up every frame, no reparenting.
+   Optional metal highlight: `col += sunSpecular(vWorldPos, N, N, normalize(uCamPos - vWorldPos), 0.35, 0.8, tex.rgb, lightCurve(uLight.x), vDist) * vShade;`.
+3. `src/disasters/tsunami/crestMesh.js` (`VoxelCrest.material`): same recipe with `N = vec3(0.0, 1.0, 0.0)` for the
+   lit term (the crest is a stepped water surface; `aShade` already darkens its sides) and the water specular:
+   `col += sunSpecular(vWorldPos, N, N, V, 0.2, 0.0, vec3(1.0), lightCurve(vLight.x), vDist) * 0.6;` with
+   `vec3 V = normalize(uCamPos - vWorldPos)`. Do not flag the crest as a caster (it is translucent and moves every
+   tick; a moving 12-block shadow reads as a glitch).
+4. Anything else with a `ShaderMaterial` that should be shaded: same three steps (varyings, `shadingLight`,
+   `bindShading` + `defines.FANCY`). The `FANCY` define is flipped by `setShadingDefines` for every bound material
+   that declares it, so the Light preset never compiles these paths. Materials that only want to cast: set
+   `object.castShadow = true` or `userData.shadowCaster = true`; alpha-tested casting through the atlas is automatic for
+   chunk geometry only (other casters draw solid).
+
+### Known gaps
+
+- Normal/material atlases: flat placeholders on this branch; R2's `setMaterialMaps` call is already on the base, so
+  the merged tree ships the real maps (see the merge notes above). The derived `?matdebug=1` maps are a dev aid.
+- Real-GPU performance (criterion 8's 60 fps @ 1080p) is unmeasured here (SwiftShader only). Draw calls roughly
+  double on Cinematic (shadow pass); the post chain is a bright pass, 4 downsamples and 4 upsamples (half resolution
+  and below), the composite and optionally FXAA.
+- Shadows on the debris / vehicles / crest surfaces need the wiring above; they already receive nothing and the debris
+  already casts.
+- Clouds do not cast shadows and are not tone-mapped differently from before; the cloud deck still uses
+  `MeshBasicMaterial`.
+- The 8x day-cycle recording of criterion 3 and the panel-toggle recording of criterion 7 were replaced by CDP
+  stills and a scripted live-switch check because of the software rasterizer.
+- Dawn/dusk frames are ~7-9 % brighter in the mean than the pre-rubric look (brighter filmic sky); noon is within 1.1 %.

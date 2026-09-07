@@ -1,0 +1,206 @@
+{
+  "date": "2026-09-05T12:25:32.198Z",
+  "base": "http://localhost:5207",
+  "view": "x=-8&z=2&yaw=-70",
+  "times": [
+    0.5,
+    0.25,
+    0.74
+  ],
+  "presets": {
+    "0.5": {
+      "time": 0.5,
+      "url": "http://localhost:5207/?x=-8&z=2&yaw=-70&time=0.5&quality=cinematic",
+      "luminance": {
+        "light": {
+          "mean": 0.34243220581774086,
+          "meanLower": 0.3169833127264804,
+          "meanSky": 0.40341694926537297,
+          "meanGround": 0.3021660470342282,
+          "width": 1280,
+          "height": 713
+        },
+        "balanced": {
+          "mean": 0.3388421525789862,
+          "meanLower": 0.31593344461062794,
+          "meanSky": 0.40394632236552575,
+          "meanGround": 0.30594965740898383,
+          "width": 1280,
+          "height": 713,
+          "ratio": 0.9895,
+          "ratioLower": 0.9967,
+          "ratioSky": 1.0013,
+          "ratioGround": 1.0125
+        },
+        "cinematic": {
+          "mean": 0.33873927813844734,
+          "meanLower": 0.31592892920302446,
+          "meanSky": 0.40375424913051294,
+          "meanGround": 0.30546070071438697,
+          "width": 1280,
+          "height": 713,
+          "ratio": 0.9892,
+          "ratioLower": 0.9967,
+          "ratioSky": 1.0008,
+          "ratioGround": 1.0109
+        }
+      },
+      "exceptions": [],
+      "consoleWarnings": []
+    },
+    "0.25": {
+      "time": 0.25,
+      "url": "http://localhost:5207/?x=-8&z=2&yaw=-70&time=0.25&quality=cinematic",
+      "luminance": {
+        "light": {
+          "mean": 0.1810101935518025,
+          "meanLower": 0.14878436308945248,
+          "meanSky": 0.22974835481357747,
+          "meanGround": 0.1343206389411395,
+          "width": 1280,
+          "height": 713
+        },
+        "balanced": {
+          "mean": 0.19775949111223529,
+          "meanLower": 0.14347856007778595,
+          "meanSky": 0.2660645411600561,
+          "meanGround": 0.10796876448737752,
+          "width": 1280,
+          "height": 713,
+          "ratio": 1.0925,
+          "ratioLower": 0.9643,
+          "ratioSky": 1.1581,
+          "ratioGround": 0.8038
+        },
+        "cinematic": {
+          "mean": 0.19782176186994588,
+          "meanLower": 0.14371477302608768,
+          "meanSky": 0.26597219010161555,
+          "meanGround": 0.10776595013489713,
+          "width": 1280,
+          "height": 713,
+          "ratio": 1.0929,
+          "ratioLower": 0.9659,
+          "ratioSky": 1.1577,
+          "ratioGround": 0.8023
+        }
+      },
+      "exceptions": [],
+      "consoleWarnings": []
+    },
+    "0.74": {
+      "time": 0.74,
+      "url": "http://localhost:5207/?x=-8&z=2&yaw=-70&time=0.74&quality=cinematic",
+      "luminance": {
+        "light": {
+          "mean": 0.17879290589414754,
+          "meanLower": 0.15281549630912578,
+          "meanSky": 0.22425179383698926,
+          "meanGround": 0.1392347058348666,
+          "width": 1280,
+          "height": 713
+        },
+        "balanced": {
+          "mean": 0.19121861002689303,
+          "meanLower": 0.14280442561970266,
+          "meanSky": 0.2581801051251256,
+          "meanGround": 0.10823959295198138,
+          "width": 1280,
+          "height": 713,
+          "ratio": 1.0695,
+          "ratioLower": 0.9345,
+          "ratioSky": 1.1513,
+          "ratioGround": 0.7774
+        },
+        "cinematic": {
+          "mean": 0.19125828834430025,
+          "meanLower": 0.14300669058818036,
+          "meanSky": 0.2580821257975706,
+          "meanGround": 0.10824668001403409,
+          "width": 1280,
+          "height": 713,
+          "ratio": 1.0697,
+          "ratioLower": 0.9358,
+          "ratioSky": 1.1509,
+          "ratioGround": 0.7774
+        }
+      },
+      "exceptions": [],
+      "consoleWarnings": []
+    }
+  },
+  "calibration": null,
+  "bloomGuard": {
+    "at": 0.5,
+    "width": 1280,
+    "height": 713,
+    "dilateRadius": 24,
+    "sourcePixels": 68025,
+    "regionPixels": 106869,
+    "outsidePixels": 805771,
+    "changedOutside": 3,
+    "changedOutsidePct": 0,
+    "maxDiffOutside": 10,
+    "changedInside": 25,
+    "maxDiffInside": 45,
+    "threshold": 1,
+    "cap": 0.35,
+    "strength": 0.7
+  },
+  "memory": {
+    "light": {
+      "quality": "light",
+      "info": {
+        "geometries": 188,
+        "textures": 49,
+        "programs": 22
+      },
+      "pipelineMB": 0,
+      "shadowsMB": 0,
+      "postMB": 0,
+      "cascades": 0,
+      "shadowRes": 1024,
+      "drawCalls": 153,
+      "shadowDraws": {
+        "shadowChunkDraws": 125,
+        "shadowObjectDraws": 59
+      }
+    },
+    "balanced": {
+      "quality": "balanced",
+      "info": {
+        "geometries": 203,
+        "textures": 51,
+        "programs": 22
+      },
+      "pipelineMB": 23.55,
+      "shadowsMB": 5,
+      "postMB": 18.55,
+      "cascades": 1,
+      "shadowRes": 1024,
+      "drawCalls": 288,
+      "shadowDraws": {
+        "shadowChunkDraws": 45,
+        "shadowObjectDraws": 74
+      }
+    },
+    "cinematic": {
+      "quality": "cinematic",
+      "info": {
+        "geometries": 216,
+        "textures": 53,
+        "programs": 22
+      },
+      "pipelineMB": 58.55,
+      "shadowsMB": 40,
+      "postMB": 18.55,
+      "cascades": 2,
+      "shadowRes": 2048,
+      "drawCalls": 380,
+      "shadowDraws": {
+        "shadowChunkDraws": 144,
+        "shadowObjectDraws": 59
+      }
+    }
+  }
+}
