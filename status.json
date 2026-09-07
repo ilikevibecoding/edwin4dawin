@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-07T00:07:42.329Z",
+  "updated": "2026-09-07T00:21:21.262Z",
   "phase": "Round 6, pass 2: builders running for the spaceport x4, 30-line dialogue + 13-anchor cast, economy v2 with physical shipments, 20 building programs + building scorer, the Senate chamber - and, from your notes tonight, W10 architecture v2 so the towers stop looking like New York. Every build now shows its commit + time in the F4 header and the F3 overlay (current live: ff8673c7).",
   "summary": "Your notes (6 Sep evening) and what is happening with each: (1) 'buildings look like New York, not Star Wars' -> W10 architecture v2 launched with your reference images: no more window grids (ribbon glazing, slits, panel seams, full-height light strips), rounded / tapered / stacked-disc massing with cap platforms and lit ring ledges on tall towers, Coruscant palette only, impostors follow; rubric 18, before/after cameras will be posted. (2) 'every room needs a purpose you can see' -> P3 is applying the 20 building programs with dossiers and a per-building score; a legibility fix round (name plates, signature furniture, no filler rooms) follows its report. (3) 'Senate pods look nothing like the real ones; bigger, individual circles, back rooms behind them (Andor)' -> P4 is rebuilding the chamber now (tiers of individual round repulsorpods, 12 delegation suites with corridors directly behind the pods, sessions); your Andor note goes into its fix round. (4) 'random ship stuck to the side of the Senate' -> found: two block-built shuttles on the Senate's pads at the lot edge; removed in ff8673c7, live now. (5) 'make your own angular blocks for spaceships' -> ships v3 (rubric 19: sloped voxel cells, re-sculpted hulls, a collision audit against every building) queued for the next free slot. Live now: everything from wave 1 - crowned towers, 62 ships with the port cycle and boarding, the maglev train, credits/shops/jobs, the lower city under the plateau, 4,767 citizens.",
   "links": [
@@ -22,6 +22,10 @@
     {
       "label": "Play the exact latest build (commit d8cd3674, immune to CDN caching)",
       "url": "https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/d8cd3674/dist/index.html"
+    },
+    {
+      "label": "Play the exact latest build (commit 8a80e4dc, immune to CDN caching)",
+      "url": "https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/8a80e4dc/dist/index.html"
     }
   ],
   "workstreams": [
@@ -257,8 +261,8 @@
     },
     {
       "name": "Pass 2 P4: Senate chamber, 12 delegation suites, sessions, 3 policy scenarios",
-      "status": "building",
-      "detail": "resumed 20:28; committing"
+      "status": "merged",
+      "detail": "chamber 105 across / 60 tall: 52 bowl pods + 3 tiers of 30 hanging pods with gallery rings behind them, podium column, 12 suites, two sessions a day, 3 scenarios, session board; test-senate 101/101; live in 8a80e4dc; fix round queued for rounder individual pods (your Andor note)"
     },
     {
       "name": "Pass 2 P5/P6: factions + 8 surprises; crowd appearance from the composer",
@@ -322,6 +326,14 @@
   ],
   "screenshots": [
     {
+      "src": "img/r6_senate_board.jpg",
+      "caption": "Session board during a sitting: the Lift Restoration Act, tally bar, speaker (00:21 UTC)"
+    },
+    {
+      "src": "img/r6_senate_chamber.jpg",
+      "caption": "The Senate chamber from the public gallery: tiers of pods, bowl rings, the podium column (00:21 UTC)"
+    },
+    {
       "src": "img/r6_cast_d4lt.jpg",
       "caption": "D4-LT in the utility plant reactor room answering in its own words (00:07 UTC)"
     },
@@ -352,14 +364,6 @@
     {
       "src": "img/r6_welding.jpg",
       "caption": "Mechanics welding at the landing gear of a dwelling ship (14:47 UTC)"
-    },
-    {
-      "src": "img/r6_ships.jpg",
-      "caption": "Ships v2: sky traffic over the boulevards (14:47 UTC)"
-    },
-    {
-      "src": "img/r6_lower_city.jpg",
-      "caption": "Lower city freight trench where the orange sea was (14:47 UTC)"
     }
   ],
   "log": [
@@ -494,6 +498,10 @@
     {
       "time": "2026-09-07 00:07 UTC",
       "text": "Your notes (ships you cannot enter in flight; floating signs and junk; people peeking over counters): in-flight boarding is live now (d8cd3674); a dedicated sweep agent is auditing every structure for floating geometry and misplaced people and fixing what it owns; P1 cast + dialogue merged."
+    },
+    {
+      "time": "2026-09-07 00:21 UTC",
+      "text": "P4 merged and live (8a80e4dc): the Senate chamber, twelve delegation suites, scheduled sessions with three policy scenarios and a live session board."
     }
   ],
   "issues": [
