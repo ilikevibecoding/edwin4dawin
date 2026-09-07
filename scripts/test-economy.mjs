@@ -413,6 +413,27 @@ log('\n== Batching: no advance visits more than TUNING.batch after the first pas
   check(`catchUp() after a skip to 06:00 runs the pending day pass to completion in ${passes} advances and leaves nothing due`, passes >= 1 && passes <= Math.ceil(total / TUNING.batch) + 1 && settled && !bs.fullPassDue && bs.drift() === 0, `drift ${bs.drift()}`);
 }
 
+log('\n== Senate policy effects (senate:result -> applyPolicy): treasury funds, customs detention share, landing fee, port berths ==');
+{
+  const S = makeSim();
+  const sim = S.sim, T0 = sim.outside.treasury.funds;
+  const changed = sim.applyPolicy({ publicFunds: 12000, service: 'lift', detentionRate: 0.33, landingFee: 180, portCapacity: 2 });
+  check('applyPolicy reports every change and sets the policy: +12000 cr treasury, 33% detention, 180 cr landing fee, 2 funded berths', changed.publicFunds === 12000 && sim.outside.treasury.funds === T0 + 12000 && sim.policy.detentionRate === 0.33 && sim.policy.landingFee === 180 && sim.policy.portCapacity === 2 && sim.repairBerths().funded === 2);
+  check('junk effects change nothing; a failed motion resets the rate', Object.keys(sim.applyPolicy({ foo: 1 })).length === 0 && sim.applyPolicy(null) === null && sim.applyPolicy({ detentionRate: 0.1 }).detentionRate === 0.1);
+  const snap = JSON.parse(JSON.stringify(sim.serialize()));
+  const S2 = makeSim(); S2.sim.restore(snap);
+  check('policy survives a serialize / restore round trip', S2.sim.policy.detentionRate === 0.1 && S2.sim.policy.landingFee === 180 && S2.sim.policy.portCapacity === 2);
+  // detention is decided by the shipment id alone: run the arrivals under a 33% policy and count detained imports
+  const D = makeSim(); D.sim.applyPolicy({ detentionRate: 0.33 });
+  const detained = new Set(), lastState = new Map(); let releases = 0;
+  D.hook = (name, p) => { if (name !== 'economy:shipment') return; if (p.state === 'detained') detained.add(p.id); else if (lastState.get(p.id) === 'detained') releases++; lastState.set(p.id, p.state); };
+  const r = runDays(D, 4);
+  const imports = (D.sim.stats.imports || 0) + D.sim.stats.days.reduce((a, d) => a + (d.imports || 0), 0);
+  check(`under a 33% policy some imports are detained at the terminal and released after a quarter day (${detained.size} detained of ${imports} imports, ${releases} released); conservation holds (drift ${r.drift})`, imports >= 4 && detained.size >= 1 && detained.size < imports && releases >= 1 && r.drift === 0 && r.neg === 0);
+  const D2 = makeSim(); D2.sim.applyPolicy({ detentionRate: 0.33 }); const det2 = new Set(); D2.hook = (name, p) => { if (name === 'economy:shipment' && p.state === 'detained') det2.add(p.id); }; runDays(D2, 4);
+  check('the detained set is deterministic across runs', [...detained].sort().join() === [...det2].sort().join());
+}
+
 if (!base) { log(`\n${passed} passed, ${failed} failed`); process.exit(failed ? 1 : 0); }
 
 // ================================================================================================ CDP

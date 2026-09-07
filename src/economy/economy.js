@@ -76,6 +76,23 @@ export class Economy {
     this.restore(game.save ? game.save.economy : null);
     if (this.v2 && game.vehicles && game.scene && game.atlas) this.crates = game.vehicles.add(new CrateLayer(game, this));
     if (this.v2 && game.events) game.events.on('economy:notice', (n) => this.onNotice(n));
+    // Senate results reach the city through the bus: funds into the treasury, customs and port policy into the sim
+    if (this.v2 && game.events) game.events.on('senate:result', (r) => this.onSenateResult(r));
+  }
+  onSenateResult(r) {
+    if (!this.v2 || !r) return;
+    const changed = this.v2.applyPolicy(r.effects);
+    if (!changed || Object.keys(changed).length === 0) return;
+    this.markDirty();
+    const parts = [];
+    if (changed.publicFunds) parts.push(`${changed.publicFunds} cr released to the treasury${r.effects.service ? ` for ${r.effects.service} works` : ''}`);
+    if (changed.detentionRate != null) parts.push(`customs now inspects ${Math.round(changed.detentionRate * 100)}% of imports`);
+    if (changed.landingFee != null) parts.push(`landing fee ${changed.landingFee} cr`);
+    if (changed.portCapacity) parts.push(`${changed.portCapacity} port-funded repair berth${changed.portCapacity === 1 ? '' : 's'}`);
+    const text = `Senate ${r.outcome === 'passed' ? 'passed' : 'rejected'} ${r.headline || r.scenario}: ${parts.join('; ')}.`;
+    if (this.v2._notice) this.v2._notice('senate', 'policy', text, null);
+    const hud = this.game.hud; if (hud && hud.addMessage) hud.addMessage(hudText(text));
+    if (this.game.events) this.game.events.emit('economy:policy', { scenario: r.scenario, outcome: r.outcome, changed });
   }
   // Builds a fresh EconomySim over the city layout. The player's wallet is lent to the sim as an account so every
   // credit the player earns or spends is a journal entry; game.events receives the sim's events.

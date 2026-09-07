@@ -78,6 +78,8 @@ const dist2 = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 const round = Math.round;
 const toInt = (v) => (Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0);
 const pairs = (m) => [...m.entries()].filter(([, v]) => v !== 0);
+// deterministic [0, 1) from a shipment id (FNV-1a), for policy decisions that must not depend on the clock
+const idHash = (s) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return (h >>> 8) / 16777216; };
 
 // ------------------------------------------------------------------------------------------------ records
 export class Business {
@@ -152,6 +154,9 @@ export class EconomySim {
     this.outside = { households: { funds: 0 }, treasury: { funds: TUNING.treasuryStart, allocatedToday: new Map(), bondToday: 0, day: -1 } };
     this.notices = new Map();   // district -> [{ day, t, kind, text, lotId }]
     this.modifiers = { waste: 1 };   // scripted disruptions (sim-economy.mjs): waste collection multiplier
+    // policy set by Senate results (economy.js subscribes to `senate:result`): customs detention share of arriving
+    // imports, the landing fee a freighter pays the terminal, extra repair capacity funded at the port
+    this.policy = { detentionRate: 0, landingFee: TUNING.portFee, portCapacity: 0 };
     this.holds = new Map();     // ship index -> { shipmentId, bill, reason }
     this.stats = { day: -1, meals: 0, unmetMeals: 0, treatments: 0, delivered: 0, created: 0, imports: 0, unloads: 0, importsDelivered: 0, negativeStock: 0, wagesPaid: 0, transfers: 0, days: [] };
     this._buildBusinesses(opts.purposes);
@@ -820,7 +825,7 @@ export class EconomySim {
         boundTo.set(C.index, sh);
         continue;
       }
-      if (sh.state === 'detained') continue;
+      if (sh.state === 'detained') { if (sh.releaseAt != null && now >= sh.releaseAt) { sh.releaseAt = null; this.release(sh.id); } continue; }
       const pose = C.poseAt(t, { x: 0, y: 0, z: 0, yaw: 0 });
       sh.position.x = pose.x; sh.position.y = pose.y + 2; sh.position.z = pose.z;
       if (AIRBORNE_INBOUND.has(phase) || phase === 'departure' || phase === 'climb') {
@@ -847,6 +852,12 @@ export class EconomySim {
   }
   _tryUnload(sh, C, now, t) {
     const T = this.terminal;
+    // customs inspection under the Senate's detention policy: a deterministic share of arriving imports is held at
+    // the terminal for a quarter day before it may unload (the shipment's own id decides, never the clock)
+    if (!sh.inspected) {
+      sh.inspected = true;
+      if (this.policy.detentionRate > 0 && idHash(sh.id) < this.policy.detentionRate) { sh.releaseAt = now + 0.25; this.detain(sh.id, 'customs inspection'); return; }
+    }
     if (sh.bill > 0 && !sh.paid) {
       let r = this.pay(T.id, 'offworld', sh.bill, 'import bill', `bill:${sh.id}`);
       if (r !== true && sh.goods.some((e) => ESSENTIAL_GOODS.has(e.good))) {
@@ -861,7 +872,7 @@ export class EconomySim {
       sh.paid = true;
     }
     if (sh.held) { sh.held = false; this.holds.delete(C.index); }
-    this.pay('offworld', T.id, TUNING.portFee, 'port fee');
+    this.pay('offworld', T.id, this.policy.landingFee || TUNING.portFee, 'port fee');
     // crates come off onto the pad-side stack (the side facing the terminal) and the conveyor takes them there
     const side = T.bay.x >= C.padPos.x ? 1 : -1;
     const stack = { x: C.padPos.x + side * 14, y: C.deckY, z: C.padPos.z };
@@ -937,7 +948,19 @@ export class EconomySim {
   repairBerths() {
     const shops = this.businesses.filter((b) => b.role === 'workshop');
     const available = shops.filter((b) => b.stockOf('parts') > 0);
-    return { total: shops.length, available: available.length, waiting: shops.filter((b) => b.stockOf('parts') <= 0).map((b) => this.waitingFor(b.id)).filter(Boolean) };
+    const extra = this.policy.portCapacity | 0;   // port-funded berths voted by the Senate (landing fee schedule)
+    return { total: shops.length + extra, available: available.length + extra, funded: extra, waiting: shops.filter((b) => b.stockOf('parts') <= 0).map((b) => this.waitingFor(b.id)).filter(Boolean) };
+  }
+  // Senate result effects (see src/senate/scenarios.js): public funds enter the treasury (outside the boundary, so
+  // no journal leg - they only widen what allocations may later spend), the rest sets policy. Returns what changed.
+  applyPolicy(effects) {
+    if (!effects || typeof effects !== 'object') return null;
+    const changed = {};
+    if (effects.publicFunds > 0) { this.outside.treasury.funds += effects.publicFunds | 0; changed.publicFunds = effects.publicFunds | 0; }
+    if (typeof effects.detentionRate === 'number') { this.policy.detentionRate = Math.max(0, Math.min(1, effects.detentionRate)); changed.detentionRate = this.policy.detentionRate; }
+    if (typeof effects.landingFee === 'number') { this.policy.landingFee = Math.max(0, effects.landingFee | 0); changed.landingFee = this.policy.landingFee; }
+    if (typeof effects.portCapacity === 'number') { this.policy.portCapacity = Math.max(0, effects.portCapacity | 0); changed.portCapacity = this.policy.portCapacity; }
+    return changed;
   }
   serviceLevel(lotId) { const b = this.byId.get(lotId); return b ? b.serviceCapability.level : null; }
   uptime() {
@@ -969,6 +992,7 @@ export class EconomySim {
       businesses: this.businesses.map((b) => [b.id, b.funds, pairs(b.stock), b.lastVisit, b.lastWageDay, b.lastRestockDay, b.acc, b.flags, [+b.uptime.up.toFixed(4), +b.uptime.total.toFixed(4)], b.serviceCapability.level, [...b.openOrders.entries()]]),
       households: { funds: this.outside.households.funds, lots: this.households.map((h) => [h.lotId, h.acc, h.lastVisit, h.stats, h.visits | 0]) },
       treasury: { funds: this.outside.treasury.funds, bondToday: this.outside.treasury.bondToday, day: this.outside.treasury.day, allocatedToday: [...this.outside.treasury.allocatedToday.entries()] },
+      policy: { ...this.policy },
       shipments: [...this.shipments.values()], recentShipments: this.recentShipments.slice(-12), recentImports: this.recentImports.slice(-6), holds: [...this.holds.entries()],
       notices: [...this.notices.entries()], stats: { ...this.stats, days: this.stats.days.slice(-14) }, journal: this.journal.serialize(),
     };
@@ -992,6 +1016,7 @@ export class EconomySim {
     }
     if (data.households) { this.outside.households.funds = toInt(data.households.funds); if (Array.isArray(data.households.lots)) for (const row of data.households.lots) { const h = this.householdById.get(row[0]); if (!h) continue; h.acc = { meals: 0, treat: 0, dom: 0, leis: 0, ride: 0, util: 0, ...(row[1] || {}) }; h.lastVisit = typeof row[2] === 'number' ? row[2] : null; if (row[3]) h.stats = { ...h.stats, ...row[3] }; h.visits = row[4] | 0; } }
     if (data.treasury) { const T = this.outside.treasury; T.funds = toInt(data.treasury.funds); T.bondToday = toInt(data.treasury.bondToday); T.day = data.treasury.day | 0; T.allocatedToday = new Map(Array.isArray(data.treasury.allocatedToday) ? data.treasury.allocatedToday : []); }
+    if (data.policy && typeof data.policy === 'object') this.applyPolicy({ detentionRate: data.policy.detentionRate, landingFee: data.policy.landingFee, portCapacity: data.policy.portCapacity });
     this.shipments.clear();
     if (Array.isArray(data.shipments)) for (const s of data.shipments) {
       if (!s || typeof s.id !== 'string' || !LIVE_STATES.has(s.state)) continue;
