@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-07T00:21:21.262Z",
+  "updated": "2026-09-07T00:43:46.604Z",
   "phase": "Round 6, pass 2: builders running for the spaceport x4, 30-line dialogue + 13-anchor cast, economy v2 with physical shipments, 20 building programs + building scorer, the Senate chamber - and, from your notes tonight, W10 architecture v2 so the towers stop looking like New York. Every build now shows its commit + time in the F4 header and the F3 overlay (current live: ff8673c7).",
   "summary": "Your notes (6 Sep evening) and what is happening with each: (1) 'buildings look like New York, not Star Wars' -> W10 architecture v2 launched with your reference images: no more window grids (ribbon glazing, slits, panel seams, full-height light strips), rounded / tapered / stacked-disc massing with cap platforms and lit ring ledges on tall towers, Coruscant palette only, impostors follow; rubric 18, before/after cameras will be posted. (2) 'every room needs a purpose you can see' -> P3 is applying the 20 building programs with dossiers and a per-building score; a legibility fix round (name plates, signature furniture, no filler rooms) follows its report. (3) 'Senate pods look nothing like the real ones; bigger, individual circles, back rooms behind them (Andor)' -> P4 is rebuilding the chamber now (tiers of individual round repulsorpods, 12 delegation suites with corridors directly behind the pods, sessions); your Andor note goes into its fix round. (4) 'random ship stuck to the side of the Senate' -> found: two block-built shuttles on the Senate's pads at the lot edge; removed in ff8673c7, live now. (5) 'make your own angular blocks for spaceships' -> ships v3 (rubric 19: sloped voxel cells, re-sculpted hulls, a collision audit against every building) queued for the next free slot. Live now: everything from wave 1 - crowned towers, 62 ships with the port cycle and boarding, the maglev train, credits/shops/jobs, the lower city under the plateau, 4,767 citizens.",
   "links": [
@@ -26,6 +26,10 @@
     {
       "label": "Play the exact latest build (commit 8a80e4dc, immune to CDN caching)",
       "url": "https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/8a80e4dc/dist/index.html"
+    },
+    {
+      "label": "Play the exact latest build (commit a06b2d55, immune to CDN caching)",
+      "url": "https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/a06b2d55/dist/index.html"
     }
   ],
   "workstreams": [
@@ -251,8 +255,8 @@
     },
     {
       "name": "Pass 2 P2: economy v2 (chains, atomic transfers, price rule, ledger, physical shipments)",
-      "status": "building",
-      "detail": "resumed 20:28; committing"
+      "status": "merged",
+      "detail": "63 goods, 446 businesses, 5 supply chains, keyed atomic transfers, documented price rule, sources/sinks ledger (7-day drift 0), crates on pads/holds/conveyors riding real freighters, Senate results set customs/fees/funds; economy 154/154; live in a06b2d55"
     },
     {
       "name": "Pass 2 P3: 20 building programs, dossiers, four-differences rule, building scorer",
@@ -293,6 +297,11 @@
       "name": "Pass 2 P6: crowd faces from the 100-face composer",
       "status": "building",
       "detail": "launched 23:45"
+    },
+    {
+      "name": "Pass 2 P5: factions (reputation / suspicion / warrants, information spread) + eight stateful surprises",
+      "status": "building",
+      "detail": "launched 00:33 on top of the cast, economy and Senate"
     }
   ],
   "metrics": [
@@ -326,6 +335,14 @@
   ],
   "screenshots": [
     {
+      "src": "img/r6_cargo_unloaded.jpg",
+      "caption": "A light freighter unloaded on its pad, cargo stacked pad-side for the conveyor (00:43 UTC)"
+    },
+    {
+      "src": "img/r6_shop_quotes.jpg",
+      "caption": "Shop cards with live stock and ask/bid quotes from the city simulation (00:43 UTC)"
+    },
+    {
       "src": "img/r6_senate_board.jpg",
       "caption": "Session board during a sitting: the Lift Restoration Act, tally bar, speaker (00:21 UTC)"
     },
@@ -356,14 +373,6 @@
     {
       "src": "img/r6_train.jpg",
       "caption": "Train v2 interior riding over the ocean (14:47 UTC)"
-    },
-    {
-      "src": "img/r6_crown.jpg",
-      "caption": "Tower crown from the reference: tiered spire with lit strips (14:47 UTC)"
-    },
-    {
-      "src": "img/r6_welding.jpg",
-      "caption": "Mechanics welding at the landing gear of a dwelling ship (14:47 UTC)"
     }
   ],
   "log": [
@@ -502,6 +511,10 @@
     {
       "time": "2026-09-07 00:21 UTC",
       "text": "P4 merged and live (8a80e4dc): the Senate chamber, twelve delegation suites, scheduled sessions with three policy scenarios and a live session board."
+    },
+    {
+      "time": "2026-09-07 00:43 UTC",
+      "text": "P2 merged and live (a06b2d55): the city economy runs on real goods chains and physical shipments; Senate votes now change customs inspections, landing fees and public funds. P5 factions + surprises launched."
     }
   ],
   "issues": [
