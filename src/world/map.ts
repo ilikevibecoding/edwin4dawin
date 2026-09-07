@@ -204,7 +204,7 @@ function sdVarPolyline(px: number, pz: number, pts: Vec2[], widths: number[]): n
 // ---------------------------------------------------------------- authored geography
 
 /** Isla Garza's main body (the reference hero island): long axis north-south. */
-const G = { cx: 195, cz: 2520, rx: 262, rz: 380, rot: 0.05 } as const;
+const G = { cx: 175, cz: 2500, rx: 215, rz: 500, rot: 0.05 } as const;
 /** Low sandy spit off Garza's north shore that carries the causeway approach; the bridge abutment
  *  sits at its northern end. */
 export const GARZA_SPIT: [Vec2, Vec2] = [[55, 2190], [-5, 1790]];
@@ -326,19 +326,20 @@ export function createLandmasses(): Landmass[] {
     beach: 62, height: 2.6, seabed: 0.012, shelf: 6,
   });
 
-  // Hero island ("Isla Garza") - reference near island: a lumpy key elongated north-south (about
-  // 950 m long, 600-650 m wide) with a lagoon in its northern half, a settlement on the south-west
-  // lobe, the park and marina on the north-east lobe and a low sandy spit carrying the causeway
-  // approach off its north shore.
+  // Hero island ("Isla Garza") - reference near island: a lumpy key elongated north-south along the causeway's
+  // line (about 1150 m long and 480 m across at its widest), thick at its southern end and thinning northward
+  // into the sandy spit that carries the causeway approach, with a lagoon in its northern half, a settlement on
+  // the south-west lobe and the park and marina on the north-east lobe. (Its first cut was 950 x 650 m, which
+  // read from the reference camera as a round key with the approach across it rather than along it.)
   L.push({
     id: 'garza', bx: 190, bz: 2450, br: 1000,
     sd: (x, z) => {
       let d = sdIsland(x, z, G.cx, G.cz, G.rx, G.rz, G.rot, 11, 0.14);
-      d = smin(d, sdIsland(x, z, 260, 2900, 160, 150, 0.1, 12, 0.2), 110);   // southern tip lobe
+      d = smin(d, sdIsland(x, z, 230, 2960, 180, 145, 0.1, 12, 0.2), 110);   // southern tip lobe (the thick end)
       d = smin(d, sdIsland(x, z, -10, 2740, 115, 120, 0.3, 13, 0.25), 100);  // south-west lobe (settlement)
-      d = smin(d, sdIsland(x, z, 390, 2500, 100, 150, 0.0, 17, 0.2), 110);   // east lobe (exposed beach)
+      d = smin(d, sdIsland(x, z, 330, 2560, 70, 170, 0.0, 17, 0.2), 110);    // east lobe (exposed beach)
       d = smin(d, sdIsland(x, z, 375, 2160, 85, 115, 0.2, 14, 0.2), 110);    // north-east lobe (park, marina)
-      d = smin(d, sdIsland(x, z, 130, 2240, 110, 85, -0.1, 16, 0.2), 100);   // north lobe (spit root)
+      d = smin(d, sdIsland(x, z, 120, 2170, 100, 110, -0.1, 16, 0.2), 100);  // north lobe (spit root)
       d = smin(d, sdSegment(x, z, GARZA_SPIT[0][0], GARZA_SPIT[0][1], GARZA_SPIT[1][0], GARZA_SPIT[1][1]) - GARZA_SPIT_HW, 60);
       // hammock belt on the shore side of the approach highway (the spit's west half and the main body's
       // north-west shore); its outer shore is roughened here so the belt does not read as a road embankment

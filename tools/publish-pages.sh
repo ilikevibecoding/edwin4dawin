@@ -37,6 +37,13 @@ mkdir -p "$WORK/.github/workflows" && cp tools/pages-workflow.yml "$WORK/.github
     git push -q origin HEAD:gh-pages
   fi
   PAGES_SHA=$(git rev-parse HEAD)
+  # progress/live.json: the progress page's "play the latest build" link (pinned to the deploy commit, so it is
+  # written in a second commit); purged from jsDelivr so the page picks it up within a minute
+  mkdir -p progress
+  printf '{"build": "%s", "url": "https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/%s/play.html", "time": "%s"}\n' \
+    "$BUILD_ID" "$PAGES_SHA" "$(date -u +%FT%TZ)" > progress/live.json
+  git add progress/live.json && git commit -q -m "Progress page: live build $BUILD_ID" && git push -q origin HEAD:gh-pages
+  curl -s -o /dev/null "https://purge.jsdelivr.net/gh/ilikevibecoding/edwin4dawin@gh-pages/progress/live.json" || true
   echo "gh-pages commit: $PAGES_SHA"
   echo "pinned:  https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/$PAGES_SHA/play.html"
   echo "latest:  https://raw.githack.com/ilikevibecoding/edwin4dawin/gh-pages/play.html"

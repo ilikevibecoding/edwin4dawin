@@ -118,6 +118,7 @@ export class FlightModel {
   private contactUp = 0;
   private readonly tmpV = new THREE.Vector3();
   private readonly tmpV2 = new THREE.Vector3();
+  private readonly tmpCp = new THREE.Vector3();
   private readonly invQ = new THREE.Quaternion();
   /**
    * Contact stations (body frame). Float stations sit ON the visual keel line (model.ts float loft: bow keel
@@ -126,14 +127,17 @@ export class FlightModel {
    * tyre bottoms (main 0.29 m radius at y -2.28, nose 0.2 m): the aircraft stands on four wheels on land with the
    * nose wheels ahead of the CG, so braking cannot nose it over. Structure points (propeller, wing tips, fin,
    * tail cone, cabin roof) only act when the airframe itself reaches the surface. The 'plane' stations carry the
-   * dynamic (planing) lift: its pressure peak sits on the forebody well ahead of the step (x +0.7, the deepest
-   * keel point), which is what trims a planing floatplane nose-up onto the step instead of bow-down.
+   * dynamic (planing) lift: the station sits 2 cm under the keel at the step (the deepest point, where the lift
+   * begins as the keel arrives) and measures the keel draft there; the force itself is applied at the pressure
+   * centre of the wetted forebody, which the contact code moves along the keel with the wetted length (it was
+   * one fixed point at x +0.7 / 7 cm under the keel: with the lift acting that far forward and the hull riding
+   * deep, the pitch balance came out at 7 deg with the whole afterbody in the water).
    */
   private readonly stations: Station[] = [
     { p: new THREE.Vector3(2.6, -2.08, -1.25), kind: 'bow', part: 'float' }, { p: new THREE.Vector3(2.6, -2.08, 1.25), kind: 'bow', part: 'float' },
     { p: new THREE.Vector3(-0.2, -2.25, -1.25), kind: 'step', part: 'float' }, { p: new THREE.Vector3(-0.2, -2.25, 1.25), kind: 'step', part: 'float' },
     { p: new THREE.Vector3(-2.3, -1.98, -1.25), kind: 'stern', part: 'float' }, { p: new THREE.Vector3(-2.3, -1.98, 1.25), kind: 'stern', part: 'float' },
-    { p: new THREE.Vector3(0.7, -2.27, -1.25), kind: 'plane', part: 'float' }, { p: new THREE.Vector3(0.7, -2.27, 1.25), kind: 'plane', part: 'float' },
+    { p: new THREE.Vector3(-0.2, -2.27, -1.25), kind: 'plane', part: 'float' }, { p: new THREE.Vector3(-0.2, -2.27, 1.25), kind: 'plane', part: 'float' },
     { p: new THREE.Vector3(-0.9, -2.57, -1.25), kind: 'wheel', part: 'wheel' }, { p: new THREE.Vector3(-0.9, -2.57, 1.25), kind: 'wheel', part: 'wheel' },
     { p: new THREE.Vector3(2.3, -2.48, -1.25), kind: 'wheel', part: 'wheel' }, { p: new THREE.Vector3(2.3, -2.48, 1.25), kind: 'wheel', part: 'wheel' },
     { p: new THREE.Vector3(3.6, -0.5, 0), kind: 'structure', part: 'nose' },
@@ -151,6 +155,14 @@ export class FlightModel {
   /** sink rate (m/s) at which a float's structure fails on touchdown (a floatplane takes ~3 m/s; twice that
    *  buckles struts and splits hulls), and the sink at which any contact is a wreck */
   static readonly FLOAT_FAIL_SINK = 5.5;
+  /**
+   * Planing-lift constants of the 'plane' stations (see the contact code): the trim cap (rad) the Savitsky law is
+   * evaluated at, the longest wetted length in beams, the share of the draft past the chines that still adds
+   * planing area, an overall lift factor, the water-impact damping (N s/m per m/s of speed) and the pressure
+   * centre's position as a fraction of the wetted length ahead of the step. Tuned with the wphys2 touchdown probe
+   * against the flight harness (touchdown sink, bounces, takeoff time).
+   */
+  static readonly PLANING = { tauMax: 0.157, lamMax: 2.0, deepK: 0.5, liftK: 1.2, dampK: 80, cpK: 0.62 };
   /**
    * Per float (0 port, 1 starboard): immersion depth (m, negative when clear) of the bow, step and stern keel
    * points, the vertical speed of the step (m/s, negative sinking), and the water surface elevation under the
@@ -387,6 +399,8 @@ export class FlightModel {
       if (isWater && !wasWet && st.kind !== 'plane') this.reportImpact(st, cpWorld, vPoint, surface, vh);
       if (isWater && (isStructure || isWheel) && vh > 2) this.ploughing.push({ x: cpWorld.x, y: surface, z: cpWorld.z, vx: vPoint.x, vz: vPoint.z, sink: 0, speed: vh, part: st.part, side: (Math.sign(cp.z) || 0) as -1 | 0 | 1, energy: clamp(0.03 * vh, 0, 1) });
       let fy: number, fh: number;
+      // where the station's force acts (the planing station moves its pressure centre along the keel)
+      let cpApply: THREE.Vector3 = cpWorld;
       if (isStructure) {
         // airframe on the surface: stiff, heavily damped, high friction; a wing/prop/tail touching at speed is a wreck
         // (the flooding scales with the airframe's speed, not the part's: the second wing of a slewing wreck
@@ -416,17 +430,57 @@ export class FlightModel {
         // a flooded float has lost part of its buoyancy (wreck): it rides deep and lists the airframe its way
         const flood = this.wreck ? this.wreck.flood[cp.z > 0 ? 1 : 0] : 0;
         if (st.kind === 'plane') {
-          // planing lift ~ rho_w V^2 x wetted area x trim, so the aircraft rides higher as speed builds (forebody
-          // ~15 cm immersed at 20 m/s, ~8 cm at 26 m/s); the wetted area grows with the immersion down to the
-          // chine flare (0.5 m), so a touchdown drives the forebody well past its running depth before the lift
-          // arrests it. The velocity term is water-impact / added-mass damping, about zeta 0.15 against the planing
-          // stiffness: a soft touchdown (~1.5 m/s) drives the steps ~10 cm under and rebounds onto the step in one
-          // swing, a firm one (3 m/s) drives them ~35 cm under, skips clear for ~0.4 s and settles on the second
-          // touch, as a floatplane does (250 N s/m per m/s gave zeta 0.5 and glued the aircraft to the surface
-          // whatever the sink rate; 40 / 80 rebounded but never quite cleared the water)
-          const trim = clamp(0.5 + 3.0 * pitchNow, 0.25, 1.3);
-          fy = (55 * vh * vh * Math.min(depth / 0.5, 1) * trim - 55 * vh * wet * vPoint.y) * planing * (1 - flood);
-          fh = 0;
+          // Planing lift of the forebody bottom (Savitsky): C_L0 = tau^1.1 (0.012 sqrt(lambda) + 0.0055 lambda^2.5 /
+          // Cv^2) on the beam squared, less the deadrise correction of the V-bottom; tau the keel's trim to the
+          // water (body pitch + the forebody keel's 3.5 deg), lambda the wetted keel length in beams, which the keel
+          // draft at the step and the trim set (a shallow trim wets a long forebody). The pressure centre sits 72 %
+          // of the wetted length ahead of the step, so a hull trimming down wets more forebody and its lift moves
+          // forward to pick the nose back up: the pitch stability of a planing hull, which one fixed station could
+          // not give (the wphys2 r1 probe of the old 55 V^2 (d / 0.5) law at x +0.7 carried 4.5 kN a float on 9 cm
+          // at the station with the step 19 cm under and the afterbody keel, rising 7.3 deg in the hull frame,
+          // lying level in the water at 7 deg of pitch: the whole hull wet, the aircraft sitting in the water,
+          // not on it). Here at 24 m/s the floats carry what the wing does not on a wetted length of ~0.7 m and
+          // 4-6 cm of keel draft at 1.5-3 deg of body pitch, the afterbody and bows clear: high on the step.
+          // The velocity term is water-impact / added-mass damping (zeta ~0.1 against the planing stiffness): a soft
+          // touchdown (~1.5 m/s) rebounds onto the step in one swing, a firm one (3 m/s) skips clear once and settles
+          // on the second touch, as a floatplane does (heavier damping glued the aircraft to the surface whatever the
+          // sink rate). The trim is capped at 9 deg for the lift: past that the afterbody carries the hull in reality.
+          const P = FlightModel.PLANING;
+          const beam = 0.74;
+          const tau = clamp(pitchNow + 0.061, 0.02, P.tauMax);
+          // the bottom meets the relative flow at the keel trim plus the flight path's angle into the surface: a
+          // hull still sinking at touchdown planes at a far higher effective trim than its attitude says (3 m/s at
+          // 28 m/s adds 6 deg), which is the water-impact lift that arrests the sink and shrinks as it does
+          const tauEff = clamp(tau + Math.atan2(Math.max(-vPoint.y, 0), Math.max(vh, 1)), 0.02, P.tauMax);
+          const tauDeg = tauEff * 57.296;
+          // the keel draft at the step (the station is 2 cm under the keel)
+          const d0 = Math.max(depth - 0.02, 0);
+          // the wetted planform: a V-bottom of ~22 deg deadrise wets 2 d / tan(beta) of width for d of keel draft,
+          // the whole beam once the chines are under (0.135 m at the step), so the wetted bottom is a narrow
+          // triangle from the spray root to the step that fills out to the Savitsky law's chines-wet planform
+          // as the hull sinks: the lift and its added-mass damping carry that share (with the full beam from the
+          // keel's first millimetre the touch at 28 m/s and 9 deg of trim was a 15 kN step per float that threw
+          // the aircraft back off the water three times over). Past the chines more draft adds little planing
+          // area, so the excess counts for a fraction of its length.
+          const wf = Math.min(d0 / 0.135, 1);
+          const area = wf * (0.5 + 0.5 * wf);
+          const keelDepth = d0 < 0.135 ? d0 : 0.135 + P.deepK * (d0 - 0.135);
+          const wetLen = clamp(keelDepth / Math.tan(tau), 0.02, P.lamMax * beam);
+          const lam = wetLen / beam;
+          const cv2 = Math.max(vh * vh / (G * beam), 1);
+          const cl0 = Math.pow(tauDeg, 1.1) * (0.012 * Math.sqrt(lam) + 0.0055 * Math.pow(lam, 2.5) / cv2);
+          const cl = Math.max(cl0 - 0.0065 * 22 * Math.pow(cl0, 0.6), 0.25 * cl0);
+          const lift = 0.5 * 1000 * vh * vh * beam * beam * cl * P.liftK * area;
+          fy = (lift - P.dampK * vh * area * vPoint.y) * planing * (1 - flood);
+          // induced planing drag (the pressure acts normal to the keel: lift x tan trim) plus the wetted bottom's
+          // skin friction and whisker-spray drag; below the CG, so it trims the nose down against the lift ahead
+          // of the CG (the full Savitsky friction, 1.3 V^2 lambda, acting there tipped a nose-down slam into the
+          // bow-scoop nose-over: kept at the spray-drag order and let the hump drag carry the takeoff timing)
+          fh = -(Math.max(fy, 0) * tau + 0.44 * vh * vh * Math.min(depth / 0.06, 1)) * planing;
+          // apply at the pressure centre, on the keel line ahead of the step
+          const xcp = -0.2 + P.cpK * wetLen;
+          this.tmpCp.set(xcp, -2.25 + (xcp + 0.2) * (0.17 / 2.8), cp.z).applyQuaternion(this.quaternion).add(this.position);
+          cpApply = this.tmpCp;
         } else {
           wetStations++;
           // hydrostatics per station: a V-bottom immerses quadratically until the chine is under (dc), then
@@ -483,7 +537,7 @@ export class FlightModel {
       fy = Math.max(fy, 0);
       worldF.set(0, fy, 0);
       if (vh > 0.01) worldF.add(this.tmpV.set(vPoint.x / vh, 0, vPoint.z / vh).multiplyScalar(fh));
-      this.applyForce(worldF, cpWorld, dt);
+      this.applyForce(worldF, cpApply, dt);
     }
     // water rudders / keel steering at low speed on the water
     if (wetStations > 0) {

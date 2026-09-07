@@ -1,81 +1,72 @@
 import * as THREE from 'three';
 import { Rng } from '../../core/seed';
+import { bladeChordAt, bladePitchAt } from '../geometry/propeller';
 import { canvas } from './common';
 
+export interface PropBlurMaps {
+  /** rgb: blade paint by radius (dark body, yellow tip band, a bright hairline at the very tip); a: the angular
+   *  coverage of ONE blade at that radius, chord / (2 pi r), modulated by fine per-angle streak noise */
+  map: THREE.CanvasTexture;
+  /** tangent-space normal of the blade's back at that radius: tilted by the blade angle against the direction of
+   *  rotation (u grows against it), so the lit side of a blurred disc follows the sun like a real one */
+  normalMap: THREE.CanvasTexture;
+}
+
 /**
- * Motion-blur disc for the spinning propeller: a faint translucent grey disc (denser near the hub where the blades
- * are wide) with three darker arcs smeared behind the blade positions and a faint yellow ring where the tips pass.
+ * Polar textures for the motion-blurred propeller (u = angle, growing against the rotation; v = radius from `r0`
+ * to `r1`). One texture pair serves both the streak sectors trailing each blade at idle and the full disc at
+ * speed: the material's shader turns the single-blade coverage in the alpha channel into the smear density for
+ * the current sweep (see `propBlurMaterial`). Nothing here depends on the RPM.
  */
-/**
- * Motion-blurred propeller disc for a three-blade prop of the given geometry (metres; the disc mesh has radius
- * `discR`). Per pixel: the time-averaged coverage of the blades at that radius (3 chord / 2 pi r, near solid at the
- * shank, a few per cent at the tip), a ghost sector trailing each blade position (the disc turns with the hub, so at
- * part blend the ghosts smear out of the crisp blades), fine radial streaks, and the yellow tip band as a brighter
- * arc with a thin glint at the very tip. Angle convention: phi counter-clockwise from +x with y up, blade i at
- * 90 deg + i 120 deg, turning toward increasing phi (model.ts: rotation.x += ..., disc rotated y by 90 deg).
- */
-export function propDiscTexture(discR = 1.5, root = 0.16, length = 1.32, rootChord = 0.17, tipChord = 0.10, tipBand = 0.17): THREE.CanvasTexture {
-  const s = 512, cx = s / 2, cy = s / 2;
-  const [c, ctx] = canvas(s, s);
-  const img = ctx.createImageData(s, s), d = img.data;
+export function propBlurMaps(r0: number, r1: number, root = 0.16, length = 1.32, rootChord = 0.17, tipChord = 0.10, tipBand = 0.17): PropBlurMaps {
+  const W = 256, H = 128;
+  const [c, ctx] = canvas(W, H);
+  const [nc, nctx] = canvas(1, H);
+  const img = ctx.createImageData(W, H), d = img.data;
+  const nimg = nctx.createImageData(1, H), nd = nimg.data;
   const rng = new Rng('prop-disc');
-  const maxChord = rootChord * 1.35;
-  const chordAt = (t: number) => {
-    const grow = THREE.MathUtils.smoothstep(t, 0, 0.42);
-    let ch = rootChord * 0.75 + (maxChord - rootChord * 0.75) * grow;
-    if (t > 0.42) ch = maxChord + (tipChord - maxChord) * ((t - 0.42) / 0.58);
-    if (t > 0.82) ch *= Math.sqrt(Math.max(1 - Math.pow((t - 0.82) / 0.18, 2), 0));
-    return Math.max(ch, 0.012);
-  };
-  // per-angle streak noise (smooth over ~1.5 deg so it reads as fine radial streaks, not spokes)
+  // per-angle streak noise, smooth over ~1.5 deg so it reads as fine radial streaks (a real blurred disc is never
+  // uniform: the blade's nicks and paint edges smear into hairlines), never as spokes
   const NB = 720, streak = new Float32Array(NB);
   for (let i = 0; i < NB; i++) streak[i] = rng.next();
-  const streakAt = (phi: number) => {
-    const f = ((phi / (Math.PI * 2)) % 1 + 1) % 1 * NB, i = Math.floor(f), a = f - i;
-    const v = streak[i % NB] * (1 - a) + streak[(i + 1) % NB] * a;
-    return 0.82 + 0.36 * v;
+  const streakAt = (f01: number) => {
+    const f = ((f01 % 1) + 1) % 1 * NB, i = Math.floor(f), a = f - i;
+    return 0.86 + 0.28 * (streak[i % NB] * (1 - a) + streak[(i + 1) % NB] * a);
   };
-  const SMEAR = 1.25, tipR = root + length;
-  for (let py = 0; py < s; py++) {
-    for (let px = 0; px < s; px++) {
-      const x = ((px + 0.5) / s * 2 - 1) * discR, y = (1 - (py + 0.5) / s * 2) * discR;
-      const r = Math.hypot(x, y), phi = Math.atan2(y, x);
-      const k = (py * s + px) * 4;
-      if (r < root * 0.7 || r > tipR + 0.01) { d[k + 3] = 0; continue; }
-      const t = THREE.MathUtils.clamp((r - root) / length, 0, 1);
-      const chord = r < root ? rootChord * 0.75 : chordAt(t);
-      // fraction of the circumference the three blades sweep through at this radius
-      const cover = Math.min(3 * chord / (2 * Math.PI * r), 1);
-      const uniform = Math.min(cover * 2.4, 0.9);
-      // ghost sectors trailing each blade position
-      let ghost = 0;
-      for (let b = 0; b < 3; b++) {
-        let back = (Math.PI / 2 + (b * 2 * Math.PI) / 3) - phi;
-        back = ((back % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
-        if (back < SMEAR) ghost = Math.max(ghost, Math.pow(1 - back / SMEAR, 1.6) * Math.min(cover * 5, 0.4));
-      }
-      let alpha = 1 - (1 - uniform) * (1 - ghost);
-      alpha *= streakAt(phi + r * 0.4);
-      // fade at the rim (rounded tips sweep less) and out over the last centimetres
-      alpha *= 1 - THREE.MathUtils.smoothstep(r, tipR - 0.02, tipR + 0.01);
-      // blade body: dark blue-grey; the outer tipBand is the yellow tip paint, a brighter arc with a thin glint
-      let cr = 34, cg = 35, cb = 40;
-      const inTip = THREE.MathUtils.smoothstep(r, tipR - tipBand - 0.015, tipR - tipBand + 0.015);
-      if (inTip > 0) {
-        cr = cr + (222 - cr) * inTip; cg = cg + (176 - cg) * inTip; cb = cb + (48 - cb) * inTip;
-        // the tip paint is brighter but sweeps no more of the disc than the dark blade: no coverage boost, or the
-        // band reads as a ring over the windshield instead of a tint
-        alpha *= 1 + 0.06 * inTip;
-      }
-      const glint = Math.exp(-Math.pow((r - (tipR - 0.03)) / 0.012, 2));
-      cr += (255 - cr) * glint * 0.2; cg += (250 - cg) * glint * 0.2; cb += (230 - cb) * glint * 0.2;
-      alpha = Math.min(alpha + glint * 0.02, 1);
-      d[k] = cr; d[k + 1] = cg; d[k + 2] = cb; d[k + 3] = Math.round(alpha * 255);
+  const tipR = root + length;
+  for (let py = 0; py < H; py++) {
+    const v = (py + 0.5) / H, r = r0 + (r1 - r0) * v;
+    const t = THREE.MathUtils.clamp((r - root) / length, 0, 1);
+    const chord = r < root ? rootChord * 0.75 : bladeChordAt(t, rootChord, tipChord);
+    // one blade's share of the circumference at this radius
+    let cover = Math.min(chord / (2 * Math.PI * r), 1);
+    // the rounded tip sweeps less; nothing beyond the tip
+    cover *= 1 - THREE.MathUtils.smoothstep(r, tipR - 0.02, tipR + 0.005);
+    // blade paint: dark body, the yellow tip band, a hairline glint at the very tip where the paint is worn to metal
+    let cr = 30, cg = 31, cb = 35;
+    const inTip = THREE.MathUtils.smoothstep(r, tipR - tipBand - 0.012, tipR - tipBand + 0.012);
+    cr += (224 - cr) * inTip; cg += (178 - cg) * inTip; cb += (46 - cb) * inTip;
+    const glint = Math.exp(-Math.pow((r - (tipR - 0.012)) / 0.008, 2));
+    cr += (235 - cr) * glint; cg += (232 - cg) * glint; cb += (220 - cb) * glint;
+    for (let px = 0; px < W; px++) {
+      const k = (py * W + px) * 4;
+      const a = cover * streakAt((px + 0.5) / W + r * 0.37);
+      d[k] = cr; d[k + 1] = cg; d[k + 2] = cb; d[k + 3] = Math.round(Math.min(a, 1) * 255);
     }
+    // the blade's back (the side seen from ahead) is rotated by the blade angle about the radial axis, its normal
+    // tilting against the direction of motion; u grows against the rotation, so that tilt is +x in tangent space
+    const beta = bladePitchAt(t);
+    const kn = py * 4;
+    nd[kn] = Math.round((0.5 + 0.5 * Math.sin(beta)) * 255); nd[kn + 1] = 128; nd[kn + 2] = Math.round((0.5 + 0.5 * Math.cos(beta)) * 255); nd[kn + 3] = 255;
   }
   ctx.putImageData(img, 0, 0);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
-  return tex;
+  nctx.putImageData(nimg, 0, 0);
+  const map = new THREE.CanvasTexture(c);
+  map.flipY = false; map.colorSpace = THREE.SRGBColorSpace; map.anisotropy = 4;
+  map.wrapS = THREE.RepeatWrapping; map.wrapT = THREE.ClampToEdgeWrapping;
+  const normalMap = new THREE.CanvasTexture(nc);
+  normalMap.flipY = false; normalMap.colorSpace = THREE.NoColorSpace;
+  normalMap.wrapS = THREE.RepeatWrapping; normalMap.wrapT = THREE.ClampToEdgeWrapping;
+  normalMap.minFilter = THREE.LinearFilter; normalMap.magFilter = THREE.LinearFilter; normalMap.generateMipmaps = false;
+  return { map, normalMap };
 }

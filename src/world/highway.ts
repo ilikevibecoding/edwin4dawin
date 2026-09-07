@@ -49,9 +49,11 @@ const POLE_SPACING_JUNCTION = 40;
 const POLE_H = 11.4;
 const ARM_REACH = 2.9;
 /** verge beside the pavement edge: a gravel band along the pavement, mown grass (sand on the beaches) beyond */
-/** verge rows (metres out from the pavement edge): the mown right-of-way strip is 12 m wide, draped on the
- *  terrain row by row so it follows the ground; the swale lies between the 5 and 8 m rows */
-const VERGE_ROWS: readonly number[] = [0, 1.8, 5.0, 8.0, 12.0];
+/** verge rows (metres out from the pavement edge): the mown right-of-way strip is 7 m wide, draped on the
+ *  terrain row by row so it follows the ground; the swale lies between the 3.2 and 5 m rows. (It was 12 m: with
+ *  the pale shoulders the corridor then read from 120 m as a raised slab twice the carriageway's width, where the
+ *  reference road is dark asphalt with a few metres of scrub margin before the trees.) */
+const VERGE_ROWS: readonly number[] = [0, 1.5, 3.2, 5.0, 7.0];
 const VERGE_GRAVEL_W = 0.7;
 /** wearing course over the pavement: from the barrier foot (tucked 1.5 cm under the F-profile's 61 cm base) to
  *  15 cm short of the pavement edge, 2 cm up; the lane asphalt ends at the shoulder joint (the decks' carriageway
@@ -152,15 +154,15 @@ const CONCRETE_FRAG = /* glsl */ `
     float tri = abs(fract(across / 2.4 + 0.3) - 0.5) * 2.0;
     float stripe = mix(smoothstep(0.3, 0.7, tri), 0.5, smoothstep(0.5, 2.4, fwAcross));
     cover *= 1.0 + isGrass * (0.05 - 0.1 * stripe);
-    // the drainage swale 5-8 m out: damper ground, the grass darker and rank
-    float swale = smoothstep(4.6, 6.0, across) * (1.0 - smoothstep(7.0, 8.4, across));
+    // the drainage swale 3.2-5 m out: damper ground, the grass darker and rank
+    float swale = smoothstep(2.9, 3.7, across) * (1.0 - smoothstep(4.5, 5.3, across));
     cover *= 1.0 - isGrass * swale * (0.14 + 0.08 * n);
     // where the irrigation misses, 40-80 m patches have dried to the khaki of the yards around (the terrain's dry
     // grass, 0.19, 0.155, 0.064, before the material base), and past the mowing limit the outer 4 m go over to it,
     // so the strip is neither one tone along nor a hard-edged band across
     vec3 dry = vec3(0.40, 0.34, 0.16) * (0.86 + 0.28 * n) * (0.92 + 0.16 * grain);
     float dryPatch = smoothstep(0.5, 0.64, fbm3(vWorldPosH.xz * 0.017 + 4.0));
-    float outer = smoothstep(7.5, 12.0, across);
+    float outer = smoothstep(4.5, 7.0, across);
     cover = mix(cover, dry, isGrass * max(0.8 * dryPatch, 0.55 * outer));
     diffuseColor.rgb = mix(cover, gravel, band);
     roughnessFactor = 0.97;
@@ -185,8 +187,10 @@ const CONCRETE_FRAG = /* glsl */ `
     asphalt *= mix(secTone, 1.0, 0.3);
     float wheel = exp(-pow((abs(xm - mix(1.5, 4.7, lane)) - 0.8) * 2.5, 2.0)) * (1.0 - onShoulder);
     asphalt *= 1.0 - 0.16 * wheel;
-    vec3 shoulderMix = mix(vec3(0.20, 0.20, 0.19), vec3(0.27, 0.265, 0.25), nC) * (0.95 + 0.10 * n2);
-    shoulderMix *= 1.0 + 0.12 * smoothstep(${(PAVE_JOINT + 1.5).toFixed(2)}, 10.6, xm) * (0.5 + 0.5 * fbm3(vWorldPosH.xz * 0.5 + 3.0));
+    // the shoulder is asphalt too, an older mix a shade greyer than the lanes: from the air the corridor must stay
+    // one dark band with a white edge line, not a dark strip between two pale ones (that read as a raised slab)
+    vec3 shoulderMix = mix(vec3(0.105, 0.105, 0.10), vec3(0.145, 0.142, 0.135), nC) * (0.95 + 0.10 * n2);
+    shoulderMix *= 1.0 + 0.10 * smoothstep(${(PAVE_JOINT + 1.5).toFixed(2)}, 10.6, xm) * (0.5 + 0.5 * fbm3(vWorldPosH.xz * 0.5 + 3.0));
     asphalt = mix(asphalt, shoulderMix, onShoulder);
     asphalt *= 1.0 - 0.14 * smoothstep(0.62, 0.72, fbm3(vWorldPosH.xz * 0.04 + 8.0));
     float crack = aaLine((fract(along / 13.7) - 0.5) * 13.7, 0.02, fwA) * step(0.45, hash11(floor(along / 13.7) + 5.0)) * (1.0 - smoothstep(0.3, 1.0, fwA));
@@ -1187,7 +1191,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     }
 
     // -------------------------------------------------------- verges: the mown right-of-way strip beside each pavement edge (a gravel band, then
-    // grass - or sand on the beaches - out to 12 m), draped on the terrain row by row and stopped at the water's edge; it
+    // grass - or sand on the beaches - out to 7 m), draped on the terrain row by row and stopped at the water's edge; it
     // gives the corridor its edges from the air and the posts stand on it
     for (const side of [-1, 1] as const) {
       const cuts = new Set<number>(stations(c, 0, c.total));
