@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-06T22:40:01.348Z",
+  "updated": "2026-09-07T00:07:42.329Z",
   "phase": "Round 6, pass 2: builders running for the spaceport x4, 30-line dialogue + 13-anchor cast, economy v2 with physical shipments, 20 building programs + building scorer, the Senate chamber - and, from your notes tonight, W10 architecture v2 so the towers stop looking like New York. Every build now shows its commit + time in the F4 header and the F3 overlay (current live: ff8673c7).",
   "summary": "Your notes (6 Sep evening) and what is happening with each: (1) 'buildings look like New York, not Star Wars' -> W10 architecture v2 launched with your reference images: no more window grids (ribbon glazing, slits, panel seams, full-height light strips), rounded / tapered / stacked-disc massing with cap platforms and lit ring ledges on tall towers, Coruscant palette only, impostors follow; rubric 18, before/after cameras will be posted. (2) 'every room needs a purpose you can see' -> P3 is applying the 20 building programs with dossiers and a per-building score; a legibility fix round (name plates, signature furniture, no filler rooms) follows its report. (3) 'Senate pods look nothing like the real ones; bigger, individual circles, back rooms behind them (Andor)' -> P4 is rebuilding the chamber now (tiers of individual round repulsorpods, 12 delegation suites with corridors directly behind the pods, sessions); your Andor note goes into its fix round. (4) 'random ship stuck to the side of the Senate' -> found: two block-built shuttles on the Senate's pads at the lot edge; removed in ff8673c7, live now. (5) 'make your own angular blocks for spaceships' -> ships v3 (rubric 19: sloped voxel cells, re-sculpted hulls, a collision audit against every building) queued for the next free slot. Live now: everything from wave 1 - crowned towers, 62 ships with the port cycle and boarding, the maglev train, credits/shops/jobs, the lower city under the plateau, 4,767 citizens.",
   "links": [
@@ -18,6 +18,10 @@
     {
       "label": "Play the exact latest build (commit b500e7a7, immune to CDN caching)",
       "url": "https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/b500e7a7/dist/index.html"
+    },
+    {
+      "label": "Play the exact latest build (commit d8cd3674, immune to CDN caching)",
+      "url": "https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/d8cd3674/dist/index.html"
     }
   ],
   "workstreams": [
@@ -238,8 +242,8 @@
     },
     {
       "name": "Pass 2 P1: 30 lines per persistent NPC, 13-anchor cast, speech + subtitles",
-      "status": "building",
-      "detail": "resumed 20:28; committing"
+      "status": "merged",
+      "detail": "842 persistent people, 27,220 lines, 13 anchors as full models bound to real rooms/pads/ships; test-cast 29/29, dialog 9/9; live in d8cd3674"
     },
     {
       "name": "Pass 2 P2: economy v2 (chains, atomic transfers, price rule, ledger, physical shipments)",
@@ -270,6 +274,21 @@
       "name": "Round 6 S3: ships v3 - sloped voxels, angular hulls, building-collision audit (rubric 19)",
       "status": "building",
       "detail": "launched 22:33"
+    },
+    {
+      "name": "Ships: board and ride ships in flight",
+      "status": "merged",
+      "detail": "airborne ships near you are solid (land on a hull, get carried); while flying, right-click a passing ship from up to 40 blocks to board through the airlock, right-click again to step out; live in d8cd3674"
+    },
+    {
+      "name": "Q1 quality sweep: floating signs/lamps/junk, people at the wrong height behind counters and at tables (your notes)",
+      "status": "building",
+      "detail": "launched 00:05: offline floating-geometry + placement audits over every structure, sign mounting fix, 30-room camera tour before/after; fixes in its files, fix lists to the owners of the rest"
+    },
+    {
+      "name": "Pass 2 P6: crowd faces from the 100-face composer",
+      "status": "building",
+      "detail": "launched 23:45"
     }
   ],
   "metrics": [
@@ -303,6 +322,14 @@
   ],
   "screenshots": [
     {
+      "src": "img/r6_cast_d4lt.jpg",
+      "caption": "D4-LT in the utility plant reactor room answering in its own words (00:07 UTC)"
+    },
+    {
+      "src": "img/r6_cast_vela.jpg",
+      "caption": "Vela Marr, dockmaster, at the Westport control desk: talk box, subtitle, chat line (00:07 UTC)"
+    },
+    {
       "src": "img/r6_terminal_hall.jpg",
       "caption": "Grand terminal hall: departure boards, waiting rows, glass roof (22:40 UTC)"
     },
@@ -333,14 +360,6 @@
     {
       "src": "img/r6_lower_city.jpg",
       "caption": "Lower city freight trench where the orange sea was (14:47 UTC)"
-    },
-    {
-      "src": "img/r6_skyline_rd32.jpg",
-      "caption": "Coruscant skyline at rd 32 (14:47 UTC)"
-    },
-    {
-      "src": "img/r6_rd32_town.jpg",
-      "caption": "Frontier town at view distance 32: far hills and the hyperlane to the horizon (14:47 UTC)"
     }
   ],
   "log": [
@@ -471,6 +490,10 @@
     {
       "time": "2026-09-06 22:40 UTC",
       "text": "W6 merged and live (b500e7a7): the spaceport is four times bigger with its own train terminus; westbound trains now stop there (boards read 'via Westport'). Ships v3 (angular hulls, collision audit) launched into the freed slot."
+    },
+    {
+      "time": "2026-09-07 00:07 UTC",
+      "text": "Your notes (ships you cannot enter in flight; floating signs and junk; people peeking over counters): in-flight boarding is live now (d8cd3674); a dedicated sweep agent is auditing every structure for floating geometry and misplaced people and fixing what it owns; P1 cast + dialogue merged."
     }
   ],
   "issues": [
@@ -478,6 +501,7 @@
     "Senate chamber pods are balcony rings, not individual round repulsorpods with back rooms; P4 is rebuilding the chamber.",
     "Crowd skins still come from the 22x6 archetype atlas; the 100-face composer swap (P6) is queued.",
     "Headless benchmark runs on software GL; FPS/GPU figures are not representative of a real GPU.",
-    "If the branch play link looks old, use the commit link above: the CDN can cache a branch path for hours. The F4 header shows the build commit."
+    "If the branch play link looks old, use the commit link above: the CDN can cache a branch path for hours. The F4 header shows the build commit.",
+    "Floating signs/lamps and people at the wrong height behind counters/tables are being swept (Q1); fixes in rooms/landmarks/towers land through their owners' fix rounds."
   ]
 }
