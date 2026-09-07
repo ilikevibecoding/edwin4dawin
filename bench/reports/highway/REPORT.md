@@ -17,12 +17,14 @@ everything sits on the pavement it was generated from) and lays out, per ~1 km c
 - **W-beam guardrail** on posts with reflector tabs wherever the ground beside the shoulder is water or low
   (< 0.75 m) or drops more than 1.7 m within 18 m, and on the last 150 m before every causeway; it ties into the
   deck parapets.
-- **Verges**: 12 m mown right-of-way strips beside both pavement edges (a dark gravel band along the pavement,
-  mower stripes, a darker drainage swale 5–8 m out; packed sand instead of grass on the beaches), draped on the
+- **Verges**: mown right-of-way strips beside both pavement edges (a dark gravel band along the pavement,
+  mower stripes, a darker drainage swale; packed sand instead of grass on the beaches), draped on the
   terrain in four rows and stopped at the water's edge — the corridor edges that make the highway read against the
-  pale pavement and the dry ground from 200 m to 1.5 km. Round 7 retuned the grass from a neon band (1.6 × the
+  dry ground from 200 m to 1.5 km. Round 7 retuned the grass from a neon band (1.6 × the
   terrain lawn's brightness, one tone for kilometres) to a shade fresher than the lawn, with 40–80 m dry khaki patches
   and a soft outer 4 m; rows that fall under another road's pavement sink 45 cm (the frontage street showed them).
+  The lead narrowed the strip from 12 m to **7 m** (swale 3.2–5 m, `fc00d3e5`, user feedback on the 120 m aerial:
+  the pale shoulders plus a 12 m saturated verge read as a raised slab twice the carriageway's width) — kept.
 - **Delineator posts** every 50 m on both verges (offset from the guardrail runs); the guardrail opens at the mouths
   of the roads meeting the highway.
 - **Arterial junctions**: the barrier opens 38 m (grown past any street mouth near a terminal) with sloped terminals
@@ -44,11 +46,13 @@ everything sits on the pavement it was generated from) and lays out, per ~1 km c
   everything above in place the corridor was still a *pale ribbon* at 600 m and no darker than a 10 m street at
   1.5 km. The course is a strip of dark lane asphalt (0.07–0.11, resurfaced in 300 m contracts, wheel paths rubbed
   darker, patch repairs, reflective cracks) laid 2 cm over the pavement from the barrier foot to 15 cm short of the
-  pavement edge, with an older paler shoulder mix (0.20–0.27) over the sealed joint at 6.95 m, and its own paint:
+  pavement edge, with an older shoulder mix over the sealed joint at 6.95 m, and its own paint:
   yellow beside the barrier, dashed lane line, edge line with a rumble band, braking rubber before the junctions,
   no paint through the junction boxes and the plaza, a double yellow through the median gaps. It ramps 6 cm over the
-  crossing pavements in the junction boxes. From 600 m the highway is a dark ribbon twice a street's width between
-  pale shoulders with a bright spine; at 1.5 km it is the darkest road line in the grid. The decks take the same
+  crossing pavements in the junction boxes. The shoulder mix was a pale concrete-like 0.20–0.27; the lead retuned it
+  to an asphalt a shade greyer than the lanes (0.105–0.145, `fc00d3e5`, the same user feedback as the verge), so
+  from 120 m the corridor is one dark band with white edge lines and a bright spine, not a dark strip between two
+  pale ones. At 1.5 km it is the darkest road line in the grid. The decks take the same
   tones so the carriageway runs unbroken over the abutment joints.
 - **Lift field over the rendered terrain**: `roads.ts` follows the height field at the two pavement edges only, every
   15 m, and `terrain.ts` samples the height texture half a texel off `heightAt`, so on the spit (and at two other
@@ -98,8 +102,9 @@ everything sits on the pavement it was generated from) and lays out, per ~1 km c
   the same function, so the course arrives flush at the slab (a 2 cm step, checked at every landing with
   `/tmp/highway/liftcheck.ts`) instead of standing up to half a metre over it where the ground crowns under the
   approach (garza-west's mainland end, the spit end of garza-bridge).
-- **Deck pavement**: an asphalt wearing course in the highway's tones (lanes 0.07–0.11, an older paler mix on the
-  shoulders) between the pale concrete kerbs and parapets, so a causeway reads as dark carriageways between pale
+- **Deck pavement**: an asphalt wearing course in the highway's tones (lanes 0.07–0.11, an older mix a shade greyer on
+  the shoulders — retuned with the lead's highway shoulders in round 12, they had stayed the pale 0.20–0.27 and would
+  have jumped in tone at every abutment) between the pale concrete kerbs and parapets, so a causeway reads as dark carriageways between pale
   edges from the air rather than one pale slab, and the carriageway runs unbroken over the abutment joint.
 - **From the air (round 8)**: the stays and arch hangers keep a 0.5 opacity floor under the 1.75 px minimum width
   (`aGlow = -1`; a 14 cm stay at 1 km covered a twentieth of a pixel and the cable-stayed spans stood cable-less in

@@ -215,12 +215,13 @@ const CONCRETE_FRAG = /* glsl */ `
     // 43 cm grain: band-limited (fades to its mean once a pixel spans a good part of its wavelength)
     float n2 = mix(vnoise(vWorldPosR.xz * 2.3), 0.5, smoothstep(0.12, 0.4, fp));
     // asphalt wearing course over the concrete deck (the tones of the highway's wearing course, highway.ts, so the
-    // carriageway runs unbroken over the abutment joint): dark lanes, an older paler mix on the shoulders, pale
-    // concrete kerbs and parapets outside - from the air the deck reads as a dark ribbon with bright edges and a
-    // bright median spine over the water, not as one pale slab
+    // carriageway runs unbroken over the abutment joint): dark lanes, an older asphalt a shade greyer on the
+    // shoulders (the highway's shoulder mix since the lead's corridor retune - a pale shoulder made the corridor a
+    // dark strip between two pale ones from 120 m), pale concrete kerbs and parapets outside - from the air the
+    // deck reads as a dark ribbon with bright edges and a bright median spine over the water, not as one pale slab
     float onShoulder = clamp((abs(xm) - width * 0.5 - 0.005) / fwX + 0.5, 0.0, 1.0);
     vec3 conc = mix(vec3(0.07, 0.07, 0.067), vec3(0.11, 0.107, 0.104), n) * (0.94 + 0.12 * n2);
-    vec3 shoulder = mix(vec3(0.20, 0.20, 0.19), vec3(0.27, 0.265, 0.25), n) * (0.95 + 0.10 * n2);
+    vec3 shoulder = mix(vec3(0.105, 0.105, 0.10), vec3(0.145, 0.142, 0.135), n) * (0.95 + 0.10 * n2);
     // the deck's 6 m joints reflect through the asphalt as faint transverse cracks; paving-lane seams at the lane edges
     float laneW = width / max(lanes, 1.0);
     float u = xm + width * 0.5;
@@ -330,7 +331,7 @@ function createConcreteMaterial(concrete: THREE.Material, lampGlow: THREE.IUnifo
       // the lamp pools on the deck (the warm tint of the highway's pools, highway.ts), only while the lamps are lit
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.82, 0.55) * deckPoolTint * (deckPool * uLampGlow);');
   };
-  mat.customProgramCacheKey = () => 'bridge-concrete-v7';
+  mat.customProgramCacheKey = () => 'bridge-concrete-v8';
   return mat;
 }
 
@@ -788,8 +789,8 @@ const S_NAV_GREEN: Rgb = [0.10, 0.92, 0.30]; // mid-span channel lights
 const STAY_FLAG: readonly number[] = [-1];
 
 /** `_roadMaterial` is kept in the signature for game.ts; the carriageway uses its own pavement shading (asphalt
- *  lanes between pale concrete shoulders, kerbs and parapets) so the causeways read as structured decks against the
- *  water at every altitude. */
+ *  lanes, greyer asphalt shoulders, pale concrete kerbs and parapets) so the causeways read as structured decks against
+ *  the water at every altitude. */
 export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concrete: THREE.Material, steel: THREE.Material): BridgeBuild {
   const lampGlow: THREE.IUniform<number> = { value: 0 };
   const concreteMat = createConcreteMaterial(concrete, lampGlow);
@@ -817,7 +818,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
   for (const spec of map.bridges) {
     const total = polylineLength(spec.pts);
     const W = spec.width, hw = W * 0.5;
-    // the carriageway is narrower than the deck: pale concrete shoulders flank it
+    // the carriageway is narrower than the deck: asphalt shoulders flank it inside the pale kerbs
     // decks wide enough for it carry the F-shape median barrier of the highway (the carriageway grows by its base)
     const hasMedian = spec.lanes >= 6 || (spec.lanes >= 4 && W >= 20);
     const cw = clamp(spec.lanes * 3.3 + (hasMedian ? 0.7 : 0), 8, W - 4), chw = cw * 0.5;

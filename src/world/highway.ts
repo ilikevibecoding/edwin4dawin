@@ -57,7 +57,7 @@ const VERGE_ROWS: readonly number[] = [0, 1.5, 3.2, 5.0, 7.0];
 const VERGE_GRAVEL_W = 0.7;
 /** wearing course over the pavement: from the barrier foot (tucked 1.5 cm under the F-profile's 61 cm base) to
  *  15 cm short of the pavement edge, 2 cm up; the lane asphalt ends at the shoulder joint (the decks' carriageway
- *  edge, bridges.ts) and the shoulder is an older, paler mix; lane paint at the lanes the traffic drives (traffic.ts:
+ *  edge, bridges.ts) and the shoulder is an older mix a shade greyer; lane paint at the lanes the traffic drives (traffic.ts:
  *  1.5 and 4.7 m from the centre line) */
 const PAVE_IN = 0.29;
 const PAVE_JOINT = 6.95;
@@ -169,7 +169,7 @@ const CONCRETE_FRAG = /* glsl */ `
   } else if (kind > 3.5 && kind < 4.5) {
     // wearing course: dark lane asphalt with its own paint (yellow beside the barrier, dashed lane line, edge line
     // with a rumble band outside it), each lane resurfaced in its own 300 m contracts, wheel paths rubbed darker,
-    // patch repairs, reflective cracks; over the sealed joint the shoulder is an older, paler mix, dusty toward the
+    // patch repairs, reflective cracks; over the sealed joint the shoulder is an older mix a shade greyer, dusty toward the
     // verge. The vertex colour carries the slow wear (braking rubber on the approaches to the junctions). flag: 0
     // paint, 1 a street mouth (no edge line), 2 a junction box or the toll plaza (no paint), 3 the median gap between
     // barrier terminals (double yellow). Fine detail fades to its mean as a pixel grows past it: nothing shimmers.
@@ -1468,7 +1468,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
     // -------------------------------------------------------- wearing course: dark asphalt over both carriageways, 2 cm up on the pavement.
     // roads.ts shades the whole highway as pale sun-bleached concrete-asphalt - the tone of the barrier, the dry ground
     // and the district streets - so from 300 m up the corridor is a pale ribbon whatever stands on it. The course runs
-    // from the barrier foot to the pavement edge and carries the lane paint: dark lanes, a paler shoulder over the
+    // from the barrier foot to the pavement edge and carries the lane paint: dark lanes, a greyer shoulder over the
     // joint (the decks' carriageway edge), the pale barrier between - a dark ribbon twice a street's width with a
     // bright spine, which is what a highway is from 600 m. Drop this block when roads.ts darkens its highway lanes.
     {
