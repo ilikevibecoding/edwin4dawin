@@ -246,7 +246,7 @@ export class CoruscantPopulation {
     const slot = actor ? null : this.crowd.alloc(this.crowd.bodyFor(person.archetype));
     if (!slot && !actor) return false;
     npc.slot = slot;
-    npc.skin = this.crowd.skinIndex(person.archetype, person.variant, person.female);
+    npc.skin = this.crowd.skinIndex(person.archetype, person.variant, person.female, person.key);   // the key spreads a person over all cells of their group
     npc.setPos(place.x + 0.5, place.h, place.z + 0.5);
     npc.yaw = npc.targetYaw = (from || spot).yaw ?? this.rng.range(0, Math.PI * 2);
     npc.spawnedAt = this.tickCount;
