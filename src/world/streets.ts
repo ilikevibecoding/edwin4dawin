@@ -710,7 +710,7 @@ export class Streets {
    *  finely: at eye level the 500 m cells drew three or four whole cells of it, 140 k triangles at street_2m, most
    *  of them behind the camera or beside it */
   private readonly smallBuilds = new Map<number, KitSoup>();
-  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, trees: 0, medians: 0, medianLength: 0, medianPalms: 0, bufferPlants: 0, awnings: 0, signs: 0, newsboxes: 0, mailboxes: 0, racks: 0, cans: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
+  counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, trees: 0, medians: 0, medianLength: 0, medianPalms: 0, bufferPlants: 0, awnings: 0, signs: 0, newsboxes: 0, mailboxes: 0, racks: 0, cans: 0, bollards: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
   private readonly roads: RoadIndex;
   /** debug: `?dbg=nopools` turns the lamp pools off */
   poolsEnabled = true;
@@ -1086,6 +1086,19 @@ export class Streets {
       if (i < n - 1) along += Math.hypot(k.arc[i + 1][0] - p[0], k.arc[i + 1][1] - p[1]);
     }
     this.counts.corners++;
+    // downtown and hotel-district corners: a black bollard either side of the ramp, 0.65 m behind the kerb face
+    // (the sidewalk-life list's bollards; the promenade has had its own since round 1)
+    if ((zone === Zone.DOWNTOWN || zone === Zone.HOTEL) && n >= 5) {
+      for (const u of [0.18, 0.82]) {
+        const p = k.arc[Math.round(u * (n - 1))];
+        const nx = (k.o[0] - p[0]) / k.r, nz = (k.o[1] - p[1]) / k.r;
+        const bx = p[0] + nx * (CURB_TOP + 0.35), bz = p[1] + nz * (CURB_TOP + 0.35);
+        if (!this.roads.clear(bx, bz, 0.25)) continue;
+        const ya = roadEdgeY(k.a.chain, k.sA, k.sideA), yb = roadEdgeY(k.b.chain, k.sB, k.sideB);
+        part(soups.small, UNIT.cyl6, frame(bx, ya + (yb - ya) * u + CURB_H, bz, 0), 0, 0.45, 0, 0.2, 0.9, 0.2, C.dark, 0.5, 0.6);
+        this.counts.bollards++;
+      }
+    }
     // a lamp at the corner (on the curb line, 0.75 m behind the curb face), kept clear of the signal poles;
     // low-density suburbs light two diagonal corners of a crossing, not four
     if (zone === Zone.RES_LOW && k.a.chain.cls !== 'arterial' && k.b.chain.cls !== 'arterial' && (k.sideA > 0) !== (k.a.chain.id % 2 === 0)) return;
