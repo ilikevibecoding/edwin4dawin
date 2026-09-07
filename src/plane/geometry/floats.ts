@@ -165,6 +165,23 @@ export function chineAt(stations: FloatStation[], x: number): { y: number; w: nu
 }
 
 /**
+ * Height of the hull bottom at station x, `dz` off the float's own centreline (the keel at dz 0, the chine at
+ * dz = w); on a split station the deeper (forebody) keel is returned just ahead of it and the afterbody keel behind.
+ */
+export function bottomHeight(stations: FloatStation[], x: number, dz = 0): number {
+  const s = sectionAt(asSections(stations), x);
+  // vee is not part of Section: interpolate it between the stations bracketing x
+  let vee = 1.15;
+  for (let i = 0; i < stations.length - 1; i++) {
+    const a = stations[i], b = stations[i + 1];
+    const lo = Math.min(a.x, b.x), hi = Math.max(a.x, b.x);
+    if (x >= lo - 1e-9 && x <= hi + 1e-9) { const f = hi === lo ? 0 : (x - a.x) / (b.x - a.x); vee = (a.vee ?? 1.15) + ((b.vee ?? 1.15) - (a.vee ?? 1.15)) * f; break; }
+  }
+  const f = Math.max(1 - Math.min(Math.abs(dz) / s.w, 1), 0);
+  return s.yc - s.bot * (1 - Math.pow(1 - f, vee));
+}
+
+/**
  * Streamlined strut between a and b: a symmetric airfoil section (NACA 00xx thickness law, chord `chord`, thickness
  * `thick`) lofted along the strut axis with the chord in the plane of the axis and the airflow (`flow`, +X unless
  * the strut is parallel to it), the axis at 40 % chord. Either end can flare into a root fairing (`flareA`/`flareB`
