@@ -74,6 +74,26 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
   longer fold the ribbon over itself). Flight harness 23/23, deterministic. The dead builders' Chrome sessions held
   both builder slots idle for 7 h (clouds4 since 12:37, terrain5 since 15:52) and 4.8 GB of idle preview servers:
   killed; builders relaunched at 22:35 on the user's priority list with the h03 critic's named defects.
+- User feedback on the aerial (23:45): the highway "looks raised off the floor" and Garza "is circular like a pizza,
+  it should be a long sausage, thick at the bottom". The corridor read as a raised slab because of a 4 m pale
+  concrete-toned shoulder each side of the dark lanes plus a 12 m saturated verge; shoulders are now an older
+  asphalt a shade greyer than the lanes and the verge 7 m of dry grass (the highway agent's verge tone, measured
+  against the terrain lawn, kept at the merge). Isla Garza: 950 x 650 m round key -> ~1150 x 480 m along the
+  causeway's line, thick at the southern (settlement) end, thinning north into the spit; lagoon, park, marina and
+  roads unchanged. New builders: `acfloats` (float rig: freeboard, faired struts, ladder, dark weathered finish,
+  heavier wheels — the user's "landing gear looks thicker in the reference") and `boats2` (rescue of the boats
+  refactor, hull detail, boat-water trim/wakes; queued until a subagent slot frees).
+- Wave 7d merged into the lead: every builder tip as of 01:00 (waterrender to round 11, light3 round 5, street
+  round 14, highway verges and junction kit, facade3, veg5 round 16, terrain5 detail-bake half-cell, acgeo rounds
+  8-12, wphys2 draft/sink wake attributes and spray roots on the hull's real bottom, accockpit panel relief).
+  Conflicts resolved once: `highway.ts` (lead shoulders + highway agent's verge tone and dry patches, re-fit to the
+  7 m strip), `city.ts` (both `openSpaces` and `footprints` returned), `wakes.ts` (waterphys r10 per-side ribbon
+  widths + wphys2 per-point draft/sink).
+- Capture robustness: `shots.mjs` retries a failed view once with doubled waits and a 15-minute protocol timeout
+  (h14 lost 7 of 22 views when the 1-minute load passed 100); the Chrome gate does not start a browser while the
+  load is over 24; `tools/lead-capture.sh` gives the lead's sanity captures slot 2 ahead of the builders' fair
+  queue (a lead check had waited 40 min behind eight queued builders). The progress page carries a "Play the latest
+  build" link fed by `progress/live.json`, written at every deploy.
 
 ## iter09 — wave 5 builders (deployed as aa8b21f9f839-20260905T121546Z)
 - Iteration 08 scored (bench/results/iter08/scores.md): no category regressed; aircraft geometry +1.5,
