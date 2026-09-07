@@ -1,8 +1,10 @@
 # Highway agent — report (rubric 23 Highway realism; supports 29 World density)
 
 Branch `cursor/highway-loop-8213`. Owned: `src/world/bridges.ts`, new `src/world/highway.ts`. Shared-file hunks: `src/game.ts`
-(module registration, mirror exclusion of thin steel, `nohighway` debug flag, `props` no longer lights `highway`/`causeway`
-segments). No change to `roads.ts`, `props.ts`, `batching.ts`, `culling.ts`, `views.ts`.
+(module registration — `buildHighway` also receives `network.graph` for the frontage overlay —, mirror exclusion of
+thin steel, `nohighway` debug flag, `props` no longer lights `highway`/`causeway` segments). No change to `roads.ts`
+(its exported `chainCross` / `chainFrame` / `frameAt` / `RoadGraph` types are imported read-only), `props.ts`,
+`batching.ts`, `culling.ts`, `views.ts`.
 
 ## What was built
 
@@ -54,6 +56,17 @@ everything sits on the pavement it was generated from) and lays out, per ~1 km c
   chain carries the largest excess of the rendered terrain over the pavement within a row along and a knot across
   (+ 6 cm); the course, barrier, poles, cushions, islands and the verges' inner row ride on it. Zero over ~95 % of the
   network, up to 0.6 m on the spit.
+- **Frontage streets** (round 11): the coastal grid's 9 m district street runs along the highway's south shoulder for
+  2.6 km with its kerb *on* the pavement edge for 1.2 km — from 180 m it was 22 m of pale `roads.ts` pavement with
+  yellow dashes beside the dark lanes, halving the corridor's contrast on that side. `buildHighway` now takes the road
+  graph (one hunk in `game.ts`); every `street` / `lane` chain sampled within 10° of a highway with its near edge
+  from 1.5 m over to 6 m off the highway's edge is a frontage stretch, and over it the street is resurfaced on the
+  rows of its own chain in the lane asphalt with a local street's paint (dashed yellow centre, stopped 5 m short of
+  its junction boxes, plain through them; wheel paths 1.8 m off the centre, damp gutters), while its edge nearest the
+  highway becomes a **planted buffer**: a kerbed 1.05 m strip with a clipped hedge (dark green against the pale
+  shoulder), broken wherever a road's pavement reaches it from the highway's side. The traffic keeps its 1.8 m lanes
+  (traffic.ts): the kerb face stands 3.3 m off the centre, a 2.5 m truck's flank 3.05 m. 1.67 km of frontage on
+  `south-hwy-mainland`; +3.8 k triangles.
 - **Median lighting**: twin-arm cobra-head poles (11.4 m) every 60 m on the median barrier; the heads glow at night with
   the same sun-driven curve as the causeway lamps, with an alpha floor so the lit dots survive to 5 km. Each course
   strip and each barrier vertex names its nearest pole, and at night the shader lays a warm **lamp pool** across both
@@ -159,12 +172,13 @@ shots of the same cameras under `/tmp/highway/shots-base`).
 5. **The frontage street** (`street`, 9 m, `map.ts`) runs parallel to the coastal highway from x ≈ -4560 to -3400 with
    its centre 15.2 m from the highway axis — its pavement edge 0.3 m inside the highway's shoulder edge, so there is
    no verge between them — and diverges to 24 m either side of that. From 180 m (`cam=-4400,180,2700 hdg=90 pch=-14`)
-   it is a pale ribbon with yellow dashes beside the dark highway, brighter than the shoulder. I have not overlaid it:
-   its pavement is yours (repaving bands, sidewalks in `streets.ts` are live on your branch) and there is no room for
-   a planted buffer without moving the alignment. Smallest change on your side: bias the repaving bands dark for
-   streets within 40 m of a `highway` segment (the aged-asphalt tone reads right from the air; the pale bands are what
-   shows). For the lead (`map.ts`): shifting that street to ≥ 26 m from the axis would give an 8 m strip for a hedge /
-   tree buffer the highway module can plant.
+   it was a pale ribbon with yellow dashes beside the dark highway, brighter than the shoulder. **Now overlaid from
+   `highway.ts`** (round 11, "Frontage streets" above): a dark course over the street on your chain's own rows with a
+   local street's dashed centre, and a kerbed hedge buffer over its edge nearest the highway. The overlay reads your
+   `RoadGraph` (`chain.rows` / `rowY`, `nodes`' box reach) and is self-contained — if the alignment ever moves ≥ 26 m
+   off the axis (`map.ts`, lead) it simply stops matching and the module plants nothing there; the highway's verge
+   then takes the gap. Your kerbs / sidewalks (`streets.ts`) on that street are untouched; a sidewalk on its
+   *highway* side would now stand behind the hedge.
 6. **Sidewalk strips across the highway**: at the street crossing 50 m west of the toll plaza (x ≈ -3245) the crossing
    street's pale kerb / sidewalk strips (`streets.ts`) continue straight across both highway carriageways
    (`/tmp/highway/crop_toll_cross.png`, 10 × crop of `cam=-3195,200,2900 pch=-45`). Sidewalks should stop at the

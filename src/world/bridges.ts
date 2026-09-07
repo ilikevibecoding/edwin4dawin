@@ -280,9 +280,13 @@ const CONCRETE_FRAG = /* glsl */ `
     diffuseColor.rgb *= 1.0 - 0.4 * (1.0 - smoothstep(-0.2, 1.1, vWorldPosR.y));
     roughnessFactor = 0.96;
   } else if (vRoadInfo.y > 1.5) {
-    // embankment fill: mottled earth or sand, a little darker where the slope meets the ground
+    // embankment fill: mown grass (the highway verge's tone and its 40-80 m dry khaki patches, highway.ts, so the
+    // slopes and the verge they continue read as one strip) or beach sand; mottled, a little darker at the toe
     float m = fbm3(vWorldPosR.xz * 0.35);
     float m2 = mix(vnoise(vWorldPosR.xz * 1.9), 0.5, smoothstep(0.15, 0.6, length(fwidth(vWorldPosR.xz))));
+    float isGrass = step(diffuseColor.r, diffuseColor.g);
+    float dryPatch = smoothstep(0.5, 0.64, fbm3(vWorldPosR.xz * 0.017 + 4.0));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.40, 0.34, 0.16), isGrass * 0.8 * dryPatch);
     diffuseColor.rgb *= (0.84 + 0.3 * m) * (0.92 + 0.16 * m2);
     roughnessFactor = 0.97;
   } else {
@@ -326,7 +330,7 @@ function createConcreteMaterial(concrete: THREE.Material, lampGlow: THREE.IUnifo
       // the lamp pools on the deck (the warm tint of the highway's pools, highway.ts), only while the lamps are lit
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.82, 0.55) * deckPoolTint * (deckPool * uLampGlow);');
   };
-  mat.customProgramCacheKey = () => 'bridge-concrete-v6';
+  mat.customProgramCacheKey = () => 'bridge-concrete-v7';
   return mat;
 }
 
@@ -879,7 +883,7 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
     const RIPRAP_INFO = [0, 0, 0, 3, 0];
     const sandy = (x: number, z: number) => map.zoneAt(x, z) === 2;
     const C_FILL_SAND: Rgb = [0.92, 0.84, 0.66];
-    const C_FILL_GRASS: Rgb = [0.60, 0.68, 0.40];
+    const C_FILL_GRASS: Rgb = [0.21, 0.33, 0.13];   // the highway verge's mown grass (highway.ts C_VERGE_GRASS, a shade fresher)
     const C_RIPRAP: Rgb = [0.60, 0.585, 0.55];
     const SLOPE_TOP = -0.45;      // the fill meets the fascia's lower edge
     const RIPRAP_TOP = 1.7;       // rock armour from the toe up to the splash zone

@@ -292,7 +292,7 @@ function createConcreteMaterial(pixelScale: THREE.IUniform<number>, lampGlow: TH
       // and the pale concrete shine brighter than the asphalt)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.82, 0.55) * hwPoolTint * (hwPool * uLampGlow);');
   };
-  mat.customProgramCacheKey = () => 'highway-concrete-v3';
+  mat.customProgramCacheKey = () => 'highway-concrete-v4';
   return mat;
 }
 
