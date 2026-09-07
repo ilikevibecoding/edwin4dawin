@@ -114,6 +114,25 @@ onto my tip) and again at 00:10 (`e1ae2719`, 45 commits: streets round 3–4, pl
 | 53 | 45–200 m over the lanes | the course comment promised patch repairs; the lanes had cracks, section tones and wheel paths only | fixed a11411ba: 5 × 3 m repair cells (4 %, darker or bleached), box-filtered edges, gone once a pixel covers a metre |
 
 Verification of rounds 8–11 (`shots24`, 30 views: decks day + night at 45–120 m and 1 km, junction 180 m, frontage
-at 9 m / 60 m / 120 m, plaza 200 m, 200 / 600 / 1500 m, `aerial-a`, `bridge-low`, `sunset`, `cloudy`, `harbor`) is
+at 9 m / 60 m / 120 m, plaza 200 m, 200 / 600 / 1500 m, `aerial-a`, `bridge-low`, `sunset`, `cloudy`, `harbor`) was
 queued behind two other builders' long sessions (a 47-job vegetation batch with 30-minute jobs and an aircraft batch,
-both holding a slot for over an hour); results are appended below when the slot comes.
+both holding a slot for over an hour); the run was cut off before the slot came, and the same 30 views were re-pointed
+at the merged build of round 12 (`shots25`).
+
+## Round 12 — the lead merged (f7f71011: corridor at grade, Garza reshaped, streets round 14 on the frontage street), two conflicts found in the code before the shots (`/tmp/highway/shots25` on `/tmp/highway-dist25`)
+
+The lead's `fc00d3e5` edited `highway.ts` itself on user feedback from the 120 m aerial: the verge from 12 m to 7 m
+(swale 3.2–5 m) and the shoulder from the pale 0.20–0.27 mix to an asphalt a shade greyer than the lanes
+(0.105–0.145) — "one dark band with its white edge lines, as the reference road is". Kept as the corridor's tuning.
+The street agent's round 14 (`c194f415`) answered request 5 of the report independently of round 11's overlay: the
+frontage street's rows carry a `+0.25` class flag that tones its pavement to three quarters with no repaving bands and
+worn dashes, and `streets.ts` plants a sea-grape hedge every 5–7 m with a palm every fourth between its sidewalk back
+and the highway's shoulder where 2.2 m remain. Both treatments now stand: the overlay course and hedge kerb on the
+pavement's highway edge, their plants in the gap beyond the sidewalk; reviewed together in `shots25`.
+Merge check of the module: 62.2 k triangles for the network (frontage 1 667 m; ≤ 80 k), every deck end keeps its fill
+after Garza's reshaping (garza-west's east fill moved from 910–982 to 940–982 m with the new shoreline), tsc clean.
+
+| # | view | what reads wrong | status |
+|---|------|------------------|--------|
+| 54 | junction 60–180 m, 4-lane arterial arms (x = -3400, -6900) | the lead's merge brought `streets.ts` medians on every 4-lane arterial (a 2 m kerbed planting strip with palms from 21 m past the junction box, a painted left-turn pocket in the opening) and `traffic.ts` moved their inner lane to 2.6 m; my 0.6 m divider from round 9 (row 43) ran 4–64 m along the same arms — coplanar inside their planting strip from 21 m on (a concrete ridge z-fighting the soil at kerb height), and over their painted turn pocket before it | fixed 32ec67f8: the divider is built on two-lane arterial arms only (1.0 m, planted top; `streets.ts` gives those nothing); the 4-lane arms are theirs |
+| 55 | every abutment from the air (decks vs the road) | the deck shoulders in `bridges.ts` had stayed the pale 0.20–0.27 mix after the lead darkened the highway's to 0.105–0.145: a tone jump at every deck end, the causeway's shoulders pale beside the approach's dark ones | fixed c964340d: the decks take the same greyer mix (`bridge-concrete-v8`) |
