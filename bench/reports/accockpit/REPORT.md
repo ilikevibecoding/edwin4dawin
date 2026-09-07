@@ -39,13 +39,15 @@ geometry rounds were built and checked offline first and the stills verified the
 | R5 | windshield invisible from the seat | forward-scatter sun haze through the dirt film from the cabin side, on top of the Fresnel sky reflection, glare-shield mirror image and seals | `parts/materials.ts` (glass block) | pending stills |
 | R6 | quadrant: prop / mixture arms painted whole in the knob colour, sticks on a bare box | housing with a slotted plate on a rounded pedestal, flat arms about an inner pivot, ball / crown / ball knobs, friction lock; rounded yoke hub with bolt and switch | `parts/cockpitControls.ts` | rasteriser |
 | R7 | pilot: 15 cm neck, low shoulders; seats plain slabs | shoulder line at the seated acromion height, torso into the harness; upholstery over both front seats (bucket cushion, bolsters, front roll, padded back with pleats, piping) | `parts/pilot.ts` | rasteriser |
+| R8 | compass a box with a decal in the middle of the cockpit frame | rounded bowl housing, bracket + base plate, framed card window, compensator screws, light hood | `parts/cockpitPanel.ts` | rasteriser |
+| R9 | both hands on the yoke | right hand closed round the throttle ball (part of the lever mesh, rides with it), two-bone right arm aimed shoulder -> elbow -> wrist every frame; left hand on the yoke | `parts/pilot.ts`, `parts/cockpitControls.ts`, `context.ts` (one constant), `animate.ts` (one call) | rasteriser |
 
 ## Budget
 
-Offline accounting (`tools/tricount.mjs`, whole `PlaneModel`): baseline 44 273 triangles / 32 meshes; now 70 673
-triangles / 34 meshes: **+26 400 triangles, +2 draw calls** (the blade mesh with its own fading material and the
-lens mesh; the streaks and the disc replaced the old single disc mesh one for one). Budget: ≤ 60 k / ≤ 8 for this
-builder, ≤ 260 k / ≤ 40 for the aircraft.
+Offline accounting (`tools/tricount.mjs`, whole `PlaneModel`): baseline 44 273 triangles / 32 meshes; after R9
+71 485 triangles / 36 meshes: **+27 212 triangles, +4 draw calls** (the blade mesh with its own fading material, the
+lens mesh, the two right-arm bones; the streaks and the disc replaced the old single disc mesh one for one). Budget:
+≤ 60 k / ≤ 8 for this builder, ≤ 260 k / ≤ 40 for the aircraft.
 
 ## Shared files touched
 
