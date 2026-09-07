@@ -36,7 +36,9 @@ export function buildTiered(bp, spec) {
   if (strips) {
     // the strips carry the night look: few lit bands / slits besides them; the 'strip' rhythm's fins follow them
     style.lit = Math.min(style.lit, style.rhythm === 'ribbon' || style.rhythm === 'curtain' ? 0.22 : 0.12);
-    if (style.light === 'warm' && strips.block === B.GLOW_PANEL) strips.block = B.LIGHT_STRIP_WARM;
+    // white strips: warm palettes light them amber, the others blue-white - always the vertical strip tile (one
+    // unbroken line of light per column, rule 6), never a column of framed panels
+    if (strips.block === B.GLOW_PANEL) strips.block = style.light === 'warm' ? B.LIGHT_STRIP_WARM_V : B.LIGHT_STRIP_V;
     style.stripPitch = strips.pitch; style.stripPhase = strips.phase; style.stripBlock = strips.block; style.stripsByPlan = true;
   }
   if (env && env.ledgeEvery) style.ledgeEvery = env.ledgeEvery;

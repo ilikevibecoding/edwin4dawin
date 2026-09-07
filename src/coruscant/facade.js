@@ -54,7 +54,8 @@ const FAMILY_PALETTES = {
   needle: ['fin_black', 'fin_steel', 'ent_dark'],
   stack: ['ind_hull', 'ind_dark'],
 };
-const STRIP_BLOCK = { blue: B.GLOW_PANEL_BLUE, warm: B.LIGHT_STRIP_WARM, white: B.GLOW_PANEL };
+// the vertical strip tiles (LIGHT_STRIP_V / LIGHT_STRIP_WARM_V): an unbroken line of light per column, rule 6
+const STRIP_BLOCK = { blue: B.LIGHT_STRIP_V, warm: B.LIGHT_STRIP_WARM_V, white: B.LIGHT_STRIP_V };
 
 export const RHYTHMS = ['ribbon', 'slit', 'curtain', 'panel', 'strip', 'industrial'];
 const RHYTHM = {

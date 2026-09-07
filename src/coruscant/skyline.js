@@ -111,13 +111,18 @@ void main() {
   vec3 lightCol = mix(vec3(0.55, 0.78, 1.0), vec3(1.0, 0.82, 0.55), vStyle.w);
   vec3 warm = vec3(1.0, 0.85, 0.58);
   vec3 glassCol = mix(vec3(0.05, 0.06, 0.09), vec3(0.40, 0.48, 0.60), uSkyLight);
-  glassCol = mix(glassCol, warm, night * glassLit * 0.95);
+  // lit glazing is the dim amber of the streamed towers' lit bands (textures.js window_band_lit), well under the strips
+  glassCol = mix(glassCol, warm * 0.55, night * glassLit * 0.9);
   vec3 col = body;
   col = mix(col, glassCol, glass);
   col = mix(col, body * 0.55, seam);
   col = mix(col, vec3(0.72, 0.75, 0.80) * sky, chrome);
-  vec3 lineCol = mix(mix(vec3(0.62, 0.68, 0.78), vec3(0.78, 0.72, 0.62), vStyle.w) * sky, lightCol * 1.15, night);
-  col = mix(col, lineCol, max(strip, ledge));
+  // the lines of light: at the streamed towers a one-block strip is a texel column the mipmaps average into its
+  // dark wall, so the impostor's analytic line is drawn at the same weight - the strips lead, the ring ledges sit
+  // under them, and both thin out with distance instead of turning the far skyline into a bright cage
+  float lineFade = 1.0 - 0.45 * smoothstep(uChunkFar, uFar, vDist);
+  vec3 lineCol = mix(mix(vec3(0.62, 0.68, 0.78), vec3(0.78, 0.72, 0.62), vStyle.w) * sky, lightCol * 0.95, night);
+  col = mix(col, lineCol, (strip * 0.8 + (1.0 - strip) * ledge * 0.5) * lineFade);
   vec3 lmCol = mix(vec3(0.35, 0.40, 0.50) * sky, warm, night * litFloor);
   col = mix(col, lmCol, lmBand);
   col = mix(col, lightCol * (0.6 + 0.6 * night), glow);

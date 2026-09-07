@@ -551,6 +551,10 @@ P.panel_sand = (t, r) => { panelBase(t, r, [198, 184, 158], 4, [150, 136, 112]);
 // horizontal light strips: a dark housing with a bright band across the middle and a soft halo either side, so a
 // ring of them around a tower is a thin unbroken line of light (blue-white for ledges, warm for the bronze towers)
 P.light_strip = (t, r) => { t.noisy([36, 40, 48], 2, r); t.hline(4, 0, 15, [70, 100, 140]); t.hline(11, 0, 15, [70, 100, 140]); t.rect(0, 5, 16, 6, [150, 200, 255]); t.rect(0, 6, 16, 4, [222, 240, 255]); };
+// vertical strips: the same bar of light turned upright, no frame at the top or bottom, so a column of blocks is
+// one continuous line of light (the strip families' night signature, references 1 and 2)
+P.light_strip_v = (t, r) => { t.noisy([36, 40, 48], 2, r); t.vline(4, 0, 15, [70, 100, 140]); t.vline(11, 0, 15, [70, 100, 140]); t.rect(5, 0, 6, 16, [150, 200, 255]); t.rect(6, 0, 4, 16, [222, 240, 255]); };
+P.light_strip_warm_v = (t, r) => { t.noisy([40, 36, 34], 2, r); t.vline(4, 0, 15, [130, 96, 60]); t.vline(11, 0, 15, [130, 96, 60]); t.rect(5, 0, 6, 16, [255, 206, 140]); t.rect(6, 0, 4, 16, [255, 238, 205]); };
 P.light_strip_warm = (t, r) => { t.noisy([40, 36, 34], 2, r); t.hline(4, 0, 15, [130, 96, 60]); t.hline(11, 0, 15, [130, 96, 60]); t.rect(0, 5, 16, 6, [255, 206, 140]); t.rect(0, 6, 16, 4, [255, 238, 205]); };
 // glazing bands: a 2-texel frame top and bottom only (no vertical frame), so a row of them is one continuous ribbon
 // of glass; the lit band is warm and even (no pane grid), the dark one blue-grey glass with a reflection line.
@@ -694,7 +698,7 @@ const TILE_NAMES = [
   'neon_pink', 'neon_green',
   // Coruscant architecture v2 (appended)
   'panel_light', 'panel_grey', 'panel_seam', 'trim_dark', 'panel_bronze', 'panel_sand', 'light_strip', 'light_strip_warm',
-  'window_band_lit', 'window_band_dark', 'window_slit_lit', 'window_slit_dark',
+  'window_band_lit', 'window_band_dark', 'window_slit_lit', 'window_slit_dark', 'light_strip_v', 'light_strip_warm_v',
 ];
 export const ITEM_TILE_NAMES = TILE_NAMES.filter((n) => n.startsWith('item_'));
 

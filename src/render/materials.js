@@ -180,6 +180,8 @@ const TILE_MATERIALS = {
   panel_sand: { cls: 'plaster', roughness: 0.7, relief: 0.3 },
   light_strip: { cls: 'glow', detail: 'panel', emit: { lo: 130, hi: 200, sat: 0 } },
   light_strip_warm: { cls: 'glow', detail: 'panel', emit: { lo: 130, hi: 200, sat: 0 } },
+  light_strip_v: { cls: 'glow', detail: 'panel', emit: { lo: 130, hi: 200, sat: 0 } },
+  light_strip_warm_v: { cls: 'glow', detail: 'panel', emit: { lo: 130, hi: 200, sat: 0 } },
   window_band_lit: { cls: 'glass', emissive: 1, emit: { lo: 150, hi: 200, sat: 0 }, roughness: 0.1 },
   window_band_dark: { cls: 'glass', roughness: 0.1 },
   window_slit_lit: { cls: 'glass', emissive: 1, emit: { lo: 150, hi: 200, sat: 0 }, roughness: 0.1 },

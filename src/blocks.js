@@ -41,6 +41,9 @@ export const B = {
   // so tapering edges, fin caps and buttress steps read as trim on any palette (ids 120+)
   WEDGE_GREY_E: 120, WEDGE_GREY_W: 121, WEDGE_GREY_S: 122, WEDGE_GREY_N: 123,
   WEDGE_DARK_E: 124, WEDGE_DARK_W: 125, WEDGE_DARK_S: 126, WEDGE_DARK_N: 127,
+  // vertical light strips (rule 6): a bar of light down the tile with no top / bottom frame, so a column of them is
+  // one continuous line of light one block wide (the horizontal LIGHT_STRIP tiles are the ring ledges) (ids 128+)
+  LIGHT_STRIP_V: 128, LIGHT_STRIP_WARM_V: 129,
 };
 
 // Wedge orientation: the slope faces (dx, dz); `dir` is the shader's slope code (aFace extra bits), the same order
@@ -239,6 +242,8 @@ export function initBlocks() {
   def(B.PANEL_SEAM, 'seam_panel', { tex: same('panel_seam'), sound: 'metal', hardness: 2.0 });
   def(B.LIGHT_STRIP, 'light_strip', { tex: same('light_strip'), emit: 12, sound: 'glass', hardness: 0.5 });
   def(B.LIGHT_STRIP_WARM, 'warm_light_strip', { tex: same('light_strip_warm'), emit: 12, sound: 'glass', hardness: 0.5 });
+  def(B.LIGHT_STRIP_V, 'vertical_light_strip', { tex: same('light_strip_v'), emit: 12, sound: 'glass', hardness: 0.5 });
+  def(B.LIGHT_STRIP_WARM_V, 'warm_vertical_light_strip', { tex: same('light_strip_warm_v'), emit: 12, sound: 'glass', hardness: 0.5 });
   def(B.WINDOW_BAND_LIT, 'lit_window_band', { tex: same('window_band_lit'), emit: 9, sound: 'glass', hardness: 0.5 });
   def(B.WINDOW_BAND_DARK, 'dark_window_band', { tex: same('window_band_dark'), sound: 'glass', hardness: 0.5 });
   def(B.WINDOW_SLIT_LIT, 'lit_slit', { tex: same('window_slit_lit'), emit: 9, sound: 'glass', hardness: 0.5 });
@@ -288,6 +293,6 @@ export const PALETTE = [
   B.VENT, B.DECK_PLATE, B.STEEL_GLASS, B.CHROME, B.WINDOW_LIT, B.WINDOW_DARK, B.CITY_LAMP, B.HULL_PLATE, B.HULL_TRENCH,
   B.NEON_PINK, B.NEON_GREEN,
   B.PANEL_LIGHT, B.PANEL_GREY, B.TRIM_DARK, B.PANEL_BRONZE, B.PANEL_SAND, B.PANEL_SEAM, B.LIGHT_STRIP, B.LIGHT_STRIP_WARM,
-  B.WINDOW_BAND_LIT, B.WINDOW_BAND_DARK, B.WINDOW_SLIT_LIT, B.WINDOW_SLIT_DARK,
+  B.WINDOW_BAND_LIT, B.WINDOW_BAND_DARK, B.WINDOW_SLIT_LIT, B.WINDOW_SLIT_DARK, B.LIGHT_STRIP_V, B.LIGHT_STRIP_WARM_V,
   B.WEDGE_GREY_E, B.WEDGE_GREY_W, B.WEDGE_GREY_S, B.WEDGE_GREY_N, B.WEDGE_DARK_E, B.WEDGE_DARK_W, B.WEDGE_DARK_S, B.WEDGE_DARK_N,
 ];
