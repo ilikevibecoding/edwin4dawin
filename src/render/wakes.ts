@@ -156,8 +156,9 @@ const WAKE_VERTEX = /* glsl */ `
   attribute vec4 aExt;    // path curvature (1/m, + turning toward +right), age (s), stern-wave advance (m), odometer (m along the track)
   attribute vec4 aTrail;  // strength, hull half-beam (m), transom-to-bow length (m), lane length (m)
   attribute vec4 aTrail2; // prop wash (0..1), planing speed (m/s), churn (foam persistence), immersion (0 at the hull's waterline .. 1 decks awash)
-  varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; flat varying vec4 vTrail; flat varying vec4 vTrail2;
-  void main() { vA = aA; vGeom = aGeom; vExt = aExt; vTrail = aTrail; vTrail2 = aTrail2; vWp = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+  attribute vec4 aTrail3; // live: running draft of the forebody keel (m), sink rate into the surface (m/s); per vertex: the same two when this point was laid
+  varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; varying vec2 vPt; flat varying vec4 vTrail; flat varying vec4 vTrail2;
+  void main() { vA = aA; vGeom = aGeom; vExt = aExt; vTrail = aTrail; vTrail2 = aTrail2; vPt = aTrail3.zw; vWp = position.xz; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
 `;
 
 /**
@@ -187,7 +188,7 @@ const WAKE_VERTEX = /* glsl */ `
 export const WAKE_MATERIAL = new THREE.ShaderMaterial({
   vertexShader: WAKE_VERTEX,
   fragmentShader: /* glsl */ `
-    varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; flat varying vec4 vTrail; flat varying vec4 vTrail2;
+    varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; varying vec2 vPt; flat varying vec4 vTrail; flat varying vec4 vTrail2;
     uniform float uTexel;   // metres per texel of the map being rendered
     const float COSK = 0.9428, SINK = 0.3333;
     ${WAKE_GLSL_COMMON}
@@ -199,6 +200,10 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
       float curv = vExt.x, ageS = vExt.y, shift = vExt.z, odo = vExt.w;
       float strength = vTrail.x, w0 = vTrail.y, lead = vTrail.z;
       float propWash = vTrail2.x, planeV = max(vTrail2.y, 1.0), churn = vTrail2.z;
+      // how far the hull ran below its planing draft where this water was laid (the head carries the live
+      // values): 0 riding at ~8 cm, 1 driven 40 cm under (a touchdown)
+      float dk = smoothstep(0.08, 0.4, vPt.x);
+      float sinkK = clamp(vPt.y / 3.0, 0.0, 1.0);
       float aspd = abs(speed);
       // the churned lane lasts a few tens of seconds of foam, so its length scales with the speed it was laid at
       float laneLen = vTrail.w * clamp(aspd / 8.0, 0.5, 1.6);
@@ -265,10 +270,17 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         // (r3) a displacement hull's lane is pale turbulence with the prop wash as its only white core: the froth
         // gate is squared and the churn factor no longer scales the density (it scales the persistence below)
         float dens = (0.18 + 0.5 * fresh + 0.28 * planing) * (0.45 + 0.55 * laneFade) * across * (0.12 + 0.88 * froth * froth) + 0.45 * wash;
+        // a planing hull leaves its step cleanly: for most of a hull length behind the transom the water is a
+        // glassy hollow (the flow separates off the step and has not closed yet), then the two chine flows and
+        // the spray meet in the rooster tail, and only there does the froth lane begin (the lane used to start
+        // at full density at the transom, painting the hollow white: the r1 step frames showed no hollow at all)
+        float hl = clamp(0.1 * aspd, 0.8, 3.0);
+        float hollowK = planing * (1.0 - smoothstep(hl * 0.45, hl * 1.15, d));
+        dens *= 1.0 - 0.95 * hollowK;
         // remnant patches: sparse, lane-sized, they outlast the froth and fade with the trail's age
         float bigN = vn(vec2(odo * min(0.1 * ls, fl), y * min(0.45 * ls, fl)) + 41.0);
         float remnant = smoothstep(0.58, 0.78, bigN) * 0.28 * churn * froth * (1.0 - smoothstep(0.3, 1.0, ay / laneHalfR));
-        dens = max(dens * laneMask, remnant * (0.4 + 0.6 * (1.0 - laneFade)) * (1.0 - smoothstep(0.0, 1.3, ay / laneHalfR)));
+        dens = max(dens * laneMask, remnant * (0.4 + 0.6 * (1.0 - laneFade)) * (1.0 - smoothstep(0.0, 1.3, ay / laneHalfR)) * (1.0 - hollowK));
         dens = clamp(dens, 0.0, 1.0);
         // nothing where the density has gone to zero (the thresholded noise alone would still fire where it
         // happens to be high, speckling the whole ribbon width)
@@ -314,8 +326,19 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         float an = vn(vec2(odo * min(0.45, fl), s * 3.0 + dy * min(2.0, fl)) + 7.0);
         float breakM = smoothstep(0.84 - 0.3 * steep, 0.98 - 0.3 * steep, an);
         float arm = armBump * armEnv * breakM * steep * (0.5 + 0.5 * n2) * smoothstep(-lead * 0.5, lead * 0.5, d) * (armW0 / armW);
+        // rooster tail: where the hollow closes, the converging flows throw a dense white crest on the
+        // centreline, narrower than the lane and streaked along the flow; it is the head of the froth lane
+        float tailN = vn(vec2(odo * min(1.2, fl), y * min(2.5, fl)) + 83.0);
+        float tail = planing * froth * g1(d - hl - 0.9, 0.9 + 0.5 * dk) * (1.0 - smoothstep(w0 * 0.35, w0 * 1.3, ay)) * (0.55 + 0.45 * tailN) * (0.7 + 0.6 * dk);
+        // spray landing: the blister thrown off the chines comes down 1.5-3 m outboard a few metres back, as a
+        // patchy band of froth that spreads and fades with the distance the sheet has flown; a hull driven deep
+        // throws far more of it
+        float landY = w0 + 1.1 + 0.11 * d;
+        float landW = (0.45 + 0.05 * d) * (1.0 + 0.6 * dk);
+        float landN = vn(vec2(odo * min(0.6, fl), y * min(1.6, fl)) + 71.0) * 0.65 + 0.35 * n3r;
+        float landing = planing * froth * g1(ay - landY, landW) * smoothstep(0.8, 3.0, d) * exp(-d / (8.0 + 6.0 * dk)) * smoothstep(0.42, 0.62, landN) * (0.45 + 0.55 * dk);
         // from altitude the arms are mostly glassy lines beside a white lane, so they carry less foam there
-        foam = lane + arm * mix(0.4, 0.8, fine);
+        foam = lane + arm * mix(0.4, 0.8, fine) + tail * 0.9 + landing * 0.7;
         // arm crest slope: a raised crest, outward normal of the arm line
         vec2 armOut = s * right * COSK + fwd * SINK;
         float crestSlope = -2.0 * dy / (armW * armW) * armBump * (0.05 + 0.05 * spd) * armEnv * min(armW / uTexel, 1.0);
@@ -382,13 +405,27 @@ export const WAKE_MATERIAL = new THREE.ShaderMaterial({
         float curlD = ax < 0.0 ? cx - curlR : (ay - hb) - curlR;
         float curl = exp(-curlD * curlD / (curlW * curlW)) * (1.0 - smoothstep(0.0, lead * 0.12, ax)) * smoothstep(1.5, 5.0, hs) * (0.55 + 0.45 * n3r) * ((0.35 * bowLift + 0.04 * w0) / curlW);
         // the hull covers the inside: fade there so nothing shows through a gap at bow or stern
-        float coverage = (1.0 - smoothstep(0.0, 0.08, inside)) * (1.0 - 0.85 * hplaning);
-        foam = (meniscus + sheet * 0.7 + curl * 0.9) * coverage;
+        float insideFade = 1.0 - smoothstep(0.0, 0.08, inside);
+        float coverage = insideFade * (1.0 - 0.85 * hplaning);
+        // spray root: on a planing hull the water the V-bottom drives aside rises along the sides and leaves the
+        // chines as the blister; on the surface that is a strip of dense whitewater hugging the chine from the
+        // stagnation line to the step, streaked along the flow, densest at the step. The stagnation line sits
+        // near midships at the running draft and moves right up to the bow as the hull is driven under (a
+        // touchdown wets the whole forebody chine at once)
+        float u = ax / max(lead, 0.1);
+        float wetFrom = mix(0.5, 0.08, max(dk, sinkK));
+        float wetU = smoothstep(wetFrom - 0.12, wetFrom + 0.15, u) * (1.0 - smoothstep(1.0, 1.25, u));
+        float rootW0 = (0.14 + 0.28 * dk + 0.08 * sinkK) * hullScale + 0.03 * w0;
+        float rootW = max(rootW0, 0.7 * uTexel);
+        float rootD = max(ay - hb - 0.02, 0.0);
+        float rootStreak = 0.55 + 0.45 * vn(vec2(ax * min(2.5, fl), ay * min(9.0, fl)) + 43.0);
+        float root = exp(-rootD * rootD / (rootW * rootW)) * wetU * (0.55 + 0.45 * clamp(u, 0.0, 1.0)) * (0.75 + 0.25 * dk) * rootStreak * hplaning * smoothstep(6.0, 12.0, hs) * (rootW0 / rootW);
+        foam = (meniscus + sheet * 0.7 + curl * 0.9) * coverage + root * insideFade;
         // crest slope of the bow wave (raised toward the hull side of the crest)
         vec2 outDir = ax < 0.0 ? normalize(vec2(-fwd * ax + s * right * ay)) : s * right;
         float slope = -2.0 * dc / (bowW * bowW) * bowBump * (0.3 + 0.1 * hspd) * bowW;
         g += outDir * slope * coverage;
-        cover = coverage * max(exp(-outside * 3.0), bowBump);
+        cover = max(coverage * max(exp(-outside * 3.0), bowBump), root * insideFade);
       }
       // ribbon edge softening (no hard rectangle edges in the map)
       float edge = 1.0 - smoothstep(0.9, 1.0, abs(side));
@@ -422,8 +459,9 @@ export const WAKE_HEIGHT_SCALE = 1.0;
 export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
   vertexShader: WAKE_VERTEX,
   fragmentShader: /* glsl */ `
-    varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; flat varying vec4 vTrail; flat varying vec4 vTrail2;
+    varying vec4 vA; varying vec4 vGeom; varying vec4 vExt; varying vec2 vWp; varying vec2 vPt; flat varying vec4 vTrail; flat varying vec4 vTrail2;
     uniform float uTexel;
+    uniform float uTime;
     const float HSCALE = ${WAKE_HEIGHT_SCALE.toFixed(2)};
     ${WAKE_GLSL_COMMON}
     void main() {
@@ -432,6 +470,8 @@ export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
       float w0 = vTrail.y, lead = vTrail.z;
       float curv = vExt.x, shift = vExt.z;
       float planeV = max(vTrail2.y, 1.0);
+      float dk = smoothstep(0.08, 0.4, vPt.x);
+      float sinkK = clamp(vPt.y / 3.0, 0.0, 1.0);
       float aspd = abs(speed);
       float hs = max(speed, 0.0);
       float laneLen = vTrail.w * clamp(aspd / 8.0, 0.5, 1.6);
@@ -495,11 +535,29 @@ export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
       //      the step as a hollow and closes behind the transom in a rooster tail a hull length back
       float hl = clamp(0.1 * hs, 0.8, 3.0);
       float lane = 1.0 - smoothstep(w0 * 0.9, w0 * 2.0, ay);
-      float chine = -0.12 * hullScale * smoothstep(0.35, 0.6, u) * (1.0 - smoothstep(1.0, 1.1, u)) * g1(sideDist, 0.5);
-      float hollow = -0.26 * hullScale * smoothstep(0.0, 0.5, d) * (1.0 - smoothstep(hl * 0.6, hl * 1.1, d)) * lane;
-      float tailH = 0.34 * hullScale * smoothstep(planeV * 0.85, planeV * 1.45, hs);
+      // the dip along the chines sits outside the pile-up ridge (below); a hull driven under digs it deeper
+      float chine = -0.12 * hullScale * (1.0 + 0.8 * dk) * smoothstep(0.35, 0.6, u) * (1.0 - smoothstep(1.0, 1.1, u)) * g1(sideDist - 0.45 * dk, 0.5);
+      float hollow = -0.26 * hullScale * (1.0 + 1.1 * dk) * smoothstep(0.0, 0.5, d) * (1.0 - smoothstep(hl * 0.6, hl * 1.1, d)) * lane;
+      float tailH = 0.34 * hullScale * (1.0 + 0.7 * dk) * smoothstep(planeV * 0.85, planeV * 1.45, hs);
       float tail = tailH * (g1(d - hl - 1.0, 1.0) * (1.0 - smoothstep(w0 * 0.6, w0 * 1.6, ay)) - 0.35 * g1(d - hl - 3.2, 1.4) * lane + 0.15 * g1(d - hl - 5.6, 1.8) * lane);
       h += planing * (chine + hollow + tail);
+      // ---- pile-up: the water a running V-bottom drives aside rises along the hull sides and stands as a ridge
+      //      just outside the chines, from the stagnation line to the step: the root the spray sheet leaves from.
+      //      A few centimetres at the running draft; a hull driven 40 cm under at touchdown, still sinking, piles
+      //      up 20-25 cm along its whole forebody (the surface really does climb the hull: the displaced water
+      //      has to go somewhere, and at planing speed it goes out and up, not ahead as a bow hump)
+      float wetFrom = mix(0.5, 0.08, max(dk, sinkK));
+      float wetU = smoothstep(wetFrom - 0.12, wetFrom + 0.15, u) * (1.0 - smoothstep(1.0, 1.2, u));
+      float ridgeH = (0.04 + 0.2 * dk + 0.05 * sinkK) * hullScale;
+      float ridgeW = (0.3 + 0.25 * dk) * hullScale;
+      h += ridgeH * g1(sideDist - 0.12 - 0.15 * dk, ridgeW) * wetU * smoothstep(6.0, 12.0, hs) * max(planing, dk);
+      // ---- rest ripples: a hull barely under way still works the surface (it heaves and rolls on the chop, the
+      //      idle wash nudges it) and radiates rings a few millimetres high from its waterline, 0.6 m apart,
+      //      running out at their own 1 m/s and dying within a couple of metres; gone once the hull moves off and
+      //      makes a wake instead (a floatplane at rest used to sit in water as flat as glass)
+      float still = 1.0 - smoothstep(0.5, 2.0, aspd);
+      float ringA = 0.006 * hullScale * exp(-sideDist / 1.6) * inversesqrt(1.0 + 3.0 * sideDist) * (0.7 + 0.3 * vn(vWp * 1.7 + 5.0));
+      h += still * ringA * cos(10.5 * sideDist - 10.1 * uTime + 3.0 * vn(vWp * 0.6 + 9.0));
       // under the hull the surface is hidden; keep it from rising through the deck at the stem
       h = mix(h, min(h, 0.0), smoothstep(0.0, 0.12, inside));
       float edge = 1.0 - smoothstep(0.85, 1.0, abs(side));
@@ -507,7 +565,7 @@ export const WAKE_HEIGHT_MATERIAL = new THREE.ShaderMaterial({
       gl_FragColor = vec4(max(h, 0.0), max(-h, 0.0), 0.0, 1.0);
     }
   `,
-  uniforms: { uTexel: { value: 0.125 } },
+  uniforms: { uTexel: { value: 0.125 }, uTime: { value: 0 } },
   transparent: true,
   depthTest: false,
   depthWrite: false,
@@ -785,6 +843,7 @@ export class WakeBatch {
   private ext = new Float32Array(0);
   private trail = new Float32Array(0);
   private trail2 = new Float32Array(0);
+  private trail3 = new Float32Array(0);
   private index = new Uint32Array(0);
   private readonly heightMaterial: THREE.ShaderMaterial;
 
@@ -798,6 +857,8 @@ export class WakeBatch {
   }
 
   setTexel(t: number): void { this.material.uniforms.uTexel.value = t; this.heightMaterial.uniforms.uTexel.value = t; }
+  /** the height pass's clock (the rest ripples travel); driven by whoever drives the splat clock */
+  setTime(t: number): void { this.heightMaterial.uniforms.uTime.value = t; }
   /** draw the batch as the signed height field (additive) instead of foam / slope */
   useHeight(on: boolean): void { this.mesh.material = on ? this.heightMaterial : this.material; }
 
@@ -810,7 +871,7 @@ export class WakeBatch {
   upload(): void {
     if (this.positions.length !== this.capacity * 6) this.allocate();
     let v = 0, n = 0;
-    const { positions, a, geom, ext, trail, trail2, index } = this;
+    const { positions, a, geom, ext, trail, trail2, trail3, index } = this;
     for (const t of this.trails) {
       const pts = t.count;
       if (pts === 0) continue;
@@ -819,9 +880,10 @@ export class WakeBatch {
       a.set(t.a.subarray(0, verts * 4), v * 4);
       geom.set(t.geom.subarray(0, verts * 4), v * 4);
       ext.set(t.ext.subarray(0, verts * 4), v * 4);
-      for (let i = v; i < v + verts; i++) {
+      for (let i = v, j = 0; i < v + verts; i++, j++) {
         trail[i * 4] = t.strength; trail[i * 4 + 1] = t.halfWidth; trail[i * 4 + 2] = t.lead; trail[i * 4 + 3] = t.laneLen;
         trail2[i * 4] = t.propWash; trail2[i * 4 + 1] = t.planingSpeed; trail2[i * 4 + 2] = t.churn; trail2[i * 4 + 3] = t.immersion;
+        trail3[i * 4] = t.draft; trail3[i * 4 + 1] = t.sink; trail3[i * 4 + 2] = t.ext2[j * 2]; trail3[i * 4 + 3] = t.ext2[j * 2 + 1];
       }
       for (let i = 0; i < pts - 1; i++) {
         const q = v + i * 2, b = q + 1, c = q + 2, e = q + 3;
@@ -830,7 +892,7 @@ export class WakeBatch {
       v += verts;
     }
     const g = this.geo;
-    for (const name of ['position', 'aA', 'aGeom', 'aExt', 'aTrail', 'aTrail2']) {
+    for (const name of ['position', 'aA', 'aGeom', 'aExt', 'aTrail', 'aTrail2', 'aTrail3']) {
       const attr = g.getAttribute(name) as THREE.BufferAttribute;
       attr.clearUpdateRanges();
       if (v > 0) attr.addUpdateRange(0, v * attr.itemSize);
@@ -851,6 +913,7 @@ export class WakeBatch {
     this.ext = new Float32Array(cap * 8);
     this.trail = new Float32Array(cap * 8);
     this.trail2 = new Float32Array(cap * 8);
+    this.trail3 = new Float32Array(cap * 8);
     this.index = new Uint32Array(Math.max(6, cap * 6));
     const g = this.geo;
     g.dispose();
@@ -860,11 +923,12 @@ export class WakeBatch {
     g.setAttribute('aExt', new THREE.BufferAttribute(this.ext, 4).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute('aTrail', new THREE.BufferAttribute(this.trail, 4).setUsage(THREE.DynamicDrawUsage));
     g.setAttribute('aTrail2', new THREE.BufferAttribute(this.trail2, 4).setUsage(THREE.DynamicDrawUsage));
+    g.setAttribute('aTrail3', new THREE.BufferAttribute(this.trail3, 4).setUsage(THREE.DynamicDrawUsage));
     g.setIndex(new THREE.BufferAttribute(this.index, 1).setUsage(THREE.DynamicDrawUsage));
   }
 }
 
-interface TrailPoint { x: number; z: number; dx: number; dz: number; t: number; fade: number; speed: number; odo: number; curv: number; }
+interface TrailPoint { x: number; z: number; dx: number; dz: number; t: number; fade: number; speed: number; odo: number; curv: number; draft: number; sink: number; }
 
 /**
  * Fixed-capacity ribbon following an emitter. Positions are in world space. Standalone trails (contrails,
@@ -896,10 +960,18 @@ export class WakeTrail {
   /** how deep the hull sits below its design waterline, 0 (afloat as built) .. 1 (a flooded hull, decks awash):
    *  the ribbon head draws its outline at the wider section that cuts the surface, with a collar of foam */
   immersion = 0;
+  /** running draft of the hull's forebody keel below the local surface (m; a planing float ~0.1, one driven under
+   *  at touchdown 0.4): the pile-up beside the chines, the spray root and the hollow off the step scale with it */
+  draft = 0;
+  /** downward speed of the hull into the surface (m/s, >= 0): the wedge jet of a hull still sinking */
+  sink = 0;
   readonly positions: Float32Array;
   readonly a: Float32Array;
   readonly geom: Float32Array;
   readonly ext: Float32Array;
+  /** per vertex: the hull's draft and sink rate when this point was laid (the head carries the live values), so a
+   *  lane laid by a hull driven deep at touchdown keeps its marks after the hull has risen onto the step */
+  readonly ext2: Float32Array;
   /** live points (vertices = 2 * count, quads = count - 1) */
   count = 0;
   private readonly points: TrailPoint[] = [];
@@ -941,6 +1013,7 @@ export class WakeTrail {
     this.a = new Float32Array(slots * 2 * 4);
     this.geom = new Float32Array(slots * 2 * 4);
     this.ext = new Float32Array(slots * 2 * 4);
+    this.ext2 = new Float32Array(slots * 2 * 2);
     if (target instanceof WakeBatch) { target.add(this); return; }
     const idx: number[] = [];
     for (let i = 0; i < slots - 1; i++) {
@@ -1022,9 +1095,9 @@ export class WakeTrail {
   /** one vertex pair: the left vertex wL metres to the left of the track point, the right one wR to the right;
    *  aGeom.y carries the vertex's signed across-position (-wL / +wR), which interpolates linearly over the quad
    *  as the position does (side x half-width would not once the two sides differ) */
-  private writeVertexPair(i: number, x: number, z: number, dx: number, dz: number, wL: number, wR: number, age: number, fade: number, speed: number, dist: number, curv: number, ageS: number, shift: number, odo: number): void {
+  private writeVertexPair(i: number, x: number, z: number, dx: number, dz: number, wL: number, wR: number, age: number, fade: number, speed: number, dist: number, curv: number, ageS: number, shift: number, odo: number, draft = this.draft, sink = this.sink): void {
     const rx = -dz, rz = dx;
-    const p = this.positions, a = this.a, g = this.geom, e = this.ext;
+    const p = this.positions, a = this.a, g = this.geom, e = this.ext, e2 = this.ext2;
     p[i * 6] = x - rx * wL; p[i * 6 + 1] = 0.05; p[i * 6 + 2] = z - rz * wL;
     p[i * 6 + 3] = x + rx * wR; p[i * 6 + 4] = 0.05; p[i * 6 + 5] = z + rz * wR;
     for (let k = 0; k < 2; k++) {
@@ -1032,6 +1105,7 @@ export class WakeTrail {
       a[v] = age; a[v + 1] = k === 0 ? -1 : 1; a[v + 2] = fade; a[v + 3] = speed;
       g[v] = dist; g[v + 1] = k === 0 ? -wL : wR; g[v + 2] = dx; g[v + 3] = dz;
       e[v] = curv; e[v + 1] = ageS; e[v + 2] = shift; e[v + 3] = odo;
+      e2[(i * 2 + k) * 2] = draft; e2[(i * 2 + k) * 2 + 1] = sink;
     }
   }
 
@@ -1087,7 +1161,7 @@ export class WakeTrail {
         const step = Math.max(this.spacing, speed * 0.25);
         const nBack = Math.min(this.capacity - 1, Math.floor(Math.min(this.lifetime * 0.6, 60) * speed / step));
         this.odometer = nBack * step;
-        for (let i = nBack; i >= 1; i--) this.points.push({ x: x - dx * step * i, z: z - dz * step * i, dx, dz, t: time - (step * i) / speed, fade: 1, speed, odo: (nBack - i) * step, curv: 0 });
+        for (let i = nBack; i >= 1; i--) this.points.push({ x: x - dx * step * i, z: z - dz * step * i, dx, dz, t: time - (step * i) / speed, fade: 1, speed, odo: (nBack - i) * step, curv: 0, draft: this.draft, sink: 0 });
         this.ramp = 0;
       }
       const fade = this.ramp > 0 ? 1 - this.ramp-- / (RAMP + 1) : 1;
@@ -1097,7 +1171,7 @@ export class WakeTrail {
         const before = this.points[this.points.length - 2];
         if (!before || before.fade === 0) { prev.dx = pdx; prev.dz = pdz; }
       }
-      this.points.push({ x, z, dx: pdx, dz: pdz, t: time, fade, speed, odo: this.odometer, curv: 0 });
+      this.points.push({ x, z, dx: pdx, dz: pdz, t: time, fade, speed, odo: this.odometer, curv: 0, draft: this.draft, sink: this.sink });
       if (this.wake) this.relax(this.points.length - 2);
       while (this.points.length > this.capacity) this.points.shift();
       this.lastX = x; this.lastZ = z;
@@ -1139,7 +1213,7 @@ export class WakeTrail {
       // the end points take their neighbour's curvature (the tail quad is the widest: symmetric there, it would
       // still fold in a turn)
       p.curv = this.curvature(i === 0 ? 1 : i === n - 1 ? n - 2 : i);
-      this.writeVertexPair(i, p.x, p.z, p.dx, p.dz, this.wakeHalf(d, p.curv, -1), this.wakeHalf(d, p.curv, 1), age, p.fade, p.speed, d, p.curv, ageS, shift, p.odo);
+      this.writeVertexPair(i, p.x, p.z, p.dx, p.dz, this.wakeHalf(d, p.curv, -1), this.wakeHalf(d, p.curv, 1), age, p.fade, p.speed, d, p.curv, ageS, shift, p.odo, p.draft, p.sink);
     }
     let count = n;
     if (head) {

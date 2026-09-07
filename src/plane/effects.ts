@@ -38,35 +38,28 @@ function sprayTexture(): THREE.CanvasTexture {
   const ctx = c.getContext('2d')!;
   ctx.clearRect(0, 0, w, h);
   const rng = new Rng('spray-atlas');
-  // tile 0: sheet
+  // tile 0: a torn shred of film (the fragments the sheet's rim sheds): an irregular veil of overlapping soft
+  // lobes with holes eaten into it, denser at the root (left), lacy at the tip; no filament lines (the previous
+  // fan of 90 strokes was the "lines of white" the touchdown read as)
   ctx.save();
   ctx.beginPath(); ctx.rect(0, 0, 128, 128); ctx.clip();
-  ctx.lineCap = 'round';
-  for (let i = 0; i < 90; i++) {
-    // filaments fan out from the root by up to +-22 degrees, the outer ones shorter and fainter
-    const spread = (rng.next() - 0.5) * 2;
-    const ang = spread * 0.38;
-    const len = (58 + 52 * rng.next()) * (1 - 0.35 * spread * spread);
-    const x0 = 6 + rng.next() * 16, y0 = 64 + spread * 9 + rng.gauss() * 2;
-    const a = (0.28 + 0.5 * rng.next()) * (1 - 0.4 * spread * spread);
-    const wid = 0.8 + 1.8 * rng.next();
-    // a filament thins and fades toward the tip: three segments of falling alpha and width
-    for (let s = 0; s < 3; s++) {
-      const t0 = s / 3, t1 = (s + 1) / 3;
-      const sa = a * (1 - 0.7 * t0 * t0);
-      ctx.strokeStyle = `rgba(255,255,255,${sa.toFixed(3)})`;
-      ctx.lineWidth = wid * (1 - 0.5 * t0);
-      ctx.beginPath();
-      ctx.moveTo(x0 + Math.cos(ang) * len * t0, y0 + Math.sin(ang) * len * t0 + 0.7 * Math.sin(t0 * 5.0 + i));
-      ctx.lineTo(x0 + Math.cos(ang) * len * t1, y0 + Math.sin(ang) * len * t1 + 0.7 * Math.sin(t1 * 5.0 + i));
-      ctx.stroke();
-    }
+  for (let i = 0; i < 26; i++) {
+    const cx = 14 + rng.next() * 100, cy = 64 + rng.gauss() * 13 * (0.5 + cx / 128);
+    const r = (9 + 13 * rng.next()) * (1.1 - 0.5 * cx / 128);
+    const a = (0.22 + 0.3 * rng.next()) * (1 - 0.55 * cx / 128);
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, `rgba(255,255,255,${a.toFixed(3)})`); g.addColorStop(0.55, `rgba(255,255,255,${(a * 0.6).toFixed(3)})`); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, 2 * r, 2 * r);
   }
-  // the root is a denser film: a short soft wedge the filaments grow out of
-  const root = ctx.createLinearGradient(4, 0, 46, 0);
-  root.addColorStop(0, 'rgba(255,255,255,0.0)'); root.addColorStop(0.25, 'rgba(255,255,255,0.35)'); root.addColorStop(1, 'rgba(255,255,255,0)');
-  ctx.fillStyle = root;
-  ctx.beginPath(); ctx.moveTo(4, 64); ctx.lineTo(46, 42); ctx.lineTo(46, 86); ctx.closePath(); ctx.fill();
+  ctx.globalCompositeOperation = 'destination-out';
+  for (let i = 0; i < 30; i++) {
+    const cx = 30 + rng.next() * 98, cy = 64 + (rng.next() - 0.5) * 60;
+    const r = (3 + 8 * rng.next()) * (0.5 + cx / 128);
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r);
+    g.addColorStop(0, 'rgba(0,0,0,0.9)'); g.addColorStop(0.6, 'rgba(0,0,0,0.5)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = g; ctx.fillRect(cx - r, cy - r, 2 * r, 2 * r);
+  }
+  ctx.globalCompositeOperation = 'source-over';
   ctx.restore();
   // tile 1: droplets
   ctx.save();
@@ -335,11 +328,248 @@ class SprayCloud {
   }
 }
 
+/** emission columns kept per sheet (one every SHEET_DT while the chine runs in the water) and stations along the root */
+const SHEET_COLS = 40, SHEET_ROWS = 7, SHEET_DT = 1 / 30;
+
+/** a float hull section: chine height, half-beam at the chine, keel depth below the chine (parts/floats.ts) */
+interface FloatSec { yc: number; w: number; bot: number }
+/**
+ * The forebody sections of the float hull, stem to step (x, chine yc, half-beam w, keel below the chine bot), as
+ * lofted by parts/floats.ts; the bottom between the chine and the keel is y = yc - bot (1 - (z / w)^VEE), a deep
+ * V of ~38 deg. The spray sheets need the hull's real bottom to leave from.
+ */
+const FLOAT_FORE: [number, number, number, number][] = [[2.95, -1.86, 0.05, 0.05], [2.6, -1.9, 0.2, 0.18], [1.9, -1.95, 0.33, 0.28], [0.8, -1.95, 0.37, 0.32], [-0.2, -1.95, 0.37, 0.3], [-0.35, -1.95, 0.365, 0.295]];
+const FLOAT_VEE = 1.12;
+function foreSection(x: number, out: FloatSec): FloatSec {
+  const F = FLOAT_FORE;
+  if (x >= F[0][0]) { out.yc = F[0][1]; out.w = F[0][2]; out.bot = F[0][3]; return out; }
+  for (let i = 1; i < F.length; i++) {
+    if (x >= F[i][0]) {
+      const a = F[i - 1], b = F[i], f = (a[0] - x) / (a[0] - b[0]);
+      out.yc = lerp(a[1], b[1], f); out.w = lerp(a[2], b[2], f); out.bot = lerp(a[3], b[3], f);
+      return out;
+    }
+  }
+  const l = F[F.length - 1];
+  out.yc = l[1]; out.w = l[2]; out.bot = l[3];
+  return out;
+}
+
+/** GLSL shared by the sheet's lit material and its shadow-pass depth material: the film's coverage. */
+const SHEET_GLSL = /* glsl */ `
+  varying vec4 vSh;   // alpha, age (s), column seed, root parameter u (0 front .. 1 aft)
+  float shHash(vec2 q) { vec3 p3 = fract(vec3(q.xyx) * vec3(0.1031, 0.1030, 0.0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+  float shNoise(vec2 q) { vec2 i = floor(q), f = fract(q); f = f * f * (3.0 - 2.0 * f);
+    return mix(mix(shHash(i), shHash(i + vec2(1, 0)), f.x), mix(shHash(i + vec2(0, 1)), shHash(i + vec2(1, 1)), f.x), f.y); }
+  // coverage of the film: whole for its first tenth of a second, then torn into ligaments and holes that grow with
+  // age. The noise is keyed by the column's emission time (sh.z), continuous along the fan and fixed per column,
+  // so the tears travel with the water they are in, not over it (a per-column random seed would decorrelate the
+  // neighbours and the interpolation across each quad would sweep the noise into fine stripes: lines again)
+  float sheetCoverage(vec4 sh, out float film, out float tornK) {
+    float tau = sh.y, u = sh.w, te = sh.z;
+    vec2 q = vec2(te * 34.0, u * 5.5);
+    float n = 0.6 * shNoise(q) + 0.4 * shNoise(q * 2.3 + 7.0);
+    tornK = smoothstep(0.08, 0.6, tau);
+    float thr = mix(0.12, 0.66, tornK);
+    float holes = smoothstep(thr - 0.16, thr + 0.1, n);
+    film = 1.0 - smoothstep(0.05, 0.22, tau);
+    // the fan's front and aft edges thin out; the root (tau 0) is whole
+    float edges = smoothstep(0.0, 0.14, u) * smoothstep(1.0, 0.7, u);
+    return sh.x * holes * edges;
+  }
+`;
+
+/**
+ * The spray sheet a running float throws: the water the chine displaces leaves it as one continuous film (the
+ * "blister" of a planing hull, the curtain of a touchdown), not as particles. Every SHEET_DT the emitter samples
+ * the wetted chine at SHEET_ROWS stations with the launch velocity of the water leaving it (sideways and up,
+ * faster the deeper the hull runs and the faster it is sinking: Wagner's wedge jet), and the surface drawn is the
+ * ballistic flight of those samples through the water's frame: a swept fan that hangs behind the hull, arching
+ * out and down, its far edge a second old. A curved, lit, translucent sheet: glassy at the root (the film is
+ * clear water), whitening as it tears into ligaments, gone where it has fallen back to the surface. Casts a
+ * ragged shadow through its own coverage. One mesh per chine (four per aircraft), rebuilt on the CPU per frame.
+ */
+class SpraySheet {
+  readonly mesh: THREE.Mesh;
+  readonly material: THREE.MeshStandardMaterial;
+  private readonly geo: THREE.BufferGeometry;
+  private readonly pos: Float32Array;
+  private readonly sh: Float32Array;
+  private readonly nrm: Float32Array;
+  private readonly idx: Uint16Array;
+  /** ring of emission columns: time, per-row root position (world) and launch velocity, strength */
+  private readonly colT = new Float64Array(SHEET_COLS).fill(-1e9);
+  private readonly colP = new Float32Array(SHEET_COLS * SHEET_ROWS * 3);
+  private readonly colV = new Float32Array(SHEET_COLS * SHEET_ROWS * 3);
+  private readonly colK = new Float32Array(SHEET_COLS);
+  private readonly colSurf = new Float32Array(SHEET_COLS);
+  private head = 0;
+  private lastEmit = -1e9;
+  private readonly tmpA = new THREE.Vector3();
+  private readonly tmpB = new THREE.Vector3();
+  private readonly tmpC = new THREE.Vector3();
+
+  constructor(material: THREE.MeshStandardMaterial, depth: THREE.MeshDepthMaterial) {
+    const n = SHEET_COLS * SHEET_ROWS;
+    this.pos = new Float32Array(n * 3);
+    this.sh = new Float32Array(n * 4);
+    this.nrm = new Float32Array(n * 3);
+    this.geo = new THREE.BufferGeometry();
+    this.geo.setAttribute('position', new THREE.BufferAttribute(this.pos, 3).setUsage(THREE.DynamicDrawUsage));
+    this.geo.setAttribute('normal', new THREE.BufferAttribute(this.nrm, 3).setUsage(THREE.DynamicDrawUsage));
+    this.geo.setAttribute('aSh', new THREE.BufferAttribute(this.sh, 4).setUsage(THREE.DynamicDrawUsage));
+    // the index is rebuilt per frame: only quads between consecutive live columns of one contact (a dead column,
+    // or a gap where the float skipped clear of the water, must not bridge a sliver across to the next sample)
+    this.idx = new Uint16Array((SHEET_COLS - 1) * (SHEET_ROWS - 1) * 6);
+    this.geo.setIndex(new THREE.BufferAttribute(this.idx, 1).setUsage(THREE.DynamicDrawUsage));
+    this.geo.setDrawRange(0, 0);
+    this.material = material;
+    this.mesh = new THREE.Mesh(this.geo, material);
+    this.mesh.frustumCulled = false;
+    this.mesh.matrixAutoUpdate = false;
+    this.mesh.castShadow = true;
+    this.mesh.receiveShadow = true;
+    this.mesh.customDepthMaterial = depth;
+    this.mesh.renderOrder = 6;
+  }
+
+  clear(): void { this.colT.fill(-1e9); this.head = 0; this.lastEmit = -1e9; this.geo.setDrawRange(0, 0); }
+
+  /**
+   * Sample the emitter: `root(u, out)` gives the world position of the spray root at station u (0 front .. 1 aft),
+   * `launch(u, out)` the launch velocity of the water leaving it there; `k` the sheet's strength (mass of water
+   * thrown), `surfaceY` the water level the fallen film dies at.
+   */
+  emit(time: number, k: number, surfaceY: number, root: (u: number, out: THREE.Vector3) => THREE.Vector3, launch: (u: number, out: THREE.Vector3) => THREE.Vector3): void {
+    if (time - this.lastEmit < SHEET_DT * 0.98) return;
+    this.lastEmit = time;
+    const c = this.head;
+    this.head = (this.head + 1) % SHEET_COLS;
+    this.colT[c] = time;
+    this.colK[c] = k;
+    this.colSurf[c] = surfaceY;
+    for (let r = 0; r < SHEET_ROWS; r++) {
+      const u = r / (SHEET_ROWS - 1);
+      const p = root(u, this.tmpA), v = launch(u, this.tmpB);
+      const o = (c * SHEET_ROWS + r) * 3;
+      this.colP[o] = p.x; this.colP[o + 1] = p.y; this.colP[o + 2] = p.z;
+      this.colV[o] = v.x; this.colV[o + 1] = v.y; this.colV[o + 2] = v.z;
+    }
+  }
+
+  /** Rebuild the fan for the current time (columns in age order, oldest first). */
+  update(time: number): void {
+    const pos = this.pos, sh = this.sh, nrm = this.nrm, idx = this.idx;
+    let nIdx = 0, prevT = -1e9;
+    for (let i = 0; i < SHEET_COLS; i++) {
+      // column i of the mesh is the (i)th oldest sample
+      const c = (this.head + i) % SHEET_COLS;
+      const tau = time - this.colT[c];
+      const alive = tau >= 0 && tau < 1.5;
+      // stitch this column to the previous one when both are live samples of the same run
+      if (alive && this.colT[c] - prevT < SHEET_DT * 3.5) {
+        for (let r = 0; r < SHEET_ROWS - 1; r++) {
+          const a = (i - 1) * SHEET_ROWS + r, b = a + 1, d = a + SHEET_ROWS, e = d + 1;
+          idx[nIdx++] = a; idx[nIdx++] = d; idx[nIdx++] = b; idx[nIdx++] = b; idx[nIdx++] = d; idx[nIdx++] = e;
+        }
+      }
+      prevT = alive ? this.colT[c] : -1e9;
+      const k = this.colK[c];
+      const surf = this.colSurf[c];
+      // the film flies nearly ballistically; what it breaks into (ligaments, drops) meets more air: the horizontal
+      // reach saturates (drag), the fall is free
+      const kh = 1.1, kv = 0.7;
+      const th = (1 - Math.exp(-kh * tau)) / kh, tv = (1 - Math.exp(-kv * tau)) / kv;
+      const fall = 0.5 * 9.81 * tau * tau;
+      // the film thins as it spreads and is gone once its drops have fallen: alive 0.1 s whole, torn by 0.6 s, a
+      // fading mist of drops to 1.2 s (longer for a heavy sheet)
+      const life = 0.85 + 0.35 * Math.min(k, 2);
+      const fade = alive ? (1 - smoothstep(life * 0.45, life, tau)) * Math.min(k, 1.6) : 0;
+      for (let r = 0; r < SHEET_ROWS; r++) {
+        const u = r / (SHEET_ROWS - 1);
+        const s = (c * SHEET_ROWS + r) * 3, o = (i * SHEET_ROWS + r);
+        let x = this.colP[s], y = this.colP[s + 1], z = this.colP[s + 2];
+        let a = 0;
+        if (alive) {
+          x += this.colV[s] * th; z += this.colV[s + 2] * th;
+          y += this.colV[s + 1] * tv - fall;
+          // fallen back into the water: the film is the wake's foam now
+          const dip = surf - y;
+          a = fade * (1 - smoothstep(-0.05, 0.25, dip));
+          if (dip > 0.25) y = surf - 0.25;
+        }
+        pos[o * 3] = x; pos[o * 3 + 1] = y; pos[o * 3 + 2] = z;
+        // z: the column's emission time, the along-fan noise coordinate (wrapped far outside any fan's 1.5 s span)
+        sh[o * 4] = a; sh[o * 4 + 1] = Math.max(tau, 0); sh[o * 4 + 2] = alive ? this.colT[c] % 1024 : 0; sh[o * 4 + 3] = u;
+      }
+    }
+    // normals from the fan's own surface (a translucent film lit from both sides: the sign only matters for the
+    // specular sheen, and DoubleSide flips it for the back faces)
+    for (let i = 0; i < SHEET_COLS; i++) for (let r = 0; r < SHEET_ROWS; r++) {
+      const o = i * SHEET_ROWS + r;
+      const i1 = Math.min(i + 1, SHEET_COLS - 1), i0 = Math.max(i - 1, 0), r1 = Math.min(r + 1, SHEET_ROWS - 1), r0 = Math.max(r - 1, 0);
+      const a = this.tmpA.set(pos[(i1 * SHEET_ROWS + r) * 3] - pos[(i0 * SHEET_ROWS + r) * 3], pos[(i1 * SHEET_ROWS + r) * 3 + 1] - pos[(i0 * SHEET_ROWS + r) * 3 + 1], pos[(i1 * SHEET_ROWS + r) * 3 + 2] - pos[(i0 * SHEET_ROWS + r) * 3 + 2]);
+      const b = this.tmpB.set(pos[(i * SHEET_ROWS + r1) * 3] - pos[(i * SHEET_ROWS + r0) * 3], pos[(i * SHEET_ROWS + r1) * 3 + 1] - pos[(i * SHEET_ROWS + r0) * 3 + 1], pos[(i * SHEET_ROWS + r1) * 3 + 2] - pos[(i * SHEET_ROWS + r0) * 3 + 2]);
+      const n = this.tmpC.crossVectors(a, b);
+      if (n.lengthSq() < 1e-10) n.set(0, 1, 0); else n.normalize();
+      nrm[o * 3] = n.x; nrm[o * 3 + 1] = n.y; nrm[o * 3 + 2] = n.z;
+    }
+    const g = this.geo;
+    (g.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+    (g.attributes.normal as THREE.BufferAttribute).needsUpdate = true;
+    (g.attributes.aSh as THREE.BufferAttribute).needsUpdate = true;
+    g.index!.needsUpdate = true;
+    g.setDrawRange(0, nIdx);
+  }
+
+  /** the lit material shared by every sheet (registered with the game's shadow hook like the spray quads) */
+  static makeMaterial(): THREE.MeshStandardMaterial {
+    const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.55, metalness: 0.0, transparent: true, depthWrite: false, side: THREE.DoubleSide });
+    mat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute vec4 aSh;\nvarying vec4 vSh;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSh = aSh;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\n${SHEET_GLSL}`)
+        .replace('#include <map_fragment>', /* glsl */ `
+          #include <map_fragment>
+          float film, tornK;
+          float cov = sheetCoverage(vSh, film, tornK);
+          if (cov < 0.01) discard;
+          // a whole film is clear water seen edge-on: it takes the sea's tint and lets most of the light through;
+          // the torn film is aerated and white
+          diffuseColor.rgb = mix(vec3(0.97, 0.985, 1.0), vec3(0.55, 0.82, 0.9), 0.7 * film);
+          diffuseColor.a *= cov * mix(0.9, 0.45, film);
+        `)
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix(0.85, 0.12, film);');
+    };
+    mat.customProgramCacheKey = () => 'spray-sheet-v1';
+    return mat;
+  }
+
+  /** the shadow-pass material: the same coverage, cut hard, so the sheet's shadow on the water is ragged */
+  static makeDepthMaterial(): THREE.MeshDepthMaterial {
+    const mat = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, side: THREE.DoubleSide });
+    mat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute vec4 aSh;\nvarying vec4 vSh;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvSh = aSh;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', `#include <common>\n${SHEET_GLSL}`)
+        .replace('#include <map_fragment>', '#include <map_fragment>\nfloat film, tornK; if (sheetCoverage(vSh, film, tornK) * mix(1.0, 0.5, film) < 0.3) discard;');
+    };
+    mat.customProgramCacheKey = () => 'spray-sheet-depth-v1';
+    return mat;
+  }
+}
+
 /** Float wakes, bow spray, exhaust smoke and wingtip condensation trails. */
 export class PlaneEffects {
   readonly wakeL: WakeTrail;
   readonly wakeR: WakeTrail;
   readonly spray: SprayCloud;
+  /** the continuous spray films off the four chines: [port out, port in, stbd in, stbd out] */
+  readonly sheets: SpraySheet[];
   readonly exhaust: ParticleCloud;
   readonly vortexL: WakeTrail;
   readonly vortexR: WakeTrail;
@@ -353,6 +583,7 @@ export class PlaneEffects {
   private rng = new Rng('plane-effects');
   private readonly tmp2 = new THREE.Vector3();
   private readonly right = new THREE.Vector3();
+  private readonly tmpSec: FloatSec = { yc: 0, w: 0, bot: 0 };
   private sprayAcc = 0;
   private tailAcc = 0;
   private exhaustAcc = 0;
@@ -360,6 +591,8 @@ export class PlaneEffects {
   private boilAcc = 0;
   /** the impact splats of the wake maps (null when the batch has none) */
   private readonly splats: SplatBatch | null;
+  /** the wake batch the float ribbons belong to (its height pass has a clock: the rest ripples) */
+  private readonly wakes: WakeBatch;
 
   constructor(wakes: WakeBatch, scene: THREE.Scene) {
     // float hull: 5.7 m from stern to stem, 0.37 m half-beam at the chine (see model.ts floatSections); a float
@@ -371,16 +604,19 @@ export class PlaneEffects {
     this.wakeR = new WakeTrail(80, 0.37, 30, 1.1, wakes, 5.7, 1.5);
     for (const w of [this.wakeL, this.wakeR]) { w.propWash = 0; w.planingSpeed = 15; w.churn = 0.85; }
     this.splats = wakes.splats;
+    this.wakes = wakes;
     const tex = spriteTexture();
     // (640: a level wing slapping down emits its curtain along the whole span in one frame, on top of the
     // touchdown plume; 480 evicted the planing spray)
     this.spray = new SprayCloud(640, sprayTexture());
+    const sheetMat = SpraySheet.makeMaterial(), sheetDepth = SpraySheet.makeDepthMaterial();
+    this.sheets = [0, 1, 2, 3].map(() => new SpraySheet(sheetMat, sheetDepth));
     this.exhaust = new ParticleCloud(120, new THREE.Color(0.25, 0.24, 0.23), tex, 0.22, THREE.NormalBlending);
-    scene.add(this.spray.mesh, this.exhaust.points);
+    scene.add(this.spray.mesh, this.exhaust.points, ...this.sheets.map((s) => s.mesh));
     this.vortexL = new WakeTrail(90, 0.5, 2.2, 0.6, CONTRAIL_MATERIAL);
     this.vortexR = new WakeTrail(90, 0.5, 2.2, 0.6, CONTRAIL_MATERIAL);
     scene.add(this.vortexL.mesh!, this.vortexR.mesh!);
-    this.litMaterials = [this.spray.material];
+    this.litMaterials = [this.spray.material, sheetMat];
     this.unmirrored = [this.spray.mesh, this.exhaust.points, this.vortexL.mesh!, this.vortexR.mesh!];
   }
 
@@ -388,6 +624,7 @@ export class PlaneEffects {
   reset(): void {
     this.wakeL.reset(); this.wakeR.reset(); this.vortexL.reset(); this.vortexR.reset();
     this.spray.clear(); this.exhaust.clear();
+    for (const s of this.sheets) s.clear();
     this.splats?.clear();
     this.sprayAcc = 0; this.tailAcc = 0; this.exhaustAcc = 0; this.ploughAcc = 0; this.boilAcc = 0;
     this.rng = new Rng('plane-effects');
@@ -427,7 +664,8 @@ export class PlaneEffects {
     // (r2: the sheets leave the chines at 35-55 degrees from the vertical, not straight up: a float landing at
     // 3 m/s sink throws two curtains out to the sides that the camera sees as a V behind the hull, with the
     // fuselage still visible between them; the r1 clips wrapped the tail in one white mass)
-    const nSheet = Math.round(((structural ? 8 : 6) + 16 * E) * spread);
+    // (a float's curtain is the continuous sheet mesh now: the quads only add the fragments torn off its rim)
+    const nSheet = Math.round((structural ? 8 + 16 * E : 2 + 5 * E) * spread);
     for (let i = 0; i < nSheet; i++) {
       const s = rng.next() < 0.5 ? -1 : 1;
       const u = ext ? ext.from + rng.next() * L : 0;
@@ -519,6 +757,91 @@ export class PlaneEffects {
     if (this.splats && Math.floor((time - dt) * spd / 2) !== Math.floor(time * spd / 2)) this.splats.add(imp.x, imp.z, time, 0.25 + 0.5 * k, imp.vx, imp.vz, 1.5 + k, 1);
   }
 
+  /**
+   * Feed the four chine sheets. Hull frame: float centrelines at z = +-1.25, hard chine 0.37 m off them at y -1.95
+   * (parts/floats.ts), the step at x -0.35. The wetted chine runs from the step forward to where the stagnation
+   * line meets the chine, further forward the deeper the hull runs; at touchdown (sinking fast) the whole forebody
+   * chine takes the water at once. The water leaves the chine sideways and up: at the running draft as the whisker
+   * spray of a planing hull (about a fifth of the speed sideways, a sixth up), plus the wedge jet of a sinking
+   * hull (a few times the sink rate), thrown a little forward at the stagnation end. Launched in the water's frame
+   * (the hull runs on ahead of what it threw), so the sheet sweeps aft into the blister / curtain the eye knows.
+   */
+  private updateSheets(flight: FlightModel, dt: number, time: number, fdx: number, fdz: number): void {
+    const q = flight.quaternion;
+    const t = flight.telemetry;
+    const V = t.groundSpeed;
+    const right = this.right.set(0, 0, 1).applyQuaternion(q);
+    right.y = 0;
+    if (right.lengthSq() < 1e-6) right.set(-fdz, 0, fdx); else right.normalize();
+    const rx = right.x, rz = right.z;
+    const sec = this.tmpSec;
+    for (let i = 0; i < 2; i++) {
+      const fs = flight.floats[i];
+      const fz = i === 0 ? -1.25 : 1.25;
+      const onStep = fs.step > -0.02, onBow = fs.bow > -0.02;
+      const running = t.onWater && !flight.wreck && V > 3.5 && (onStep || onBow);
+      const sink = clamp(-fs.vy, 0, 4);
+      const sinkK = clamp(sink / 3, 0, 1);
+      const draft = clamp(Math.max(fs.step, fs.bow * 0.7), 0, 0.6);
+      const kd = clamp(draft / 0.12, 0, 1);
+      // strength: how much water the chine throws (the running blister ~1, a firm touchdown several times that)
+      const k = smoothstep(3.5, 8, V) * (0.25 + 0.75 * kd) * (1 + 1.1 * sink);
+      // keel draft along the forebody from the two keel stations (x -0.2 step, x 2.6 bow): the root runs from the
+      // stagnation point, where the keel meets the surface (or the stem, when the bows are in too: a touchdown),
+      // back to the step; a hull still sinking wets ahead of its waterline (the wedge jet runs up the bow)
+      const dStep = fs.step, dBow = fs.bow;
+      const keelDraft = (x: number) => dStep + (dBow - dStep) * (x + 0.2) / 2.8;
+      let xFront = dBow > 0 ? 2.9 : dStep > 0 ? -0.2 + 2.8 * dStep / (dStep - dBow) : 0.5;
+      xFront = clamp(xFront + 0.6 * sinkK, 0.4, 2.9);
+      const xAft = -0.35;
+      const surf = fs.surfaceY;
+      for (let sd = 0; sd < 2; sd++) {
+        // sd 0: outboard chine, 1: inboard (the inboard sheets meet between the floats: shorter, lower)
+        const s = sd === 0 ? Math.sign(fz) : -Math.sign(fz);
+        const sheet = this.sheets[i * 2 + sd];
+        if (running) {
+          const inK = sd === 1 ? 0.65 : 1;
+          // the spray root sits on the hull bottom where the piled-up water leaves it: on the V-bottom above the
+          // still waterline (Wagner's pile-up widens the wetted bottom by about half again, more for a hull
+          // driven in fast), at the chine once that reaches it (the running hull's blister leaves the chine and
+          // the spray rail; the rail also throws it flatter than the deep V's own 38 deg)
+          const rootAt = (u: number) => {
+            const x = lerp(xFront, xAft, u);
+            foreSection(x, sec);
+            const d = Math.max(keelDraft(x), 0.005);
+            const z0 = sec.w * Math.pow(clamp(d / sec.bot, 0, 1), 1 / FLOAT_VEE);
+            const zr = Math.min(sec.w, z0 * (1.4 + 0.5 * sinkK));
+            const hr = sec.bot * Math.pow(zr / sec.w, FLOAT_VEE);
+            const atChine = zr > sec.w - 0.01;
+            const slope = sec.bot * FLOAT_VEE * Math.pow(Math.max(zr / sec.w, 0.05), FLOAT_VEE - 1) / sec.w;
+            const theta = atChine ? 0.32 : clamp(Math.atan(slope), 0.3, 0.75);
+            return { x, y: sec.yc - sec.bot + hr, z: fz + s * zr, theta };
+          };
+          const root = (u: number, out: THREE.Vector3): THREE.Vector3 => {
+            const r = rootAt(u);
+            out.set(r.x, r.y, r.z).applyQuaternion(q).add(flight.position);
+            // never below the water it is leaving (the hull point is above the still surface by the pile-up)
+            out.y = Math.max(out.y, surf + 0.01);
+            return out;
+          };
+          const launch = (u: number, out: THREE.Vector3): THREE.Vector3 => {
+            const r = rootAt(u);
+            // the film leaves along the bottom's tangent, out and up, at about a fifth of the hull's speed in the
+            // water's frame (the whisker spray of a planing hull) plus the wedge jet of a sinking hull
+            const vs = (0.24 * V * kd + 1.9 * sink) * (0.85 + 0.35 * u) * inK;
+            const lat = Math.min(vs * Math.cos(r.theta), 9) * s;
+            const up = Math.min(vs * Math.sin(r.theta) * (1.15 - 0.4 * u), 8.5);
+            const fwd = 0.05 * V + 0.07 * V * (1 - u);
+            return out.set(rx * lat + fdx * fwd, up, rz * lat + fdz * fwd);
+          };
+          sheet.emit(time, k * inK, surf, root, launch);
+        }
+        sheet.update(time);
+      }
+    }
+    void dt;
+  }
+
   update(flight: FlightModel, model: PlaneModel, dt: number, time: number, pixelHeight: number): void {
     const t = flight.telemetry;
     const q = flight.quaternion;
@@ -534,6 +857,7 @@ export class PlaneEffects {
     // laid wake foam drifts with the wind-driven surface current (~3 % of the wind)
     WAKE_DRIFT.x = flight.wind.x * 0.03; WAKE_DRIFT.z = flight.wind.z * 0.03;
     this.splats?.setTime(time);
+    this.wakes.setTime(time);
     for (const [trail, stern, i] of [[this.wakeL, model.floatSternL, 0], [this.wakeR, model.floatSternR, 1]] as const) {
       const p = this.tmp.copy(stern).setX(emitX).applyQuaternion(q).add(flight.position);
       // the head runs from the emitter to the real bow (x 2.95) wherever the emitter sits on the hull
@@ -544,8 +868,14 @@ export class PlaneEffects {
       // a flooding hull sits deep: the ribbon head widens its outline to the section that cuts the surface and
       // draws a collar of foam around it (the only hull that ever sits below its waterline is a wreck's)
       trail.immersion = flight.wreck ? Math.min(flight.wreck.flood[i] * 1.25, 1) : 0;
+      // the real running depth and sink rate of this float drive the pile-up beside its chines, the spray root
+      // and the hollow off its step (the ribbon used to know only the speed: a float driven 40 cm under at
+      // touchdown and one skimming at 8 cm drew the same surface)
+      trail.draft = wet ? clamp(Math.max(fs.step, fs.bow * 0.7), 0, 0.6) : 0;
+      trail.sink = wet ? clamp(-fs.vy, 0, 4) : 0;
       trail.update(p.x, p.z, fdx, fdz, time, wet, speed);
     }
+    this.updateSheets(flight, dt, time, fdx, fdz);
     // parts that entered the water this frame (float touchdowns and skips, wheels, a wing tip, the nose): the
     // structured splash and the surface splat at each contact point
     for (const imp of flight.impacts) this.splash(flight, imp, time);
@@ -609,7 +939,8 @@ export class PlaneEffects {
           const ax = lerp(lerp(2.3, 0.4 + this.rng.next() * 1.6, planing), -2.0 + this.rng.next() * 4.3, slip);
           const p = this.tmp.copy(bow).setX(ax).setZ(bow.z + lerp(side * 0.3, upSide * 0.35, slip)).applyQuaternion(q).add(flight.position);
           const u = this.rng.next();
-          const tile = u < 0.5 ? TILE_SHEET : u < 0.82 ? TILE_DROPS : TILE_MIST;
+          // the film itself is the sheet mesh: the quads are the drops torn off its rim and the mist behind it
+          const tile = u < 0.12 ? TILE_SHEET : u < 0.72 ? TILE_DROPS : TILE_MIST;
           const lat = (tile === TILE_MIST ? 1.5 + this.rng.next() * 1.5 : (1.6 + this.rng.next() * 2.6) * (0.6 + 0.6 * hump) + speed * (tile === TILE_DROPS ? 0.07 : 0.045));
           const up = tile === TILE_MIST ? 0.8 + this.rng.next() * 1.2 : tile === TILE_DROPS ? 1.8 + this.rng.next() * 2.4 + speed * 0.06 : 1.0 + this.rng.next() * 1.6 + speed * 0.045;
           // the sheets leave the chine nearly still in the water's frame (the float runs on ahead of them); the
