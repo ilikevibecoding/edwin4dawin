@@ -344,3 +344,74 @@ Change (`water.ts`):
 Expected: the sunset path continues to the frame bottom as an orange band broken across the wind sea, narrower at
 the horizon; the shore_beach lower half loses its speckle and shows the 3.4 / 2.15 m sets and the 1.7 m chop
 resolved (0.1–0.25 m/px is inside their range); the water-landing frame cost back within budget.
+
+## Round 13 — Fresnel inside the sky lobe, per node; the low node held at the horizon
+
+Diagnosis of the grazing colour (finding 2), first pass: at a low camera the sky term is the lobe integral over
+facets tilted ±d (d = √3 · √(2 mss): 18° at the clear preset's far field), weighted by one Fresnel of the mean
+normal times an ad hoc ensemble drop. A facet tilted away from the camera meets the view ray less obliquely and
+reflects less, one tilted toward it more; the lobe's low node, sent below the horizon, read the dome's below-horizon
+fill. Change (`skyReflection` → vec4): Schlick per Gauss–Hermite node for the facet that reflects V into that
+node (`fresnelNode`), the mean Fresnel `fw` returned and used as the body's loss; the low node clamped at the
+horizon (a facet tilted away by more than the view elevation is masked by the wave in front) and given 0.7 of the
+horizon sky (the sea mirrored a second time), fading in over the 3° below the horizon. Compose: `body (1 − F) +
+sky_weighted + glitter`; the mirrored scene takes `F` as its weight. Cache key water-v19. (Evidence: h15.)
+
+## Evidence from the hourly snapshot h14 (build with round 12, 23:17–00:35; `progress/shots/h14` once published)
+
+The hourly integration frames are the progress cameras on the merged lead; with the capture slots contended for
+hours by other builders' sessions they are this branch's steadiest evidence (h13 = round 11, h14 = round 12).
+- `sunset`: the path is a solid column from the horizon through the bridge to the aircraft's wing (h13: it ended at
+  the bridge); below the wing a smooth orange glow with soft crest-aligned streaks fades to the frame bottom — no
+  discrete glints (h00 had glints to the bottom). Profile down the sun's azimuth (sRGB, h14 vs h00): y 480 70/52/65
+  vs 76/55/66; y 570 66/49/63 vs 78/57/64; y 630 61/54/79 vs 79/65/83 — the same mean, none of the sparkle.
+- `aircraft_rear`, `glass`: the fine speckle is gone; the near water shows the chop as smooth facets (finding 4
+  closed for the speckle). The water is a deep navy at every angle; the wing's shadow covers the whole foreground
+  of `aircraft_rear`; no mirror image of the aircraft is readable.
+- Depth at the marina (`WorldMap.heightAt`, bundled with esbuild): −2.6 to −3.0 m under and around the aircraft and
+  the cameras of both views; `shore_beach` camera −4.65 m.
+- The h13 → h14 darkening of the shadowed side of the aircraft and of the water under the wing (−40 % in both) is
+  the lead's lighting round 5 (df8b092d: a cloud's footprint now removes the whole direct share; a cumulus shades
+  the marina in this frame), not the water.
+
+Diagnosis of the grazing colour, second pass (the depth above, the body model as coded): with K = (0.9, 0.23,
+0.18) /m the 3 m bed at a 25° depression (view path 4.1 m, sun path 3.2 m) returns T = (0.002, 0.20, 0.28) of its
+light — the body is Rinf (deep-water blue) with a fifth of the sand's green on top: navy. At 5° depression the
+path is only 1.5× the vertical one (refraction), so the bed's light is not what a grazing angle loses; Fresnel is,
+and the sky the lobe mirrors (the dome's mid-elevation blue) is darker than the horizon band. Jerlov's type III /
+coastal 1 water attenuates 0.42–0.5 /m at 650 nm, 0.12–0.15 at 550, 0.1–0.15 at 450: the coded K was coastal type
+3 in the green and off the scale in the red. The h00 cyan at these cameras came from the old environment-map sky
+term (a chroma-boosted, whitened probe) — the body was the same; the regression is that a physically darker sky
+term exposed a body that was too absorbing for the water it stands for.
+
+## Round 14 — glint count statistics on the sun path (finding 1: the foreground glitter)
+
+Observed: h14 `sunset` foreground is the analytic mean of the lobe — a smooth glow; h00's foreground glitter was the
+undersampled chop layers (a random per-pixel normal) that round 12 stopped drawing.
+
+Diagnosis: the analytic lobe is the mean over infinitely many facets. The facets that mirror the sun's disc are
+centimetre facets whose normal lies within the disc's angular radius / 2 of the half vector (1.7e-5 of slope space,
+a few cm² each): the expected number in a pixel is λ = P · 1.7e-5 / 4e-4 m² · A_px = P · 0.0425 A_px. Replica
+(`tools/path.py` bookkeeping): sunset core (2–8° depression, 2–8 km) λ 15–950; the bridge (14–18°) λ 1–2.6; the
+foreground (22–36°) λ 0.04–0.5; a 60 m camera at 100–350 m λ 0.02–0.05 everywhere in the path; 1500 m λ 5–116. A
+pixel with λ ≪ 1 either holds a glint or not: the margins of a path seen from altitude and the whole path of a
+near view are discrete sparkles over darker water, the core of the sunset path is a solid band — the look of every
+photograph, and of h00 by accident.
+
+Change (`sunGlitter`, `sparkleSlope`): the analytic radiance × a lognormal gain of mean one, exp(c g − c² / 2),
+g a unit-variance zero-mean process of the two finest sparkle octaves (world-fixed crest segments, phase rate of
+their wave period, cross-faded by √w), c = min(1 / √λ, 1.2). Nothing changes where λ ≫ 1 (c → 0). The cap keeps the
+water between glints at ≥ 0.5 of the mean and a glint ≤ ~4× it (7 % of the pixels > 3× at c = 1.2). Cache key
+water-v20. Cost: two value-noise reads per octave where the glitter is evaluated.
+
+## Round 15 — clear shelf water; more of the beam scattered in under a shadow (findings 2, 5)
+
+Change (`water.ts`): K = (0.7, 0.15, 0.11) /m (type III / coastal 1). Body reflectance R = bed T + Rinf (1 − T),
+sand bed 0.52/0.49/0.42, replica: nadir 2.7 m (path 5.5 m) (0.041, 0.205, 0.261) → (0.048, 0.27, 0.306); nadir
+6 m (0.038, 0.117, 0.196) → (0.038, 0.157, 0.234); nadir 10 m (0.038, 0.098, 0.174) → (0.038, 0.113, 0.19); the
+marina at 5° depression (path 6.9 m) (0.038, 0.175, 0.24) → (0.04, 0.236, 0.286). The shore gradient keeps its
+shape (the bed still vanishes by 10–12 m) and reaches ~2 m deeper; the swash zone shows more of the sand's warmth
+(T_red at 0.5 m 0.39 → 0.48). The shadow leak `0.45 (1 − e^(−depth / 2.5))` → `0.55 (1 − e^(−depth / 2.2))`: over
+the 3 m bed 0.31 → 0.41 of the beam; with the clearer water the bed's grain stays readable in the shadow. Cache
+key water-v21. Risk: the protected top-down turquoise brightens by a quarter over 2–4 m beds; to be read in h16
+(`island_pass`, `shore_beach`) against h14/h15, reverted or halved if it reads pale.
