@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { Batch, strutGeometry, type Surf } from '../geometry';
 import { SURF } from '../textures';
-import { at, DEG, FLOOR, SEAT_Y, UP, V3, WRIST, YOKE_HUB, type BuildContext } from './context';
+import { at, DEG, FLOOR, SEAT_Y, THROTTLE_PIVOT, UP, V3, WRIST, YOKE_HUB, type BuildContext } from './context';
 
 /** the pilot's skin: a medium tan, a touch less orange than the parts table's, with the soft sheen of skin */
 export const SKIN: Surf = { color: 0xc49876, roughness: 0.62, metalness: 0.0 };
@@ -13,6 +13,43 @@ export const SKIN: Surf = { color: 0xc49876, roughness: 0.62, metalness: 0.0 };
  * the hand travelling with the yoke both end here.
  */
 export const HAND_WRIST = (s: number): THREE.Vector3 => WRIST(s).add(new THREE.Vector3(0, -0.004, s * 0.020));
+
+/**
+ * The throttle knob as the right hand holds it, in the throttle lever's space (origin at the lever's pivot inside
+ * the quadrant, +y up the arm): a ball of `THROTTLE_KNOB_R` centred `THROTTLE_KNOB_Y` up the arm; the hand's wrist
+ * joint sits aft of, a little above and outboard (+z, the pilot's right) of the ball. The hand travels with the
+ * lever (it is part of its mesh, see cockpitControls) and the two-bone right arm follows it (animatePilot).
+ */
+export const THROTTLE_KNOB_Y = 0.202, THROTTLE_KNOB_R = 0.030;
+export const THROTTLE_WRIST = new THREE.Vector3(-0.074, THROTTLE_KNOB_Y + 0.010, 0.030);
+
+interface ArmRig { upper: THREE.Mesh; fore: THREE.Mesh; shoulder: THREE.Vector3; L1: number; L2: number; }
+const ARMS = new WeakMap<THREE.Object3D, ArmRig>();
+const Z_AXIS = new THREE.Vector3(0, 0, 1);
+
+/**
+ * Pose the pilot's right arm on the throttle (called from animate): the wrist is where the lever's rotation about
+ * its pivot puts `THROTTLE_WRIST`; a two-bone solve puts the elbow in the plane of the shoulder, the wrist and a
+ * bend hint (down and outboard), and the upper arm / forearm meshes are aimed shoulder -> elbow -> wrist.
+ */
+export function animatePilot(root: THREE.Object3D, throttleLever: { position: THREE.Vector3; rotation: { z: number } }): void {
+  const rig = ARMS.get(root);
+  if (!rig) return;
+  const W = THROTTLE_WRIST.clone().applyAxisAngle(Z_AXIS, throttleLever.rotation.z).add(throttleLever.position);
+  const S = rig.shoulder;
+  const u = W.clone().sub(S);
+  const d = Math.min(u.length(), rig.L1 + rig.L2 - 0.004);
+  u.normalize();
+  const a = (rig.L1 * rig.L1 - rig.L2 * rig.L2 + d * d) / (2 * d);
+  const h = Math.sqrt(Math.max(rig.L1 * rig.L1 - a * a, 0));
+  const n = new THREE.Vector3(-0.15, -0.85, 0.5);
+  n.addScaledVector(u, -n.dot(u)).normalize();
+  const E = S.clone().addScaledVector(u, a).addScaledVector(n, h);
+  rig.upper.position.copy(S);
+  rig.upper.quaternion.setFromUnitVectors(UP, E.clone().sub(S).normalize());
+  rig.fore.position.copy(E);
+  rig.fore.quaternion.setFromUnitVectors(UP, S.clone().addScaledVector(u, d).sub(E).normalize());
+}
 
 /**
  * Closed tube along a polyline with an elliptical section at every point (semi-axis `ra` along the frame normal,
@@ -62,11 +99,13 @@ export function tubeAlong(pts: THREE.Vector3[], ra: number[], rb: number[] = ra,
  * frame: x forward (the fingers wrap around the front), y up the grip (index finger at the top), z outboard (the
  * back of the hand). A mirrored frame (negative determinant) makes the other hand. `wrist` is the wrist joint in
  * the same frame (aft and a little outboard of the axis); the skin runs on past it into the sleeve's cuff. `watch`
- * straps a wristwatch on the back of the wrist.
+ * straps a wristwatch on the back of the wrist. `gripR` may be a function of the height along the grip (a ball
+ * knob: the fingers close tighter above and below its equator).
  */
-export function handGeometry(gripR: number, wrist: THREE.Vector3, watch = false): THREE.BufferGeometry {
+export function handGeometry(gripR: number | ((y: number) => number), wrist: THREE.Vector3, watch = false): THREE.BufferGeometry {
   const b = new Batch(SKIN);
   const P = (theta: number, r: number, y: number) => new THREE.Vector3(r * Math.cos(theta), y, r * Math.sin(theta));
+  const gripAt = typeof gripR === 'number' ? () => gripR : gripR;
   // four fingers stacked along the grip, each curled around it on a circle just clear of the rubber: the knuckle
   // stands proud at the front-outboard, the tip comes round to the aft-inboard side almost to the thumb. Tapered
   // along their length with a joint bulge at each knuckle; the outer fingers curl a little less far.
@@ -76,8 +115,8 @@ export function handGeometry(gripR: number, wrist: THREE.Vector3, watch = false)
     const wrap = 190 * DEG * len, M = 12;
     const pts: THREE.Vector3[] = [], ra: number[] = [];
     for (let i = 0; i <= M; i++) {
-      const t = i / M, rr = r * (1 - 0.26 * t);
-      pts.push(P(th0 - wrap * t, gripR + 0.001 + rr, y - 0.004 * t));
+      const t = i / M, rr = r * (1 - 0.26 * t), yy = y - 0.004 * t;
+      pts.push(P(th0 - wrap * t, gripAt(yy) + 0.001 + rr, yy));
       ra.push(rr);
     }
     b.add(tubeAlong(pts, ra, ra, 8, UP));
@@ -88,20 +127,22 @@ export function handGeometry(gripR: number, wrist: THREE.Vector3, watch = false)
   }
   // the palm: a slab lying on the grip's outboard face, wider at the knuckles than at the wrist, thickest at the
   // heel; the thenar bulge (thumb base) wraps the grip's aft side at the top, the hypothenar heel at the bottom
+  // (laid out for the yoke's 17 mm grip and pushed outboard by the difference for a fatter one)
+  const dz = gripAt(0) - 0.017;
   const palm: [number, number, number, number][] = [[-0.062, 0.026, 0.0135, 0.031], [-0.042, 0.030, 0.0145, 0.036], [-0.020, 0.031, 0.0135, 0.040], [0.002, 0.029, 0.0120, 0.042], [0.019, 0.025, 0.0105, 0.041]];
   const OUT = new THREE.Vector3(0, 0, 1);
-  b.add(tubeAlong(palm.map(([x, z]) => new THREE.Vector3(x, 0.002, z)), palm.map((p) => p[2]), palm.map((p) => p[3]), 12, OUT));
-  b.add(new THREE.SphereGeometry(1, 10, 8), at([-0.040, 0.026, 0.013], [0, 0.35, -0.25], [0.023, 0.018, 0.013]));
-  b.add(new THREE.SphereGeometry(1, 10, 8), at([-0.052, -0.026, 0.024], [0, 0.2, 0.3], [0.020, 0.013, 0.015]));
+  b.add(tubeAlong(palm.map(([x, z]) => new THREE.Vector3(x, 0.002, z + dz)), palm.map((p) => p[2]), palm.map((p) => p[3]), 12, OUT));
+  b.add(new THREE.SphereGeometry(1, 10, 8), at([-0.040, 0.026, 0.013 + dz], [0, 0.35, -0.25], [0.023, 0.018, 0.013]));
+  b.add(new THREE.SphereGeometry(1, 10, 8), at([-0.052, -0.026, 0.024 + dz], [0, 0.2, 0.3], [0.020, 0.013, 0.015]));
   // the thumb: from the thenar up over the grip's aft face toward the inboard side, its tip resting on the top of
   // the grip just behind the switches
-  const thumb = [new THREE.Vector3(-0.040, 0.030, 0.008), new THREE.Vector3(-0.034, 0.047, -0.003), new THREE.Vector3(-0.026, 0.059, -0.012), new THREE.Vector3(-0.017, 0.064, -0.017)];
+  const thumb = [new THREE.Vector3(-0.040, 0.030, 0.008 + dz), new THREE.Vector3(-0.034, 0.047, -0.003 + dz * 0.5), new THREE.Vector3(-0.026, 0.059, -0.012), new THREE.Vector3(-0.017, 0.064, -0.017)];
   b.add(tubeAlong(thumb, [0.0125, 0.0108, 0.0098, 0.0085], undefined, 8, OUT));
   b.add(new THREE.SphereGeometry(0.0112, 8, 6), at(thumb[1]));
   b.add(new THREE.SphereGeometry(0.0098, 7, 5), at(thumb[2]));
   b.add(new THREE.SphereGeometry(0.0086, 7, 5), at(thumb[3]));
   // the wrist: from the heel of the palm back through the joint and on into the cuff (flatter than it is wide)
-  const heel = new THREE.Vector3(-0.062, 0.002, 0.026);
+  const heel = new THREE.Vector3(-0.062, 0.002, 0.026 + dz);
   const fore = wrist.clone().sub(heel).normalize();
   const wristEnd = wrist.clone().addScaledVector(fore, 0.036);
   b.add(tubeAlong([heel, heel.clone().lerp(wrist, 0.5), wrist.clone(), wristEnd], [0.0135, 0.016, 0.019, 0.0205], [0.031, 0.029, 0.026, 0.026], 12, OUT));
@@ -233,9 +274,10 @@ export function buildPilot(ctx: BuildContext, cockpitEye: THREE.Vector3): void {
     cabinKit.add(new THREE.BoxGeometry(0.007, 0.030, 0.108), at([px + 0.004, 0.615, pz], [0, yaw, 0]), SURF.shirt);
     cabinKit.add(new THREE.SphereGeometry(0.005, 8, 6), at([px + 0.008, 0.602, pz]), SURF.lightPlastic); }
   // ------------------------------------------------------------ arms
-  // upper arm (~36 cm) from the shoulder forward and down to the elbow, forearm (~26 cm) in the sleeve on to a
-  // cuff just behind the hand (the wrists and hands travel with the yoke); the elbows show as joints
-  for (const side of [-1, 1]) {
+  // left arm: upper arm (~36 cm) from the shoulder forward and down to the elbow, forearm (~26 cm) in the sleeve
+  // on to a cuff just behind the hand (the hand travels with the yoke); the elbow shows as a joint
+  {
+    const side = -1;
     const shoulder = V3(SHOULDER_X, SHOULDER_Y, PZ + side * 0.19), elbow = V3(1.29, 0.535, PZ + side * 0.245);
     const wrist = HAND_WRIST(side).add(YOKE_HUB).add(V3(0, 0, PZ));
     const cuff = wrist.clone().lerp(elbow, 0.11);
@@ -244,6 +286,19 @@ export function buildPilot(ctx: BuildContext, cockpitEye: THREE.Vector3): void {
     cabinKit.add(tubeAlong([elbow, elbow.clone().lerp(cuff, 0.5), cuff], [0.043, 0.040, 0.037], undefined, 10), undefined, SURF.shirt);
     const cDir = wrist.clone().sub(elbow).normalize();
     cabinKit.add(new THREE.CylinderGeometry(0.040, 0.038, 0.026, 12), at(cuff, [0, 0, -Math.atan2(cDir.x, cDir.y)]), SURF.collar);
+  }
+  // right arm: on the throttle, so it moves with the lever; two bones (upper arm, forearm with the cuff), each a
+  // mesh built along +y from its joint and aimed every frame by animatePilot
+  {
+    const L1 = 0.36, L2 = 0.26;
+    const along = (len: number, r: number[]) => tubeAlong([V3(0, 0, 0), V3(0, len / 2, 0), V3(0, len, 0)], r, undefined, 10, V3(1, 0, 0));
+    const upperGeo = new Batch().add(along(L1, [0.050, 0.047, 0.043]), undefined, SURF.shirt).add(new THREE.SphereGeometry(0.046, 10, 7), at([0, L1, 0]), SURF.shirt).build();
+    const foreGeo = new Batch().add(along(L2 * 0.9, [0.043, 0.040, 0.037]), undefined, SURF.shirt).add(new THREE.CylinderGeometry(0.040, 0.038, 0.026, 12), at([0, L2 * 0.9, 0]), SURF.collar).build();
+    const upper = ctx.mesh(upperGeo, ctx.mat.parts, { exterior: false, cast: false, receive: false });
+    const fore = ctx.mesh(foreGeo, ctx.mat.parts, { exterior: false, cast: false, receive: false });
+    ARMS.set(ctx.root, { upper, fore, shoulder: V3(SHOULDER_X, SHOULDER_Y, PZ + 0.19), L1, L2 });
+    // posed for a lever at mid travel until the first animate call
+    animatePilot(ctx.root, { position: THROTTLE_PIVOT, rotation: { z: 0 } });
   }
   // ------------------------------------------------------------ legs
   // thighs along the cushion to the knees, shins down to boots whose toes rest on the pedals, heels on the floor

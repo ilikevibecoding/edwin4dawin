@@ -3,6 +3,7 @@ import { DIAL, GAUGES } from '../textures';
 import type { FlightTelemetry, FloatState } from '../physics';
 import type { PlaneModel } from '../model';
 import { CANVAS_PERIOD, CH, DEG, LIGHT, YOKE_HUB_X } from './context';
+import { animatePilot } from './pilot';
 import { animatePropeller } from './propeller';
 
 // Per-frame animation of the model: `PlaneModel.setWaterline` / `animate` / `setInstruments` delegate here.
@@ -67,6 +68,7 @@ export function animate(model: PlaneModel, pitch: number, roll: number, yaw: num
   model.pedalsL.rotation.z = -yaw * 0.32;
   model.pedalsR.rotation.z = yaw * 0.32;
   model.throttleLever.rotation.z = (0.5 - THREE.MathUtils.clamp(throttle, 0, 1)) * 0.9;
+  animatePilot(model.root, model.throttleLever); // the right arm follows the hand on the throttle
   model.flapLever.rotation.z = -(1.75 + THREE.MathUtils.clamp(flaps, 0, 1) * 1.05) + Math.PI / 2;
   // instrument lighting: the dials, the screen and the panel legends glow after dusk
   // by day the dials barely glow (a glowing face reads flat, without the light's shading); the backlight comes up after dusk

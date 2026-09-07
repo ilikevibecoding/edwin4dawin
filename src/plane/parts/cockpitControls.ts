@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { Batch, strutGeometry, type Surf } from '../geometry';
 import { PANEL_UV, SURF } from '../textures';
-import { at, FLOOR, UP, YOKE_HUB, type BuildContext } from './context';
-import { HAND_WRIST, handGeometry } from './pilot';
+import { at, FLOOR, THROTTLE_PIVOT, UP, YOKE_HUB, type BuildContext } from './context';
+import { HAND_WRIST, handGeometry, THROTTLE_KNOB_R, THROTTLE_KNOB_Y, THROTTLE_WRIST } from './pilot';
 
 export interface CockpitControlsBuild {
   throttleLever: THREE.Mesh;
@@ -24,7 +24,7 @@ export function buildCockpitControls(ctx: BuildContext, inPanel: (px: number, py
   // plate carries three slots; the flat lever arms swing about a pivot inside it, so the arm leans in its slot
   // and the knobs - black ball throttle, blue crown propeller, red ball mixture - fan out at different angles),
   // the friction lock knob on the pilot's flank and the flap lever on the other
-  const QUAD_TOP = FLOOR + 0.40, QUAD_X = 1.60, PIVOT_DROP = 0.055;
+  const QUAD_X = THROTTLE_PIVOT.x, PIVOT_DROP = 0.055, QUAD_TOP = THROTTLE_PIVOT.y + PIVOT_DROP;
   cabinKit.add(new RoundedBoxGeometry(0.70, 0.32, 0.22, 3, 0.02), at([1.7, FLOOR + 0.16, 0]), SURF.plastic);
   cabinKit.add(new RoundedBoxGeometry(0.26, 0.08, 0.17, 3, 0.012), at([QUAD_X, QUAD_TOP - 0.04, 0]), SURF.plastic);
   cabinKit.add(new THREE.BoxGeometry(0.22, 0.003, 0.13), at([QUAD_X, QUAD_TOP + 0.0015, 0]), SURF.darkMetal);
@@ -34,10 +34,16 @@ export function buildCockpitControls(ctx: BuildContext, inPanel: (px: number, py
   const lever = (knob: Surf, knobGeo: THREE.BufferGeometry, len: number, armW = 0.016): THREE.BufferGeometry => new Batch()
     .add(new THREE.BoxGeometry(armW, len, 0.006), at([0, len / 2, 0]), SURF.metal)
     .add(knobGeo, at([0, len + 0.012, 0]), knob).build();
-  const knobBall = new THREE.SphereGeometry(0.023, 14, 10);
   const crown = new Batch(SURF.propKnob).add(new THREE.CylinderGeometry(0.016, 0.017, 0.036, 12)).add(new THREE.CylinderGeometry(0.0185, 0.0185, 0.006, 12), at([0, -0.008, 0])).add(new THREE.CylinderGeometry(0.0185, 0.0185, 0.006, 12), at([0, 0.008, 0])).build();
-  const throttleLever = mesh(lever(SURF.throttle, knobBall, PIVOT_DROP + 0.135), parts, { exterior: false, cast: false, receive: false });
-  throttleLever.position.set(QUAD_X, QUAD_TOP - PIVOT_DROP, -0.045);
+  // the throttle carries the pilot's right hand: fingers closed round the ball (tighter above and below its
+  // equator), thumb over the top, the wrist aft and outboard where the forearm (animatePilot) meets it
+  const ballR = (y: number) => Math.sqrt(Math.max(THROTTLE_KNOB_R * THROTTLE_KNOB_R - y * y, 0.008 * 0.008));
+  const throttleGeo = new Batch()
+    .add(lever(SURF.throttle, new THREE.SphereGeometry(THROTTLE_KNOB_R, 16, 12), THROTTLE_KNOB_Y - 0.012))
+    .add(handGeometry(ballR, THROTTLE_WRIST.clone().sub(new THREE.Vector3(0, THROTTLE_KNOB_Y, 0))), at([0, THROTTLE_KNOB_Y, 0]))
+    .build();
+  const throttleLever = mesh(throttleGeo, parts, { exterior: false, cast: false, receive: false });
+  throttleLever.position.copy(THROTTLE_PIVOT);
   cabinKit.add(lever(SURF.propKnob, crown, PIVOT_DROP + 0.115), at([QUAD_X, QUAD_TOP - PIVOT_DROP, 0.0], [0, 0, -0.28]));
   cabinKit.add(lever(SURF.mixture, new THREE.SphereGeometry(0.019, 14, 10), PIVOT_DROP + 0.105), at([QUAD_X, QUAD_TOP - PIVOT_DROP, 0.045], [0, 0, -0.40]));
   // flap lever: a bar on the pedestal's right flank, up = flaps retracted, back toward the pilot = full flap
@@ -97,10 +103,11 @@ export function buildCockpitControls(ctx: BuildContext, inPanel: (px: number, py
         yoke.add(new THREE.BoxGeometry(0.010, 0.006, 0.008), at([-0.055, 0.133, s * 0.16]), SURF.lightPlastic);
         yoke.add(new THREE.CylinderGeometry(0.006, 0.006, 0.006, 10), at([-0.046, 0.085, s * 0.147], [Math.PI / 2, 0, 0]), SURF.mixture);
       }
-      if (hands) {
-        // hand in a hammer grip on the near-vertical grip: the palm on its outboard face, the four fingers wrapped
-        // around its front with the tips coming back on the inboard side, the thumb up the aft face toward the
-        // switches. Built in a grip-aligned frame (x forward, y up the grip, z outboard) and mirrored for the left.
+      if (hands && s < 0) {
+        // the left hand in a hammer grip on the near-vertical grip (the right hand is on the throttle): the palm on
+        // its outboard face, the four fingers wrapped around its front with the tips coming back on the inboard
+        // side, the thumb up the aft face toward the switches. Built in a grip-aligned frame (x forward, y up the
+        // grip, z outboard), mirrored for the left.
         const gripDir = arm[4].clone().sub(arm[3]).normalize();
         const gc = arm[3].clone().lerp(arm[4], 0.45);
         const xAxis = new THREE.Vector3(gripDir.y, -gripDir.x, 0), zAxis = new THREE.Vector3(0, 0, s);

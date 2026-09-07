@@ -21,6 +21,8 @@ export const YOKE_HUB_X = 1.66, YOKE_HUB_Y = 0.52;
 export const YOKE_HUB = new THREE.Vector3(YOKE_HUB_X, YOKE_HUB_Y, 0);
 /** where the pilot's wrists meet the hands on the grips (hub space), for the static forearms in the cabin kit */
 export const WRIST = (s: number) => new THREE.Vector3(-0.115, 0.045, s * 0.165);
+/** the throttle lever's pivot inside the pedestal quadrant (the lever mesh's origin; the right hand rides on it) */
+export const THROTTLE_PIVOT = new THREE.Vector3(1.60, -0.25 + 0.345, -0.045);
 /** wing datum (root 30 % chord point): the root's lower surface touches the roof crest (1.18) at mid chord */
 export const WING_POS = new THREE.Vector3(0.55, 1.25, 0);
 // seats: cushion top ~0.39 m over the floor so a seated pilot's eye (0.79 m over the cushion) lands at cockpitEye
