@@ -706,7 +706,9 @@ if (base) {
       assert.equal(await evj(`game.coruscant.population.talkBox.npc && game.coruscant.population.talkBox.npc.person.cast`), 'seli_noor', 'still in the box');
       await ev(`window.__t.key('Escape', 'Escape')`); await ev('window.__t.frames(2)');
       await page.sleep(2000);   // the registry persists 1.5 s after a change
-      const saved = await evj(`JSON.parse(localStorage.getItem('frontier-craft:cast:' + game.cast.seed) || 'null')`);
+      // through the save manager's `cast` blob when the integrator's hook exists, else the registry's own key
+      const saved = await evj(`(() => { if (game.save && typeof game.save.setCast === 'function') { game.save.flush(); const raw = JSON.parse(localStorage.getItem(game.save.key) || 'null'); return raw && raw.cast ? raw.cast : null; }
+        return JSON.parse(localStorage.getItem('frontier-craft:cast:' + game.cast.seed) || 'null'); })()`);
       assert.ok(saved && saved.history['cast:seli_noor'] && saved.history['cast:seli_noor'].talks === 2, JSON.stringify(saved));
     });
 

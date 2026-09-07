@@ -10,7 +10,9 @@
 //     the 90 degree quadrants of the base class), so a passenger's position is stable relative to the moving craft
 //     while the world turns outside the windows,
 //   - onUse() (right-click on the hull) boards through the open door / ramp or leaves the landed ship; leave()
-//     refuses in flight.
+//     refuses in flight. A player who can fly may also board or leave an airborne ship through the airlock
+//     (right-click on the hull), and any ship within PROMOTE_FLIGHT_DIST is solid, so a flyer can land on a hull
+//     and ride it.
 import { Vehicle } from './vehicle.js';
 import { AABB } from '../player.js';
 import { TICK_RATE } from '../constants.js';
@@ -152,17 +154,28 @@ export class ShipVehicle extends Vehicle {
   // Right-click on the hull: board through the open door (the passenger appears on the inner sill cell, looking
   // into the cabin) or leave a landed ship; a sealed door only answers with a message. Returns true when handled.
   onUse(player, game, hit) {
+    const door = this.model.door;
+    const canFly = typeof player.canFly === 'function' ? player.canFly() : !!player.flying;
     if (this.isAboard(player)) {
       if (this.leave(player)) return true;
+      // in flight a flyer steps out through the airlock (survival passengers stay aboard until the ramp comes down)
+      if (!this.landed() && door && canFly) {
+        this.place(player, door.outer);
+        this.dropRider(player);
+        if (player.flying !== undefined) player.flying = true;
+        this.hud(`Left the ${this.model.label} through the airlock, in flight.`);
+        return true;
+      }
       this.hud(this.landed() ? `${this.model.label}: the doors are still closed.` : `${this.model.label}: in flight - doors sealed until landing at ${padName(this.ship)}.`);
       return true;
     }
-    if (!this.doorOpen) {
+    if (!door) return false;
+    // on the ground the ramp / door must be open; in the air a flyer who reached the hull boards through the airlock
+    const airlock = !this.landed() && !this.doorOpen && canFly;
+    if (!this.doorOpen && !airlock) {
       this.hud(this.landed() ? `${this.model.label}: doors closed - wait for the ramp.` : `${this.model.label} is in flight.`);
       return true;
     }
-    const door = this.model.door;
-    if (!door) return false;
     // face into the cabin: the door's outward side vector, reversed, turned by the ship's yaw
     const c = Math.cos(this.cur.yaw), s = Math.sin(this.cur.yaw), ix = -door.side[0], iz = -door.side[1];
     const yaw = Math.atan2(-(ix * c + iz * s), -(-ix * s + iz * c));
@@ -171,7 +184,8 @@ export class ShipVehicle extends Vehicle {
     const w = player.pos;
     this.riders.set(player, { dx: 0, dy: 0, dz: 0, x: w.x, y: w.y, z: w.z });
     player.vehicle = this;
-    this.hud(`Boarded the ${this.model.label} (${this.ship.name}). Destination: ${this.ship.dest || 'a circuit and back'}.`);
+    this.hud(airlock ? `Boarded the ${this.model.label} (${this.ship.name}) through the airlock. Destination: ${this.ship.dest || 'a circuit and back'}.`
+      : `Boarded the ${this.model.label} (${this.ship.name}). Destination: ${this.ship.dest || 'a circuit and back'}.`);
     return true;
   }
   // Steps a passenger out onto the pad beside the door; false while the ship is airborne or the doors are closed.

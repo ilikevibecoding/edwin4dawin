@@ -27,7 +27,9 @@ import { getLayout } from '../coruscant/layout.js';
 
 export const HIDE_DIST = 300;          // ships beyond this are not drawn
 export const PROMOTE_DIST = 80;        // a ship on its pad (or berth) within this distance of the player becomes a vehicle
+export const PROMOTE_FLIGHT_DIST = 64; // a ship in flight this close is solid too: a flying player can land on the hull and ride it
 const DEMOTE_DIST = 120;               // ... and is demoted again beyond this (no riders) or once it has flown off
+const DEMOTE_FLIGHT_DIST = 96;         // an airborne ship without riders is demoted beyond this
 const MAX_ROLL = 25 * Math.PI / 180;
 const G = 9.81;
 const RESERVE_LEAD = 10;               // seconds of 'reservation' before the approach starts
@@ -532,10 +534,11 @@ export class ShipTraffic {
     for (const sh of this.ships) {
       const phase = routePose(sh.route, t + sh.offset, p).phase;
       const d = Math.hypot(p.x - pp.x, p.y - pp.y, p.z - pp.z);
+      const onPad = LANDED.has(phase) || phase === 'approach';
       if (sh.vehicle) {
         if (sh.vehicle.riders.size > 0) continue;
-        if (d > DEMOTE_DIST || (!LANDED.has(phase) && phase !== 'approach' && d > 40)) this.demote(sh);
-      } else if ((LANDED.has(phase) || phase === 'approach') && d < PROMOTE_DIST) this.promote(sh);
+        if (d > DEMOTE_DIST || (!onPad && d > DEMOTE_FLIGHT_DIST)) this.demote(sh);
+      } else if ((onPad && d < PROMOTE_DIST) || d < PROMOTE_FLIGHT_DIST) this.promote(sh);
     }
   }
 

@@ -21,7 +21,7 @@ import { Particles } from './particles.js';
 import { GameAudio } from './audio.js';
 import { Hand } from './hand.js';
 import { SHARED, makeEntityMaterial } from './entityMaterial.js';
-import { TICK_DT, REACH, PLAYER_EYE } from './constants.js';
+import { TICK_DT, REACH, FLY_HAIL_REACH, PLAYER_EYE } from './constants.js';
 import { PerfMonitor } from './perf.js';
 import { EventBus } from './events.js';
 import { BUILD } from './build.js';
@@ -835,8 +835,11 @@ export class Game {
     // placing / interacting (doors, chests, furnace and planting are "use" actions that come before placement)
     const useClick = this.input.mouseClicked[2];
     if (playing && !p.dead && (useClick || (this.input.mouseDown[2] && this.placeCooldown <= 0))) {
-      // vehicles (ships) take the click when they are the nearest thing under the crosshair
-      const vhit = useClick && this.vehicles ? this.vehicles.raycast(eye, dir, REACH) : null;
+      // vehicles (ships) take the click when they are the nearest thing under the crosshair; a flyer can hail a
+      // passing ship from further out (ships cruise at 20-46 blocks/s, faster than anyone flies) and board it
+      // through the airlock - see ShipVehicle.onUse
+      const vReach = p.flying && !hit ? FLY_HAIL_REACH : REACH;
+      const vhit = useClick && this.vehicles ? this.vehicles.raycast(eye, dir, vReach) : null;
       if (vhit && (!hit || vhit.dist < hit.dist)) { if (vhit.vehicle.onUse(p, this, vhit)) { this.hand.startSwing(); this.placeCooldown = 0.5; } }
       else if (entityHit && !hit) { this.npcs.talk(entityHit.npc, this); this.hand.startSwing(); this.placeCooldown = 0.5; }
       else if (useClick && this.economy && this.economy.onUseClick(eye, dir, hit)) { this.hand.startSwing(); this.placeCooldown = 0.5; } // shop consoles, job boards, repair markers, your bed

@@ -10,6 +10,7 @@ export const PLAYER_HEIGHT = 1.8;
 export const PLAYER_EYE = 1.62;
 export const SNEAK_EYE = 1.27;
 export const REACH = 4.5;
+export const FLY_HAIL_REACH = 40;   // a flying player can hail (right-click) a passing ship from this far
 export const TICK_RATE = 20;           // physics ticks per second (Minecraft = 20)
 export const TICK_DT = 1 / TICK_RATE;
 
