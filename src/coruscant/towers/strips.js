@@ -2,8 +2,8 @@
 // full height of a facade above the podium, so the night skyline reads as lines of light instead of random dots.
 // The plan is a pure function of the lot (pitch, phase, faces, colour); the painter overwrites the wall / window /
 // slab-band cells of a facade ring column but never openings, glass fronts, signs or corners. The strip block is a
-// full-face panel (white GLOW_PANEL or blue GLOW_PANEL_BLUE): a WINDOW_LIT column is a dotted line of framed panes
-// that vanishes among the facade's ordinary lit windows, a panel column is an unbroken line of light.
+// vertical light-strip tile (LIGHT_STRIP_V blue-white, LIGHT_STRIP_WARM_V amber; rubric 18 rule 6): a bar of light
+// with no frame at the top or bottom, so the column is one unbroken line of light instead of a dotted line of panes.
 import { B } from '../../blocks.js';
 import { FORCE_AIR } from '../blueprint.js';
 import { hash2 } from '../../rng.js';
@@ -22,15 +22,18 @@ export function stripPlan(lot, family) {
   const phase = Math.floor(h2 * pitch);
   let faces = null;
   if (family === 'stack' || h3 < 0.3) faces = h4 < 0.5 ? new Set(['N', 'S', 'D']) : new Set(['E', 'W', 'D']);
+  // the strip block is the vertical light-strip tile (rubric 18 rule 6: a bar of light with no frame between the
+  // blocks, so the column is one unbroken line); the needle / spine families and most financial towers take the
+  // blue-white one, the rest the white one the family's warm palettes turn warm (buildTiered)
   const blue = family === 'needle' || family === 'spine' || (lot.district === 'financial' ? h4 < 0.6 : h4 < 0.4);
-  return { pitch, phase, faces, block: blue ? B.GLOW_PANEL_BLUE : B.GLOW_PANEL, f0: STRIP_FROM_FLOOR };
+  return { pitch, phase, faces, block: blue ? B.LIGHT_STRIP_V : B.GLOW_PANEL, f0: STRIP_FROM_FLOOR };
 }
 
 // a white panel column disappears on a pale plaster / stone wall at night (the night render has no bloom, so the
 // strip is only as bright as its own texel); those towers take the blue strip instead
 const LIGHT_WALLS = new Set([B.PLASTER, B.SMOOTH_STONE]);
 export function contrastStrips(plan, wall) {
-  if (plan && plan.block === B.GLOW_PANEL && LIGHT_WALLS.has(wall)) plan.block = B.GLOW_PANEL_BLUE;
+  if (plan && plan.block === B.GLOW_PANEL && LIGHT_WALLS.has(wall)) plan.block = B.LIGHT_STRIP_V;
   return plan;
 }
 

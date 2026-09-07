@@ -1,12 +1,24 @@
 // Family 6: landing-platform tower. A podium on the full lot, then a shaft receded from the front so cantilevered
 // landing pads can reach the lot edge every fourth floor: DECK_PLATE decks with striped touchdown marks,
-// CITY_LAMP posts, railings, a tapered underside and a 3x3 hangar door into a hangar/garage floor.
+// CITY_LAMP posts, railings, a tapered underside and a 3x3 hangar door into a hangar/garage floor. On a tower lot the
+// envelope plan shapes the shaft (octagon / rounded shells) and buildTiered paints the decks (decks.js); lots without
+// a plan keep the legacy pads below.
 import { B } from '../../blocks.js';
 import { FORCE_AIR } from '../blueprint.js';
 import { buildTiered } from './tiered.js';
 
 export function pad(bp, lot, ctx) {
   const { nF, midDoorF } = ctx;
+  ctx.style.vents = true;
+  if (ctx.envelope) {
+    const env = ctx.envelope({ deck: 'f', deckEvery: 4 });
+    const decks = env.deckFloors;
+    const hooks = {
+      poolFor: (f) => (decks.includes(f) ? ctx.pools.pad : f <= 1 ? ctx.pools.ground : f >= nF - 2 ? ctx.pools.top : ctx.pools.typical),
+      crownKind: 'beacon',
+    };
+    return buildTiered(bp, { ...ctx.spec, tiers: env.tiers, mask: env.mask, env, family: 'pad', hooks });
+  }
   const baseEnd = Math.max(midDoorF, 2, Math.min(nF - 4, 4));
   const tiers = [{ f0: 0, f1: baseEnd }];
   const padFloors = [];
@@ -14,7 +26,6 @@ export function pad(bp, lot, ctx) {
     tiers.push({ f0: baseEnd + 1, f1: nF - 1, inset: { f: 6, r: 2 } });
     for (let f = baseEnd + 3; f <= nF - 2; f += 4) padFloors.push(f);
   }
-  ctx.style.vents = true;
   const front = ctx.spec.front;
   const hooks = {
     poolFor: (f) => (padFloors.includes(f) ? ctx.pools.pad : f <= 1 ? ctx.pools.ground : f >= nF - 2 ? ctx.pools.top : ctx.pools.typical),

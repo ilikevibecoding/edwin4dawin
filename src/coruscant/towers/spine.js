@@ -9,6 +9,7 @@ import { FORCE_AIR } from '../blueprint.js';
 import { PlanFrame, computeLayout, insetLimits } from '../plan.js';
 import { buildTiered } from './tiered.js';
 import { paintLandingDeck } from './decks.js';
+import { twinShafts } from './envelope.js';
 
 export const SPINE_MIN = 38;          // lot width along the front for two 16-wide shafts and the arcade
 const DECK_DEPTH = 5;                 // cells the shaft recedes on its back face above the podium for the decks
@@ -18,29 +19,29 @@ const BRIDGE_EVERY = 6;
 export function spine(bp, lot, ctx) {
   const { nF, rng, midDoorF, spec } = ctx;
   const style = ctx.style;
-  style.wall = rng.pick([B.PANEL_BLACK, B.DURASTEEL_DARK]);     // dark slabs: the blue spine is the light
+  // dark slabs (the fin_black / fin_steel palettes): the blue spine is the light
   style.corner = B.CHROME; style.mullion = B.CHROME; style.roof = B.DURASTEEL_DARK;
-  style.rhythm = rng.pick(['curtain', 'slit']); style.period = 3;
+  style.period = 3;
   style.railing = B.IRON_BARS;
   const front = spec.front;
-  const alongX = front === 'N' || front === 'S';      // shafts side by side along x, arcade runs along z
-  const w = bp.w, d = bp.d;
-  const L = alongX ? w : d, T = alongX ? d : w;        // L across the shafts, T along the arcade
-  const mid = L >> 1;
-  const g0 = mid - 2, g1 = mid + 2;                    // arcade cells across
+  // shafts side by side along x when the front is N / S (the arcade runs along z), else along z; T is the length
+  // along the arcade, g0..g1 its cells across, dc the door position along it for both shafts (envelope.js twinShafts,
+  // shared with the skyline impostors, which draw the spine column from the same numbers)
+  const { alongX, T, mid, g0, g1, dc, rectA, rectB, frontA, frontB, doorA, doorB } = twinShafts(bp.w, bp.d, front);
   const ta = 0, tb = T - 1;
-  const rectA = alongX ? { x0: 0, x1: g0 - 1, z0: 0, z1: d - 1 } : { x0: 0, x1: w - 1, z0: 0, z1: g0 - 1 };
-  const rectB = alongX ? { x0: g1 + 1, x1: w - 1, z0: 0, z1: d - 1 } : { x0: 0, x1: w - 1, z0: g1 + 1, z1: d - 1 };
-  const frontA = alongX ? 'E' : 'S', frontB = alongX ? 'W' : 'N';
-  const dc = T >> 1;                                   // door position along the arcade for both shafts
-  const doorA = alongX ? { x: g0 - 1, z: dc } : { x: dc, z: g0 - 1 };
-  const doorB = alongX ? { x: g1 + 1, z: dc } : { x: dc, z: g1 + 1 };
   // the lot's back face is the plan side u0 ('l') when the front is S or E (u runs +z / +x), else u1 ('r')
   const backSide = front === 'S' || front === 'E' ? 'l' : 'r';
   const backFace = alongX ? (front === 'S' ? 'N' : 'S') : (front === 'E' ? 'W' : 'E');
   const nFA = nF, nFB = nF >= 14 ? nF - 2 : nF;       // the slabs stop at different heights, the spine rises past both
   const baseEnd = Math.max(midDoorF, 2, Math.min(4, nF - 4));
   const shaft = (rect, frontS, door, nFs) => {
+    // the envelope plan of the shaft: chamfered (octagon / blade) shells receding along the arcade, the arcade face
+    // straight for the skybridges, the back face receded DECK_DEPTH for the landing decks every DECK_EVERY floors
+    // (buildTiered paints them); lots without a plan keep the legacy straight shaft with its own decks
+    if (ctx.envelope) {
+      const env = ctx.envelope({ ext: rect, front: frontS, door, nF: nFs, deck: backSide, deckEvery: DECK_EVERY, noInset: ['f'] });
+      return buildTiered(bp, { ...spec, ext: rect, front: frontS, door, tiers: env.tiers, mask: env.mask, env, family: 'spine', nF: nFs });
+    }
     const frame = new PlanFrame(rect, frontS);
     const lim = insetLimits(frame, computeLayout(frame.Iu, frame.Iv));
     const room = lim[backSide];

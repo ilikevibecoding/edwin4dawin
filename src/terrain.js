@@ -83,6 +83,16 @@ void faceFrame(float f, out vec3 N, out vec3 T, out vec3 B) {
   else if (f < 4.5) { N = vec3(0.0, 0.0, 1.0);  T = vec3(1.0, 0.0, 0.0);  B = vec3(0.0, 1.0, 0.0); }
   else              { N = vec3(0.0, 0.0, -1.0); T = vec3(-1.0, 0.0, 0.0); B = vec3(0.0, 1.0, 0.0); }
 }
+// Wedge slopes (mesher.js wedge(): face code 6, the extra bits = the side the slope faces, 0 +x, 1 -x, 2 +z, 3 -z):
+// the normal leans 45 degrees from up toward that side; u runs along the ridge as on the vertical face it faces,
+// v down the slope, so the tile stands upright on it and its normal map lights like the wall below.
+void slopeFrame(float e, out vec3 N, out vec3 T, out vec3 B) {
+  const float R = 0.70710678;
+  if (e < 0.5)      { N = vec3(R, R, 0.0);  T = vec3(0.0, 0.0, -1.0); B = vec3(-R, R, 0.0); }
+  else if (e < 1.5) { N = vec3(-R, R, 0.0); T = vec3(0.0, 0.0, 1.0);  B = vec3(R, R, 0.0); }
+  else if (e < 2.5) { N = vec3(0.0, R, R);  T = vec3(1.0, 0.0, 0.0);  B = vec3(0.0, R, -R); }
+  else              { N = vec3(0.0, R, -R); T = vec3(-1.0, 0.0, 0.0); B = vec3(0.0, R, R); }
+}
 // The vanilla per-face shade (FACES[].shade in mesher.js: sides 0.6 / 0.8, bottom 0.5) stands in for directional
 // light; with the sun doing that job per pixel it is partly lifted (FACE_FLATTEN of the way to 1), keeping the AO part.
 const float FACE_FLATTEN = 0.4;
@@ -106,7 +116,7 @@ void main() {
   vec3 blkCol = vec3(blk) * vec3(1.0, 0.9, 0.72);
 #if FANCY
   vec3 N, T, B;
-  faceFrame(vFace, N, T, B);
+  if (vFace > 5.5) slopeFrame(vExtra, N, T, B); else faceFrame(vFace, N, T, B);
   vec3 gN = N;
   float rough = 0.9, metal = 0.0, emis = 0.0;
   #if MATERIAL_MAPS

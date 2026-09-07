@@ -539,6 +539,34 @@ P.window_dark = (t, r) => { t.fill([36, 40, 52]); for (const [x, y] of [[2, 2], 
 P.city_lamp = (t, r) => { t.fill([255, 246, 220]); t.border([200, 190, 160]); t.rect(6, 6, 4, 4, [255, 255, 255]); };
 P.hull_plate = (t, r) => { t.noisy([122, 126, 134], 7, r); const g = [84, 88, 96]; t.hline(0, 0, 15, g); t.vline(0, 0, 15, g); if (r.next() < 0.5) t.hline(8, 0, 15, g); if (r.next() < 0.5) t.vline(5 + r.int(0, 6), 0, 15, g); t.speckle([150, 154, 162], 6, r); t.speckle([60, 62, 70], 4, r); };
 P.hull_trench = (t, r) => { t.noisy([44, 46, 52], 5, r); t.hline(5, 0, 15, [28, 30, 34]); t.hline(10, 0, 15, [28, 30, 34]); for (let x = 1; x < 16; x += 4) t.px(x, 7, [255, 200, 90]); };
+// ---- Coruscant architecture v2 (rubric 18): smooth panel fields with one recessed seam on the top/left edge and a
+// lit bevel bottom/right (the panelBase convention), no rivets, so a wall of them reads as a plated field with fine
+// seams rather than a busy texture; the trim is a plain dark recessed groove block for seam columns and fins
+P.panel_light = (t, r) => { panelBase(t, r, [170, 174, 180], 3, [134, 138, 146]); t.hline(7, 2, 13, [160, 164, 170]); };
+P.panel_grey = (t, r) => { panelBase(t, r, [104, 108, 116], 3, [68, 72, 80]); t.hline(7, 2, 13, [96, 100, 108]); };
+P.panel_seam = (t, r) => { panelBase(t, r, [104, 108, 116], 3, [68, 72, 80]); t.vline(7, 0, 15, [48, 50, 56]); t.vline(8, 0, 15, [58, 60, 68]); };
+P.trim_dark = (t, r) => { t.noisy([38, 40, 46], 2, r); t.hline(0, 0, 15, [24, 25, 30]); t.vline(0, 0, 15, [24, 25, 30]); t.hline(15, 0, 15, [52, 54, 60]); t.vline(15, 0, 15, [48, 50, 56]); };
+P.panel_bronze = (t, r) => { panelBase(t, r, [128, 98, 68], 5, [84, 62, 42]); t.hline(3, 1, 14, [152, 120, 86]); t.hline(11, 1, 14, [110, 84, 58]); };
+P.panel_sand = (t, r) => { panelBase(t, r, [198, 184, 158], 4, [150, 136, 112]); t.hline(7, 2, 13, [188, 174, 148]); };
+// horizontal light strips: a dark housing with a bright band across the middle and a soft halo either side, so a
+// ring of them around a tower is a thin unbroken line of light (blue-white for ledges, warm for the bronze towers)
+P.light_strip = (t, r) => { t.noisy([36, 40, 48], 2, r); t.hline(4, 0, 15, [70, 100, 140]); t.hline(11, 0, 15, [70, 100, 140]); t.rect(0, 5, 16, 6, [150, 200, 255]); t.rect(0, 6, 16, 4, [222, 240, 255]); };
+// vertical strips: the same bar of light turned upright, no frame at the top or bottom, so a column of blocks is
+// one continuous line of light (the strip families' night signature, references 1 and 2)
+P.light_strip_v = (t, r) => { t.noisy([36, 40, 48], 2, r); t.vline(4, 0, 15, [70, 100, 140]); t.vline(11, 0, 15, [70, 100, 140]); t.rect(5, 0, 6, 16, [150, 200, 255]); t.rect(6, 0, 4, 16, [222, 240, 255]); };
+P.light_strip_warm_v = (t, r) => { t.noisy([40, 36, 34], 2, r); t.vline(4, 0, 15, [130, 96, 60]); t.vline(11, 0, 15, [130, 96, 60]); t.rect(5, 0, 6, 16, [255, 206, 140]); t.rect(6, 0, 4, 16, [255, 238, 205]); };
+P.light_strip_warm = (t, r) => { t.noisy([40, 36, 34], 2, r); t.hline(4, 0, 15, [130, 96, 60]); t.hline(11, 0, 15, [130, 96, 60]); t.rect(0, 5, 16, 6, [255, 206, 140]); t.rect(0, 6, 16, 4, [255, 238, 205]); };
+// glazing bands: a 2-texel frame top and bottom only (no vertical frame), so a row of them is one continuous ribbon
+// of glass; the lit band is warm and even (no pane grid), the dark one blue-grey glass with a reflection line.
+// The lit band is a mid amber, not white: its emissive comes from texel luminance (materialMaps.js), and interior
+// light seen through glass has to sit well under the light strips so a tower at night reads as vertical lines over
+// dim floors (references 1, 2 and the Andor plaza), not a lattice of equally bright horizontals and verticals.
+P.window_band_lit = (t, r) => { t.noisy([206, 168, 116], 5, r); t.rect(0, 0, 16, 2, [34, 38, 48]); t.rect(0, 14, 16, 2, [34, 38, 48]); t.hline(2, 0, 15, [226, 192, 140]); t.hline(13, 0, 15, [176, 140, 96]); };
+P.window_band_dark = (t, r) => { t.noisy([46, 64, 94], 5, r); t.rect(0, 0, 16, 2, [34, 38, 48]); t.rect(0, 14, 16, 2, [34, 38, 48]); t.hline(3, 0, 15, [76, 108, 148]); t.hline(4, 0, 15, [62, 88, 126]); };
+// tall slits: a narrow bright bar down the middle with a halo, no top/bottom frame, so a column of them is one
+// unbroken narrow line of light in a dark panel
+P.window_slit_lit = (t, r) => { t.noisy([40, 42, 50], 2, r); t.vline(5, 0, 15, [120, 100, 72]); t.vline(10, 0, 15, [120, 100, 72]); t.rect(6, 0, 4, 16, [255, 222, 170]); t.rect(7, 0, 2, 16, [255, 240, 210]); };
+P.window_slit_dark = (t, r) => { t.noisy([40, 42, 50], 2, r); t.vline(5, 0, 15, [48, 54, 66]); t.vline(10, 0, 15, [48, 54, 66]); t.rect(6, 0, 4, 16, [46, 66, 98]); t.vline(7, 0, 15, [70, 100, 140]); };
 P.missing = (t, r) => { for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) t.px(x, y, ((x >> 3) + (y >> 3)) & 1 ? [255, 0, 255] : [0, 0, 0]); };
 
 // ---- crops (growth stages) and item icons: hand-drawn 16x16 pixel maps ('.' = transparent)
@@ -668,6 +696,9 @@ const TILE_NAMES = [
   'item_apple', 'item_bread', 'item_wheat', 'item_seeds', 'item_beef_raw', 'item_beef_cooked', 'item_porkchop_raw', 'item_porkchop_cooked',
   'item_chicken_raw', 'item_chicken_cooked', 'item_bone', 'item_leather', 'item_feather', 'item_stick',
   'neon_pink', 'neon_green',
+  // Coruscant architecture v2 (appended)
+  'panel_light', 'panel_grey', 'panel_seam', 'trim_dark', 'panel_bronze', 'panel_sand', 'light_strip', 'light_strip_warm',
+  'window_band_lit', 'window_band_dark', 'window_slit_lit', 'window_slit_dark', 'light_strip_v', 'light_strip_warm_v',
 ];
 export const ITEM_TILE_NAMES = TILE_NAMES.filter((n) => n.startsWith('item_'));
 

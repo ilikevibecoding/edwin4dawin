@@ -10,6 +10,8 @@ import { Inventory, mergeInto, initItems, I, ITEMS, MAX_STACK, isItem, foodOf, c
 import { DoorController, setDoorOpen, doorBottomY } from '../src/doors.js';
 import { isPassable, standHeight } from '../src/npc/pathfinding.js';
 import { EventBus } from '../src/events.js';
+import { Mesher, FACE_SLOPE } from '../src/mesher.js';
+import { WEDGE_DIRS, WEDGE_FACING, SHAPE } from '../src/blocks.js';
 
 let passed = 0, failed = 0;
 function test(name, fn) {
@@ -338,6 +340,59 @@ test('EventBus: on/once/off, unsubscribe handles, throwing listeners are isolate
   assert.ok(bus.recent().every((h, i, a) => i === 0 || a[i - 1].seq < h.seq), 'sequence numbers increase');
   assert.throws(() => bus.on('x', null));
   assert.equal(bus.count('economy:transfer'), 1);
+});
+
+// Wedge blocks (rubric 18 rule 5): a triangular prism in four orientations. The mesher emits the bottom and the
+// back as culled cube faces, two side triangles (degenerate quads) culled by opaque or same-facing neighbours, and
+// one 45 degree slope quad tagged with face code 6 + the direction, whose vertices lie on the slope plane.
+test('Mesher: wedge blocks emit a sloped quad on the 45 degree plane, cull bottom / back / side faces against neighbours', () => {
+  const faces = (geo) => {
+    if (!geo) return [];
+    const pos = geo.getAttribute('position').array, fa = geo.getAttribute('aFace').array, out = [];
+    for (let v = 0; v < fa.length; v += 4) out.push({ code: fa[v] & 7, extra: fa[v] >> 3, verts: [0, 1, 2, 3].map((k) => [pos[(v + k) * 3], pos[(v + k) * 3 + 1], pos[(v + k) * 3 + 2]]) });
+    return out;
+  };
+  const meshAt = (place) => {
+    const w = testWorld(); place(w);
+    const m = new Mesher();
+    return faces(m.build(w, w.getChunk(0, 0)).solid);
+  };
+  for (const side of ['E', 'W', 'S', 'N']) {
+    const id = WEDGE_FACING.grey[side], def = BLOCKS[id], dir = def.wedge, { dx, dz } = WEDGE_DIRS[dir];
+    assert.equal(def.shape, SHAPE.WEDGE); assert.equal(def.opaque, false, 'a wedge never culls its neighbours');
+    assert.equal(def.boxes.length, 2, 'collision is the two-step stair approximation');
+    // alone in the air: bottom + back + 2 sides + slope
+    const alone = meshAt((w) => w.setBlock(5, 40, 5, id));
+    assert.equal(alone.length, 5, `${side}: five quads when nothing is culled (got ${alone.length})`);
+    const slopes = alone.filter((f) => f.code === FACE_SLOPE);
+    assert.equal(slopes.length, 1); assert.equal(slopes[0].extra, dir, 'the extra bits carry the slope direction');
+    for (const [x, y, z] of slopes[0].verts) {
+      // on the plane: height 1 along the back edge, 0 along the front edge, in cell-local coordinates
+      const lx = x - 5, ly = y - 40, lz = z - 5;
+      const expect = dx === 1 ? 1 - lx : dx === -1 ? lx : dz === 1 ? 1 - lz : lz;
+      assert.ok(Math.abs(ly - expect) < 1e-6, `${side}: slope vertex (${lx},${ly},${lz}) is off the 45 degree plane`);
+    }
+    // its bottom sits on a cube and an opaque block stands behind it: bottom and back are culled, the cube's own faces
+    // toward the wedge are not (a wedge is not opaque), the slope stays
+    const seated = meshAt((w) => { w.setBlock(5, 40, 5, id); w.setBlock(5, 39, 5, B.STONE); w.setBlock(5 - dx, 40, 5 - dz, B.STONE); });
+    const inCell = (f) => f.verts.every(([x, y, z]) => x >= 5 && x <= 6 && y >= 40 && y <= 41 && z >= 5 && z <= 6);
+    const backPlane = dx === 1 ? ([x]) => x === 5 : dx === -1 ? ([x]) => x === 6 : dz === 1 ? ([, , z]) => z === 5 : ([, , z]) => z === 6;
+    const frontD = dx === 1 ? 0 : dx === -1 ? 1 : dz === 1 ? 4 : 5;
+    // quads in the wedge's cell that are not the stone below's top (code 2 at y 40) or the stone behind's face
+    // toward the wedge (frontD on the back plane): what is left is the wedge's own geometry
+    const own = seated.filter((f) => inCell(f) && !(f.code === 2 && f.verts.every(([, y]) => y === 40)) && !(f.code === frontD && f.verts.every(backPlane)));
+    assert.deepEqual(own.map((f) => f.code).sort((a, b) => a - b), [dx !== 0 ? 4 : 0, dx !== 0 ? 5 : 1, FACE_SLOPE], `${side}: seated wedge keeps only its two side triangles and the slope (bottom / back culled), got codes ${own.map((f) => f.code)}`);
+    assert.ok(!seated.some((f) => f.code === 3 && inCell(f) && f.verts.every(([, y]) => y === 40)), `${side}: the bottom face is culled by the block below`);
+  }
+  // two east-facing wedges side by side along their ridge (z neighbours) hide the shared side triangles: 8 quads, not 10
+  const pair = meshAt((w) => { w.setBlock(5, 40, 5, WEDGE_FACING.grey.E); w.setBlock(5, 40, 6, WEDGE_FACING.grey.E); });
+  assert.equal(pair.length, 8, `a wedge row shares no inner side triangles (got ${pair.length})`);
+  // a dark wedge next to a grey one of the same facing still hides the shared face? no: only the same id does, so the
+  // grey/dark seam keeps both triangles (materials differ); an opaque block beside them hides the triangle outright
+  const mixed = meshAt((w) => { w.setBlock(5, 40, 5, WEDGE_FACING.grey.E); w.setBlock(5, 40, 6, WEDGE_FACING.dark.E); w.setBlock(5, 40, 4, B.STONE); });
+  const grey = mixed.filter((f) => f.verts.every(([x, , z]) => x >= 5 && x <= 6 && z >= 5 && z <= 6) && f.verts.some(([, , z]) => z === 6) && f.code === 4);
+  assert.equal(grey.length, 1, 'the grey wedge keeps its +z side triangle against a different wedge');
+  assert.ok(!mixed.some((f) => f.code === 5 && f.verts.every(([x, , z]) => z === 5 && x >= 5 && x <= 6)), 'its -z side triangle is culled by the stone beside it');
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

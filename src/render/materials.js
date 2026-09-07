@@ -171,6 +171,21 @@ const TILE_MATERIALS = {
   city_lamp: { cls: 'glow', detail: 'panel', emit: { lo: 200, hi: 235, sat: 0 } },
   hull_plate: { cls: 'metal', roughness: 0.5 },
   hull_trench: { cls: 'panel', emissive: 1, emit: { lo: 150, hi: 200, sat: 0.3 } },
+  // Coruscant architecture v2: smooth panel fields (few grooves, no rivet domes), trim, light strips, glazing
+  panel_light: { cls: 'panel', roughness: 0.45, metalness: 0.6, dots: false, relief: 0.35 },
+  panel_grey: { cls: 'panel', roughness: 0.5, metalness: 0.6, dots: false, relief: 0.35 },
+  panel_seam: { cls: 'panel', roughness: 0.5, metalness: 0.6, dots: false, relief: 0.5, grooveT: 20 },
+  trim_dark: { cls: 'panel', roughness: 0.55, metalness: 0.5, dots: false, relief: 0.3 },
+  panel_bronze: { cls: 'metal', roughness: 0.38, metalness: 0.9, dots: false, relief: 0.35 },
+  panel_sand: { cls: 'plaster', roughness: 0.7, relief: 0.3 },
+  light_strip: { cls: 'glow', detail: 'panel', emit: { lo: 130, hi: 200, sat: 0 } },
+  light_strip_warm: { cls: 'glow', detail: 'panel', emit: { lo: 130, hi: 200, sat: 0 } },
+  light_strip_v: { cls: 'glow', detail: 'panel', emit: { lo: 130, hi: 200, sat: 0 } },
+  light_strip_warm_v: { cls: 'glow', detail: 'panel', emit: { lo: 130, hi: 200, sat: 0 } },
+  window_band_lit: { cls: 'glass', emissive: 1, emit: { lo: 150, hi: 200, sat: 0 }, roughness: 0.1 },
+  window_band_dark: { cls: 'glass', roughness: 0.1 },
+  window_slit_lit: { cls: 'glass', emissive: 1, emit: { lo: 150, hi: 200, sat: 0 }, roughness: 0.1 },
+  window_slit_dark: { cls: 'glass', roughness: 0.1 },
 };
 
 // Keyword rules for names that are not in the table (dynamic tiles, tiles added by other builders).

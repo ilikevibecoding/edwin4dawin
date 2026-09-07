@@ -13,6 +13,9 @@ import { needle, NEEDLE_MIN } from './needle.js';
 import { senate, temple, opera, plaza, terminal } from './landmarks.js';
 import { crownProfile } from '../crowns.js';
 import { hash2 } from '../../rng.js';
+import { envelopeCandidates, envelopeFor } from './envelope.js';
+import { paletteNames, rhythmNames, applyPalette } from '../facade.js';
+import { getLayout } from '../layout.js';
 
 // index order used when the layout passes lot.family as a number
 export const FAMILIES = ['slab', 'setback', 'habitat', 'stack', 'twin', 'pad', 'civic', 'hall', 'spire', 'spine', 'needle'];
@@ -92,7 +95,71 @@ export function lotCrown(lot, ground) {
   return crownProfile(lot, resolveFamily(lot).name, ground);
 }
 
+// ------------------------------------------------------------------------------------ rubric 18: envelope + variety
+// The architecture pick of a tower lot: envelope kind, palette and facade rhythm, dealt so that no two towers within
+// VARIETY_RADIUS share (family, envelope, crown, palette) (rubric 18 row 3) and same-family neighbours differ in
+// rhythm where the family has more than one. Lots of the memoised city layout get the neighbour-aware deal (computed
+// once per layout, in lot order, greedily avoiding the tuples already taken nearby); any other lot (test harness
+// lots, other seeds) takes its own seeded first choice. Deterministic either way. The skyline impostors read the
+// same record, so the far silhouette, tint and light lines match the tower that streams in.
+export const VARIETY_RADIUS = 120;
+const archCache = new WeakMap();   // layout -> Map(lot.id -> { envelope, palette, rhythm, crown })
+function seededOrder(list, seed, salt) {
+  return list.map((v, i) => [v, hash2(seed, salt, i)]).sort((a, b) => a[1] - b[1]).map((a) => a[0]);
+}
+function ownPick(lot, family) {
+  const seed = (lot.seed ?? 1) >>> 0;
+  return { envelope: seededOrder(envelopeCandidates(family, lot), seed, 0x21)[0], palette: seededOrder(paletteNames(family, lot.district), seed, 0x22)[0], rhythm: seededOrder(rhythmNames(family), seed, 0x23)[0], crown: crownProfile(lot, family).style, family };
+}
+function archPlan(layout) {
+  let plan = archCache.get(layout);
+  if (plan) return plan;
+  plan = new Map();
+  const towers = layout.lots.filter((l) => l.kind === 'tower');
+  const done = [];
+  const R2 = VARIETY_RADIUS * VARIETY_RADIUS;
+  for (const lot of towers) {
+    const family = resolveFamily(lot).name, seed = (lot.seed ?? 1) >>> 0;
+    const crown = crownProfile(lot, family).style;
+    const envs = seededOrder(envelopeCandidates(family, lot), seed, 0x21), pals = seededOrder(paletteNames(family, lot.district), seed, 0x22);
+    const rhys = seededOrder(rhythmNames(family), seed, 0x23);
+    const cx = lot.x0 + lot.w / 2, cz = lot.z0 + lot.d / 2;
+    // same-family neighbours whatever their crown (the crown planner may fall back to another style on a small top
+    // shell, so two planned-different crowns can be built the same): envelopes vary first, palettes second
+    const nearFam = done.filter((d) => { const dx = d.cx - cx, dz = d.cz - cz; return dx * dx + dz * dz <= R2 && d.family === family; });
+    let pick = null;
+    outer: for (let j = 0; j < pals.length; j++) for (let i = 0; i < envs.length; i++) {
+      if (!nearFam.some((d) => d.envelope === envs[i] && d.palette === pals[j])) { pick = { envelope: envs[i], palette: pals[j] }; break outer; }
+    }
+    if (!pick) pick = { envelope: envs[0], palette: pals[0] };
+    // the rhythm least used by the same family nearby (ties by the seeded order)
+    let rhythm = rhys[0], best = Infinity;
+    for (const r of rhys) { const n = nearFam.filter((d) => d.rhythm === r).length; if (n < best) { best = n; rhythm = r; } }
+    const rec = { ...pick, rhythm, crown, family, cx, cz, id: lot.id };
+    plan.set(lot.id, rec); done.push(rec);
+  }
+  archCache.set(layout, plan);
+  return plan;
+}
+export function archFor(lot, family) {
+  if (!lot || lot.kind !== 'tower') return null;
+  const city = getLayout();
+  const rec = city && city.lots[lot.id] === lot ? archPlan(city).get(lot.id) : null;
+  return rec && rec.family === family ? rec : ownPick(lot, family);
+}
+// The envelope a lot builds (and the impostor draws): the variety-dealt kind resolved by envelopeFor.
+export function lotEnvelope(lot, family, o) {
+  return envelopeFor(lot, family, archFor(lot, family).envelope, o);
+}
+
 export function buildFamily(fam, bp, lot, ctx) {
+  if (lot && lot.kind === 'tower') {
+    const arch = archFor(lot, fam.name);
+    applyPalette(ctx.style, arch.palette);
+    if (arch.rhythm) { ctx.style.rhythm = arch.rhythm; if (arch.rhythm === 'curtain' && ctx.style.period < 3) ctx.style.period = 3; }
+    ctx.arch = arch;
+    ctx.envelope = (o) => envelopeFor(lot, fam.name, arch.envelope, { nF: ctx.nF, midDoorF: ctx.midDoorF, ...o });
+  }
   switch (fam.name) {
     case 'slab': return slab(bp, lot, ctx);
     case 'setback': return setback(bp, lot, ctx);

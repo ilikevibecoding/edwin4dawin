@@ -5,6 +5,7 @@ export const SHAPE = {
   CUBE: 0, CROSS: 1, SLAB: 2, SLAB_TOP: 3, POST: 4, FENCE: 5, LANTERN: 6, TORCH: 7, RAIL: 8,
   PANE: 9, DOOR: 10, SALOON_DOOR: 11, WALL_SIGN: 12, BED: 13, ANVIL: 14, CHEST: 15, GRAVESTONE: 16,
   CACTUS: 17, TROUGH: 18, FARMLAND: 19, LIQUID: 20, TABLE: 21,
+  WEDGE: 22,   // triangular prism: full back wall, sloped face down to the front edge (mesher.js wedge, terrain.js slope frame)
 };
 
 export const B = {
@@ -29,7 +30,30 @@ export const B = {
   WHEAT_0: 104, WHEAT_1: 105,
   // undercity neon (ids 106+)
   NEON_PINK: 106, NEON_GREEN: 107,
+  // Coruscant architecture v2 (docs/rubrics/18_architecture_v2.md): smooth panel fields, seams and trim, the
+  // 500-Republica bronze and the residential sand accent, horizontal light strips for ring ledges, and continuous
+  // glazing bands / tall slits that replace the small-square window grids on every tower facade (ids 108+)
+  PANEL_LIGHT: 108, PANEL_GREY: 109, TRIM_DARK: 110, PANEL_BRONZE: 111, PANEL_SAND: 112,
+  LIGHT_STRIP: 113, LIGHT_STRIP_WARM: 114, WINDOW_BAND_LIT: 115, WINDOW_BAND_DARK: 116, WINDOW_SLIT_LIT: 117, WINDOW_SLIT_DARK: 118,
+  PANEL_SEAM: 119,
+  // wedges (rubric 18 rule 5, the user's "more angular" blocks): a triangular prism whose slope faces the named
+  // side (E = +x, W = -x, S = +z, N = -z) and whose full-height back is the opposite side; grey panel and dark trim
+  // so tapering edges, fin caps and buttress steps read as trim on any palette (ids 120+)
+  WEDGE_GREY_E: 120, WEDGE_GREY_W: 121, WEDGE_GREY_S: 122, WEDGE_GREY_N: 123,
+  WEDGE_DARK_E: 124, WEDGE_DARK_W: 125, WEDGE_DARK_S: 126, WEDGE_DARK_N: 127,
+  // vertical light strips (rule 6): a bar of light down the tile with no top / bottom frame, so a column of them is
+  // one continuous line of light one block wide (the horizontal LIGHT_STRIP tiles are the ring ledges) (ids 128+)
+  LIGHT_STRIP_V: 128, LIGHT_STRIP_WARM_V: 129,
 };
+
+// Wedge orientation: the slope faces (dx, dz); `dir` is the shader's slope code (aFace extra bits), the same order
+// as the +x / -x / +z / -z face directions. WEDGE_FACING[material][side] looks a wedge up by the side it faces.
+export const WEDGE_DIRS = [{ dx: 1, dz: 0 }, { dx: -1, dz: 0 }, { dx: 0, dz: 1 }, { dx: 0, dz: -1 }];
+export const WEDGE_FACING = {
+  grey: { E: B.WEDGE_GREY_E, W: B.WEDGE_GREY_W, S: B.WEDGE_GREY_S, N: B.WEDGE_GREY_N },
+  dark: { E: B.WEDGE_DARK_E, W: B.WEDGE_DARK_W, S: B.WEDGE_DARK_S, N: B.WEDGE_DARK_N },
+};
+export const isWedge = (id) => !!(BLOCKS[id] && BLOCKS[id].shape === SHAPE.WEDGE);
 
 export const BLOCKS = new Array(256);
 
@@ -209,6 +233,34 @@ export function initBlocks() {
   def(B.HULL_TRENCH, 'hull_trench', { tex: same('hull_trench'), sound: 'metal', hardness: 4.0 });
   def(B.NEON_PINK, 'neon_pink', { tex: same('neon_pink'), emit: 14, sound: 'glass', hardness: 0.4 });
   def(B.NEON_GREEN, 'neon_green', { tex: same('neon_green'), emit: 14, sound: 'glass', hardness: 0.4 });
+  // --- Coruscant architecture v2: panel fields, trim, light strips, glazing bands and slits
+  def(B.PANEL_LIGHT, 'light_panel', { tex: same('panel_light'), sound: 'metal', hardness: 2.0 });
+  def(B.PANEL_GREY, 'grey_panel', { tex: same('panel_grey'), sound: 'metal', hardness: 2.0 });
+  def(B.TRIM_DARK, 'dark_trim', { tex: same('trim_dark'), sound: 'metal', hardness: 2.0 });
+  def(B.PANEL_BRONZE, 'bronze_panel', { tex: same('panel_bronze'), sound: 'metal', hardness: 2.0 });
+  def(B.PANEL_SAND, 'sand_panel', { tex: same('panel_sand'), sound: 'metal', hardness: 2.0 });
+  def(B.PANEL_SEAM, 'seam_panel', { tex: same('panel_seam'), sound: 'metal', hardness: 2.0 });
+  def(B.LIGHT_STRIP, 'light_strip', { tex: same('light_strip'), emit: 12, sound: 'glass', hardness: 0.5 });
+  def(B.LIGHT_STRIP_WARM, 'warm_light_strip', { tex: same('light_strip_warm'), emit: 12, sound: 'glass', hardness: 0.5 });
+  def(B.LIGHT_STRIP_V, 'vertical_light_strip', { tex: same('light_strip_v'), emit: 12, sound: 'glass', hardness: 0.5 });
+  def(B.LIGHT_STRIP_WARM_V, 'warm_vertical_light_strip', { tex: same('light_strip_warm_v'), emit: 12, sound: 'glass', hardness: 0.5 });
+  def(B.WINDOW_BAND_LIT, 'lit_window_band', { tex: same('window_band_lit'), emit: 9, sound: 'glass', hardness: 0.5 });
+  def(B.WINDOW_BAND_DARK, 'dark_window_band', { tex: same('window_band_dark'), sound: 'glass', hardness: 0.5 });
+  def(B.WINDOW_SLIT_LIT, 'lit_slit', { tex: same('window_slit_lit'), emit: 9, sound: 'glass', hardness: 0.5 });
+  def(B.WINDOW_SLIT_DARK, 'dark_slit', { tex: same('window_slit_dark'), sound: 'glass', hardness: 0.5 });
+  // --- wedges: collision is the back half full height plus the front half at half height (a two-step approximation
+  // of the slope, so the player and the NPC pathfinder treat a wedge like a stair); `wedge` is the slope code
+  const wedge = (id, name, tile, dir) => {
+    const { dx, dz } = WEDGE_DIRS[dir];
+    const back = dx === 1 ? [0, 0, 0, 0.5, 1, 1] : dx === -1 ? [0.5, 0, 0, 1, 1, 1] : dz === 1 ? [0, 0, 0, 1, 1, 0.5] : [0, 0, 0.5, 1, 1, 1];
+    const front = dx === 1 ? [0.5, 0, 0, 1, 0.5, 1] : dx === -1 ? [0, 0, 0, 0.5, 0.5, 1] : dz === 1 ? [0, 0, 0.5, 1, 0.5, 1] : [0, 0, 0, 1, 0.5, 0.5];
+    const b = def(id, name, { shape: SHAPE.WEDGE, tex: same(tile), sound: 'metal', hardness: 2.0, boxes: [back, front], icon: 'slab' });
+    b.wedge = dir;
+  };
+  wedge(B.WEDGE_GREY_E, 'grey_wedge_east', 'panel_grey', 0); wedge(B.WEDGE_GREY_W, 'grey_wedge_west', 'panel_grey', 1);
+  wedge(B.WEDGE_GREY_S, 'grey_wedge_south', 'panel_grey', 2); wedge(B.WEDGE_GREY_N, 'grey_wedge_north', 'panel_grey', 3);
+  wedge(B.WEDGE_DARK_E, 'dark_wedge_east', 'trim_dark', 0); wedge(B.WEDGE_DARK_W, 'dark_wedge_west', 'trim_dark', 1);
+  wedge(B.WEDGE_DARK_S, 'dark_wedge_south', 'trim_dark', 2); wedge(B.WEDGE_DARK_N, 'dark_wedge_north', 'trim_dark', 3);
 
   for (let i = 0; i < 256; i++) if (!BLOCKS[i]) BLOCKS[i] = BLOCKS[B.AIR];
 }
@@ -240,4 +292,7 @@ export const PALETTE = [
   B.DURASTEEL, B.DURASTEEL_DARK, B.PANEL_BLACK, B.PANEL_RED, B.PANEL_STRIPE, B.GLOW_PANEL, B.GLOW_PANEL_BLUE, B.HOLO_SIGN, B.CONSOLE,
   B.VENT, B.DECK_PLATE, B.STEEL_GLASS, B.CHROME, B.WINDOW_LIT, B.WINDOW_DARK, B.CITY_LAMP, B.HULL_PLATE, B.HULL_TRENCH,
   B.NEON_PINK, B.NEON_GREEN,
+  B.PANEL_LIGHT, B.PANEL_GREY, B.TRIM_DARK, B.PANEL_BRONZE, B.PANEL_SAND, B.PANEL_SEAM, B.LIGHT_STRIP, B.LIGHT_STRIP_WARM,
+  B.WINDOW_BAND_LIT, B.WINDOW_BAND_DARK, B.WINDOW_SLIT_LIT, B.WINDOW_SLIT_DARK, B.LIGHT_STRIP_V, B.LIGHT_STRIP_WARM_V,
+  B.WEDGE_GREY_E, B.WEDGE_GREY_W, B.WEDGE_GREY_S, B.WEDGE_GREY_N, B.WEDGE_DARK_E, B.WEDGE_DARK_W, B.WEDGE_DARK_S, B.WEDGE_DARK_N,
 ];

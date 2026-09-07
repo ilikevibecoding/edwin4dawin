@@ -8,14 +8,16 @@
 //   aShade    Uint8   x1   index into SHADE_TABLE (every AO-curve x face-shade product, as float32)
 //   aFace     Uint8   x1   bits 0-2: face direction (DIRS index: 0 +x, 1 -x, 2 +y, 3 -y, 4 +z, 5 -z) from which the
 //                          shader derives the world normal and the tangent frame of the atlas uv (see faceUV);
-//                          bits 3-7: extra per-quad data (water top faces: depth of the water column below, 0..31)
+//                          6 = a wedge slope (45 degrees, terrain.js slopeFrame);
+//                          bits 3-7: extra per-quad data (water top faces: depth of the water column below, 0..31;
+//                          wedge slopes: the direction the slope faces, 0 +x, 1 -x, 2 +z, 3 -z)
 //   index     Uint16 (Uint32 only when a chunk exceeds 65536 vertices)
 // The tables hold exactly the float32 values the old Float32 attributes carried, so the varyings are bit-identical
 // without depending on the precision of shader arithmetic. Cross (plant) quads are diagonal: they report the
 // nearest axis (first panel +-z, second panel +-x, sign by winding).
 import * as THREE from 'three';
 import { CHUNK_SIZE as CS, CHUNK_HEIGHT as CH, ATLAS_TILES } from './constants.js';
-import { B, BLOCKS, SHAPE } from './blocks.js';
+import { B, BLOCKS, SHAPE, WEDGE_DIRS } from './blocks.js';
 import { tileUV, TILES } from './textures.js';
 import { World } from './world.js';
 
@@ -109,6 +111,8 @@ const FVX = [], FVY = [], FVZ = [], FCU = [], FCV = [], FS1 = [], FS2 = [], FSQ 
 }
 const SHADE_CROSS_Q = shadeIndex(0.9);
 const SHADE_ONE_Q = shadeIndex(1.0);
+const SHADE_SLOPE_Q = shadeIndex(0.9);  // a 45 degree slope: between the top (1.0) and the sides (0.6 / 0.8)
+export const FACE_SLOPE = 6;            // aFace direction code of a wedge slope (the extra bits carry WEDGE_DIRS index)
 export const SHADE_TABLE = new Float32Array(shadeValues);
 
 // Block property lookup tables (rebuilt per build; BLOCKS is filled at startup by initBlocks()).
@@ -416,10 +420,62 @@ export class Mesher {
   isSolidAt(x, y, z) { return BLOCKS[this.blk(x, y, z)].solid; }
   isOpaqueOrSame(x, y, z, id) { const n = this.blk(x, y, z); return n === id || OPQ[n] === 1; }
 
+  // Wedge (SHAPE.WEDGE): a triangular prism filling the cell, full height on its back side and sloping down to the
+  // front edge; def.wedge is the direction the slope faces (WEDGE_DIRS index: 0 +x, 1 -x, 2 +z, 3 -z). The bottom
+  // and the back are ordinary cube faces (box(): culled against opaque neighbours, lit from them); the two side
+  // triangles are the vertical face templates with their front-top vertex dropped onto the slope (one degenerate
+  // triangle each), culled by an opaque side neighbour or a same-facing wedge beside them; the slope is one quad
+  // from the back-top edge to the front-bottom edge with face code FACE_SLOPE and the direction in the extra bits,
+  // which the world shader turns into the 45 degree normal (terrain.js slopeFrame). Its uv is the vertical face's,
+  // so the tile stands upright on the slope. Slope light is the cell's own: a wedge is not opaque, so light reaches it.
+  wedge(x, y, z, def) {
+    const dir = def.wedge, t = def.tex, id = def.id;
+    const { dx, dz } = WEDGE_DIRS[dir];
+    const frontD = dir === 0 ? 0 : dir === 1 ? 1 : dir === 2 ? 4 : 5;
+    const backD = frontD ^ 1;
+    this.box(x, y, z, 0, 0, 0, 1, 1, 1, t, 63 & ~((1 << 3) | (1 << backD)));
+    const verts = this.tmpVerts, uv = this.uvTmp;
+    // height of the slope over a corner: 1 along the back edge, 0 along the front edge
+    const h = (px, pz) => (dx === 1 ? 1 - px : dx === -1 ? px : dz === 1 ? 1 - pz : pz);
+    const sideA = dx !== 0 ? 4 : 0;
+    for (let d = sideA; d <= sideA + 1; d++) {
+      const f = FACES[d];
+      const nx = x + f.n[0], nz = z + f.n[2];
+      const nid = this.blk(nx, y, nz);
+      if (OPQ[nid] || nid === id) continue;
+      const ss = this.skyAt(nx, y, nz) * 4, ll = this.lightAt(nx, y, nz) * 4;
+      const tu = TILE_U[t[d]], tv = TILE_V[t[d]];
+      for (let k = 0; k < 4; k++) {
+        const vv = f.v[k];
+        const yy = vv[1] ? h(vv[0], vv[2]) : 0;
+        faceUV(d, vv[0], yy, vv[2], uv);
+        const v = verts[k];
+        v[0] = x + vv[0]; v[1] = y + yy; v[2] = z + vv[2];
+        v[3] = tu + (uv[0] * UV_SCALE + INSET) * TS; v[4] = tv + (uv[1] * UV_SCALE + INSET) * TS;
+        v[5] = ss; v[6] = ll; v[7] = FSHQ[d];
+      }
+      this.solid.quad(verts, false, d);
+    }
+    // the slope: the front face's template with its top vertices moved to the back edge
+    const f = FACES[frontD];
+    const s = this.skyAt(x, y, z) * 4, l = this.lightAt(x, y, z) * 4;
+    const tu = TILE_U[t[frontD]], tv = TILE_V[t[frontD]];
+    for (let k = 0; k < 4; k++) {
+      const vv = f.v[k];
+      faceUV(frontD, vv[0], vv[1], vv[2], uv);
+      const v = verts[k];
+      v[0] = x + vv[0] - (vv[1] ? dx : 0); v[1] = y + vv[1]; v[2] = z + vv[2] - (vv[1] ? dz : 0);
+      v[3] = tu + (uv[0] * UV_SCALE + INSET) * TS; v[4] = tv + (uv[1] * UV_SCALE + INSET) * TS;
+      v[5] = s; v[6] = l; v[7] = SHADE_SLOPE_Q;
+    }
+    this.solid.quad(verts, false, FACE_SLOPE | (dir << 3));
+  }
+
   special(x, y, z, def) {
     const t = def.tex;
     const id = def.id;
     switch (def.shape) {
+      case SHAPE.WEDGE: this.wedge(x, y, z, def); break;
       case SHAPE.SLAB: {
         const mask = (this.isOpaqueOrSame(x + 1, y, z, id) ? 1 : 0) | (this.isOpaqueOrSame(x - 1, y, z, id) ? 2 : 0) | (this.isOpaqueOrSame(x, y, z + 1, id) ? 16 : 0) | (this.isOpaqueOrSame(x, y, z - 1, id) ? 32 : 0);
         this.box(x, y, z, 0, 0, 0, 1, 0.5, 1, t, mask);

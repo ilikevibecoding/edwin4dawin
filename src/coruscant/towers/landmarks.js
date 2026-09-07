@@ -153,7 +153,7 @@ export function opera(bp, lot, ctx) {
   const { rng, spec } = ctx;
   const w = bp.w, d = bp.d, front = spec.front;
   const style = spec.style;
-  style.wall = B.PLASTER; style.corner = B.CHROME; style.band = B.DURASTEEL_DARK; style.rhythm = 'grid'; style.roof = B.DURASTEEL_DARK;
+  style.wall = B.PLASTER; style.corner = B.CHROME; style.band = B.DURASTEEL_DARK; style.rhythm = 'curtain'; style.period = 4; style.roof = B.DURASTEEL_DARK;
   const alongZ = front === 'N' || front === 'S';
   const T = alongZ ? d : w;                    // depth from the front edge
   const houseDepth = Math.max(16, Math.round(T * 0.4));

@@ -2,19 +2,24 @@
 // every level, floors on the 5-block lattice (slab at 5f, walk level 5f + 1), facade rings per floor, a
 // double-height lobby with the entrance on the lot edge, an optional boulevard-level sky lobby, skybridge stubs,
 // and a crown. Families describe themselves as a spec; see slab.js for the simplest one.
-import { B, BLOCKS } from '../../blocks.js';
+import { B, BLOCKS, SHAPE, WEDGE_DIRS } from '../../blocks.js';
 import { FORCE_AIR } from '../blueprint.js';
 import { PlanFrame, computeLayout, planFloor, cutEntrance, insetLimits } from '../plan.js';
 import { buildCore } from '../core.js';
-import { rectRing, paintRing, paintRoof, paintCrown } from '../facade.js';
+import { rectRing, paintRing, paintRoof, paintCoping, paintCrown, putWedge } from '../facade.js';
 import { hash2 } from '../../rng.js';
 import { planCrown, buildCrown, crownEat, tableLookup, ringFromTable, slab, CROWN_OPTIONS, CROWN_MIN_HEIGHT } from '../crowns.js';
 import { stripPlan, stripRing, contrastStrips } from './strips.js';
+import { paintLandingDeck } from './decks.js';
 
 const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const OUT = { N: [0, -1], S: [0, 1], W: [-1, 0], E: [1, 0] };
+const OPPOSITE = { N: 'S', S: 'N', E: 'W', W: 'E' };
+const DECK_POOL = ['hangar', 'garage', 'lounge'];
 
-// spec: { ext, front, tiers: [{ inset: {l, r, f, b}, f0, f1 }], style, pools, seed, family, door: {x, z},
-//         midDoorF, mask(x, z, tierIndex), crownStyle?, strips?: false,
+// spec: { ext, front, tiers: [{ inset: {l, r, f, b}, f0, f1, shape?, disc?, stalk? }], style, pools, seed, family,
+//         door: {x, z}, midDoorF, mask(x, z, tierIndex), crownStyle?, strips?: false,
+//         env? (towers/envelope.js plan: ledge cadence, landing decks, fins, buttresses, disc undersides),
 //         hooks: { floorOpts(f, tier), poolFor(f, tier), afterTier(tier, yRoof), crown, crownKind } }
 // Towers of 60 blocks or more (bp.lot.kind === 'tower') end in a crown from crowns.js: the stair/lift core is
 // extended through the crown tiers so they are climbable, and their facades get lit vertical strips. Landmarks and
@@ -22,12 +27,22 @@ const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
 export function buildTiered(bp, spec) {
   const { ext, front, style, pools, seed } = spec;
   const hooks = spec.hooks || {};
+  const env = spec.env || null;
   const frame = new PlanFrame(ext, front);
   const layout = computeLayout(frame.Iu, frame.Iv);
   const lim = insetLimits(frame, layout);
   const lot = bp.lot, roomsAt = bp.meta.rooms.length;
   const strips = spec.strips === false ? null : contrastStrips(stripPlan(lot, spec.family), style.wall);
-  if (strips) style.lit = Math.min(style.lit, 0.12);     // the strips carry the night look; few random dots
+  if (strips) {
+    // the strips carry the night look: few lit bands / slits besides them; the 'strip' rhythm's fins follow them
+    style.lit = Math.min(style.lit, style.rhythm === 'ribbon' || style.rhythm === 'curtain' ? 0.22 : 0.12);
+    // white strips: warm palettes light them amber, the others blue-white - always the vertical strip tile (one
+    // unbroken line of light per column, rule 6), never a column of framed panels
+    if (strips.block === B.GLOW_PANEL) strips.block = style.light === 'warm' ? B.LIGHT_STRIP_WARM_V : B.LIGHT_STRIP_V;
+    style.stripPitch = strips.pitch; style.stripPhase = strips.phase; style.stripBlock = strips.block; style.stripsByPlan = true;
+  }
+  if (env && env.ledgeEvery) style.ledgeEvery = env.ledgeEvery;
+  const deckFloors = env && env.deckFace ? env.deckFloors : [];
   // the tallest towers hand their top floors to the crown (crownEat): the family's tiers stop `eat` floors lower
   // and the crown tiers, furnished from the same room library, take their place under a full-size cap
   const crowned = hooks.crown !== false && CROWN_OPTIONS.enabled && lot && lot.kind === 'tower' && (lot.height ?? 0) >= CROWN_MIN_HEIGHT && spec.family !== 'spine';
@@ -68,7 +83,7 @@ export function buildTiered(bp, spec) {
       }
       interior = (x, z) => x >= 0 && z >= 0 && x < bp.w && z < bp.d && m[x * bp.d + z] === 1;
     }
-    return { f0: t.f0, f1: t.f1, clip, ext: text, inside, cellsIn, cellsOut, interior, ring: tbl ? ringFromTable(text, tbl) : rectRing(text), index: i };
+    return { f0: t.f0, f1: t.f1, clip, ext: text, inside, cellsIn, cellsOut, interior, ring: tbl ? ringFromTable(text, tbl) : rectRing(text), index: i, shape: tbl ? (t.shape || 'mask') : 'rect', disc: !!t.disc, stalk: !!t.stalk, inset: { l, r, f: fr, b } };
   });
   const blocks = bp.blocks;
   const nF = tiers[tiers.length - 1].f1 + 1;
@@ -77,28 +92,43 @@ export function buildTiered(bp, spec) {
     const o = hooks.floorOpts ? hooks.floorOpts(f, t) : {};
     if (f <= 1 && t.index === 0) o.lobby = true;
     if (f === nF - 1 && style.signs && nF > 6) o.signs = true;
+    if (t.disc && f === t.f0) o.ledge = true;          // the rim of a disc is a light line (rule 3 / 9)
     return o;
   };
 
-  // 1. slabs, exterior walls (rect tiers now, masked tiers after planning), roofs
+  // 1. slabs, exterior walls (rect tiers now, masked tiers after planning), roofs. Every tier roof ends in a lit rim
+  // (the ring cells of the roof slab) under a corner-block parapet or the terrace railing: every shell change is a
+  // light line around the tower (rubric 18 rule 9).
+  // where the next shell stands on this roof (a disc over its stalk) the roof is that shell's floor - no coping,
+  // parapet or lamp there (dressEnvelope stops the fins under its slab the same way)
+  const within = (t) => (t.inside ? t.inside : (x, z) => x >= t.ext.x0 && x <= t.ext.x1 && z >= t.ext.z0 && z <= t.ext.z1);
   for (const t of tiers) {
     for (let f = t.f0; f <= t.f1; f++) {
       const y = 5 * f;
-      if (t.inside) { const fl = style.floor; for (const base of t.cellsIn) blocks[base + y] = fl; }
+      if (t.inside) {
+        const fl = style.floor; for (const base of t.cellsIn) blocks[base + y] = fl;
+        // a chamfered / rounded podium stands on the full lot: its cut corners are paved like the city's lot tiles
+        if (f === 0 && t.index === 0) for (const base of t.cellsOut) if (!blocks[base]) blocks[base] = B.DURASTEEL_DARK;
+      }
       else { slab(bp, t.ext.x0, t.ext.z0, t.ext.x1, t.ext.z1, y, style.floor); paintRing(bp, t.ring, f, style, seed, floorOpts(f, t)); }
     }
     const yRoof = 5 * (t.f1 + 1);
+    const next = tiers[t.index + 1] || null, covered = next ? within(next) : null;
+    // the setback family's terraces are furnished and railed (balconies, planters); every other shell ends in the
+    // bevelled coping of paintRoof / paintCoping (rule 5), so the tiers read as chamfered steps of a taper
+    const terrace = t.index > 0 && style.railing === B.IRON_BARS && spec.family === 'setback';
     if (t.inside) {
-      if (yRoof < bp.h) { const rf = style.roof; for (const base of t.cellsIn) blocks[base + yRoof] = rf; }
-      for (const c of t.ring) bp.set(c.x, yRoof + 1, c.z, c.corner ? style.corner : style.railing);
-    } else paintRoof(bp, t.ext, yRoof, style, t.index > 0 && style.railing === B.IRON_BARS);
+      if (yRoof < bp.h) { const rf = style.roof, rim = style.ledge || style.band; for (const base of t.cellsIn) blocks[base + yRoof] = rf; for (const c of t.ring) blocks[(c.x * bp.d + c.z) * bp.h + yRoof] = rim; }
+      if (terrace) { for (const c of t.ring) if (!(covered && covered(c.x, c.z))) bp.set(c.x, yRoof + 1, c.z, c.corner ? style.corner : style.railing); }
+      else paintCoping(bp, t.ring, yRoof + 1, style, covered);
+    } else paintRoof(bp, t.ext, yRoof, style, terrace, covered);
   }
 
   // 2. interiors
   const used = new Map();
   for (const t of tiers) for (let f = t.f0; f <= t.f1; f++) {
     const mode = f === 0 ? 'lobby' : f === 1 ? 'gallery' : f === spec.midDoorF ? 'skylobby' : 'normal';
-    const pool = hooks.poolFor ? hooks.poolFor(f, t) : (f <= 1 ? pools.ground : f >= nF - 2 ? pools.top : pools.typical);
+    const pool = hooks.poolFor ? hooks.poolFor(f, t) : (deckFloors.includes(f) ? DECK_POOL : f <= 1 ? pools.ground : f >= nF - 2 ? pools.top : pools.typical);
     planFloor(bp, { frame, layout, clip: t.clip, lvl: 5 * f + 1, style, pools, pool, ctx: { isTop: f === nF - 1, floor: f, family: spec.family }, mode, used, doorU, interior: t.interior });
     if (t.inside) {
       // masked footprint: drop what the planner wrote outside the mask, then paint the ring over it
@@ -114,6 +144,10 @@ export function buildTiered(bp, spec) {
     bp.meta.strips = { pitch: strips.pitch, phase: strips.phase, block: strips.block, faces: strips.faces ? [...strips.faces] : null, fromFloor: strips.f0 };
   }
 
+  // 2c. the envelope dressing: fins past the roof lines, stair-stepped buttresses, protruding lit ledges, glowing
+  // disc undersides and the cantilevered landing decks (docs/rubrics/18_architecture_v2.md rules 5, 9, 13)
+  const arch = dressEnvelope(bp, spec, tiers, env, style, strips, deckFloors);
+
   // 3. crown plan (decides how many extra core floors), core, entrance, sky-lobby door, tier hooks, crown
   const top = tiers[tiers.length - 1];
   const crown = hooks.crown === false ? null : planCrown(bp, { frame, layout, top, nF, eat, family: spec.family, lot, forceStyle: spec.crownStyle });
@@ -125,7 +159,181 @@ export function buildTiered(bp, spec) {
   if (crown) extra = buildCrown(bp, crown, { style, seed, strips, stripRing });
   else if (hooks.crown !== false) extra = paintCrown(bp, top.ext, 5 * nF, style, bp.rng, hooks.crownKind || style.crown);
   relightRooms(bp, tiers, nF, !!crown, roomsAt);
-  return { frame, layout, tiers, nF, doorU, extra, used, lim, crown: crown ? { style: crown.style, tiers: crown.K, height: extra } : null, strips: !!strips };
+  arch.wedges -= settleWedges(bp);
+  // the architecture record the harness audits (rubric 18 rows 2-5): one per blueprint; twin / spine towers keep the
+  // first shaft's record and count the second shaft's tiers in
+  const rec = { envelope: env ? env.kind : 'rect', palette: style.palette || null, rhythm: style.rhythm, ledgeEvery: style.ledgeEvery, decks: arch.decks, deckFace: env ? env.deckFace : null, fins: arch.fins, buttresses: arch.buttresses, wedges: arch.wedges, tiers: tiers.map((t) => ({ f0: t.f0, f1: t.f1, shape: t.shape, masked: !!t.inside, disc: t.disc, ext: { ...t.ext } })) };
+  if (bp.meta.arch) { bp.meta.arch.tiers.push(...rec.tiers); bp.meta.arch.decks += rec.decks; bp.meta.arch.fins += rec.fins; bp.meta.arch.buttresses += rec.buttresses; bp.meta.arch.wedges += rec.wedges; }
+  else bp.meta.arch = rec;
+  return { frame, layout, tiers, nF, doorU, extra, used, lim, crown: crown ? { style: crown.style, tiers: crown.K, height: extra } : null, strips: !!strips, arch: rec };
+}
+
+// Fins, buttresses, ledge lips, disc under-rims and landing decks around the tiers of one shaft. Everything is
+// written outside the exterior walls (inside spec.ext) into air only, so the rooms, the rings and the strips stay
+// as planned; the decks (paintLandingDeck) are the exception: they carve their hangar door into the wall.
+// -> { fins, buttresses, decks } counts
+function dressEnvelope(bp, spec, tiers, env, style, strips, deckFloors) {
+  const out = { fins: 0, buttresses: 0, decks: 0, wedges: 0 };
+  const ext = spec.ext;
+  const ledge = style.ledge || style.band;
+  const wedges = style.wedges || null;          // WEDGE_FACING[tone]: side -> wedge id whose slope faces that side
+  const inExt = (x, z) => x >= ext.x0 && x <= ext.x1 && z >= ext.z0 && z <= ext.z1;
+  const outsideOf = (t) => (t.inside ? (x, z) => !t.inside(x, z) : (x, z) => x < t.ext.x0 || x > t.ext.x1 || z < t.ext.z0 || z > t.ext.z1);
+  // 1. ledge lips: the lit band row of a ledge floor steps one block out of the wall (rule 9: ledges read at 200 blocks)
+  for (const t of tiers) {
+    const outside = outsideOf(t);
+    for (let f = t.f0 + 1; f <= t.f1; f++) {
+      if (!(f > 1 && f % style.ledgeEvery === 0)) continue;
+      const y = 5 * f;
+      for (const c of t.ring) for (const [ox, oz] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+        const x = c.x + ox, z = c.z + oz;
+        if (inExt(x, z) && outside(x, z) && bp.isAir(x, y, z)) bp.set(x, y, z, ledge);
+      }
+    }
+    // 2. disc undersides: a lit rim hangs under the overhanging edge of a disc (rule 3: the undersides glow)
+    if (t.disc && t.index > 0) {
+      const y = 5 * t.f0 - 1;
+      for (const c of t.ring) if (bp.isAir(c.x, y, c.z)) bp.set(c.x, y, c.z, ledge);
+    }
+  }
+  if (!env) return out;
+  // 3. fins: projecting fin columns between the light strips on the inset shells, running 2 blocks past the roof
+  // line (rule 5); one module pitch per tower (rule 7)
+  if (env.fins) {
+    const pitch = Math.max(3, (strips ? strips.pitch : style.period) | 0), phase = strips ? strips.phase : 0;
+    const half = Math.floor(pitch / 2);
+    // the entrance axis stays clear of fins: the sky-lobby door (cutEntrance, 3 wide on the door column of the front
+    // face) is carved after the dressing and would cut a fin's foot from under its cap
+    const door = spec.door, front = spec.front;
+    const onDoorAxis = (c) => !!door && c.face === front && (front === 'N' || front === 'S' ? Math.abs(c.x - door.x) <= 2 : Math.abs(c.z - door.z) <= 2);
+    for (const t of tiers) {
+      if (t.index === 0) continue;
+      const y0 = 5 * t.f0 + 1, yRoof = 5 * (t.f1 + 1), y1 = Math.min(bp.h - 1, yRoof + 2);
+      for (const c of t.ring) {
+        if (c.corner || c.face === 'D' || (((c.along + phase) % pitch) + pitch) % pitch !== half) continue;
+        if (env.deckFace && c.face === env.deckFace) continue;          // the deck side stays clear for the decks
+        if (onDoorAxis(c)) continue;
+        const [ox, oz] = OUT[c.face], x = c.x + ox, z = c.z + oz;
+        if (!inExt(x, z) || !bp.isAir(x, y0, z) || !bp.isAir(x, y0 + 4, z)) continue;
+        for (let y = y0; y <= y1; y++) if (bp.isAir(x, y, z)) bp.set(x, y, z, y === y1 ? (style.stripBlock || B.GLOW_PANEL_BLUE) : style.corner);
+        // the fin ends in a wedge leaning away from the wall: a tapered tip, not a cut-off post (rule 5)
+        if (wedges && y1 + 1 < bp.h && bp.isAir(x, y1 + 1, z)) { putWedge(bp, x, y1 + 1, z, wedges[c.face]); out.wedges++; }
+        // the coping wedge behind the fin would slope into it: a solid post there instead
+        if (wedges && yRoof + 1 < bp.h) { const v = bp.get(c.x, yRoof + 1, c.z); if (v && BLOCKS[v] && BLOCKS[v].shape === SHAPE.WEDGE) bp.set(c.x, yRoof + 1, c.z, style.corner); }
+        out.fins++;
+      }
+    }
+  }
+  // 4. stair-stepped buttresses at the ends of the flat faces of the first shell, standing on the podium terrace:
+  // the column against the wall is three floors high, the next two, the last one (rule 5)
+  if (env.buttress && tiers.length > 1) {
+    const t = tiers[1];
+    const yBase = 5 * t.f0;                     // the podium roof slab the buttress stands on
+    const runs = new Map();
+    for (const c of t.ring) { if (c.corner || c.face === 'D' || c.face === env.deckFace) continue; const r = runs.get(c.face); if (!r) runs.set(c.face, { lo: c, hi: c }); else { if (c.along < r.lo.along) r.lo = c; if (c.along > r.hi.along) r.hi = c; } }
+    for (const [face, r] of runs) {
+      const [ox, oz] = OUT[face];
+      const room = face === 'N' ? t.ext.z0 - ext.z0 : face === 'S' ? ext.z1 - t.ext.z1 : face === 'W' ? t.ext.x0 - ext.x0 : ext.x1 - t.ext.x1;
+      const K = Math.min(3, room);
+      if (K < 2 || r.hi.along - r.lo.along < 6) continue;
+      for (const c of [r.lo, r.hi]) {
+        let placed = false;
+        for (let k = 1; k <= K; k++) {
+          const x = c.x + ox * k, z = c.z + oz * k, yTop = yBase + 5 * (K - k + 1);
+          if (!inExt(x, z) || !bp.isAir(x, yBase + 1, z) || bp.isAir(x, yBase, z)) break;
+          for (let y = yBase + 1; y <= yTop && y < bp.h; y++) if (bp.isAir(x, y, z)) bp.set(x, y, z, y === yTop ? style.corner : style.wall);
+          // every tread carries a wedge sloping away from the wall: the steps read as one raking buttress line
+          if (wedges && yTop + 1 < bp.h && bp.isAir(x, yTop + 1, z)) { putWedge(bp, x, yTop + 1, z, wedges[face]); out.wedges++; }
+          placed = true;
+        }
+        if (placed) out.buttresses++;
+      }
+    }
+  }
+  // 5. cantilevered landing decks off the deck face, from the shell wall out to the lot edge (rule 13)
+  if (env.deckFace && deckFloors.length) {
+    const face = env.deckFace, [ox, oz] = OUT[face];
+    deckFloors.forEach((f, i) => {
+      const t = tiers.find((tt) => f >= tt.f0 && f <= tt.f1);
+      if (!t || t.index === 0) return;
+      // the flat run of the face at this tier, trimmed to ~60% of its length (>= 9 cells) around its centre
+      let lo = Infinity, hi = -Infinity;
+      for (const c of t.ring) if (c.face === face && !c.corner) { if (c.along < lo) lo = c.along; if (c.along > hi) hi = c.along; }
+      if (hi - lo + 1 < 5) return;
+      const want = Math.min(hi - lo + 1, Math.max(9, Math.round((hi - lo + 1) * 0.6)));
+      const a0 = lo + Math.floor((hi - lo + 1 - want) / 2), a1 = a0 + want - 1;
+      const e = t.ext;
+      let rect;
+      if (face === 'S') rect = { x0: e.x0 + a0, x1: e.x0 + a1, z0: e.z1 + 1, z1: ext.z1 };
+      else if (face === 'N') rect = { x0: e.x0 + a0, x1: e.x0 + a1, z0: ext.z0, z1: e.z0 - 1 };
+      else if (face === 'E') rect = { z0: e.z0 + a0, z1: e.z0 + a1, x0: e.x1 + 1, x1: ext.x1 };
+      else rect = { z0: e.z0 + a0, z1: e.z0 + a1, x0: ext.x0, x1: e.x0 - 1 };
+      const depth = ox ? rect.x1 - rect.x0 + 1 : rect.z1 - rect.z0 + 1;
+      if (depth < 4) return;
+      if (paintLandingDeck(bp, rect, 5 * f, OPPOSITE[face], style, { speeder: i % 2 === 0, door: true })) out.decks++;
+    });
+  }
+  // 6. wedge skirts (rule 5, the user's angular blocks): where a shell change leaves a terrace of >= 3 cells, the
+  // foot of the upper wall wears a ring of wedges sloping down and away from it, so with the bevelled coping on the
+  // terrace edge (paintCoping) the setback reads as a chamfered taper instead of a stair; straight faces only (a
+  // chamfer facet has no single outward side), into air standing on the terrace slab with open air in front, never
+  // on the deck side of a deck floor. Last, so the decks and fins have taken their cells.
+  if (wedges) {
+    for (const t of tiers) {
+      if (t.index === 0) continue;
+      const y = 5 * t.f0 + 1;
+      const deckHere = env && env.deckFace && deckFloors.includes(t.f0) ? env.deckFace : null;
+      for (const c of t.ring) {
+        if (c.corner || c.face === 'D' || c.face === deckHere) continue;
+        const [ox, oz] = OUT[c.face], x = c.x + ox, z = c.z + oz;
+        if (!inExt(x, z) || !bp.isAir(x, y, z) || bp.isAir(x, y - 1, z) || !inExt(x + ox, z + oz) || !bp.isAir(x + ox, y, z + oz)) continue;
+        putWedge(bp, x, y, z, wedges[c.face]);
+        out.wedges++;
+      }
+    }
+    // the copings laid with the roofs count too
+    for (const t of tiers) for (const c of t.ring) { const v = bp.get(c.x, 5 * (t.f1 + 1) + 1, c.z); if (v && BLOCKS[v] && BLOCKS[v].shape === SHAPE.WEDGE) out.wedges++; }
+  }
+  out.decks = out.decks | 0;
+  return out;
+}
+
+// Every wedge stands on a block and slopes into open air (rubric 18 row 6). The dressing checks both when it lays a
+// wedge, but later passes carve and furnish: a skybridge vestibule cuts a fin's foot from under its cap, a terrace
+// planter or a core wall lands in front of a skirt wedge. This sweep runs after them and clears the wedges that lost
+// their footing or their view (explicit air, like the carve that undid them). Without a region it visits the cells
+// putWedge noted on the blueprint (bp.wedgeCells) and clears the note; with one (a skybridge stub's surroundings) it
+// scans that box. Returns the number cleared.
+let WEDGE_OUT = null;      // block id -> [dx, dz] of the slope's outward side, built on first use (BLOCKS is filled at init)
+export function settleWedges(bp, region = null) {
+  if (!WEDGE_OUT) { WEDGE_OUT = new Map(); for (let id = 0; id < BLOCKS.length; id++) { const d = BLOCKS[id]; if (d && d.shape === SHAPE.WEDGE) WEDGE_OUT.set(id, [WEDGE_DIRS[d.wedge].dx, WEDGE_DIRS[d.wedge].dz]); } }
+  if (!WEDGE_OUT.size) return 0;
+  const blocks = bp.blocks, h = bp.h, d = bp.d;
+  let cleared = 0;
+  const settle = (x, y, z, k) => {
+    if (y < 1) return;
+    const out = WEDGE_OUT.get(blocks[k]);
+    if (!out) return;
+    const below = blocks[k - 1];
+    const front = bp.get(x + out[0], y, z + out[1]);
+    const blocked = front !== 0 && front !== FORCE_AIR && BLOCKS[front] && BLOCKS[front].opaque;
+    if (below === 0 || below === FORCE_AIR || blocked) { blocks[k] = FORCE_AIR; cleared++; }
+  };
+  if (!region) {
+    const cells = bp.wedgeCells;
+    if (!cells) return 0;
+    for (const k of cells) settle((k / (d * h)) | 0, k % h, ((k / h) | 0) % d, k);
+    cells.length = 0;
+    return cleared;
+  }
+  const x0 = Math.max(0, region.x0), x1 = Math.min(bp.w - 1, region.x1);
+  const z0 = Math.max(0, region.z0), z1 = Math.min(d - 1, region.z1);
+  const y0 = Math.max(1, region.y0), y1 = Math.min(h - 1, region.y1);
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+    const base = (x * d + z) * h;
+    for (let y = y0; y <= y1; y++) settle(x, y, z, base + y);
+  }
+  return cleared;
 }
 
 // Rooms that can have lost their light after the planner furnished them: under a setback or a crown tier the upper
@@ -217,5 +425,10 @@ export function bridgeStubs(bp, lot, cityLayout, res, style) {
     }
     put(wallAt, y + 3, 0, B.GLOW_PANEL);
     put(wallAt, y + 3, -1, B.GLOW_PANEL_BLUE); put(wallAt, y + 3, 1, B.GLOW_PANEL_BLUE);
+    // the carve may have cut a fin from under its wedge cap or walled a skirt wedge in: settle the wedges around it
+    const lo = Math.min(a0, wallAt + dirIn * 2) - 1, hi = Math.max(a1, wallAt + dirIn * 2) + 1;
+    const region = (side === 'E' || side === 'W') ? { x0: lo, x1: hi, z0: c - 3, z1: c + 3, y0: y - 1, y1: y + 4 } : { x0: c - 3, x1: c + 3, z0: lo, z1: hi, y0: y - 1, y1: y + 4 };
+    const cleared = settleWedges(bp, region);
+    if (cleared && bp.meta.arch) bp.meta.arch.wedges -= cleared;
   }
 }
