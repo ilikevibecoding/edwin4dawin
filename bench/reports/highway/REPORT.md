@@ -109,8 +109,9 @@ everything sits on the pavement it was generated from) and lays out, per ~1 km c
 - **From the air (round 8)**: the stays and arch hangers keep a 0.5 opacity floor under the 1.75 px minimum width
   (`aGlow = -1`; a 14 cm stay at 1 km covered a twentieth of a pixel and the cable-stayed spans stood cable-less in
   every distant view), stays 18 cm; red aviation **beacons** on every pylon leg top, lit dots to 5 km, the steel glow
-  tinted by the member's colour; **armoured expansion joints** (pale edge plates round a dark seal, 0.5 m over every
-  pier, 0.7 m at the abutments) instead of dark strips that vanished on the dark asphalt; **inlet grates** with damp
+  tinted by the member's colour; **armoured expansion joints** (pale edge plates round a dark seal, 0.8 m over every
+  pier, 1.0 m at the abutments — 0.5 / 0.7 m and a shade darker in round 8 read as faint lines from the 45 m chase
+  camera) instead of dark strips that vanished on the dark asphalt; **inlet grates** with damp
   rings decaled over every scupper (15 k + 7.5 m) in both gutters; **lamp pools** on the deck at night from the
   alternating 45 m lamp row, `uLampGlow` on the bridge concrete — a lit causeway is a string of pools from the air.
 - Kit exports for the highway module (`Soup`, `Frame`, `Rgb`, `MIN_WIDTH_VERT`, `GLSL_AA_LINE`, `STEEL_ALPHA_FRAG`,

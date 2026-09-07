@@ -244,8 +244,8 @@ const CONCRETE_FRAG = /* glsl */ `
     float sc = abs(fract((along - 7.5) / 15.0) - 0.5) * 15.0;
     float gutter = abs(xm) - (width * 0.5 - 0.32);
     float grate = aaLine(sc, 0.3, fwA) * aaLine(gutter, 0.2, fwX);
-    float damp = exp(-pow(sc / 1.2, 2.0)) * exp(-pow(gutter / 0.7, 2.0));
-    conc *= 1.0 - 0.55 * grate - 0.12 * damp;
+    float damp = exp(-pow(sc / 1.6, 2.0)) * exp(-pow(gutter / 1.0, 2.0));
+    conc *= 1.0 - 0.55 * grate - 0.18 * damp;
     shoulder *= 1.0 - 0.15 * joint - 0.1 * smoothstep(0.6, 0.75, fbm3(vWorldPosR.xz * 0.03 + 8.0));
     conc = mix(conc, shoulder, onShoulder);
     // markings sized to read from a 45 m chase camera: 30 cm white edge lines, 30 cm lane dashes (3 m on / 6 m off),
@@ -331,7 +331,7 @@ function createConcreteMaterial(concrete: THREE.Material, lampGlow: THREE.IUnifo
       // the lamp pools on the deck (the warm tint of the highway's pools, highway.ts), only while the lamps are lit
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.82, 0.55) * deckPoolTint * (deckPool * uLampGlow);');
   };
-  mat.customProgramCacheKey = () => 'bridge-concrete-v8';
+  mat.customProgramCacheKey = () => 'bridge-concrete-v9';
   return mat;
 }
 
@@ -413,7 +413,7 @@ function createSteelMaterial(steel: THREE.Material): { mat: THREE.MeshStandardMa
  *  asphalt at every pier, the rhythm that tells a bridge deck from a road. */
 function armouredJoint(steel: Soup, f: Frame, cw: number, yaw: number, w: number): void {
   steel.box(f.x, f.y + 0.03, f.z, cw, 0.035, w, yaw, 0, S_ARMOUR, false);
-  steel.box(f.x, f.y + 0.03, f.z, cw, 0.045, w * 0.28, yaw, 0, S_DARK, false);
+  steel.box(f.x, f.y + 0.03, f.z, cw, 0.045, w * 0.22, yaw, 0, S_DARK, false);
 }
 
 /** Lamp glow 0..1 for the key light: on through dusk (sun under ~10 deg) and whenever the key light is the moon. */
@@ -781,7 +781,7 @@ const C_DECK: Rgb = [1, 1, 1];
 /** Steel tints. */
 const S_PLAIN: Rgb = [1, 1, 1];
 const S_DARK: Rgb = [0.3, 0.3, 0.32];        // expansion joint seals
-const S_ARMOUR: Rgb = [0.78, 0.78, 0.8];     // joint edge plates, polished by the traffic
+const S_ARMOUR: Rgb = [0.86, 0.86, 0.88];     // joint edge plates, polished by the traffic
 const S_HEAD: Rgb = [0.92, 0.9, 0.84];       // lamp luminaires
 const S_BEACON: Rgb = [0.95, 0.09, 0.06];    // aviation obstruction beacons on the pylon tops (their glow is red)
 const S_NAV_GREEN: Rgb = [0.10, 0.92, 0.30]; // mid-span channel lights
@@ -1139,13 +1139,13 @@ export function buildBridges(map: WorldMap, _roadMaterial: THREE.Material, concr
         P.proxy.box(fm.x, fm.y - g - 1.7, fm.z, W * 0.94, 1.5, s1 - s - 1.5, yawAt(fm), 0, C_PROXY_SOFFIT, false, NO_ROAD);
       }
       // expansion joint across the carriageway over every pier
-      armouredJoint(P.steel, f, cw, yaw, 0.5);
+      armouredJoint(P.steel, f, cw, yaw, 0.8);
     }
     // abutment joints: the approach-slab finger joint where the road runs onto each end of the deck
     for (const s of [0.45, total - 0.45]) {
       const P = parts[chunkOf(s)];
       const f = frameAt(s);
-      armouredJoint(P.steel, f, cw, yawAt(f), 0.7);
+      armouredJoint(P.steel, f, cw, yawAt(f), 1.0);
     }
 
     // ------------------------------------------------------------ main span structure

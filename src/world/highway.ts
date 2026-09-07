@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { BridgeSpec, RoadClass, Vec2, WorldMap } from './map';
 import { chainCross, chainFrame, frameAt as roadFrameAt, type RoadChain, type RoadGraph, type RoadSegment } from './roads';
-import { clamp, lerp } from '../core/noise';
+import { clamp, lerp, smoothstep } from '../core/noise';
 import { GLSL_NOISE } from '../render/shaders/common.glsl';
 import { F_BARRIER_H, F_BARRIER_PROFILE, GLSL_AA_LINE, MIN_WIDTH_VERT, STEEL_ALPHA_FRAG, Soup, lampGlowFor, landingSurface, terrainAt, type Frame, type Rgb } from './bridges';
 import { ALL_CASCADES, MAX_CASCADES, ViewCull, cascadeIsFine, layerMask, maskCasts, type CasterClass } from './culling';
@@ -87,6 +87,8 @@ const C_VERGE_GRASS: Rgb = [0.19, 0.32, 0.12];   // mown, irrigated verge: a sha
                                                  // material's 0xb8b4aa base), not the bright band it was: from 200-1500 m it must read as a strip of
                                                  // the same grass as the lots, kept, not as a neon ribbon
 const C_VERGE_SAND: Rgb = [0.74, 0.66, 0.52];    // packed sand and shell where the highway crosses the beaches
+const C_VERGE_SCRUB: Rgb = [0.40, 0.34, 0.16];   // unwatered verge on the sandy shore fringe: the terrain's dry-grass khaki (r > g: the
+                                                 // shader treats it as a bare cover - no mower stripes, swale or irrigation patches)
 const S_GALV: Rgb = [0.56, 0.58, 0.60];       // galvanised guardrail, posts, gantry steel (satin, blotchy in the shader)
 const S_POLE: Rgb = [0.46, 0.47, 0.49];       // weathered galvanised lighting columns (read against the pale pavement from the air)
 const S_DARK: Rgb = [0.30, 0.31, 0.33];       // sign backs, brackets
@@ -1200,6 +1202,16 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       const cuts = new Set<number>(stations(c, 0, c.total));
       for (let k = 1; k < nChunks; k++) cuts.add(k * chunkLen);
       const ss = [...cuts].sort((p, q) => p - q);
+      /** the cover of a verge point: sand on the beaches and at the waterline; on the sandy shore fringe - the terrain's
+       *  own rule (terrain.ts `sandy`: low ground within 30-70 m of the coast, exposed, not under canopy), where the
+       *  ground is pale sand under dry tufts - the dry khaki scrub of an unwatered verge rather than a mown lawn (on
+       *  the tortuga spit the irrigated green ran as a neon band between beach sand and sea grape); mown grass inland */
+      const toneAt = (x: number, z: number, g: number): Rgb => {
+        if (map.zoneAt(x, z) === 2 || g < 1.2) return C_VERGE_SAND;
+        const canopy = Math.pow(smoothstep(0.3, 0.82, map.vegAt(x, z)), 2);
+        const sandy = (1 - smoothstep(1.0, 2.8, g)) * smoothstep(0.06, 0.28, map.exposureAt(x, z)) * (1 - 0.55 * canopy) * (1 - smoothstep(30, 70, -map.coastAt(x, z)));
+        return sandy > 0.6 ? C_VERGE_SAND : sandy > 0.25 ? C_VERGE_SCRUB : C_VERGE_GRASS;
+      };
       /** the rows of one station: positions from the pavement edge outward (fewer where the ground goes under water) */
       const rowsAt = (s: number): { p: THREE.Vector3; tone: Rgb }[] => {
         const f = frameAt(c, s);
@@ -1218,7 +1230,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
           const under = k > 0 && inRoad(x, z, 0.4) ? 0.45 : 0.05;
           const y = k === 0 ? surfaceAt(c, s, a) - 0.05 : clamp(g + ROAD_LIFT - under, yPrev - 0.35 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]), yPrev + 0.12 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]));
           yPrev = y;
-          out.push({ p: new THREE.Vector3(x, y, z), tone: map.zoneAt(x, z) === 2 || g < 1.2 ? C_VERGE_SAND : C_VERGE_GRASS });
+          out.push({ p: new THREE.Vector3(x, y, z), tone: toneAt(x, z, g) });
         }
         return out;
       };

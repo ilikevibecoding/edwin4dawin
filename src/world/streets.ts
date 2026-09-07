@@ -712,6 +712,8 @@ export class Streets {
   private readonly smallBuilds = new Map<number, KitSoup>();
   counts = { runs: 0, corners: 0, signals: 0, stops: 0, lamps: 0, trees: 0, medians: 0, medianLength: 0, medianPalms: 0, bufferPlants: 0, awnings: 0, signs: 0, newsboxes: 0, mailboxes: 0, racks: 0, cans: 0, walkTriangles: 0, kitTriangles: 0, cells: 0, rejected: 0, lots: 0, plazas: 0, cars: 0, curbCars: 0, planters: 0, paveTriangles: 0, yardTriangles: 0, yardFarTriangles: 0, kitFarTriangles: 0 };
   private readonly roads: RoadIndex;
+  /** the highway and causeway carriageways alone: no sidewalk is laid on them (`highwayCuts`) */
+  private readonly fastRoads: RoadIndex;
   /** debug: `?dbg=nopools` turns the lamp pools off */
   poolsEnabled = true;
   /** signal pole footings per signalised node (the corner lamps keep clear of them) */
@@ -726,6 +728,7 @@ export class Streets {
     this.kitMaterial = createKitMaterial(this.uniforms);
     this.materials.push(this.walkMaterial, this.kitMaterial);
     this.roads = new RoadIndex(graph.chains);
+    this.fastRoads = new RoadIndex(graph.chains.filter((c) => c.cls === 'highway' || c.cls === 'causeway'));
     for (const f of facades) {
       const k = cellKey(f.x, f.z, FACADE_G);
       let l = this.facadeCells.get(k);
@@ -793,6 +796,10 @@ export class Streets {
       else if (atEnd) gaps.push([list[0], Infinity]);
       else gaps.push([cn.s - cn.hMinus - 1, cn.s + cn.hPlus + 1]);
     }
+    // no sidewalk on a highway's pavement: the highways share no node with the grid, so the district streets'
+    // runs continued straight across both carriageways of the coastal highway and the frontage street's near
+    // sidewalk lay on its shoulder for 1.2 km (highway agent, bench/reports/highway/DEFECTS.md row 56)
+    for (const g of this.highwayCuts(chain, side)) gaps.push(g);
     gaps.sort((a, b) => a[0] - b[0]);
     const runs: Run[] = [];
     let s = chain.s0;
@@ -813,6 +820,26 @@ export class Streets {
     }
     if (s < end) push(s, end);
     return runs;
+  }
+
+  /** The stretches of one side of a chain whose sidewalk band (kerb face to 3 m out) would lie on a highway or
+   *  causeway pavement, sampled every 2 m, as gaps with a 1.5 m margin: the walk stops at the highway's edge the
+   *  way it stops at a curb return. */
+  private highwayCuts(chain: RoadChain, side: 1 | -1): [number, number][] {
+    if (chain.cls === 'highway' || chain.cls === 'causeway') return [];
+    const cross = this.crossOf(chain);
+    const out: [number, number][] = [];
+    let open = -1;
+    for (let s = chain.s0; ; s += 2) {
+      const sc = Math.min(s, chain.s1);
+      const f = frameAt(chain, cross, sc);
+      const hit = [0.15, 3.0].some((a) => this.fastRoads.distance(f.x + f.cx * side * (chain.hw + a), f.z + f.cz * side * (chain.hw + a)) < 0);
+      if (hit) { if (open < 0) open = sc; }
+      else if (open >= 0) { out.push([open - 1.5, sc - 2 + 1.5]); open = -1; }
+      if (sc >= chain.s1) break;
+    }
+    if (open >= 0) out.push([open - 1.5, chain.s1 + 1.5]);
+    return out;
   }
 
   private readonly crossCache = new Map<RoadChain, Vec2[]>();
