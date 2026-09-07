@@ -281,6 +281,8 @@ function greatHall(bp, rng) {
     statue(bp, x0 + 5, y0, z + 4, [1, 0]); statue(bp, x1 - 5, y0, z + 4, [-1, 0]);
     lamp(bp, x0 + 3, y0, z + 4, 3, B.LANTERN); lamp(bp, x1 - 3, y0, z + 4, 3, B.LANTERN);
     bp.spot(x0 + 8, y0, z + 4, 'stand'); bp.spot(x1 - 8, y0, z + 4, 'stand');
+    // visitors' benches against the walls between the columns: the threshold is where petitioners wait to be met
+    for (const x of [x0 + 1, x1 - 1]) for (let k = 1; k <= 3; k++) { bp.set(x, y0, z + k, B.STONE_BRICK_SLAB); bp.spot(x, y0, z + k, 'seat'); }
   }
   // banners (wool) hanging high between the columns
   for (let z = z0 + 9; z <= z1 - 5; z += 8) for (const x of [x0 + 1, x1 - 1]) { bp.fill(x, y0 + 10, z, x, y0 + 16, z, (z >> 3) % 2 ? B.BLUE_WOOL : B.WHITE_WOOL); bp.set(x, y0 + 17, z, TRIM); }
@@ -499,7 +501,9 @@ function dojo(bp, rng, x0, z0, x1, z1, y, side) {
   const cu = r.cu, cv = Math.floor(r.back / 2);
   for (let u = 0; u < r.w; u++) for (let v = 0; v <= r.back; v++) { const d = Math.hypot(u - cu, v - cv); if (d > 2.2 && d <= 3.2) r.putRaw(u, -1, v, B.RED_WOOL); }
   for (let u = 1; u < r.w - 1; u += 2) { r.put(u, 0, r.back, B.SHELF); r.put(u, 1, r.back, B.IRON_BARS); }
-  for (let v = 2; v <= r.back - 1; v += 2) { if (r.put(0, 0, v, B.WHITE_WOOL)) r.spot(0, v, 'seat'); }
+  for (let v = 2; v <= r.back - 1; v += 2) r.seat(0, v, B.STONE_BRICK_SLAB);                             // the kneeling row (cushions an NPC can sit on)
+  // training remotes hovering on their posts along the front row, clear of the sparring circle
+  for (let u = 3; u < r.w - 3; u += 6) if (Math.hypot(u - cu, 2 - cv) > 3.5 && r.put(u, 0, 2, B.IRON_BARS)) r.put(u, 1, 2, B.GLOW_PANEL_BLUE);
   r.put(r.w - 1, 0, 2, B.CONSOLE); r.work(r.w - 2, 2, 'instructor');
   r.lantern(1, 1); r.lantern(r.w - 2, r.back - 1);
   r.ceilingLights(4);
@@ -613,16 +617,20 @@ function tier2(bp, rng) {
 function tier3(bp, rng) {
   const floors = [56, 51, 46];   // top-down (see wings)
   const c0 = CENTRAL.x0 - 5, c1 = CENTRAL.x1 + 5;
+  // the N and S arms of the ring run the full width of the north and south room bands (a0..a1), so the bands' corner
+  // rooms open onto a corridor too; the W and E bands start below the arms (c0 + 5 .. c1 - 5) so no room of theirs
+  // stands where a corner room's door opens (the walls of a later room used to seal six rooms per tier)
+  const a0 = c0 - 10, a1 = c1 + 10;
   for (const fy of floors) {
     // ring corridor around the central spire
-    for (const [ax0, az0, ax1, az1] of [[c0, c0, c1, c0 + 3], [c0, c1 - 3, c1, c1], [c0, c0, c0 + 3, c1], [c1 - 3, c0, c1, c1]]) {
+    for (const [ax0, az0, ax1, az1] of [[a0, c0, a1, c0 + 3], [a0, c1 - 3, a1, c1], [c0, c0, c0 + 3, c1], [c1 - 3, c0, c1, c1]]) {
       bp.fill(ax0, fy - 1, az0, ax1, fy - 1, az1, PLATE); bp.fill(ax0, fy, az0, ax1, fy + 3, az1, AIR); bp.fill(ax0, fy + 4, az0, ax1, fy + 4, az1, STONE2);
       for (let x = ax0 + 2; x <= ax1; x += 4) for (let z = az0 + 2; z <= az1; z += 4) bp.set(x, fy + 4, z, GLOW);
     }
     // rooms in the four blocks around the corridor
     const blocks = [
       [T3.x0 + 2, T3.z0 + 2, T3.x1 - 2, c0, 'S'], [T3.x0 + 2, c1, T3.x1 - 2, T3.z1 - 2, 'N'],
-      [T3.x0 + 2, c0, c0, c1, 'E'], [c1, c0, T3.x1 - 2, c1, 'W'],
+      [T3.x0 + 2, c0 + 5, c0, c1 - 5, 'E'], [c1, c0 + 5, T3.x1 - 2, c1 - 5, 'W'],
     ];
     const blocked = (rx0, rz0, rx1, rz1) => CORNERS.some(([cx, cz]) => rx1 >= cx - 1 && rx0 <= cx + SPIRE && rz1 >= cz - 1 && rz0 <= cz + SPIRE)
       || (rz1 > c1 && ((rx1 >= 73 && rx0 <= 80) || (rx1 >= 87 && rx0 <= 94)));

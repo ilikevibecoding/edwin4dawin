@@ -6,19 +6,30 @@ export function defRoom(name, opts, fn) {
   return ROOMS[name];
 }
 
+// a pool's templates (names resolved, unknown and special ones dropped), remembered per pool array: the planner
+// picks a room for every one of a tower's hundred-odd rooms from the same few pools
+const RESOLVED = new WeakMap();
+function templatesOf(pool) {
+  let list = RESOLVED.get(pool);
+  if (!list) {
+    list = [];
+    for (const name of pool) { const t = ROOMS[name]; if (t && !t.special) list.push(t); }
+    RESOLVED.set(pool, list);
+  }
+  return list;
+}
+
 // Picks a template from `pool` (names) that fits a w x d interior, discouraging repeats via `used` counts.
 export function pickRoom(pool, w, d, rng, used = null) {
   let total = 0;
-  const cands = [];
-  for (const name of pool) {
-    const t = ROOMS[name];
-    if (!t || t.special) continue;
+  const cands = [], weights = [];
+  for (const t of templatesOf(pool)) {
     if (w < t.minW || d < t.minD || w > t.maxW || d > t.maxD) continue;
-    const wgt = t.weight / (1 + 2 * (used ? (used.get(name) || 0) : 0));
-    cands.push([t, wgt]); total += wgt;
+    const wgt = t.weight / (1 + 2 * (used ? (used.get(t.name) || 0) : 0));
+    cands.push(t); weights.push(wgt); total += wgt;
   }
   if (!cands.length) return ROOMS.storage;
   let r = rng.next() * total;
-  for (const [t, wgt] of cands) { r -= wgt; if (r <= 0) return t; }
-  return cands[cands.length - 1][0];
+  for (let i = 0; i < cands.length; i++) { r -= weights[i]; if (r <= 0) return cands[i]; }
+  return cands[cands.length - 1];
 }

@@ -83,7 +83,7 @@ defRoom('workshop', { minW: 5, minD: 4, tags: ['industry'] }, (r, rng) => {
   for (let v = 2; v < r.back; v += 2) { r.put(0, 0, v, B.CRATE); if (v % 4 === 2) r.put(0, 1, v, B.CRATE); }
   r.put(r.w - 1, 0, 2, B.IRON_BLOCK); r.put(r.w - 1, 0, 3, B.BARREL);
   if (r.w >= 7 && r.d >= 6) { r.put(r.cu, 0, 3, B.IRON_BLOCK); r.put(r.cu, 1, 3, B.CHROME); }
-  for (let u = 1; u < r.w - 1; u += 2) r.put(u, 2, r.back, B.IRON_BARS);
+  for (let u = 1; u < r.w - 1; u += 2) for (let l = 2; l < r.h; l++) r.put(u, l, r.back, B.IRON_BARS);   // hoist chains, hung from the ceiling
   r.work(1, r.back - 1, 'mechanic'); r.work(r.w - 2, r.back - 1, 'mechanic'); r.spot(r.cu, 2);
   r.ceilingLights(4);
 });

@@ -22,6 +22,8 @@ import * as ROOMS from './rooms/index.js';
 import { list as roomList } from './rooms/index.js';
 import { B } from '../blocks.js';
 import { landmarkFor } from './landmarks/index.js';
+import { applyProgram } from './programs/apply.js';
+import './rooms/programs.js';   // registers the program room templates (own registry, see rooms/programs.js)
 
 export { FAMILIES, LANDMARKS, roomList };
 export { stampBlueprint } from './blueprint.js';
@@ -82,6 +84,8 @@ export function buildBlueprint(lot, layout) {
   const ctx = { nF, height, rng, style, pools, midDoorF, spec };
   const res = buildFamily(fam, bp, lot, ctx) || { nF: 0, extra: 0 };
   if (lot.kind === 'tower' && layout) bridgeStubs(bp, lot, layout, res, style);
+  // the building program (src/coruscant/programs): signature rooms refurnished in place before the meta is finished
+  if (lot.kind === 'tower') applyProgram(bp, lot, layout, { style, front });
   finishMeta(bp, lot, fam, res, ground, front, ldoor, midDoorF);
   return bp.export();
 }
@@ -99,6 +103,8 @@ export function buildSignature(lm, lot, layout) {
   lm.build(bp, lot, { rng, layout, levels, rooms: ROOMS, B, seed: layout ? layout.seed : (lot.seed ?? 0) });
   const m = bp.meta, walk = ground + 1;
   const front = lot.front || (lot.door && lot.door.side) || 'S';
+  // the landmark's program: its own rooms satisfy the spec by kind pattern, generic rooms are refurnished for the rest
+  applyProgram(bp, lot, layout, { front, landmark: true, noBuild: lot.family === 'senate' });
   m.id = lot.id;
   m.kind = 'landmark';
   m.family = lot.family;
@@ -136,6 +142,8 @@ function finishMeta(bp, lot, fam, res, ground, front, ldoor, midDoorF) {
   m.doors = [{ x: lot.x0 + ldoor.x, y: walk, z: lot.z0 + ldoor.z, side: front }];
   if (res.doors) for (const dd of res.doors) m.doors.push({ x: lot.x0 + dd.x, y: walk, z: lot.z0 + dd.z, side: 'arcade' });
   if (res.houseDoor) m.doors.push({ x: lot.x0 + res.houseDoor.x, y: walk, z: lot.z0 + res.houseDoor.z, side: 'plaza' });
+  if (m.program && m.program.serviceDoor) { const s = m.program.serviceDoor; m.doors.push({ x: s.x, y: s.y, z: s.z, side: 'service' }); }
+  if (m.program && m.program.streetDoor) { const s = m.program.streetDoor; m.doors.push({ x: s.x, y: s.y, z: s.z, side: s.side }); }   // a program room's own street door (variant-1 hosts)
   if (!m.lobby) m.lobby = { x: inn.x, y: walk, z: inn.z };
   m.floors = [];
   for (let f = 0; f < (res.nF || 0); f++) m.floors.push(ground + 5 * f + 1);
@@ -143,17 +151,33 @@ function finishMeta(bp, lot, fam, res, ground, front, ldoor, midDoorF) {
   pruneMeta(bp);
 }
 
+// Block classes for pruneMeta, tabulated once per block set: PASS[id] = an NPC can occupy the cell (air, force-air,
+// a non-solid block, a slab or a bed), STAND[id] = the cell carries an NPC standing on it (a solid block or liquid;
+// an unknown id counts as solid, air and force-air do not).
+let PASS = null, STAND = null;
+function blockClasses() {
+  if (PASS && BLOCKS[1]) return;   // tabulated after initBlocks() filled the block set
+  PASS = new Uint8Array(256); STAND = new Uint8Array(256);
+  for (let id = 0; id < 256; id++) {
+    const b = BLOCKS[id];
+    if (id === 0 || id === 255) { PASS[id] = 1; STAND[id] = 0; continue; }
+    PASS[id] = b ? (!b.solid || b.shape === SHAPE.SLAB || b.shape === SHAPE.BED ? 1 : 0) : 0;
+    STAND[id] = b ? (b.solid || b.shape === SHAPE.LIQUID ? 1 : 0) : 1;
+  }
+}
+
 // Drops NPC spots that ended up inside walls or over air (masked corners, rotunda cuts, vestibules).
 function pruneMeta(bp) {
-  const m = bp.meta;
-  const passable = (id) => { if (id === 0 || id === 255) return true; const b = BLOCKS[id]; return b ? (!b.solid || b.shape === SHAPE.SLAB || b.shape === SHAPE.BED) : false; };
-  const standable = (id) => { if (id === 0 || id === 255) return false; const b = BLOCKS[id]; return b ? (b.solid || b.shape === SHAPE.LIQUID) : true; };
+  blockClasses();
+  const m = bp.meta, blocks = bp.blocks, W = bp.w, H = bp.h, D = bp.d, lx0 = bp.lot.x0, lz0 = bp.lot.z0, y0 = bp.y0;
+  // blocks are indexed (x*d + z)*h + y: a column's y run is contiguous, so here/above/below are neighbours
   const ok = (p) => {
-    const x = p.x - bp.lot.x0, y = p.y - bp.y0, z = p.z - bp.lot.z0;
-    if (!bp.inside(x, y, z)) return false;
-    const here = bp.get(x, y, z), above = bp.get(x, y + 1, z), below = bp.get(x, y - 1, z);
-    if (!passable(here) || !passable(above)) return false;
-    return standable(below) || (here !== 0 && here !== 255);
+    const x = p.x - lx0, y = p.y - y0, z = p.z - lz0;
+    if (x < 0 || y < 0 || z < 0 || x >= W || y >= H || z >= D) return false;
+    const i = (x * D + z) * H + y;
+    const here = blocks[i], above = y + 1 < H ? blocks[i + 1] : 0, below = y > 0 ? blocks[i - 1] : 0;
+    if (!PASS[here] || !PASS[above]) return false;
+    return STAND[below] === 1 || (here !== 0 && here !== 255);
   };
   m.spots = m.spots.filter(ok);
   m.work = m.work.filter(ok);
@@ -164,16 +188,22 @@ function pruneMeta(bp) {
   // includes the walls, which is what the lighting/furnishing harness measures).
   const rooms = [];
   for (const r of m.rooms) {
-    const y = r.y - bp.y0;
-    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, n = 0, total = 0;
-    for (let wx = r.x; wx < r.x + r.w; wx++) for (let wz = r.z; wz < r.z + r.d; wz++) {
-      const x = wx - bp.lot.x0, z = wz - bp.lot.z0;
-      total++;
-      if (!bp.inside(x, y, z) || !passable(bp.get(x, y, z)) || !passable(bp.get(x, y + 1, z)) || !standable(bp.get(x, y - 1, z))) continue;
-      n++; if (wx < x0) x0 = wx; if (wx > x1) x1 = wx; if (wz < z0) z0 = wz; if (wz > z1) z1 = wz;
+    const y = r.y - y0, total = r.w * r.d;
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, n = 0;
+    if (y >= 1 && y < H) {   // y = 0 has no slab below it; above the top layer reads as air
+      const xa = Math.max(r.x, lx0), xb = Math.min(r.x + r.w - 1, lx0 + W - 1), za = Math.max(r.z, lz0), zb = Math.min(r.z + r.d - 1, lz0 + D - 1);
+      const hasAbove = y + 1 < H;
+      for (let wx = xa; wx <= xb; wx++) {
+        const col = (wx - lx0) * D;
+        for (let wz = za; wz <= zb; wz++) {
+          const i = (col + (wz - lz0)) * H + y;
+          if (!PASS[blocks[i]] || (hasAbove && !PASS[blocks[i + 1]]) || !STAND[blocks[i - 1]]) continue;
+          n++; if (wx < x0) x0 = wx; if (wx > x1) x1 = wx; if (wz < z0) z0 = wz; if (wz > z1) z1 = wz;
+        }
+      }
     }
     if (!n) continue;
-    rooms.push({ ...r, floor: { x: x0, z: z0, w: x1 - x0 + 1, d: z1 - z0 + 1, frac: +(n / Math.max(1, total)).toFixed(2) } });
+    rooms.push({ ...r, floor: { x: x0, z: z0, w: x1 - x0 + 1, d: z1 - z0 + 1, frac: Math.round((100 * n) / Math.max(1, total)) / 100 } });   // the share of the rectangle with a floor, to two decimals
   }
   m.rooms = rooms;
 }

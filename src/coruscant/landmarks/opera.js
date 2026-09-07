@@ -58,10 +58,15 @@ function patternFloor(bp, x0, z0, x1, z1, y, a = PLATE, b = STRIPE, period = 6) 
 }
 function doorway(bp, x0, z0, x1, z1, y, h = 3, frame = TRIM, lintel = GLOW) {
   bp.fill(x0, y, z0, x1, y + h - 1, z1, AIR);
+  // the threshold: a wall line between two carved rooms has no floor plate of its own (the stage-house rooms over
+  // the scenery workshop), so the door cells get one wherever nothing stands under them
+  for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) if (bp.isAir(x, y - 1, z)) bp.set(x, y - 1, z, frame);
   if (z0 === z1) { bp.fill(x0 - 1, y, z0, x0 - 1, y + h, z0, frame); bp.fill(x1 + 1, y, z0, x1 + 1, y + h, z0, frame); bp.fill(x0, y + h, z0, x1, y + h, z0, lintel); }
   else { bp.fill(x0, y, z0 - 1, x0, y + h, z0 - 1, frame); bp.fill(x0, y, z1 + 1, x0, y + h, z1 + 1, frame); bp.fill(x0, y + h, z0, x0, y + h, z1, lintel); }
 }
 function lampPost(bp, x, y, z, h = 2, id = B.CITY_LAMP) { bp.fill(x, y, z, x, y + h - 1, z, BARS); bp.set(x, y + h, z, id); }
+// a rigging rod: bars from (x, y, z) up to the first solid block above (the fly floor, the dome), at most 12 high
+function hangFrom(bp, x, y, z) { for (let yy = y; yy < y + 12 && yy < bp.h; yy++) { if (!bp.isAir(x, yy, z)) return; bp.set(x, yy, z, BARS); } }
 
 const DRESS = [B.SHELF, B.CHEST, B.CRATE, B.BARREL, B.BOOKSHELF, B.CONSOLE];
 const CIVIC = new Set(['courtroom', 'control_room', 'executive_office', 'meeting_room', 'lobby_atrium', 'archive', 'library', 'medbay', 'clinic_ward', 'council_chamber', 'holo_theatre', 'observation_deck', 'gallery', 'museum_hall', 'lounge', 'restaurant', 'cafeteria', 'open_plan_office']);
@@ -131,7 +136,7 @@ function lowerFoyer(bp, rng, x0, z0, x1, z1, y) {
   for (let x = x0 + 5; x <= x1 - 5; x += 8) { bp.set(x, y + 1, z1 + 1, HOLO); bp.set(x, y + 2, z1 + 1, HOLO); bp.set(x + 1, y + 1, z1 + 1, HOLO); bp.set(x + 1, y + 2, z1 + 1, HOLO); }
   for (const x of [x0 + 8, cx - 6, cx + 7, x1 - 8]) { bp.fill(x, y, z0 + 6, x, y + 2, z0 + 6, TRIM); bp.set(x, y + 3, z0 + 6, GLOW); }
   for (let x = x0 + 1; x <= x1 - 1; x += 4) for (let z = z0 + 1; z <= z1 - 1; z += 4) bp.set(x, y + 4, z, (x + z) % 3 ? GLOW : RED);
-  bp.room('lower_foyer', x0 - 1, y, z0 - 1, x1 + 1, z1 + 1);
+  bp.room('lobby_atrium', x0 - 1, y, z0 - 1, x1 + 1, z1 + 1);   // the entrance foyer is the house's lobby (the ushers' room)
 }
 // a 4-connected curved stair from (x0, z0) at height y0 to height y1 along an arc around (cx, cz) with radius r
 // between angles a0 and a1; half steps alternate slab / full block, chrome railing posts on the outer side
@@ -158,7 +163,8 @@ function curvedStair(bp, cx, cz, r, a0, a1, y0, y1) {
     // railing on the outer side of the arc
     const ox = x + Math.sign(x + 0.5 - cx), oz = z + Math.sign(z + 0.5 - cz);
     const far = Math.abs(x + 0.5 - cx) > Math.abs(z + 0.5 - cz) ? [ox, z] : [x, oz];
-    if (bp.isAir(far[0], base + 1, far[1]) && !cells.some(([a, b]) => a === far[0] && b === far[1])) { bp.set(far[0], base + 1, far[1], slab ? BARS : TRIM); }
+    // the post stands beside the step, from the step's own height up (a post at base + 1 alone touched the step only diagonally)
+    if (bp.isAir(far[0], base + 1, far[1]) && !cells.some(([a, b]) => a === far[0] && b === far[1])) { if (bp.isAir(far[0], base, far[1])) bp.set(far[0], base, far[1], TRIM); bp.set(far[0], base + 1, far[1], slab ? BARS : TRIM); }
   });
   return cells;
 }
@@ -235,7 +241,7 @@ function auditorium(bp, rng) {
   for (let x = 37; x <= 57; x += 4) bp.set(x, y + 9, STAGE.z1 + 2, GOLD);
   // stage: holo backdrop, wings, lighting bridge, footlights, scenery flats
   for (let x = STAGE.x0; x <= STAGE.x1; x++) for (let yy = y; yy <= y + 12; yy++) bp.set(x, yy, STAGE.z0 - 1, (x + yy) % 9 === 0 ? BLUE : HOLO);
-  for (let x = STAGE.x0 + 2; x <= STAGE.x1 - 2; x += 3) { bp.set(x, y + 14, STAGE.z1 - 1, BARS); bp.set(x, y + 13, STAGE.z1 - 1, (x % 2) ? GLOW : B.LANTERN); }
+  for (let x = STAGE.x0 + 2; x <= STAGE.x1 - 2; x += 3) { hangFrom(bp, x, y + 14, STAGE.z1 - 1); bp.set(x, y + 13, STAGE.z1 - 1, (x % 2) ? GLOW : B.LANTERN); }   // the lighting bridge hangs on its rods from the fly floor
   for (let x = 36; x <= 58; x += 2) bp.set(x, y - 1, STAGE.z1, GLOW);
   for (const [x, z] of [[STAGE.x0 + 3, STAGE.z0 + 4], [STAGE.x1 - 3, STAGE.z0 + 4], [STAGE.x0 + 6, STAGE.z0 + 9], [STAGE.x1 - 6, STAGE.z0 + 9]]) { bp.fill(x, y, z, x, y + 4, z, TRIM); bp.set(x, y + 2, z, HOLO); }
   for (let x = 44; x <= 50; x += 3) { bp.set(x, y, STAGE.z0 + 6, GOLD); bp.spot(x, y, STAGE.z0 + 7, 'stand'); }
@@ -266,7 +272,8 @@ function auditorium(bp, rng) {
     for (let x = ELL.cx - hw; x <= ELL.cx + hw - 1; x++) {
       bp.fill(x, y - 1, z, x, level - 1, z, DARK);
       bp.set(x, level, z, step === 2 ? SLAB : CARPET);
-      if (!isAisle(x) && step === 1) { bp.set(x, level + 1, z, RWOOL); if (x % 3 === 0) bp.spot(x, level + 1, z, 'seat'); }
+      // every third seat is the one an NPC takes: a spruce slab (a spot inside a solid wool block is pruned)
+      if (!isAisle(x) && step === 1) { if (x % 3 === 0) { bp.set(x, level + 1, z, B.SPRUCE_SLAB); bp.spot(x, level + 1, z, 'seat'); } else bp.set(x, level + 1, z, RWOOL); }
     }
   }
   bp.room('stalls', ELL.cx - halfW(s0), y, s0, ELL.cx + halfW(s0), 41);
@@ -279,7 +286,7 @@ function auditorium(bp, rng) {
         bp.set(x, level, z, k % 3 === 2 ? SLAB : CARPET);
         const aisle = x === 46 || x === 47;
         if (z === zf) { bp.set(x, level + 1, z, (x % 3) ? BARS : GOLD); continue; }
-        if (!aisle && k % 3 === 1) { bp.set(x, level + 1, z, RWOOL); if (x % 3 === 0) bp.spot(x, level + 1, z, 'seat'); }
+        if (!aisle && k % 3 === 1) { if (x % 3 === 0) { bp.set(x, level + 1, z, B.SPRUCE_SLAB); bp.spot(x, level + 1, z, 'seat'); } else bp.set(x, level + 1, z, RWOOL); }
       }
     }
     // the balcony front face in gold with glow strip; lights in the underside over the rows below
@@ -337,7 +344,7 @@ function auditorium(bp, rng) {
     bp.room('vomitory', x0 - 1, y, 30, x1 + 1, 56);
   }
   // lighting bridge over the stalls and the dome's chandelier cluster
-  for (let x = 30; x <= 64; x += 2) { bp.set(x, 44, 30, BARS); bp.set(x, 43, 30, (x % 4) ? GLOW : B.LANTERN); }
+  for (let x = 30; x <= 64; x += 2) { hangFrom(bp, x, 44, 30); bp.set(x, 43, 30, (x % 4) ? GLOW : B.LANTERN); }
   const cy = domeH(47, 38) - 3;
   bp.fill(46, cy, 37, 47, cy + 2, 38, TRIM);
   for (let r = 1; r <= 4; r++) for (let a = 0; a < 8; a++) { const x = Math.round(46.5 + r * 1.6 * Math.cos(a / 8 * Math.PI * 2)), z = Math.round(37.5 + r * 1.6 * Math.sin(a / 8 * Math.PI * 2)); bp.set(x, cy - r + 3, z, (r + a) % 2 ? GLOW : TRIM); }

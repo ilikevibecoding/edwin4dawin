@@ -140,24 +140,29 @@ function template(bp, rng, name, kind, x0, z0, x1, z1, y, side, doorU, doorW = 2
 }
 
 // ------------------------------------------------------------------------------------------------ stall trades
+// every trade has a room kind: the first stall of each trade is registered as a kiosk room (counter, vendor row and
+// the aisle cell in front) so the market-arcade program (rooms/programs.js kiosk kinds) can find its vendors
 const TRADES = [
-  { counter: B.CRATE, goods: [B.PUMPKIN, B.HAY_BALE, B.PUMPKIN, B.CRATE], rack: B.HAY_BALE },          // produce
-  { counter: B.CRATE, goods: [B.WHEAT, B.CRATE, B.WHEAT, B.HAY_BALE], rack: B.CRATE },               // grain
-  { counter: B.TABLE, goods: [B.RED_WOOL, B.BLUE_WOOL, B.GREEN_WOOL, B.WHITE_WOOL], rack: B.WHITE_WOOL }, // fabrics
-  { counter: B.IRON_BLOCK, goods: [B.ANVIL, B.CONSOLE, B.VENT, B.IRON_BARS], rack: B.CRATE },        // speeder parts
-  { counter: B.BOOKSHELF, goods: [B.HOLO_SIGN, B.CHEST, B.BOOKSHELF, 0], rack: B.BOOKSHELF },        // holobooks
-  { counter: B.BARREL, goods: [B.SHELF, B.GOLD_BLOCK, B.SHELF, B.BARREL], rack: B.SHELF },           // spices, drinks
-  { counter: B.TABLE, goods: [B.POPPY, B.DANDELION, B.OAK_LEAVES, B.TALL_GRASS], rack: B.OAK_LEAVES }, // flowers
-  { counter: B.DURASTEEL_DARK, goods: [B.CHROME, B.IRON_BARS, B.GLASS, B.CONSOLE], rack: B.IRON_BLOCK }, // droid scrap
-  { counter: B.CRATE, goods: [B.SNOW, B.BARREL, B.SNOW, B.CHEST], rack: B.BARREL },                  // fish on ice
-  { counter: B.SANDSTONE, goods: [B.GOLD_BLOCK, B.CHROME, B.GLASS, B.GOLD_BLOCK], rack: B.SHELF },    // jewellery
+  { kind: 'produce_kiosk', counter: B.CRATE, goods: [B.PUMPKIN, B.HAY_BALE, B.PUMPKIN, B.CRATE], rack: B.HAY_BALE },          // produce
+  { kind: 'grain_kiosk', counter: B.CRATE, goods: [B.WHEAT, B.CRATE, B.WHEAT, B.HAY_BALE], rack: B.CRATE },               // grain
+  { kind: 'textile_kiosk', counter: B.TABLE, goods: [B.RED_WOOL, B.BLUE_WOOL, B.GREEN_WOOL, B.WHITE_WOOL], rack: B.WHITE_WOOL }, // fabrics
+  { kind: 'mechanical_kiosk', counter: B.IRON_BLOCK, goods: [B.ANVIL, B.CONSOLE, B.VENT, B.IRON_BARS], rack: B.CRATE },        // speeder parts
+  { kind: 'navigation_kiosk', counter: B.BOOKSHELF, goods: [B.HOLO_SIGN, B.CHEST, B.BOOKSHELF, 0], rack: B.BOOKSHELF },        // holobooks, charts and data
+  { kind: 'spice_kiosk', counter: B.BARREL, goods: [B.SHELF, B.GOLD_BLOCK, B.SHELF, B.BARREL], rack: B.SHELF },           // spices, drinks
+  { kind: 'flower_kiosk', counter: B.TABLE, goods: [B.POPPY, B.DANDELION, B.OAK_LEAVES, B.TALL_GRASS], rack: B.OAK_LEAVES }, // flowers
+  { kind: 'salvage_kiosk', counter: B.DURASTEEL_DARK, goods: [B.CHROME, B.IRON_BARS, B.GLASS, B.CONSOLE], rack: B.IRON_BLOCK }, // droid scrap
+  { kind: 'fish_kiosk', counter: B.CRATE, goods: [B.SNOW, B.BARREL, B.SNOW, B.CHEST], rack: B.BARREL },                  // fish on ice
+  { kind: 'jewellery_kiosk', counter: B.SANDSTONE, goods: [B.GOLD_BLOCK, B.CHROME, B.GLASS, B.GOLD_BLOCK], rack: B.SHELF },    // jewellery
+  { kind: 'appliance_kiosk', counter: B.PANEL_BLACK, goods: [B.FURNACE, B.TROUGH, B.CONSOLE, B.CHEST], rack: B.SHELF },   // domestic equipment
 ];
+let kioskRooms = new Set();
 
 // A 3-wide stall in the slot whose post cell is z0: counter at x = xc facing the aisle at xc + dx, vendor behind,
 // wool awning at y 4 over the counter and vendor rows (and the rack row of wall stalls), a holo price board
 // hanging over the aisle edge at y 3, 3-high fence posts with lanterns on top.
 function stall(bp, rng, xc, z0, dx, colour, opts = {}) {
   const t = rng.pick(TRADES);
+  if (!kioskRooms.has(t.kind)) { kioskRooms.add(t.kind); bp.room(t.kind, Math.min(xc - dx, xc + dx), 1, z0 + 1, Math.max(xc - dx, xc + dx), z0 + 3); }
   bp.fill(xc, 1, z0, xc, 3, z0, B.OAK_FENCE); bp.fill(xc, 1, z0 + 4, xc, 3, z0 + 4, B.OAK_FENCE);
   const back = opts.rackX !== undefined ? opts.rackX : xc - dx;
   for (let z = z0 + 1; z <= z0 + 3; z++) {
@@ -166,6 +171,7 @@ function stall(bp, rng, xc, z0, dx, colour, opts = {}) {
     if (g && !(z === z0 + 2 && rng.chance(0.25))) bp.set(xc, 2, z, g);
     for (let x = Math.min(xc, back); x <= Math.max(xc, back); x++) bp.set(x, 4, z, colour);
   }
+  bp.set(xc, 3, z0 + 2, B.LANTERN);   // the stall's own lamp, hung under the awning over the counter
   bp.set(xc + dx, 3, z0 + 2, B.HOLO_SIGN);
   if (opts.rackX !== undefined) {
     // wall stall: shelving against the wall behind the vendor, a barrel in the post column, ad or lamp over the rack
@@ -198,6 +204,7 @@ export const LANDMARK = {
   build(bp, lot, ctx) {
     const rng = ctx.rng;
     bp.meta.name = 'CoCo Town market halls';
+    kioskRooms = new Set();
     pave(bp);
     shell(bp);
     serviceBlock(bp, rng);
