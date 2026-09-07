@@ -11,7 +11,7 @@ import { ARCHETYPES, resolveArchetype, FACTION_ARCHETYPES, DISTRICT_WEAR, DISTRI
 import { fillPart, applyWear, WEAR_LEVELS } from './paint.js';
 
 export const CACHE_CAPACITY = 512;
-const HEAD_HEADGEAR = new Set(['helmet', 'mask', 'open_helmet', 'droid']); // the head is fully covered / replaced
+export const HEAD_HEADGEAR = new Set(['helmet', 'mask', 'open_helmet', 'droid']); // the head is fully covered / replaced
 const HAIR_VOLUME_BLOCKED = new Set(['cap', 'hood', 'headdress', 'helmet', 'mask', 'open_helmet', 'droid']);
 
 const weightedKey = (rng, weights) => {
@@ -120,8 +120,10 @@ function bodyScale(choice, rng) {
   return out.map((v) => Math.round(v * 1000) / 1000);
 }
 
-// Paint step. Returns the appearance object (not cached here).
-export function paintAppearance(choice) {
+// Paint step. Returns the appearance object (not cached here). `canvas: false` (the instanced crowd, which blits
+// app.raster into its atlas) skips the DOM canvas and the eye-strip ImageData: app.canvas / app.skin / eyes.image
+// are null then, everything else is identical.
+export function paintAppearance(choice, { canvas: wantCanvas = true } = {}) {
   const { sp, outfit, colourway, wear, face, gender, age, seed } = choice;
   const r = new Raster(TEX_W, TEX_H);
   const alloc = new ShelfAllocator();
@@ -194,13 +196,13 @@ export function paintAppearance(choice) {
     ov.uv = uv; ov.colour = hex(c); delete ov.faceOpening;
   }
 
-  const canvas = createCanvas(TEX_W, TEX_H);
-  r.blitTo(canvas);
+  const canvas = wantCanvas ? createCanvas(TEX_W, TEX_H) : null;
+  if (canvas) r.blitTo(canvas);
   // eye info for blink.js (null when a helmet / mask / droid shell hides the eyes)
   let eyes = null;
   if (head && head.strip && !ctx.helmet && !HEAD_HEADGEAR.has(outfit.headgear)) {
     const s = head.strip;
-    eyes = { x: s.x, y: s.y, w: s.w, h: s.h, pixels: head.eyePixels, iris: hex(head.iris), lid: hex(head.lid), image: canvas.getContext('2d').getImageData(s.x, s.y, s.w, s.h) };
+    eyes = { x: s.x, y: s.y, w: s.w, h: s.h, pixels: head.eyePixels, iris: hex(head.iris), lid: hex(head.lid), image: canvas ? canvas.getContext('2d').getImageData(s.x, s.y, s.w, s.h) : null };
   }
   const scaleRng = new RNG(subSeed(seed, 'scale'));
   const model = outfit.model ? { kind: 'boxes', model: outfit.model, parts, height: ctx.height, scale: [1, 1, 1] } : { kind: 'humanoid', scale: bodyScale(choice, scaleRng), height: 32 };
@@ -228,7 +230,7 @@ export function composeAppearance(seed, opts = {}) {
   return app;
 }
 export const getAppearance = composeAppearance;
-export function composeUncached(seed, opts = {}) { return paintAppearance(chooseAppearance(seed, opts)); }
+export function composeUncached(seed, opts = {}, paintOpts = undefined) { return paintAppearance(chooseAppearance(seed, opts), paintOpts); }
 
 // ---------------------------------------------------------------------------------------------------------------
 const AGE_WORDS = { child: 'child', young: 'young', adult: 'adult', middle: 'middle-aged', elder: 'elderly', none: '' };
