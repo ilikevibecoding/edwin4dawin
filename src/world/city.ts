@@ -1,9 +1,9 @@
 import * as THREE from 'three';
-import { Rng } from '../core/seed';
+import { Rng, hash2 } from '../core/seed';
 import { clamp, lerp, perlin2, smoothstep } from '../core/noise';
 import { Canopy, Zone, urbanGradient, type District, type WorldMap } from './map';
 import type { Block } from './roads';
-import { createFacadeMaterial } from './facade';
+import { CAR_FAR, createFacadeMaterial } from './facade';
 import { LAYER_CAMERA, LAYER_CASCADE0, LAYER_MIRROR, MAX_CASCADES, layerMask, maskCasts, type ViewCull } from './culling';
 import { InstanceBatch, splitCells, type BatchSource, type CellSource } from './batching';
 
@@ -97,7 +97,7 @@ function mergeSimple(geos: THREE.BufferGeometry[]): THREE.BufferGeometry {
  *  rails, condensers, tank legs) drawn within ROOF_FAR, `roofbig` its large items (RTUs, solar rows, skylights,
  *  screen walls) drawn within ROOF_BIG_FAR; beyond those the coarse rooftop masses (penthouses, tanks, cooling
  *  towers, masts, helipads: ordinary `box` / `cyl` instances) and the roof shader's pads stand in. */
-export type Kind = 'box' | 'cyl' | 'oct' | 'frustum' | 'shear' | 'house' | 'trim' | 'roof' | 'roofcyl' | 'roofbig';
+export type Kind = 'box' | 'cyl' | 'oct' | 'frustum' | 'shear' | 'house' | 'trim' | 'roof' | 'roofcyl' | 'roofbig' | 'car';
 
 interface Instance {
   x: number; y: number; z: number; w: number; h: number; d: number; rot: number; color: THREE.Color;
@@ -137,9 +137,10 @@ export const ROOF_FAR = 700;
 export const ROOF_BIG_FAR = 1600;
 /** near-detail kinds: their draw distance; they never join the shadow proxies. Trims never cast (under a shadow
  *  texel everywhere they are drawn); the rooftop kit casts into the two near cascades while within its draw
- *  distance, since an RTU without its shadow on a sunlit roof reads as a paint patch. */
-const NEAR_FAR: Partial<Record<Kind, number>> = { trim: TRIM_FAR, roof: ROOF_FAR, roofcyl: ROOF_FAR, roofbig: ROOF_BIG_FAR };
-const NEAR_CAST_MASK = 0b0011;
+ *  distance, since an RTU without its shadow on a sunlit roof reads as a paint patch; the small kit items and the
+ *  cars (0.2-1.5 m tall) cast into the finest cascade only, a car's shadow being under a texel further out. */
+const NEAR_FAR: Partial<Record<Kind, number>> = { trim: TRIM_FAR, roof: ROOF_FAR, roofcyl: ROOF_FAR, roofbig: ROOF_BIG_FAR, car: CAR_FAR };
+const NEAR_CAST: Partial<Record<Kind, number>> = { trim: 0, roof: 0b0001, roofcyl: 0b0001, roofbig: 0b0011, car: 0b0001 };
 const _bp = new THREE.Vector3();
 /** grow `box` by building `i` of `t` the way the tile box was built (footprint half-diagonal x 0.6, height) */
 function boundBuilding(t: BatchSource, i: number, box: THREE.Box3): void {
@@ -194,7 +195,7 @@ export class BuildingBatches {
     this.material = createFacadeMaterial(nightUniform);
     // the kit's round items (vents, stacks, pipes, tank drums: 0.3-1.5 m) are hexagonal: they are 1-8 px across
     // wherever the kit is drawn, and the 10-sided prism cost 40 triangles per vent for a silhouette nobody resolved
-    this.geos = { box: unitBox(), cyl: unitPrism(16, 0), oct: unitPrism(8, Math.PI / 8), frustum: unitFrustum(0.3), shear: unitShear(), house: unitHouse(), trim: unitBox(), roof: unitBox(), roofcyl: unitPrism(6, 0), roofbig: unitBox() };
+    this.geos = { box: unitBox(), cyl: unitPrism(16, 0), oct: unitPrism(8, Math.PI / 8), frustum: unitFrustum(0.3), shear: unitShear(), house: unitHouse(), trim: unitBox(), roof: unitBox(), roofcyl: unitPrism(6, 0), roofbig: unitBox(), car: unitBox() };
   }
 
   add(kind: Kind, inst: Instance): void {
@@ -347,8 +348,9 @@ export class BuildingBatches {
     for (const t of this.tiles) {
       const d = Math.max(0, Math.hypot(t.center.x - camX, t.center.z - camZ) - t.lodR);
       const near = NEAR_FAR[t.kind];
-      const casts = near === undefined ? d < this.shadowDistance : t.kind !== 'trim' && d < near;
-      t.bits = casts ? cull.casterCascades(t.center, t.r, t.height) & (near === undefined ? ~0 : NEAR_CAST_MASK) : 0;
+      const castMask = near === undefined ? ~0 : NEAR_CAST[t.kind] ?? 0;
+      const casts = near === undefined ? d < this.shadowDistance : castMask !== 0 && d < near;
+      t.bits = casts ? cull.casterCascades(t.center, t.r, t.height) & castMask : 0;
       for (let i = 0; i < MAX_CASCADES; i++) if (t.bits & (1 << i)) perCascade[i]++;
     }
     // cascades where the per-tile meshes would cost more draws than the proxies take the proxies instead
@@ -517,11 +519,19 @@ interface PlaceOpts {
   roof?: number; yBase?: number; lit?: number; warm?: number; variant?: number; form?: number;
   /** occupancy margin (m) around the footprint; negative = do not mark (rooftop items) */
   margin?: number;
+  /** the street face of a box body (0 -z, 1 +z, 2 -x, 3 +x in its own frame): the shader puts the entrance, lobby
+   *  and shopfronts on it and the loading dock on its pair (aStyle2.w = 10 + face); the ground-floor geometry
+   *  (canopies, awnings, stoops) goes on the same face. Unset: the shader picks by hash. */
+  front?: number;
 }
 
 export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>, nightUniform: THREE.IUniform<number>): CityBuild {
   const batches = new BuildingBatches(nightUniform);
   const rng = new Rng('city');
+  /** The shader seed of an instance is a hash of where it stands and how tall it is, so a building's look (its
+   *  front face, roof family, pane grain, weathering) never depends on how many instances were placed before it:
+   *  a change to one block's fill leaves every other building as it was. */
+  const seedAt = (x: number, z: number, h: number) => hash2(Math.round(x * 8), Math.round(z * 8), Math.round(h * 16)) * 1000;
   const occ = new Uint8Array(2000 * 2000); // 10 m cells over 20 km
   const occIndex = (x: number, z: number) => {
     const ix = Math.floor((x + 10000) / 10), iz = Math.floor((z + 10000) / 10);
@@ -574,8 +584,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     if (y < 0.9) return null;
     const col = color instanceof THREE.Color ? color : new THREE.Color(color);
     batches.add(kind, {
-      x, y: y - 0.4, z, w, h: h + 0.4, d, rot, color: col, style, floorH, seed: rng.range(0, 1000), roof: o.roof ?? 5,
-      lit: o.lit ?? 0.3, warm: o.warm ?? 0.7, variant: o.variant ?? 0.5, form: o.form ?? 0,
+      x, y: y - 0.4, z, w, h: h + 0.4, d, rot, color: col, style, floorH, seed: seedAt(x, z, h), roof: o.roof ?? 5,
+      lit: o.lit ?? 0.3, warm: o.warm ?? 0.7, variant: o.variant ?? 0.5, form: o.front !== undefined && kind === 'box' ? 10 + o.front : o.form ?? 0,
     });
     const margin = o.margin ?? 3;
     if (margin >= 0) markFootprint(x, z, w, d, rot, margin);
@@ -663,14 +673,14 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
 
   /** Rooftop kit item: a near-detail instance (see Kind) at world (x, z), base `y`, yaw `rot`. */
   const kit = (kind: Kind, x: number, y: number, z: number, w: number, h: number, d: number, rot: number, col: THREE.Color, style: number) =>
-    batches.add(kind, { x, y, z, w, h, d, rot, color: col, style, floorH: 3, seed: rng.range(0, 1000), roof: -1, lit: 0, warm: 0.5, variant: 0.5, form: 0 });
+    batches.add(kind, { x, y, z, w, h, d, rot, color: col, style, floorH: 3, seed: seedAt(x, z, y + h), roof: -1, lit: 0, warm: 0.5, variant: 0.5, form: 0 });
 
   const CAR_C = ['#e8e8e6', '#c9cccf', '#8f9397', '#2a2b2e', '#1d2a44', '#7a1e1e', '#b8342a', '#c9b79a', '#3b4a5a', '#5a6b4a', '#f1f1ef', '#151618', '#d8d5cc', '#6d6f73'].map((c) => new THREE.Color(c));
   const HEDGE_C = new THREE.Color('#2f4a22'), PLANTER_C = new THREE.Color('#6e6a62'), PATH_C = new THREE.Color('#8f8a80'), ASPHALT_C = new THREE.Color('#1c1c1e'), LAWN_C = new THREE.Color('#3a5a22');
   /** Parked cars on a lot or deck of `w` x `d` m (centre x, z, yaw rot, surface height `y`) on the stall layout the
    *  LOT / PARKING shader stripes (5 m rows either side of a 6.5 m aisle at a 17.1 m period across the lot, 2.6 m
    *  stalls along it), `fill` of the stalls taken; `ok` (lot-local offsets from the centre) can veto a stall that
-   *  lies under a building. One roofbig box per car, drawn within ROOF_BIG_FAR. */
+   *  lies under a building. One `car` box per car, drawn within CAR_FAR (the lot shader's blobs stand in beyond). */
   const lotCars = (r: Rng, x: number, z: number, w: number, d: number, rot: number, y: number, fill: number, ok?: (ox: number, oz: number) => boolean) => {
     const alongX = w >= d;
     const L = alongX ? w : d, W = alongX ? d : w;
@@ -685,7 +695,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           const ox = alongX ? lu : lv, oz = alongX ? lv : lu;
           if (ok && !ok(ox, oz)) continue;
           const cw = r.range(1.7, 1.9), cl = r.range(4.2, 4.9), ch = r.range(1.4, 1.75);
-          kit('roofbig', x + ox * cr - oz * sr, y, z + ox * sr + oz * cr, alongX ? cw : cl, ch, alongX ? cl : cw, rot + r.range(-0.03, 0.03), r.pick(CAR_C), S.CAR);
+          kit('car', x + ox * cr - oz * sr, y, z + ox * sr + oz * cr, alongX ? cw : cl, ch, alongX ? cl : cw, rot + r.range(-0.03, 0.03), r.pick(CAR_C), S.CAR);
         }
       }
     }
@@ -763,6 +773,12 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
   const PLANT_C = PLANT_COLS.map((c) => new THREE.Color(c)), DUCT_C = DUCT_COLS.map((c) => new THREE.Color(c)), RAIL_C = RAIL_COLS.map((c) => new THREE.Color(c));
   const SOLAR_C = new THREE.Color('#1c2a44'), DISH_C = new THREE.Color('#e4e6e3'), SKY_C = new THREE.Color('#9fb6c8'), TANK_LEG_C = new THREE.Color('#4a4d50');
   const GREY_C = GREYS.map((c) => new THREE.Color(c));
+  /** ground-floor kit: canopy slabs (dark metal, pale concrete, painted), shop awnings, pool loungers, green roofs */
+  const CANOPY_DARK_C = new THREE.Color('#2e3134'), CANOPY_PALE_C = new THREE.Color('#d8d5cc');
+  const CANOPY_C = ['#6b7076', '#a9a49a', '#4d5a66', '#7a6a58'].map((c) => new THREE.Color(c));
+  const AWNING_C = ['#2f5d3a', '#7a1f2a', '#1f2f4d', '#2b2b2c', '#d9cdb2', '#b8462f', '#e9e4d6', '#3d6e7a', '#8c6d3f'].map((c) => new THREE.Color(c));
+  const LOUNGER_C = ['#f1f1ec', '#e4dccb', '#2f4a5a'].map((c) => new THREE.Color(c));
+  const GREEN_ROOF_C = ['#5a6b3a', '#6b7a3f', '#4f5e35'].map((c) => new THREE.Color(c));
   /** A secondary roof surface: `terrace` is a setback tier or the ring around a crown (vents, a few small units,
    *  rails, solar), `podium` a base that carries the building's heavy plant (cooling towers, RTUs, a screen wall)
    *  and skylights over the retail below. `block` lists what already stands on it (the upper tier, a lantern, fins)
@@ -1001,10 +1017,186 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     if (area > 300 && r.chance(0.3)) { const sz = r.range(1.5, 2.6); const p = pk.find(r, sz, sz, 0.5, 6); if (p) item('roofbig', p[0], p[1], sz, 0.6, sz, SKY_C, S.SKYLIGHT); }
   };
 
+  /** A box face in its own frame: outward normal, tangent along it and its length (0 -z, 1 +z, 2 -x, 3 +x). */
+  const faceFrame = (face: number, w: number, d: number) =>
+    face === 0 ? { nx: 0, nz: -1, tx: 1, tz: 0, len: w, half: d / 2 } : face === 1 ? { nx: 0, nz: 1, tx: 1, tz: 0, len: w, half: d / 2 }
+      : face === 2 ? { nx: -1, nz: 0, tx: 0, tz: 1, len: d, half: w / 2 } : { nx: 1, nz: 0, tx: 0, tz: 1, len: d, half: w / 2 };
+
+  /** Where a building meets the street (its `front` face, the one the shader draws the entrance / shopfronts on):
+   *  a shop parade gets a continuous canopy over the pavement or a run of awnings in the shops' own colours; a
+   *  tower lobby its entrance canopy (at the shader's canopy band); a residential walk-up a stoop and a hood over
+   *  the door at the face's centre (where the shader puts the door when the front is given). The canopies are
+   *  roofbig items (a 2.5 m slab and its shadow on the pavement read from the air); awnings and stoops are trims. */
+  const groundFloor = (r: Rng, x: number, z: number, w: number, d: number, rot: number, face: number, fam: Family, h: number, shops: boolean) => {
+    const f = faceFrame(face, w, d);
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    let g = -Infinity;
+    for (const [px, pz] of corners(x, z, w, d, rot)) g = Math.max(g, map.heightAt(px, pz));
+    /** an item `s` along the face from its centre, its inner edge `o` out from the face, `dep` deep, at `y` above ground */
+    const item = (kind: Kind, s: number, o: number, len: number, dep: number, y: number, th: number, col: THREE.Color, style: number) => {
+      const ox = f.nx * (f.half + o + dep / 2) + f.tx * s, oz = f.nz * (f.half + o + dep / 2) + f.tz * s;
+      const bw = f.tx !== 0 ? len : dep, bd = f.tx !== 0 ? dep : len;
+      kit(kind, x + ox * cr - oz * sr, g + y, z + ox * sr + oz * cr, bw, th, bd, rot, col, style);
+    };
+    const glassy = fam.style === S.GLASS_BLUE || fam.style === S.GLASS_GREEN || fam.style === S.STONE;
+    const tower = (glassy || (fam.style === S.GRID && h > 40)) && h > 24 && f.len > 10;
+    if (tower) {
+      // the lobby's entrance canopy: a dark slab over the centre third of the face, at the shader's canopy band
+      // (0.55 of a two-storey lobby on the towers over 60 m, 0.82 of the single storey otherwise), on slim posts
+      const lobbyH = (h > 60 ? 2 : 1) * fam.floorH;
+      const cy = (h > 60 ? 0.55 : 0.82) * lobbyH - 0.4;
+      const cw = f.len * 0.28 + 1.0, dep = r.range(2.6, 4.0);
+      item('roofbig', 0, 0, cw, dep, cy, 0.35, r.chance(0.6) ? CANOPY_DARK_C : CANOPY_PALE_C, S.CONCRETE);
+      for (const s of [-cw / 2 + 0.4, cw / 2 - 0.4]) item('trim', s, dep - 0.35, 0.22, 0.22, 0, cy, TRIM_DARK, S.CONCRETE);
+      return;
+    }
+    const walkup = fam.style === S.PUNCHED || fam.style === S.BALCONY || fam.style === S.DECO || fam.style === S.HOTEL || fam.style === S.BRICK || fam.style === S.GRID;
+    if (!walkup || h <= 7) return;
+    if (shops) {
+      const k = r.next();
+      if (k < 0.38) {
+        // a continuous canopy over the pavement at the fascia line, its posts at the kerb every 6 m or so
+        const dep = r.range(2.2, 3.0), y = fam.floorH * 0.76 - 0.4;
+        item('roofbig', 0, 0, f.len - 0.6, dep, y, 0.28, r.chance(0.5) ? CANOPY_DARK_C : r.pick(CANOPY_C), S.CONCRETE);
+        const n = Math.max(2, Math.round(f.len / 6.5));
+        for (let i = 0; i < n; i++) item('trim', -f.len / 2 + 0.6 + (i + 0.5) * (f.len - 1.2) / n, dep - 0.3, 0.18, 0.18, 0, y, TRIM_DARK, S.CONCRETE);
+      } else if (k < 0.8) {
+        // awnings over the shop windows: one per 4-7 m, a few bays bare, each shop its own colour
+        const y = fam.floorH * 0.66 - 0.4;
+        let s = -f.len / 2 + 1.2;
+        while (s + 3.2 < f.len / 2 - 0.6) {
+          const aw = r.range(2.8, 4.4), pitch = aw + r.range(0.8, 3.0);
+          if (s + aw > f.len / 2 - 0.6) break;
+          if (r.chance(0.78)) item('trim', s + aw / 2, 0, aw, r.range(1.1, 1.5), y, 0.14, r.pick(AWNING_C), S.CONCRETE);
+          s += pitch;
+        }
+      }
+      // shopfront planters and an A-board are the street builder's; a step up to the corner shop's door here
+      if (r.chance(0.3)) item('trim', (r.chance(0.5) ? -1 : 1) * (f.len / 2 - 2.2), 0, 1.8, 0.7, -0.05, 0.22, r.pick(GREY_C), S.CONCRETE);
+      return;
+    }
+    // a residential entrance: stoop (three steps, on the masonry families a full stair) and a hood over the door
+    const brick = fam.style === S.BRICK || fam.style === S.PUNCHED;
+    const sw = brick ? r.range(2.2, 3.0) : r.range(1.8, 2.4), sd = brick ? r.range(1.4, 2.2) : r.range(0.9, 1.4);
+    item('trim', 0, 0, sw, sd, -0.05, brick ? r.range(0.55, 1.0) : r.range(0.2, 0.4), r.pick(GREY_C), S.CONCRETE);
+    if (brick) { item('trim', -sw / 2 - 0.15, 0, 0.3, sd, -0.05, 1.05, r.pick(GREY_C), S.CONCRETE); item('trim', sw / 2 + 0.15, 0, 0.3, sd, -0.05, 1.05, r.pick(GREY_C), S.CONCRETE); }
+    if (r.chance(0.55)) item('trim', 0, 0, r.range(1.8, 2.6), r.range(0.9, 1.4), 2.55, 0.16, r.chance(0.5) ? CANOPY_DARK_C : TRIM_LIGHT, S.CONCRETE);
+  };
+
+  /** The largest rectangle of a `w` x `d` roof (centred frame) clear of the `blocks` on it, or null. */
+  const largestFree = (w: number, d: number, blocks: readonly (readonly [number, number, number, number])[], minSide: number): [number, number, number, number] | null => {
+    let cands: [number, number, number, number][] = [[0, 0, w, d]];
+    for (const [bx, bz, bw, bd] of blocks) {
+      const next: [number, number, number, number][] = [];
+      for (const [cx, cz, cw, cd] of cands) {
+        const x0 = cx - cw / 2, x1 = cx + cw / 2, z0 = cz - cd / 2, z1 = cz + cd / 2;
+        const ox0 = bx - bw / 2 - 0.8, ox1 = bx + bw / 2 + 0.8, oz0 = bz - bd / 2 - 0.8, oz1 = bz + bd / 2 + 0.8;
+        if (ox1 <= x0 || ox0 >= x1 || oz1 <= z0 || oz0 >= z1) { next.push([cx, cz, cw, cd]); continue; }
+        if (ox0 > x0) next.push([(x0 + ox0) / 2, cz, ox0 - x0, cd]);
+        if (ox1 < x1) next.push([(ox1 + x1) / 2, cz, x1 - ox1, cd]);
+        if (oz0 > z0) next.push([cx, (z0 + oz0) / 2, cw, oz0 - z0]);
+        if (oz1 < z1) next.push([cx, (oz1 + z1) / 2, cw, z1 - oz1]);
+      }
+      cands = next;
+    }
+    let best: [number, number, number, number] | null = null;
+    for (const c of cands) if (Math.min(c[2], c[3]) >= minSide && (!best || c[2] * c[3] > best[2] * best[3])) best = c;
+    return best;
+  };
+
+  /** The roof of a podium (the 3-8 storey base a tower rises from), the largest roof surfaces in the CBD and the
+   *  ones that read blank from 200-500 m when left to the membrane: a parking deck (striped, its cars, ramp hood,
+   *  light masts), an amenity deck (pavers, a pool and its deck, lawn, planters, a pergola, cabanas) on the
+   *  residential towers' podiums, a plant yard (the tower's cooling towers and RTUs behind a screen) on the
+   *  offices', or a green roof; the parapet rail all round, the plant packed in what is left. */
+  const podiumRoof = (r: Rng, x: number, z: number, pw: number, pd: number, top: number, rot: number, ph: number, pfam: Family, towerFam: Family, block: readonly (readonly [number, number, number, number])[]) => {
+    const cr = Math.cos(rot), sr = Math.sin(rot);
+    const at = (ox: number, oz: number): [number, number] => [x + ox * cr - oz * sr, z + ox * sr + oz * cr];
+    const office = towerFam.style === S.GLASS_BLUE || towerFam.style === S.STONE || towerFam.style === S.GRID || towerFam.style === S.CONCRETE;
+    const free = largestFree(pw, pd, block, 14);
+    const k = r.next();
+    const prog = !free ? 2 : k < (office ? 0.4 : 0.3) ? 0 : k < (office ? 0.55 : 0.75) ? 1 : k < 0.92 ? 2 : 3;
+    const used: (readonly [number, number, number, number])[] = [...block];
+    // the rail round the parapet (the podium is walked on whatever it carries)
+    for (const [lx, lz, w, dd] of [[0, -pd / 2 + 0.4, pw - 0.8, 0.06], [0, pd / 2 - 0.4, pw - 0.8, 0.06], [-pw / 2 + 0.4, 0, 0.06, pd - 0.8], [pw / 2 - 0.4, 0, 0.06, pd - 0.8]] as const) {
+      const [px, pz] = at(lx, lz);
+      kit('roof', px, top - 0.05, pz, w, 1.1, dd, rot, r.pick(RAIL_C), S.RAIL);
+    }
+    if (prog === 0 && free) {
+      // roof parking: the striped deck over the free rectangle, its cars, the ramp hood at the tower's side and a
+      // lamp mast or two
+      const [fx, fz, fw, fd] = [free[0], free[1], free[2] - 2.4, free[3] - 2.4];
+      const [dx, dz] = at(fx, fz);
+      const fill = r.range(0.45, 0.8);
+      const dtop = place('box', dx, dz, fw, 0.12, fd, rot, ASPHALT_C, S.LOT, 3, { yBase: top - 0.02, margin: -1, variant: fill });
+      if (dtop !== null) {
+        lotCars(r, dx, dz, fw, fd, rot, dtop, fill);
+        const along = fw >= fd;
+        const [hx, hz] = at(fx + (along ? -fw / 2 + 5 : 0), fz + (along ? 0 : -fd / 2 + 5));
+        place('box', hx, hz, along ? 8 : 6.5, 1.3, along ? 6.5 : 8, rot, r.pick(GREYS), S.CONCRETE, 3, { yBase: dtop - 0.4, margin: -1 });
+        for (let i = 0, n = r.int(1, 3); i < n; i++) { const [mx, mz] = at(fx + r.range(-fw * 0.3, fw * 0.3), fz + r.range(-fd * 0.3, fd * 0.3)); place('frustum', mx, mz, 0.5, r.range(7, 10), 0.5, rot, '#c9ccce', S.CONCRETE, 3, { yBase: dtop, margin: -1 }); }
+      }
+      used.push([fx, fz, fw, fd]);
+    } else if (prog === 1 && free) {
+      // amenity deck: pavers over the free rectangle, a pool with its coping, a lawn, planters with hedges,
+      // a pergola on posts and two cabana boxes; the residents' side of a Miami podium
+      const [fx, fz, fw, fd] = [free[0], free[1], free[2] - 2.0, free[3] - 2.0];
+      const [dx, dz] = at(fx, fz);
+      const dtop = place('box', dx, dz, fw, 0.14, fd, rot, r.pick(['#d9d3c4', '#cfc9bb', '#c8c2b6']), S.PLAZA, 3, { yBase: top - 0.02, margin: -1 });
+      if (dtop !== null) {
+        const pk = new RoofPacker(fw / 2 - 1.0, fd / 2 - 1.0);
+        const pwd = Math.min(fw * 0.5, r.range(10, 18)), pdd = Math.min(fd * 0.5, r.range(5, 9));
+        const pool = pk.find(r, pwd + 2.0, pdd + 2.0, 1.0, 8);
+        if (pool) {
+          const [qx, qz] = at(fx + pool[0], fz + pool[1]);
+          place('house', qx, qz, pwd, 0.3, pdd, rot, '#3fc4de', S.POOL, 3, { yBase: dtop - 0.05, form: 2, margin: -1 });
+          pk.block(pool[0], pool[1], pwd + 2.0, pdd + 2.0);
+          // sun loungers along one long side
+          const side = r.chance(0.5) ? 1 : -1;
+          for (let i = 0, n = Math.floor(pwd / 1.6); i < n; i++) { const [lx, lz] = at(fx + pool[0] - pwd / 2 + 0.8 + i * 1.6, fz + pool[1] + side * (pdd / 2 + 1.6)); kit('trim', lx, dtop, lz, 0.7, 0.35, 1.9, rot, r.pick(LOUNGER_C), S.CONCRETE); }
+          pk.block(pool[0], pool[1] + side * (pdd / 2 + 1.6), pwd, 2.2);
+        }
+        // lawn
+        const lw = Math.min(fw * 0.4, r.range(7, 14)), ld = Math.min(fd * 0.4, r.range(5, 10));
+        const lawn = pk.find(r, lw + 0.6, ld + 0.6, 0.8, 8);
+        if (lawn) { const [lx, lz] = at(fx + lawn[0], fz + lawn[1]); place('box', lx, lz, lw, 0.16, ld, rot, LAWN_C, S.LAWN, 3, { yBase: dtop - 0.06, margin: -1 }); pk.block(lawn[0], lawn[1], lw + 0.6, ld + 0.6); }
+        // pergola: a slatted roof on four posts
+        const perg = pk.find(r, 6, 4.5, 0.8, 8);
+        if (perg) {
+          const [gx, gz] = at(fx + perg[0], fz + perg[1]);
+          kit('roof', gx, dtop + 2.8, gz, 5.6, 0.25, 4.1, rot, CANOPY_PALE_C, S.RAIL);
+          for (const [sx, sz] of [[-2.6, -1.85], [2.6, -1.85], [2.6, 1.85], [-2.6, 1.85]]) { const [ux, uz] = at(fx + perg[0] + sx, fz + perg[1] + sz); kit('roof', ux, dtop, uz, 0.2, 2.8, 0.2, rot, TRIM_LIGHT, S.CONCRETE); }
+          pk.block(perg[0], perg[1], 6, 4.5);
+        }
+        // cabanas, planters with hedges
+        for (let i = 0, n = r.int(0, 2); i < n; i++) { const p = pk.find(r, 3.2, 3.2, 0.6, 6); if (p) { const [cx, cz] = at(fx + p[0], fz + p[1]); place('box', cx, cz, 3.0, 2.7, 3.0, rot, '#f1eee6', S.CONCRETE, 3, { yBase: dtop - 0.1, margin: -1 }); pk.block(p[0], p[1], 3.2, 3.2); } }
+        for (let i = 0, n = r.int(3, 8); i < n; i++) {
+          const along = r.chance(0.5), len = r.range(3, 8);
+          const p = pk.find(r, along ? len : 1.0, along ? 1.0 : len, 0.5, 6);
+          if (!p) continue;
+          const [hx, hz] = at(fx + p[0], fz + p[1]);
+          kit('roof', hx, dtop - 0.02, hz, along ? len : 0.9, 0.5, along ? 0.9 : len, rot, PLANTER_C, S.CONCRETE);
+          kit('roof', hx, dtop + 0.45, hz, along ? len - 0.2 : 0.7, r.range(0.7, 1.3), along ? 0.7 : len - 0.2, rot, HEDGE_C, S.LAWN);
+        }
+      }
+      used.push([fx, fz, fw, fd]);
+    } else if (prog === 3 && free) {
+      // green roof: sedum / turf over the free rectangle with a paver path across it
+      const [fx, fz, fw, fd] = [free[0], free[1], free[2] - 2.4, free[3] - 2.4];
+      const [dx, dz] = at(fx, fz);
+      const gtop = place('box', dx, dz, fw, 0.16, fd, rot, r.pick(GREEN_ROOF_C), S.LAWN, 3, { yBase: top - 0.02, margin: -1 });
+      if (gtop !== null) { const along = fw >= fd; place('box', dx, dz, along ? fw : 1.6, 0.14, along ? 1.6 : fd, rot, PATH_C, S.PLAZA, 3, { yBase: gtop - 0.06, margin: -1 }); }
+      used.push([fx, fz, fw, fd]);
+    }
+    // the plant: the tower's share on a plant-yard podium (the full podium tier), a small kit on the rest
+    if (prog === 2) addRoofDetail(r, x, z, pw, pd, top, rot, ph, pfam, { tier: 'podium', block: used });
+    else addSmallRoofKit(r, x, z, pw, pd, top, rot, used);
+  };
+
   /** Massing recipes for towers. Returns the roof height of the main body. */
-  const buildTower = (r: Rng, x: number, z: number, rot: number, fw: number, fd: number, h: number, fam: Family, recipe: number, detail = true, pastel = -1): number | null => {
+  const buildTower = (r: Rng, x: number, z: number, rot: number, fw: number, fd: number, h: number, fam: Family, recipe: number, detail = true, pastel = -1, front?: number): number | null => {
     const lk = look(fam, r, pastel);
-    const o = { lit: lk.lit, warm: lk.warm, variant: lk.variant };
+    const o: PlaceOpts = { lit: lk.lit, warm: lk.warm, variant: lk.variant, front };
     const cr = Math.cos(rot), sr = Math.sin(rot);
     const at = (ox: number, oz: number): [number, number] => [x + ox * cr - oz * sr, z + ox * sr + oz * cr];
     let top: number | null = null;
@@ -1449,8 +1641,13 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
     const c = Math.cos(d.rot), s = Math.sin(d.rot);
     const toWorld = (lx: number, lz: number): [number, number] => [d.cx + lx * c - lz * s, d.cz + lx * s + lz * c];
     if (!blocks) continue;
-    const drng = rng.fork(d.id);
-    for (const b of blocks) {
+    for (let bi = 0; bi < blocks.length; bi++) {
+      const b = blocks[bi];
+      // Two streams per block, both seeded by the block alone: `drng` decides what the block is and places its
+      // towers, `frng` fills the rest (street wall, podium liner, open space, roofs). Neither depends on any other
+      // block or on how much the fill draws, so a change to the fill logic never reshuffles the skyline.
+      const drng = new Rng(`${d.id}#${bi}`);
+      const frng = drng.fork('fill');
       const inset = b.streetWidth * 0.5 + 3;
       const bx0 = b.x0 + inset, bx1 = b.x1 - inset, bz0 = b.z0 + inset, bz1 = b.z1 - inset;
       const bw = bx1 - bx0, bd = bz1 - bz0;
@@ -1521,7 +1718,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
 
       /** A parcel visitor: given the parcel's rectangle for a depth (centre, w, d in the district frame), places a
        *  building or declines (returns the depth used, or null). */
-      type ParcelVisit = (rect: (dep: number) => [number, number, number, number], frontage: number, depth: number, i: number, n: number) => number | null;
+      type ParcelVisit = (rect: (dep: number) => [number, number, number, number], frontage: number, depth: number, i: number, n: number, face: number) => number | null;
       /** One row of street-wall parcels along a block edge: frontages that tile [from, to] exactly (their count from
        *  the mean frontage, their widths jittered), each `dMin`-`dMax` deep from the edge line `fixed` toward the
        *  block interior (`inward`). Returns the depths of the row's two end parcels (0 when declined), so the rows
@@ -1533,6 +1730,8 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         const n = Math.max(1, Math.round(L / fMean + r.range(-0.35, 0.35)));
         const ws: number[] = []; let sum = 0;
         for (let i = 0; i < n; i++) { const w = r.range(0.65, 1.4); ws.push(w); sum += w; }
+        // the street face of the row's buildings in the district frame (0 -z, 1 +z, 2 -x, 3 +x): the edge they stand on
+        const face = along === 'x' ? (inward > 0 ? 0 : 1) : (inward > 0 ? 2 : 3);
         let cursor = from;
         for (let i = 0; i < n; i++) {
           const f = (L * ws[i]) / sum;
@@ -1540,7 +1739,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           const mid = cursor + f / 2;
           cursor += f;
           const rect = (dep: number): [number, number, number, number] => along === 'x' ? [mid, fixed + inward * dep / 2, f, dep] : [fixed + inward * dep / 2, mid, dep, f];
-          const placed = visit(rect, f, depth, i, n);
+          const placed = visit(rect, f, depth, i, n, face);
           if (placed !== null) { if (i === 0) out.first = placed; if (i === n - 1) out.last = placed; }
         }
         return out;
@@ -1553,6 +1752,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         /** chance a parcel is left as a gap (a small surface lot) */ skip: number;
         /** chance a wide parcel is a parking structure */ parking: number;
         pastel: number;
+        /** share of the parcels whose ground floor is shops (the rest are residential: a door and a stoop) */ retail: number;
       }
 
       /** A striped surface car park of `w` x `dd` m at block-local (cx, cz): the asphalt slab (`lift` m proud of the
@@ -1561,7 +1761,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       function surfaceLot(r: Rng, cx: number, cz: number, w: number, dd: number, lift: number, fill: number, ok?: (ox: number, oz: number) => boolean): number | null {
         const [x, z] = toWorld(cx, cz);
         if (!landOK(x, z, w, dd, d.rot)) return null;
-        const top = place('box', x, z, w, lift, dd, d.rot, ASPHALT_C, S.LOT, 3, { margin: 0 });
+        const top = place('box', x, z, w, lift, dd, d.rot, ASPHALT_C, S.LOT, 3, { margin: 0, variant: fill });
         if (top === null) return null;
         lotCars(r, x, z, w, dd, d.rot, top, fill, ok);
         return top;
@@ -1573,7 +1773,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         const [x, z] = toWorld(cx, cz);
         if (!landOK(x, z, w, dd, d.rot)) return;
         const h = decks * 3.0 + 1.2;
-        const top = place('box', x, z, w, h, dd, d.rot, r.pick(['#b9b9b4', '#c6c6c1', '#aeb0ad', '#bdb6a8']), S.PARKING, 3.0, { lit: 0.3, warm: 0.3, variant: 0.9, margin: 0 });
+        const top = place('box', x, z, w, h, dd, d.rot, r.pick(['#b9b9b4', '#c6c6c1', '#aeb0ad', '#bdb6a8']), S.PARKING, 3.0, { lit: 0.3, warm: 0.3, variant: 0.45, margin: 0 });
         if (top === null) return;
         const cr = Math.cos(d.rot), sr = Math.sin(d.rot);
         const at = (ox: number, oz: number): [number, number] => [x + ox * cr - oz * sr, z + ox * sr + oz * cr];
@@ -1594,6 +1794,11 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         if (w < 8 || dd < 8) return;
         const cx = (bx0 + bx1) / 2, cz = (bz0 + bz1) / 2;
         const free = (ox: number, oz: number) => plan.free(cx + ox, cz + oz, 2.0, 2.0);
+        // a block whose middle is already taken (a landmark and its plaza stood there before the fill) gets no
+        // interior: the alley lot laid under a landmark was a striped slab round its foot with every stall vetoed
+        let n = 0, ok = 0;
+        for (let ox = -w / 2 + 2; ox < w / 2; ox += 4) for (let oz = -dd / 2 + 2; oz < dd / 2; oz += 4) { n++; if (free(ox, oz)) ok++; }
+        if (ok < n * 0.3) return;
         if (!court) { surfaceLot(r, cx, cz, w, dd, 0.12, r.range(0.45, 0.75), free); return; }
         const [x, z] = toWorld(cx, cz);
         if (!landOK(x, z, w, dd, d.rot)) return;
@@ -1628,7 +1833,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
         if (!landOK(x, z, bw, bd, d.rot) || !areaFree(x, z, bw - 6, bd - 6, d.rot)) return;
         const cr = Math.cos(d.rot), sr = Math.sin(d.rot);
         const at = (ox: number, oz: number): [number, number] => [x + ox * cr - oz * sr, z + ox * sr + oz * cr];
-        const r = drng.fork(`open${cx}${cz}`);
+        const r = frng;
         if (roll < 0.4) {
           const top = surfaceLot(r, cx, cz, bw - 2, bd - 2, 0.12, r.range(0.5, 0.8));
           if (top === null) return;
@@ -1678,7 +1883,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
       function streetWall(plan: BlockPlan, r: Rng, spec: WallSpec): number {
         let placed = 0;
         let prevFam: Family | null = null;
-        const build: ParcelVisit = (rect, f, depth) => {
+        const build: ParcelVisit = (rect, f, depth, _i, _n, face) => {
           for (const dep of depth > spec.dMin + 1 ? [depth, spec.dMin] : [depth]) {
             const [cx, cz, w, dd] = rect(dep);
             if (!plan.free(cx, cz, w, dd)) continue;
@@ -1701,10 +1906,13 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
             // kin runs share a palette, not a tint: the hue window wanders a little parcel to parcel
             const lk = look(fam, r, spec.pastel < 0 ? -1 : clamp(spec.pastel + r.range(-0.15, 0.15), 0, 1));
             const hh = spec.storeys() * fam.floorH + r.range(0.6, 1.2);
-            const top = place('box', x, z, w, hh, dd, d.rot, lk.tint, fam.style, fam.floorH, { lit: lk.lit, warm: lk.warm, variant: lk.variant, margin: 0 });
+            // the ground floor: shops (aStyle2.w = 20 + face tells the shader) or a residential entrance
+            const shops = r.next() < spec.retail && fam.style !== S.CONCRETE && fam.style !== S.GLASS_GREEN && fam.style !== S.STONE;
+            const top = place('box', x, z, w, hh, dd, d.rot, lk.tint, fam.style, fam.floorH, { lit: lk.lit, warm: lk.warm, variant: lk.variant, margin: 0, front: face + (shops ? 10 : 0) });
             if (top === null) return null;
             plan.take(cx, cz, w, dd);
             placed++;
+            groundFloor(r, x, z, w, dd, d.rot, face, fam, hh, shops);
             infillRoof(r, x, z, w, dd, top, d.rot, hh, fam, lk.tint);
             return dep;
           }
@@ -1812,43 +2020,49 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           plan.take(lx, lz, fw, fd);
           towers.push({ lx, lz, fw, fd, h, fam, recipe, sz });
         }
-        // the podium: parking and retail liner in the tower's own family (or precast), its roof carrying the
-        // towers' plant around their feet
-        const podium = (lx: number, lz: number, pw: number, pd: number) => {
-          const storeys = drng.int(3, Math.round(5 + 3 * prominence));
+        // the podium: parking and retail liner in the tower's own family (or precast), its roof one of the
+        // programmes a podium roof really carries (podiumRoof)
+        const podium = (lx: number, lz: number, pw: number, pd: number, front: number) => {
+          const storeys = frng.int(3, Math.round(5 + 3 * prominence));
           const lead = towers[0]?.fam ?? FAM.punched;
           const liner = [FAM.punched, FAM.grid, FAM.deco, FAM.brick];
-          const pfam = drng.chance(0.4) ? FAM.concrete : liner.includes(lead) ? lead : drng.pick(liner);
-          const lk = look(pfam, drng, nb.pastel);
+          const pfam = frng.chance(0.4) ? FAM.concrete : liner.includes(lead) ? lead : frng.pick(liner);
+          const lk = look(pfam, frng, nb.pastel);
           const ph = storeys * pfam.floorH + 0.9;
           const [x, z] = toWorld(lx, lz);
           if (!landOK(x, z, pw, pd, d.rot)) return;
-          const top = place('box', x, z, pw, ph, pd, d.rot, lk.tint, pfam.style, pfam.floorH, { lit: pfam === FAM.concrete ? 0.1 : lk.lit * 0.6, warm: lk.warm, variant: lk.variant, margin: 0 });
+          // the liner's ground floor is retail (front + 10 tells the shader so) on the podium's street face
+          const top = place('box', x, z, pw, ph, pd, d.rot, lk.tint, pfam.style, pfam.floorH, { lit: pfam === FAM.concrete ? 0.1 : lk.lit * 0.6, warm: lk.warm, variant: lk.variant, margin: 0, front: front + 10 });
           if (top === null) return;
-          addRoofDetail(drng, x, z, pw, pd, top, d.rot, ph, pfam, { tier: 'podium', block: plan.within(lx, lz, pw, pd) });
+          groundFloor(frng, x, z, pw, pd, d.rot, front, pfam, ph, true);
+          podiumRoof(frng, x, z, pw, pd, top, d.rot, ph, pfam, towers[0]?.fam ?? pfam, plan.within(lx, lz, pw, pd));
           plan.take(lx, lz, pw, pd);
         };
-        if (podFull && towers.length) podium((bx0 + bx1) / 2, (bz0 + bz1) / 2, bw, bd);
+        if (podFull && towers.length) podium((bx0 + bx1) / 2, (bz0 + bz1) / 2, bw, bd, drng.int(0, 3));
         else if (podHalf && towers.length) {
           // along the street the first tower stands on, the block's full width
           const t0 = towers[0];
           const pd = Math.min(bd * 0.6, t0.fd + drng.range(10, 30));
-          podium((bx0 + bx1) / 2, t0.sz < 0 ? bz0 + pd / 2 : bz1 - pd / 2, bw, pd);
+          podium((bx0 + bx1) / 2, t0.sz < 0 ? bz0 + pd / 2 : bz1 - pd / 2, bw, pd, t0.sz < 0 ? 0 : 1);
         }
         for (const t of towers) {
           const [x, z] = toWorld(t.lx, t.lz);
-          buildTower(drng, x, z, d.rot, t.fw, t.fd, t.h, t.fam, t.recipe, true, nb.pastel);
+          // the lobby faces the street the tower stands on (its long street where it holds a corner)
+          const onX = t.lz - t.fd / 2 < bz0 + 1 || t.lz + t.fd / 2 > bz1 - 1, onZ = t.lx - t.fw / 2 < bx0 + 1 || t.lx + t.fw / 2 > bx1 - 1;
+          const front = onX && (!onZ || bw >= bd) ? (t.lz < (bz0 + bz1) / 2 ? 0 : 1) : onZ ? (t.lx < (bx0 + bx1) / 2 ? 2 : 3) : (t.sz < 0 ? 0 : 1);
+          buildTower(drng, x, z, d.rot, t.fw, t.fd, t.h, t.fam, t.recipe, true, nb.pastel, front);
+          if (!podFull && !podHalf) groundFloor(frng, x, z, t.fw, t.fd, d.rot, front, t.fam, t.h, false);
         }
         if (podFull && towers.length) return;
         // the street wall: 3-8 storey buildings shoulder to shoulder to the street line (taller toward the core),
         // in runs of kin families, wrapping the towers and the half podium
         const base = lerp(4.5, 8.5, core);
-        streetWall(plan, drng, {
-          storeys: () => clamp(Math.round(base + gauss(drng) * 1.6), 3, 13),
-          fam: (prev) => prev && drng.chance(0.45) ? prev : pickWeighted(drng, clusterWeights([[FAM.brick, 0.22], [FAM.punched, 0.26], [FAM.deco, 0.18], [FAM.balcony, 0.12], [FAM.grid, 0.08], [FAM.concrete, 0.06], [FAM.stone, 0.04], [FAM.glassGreen, 0.04]] as const, nb.glass)),
-          fMean: lerp(23, 19, core), dMin: 14, dMax: 24, skip: lerp(0.08, 0.03, core), parking: lerp(0.12, 0.06, core), pastel: nb.pastel,
+        streetWall(plan, frng, {
+          storeys: () => clamp(Math.round(base + gauss(frng) * 1.6), 3, 13),
+          fam: (prev) => prev && frng.chance(0.45) ? prev : pickWeighted(frng, clusterWeights([[FAM.brick, 0.22], [FAM.punched, 0.26], [FAM.deco, 0.18], [FAM.balcony, 0.12], [FAM.grid, 0.08], [FAM.concrete, 0.06], [FAM.stone, 0.04], [FAM.glassGreen, 0.04]] as const, nb.glass)),
+          fMean: lerp(23, 19, core), dMin: 14, dMax: 24, skip: lerp(0.08, 0.03, core), parking: lerp(0.12, 0.06, core), pastel: nb.pastel, retail: lerp(0.55, 0.85, core),
         });
-        interior(plan, drng, 14, false);
+        interior(plan, frng, 14, false);
       }
 
       function fillMidrise(): void {
@@ -1874,18 +2088,21 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
               ? (rr < 0.2 ? 1 : rr < 0.28 ? 7 : rr < 0.4 && long ? 2 : rr < 0.48 ? 3 : rr < 0.58 ? 9 : rr < 0.66 && long ? 10 : rr < 0.74 ? 13 : rr < 0.8 ? 12 : 0)
               : (rr < 0.2 ? 3 : rr < 0.3 && long ? 2 : rr < 0.4 ? 9 : rr < 0.5 ? 13 : rr < 0.56 && long ? 10 : 0);
             plan.take(lx, lz, fw, fd);
-            buildTower(drng, x, z, d.rot, fw, fd, h, fam, recipe, h > 20, nb.pastel);
+            // the corner tower's lobby faces the longer of its two streets
+            const front = bw >= bd ? (sz < 0 ? 0 : 1) : (sx < 0 ? 2 : 3);
+            buildTower(drng, x, z, d.rot, fw, fd, h, fam, recipe, h > 20, nb.pastel, front);
+            groundFloor(frng, x, z, fw, fd, d.rot, front, fam, h, false);
           }
         }
         // residential street wall: 2-8 storey walk-ups and condo slabs in the district's height range, courtyards
-        // behind them
+        // behind them; shops on the ground floor of about a third (more toward downtown)
         const sMin = Math.max(2, Math.round(d.hMin / 3.2)), sMax = clamp(Math.round((d.hMax * 0.55) / 3.2), sMin + 1, 10);
-        streetWall(plan, drng, {
-          storeys: () => clamp(Math.round(lerp(sMin, sMax, Math.pow(drng.next(), 1.8)) * lerp(0.85, 1.1, prox)), sMin, sMax),
-          fam: (prev) => prev && drng.chance(0.5) ? prev : pickWeighted(drng, clusterWeights([[FAM.balcony, 0.26], [FAM.punched, 0.24], [FAM.brick, 0.18], [FAM.deco, 0.16], [FAM.grid, 0.08], [FAM.glassGreen, 0.04], [FAM.concrete, 0.04]] as const, nb.glass * 0.5)),
-          fMean: 24, dMin: 13, dMax: 20, skip: 0.1, parking: 0.04, pastel: nb.pastel,
+        streetWall(plan, frng, {
+          storeys: () => clamp(Math.round(lerp(sMin, sMax, Math.pow(frng.next(), 1.8)) * lerp(0.85, 1.1, prox)), sMin, sMax),
+          fam: (prev) => prev && frng.chance(0.5) ? prev : pickWeighted(frng, clusterWeights([[FAM.balcony, 0.26], [FAM.punched, 0.24], [FAM.brick, 0.18], [FAM.deco, 0.16], [FAM.grid, 0.08], [FAM.glassGreen, 0.04], [FAM.concrete, 0.04]] as const, nb.glass * 0.5)),
+          fMean: 24, dMin: 13, dMax: 20, skip: 0.1, parking: 0.04, pastel: nb.pastel, retail: lerp(0.25, 0.5, prox),
         });
-        interior(plan, drng, 13, drng.chance(0.75));
+        interior(plan, frng, 13, frng.chance(0.75));
       }
 
       function fillHotel(): void {
@@ -1980,7 +2197,7 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
           const rot = d.rot + (along === 'x' ? 0 : Math.PI / 2);
           if (landOK(x, z, pw, pd, rot) && areaFree(x, z, pw + 3, pd + 3, rot)) {
             const h = 3.0 * drng.int(3, 6) + 1.2;
-            const top = place('box', x, z, pw, h, pd, rot, drng.pick(GREYS), S.PARKING, 3.0, { lit: 0.3, warm: 0.4, variant: 0.9 });
+            const top = place('box', x, z, pw, h, pd, rot, drng.pick(GREYS), S.PARKING, 3.0, { lit: 0.3, warm: 0.4, variant: 0.4 });
             if (top !== null) {
               // stair / lift towers at two corners, a lamp mast, the cars on the roof deck
               place('box', ...toWorld((bx0 + bx1) / 2 - pw * 0.42, (bz0 + bz1) / 2 - pd * 0.38), 5, 4, 5, rot, '#a6a8a4', S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
@@ -2013,8 +2230,12 @@ export function buildCity(map: WorldMap, blocksByDistrict: Map<string, Block[]>,
             const lk = look(fam, drng, nb.pastel);
             const floors = clamp(Math.round(drng.range(2, 3.4) + urban * drng.range(1, 4)), 2, 7);
             const h = fam.floorH * floors + 0.8;
-            const top = place('box', x, z, w, h, dd, rot, lk.tint, fam.style, fam.floorH, { lit: lk.lit, warm: lk.warm, variant: lk.variant, margin: 1.5 });
+            // the row faces its street (face 0 toward -local); shops on the corridor blocks' ground floors
+            const sface = along === 'x' ? (face === 0 ? 0 : 1) : (face === 0 ? 2 : 3);
+            const shops = fam.style !== S.CONCRETE && drng.chance(onCorridor ? 0.5 : 0.12);
+            const top = place('box', x, z, w, h, dd, rot, lk.tint, fam.style, fam.floorH, { lit: lk.lit, warm: lk.warm, variant: lk.variant, margin: 1.5, front: sface + (shops ? 10 : 0) });
             if (top === null) continue;
+            groundFloor(drng, x, z, w, dd, rot, sface, fam, h, shops);
             if (floors >= 4 && drng.chance(0.3)) place('box', x, z, w * 0.5, 2.8, dd * 0.45, rot, drng.pick(GREYS), S.CONCRETE, 3, { yBase: top - 0.2, margin: -1 });
             addSmallRoofKit(drng, x, z, w, dd, top, rot);
             if (face === 0 && drng.chance(0.2)) {

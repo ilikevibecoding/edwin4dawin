@@ -27,6 +27,11 @@ import { GLSL_NOISE } from '../render/shaders/common.glsl';
  *  Glass widens its specular lobe as its panes go sub-pixel (the pane tilts average into the face's normal
  *  distribution), so the sun lights a tower's sun-facing side coherently at 1-5 km.
  */
+
+/** parked cars (city.ts `car` kind, one box each) are drawn from cells within this distance; beyond it the LOT and
+ *  PARKING roof shaders paint a car-coloured blob in the same share of the stalls (carBlobs) */
+export const CAR_FAR = 900;
+
 export function createFacadeMaterial(nightUniform: THREE.IUniform<number>): THREE.MeshStandardMaterial {
   const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.7, metalness: 0.0 });
   mat.onBeforeCompile = (shader) => {
@@ -190,6 +195,33 @@ vec3 fasciaPalette(float k) {
   if (k < 0.64) return vec3(0.92, 0.90, 0.84);
   if (k < 0.80) return vec3(0.80, 0.56, 0.14);
   return vec3(0.10, 0.10, 0.11);
+}
+// a parked car's paint (the city.ts CAR_C palette's spread: white and silver most, then dark, then a few colours)
+vec3 carPalette(float k) {
+  if (k < 0.22) return vec3(0.72, 0.72, 0.70);
+  if (k < 0.42) return vec3(0.40, 0.42, 0.44);
+  if (k < 0.62) return vec3(0.03, 0.03, 0.035);
+  if (k < 0.72) return vec3(0.02, 0.04, 0.10);
+  if (k < 0.82) return vec3(0.30, 0.03, 0.03);
+  if (k < 0.9) return vec3(0.42, 0.36, 0.26);
+  return vec3(0.10, 0.14, 0.09);
+}
+// The cars of a striped lot beyond the car geometry's range (city.ts CAR_FAR): a car-coloured rectangle in
+// \`fill\` of the stalls (the stall's hash against the lot's fill share, aStyle2.z), 4.5 x 1.8 m at the stall's
+// centre, box-filtered so a far row is a mottled band; faded in over the last 120 m so the boxes take over inside
+vec3 carBlobs(vec3 col, float along, float across, float wa, float wc, float seed, float fill) {
+  float far = smoothstep(${CAR_FAR.toFixed(1)} - 120.0, ${CAR_FAR.toFixed(1)}, length(vWorldPosF - cameraPosition));
+  if (far <= 0.0) return col;
+  float p = mod(across - 0.6, 17.1);
+  float rowB = step(11.5, p) * step(p, 16.5);
+  float inRow = max(step(p, 5.0), rowB);
+  float rc = rowB > 0.5 ? 14.0 : 2.5;
+  float stallI = floor((along - 0.6) / 2.6), rowI = floor((across - 0.6) / 17.1) * 2.0 + rowB;
+  float on = step(hash12(vec2(stallI, rowI + seed)), fill) * inRow;
+  float carAcross = fpulse((p - rc + 2.25) / 4.5, 0.0, 1.0, wc / 4.5);
+  float carAlong = fpulse(fract((along - 0.6) / 2.6), 0.15, 0.85, wa / 2.6);
+  vec3 cc = carPalette(hash12(vec2(stallI * 3.1, rowI * 7.7 + seed)));
+  return mix(col, cc, on * carAcross * carAlong * far);
 }
 `)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
@@ -373,6 +405,7 @@ if (facadeGlass > 0.0) {
         float stripe = fpulse((along - 0.6) / 2.6, 0.0, 0.05, wa / 2.6) * stallBand;
         float head = (fpulse(p / 17.1, 0.0, 0.025, wc / 17.1) + fpulse(p / 17.1, 16.475 / 17.1, 16.5 / 17.1, wc / 17.1));
         col = mix(col, vec3(0.62), clamp(stripe + head, 0.0, 1.0) * 0.9 * (1.0 - smoothstep(0.25, 0.7, wa)));
+        col = carBlobs(col, along, across, wa, wc, seed, variant);
         float edgeD = min(min(meters.x, vDims.x - meters.x), min(meters.z, vDims.z - meters.z));
         col = mix(col, vec3(0.58, 0.57, 0.55), 1.0 - fstep(0.9, edgeD, fwidth(edgeD)));   // the upstand's top
         rough = 0.85;
@@ -410,6 +443,7 @@ if (facadeGlass > 0.0) {
         float stripe = fpulse((along - 0.6) / 2.6, 0.0, 0.05, wa / 2.6) * stallBand;
         float head = fpulse(p / 17.1, 0.0, 0.025, wc / 17.1) + fpulse(p / 17.1, 16.475 / 17.1, 16.5 / 17.1, wc / 17.1);
         col = mix(col, vec3(0.6), clamp(stripe + head, 0.0, 1.0) * 0.85 * (1.0 - smoothstep(0.25, 0.7, wa)));
+        col = carBlobs(col, along, across, wa, wc, seed, variant);
         float edgeD = min(min(meters.x, vDims.x - meters.x), min(meters.z, vDims.z - meters.z));
         col = mix(col, vec3(0.5, 0.49, 0.47), 1.0 - fstep(0.35, edgeD, fwidth(edgeD)));   // kerb
         rough = 0.9;
@@ -436,9 +470,16 @@ if (facadeGlass > 0.0) {
     } else if (style == 23.0) {
       // lawn: mown grass, mottled, a worn path where the noise runs low; the sides are the kerb of its bed
       if (isTop) {
+        // the parks' turf albedo (0.06-0.08 / 0.10-0.14 / 0.04-0.05: a lawn 2.5x brighter than the terrain's grass
+        // rendered lime), the mottle fading to its mean with the pixel footprint so a far lawn is a flat green
+        float lawnPx = fwidth(vWorldPosF.x) + fwidth(vWorldPosF.z);
+        float mottle = 1.0 - smoothstep(0.6, 2.5, lawnPx);
         float n = vnoise(vWorldPosF.xz * 0.6), n2 = vnoise(vWorldPosF.xz * 4.0);
-        col = mix(vec3(0.16, 0.26, 0.07), vec3(0.24, 0.32, 0.10), n) * (0.9 + 0.2 * n2);
-        col = mix(col, vec3(0.30, 0.27, 0.20), smoothstep(0.72, 0.85, vnoise(vWorldPosF.xz * 0.18 + seed)) * 0.6);
+        col = mix(vec3(0.060, 0.104, 0.038), vec3(0.084, 0.136, 0.052), mix(0.5, n, mottle)) * (1.0 + 0.2 * (n2 - 0.5) * mottle);
+        // a green roof (city.ts GREEN_ROOF_C, olive tints: linear red over 0.075 where a lawn's is 0.04) is sedum,
+        // drier and browner than a lawn, in its own tint
+        col = mix(col, wall * 0.8 * (0.9 + 0.2 * n2 * mottle), step(0.075, wall.r));
+        col = mix(col, vec3(0.30, 0.27, 0.20), smoothstep(0.72, 0.85, vnoise(vWorldPosF.xz * 0.18 + seed)) * 0.6 * mottle);
         rough = 0.95;
       } else { col = wall * 0.75; rough = 0.95; }   // a hedge's sides, a lawn bed's grassy edge
     } else if (style == 24.0) {
@@ -501,8 +542,11 @@ if (facadeGlass > 0.0) {
       // to ballast and dark sheet, stucco and precast to the pale coating, brick to bitumen. Each has the marks
       // that say what it is at 130-500 m (the seam grid, the paver walkway, the ponding, the panel ribs) and they
       // fade to the family's mean as they go sub-pixel, so a far roof is a tone, never a shimmer.
-      float mk = hash11(seed * 4.7 + 1.9) + (glassy || style == 9.0 ? 0.3 : style == 10.0 ? 0.15 : style == 3.0 || style == 6.0 ? -0.15 : 0.0);
-      int rfam = mk < 0.2 ? 0 : mk < 0.42 ? 1 : mk < 0.72 ? 2 : mk < 0.93 ? 3 : 4;
+      // the wide roofs (podium liners, plates over 900 m2) lean to ballast and dark sheet: the pale coating on a
+      // 60 x 40 m roof is the blank slab the aerial views showed; glass towers never carry standing seam
+      float wide = smoothstep(600.0, 1400.0, vDims.x * vDims.z);
+      float mk = hash11(seed * 4.7 + 1.9) + (glassy || style == 9.0 ? 0.25 : style == 10.0 ? 0.15 : style == 3.0 || style == 6.0 ? -0.1 : 0.0) + 0.15 * wide;
+      int rfam = mk < 0.17 ? 0 : mk < 0.38 ? 1 : mk < 0.7 ? 2 : mk < 0.95 ? 3 : (glassy ? 3 : 4);
       float roofPx = fwidth(vWorldPosF.x) + fwidth(vWorldPosF.z);
       float fine = 1.0 - smoothstep(0.15, 0.6, roofPx);   // sub-metre marks
       float midv = 1.0 - smoothstep(0.6, 2.5, roofPx);    // metre-scale marks
@@ -510,22 +554,24 @@ if (facadeGlass > 0.0) {
       float longX = step(vDims.z, vDims.x);
       float across = mix(meters.x, meters.z, longX), acrossW = mix(vDims.x, vDims.z, longX);
       if (rfam == 0) {
-        // pale TPO / PVC sheet, weathered to 0.6: seams every 2 m, grime drifting into the corners and patches
-        col = vec3(0.60, 0.60, 0.58) * (0.9 + 0.2 * n1);
+        // pale TPO / PVC sheet, weathered to 0.5 (0.6 rendered near white beside the 0.55 concrete coping):
+        // seams every 2 m, grime drifting into the corners and patches, the ponding stains darker
+        col = vec3(0.50, 0.50, 0.48) * (0.88 + 0.24 * n1);
         col *= 1.0 - 0.12 * fpulse(meters.x / 2.0, 0.0, 0.03, fwidth(meters.x) / 2.0) * fine;
-        col *= 1.0 - 0.25 * smoothstep(0.5, 0.85, n2);
-        col = mix(col, vec3(0.5, 0.5, 0.49), step(0.7, hash12(floor(vWorldPosF.xz / 3.0) + seed)) * 0.5 * midv * smoothstep(0.55, 0.7, vnoise(vWorldPosF.xz * 0.45 + 3.0)));
+        col *= 1.0 - 0.3 * smoothstep(0.5, 0.85, n2);
+        col = mix(col, vec3(0.38, 0.38, 0.37), step(0.7, hash12(floor(vWorldPosF.xz / 3.0) + seed)) * 0.5 * midv * smoothstep(0.55, 0.7, vnoise(vWorldPosF.xz * 0.45 + 3.0)));
         rough = 0.7;
       } else if (rfam == 1) {
         // grey elastomeric coating / mineral cap sheet: rolled seams every metre, chalky wear
-        col = vec3(0.42, 0.42, 0.41) * (0.9 + 0.2 * n1);
+        col = vec3(0.30, 0.30, 0.29) * (0.88 + 0.24 * n1);
         col *= 1.0 - 0.1 * fpulse(across / 1.0, 0.0, 0.05, fwidth(across)) * fine;
-        col = mix(col, vec3(0.5, 0.49, 0.47), smoothstep(0.6, 0.9, vnoise(vWorldPosF.xz * 1.5)) * 0.3 * midv);
+        col = mix(col, vec3(0.38, 0.37, 0.35), smoothstep(0.6, 0.9, vnoise(vWorldPosF.xz * 1.5)) * 0.3 * midv);
         rough = 0.85;
       } else if (rfam == 2) {
-        // gravel ballast: the stone's grain while it spans pixels, a 0.6 m paver walkway along the roof to the units
+        // gravel ballast: the stone's grain while it spans pixels, a 0.6 m paver walkway along the roof to the
+        // units; the aggregate a warm grey-brown
         float grain = vnoise(vWorldPosF.xz * 6.0);
-        col = vec3(0.34, 0.33, 0.31) * (0.88 + 0.24 * n1) * (1.0 + (0.25 * grain - 0.12) * fine);
+        col = vec3(0.26, 0.245, 0.22) * (0.86 + 0.28 * n1) * (1.0 + (0.25 * grain - 0.12) * fine);
         col *= 1.0 - 0.15 * smoothstep(0.62, 0.8, n2);
         float wPos = acrossW * (0.3 + 0.4 * hash11(seed * 3.3));
         float walk = fpulse((across - wPos) / 0.6, 0.0, 1.0, fwidth(across) / 0.6) * step(6.0, min(vDims.x, vDims.z));
@@ -540,7 +586,7 @@ if (facadeGlass > 0.0) {
       } else {
         // standing-seam metal: pale grey, white or teal panels, ribs every 0.45 m, a low sheen
         float mh = hash11(seed * 6.6);
-        vec3 mc = mh < 0.4 ? vec3(0.55, 0.56, 0.57) : mh < 0.7 ? vec3(0.68, 0.68, 0.66) : vec3(0.22, 0.38, 0.38);
+        vec3 mc = mh < 0.4 ? vec3(0.42, 0.43, 0.44) : mh < 0.7 ? vec3(0.55, 0.55, 0.53) : vec3(0.18, 0.32, 0.32);
         col = mc * (0.94 + 0.12 * n1);
         col *= 1.0 - 0.18 * fpulse(across / 0.45, 0.0, 0.1, fwidth(across) / 0.45) * fine;
         rough = 0.4; metal = 0.6;
@@ -1006,13 +1052,17 @@ if (facadeGlass > 0.0) {
       // docks in the service lane rather than the same ground floor all round.
       bool walkup = (style == 1.0 || style == 2.0 || style == 3.0 || style == 7.0 || style == 10.0 || style == 11.0) && H > 7.0 && !isTrim;
       bool tower = (style < 0.5 || style == 8.0 || style == 9.0 || (style == 11.0 && H > 40.0)) && H > 24.0 && faceW > 10.0 && !isTrim;
-      // faces 0 / 1 are -z / +z, 2 / 3 are -x / +x: the back face is the front's pair
+      // faces 0 / 1 are -z / +z, 2 / 3 are -x / +x: the back face is the front's pair. city.ts names the street
+      // face of the buildings it lays out to a street (aStyle2.w = 10 + face, 20 + face when the ground floor is
+      // shops) and puts the canopies, awnings and stoops on that face; the rest pick by hash.
+      float form = vStyle2.w;
+      bool frontGiven = form > 9.5;
       float faceId = floor(sideX + 0.5) * 2.0 + step(0.0, vLocalN.x + vLocalN.z);
-      float frontId = floor(hash11(seed * 5.1 + 0.2) * 3.999);
+      float frontId = frontGiven ? mod(form - 10.0, 10.0) : floor(hash11(seed * 5.1 + 0.2) * 3.999);
       float backId = frontId + (mod(frontId, 2.0) < 0.5 ? 1.0 : -1.0);
       bool front = round || abs(faceId - frontId) < 0.5;
       bool back = !round && abs(faceId - backId) < 0.5;
-      bool street = walkup && hash11(seed * 4.4 + 0.9) < 0.7;
+      bool street = walkup && (form > 19.5 || (!frontGiven && hash11(seed * 4.4 + 0.9) < 0.7));
       float lobbyN = H > 60.0 ? 2.0 : 1.0;
       if (street && floorIdx < 0.5 && !back) {
         // shopfront glazing between piers over a stone stall riser, a fascia sign band over it, lit at night
@@ -1024,9 +1074,9 @@ if (facadeGlass > 0.0) {
         float fascia = sx * fpulse(fl, 0.77, 0.94, pwv);
         vec3 fasciaCol = fasciaPalette(hash12(vec2(signId, seed)));
         vec3 shopIn = vec3(0.10, 0.09, 0.08) + vec3(0.3, 0.27, 0.22) * smoothstep(0.5, 0.74, fy) * vis;
-        float awning = sx * fpulse(fl, 0.66, 0.76, pwv) * step(0.5, hash12(vec2(signId, seed + 1.0)));
-        awning *= 0.6 + 0.4 * fpulse(bu * 6.0, 0.0, 0.5, pwu * 6.0);   // striped valance
-        col = mix(wall * 0.9, shopIn, shop);
+        // the shop parade's piers and stall risers are the base course: stone or dark render, never the upper wall
+        vec3 baseC = mix(wall * 0.72, vec3(0.34, 0.33, 0.31), 0.5 * step(0.5, hash11(seed * 9.9 + 0.3)));
+        col = mix(baseC, shopIn, shop);
         col = mix(col, mix(vec3(0.26, 0.25, 0.24), wall * 0.6, step(0.5, hash11(seed * 4.2 + 0.6))), riser);
         // the door: a framed leaf at the near end of the odd bays, its glass a shade darker than the window
         float doorSide = step(0.5, hash12(vec2(colIdx, seed + 7.0)));
@@ -1054,8 +1104,6 @@ if (facadeGlass > 0.0) {
         vec3 logoCol = mix(textCol, fasciaPalette(fract(sHash + 0.37)), 0.6);
         col = mix(col, textCol, text);
         col = mix(col, logoCol, logo);
-        col = mix(col, mix(fasciaCol, vec3(0.9), 0.35) * 0.8, awning);
-        shop *= 1.0 - awning;
         float shopGlass = max(shop * (1.0 - doorFrame), door * (1.0 - doorFrame));
         rough = mix(0.8, 0.1, shopGlass);
         metal = 0.0;
@@ -1095,14 +1143,17 @@ if (facadeGlass > 0.0) {
         col = mix(vec3(0.16, 0.17, 0.18), lobbyIn, g);
         col = mix(col, vec3(0.22, 0.22, 0.23), plinth);
         col = mix(col, wall * 0.9, head);
+        // the canopy band (city.ts groundFloor hangs the slab itself at the same height): over a two-storey lobby
+        // at 0.55 of it, over a single storey at 0.82 (0.55 of 3.9 m put a 1.7 m canopy over 2.1 m doors)
         float ent = front ? fpulse(u / faceW, 0.36, 0.64, wu / faceW) : 0.0;
-        float canopy = ent * fpulse(lv, 0.55, 0.62, wv / lobbyH);
-        float doors = ent * (1.0 - fstep(0.55 * lobbyH, v, wv)) * (1.0 - plinth);
+        float cy = lobbyN > 1.5 ? 0.55 : 0.82;
+        float canopy = ent * fpulse(lv, cy, cy + 0.07, wv / lobbyH);
+        float doors = ent * (1.0 - fstep(cy * lobbyH, v, wv)) * (1.0 - plinth);
         col = mix(col, vec3(0.12, 0.12, 0.13), canopy);
-        col *= 1.0 - 0.35 * doors * smoothstep(0.35, 0.55, lv);
+        col *= 1.0 - 0.35 * doors * smoothstep(cy - 0.2, cy, lv);
         float doorFrame = doors * fpulse(u / 1.1, 0.0, 0.06, wu / 1.1);
         col = mix(col, vec3(0.7), doorFrame);
-        float sign = ent * fpulse(lv, 0.66, 0.8, wv / lobbyH) * fpulse(u / faceW, 0.42, 0.58, wu / faceW);
+        float sign = lobbyN > 1.5 ? ent * fpulse(lv, 0.66, 0.8, wv / lobbyH) * fpulse(u / faceW, 0.42, 0.58, wu / faceW) : 0.0;
         vec3 signCol = fasciaPalette(hash11(seed * 3.3));
         col = mix(col, signCol, sign * 0.85);
         rough = mix(0.6, 0.08, g);
@@ -1127,8 +1178,12 @@ if (facadeGlass > 0.0) {
         facadeGlass *= 1.0 - max(dock, door);
         emis *= 1.0 - max(dock, door);
       } else if (front && !round && floorIdx < 0.5 && walkup) {
-        // entrance: a panelled door in a pale surround, a lamp over it at night, a darker plinth
-        float u0 = faceW * 0.5 + (hash11(seed * 6.6) - 0.5) * faceW * 0.5;
+        // entrance: a panelled door in a pale surround (centred on the face when city.ts put the stoop there), a
+        // lamp over it at night, a darker plinth; the ground floor of half the walk-ups is a base course of
+        // rendered or stone work a shade darker than the wall, so the building meets the pavement with a band
+        float u0 = frontGiven ? faceW * 0.5 - 0.65 : faceW * 0.5 + (hash11(seed * 6.6) - 0.5) * faceW * 0.5;
+        float baseCourse = step(0.5, hash11(seed * 9.9 + 0.3)) * (1.0 - fstep(floorH - 0.25, v, wv));
+        col = mix(col, col * vec3(0.66, 0.64, 0.62), baseCourse);
         float door = fpulse((u - u0) / faceW, 0.0, 1.3 / faceW, wu / faceW) * (1.0 - fstep(2.5, v, wv));
         float surround = clamp(fpulse((u - u0 + 0.2) / faceW, 0.0, 1.7 / faceW, wu / faceW) * (1.0 - fstep(2.9, v, wv)) - door, 0.0, 1.0);
         vec3 doorCol = hash11(seed * 7.2) < 0.5 ? vec3(0.20, 0.16, 0.12) : vec3(0.12, 0.2, 0.26);
@@ -1139,6 +1194,9 @@ if (facadeGlass > 0.0) {
         emis = emis * (1.0 - door) + vec3(1.0, 0.85, 0.6) * lamp * 2.0 * nightOn;
         facadeGlass *= 1.0 - max(door, surround);
       } else if (!isTrim) {
+        // the other faces of a walk-up carry the same base course round the building
+        float baseCourse = walkup && !street && floorIdx < 0.5 ? step(0.5, hash11(seed * 9.9 + 0.3)) * (1.0 - fstep(floorH - 0.25, v, wv)) : 0.0;
+        col = mix(col, col * vec3(0.66, 0.64, 0.62), baseCourse);
         col = mix(col, col * 0.8, 1.0 - fstep(0.8, v, wv));
       }
       // weathering: grime near the ground, rain staining under the parapet
@@ -1176,6 +1234,6 @@ if (facadeGlass > 0.0) {
   totalEmissiveRadiance += emis;
 }`);
   };
-  mat.customProgramCacheKey = () => 'facade-v15';
+  mat.customProgramCacheKey = () => 'facade-v16';
   return mat;
 }
