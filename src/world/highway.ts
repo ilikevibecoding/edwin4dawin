@@ -168,6 +168,13 @@ const CONCRETE_FRAG = /* glsl */ `
     cover = mix(cover, dry, isGrass * max(0.8 * dryPatch, 0.55 * outer));
     diffuseColor.rgb = mix(cover, gravel, band);
     roughnessFactor = 0.97;
+    // the lamp pool spills over the pavement edge (vInfoH.w: the nearest pole's station, as the course carries it):
+    // the course's lozenge continued outward from the 11 m pavement edge (every highway is 22 m, map.ts), at
+    // 0.55 against the course's 1.4 because the grass reflects twice what the asphalt does - so at night the lit
+    // ribbon fades into the verge over 3-4 m instead of stopping dead at the edge line as it did from 80-300 m
+    float dPoleV = vInfoH.y - vInfoH.w;
+    hwPool = 0.55 * step(0.5, vInfoH.w) * exp(-pow(dPoleV / 12.0, 2.0)) * exp(-pow((across + ${(11 - ARM_REACH).toFixed(2)}) / 7.5, 2.0));
+    hwPoolTint = diffuseColor.rgb;
   } else if (kind > 3.5 && kind < 4.5) {
     // wearing course: dark lane asphalt with its own paint (yellow beside the barrier, dashed lane line, edge line
     // with a rumble band outside it), each lane resurfaced in its own 300 m contracts, wheel paths rubbed darker,
@@ -306,7 +313,7 @@ function createConcreteMaterial(pixelScale: THREE.IUniform<number>, lampGlow: TH
       // and the pale concrete shine brighter than the asphalt)
       .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance = vec3(1.0, 0.82, 0.55) * hwPoolTint * (hwPool * uLampGlow);');
   };
-  mat.customProgramCacheKey = () => 'highway-concrete-v5';
+  mat.customProgramCacheKey = () => 'highway-concrete-v6';
   return mat;
 }
 
@@ -1195,69 +1202,6 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       }
     }
 
-    // -------------------------------------------------------- verges: the mown right-of-way strip beside each pavement edge (a gravel band, then
-    // grass - or sand on the beaches - out to 7 m), draped on the terrain row by row and stopped at the water's edge; it
-    // gives the corridor its edges from the air and the posts stand on it
-    for (const side of [-1, 1] as const) {
-      const cuts = new Set<number>(stations(c, 0, c.total));
-      for (let k = 1; k < nChunks; k++) cuts.add(k * chunkLen);
-      const ss = [...cuts].sort((p, q) => p - q);
-      /** the cover of a verge point: sand on the beaches and at the waterline; on the sandy shore fringe - the terrain's
-       *  own rule (terrain.ts `sandy`: low ground within 30-70 m of the coast, exposed, not under canopy), where the
-       *  ground is pale sand under dry tufts - the dry khaki scrub of an unwatered verge rather than a mown lawn (on
-       *  the tortuga spit the irrigated green ran as a neon band between beach sand and sea grape); mown grass inland */
-      const toneAt = (x: number, z: number, g: number): Rgb => {
-        if (map.zoneAt(x, z) === 2 || g < 1.2) return C_VERGE_SAND;
-        const canopy = Math.pow(smoothstep(0.3, 0.82, map.vegAt(x, z)), 2);
-        const sandy = (1 - smoothstep(1.0, 2.8, g)) * smoothstep(0.06, 0.28, map.exposureAt(x, z)) * (1 - 0.55 * canopy) * (1 - smoothstep(30, 70, -map.coastAt(x, z)));
-        return sandy > 0.6 ? C_VERGE_SAND : sandy > 0.25 ? C_VERGE_SCRUB : C_VERGE_GRASS;
-      };
-      /** the rows of one station: positions from the pavement edge outward (fewer where the ground goes under water) */
-      const rowsAt = (s: number): { p: THREE.Vector3; tone: Rgb }[] => {
-        const f = frameAt(c, s);
-        const out: { p: THREE.Vector3; tone: Rgb }[] = [];
-        let yPrev = 0;
-        for (let k = 0; k < VERGE_ROWS.length; k++) {
-          const a = side * (hw + VERGE_ROWS[k]);
-          const x = f.x + f.rx * a, z = f.z + f.rz * a;
-          const g = terrainAt(map, x, z);
-          if (k > 0 && g < 0.15) break;
-          // 5 cm under the pavement edge, then on the rendered terrain at the lift the roads use (the clipmap sits
-          // under it), never dropping or climbing faster than a real graded verge would between two rows; under
-          // another road's pavement (a frontage street beside the shoulder, a street mouth) the row is sunk well
-          // below it - that pavement is flat between its 15 m rows while the terrain the verge follows is not, and
-          // the verge showed through it in green blotches from 180 m
-          const under = k > 0 && inRoad(x, z, 0.4) ? 0.45 : 0.05;
-          const y = k === 0 ? surfaceAt(c, s, a) - 0.05 : clamp(g + ROAD_LIFT - under, yPrev - 0.35 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]), yPrev + 0.12 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]));
-          yPrev = y;
-          out.push({ p: new THREE.Vector3(x, y, z), tone: toneAt(x, z, g) });
-        }
-        return out;
-      };
-      let prev = rowsAt(ss[0]);
-      for (let i = 1; i < ss.length; i++) {
-        const cur = rowsAt(ss[i]);
-        const soup = P((ss[i - 1] + ss[i]) / 2).conc;
-        const n = Math.min(prev.length, cur.length);
-        for (let k = 0; k + 1 < n; k++) {
-          const p0 = prev[k], p1 = cur[k], p2 = cur[k + 1], p3 = prev[k + 1];
-          const base = soup.vertexCount;
-          _n.subVectors(p1.p, p0.p).cross(_d.subVectors(p3.p, p0.p)).normalize();
-          if (_n.y < 0) _n.negate();
-          const a0 = VERGE_ROWS[k], a1 = VERGE_ROWS[k + 1];
-          soup.vertex(p0.p.x, p0.p.y, p0.p.z, _n.x, _n.y, _n.z, p0.tone, [3, ss[i - 1], a0]);
-          soup.vertex(p1.p.x, p1.p.y, p1.p.z, _n.x, _n.y, _n.z, p1.tone, [3, ss[i], a0]);
-          soup.vertex(p2.p.x, p2.p.y, p2.p.z, _n.x, _n.y, _n.z, p2.tone, [3, ss[i], a1]);
-          soup.vertex(p3.p.x, p3.p.y, p3.p.z, _n.x, _n.y, _n.z, p3.tone, [3, ss[i - 1], a1]);
-          _a.subVectors(p1.p, p0.p).cross(_b.subVectors(p2.p, p0.p));
-          if (_a.y >= 0) soup.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
-          else soup.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
-        }
-        prev = cur;
-      }
-      counts.vergeM += c.total;
-    }
-
     // -------------------------------------------------------- guardrail: where the ground beside the shoulder is water or drops away, and on the causeway approaches
     const railRuns: { side: 1 | -1; runs: Run[] }[] = [];
     for (const side of [-1, 1] as const) {
@@ -1475,6 +1419,73 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       for (const p of poleStations) if (Math.abs(p - s) < Math.abs(best - s)) best = p;
       return best;
     };
+    // -------------------------------------------------------- verges: the mown right-of-way strip beside each pavement edge (a gravel band, then
+    // grass - or sand on the beaches - out to 7 m), draped on the terrain row by row and stopped at the water's edge; it
+    // gives the corridor its edges from the air and the posts stand on it. Built after the lighting: every strip is
+    // cut halfway between poles and carries its pole's station (aInfo.w) for the lamp spill at night
+    const poleMidpoints = poleStations.slice(1).map((s, i) => (s + poleStations[i]) / 2);
+    for (const side of [-1, 1] as const) {
+      const cuts = new Set<number>(stations(c, 0, c.total));
+      for (let k = 1; k < nChunks; k++) cuts.add(k * chunkLen);
+      for (const s of poleMidpoints) if (s > 0.05 && s < c.total - 0.05) cuts.add(s);
+      const ss = [...cuts].sort((p, q) => p - q);
+      /** the cover of a verge point: sand on the beaches and at the waterline; on the sandy shore fringe - the terrain's
+       *  own rule (terrain.ts `sandy`: low ground within 30-70 m of the coast, exposed, not under canopy), where the
+       *  ground is pale sand under dry tufts - the dry khaki scrub of an unwatered verge rather than a mown lawn (on
+       *  the tortuga spit the irrigated green ran as a neon band between beach sand and sea grape); mown grass inland */
+      const toneAt = (x: number, z: number, g: number): Rgb => {
+        if (map.zoneAt(x, z) === 2 || g < 1.2) return C_VERGE_SAND;
+        const canopy = Math.pow(smoothstep(0.3, 0.82, map.vegAt(x, z)), 2);
+        const sandy = (1 - smoothstep(1.0, 2.8, g)) * smoothstep(0.06, 0.28, map.exposureAt(x, z)) * (1 - 0.55 * canopy) * (1 - smoothstep(30, 70, -map.coastAt(x, z)));
+        return sandy > 0.6 ? C_VERGE_SAND : sandy > 0.25 ? C_VERGE_SCRUB : C_VERGE_GRASS;
+      };
+      /** the rows of one station: positions from the pavement edge outward (fewer where the ground goes under water) */
+      const rowsAt = (s: number): { p: THREE.Vector3; tone: Rgb }[] => {
+        const f = frameAt(c, s);
+        const out: { p: THREE.Vector3; tone: Rgb }[] = [];
+        let yPrev = 0;
+        for (let k = 0; k < VERGE_ROWS.length; k++) {
+          const a = side * (hw + VERGE_ROWS[k]);
+          const x = f.x + f.rx * a, z = f.z + f.rz * a;
+          const g = terrainAt(map, x, z);
+          if (k > 0 && g < 0.15) break;
+          // 5 cm under the pavement edge, then on the rendered terrain at the lift the roads use (the clipmap sits
+          // under it), never dropping or climbing faster than a real graded verge would between two rows; under
+          // another road's pavement (a frontage street beside the shoulder, a street mouth) the row is sunk well
+          // below it - that pavement is flat between its 15 m rows while the terrain the verge follows is not, and
+          // the verge showed through it in green blotches from 180 m
+          const under = k > 0 && inRoad(x, z, 0.4) ? 0.45 : 0.05;
+          const y = k === 0 ? surfaceAt(c, s, a) - 0.05 : clamp(g + ROAD_LIFT - under, yPrev - 0.35 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]), yPrev + 0.12 * (VERGE_ROWS[k] - VERGE_ROWS[k - 1]));
+          yPrev = y;
+          out.push({ p: new THREE.Vector3(x, y, z), tone: toneAt(x, z, g) });
+        }
+        return out;
+      };
+      let prev = rowsAt(ss[0]);
+      for (let i = 1; i < ss.length; i++) {
+        const cur = rowsAt(ss[i]);
+        const soup = P((ss[i - 1] + ss[i]) / 2).conc;
+        const pole = poleFor((ss[i - 1] + ss[i]) / 2);
+        const n = Math.min(prev.length, cur.length);
+        for (let k = 0; k + 1 < n; k++) {
+          const p0 = prev[k], p1 = cur[k], p2 = cur[k + 1], p3 = prev[k + 1];
+          const base = soup.vertexCount;
+          _n.subVectors(p1.p, p0.p).cross(_d.subVectors(p3.p, p0.p)).normalize();
+          if (_n.y < 0) _n.negate();
+          const a0 = VERGE_ROWS[k], a1 = VERGE_ROWS[k + 1];
+          soup.vertex(p0.p.x, p0.p.y, p0.p.z, _n.x, _n.y, _n.z, p0.tone, [3, ss[i - 1], a0, pole]);
+          soup.vertex(p1.p.x, p1.p.y, p1.p.z, _n.x, _n.y, _n.z, p1.tone, [3, ss[i], a0, pole]);
+          soup.vertex(p2.p.x, p2.p.y, p2.p.z, _n.x, _n.y, _n.z, p2.tone, [3, ss[i], a1, pole]);
+          soup.vertex(p3.p.x, p3.p.y, p3.p.z, _n.x, _n.y, _n.z, p3.tone, [3, ss[i - 1], a1, pole]);
+          _a.subVectors(p1.p, p0.p).cross(_b.subVectors(p2.p, p0.p));
+          if (_a.y >= 0) soup.idx.push(base, base + 1, base + 2, base, base + 2, base + 3);
+          else soup.idx.push(base, base + 2, base + 1, base, base + 3, base + 2);
+        }
+        prev = cur;
+      }
+      counts.vergeM += c.total;
+    }
+
     for (const { part, frames, scale } of barrierLofts) loftH(part.conc, frames, BARRIER_PROFILE, scale, [C_BARRIER, C_BARRIER, C_BARRIER, C_BARRIER_TOP, C_BARRIER, C_BARRIER, C_BARRIER], 1, BARRIER_H * 0.45, (f, _k, h) => [1, f.s, h, poleFor(f.s)]);
 
     // -------------------------------------------------------- wearing course: dark asphalt over both carriageways, 2 cm up on the pavement.
@@ -1508,8 +1519,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
         for (const b of sideBoxes) k = Math.max(k, 1 - Math.max(0, Math.max(b.s0 - s, s - b.s1)) / 15);
         return 0.06 * k;
       };
-      // strips are cut halfway between poles so every strip lies in one pool
-      const midpoints = poleStations.slice(1).map((s, i) => (s + poleStations[i]) / 2);
+      // strips are cut halfway between poles (`poleMidpoints`) so every strip lies in one pool
       /** one strip of the course between stations sa and sb, a0..a1 across; the vertex colour carries the wear tone
        *  (r) and the toll plaza's station where the strip lies within its approach paint (g), aInfo the station of
        *  the nearest lighting pole for the shader */
@@ -1539,7 +1549,7 @@ export function buildHighway(map: WorldMap, segments: RoadSegment[], registerLit
       const cutsBetween = (s0: number, s1: number, extra: number[]): number[] => {
         const cuts = new Set<number>(stations(c, s0, s1));
         for (let k = 1; k < nChunks; k++) { const s = k * chunkLen; if (s > s0 + 0.05 && s < s1 - 0.05) cuts.add(s); }
-        for (const s of [...extra, ...midpoints]) if (s > s0 + 0.05 && s < s1 - 0.05) cuts.add(s);
+        for (const s of [...extra, ...poleMidpoints]) if (s > s0 + 0.05 && s < s1 - 0.05) cuts.add(s);
         return [...cuts].sort((p, q) => p - q);
       };
       for (const side of [-1, 1] as const) {
