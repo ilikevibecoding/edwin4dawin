@@ -243,7 +243,7 @@ Changed:
 
 Measured on the round-8 chain (captures, A/B and the CPU-tick variant breakdown all on this build, 4607).
 
-## Round 8 — parks from 500 m, downtown paving, band limits (commit 30a8b4a5)
+## Round 8 — parks from 500 m, downtown paving, band limits (commit 5896627c)
 
 Reasoned without new captures (the slot queue: eight builders' waiters ahead of two slots), on what the round-4
 captures and the rubric still say about the parks and the downtown ground:
