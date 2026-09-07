@@ -23,6 +23,9 @@ interface ChunkMesh extends BatchSource {
   loFar: boolean;
   /** the camera and mirror leave this mesh's cells out beyond this distance (lamps: their dots take over) */
   far: number;
+  /** the mirror and the shadow passes draw the coarse shape at every distance (lamps: a 4-gon pole throws the same
+   *  shadow and blurs to the same reflection as an 8-gon, at a third of the triangles) */
+  coarseAux: boolean;
   /** camera / mirror batches drawing this mesh's unit shape at each LOD */
   batches: [PropBatches, PropBatches | null];
   /** PROP_CELL-metre cells over the large prefix and over all instances (built on first use): the batches
@@ -53,6 +56,10 @@ const CHUNK = 2500;
 const SMALL = 1.0;
 /** thin cylinders and lamp poles use a 6-sided prism beyond this (a 30 cm piling is ~1 px there) */
 const LOD_DISTANCE = 350;
+/** the lamps swap to their coarse shape (4-gon pole, one head box) beyond this, measured in three dimensions: a
+ *  0.15 m pole is 1.4 px wide at 150 m from eye level, where the thin-member inflation holds the silhouette either
+ *  way, and from 200 m up every pole is coarse (the fine shapes cost city_north 10 k for nothing visible) */
+const LAMP_LOD = 150;
 /** objects thinner than SMALL are well under a pixel wide beyond this and leave the main pass */
 const SMALL_DISTANCE = 2500;
 /** props leave the main pass where a PROXY_SIZE-thick object (a container) projects under PROP_MIN_PX pixels wide,
@@ -72,9 +79,11 @@ const PROXY_DRAWS = 2;
 const allOf = (c: PropCell): number => c.count;
 
 /** street lamp kinds, in batch order */
-const LAMP_KINDS: LampKind[] = ['arterial', 'street', 'ped', 'highway'];
+const LAMP_KINDS: LampKind[] = ['arterial', 'street', 'ped', 'highway', 'mast'];
 /** luminaire position in the unit lamp's frame (x along the arm, y height) per kind: where the night dot sits */
-const LAMP_HEAD: Record<LampKind, [number, number]> = { arterial: [3.3, 10.9], street: [2.0, 8.4], ped: [0, 4.25], highway: [0, 9.05] };
+const LAMP_HEAD: Record<LampKind, [number, number]> = { arterial: [3.3, 10.9], street: [2.0, 8.4], ped: [0, 4.25], highway: [0, 9.05], mast: [0, 29.6] };
+/** dot sprite size (m) and gain per kind: a high mast's crown of eight luminaires is a bigger, brighter point */
+const LAMP_DOT: Record<LampKind, [number, number]> = { arterial: [1.2, 1], street: [1.1, 0.85], ped: [0.8, 0.5], highway: [1.2, 1], mast: [3.6, 2.5] };
 /** lamp dots fade in where the luminaire geometry falls under a pixel, hold to DOT_FULL_FAR (the night bench view
  *  looks at downtown from 3.7 km) and fade out toward DOT_FAR */
 const DOT_NEAR = 70, DOT_FULL = 140, DOT_FULL_FAR = 4000, DOT_FAR = 5000;
@@ -97,31 +106,54 @@ function boxWithoutBottom(): THREE.BufferGeometry {
 
 /** Point sprites for the luminaires at night: a warm dot ~1.2 m across (clamped to 1.5..4.5 px) that fades in between
  *  DOT_NEAR and DOT_FULL, where the head geometry drops under a pixel, and out toward DOT_FAR. Additive, depth-tested
- *  against the buildings, no depth write. `uFocal` is the frame's focal length in pixels. */
+ *  against the buildings. `uFocal` is the frame's focal length in pixels.
+ *
+ *  The renderer uses a logarithmic depth buffer (game.ts), so this raw ShaderMaterial must compute the same log depth
+ *  (the logdepthbuf chunks, as plane/parts/lights.ts does): without them a fragment's hardware z is compared against
+ *  every built-in material's log z and loses behind anything but the sky — a dot 2.3 km out has hardware z 0.9998,
+ *  the water 200 m behind it log z 0.71 — which is why no lamp dot was ever seen against ground or buildings from
+ *  round 1 to round 9 (DEFECTS 10.1: the port's masts "absent" at night, the city's lamp lines missing beyond the
+ *  600 m of lamp geometry). */
 function createLampDotMaterial(): THREE.ShaderMaterial {
   return new THREE.ShaderMaterial({
     uniforms: { uNight: { value: 0 }, uFocal: { value: 1000 } },
     vertexShader: /* glsl */ `
+      #include <common>
+      #include <logdepthbuf_pars_vertex>
       uniform float uFocal;
+      attribute vec2 aDot; // sprite size (m), gain
       varying float vFade;
       void main() {
         vec4 mv = modelViewMatrix * vec4(position, 1.0);
         float d = length(mv.xyz);
-        vFade = smoothstep(${DOT_NEAR.toFixed(1)}, ${DOT_FULL.toFixed(1)}, d) * (1.0 - smoothstep(${DOT_FULL_FAR.toFixed(1)}, ${DOT_FAR.toFixed(1)}, d));
-        gl_PointSize = clamp(1.2 * uFocal / max(d, 1.0), 1.5, 4.5);
+        vFade = aDot.y * smoothstep(${DOT_NEAR.toFixed(1)}, ${DOT_FULL.toFixed(1)}, d) * (1.0 - smoothstep(${DOT_FULL_FAR.toFixed(1)}, ${DOT_FAR.toFixed(1)}, d));
+        // a high mast (aDot.x > 2) never falls under 3 px: a 30 m crown of eight luminaires is the brightest point on a
+        // port at night, and at the 1.5 px floor it was no larger than a street lamp's dot
+        float mast = step(2.0, aDot.x);
+        gl_PointSize = clamp(aDot.x * uFocal / max(d, 1.0), 1.5 + 1.5 * mast, 4.5 + 2.5 * mast);
+        // 0.6 m toward the camera: the luminaire sits inside its own housing box, which within LAMP_FAR would hide the
+        // sprite's centre (a building 5 m in front still hides it)
+        mv.xyz *= 1.0 - 0.6 / max(d, 1.0);
         gl_Position = projectionMatrix * mv;
+        #include <logdepthbuf_vertex>
       }`,
     fragmentShader: /* glsl */ `
+      #include <common>
+      #include <logdepthbuf_pars_fragment>
       uniform float uNight;
       varying float vFade;
       void main() {
+        #include <logdepthbuf_fragment>
         float r = length(gl_PointCoord - 0.5) * 2.0;
         float a = (1.0 - smoothstep(0.35, 1.0, r)) * vFade * uNight;
-        if (a <= 0.002) discard;
+        if (a <= 0.02) discard;
         gl_FragColor = vec4(vec3(1.0, 0.82, 0.55) * 5.0 * a, 1.0);
       }`,
     transparent: true,
-    depthWrite: false,
+    // the lit core writes its (log) depth: the aerial-perspective pass (post.ts) hazes every pixel by the depth
+    // buffer's distance, so the dot is hazed by its own distance rather than by whatever stands behind it; the soft
+    // edge (a <= 0.02) is discarded and writes nothing, and by day every fragment is discarded
+    depthWrite: true,
     depthTest: true,
     blending: THREE.AdditiveBlending,
   });
@@ -143,6 +175,9 @@ function proxySource(list: Placement[]): ProxySource | null {
 export class Props {
   readonly group = new THREE.Group();
   readonly material: THREE.MeshStandardMaterial;
+  readonly lampMaterial: THREE.MeshStandardMaterial;
+  /** focal length of the main frame in pixels per metre at 1 m (the thin-member inflation of the lamps) */
+  private readonly focalPx: THREE.IUniform<number> = { value: 1000 };
   readonly materials: THREE.Material[] = [];
   readonly lampPositions: THREE.Vector3[] = [];
   readonly mooredBoatPositions: MooredBoat[] = [];
@@ -152,7 +187,7 @@ export class Props {
   private readonly s = new THREE.Vector3();
   private readonly boxes: Placement[] = [];
   private readonly cyls: Placement[] = [];
-  private readonly lamps: Record<LampKind, Placement[]> = { arterial: [], street: [], ped: [], highway: [] };
+  private readonly lamps: Record<LampKind, Placement[]> = { arterial: [], street: [], ped: [], highway: [], mast: [] };
   /** night point sprites standing in for the luminaires beyond DOT_NEAR, one Points per chunk */
   private readonly dots: { points: THREE.Points; center: THREE.Vector3; r: number }[] = [];
   private readonly dotMaterial: THREE.ShaderMaterial;
@@ -187,7 +222,10 @@ export class Props {
     };
     // the emissive colour is the lamp heads' glow; `aEmissive` masks it to those vertices
     this.material = createBatchedPbrMaterial('props-v4', true, 0xffd9a0);
-    this.materials.push(this.material);
+    // the lamps' own program: the same shading plus the thin-member inflation (poles, arms and heads held to a pixel
+    // across to LAMP_FAR, so the lamp rows read from the air by day and not only as dots at night)
+    this.lampMaterial = createBatchedPbrMaterial('props-lamps-v1', true, 0xffd9a0, this.focalPx);
+    this.materials.push(this.material, this.lampMaterial);
     this.dotMaterial = createLampDotMaterial();
     const rng = new Rng('props');
     this.buildMarinas(rng.fork('marinas'));
@@ -250,52 +288,89 @@ export class Props {
   }
 
   /** Composite lamp unit in metres, arm along +x: tapered pole (`sides`-gon), arm, luminaire housing and its
-   *  emissive lens (a post-top lantern for the pedestrian lamp; the highway unit is the plain 9 m pole). */
-  private lampGeometry(kind: LampKind, sides: number): THREE.BufferGeometry {
-    const parts: { geometry: THREE.BufferGeometry; material: THREE.MeshStandardMaterial; emissive?: boolean | number }[] = [];
+   *  emissive lens (a post-top lantern for the pedestrian lamp; the highway unit is the plain 9 m pole).
+   *
+   *  Triangle diet (round 8): a lamp is drawn up to four times a frame — camera, mirror, and every fine cascade its
+   *  cell touches — and the chunk-level LOD keeps the fine shape over the whole 600 m range in the city views, so
+   *  the 128-triangle lantern of round 7 cost the street_2m frame 94 k and city_north 48 k. Poles are open tubes
+   *  (the bottom is in the ground, the top under the arm or inside the globe), the fine shapes 8-gons (the thin-member
+   *  inflation holds the silhouette at 1.2 px anyway, so the count of sides never shows), and the coarse shape is a
+   *  4-gon pole with a single glowing head box: arterial / street 52 / 32 (were 84–76 / 60), lantern 42 / 16 (128 / 80). */
+  private lampGeometry(kind: LampKind, sides: number, lod: 'hi' | 'lo' = 'hi'): THREE.BufferGeometry {
+    // every part is a thin member: `axis` is the line it is inflated away from in the vertex shader when it would
+    // fall under a pixel — the pole's vertical axis, the arm's horizontal axis, the housing's own vertical axis
+    type Axis = { dir: 'x' | 'y'; a: number; b: number }; // dir y: axis at (x = a, z = b); dir x: axis at (y = a, z = b)
+    const parts: { geometry: THREE.BufferGeometry; material: THREE.MeshStandardMaterial; emissive?: boolean | number; axis: Axis }[] = [];
     const steel = this.mats.steel, housing = this.mats.dark, lens = this.mats.lampHead;
+    const Y = (a = 0, b = 0): Axis => ({ dir: 'y', a, b }), X = (a: number, b = 0): Axis => ({ dir: 'x', a, b });
+    const fine = lod === 'hi';
+    const tube = (rTop: number, rBottom: number, h: number) => new THREE.CylinderGeometry(rTop, rBottom, h, sides, 1, true);
     if (kind === 'arterial') {
-      parts.push({ geometry: new THREE.CylinderGeometry(0.09, 0.15, 11, sides).translate(0, 5.5, 0), material: steel });
-      parts.push({ geometry: new THREE.BoxGeometry(3.4, 0.14, 0.14).translate(1.7, 10.85, 0), material: steel });
-      // the housing glows a little too, so the luminaire reads as a lit point from above and the side at night
-      parts.push({ geometry: new THREE.BoxGeometry(0.8, 0.16, 0.34).translate(3.3, 10.92, 0), material: housing, emissive: 0.3 });
-      parts.push({ geometry: new THREE.BoxGeometry(0.56, 0.03, 0.24).translate(3.3, 10.83, 0), material: lens, emissive: true });
+      parts.push({ geometry: tube(0.09, 0.15, 10.92).translate(0, 5.46, 0), material: steel, axis: Y() }); // flush with the arm's top
+      parts.push({ geometry: new THREE.BoxGeometry(3.4, 0.14, 0.14).translate(1.7, 10.85, 0), material: steel, axis: X(10.85) });
+      // the housing glows a little too, so the luminaire reads as a lit point from above and the side at night; the
+      // coarse shape's one head box glows for the lens as well
+      parts.push({ geometry: new THREE.BoxGeometry(0.8, 0.16, 0.34).translate(3.3, 10.92, 0), material: housing, emissive: fine ? 0.3 : 0.6, axis: Y(3.3) });
+      if (fine) parts.push({ geometry: new THREE.BoxGeometry(0.56, 0.03, 0.24).translate(3.3, 10.83, 0), material: lens, emissive: true, axis: Y(3.3) });
     } else if (kind === 'street') {
-      parts.push({ geometry: new THREE.CylinderGeometry(0.08, 0.12, 8.5, sides).translate(0, 4.25, 0), material: steel });
-      parts.push({ geometry: new THREE.BoxGeometry(2.1, 0.12, 0.12).translate(1.05, 8.35, 0), material: steel });
-      parts.push({ geometry: new THREE.BoxGeometry(0.6, 0.14, 0.28).translate(2.0, 8.42, 0), material: housing, emissive: 0.3 });
-      parts.push({ geometry: new THREE.BoxGeometry(0.42, 0.03, 0.2).translate(2.0, 8.34, 0), material: lens, emissive: true });
+      parts.push({ geometry: tube(0.08, 0.12, 8.41).translate(0, 4.205, 0), material: steel, axis: Y() });
+      parts.push({ geometry: new THREE.BoxGeometry(2.1, 0.12, 0.12).translate(1.05, 8.35, 0), material: steel, axis: X(8.35) });
+      parts.push({ geometry: new THREE.BoxGeometry(0.6, 0.14, 0.28).translate(2.0, 8.42, 0), material: housing, emissive: fine ? 0.3 : 0.6, axis: Y(2.0) });
+      if (fine) parts.push({ geometry: new THREE.BoxGeometry(0.42, 0.03, 0.2).translate(2.0, 8.34, 0), material: lens, emissive: true, axis: Y(2.0) });
     } else if (kind === 'ped') {
-      parts.push({ geometry: new THREE.CylinderGeometry(0.06, 0.08, 4.0, sides).translate(0, 2.0, 0), material: steel });
-      parts.push({ geometry: new THREE.SphereGeometry(0.17, sides, 5).translate(0, 4.25, 0), material: lens, emissive: true });
-      parts.push({ geometry: new THREE.CylinderGeometry(0.2, 0.12, 0.08, sides).translate(0, 4.46, 0), material: housing, emissive: 0.25 });
+      // post-top lantern: the pole runs up into the globe; a conical hat (open, 6 triangles) is the dark cap from above
+      parts.push({ geometry: tube(0.06, 0.08, 4.15).translate(0, 2.075, 0), material: steel, axis: Y() });
+      parts.push({ geometry: new THREE.SphereGeometry(0.17, sides, fine ? 3 : 2).translate(0, 4.25, 0), material: lens, emissive: true, axis: Y() });
+      if (fine) parts.push({ geometry: new THREE.ConeGeometry(0.2, 0.1, sides, 1, true).translate(0, 4.44, 0), material: housing, emissive: 0.25, axis: Y() });
+    } else if (kind === 'mast') {
+      // 30 m high mast: tapered tube, a crown ring of luminaires (housing above, lens plate below) that from the air
+      // by day is a 2.6 m dark disc and at night the brightest point of the yard
+      parts.push({ geometry: tube(0.2, 0.36, 29.4).translate(0, 14.7, 0), material: steel, axis: Y() });
+      parts.push({ geometry: new THREE.CylinderGeometry(1.3, 1.1, 0.5, sides).translate(0, 29.75, 0), material: housing, emissive: 0.35, axis: Y() });
+      parts.push({ geometry: new THREE.CylinderGeometry(1.15, 1.15, 0.12, sides).translate(0, 29.44, 0), material: lens, emissive: true, axis: Y() });
     } else {
-      parts.push({ geometry: new THREE.CylinderGeometry(0.12, 0.12, 9, sides).translate(0, 4.5, 0), material: steel });
-      parts.push({ geometry: new THREE.BoxGeometry(0.2, 0.2, 2.4).translate(0, 9.1, 0), material: steel });
-      parts.push({ geometry: new THREE.SphereGeometry(0.22, 6, 4).translate(0, 9.05, 0), material: lens, emissive: true });
+      parts.push({ geometry: tube(0.12, 0.12, 9).translate(0, 4.5, 0), material: steel, axis: Y() });
+      parts.push({ geometry: new THREE.BoxGeometry(0.2, 0.2, 2.4).translate(0, 9.1, 0), material: steel, axis: Y() });
+      parts.push({ geometry: new THREE.SphereGeometry(0.22, 6, fine ? 4 : 2).translate(0, 9.05, 0), material: lens, emissive: true, axis: Y() });
     }
     const g = mergeUnitParts(parts);
+    // aThin: the vertex's offset from its part's axis (mergeUnitParts keeps the parts' vertex order, non-indexed)
+    const pos = g.getAttribute('position');
+    const thin = new Float32Array(pos.count * 3);
+    let v = 0;
+    for (const p of parts) {
+      const n = p.geometry.index ? p.geometry.index.count : p.geometry.getAttribute('position').count;
+      for (let i = 0; i < n; i++, v++) {
+        const x = pos.getX(v), y = pos.getY(v), z = pos.getZ(v);
+        if (p.axis.dir === 'y') { thin[v * 3] = x - p.axis.a; thin[v * 3 + 2] = z - p.axis.b; }
+        else { thin[v * 3 + 1] = y - p.axis.a; thin[v * 3 + 2] = z - p.axis.b; }
+      }
+    }
+    g.setAttribute('aThin', new THREE.BufferAttribute(thin, 3));
     for (const p of parts) p.geometry.dispose();
     return g;
   }
 
   /** One Points object per chunk over every luminaire: the lit dot the lamps become beyond DOT_NEAR at night. */
   private buildLampDots(): void {
-    const buckets = new Map<number, number[]>();
+    const buckets = new Map<number, { pos: number[]; dot: number[] }>();
     const v = new THREE.Vector3();
     for (const kind of LAMP_KINDS) {
       const [ax, ay] = LAMP_HEAD[kind];
+      const [size, gain] = LAMP_DOT[kind];
       for (const p of this.lamps[kind]) {
         v.set(ax, ay, 0).applyMatrix4(p.m);
         const key = cellKey(v.x, v.z, CHUNK);
         let list = buckets.get(key);
-        if (!list) { list = []; buckets.set(key, list); }
-        list.push(v.x, v.y, v.z);
+        if (!list) { list = { pos: [], dot: [] }; buckets.set(key, list); }
+        list.pos.push(v.x, v.y, v.z);
+        list.dot.push(size, gain);
       }
     }
     for (const list of buckets.values()) {
       const g = new THREE.BufferGeometry();
-      g.setAttribute('position', new THREE.Float32BufferAttribute(list, 3));
+      g.setAttribute('position', new THREE.Float32BufferAttribute(list.pos, 3));
+      g.setAttribute('aDot', new THREE.Float32BufferAttribute(list.dot, 2));
       g.computeBoundingSphere();
       const points = new THREE.Points(g, this.dotMaterial);
       points.name = 'lamp-dots';
@@ -317,16 +392,16 @@ export class Props {
     const unitBoxLo = addNeutralVertexAttributes(boxWithoutBottom());
     const cylHi = addNeutralVertexAttributes(new THREE.CylinderGeometry(0.5, 0.5, 1, 14));
     const cylLo = addNeutralVertexAttributes(new THREE.CylinderGeometry(0.5, 0.5, 1, 6));
-    const lampHi: Record<LampKind, THREE.BufferGeometry> = { arterial: this.lampGeometry('arterial', 12), street: this.lampGeometry('street', 10), ped: this.lampGeometry('ped', 8), highway: this.lampGeometry('highway', 14) };
-    const lampLo: Record<LampKind, THREE.BufferGeometry> = { arterial: this.lampGeometry('arterial', 6), street: this.lampGeometry('street', 6), ped: this.lampGeometry('ped', 5), highway: this.lampGeometry('highway', 6) };
+    const lampHi: Record<LampKind, THREE.BufferGeometry> = { arterial: this.lampGeometry('arterial', 8), street: this.lampGeometry('street', 8), ped: this.lampGeometry('ped', 6), highway: this.lampGeometry('highway', 8), mast: this.lampGeometry('mast', 12) };
+    const lampLo: Record<LampKind, THREE.BufferGeometry> = { arterial: this.lampGeometry('arterial', 4, 'lo'), street: this.lampGeometry('street', 4, 'lo'), ped: this.lampGeometry('ped', 4, 'lo'), highway: this.lampGeometry('highway', 4, 'lo'), mast: this.lampGeometry('mast', 6, 'lo') };
     for (const g of [unitBox, unitBoxLo, cylHi, cylLo, ...Object.values(lampHi), ...Object.values(lampLo)]) g.computeBoundingSphere();
     // camera / mirror batches, one pair per unit shape (the per-chunk meshes are left to the shadow passes)
     const nBoxes = this.boxes.length, nCyls = this.cyls.length;
     const PARAMS = [{ name: 'aMatParams', itemSize: 2 }];
-    const batchesOf = (unit: THREE.BufferGeometry, capacity: number, extras: { name: string; itemSize: number }[], name: string): PropBatches => {
-      const camera = new InstanceBatch(capacity, unit, this.material, extras, true);
+    const batchesOf = (unit: THREE.BufferGeometry, capacity: number, extras: { name: string; itemSize: number }[], name: string, material = this.material): PropBatches => {
+      const camera = new InstanceBatch(capacity, unit, material, extras, true);
       camera.mesh.layers.set(LAYER_CAMERA); camera.mesh.name = `props-${name}`;
-      const mirror = new InstanceBatch(capacity, unit, this.material, extras, true);
+      const mirror = new InstanceBatch(capacity, unit, material, extras, true);
       mirror.mesh.layers.set(LAYER_MIRROR); mirror.mesh.name = `props-${name}-mirror`;
       this.cameraMeshes.add(camera.mesh); this.mirrorMeshes.add(mirror.mesh);
       this.group.add(camera.mesh, mirror.mesh);
@@ -347,10 +422,10 @@ export class Props {
     const cylHiBatches = batchesOf(cylHi, nCyls, PARAMS, 'cylinders');
     const cylLoBatches = batchesOf(cylLo, nCyls, PARAMS, 'cylinders-lo');
     this.allBatches.push(boxBatches, boxLoBatches, cylHiBatches, cylLoBatches);
-    const lampBatches: Record<LampKind, [PropBatches, PropBatches]> = { arterial: null!, street: null!, ped: null!, highway: null! };
+    const lampBatches: Record<LampKind, [PropBatches, PropBatches]> = { arterial: null!, street: null!, ped: null!, highway: null!, mast: null! };
     for (const kind of LAMP_KINDS) {
       const n = this.lamps[kind].length;
-      lampBatches[kind] = [batchesOf(lampHi[kind], n, [], `lamps-${kind}`), batchesOf(lampLo[kind], n, [], `lamps-${kind}-lo`)];
+      lampBatches[kind] = [batchesOf(lampHi[kind], n, [], `lamps-${kind}`, this.lampMaterial), batchesOf(lampLo[kind], n, [], `lamps-${kind}-lo`, this.lampMaterial)];
       this.allBatches.push(...lampBatches[kind]);
     }
     type Bucket = { boxes: Placement[]; cylLarge: Placement[]; cylSmall: Placement[]; lamps: Record<LampKind, Placement[]> };
@@ -359,7 +434,7 @@ export class Props {
       this.p.setFromMatrixPosition(p.m);
       const key = cellKey(this.p.x, this.p.z, CHUNK);
       let b = buckets.get(key);
-      if (!b) { b = { boxes: [], cylLarge: [], cylSmall: [], lamps: { arterial: [], street: [], ped: [], highway: [] } }; buckets.set(key, b); }
+      if (!b) { b = { boxes: [], cylLarge: [], cylSmall: [], lamps: { arterial: [], street: [], ped: [], highway: [], mast: [] } }; buckets.set(key, b); }
       return b;
     };
     const isLarge = (p: Placement) => p.size > SMALL;
@@ -375,7 +450,7 @@ export class Props {
       b.boxes.sort((u, v) => Number(isLarge(v)) - Number(isLarge(u)));
       /** `perVertex`: the unit carries colour / parameters per vertex (lamp) instead of per instance; `loFar`: the
        *  coarse shape is for the far distance (beyond SMALL_DISTANCE) rather than LOD_DISTANCE */
-      const make = (list: Placement[], hi: THREE.BufferGeometry, lo: THREE.BufferGeometry | null, perVertex: boolean, batches: [PropBatches, PropBatches | null], loFar = false, far = Infinity) => {
+      const make = (list: Placement[], hi: THREE.BufferGeometry, lo: THREE.BufferGeometry | null, perVertex: boolean, batches: [PropBatches, PropBatches | null], loFar = false, far = Infinity, coarseAux = false) => {
         if (!list.length) return;
         const geo = hi.clone();
         const params = perVertex ? null : new THREE.InstancedBufferAttribute(new Float32Array(list.length * 2), 2);
@@ -400,7 +475,7 @@ export class Props {
           loGeo = lo.clone();
           if (params) loGeo.setAttribute('aMatParams', params);
         }
-        const entry: ChunkMesh = { mesh, large, total: list.length, mainCount: list.length, hi: geo, lo: loGeo, loFar, far, batches, cellsLarge: null, cellsAll: null, inCamera: null, cameraCells: null, inMirror: null, mirrorCells: null, inShadow: new Array(MAX_CASCADES).fill(null), shadowCells: new Array(MAX_CASCADES).fill(null), matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: params ? [params.array as Float32Array] : [] };
+        const entry: ChunkMesh = { mesh, large, total: list.length, mainCount: list.length, hi: geo, lo: loGeo, loFar, far, coarseAux, batches, cellsLarge: null, cellsAll: null, inCamera: null, cameraCells: null, inMirror: null, mirrorCells: null, inShadow: new Array(MAX_CASCADES).fill(null), shadowCells: new Array(MAX_CASCADES).fill(null), matrices: mesh.instanceMatrix.array as Float32Array, colors: mesh.instanceColor!.array as Float32Array, extras: params ? [params.array as Float32Array] : [] };
         // the coarse cascades only see the large prefix; the fine ones (and any non-CSM light) see all
         mesh.onBeforeShadow = () => { mesh.count = activeShadowPassIsFine() ? entry.total : entry.large; };
         mesh.onAfterShadow = () => { mesh.count = entry.mainCount; };
@@ -414,7 +489,7 @@ export class Props {
       make(b.boxes, unitBox, unitBoxLo, false, [boxBatches, boxLoBatches], true);
       make(b.cylLarge, cylHi, null, false, [cylHiBatches, null]);
       make(b.cylSmall, cylHi, cylLo, false, [cylHiBatches, cylLoBatches]);
-      for (const kind of LAMP_KINDS) make(b.lamps[kind], lampHi[kind], lampLo[kind], true, lampBatches[kind], false, LAMP_FAR);
+      for (const kind of LAMP_KINDS) make(b.lamps[kind], lampHi[kind], lampLo[kind], true, lampBatches[kind], false, LAMP_FAR, true);
       chunk.box.getBoundingSphere(sphere);
       chunk.center.copy(sphere.center); chunk.r = sphere.radius; chunk.height = chunk.box.max.y - chunk.box.min.y;
       this.chunks.push(chunk);
@@ -523,7 +598,7 @@ export class Props {
 
   /** Lamp heads glow at night; the distant dots come on with them. */
   setNight(night: number): void {
-    this.material.emissiveIntensity = 8 * night;
+    this.material.emissiveIntensity = this.lampMaterial.emissiveIntensity = 8 * night;
     this.dotMaterial.uniforms.uNight.value = night;
   }
 
@@ -537,6 +612,7 @@ export class Props {
     // lamp dots: at night, the chunks within DOT_FAR (the sprites fade themselves by distance)
     const night = this.dotMaterial.uniforms.uNight.value as number;
     this.dotMaterial.uniforms.uFocal.value = pxPerMetre;
+    this.focalPx.value = pxPerMetre;
     for (const d of this.dots) d.points.visible = night > 0.02 && Math.hypot(d.center.x - camX, d.center.z - camZ) - d.r < DOT_FAR;
     // coarse cascades that would draw more chunk meshes than the proxies cost take the proxies instead
     const perCascade = _perCascade;
@@ -565,6 +641,7 @@ export class Props {
     };
     for (const c of this.chunks) {
       const d = Math.max(0, Math.hypot(c.center.x - camX, c.center.z - camZ) - c.r);
+      const d3 = Math.hypot(d, Math.max(0, camPos.y - c.box.max.y));
       const inView = cull.boxInView(c.box);
       const bits = c.bits & ~proxyBits;
       for (const e of c.meshes) {
@@ -574,13 +651,14 @@ export class Props {
         e.mainCount = n;
         e.mesh.count = n;
         const drawn = inView && n > 0;
-        const lo = e.lo !== null && d > (e.loFar ? SMALL_DISTANCE : LOD_DISTANCE);
+        const lo = e.lo !== null && (e.coarseAux ? d3 > LAMP_LOD : d > (e.loFar ? SMALL_DISTANCE : LOD_DISTANCE));
         // the far-only coarse shape is for the camera and mirror; the mesh (a shadow fallback) keeps the fine one
         if (e.lo && !e.loFar) e.mesh.geometry = lo ? e.lo : e.hi;
         // the camera draws the mesh's prefix from the batch of its unit shape at this LOD; the mesh itself is
         // left to the shadow passes (and to the camera only when the batch is full)
         const pb = e.batches[lo ? 1 : 0] ?? e.batches[0];
-        const shadowPb = e.loFar ? e.batches[0] : pb;
+        const coarsePb = e.coarseAux ? e.batches[1] ?? pb : pb;
+        const shadowPb = e.loFar ? e.batches[0] : coarsePb;
         const cells = drawn ? this.cellsOf(e, n) : null;
         const batched = this.place(e, cells, pb.camera, 'inCamera', inViewBox, cameraCountOf);
         // shadows: the cascades the chunk can shade take the mesh's cells that can shade them from the shape's
@@ -589,7 +667,9 @@ export class Props {
         let own = 0;
         for (let i = 0; i < MAX_CASCADES; i++) {
           let cast: PropCell[] | null = null;
-          if (bits & (1 << i)) { const nc = cascadeIsFine(i) ? e.total : e.large; if (nc > 0) cast = this.cellsOf(e, nc); }
+          // the lamps cast into the finest cascade only: in the second cascade's 0.5 m texels a 0.15 m pole is under a
+          // texel and the head a one-texel blot (29–51 k triangles a view in the 200 m frames, nothing visible)
+          if (bits & (1 << i) && (!e.coarseAux || i === 0)) { const nc = cascadeIsFine(i) ? e.total : e.large; if (nc > 0) cast = this.cellsOf(e, nc); }
           if (!this.placeShadow(e, i, cast, shadowPb.shadow[i], cull)) own |= 1 << i;
         }
         let mask = layerMask(e.large > 0 ? 'all' : 'near', drawn && !batched, own);
@@ -597,7 +677,7 @@ export class Props {
         // the water mirrors the chunk meshes within the reflection range (distance to the mesh's bounding sphere)
         const sphere = e.mesh.boundingSphere!;
         const mirrored = drawn && Math.max(0, sphere.center.distanceTo(camPos) - sphere.radius) <= Math.min(mirrorRange, MIRROR_FAR);
-        if (!this.place(e, mirrored ? cells : null, pb.mirror, 'inMirror', inMirrorBox, mirrorCountOf)) mask |= 1 << LAYER_MIRROR;
+        if (!this.place(e, mirrored ? cells : null, coarsePb.mirror, 'inMirror', inMirrorBox, mirrorCountOf)) mask |= 1 << LAYER_MIRROR;
         e.mesh.visible = mask !== 0;
         e.mesh.castShadow = cast;
         e.mesh.layers.mask = mask;
@@ -927,8 +1007,9 @@ export class Props {
     const ground = (u: number, v: number) => { const [x, z] = world(u, v); return this.map.heightAt(x, z); };
     const occupy = (u: number, v: number, r: number) => { const [x, z] = world(u, v); this.markOccupied(x, z, r); };
     const boxColours = ['red', 'blue', 'green', 'orange', 'steel', 'white', 'blue', 'red'];
-    // ---- apron furniture, all in the island frame. `paint` lays road markings as 5 cm slabs on the concrete.
-    const paint = (mat: string, u: number, v: number, alongU: number, alongV: number) => { const g = ground(u, v); if (g >= 1) pbox(mat, u, g + 0.02, v, alongU, 0.05, alongV); };
+    // ---- apron furniture, all in the island frame. `paint` lays road markings as 3 cm slabs on the yard paving (the
+    // streets pave the island 8 cm over the ground, world/streets.ts buildPortYard).
+    const paint = (mat: string, u: number, v: number, alongU: number, alongV: number) => { const g = ground(u, v); if (g >= 1) pbox(mat, u, g + 0.1, v, alongU, 0.03, alongV); };
     const jitter = (a: number) => rng.range(-a, a);
     /** yawed box in the island frame: `yawJ` radians added to the quay-aligned yaw */
     const jbox = (mat: string, u: number, y: number, v: number, alongU: number, h: number, alongV: number, yawJ: number) => { const [x, z] = world(u, v); this.box(mat, x, y, z, alongU, h, alongV, yaw + yawJ); };
@@ -980,12 +1061,12 @@ export class Props {
       for (const du of [-4.5, -3.2, 6.5]) for (const dv of [-1.1, 1.1]) { p = at(du, dv); const [wx, wz] = world(p[0], p[1]); this.cyl('dark', wx, g, wz, 0.52, 0.4, yaw + yawJ, Math.PI / 2); }
       if (loaded) { p = at(-0.5, 0); jbox(rng.pick(CONTAINERS), p[0], g + 1.35, p[1], 12.2, 2.6, 2.44, yawJ); }
     };
+    /** 30 m high mast (a `mast` lamp: lit crown at night, a night dot to 4 km, inflated to a pixel from the air) */
     const lightMast = (u: number, v: number) => {
       const g = ground(u, v);
       if (g < 1) return;
-      pcyl('steel', u, g, v, 0.32, 30);
-      pbox('dark', u, g + 30, v, 2.6, 0.9, 1.4);
-      pbox('white', u, g + 29.4, v, 2.2, 0.5, 1.0);
+      const [x, z] = world(u, v);
+      this.lamp(x, g, z, yaw, 'mast');
     };
     const palletStack = (u: number, v: number) => {
       const g = ground(u, v);
@@ -1046,7 +1127,9 @@ export class Props {
           }
         }
         occupy(bu + 60, bv + 15, 80);
-        if (rng.chance(0.4)) lightMast(bu - 8 + jitter(3), bv - 6 + jitter(2)); // yard light mast
+        // yard lighting: high masts every ~85 m along the truck lane of every second block row (a 85 x 116 m grid
+        // over the terminal, as the 60-80 m rhythm of a real yard seen from the air)
+        if (Math.round((bv - yardV0) / 58) % 2 === 0) for (let mu = bu - 8; mu < bu + 170; mu += 85) lightMast(mu + jitter(3), bv - 6 + jitter(2));
       }
     }
     // ---- transit sheds along the south side of the apron: ridge vents, jittered rooftop plant, loading docks
@@ -1170,11 +1253,11 @@ export class Props {
       if (rng.chance(0.5)) truck(bu + rng.range(8, bw - 8), yardS0 - 14 + jitter(3), rng.pick([0, Math.PI]) + jitter(0.05), rng.chance(0.6));
       bu += bw + rng.range(12, 24);
     }
-    for (let mu = -P.hw + 90 + rng.range(0, 60); mu < P.hw - 160; mu += rng.range(95, 150)) {
+    for (let mu = -P.hw + 90 + rng.range(0, 30); mu < P.hw - 160; mu += rng.range(70, 90)) {
       if (mu > 90 && mu < 440) continue;
-      lightMast(mu + jitter(6), rng.pick([yardS0 - 4, yardS1 + 8]) + jitter(3));
+      lightMast(mu + jitter(4), rng.pick([yardS0 - 4, yardS1 + 8]) + jitter(3));
     }
-    for (let mu = -P.hw + 60 + rng.range(0, 60); mu < P.hw - 160; mu += rng.range(110, 170)) lightMast(mu + jitter(6), laneV + rng.pick([-13, 13]) + jitter(2));
+    for (let mu = -P.hw + 60 + rng.range(0, 40); mu < P.hw - 160; mu += rng.range(70, 90)) lightMast(mu + jitter(4), laneV + rng.pick([-13, 13]) + jitter(2));
     // reach stackers and trucks on the main lane and the north yard aisles
     for (let k = 0; k < 9; k++) truck(rng.range(-P.hw + 80, P.hw - 180), laneV + rng.pick([-7, 7]) + jitter(1), (rng.chance(0.5) ? 0 : Math.PI) + jitter(0.03), rng.chance(0.65));
     for (let k = 0; k < 6; k++) reachStacker(rng.range(-P.hw + 90, P.hw - 300), rng.range(yardV0 + 20, yardV1 - 20) + jitter(4), rng.range(0, Math.PI * 2), rng.chance(0.5));

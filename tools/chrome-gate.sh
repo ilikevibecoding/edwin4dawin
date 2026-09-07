@@ -13,10 +13,15 @@ p=$$
 while [ "$p" -gt 1 ]; do
   # the hourly snapshot owns slot 3 outright (nothing else may take it) so the user-facing page never waits
   if tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q 'tools/progress-snapshot.sh'; then CANDIDATES="3 2 0 1"; break; fi
+  # the lead's verification captures (tools/lead-capture.sh) take slot 2 ahead of the builder queue
+  if tr '\0' ' ' < "/proc/$p/cmdline" 2>/dev/null | grep -q 'tools/lead-capture.sh'; then CANDIDATES="2 0 1"; break; fi
   p=$(awk '/^PPid:/{print $2}' "/proc/$p/status" 2>/dev/null) || break
   [ -n "$p" ] || break
 done
 while :; do
+  # never add a browser to a machine that is already thrashing (a 1-minute load past 40 on 4 cores (SwiftShader runs a browser on 16 threads, so two renders alone read ~25): the h14
+  # snapshot lost seven views to protocol timeouts when the load passed 100); the slot poll waits it out
+  if [ "$(awk '{print int($1)}' /proc/loadavg)" -gt 40 ]; then sleep 5; continue; fi
   for i in $CANDIDATES; do
     exec {fd}>"/tmp/chrome-slot-$i.lock"
     if flock -n "$fd"; then

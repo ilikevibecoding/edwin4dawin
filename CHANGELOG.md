@@ -66,6 +66,34 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
   1-3; facade3 round 10; veg5 round 14; terrain5 round 4; acgeo rounds 3-7). Flight harness 23/23, deterministic;
   six sanity stills clean. Subagents stopped at 15:10 on an account billing block (unpaid invoice); uncommitted
   worktree changes were rescued to `cursor/<name>-wip-backup-8213` branches (acgeo, facade3, veg5, boats).
+- Wave 7c (deployed as e13cb89769e2-20260906T225140Z): the terrain/water half-cell fix (map textures sampled at
+  wp + HALF + CELL/2 so the rendered ground matches `heightAt()`; the highway agent's finding), street rounds 3-10
+  (surfaces, plazas and lots with parked cars, lamp diet, FDOT heads; the lamp dots had never depth-tested under the
+  log depth buffer — `logdepthbuf` chunks added, so the first night frame with suburb lamp lines and terminal masts
+  is h13), water physics round 10 (wake ribbon breaks on time off the surface; per-side ribbon widths so turns no
+  longer fold the ribbon over itself). Flight harness 23/23, deterministic. The dead builders' Chrome sessions held
+  both builder slots idle for 7 h (clouds4 since 12:37, terrain5 since 15:52) and 4.8 GB of idle preview servers:
+  killed; builders relaunched at 22:35 on the user's priority list with the h03 critic's named defects.
+- User feedback on the aerial (23:45): the highway "looks raised off the floor" and Garza "is circular like a pizza,
+  it should be a long sausage, thick at the bottom". The corridor read as a raised slab because of a 4 m pale
+  concrete-toned shoulder each side of the dark lanes plus a 12 m saturated verge; shoulders are now an older
+  asphalt a shade greyer than the lanes and the verge 7 m of dry grass (the highway agent's verge tone, measured
+  against the terrain lawn, kept at the merge). Isla Garza: 950 x 650 m round key -> ~1150 x 480 m along the
+  causeway's line, thick at the southern (settlement) end, thinning north into the spit; lagoon, park, marina and
+  roads unchanged. New builders: `acfloats` (float rig: freeboard, faired struts, ladder, dark weathered finish,
+  heavier wheels — the user's "landing gear looks thicker in the reference") and `boats2` (rescue of the boats
+  refactor, hull detail, boat-water trim/wakes; queued until a subagent slot frees).
+- Wave 7d merged into the lead: every builder tip as of 01:00 (waterrender to round 11, light3 round 5, street
+  round 14, highway verges and junction kit, facade3, veg5 round 16, terrain5 detail-bake half-cell, acgeo rounds
+  8-12, wphys2 draft/sink wake attributes and spray roots on the hull's real bottom, accockpit panel relief).
+  Conflicts resolved once: `highway.ts` (lead shoulders + highway agent's verge tone and dry patches, re-fit to the
+  7 m strip), `city.ts` (both `openSpaces` and `footprints` returned), `wakes.ts` (waterphys r10 per-side ribbon
+  widths + wphys2 per-point draft/sink).
+- Capture robustness: `shots.mjs` retries a failed view once with doubled waits and a 15-minute protocol timeout
+  (h14 lost 7 of 22 views when the 1-minute load passed 100); the Chrome gate does not start a browser while the
+  load is over 24; `tools/lead-capture.sh` gives the lead's sanity captures slot 2 ahead of the builders' fair
+  queue (a lead check had waited 40 min behind eight queued builders). The progress page carries a "Play the latest
+  build" link fed by `progress/live.json`, written at every deploy.
 
 ## iter09 — wave 5 builders (deployed as aa8b21f9f839-20260905T121546Z)
 - Iteration 08 scored (bench/results/iter08/scores.md): no category regressed; aircraft geometry +1.5,
@@ -263,3 +291,5 @@ Build ids are `<source sha>-<utc timestamp>`; the deployed build's id is served 
 | b366a423870c-20260906T120411Z | 460ace25e1e376c940320201c66b42346dff6111 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/460ace25e1e376c940320201c66b42346dff6111/play.html | verified: build id matched, loaded in 34 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 146 draw calls / 0.22 M tris at the spawn. Lead + aircraft module split (pixel-identical); the wave-7 builder branches are only in the hourly progress integration so far |
 | 7f95c5ea8c9b-20260906T132622Z | 225d58bf12ed3eeea98682847ac98b63d2a2c869 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/225d58bf12ed3eeea98682847ac98b63d2a2c869/play.html | verified: build id matched, loaded in 30.7 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 153 draw calls / 0.23 M tris at the spawn. Lead + wave 7a (streets, highway, water rendering, water physics) |
 | bc348b0db7c9-20260906T152637Z | d3382d59e665cb537c25c38b5d716d6974ed0dd0 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/d3382d59e665cb537c25c38b5d716d6974ed0dd0/play.html | verified: build id matched, loaded in 29.6 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 153 draw calls / 0.25 M tris at the spawn. Lead + wave 7b (all builder branch tips) |
+| e13cb89769e2-20260906T225140Z | 21df97bf786f08697b426f54d73875dc9f40661d | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/21df97bf786f08697b426f54d73875dc9f40661d/play.html | verified: build id matched, loaded in 38.5 s (cold CDN), water takeoff to 74 m in 30 s, no console errors; 153 draw calls / 0.25 M tris at the spawn. Lead + wave 7c (half-cell fix, street rounds 3-10, water physics r10) |
+| 2e1d8cd7b892-20260907T012336Z | b6fc8787d1a470a5579ec6c949cfa0a429bc1ca2 | https://rawcdn.githack.com/ilikevibecoding/edwin4dawin/b6fc8787d1a470a5579ec6c949cfa0a429bc1ca2/play.html | verified: build id matched, loaded in 35.9 s (cold CDN), water takeoff to 52 m in 30 s, no console errors; 197 draw calls / 0.32 M tris at the spawn. Lead + wave 7d (all builder tips at 01:00) + the user's highway-at-grade and long-Garza fixes. Flight harness 22/23, deterministic: `waterBounces` 2 (bound 0-1) from the wphys2 Savitsky planing law meeting waterrender's wave field; handed to wphys2 |

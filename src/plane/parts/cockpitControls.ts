@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { Batch, strutGeometry, type Surf } from '../geometry';
 import { PANEL_UV, SURF } from '../textures';
-import { at, FLOOR, UP, WRIST, YOKE_HUB, type BuildContext } from './context';
+import { at, FLOOR, UP, YOKE_HUB, type BuildContext } from './context';
+import { HAND_WRIST, handGeometry } from './pilot';
 
 export interface CockpitControlsBuild {
   throttleLever: THREE.Mesh;
@@ -83,41 +84,16 @@ export function buildCockpitControls(ctx: BuildContext, inPanel: (px: number, py
         yoke.add(new THREE.CylinderGeometry(0.006, 0.006, 0.006, 10), at([-0.046, 0.085, s * 0.147], [Math.PI / 2, 0, 0]), SURF.mixture);
       }
       if (hands) {
-        // hand: the palm lies against the grip's aft face, four fingers wrap the outboard side and curl in front of
-        // it, the thumb hooks the inboard side; a watch on the left wrist
+        // hand in a hammer grip on the near-vertical grip: the palm on its outboard face, the four fingers wrapped
+        // around its front with the tips coming back on the inboard side, the thumb up the aft face toward the
+        // switches. Built in a grip-aligned frame (x forward, y up the grip, z outboard) and mirrored for the left.
         const gripDir = arm[4].clone().sub(arm[3]).normalize();
         const gc = arm[3].clone().lerp(arm[4], 0.45);
-        const palmRot: [number, number, number] = [0, 0, -Math.atan2(gripDir.x, gripDir.y)];
-        // back of the hand: a flattened ovoid against the grip's aft face (seen from the seat it is the whole hand)
-        const palm = gc.clone().add(new THREE.Vector3(-0.026, 0.0, 0));
-        const palmGeo = new THREE.SphereGeometry(0.04, 10, 8); palmGeo.scale(0.45, 1.0, 0.9);
-        yoke.add(palmGeo, at(palm, palmRot), SURF.skin);
-        // fingers wrap the outboard side and curl in front of the grip; the knuckles stand a little proud of the
-        // palm's outboard edge and its top so the row of them reads from behind and above
-        for (let f = 0; f < 4; f++) {
-          const y = gc.y + 0.028 - f * 0.018, r = f === 3 ? 0.0075 : 0.0085;
-          const base = new THREE.Vector3(-0.030, y, s * (0.165 + 0.030)), knuckle = new THREE.Vector3(0.004, y - 0.002, s * (0.165 + 0.026)), tip = new THREE.Vector3(0.020, y - 0.004, s * 0.160);
-          yoke.add(strutGeometry(base, knuckle, r, 8), undefined, SURF.skin);
-          yoke.add(new THREE.SphereGeometry(r, 7, 6), at(knuckle), SURF.skin);
-          yoke.add(strutGeometry(knuckle, tip, r * 0.9, 8), undefined, SURF.skin);
-          yoke.add(new THREE.SphereGeometry(r * 0.9, 6, 5), at(tip), SURF.skin);
-        }
-        // thumb: from the inboard side of the palm up and over the grip's inner face toward the switch
-        const thumbA = new THREE.Vector3(-0.026, gc.y + 0.012, s * 0.138), thumbB = new THREE.Vector3(-0.012, gc.y + 0.045, s * 0.146), thumbC = new THREE.Vector3(0.006, gc.y + 0.055, s * 0.152);
-        yoke.add(strutGeometry(thumbA, thumbB, 0.010, 8), undefined, SURF.skin);
-        yoke.add(new THREE.SphereGeometry(0.010, 7, 6), at(thumbB), SURF.skin);
-        yoke.add(strutGeometry(thumbB, thumbC, 0.009, 8), undefined, SURF.skin);
-        yoke.add(new THREE.SphereGeometry(0.009, 6, 5), at(thumbC), SURF.skin);
-        // wrist from the palm back to where the sleeve's cuff takes over; the watch on the left one
-        const wrist = WRIST(s);
-        yoke.add(strutGeometry(palm.clone().add(new THREE.Vector3(-0.010, -0.028, 0)), wrist, 0.026, 10), undefined, SURF.skin);
-        if (s < 0) {
-          const wDir = palm.clone().sub(wrist).normalize();
-          const wPos = wrist.clone().addScaledVector(wDir, 0.03);
-          yoke.add(new THREE.TorusGeometry(0.029, 0.005, 6, 14), at(wPos, [0, Math.PI / 2 - Math.atan2(wDir.x, wDir.z), 0]), SURF.belt);
-          yoke.add(new THREE.CylinderGeometry(0.016, 0.016, 0.008, 12), at(wPos.clone().add(new THREE.Vector3(0.004, 0.030, 0)), [0, 0, -0.2]), SURF.metal);
-          yoke.add(new THREE.CylinderGeometry(0.012, 0.012, 0.004, 12), at(wPos.clone().add(new THREE.Vector3(0.0045, 0.0345, 0)), [0, 0, -0.2]), SURF.headset);
-        }
+        const xAxis = new THREE.Vector3(gripDir.y, -gripDir.x, 0), zAxis = new THREE.Vector3(0, 0, s);
+        const frame = new THREE.Matrix4().makeBasis(xAxis, gripDir, zAxis);
+        const wristLocal = HAND_WRIST(s).sub(gc).applyMatrix4(frame.clone().invert());
+        // the wristwatch on the left hand
+        yoke.add(handGeometry(0.017, wristLocal, s < 0), frame.clone().setPosition(gc));
       }
     }
     const m = new THREE.Mesh(yoke.build(), parts);

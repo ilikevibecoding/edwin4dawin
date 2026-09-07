@@ -271,3 +271,147 @@ around the camera in cloud space; `water.ts`: `uCloudFieldTex/Center/Extent`, on
 field evaluation; `game.ts` one line: `attachCloudField`). The bake is what the visible cloud's base footprint
 is thresholded from, so the mirror now follows the visible footprint exactly (the analytic field and the bake
 differ only by the bake's 74 m filtering). Look unchanged otherwise: r10 vs r11 `low30` is the check.
+
+## Results of the round-11 captures (landed after the cut-off; `/tmp/waterrender/r11`, `perf/`)
+
+Ten r11 stills, 0 console errors each. Interleaved A/B (base 4510 = r0 vs r11, 6 rounds ABBA, 12 frames a side):
+`night` median ratio 1.004 (min-frame 1.052), `sun1730` 0.989 (1.056), `waterlanding` **1.503 (min-frame 1.173)** —
+the water-landing view was over the +10 % budget. Base clip `waterlanding` had 1 error (the r0 build's `patch`
+GLSL reserved word in wakes.ts, fixed since), the r11 clip 0. Cause of the water-landing cost, by reading the
+kernel: the first gate of `sceneReflection` reads the pyramid's top level, whose texels are a tenth of the image,
+so around the aircraft's mirror image and the shore's horizon band most of the water passed it and ran the sparkle
+field plus 13 taps × 2 texture reads (SwiftShader's filtered reads are the expensive instruction here).
+
+## Critic h03 (`bench/reports/critics/h03/visual-2.md`, build 7fe5d685 = this branch at 7ab21f54, after round 10)
+
+| # | finding | camera / cells | diagnosis (this round) |
+| --- | --- | --- | --- |
+| 1 | REGRESSION: sunset sun path truncated (h00 ran to the frame bottom) | sunset E2–F4 | see round 12: the unresolved floor was a tenth of the short-wave variance; the drawn chop at 7 m/s held 3× a whole sea's variance |
+| 2 | REGRESSION (flag): grazing water cyan → deep blue | glass G5–H8, aircraft_rear A7–D8 | the analytic sky term mirrors the dome's mid-elevation blue (the PMREM horizon band was whiter); round 13 |
+| 3 | no local reflections (aircraft, piers, towers) | aircraft_rear C6–F8, highway_bridge E6–F8, city_200m G5–H6 | at 40–45° depression F ≈ 0.022: a pier's mirror is 1 % of the frame's radiance (physical); at the low cameras F ≈ 0.2–0.3 and the aircraft should show — debug output `wdbg=3` this round |
+| 4 | glint speckle; one ripple frequency | shore_beach E4–H5 | not glitter (the half vector there needs a 1.0 rad slope): the noise chop layers were drawn only while undersampled, 1.2–3.5 px per cell, mirroring the horizon haze as a fine white speckle; round 12 |
+| 5 | water shadows black, hard, structureless | aircraft_rear A6–H8, highway_bridge A4–D7 | the shadowed body is skylight (14 % of the irradiance at clear noon: `uSunShare` 0.86) plus the 0–45 % leak; the sky term at 45° is 2 % — a clear-water shadow is dark; structure inside it is the bed; round 13 |
+
+## Round 12 — the never-resolved short waves; chop variance linear in the wind; noise layers faded before they alias; cheaper mirror gather
+
+Observed: h03 `sunset` (7 m/s, sun el 5.7°, camera 290 m): a broad bright band from the horizon to ~12°
+depression, dark blue-purple water below, no glitter in the foreground; h00 had a grainy path to the frame bottom.
+h03 `shore_beach`: fine white speckle over all the water in the lower half (the sun is 72° off the view: not
+glitter). h03 `glass`, `aircraft_rear`: the near water shows the 0.5 m and 1.7 m chop as crisp ripples, the far
+water is speckled.
+
+Diagnosis (offline, `tools/path.py`: the analytic glitter of `sunGlitter` along the sun's azimuth against the view
+depression with the round-11 and round-12 bookkeeping of the unresolved variance):
+- The unresolved variance the glitter lobe is built from is the sum of what the footprint fades take out of the
+  drawn layers plus a floor. The floor was `0.002 + 0.003 windG · shelter` ≈ 0.0055 at 7 m/s, i.e. a lobe 2.4° wide
+  (1σ per axis) where every drawn layer is resolved. Cox and Munk's clean-surface fit is 0.003 + 0.00512 U; their
+  slick-surface fit 0.008 + 0.00156 U; a slick damps just the waves under ~30 cm, so those hold 0.00356 U − 0.005:
+  0.0074 at 3.5 m/s (a third of the sea's variance), 0.020 at 7 (half). Nothing drawn is shorter than the 0.5 m
+  layer, so that variance is never resolved and must stay in the lobe at every distance. With a tenth of it, the
+  path at 22–36° depression (the sunset's foreground needs 0.14–0.27 rad of slope) fell to e^−5 of its peak.
+- The three noise chop layers had slope amplitudes ∝ windG, i.e. variance ∝ windG²: at 7 m/s a1² + a2² + a3² =
+  0.053 against 0.039 for a whole sea (Cox–Munk), 0.13 at 10 m/s. The far field of the sunset was a lobe of
+  σ ≈ 0.26–0.38 rad (gusts and groups on top): the broad diffuse band. Slope variance grows linearly with U.
+- The layers faded on the pixel diagonal `foot` between 5 and 2.3 px per L, but their cells are L/stretch along the
+  wind (7 / 2.8 / 1.2 / 0.31 m for the 14 / 5 / 1.7 / 0.5 m layers), so each was drawn only through 1.2–3.5 px per
+  cell: undersampled slopes, i.e. a per-pixel random normal that mirrors the bright horizon haze in a fine white
+  speckle wherever the sky term is large (the shore_beach lower half at 0.1–0.25 m/px is exactly the 0.5 m layer's
+  fade range). Their variance was booked as resolved while what they drew was noise.
+
+Change (`water.ts`):
+- `mssS += max(0.02136 windG − 0.005, 0.0015) · mix(0.4, 1, 0.6 o1 + 0.4 open) · smoothstep(0, 0.5, depth)` in
+  place of `0.003 windG mix(0.3, 1, open)`; the 0.002 slick floor stays in `mss`.
+- `windA`: the chop amplitude factor follows the slick fit above the clear preset's 3.5 m/s (`0.583 sqrt((0.008 +
+  0.00936 windG) / 0.01346)`, = windG at 0.583; below it unchanged). Far-field totals (gust 1): 3.5 m/s 0.027
+  (was 0.021; CM 0.021), 7 m/s 0.048 (was 0.065; CM 0.039), 10 m/s ~0.08 (was 0.13; CM 0.054).
+- `noiseFade(L, stretch)`: per-axis fades on the cell sizes (feature = cell / 1.5, the sets' 10 → 4.5 px rule):
+  the 5 m layer now leaves between 0.19 and 0.41 m of along-wind footprint (was 1.0–2.2 m of diagonal), the 0.5 m
+  layer between 0.021 and 0.046 m (was 0.1–0.22). The lanes (value noise, 1.8 m cells across the wind) fade on
+  2.4 m; the group roughness modulation on its 40 × 16 m cells. The 14 m and 5 m layers keep being evaluated (for
+  their value, which groups and bends the sets under them) while those sets are drawn: a set drawn with its warp
+  frozen at 0.5 would have run straight (the lattice risk of the audit above).
+- Replica (`tools/path.py`, 7 m/s, gust 1): analytic path at depression 14 / 18 / 22 / 26 / 30 / 36°: r11
+  1.6 / 0.98 / 0.58 / 0.34 / 0.20 / 0.07 → r12 2.4 / 1.36 / 0.75 / 0.41 / 0.21 / 0.07 × E (capped at 2.5). The far
+  field (σ 0.22 rad instead of 0.26) is the narrower band; the resolved wind sea and the group modulation break it
+  across the waves as before. At 3.5 m/s the path is unchanged to 18° and 2× brighter at 36°.
+- `sceneReflection`: a second gate at the gather's own place and size — after the flat-mirror lookup point and the
+  reach's streak are known, one read of the share pyramid's coverage at `lod = ceil(log2(3 σ_L))` (a cell the size
+  of the whole gather plus the sparkle tilt) exits where every tap below would find nothing; the sparkle field is
+  evaluated after it. Taps 0.375 rms apart, four a side (a Gaussian summed at that spacing is within 10⁻³ of its
+  integral; the colour read's lod floor of half the spacing still tiles the streak).
+- `WATER_DEBUG` from the URL (`wdbg=1..6`): the diagnosis outputs no longer need a rebuild.
+
+Expected: the sunset path continues to the frame bottom as an orange band broken across the wind sea, narrower at
+the horizon; the shore_beach lower half loses its speckle and shows the 3.4 / 2.15 m sets and the 1.7 m chop
+resolved (0.1–0.25 m/px is inside their range); the water-landing frame cost back within budget.
+
+## Round 13 — Fresnel inside the sky lobe, per node; the low node held at the horizon
+
+Diagnosis of the grazing colour (finding 2), first pass: at a low camera the sky term is the lobe integral over
+facets tilted ±d (d = √3 · √(2 mss): 18° at the clear preset's far field), weighted by one Fresnel of the mean
+normal times an ad hoc ensemble drop. A facet tilted away from the camera meets the view ray less obliquely and
+reflects less, one tilted toward it more; the lobe's low node, sent below the horizon, read the dome's below-horizon
+fill. Change (`skyReflection` → vec4): Schlick per Gauss–Hermite node for the facet that reflects V into that
+node (`fresnelNode`), the mean Fresnel `fw` returned and used as the body's loss; the low node clamped at the
+horizon (a facet tilted away by more than the view elevation is masked by the wave in front) and given 0.7 of the
+horizon sky (the sea mirrored a second time), fading in over the 3° below the horizon. Compose: `body (1 − F) +
+sky_weighted + glitter`; the mirrored scene takes `F` as its weight. Cache key water-v19. (Evidence: h15.)
+
+## Evidence from the hourly snapshot h14 (build with round 12, 23:17–00:35; `progress/shots/h14` once published)
+
+The hourly integration frames are the progress cameras on the merged lead; with the capture slots contended for
+hours by other builders' sessions they are this branch's steadiest evidence (h13 = round 11, h14 = round 12).
+- `sunset`: the path is a solid column from the horizon through the bridge to the aircraft's wing (h13: it ended at
+  the bridge); below the wing a smooth orange glow with soft crest-aligned streaks fades to the frame bottom — no
+  discrete glints (h00 had glints to the bottom). Profile down the sun's azimuth (sRGB, h14 vs h00): y 480 70/52/65
+  vs 76/55/66; y 570 66/49/63 vs 78/57/64; y 630 61/54/79 vs 79/65/83 — the same mean, none of the sparkle.
+- `aircraft_rear`, `glass`: the fine speckle is gone; the near water shows the chop as smooth facets (finding 4
+  closed for the speckle). The water is a deep navy at every angle; the wing's shadow covers the whole foreground
+  of `aircraft_rear`; no mirror image of the aircraft is readable.
+- Depth at the marina (`WorldMap.heightAt`, bundled with esbuild): −2.6 to −3.0 m under and around the aircraft and
+  the cameras of both views; `shore_beach` camera −4.65 m.
+- The h13 → h14 darkening of the shadowed side of the aircraft and of the water under the wing (−40 % in both) is
+  the lead's lighting round 5 (df8b092d: a cloud's footprint now removes the whole direct share; a cumulus shades
+  the marina in this frame), not the water.
+
+Diagnosis of the grazing colour, second pass (the depth above, the body model as coded): with K = (0.9, 0.23,
+0.18) /m the 3 m bed at a 25° depression (view path 4.1 m, sun path 3.2 m) returns T = (0.002, 0.20, 0.28) of its
+light — the body is Rinf (deep-water blue) with a fifth of the sand's green on top: navy. At 5° depression the
+path is only 1.5× the vertical one (refraction), so the bed's light is not what a grazing angle loses; Fresnel is,
+and the sky the lobe mirrors (the dome's mid-elevation blue) is darker than the horizon band. Jerlov's type III /
+coastal 1 water attenuates 0.42–0.5 /m at 650 nm, 0.12–0.15 at 550, 0.1–0.15 at 450: the coded K was coastal type
+3 in the green and off the scale in the red. The h00 cyan at these cameras came from the old environment-map sky
+term (a chroma-boosted, whitened probe) — the body was the same; the regression is that a physically darker sky
+term exposed a body that was too absorbing for the water it stands for.
+
+## Round 14 — glint count statistics on the sun path (finding 1: the foreground glitter)
+
+Observed: h14 `sunset` foreground is the analytic mean of the lobe — a smooth glow; h00's foreground glitter was the
+undersampled chop layers (a random per-pixel normal) that round 12 stopped drawing.
+
+Diagnosis: the analytic lobe is the mean over infinitely many facets. The facets that mirror the sun's disc are
+centimetre facets whose normal lies within the disc's angular radius / 2 of the half vector (1.7e-5 of slope space,
+a few cm² each): the expected number in a pixel is λ = P · 1.7e-5 / 4e-4 m² · A_px = P · 0.0425 A_px. Replica
+(`tools/path.py` bookkeeping): sunset core (2–8° depression, 2–8 km) λ 15–950; the bridge (14–18°) λ 1–2.6; the
+foreground (22–36°) λ 0.04–0.5; a 60 m camera at 100–350 m λ 0.02–0.05 everywhere in the path; 1500 m λ 5–116. A
+pixel with λ ≪ 1 either holds a glint or not: the margins of a path seen from altitude and the whole path of a
+near view are discrete sparkles over darker water, the core of the sunset path is a solid band — the look of every
+photograph, and of h00 by accident.
+
+Change (`sunGlitter`, `sparkleSlope`): the analytic radiance × a lognormal gain of mean one, exp(c g − c² / 2),
+g a unit-variance zero-mean process of the two finest sparkle octaves (world-fixed crest segments, phase rate of
+their wave period, cross-faded by √w), c = min(1 / √λ, 1.2). Nothing changes where λ ≫ 1 (c → 0). The cap keeps the
+water between glints at ≥ 0.5 of the mean and a glint ≤ ~4× it (7 % of the pixels > 3× at c = 1.2). Cache key
+water-v20. Cost: two value-noise reads per octave where the glitter is evaluated.
+
+## Round 15 — clear shelf water; more of the beam scattered in under a shadow (findings 2, 5)
+
+Change (`water.ts`): K = (0.7, 0.15, 0.11) /m (type III / coastal 1). Body reflectance R = bed T + Rinf (1 − T),
+sand bed 0.52/0.49/0.42, replica: nadir 2.7 m (path 5.5 m) (0.041, 0.205, 0.261) → (0.048, 0.27, 0.306); nadir
+6 m (0.038, 0.117, 0.196) → (0.038, 0.157, 0.234); nadir 10 m (0.038, 0.098, 0.174) → (0.038, 0.113, 0.19); the
+marina at 5° depression (path 6.9 m) (0.038, 0.175, 0.24) → (0.04, 0.236, 0.286). The shore gradient keeps its
+shape (the bed still vanishes by 10–12 m) and reaches ~2 m deeper; the swash zone shows more of the sand's warmth
+(T_red at 0.5 m 0.39 → 0.48). The shadow leak `0.45 (1 − e^(−depth / 2.5))` → `0.55 (1 − e^(−depth / 2.2))`: over
+the 3 m bed 0.31 → 0.41 of the beam; with the clearer water the bed's grain stays readable in the shadow. Cache
+key water-v21. Risk: the protected top-down turquoise brightens by a quarter over 2–4 m beds; to be read in h16
+(`island_pass`, `shore_beach`) against h14/h15, reverted or halved if it reads pale.

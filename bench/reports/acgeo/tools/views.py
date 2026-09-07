@@ -70,6 +70,10 @@ VIEWS = [
     # tail-on and nose-on, 16 m, level
     dev('tailon', (-16.0, 1.0, 0.6), (-2.0, 0.6, 0.0), fov=36, time=14.0, plane=FLY, speed=52, throttle=0.7),
     dev('noseon', (16.0, 0.6, -0.8), (2.0, 0.4, 0.0), fov=36, time=10.0, plane=FLY, speed=52, throttle=0.7),
+    # starboard lower cowl from ahead and below, 4 m: exhaust tailpipe and heat shield, cowl flaps, chin scoop
+    dev('exhaust', (6.2, -0.9, 3.4), (3.0, -0.35, 0.2), fov=34, time=10.0),
+    # port stern quarter at water level, 7 m: ventral fin, water rudders, stern cleats, tail light
+    dev('stern', (-9.0, -0.6, -4.0), (-4.2, -0.6, 0.0), fov=34, time=14.0),
 ]
 
 for label, q in VIEWS:

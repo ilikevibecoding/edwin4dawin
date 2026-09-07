@@ -212,13 +212,14 @@ export class Game {
     this.reflection.excludeChildrenWhen(this.bridges.group, (m) => (m as THREE.InstancedMesh).isInstancedMesh === true && !m.castShadow);
     // highway furniture (barriers, guardrail, lighting, gantries and signs along the highway / causeway classes);
     // its thin steel (userData.noMirror) is far below a texel of the mirror image
-    this.highway = buildHighway(this.map, this.roads, (m) => this.registerLit(m));
+    this.highway = buildHighway(this.map, this.roads, (m) => this.registerLit(m), network.graph);
     this.highway.group.name = 'highway';
     this.scene.add(this.highway.group);
     this.reflection.excludeChildrenWhen(this.highway.group, (m) => m.userData.noMirror === true);
 
     await this.tick(progress, 'Building the city', 0.52);
     this.city = buildCity(this.map, network.blocksByDistrict, this.atmos.uniforms.uNight);
+    this.terrain.stampLots(this.city.footprints);
     this.registerLit(this.city.batches.material);
     this.city.batches.group.name = 'city';
     this.scene.add(this.city.batches.group);
@@ -238,7 +239,7 @@ export class Game {
     await this.tick(progress, 'Paving sidewalks and hanging signals', 0.6);
     // sidewalks, curbs, signals, street furniture and the lamp plan (footings on the curb line) over the road graph;
     // low and unmirrored (the mirror image is far under its texel size for a curb)
-    this.streets = new Streets(this.map, network.graph, roadLights, this.city.markOccupied);
+    this.streets = new Streets(this.map, network.graph, roadLights, this.city.markOccupied, network.blocksByDistrict, this.city.occupied, this.city.batches.groundBoxes((x, z) => this.map.heightAt(x, z)));
     for (const m of this.streets.materials) this.registerLit(m);
     this.streets.group.name = 'streets';
     this.scene.add(this.streets.group);
@@ -254,7 +255,7 @@ export class Game {
     this.reflection.excludeChildrenWhen(props.group, (o, cam) => props.cameraMeshes.has(o) || (!props.mirrorMeshes.has(o) && beyondRange(o, cam)));
 
     await this.tick(progress, 'Planting palms and mangroves', 0.74);
-    this.vegetation = new Vegetation(this.map, this.city.occupied);
+    this.vegetation = new Vegetation(this.map, this.city.occupied, this.streets.streetTrees);
     for (const m of this.vegetation.materials) this.registerLit(m);
     this.vegetation.group.name = 'vegetation';
     this.scene.add(this.vegetation.group);
@@ -423,7 +424,7 @@ export class Game {
     const pxPerMetre = 0.5 * this.renderer.getDrawingBufferSize(_size).y * cam.projectionMatrix.elements[5];
     this.city.batches.updateLod(cx, cz, this.cull, cam.position, this.reflection.range, pxPerMetre);
     this.props.updateLod(cx, cz, this.cull, cam.position, this.reflection.range, pxPerMetre);
-    this.streets.updateLod(cx, cz, this.cull, cam.position);
+    this.streets.updateLod(cx, cz, this.cull, cam.position, pxPerMetre);
     this.traffic.updateCulling(this.cull);
     // the airframe casts only into the cascades its shadow can reach: swept down to the ground under it, so
     // from altitude that is the cascade holding its ground shadow, not all three

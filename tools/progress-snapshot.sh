@@ -14,7 +14,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TAG="${1:?tag}"; shift || true
 SOURCE=integration; PUBLISH=0
 while [ $# -gt 0 ]; do case "$1" in --source) SOURCE="$2"; shift 2;; --publish) PUBLISH=1; shift;; *) echo "unknown $1"; exit 2;; esac; done
-BUILDERS=(acsplit waterrender waterphys boats clouds4 light3 street highway facade3 veg5 terrain5 acgeo wphys2)
+BUILDERS=(acsplit waterrender waterphys boats clouds4 light3 street highway facade3 veg5 terrain5 acgeo wphys2 accockpit acfloats boats2)
 LEAD_BRANCH=cursor/vice-city-aerial-8213
 INTEG=/home/ubuntu/wt-integration
 PORT=4398
