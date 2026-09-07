@@ -8,12 +8,13 @@
 // Crowd appearance v2 (P6): the atlas cells are 128x64 appearances painted by the character-appearance composer
 // (npc/appearance/crowdCells.js: 19 archetypes x 2 genders x 12 seeds + children + droids, ~500 cells, 2048 px
 // wide) instead of the 22 x 6 hand-painted skins. Cells are painted lazily - when a person first wears one, and in
-// idle slices for the rest - into a CPU raster that is uploaded cell by cell (copyTextureToTexture) from the
-// meshes' onBeforeRender, so nothing is painted or uploaded at load. A per-cell float table (RGBA32F, one row per
+// idle slices for the rest - into a CPU raster; a cell's pixels go to the GPU (one packed copyTextureToTexture per
+// cell, at the start of the frame) the first time somebody wears it, so nothing is painted or uploaded at load
+// beyond the looks actually on screen. A per-cell float table (RGBA32F, one row per
 // cell) tells the vertex shader the eye rects for blinking, the body scale (species / gender silhouette) and up to
-// MAX_BOXES geometry boxes - lekku, montrals, horns, hair volume, hats, capes, skirts - that ride along as eight
-// extra instanced boxes per humanoid, sized from the table and collapsed to a point when unused. Nearby people
-// never share a cell when their group has one to spare (spread on assignment).
+// MAX_BOXES (12) geometry boxes - lekku, montrals, horns, hair volume, hats, capes, skirts - that ride along as
+// twelve extra instanced boxes per humanoid, sized from the table and collapsed to a point when unused. Nearby
+// people never share a cell when their group has one to spare (spread on assignment, repair pass while they walk).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { REGIONS as R } from '../skins.js';
@@ -341,10 +342,12 @@ function makeCrowdMaterial(texture, table, cells) {
   return m;
 }
 
-function dataTexture(data, w, h, type) {
+// dataReady = false: the renderer allocates the texture (texStorage2D) without uploading `data`
+function dataTexture(data, w, h, type, dataReady = true) {
   const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat, type);
   t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
   t.generateMipmaps = false; t.flipY = false; t.colorSpace = THREE.NoColorSpace;
+  t.source.dataReady = dataReady;
   t.needsUpdate = true;
   return t;
 }
@@ -391,7 +394,7 @@ class InstancePool {
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 
 const _pos = new THREE.Vector3(), _quat = new THREE.Quaternion(), _scale = new THREE.Vector3(), _euler = new THREE.Euler(0, 0, 0, 'YXZ'), _m = new THREE.Matrix4();
-const _box = new THREE.Box2(), _dst = new THREE.Vector2(), _used = new Set();
+const _dst = new THREE.Vector2(), _used = new Set();
 
 export class CrowdRenderer {
   // capacities: live humanoids / astromechs / sweepers the pools can hold at once; sweep: paint the unworn cells in
@@ -406,18 +409,26 @@ export class CrowdRenderer {
     const W = this.table.atlasWidth, H = this.table.atlasHeight, n = this.table.count;
     this.atlasRaster = new Raster(W, H);                        // CPU side of the atlas; cells are blitted in as they are painted
     this.atlasData = new Uint8Array(this.atlasRaster.d.buffer);
-    this.texture = dataTexture(this.atlasData, W, H, THREE.UnsignedByteType);
     this.tab = new Float32Array(TAB_W * 4 * n);                  // per-cell shader table (see crowdCells.js fillCellRow)
     for (let i = 0; i < n; i++) emptyCellRow(this.tab, i);
-    this.tableTex = dataTexture(this.tab, TAB_W, n, THREE.FloatType);
-    // never-uploaded twins sharing the CPU buffers: copyTextureToTexture reads one cell / one row straight from them
-    this.atlasSrc = new THREE.DataTexture(this.atlasData, W, H, THREE.RGBAFormat, THREE.UnsignedByteType);
-    this.tabSrc = new THREE.DataTexture(this.tab, TAB_W, n, THREE.RGBAFormat, THREE.FloatType);
-    this.painted = new Uint8Array(n);
+    // GPU atlas + table: allocated only (dataReady = false skips the 16 MB transfer of the still-empty atlas); every
+    // texel a shader can read arrives cell by cell, before the cell is first drawn
+    this.texture = dataTexture(this.atlasData, W, H, THREE.UnsignedByteType, false);
+    this.tableTex = dataTexture(this.tab, TAB_W, n, THREE.FloatType, false);
+    // compact, never-uploaded staging sources for copyTextureToTexture: one cell (32 KB) and one table row. Handing
+    // it the whole atlas with a sub-rect would make WebGL walk 2048-px rows (512 KB per cell) and stall on the GPU
+    // process; a packed 128x64 source is one small texSubImage2D
+    this.cellStage = new Uint8Array(CELL_W * CELL_H * 4);
+    this.cellSrc = new THREE.DataTexture(this.cellStage, CELL_W, CELL_H, THREE.RGBAFormat, THREE.UnsignedByteType);
+    this.rowStage = new Float32Array(TAB_W * 4);
+    this.rowSrc = new THREE.DataTexture(this.rowStage, TAB_W, 1, THREE.RGBAFormat, THREE.FloatType);
+    this.painted = new Uint8Array(n);                            // pixels + table row in the CPU buffers
+    this.uploaded = new Uint8Array(n);                           // ... and on the GPU
+    this.queued = new Uint8Array(n);                             // in `pending`
     this.cellInfo = new Array(n).fill(null);
-    this.pending = [];                                           // painted cells not yet uploaded
+    this.pending = [];                                           // worn cells to upload before the next draw
     this.paint = { count: 0, ms: 0, maxMs: 0, uploads: 0, uploadMs: 0, sweepDone: false, sweepNext: 0 };
-    this.renderer = null;
+    this.renderer = null; this.onRestore = null;
     this.material = makeCrowdMaterial(this.texture, this.tableTex, [ATLAS_COLS, this.table.rows]);
     this.pools = [
       new InstancePool(buildParts(HUMANOID_PARTS, MAX_BOXES), this.material, humanoids, 'crowd-humanoid'),
@@ -449,7 +460,8 @@ export class CrowdRenderer {
   }
   release(slot) { if (!slot) return; this.pools[slot.body].release(slot.i); this.live--; }
 
-  // Paints a cell into the CPU atlas + table (idempotent) and queues its upload.
+  // Paints a cell into the CPU atlas + table (idempotent). The pixels reach the GPU when somebody wears the cell
+  // (requireUpload): uploading cells nobody wears would only queue texSubImage2D calls behind a busy GPU process.
   paintCell(cell) {
     if (cell < 0 || cell >= this.table.count || this.painted[cell]) return false;
     const t0 = performance.now();
@@ -458,12 +470,17 @@ export class CrowdRenderer {
     fillCellRow(this.tab, cell, info);
     this.painted[cell] = 1;
     this.cellInfo[cell] = cellSummary(this.table.cells[cell], info);
-    this.pending.push(cell);
     const ms = performance.now() - t0;
     this.paint.count++; this.paint.ms += ms; if (ms > this.paint.maxMs) this.paint.maxMs = ms;
     return true;
   }
-  // Idle-time sweep over the cells nobody has worn yet (one at a time when the browser gives no idle deadline).
+  // A cell somebody wears now must be on the GPU before the next draw.
+  requireUpload(cell) {
+    if (cell < 0 || this.uploaded[cell] || this.queued[cell]) return;
+    this.queued[cell] = 1; this.pending.push(cell);
+  }
+  // Idle-time sweep painting the cells nobody has worn yet (one at a time when the browser gives no idle deadline),
+  // so that a person arriving in a new look later costs the frame an upload, not a composer paint.
   sweepStep(deadline) {
     if (this.disposed) return;
     const n = this.table.count;
@@ -478,22 +495,41 @@ export class CrowdRenderer {
     if (this.sweepIdle) this.sweepHandle = requestIdleCallback((dl) => { this.sweepHandle = null; this.sweepStep(dl); }, { timeout: 300 });
     else this.sweepHandle = setTimeout(() => { this.sweepHandle = null; this.sweepStep(null); }, 40);
   }
-  // Uploads the painted cells (one texSubImage2D per cell for the atlas, one row for the table). Runs from the pool
-  // meshes' onBeforeRender, so it has the renderer and happens before the crowd is drawn.
+  // Uploads the worn cells (one packed texSubImage2D per cell for the atlas, one row for the table). Runs from
+  // update() at the start of the frame - the command buffer is emptiest there, so the uploads do not queue behind the
+  // world's draw calls - and again from the pool meshes' onBeforeRender (the first frame, before the renderer is
+  // known, and anything assigned after update()).
   flushUploads(renderer) {
-    this.renderer = renderer;
+    if (renderer && renderer !== this.renderer) this.bindRenderer(renderer);
     if (!this.pending.length || !renderer || !renderer.copyTextureToTexture) return;
     const t0 = performance.now();
-    for (const cell of this.pending) {
-      const [x0, y0] = this.table.cellRect(cell);
-      _box.min.set(x0, y0); _box.max.set(x0 + CELL_W, y0 + CELL_H); _dst.set(x0, y0);
-      renderer.copyTextureToTexture(this.atlasSrc, this.texture, _box, _dst);
-      _box.min.set(0, cell); _box.max.set(TAB_W, cell + 1); _dst.set(0, cell);
-      renderer.copyTextureToTexture(this.tabSrc, this.tableTex, _box, _dst);
-    }
+    for (const cell of this.pending) this.upload(renderer, cell);
     this.paint.uploads += this.pending.length;
-    this.paint.uploadMs += performance.now() - t0;
     this.pending.length = 0;
+    this.paint.uploadMs += performance.now() - t0;
+  }
+  upload(renderer, cell) {
+    const [x0, y0] = this.table.cellRect(cell);
+    const W4 = this.atlasRaster.w * 4, ROW = CELL_W * 4, atlas = this.atlasData, stage = this.cellStage;
+    for (let y = 0; y < CELL_H; y++) { const s = (y0 + y) * W4 + x0 * 4; stage.set(atlas.subarray(s, s + ROW), y * ROW); }
+    _dst.set(x0, y0);
+    renderer.copyTextureToTexture(this.cellSrc, this.texture, null, _dst);
+    this.rowStage.set(this.tab.subarray(cell * TAB_W * 4, (cell + 1) * TAB_W * 4));
+    _dst.set(0, cell);
+    renderer.copyTextureToTexture(this.rowSrc, this.tableTex, null, _dst);
+    this.uploaded[cell] = 1; this.queued[cell] = 0;
+  }
+  get pendingUploads() { return this.pending.length; }
+  // A restored WebGL context comes back with freshly allocated (empty) atlas + table: every worn cell goes up again.
+  bindRenderer(renderer) {
+    this.renderer = renderer;
+    const el = renderer.domElement;
+    if (!el || !el.addEventListener) return;
+    this.onRestore = () => {
+      this.pending.length = 0; this.uploaded.fill(0); this.queued.fill(0);
+      for (const p of this.pools) for (let i = 0; i < p.capacity; i++) this.requireUpload(p.cell[i]);
+    };
+    el.addEventListener('webglcontextrestored', this.onRestore);
   }
 
   // The cell a slot wears: children move to the child group, then the first cell of the group nobody within
@@ -510,6 +546,7 @@ export class CrowdRenderer {
     }
     cell = this.table.spread(cell, _used);
     this.paintCell(cell);
+    this.requireUpload(cell);
     pool.base[i] = base; pool.child[i] = child; pool.cell[i] = cell;
     return cell;
   }
@@ -543,6 +580,7 @@ export class CrowdRenderer {
     this.material.uniforms.uTime.value = timeSeconds;
     if (timeSeconds - this.lastRepair >= REPAIR_EVERY) { this.lastRepair = timeSeconds; this.repair(); }
     for (const p of this.pools) p.flush();
+    if (this.renderer) this.flushUploads(this.renderer);
   }
 
   // People walk into each other's company after they were assigned: once per pass, the first pair of shown
@@ -585,7 +623,7 @@ export class CrowdRenderer {
     }
     let painted = 0; for (let i = 0; i < this.painted.length; i++) painted += this.painted[i];
     return {
-      cells: t.count, groups: t.groups.length, rows: t.rows, atlas: [t.atlasWidth, t.atlasHeight], painted, pending: this.pending.length,
+      cells: t.count, groups: t.groups.length, rows: t.rows, atlas: [t.atlasWidth, t.atlasHeight], painted, pending: this.pendingUploads,
       uploads: this.paint.uploads, uploadMs: +this.paint.uploadMs.toFixed(1), paintCount: this.paint.count, paintMs: +this.paint.ms.toFixed(1), paintMaxMs: +this.paint.maxMs.toFixed(2),
       paintAvgMs: this.paint.count ? +(this.paint.ms / this.paint.count).toFixed(2) : 0, sweepDone: this.paint.sweepDone, sweepNext: this.paint.sweepNext,
       live, distinctWorn: worn.size, species, boxesWorn: boxes, wornWithParts: withParts, drawCalls: this.drawCalls, maxBoxes: MAX_BOXES, spreadRadius: SPREAD_R, repairs: this.repairs,
@@ -595,6 +633,7 @@ export class CrowdRenderer {
   dispose() {
     this.disposed = true;
     if (this.sweepHandle != null) { if (this.sweepIdle) cancelIdleCallback(this.sweepHandle); else clearTimeout(this.sweepHandle); this.sweepHandle = null; }
+    if (this.onRestore && this.renderer && this.renderer.domElement) this.renderer.domElement.removeEventListener('webglcontextrestored', this.onRestore);
     this.scene.remove(this.group);
     for (const p of this.pools) p.mesh.geometry.dispose();
     this.material.dispose();
