@@ -5,7 +5,11 @@ import { SURF } from '../textures';
 import { at, DEG, FLOOR, SEAT_Y, THROTTLE_PIVOT, UP, V3, WRIST, YOKE_HUB, type BuildContext } from './context';
 
 /** the pilot's skin: a medium tan, a touch less orange than the parts table's, with the soft sheen of skin */
-export const SKIN: Surf = { color: 0xc49876, roughness: 0.62, metalness: 0.0 };
+export const SKIN: Surf = { color: 0xc49876, roughness: 0.74, metalness: 0.0 };
+/** the skin is not one colour: knuckles and fingertips flush, the palm is paler, nails are pale horn */
+const KNUCKLE: Surf = { color: 0xbf8d6c, roughness: 0.70, metalness: 0.0 };
+const PALM: Surf = { color: 0xd1a685, roughness: 0.74, metalness: 0.0 };
+const NAIL: Surf = { color: 0xdcc0a6, roughness: 0.35, metalness: 0.0 };
 
 /**
  * The wrist joint of a hand on a yoke grip (hub space): the palm's heel lies on the grip's aft-outboard face, so the
@@ -120,10 +124,14 @@ export function handGeometry(gripR: number | ((y: number) => number), wrist: THR
       ra.push(rr);
     }
     b.add(tubeAlong(pts, ra, ra, 8, UP));
-    b.add(new THREE.SphereGeometry(r * 1.12, 8, 6), at(pts[0]));
-    b.add(new THREE.SphereGeometry(r * 0.99, 7, 5), at(pts[Math.round(M * 0.46)]));
+    b.add(new THREE.SphereGeometry(r * 1.12, 8, 6), at(pts[0]), KNUCKLE);
+    b.add(new THREE.SphereGeometry(r * 0.99, 7, 5), at(pts[Math.round(M * 0.46)]), KNUCKLE);
     b.add(new THREE.SphereGeometry(r * 0.88, 7, 5), at(pts[Math.round(M * 0.76)]));
-    b.add(new THREE.SphereGeometry(r * 0.75, 7, 5), at(pts[M]));
+    b.add(new THREE.SphereGeometry(r * 0.75, 7, 5), at(pts[M]), KNUCKLE);
+    // the nail: a pale flattened oval on the back of the tip (away from the grip)
+    const tipTheta = th0 - wrap, outward = new THREE.Vector3(Math.cos(tipTheta), 0, Math.sin(tipTheta)), rt = ra[M];
+    const nailAt = pts[M].clone().addScaledVector(outward, rt * 0.62);
+    b.add(new THREE.SphereGeometry(1, 8, 6), at(nailAt, [0, -tipTheta, 0], [rt * 0.42, rt * 0.55, rt * 0.62]), NAIL);
   }
   // the palm: a slab lying on the grip's outboard face, wider at the knuckles than at the wrist, thickest at the
   // heel; the thenar bulge (thumb base) wraps the grip's aft side at the top, the hypothenar heel at the bottom
@@ -132,8 +140,8 @@ export function handGeometry(gripR: number | ((y: number) => number), wrist: THR
   const palm: [number, number, number, number][] = [[-0.062, 0.026, 0.0135, 0.031], [-0.042, 0.030, 0.0145, 0.036], [-0.020, 0.031, 0.0135, 0.040], [0.002, 0.029, 0.0120, 0.042], [0.019, 0.025, 0.0105, 0.041]];
   const OUT = new THREE.Vector3(0, 0, 1);
   b.add(tubeAlong(palm.map(([x, z]) => new THREE.Vector3(x, 0.002, z + dz)), palm.map((p) => p[2]), palm.map((p) => p[3]), 12, OUT));
-  b.add(new THREE.SphereGeometry(1, 10, 8), at([-0.040, 0.026, 0.013 + dz], [0, 0.35, -0.25], [0.023, 0.018, 0.013]));
-  b.add(new THREE.SphereGeometry(1, 10, 8), at([-0.052, -0.026, 0.024 + dz], [0, 0.2, 0.3], [0.020, 0.013, 0.015]));
+  b.add(new THREE.SphereGeometry(1, 10, 8), at([-0.040, 0.026, 0.013 + dz], [0, 0.35, -0.25], [0.023, 0.018, 0.013]), PALM);
+  b.add(new THREE.SphereGeometry(1, 10, 8), at([-0.052, -0.026, 0.024 + dz], [0, 0.2, 0.3], [0.020, 0.013, 0.015]), PALM);
   // the thumb: from the thenar up over the grip's aft face toward the inboard side, its tip resting on the top of
   // the grip just behind the switches
   const thumb = [new THREE.Vector3(-0.040, 0.030, 0.008 + dz), new THREE.Vector3(-0.034, 0.047, -0.003 + dz * 0.5), new THREE.Vector3(-0.026, 0.059, -0.012), new THREE.Vector3(-0.017, 0.064, -0.017)];
@@ -212,14 +220,15 @@ export function buildPilot(ctx: BuildContext, cockpitEye: THREE.Vector3): void {
   const ball = (x: number, y: number, z: number, sx: number, sy: number, sz: number, surf: Surf, rot?: [number, number, number], segs = 16) =>
     cabinKit.add(new THREE.SphereGeometry(1, segs, Math.round(segs * 0.75)), at([x, y, z], rot, [sx, sy, sz]), surf);
   ball(C.x, C.y, C.z, 0.095, 0.095, 0.078, SKIN, undefined, 18);
-  ball(XF - 0.090, YE - 0.050, PZ, 0.082, 0.070, 0.066, SKIN, undefined, 16);
+  ball(XF - 0.088, YE - 0.054, PZ, 0.084, 0.074, 0.068, SKIN, undefined, 16);
   // nose: a short bridge off the face below the eye line ending in a rounded tip, drooping a little
   cabinKit.add(new THREE.ConeGeometry(0.012, 0.028, 8), at([XF + 0.002, YE - 0.034, PZ], [0, 0, -Math.PI / 2 - 0.35]), SKIN);
   cabinKit.add(new THREE.SphereGeometry(1, 8, 6), at([XF + 0.015, YE - 0.041, PZ], undefined, [0.010, 0.009, 0.012]), SKIN);
   // mouth: a thin dark line across the front of the jaw
   cabinKit.add(new THREE.BoxGeometry(0.004, 0.003, 0.030), at([XF - 0.013, YE - 0.078, PZ]), MOUTH);
-  // neck: from the top of the shirt up and back into the jaw (the head sits a little behind the shoulder line)
-  cabinKit.add(tubeAlong([V3(0.975, 0.685, PZ), V3(0.95, 0.765, PZ), V3(0.915, 0.845, PZ)], [0.054, 0.050, 0.046], undefined, 12), undefined, SKIN);
+  // neck: from the top of the shirt up and back into the jaw, set well behind the chin (the neck joins the head
+  // under its rear half: the chin stands ~4 cm ahead of the throat)
+  cabinKit.add(tubeAlong([V3(0.955, 0.685, PZ), V3(0.932, 0.765, PZ), V3(0.902, 0.845, PZ)], [0.054, 0.049, 0.044], undefined, 12), undefined, SKIN);
   // hair: the back and sides of the head below the cap's edge, down to the nape
   cabinKit.add(new THREE.SphereGeometry(1, 16, 8, -Math.PI / 2, Math.PI, Math.PI * 0.40, Math.PI * 0.24), at(C, undefined, [0.097, 0.097, 0.080]), HAIR);
   // ball cap: the crown fitted over the cranium, its edge just above the brow, a short peak dipping forward (kept
@@ -254,8 +263,8 @@ export function buildPilot(ctx: BuildContext, cockpitEye: THREE.Vector3): void {
   // ------------------------------------------------------------ torso
   // a shirt torso lofted from the hips to the shoulder line, deepest at the chest and leaning a little forward
   // off the seat back toward the yoke; round shoulders, an open collar, buttons down the placket, a chest pocket
-  // (seated: cushion top 0.14, acromion ~0.60 over it -> the shoulder line at 0.715, the eye 0.79 over the cushion)
-  const spine: [number, number, number, number][] = [[0.95, 0.15, 0.120, 0.170], [0.965, 0.32, 0.120, 0.165], [0.985, 0.50, 0.115, 0.185], [0.99, 0.62, 0.110, 0.195], [0.985, 0.705, 0.100, 0.200]];
+  // (seated: cushion top 0.14, the trapezius line 0.585 over it at 0.725, acromion 0.68, the eye 0.79 over the cushion)
+  const spine: [number, number, number, number][] = [[0.95, 0.15, 0.120, 0.170], [0.965, 0.32, 0.120, 0.165], [0.985, 0.50, 0.115, 0.185], [0.99, 0.62, 0.110, 0.195], [0.985, 0.69, 0.100, 0.195], [0.975, 0.725, 0.080, 0.140]];
   cabinKit.add(tubeAlong(spine.map(([x, y]) => V3(x, y, PZ)), spine.map((p) => p[2]), spine.map((p) => p[3]), 18, V3(1, 0, 0)), undefined, SURF.shirt);
   const frontAt = (y: number): [number, number, number] => {
     for (let i = 0; i < spine.length - 1; i++) {
@@ -264,9 +273,14 @@ export function buildPilot(ctx: BuildContext, cockpitEye: THREE.Vector3): void {
     }
     return [spine[0][0], spine[0][2], spine[0][3]];
   };
-  const SHOULDER_Y = 0.715, SHOULDER_X = 0.985;
-  for (const side of [-1, 1]) cabinKit.add(new THREE.SphereGeometry(0.066, 12, 9), at([SHOULDER_X, SHOULDER_Y, PZ + side * 0.175]), SURF.shirt);
-  for (const side of [-1, 1]) cabinKit.add(new THREE.BoxGeometry(0.085, 0.020, 0.075), at([SHOULDER_X + 0.025, 0.75, PZ + side * 0.062], [side * 0.55, 0, -0.35]), SURF.collar);
+  // the shoulders slope down from the neck (acromion ~5 cm under the trapezius line, 25 cm under the eye); with
+  // the deltoid caps above the neck base the pilot shrugged and the neck read as a long column
+  const SHOULDER_Y = 0.68, SHOULDER_X = 0.985;
+  for (const side of [-1, 1]) cabinKit.add(new THREE.SphereGeometry(0.058, 12, 9), at([SHOULDER_X, SHOULDER_Y, PZ + side * 0.178]), SURF.shirt);
+  // the collar: a folded band standing around the base of the neck, open at the front, its two points lying
+  // down over the placket (the two flat slabs on the shoulders read as epaulettes from outside)
+  cabinKit.add(new THREE.TorusGeometry(0.060, 0.011, 6, 16, Math.PI * 1.55), at([0.945, 0.735, PZ], [Math.PI / 2, 0, Math.PI * 0.225]), SURF.collar);
+  for (const side of [-1, 1]) cabinKit.add(new THREE.BoxGeometry(0.004, 0.090, 0.028), at([1.040, 0.700, PZ + side * 0.034], [side * 0.45, 0, 0.95]), SURF.collar);
   for (const y of [0.26, 0.35, 0.44, 0.53, 0.62, 0.69]) { const [x, a] = frontAt(y); cabinKit.add(new THREE.SphereGeometry(0.0055, 8, 6), at([x + a - 0.002, y, PZ]), SURF.lightPlastic); }
   { const [x, a, bz] = frontAt(0.56), dz = -0.095, t = Math.asin(dz / bz);
     const px = x + a * Math.cos(t), pz = PZ + dz, yaw = Math.atan2(-a * Math.sin(t) / bz, Math.cos(t));
