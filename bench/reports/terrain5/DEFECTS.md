@@ -242,3 +242,27 @@ Changed:
   under `if (carriage > 0.0)`. Four to seven value-noise octaves fewer per urban-ring / beach pixel.
 
 Measured on the round-8 chain (captures, A/B and the CPU-tick variant breakdown all on this build, 4607).
+
+## Round 8 — parks from 500 m, downtown paving, band limits (commit 30a8b4a5)
+
+Reasoned without new captures (the slot queue: eight builders' waiters ahead of two slots), on what the round-4
+captures and the rubric still say about the parks and the downtown ground:
+- park_500m / park_1500m: a park is a green with paths that have gone subpixel — nothing that says 'park' rather
+  than 'lawn' from 500 m. From the air a park is its sports fields: the flattest, most even green in it, with a
+  white outline.
+- downtown_5m / downtown_30m: the ground between the street meshes is one grey with the 22 m noise on it — a plane
+  at 5 m where every real downtown ground is paving with joints.
+- Cost: the 3 m noise (n1) ran to 2 m/px, the 22 m noise's 5-11 m octaves to 4 m/px, the 3 m tile to 1.2 m/px,
+  where they were already 2-5 px across and averaging out.
+
+Changed:
+- Sports pitches in the parks: in about half of the 200 m park cells, where the trees leave room (canopy < 0.4),
+  a mown rectangle (104 × 68 or 72 × 48 m, any orientation) a shade lighter and yellower than the park's turf,
+  with its perimeter, halfway line and centre circle in 0.12 m white close up (pixel-widened, gone past 1 m/px).
+  Placed by a hash per cell, so one may be cut by a park edge or a pond — accepted for now (a bake could check).
+- Downtown paving: 3 m slab joints close up (pixel-widened, gone past 1.2 m/px).
+- Band limits: n1 fades 0.6-1.2 m/px (was 1-2), n2's fine octaves 1.2-2.5 (was 2-4), the micro tile 0.5-0.9
+  (was 0.7-1.2). One to four value-noise octaves and up to two tile taps fewer over the middle of every aerial
+  frame; nothing that was resolvable is lost.
+
+Built as r9 (4608); its captures and A/B are chained after the r8 chain on the same held browser.
