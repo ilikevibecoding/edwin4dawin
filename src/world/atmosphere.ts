@@ -206,7 +206,11 @@ export class Atmosphere {
     // 1.15-1.9x the horizon luminance (sky.ts); with the clear-sky keys halved for the fill (see `amb`) the
     // overcast level is set on its own: 1.2 puts a white horizontal at ~0.85x the sky band (lin 0.38 under a
     // 0.45 sky), where 0.5 x 1.5 left it at 0.26 — a white wing darker than the grey overcast above it.
-    s.ambientIntensity = lerp(k.amb, 1.2, grey);
+    // Round 5: the cloud shadow now removes the whole direct beam under the deck's footprint (the cloudy
+    // preset's 0.3 dim used to leave it everywhere), so the diffuse alone has to carry the overcast level:
+    // 1.6, i.e. 2.5x the clear-sky diffuse, the measured ratio for a 60-70 % stratocumulus sky (the cloudy
+    // ground had fallen to p50 67 from 83 at 1.2; the storm keeps its 0.18 beam and lands where it was).
+    s.ambientIntensity = lerp(k.amb, 1.6, grey);
     const horLum = s.horizon.r * 0.2126 + s.horizon.g * 0.7152 + s.horizon.b * 0.0722;
     const overcast = new THREE.Color(horLum, horLum, horLum).lerp(s.horizon, 0.3);
     const zl = s.zenith.clone().lerp(overcast, grey * 0.85);
