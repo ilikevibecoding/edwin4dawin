@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-07T00:43:46.604Z",
+  "updated": "2026-09-07T01:47:45.372Z",
   "phase": "Round 6, pass 2: builders running for the spaceport x4, 30-line dialogue + 13-anchor cast, economy v2 with physical shipments, 20 building programs + building scorer, the Senate chamber - and, from your notes tonight, W10 architecture v2 so the towers stop looking like New York. Every build now shows its commit + time in the F4 header and the F3 overlay (current live: ff8673c7).",
   "summary": "Your notes (6 Sep evening) and what is happening with each: (1) 'buildings look like New York, not Star Wars' -> W10 architecture v2 launched with your reference images: no more window grids (ribbon glazing, slits, panel seams, full-height light strips), rounded / tapered / stacked-disc massing with cap platforms and lit ring ledges on tall towers, Coruscant palette only, impostors follow; rubric 18, before/after cameras will be posted. (2) 'every room needs a purpose you can see' -> P3 is applying the 20 building programs with dossiers and a per-building score; a legibility fix round (name plates, signature furniture, no filler rooms) follows its report. (3) 'Senate pods look nothing like the real ones; bigger, individual circles, back rooms behind them (Andor)' -> P4 is rebuilding the chamber now (tiers of individual round repulsorpods, 12 delegation suites with corridors directly behind the pods, sessions); your Andor note goes into its fix round. (4) 'random ship stuck to the side of the Senate' -> found: two block-built shuttles on the Senate's pads at the lot edge; removed in ff8673c7, live now. (5) 'make your own angular blocks for spaceships' -> ships v3 (rubric 19: sloped voxel cells, re-sculpted hulls, a collision audit against every building) queued for the next free slot. Live now: everything from wave 1 - crowned towers, 62 ships with the port cycle and boarding, the maglev train, credits/shops/jobs, the lower city under the plateau, 4,767 citizens.",
   "links": [
@@ -30,6 +30,10 @@
     {
       "label": "Play the exact latest build (commit a06b2d55, immune to CDN caching)",
       "url": "https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/a06b2d55/dist/index.html"
+    },
+    {
+      "label": "Play the exact latest build (commit 1df1e5e9, immune to CDN caching)",
+      "url": "https://cdn.githubraw.com/ilikevibecoding/edwin4dawin/1df1e5e9/dist/index.html"
     }
   ],
   "workstreams": [
@@ -280,8 +284,8 @@
     },
     {
       "name": "Round 6 S3: ships v3 - sloped voxels, angular hulls, building-collision audit (rubric 19)",
-      "status": "building",
-      "detail": "launched 22:33"
+      "status": "merged",
+      "detail": "70 sloped cell shapes in the ship mesher, all 9 hulls re-sculpted (wedge noses, chamfers, canopies), collision audit 0 intersections over 68,951 poses, no block-built ship anywhere; ships 14/14 + 16 CDP on its branch; live in 1df1e5e9"
     },
     {
       "name": "Ships: board and ride ships in flight",
@@ -335,6 +339,18 @@
   ],
   "screenshots": [
     {
+      "src": "img/r6_ships_v3_cruiser.jpg",
+      "caption": "The diplomatic cruiser as a tapered red cigar with a chamfered prow (01:47 UTC)"
+    },
+    {
+      "src": "img/r6_ships_v3_montage.jpg",
+      "caption": "All nine ship models on their pads at noon with the new angular hulls (01:47 UTC)"
+    },
+    {
+      "src": "img/r6_ships_v3_shuttle_pair.jpg",
+      "caption": "Shuttle before (left, stepped blocks) and after (right, 45-degree slopes, wedge nose, sloped canopy) (01:47 UTC)"
+    },
+    {
       "src": "img/r6_cargo_unloaded.jpg",
       "caption": "A light freighter unloaded on its pad, cargo stacked pad-side for the conveyor (00:43 UTC)"
     },
@@ -361,18 +377,6 @@
     {
       "src": "img/r6_terminal_hall.jpg",
       "caption": "Grand terminal hall: departure boards, waiting rows, glass roof (22:40 UTC)"
-    },
-    {
-      "src": "img/r6_terminus.jpg",
-      "caption": "Westport Terminus platform 1: docked train, open doors, live board (22:40 UTC)"
-    },
-    {
-      "src": "img/r6_westport_apron.jpg",
-      "caption": "Westport spaceport from the south-west: control tower, fuel farm, hangars, pad fields over the lower city (22:40 UTC)"
-    },
-    {
-      "src": "img/r6_train.jpg",
-      "caption": "Train v2 interior riding over the ocean (14:47 UTC)"
     }
   ],
   "log": [
@@ -515,6 +519,10 @@
     {
       "time": "2026-09-07 00:43 UTC",
       "text": "P2 merged and live (a06b2d55): the city economy runs on real goods chains and physical shipments; Senate votes now change customs inspections, landing fees and public funds. P5 factions + surprises launched."
+    },
+    {
+      "time": "2026-09-07 01:47 UTC",
+      "text": "S3 merged and live (1df1e5e9): angular ship hulls from sloped voxel cells, and an audit that guarantees no ship path or parked ship intersects a building (two lanes/berths were moved)."
     }
   ],
   "issues": [
