@@ -276,9 +276,17 @@ export function paintCoping(bp, ring, y, style, covered = null) {
   for (const c of ring) {
     if (covered && covered(c.x, c.z)) continue;
     if (c.corner || c.face === 'D' || !w) { bp.set(c.x, y, c.z, style.corner); continue; }
-    bp.set(c.x, y, c.z, w[c.face]); n++;
+    putWedge(bp, c.x, y, c.z, w[c.face]); n++;
   }
   return n;
+}
+
+// Sets a wedge and notes its cell on the blueprint (bp.wedgeCells: packed (x * d + z) * h + y indices), so the settling
+// sweep at the end of the build (towers/tiered.js settleWedges) visits the wedges and not the whole volume.
+export function putWedge(bp, x, y, z, id) {
+  if (x < 0 || y < 0 || z < 0 || x >= bp.w || y >= bp.h || z >= bp.d) return;
+  bp.set(x, y, z, id);
+  (bp.wedgeCells || (bp.wedgeCells = [])).push((x * bp.d + z) * bp.h + y);
 }
 
 // Crown ornaments on the top roof (low towers; towers >= 60 get crowns.js). Returns the extra height used above yRoof.

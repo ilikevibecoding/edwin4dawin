@@ -157,7 +157,13 @@ export function envelopeFor(lot, family, kind, o = {}) {
     cache.set(key, p);
     return p;
   };
-  const mask = kind === 'rect' ? null : (x, z, i, e) => predicateFor(e, i)(x, z);
+  // buildTiered asks for every cell of a tier rect with the same rect object: the last (rect, tier) predicate is
+  // kept at hand so the per-cell path is one call, and the keyed cache is only consulted when the tier changes
+  let lastE = null, lastI = -1, lastP = null;
+  const mask = kind === 'rect' ? null : (x, z, i, e) => {
+    if (e !== lastE || i !== lastI) { lastP = predicateFor(e, i); lastE = e; lastI = i; }
+    return lastP(x, z);
+  };
 
   return {
     kind, tiers, mask, nF, podiumEnd, front, lim, frame,
@@ -217,7 +223,8 @@ function cornerMask(e, radii, p, front) {
   const keep = (r, a, b) => {
     if (r <= 0 || a >= r || b >= r) return true;
     if (p === 1) return (a - 0.5) + (b - 0.5) >= r;
-    return Math.pow((r - a) / r, p) + Math.pow((r - b) / r, p) <= 1;
+    const u = (r - a) / r, v = (r - b) / r;
+    return (p === 2 ? u * u + v * v : Math.pow(u, p) + Math.pow(v, p)) <= 1;
   };
   return (x, z) => {
     if (x < x0 || x > x1 || z < z0 || z > z1) return false;

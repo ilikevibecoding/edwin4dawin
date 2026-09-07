@@ -6,7 +6,7 @@ import { B, BLOCKS, SHAPE, WEDGE_DIRS } from '../../blocks.js';
 import { FORCE_AIR } from '../blueprint.js';
 import { PlanFrame, computeLayout, planFloor, cutEntrance, insetLimits } from '../plan.js';
 import { buildCore } from '../core.js';
-import { rectRing, paintRing, paintRoof, paintCoping, paintCrown } from '../facade.js';
+import { rectRing, paintRing, paintRoof, paintCoping, paintCrown, putWedge } from '../facade.js';
 import { hash2 } from '../../rng.js';
 import { planCrown, buildCrown, crownEat, tableLookup, ringFromTable, slab, CROWN_OPTIONS, CROWN_MIN_HEIGHT } from '../crowns.js';
 import { stripPlan, stripRing, contrastStrips } from './strips.js';
@@ -215,7 +215,7 @@ function dressEnvelope(bp, spec, tiers, env, style, strips, deckFloors) {
         if (!inExt(x, z) || !bp.isAir(x, y0, z) || !bp.isAir(x, y0 + 4, z)) continue;
         for (let y = y0; y <= y1; y++) if (bp.isAir(x, y, z)) bp.set(x, y, z, y === y1 ? (style.stripBlock || B.GLOW_PANEL_BLUE) : style.corner);
         // the fin ends in a wedge leaning away from the wall: a tapered tip, not a cut-off post (rule 5)
-        if (wedges && y1 + 1 < bp.h && bp.isAir(x, y1 + 1, z)) { bp.set(x, y1 + 1, z, wedges[c.face]); out.wedges++; }
+        if (wedges && y1 + 1 < bp.h && bp.isAir(x, y1 + 1, z)) { putWedge(bp, x, y1 + 1, z, wedges[c.face]); out.wedges++; }
         // the coping wedge behind the fin would slope into it: a solid post there instead
         if (wedges && yRoof + 1 < bp.h) { const v = bp.get(c.x, yRoof + 1, c.z); if (v && BLOCKS[v] && BLOCKS[v].shape === SHAPE.WEDGE) bp.set(c.x, yRoof + 1, c.z, style.corner); }
         out.fins++;
@@ -241,7 +241,7 @@ function dressEnvelope(bp, spec, tiers, env, style, strips, deckFloors) {
           if (!inExt(x, z) || !bp.isAir(x, yBase + 1, z) || bp.isAir(x, yBase, z)) break;
           for (let y = yBase + 1; y <= yTop && y < bp.h; y++) if (bp.isAir(x, y, z)) bp.set(x, y, z, y === yTop ? style.corner : style.wall);
           // every tread carries a wedge sloping away from the wall: the steps read as one raking buttress line
-          if (wedges && yTop + 1 < bp.h && bp.isAir(x, yTop + 1, z)) { bp.set(x, yTop + 1, z, wedges[face]); out.wedges++; }
+          if (wedges && yTop + 1 < bp.h && bp.isAir(x, yTop + 1, z)) { putWedge(bp, x, yTop + 1, z, wedges[face]); out.wedges++; }
           placed = true;
         }
         if (placed) out.buttresses++;
@@ -285,7 +285,7 @@ function dressEnvelope(bp, spec, tiers, env, style, strips, deckFloors) {
         if (c.corner || c.face === 'D' || c.face === deckHere) continue;
         const [ox, oz] = OUT[c.face], x = c.x + ox, z = c.z + oz;
         if (!inExt(x, z) || !bp.isAir(x, y, z) || bp.isAir(x, y - 1, z) || !inExt(x + ox, z + oz) || !bp.isAir(x + ox, y, z + oz)) continue;
-        bp.set(x, y, z, wedges[c.face]);
+        putWedge(bp, x, y, z, wedges[c.face]);
         out.wedges++;
       }
     }
@@ -299,28 +299,37 @@ function dressEnvelope(bp, spec, tiers, env, style, strips, deckFloors) {
 // Every wedge stands on a block and slopes into open air (rubric 18 row 6). The dressing checks both when it lays a
 // wedge, but later passes carve and furnish: a skybridge vestibule cuts a fin's foot from under its cap, a terrace
 // planter or a core wall lands in front of a skirt wedge. This sweep runs after them and clears the wedges that lost
-// their footing or their view (explicit air, like the carve that undid them). Returns the number cleared.
+// their footing or their view (explicit air, like the carve that undid them). Without a region it visits the cells
+// putWedge noted on the blueprint (bp.wedgeCells) and clears the note; with one (a skybridge stub's surroundings) it
+// scans that box. Returns the number cleared.
 let WEDGE_OUT = null;      // block id -> [dx, dz] of the slope's outward side, built on first use (BLOCKS is filled at init)
 export function settleWedges(bp, region = null) {
   if (!WEDGE_OUT) { WEDGE_OUT = new Map(); for (let id = 0; id < BLOCKS.length; id++) { const d = BLOCKS[id]; if (d && d.shape === SHAPE.WEDGE) WEDGE_OUT.set(id, [WEDGE_DIRS[d.wedge].dx, WEDGE_DIRS[d.wedge].dz]); } }
   if (!WEDGE_OUT.size) return 0;
   const blocks = bp.blocks, h = bp.h, d = bp.d;
-  const x0 = region ? Math.max(0, region.x0) : 0, x1 = region ? Math.min(bp.w - 1, region.x1) : bp.w - 1;
-  const z0 = region ? Math.max(0, region.z0) : 0, z1 = region ? Math.min(d - 1, region.z1) : d - 1;
-  const y0 = region ? Math.max(1, region.y0) : 1, y1 = region ? Math.min(h - 1, region.y1) : h - 1;
   let cleared = 0;
+  const settle = (x, y, z, k) => {
+    if (y < 1) return;
+    const out = WEDGE_OUT.get(blocks[k]);
+    if (!out) return;
+    const below = blocks[k - 1];
+    const front = bp.get(x + out[0], y, z + out[1]);
+    const blocked = front !== 0 && front !== FORCE_AIR && BLOCKS[front] && BLOCKS[front].opaque;
+    if (below === 0 || below === FORCE_AIR || blocked) { blocks[k] = FORCE_AIR; cleared++; }
+  };
+  if (!region) {
+    const cells = bp.wedgeCells;
+    if (!cells) return 0;
+    for (const k of cells) settle((k / (d * h)) | 0, k % h, ((k / h) | 0) % d, k);
+    cells.length = 0;
+    return cleared;
+  }
+  const x0 = Math.max(0, region.x0), x1 = Math.min(bp.w - 1, region.x1);
+  const z0 = Math.max(0, region.z0), z1 = Math.min(d - 1, region.z1);
+  const y0 = Math.max(1, region.y0), y1 = Math.min(h - 1, region.y1);
   for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
     const base = (x * d + z) * h;
-    for (let y = y0; y <= y1; y++) {
-      const v = blocks[base + y];
-      if (v === 0 || v === FORCE_AIR) continue;
-      const out = WEDGE_OUT.get(v);
-      if (!out) continue;
-      const below = blocks[base + y - 1];
-      const front = bp.get(x + out[0], y, z + out[1]);
-      const blocked = front !== 0 && front !== FORCE_AIR && BLOCKS[front] && BLOCKS[front].opaque;
-      if (below === 0 || below === FORCE_AIR || blocked) { blocks[base + y] = FORCE_AIR; cleared++; }
-    }
+    for (let y = y0; y <= y1; y++) settle(x, y, z, base + y);
   }
   return cleared;
 }
