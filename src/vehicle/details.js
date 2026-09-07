@@ -836,7 +836,16 @@ function lightBar(k) {
     // the frame that does not bloom, with the housing dark between. That is
     // the round-5 lighting brief in as many words: "the light bar under the
     // bloom threshold with nine pods readable".
-    k.add('headlight', hotSpot(new THREE.CylinderGeometry(0.024, 0.024, 0.01, 12), 0.12), {
+    //
+    // 48 -> 44 mm (round 8). At 1280 the critics' bar box held 332 px over
+    // Y 0.5 against the 300 asked for, and the nine blobs are the discs'
+    // own footprints: each is a 6 x 9 px oval peaking at 0.725 with the
+    // cover between them at 0.07-0.2 — the cover's lobe at the disc's edge is
+    // 0.48 of its peak, 0.05 of radiance at the cover's alpha, and `cover`
+    // 0.4 -> 0.3 in round 7 moved the box by 3 px. The only thing in the box
+    // over 0.5 is the LED, so the LED is what gets smaller: 0.84 of the area
+    // for the same peak.
+    k.add('headlight', hotSpot(new THREE.CylinderGeometry(0.022, 0.022, 0.01, 12), 0.12), {
       pos: [x, y, z + 0.072],
       rot: [Math.PI / 2, 0, 0],
     });

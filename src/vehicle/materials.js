@@ -121,8 +121,11 @@ export function vehicleMaterials(env = null) {
     // strength tracks the basecoat's — see the sweep table in makePaintMaterial.
     // These panels gain the most from it: 0.331 saturation to 0.374.
     // `line` held at the round-6 paint value: the body keys moved to 0.08 in
-    // round 7 so the flanks pick the sky up, and the roof already does.
-    bw: { strength: 1.8, band: 0.5, flat: 0.5, ambient: 1.6, line: 0.24 },
+    // round 7 so the flanks pick the sky up, and the roof already does. The
+    // round-8 skyline (ramp, blur, haze — see makePaintMaterial) is the body
+    // key's: the roof mirrors 20-30 degrees up where none of it applies, so
+    // it keeps the constants it was tuned with.
+    bw: { strength: 1.8, band: 0.5, flat: 0.5, ambient: 1.6, line: 0.24, skyRamp: 0.25, blurFloor: 0.06, blurSlope: 0.95, haze: 0 },
   });
   // Basecoat roughness on every paint key is the map's now (see
   // makePaintMaterial); the coats are one lacquer at 0.15, the roof a shade
@@ -966,6 +969,23 @@ export function vehicleMaterials(env = null) {
   // drives with the lamp state, so none of it touches the daytime lens. The
   // colour keys bleach less than the clear ones — a red lens stays red to the
   // edge of its core; a clear one goes to white over most of the aperture.
+  //
+  // Left as it is in round 8, against the round-5 consensus's `core 1.6 /
+  // coreExp 1.8 / bleach 0.4` for the "filled ellipse" headlamp glare: the
+  // ellipse is not this material. Ablated live on the night `front` and
+  // `hero` (HEAD `7827d1d`, one change per frame): hiding every `headlight`
+  // mesh moved the front lamp blobs 2 523 / 1 808 px over Y 0.5 by 0 px;
+  // hiding every `lensClear` dome and every `reflector` bowl by 8 and 2 px;
+  // `uLampBowl` 0 by 4 %; the lens emissive 0 by 19 %; the bloom pass off
+  // 2 523 -> 499 (the bloom is 80 % of the area in `front`, 0 % in `hero`);
+  // and the beam sprites' glare quad (`src/sky.js` `beamFrag`, the `vGlare`
+  // branch: `lens` is a flat-topped `smoothstep( lensR * 1.6, lensR * 0.7 )`
+  // disc at 1.4 x `uGlareGain`) at gain 0: 2 523 -> 331 and 1 808 -> 309 in
+  // `front`, 801 -> 191 in the hero's left lamp box. The plateau at Y 0.74
+  // is that disc over the tone curve's shoulder; the lamp under it is a
+  // 16 x 15 px lit lens with a chrome rim. `coreExp` on this key is also a
+  // no-op: the bulbs are `hotSpot(geo, 1)` — `lampHot` is 1 over the whole
+  // sphere, so pow() of it is 1 at any exponent. The fix is the sprite's.
   applyLampGlow(m.headlight, { tag: 'headlight', core: 2.5, bleach: 0.6, coreExp: 1.0 });
   applyLampGlow(m.taillight, { tag: 'taillight', core: 2.0, bleach: 0.25, coreExp: 2.2 });
   applyLampGlow(m.amber, { tag: 'amber', core: 2.5, bleach: 0.35, coreExp: 2.2 });

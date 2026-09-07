@@ -424,6 +424,32 @@ export function applyBrightwork(
     // all — so it is a uniform, and therefore sweepable, rather than a constant
     // buried in the GLSL where it cost two iterations to find.
     lobe = 1.6,
+    // How far above `line` the sky term takes to come in fully, in units of
+    // reflected elevation (sine), on top of the roughness blur either side.
+    // 0.25 is what every key had as a constant in the GLSL: with the paint's
+    // blur that is a 0.48 fade — 29 degrees — wider than the whole spread of
+    // reflected elevations across a door seen from the hero camera (3 to 9
+    // degrees up), so moving `line` in round 7 (0.24 -> 0.08) slid a very
+    // soft ramp under the door and the door lifted as one value instead of
+    // showing a skyline (round 8, ablated: `line` 0.3 / 0.08 / -0.2 on the
+    // live hero moved the door's top-to-bottom step 0.38 / 0.52 / 0.42 st —
+    // a level change, never an edge). The paint sets this to a few degrees.
+    skyRamp = 0.25,
+    // The skyline blur, `floor + slope x roughness`, in the same units. The
+    // 0.06 floor is 3.4 degrees on a mirror; the slope treats roughness as
+    // linear in lobe width, which for a 0.06 lacquer (GGX alpha 0.0036)
+    // over-blurs by an order of magnitude. Every non-paint key keeps the
+    // constants it was tuned with.
+    blurFloor = 0.06,
+    blurSlope = 0.95,
+    // Horizon brightening. A hazy sky is brightest just above the skyline and
+    // falls toward the zenith; the model had one sky colour for the whole
+    // hemisphere. `haze` scales the sky term by `1 + haze` at the skyline,
+    // fading to 1 over 0.3 of elevation (17 degrees), so a vertical panel
+    // whose reflected ray runs a few degrees over the horizon mirrors the
+    // haze band while a bonnet or roof, mirroring 20-30 degrees up, sees the
+    // sky it always did. 0 leaves every other key exactly as it was.
+    haze = 0,
   } = {},
 ) {
   const u = {
@@ -438,6 +464,9 @@ export function applyBrightwork(
     uBwFresnel: { value: fresnel },
     uBwBase: { value: base },
     uBwLobe: { value: lobe },
+    uBwSkyRamp: { value: skyRamp },
+    uBwBlur: { value: new THREE.Vector2(blurFloor, blurSlope) },
+    uBwHaze: { value: haze },
   };
   if (pane) u.uBwPane = { value: pane };
   if (pane) u.uBwGraze = { value: graze };
@@ -502,6 +531,9 @@ export function applyBrightwork(
         uniform float uBwFresnel;
         uniform float uBwBase;
         uniform float uBwLobe;
+        uniform float uBwSkyRamp;
+        uniform vec2 uBwBlur;
+        uniform float uBwHaze;
         ${flat ? 'uniform float uBwFlat;' : ''}
         ${ambient ? 'uniform float uBwAmbient;' : ''}
         ${pane ? 'uniform float uBwPane;\n        uniform float uBwGraze;\n        uniform vec2 uBwGrazeRamp;\n        vec3 bwPaneRefl = vec3( 0.0 );\n        float bwPaneF = 0.0;\n        float bwPaneOut = 1.0;' : ''}`,
@@ -570,7 +602,7 @@ export function applyBrightwork(
           float bwUp = clamp( mix( bwR.y, bwN.y, clamp( bwRgh * uBwLobe, 0.0, 0.55 ) ), -1.0, 1.0 );
           // a rough surface smears every edge in the reflection; a polished one
           // keeps the skyline as a hard streak
-          float bwBlur = 0.06 + bwRgh * 0.95;
+          float bwBlur = uBwBlur.x + bwRgh * uBwBlur.y;
           float bwSharp = clamp( 1.0 - bwRgh * 2.6, 0.0, 1.0 );
           // trunks and sunlit gaps, indexed by the azimuth of the reflected ray
           float bwAz = atan( bwR.x, bwR.z );
@@ -587,7 +619,9 @@ export function applyBrightwork(
           // horizon line back on the flanks and lets the lower half of a panel
           // pick up the trail.
           vec3 bwRefl = mix( uBwGround, bwWall, smoothstep( -0.05 - bwBlur, 0.04 + bwBlur, bwUp ) );
-          bwRefl = mix( bwRefl, uBwSky, smoothstep( uBwLine - bwBlur, uBwLine + 0.25 + bwBlur, bwUp ) );
+          // the haze band: brightest at the skyline, the plain sky 17 degrees up
+          vec3 bwSkyC = uBwSky * ( 1.0 + uBwHaze * ( 1.0 - smoothstep( uBwLine, uBwLine + 0.3, bwUp ) ) );
+          bwRefl = mix( bwRefl, bwSkyC, smoothstep( uBwLine - bwBlur, uBwLine + uBwSkyRamp + bwBlur, bwUp ) );
           float bwBand = uBwBand;
           ${
             flat
@@ -4093,6 +4127,28 @@ export function makePaintMaterial(color = PALETTE.bodyPaint, opts = {}) {
     // upper half of a door picks the sky up. The roof key keeps the old
     // value: it sees the sky over its whole area anyway.
     line: 0.08,
+    // Round 8: the skyline as an edge, not a level. `line` at 0.08 changed
+    // nothing the critics could see (hero door rows 120-190 p95/p50 0.58 st
+    // before and after round 7) because the sky term still faded in over
+    // 0.48 of elevation (the 0.25 ramp plus 0.117 of blur either side at a
+    // 0.06 coat). Ablated live on the day hero (one uniform at a time,
+    // `paint` only): `clearcoatRoughness` 0.06 -> 0.01 moved the door by
+    // 0.000 (the roughness was never the blur — the constants were); `line`
+    // -0.2 (the whole door in the sky term) lifted the flank's median 0.098
+    // -> 0.122 with the door's top/bottom step 0.52 -> 0.42 st, so at ramp
+    // 0.25 the sky term is a lift with no edge in it; the PMREM at 2.0 lifted
+    // everything 0.55 st and put 6.6 % of the paint over the sky median with
+    // no band either (its horizon is at zero elevation and the door mirrors
+    // 3-9 degrees up, all sky). So: a 0.04 ramp over a 0.02 + 0.5 x roughness
+    // blur — the transition is 4 degrees wide on a clean coat and smears
+    // again where the dirt pass roughens the sills — and the haze band, which
+    // is what gives the door's sky rows the contrast over its wall rows that
+    // the level sky colour could not (`skyx2` on the live hero: +0.63 st
+    // top/bottom against 0.52, but the bottom rows lifted with the top).
+    skyRamp: 0.04,
+    blurFloor: 0.02,
+    blurSlope: 0.5,
+    haze: 1.5,
     // the coat carries the reflection at every angle; the BRDF's own Fresnel is
     // what should be deciding how much of it survives, not a hand-rolled falloff
     clearcoat: 'full',
