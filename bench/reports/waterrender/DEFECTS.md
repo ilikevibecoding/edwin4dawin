@@ -415,3 +415,53 @@ shape (the bed still vanishes by 10–12 m) and reaches ~2 m deeper; the swash z
 the 3 m bed 0.31 → 0.41 of the beam; with the clearer water the bed's grain stays readable in the shadow. Cache
 key water-v21. Risk: the protected top-down turquoise brightens by a quarter over 2–4 m beds; to be read in h16
 (`island_pass`, `shore_beach`) against h14/h15, reverted or halved if it reads pale.
+
+## Evidence from the hourly snapshot h15 (build 94531b45 with round 14, 00:45; frames in `/tmp/progress-h15-*.png`, the
+snapshot's own copy was lost to a protocol timeout)
+
+- `sunset`: the whole path from the bridge to the frame bottom, and the far water 300–400 px off the path's axis, is
+  painted in pale soft blotches 20–40 px wide (crop `crops/r16_sunset_h13_vs_h15.jpg`, right) — the lognormal gain
+  of round 14 at its contrast cap. The cells it rode on are the sparkle cells: the along-wind cell is chosen by the
+  foreshortened along-view footprint (2–4 px along the view = 4–8 m of water at 500 m and 8° depression), and the
+  cell is CREST = 2.5× longer along the crest, so on screen the "grain" was 25–50 px wide dashes at contrast 1.2.
+  The mean is right; the texture is the wrong scale by an order of magnitude. Off the axis the gain painted the
+  same blotches wherever the path's mean was visible at all (λ was 0.5–5 there at the old facet density).
+- `aircraft_rear`, `glass`: unchanged from h14 (the round-14 gain is invisible at λ ≪ 1 with a cap of 1.2: a
+  smooth ±modulation). Depth reads as before.
+
+## Round 16 — Poisson glint field on a per-axis grain lattice (finding 1); offline shader compile check
+
+Diagnosis: a pixel with λ expected glinting facets holds none with probability e^−λ; the picture is a binary field
+(a pixel has a glint or has not) whose lit share is q = 1 − e^−λ, not a smooth field of contrast 1 / √λ. The
+correlation length of that field is the pixel (the facets are centimetres; the crest segments they sit on are
+sub-pixel from altitude in the along-view direction and 2–5 px across): the grain has to be drawn at 2–4 px per
+screen axis, whatever the water's foreshortening. The count itself was low by the half-vector Jacobian: the
+normals that mirror the disc fill Ω_s / (4 V·H) of solid angle and 1 / cos³θ_h more of slope space, so at the
+sunset's grazing sun (V·H ≈ 0.31) 3× more facets glint than the disc's size alone says. Facet density taken as
+2e4 / m² (centimetre capillaries); GLINT_PER_M2 = Ω_s / 4 · 2e4 = 0.34.
+
+Change (`water.ts`, cache key water-v22):
+- `glintGrain(wp, dx, dy, t)`: a unit-variance process on world-anchored cells aligned with the wind whose size
+  per axis is the finest octave of 5 cm · 2^o spanning > 2 px along that axis (footprint along the wind and along
+  the crests separately), cross-faded per axis into the next octave as it reaches 4 px — four lattices with √w
+  weights. Two independent draws rotated by a phase at the deep-water wave rate of the along-wind cell
+  (√(2πg / L), capped at 12 rad/s so 5 cm cells do not strobe at the frame rate). Drifts downwind like the sparkle
+  cells. 8 value-noise reads, only inside the highlight and only where q < 0.995.
+- `sunGlitter`: λ = P · GLINT_PER_M2 · A_px / (V·H · cos³θ_h); q = max(1 − e^−λ, 0.02); gain =
+  smoothstep(z − 0.3, z + 0.3, grain) / q with z = probit(q) (Abramowitz–Stegun 26.2.23; the grain process
+  measures within 0.1σ of normal from its 1 % to its 99 % quantile, `r16/grainstat.py`: soft coverage / q =
+  1.08 at q 0.02, 1.02 at 0.1, 1.00 above). The mean radiance is the analytic one; the lit pixels carry it.
+- `sparkleSlope` back to slope-only (its grain output removed).
+- Replica (`tools/path.py` bookkeeping, sunset camera 290 m, 7 m/s): along the axis q = 1.000 to 26° depression
+  (λ 27 at the bridge, 6.6 at 26°), 0.96 at 30°, 0.63 at 36° (the frame bottom: 37 % dark pixels between glints
+  of 0.33 E); 400 px off the axis at 8° depression λ = 90 → no grain on the far water. A 30 m camera has λ ≤ 0.02
+  everywhere in the path: the near-view path resolves into a field of point sparkles at 2 % coverage (gain 50,
+  capped: the blown flashes of a near view) over the mean-preserving dark between them — the look of the sun on
+  the water from a boat; the smooth near-view path was the long-exposure mean.
+- Risk: the near-view sparkle field is new in `glass` / `aircraft_rear` (if the sun is in frame) and in the
+  water-landing clip; flicker metric to be read (the grain is 2–4 px, the metric averages 4 × 4).
+
+`tools/glslcheck.mjs`: assembles the water's program exactly as three r170's WebGLProgram does (prefix, includes,
+light counts, unrolled loops, the onBeforeCompile hooks, plane and patch) and runs glslangValidator on both
+stages as ESSL 3.00. Verified to catch an injected signature mismatch. Shader errors are found in 0.3 s instead
+of after a multi-hour wait for a browser slot; a passing check is necessary, not sufficient (no driver limits).
