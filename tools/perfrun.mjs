@@ -57,6 +57,10 @@ const info = await page.evaluate(() => ({
   gpuTimer: window.debugAPI.perf.gpuTimer,
   quality: window.debugAPI.stats().quality,
   renderer: window.debugAPI.objects.renderer.getContext().getParameter(0x1f01),
+  // the collision world is built between "Posting the signs" and "Compiling
+  // shaders" without a boot step of its own; its cost lives on the debug API
+  collision: window.debugAPI.collision?.stats?.boot ?? null,
+  colliders: window.debugAPI.collision?.colliders?.().length ?? null,
 }));
 
 const fmt = (v, unit = '') => (v === null || v === undefined ? 'n/a' : `${v}${unit}`);
@@ -65,6 +69,10 @@ console.log(`[perf] renderer: ${info.renderer}`);
 console.log(`[perf] time to first frame: ${info.readyMs} ms in-page, ${bootWall} ms wall`);
 console.log('[perf] boot stages:');
 for (const s of info.boot) console.log(`         ${String(s.ms).padStart(6)} ms  ${s.label}`);
+if (info.collision) {
+  const stages = Object.entries(info.collision.stages || {}).map(([k, v]) => `${k} ${v}`).join(', ');
+  console.log(`         ${String(Math.round(info.collision.ms)).padStart(6)} ms  Building the collision world (${fmt(info.colliders)} colliders; ${stages})`);
+}
 console.log(`[perf] gpu timer query: ${info.gpuTimer ? 'available' : 'not available on this driver'}`);
 
 // Drive the route from the start with auto-drive on, and sample the loop.
