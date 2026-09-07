@@ -291,8 +291,13 @@ export function shapeCovers(codeB, fB, codeA, fA) {
   COVER_CACHE.set(key, r);
   return r;
 }
-// The shape `code` cut by one more cell-local plane: the same code when the plane removes (almost) nothing, -1 when
-// (almost) nothing would be left (the cell becomes air), else the code of the sharper shape.
+// The shape `code` cut by one more cell-local plane: the same code when the plane does not enter the cell, -1 when
+// (almost) nothing would be left (the cell becomes air), else the code of the sharper shape. A plane that enters the
+// cell is always applied, however thin the sliver it removes: two neighbours cut by one plane then carry the same
+// cross-section on their shared face, so the union of the cells stays a closed surface (skipping small slivers left
+// T-junctions where a cut cell met an uncut one). Dropping a crumb keeps the surface closed too: the neighbours'
+// faces onto the vanished cell are exposed exactly.
+const CRUMB = 0.04;
 export function cutShape(code, plane) {
   const G = shapeGeometry(code);
   const [a, b, c, d] = plane;
@@ -302,8 +307,8 @@ export function cutShape(code, plane) {
   if (!inside) return -1;
   const next = customShape([...SHAPE_DEFS[code].planes, plane]);
   const v = shapeGeometry(next).volume;
-  if (v < 0.04) return -1;
-  if (G.volume - v < 0.04) return code;
+  if (v < CRUMB) return -1;
+  if (G.volume - v < 1e-9) return code;
   return next;
 }
 // collision boxes of a cell: the block's own boxes for a full cube / partial block, the shape's for a clipped cell

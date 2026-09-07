@@ -5,7 +5,9 @@
 import assert from 'node:assert/strict';
 import { initBlocks, BLOCKS, B, SHAPE } from '../src/blocks.js';
 import { shipModels, buildShipGeometry, modelLight, shipMaterial, MAX_PARTS } from '../src/ships/models.js';
-import { EMIT, CH, emitCodeOf, SEAT, CONSOLE } from '../src/ships/builder.js';
+import { EMIT, CH, emitCodeOf, SEAT, CONSOLE, ShipBuilder, above, below, sideXZ, sideXY, planXZ } from '../src/ships/builder.js';
+import { VoxelGrid, SH, buildVoxelGeometry, buildExtrasGeometry, shapeGeometry, shapeName, shapeCount, NAMED_SHAPE_COUNT, cutShape, mirrorShapeX, shapeCovers, cellBoxes } from '../src/vehicles/voxelMesh.js';
+import { buildTrainGrid } from '../src/vehicles/train.js';
 import { SPACEPORT, DECK_Y, FRONTIER, FRONTIER_DECK_Y } from '../src/coruscant/spaceport.js';
 import { getLayout } from '../src/coruscant/layout.js';
 // the fleet modules are loaded as namespaces so the model scorecard runs even while the fleet API is incomplete
@@ -225,6 +227,118 @@ function grade(m) {
 }
 // triangles per model before ships v3 (cube-only hulls): the v3 budget is <= 2x these
 const TRIS_V2 = { light_freighter: 3348, shuttle: 3386, taxi: 606, gunship: 3130, bulk_freighter: 5254, cruiser: 4978, starfighter: 1320, police: 872, air_bus: 2544 };
+
+// ---------------------------------------------------------------- sloped cells (voxelMesh.js: rubric 19 / 1)
+// FNV-1a over the float bit patterns of every attribute and the index: the cube-only mesher must reproduce the train
+// exactly (the geometry of the train's hull, doors and plain grid before sloped cells were added)
+function checksum(geometry) {
+  let h = 0x811c9dc5 >>> 0;
+  const mix = (v) => { for (let s = 0; s < 32; s += 8) { h ^= (v >>> s) & 0xff; h = Math.imul(h, 0x01000193) >>> 0; } };
+  for (const n of Object.keys(geometry.attributes).sort()) { const a = geometry.attributes[n].array, u = new Uint32Array(a.buffer, a.byteOffset, a.length); mix(a.length); for (let i = 0; i < u.length; i++) mix(u[i]); }
+  const idx = geometry.index.array; mix(idx.length); for (let i = 0; i < idx.length; i++) mix(idx[i]);
+  return h.toString(16);
+}
+const TRAIN_V2 = { hull: 'afd9a10c', west: '1b17cab8', east: 'a58625bc', plain: 'cad173ed' };
+// edge census of a triangle soup: watertight = every edge in exactly two triangles, traversed in opposite directions
+function edgeCensus(pos, idx) {
+  const edges = new Map(), vk = (i) => `${Math.round(pos[i * 3] * 1e5)},${Math.round(pos[i * 3 + 1] * 1e5)},${Math.round(pos[i * 3 + 2] * 1e5)}`;
+  for (let t = 0; t < idx.length; t += 3) for (let e = 0; e < 3; e++) {
+    const a = vk(idx[t + e]), b = vk(idx[t + (e + 1) % 3]), k = a < b ? a + '|' + b : b + '|' + a;
+    const r = edges.get(k) || { n: 0, dir: 0 }; r.n++; r.dir += a < b ? 1 : -1; edges.set(k, r);
+  }
+  const bad = [...edges.entries()].filter(([, e]) => e.n !== 2 || e.dir !== 0);
+  return { edges: edges.size, bad: bad.length, sample: bad.slice(0, 3).map(([k, e]) => `${k} x${e.n}`) };
+}
+const polyCensus = (faces) => { const pos = [], idx = []; for (const f of faces) { const b = pos.length / 3; for (const p of f.pts) pos.push(...p); for (let k = 1; k + 1 < f.pts.length; k++) idx.push(b, b + k, b + k + 1); } return edgeCensus(pos, idx); };
+console.log('\n== sloped cells ==');
+
+test('sloped cells: every named shape is a closed convex polyhedron with the expected volume; mirroring and cuts are exact', () => {
+  const want = { WEDGE: 0.5, LOWEDGE: 0.25, RAMP2: 0.75, HIWEDGE: 0.25, KNIFE: 0.5, VWEDGE: 0.5, HIP: 1 / 3, CORNER: 1 / 6, CHAMFER: 5 / 6, SLAB: 0.5, HALF: 0.5, RIDGE: 0.75, KEEL: 0.75, BLADE: 0.5 };
+  let n = 0;
+  for (let c = 1; c <= NAMED_SHAPE_COUNT; c++) {
+    const G = shapeGeometry(c), nm = shapeName(c), fam = nm.split('_')[0];
+    assert.ok(want[fam] !== undefined, `shape family ${fam}`);
+    assert.ok(Math.abs(G.volume - want[fam]) < 1e-6, `${nm} volume ${G.volume.toFixed(4)} (want ${want[fam]})`);
+    const wt = polyCensus(G.faces);
+    assert.equal(wt.bad, 0, `${nm} not closed: ${wt.sample.join(' ')}`);
+    for (const f of G.faces) { assert.ok(f.pts.length >= 3 && Math.abs(Math.hypot(...f.n) - 1) < 1e-6 && f.uvDir >= 0 && f.uvDir < 6, `${nm} face`); }
+    n++;
+  }
+  assert.ok(n === NAMED_SHAPE_COUNT && n === 70, `${n} named shapes (8 wedges, 12 ramps, 4 knives, 4 vertical wedges, 8 hips, 8 corners, 8 chamfers, 6 slabs / halves, 4 ridges / keels, 4 blades, wedge bevels)`);
+  assert.equal(shapeName(mirrorShapeX(SH.WEDGE_XN_UP)), 'WEDGE_XP_UP'); assert.equal(shapeName(mirrorShapeX(SH.HIP_XN_ZP_DOWN)), 'HIP_XP_ZP_DOWN'); assert.equal(mirrorShapeX(SH.WEDGE_ZN_UP), SH.WEDGE_ZN_UP);
+  assert.equal(cutShape(0, [0, 1, 0, 0.5]), SH.SLAB_BOTTOM, 'cutting a cube at half height is the slab');
+  assert.equal(cutShape(SH.WEDGE_ZN_UP, [0, 1, 0, 1]), SH.WEDGE_ZN_UP, 'a cut that removes nothing keeps the code');
+  assert.equal(cutShape(SH.WEDGE_ZN_UP, [0, -1, 0, -1]), -1, 'a cut that removes everything reports -1');
+  // culling: a wedge's full back face hides the cube behind it, its triangular side does not hide a cube's face,
+  // a slab hides nothing of a full face but is hidden by it
+  assert.ok(shapeCovers(SH.WEDGE_ZN_UP, 4, 0, 5) && !shapeCovers(SH.WEDGE_ZN_UP, 1, 0, 0) && !shapeCovers(SH.SLAB_BOTTOM, 0, 0, 1) && shapeCovers(0, 1, SH.SLAB_BOTTOM, 0));
+  // collision boxes: a full cube is one box, a wedge a staircase whose top is under the slope, a DOWN wedge keeps its
+  // full top (floors stay walkable)
+  assert.deepEqual(cellBoxes(BLOCKS[B.DURASTEEL], 0), [[0, 0, 0, 1, 1, 1]]);
+  const up = cellBoxes(BLOCKS[B.DURASTEEL], SH.WEDGE_ZN_UP), down = cellBoxes(BLOCKS[B.DURASTEEL], SH.WEDGE_ZN_DOWN);
+  assert.ok(up.length >= 2 && up.every((b) => b[4] <= b[5] + 1e-6), 'UP wedge boxes rise with the slope');
+  const footprint = (boxes) => boxes.reduce((s, b) => s + (b[3] - b[0]) * (b[5] - b[2]), 0);
+  assert.ok(down.every((b) => b[4] >= 1 - 1e-6) && Math.abs(footprint(down) - 1) < 1e-6, 'DOWN wedge: every column reaches the ceiling and the columns cover the whole footprint');
+  assert.ok(Math.abs(footprint(up) - 1) < 1e-6 && up.every((b) => b[1] <= 1e-6), 'UP wedge: columns stand on the floor over the whole footprint');
+});
+
+test('sloped cells: cube-only grids mesh bit-identically to ships v2 (train hull, doors, plain grid checksums)', () => {
+  const m = buildTrainGrid();
+  const hull = buildVoxelGeometry(m.grid, { extras: m.extras, inside: m.inside, cells: (x, y, z) => !m.skip.has(m.grid.idx(x, y, z)) });
+  assert.equal(checksum(hull.geometry), TRAIN_V2.hull, 'train hull');
+  assert.equal(checksum(buildExtrasGeometry(m.leaves.west, m.inside).geometry), TRAIN_V2.west, 'west doors');
+  assert.equal(checksum(buildExtrasGeometry(m.leaves.east, m.inside).geometry), TRAIN_V2.east, 'east doors');
+  assert.equal(checksum(buildVoxelGeometry(m.grid, {}).geometry), TRAIN_V2.plain, 'plain cubes');
+  assert.equal(m.grid.shapedCount(), 0, 'the train carries no sloped cells');
+  console.log(`   train hull ${hull.faces} faces / ${hull.tris} tris, checksum ${TRAIN_V2.hull}`);
+});
+
+test('sloped cells: sample hulls mesh watertight (every edge in exactly two triangles) with the expected cell and triangle counts', () => {
+  const closed = (grid, label, cells, minTris) => {
+    const res = buildVoxelGeometry(grid, {});
+    const c = edgeCensus(res.geometry.attributes.position.array, res.geometry.index.array);
+    assert.equal(grid.count(), cells, `${label}: cells`);
+    assert.equal(c.bad, 0, `${label}: ${c.bad} open / overlapping edges of ${c.edges}: ${c.sample.join(' ')}`);
+    assert.ok(res.tris >= minTris && res.tris === res.geometry.index.array.length / 3, `${label}: ${res.tris} tris`);
+    console.log(`   ${label}: ${grid.count()} cells (${grid.shapedCount()} sloped), ${res.faces} faces, ${res.tris} tris, ${c.edges} edges all shared by 2 triangles`);
+    return res;
+  };
+  // 1: a block bevelled all round with the named shapes (wedge rings, hips at the corners, overhangs below)
+  const g = new VoxelGrid(8, 5, 10), D = B.DURASTEEL;
+  g.fill(1, 1, 1, 6, 3, 8, D);
+  for (let x = 1; x <= 6; x++) { g.set(x, 3, 1, D, SH.WEDGE_ZN_UP); g.set(x, 1, 1, D, SH.WEDGE_ZN_DOWN); g.set(x, 3, 8, D, SH.WEDGE_ZP_UP); g.set(x, 1, 8, D, SH.WEDGE_ZP_DOWN); }
+  for (let z = 2; z <= 7; z++) { g.set(1, 3, z, D, SH.WEDGE_XN_UP); g.set(6, 3, z, D, SH.WEDGE_XP_UP); g.set(1, 1, z, D, SH.WEDGE_XN_DOWN); g.set(6, 1, z, D, SH.WEDGE_XP_DOWN); }
+  for (const [x, z, xs, zs] of [[1, 1, 'XN', 'ZN'], [6, 1, 'XP', 'ZN'], [1, 8, 'XN', 'ZP'], [6, 8, 'XP', 'ZP']]) { g.set(x, 3, z, D, SH[`HIP_${xs}_${zs}_UP`]); g.set(x, 1, z, D, SH[`HIP_${xs}_${zs}_DOWN`]); }
+  const r1 = closed(g, 'bevelled block', 6 * 3 * 8, 200);
+  const plainGrid = new VoxelGrid(8, 5, 10); plainGrid.fill(1, 1, 1, 6, 3, 8, D);
+  const plain = buildVoxelGeometry(plainGrid, {});
+  assert.ok(r1.tris < plain.tris * 2, `sloped block ${r1.tris} tris vs ${plain.tris} plain`);
+  // 2: chamfered vertical edges under tetrahedral corner tips
+  const g2 = new VoxelGrid(8, 5, 10);
+  g2.fill(1, 1, 1, 6, 3, 8, D);
+  for (let x = 2; x <= 5; x++) { g2.set(x, 3, 1, D, SH.WEDGE_ZN_UP); g2.set(x, 3, 8, D, SH.WEDGE_ZP_UP); }
+  for (let z = 2; z <= 7; z++) { g2.set(1, 3, z, D, SH.WEDGE_XN_UP); g2.set(6, 3, z, D, SH.WEDGE_XP_UP); }
+  for (const y of [1, 2]) { g2.set(1, y, 1, D, SH.VWEDGE_XN_ZN); g2.set(6, y, 1, D, SH.VWEDGE_XP_ZN); g2.set(1, y, 8, D, SH.VWEDGE_XN_ZP); g2.set(6, y, 8, D, SH.VWEDGE_XP_ZP); }
+  g2.set(1, 3, 1, D, SH.CORNER_XP_YN_ZP); g2.set(6, 3, 1, D, SH.CORNER_XN_YN_ZP); g2.set(1, 3, 8, D, SH.CORNER_XP_YN_ZN); g2.set(6, 3, 8, D, SH.CORNER_XN_YN_ZN);
+  closed(g2, 'chamfered box', 6 * 3 * 8, 200);
+  // 3: a hull carved with nine plane cuts (the ship builder's nose slope, chin, plan taper, swept tail edges, roof and
+  // belly bevels, tail slopes), every plane applied across the whole block: adjacent cells share each cutting plane,
+  // so the custom shapes meet exactly and the union is one closed polytope
+  const sb = new ShipBuilder('sample', 9, 6, 14, {}), BOX = [1, 1, 0, 7, 4, 13];
+  sb.fill(1, 1, 0, 7, 4, 13, D);
+  sb.cut(BOX, above(0, 1.5, 5, 5)); sb.cut(BOX, below(0, 1.8, 4, 1));
+  sb.scut(BOX, sideXZ(0, 3.6, 6, 1, false)); sb.scut(BOX, planXZ(1, 8, 4, 14, [5, 10]));
+  sb.scut(BOX, sideXY(4, 1, 5, 2, false)); sb.scut(BOX, sideXY(1, 2, 2, 1, false));
+  sb.cut(BOX, above(13, 5, 14, 4)); sb.cut(BOX, below(13, 1, 14, 2));
+  const before = shapeCount();
+  const r3 = closed(sb.g, 'plane-cut hull', sb.g.count(), 300);
+  assert.ok(sb.g.shapedCount() >= 80 && sb.g.count() < 7 * 4 * 14 && shapeCount() === before, `${sb.g.shapedCount()} cells cut by up to four planes each`);
+  // the same hull built of cubes only (no shapes) keeps the reference quad count: 2 triangles per visible face
+  const cubes = new VoxelGrid(9, 6, 14); for (let x = 0; x < 9; x++) for (let y = 0; y < 6; y++) for (let z = 0; z < 14; z++) if (sb.g.get(x, y, z)) cubes.set(x, y, z, D);
+  const rc = buildVoxelGeometry(cubes, {});
+  assert.equal(rc.tris, rc.faces * 2, 'cube path: quads');
+  assert.ok(r3.tris <= rc.tris * 2, `cut hull ${r3.tris} tris vs ${rc.tris} as cubes`);
+});
 
 const models = shipModels();
 const grades = new Map();
