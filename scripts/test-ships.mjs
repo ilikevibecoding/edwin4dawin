@@ -5,9 +5,18 @@
 import assert from 'node:assert/strict';
 import { initBlocks, BLOCKS, B, SHAPE } from '../src/blocks.js';
 import { shipModels, buildShipGeometry, modelLight, shipMaterial, MAX_PARTS } from '../src/ships/models.js';
-import { EMIT, CH, emitCodeOf, SEAT, CONSOLE } from '../src/ships/builder.js';
-import { SPACEPORT, DECK_Y, FRONTIER, FRONTIER_DECK_Y } from '../src/coruscant/spaceport.js';
+import { EMIT, CH, emitCodeOf, SEAT, CONSOLE, ShipBuilder, above, below, sideXZ, sideXY, planXZ } from '../src/ships/builder.js';
+import { VoxelGrid, SH, buildVoxelGeometry, buildExtrasGeometry, shapeGeometry, shapeName, shapeCount, NAMED_SHAPE_COUNT, cutShape, mirrorShapeX, shapeCovers, cellBoxes } from '../src/vehicles/voxelMesh.js';
+import { buildTrainGrid } from '../src/vehicles/train.js';
+import { SPACEPORT, DECK_Y, DECK_TOP, FRONTIER, FRONTIER_DECK_Y, FRONTIER_DECK_TOP, register as registerSpaceport } from '../src/coruscant/spaceport.js';
 import { getLayout } from '../src/coruscant/layout.js';
+import { WorldGen } from '../src/worldgen.js';
+import { CHUNK_SIZE as CSZ, CHUNK_HEIGHT as CHT } from '../src/constants.js';
+import { register as registerCity } from '../src/coruscant/city.js';
+import { register as registerLowerCity } from '../src/coruscant/lowercity.js';
+import { registerTrack as registerHyperlane } from '../src/structures/hyperlane.js';
+import { blueprintFor } from '../src/coruscant/buildings.js';
+import { modelBounds } from '../src/ships/builder.js';
 // the fleet modules are loaded as namespaces so the model scorecard runs even while the fleet API is incomplete
 const T = await import('../src/ships/traffic.js');
 const { buildShips, routePose, shipState, ShipTraffic, HIDE_DIST, lanePathClear, PORT_PHASES, padStateAt } = T;
@@ -213,15 +222,130 @@ function grade(m) {
   pt(15, true, 'motion (fleet check below)', 'fleet');
   pt(16, m.engineHz >= 60 && m.engineHz <= 140, `hum f0 ${m.engineHz} Hz`, 'auto+critic');
   pt(17, true, 'shadow caster material', 'auto');
-  const { faces: nf } = buildShipGeometry(m);
-  pt(18, nf * 2 <= 6000 && m.parts.length < MAX_PARTS, `${nf * 2} tris, ${m.parts.length} parts`);
+  const { faces: nf, tris } = buildShipGeometry(m);
+  pt(18, tris <= 6000 && tris <= 2 * TRIS_V2[m.name] && m.parts.length < MAX_PARTS, `${tris} tris (v2 ${TRIS_V2[m.name]}), ${m.parts.length} parts`);
   pt(19, m.interiors.length >= 1 && m.interiors.every((b) => b.x0 >= 0 && b.z0 >= 0 && b.x1 <= m.w && b.z1 <= m.d && b.y1 <= m.h), `interior boxes ${m.interiors.length} (carry test below)`);
   pt(20, true, 'originality (critic)', 'critic');
   const score = pts.filter((p) => p.ok).length;
   const mech = pts.filter((p) => p.kind !== 'critic' && p.kind !== 'fleet'), mechOk = mech.filter((p) => p.ok).length;
   const structural = pts.slice(0, 8).every((p) => p.ok);
-  return { score, pts, notes, structural, faces: nf, mech: `${mechOk}/${mech.length}` };
+  const shaped = m.hull.shapedCount() + m.parts.reduce((n, p) => n + p.cells.filter((c) => c[5]).length, 0);
+  return { score, pts, notes, structural, faces: nf, tris, shaped, cells: m.hull.count() + m.parts.reduce((n, p) => n + p.cells.length, 0), mech: `${mechOk}/${mech.length}` };
 }
+// triangles per model before ships v3 (cube-only hulls): the v3 budget is <= 2x these
+const TRIS_V2 = { light_freighter: 3348, shuttle: 3386, taxi: 606, gunship: 3130, bulk_freighter: 5254, cruiser: 4978, starfighter: 1320, police: 872, air_bus: 2544 };
+
+// ---------------------------------------------------------------- sloped cells (voxelMesh.js: rubric 19 / 1)
+// FNV-1a over the float bit patterns of every attribute and the index: the cube-only mesher must reproduce the train
+// exactly (the geometry of the train's hull, doors and plain grid before sloped cells were added)
+function checksum(geometry) {
+  let h = 0x811c9dc5 >>> 0;
+  const mix = (v) => { for (let s = 0; s < 32; s += 8) { h ^= (v >>> s) & 0xff; h = Math.imul(h, 0x01000193) >>> 0; } };
+  for (const n of Object.keys(geometry.attributes).sort()) { const a = geometry.attributes[n].array, u = new Uint32Array(a.buffer, a.byteOffset, a.length); mix(a.length); for (let i = 0; i < u.length; i++) mix(u[i]); }
+  const idx = geometry.index.array; mix(idx.length); for (let i = 0; i < idx.length; i++) mix(idx[i]);
+  return h.toString(16);
+}
+const TRAIN_V2 = { hull: 'afd9a10c', west: '1b17cab8', east: 'a58625bc', plain: 'cad173ed' };
+// edge census of a triangle soup: watertight = every edge in exactly two triangles, traversed in opposite directions
+function edgeCensus(pos, idx) {
+  const edges = new Map(), vk = (i) => `${Math.round(pos[i * 3] * 1e5)},${Math.round(pos[i * 3 + 1] * 1e5)},${Math.round(pos[i * 3 + 2] * 1e5)}`;
+  for (let t = 0; t < idx.length; t += 3) for (let e = 0; e < 3; e++) {
+    const a = vk(idx[t + e]), b = vk(idx[t + (e + 1) % 3]), k = a < b ? a + '|' + b : b + '|' + a;
+    const r = edges.get(k) || { n: 0, dir: 0 }; r.n++; r.dir += a < b ? 1 : -1; edges.set(k, r);
+  }
+  const bad = [...edges.entries()].filter(([, e]) => e.n !== 2 || e.dir !== 0);
+  return { edges: edges.size, bad: bad.length, sample: bad.slice(0, 3).map(([k, e]) => `${k} x${e.n}`) };
+}
+const polyCensus = (faces) => { const pos = [], idx = []; for (const f of faces) { const b = pos.length / 3; for (const p of f.pts) pos.push(...p); for (let k = 1; k + 1 < f.pts.length; k++) idx.push(b, b + k, b + k + 1); } return edgeCensus(pos, idx); };
+console.log('\n== sloped cells ==');
+
+test('sloped cells: every named shape is a closed convex polyhedron with the expected volume; mirroring and cuts are exact', () => {
+  const want = { WEDGE: 0.5, LOWEDGE: 0.25, RAMP2: 0.75, HIWEDGE: 0.25, KNIFE: 0.5, VWEDGE: 0.5, HIP: 1 / 3, CORNER: 1 / 6, CHAMFER: 5 / 6, SLAB: 0.5, HALF: 0.5, RIDGE: 0.75, KEEL: 0.75, BLADE: 0.5 };
+  let n = 0;
+  for (let c = 1; c <= NAMED_SHAPE_COUNT; c++) {
+    const G = shapeGeometry(c), nm = shapeName(c), fam = nm.split('_')[0];
+    assert.ok(want[fam] !== undefined, `shape family ${fam}`);
+    assert.ok(Math.abs(G.volume - want[fam]) < 1e-6, `${nm} volume ${G.volume.toFixed(4)} (want ${want[fam]})`);
+    const wt = polyCensus(G.faces);
+    assert.equal(wt.bad, 0, `${nm} not closed: ${wt.sample.join(' ')}`);
+    for (const f of G.faces) { assert.ok(f.pts.length >= 3 && Math.abs(Math.hypot(...f.n) - 1) < 1e-6 && f.uvDir >= 0 && f.uvDir < 6, `${nm} face`); }
+    n++;
+  }
+  assert.ok(n === NAMED_SHAPE_COUNT && n === 70, `${n} named shapes (8 wedges, 12 ramps, 4 knives, 4 vertical wedges, 8 hips, 8 corners, 8 chamfers, 6 slabs / halves, 4 ridges / keels, 4 blades, wedge bevels)`);
+  assert.equal(shapeName(mirrorShapeX(SH.WEDGE_XN_UP)), 'WEDGE_XP_UP'); assert.equal(shapeName(mirrorShapeX(SH.HIP_XN_ZP_DOWN)), 'HIP_XP_ZP_DOWN'); assert.equal(mirrorShapeX(SH.WEDGE_ZN_UP), SH.WEDGE_ZN_UP);
+  assert.equal(cutShape(0, [0, 1, 0, 0.5]), SH.SLAB_BOTTOM, 'cutting a cube at half height is the slab');
+  assert.equal(cutShape(SH.WEDGE_ZN_UP, [0, 1, 0, 1]), SH.WEDGE_ZN_UP, 'a cut that removes nothing keeps the code');
+  assert.equal(cutShape(SH.WEDGE_ZN_UP, [0, -1, 0, -1]), -1, 'a cut that removes everything reports -1');
+  // culling: a wedge's full back face hides the cube behind it, its triangular side does not hide a cube's face,
+  // a slab hides nothing of a full face but is hidden by it
+  assert.ok(shapeCovers(SH.WEDGE_ZN_UP, 4, 0, 5) && !shapeCovers(SH.WEDGE_ZN_UP, 1, 0, 0) && !shapeCovers(SH.SLAB_BOTTOM, 0, 0, 1) && shapeCovers(0, 1, SH.SLAB_BOTTOM, 0));
+  // collision boxes: a full cube is one box, a wedge a staircase whose top is under the slope, a DOWN wedge keeps its
+  // full top (floors stay walkable)
+  assert.deepEqual(cellBoxes(BLOCKS[B.DURASTEEL], 0), [[0, 0, 0, 1, 1, 1]]);
+  const up = cellBoxes(BLOCKS[B.DURASTEEL], SH.WEDGE_ZN_UP), down = cellBoxes(BLOCKS[B.DURASTEEL], SH.WEDGE_ZN_DOWN);
+  assert.ok(up.length >= 2 && up.every((b) => b[4] <= b[5] + 1e-6), 'UP wedge boxes rise with the slope');
+  const footprint = (boxes) => boxes.reduce((s, b) => s + (b[3] - b[0]) * (b[5] - b[2]), 0);
+  assert.ok(down.every((b) => b[4] >= 1 - 1e-6) && Math.abs(footprint(down) - 1) < 1e-6, 'DOWN wedge: every column reaches the ceiling and the columns cover the whole footprint');
+  assert.ok(Math.abs(footprint(up) - 1) < 1e-6 && up.every((b) => b[1] <= 1e-6), 'UP wedge: columns stand on the floor over the whole footprint');
+});
+
+test('sloped cells: cube-only grids mesh bit-identically to ships v2 (train hull, doors, plain grid checksums)', () => {
+  const m = buildTrainGrid();
+  const hull = buildVoxelGeometry(m.grid, { extras: m.extras, inside: m.inside, cells: (x, y, z) => !m.skip.has(m.grid.idx(x, y, z)) });
+  assert.equal(checksum(hull.geometry), TRAIN_V2.hull, 'train hull');
+  assert.equal(checksum(buildExtrasGeometry(m.leaves.west, m.inside).geometry), TRAIN_V2.west, 'west doors');
+  assert.equal(checksum(buildExtrasGeometry(m.leaves.east, m.inside).geometry), TRAIN_V2.east, 'east doors');
+  assert.equal(checksum(buildVoxelGeometry(m.grid, {}).geometry), TRAIN_V2.plain, 'plain cubes');
+  assert.equal(m.grid.shapedCount(), 0, 'the train carries no sloped cells');
+  console.log(`   train hull ${hull.faces} faces / ${hull.tris} tris, checksum ${TRAIN_V2.hull}`);
+});
+
+test('sloped cells: sample hulls mesh watertight (every edge in exactly two triangles) with the expected cell and triangle counts', () => {
+  const closed = (grid, label, cells, minTris) => {
+    const res = buildVoxelGeometry(grid, {});
+    const c = edgeCensus(res.geometry.attributes.position.array, res.geometry.index.array);
+    assert.equal(grid.count(), cells, `${label}: cells`);
+    assert.equal(c.bad, 0, `${label}: ${c.bad} open / overlapping edges of ${c.edges}: ${c.sample.join(' ')}`);
+    assert.ok(res.tris >= minTris && res.tris === res.geometry.index.array.length / 3, `${label}: ${res.tris} tris`);
+    console.log(`   ${label}: ${grid.count()} cells (${grid.shapedCount()} sloped), ${res.faces} faces, ${res.tris} tris, ${c.edges} edges all shared by 2 triangles`);
+    return res;
+  };
+  // 1: a block bevelled all round with the named shapes (wedge rings, hips at the corners, overhangs below)
+  const g = new VoxelGrid(8, 5, 10), D = B.DURASTEEL;
+  g.fill(1, 1, 1, 6, 3, 8, D);
+  for (let x = 1; x <= 6; x++) { g.set(x, 3, 1, D, SH.WEDGE_ZN_UP); g.set(x, 1, 1, D, SH.WEDGE_ZN_DOWN); g.set(x, 3, 8, D, SH.WEDGE_ZP_UP); g.set(x, 1, 8, D, SH.WEDGE_ZP_DOWN); }
+  for (let z = 2; z <= 7; z++) { g.set(1, 3, z, D, SH.WEDGE_XN_UP); g.set(6, 3, z, D, SH.WEDGE_XP_UP); g.set(1, 1, z, D, SH.WEDGE_XN_DOWN); g.set(6, 1, z, D, SH.WEDGE_XP_DOWN); }
+  for (const [x, z, xs, zs] of [[1, 1, 'XN', 'ZN'], [6, 1, 'XP', 'ZN'], [1, 8, 'XN', 'ZP'], [6, 8, 'XP', 'ZP']]) { g.set(x, 3, z, D, SH[`HIP_${xs}_${zs}_UP`]); g.set(x, 1, z, D, SH[`HIP_${xs}_${zs}_DOWN`]); }
+  const r1 = closed(g, 'bevelled block', 6 * 3 * 8, 200);
+  const plainGrid = new VoxelGrid(8, 5, 10); plainGrid.fill(1, 1, 1, 6, 3, 8, D);
+  const plain = buildVoxelGeometry(plainGrid, {});
+  assert.ok(r1.tris < plain.tris * 2, `sloped block ${r1.tris} tris vs ${plain.tris} plain`);
+  // 2: chamfered vertical edges under tetrahedral corner tips
+  const g2 = new VoxelGrid(8, 5, 10);
+  g2.fill(1, 1, 1, 6, 3, 8, D);
+  for (let x = 2; x <= 5; x++) { g2.set(x, 3, 1, D, SH.WEDGE_ZN_UP); g2.set(x, 3, 8, D, SH.WEDGE_ZP_UP); }
+  for (let z = 2; z <= 7; z++) { g2.set(1, 3, z, D, SH.WEDGE_XN_UP); g2.set(6, 3, z, D, SH.WEDGE_XP_UP); }
+  for (const y of [1, 2]) { g2.set(1, y, 1, D, SH.VWEDGE_XN_ZN); g2.set(6, y, 1, D, SH.VWEDGE_XP_ZN); g2.set(1, y, 8, D, SH.VWEDGE_XN_ZP); g2.set(6, y, 8, D, SH.VWEDGE_XP_ZP); }
+  g2.set(1, 3, 1, D, SH.CORNER_XP_YN_ZP); g2.set(6, 3, 1, D, SH.CORNER_XN_YN_ZP); g2.set(1, 3, 8, D, SH.CORNER_XP_YN_ZN); g2.set(6, 3, 8, D, SH.CORNER_XN_YN_ZN);
+  closed(g2, 'chamfered box', 6 * 3 * 8, 200);
+  // 3: a hull carved with nine plane cuts (the ship builder's nose slope, chin, plan taper, swept tail edges, roof and
+  // belly bevels, tail slopes), every plane applied across the whole block: adjacent cells share each cutting plane,
+  // so the custom shapes meet exactly and the union is one closed polytope
+  const sb = new ShipBuilder('sample', 9, 6, 14, {}), BOX = [1, 1, 0, 7, 4, 13];
+  sb.fill(1, 1, 0, 7, 4, 13, D);
+  sb.cut(BOX, above(0, 1.5, 5, 5)); sb.cut(BOX, below(0, 1.8, 4, 1));
+  sb.scut(BOX, sideXZ(0, 3.6, 6, 1, false)); sb.scut(BOX, planXZ(1, 8, 4, 14, [5, 10]));
+  sb.scut(BOX, sideXY(4, 1, 5, 2, false)); sb.scut(BOX, sideXY(1, 2, 2, 1, false));
+  sb.cut(BOX, above(13, 5, 14, 4)); sb.cut(BOX, below(13, 1, 14, 2));
+  const before = shapeCount();
+  const r3 = closed(sb.g, 'plane-cut hull', sb.g.count(), 300);
+  assert.ok(sb.g.shapedCount() >= 80 && sb.g.count() < 7 * 4 * 14 && shapeCount() === before, `${sb.g.shapedCount()} cells cut by up to four planes each`);
+  // the same hull built of cubes only (no shapes) keeps the reference quad count: 2 triangles per visible face
+  const cubes = new VoxelGrid(9, 6, 14); for (let x = 0; x < 9; x++) for (let y = 0; y < 6; y++) for (let z = 0; z < 14; z++) if (sb.g.get(x, y, z)) cubes.set(x, y, z, D);
+  const rc = buildVoxelGeometry(cubes, {});
+  assert.equal(rc.tris, rc.faces * 2, 'cube path: quads');
+  assert.ok(r3.tris <= rc.tris * 2, `cut hull ${r3.tris} tris vs ${rc.tris} as cubes`);
+});
 
 const models = shipModels();
 const grades = new Map();
@@ -229,7 +353,7 @@ console.log('\n== ship rubric scorecard ==');
 for (const m of models) {
   const r = grade(m);
   grades.set(m.name, r);
-  console.log(`${m.name}: ${r.score}/20 (mechanical ${r.mech}, ${r.faces * 2} tris)${r.structural ? '' : '  STRUCTURAL FAIL'}${r.notes.length ? '   missing: ' + r.notes.join('; ') : ''}`);
+  console.log(`${m.name}: ${r.score}/20 (mechanical ${r.mech}, ${r.tris} tris = ${(100 * r.tris / TRIS_V2[m.name]).toFixed(0)}% of v2, ${r.shaped}/${r.cells} cells sloped)${r.structural ? '' : '  STRUCTURAL FAIL'}${r.notes.length ? '   missing: ' + r.notes.join('; ') : ''}`);
 }
 console.log('(points 2 silhouette, 15 motion, 17 shadow and 20 originality are critic-judged and counted as given here)\n');
 
@@ -435,6 +559,264 @@ test('repair spots: 2-3 docked ships in the repair state with mechanic spots on 
   assert.ok(tr.repairs.length >= 2 && tr.repairs.length <= 3, `repair ships ${tr.repairs.length}`);
   assert.ok(spots.length >= 4);
   for (const s of spots) assert.ok(s.x >= SPACEPORT.deck.x0 && s.x <= SPACEPORT.deck.x1 && Math.abs(s.y - DECK_Y) < 1e-6 && s.ship, `spot ${JSON.stringify(s)}`);
+});
+
+// ---------------------------------------------------------------- building-collision audit (rubric 19 / 3)
+// Every route (lane loops, pad approach / touchdown / dwell / departure / climb columns, the frontier pad cycle, the
+// repair berths) is swept as a chain of world AABBs of the hull (the model's solid bounds in the pose the animation
+// state gives: flight bounds with the wings spread, landed bounds with the gear and ramps out, their union while a
+// part moves; rotated by the drawn yaw / pitch / roll AND by the level yaw-only pose a rider's collision uses) plus
+// a 1-block margin, consecutive samples <= ~2 blocks apart merged into one swept box. Each swept box is tested
+// against (a) the real block masks of every tower and landmark lot (blueprintFor) and (b) the real generated chunks
+// of every structure a ship can meet (city fill: towers, landmarks, skybridges, lamps, lifts; the spaceport and the
+// frontier port; the lower city; the hyperlane track), built lazily under the boxes. The ship's own pad (its deck
+// and the pad's equipment at deck level) and a berth's hangar floor are the only blocks a hull may touch.
+console.log('\n== building-collision audit ==');
+const WG = new WorldGen(1337);
+registerCity(WG, null); registerSpaceport(WG, null); registerLowerCity(WG, null); registerHyperlane(WG);
+const chunkCache = new Map();
+function chunkAt(cx, cz) {
+  const k = cx * 100000 + cz;
+  let c = chunkCache.get(k);
+  if (!c) {
+    c = { cx, cz, blocks: new Uint8Array(CSZ * CSZ * CHT), top: new Int16Array(CSZ * CSZ) };
+    WG.generateChunk(c);
+    for (let i = 0; i < CSZ * CSZ; i++) { const o = i * CHT; let y = CHT - 1; while (y >= 0 && (c.blocks[o + y] === 0 || c.blocks[o + y] === 255)) y--; c.top[i] = y; }
+    chunkCache.set(k, c);
+  }
+  return c;
+}
+// first block of the world inside the box that `touch(x, y, z)` confirms (the narrow phase: the ship's own deck is
+// exempt, every other block is tested against the hull's cells), or null
+function worldHit(box, touch) {
+  const bx0 = Math.floor(box[0]), bx1 = Math.ceil(box[3]) - 1, bz0 = Math.floor(box[2]), bz1 = Math.ceil(box[5]) - 1;
+  const by0 = Math.max(0, Math.floor(box[1])), by1 = Math.min(CHT - 1, Math.ceil(box[4]) - 1);
+  for (let cx = Math.floor(bx0 / CSZ); cx <= Math.floor(bx1 / CSZ); cx++) for (let cz = Math.floor(bz0 / CSZ); cz <= Math.floor(bz1 / CSZ); cz++) {
+    const c = chunkAt(cx, cz);
+    for (let x = Math.max(bx0, cx * CSZ); x <= Math.min(bx1, cx * CSZ + CSZ - 1); x++) for (let z = Math.max(bz0, cz * CSZ); z <= Math.min(bz1, cz * CSZ + CSZ - 1); z++) {
+      const col = (x - cx * CSZ) * CSZ + (z - cz * CSZ);
+      if (c.top[col] < by0) continue;
+      const o = col * CHT;
+      for (let y = by0; y <= by1; y++) { const id = c.blocks[o + y]; if (id && id !== 255 && touch(x, y, z)) return { x, y, z, id, src: 'chunk' }; }
+    }
+  }
+  return null;
+}
+// the tower and landmark lots with their blueprint masks (the spaceport's hall lots are empty records: the port's
+// blocks come from its own painter and are covered by the chunk test)
+const AUDIT_LOTS = layout.lots.filter((l) => (l.kind === 'tower' || l.kind === 'landmark') && l.family !== 'spaceport_hall');
+const bpCache = new Map();
+const blueprintOf = (l) => { let bp = bpCache.get(l.id); if (!bp) { bp = blueprintFor(l, layout); bpCache.set(l.id, bp); } return bp; };
+const LOT_CELL = 64, lotIndex = new Map();
+for (const l of AUDIT_LOTS) for (let i = Math.floor(l.x0 / LOT_CELL); i <= Math.floor((l.x1 - 1) / LOT_CELL); i++) for (let j = Math.floor(l.z0 / LOT_CELL); j <= Math.floor((l.z1 - 1) / LOT_CELL); j++) {
+  const k = i * 100000 + j; if (!lotIndex.has(k)) lotIndex.set(k, []); lotIndex.get(k).push(l);
+}
+let lotTests = 0;
+function blueprintHit(box, touch) {
+  const seen = new Set();
+  for (let i = Math.floor(box[0] / LOT_CELL); i <= Math.floor(box[3] / LOT_CELL); i++) for (let j = Math.floor(box[2] / LOT_CELL); j <= Math.floor(box[5] / LOT_CELL); j++) {
+    const lots = lotIndex.get(i * 100000 + j);
+    if (!lots) continue;
+    for (const l of lots) {
+      if (seen.has(l.id) || box[3] <= l.x0 || box[0] >= l.x1 || box[5] <= l.z0 || box[2] >= l.z1) continue;
+      seen.add(l.id);
+      const bp = blueprintOf(l);
+      if (box[4] <= bp.y0 || box[1] >= bp.y0 + bp.h) continue;
+      lotTests++;
+      const x0 = Math.max(Math.floor(box[0]), l.x0), x1 = Math.min(Math.ceil(box[3]) - 1, l.x1 - 1), z0 = Math.max(Math.floor(box[2]), l.z0), z1 = Math.min(Math.ceil(box[5]) - 1, l.z1 - 1);
+      const y0 = Math.max(Math.floor(box[1]), bp.y0), y1 = Math.min(Math.ceil(box[4]) - 1, bp.y0 + bp.h - 1);
+      for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) {
+        const o = ((x - l.x0) * bp.d + (z - l.z0)) * bp.h - bp.y0;
+        for (let y = y0; y <= y1; y++) { const id = bp.blocks[o + y]; if (id && id !== 255 && touch(x, y, z)) return { x, y, z, id, src: `${l.family} lot ${l.id}` }; }
+      }
+    }
+  }
+  return null;
+}
+// Narrow phase: does the block at (bx, by, bz) come within AUDIT_MARGIN of a hull cell of `grid` drawn at pose q?
+// The block's centre is carried into grid space by the inverse of the instance transform (Rz(roll) Ry(yaw) Rx(pitch)
+// inverted, then + (w / 2, 0, d / 2)) and the cells within one step of the one it lands in are looked up: a
+// voxel-accurate test, so a narrow nose turning over a tight pad does not sweep the pad's corner lamps the way its
+// bounding box does.
+function hullTouches(m, grid, q, tilt, bx, by, bz) {
+  const cy = Math.cos(q.yaw), sy = Math.sin(q.yaw), cp = Math.cos(q.pitch * tilt), sp = Math.sin(q.pitch * tilt), cr = Math.cos(q.roll * tilt), sr = Math.sin(q.roll * tilt);
+  let x = bx + 0.5 - q.x, y = by + 0.5 - q.y, z = bz + 0.5 - q.z;
+  let t = y * cp + z * sp; z = -y * sp + z * cp; y = t;            // Rx(-pitch)
+  t = x * cy - z * sy; z = x * sy + z * cy; x = t;                 // Ry(-yaw)
+  t = x * cr + y * sr; y = -x * sr + y * cr; x = t;                // Rz(-roll)
+  const gx = Math.floor(x + m.w / 2), gy = Math.floor(y), gz = Math.floor(z + m.d / 2), r = AUDIT_MARGIN;
+  for (let i = gx - r; i <= gx + r; i++) for (let j = gy - r; j <= gy + r; j++) for (let k = gz - r; k <= gz + r; k++) if (i >= 0 && j >= 0 && k >= 0 && i < grid.w && j < grid.h && k < grid.d && grid.get(i, j, k)) return true;
+  return false;
+}
+const unionBox = (a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2]), Math.max(a[3], b[3]), Math.max(a[4], b[4]), Math.max(a[5], b[5])];
+const HULL_BOUNDS = models.map((m) => { const b = modelBounds(m); return { ...b, both: unionBox(b.landed, b.flight) }; });
+// world AABB of grid bounds `b` of model m drawn at pose q: the instance matrix is compose(position, Euler XYZ
+// (pitch * tilt, yaw, roll * tilt)) over geometry translated by (-w / 2, 0, -d / 2)
+function poseBox(m, b, q, tilt) {
+  const cy = Math.cos(q.yaw), sy = Math.sin(q.yaw), cp = Math.cos(q.pitch * tilt), sp = Math.sin(q.pitch * tilt), cr = Math.cos(q.roll * tilt), sr = Math.sin(q.roll * tilt);
+  const out = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+  for (let k = 0; k < 8; k++) {
+    let x = (k & 1 ? b[3] : b[0]) - m.w / 2, y = k & 2 ? b[4] : b[1], z = (k & 4 ? b[5] : b[2]) - m.d / 2;
+    let t = x * cr - y * sr; y = x * sr + y * cr; x = t;          // Rz(roll)
+    t = x * cy + z * sy; z = -x * sy + z * cy; x = t;             // Ry(yaw)
+    t = y * cp - z * sp; z = y * sp + z * cp; y = t;              // Rx(pitch)
+    x += q.x; y += q.y; z += q.z;
+    if (x < out[0]) out[0] = x; if (y < out[1]) out[1] = y; if (z < out[2]) out[2] = z;
+    if (x > out[3]) out[3] = x; if (y > out[4]) out[4] = y; if (z > out[5]) out[5] = z;
+  }
+  return out;
+}
+const AUDIT_MARGIN = 1;
+const HANGAR_OF = (x, z) => SPACEPORT.hangars.find((h) => x >= h.x0 && x <= h.x1 && z >= h.z0 && z <= h.z1) || null;
+// sweeps one ship's whole route; returns { samples, boxes, hits: [{ phase, at, block, src }] }
+function auditRoute(sh) {
+  const m = models[sh.type], hb = HULL_BOUNDS[sh.type];
+  const q = {}, st = {}, hits = [], seen = new Set();
+  let samples = 0, boxes = 0, prev = null, prevPose = null, prevGrids = null;
+  const pad = typeof sh.pad === 'number' ? SPACEPORT.pads[sh.pad] : sh.pad === 'frontier' ? { ...FRONTIER.pad, half: SPACEPORT.padSizes[FRONTIER.pad.size] } : null;
+  const deckTop = sh.pad === 'frontier' ? FRONTIER_DECK_TOP : DECK_TOP;
+  const hangar = sh.repair ? HANGAR_OF(sh.padPos.x, sh.padPos.z) : null;
+  const ownDeck = pad ? (x, y, z) => y <= deckTop && Math.abs(x + 0.5 - pad.x) <= pad.half + 1.5 && Math.abs(z + 0.5 - pad.z) <= pad.half + 1.5
+    : hangar ? (x, y, z) => y <= DECK_TOP && x >= hangar.x0 - 1 && x <= hangar.x1 + 1 && z >= hangar.z0 - 1 && z <= hangar.z1 + 1 : () => false;
+  const sample = (t) => {
+    routePose(sh.route, t, q); shipState(sh.route, t, st); samples++;
+    const landedPose = st.gear >= 1 - 1e-6 && st.cls >= 1 - 1e-6, flightPose = st.gear <= 1e-6 && st.cls <= 1e-6;
+    const b = landedPose ? hb.landed : flightPose ? hb.flight : hb.both;
+    const grids = landedPose ? [m.grid] : flightPose ? [m.gridFlight] : [m.grid, m.gridFlight];
+    const box = unionBox(poseBox(m, b, q, 1), poseBox(m, b, q, 0));
+    for (let i = 0; i < 3; i++) { box[i] -= AUDIT_MARGIN; box[i + 3] += AUDIT_MARGIN; }
+    const swept = prev ? unionBox(prev, box) : box;
+    const pose = { x: q.x, y: q.y, z: q.z, yaw: q.yaw, pitch: q.pitch, roll: q.roll };
+    // narrow phase over the blocks of the swept box: a block counts when it comes within the margin of a hull cell in
+    // the drawn (tilted) or the level pose at either end of the step
+    const touch = (x, y, z) => {
+      if (ownDeck(x, y, z)) return false;
+      for (const g of grids) if (hullTouches(m, g, pose, 1, x, y, z) || hullTouches(m, g, pose, 0, x, y, z)) return true;
+      if (prevPose) for (const g of prevGrids) if (hullTouches(m, g, prevPose, 1, x, y, z) || hullTouches(m, g, prevPose, 0, x, y, z)) return true;
+      return false;
+    };
+    const hit = blueprintHit(swept, touch) || worldHit(swept, touch);
+    prev = box; prevPose = pose; prevGrids = grids; boxes++;
+    if (hit) {
+      const key = `${q.phase}|${hit.src}|${hit.x >> 3},${hit.y >> 3},${hit.z >> 3}`;
+      if (!seen.has(key)) { seen.add(key); hits.push({ phase: q.phase, at: `${q.x.toFixed(0)},${q.y.toFixed(1)},${q.z.toFixed(0)}`, block: `${BLOCKS[hit.id] ? BLOCKS[hit.id].name : hit.id} at ${hit.x},${hit.y},${hit.z}`, src: hit.src }); }
+    }
+  };
+  for (const seg of sh.route.segs) {
+    let dt;
+    if (seg.kind === 'fly') dt = 2 / Math.max(1, seg.prof.v(seg.dur / 2));
+    else if (seg.kind === 'vert') dt = seg.dur / Math.max(1, Math.ceil(Math.abs(seg.y1 - seg.y0) * 1.5));
+    else dt = seg.dur / 2;
+    for (let u = 0; u < seg.dur; u += dt) sample(seg.t0 + u);
+    sample(seg.t0 + seg.dur - 1e-6);
+  }
+  sample(1e-6);   // close the loop: the last box sweeps into the first
+  return { samples, boxes, hits };
+}
+
+test('audit: every lane, pad column, dwell pose, repair berth and the frontier cycle sweeps clear of every tower and landmark blueprint, the spaceport, the lower city and the hyperlane', () => {
+  // control: a gunship parked inside the crown of the tallest tower is reported by both the mask and the chunk test
+  const tallest = AUDIT_LOTS.filter((l) => l.kind === 'tower').sort((a, b) => b.height - a.height)[0], tbp = blueprintOf(tallest);
+  const hold = { kind: 'hold', x: (tallest.x0 + tallest.x1) / 2, y: tbp.y0 + tallest.height - 6, z: (tallest.z0 + tallest.z1) / 2, yaw: 0, dur: 2, t0: 0, thrust: 0, phase: 'repair', anim: { gear: 1, cls: 1, door: 1, lights: 0 } };
+  const control = auditRoute({ type: 3, route: { segs: [hold], period: 2, phases: ['repair'] }, pad: null, repair: false, name: 'control' });
+  assert.ok(control.hits.length > 0 && control.hits.some((h) => h.src.includes(`lot ${tallest.id}`)), `control hull inside ${tallest.family} lot ${tallest.id} reported by the mask test: ${JSON.stringify(control.hits[0])}`);
+  const chunkControl = worldHit([hold.x - 2, hold.y, hold.z - 2, hold.x + 2, hold.y + 2, hold.z + 2], () => true);
+  assert.ok(chunkControl && BLOCKS[chunkControl.id], `the generated chunks carry the tower there too (${chunkControl && BLOCKS[chunkControl.id].name})`);
+  const t0 = performance.now();
+  const audited = new Set();
+  let samples = 0, boxes = 0, routes = 0;
+  const findings = [];
+  const kinds = { pad: 0, lane: 0, harbour: 0, repair: 0, frontier: 0 };
+  for (const sh of ships) {
+    // lane ships of one type share a path: sweep it once per type
+    const key = sh.lanePts ? `lane|${ships.indexOf(ships.find((o) => o.lanePts === sh.lanePts))}|${sh.type}` : `ship|${ships.indexOf(sh)}`;
+    if (audited.has(key)) continue;
+    audited.add(key); routes++;
+    kinds[sh.repair ? 'repair' : sh.pad === 'frontier' ? 'frontier' : sh.harbour ? 'harbour' : sh.lanePts ? 'lane' : 'pad']++;
+    const r = auditRoute(sh);
+    samples += r.samples; boxes += r.boxes;
+    for (const h of r.hits) findings.push(`${sh.name} (${h.phase}) at ${h.at}: ${h.block} of ${h.src}`);
+  }
+  const phases = new Set(); for (const sh of ships) for (const ph of sh.route.phases) phases.add(ph);
+  console.log(`   ${routes} routes (${kinds.pad} pad cycles, ${kinds.frontier} frontier cycle, ${kinds.lane} city lane sweeps, ${kinds.harbour} harbour sweeps, ${kinds.repair} repair berths), phases ${[...phases].join(' ')}`);
+  console.log(`   ${samples} poses, ${boxes} swept boxes (hull AABB + ${AUDIT_MARGIN} block), ${lotTests} lot-mask tests over ${AUDIT_LOTS.length} tower / landmark blueprints (${bpCache.size} built), ${chunkCache.size} chunks generated, ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+  if (findings.length) console.log('   INTERSECTIONS:\n     ' + findings.slice(0, 40).join('\n     '));
+  assert.ok(samples > 20000 && chunkCache.size > 200 && bpCache.size > 50, 'the sweep covered the city');
+  assert.equal(findings.length, 0, `${findings.length} hull-building intersections`);
+});
+
+// ---------------------------------------------------------------- block census: no ship built from chunk blocks
+// A ship silhouette in a blueprint is a free-standing box of hull materials of ship proportions: a 6-connected
+// component of durasteel / hull plate / chrome / panel / tinted-glass blocks, 8..60 long, 3..30 wide, 2..16 high,
+// at least 1.5x longer than wide and reasonably solid, that hardly touches any other building material at its sides
+// (only what it stands on) and has open air over most of its top. Every tower and landmark blueprint is scanned;
+// the removed Senate shuttle (a durasteel box with a glass nose and dark engines on the pad plate) is rebuilt on a
+// test slab as the positive control.
+const HULL_LUT = new Uint8Array(256);
+for (const id of [B.DURASTEEL, B.DURASTEEL_DARK, B.HULL_PLATE, B.HULL_TRENCH, B.CHROME, B.PANEL_BLACK, B.PANEL_RED, B.PANEL_STRIPE, B.STEEL_GLASS, B.VENT]) HULL_LUT[id] = 1;
+const SOLID_LUT = new Uint8Array(256);
+for (let id = 1; id < 255; id++) if (BLOCKS[id] && BLOCKS[id].solid) SOLID_LUT[id] = 1;
+function shipShapedBoxes(bp) {
+  const { w, h, d, blocks } = bp, N = w * h * d, MAXC = 60 * 30 * 16;
+  const seen = new Uint8Array(N), stack = new Int32Array(N);
+  const out = [];
+  const idx = (x, y, z) => (x * d + z) * h + y;
+  for (let i0 = 0; i0 < N; i0++) {
+    if (seen[i0] || !HULL_LUT[blocks[i0]]) continue;
+    let sp = 0, count = 0, x0 = w, x1 = -1, y0 = h, y1 = -1, z0 = d, z1 = -1;
+    const cells = [];
+    stack[sp++] = i0; seen[i0] = 1;
+    while (sp) {
+      const i = stack[--sp], y = i % h, xz = (i - y) / h, z = xz % d, x = (xz - z) / d;
+      count++; if (count <= MAXC) cells.push(i);
+      if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; if (z < z0) z0 = z; if (z > z1) z1 = z;
+      if (x > 0) { const j = i - d * h; if (!seen[j] && HULL_LUT[blocks[j]]) { seen[j] = 1; stack[sp++] = j; } }
+      if (x < w - 1) { const j = i + d * h; if (!seen[j] && HULL_LUT[blocks[j]]) { seen[j] = 1; stack[sp++] = j; } }
+      if (z > 0) { const j = i - h; if (!seen[j] && HULL_LUT[blocks[j]]) { seen[j] = 1; stack[sp++] = j; } }
+      if (z < d - 1) { const j = i + h; if (!seen[j] && HULL_LUT[blocks[j]]) { seen[j] = 1; stack[sp++] = j; } }
+      if (y > 0) { const j = i - 1; if (!seen[j] && HULL_LUT[blocks[j]]) { seen[j] = 1; stack[sp++] = j; } }
+      if (y < h - 1) { const j = i + 1; if (!seen[j] && HULL_LUT[blocks[j]]) { seen[j] = 1; stack[sp++] = j; } }
+    }
+    const dx = x1 - x0 + 1, dy = y1 - y0 + 1, dz = z1 - z0 + 1, L = Math.max(dx, dz), W = Math.min(dx, dz);
+    if (count > MAXC || L < 8 || L > 60 || W < 3 || W > 30 || dy < 2 || dy > 16 || L < 1.5 * W || count < 0.25 * dx * dy * dz) continue;
+    // free-standing: sideways / upward contact with other building material, open sky over the top layer
+    let attach = 0, topCells = 0, topOpen = 0;
+    const other = (x, y, z) => { if (x < 0 || y < 0 || z < 0 || x >= w || y >= h || z >= d) return 0; const id = blocks[idx(x, y, z)]; return SOLID_LUT[id] && !HULL_LUT[id] ? 1 : 0; };
+    const open = (x, y, z) => { if (y >= h) return 1; const id = blocks[idx(x, y, z)]; return id === 0 || id === 255 || !SOLID_LUT[id] ? 1 : 0; };
+    for (const i of cells) {
+      const y = i % h, xz = (i - y) / h, z = xz % d, x = (xz - z) / d;
+      attach += other(x - 1, y, z) + other(x + 1, y, z) + other(x, y, z - 1) + other(x, y, z + 1) + other(x, y + 1, z) + (y > y0 ? other(x, y - 1, z) : 0);
+      if (y === y1) { topCells++; topOpen += open(x, y + 1, z); }
+    }
+    if (attach <= 0.03 * count && topOpen >= 0.7 * topCells) out.push({ x0, y0, z0, x1, y1, z1, count, L, W, H: dy });
+  }
+  return out;
+}
+
+test('census: no ship-shaped hull box built from chunk blocks in any tower or landmark blueprint (the removed Senate shuttle is caught when rebuilt)', () => {
+  // positive control: the old Senate pad shuttle on a stone slab (senate.js before 6a22181d)
+  const w = 40, h = 20, d = 30, blocks = new Uint8Array(w * h * d), set = (x, y, z, id) => { blocks[(x * d + z) * h + y] = id; };
+  const fill = (x0, y0, z0, x1, y1, z1, id) => { for (let x = x0; x <= x1; x++) for (let y = y0; y <= y1; y++) for (let z = z0; z <= z1; z++) set(x, y, z, id); };
+  fill(0, 0, 0, w - 1, 5, d - 1, B.SMOOTH_STONE); fill(0, 6, 0, w - 1, 6, d - 1, B.DECK_PLATE);
+  const cx = 20, cz = 15;
+  fill(cx - 6, 7, cz - 2, cx + 6, 9, cz + 2, B.DURASTEEL); fill(cx - 5, 8, cz - 1, cx + 5, 8, cz + 1, 0);
+  fill(cx + 6, 8, cz - 1, cx + 7, 9, cz + 1, B.STEEL_GLASS); fill(cx - 8, 7, cz - 1, cx - 7, 8, cz + 1, B.DURASTEEL_DARK); set(cx - 9, 7, cz, B.GLOW_PANEL_BLUE);
+  fill(cx - 3, 10, cz - 6, cx + 2, 10, cz - 3, B.CHROME); fill(cx - 3, 10, cz + 3, cx + 2, 10, cz + 6, B.CHROME);
+  fill(cx - 3, 11, cz - 6, cx + 2, 13, cz - 6, B.DURASTEEL); fill(cx - 3, 11, cz + 6, cx + 2, 13, cz + 6, B.DURASTEEL);
+  const control = shipShapedBoxes({ w, h, d, blocks });
+  assert.ok(control.length === 1 && control[0].L >= 16 && control[0].H >= 3, `control shuttle flagged: ${JSON.stringify(control)}`);
+  // the city
+  const t0 = performance.now();
+  const findings = [];
+  let hullCells = 0, scanned = 0;
+  for (const l of AUDIT_LOTS) {
+    const bp = blueprintOf(l); scanned++;
+    for (let i = 0; i < bp.blocks.length; i++) if (HULL_LUT[bp.blocks[i]]) hullCells++;
+    for (const c of shipShapedBoxes(bp)) findings.push(`${l.family} lot ${l.id}: ${c.L} x ${c.W} x ${c.H} hull box (${c.count} cells) at ${l.x0 + c.x0}..${l.x0 + c.x1}, y ${bp.y0 + c.y0}..${bp.y0 + c.y1}, z ${l.z0 + c.z0}..${l.z0 + c.z1}`);
+  }
+  console.log(`   ${scanned} blueprints (${AUDIT_LOTS.filter((l) => l.kind === 'landmark').length} landmarks, ${AUDIT_LOTS.filter((l) => l.kind === 'tower').length} towers), ${hullCells} hull-material cells scanned in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+  if (findings.length) console.log('   SHIP-SHAPED BOXES:\n     ' + findings.join('\n     '));
+  assert.equal(findings.length, 0, `${findings.length} ship-shaped hull boxes built from blocks`);
 });
 
 // ---------------------------------------------------------------- browser checks (optional)

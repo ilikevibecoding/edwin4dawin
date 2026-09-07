@@ -510,9 +510,10 @@ test('nine ship designs (six families + fighter, police, bus) 10..40 blocks long
   for (const f of ['bulk freight', 'light freighter', 'passenger shuttle', 'diplomatic transport', 'security / troop transport', 'local taxi / courier']) assert.ok(families.has(f), `family ${f}`);
   for (const m of models) {
     assert.ok(m.length >= 10 && m.length <= 40, `${m.name} length ${m.length}`);
-    const { geometry, faces } = buildShipGeometry(m);
-    assert.ok(faces > 100 && geometry.getAttribute('position').count === faces * 4);
-    assert.ok(faces * 2 <= 6000, `${m.name} ${faces * 2} tris`);
+    const { geometry, faces, tris } = buildShipGeometry(m);
+    // faces are convex polygons since ships v3 (sloped cells): 3..8 vertices each, indexed as tris
+    assert.ok(faces > 100 && geometry.getAttribute('position').count >= faces * 3 && geometry.getAttribute('position').count <= faces * 8 && geometry.index.count === tris * 3);
+    assert.ok(tris <= 6000, `${m.name} ${tris} tris`);
     const surf = geometry.getAttribute('aSurf').array;      // (shade, emit code, own light, sky)
     let engine = 0, lit = 0;
     for (let i = 1; i < surf.length; i += 4) { if (surf[i] === EMIT.ENGINE) engine++; else if (surf[i] > 0) lit++; }

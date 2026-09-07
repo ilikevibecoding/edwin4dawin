@@ -12,11 +12,18 @@
 //   - onUse() (right-click on the hull) boards through the open door / ramp or leaves the landed ship; leave()
 //     refuses in flight. A player who can fly may also board or leave an airborne ship through the airlock
 //     (right-click on the hull), and any ship within PROMOTE_FLIGHT_DIST is solid, so a flyer can land on a hull
-//     and ride it.
+//     and ride it,
+//   - collision follows the sculpted hull: clipped cells (wedge noses, chamfers, canopy slopes) collide with the
+//     conservative step boxes of their shape (see voxelMesh cellBoxes), so a passenger stands on the real floors and
+//     decks and never inside a slope, while a full cube stays a full box.
 import { Vehicle } from './vehicle.js';
 import { AABB } from '../player.js';
+import { BLOCKS } from '../blocks.js';
 import { TICK_RATE } from '../constants.js';
+import { cellBoxes } from './voxelMesh.js';
 import { routePose, shipState } from '../ships/traffic.js';
+
+const SUPPORT_EPS = 0.05;    // feet within this distance above a cell top count as resting on it (as in Vehicle)
 
 const OPEN_PHASES = new Set(['boarding', 'servicing', 'repair']);      // doors fully open on the pad
 const LANDED_PHASES = new Set(['touchdown', 'shutdown', 'doors', 'boarding', 'servicing', 'closure', 'repair']);
@@ -74,6 +81,51 @@ export class ShipVehicle extends Vehicle {
     out.z0 = this.origin.z + Math.min(z00, z10, z01, z11); out.z1 = this.origin.z + Math.max(z00, z10, z01, z11);
     out.y0 = box.y0 - pose.y + this.origin.y; out.y1 = box.y1 - pose.y + this.origin.y;
     return out;
+  }
+
+  // ---------------------------------------------------------------- collision (shape aware)
+  // World-space collision boxes of the solid cells intersecting `region`: a cell's block boxes, or the step boxes of
+  // its clipped shape.
+  collectBoxes(region, out) {
+    const g = this.grid, pose = this.cur;
+    const r = this.boxToGrid(region, pose, { x0: 0, y0: 0, z0: 0, x1: 0, y1: 0, z1: 0 });
+    const x0 = Math.max(0, Math.floor(r.x0)), x1 = Math.min(g.w - 1, Math.floor(r.x1));
+    const y0 = Math.max(0, Math.floor(r.y0)), y1 = Math.min(g.h - 1, Math.floor(r.y1));
+    const z0 = Math.max(0, Math.floor(r.z0)), z1 = Math.min(g.d - 1, Math.floor(r.z1));
+    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) for (let y = y0; y <= y1; y++) {
+      const id = g.get(x, y, z);
+      if (id === 0) continue;
+      const def = BLOCKS[id];
+      if (!def.solid) continue;
+      for (const b of cellBoxes(def, g.shapeAt(x, y, z))) out.push(this.boxToWorld(x + b[0], y + b[1], z + b[2], x + b[3], y + b[4], z + b[5], pose, new AABB(0, 0, 0, 0, 0, 0)));
+    }
+    return out;
+  }
+  // Riding: feet on a cell top (the top of the shape's step box under the feet, so a passenger on a chamfered deck
+  // edge rides the ship) or inside an interior volume.
+  isRiding(box, pos, pose) {
+    const g = this.grid;
+    const p = this.toGrid(pos.x, pos.y, pos.z, pose, { x: 0, y: 0, z: 0 });
+    for (const v of this.interiors) {
+      if (p.x >= v.x0 && p.x < v.x1 && p.z >= v.z0 && p.z < v.z1 && p.y >= v.y0 - SUPPORT_EPS && p.y < v.y1) return true;
+    }
+    const r = this.boxToGrid(box, pose, { x0: 0, y0: 0, z0: 0, x1: 0, y1: 0, z1: 0 });
+    if (r.x1 <= 0 || r.x0 >= g.w || r.z1 <= 0 || r.z0 >= g.d || r.y0 > g.h + 1 || r.y1 < 0) return false;
+    const x0 = Math.max(0, Math.floor(r.x0)), x1 = Math.min(g.w - 1, Math.floor(r.x1 - 1e-6));
+    const z0 = Math.max(0, Math.floor(r.z0)), z1 = Math.min(g.d - 1, Math.floor(r.z1 - 1e-6));
+    const y0 = Math.max(0, Math.floor(r.y0 - SUPPORT_EPS - 1)), y1 = Math.min(g.h - 1, Math.floor(r.y0 + 1e-3));
+    for (let x = x0; x <= x1; x++) for (let z = z0; z <= z1; z++) for (let y = y0; y <= y1; y++) {
+      const id = g.get(x, y, z);
+      if (id === 0) continue;
+      const def = BLOCKS[id];
+      if (!def.solid) continue;
+      for (const b of cellBoxes(def, g.shapeAt(x, y, z))) {
+        const gap = r.y0 - (y + b[4]);
+        if (gap < -1e-3 || gap > SUPPORT_EPS) continue;
+        if (r.x0 < x + b[3] - 1e-6 && r.x1 > x + b[0] + 1e-6 && r.z0 < z + b[5] - 1e-6 && r.z1 > z + b[2] + 1e-6) return true;
+      }
+    }
+    return false;
   }
 
   // ---------------------------------------------------------------- lifecycle
